@@ -12,7 +12,8 @@
    "main@57c26060|internal/textureowner/texture_agent_revision.go|revisionFromOwner"
   ],
   "supplements": [
-   "decoder-commit: +2 frozen-table rows for internal/computerevent/decode.go (Define update; no prior rows touched)"
+   "decoder-commit: +2 frozen-table rows for internal/computerevent/decode.go (Define update; no prior rows touched)",
+   "step-4 re-freeze v2: hunk-mapped anchor refresh after the inert Canonical tuple refactor; step4TupleHoists rows dissolved back into owning site rows; every row keeps its key"
   ]
  },
  "rows": [
@@ -380,8 +381,8 @@
    "key": "main@57c26060|internal/actorruntime/adapter.go|recoverParkedLifecycleMailboxSnapshots",
    "file": "internal/actorruntime/adapter.go",
    "lines": [
-    529,
-    530
+    531,
+    532
    ],
    "symbol": "recoverParkedLifecycleMailboxSnapshots",
    "field_path": "recoverParkedLifecycleMailboxSnapshots",
@@ -404,8 +405,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher ||",
-    "agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||"
+    "snapProfile != agentprofile.Researcher ||",
+    "snapRole != agentprofile.Researcher ||"
    ],
    "note": "researcher admission snapshot guard"
   },
@@ -413,8 +414,8 @@
    "key": "main@57c26060|internal/actorruntime/adapter.go|lifecycleTextureControlSource",
    "file": "internal/actorruntime/adapter.go",
    "lines": [
-    531,
-    547
+    533,
+    549
    ],
    "symbol": "lifecycleTextureControlSource",
    "field_path": "lifecycleTextureControlSource",
@@ -441,8 +442,12 @@
    "key": "main@57c26060|internal/actorruntime/adapter.go|textureSubjectAdmission",
    "file": "internal/actorruntime/adapter.go",
    "lines": [
-    567,
-    568
+    569,
+    570,
+    571,
+    572,
+    528,
+    529
    ],
    "symbol": "textureSubjectAdmission",
    "field_path": "textureSubjectAdmission",
@@ -460,8 +465,12 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agentprofile.Canonical(subject.Profile) == agentprofile.Texture ||",
-    "agentprofile.Canonical(subject.Role) == agentprofile.Texture ||"
+    "subjectProfile, _ := agentprofile.Canonical(subject.Profile)",
+    "subjectRole, _ := agentprofile.Canonical(subject.Role)",
+    "if subjectProfile == agentprofile.Texture ||",
+    "subjectRole == agentprofile.Texture ||",
+    "snapProfile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "snapRole, _ := agentprofile.Canonical(rec.AgentRole)"
    ],
    "note": "stays-live profile"
   },
@@ -471,7 +480,7 @@
    "lines": [
     262,
     334,
-    569
+    573
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -501,7 +510,12 @@
    "lines": [
     60,
     61,
-    68
+    62,
+    63,
+    71,
+    72,
+    378,
+    379
    ],
    "symbol": "textureRunRecord",
    "field_path": "textureRunRecord",
@@ -519,9 +533,14 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agentprofile.Canonical(rec.AgentProfile) == agentprofile.Texture ||",
-    "agentprofile.Canonical(rec.AgentRole) == agentprofile.Texture {",
-    "if value, ok := rec.Metadata[key].(string); ok && agentprofile.Canonical(value) == agentprofile.Texture {"
+    "recordProfile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "recordRole, _ := agentprofile.Canonical(rec.AgentRole)",
+    "if recordProfile == agentprofile.Texture ||",
+    "recordRole == agentprofile.Texture {",
+    "metaProfile, _ := agentprofile.Canonical(value)",
+    "if metaProfile == agentprofile.Texture {",
+    "wakeProfile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "wakeRole, _ := agentprofile.Canonical(rec.AgentRole)"
    ],
    "note": "stays-live profile"
   },
@@ -529,7 +548,7 @@
    "key": "main@57c26060|internal/actorruntime/handler.go|persistentSuperOccurrence",
    "file": "internal/actorruntime/handler.go",
    "lines": [
-    242
+    247
    ],
    "symbol": "persistentSuperOccurrence",
    "field_path": "persistentSuperOccurrence",
@@ -555,8 +574,8 @@
    "key": "main@57c26060|internal/actorruntime/handler.go|parkedLifecycleCoagentWake",
    "file": "internal/actorruntime/handler.go",
    "lines": [
-    374,
-    375
+    381,
+    382
    ],
    "symbol": "parkedLifecycleCoagentWake",
    "field_path": "parkedLifecycleCoagentWake",
@@ -579,8 +598,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "(agentprofile.Canonical(rec.AgentProfile) == agentprofile.Researcher ||",
-    "agentprofile.Canonical(rec.AgentRole) == agentprofile.Researcher) &&"
+    "(wakeProfile == agentprofile.Researcher ||",
+    "wakeRole == agentprofile.Researcher) &&"
    ],
    "note": "researcher wake guard"
   },
@@ -588,8 +607,8 @@
    "key": "main@57c26060|internal/actorruntime/handler.go|lifecycleTextureControlSource",
    "file": "internal/actorruntime/handler.go",
    "lines": [
-    376,
-    392
+    383,
+    399
    ],
    "symbol": "lifecycleTextureControlSource",
    "field_path": "lifecycleTextureControlSource",
@@ -616,8 +635,10 @@
    "key": "main@57c26060|internal/actorruntime/handler.go|reconcileCoagentWakeTexture",
    "file": "internal/actorruntime/handler.go",
    "lines": [
-    469,
-    470
+    476,
+    477,
+    478,
+    479
    ],
    "symbol": "reconcileCoagentWakeTexture",
    "field_path": "reconcileCoagentWakeTexture",
@@ -635,8 +656,10 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agentprofile.Canonical(agent.Profile) == agentprofile.Texture ||",
-    "agentprofile.Canonical(agent.Role) == agentprofile.Texture {"
+    "wakeAgentProfile, _ := agentprofile.Canonical(agent.Profile)",
+    "wakeAgentRole, _ := agentprofile.Canonical(agent.Role)",
+    "if wakeAgentProfile == agentprofile.Texture ||",
+    "wakeAgentRole == agentprofile.Texture {"
    ],
    "note": "stays-live profile"
   },
@@ -644,10 +667,10 @@
    "key": "main@57c26060|internal/actorruntime/handler.go|staysLiveConsumers",
    "file": "internal/actorruntime/handler.go",
    "lines": [
-    103,
-    165,
-    267,
-    455
+    108,
+    170,
+    272,
+    462
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -678,8 +701,8 @@
    "lines": [
     317,
     318,
-    932,
-    933
+    933,
+    934
    ],
    "symbol": "runStatusProjection",
    "field_path": "runStatusProjection",
@@ -723,9 +746,10 @@
    "file": "internal/agentcore/api.go",
    "lines": [
     356,
-    547,
-    582,
-    638
+    357,
+    548,
+    583,
+    639
    ],
    "symbol": "processorAdmission",
    "field_path": "processorAdmission",
@@ -743,8 +767,9 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Processor && ownerID != \"\" {",
-    "profile := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))",
+    "profile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
+    "if profile == agentprofile.Processor && ownerID != \"\" {",
+    "profile, _ := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))",
     "if profile == agentprofile.Processor || typedIngestionSubmission {",
     "if profile == agentprofile.Processor {"
    ],
@@ -754,13 +779,13 @@
    "key": "main@57c26060|internal/agentcore/api.go|channelCastRequest",
    "file": "internal/agentcore/api.go",
    "lines": [
-    389,
     390,
-    398,
-    749,
+    391,
+    399,
     750,
-    753,
-    754
+    751,
+    754,
+    755
    ],
    "symbol": "channelCastRequest",
    "field_path": "channelCastRequest",
@@ -806,11 +831,11 @@
    "key": "main@57c26060|internal/agentcore/api.go|staysLiveConsumers",
    "file": "internal/agentcore/api.go",
    "lines": [
-    386,
-    553,
-    578,
-    647,
-    1009
+    387,
+    554,
+    579,
+    648,
+    1010
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -1126,7 +1151,8 @@
    "key": "main@57c26060|internal/agentcore/cosuper_assignment_fate.go|assignedCoSuperRunGuard",
    "file": "internal/agentcore/cosuper_assignment_fate.go",
    "lines": [
-    82
+    84,
+    85
    ],
    "symbol": "assignedCoSuperRunGuard",
    "field_path": "assignedCoSuperRunGuard",
@@ -1151,7 +1177,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.CoSuper &&"
+    "profile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
+    "return profile == agentprofile.CoSuper &&"
    ],
    "note": "CoSuper run guard"
   },
@@ -1160,12 +1187,12 @@
    "file": "internal/agentcore/cosuper_assignment_fate.go",
    "lines": [
     34,
-    163,
-    208,
-    403,
-    426,
-    789,
-    918
+    166,
+    211,
+    406,
+    429,
+    792,
+    921
    ],
    "symbol": "commandIdentities",
    "field_path": "commandIdentities",
@@ -1202,9 +1229,9 @@
    "key": "main@57c26060|internal/agentcore/cosuper_assignment_fate.go|reportDigestDomain",
    "file": "internal/agentcore/cosuper_assignment_fate.go",
    "lines": [
-    591,
-    647,
-    663
+    594,
+    650,
+    666
    ],
    "symbol": "reportDigestDomain",
    "field_path": "reportDigestDomain",
@@ -1234,8 +1261,8 @@
    "file": "internal/agentcore/cosuper_assignment_runtime.go",
    "lines": [
     67,
-    114,
-    150
+    116,
+    152
    ],
    "symbol": "assignmentIdentityDigests",
    "field_path": "assignmentIdentityDigests",
@@ -1265,6 +1292,8 @@
    "key": "main@57c26060|internal/agentcore/cosuper_assignment_runtime.go|parentSuperValidator",
    "file": "internal/agentcore/cosuper_assignment_runtime.go",
    "lines": [
+    104,
+    101,
     102
    ],
    "symbol": "parentSuperValidator",
@@ -1283,7 +1312,9 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "agentprofile.Canonical(parent.AgentProfile) != agentprofile.Super || agentprofile.Canonical(parent.AgentRole) != agentprofile.Super ||"
+    "parentProfile != agentprofile.Super || parentRole != agentprofile.Super ||",
+    "parentProfile, _ := agentprofile.Canonical(parent.AgentProfile)",
+    "parentRole, _ := agentprofile.Canonical(parent.AgentRole)"
    ],
    "note": "parent must be persistent Super"
   },
@@ -1291,7 +1322,7 @@
    "key": "main@57c26060|internal/agentcore/cosuper_assignment_runtime.go|assignmentAgentIDs",
    "file": "internal/agentcore/cosuper_assignment_runtime.go",
    "lines": [
-    210
+    212
    ],
    "symbol": "assignmentAgentIDs",
    "field_path": "assignmentAgentIDs",
@@ -1324,10 +1355,10 @@
    "key": "main@57c26060|internal/agentcore/cosuper_assignment_runtime.go|openBindCommands",
    "file": "internal/agentcore/cosuper_assignment_runtime.go",
    "lines": [
-    230,
-    245,
-    292,
-    361
+    232,
+    247,
+    294,
+    363
    ],
    "symbol": "openBindCommands",
    "field_path": "openBindCommands",
@@ -1358,11 +1389,11 @@
    "key": "main@57c26060|internal/agentcore/cosuper_assignment_runtime.go|capabilityMint",
    "file": "internal/agentcore/cosuper_assignment_runtime.go",
    "lines": [
-    304,
-    309,
-    310,
-    324,
-    334
+    306,
+    311,
+    312,
+    326,
+    336
    ],
    "symbol": "capabilityMint",
    "field_path": "capabilityMint",
@@ -1399,10 +1430,10 @@
    "key": "main@57c26060|internal/agentcore/cosuper_assignment_runtime.go|boundRunCarrier",
    "file": "internal/agentcore/cosuper_assignment_runtime.go",
    "lines": [
-    342,
-    345,
+    344,
     347,
-    356
+    349,
+    358
    ],
    "symbol": "boundRunCarrier",
    "field_path": "boundRunCarrier",
@@ -1439,7 +1470,8 @@
    "key": "main@57c26060|internal/agentcore/cosuper_assignment_tools_overlay.go|assignedOverlayGuard",
    "file": "internal/agentcore/cosuper_assignment_tools_overlay.go",
    "lines": [
-    17
+    20,
+    21
    ],
    "symbol": "assignedOverlayGuard",
    "field_path": "assignedOverlayGuard",
@@ -1464,7 +1496,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if rec == nil || agentprofile.Canonical(agentProfileForRun(rec)) != agentprofile.CoSuper {"
+    "profile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
+    "if profile != agentprofile.CoSuper {"
    ],
    "note": "overlay requires assigned CoSuper run"
   },
@@ -1472,7 +1505,7 @@
    "key": "main@57c26060|internal/agentcore/cosuper_assignment_tools_overlay.go|overlayRoleGrant",
    "file": "internal/agentcore/cosuper_assignment_tools_overlay.go",
    "lines": [
-    72
+    76
    ],
    "symbol": "overlayRoleGrant",
    "field_path": "overlayRoleGrant",
@@ -1744,9 +1777,10 @@
    "lines": [
     172,
     192,
-    233,
-    263,
-    281
+    234,
+    264,
+    275,
+    276
    ],
    "symbol": "terminalOutcomeProfiles",
    "field_path": "terminalOutcomeProfiles",
@@ -1779,10 +1813,11 @@
    "verification": "verified",
    "texts": [
     "Role:         synthetic.Role,",
-    "return agentprofile.Canonical(profile) != \"\"",
-    "profile := agentprofile.Canonical(agentProfileForRun(rec))",
+    "canonicalProfile, _ := agentprofile.Canonical(profile)",
+    "profile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
     "Role:                profile,",
-    "agentprofile.Canonical(update.Role) == agentprofile.Canonical(agentProfileForRun(rec))"
+    "updateRole, _ := agentprofile.Canonical(update.Role)",
+    "runProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))"
    ],
    "note": "terminal outcome profile guards"
   },
@@ -2093,14 +2128,18 @@
     405,
     406,
     422,
-    428,
-    437,
-    699,
+    423,
+    429,
+    438,
     700,
-    712,
-    752,
-    800,
-    837
+    701,
+    713,
+    754,
+    755,
+    803,
+    804,
+    841,
+    842
    ],
    "symbol": "profileBranchConsumers",
    "field_path": "profileBranchConsumers",
@@ -2128,15 +2167,19 @@
     "if profile == agentprofile.Super || profile == agentprofile.Processor || profile == agentprofile.Reconciler {",
     "Profile:    agentprofile.Super,",
     "Role:       agentprofile.Super,",
-    "if parent != nil && strings.TrimSpace(parent.AgentProfile) != \"\" && agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) != agentprofile.Texture {",
-    "profile = agentprofile.Canonical(profile)",
-    "role = agentprofile.Canonical(role)",
-    "profile := agentprofile.Canonical(agentProfileForRun(rec))",
+    "metadataProfile, _ := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))",
+    "if parent != nil && strings.TrimSpace(parent.AgentProfile) != \"\" && metadataProfile != agentprofile.Texture {",
+    "profile, _ = agentprofile.Canonical(profile)",
+    "role, _ = agentprofile.Canonical(role)",
+    "profile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
     "if profile == agentprofile.Processor || profile == agentprofile.Texture || profile == agentprofile.Researcher || profile == agentprofile.CoSuper {",
-    "return fmt.Sprintf(\"run=%s profile=%s requested_by=%s channel=%s processor_key=%s state=%s\", rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), strings.TrimSpace(rec.RequestedByRunID), strings.TrimSpace(rec.ChannelID), metadataStringValue(rec.Metadata, runMetadataProcessorKey), rec.State)",
-    "if agentprofile.Canonical(agentRec.Profile) == agentprofile.Conductor && metadataStringValue(metadata, \"lifecycle_command_id\") == \"\" {",
-    "if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Processor {",
-    "if agentprofile.Canonical(agentRec.Profile) == agentprofile.Conductor && metadataStringValue(metadata, \"lifecycle_command_id\") == \"\" {"
+    "summaryProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
+    "agentRecProfile, _ := agentprofile.Canonical(agentRec.Profile)",
+    "if agentRecProfile == agentprofile.Conductor && metadataStringValue(metadata, \"lifecycle_command_id\") == \"\" {",
+    "submittedProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
+    "if submittedProfile == agentprofile.Processor {",
+    "agentRecProfile, _ := agentprofile.Canonical(agentRec.Profile)",
+    "if agentRecProfile == agentprofile.Conductor && metadataStringValue(metadata, \"lifecycle_command_id\") == \"\" {"
    ],
    "note": "profile branch guards and Super run construction carriers"
   },
@@ -2144,14 +2187,14 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|runRecordCarrier",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    450,
     451,
-    771,
-    772,
-    858,
-    859,
-    1073,
-    1074
+    452,
+    774,
+    775,
+    863,
+    864,
+    1081,
+    1082
    ],
    "symbol": "runRecordCarrier",
    "field_path": "runRecordCarrier",
@@ -2198,24 +2241,26 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|startCoagentAdmission",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    952,
-    955,
-    956,
-    962,
-    964,
-    966,
+    957,
+    960,
+    961,
     967,
-    970,
-    973,
-    987,
-    1000,
-    1001,
-    1011,
-    1012,
-    1043,
-    1090,
-    1115,
-    1134
+    969,
+    971,
+    972,
+    975,
+    978,
+    992,
+    1005,
+    1007,
+    1018,
+    1019,
+    1050,
+    1051,
+    1124,
+    1144,
+    1017,
+    1097
    ],
    "symbol": "startCoagentAdmission",
    "field_path": "startCoagentAdmission",
@@ -2248,23 +2293,25 @@
    "verification": "verified",
    "texts": [
     "if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != \"\" {",
-    "targetProfile := agentprofile.Canonical(firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentProfile), metadataStringValue(metadata, runMetadataAgentRole)))",
+    "targetProfile, _ := agentprofile.Canonical(firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentProfile), metadataStringValue(metadata, runMetadataAgentRole)))",
     "if targetProfile == agentprofile.CoSuper {",
-    "coagentProfile := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))",
-    "coagentProfile = agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentRole))",
+    "coagentProfile, _ := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))",
+    "coagentProfile, _ = agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentRole))",
     "slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot))",
     "if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != \"\" && slot == \"\" && coagentProfile == agentprofile.CoSuper {",
     "if coagentProfile == agentprofile.CoSuper && slot == \"\" {",
     "if slot != \"\" && coagentProfile == agentprofile.CoSuper {",
     "if slot == \"verifier\" && coagentProfile == agentprofile.CoSuper {",
-    "switch agentprofile.Canonical(agentRec.Profile) {",
+    "lifecycleProfile, _ := agentprofile.Canonical(agentRec.Profile)",
     "case agentprofile.Super, agentprofile.CoSuper:",
     "if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != \"\" &&",
-    "agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&",
-    "if agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&",
-    "rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)",
-    "log.Printf(\"runtime: started coagent %s requested by %s requester_profile=%s\", wireLifecycleSummary(rec), requesterRec.RunID, agentprofile.Canonical(agentProfileForRun(&requesterRec)))",
-    "profile := agentprofile.Canonical(agentProfileForRun(rec))"
+    "slotAgentProfile == agentprofile.CoSuper &&",
+    "grantAgentProfile, _ := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))",
+    "if grantAgentProfile == agentprofile.CoSuper &&",
+    "requesterSummaryProfile, _ := agentprofile.Canonical(agentProfileForRun(&requesterRec))",
+    "profile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
+    "slotAgentProfile, _ := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))",
+    "spawnedProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))"
    ],
    "note": "StartCoagentRun admission incl. verifier-slot CoSuper branch"
   },
@@ -2272,13 +2319,15 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|spawnedWorkItemCarrier",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    1169,
-    1182,
-    1212,
-    1278,
-    1279,
-    1314,
-    1336
+    1179,
+    1192,
+    1222,
+    1223,
+    1289,
+    1291,
+    1326,
+    1327,
+    1349
    ],
    "symbol": "spawnedWorkItemCarrier",
    "field_path": "spawnedWorkItemCarrier",
@@ -2310,12 +2359,14 @@
    "inverse": "NA",
    "verification": "verified",
    "texts": [
-    "if requesterProfile := agentprofile.Canonical(agentProfileForRun(requester)); requesterProfile != \"\" {",
+    "if requesterProfile, _ := agentprofile.Canonical(agentProfileForRun(requester)); requesterProfile != \"\" {",
     "AuthorityProfile:     profile,",
-    "if requesterRun == nil || agentprofile.Canonical(agentProfileForRun(requesterRun)) != agentprofile.Texture {",
-    "switch agentprofile.Canonical(profile) {",
+    "requesterTexture, _ := agentprofile.Canonical(agentProfileForRun(requesterRun))",
+    "if requesterRun == nil || requesterTexture != agentprofile.Texture {",
+    "workItemProfile, _ := agentprofile.Canonical(profile)",
     "case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:",
-    "return agentprofile.Canonical(agentProfileForRun(requesterRec)) == agentprofile.Super",
+    "budgetProfile, _ := agentprofile.Canonical(agentProfileForRun(requesterRec))",
+    "return budgetProfile == agentprofile.Super",
     "slot = normalizeCoSuperSlot(slot)"
    ],
    "note": "spawned work item profile/authority carriers"
@@ -2324,17 +2375,24 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|lifecycleSweepValidators",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    1909,
-    1928,
-    1991,
-    2045,
-    2201,
-    2254,
-    2255,
-    2293,
-    2294,
-    2323,
-    2324
+    1922,
+    1941,
+    2060,
+    2061,
+    2217,
+    2218,
+    2271,
+    2272,
+    2273,
+    2274,
+    2312,
+    2313,
+    2314,
+    2315,
+    2344,
+    2345,
+    2346,
+    2347
    ],
    "symbol": "lifecycleSweepValidators",
    "field_path": "lifecycleSweepValidators",
@@ -2358,17 +2416,24 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "profile = agentprofile.Canonical(profile)",
-    "if agentprofile.Canonical(runs[i].AgentProfile) != profile {",
-    "rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)",
-    "if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Texture {",
-    "if agentprofile.Canonical(rec.AgentProfile) == agentprofile.Researcher &&",
-    "if agentprofile.Canonical(agentProfileForRun(&run)) != agentprofile.Super ||",
-    "agentprofile.Canonical(run.AgentRole) != agentprofile.Super ||",
-    "if agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher ||",
-    "agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||",
-    "if agentErr != nil || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher ||",
-    "agentprofile.Canonical(agent.Role) != agentprofile.Researcher ||"
+    "profile, _ = agentprofile.Canonical(profile)",
+    "runProfile, _ := agentprofile.Canonical(runs[i].AgentProfile)",
+    "bindingsProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
+    "if bindingsProfile == agentprofile.Texture {",
+    "rewarmProfile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "if rewarmProfile == agentprofile.Researcher &&",
+    "rewarmRunProfile, _ := agentprofile.Canonical(agentProfileForRun(&run))",
+    "rewarmRunRole, _ := agentprofile.Canonical(run.AgentRole)",
+    "if rewarmRunProfile != agentprofile.Super ||",
+    "rewarmRunRole != agentprofile.Super ||",
+    "retryProfile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "retryRole, _ := agentprofile.Canonical(rec.AgentRole)",
+    "if retryProfile != agentprofile.Researcher ||",
+    "retryRole != agentprofile.Researcher ||",
+    "recoveryAgentProfile, _ := agentprofile.Canonical(agent.Profile)",
+    "recoveryAgentRole, _ := agentprofile.Canonical(agent.Role)",
+    "if agentErr != nil || recoveryAgentProfile != agentprofile.Researcher ||",
+    "recoveryAgentRole != agentprofile.Researcher ||"
    ],
    "note": "lifecycle sweep Super/Researcher validators"
   },
@@ -2376,16 +2441,17 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|authorityProfileRouting",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    2588,
-    2591,
-    2636,
-    2726,
-    2727,
-    2734,
-    2743,
-    2755,
-    2756,
-    2773
+    2611,
+    2614,
+    2659,
+    2660,
+    2750,
+    2751,
+    2758,
+    2767,
+    2780,
+    2781,
+    2798
    ],
    "symbol": "authorityProfileRouting",
    "field_path": "authorityProfileRouting",
@@ -2416,13 +2482,14 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.CoSuper {",
-    "} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.Researcher {",
-    "if item.LifecycleVersion > 0 && agentprofile.Canonical(firstNonEmpty(item.AuthorityProfile, agentProfileForRun(rec))) == agentprofile.Researcher {",
-    "profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))",
+    "} else if sweepAuthority, _ := agentprofile.Canonical(first.AuthorityProfile); sweepAuthority == agentprofile.CoSuper {",
+    "} else if sweepAuthority, _ := agentprofile.Canonical(first.AuthorityProfile); sweepAuthority == agentprofile.Researcher {",
+    "sweptAuthority, _ := agentprofile.Canonical(firstNonEmpty(item.AuthorityProfile, agentProfileForRun(rec)))",
+    "if item.LifecycleVersion > 0 && sweptAuthority == agentprofile.Researcher {",
+    "profile, _ := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))",
     "if profile == agentprofile.Researcher && (agent.LifecycleVersion > 0 || first.LifecycleVersion > 0) {",
     "case agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler:",
-    "if agentprofile.Canonical(agent.Role) != profile {",
+    "agentRole, _ := agentprofile.Canonical(agent.Role)",
     "runMetadataAgentProfile: profile,",
     "runMetadataAgentRole:    role,",
     "if profile == agentprofile.Researcher {"
@@ -2433,12 +2500,18 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|researcherRunGuards",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    2846,
-    2847,
-    2848,
-    2900,
-    2918,
-    2926
+    2871,
+    2872,
+    2873,
+    2925,
+    2945,
+    2955,
+    2940,
+    2941,
+    2952,
+    2953,
+    3031,
+    3032
    ],
    "symbol": "researcherRunGuards",
    "field_path": "researcherRunGuards",
@@ -2461,12 +2534,18 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "profile := agentprofile.Canonical(rec.AgentProfile)",
-    "role := agentprofile.Canonical(rec.AgentRole)",
+    "profile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "role, _ := agentprofile.Canonical(rec.AgentRole)",
     "if profile != agentprofile.Researcher && role != agentprofile.Researcher {",
     "if profile != agentprofile.Researcher || role != agentprofile.Researcher ||",
-    "agentprofile.Canonical(stored.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(stored.AgentRole) != agentprofile.Researcher {",
-    "agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher ||"
+    "storedProfile != agentprofile.Researcher || storedRole != agentprofile.Researcher {",
+    "scopeAgentProfile != agentprofile.Researcher || scopeAgentRole != agentprofile.Researcher ||",
+    "storedProfile, _ := agentprofile.Canonical(stored.AgentProfile)",
+    "storedRole, _ := agentprofile.Canonical(stored.AgentRole)",
+    "scopeAgentProfile, _ := agentprofile.Canonical(agent.Profile)",
+    "scopeAgentRole, _ := agentprofile.Canonical(agent.Role)",
+    "sourceTextureProfile, _ := agentprofile.Canonical(sourceAgent.Profile)",
+    "sourceTextureRole, _ := agentprofile.Canonical(sourceAgent.Role)"
    ],
    "note": "researcher run/profile guards"
   },
@@ -2474,7 +2553,7 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|textureSourceGuard",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    3003
+    3034
    ],
    "symbol": "textureSourceGuard",
    "field_path": "textureSourceGuard",
@@ -2492,7 +2571,7 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "agentprofile.Canonical(sourceAgent.Profile) != agentprofile.Texture || agentprofile.Canonical(sourceAgent.Role) != agentprofile.Texture ||"
+    "sourceTextureProfile != agentprofile.Texture || sourceTextureRole != agentprofile.Texture ||"
    ],
    "note": "stays-live profile"
   },
@@ -2500,7 +2579,8 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|cosuperActivationGuard",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    3180
+    3211,
+    3212
    ],
    "symbol": "cosuperActivationGuard",
    "field_path": "cosuperActivationGuard",
@@ -2525,7 +2605,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.CoSuper {"
+    "overlayProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
+    "if overlayProfile == agentprofile.CoSuper {"
    ],
    "note": "CoSuper activation guard"
   },
@@ -2533,9 +2614,9 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|capsuleToolContexts",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    3224,
-    3226,
-    3229
+    3256,
+    3258,
+    3261
    ],
    "symbol": "capsuleToolContexts",
    "field_path": "capsuleToolContexts",
@@ -2571,10 +2652,10 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|profileConsistencyGuards",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    3431,
-    3434,
-    4305,
-    4328
+    3463,
+    3466,
+    4337,
+    4360
    ],
    "symbol": "profileConsistencyGuards",
    "field_path": "profileConsistencyGuards",
@@ -2609,12 +2690,12 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|controlSourceMarkers",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    2202,
-    2256,
-    2295,
-    2855,
-    2930,
-    3437
+    2219,
+    2275,
+    2316,
+    2880,
+    2959,
+    3469
    ],
    "symbol": "controlSourceMarkers",
    "field_path": "controlSourceMarkers",
@@ -2645,8 +2726,8 @@
    "key": "main@57c26060|internal/agentcore/runtime.go|runtimeSlotProse",
    "file": "internal/agentcore/runtime.go",
    "lines": [
-    1047,
-    1051
+    1055,
+    1059
    ],
    "symbol": "runtimeSlotProse",
    "field_path": "runtimeSlotProse",
@@ -2677,34 +2758,33 @@
     346,
     350,
     354,
-    429,
     430,
-    439,
+    431,
     440,
-    1217,
-    1366,
-    1931,
-    1998,
-    2117,
-    2738,
-    3165,
-    3324,
-    3429,
-    3430,
-    3488,
-    3523,
-    3656,
-    3683,
-    3687,
-    3691,
-    3698,
-    3739,
-    3824,
-    3889,
-    4024,
-    4205,
-    4209,
-    4466
+    441,
+    1228,
+    1379,
+    1945,
+    2013,
+    2133,
+    2762,
+    3196,
+    3356,
+    3461,
+    3462,
+    3520,
+    3688,
+    3715,
+    3719,
+    3730,
+    3771,
+    3856,
+    3921,
+    4056,
+    4237,
+    4241,
+    4498,
+    2004
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -2741,14 +2821,12 @@
     "case agentprofile.Texture:",
     "if runHasProfile(rec, agentprofile.Texture) && kind == types.EventRunProgress {",
     "if runHasProfile(rec, agentprofile.Texture) {",
-    "profile := agentprofile.Canonical(rec.AgentProfile)",
-    "role := agentprofile.Canonical(rec.AgentRole)",
-    "if runHasProfile(rec, agentprofile.Texture) {",
+    "profile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "role, _ := agentprofile.Canonical(rec.AgentRole)",
     "if runHasProfile(rec, agentprofile.Texture) {",
     "if agentProfileForRun(rec) != agentprofile.Conductor {",
     "return agentprofile.Texture",
     "requestedApp = agentprofile.Texture",
-    "return agentprofile.Texture",
     "case agentprofile.Texture:",
     "decision.App = agentprofile.Texture",
     "parsed.App = agentprofile.Texture",
@@ -2756,7 +2834,8 @@
     "if !runHasProfile(rec, agentprofile.Texture) ||",
     "if agentProfileForRun(rec) == agentprofile.Conductor {",
     "if !runHasProfile(rec, agentprofile.Texture) {",
-    "if runHasProfile(rec, agentprofile.Texture) {"
+    "if runHasProfile(rec, agentprofile.Texture) {",
+    "skippedProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))"
    ],
    "note": "canonical-stays-live profile consumers (auto-grouped; identity map)"
   },
@@ -2969,7 +3048,7 @@
    "file": "internal/agentcore/skill_context.go",
    "lines": [
     49,
-    50
+    51
    ],
    "symbol": "skillContextProfiles",
    "field_path": "skillContextProfiles",
@@ -2990,7 +3069,7 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "switch agentprofile.Canonical(profile) {",
+    "canonicalProfile, _ := agentprofile.Canonical(profile)",
     "case agentprofile.Conductor, agentprofile.Texture, agentprofile.Super, agentprofile.CoSuper:"
    ],
    "note": "skill context profile allowlist"
@@ -3029,8 +3108,8 @@
     316,
     487,
     488,
-    1779,
-    1780
+    1783,
+    1784
    ],
    "symbol": "superRunMetadataWriters",
    "field_path": "superRunMetadataWriters",
@@ -3063,9 +3142,13 @@
    "lines": [
     1023,
     1374,
-    1416,
-    1421,
-    2343
+    1375,
+    1376,
+    1418,
+    1419,
+    1424,
+    1425,
+    2347
    ],
    "symbol": "residentSuperGuards",
    "field_path": "residentSuperGuards",
@@ -3092,9 +3175,13 @@
    "verification": "verified",
    "texts": [
     "if agentProfileForRun(rec) != agentprofile.Super {",
-    "if agentprofile.Canonical(agent.Profile) != agentprofile.Super || agentprofile.Canonical(agent.Role) != agentprofile.Super || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {",
-    "return agentprofile.Canonical(update.Role) == agentprofile.Texture &&",
-    "if agentprofile.Canonical(update.Role) != agentprofile.CoSuper ||",
+    "agentProfile, _ := agentprofile.Canonical(agent.Profile)",
+    "agentRole, _ := agentprofile.Canonical(agent.Role)",
+    "if agentProfile != agentprofile.Super || agentRole != agentprofile.Super || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {",
+    "role, _ := agentprofile.Canonical(update.Role)",
+    "return role == agentprofile.Texture &&",
+    "role, _ := agentprofile.Canonical(update.Role)",
+    "if role != agentprofile.CoSuper ||",
     "case agentprofile.Super, agentprofile.CoSuper, agentprofile.Researcher, agentprofile.Texture:"
    ],
    "note": "resident Super + report admission guards"
@@ -3103,13 +3190,19 @@
    "key": "main@57c26060|internal/agentcore/super_controller.go|lifecycleResearcherScan",
    "file": "internal/agentcore/super_controller.go",
    "lines": [
-    1698,
-    1699,
-    2030,
-    2408,
-    2445,
-    2533,
-    2540
+    1702,
+    1703,
+    2034,
+    2412,
+    2451,
+    2539,
+    2540,
+    2541,
+    2548,
+    2549,
+    2550,
+    2448,
+    2449
    ],
    "symbol": "lifecycleResearcherScan",
    "field_path": "lifecycleResearcherScan",
@@ -3132,13 +3225,19 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))",
+    "profile, _ := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))",
     "lifecycleAgent := profile == agentprofile.Researcher && agent.LifecycleVersion > 0",
     "if agentProfileForRun(rec) == agentprofile.Researcher {",
     "if agentProfileForRun(rec) == agentprofile.Researcher && len(lifecycleControlWorkIDsForRun(rec)) > 0 {",
-    "agentprofile.Canonical(run.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(run.AgentRole) != agentprofile.Researcher ||",
-    "if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher || agent.LifecycleVersion <= 0 {",
-    "if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||"
+    "scanProfile != agentprofile.Researcher || scanRole != agentprofile.Researcher ||",
+    "agentProfile, _ := agentprofile.Canonical(agent.Profile)",
+    "agentRole, _ := agentprofile.Canonical(agent.Role)",
+    "if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentProfile != agentprofile.Researcher || agentRole != agentprofile.Researcher || agent.LifecycleVersion <= 0 {",
+    "runProfile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "runRole, _ := agentprofile.Canonical(rec.AgentRole)",
+    "if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || runProfile != agentprofile.Researcher || runRole != agentprofile.Researcher ||",
+    "scanProfile, _ := agentprofile.Canonical(run.AgentProfile)",
+    "scanRole, _ := agentprofile.Canonical(run.AgentRole)"
    ],
    "note": "lifecycle researcher run/agent scan"
   },
@@ -3146,8 +3245,8 @@
    "key": "main@57c26060|internal/agentcore/super_controller.go|profileBranchConsumers",
    "file": "internal/agentcore/super_controller.go",
    "lines": [
-    1767,
-    2771
+    1771,
+    2781
    ],
    "symbol": "profileBranchConsumers",
    "field_path": "profileBranchConsumers",
@@ -3184,17 +3283,17 @@
     566,
     940,
     944,
-    1462,
-    1480,
-    1687,
-    1808,
-    1829,
-    1990,
-    2150,
-    2274,
-    2405,
-    2446,
-    2541
+    1466,
+    1484,
+    1691,
+    1812,
+    1833,
+    1994,
+    2154,
+    2278,
+    2409,
+    2452,
+    2551
    ],
    "symbol": "controlSourceMarkers",
    "field_path": "controlSourceMarkers",
@@ -3236,7 +3335,7 @@
    "key": "main@57c26060|internal/agentcore/super_controller.go|providerMessageChecks",
    "file": "internal/agentcore/super_controller.go",
    "lines": [
-    2185
+    2189
    ],
    "symbol": "providerMessageChecks",
    "field_path": "providerMessageChecks",
@@ -3263,9 +3362,9 @@
    "file": "internal/agentcore/super_controller.go",
    "lines": [
     261,
-    2044,
-    2277,
-    2401
+    2048,
+    2281,
+    2405
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -3358,7 +3457,7 @@
    "verification": "verified",
    "texts": [
     "case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:",
-    "profile := agentprofile.Canonical(run.AgentProfile)",
+    "profile, _ := agentprofile.Canonical(run.AgentProfile)",
     "if profile == agentprofile.Super {",
     "if profile == agentprofile.Super {",
     "if profile == agentprofile.CoSuper {",
@@ -3452,15 +3551,15 @@
    "file": "internal/agentcore/tool_profiles.go",
    "lines": [
     63,
-    67,
-    75,
-    78,
-    82,
+    68,
+    77,
+    80,
     85,
     89,
-    94,
+    96,
     97,
-    101
+    106,
+    111
    ],
    "symbol": "profileDefaultFallbacks",
    "field_path": "profileDefaultFallbacks",
@@ -3478,16 +3577,16 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "return agentprofile.Canonical(rec.AgentProfile)",
-    "return agentprofile.Canonical(profile)",
+    "profile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "canonicalProfile, _ := agentprofile.Canonical(profile)",
     "return agentprofile.Super",
-    "return agentprofile.Canonical(rec.AgentProfile)",
-    "return agentprofile.Canonical(profile)",
+    "profile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "canonicalProfile, _ := agentprofile.Canonical(profile)",
     "return agentprofile.Super",
-    "return rec != nil && agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Canonical(profile)",
-    "return agentprofile.Super",
-    "return agentprofile.Canonical(rec.AgentRole)",
-    "return agentprofile.Canonical(role)"
+    "runProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))",
+    "targetProfile, _ := agentprofile.Canonical(profile)",
+    "role, _ := agentprofile.Canonical(rec.AgentRole)",
+    "canonicalRole, _ := agentprofile.Canonical(role)"
    ],
    "note": "profile-for-run Super fallbacks"
   },
@@ -3495,10 +3594,10 @@
    "key": "main@57c26060|internal/agentcore/tool_profiles.go|systemPromptBranches",
    "file": "internal/agentcore/tool_profiles.go",
    "lines": [
-    246,
-    249,
-    272,
-    279
+    257,
+    260,
+    283,
+    290
    ],
    "symbol": "systemPromptBranches",
    "field_path": "systemPromptBranches",
@@ -3533,16 +3632,16 @@
    "key": "main@57c26060|internal/agentcore/tool_profiles.go|registryInstallProfiles",
    "file": "internal/agentcore/tool_profiles.go",
    "lines": [
-    412,
-    428,
-    435,
-    445,
-    452,
+    423,
+    439,
+    446,
     456,
-    460,
-    470,
+    463,
+    467,
     471,
-    472
+    481,
+    482,
+    483
    ],
    "symbol": "registryInstallProfiles",
    "field_path": "registryInstallProfiles",
@@ -3583,11 +3682,8 @@
    "key": "main@57c26060|internal/agentcore/tool_profiles.go|assignedRegistryProse",
    "file": "internal/agentcore/tool_profiles.go",
    "lines": [
-    320,
-    323,
-    326,
-    348,
-    352
+    331,
+    359
    ],
    "symbol": "assignedRegistryProse",
    "field_path": "assignedRegistryProse",
@@ -3606,9 +3702,6 @@
    "verification": "verified",
    "texts": [
     "return nil, fmt.Errorf(\"build assigned co-super registry: %w\", err)",
-    "return nil, fmt.Errorf(\"build assigned co-super registry: %w\", err)",
-    "return nil, fmt.Errorf(\"build assigned co-super registry: %w\", err)",
-    "return nil, fmt.Errorf(\"build RLM assigned co-super registry: %w\", err)",
     "return nil, fmt.Errorf(\"build RLM assigned co-super registry: %w\", err)"
    ],
    "note": "error copy, rename opportunistically"
@@ -3659,19 +3752,19 @@
    "key": "main@57c26060|internal/agentcore/tool_profiles.go|staysLiveConsumers",
    "file": "internal/agentcore/tool_profiles.go",
    "lines": [
-    157,
-    171,
-    176,
-    223,
-    227,
+    168,
+    182,
+    187,
     234,
-    240,
-    243,
-    469,
-    473,
-    474,
-    475,
-    476
+    238,
+    245,
+    251,
+    254,
+    480,
+    484,
+    485,
+    486,
+    487
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -3827,9 +3920,10 @@
    "key": "main@57c26060|internal/agentcore/tools_coagent.go|duplicateRouteGuards",
    "file": "internal/agentcore/tools_coagent.go",
    "lines": [
-    60,
-    111,
-    213
+    61,
+    113,
+    215,
+    59
    ],
    "symbol": "duplicateRouteGuards",
    "field_path": "duplicateRouteGuards",
@@ -3847,9 +3941,10 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "agentprofile.Canonical(agentProfileForRun(&child)) != agentprofile.Texture ||",
-    "agentprofile.Canonical(agentProfileForRun(&child)) != agentprofile.Texture ||",
-    "if toolregistry.ExecutionContextFrom(ctx).Profile == agentprofile.Super {"
+    "childProfile != agentprofile.Texture ||",
+    "childProfile != agentprofile.Texture ||",
+    "if toolregistry.ExecutionContextFrom(ctx).Profile == agentprofile.Super {",
+    "childProfile, _ := agentprofile.Canonical(agentProfileForRun(&child))"
    ],
    "note": "duplicate route + Super execution guards"
   },
@@ -3909,7 +4004,8 @@
    "key": "main@57c26060|internal/agentcore/tools_wire_processor.go|processorDecisionProfile",
    "file": "internal/agentcore/tools_wire_processor.go",
    "lines": [
-    61
+    61,
+    62
    ],
    "symbol": "processorDecisionProfile",
    "field_path": "processorDecisionProfile",
@@ -3927,7 +4023,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agentprofile.Canonical(agentProfileForRun(runRec)) != agentprofile.Processor {"
+    "profile, _ := agentprofile.Canonical(agentProfileForRun(runRec))",
+    "if profile != agentprofile.Processor {"
    ],
    "note": "stays-live profile"
   },
@@ -3938,14 +4035,14 @@
     213,
     354,
     355,
-    358,
-    364,
+    359,
     365,
-    368,
-    371,
-    396,
-    417,
-    418
+    366,
+    367,
+    374,
+    399,
+    418,
+    419
    ],
    "symbol": "reportAuthorityMatrix",
    "field_path": "reportAuthorityMatrix",
@@ -3972,16 +4069,16 @@
    "verification": "verified",
    "texts": [
     "if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Super {",
-    "targetProfile := agentprofile.Canonical(target.Profile)",
-    "if targetProfile == \"\" || agentprofile.Canonical(target.Role) != targetProfile || strings.TrimSpace(target.ChannelID) == \"\" {",
+    "targetProfile, _ := agentprofile.Canonical(target.Profile)",
+    "targetRole, _ := agentprofile.Canonical(target.Role)",
     "authority.target, authority.targetProfile = target, targetProfile",
-    "callerProfile := agentprofile.Canonical(callerAgent.Profile)",
-    "if callerProfile == \"\" || agentprofile.Canonical(callerAgent.Role) != callerProfile {",
-    "if executionProfile := agentprofile.Canonical(execution.Profile); executionProfile == \"\" || executionProfile != callerProfile {",
+    "callerProfile, _ := agentprofile.Canonical(callerAgent.Profile)",
+    "callerRole, _ := agentprofile.Canonical(callerAgent.Role)",
+    "executionProfile, _ := agentprofile.Canonical(execution.Profile)",
     "authority.callerAgent, authority.callerProfile = callerAgent, callerProfile",
     "if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Super {",
-    "agentprofile.Canonical(configuredAgentProfileForRun(&run)) != profile ||",
-    "agentprofile.Canonical(agentRoleForRun(&run)) != profile {"
+    "configuredProfile, _ := agentprofile.Canonical(configuredAgentProfileForRun(&run))",
+    "runRole, _ := agentprofile.Canonical(agentRoleForRun(&run))"
    ],
    "note": "CoSuper\u2194Super report authority matrix"
   },
@@ -3989,13 +4086,13 @@
    "key": "main@57c26060|internal/agentcore/tools_worker_update.go|spawnAuthorityMatrix",
    "file": "internal/agentcore/tools_worker_update.go",
    "lines": [
-    446,
-    447,
-    454,
-    455,
+    451,
+    452,
+    459,
     460,
-    481,
-    485
+    465,
+    486,
+    490
    ],
    "symbol": "spawnAuthorityMatrix",
    "field_path": "spawnAuthorityMatrix",
@@ -4030,8 +4127,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "callerProfile := agentprofile.Canonical(execution.Profile)",
-    "targetProfile = agentprofile.Canonical(targetProfile)",
+    "callerProfile, _ := agentprofile.Canonical(execution.Profile)",
+    "targetProfile, _ = agentprofile.Canonical(targetProfile)",
     "if !agentprofile.CanMessage(callerProfile, targetProfile) {",
     "if targetProfile == agentprofile.Email {",
     "if callerProfile == agentprofile.Super && targetProfile == agentprofile.CoSuper {",
@@ -4044,13 +4141,15 @@
    "key": "main@57c26060|internal/agentcore/tools_worker_update.go|requesterLoadValidators",
    "file": "internal/agentcore/tools_worker_update.go",
    "lines": [
-    517,
-    522,
-    531,
-    543,
-    544,
-    647,
-    654
+    529,
+    538,
+    550,
+    551,
+    552,
+    553,
+    665,
+    520,
+    526
    ],
    "symbol": "requesterLoadValidators",
    "field_path": "requesterLoadValidators",
@@ -4068,13 +4167,15 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "agentprofile.Canonical(work.AuthorityProfile) != authority.callerProfile {",
-    "agentprofile.Canonical(metadataStringValue(work.Details, \"requested_by_profile\")) != agentprofile.Texture {",
-    "requesterProfile := agentprofile.Canonical(metadataStringValue(caller.Metadata, \"requested_by_profile\"))",
-    "if parent.AgentID != target.AgentID || agentprofile.Canonical(configuredAgentProfileForRun(&parent)) != agentprofile.Texture ||",
-    "agentprofile.Canonical(agentRoleForRun(&parent)) != agentprofile.Texture || strings.TrimSpace(trajectoryIDForRun(&parent)) != strings.TrimSpace(trajectoryIDForRun(&caller)) {",
-    "agentprofile.Canonical(metadataStringValue(caller.Metadata, \"requested_by_profile\")) != agentprofile.Canonical(target.Profile) {",
-    "if parent.AgentID != target.AgentID || agentprofile.Canonical(configuredAgentProfileForRun(&parent)) != agentprofile.Canonical(target.Profile) ||"
+    "requesterProfile != agentprofile.Texture {",
+    "requesterProfile, _ := agentprofile.Canonical(metadataStringValue(caller.Metadata, \"requested_by_profile\"))",
+    "parentProfile, _ := agentprofile.Canonical(configuredAgentProfileForRun(&parent))",
+    "parentRole, _ := agentprofile.Canonical(agentRoleForRun(&parent))",
+    "if parent.AgentID != target.AgentID || parentProfile != agentprofile.Texture ||",
+    "parentRole != agentprofile.Texture || strings.TrimSpace(trajectoryIDForRun(&parent)) != strings.TrimSpace(trajectoryIDForRun(&caller)) {",
+    "parentProfile, _ := agentprofile.Canonical(configuredAgentProfileForRun(&parent))",
+    "authorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)",
+    "requesterProfile, _ := agentprofile.Canonical(metadataStringValue(work.Details, \"requested_by_profile\"))"
    ],
    "note": "lifecycle + legacy requester Super loads"
   },
@@ -4085,18 +4186,20 @@
     207,
     239,
     253,
-    622,
-    626,
-    632,
+    631,
     635,
-    686,
-    715,
-    728,
-    740,
+    641,
+    644,
+    698,
+    727,
     741,
-    770,
-    784,
-    1005
+    755,
+    756,
+    785,
+    799,
+    800,
+    1021,
+    739
    ],
    "symbol": "assignedReportAuthority",
    "field_path": "assignedReportAuthority",
@@ -4131,12 +4234,14 @@
     "if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Texture {",
     "if authority.targetProfile == agentprofile.CoSuper {",
     "if authority.callerProfile != agentprofile.CoSuper || authority.targetProfile != agentprofile.Super {",
-    "agentprofile.Canonical(metadataStringValue(authority.callerRun.Metadata, \"requested_by_profile\")) != agentprofile.Super {",
-    "agentprofile.Canonical(configuredAgentProfileForRun(&parent)) != agentprofile.Super ||",
-    "agentprofile.Canonical(agentRoleForRun(&parent)) != agentprofile.Super ||",
+    "requesterProfile != agentprofile.Super {",
+    "parentProfile != agentprofile.Super ||",
+    "parentRole != agentprofile.Super ||",
     "if authority.callerProfile != agentprofile.CoSuper || authority.targetProfile != agentprofile.Texture || authority.trajectoryID == \"\" {",
-    "if agentprofile.Canonical(configuredAgentProfileForRun(&owningSuper)) != agentprofile.Super {",
-    "Role:          strings.TrimSpace(update.Role),"
+    "owningSuperProfile, _ := agentprofile.Canonical(configuredAgentProfileForRun(&owningSuper))",
+    "if owningSuperProfile != agentprofile.Super {",
+    "Role:          strings.TrimSpace(update.Role),",
+    "requesterProfile, _ := agentprofile.Canonical(metadataStringValue(authority.callerRun.Metadata, \"requested_by_profile\"))"
    ],
    "note": "assigned CoSuper\u2192Super/Texture report authority"
   },
@@ -4144,12 +4249,12 @@
    "key": "main@57c26060|internal/agentcore/tools_worker_update.go|authorityErrorProse",
    "file": "internal/agentcore/tools_worker_update.go",
    "lines": [
-    463,
-    470,
-    757,
-    764,
-    771,
-    778
+    468,
+    475,
+    772,
+    779,
+    786,
+    793
    ],
    "symbol": "authorityErrorProse",
    "field_path": "authorityErrorProse",
@@ -4181,8 +4286,8 @@
    "key": "main@57c26060|internal/agentcore/tools_worker_update.go|staysLiveConsumers",
    "file": "internal/agentcore/tools_worker_update.go",
    "lines": [
-    536,
-    624
+    543,
+    633
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -4230,7 +4335,7 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "switch agentprofile.Canonical(agentProfileForRun(rec)) {"
+    "profile, _ := agentprofile.Canonical(agentProfileForRun(rec))"
    ],
    "note": "trajectory kind profile (exact text embedded at build)"
   },
@@ -4238,8 +4343,8 @@
    "key": "main@57c26060|internal/agentcore/trajectory.go|staysLiveConsumers",
    "file": "internal/agentcore/trajectory.go",
    "lines": [
-    19,
-    21
+    20,
+    22
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -4287,7 +4392,7 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "switch agentprofile.Canonical(profile) {"
+    "canonicalProfile, _ := agentprofile.Canonical(profile)"
    ],
    "note": "stays-live profile"
   },
@@ -4295,8 +4400,8 @@
    "key": "main@57c26060|internal/agentcore/wire_metadata.go|staysLiveConsumers",
    "file": "internal/agentcore/wire_metadata.go",
    "lines": [
-    20,
-    22
+    21,
+    23
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -4409,9 +4514,9 @@
    "key": "main@57c26060|internal/agentprofile/agentprofile.go|profileConstants",
    "file": "internal/agentprofile/agentprofile.go",
    "lines": [
-    9,
-    10,
-    11
+    12,
+    13,
+    14
    ],
    "symbol": "profileConstants",
    "field_path": "profileConstants",
@@ -4453,11 +4558,11 @@
    "key": "main@57c26060|internal/agentprofile/agentprofile.go|staysLiveConstants",
    "file": "internal/agentprofile/agentprofile.go",
    "lines": [
-    8,
-    12,
-    13,
-    14,
-    15
+    11,
+    15,
+    16,
+    17,
+    18
    ],
    "symbol": "staysLiveConstants",
    "field_path": "staysLiveConstants",
@@ -4491,7 +4596,7 @@
    "key": "main@57c26060|internal/agentprofile/agentprofile.go|canonicalResearchTable",
    "file": "internal/agentprofile/agentprofile.go",
    "lines": [
-    120
+    140
    ],
    "symbol": "canonicalResearchTable",
    "field_path": "canonicalResearchTable",
@@ -4522,7 +4627,7 @@
    "key": "main@57c26060|internal/agentprofile/agentprofile.go|canonicalEngineeringTable",
    "file": "internal/agentprofile/agentprofile.go",
    "lines": [
-    122
+    142
    ],
    "symbol": "canonicalEngineeringTable",
    "field_path": "canonicalEngineeringTable",
@@ -4551,8 +4656,10 @@
    "key": "main@57c26060|internal/agentprofile/agentprofile.go|spawnTargetTables",
    "file": "internal/agentprofile/agentprofile.go",
    "lines": [
-    149,
-    151
+    170,
+    173,
+    171,
+    174
    ],
    "symbol": "spawnTargetTables",
    "field_path": "spawnTargetTables",
@@ -4575,8 +4682,10 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "targetProfile = Canonical(targetProfile)",
-    "if targetProfile == Canonical(allowed) {"
+    "target, _ := Canonical(targetProfile)",
+    "canonicalAllowed, _ := Canonical(allowed)",
+    "targetProfile = target",
+    "if targetProfile == canonicalAllowed {"
    ],
    "note": "static V1 target sets migrate tokens-only; Researcher spawn list stays empty"
   },
@@ -4584,8 +4693,8 @@
    "key": "main@57c26060|internal/agentprofile/agentprofile.go|messageTargetTables",
    "file": "internal/agentprofile/agentprofile.go",
    "lines": [
-    161,
-    163
+    184,
+    187
    ],
    "symbol": "messageTargetTables",
    "field_path": "messageTargetTables",
@@ -4608,8 +4717,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "targetProfile = Canonical(targetProfile)",
-    "if targetProfile == Canonical(allowed) {"
+    "target, _ := Canonical(targetProfile)",
+    "canonicalAllowed, _ := Canonical(allowed)"
    ],
    "note": "static V1 message targets migrate tokens-only"
   },
@@ -4617,15 +4726,15 @@
    "key": "main@57c26060|internal/agentprofile/agentprofile.go|policyProfileValues",
    "file": "internal/agentprofile/agentprofile.go",
    "lines": [
-    36,
-    42,
-    60,
-    68,
-    80,
-    91,
-    97,
-    100,
-    111
+    40,
+    46,
+    64,
+    72,
+    84,
+    95,
+    101,
+    104,
+    115
    ],
    "symbol": "policyProfileValues",
    "field_path": "policyProfileValues",
@@ -5101,7 +5210,7 @@
    "inverse": "NA",
    "verification": "verified",
    "texts": [
-    "callerProfile := agentprofile.Canonical(exec.Profile)",
+    "callerProfile, _ := agentprofile.Canonical(exec.Profile)",
     "if callerProfile == agentprofile.Texture && exec.RunRecord != nil &&",
     "parent = &types.RunRecord{RunID: exec.RunID, OwnerID: exec.OwnerID, AgentID: exec.AgentID, AgentProfile: callerProfile, AgentRole: exec.Role, ChannelID: exec.ChannelID}"
    ],
@@ -5134,9 +5243,9 @@
    "verification": "verified",
    "texts": [
     "if !agentprofile.CanSpawn(callerProfile, profile) {",
-    "value = agentprofile.Canonical(value)",
-    "direct := agentprofile.Canonical(raw)",
-    "candidate := agentprofile.Canonical(token)"
+    "value, _ = agentprofile.Canonical(value)",
+    "direct, _ := agentprofile.Canonical(raw)",
+    "candidate, _ := agentprofile.Canonical(token)"
    ],
    "note": "spawn policy admission"
   },
@@ -6583,7 +6692,11 @@
    "file": "internal/store/lifecycle_control_activation_failure.go",
    "lines": [
     144,
-    151
+    145,
+    146,
+    153,
+    154,
+    155
    ],
    "symbol": "researcherFailureValidators",
    "field_path": "researcherFailureValidators",
@@ -6606,8 +6719,12 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher || agent.LifecycleVersion <= 0 || strings.TrimSpace(agent.ActiveRunID) !=",
-    "if run.OwnerID != ownerID || run.ComputerID != computerID || run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID || agentprofile.Canonical(run.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(run.AgentRole) != agentprofile.Researcher || !lifecycleRunOwnsActivation(ru"
+    "failAgentProfile, _ := agentprofile.Canonical(agent.Profile)",
+    "failAgentRole, _ := agentprofile.Canonical(agent.Role)",
+    "if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID || failAgentProfile != agentprofile.Researcher || failAgentRole != agentprofile.Researcher || agent.LifecycleVersion <= 0 || strings.TrimSpace(agent.ActiveRunID) != req.RunID {",
+    "failRunProfile, _ := agentprofile.Canonical(run.AgentProfile)",
+    "failRunRole, _ := agentprofile.Canonical(run.AgentRole)",
+    "if run.OwnerID != ownerID || run.ComputerID != computerID || run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID || failRunProfile != agentprofile.Researcher || failRunRole != agentprofile.Researcher || !lifecycleRunOwnsActivation(run.State) || metadataStringValueStore(run.Metadata, \""
    ],
    "note": "activation-failure researcher validators"
   },
@@ -6616,12 +6733,16 @@
    "file": "internal/store/lifecycle_control_delivery.go",
    "lines": [
     274,
-    357,
-    358,
-    363,
-    374,
+    275,
+    276,
+    359,
+    360,
+    361,
+    366,
     377,
-    472
+    381,
+    476,
+    378
    ],
    "symbol": "deliveryAgentValidators",
    "field_path": "deliveryAgentValidators",
@@ -6645,13 +6766,17 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher || agent.LifecycleVersion <= 0 {",
-    "profile := agentprofile.Canonical(agent.Profile)",
-    "if agent.OwnerID != ownerID || agent.ComputerID != computerID || agentprofile.Canonical(agent.Role) != profile || (profile != agentprofile.Researcher && !(profile == agentprofile.Super && agent.AgentID == agentprofile.Super+\":\"+ownerID && agent.LifecycleVersion == 0)) {",
+    "deliverAgentProfile, _ := agentprofile.Canonical(agent.Profile)",
+    "deliverAgentRole, _ := agentprofile.Canonical(agent.Role)",
+    "if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || deliverAgentProfile != agentprofile.Researcher || deliverAgentRole != agentprofile.Researcher || agent.LifecycleVersion <= 0 {",
+    "profile, _ := agentprofile.Canonical(agent.Profile)",
+    "admitRole, _ := agentprofile.Canonical(agent.Role)",
+    "if agent.OwnerID != ownerID || agent.ComputerID != computerID || admitRole != profile || (profile != agentprofile.Researcher && !(profile == agentprofile.Super && agent.AgentID == agentprofile.Super+\":\"+ownerID && agent.LifecycleVersion == 0)) {",
     "if profile == agentprofile.Super {",
-    "if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != req.TargetAgentID || agentprofile.Canonical(run.AgentProfile) != profile || !run.State.Active() {",
+    "deliverTargetProfile, _ := agentprofile.Canonical(run.AgentProfile)",
     "if profile == agentprofile.Super {",
-    "if profile != agentprofile.Researcher || len(controlWorkIDs) != len(req.ActivationRefresh.WorkItemIDs) {"
+    "if profile != agentprofile.Researcher || len(controlWorkIDs) != len(req.ActivationRefresh.WorkItemIDs) {",
+    "if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != req.TargetAgentID || deliverTargetProfile != profile || !run.State.Active() {"
    ],
    "note": "control delivery agent validators"
   },
@@ -6659,12 +6784,12 @@
    "key": "main@57c26060|internal/store/lifecycle_control_delivery.go|deliveryRunValidators",
    "file": "internal/store/lifecycle_control_delivery.go",
    "lines": [
-    606,
-    607,
-    608,
-    612,
-    623,
-    626
+    610,
+    611,
+    613,
+    617,
+    628,
+    632
    ],
    "symbol": "deliveryRunValidators",
    "field_path": "deliveryRunValidators",
@@ -6688,11 +6813,11 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "profile := agentprofile.Canonical(agent.Profile)",
-    "if agent.OwnerID != ownerID || agent.ComputerID != computerID || agentprofile.Canonical(agent.Role) != profile ||",
+    "profile, _ := agentprofile.Canonical(agent.Profile)",
+    "admitRole, _ := agentprofile.Canonical(agent.Role)",
     "(profile != agentprofile.Researcher && !(profile == agentprofile.Super && targetAgentID == agentprofile.Super+\":\"+ownerID && agent.LifecycleVersion == 0)) {",
     "if profile == agentprofile.Super {",
-    "if run.RunID != targetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != targetAgentID || agentprofile.Canonical(run.AgentProfile) != profile {",
+    "deliverPageProfile, _ := agentprofile.Canonical(run.AgentProfile)",
     "if profile == agentprofile.Super {"
    ],
    "note": "delivered page run validators incl. super: target"
@@ -6701,14 +6826,14 @@
    "key": "main@57c26060|internal/store/lifecycle_control_delivery.go|producerReportJoins",
    "file": "internal/store/lifecycle_control_delivery.go",
    "lines": [
-    675,
-    688,
-    689,
-    731,
-    745,
-    746,
-    754,
-    788
+    681,
+    694,
+    695,
+    737,
+    751,
+    752,
+    760,
+    794
    ],
    "symbol": "producerReportJoins",
    "field_path": "producerReportJoins",
@@ -6749,8 +6874,8 @@
    "key": "main@57c26060|internal/store/lifecycle_control_delivery.go|controlSourceMarkers",
    "file": "internal/store/lifecycle_control_delivery.go",
    "lines": [
-    286,
-    489
+    288,
+    493
    ],
    "symbol": "controlSourceMarkers",
    "field_path": "controlSourceMarkers",
@@ -7075,8 +7200,9 @@
    "key": "main@57c26060|internal/store/store.go|producerReportGuard",
    "file": "internal/store/store.go",
    "lines": [
-    2800,
-    2801
+    2801,
+    2802,
+    2799
    ],
    "symbol": "producerReportGuard",
    "field_path": "producerReportGuard",
@@ -7102,8 +7228,9 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "agentprofile.Canonical(update.Role) == agentprofile.CoSuper &&",
-    "strings.TrimSpace(update.TargetAgentID) == \"super:\"+ownerID"
+    "reportRole == agentprofile.CoSuper &&",
+    "strings.TrimSpace(update.TargetAgentID) == \"super:\"+ownerID",
+    "reportRole, _ := agentprofile.Canonical(update.Role)"
    ],
    "note": "producer report CoSuper\u2192super: guard"
   },
@@ -7111,7 +7238,7 @@
    "key": "main@57c26060|internal/store/store.go|providerMessageRoles",
    "file": "internal/store/store.go",
    "lines": [
-    3024
+    3025
    ],
    "symbol": "providerMessageRoles",
    "field_path": "providerMessageRoles",
@@ -7275,7 +7402,7 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "callerProfile := agentprofile.Canonical(req.CallerProfile)",
+    "callerProfile, _ := agentprofile.Canonical(req.CallerProfile)",
     "if callerProfile != agentprofile.Processor && callerProfile != agentprofile.Reconciler {",
     "if callerProfile == agentprofile.Processor {",
     "if callerProfile == agentprofile.Reconciler {"
@@ -7287,11 +7414,11 @@
    "file": "internal/textureowner/coagent_route.go",
    "lines": [
     123,
-    182,
-    205,
-    217,
-    222,
-    424
+    124,
+    219,
+    224,
+    426,
+    177
    ],
    "symbol": "handoffAuthorityCarrier",
    "field_path": "handoffAuthorityCarrier",
@@ -7309,12 +7436,12 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agentprofile.Canonical(agentProfileForRun(&run)) != agentprofile.Texture ||",
-    "\"created_from\":                   agentprofile.Canonical(req.CallerProfile),",
-    "AuthorLabel: strings.TrimSpace(firstNonEmpty(parentRec.AgentID, agentprofile.Canonical(req.CallerProfile))),",
+    "routeRunProfile, _ := agentprofile.Canonical(agentProfileForRun(&run))",
+    "if routeRunProfile != agentprofile.Texture ||",
     "AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture,",
     "Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: doc.DocID,",
-    "entity.Provenance.CreatedBy = firstNonEmpty(agentprofile.Canonical(req.CallerProfile), entity.Provenance.CreatedBy)"
+    "provenanceProfile, _ := agentprofile.Canonical(req.CallerProfile)",
+    "seedCallerProfile, _ := agentprofile.Canonical(req.CallerProfile)"
    ],
    "note": "stays-live handoff authority"
   },
@@ -7354,14 +7481,14 @@
     308,
     309,
     327,
-    331,
-    342,
-    345,
-    349,
-    410,
-    413,
+    332,
+    344,
+    347,
+    352,
+    414,
     417,
-    423
+    422,
+    429
    ],
    "symbol": "profileFallbacks",
    "field_path": "profileFallbacks",
@@ -7381,14 +7508,14 @@
    "texts": [
     "Profile:    configuredAgentProfileForRun(rec),",
     "Role:       agentRoleForRun(rec),",
-    "return agentprofile.Canonical(rec.AgentProfile)",
-    "return agentprofile.Canonical(profile)",
+    "configuredProfile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "configuredMetaProfile, _ := agentprofile.Canonical(profile)",
     "return agentprofile.Super",
-    "return agentprofile.Canonical(rec.AgentRole)",
-    "return agentprofile.Canonical(role)",
+    "configuredRole, _ := agentprofile.Canonical(rec.AgentRole)",
+    "configuredMetaRole, _ := agentprofile.Canonical(role)",
     "return agentprofile.Super",
-    "return agentprofile.Canonical(rec.AgentProfile)",
-    "return agentprofile.Canonical(profile)",
+    "configuredProfile, _ := agentprofile.Canonical(rec.AgentProfile)",
+    "configuredMetaProfile, _ := agentprofile.Canonical(profile)",
     "return agentprofile.Super"
    ],
    "note": "Super profile fallbacks"
@@ -7397,9 +7524,9 @@
    "key": "main@57c26060|internal/textureowner/handler.go|staysLiveConsumers",
    "file": "internal/textureowner/handler.go",
    "lines": [
-    335,
-    405,
-    421
+    337,
+    409,
+    427
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -7717,7 +7844,8 @@
    "key": "main@57c26060|internal/textureowner/texture_controller.go|reconcileSubjects",
    "file": "internal/textureowner/texture_controller.go",
    "lines": [
-    54
+    54,
+    55
    ],
    "symbol": "reconcileSubjects",
    "field_path": "reconcileSubjects",
@@ -7738,7 +7866,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agentprofile.Canonical(subject.Profile) != agentprofile.Texture {"
+    "subjectProfile, _ := agentprofile.Canonical(subject.Profile)",
+    "if subjectProfile != agentprofile.Texture {"
    ],
    "note": "reconcile subject profiles"
   },
@@ -7746,19 +7875,28 @@
    "key": "main@57c26060|internal/textureowner/texture_controller.go|activationValidators",
    "file": "internal/textureowner/texture_controller.go",
    "lines": [
-    482,
-    491,
-    941,
-    1058,
-    1060,
-    1061,
+    483,
+    484,
+    485,
+    494,
+    495,
+    945,
     1062,
-    1072,
-    1083,
-    1086,
-    1153,
-    1181,
-    1194
+    1064,
+    1065,
+    1066,
+    1076,
+    1088,
+    1091,
+    1092,
+    1160,
+    1161,
+    1162,
+    1190,
+    1191,
+    1204,
+    1205,
+    1077
    ],
    "symbol": "activationValidators",
    "field_path": "activationValidators",
@@ -7790,19 +7928,28 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if err != nil || agentprofile.Canonical(agent.Profile) != agentprofile.Texture || agentprofile.Canonical(agent.Role) != agentprofile.Texture ||",
-    "if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != doc.TrajectoryID || work.AssignedAgentID != agentID || agentprofile.Canonical(work.AuthorityProfile) != agentprofile.Texture {",
+    "agentProfile, _ := agentprofile.Canonical(agent.Profile)",
+    "agentRole, _ := agentprofile.Canonical(agent.Role)",
+    "if err != nil || agentProfile != agentprofile.Texture || agentRole != agentprofile.Texture ||",
+    "workAuthorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)",
+    "if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != doc.TrajectoryID || work.AssignedAgentID != agentID || workAuthorityProfile != agentprofile.Texture {",
     "case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:",
-    "producerProfile := agentprofile.Canonical(producerAgent.Profile)",
+    "producerProfile, _ := agentprofile.Canonical(producerAgent.Profile)",
     "(producerProfile != agentprofile.Researcher && producerProfile != agentprofile.Super && producerProfile != agentprofile.CoSuper) ||",
     "(producerProfile == agentprofile.Super && producerAgent.AgentID != persistentSuperAgentID(o.OwnerID)) ||",
     "(producerProfile != agentprofile.Super && producerAgent.LifecycleVersion <= 0) {",
-    "if producerWork.TrajectoryID != o.TrajectoryID || producerWork.AssignedAgentID != o.ProducerAgentID || producerWork.LifecycleVersion <= 0 || agentprofile.Canonical(producerWork.AuthorityProfile) != producerProfile {",
+    "producerWorkAuthorityProfile, _ := agentprofile.Canonical(producerWork.AuthorityProfile)",
     "if producerProfile == agentprofile.Super {",
-    "if producerRun.RunID != canonical.SourceRunID || producerRun.OwnerID != o.OwnerID || producerRun.ComputerID != o.ComputerID || producerRun.AgentID != o.ProducerAgentID || !trajectoryBound || producerRun.ChannelID != o.DocumentID || agentprofile.Canonical(producerRun.AgentProfile) != producerProfile ",
-    "if err != nil || agentprofile.Canonical(agent.Profile) != agentprofile.Texture || agentprofile.Canonical(agent.Role) != agentprofile.Texture || agent.ChannelID != o.DocumentID || agent.LifecycleVersion <= 0 {",
-    "if candidate.Status != types.WorkItemOpen || candidate.AssignedAgentID != o.TargetAgentID || agentprofile.Canonical(candidate.AuthorityProfile) != agentprofile.Texture {",
-    "if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != o.TrajectoryID || work.AssignedAgentID != o.TargetAgentID || agentprofile.Canonical(work.AuthorityProfile) != agentprofile.Texture {"
+    "producerRunProfile, _ := agentprofile.Canonical(producerRun.AgentProfile)",
+    "producerRunRole, _ := agentprofile.Canonical(producerRun.AgentRole)",
+    "agentProfile, _ := agentprofile.Canonical(agent.Profile)",
+    "agentRole, _ := agentprofile.Canonical(agent.Role)",
+    "if err != nil || agentProfile != agentprofile.Texture || agentRole != agentprofile.Texture || agent.ChannelID != o.DocumentID || agent.LifecycleVersion <= 0 {",
+    "candidateAuthorityProfile, _ := agentprofile.Canonical(candidate.AuthorityProfile)",
+    "if candidate.Status != types.WorkItemOpen || candidate.AssignedAgentID != o.TargetAgentID || candidateAuthorityProfile != agentprofile.Texture {",
+    "workAuthorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)",
+    "if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != o.TrajectoryID || work.AssignedAgentID != o.TargetAgentID || workAuthorityProfile != agentprofile.Texture {",
+    "if producerWork.TrajectoryID != o.TrajectoryID || producerWork.AssignedAgentID != o.ProducerAgentID || producerWork.LifecycleVersion <= 0 || producerWorkAuthorityProfile != producerProfile {"
    ],
    "note": "texture activation + producer/target validators"
   },
@@ -7862,7 +8009,7 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "switch agentprofile.Canonical(profile) {"
+    "callerKind, _ := agentprofile.Canonical(profile)"
    ],
    "note": "handoff caller kind guard (exact text embedded at build)"
   },
@@ -7870,10 +8017,10 @@
    "key": "main@57c26060|internal/textureowner/texture_handoff.go|handoffAuthorityCarrier",
    "file": "internal/textureowner/texture_handoff.go",
    "lines": [
-    126,
     127,
-    254,
-    259
+    128,
+    255,
+    260
    ],
    "symbol": "handoffAuthorityCarrier",
    "field_path": "handoffAuthorityCarrier",
@@ -7902,16 +8049,16 @@
    "key": "main@57c26060|internal/textureowner/texture_handoff.go|staysLiveConsumers",
    "file": "internal/textureowner/texture_handoff.go",
    "lines": [
-    86,
-    88,
-    90,
-    104,
-    152,
-    335,
-    339,
-    342,
-    348,
-    385
+    87,
+    89,
+    91,
+    105,
+    153,
+    336,
+    340,
+    343,
+    349,
+    386
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -8276,7 +8423,8 @@
    "key": "main@57c26060|internal/textureowner/tools_texture.go|emailDraftGuard",
    "file": "internal/textureowner/tools_texture.go",
    "lines": [
-    506
+    506,
+    507
    ],
    "symbol": "emailDraftGuard",
    "field_path": "emailDraftGuard",
@@ -8294,7 +8442,8 @@
    "inverse": "INV-CANON",
    "verification": "verified",
    "texts": [
-    "if agentprofile.Canonical(toolregistry.ExecutionContextFrom(ctx).Profile) != agentprofile.Texture {"
+    "draftProfile, _ := agentprofile.Canonical(toolregistry.ExecutionContextFrom(ctx).Profile)",
+    "if draftProfile != agentprofile.Texture {"
    ],
    "note": "stays-live profile"
   },
@@ -8302,8 +8451,8 @@
    "key": "main@57c26060|internal/textureowner/tools_texture.go|textureProvenanceCarriers",
    "file": "internal/textureowner/tools_texture.go",
    "lines": [
-    787,
-    1884
+    788,
+    1885
    ],
    "symbol": "textureProvenanceCarriers",
    "field_path": "textureProvenanceCarriers",
@@ -8331,7 +8480,7 @@
    "file": "internal/textureowner/tools_texture.go",
    "lines": [
     455,
-    630
+    631
    ],
    "symbol": "staysLiveConsumers",
    "field_path": "staysLiveConsumers",
@@ -8456,15 +8605,15 @@
    "inverse": "NA",
    "verification": "verified",
    "texts": [
-    "profile := agentprofile.Canonical(in.Profile)",
-    "profile = agentprofile.Canonical(in.Role)",
+    "profile, _ := agentprofile.Canonical(in.Profile)",
+    "profile, _ = agentprofile.Canonical(in.Role)",
     "if profile != agentprofile.CoSuper {",
     "slot := normalizeCoSuperSlot(in.Slot)",
-    "profile := agentprofile.Canonical(in.Profile)",
-    "profile = agentprofile.Canonical(in.Role)",
+    "profile, _ := agentprofile.Canonical(in.Profile)",
+    "profile, _ = agentprofile.Canonical(in.Role)",
     "if profile != agentprofile.Researcher {",
-    "profile := agentprofile.Canonical(in.Profile)",
-    "profile = agentprofile.Canonical(in.Role)"
+    "profile, _ := agentprofile.Canonical(in.Profile)",
+    "profile, _ = agentprofile.Canonical(in.Role)"
    ],
    "note": "batch spawn profile extractors"
   },

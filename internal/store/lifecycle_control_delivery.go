@@ -271,7 +271,9 @@ func (s *Store) ResolveLifecycleControlActivation(ctx context.Context, ownerID, 
 	if err != nil {
 		return LifecycleControlActivationReplay{}, err
 	}
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
+	deliverAgentProfile, _ := agentprofile.Canonical(agent.Profile)
+	deliverAgentRole, _ := agentprofile.Canonical(agent.Role)
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || deliverAgentProfile != agentprofile.Researcher || deliverAgentRole != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
 		return LifecycleControlActivationReplay{}, ErrLifecycleInvalidTransition
 	}
 	result := LifecycleControlActivationReplay{}
@@ -354,8 +356,9 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	profile := agentprofile.Canonical(agent.Profile)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agentprofile.Canonical(agent.Role) != profile || (profile != agentprofile.Researcher && !(profile == agentprofile.Super && agent.AgentID == agentprofile.Super+":"+ownerID && agent.LifecycleVersion == 0)) {
+	profile, _ := agentprofile.Canonical(agent.Profile)
+	admitRole, _ := agentprofile.Canonical(agent.Role)
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || admitRole != profile || (profile != agentprofile.Researcher && !(profile == agentprofile.Super && agent.AgentID == agentprofile.Super+":"+ownerID && agent.LifecycleVersion == 0)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	var runObj objectgraph.Object
@@ -371,7 +374,8 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != req.TargetAgentID || agentprofile.Canonical(run.AgentProfile) != profile || !run.State.Active() {
+	deliverTargetProfile, _ := agentprofile.Canonical(run.AgentProfile)
+	if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != req.TargetAgentID || deliverTargetProfile != profile || !run.State.Active() {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	if profile == agentprofile.Super {
@@ -603,8 +607,9 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 	if err != nil {
 		return LifecycleDeliveredPacketPage{}, err
 	}
-	profile := agentprofile.Canonical(agent.Profile)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agentprofile.Canonical(agent.Role) != profile ||
+	profile, _ := agentprofile.Canonical(agent.Profile)
+	admitRole, _ := agentprofile.Canonical(agent.Role)
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || admitRole != profile ||
 		(profile != agentprofile.Researcher && !(profile == agentprofile.Super && targetAgentID == agentprofile.Super+":"+ownerID && agent.LifecycleVersion == 0)) {
 		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
@@ -620,7 +625,8 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 	if err != nil {
 		return LifecycleDeliveredPacketPage{}, err
 	}
-	if run.RunID != targetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != targetAgentID || agentprofile.Canonical(run.AgentProfile) != profile {
+	deliverPageProfile, _ := agentprofile.Canonical(run.AgentProfile)
+	if run.RunID != targetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != targetAgentID || deliverPageProfile != profile {
 		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 	if profile == agentprofile.Super {

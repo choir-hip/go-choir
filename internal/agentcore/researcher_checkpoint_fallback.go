@@ -189,7 +189,8 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 }
 
 func terminalOutcomeCapableProfile(profile string) bool {
-	return agentprofile.Canonical(profile) != ""
+	canonicalProfile, _ := agentprofile.Canonical(profile)
+	return canonicalProfile != ""
 }
 
 func (rt *Runtime) terminalOutcomeRequesterTarget(ctx context.Context, rec *types.RunRecord) (string, string, bool, error) {
@@ -230,7 +231,7 @@ func (rt *Runtime) terminalOutcomeRequesterTarget(ctx context.Context, rec *type
 }
 
 func terminalOutcomeReferenceUpdate(rec *types.RunRecord, targetAgentID, channelID, outcomeDigest string) types.CoagentSourcePacket {
-	profile := agentprofile.Canonical(agentProfileForRun(rec))
+	profile, _ := agentprofile.Canonical(agentProfileForRun(rec))
 	kind := "evidence_update"
 	summary := fmt.Sprintf("%s run completed with an authoritative terminal result.", profile)
 	if rec.State != types.RunCompleted {
@@ -271,6 +272,8 @@ func terminalOutcomeReferenceUpdate(rec *types.RunRecord, targetAgentID, channel
 }
 
 func terminalOutcomeExplicitProducerIdentityMatches(update types.CoagentSourcePacket, rec *types.RunRecord, targetAgentID, channelID string) bool {
+	updateRole, _ := agentprofile.Canonical(update.Role)
+	runProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))
 	return update.UpdateID == deriveWorkerUpdateID(update) &&
 		update.OwnerID == rec.OwnerID &&
 		update.AgentID == agentIDForRun(rec) &&
@@ -278,7 +281,7 @@ func terminalOutcomeExplicitProducerIdentityMatches(update types.CoagentSourcePa
 		update.ChannelID == channelID &&
 		update.TrajectoryID == trajectoryIDForRun(rec) &&
 		update.SourceRunID == rec.RunID &&
-		agentprofile.Canonical(update.Role) == agentprofile.Canonical(agentProfileForRun(rec))
+		updateRole == runProfile
 }
 
 func terminalOutcomeUpdateLater(candidate, current types.CoagentSourcePacket) bool {

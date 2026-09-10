@@ -547,7 +547,7 @@ func (rt *Runtime) ValidateLifecycleProducerReportAuthority(ctx context.Context,
 		}
 		return fmt.Errorf("load producer report source run: %w", err)
 	}
-	profile := agentprofile.Canonical(run.AgentProfile)
+	profile, _ := agentprofile.Canonical(run.AgentProfile)
 	trajectoryBound := run.TrajectoryID == report.TrajectoryID
 	if profile == agentprofile.Super {
 		trajectoryBound = run.TrajectoryID == "" && metadataStringValue(run.Metadata, "assignment_trajectory_id") == report.TrajectoryID

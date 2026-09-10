@@ -78,7 +78,7 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			} else {
 				profile = role
 			}
-			callerProfile := agentprofile.Canonical(exec.Profile)
+			callerProfile, _ := agentprofile.Canonical(exec.Profile)
 			if callerProfile == agentprofile.Texture && exec.RunRecord != nil &&
 				strings.TrimSpace(exec.RunRecord.TrajectoryID) != "" &&
 				metadataString(exec.RunRecord.Metadata, "lifecycle_work_item_id") != "" {
@@ -152,7 +152,7 @@ func canonicalTargets(values []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(values))
 	for _, value := range values {
-		value = agentprofile.Canonical(value)
+		value, _ = agentprofile.Canonical(value)
 		if value != "" && !seen[value] {
 			seen[value] = true
 			out = append(out, value)
@@ -172,7 +172,7 @@ func exactTarget(raw string, allowed []string) string {
 }
 
 func normalizeTarget(raw string, allowed []string) string {
-	direct := agentprofile.Canonical(raw)
+	direct, _ := agentprofile.Canonical(raw)
 	for _, value := range allowed {
 		if direct == value {
 			return direct
@@ -180,7 +180,7 @@ func normalizeTarget(raw string, allowed []string) string {
 	}
 	var match string
 	for _, token := range strings.FieldsFunc(raw, func(r rune) bool { return !unicode.IsLetter(r) && r != '-' && r != '_' }) {
-		candidate := agentprofile.Canonical(token)
+		candidate, _ := agentprofile.Canonical(token)
 		for _, value := range allowed {
 			if candidate == value {
 				if match != "" && match != value {

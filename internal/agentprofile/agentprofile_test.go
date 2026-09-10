@@ -1,6 +1,7 @@
 package agentprofile
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -23,7 +24,11 @@ func TestCanonical(t *testing.T) {
 			value := value
 			t.Run(value, func(t *testing.T) {
 				t.Parallel()
-				if got := Canonical(value); got != want {
+				got, err := Canonical(value)
+				if err != nil {
+					t.Fatalf("Canonical(%q) error = %v", value, err)
+				}
+				if got != want {
 					t.Fatalf("Canonical(%q) = %q, want %q", value, got, want)
 				}
 			})
@@ -38,8 +43,16 @@ func TestCanonical(t *testing.T) {
 		{"Custom_Profile", "custom-profile"},
 		{" Mixed Unknown ", "mixed unknown"},
 	} {
-		if got := Canonical(tt.in); got != tt.want {
-			t.Fatalf("Canonical(%q) = %q, want %q", tt.in, got, tt.want)
+		got, err := Canonical(tt.in)
+		if err == nil {
+			t.Fatalf("Canonical(%q) error = nil, want UnknownProfileError", tt.in)
+		}
+		var unknown UnknownProfileError
+		if !errors.As(err, &unknown) {
+			t.Fatalf("Canonical(%q) error = %T, want UnknownProfileError", tt.in, err)
+		}
+		if got != tt.want {
+			t.Fatalf("Canonical(%q) = %q, want %q (step-4 inert passthrough)", tt.in, got, tt.want)
 		}
 	}
 }

@@ -1371,7 +1371,9 @@ func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Conte
 	if err != nil {
 		return nil, fmt.Errorf("load exact persistent Super: %w", err)
 	}
-	if agentprofile.Canonical(agent.Profile) != agentprofile.Super || agentprofile.Canonical(agent.Role) != agentprofile.Super || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
+	agentProfile, _ := agentprofile.Canonical(agent.Profile)
+	agentRole, _ := agentprofile.Canonical(agent.Role)
+	if agentProfile != agentprofile.Super || agentRole != agentprofile.Super || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
 		return nil, fmt.Errorf("persistent Super lifecycle control target has invalid authority")
 	}
 	updates, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
@@ -1413,12 +1415,14 @@ func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, own
 }
 
 func persistentSuperSenderAuthorized(update types.CoagentSourcePacket) bool {
-	return agentprofile.Canonical(update.Role) == agentprofile.Texture &&
+	role, _ := agentprofile.Canonical(update.Role)
+	return role == agentprofile.Texture &&
 		update.Direction == types.LifecyclePacketDirectionControl
 }
 
 func persistentSuperAdmissibleReport(update types.CoagentSourcePacket) bool {
-	if agentprofile.Canonical(update.Role) != agentprofile.CoSuper ||
+	role, _ := agentprofile.Canonical(update.Role)
+	if role != agentprofile.CoSuper ||
 		update.Direction != types.LifecyclePacketDirectionProducerReport {
 		return false
 	}
@@ -1695,7 +1699,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		}
 		return nil, fmt.Errorf("lookup coagent: %w", err)
 	}
-	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))
+	profile, _ := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))
 	lifecycleAgent := profile == agentprofile.Researcher && agent.LifecycleVersion > 0
 	if residentFound && !lifecycleAgent {
 		return &resident, nil
@@ -2441,8 +2445,10 @@ func (rt *Runtime) parkedLifecycleControlCandidate(ctx context.Context, ownerID,
 	var candidate *types.RunRecord
 	for index := range runs {
 		run := &runs[index]
+		scanProfile, _ := agentprofile.Canonical(run.AgentProfile)
+		scanRole, _ := agentprofile.Canonical(run.AgentRole)
 		if strings.TrimSpace(run.AgentID) != agentID || (run.State != types.RunPassivated && run.State != types.RunBlocked) ||
-			agentprofile.Canonical(run.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(run.AgentRole) != agentprofile.Researcher ||
+			scanProfile != agentprofile.Researcher || scanRole != agentprofile.Researcher ||
 			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" ||
 			metadataStringValue(run.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(run.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
 			continue
@@ -2530,14 +2536,18 @@ func (rt *Runtime) reconcileParkedLifecycleCoagentWakeLocked(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
+	agentProfile, _ := agentprofile.Canonical(agent.Profile)
+	agentRole, _ := agentprofile.Canonical(agent.Role)
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentProfile != agentprofile.Researcher || agentRole != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
 		return nil, store.ErrLifecycleInvalidTransition
 	}
 	rec, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID)
 	if err != nil {
 		return nil, err
 	}
-	if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
+	runProfile, _ := agentprofile.Canonical(rec.AgentProfile)
+	runRole, _ := agentprofile.Canonical(rec.AgentRole)
+	if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || runProfile != agentprofile.Researcher || runRole != agentprofile.Researcher ||
 		(rec.State != types.RunPassivated && !rec.State.Active()) || metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
 		metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
 		return nil, store.ErrLifecycleInvalidTransition

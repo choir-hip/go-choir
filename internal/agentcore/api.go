@@ -353,7 +353,8 @@ func (h *APIHandler) runStatusWithTrajectory(ctx context.Context, rec *types.Run
 		WaitingOn:         append([]string(nil), obligations.WaitingOn...),
 		OpenWorkItemCount: len(obligations.OpenWorkItems),
 	}
-	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Processor && ownerID != "" {
+	profile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	if profile == agentprofile.Processor && ownerID != "" {
 		item, found, err := h.rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
 		if err == nil && found {
 			resp.ProcessorResolution = &runProcessorResolutionStatusResponse{
@@ -544,7 +545,7 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]any)
 	}
-	profile := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))
+	profile, _ := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))
 	if profile == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "agent_profile is required"})
 		return

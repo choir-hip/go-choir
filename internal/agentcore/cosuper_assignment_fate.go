@@ -78,8 +78,11 @@ func (rt *Runtime) assignedCapsule() assignmentCapsuleRuntime {
 }
 
 func assignedCoSuperRun(rec *types.RunRecord) bool {
-	return rec != nil &&
-		agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.CoSuper &&
+	if rec == nil {
+		return false
+	}
+	profile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	return profile == agentprofile.CoSuper &&
 		metadataStringValue(rec.Metadata, "assignment_id") != ""
 }
 

@@ -419,13 +419,14 @@ func resolveRunIdentity(ownerID, computerID string, metadata map[string]any, par
 	rawProfile := metadataStringValue(metadata, runMetadataAgentProfile)
 	profile := rawProfile
 	if profile == "" {
-		if parent != nil && strings.TrimSpace(parent.AgentProfile) != "" && agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) != agentprofile.Texture {
+		metadataProfile, _ := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))
+		if parent != nil && strings.TrimSpace(parent.AgentProfile) != "" && metadataProfile != agentprofile.Texture {
 			profile = parent.AgentProfile
 		} else {
 			profile = agentProfileForRun(&types.RunRecord{Metadata: metadata})
 		}
 	}
-	profile = agentprofile.Canonical(profile)
+	profile, _ = agentprofile.Canonical(profile)
 	if strings.EqualFold(strings.TrimSpace(rawProfile), agentprofile.Texture) {
 		profile = agentprofile.Texture
 	}
@@ -434,7 +435,7 @@ func resolveRunIdentity(ownerID, computerID string, metadata map[string]any, par
 	if role == "" {
 		role = profile
 	} else {
-		role = agentprofile.Canonical(role)
+		role, _ = agentprofile.Canonical(role)
 	}
 	if strings.EqualFold(strings.TrimSpace(rawRole), agentprofile.Texture) {
 		role = agentprofile.Texture
@@ -696,7 +697,7 @@ func shouldLogWireLifecycle(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	profile := agentprofile.Canonical(agentProfileForRun(rec))
+	profile, _ := agentprofile.Canonical(agentProfileForRun(rec))
 	if profile == agentprofile.Processor || profile == agentprofile.Texture || profile == agentprofile.Researcher || profile == agentprofile.CoSuper {
 		if metadataStringValue(rec.Metadata, runMetadataProcessorKey) != "" || strings.TrimSpace(rec.OwnerID) == vmctl.UniversalWirePlatformOwnerID {
 			return true
@@ -709,7 +710,8 @@ func wireLifecycleSummary(rec *types.RunRecord) string {
 	if rec == nil {
 		return ""
 	}
-	return fmt.Sprintf("run=%s profile=%s requested_by=%s channel=%s processor_key=%s state=%s", rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), strings.TrimSpace(rec.RequestedByRunID), strings.TrimSpace(rec.ChannelID), metadataStringValue(rec.Metadata, runMetadataProcessorKey), rec.State)
+	summaryProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	return fmt.Sprintf("run=%s profile=%s requested_by=%s channel=%s processor_key=%s state=%s", rec.RunID, summaryProfile, strings.TrimSpace(rec.RequestedByRunID), strings.TrimSpace(rec.ChannelID), metadataStringValue(rec.Metadata, runMetadataProcessorKey), rec.State)
 }
 
 func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID string, metadata map[string]any) (*types.RunRecord, error) {
@@ -749,7 +751,8 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	runID := uuid.New().String()
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.ComputerID, metadata, nil)
-	if agentprofile.Canonical(agentRec.Profile) == agentprofile.Conductor && metadataStringValue(metadata, "lifecycle_command_id") == "" {
+	agentRecProfile, _ := agentprofile.Canonical(agentRec.Profile)
+	if agentRecProfile == agentprofile.Conductor && metadataStringValue(metadata, "lifecycle_command_id") == "" {
 		metadata["lifecycle_command_id"] = uuid.NewString()
 	}
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
@@ -797,7 +800,8 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 			return nil, err
 		}
 	}
-	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Processor {
+	submittedProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	if submittedProfile == agentprofile.Processor {
 		if _, err := rt.beginWireProcessorDecisionWorkItem(ctx, rec); err != nil {
 			log.Printf("runtime: wire processor decision work item run=%s: %v", rec.RunID, err)
 		}
@@ -834,7 +838,8 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
 	metadata = ensureTrajectoryID(metadata, nil, runID)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.ComputerID, metadata, nil)
-	if agentprofile.Canonical(agentRec.Profile) == agentprofile.Conductor && metadataStringValue(metadata, "lifecycle_command_id") == "" {
+	agentRecProfile, _ := agentprofile.Canonical(agentRec.Profile)
+	if agentRecProfile == agentprofile.Conductor && metadataStringValue(metadata, "lifecycle_command_id") == "" {
 		metadata["lifecycle_command_id"] = uuid.NewString()
 	}
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
@@ -952,16 +957,16 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
 		metadata[runMetadataCoSuperSlot] = slot
 	}
-	targetProfile := agentprofile.Canonical(firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentProfile), metadataStringValue(metadata, runMetadataAgentRole)))
+	targetProfile, _ := agentprofile.Canonical(firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentProfile), metadataStringValue(metadata, runMetadataAgentRole)))
 	if targetProfile == agentprofile.CoSuper {
 		return nil, fmt.Errorf("generic StartCoagentRun refuses all CoSuper activation; use the authenticated persistent-Super assignment runtime")
 	}
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 
 	if rt.coagentSpawnBudgetApplies(&requesterRec) {
-		coagentProfile := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))
+		coagentProfile, _ := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))
 		if coagentProfile == "" {
-			coagentProfile = agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentRole))
+			coagentProfile, _ = agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentRole))
 		}
 		slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot))
 		if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != "" && slot == "" && coagentProfile == agentprofile.CoSuper {
@@ -997,7 +1002,8 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.ComputerID, metadata, &requesterRec)
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 	if requesterAgent, lookupErr := rt.store.GetAgentByScope(ctx, ownerID, rt.cfg.ComputerID, requesterRec.AgentID); lookupErr == nil && requesterAgent.LifecycleVersion > 0 {
-		switch agentprofile.Canonical(agentRec.Profile) {
+		lifecycleProfile, _ := agentprofile.Canonical(agentRec.Profile)
+		switch lifecycleProfile {
 		case agentprofile.Super, agentprofile.CoSuper:
 			return nil, fmt.Errorf("durable-work lifecycle refuses effects-capable %s activation", agentRec.Profile)
 		}
@@ -1008,8 +1014,9 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	claimedCoSuperSlot := false
 	claimedCoSuperTrajectoryID := ""
 	claimedCoSuperSlotName := ""
+	slotAgentProfile, _ := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))
 	if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
-		agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
+		slotAgentProfile == agentprofile.CoSuper &&
 		rt.coagentSpawnBudgetApplies(&requesterRec) {
 		trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
 		existing, claimed, err := rt.store.ClaimCoSuperSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, requesterRunID)
@@ -1040,7 +1047,8 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		}
 		return cause
 	}
-	if agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
+	grantAgentProfile, _ := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))
+	if grantAgentProfile == agentprofile.CoSuper &&
 		normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)) == "implementation" {
 		controlHandle := strings.TrimSpace(metadataStringValue(metadata, "capsule_control_handle"))
 		if rt.capsuleExecutor == nil || controlHandle == "" {
@@ -1086,8 +1094,9 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned coagent work item: %w", err))
 	}
 	if spawnedWork.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
+		spawnedProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))
 		log.Printf("runtime: spawned coagent work item not created for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
-			rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
+			rec.RunID, spawnedProfile, trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
 	}
 	if spawnedWork.LifecycleVersion > 0 {
 		rec.TrajectoryID = spawnedWork.TrajectoryID
@@ -1112,7 +1121,8 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	})
 	rt.emitEvent(ctx, rec, types.EventRunSubmitted, events.CauseTaskLifecycle, objectiveLenPayload)
 	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&requesterRec) {
-		log.Printf("runtime: started coagent %s requested by %s requester_profile=%s", wireLifecycleSummary(rec), requesterRec.RunID, agentprofile.Canonical(agentProfileForRun(&requesterRec)))
+		requesterSummaryProfile, _ := agentprofile.Canonical(agentProfileForRun(&requesterRec))
+		log.Printf("runtime: started coagent %s requested by %s requester_profile=%s", wireLifecycleSummary(rec), requesterRec.RunID, requesterSummaryProfile)
 	}
 	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
@@ -1131,7 +1141,7 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 	if rt == nil || rt.store == nil || rec == nil {
 		return types.WorkItemRecord{}, nil
 	}
-	profile := agentprofile.Canonical(agentProfileForRun(rec))
+	profile, _ := agentprofile.Canonical(agentProfileForRun(rec))
 	if !spawnedCoagentWorkItemProfile(profile) {
 		return types.WorkItemRecord{}, nil
 	}
@@ -1166,7 +1176,7 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 		details["channel_id"] = channelID
 	}
 	if requester != nil {
-		if requesterProfile := agentprofile.Canonical(agentProfileForRun(requester)); requesterProfile != "" {
+		if requesterProfile, _ := agentprofile.Canonical(agentProfileForRun(requester)); requesterProfile != "" {
 			details["requested_by_agent_profile"] = requesterProfile
 		}
 	}
@@ -1209,7 +1219,8 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 }
 
 func inheritTextureRequesterMetadata(metadata map[string]any, requesterRun *types.RunRecord) map[string]any {
-	if requesterRun == nil || agentprofile.Canonical(agentProfileForRun(requesterRun)) != agentprofile.Texture {
+	requesterTexture, _ := agentprofile.Canonical(agentProfileForRun(requesterRun))
+	if requesterRun == nil || requesterTexture != agentprofile.Texture {
 		return metadata
 	}
 	metadata = cloneMetadata(metadata)
@@ -1275,7 +1286,8 @@ func (rt *Runtime) ensureSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 }
 
 func spawnedCoagentWorkItemProfile(profile string) bool {
-	switch agentprofile.Canonical(profile) {
+	workItemProfile, _ := agentprofile.Canonical(profile)
+	switch workItemProfile {
 	case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
 		return true
 	default:
@@ -1311,7 +1323,8 @@ func (rt *Runtime) coagentSpawnBudgetApplies(requesterRec *types.RunRecord) bool
 	if requesterRec == nil {
 		return false
 	}
-	return agentprofile.Canonical(agentProfileForRun(requesterRec)) == agentprofile.Super
+	budgetProfile, _ := agentprofile.Canonical(agentProfileForRun(requesterRec))
+	return budgetProfile == agentprofile.Super
 }
 
 func (rt *Runtime) enforceCoSuperSlotBudget(ctx context.Context, requesterRec *types.RunRecord) error {
@@ -1906,7 +1919,7 @@ func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) in
 	if rt.bootInProgress.Load() {
 		return rt.RunningCount()
 	}
-	profile = agentprofile.Canonical(profile)
+	profile, _ = agentprofile.Canonical(profile)
 	var runs []types.RunRecord
 	var err error
 	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
@@ -1925,7 +1938,8 @@ func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) in
 	}
 	count := 0
 	for i := range runs {
-		if agentprofile.Canonical(runs[i].AgentProfile) != profile {
+		runProfile, _ := agentprofile.Canonical(runs[i].AgentProfile)
+		if runProfile != profile {
 			continue
 		}
 		if profile == agentprofile.Processor && !rt.processorRunOccupiesAdmission(ctx, runs[i]) {
@@ -1987,8 +2001,9 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 			if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id"); err != nil {
 				log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
 			} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
+				skippedProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))
 				log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
-					rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
+					rec.RunID, skippedProfile, trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
 			}
 			if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 				log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
@@ -2042,7 +2057,8 @@ func (rt *Runtime) lifecycleActivationBindingsEligible(ctx context.Context, rec 
 	if rt == nil || rt.store == nil || rec == nil {
 		return false, nil
 	}
-	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Texture {
+	bindingsProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	if bindingsProfile == agentprofile.Texture {
 		// Texture lifecycle activations are reconstructed by textureowner from
 		// canonical document state after generic core recovery.
 		return false, nil
@@ -2198,7 +2214,8 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 				continue
 			}
 			rt.activate(rec)
-			if agentprofile.Canonical(rec.AgentProfile) == agentprofile.Researcher &&
+			rewarmProfile, _ := agentprofile.Canonical(rec.AgentProfile)
+			if rewarmProfile == agentprofile.Researcher &&
 				metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" &&
 				metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) != "" {
 				delivered, deliveryErr := rt.lifecycleRunHasCanonicalControlDelivery(ctx, rec)
@@ -2251,8 +2268,10 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 	}
 	seen := make(map[string]struct{})
 	for _, run := range runs {
-		if agentprofile.Canonical(agentProfileForRun(&run)) != agentprofile.Super ||
-			agentprofile.Canonical(run.AgentRole) != agentprofile.Super ||
+		rewarmRunProfile, _ := agentprofile.Canonical(agentProfileForRun(&run))
+		rewarmRunRole, _ := agentprofile.Canonical(run.AgentRole)
+		if rewarmRunProfile != agentprofile.Super ||
+			rewarmRunRole != agentprofile.Super ||
 			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" {
 			continue
 		}
@@ -2290,8 +2309,10 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 	for i := range runs {
 		rec := &runs[i]
 		passivatedReason := metadataStringValue(rec.Metadata, "passivated_reason")
-		if agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher ||
-			agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
+		retryProfile, _ := agentprofile.Canonical(rec.AgentProfile)
+		retryRole, _ := agentprofile.Canonical(rec.AgentRole)
+		if retryProfile != agentprofile.Researcher ||
+			retryRole != agentprofile.Researcher ||
 			metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
 			(passivatedReason != runtimeInjectionAppendFailurePassivationReason && passivatedReason != lifecycleResearcherAdmissionRetryReason) {
 			continue
@@ -2320,8 +2341,10 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 			continue
 		}
 		agent, agentErr := rt.store.GetAgentByScope(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
-		if agentErr != nil || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher ||
-			agentprofile.Canonical(agent.Role) != agentprofile.Researcher ||
+		recoveryAgentProfile, _ := agentprofile.Canonical(agent.Profile)
+		recoveryAgentRole, _ := agentprofile.Canonical(agent.Role)
+		if agentErr != nil || recoveryAgentProfile != agentprofile.Researcher ||
+			recoveryAgentRole != agentprofile.Researcher ||
 			(strings.TrimSpace(agent.ActiveRunID) != "" && strings.TrimSpace(agent.ActiveRunID) != rec.RunID) {
 			if agentErr != nil {
 				log.Printf("runtime: boot lifecycle injection recovery: validate actor for run %s: %v", rec.RunID, agentErr)
@@ -2585,10 +2608,10 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 			// Boot is recovery, not a scheduler tick: backlog is durable and waits for live triggers.
 			log.Printf("runtime: boot work-item sweep skipping persistent Super owner=%s agent=%s (boot does not schedule)", first.OwnerID, first.AssignedAgentID)
 			continue
-		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.CoSuper {
+		} else if sweepAuthority, _ := agentprofile.Canonical(first.AuthorityProfile); sweepAuthority == agentprofile.CoSuper {
 			err = rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, first.OwnerID,
 				firstNonEmpty(first.ComputerID, rt.TextureComputerID()), first.TrajectoryID)
-		} else if agentprofile.Canonical(first.AuthorityProfile) == agentprofile.Researcher {
+		} else if sweepAuthority, _ := agentprofile.Canonical(first.AuthorityProfile); sweepAuthority == agentprofile.Researcher {
 			// Open lifecycle work is durable responsibility, not provider authority.
 			// Only an exact pending Texture control enters the fingerprint reconciler;
 			// otherwise the Researcher remains idle and inspectable.
@@ -2633,7 +2656,8 @@ func (rt *Runtime) sweepPassivatedSpawnedCoagentWork(ctx context.Context) {
 		if item.WorkItemID == "" || item.Status != types.WorkItemOpen {
 			continue
 		}
-		if item.LifecycleVersion > 0 && agentprofile.Canonical(firstNonEmpty(item.AuthorityProfile, agentProfileForRun(rec))) == agentprofile.Researcher {
+		sweptAuthority, _ := agentprofile.Canonical(firstNonEmpty(item.AuthorityProfile, agentProfileForRun(rec)))
+		if item.LifecycleVersion > 0 && sweptAuthority == agentprofile.Researcher {
 			computerID := firstNonEmpty(strings.TrimSpace(item.ComputerID), rt.TextureComputerID())
 			pendingControls, pendingErr := rt.store.ListAllPendingLifecycleUpdates(ctx, item.OwnerID, computerID, item.AssignedAgentID)
 			if pendingErr != nil {
@@ -2723,7 +2747,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		}
 		return nil, fmt.Errorf("lookup assigned work-item actor: %w", err)
 	}
-	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))
+	profile, _ := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))
 	if profile == agentprofile.Researcher && (agent.LifecycleVersion > 0 || first.LifecycleVersion > 0) {
 		// Lifecycle Researchers are activated only by the exact Texture-control
 		// fingerprint reconciler. Generic assigned-work recovery preserves the
@@ -2740,7 +2764,8 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 	default:
 		return nil, nil
 	}
-	if agentprofile.Canonical(agent.Role) != profile {
+	agentRole, _ := agentprofile.Canonical(agent.Role)
+	if agentRole != profile {
 		return nil, fmt.Errorf("assigned lifecycle actor has conflicting profile and role")
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
@@ -2843,8 +2868,8 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 	if rt == nil || rt.store == nil || rec == nil {
 		return false, false, "runtime or run unavailable", nil
 	}
-	profile := agentprofile.Canonical(rec.AgentProfile)
-	role := agentprofile.Canonical(rec.AgentRole)
+	profile, _ := agentprofile.Canonical(rec.AgentProfile)
+	role, _ := agentprofile.Canonical(rec.AgentRole)
 	if profile != agentprofile.Researcher && role != agentprofile.Researcher {
 		return false, true, "", nil
 	}
@@ -2912,18 +2937,22 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 	if loadErr != nil {
 		return true, false, "", fmt.Errorf("load exact lifecycle Researcher run: %w", loadErr)
 	}
+	storedProfile, _ := agentprofile.Canonical(stored.AgentProfile)
+	storedRole, _ := agentprofile.Canonical(stored.AgentRole)
 	if stored.RunID != strings.TrimSpace(rec.RunID) || stored.OwnerID != ownerID || stored.ComputerID != computerID ||
 		stored.TrajectoryID != trajectoryID || stored.AgentID != agentID || stored.State != rec.State ||
 		(stored.State != types.RunPending && stored.State != types.RunRunning) ||
-		agentprofile.Canonical(stored.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(stored.AgentRole) != agentprofile.Researcher {
+		storedProfile != agentprofile.Researcher || storedRole != agentprofile.Researcher {
 		return deny("run projection is stale or outside the exact lifecycle Researcher scope")
 	}
 	agent, loadErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
 	if loadErr != nil {
 		return true, false, "", fmt.Errorf("load exact lifecycle Researcher agent: %w", loadErr)
 	}
+	scopeAgentProfile, _ := agentprofile.Canonical(agent.Profile)
+	scopeAgentRole, _ := agentprofile.Canonical(agent.Role)
 	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agent.LifecycleVersion <= 0 ||
-		agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher ||
+		scopeAgentProfile != agentprofile.Researcher || scopeAgentRole != agentprofile.Researcher ||
 		strings.TrimSpace(agent.ActiveRunID) != stored.RunID {
 		return deny("Researcher agent does not own the exact live run")
 	}
@@ -2999,8 +3028,10 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 		if sourceErr != nil {
 			return true, false, "", fmt.Errorf("load lifecycle control source Texture: %w", sourceErr)
 		}
+		sourceTextureProfile, _ := agentprofile.Canonical(sourceAgent.Profile)
+		sourceTextureRole, _ := agentprofile.Canonical(sourceAgent.Role)
 		if sourceAgent.OwnerID != ownerID || sourceAgent.ComputerID != computerID || sourceAgent.LifecycleVersion <= 0 ||
-			agentprofile.Canonical(sourceAgent.Profile) != agentprofile.Texture || agentprofile.Canonical(sourceAgent.Role) != agentprofile.Texture ||
+			sourceTextureProfile != agentprofile.Texture || sourceTextureRole != agentprofile.Texture ||
 			sourceAgent.ChannelID == "" || sourceAgent.ChannelID != control.ChannelID || control.ChannelID != snapshot.Document.DocID ||
 			control.AgentID != sourceAgent.AgentID || snapshot.Document.TrajectoryID != trajectoryID {
 			return deny("lifecycle control source is not the exact document-bound lifecycle Texture")
@@ -3177,7 +3208,8 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	}
 
 	registry := rt.toolRegistryForRun(rec)
-	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.CoSuper {
+	overlayProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	if overlayProfile == agentprofile.CoSuper {
 		var bindErr error
 		registry, _, bindErr = rt.assignedCoSuperToolOverlay(ctx, rec, registry)
 		if bindErr != nil {
@@ -3426,8 +3458,8 @@ func retryableLifecycleRuntimeInjectionFailure(rec *types.RunRecord, err error) 
 	if rec == nil || !errors.Is(err, ErrRuntimeInjectionAppendFailed) {
 		return false
 	}
-	profile := agentprofile.Canonical(rec.AgentProfile)
-	role := agentprofile.Canonical(rec.AgentRole)
+	profile, _ := agentprofile.Canonical(rec.AgentProfile)
+	role, _ := agentprofile.Canonical(rec.AgentRole)
 	if profile != role || (profile != agentprofile.Researcher && profile != agentprofile.Texture && profile != agentprofile.Super) {
 		return false
 	}

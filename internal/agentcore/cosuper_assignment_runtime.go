@@ -98,8 +98,10 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		return AssignedCoSuperStart{}, fmt.Errorf("verification requires one exact candidate_id and implementation forbids it")
 	}
 	ownerID, computerID := strings.TrimSpace(parent.OwnerID), strings.TrimSpace(parent.ComputerID)
+	parentProfile, _ := agentprofile.Canonical(parent.AgentProfile)
+	parentRole, _ := agentprofile.Canonical(parent.AgentRole)
 	if ownerID == "" || computerID == "" || parent.AgentID != persistentSuperAgentID(ownerID) ||
-		agentprofile.Canonical(parent.AgentProfile) != agentprofile.Super || agentprofile.Canonical(parent.AgentRole) != agentprofile.Super ||
+		parentProfile != agentprofile.Super || parentRole != agentprofile.Super ||
 		parent.TrajectoryID != "" || !persistentSuperRunStateAllowedRuntime(parent.State) {
 		return AssignedCoSuperStart{}, fmt.Errorf("only the exact non-lifecycle persistent Super may open assigned CoSuper work")
 	}

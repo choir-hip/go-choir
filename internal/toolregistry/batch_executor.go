@@ -346,9 +346,9 @@ func toolCallSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
 	if err := json.Unmarshal(call.Arguments, &in); err != nil {
 		return "", false
 	}
-	profile := agentprofile.Canonical(in.Profile)
+	profile, _ := agentprofile.Canonical(in.Profile)
 	if profile == "" {
-		profile = agentprofile.Canonical(in.Role)
+		profile, _ = agentprofile.Canonical(in.Role)
 	}
 	if profile != agentprofile.CoSuper {
 		return "", false
@@ -370,9 +370,9 @@ func toolCallTextureResearcherSpawnKey(call types.ToolCall) (string, bool) {
 	if err := json.Unmarshal(call.Arguments, &in); err != nil {
 		return "", false
 	}
-	profile := agentprofile.Canonical(in.Profile)
+	profile, _ := agentprofile.Canonical(in.Profile)
 	if profile == "" {
-		profile = agentprofile.Canonical(in.Role)
+		profile, _ = agentprofile.Canonical(in.Role)
 	}
 	if profile != agentprofile.Researcher {
 		return "", false
@@ -409,9 +409,9 @@ func toolCallSpawnProfile(call types.ToolCall) string {
 	if err := json.Unmarshal(call.Arguments, &in); err != nil {
 		return ""
 	}
-	profile := agentprofile.Canonical(in.Profile)
+	profile, _ := agentprofile.Canonical(in.Profile)
 	if profile == "" {
-		profile = agentprofile.Canonical(in.Role)
+		profile, _ = agentprofile.Canonical(in.Role)
 	}
 	return profile
 }

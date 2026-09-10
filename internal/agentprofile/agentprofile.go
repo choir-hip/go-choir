@@ -2,7 +2,10 @@
 // normalization, capabilities, and spawn/message policy.
 package agentprofile
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	Conductor  = "conductor"
@@ -30,7 +33,8 @@ type Policy struct {
 
 // PolicyFor returns the capability, spawn, and message policy for profile.
 func PolicyFor(profile string) Policy {
-	switch Canonical(profile) {
+	canonical, _ := Canonical(profile)
+	switch canonical {
 	case Conductor:
 		return Policy{
 			Profile:             Conductor,
@@ -112,43 +116,62 @@ func PolicyFor(profile string) Policy {
 	}
 }
 
-// Canonical normalizes a profile name and its accepted aliases.
-func Canonical(profile string) string {
+// UnknownProfileError reports a profile token outside the frozen V1 acceptor
+// tables. Landing step 4 (behaviorally inert): the rejected token is still
+// returned so existing callers behave exactly as before; every call site
+// takes the tuple and the writer cutover (step 6) turns the report into
+// fail-closed refusal. A non-empty unknown token with a checked error is a
+// writer-purity failure.
+type UnknownProfileError struct {
+	Input string
+}
+
+func (e UnknownProfileError) Error() string {
+	return fmt.Sprintf("agentprofile: unknown profile %q", e.Input)
+}
+
+// Canonical normalizes a profile name and its accepted aliases, reporting
+// whether the token is a known V1 profile. Known aliases behave exactly as
+// before; unknown tokens return the normalized input with a typed error.
+func Canonical(profile string) (string, error) {
 	profile = strings.TrimSpace(profile)
 	normalized := strings.ToLower(strings.ReplaceAll(profile, "_", "-"))
 	switch normalized {
 	case "researcher", "researchers", "research", "research-agent", "web-research", "web-researcher":
-		return Researcher
+		return Researcher, nil
 	case "cosuper", "co-super", "coagent", "co-agent":
-		return CoSuper
+		return CoSuper, nil
 	case "texture", "texture-agent", "document-agent":
-		return Texture
+		return Texture, nil
 	case "processor", "news-processor", "source-processor", "universal-wire-processor":
-		return Processor
+		return Processor, nil
 	case "reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "universal-wire-reconciler":
-		return Reconciler
+		return Reconciler, nil
 	case "email", "email-agent", "email-appagent", "mail", "mail-agent":
-		return Email
+		return Email, nil
 	case Super:
-		return Super
+		return Super, nil
 	case Conductor:
-		return Conductor
+		return Conductor, nil
 	default:
-		return normalized
+		return normalized, UnknownProfileError{Input: profile}
 	}
 }
 
 // IsTexture reports whether profile resolves to the Texture profile.
 func IsTexture(profile string) bool {
-	return Canonical(profile) == Texture
+	canonical, _ := Canonical(profile)
+	return canonical == Texture
 }
 
 // CanSpawn reports whether callerProfile may spawn targetProfile.
 func CanSpawn(callerProfile, targetProfile string) bool {
 	policy := PolicyFor(callerProfile)
-	targetProfile = Canonical(targetProfile)
+	target, _ := Canonical(targetProfile)
+	targetProfile = target
 	for _, allowed := range policy.AllowedSpawnTargets {
-		if targetProfile == Canonical(allowed) {
+		canonicalAllowed, _ := Canonical(allowed)
+		if targetProfile == canonicalAllowed {
 			return true
 		}
 	}
@@ -158,9 +181,11 @@ func CanSpawn(callerProfile, targetProfile string) bool {
 // CanMessage reports whether callerProfile may address targetProfile.
 func CanMessage(callerProfile, targetProfile string) bool {
 	policy := PolicyFor(callerProfile)
-	targetProfile = Canonical(targetProfile)
+	target, _ := Canonical(targetProfile)
+	targetProfile = target
 	for _, allowed := range policy.AllowedMessageTargets {
-		if targetProfile == Canonical(allowed) {
+		canonicalAllowed, _ := Canonical(allowed)
+		if targetProfile == canonicalAllowed {
 			return true
 		}
 	}

@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Decoder landed end-to-end (dc413b56; CI green incl. staging deploy serving dc413b56; uninventoried TailPage caught and migrated). Next: behaviorally-inert Canonical string-to-tuple refactor across ~147 call sites (landing step 4)."
+  slice: "Canonical string-to-tuple refactor landed behaviorally inert (landing step 4): (string, error) with UnknownProfileError, unknown returns input passthrough, ~143 call sites take the tuple discarding the error. Awaiting CI verdict. Next: migrate/revert/migrate drill ending on V1 serving rows (step 5)."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Decoder commit in flight; owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover only). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Land the behaviorally-inert Canonical string-to-tuple refactor (landing step 4): signature change only, still accepts every frozen V1 alias and reports it known."
+  blocker_or_risk: "Tuple commit in flight; owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover only). Full agentcore/store/textureowner suites time out identically on baseline (environmental; CI shards them). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Run the migrate/revert/migrate drill on staging ending on V1 serving rows (landing step 5); drill never leaves staging serving mixed vocabulary."
 
 
 receipts:

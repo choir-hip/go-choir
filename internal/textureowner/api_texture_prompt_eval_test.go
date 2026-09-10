@@ -97,7 +97,8 @@ reasoning = "medium"
 	}
 	var textureRun *types.RunRecord
 	for i := range runs {
-		if agentprofile.Canonical(runs[i].AgentProfile) == agentprofile.Texture {
+		profile, _ := agentprofile.Canonical(runs[i].AgentProfile)
+		if profile == agentprofile.Texture {
 			textureRun = &runs[i]
 			break
 		}

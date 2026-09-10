@@ -60,11 +60,13 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 		return ""
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
-		return agentprofile.Canonical(rec.AgentProfile)
+		profile, _ := agentprofile.Canonical(rec.AgentProfile)
+		return profile
 	}
 	if rec.Metadata != nil {
 		if profile, _ := rec.Metadata[runMetadataAgentProfile].(string); strings.TrimSpace(profile) != "" {
-			return agentprofile.Canonical(profile)
+			canonicalProfile, _ := agentprofile.Canonical(profile)
+			return canonicalProfile
 		}
 	}
 	return ""
@@ -75,18 +77,25 @@ func agentProfileForRun(rec *types.RunRecord) string {
 		return agentprofile.Super
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
-		return agentprofile.Canonical(rec.AgentProfile)
+		profile, _ := agentprofile.Canonical(rec.AgentProfile)
+		return profile
 	}
 	if rec.Metadata != nil {
 		if profile, _ := rec.Metadata[runMetadataAgentProfile].(string); strings.TrimSpace(profile) != "" {
-			return agentprofile.Canonical(profile)
+			canonicalProfile, _ := agentprofile.Canonical(profile)
+			return canonicalProfile
 		}
 	}
 	return agentprofile.Super
 }
 
 func runHasProfile(rec *types.RunRecord, profile string) bool {
-	return rec != nil && agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Canonical(profile)
+	if rec == nil {
+		return false
+	}
+	runProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	targetProfile, _ := agentprofile.Canonical(profile)
+	return runProfile == targetProfile
 }
 
 func agentRoleForRun(rec *types.RunRecord) string {
@@ -94,11 +103,13 @@ func agentRoleForRun(rec *types.RunRecord) string {
 		return agentprofile.Super
 	}
 	if strings.TrimSpace(rec.AgentRole) != "" {
-		return agentprofile.Canonical(rec.AgentRole)
+		role, _ := agentprofile.Canonical(rec.AgentRole)
+		return role
 	}
 	if rec.Metadata != nil {
 		if role, _ := rec.Metadata[runMetadataAgentRole].(string); strings.TrimSpace(role) != "" {
-			return agentprofile.Canonical(role)
+			canonicalRole, _ := agentprofile.Canonical(role)
+			return canonicalRole
 		}
 	}
 	return agentProfileForRun(rec)

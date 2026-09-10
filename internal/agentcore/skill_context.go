@@ -46,7 +46,8 @@ func (rt *Runtime) skillContextForProfile(profile string) string {
 }
 
 func profileReceivesSkillContext(profile string) bool {
-	switch agentprofile.Canonical(profile) {
+	canonicalProfile, _ := agentprofile.Canonical(profile)
+	switch canonicalProfile {
 	case agentprofile.Conductor, agentprofile.Texture, agentprofile.Super, agentprofile.CoSuper:
 		return true
 	default:

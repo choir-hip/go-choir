@@ -2796,8 +2796,9 @@ func workerMailboxAllowsAssignedCoSuperSuperReport(update types.CoagentSourcePac
 	if ownerID == "" {
 		return false
 	}
+	reportRole, _ := agentprofile.Canonical(update.Role)
 	return update.Direction == types.LifecyclePacketDirectionProducerReport &&
-		agentprofile.Canonical(update.Role) == agentprofile.CoSuper &&
+		reportRole == agentprofile.CoSuper &&
 		strings.TrimSpace(update.TargetAgentID) == "super:"+ownerID
 }
 

@@ -14,7 +14,11 @@ import (
 )
 
 func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.RunRecord, base *toolregistry.ToolRegistry) (*toolregistry.ToolRegistry, string, error) {
-	if rec == nil || agentprofile.Canonical(agentProfileForRun(rec)) != agentprofile.CoSuper {
+	if rec == nil {
+		return base, "", nil
+	}
+	profile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	if profile != agentprofile.CoSuper {
 		return base, "", nil
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")

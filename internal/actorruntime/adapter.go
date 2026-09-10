@@ -525,9 +525,11 @@ func (a *Adapter) recoverParkedLifecycleMailboxSnapshots(ctx context.Context) er
 			}
 			return fmt.Errorf("load lifecycle actor snapshot run %s: %w", resume.RunID, runErr)
 		}
+		snapProfile, _ := agentprofile.Canonical(rec.AgentProfile)
+		snapRole, _ := agentprofile.Canonical(rec.AgentRole)
 		if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID ||
-			agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher ||
-			agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
+			snapProfile != agentprofile.Researcher ||
+			snapRole != agentprofile.Researcher ||
 			strings.TrimSpace(metadataString(rec.Metadata, "request_source")) != "lifecycle_texture_control" ||
 			(rec.State != types.RunPassivated && rec.State != types.RunBlocked) {
 			continue
@@ -564,8 +566,10 @@ func (a *Adapter) Start(ctx context.Context) error {
 			return fmt.Errorf("actorruntime: inspect durable Texture subjects: %w", err)
 		}
 		for _, subject := range subjects {
-			if agentprofile.Canonical(subject.Profile) == agentprofile.Texture ||
-				agentprofile.Canonical(subject.Role) == agentprofile.Texture ||
+			subjectProfile, _ := agentprofile.Canonical(subject.Profile)
+			subjectRole, _ := agentprofile.Canonical(subject.Role)
+			if subjectProfile == agentprofile.Texture ||
+				subjectRole == agentprofile.Texture ||
 				strings.HasPrefix(strings.TrimSpace(subject.AgentID), agentprofile.Texture+":") {
 				return fmt.Errorf("actorruntime: Texture owner is not bound for durable subject %s", subject.AgentID)
 			}
