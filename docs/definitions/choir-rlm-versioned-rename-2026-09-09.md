@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Decoder slice landed (landing step 3): centralized historic/admission roots in computerevent/decode.go with frozen V1 tables, 10 call sites migrated behaviorally inert, decoder matrix frozen, decode-roots CI guard green, inventory supplemented to 310 rows. Awaiting CI verdict on the decoder commit. Next: behaviorally-inert Canonical string-to-tuple refactor (step 4)."
+  slice: "Decoder landed end-to-end (dc413b56; CI green incl. staging deploy serving dc413b56; uninventoried TailPage caught and migrated). Next: behaviorally-inert Canonical string-to-tuple refactor across ~147 call sites (landing step 4)."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -308,5 +308,19 @@ receipts:
     rollback_ref: "never revert this commit (would strand v2-stamped bases); cutover rollback reverts CurrentVocabularyVersion only, in a later revertible commit"
     disposition: "landing-order step 2 landed; frozen V1 decoder with two centralized decode roots is next"
     problem_ref: "v1-stamped bases would refuse install after the writer cutover without the widened known set"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-decoder-2026-09-10
+    boundary: implement
+    commit_or_artifact: "dc413b56 red(decode): centralize Event/CASRequest/DurableEvent decode behind historic and admission roots"
+    proof_refs:
+      - "computerevent suite ok; projectionbase suite ok (100s); platform and store decode-adjacent subsets ok"
+      - "check-v1-inventory.sh PASS (310 rows); check-decode-roots.sh PASS (new guard, wired into v1-inventory job)"
+      - "CI run 34445356285 completed/success incl. staging deploy; staging /health ok serving dc413b56"
+      - "decoder matrix docs/evidence/choir-rlm-decoder-matrix-2026-09-10.md freezes every raw-entry path"
+      - "check-decode-roots caught uninventoried HTTPSource.TailPage mid-slice; migrated to historic root in the same commit"
+    rollback_ref: "revert restores per-site json.Unmarshal decodes; roots are behaviorally inert so revert is safe"
+    disposition: "landing-order step 3 landed; behaviorally-inert Canonical string-to-tuple refactor (step 4) is next"
+    problem_ref: "tape/content decode ran through a dozen ad-hoc unmarshal sites with no version-selected seam"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
     candidate_or_evidence_refs: []
