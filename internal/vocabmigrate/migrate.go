@@ -23,6 +23,12 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+// Vocabulary selectors. The strings match projectionbase vocabulary
+// versions and computerevent decode selectors; all are frozen protocol
+// (a test pins equality with the projectionbase constant).
+const VocabularyV1 = "v1"
+const VocabularyV2 = "v2"
+
 // forwardV1ToV2 is the single frozen map. Every V1 desk spelling known to any
 // per-function acceptor table appears here exactly once.
 var forwardV1ToV2 = map[string]string{

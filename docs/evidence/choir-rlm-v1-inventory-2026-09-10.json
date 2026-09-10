@@ -5,7 +5,7 @@
   "generator": "scripts/v1-inventory-queries.py",
   "query_version": 1,
   "corpus_manifest": "docs/evidence/choir-rlm-v1-inventory-corpus-2026-09-10.txt",
-  "row_count": 316,
+  "row_count": 317,
   "unknown_allowlisted": [
    "main@57c26060|internal/agentcore/rematerialize.go|restoreIntentOwner",
    "main@57c26060|internal/textureowner/texture_agent_revision.go|revisionRoleOwner",
@@ -14,7 +14,8 @@
   "supplements": [
    "decoder-commit: +2 frozen-table rows for internal/computerevent/decode.go (Define update; no prior rows touched)",
    "step-4 re-freeze v2: hunk-mapped anchor refresh after the inert Canonical tuple refactor; step4TupleHoists rows dissolved back into owning site rows; every row keeps its key",
-   "migration-core commit: +6 rows for internal/vocabmigrate/migrate.go (Define update; frozen \u00a73 embodiment)"
+   "migration-core commit: +6 rows for internal/vocabmigrate/migrate.go (Define update; frozen \u00a73 embodiment)",
+   "fence-core commit: +1 row for internal/vocabmigrate/fence.go v2LiveSet (Define update; enforcement wiring deferred to cutover)"
   ]
  },
  "rows": [
@@ -10910,6 +10911,30 @@
     "msg.Role = out.mapToken(\"role\", msg.Role, log)"
    ],
    "note": "Q13 fires on msg.Role textually but these are desk-role carriers, not provider-message roles; classified live carrier."
+  },
+  {
+   "key": "main@57c26060|internal/vocabmigrate/fence.go|v2LiveSet",
+   "file": "internal/vocabmigrate/fence.go",
+   "lines": [
+    35
+   ],
+   "symbol": "v2LiveSet",
+   "field_path": "v2LiveSet",
+   "class": 2,
+   "namespace": "migrate.fence.table",
+   "v1_tokens": [],
+   "v2_token": "management,engineering,research + stays-live",
+   "carrier": "n/a (fence table)",
+   "liveness": "live",
+   "role": "def",
+   "digest": "NONE",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "\"management\": true, \"engineering\": true, \"research\": true,"
+   ],
+   "note": "Frozen V2 live set for fence verification; aliases excluded by construction. Wiring deferred to cutover per landing order (refusal before migration is a defect)."
   }
  ],
  "negative_sweeps": [

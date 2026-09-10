@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Migration core landed end-to-end (b2eccab3; CI green with zero failures; staging serving b2eccab3). Next: serving-fence wiring, then the staging migrate/revert/migrate drill ending on V1 rows."
+  slice: "Serving-fence verification core landed (VerifyServingVocabulary + v2LiveSet + refusal contracts, vocabmigrate suite green, inventory at 317 rows, both gates PASS). Enforcement wiring deliberately deferred: landing refusal before migration/drill is a charter defect, so the fence binds paths at the cutover after forward-migration runs. Awaiting CI verdict. Next: drill design (migrate/revert/migrate ending on V1 rows) against the fence guarantee."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Migration core in flight; serving fence and drill outstanding. Owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover only). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Wire the serving fence: forward-migration before live authority on every deposit/serve path (appender replay deposits, base rebuild in scratch, rematerialize flip, boot dispatch, RecoverPrepared recovery), then the staging migrate/revert/migrate drill."
+  blocker_or_risk: "Fence core in flight; drill design outstanding (needs owner-shape decisions on drill surface: staging vs scratch). Owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover only). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Design the migrate/revert/migrate drill (landing step 5): forward-migrate live rows to V2, verify fence + joins + authorization, revert to V1 via proven inverse, re-migrate, ending on V1 serving rows; drill never leaves serving mixed vocabulary."
 
 
 receipts:
