@@ -58,6 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_og_edges_to ON og_edges(to_id);
 type DoltStore struct {
 	db        *sql.DB
 	intercept MutationInterceptor
+	validate  WriteValidator
 }
 
 // MutationInterceptor receives durable object/edge mutations before SQL.
@@ -65,11 +66,23 @@ type DoltStore struct {
 // the interceptor must append+project instead. Projector SQL bypasses this.
 type MutationInterceptor func(ctx context.Context, objects []Object, edges []Edge) error
 
+// WriteValidator inspects durable object/edge mutations before SQL and
+// before any MutationInterceptor. A non-nil error refuses the write. The
+// vocabulary cutover uses this to fail closed on stale-desk writes.
+type WriteValidator func(ctx context.Context, objects []Object, edges []Edge) error
+
 func (s *DoltStore) SetMutationInterceptor(fn MutationInterceptor) {
 	if s == nil {
 		return
 	}
 	s.intercept = fn
+}
+
+func (s *DoltStore) SetWriteValidator(fn WriteValidator) {
+	if s == nil {
+		return
+	}
+	s.validate = fn
 }
 
 // JSONFieldMatch is one JSON field predicate for a Dolt object lookup.
@@ -104,6 +117,11 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if s.validate != nil {
+		if err := s.validate(ctx, []Object{obj}, nil); err != nil {
+			return err
+		}
 	}
 	if s.intercept != nil {
 		return s.intercept(ctx, []Object{obj}, nil)
@@ -301,10 +319,14 @@ func (s *DoltStore) PutBatch(ctx context.Context, batch Batch) error {
 func (s *DoltStore) PutBatchConditional(ctx context.Context, conditions []ObjectCondition, batch Batch) error {
 	return s.putBatch(ctx, conditions, batch)
 }
-
 func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, batch Batch) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if s.validate != nil {
+		if err := s.validate(ctx, batch.Objects, batch.Edges); err != nil {
+			return err
+		}
 	}
 	if s.intercept != nil {
 		if err := s.evaluateConditions(ctx, conditions); err != nil {

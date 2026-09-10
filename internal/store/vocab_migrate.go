@@ -62,6 +62,30 @@ type ProvEntry struct {
 type MigrationReport struct {
 	Provenance map[string]ProvEntry `json:"provenance"`
 	Counts     map[string]int64     `json:"counts"`
+	// OGObjects records every migrated og_objects row for INV-PROV revert:
+	// the original canonical ID plus every changed leaf's original value.
+	// Revert restores recorded leaves exactly, recomputes content_hash and
+	// canonical_id, and rewrites references through the recorded ID map.
+	OGObjects []OGProvEntry `json:"og_objects,omitempty"`
+	// OGEdges records every rewritten og_edges row.
+	OGEdges []OGEdgeProvEntry `json:"og_edges,omitempty"`
+}
+
+// OGProvEntry retains one migrated og_objects row's inverse record.
+type OGProvEntry struct {
+	OldCanonicalID string            `json:"old_canonical_id"`
+	NewCanonicalID string            `json:"new_canonical_id"`
+	// Fields maps a JSON path ("metadata.agent_id", "body.binding.role")
+	// to the leaf's exact pre-migration value.
+	Fields map[string]string `json:"fields"`
+}
+
+// OGEdgeProvEntry retains one rewritten og_edges row's inverse record.
+type OGEdgeProvEntry struct {
+	OldEdgeID string `json:"old_edge_id"`
+	NewEdgeID string `json:"new_edge_id"`
+	OldFrom   string `json:"old_from"`
+	OldTo     string `json:"old_to"`
 }
 
 func provKey(table string, keys map[string]string, col string) string {
@@ -356,9 +380,17 @@ func (s *Store) MigrateVocabularyToV2(ctx context.Context) (*MigrationReport, er
 	if err != nil {
 		return nil, err
 	}
+	objs, edges, err := s.planOGMigration(ctx, rep, nil)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.applyVocabularyMigration(ctx, writes); err != nil {
 		return nil, err
 	}
+	if err := s.applyOGMigration(ctx, objs, edges); err != nil {
+		return nil, err
+	}
+	s.vocabCutover.Store(true)
 	return rep, nil
 }
 
@@ -607,6 +639,10 @@ func (s *Store) RevertVocabularyToV1(ctx context.Context, rep *MigrationReport) 
 			}
 		}
 	}
+	if err := s.revertOGMigration(ctx, rep); err != nil {
+		return err
+	}
+	s.vocabCutover.Store(false)
 	return nil
 }
 
@@ -671,6 +707,11 @@ func (s *Store) servingRoleFields(ctx context.Context) ([]vocabmigrate.Field, er
 			return nil, fmt.Errorf("vocab fence scan %s: %w", name, err)
 		}
 	}
+	ogFields, err := s.servingOGRoleFields(ctx)
+	if err != nil {
+		return nil, err
+	}
+	fields = append(fields, ogFields...)
 	return fields, nil
 }
 
@@ -702,6 +743,13 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context) (*Migratio
 	if err != nil {
 		return nil, err
 	}
+	// OG planning seeds its reference map from the persisted report so a
+	// re-run after a mid-apply crash still resolves references to objects
+	// already migrated under their new IDs.
+	objs, edges, err := s.planOGMigration(ctx, rep, ogSeedFromReport(prior))
+	if err != nil {
+		return nil, err
+	}
 	if prior != nil {
 		mergeVocabReports(prior, rep)
 		rep = prior
@@ -715,9 +763,13 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context) (*Migratio
 	if err := s.applyVocabularyMigration(ctx, writes); err != nil {
 		return nil, err
 	}
+	if err := s.applyOGMigration(ctx, objs, edges); err != nil {
+		return nil, err
+	}
 	if err := s.VerifyServingVocabularyV2(ctx); err != nil {
 		return nil, fmt.Errorf("vocab serving fence: %w", err)
 	}
+	s.vocabCutover.Store(true)
 	return rep, nil
 }
 
@@ -745,6 +797,30 @@ func mergeVocabReports(dst, src *MigrationReport) {
 	}
 	for key, n := range src.Counts {
 		dst.Counts[key] += n
+	}
+	// OG entries dedupe on the ORIGINAL canonical/edge ID: a re-run over a
+	// partially migrated store re-plans the same rows under their current
+	// (already migrated) IDs, so the prior entry — keyed by the original —
+	// is the only correct INV-PROV source.
+	seenObj := map[string]bool{}
+	for _, e := range dst.OGObjects {
+		seenObj[e.OldCanonicalID] = true
+		seenObj[e.NewCanonicalID] = true
+	}
+	for _, e := range src.OGObjects {
+		if !seenObj[e.OldCanonicalID] {
+			dst.OGObjects = append(dst.OGObjects, e)
+		}
+	}
+	seenEdge := map[string]bool{}
+	for _, e := range dst.OGEdges {
+		seenEdge[e.OldEdgeID] = true
+		seenEdge[e.NewEdgeID] = true
+	}
+	for _, e := range src.OGEdges {
+		if !seenEdge[e.OldEdgeID] {
+			dst.OGEdges = append(dst.OGEdges, e)
+		}
 	}
 }
 

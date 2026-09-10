@@ -30,6 +30,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -113,6 +114,10 @@ type Store struct {
 	og                      *objectgraph.Service
 	ogStore                 *objectgraph.DoltStore
 	ogReadStore             *objectgraph.DoltStore
+	// vocabCutover marks the store post-cutover: the OG write guard refuses
+	// declared role fields outside the V2 vocabulary. Set when the migration
+	// report exists (open) or when the fenced cutover persists it.
+	vocabCutover atomic.Bool
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
@@ -843,6 +848,12 @@ func Open(dbPath string) (*Store, error) {
 	}
 	log.Printf("store: open phase=objectgraph-schema status=complete")
 	s.ogStore = ogDoltStore
+	ogDoltStore.SetWriteValidator(s.vocabWriteGuard)
+	// A persisted migration report means this store already cut over: the
+	// write guard activates immediately on reopen.
+	if rep, err := s.loadVocabMigrationReport(); err == nil && rep != nil {
+		s.vocabCutover.Store(true)
+	}
 	// Create a read-only DoltStore using the read connection pool so OG
 	// reads don't block during write transactions on the main connection.
 	if readDB != nil {

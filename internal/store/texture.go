@@ -244,6 +244,10 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 		return nil, fmt.Errorf("texture workspace: bootstrap object graph: %w", err)
 	}
 	s.ogStore = ogDoltStore
+	ogDoltStore.SetWriteValidator(s.vocabWriteGuard)
+	if rep, err := s.loadVocabMigrationReport(); err == nil && rep != nil {
+		s.vocabCutover.Store(true)
+	}
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,
 	})
