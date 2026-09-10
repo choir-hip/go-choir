@@ -55,8 +55,9 @@ func drillSeedV1(t *testing.T, s *Store) {
 		now)
 	drillExec(t, s, `INSERT INTO work_items (work_item_id, trajectory_id, owner_id, objective, reason, authority_profile, step_budget, token_budget, objective_fingerprint, status, assigned_agent_id, created_by_loop_id, details_json, created_at, updated_at) VALUES
 		('work-super-assignment', 'traj-1', 'owner', 'coordinate', '', 'super', 0, 0, 'fp', 'open', 'super:root', 'run-super-1', '{"requested_by_profile":"super"}', ?, ?),
-		('work-cosuper-1', 'traj-1', 'owner', 'implement', '', 'co-super', 0, 0, 'fp', 'open', 'co-super:impl', 'run-cosuper-1', '{}', ?, ?)`,
-		now, now, now, now)
+		('work-cosuper-1', 'traj-1', 'owner', 'implement', '', 'co-super', 0, 0, 'fp', 'open', 'co-super:impl', 'run-cosuper-1', '{}', ?, ?),
+		('work-co-super-2', 'traj-1', 'owner', 'review', '', 'co-super', 0, 0, 'fp', 'open', 'co-super:impl', 'run-cosuper-1', '{}', ?, ?)`,
+		now, now, now, now, now, now)
 	drillExec(t, s, `INSERT INTO worker_updates (owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq, trajectory_id, role, kind, summary, packet_json, content, created_at, delivered_to_loop_id) VALUES
 		('owner', 'upd-1', 'researcher:doc', 'super:root', 'doc-1', 1, 'traj-1', 'researcher', 'evidence_update', 's', '{}', 'c', ?, '')`,
 		now)
@@ -324,6 +325,16 @@ func TestVocabDrillMigrateRevertMigrate(t *testing.T) {
 	drillAssertFence(t, vocabmigrate.VocabularyV2, drillRoleColumns(t, s))
 	drillAssertJoins(t, s)
 	drillAssertAuthzEquivalence(t, s, rep, originals)
+	// Longest-token-first: "work-co-super-2" must migrate to
+	// "work-engineering-2", never "work-co-management-2" (the "-super-"
+	// infix is a substring of "-co-super-"; regression pin for F3).
+	var wid string
+	if err := s.db.QueryRowContext(ctx, `SELECT work_item_id FROM work_items WHERE objective = 'review'`).Scan(&wid); err != nil {
+		t.Fatalf("drill infix: %v", err)
+	}
+	if wid != "work-engineering-2" {
+		t.Fatalf("drill infix: work-co-super-2 migrated to %q, want work-engineering-2", wid)
+	}
 	assertBoss("post-migrate")
 
 	// Revert: byte-identical through provenance (aliases included).
