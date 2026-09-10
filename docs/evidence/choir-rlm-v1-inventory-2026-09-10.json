@@ -5,7 +5,7 @@
   "generator": "scripts/v1-inventory-queries.py",
   "query_version": 1,
   "corpus_manifest": "docs/evidence/choir-rlm-v1-inventory-corpus-2026-09-10.txt",
-  "row_count": 317,
+  "row_count": 321,
   "unknown_allowlisted": [
    "main@57c26060|internal/agentcore/rematerialize.go|restoreIntentOwner",
    "main@57c26060|internal/textureowner/texture_agent_revision.go|revisionRoleOwner",
@@ -15,7 +15,8 @@
    "decoder-commit: +2 frozen-table rows for internal/computerevent/decode.go (Define update; no prior rows touched)",
    "step-4 re-freeze v2: hunk-mapped anchor refresh after the inert Canonical tuple refactor; step4TupleHoists rows dissolved back into owning site rows; every row keeps its key",
    "migration-core commit: +6 rows for internal/vocabmigrate/migrate.go (Define update; frozen \u00a73 embodiment)",
-   "fence-core commit: +1 row for internal/vocabmigrate/fence.go v2LiveSet (Define update; enforcement wiring deferred to cutover)"
+   "fence-core commit: +1 row for internal/vocabmigrate/fence.go v2LiveSet (Define update; enforcement wiring deferred to cutover)",
+   "drill commit: +4 rows for internal/store/vocab_migrate.go (Define update; SQL migration production code)"
   ]
  },
  "rows": [
@@ -10935,6 +10936,134 @@
     "\"management\": true, \"engineering\": true, \"research\": true,"
    ],
    "note": "Frozen V2 live set for fence verification; aliases excluded by construction. Wiring deferred to cutover per landing order (refusal before migration is a defect)."
+  },
+  {
+   "key": "main@57c26060|internal/store/vocab_migrate.go|provenanceSpellings",
+   "file": "internal/store/vocab_migrate.go",
+   "lines": [
+    40,
+    42,
+    43
+   ],
+   "symbol": "provenanceSpellings",
+   "field_path": "provenanceSpellings",
+   "class": 2,
+   "namespace": "migrate.frozen.set",
+   "v1_tokens": [
+    "cosuper",
+    "coagent",
+    "co-agent",
+    "co_super",
+    "cosuper_coding",
+    "co-super-coding",
+    "engineering",
+    "researchers",
+    "research",
+    "research-agent",
+    "web-research",
+    "web-researcher"
+   ],
+   "v2_token": "exact-restore set",
+   "carrier": "n/a",
+   "liveness": "live",
+   "role": "def",
+   "digest": "NONE",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "\"cosuper\": true, \"coagent\": true, \"co-agent\": true,",
+    "\"engineering\": true,",
+    "\"researchers\": true, \"research\": true, \"research-agent\": true,"
+   ],
+   "note": "Spellings whose canonical inverse differs; rows carrying them get INV-PROV provenance."
+  },
+  {
+   "key": "main@57c26060|internal/store/vocab_migrate.go|migrateIDForwardPrefixes",
+   "file": "internal/store/vocab_migrate.go",
+   "lines": [
+    82
+   ],
+   "symbol": "migrateIDForwardPrefixes",
+   "field_path": "migrateIDForwardPrefixes",
+   "class": 10,
+   "namespace": "migrate.prefix",
+   "v1_tokens": [
+    "super:",
+    "co-super:",
+    "cosuper:",
+    "researcher:"
+   ],
+   "v2_token": "management:,engineering:,research:",
+   "carrier": "agent/address ID prefixes",
+   "liveness": "live",
+   "role": "writer",
+   "digest": "NONE",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "for _, prefix := range []string{\"super:\", \"co-super:\", \"cosuper:\", \"researcher:\"} {"
+   ],
+   "note": "Go-side prefix+infix rewrite (portability); command identities never passed in."
+  },
+  {
+   "key": "main@57c26060|internal/store/vocab_migrate.go|migrateIDBackwardPrefixes",
+   "file": "internal/store/vocab_migrate.go",
+   "lines": [
+    106,
+    109
+   ],
+   "symbol": "migrateIDBackwardPrefixes",
+   "field_path": "migrateIDBackwardPrefixes",
+   "class": 10,
+   "namespace": "migrate.prefix",
+   "v1_tokens": [
+    "management:",
+    "engineering:",
+    "research:"
+   ],
+   "v2_token": "super:,co-super:,researcher:",
+   "carrier": "agent/address ID prefixes",
+   "liveness": "live",
+   "role": "writer",
+   "digest": "NONE",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "for _, prefix := range []string{\"management:\", \"engineering:\", \"research:\"} {",
+    "\"management:\": \"super:\", \"engineering:\": \"co-super:\", \"research:\": \"researcher:\","
+   ],
+   "note": "Canonical-inverse ID rewrite; exact spellings restore through provenance."
+  },
+  {
+   "key": "main@57c26060|internal/store/vocab_migrate.go|revertInverseMap",
+   "file": "internal/store/vocab_migrate.go",
+   "lines": [
+    353
+   ],
+   "symbol": "revertInverseMap",
+   "field_path": "revertInverseMap",
+   "class": 2,
+   "namespace": "migrate.frozen.map",
+   "v1_tokens": [
+    "management",
+    "engineering",
+    "research"
+   ],
+   "v2_token": "super,co-super,researcher",
+   "carrier": "n/a",
+   "liveness": "live",
+   "role": "def",
+   "digest": "NONE",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "inverse := map[string]string{\"management\": \"super\", \"engineering\": \"co-super\", \"research\": \"researcher\"}"
+   ],
+   "note": "Canonical inverse for non-provenance rows."
   }
  ],
  "negative_sweeps": [

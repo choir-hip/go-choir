@@ -1,7 +1,7 @@
 # Choir RLM versioned-rename V1 inventory corpus manifest
 # source_ref: main@57c26060
 # generator: scripts/check-v1-inventory.sh --write-manifest (query_version 1)
-# files: 665
+# files: 666
 # excluded_test_support: internal/base/testkit/scenarios.go (fixture helper, no production callers)
 # excluded_generator: scripts/v1-inventory-*.py (measuring instrument; desk-lexeme strings are query patterns, swept clean of role fields)
 # excluded_ops_tooling: extensionless scripts/* shell tooling (negative-swept clean except prose substring noise)
@@ -545,6 +545,7 @@ internal/store/texture_structured_revision.go
 internal/store/texture_turn.go
 internal/store/texture_turn_manifest.go
 internal/store/trajectory.go
+internal/store/vocab_migrate.go
 internal/texturedoc/projection.go
 internal/texturedoc/schema.go
 internal/textureowner/api_texture_prompt_eval.go

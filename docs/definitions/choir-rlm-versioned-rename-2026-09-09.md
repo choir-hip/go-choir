@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Fence core landed end-to-end (70057ab7; CI green with zero failures; staging serving 70057ab7). Next: drill design (migrate/revert/migrate ending on V1 rows) against the fence guarantee, then the single cutover."
+  slice: "Scratch drill landed (store SQL migration + migrate/revert/migrate drill test green, inventory at 321 rows, both gates PASS). Awaiting CI verdict. Next: single writer cutover (step 6) with owner-ratified mapping, then staging proof."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Fence core in flight; drill design outstanding (needs owner-shape decisions on drill surface: staging vs scratch). Owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover only). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Design the migrate/revert/migrate drill (landing step 5): forward-migrate live rows to V2, verify fence + joins + authorization, revert to V1 via proven inverse, re-migrate, ending on V1 serving rows; drill never leaves serving mixed vocabulary."
+  blocker_or_risk: "Drill commit in flight; owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Obtain owner ratification of the mapping-table owner classification, then land the single writer cutover (landing step 6) with the v2 identity/mapping receipt."
 
 
 receipts:
