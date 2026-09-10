@@ -30,6 +30,11 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   successor is deferred while the program continues in future missions.
   Revisit: a later mission names the complete successor and redirects the
   cutover atomically.
+- **R7 — Engineering-proof successor owns tool/operation retirement (open).**
+  Mission 2 proves vocabulary only; the five overlay JSON tools and four
+  legacy capsule operations plus replay-returns-original-receipts belong to
+  the Engineering-proof successor mission. Revisit: when that mission charters.
+
 ## Closed
 
 - **R4 — Mission-1 correction superseding tuple.** Closed 2026-09-09 by settlement-gate item-3 repair (commit `965e26a7`): `CoSuperSupersedeTuple` required for attempt > 1, forbidden on attempt 1, validated in-store; slot conflict enforced on differing propositions without tuple.
