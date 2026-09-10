@@ -358,3 +358,65 @@ func TestVocabDrillMigrateRevertMigrate(t *testing.T) {
 		}
 	}
 }
+
+// TestMigrateAndFenceServingVocabulary exercises the production cutover
+// orchestrator: migrate + persist + fence in one call, idempotent across
+// repeated serving transitions, with provenance surviving a second run so
+// revert still restores the original V1 bytes.
+func TestMigrateAndFenceServingVocabulary(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	drillExec(t, s, `INSERT INTO agents (agent_id, owner_id, computer_id, profile, role, channel_id, created_at, updated_at) VALUES
+		('super:root', 'owner', 'computer', 'super', 'super', 'super:root', ?, ?),
+		('co-super:impl', 'owner', 'computer', 'co-super', 'co-super', 'chan-1', ?, ?),
+		('alias:one', 'owner', 'computer', 'cosuper', 'CoAgent', 'chan-1', ?, ?)`,
+		now, now, now, now, now, now)
+	original := drillSnapshot(t, s)
+
+	// First transition: migrates, persists the report, fence passes.
+	if _, err := s.MigrateAndFenceServingVocabulary(ctx); err != nil {
+		t.Fatalf("first migrate+fence: %v", err)
+	}
+	rep, err := s.loadVocabMigrationReport()
+	if err != nil || rep == nil {
+		t.Fatalf("report not persisted: %v", err)
+	}
+	if len(rep.Provenance) == 0 {
+		t.Fatal("persisted report has no provenance")
+	}
+
+	// Second transition (e.g. next boot): must not overwrite the original
+	// V1 provenance with the migrated V2 spellings.
+	if _, err := s.MigrateAndFenceServingVocabulary(ctx); err != nil {
+		t.Fatalf("second migrate+fence: %v", err)
+	}
+	rep, err = s.loadVocabMigrationReport()
+	if err != nil {
+		t.Fatalf("reload report: %v", err)
+	}
+	if err := s.RevertVocabularyToV1(ctx, rep); err != nil {
+		t.Fatalf("revert after double migration: %v", err)
+	}
+	drillAssertSnapshotsEqual(t, original, drillSnapshot(t, s))
+}
+
+// TestMigrateAndFenceRefusesUnknown proves the serving fence stays closed:
+// an unknown role token survives migration untouched and fails the fence.
+func TestMigrateAndFenceRefusesUnknown(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	drillExec(t, s, `INSERT INTO channel_messages (channel_id, seq, owner_id, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at) VALUES
+		('chan-9', 3, 'owner', 'alias:one', '', '', '', 'traj-9', '', 'boss', 'mystery', ?)`, now)
+	if _, err := s.MigrateAndFenceServingVocabulary(ctx); err == nil {
+		t.Fatal("fence passed with unknown role token serving")
+	}
+	var role string
+	if err := s.db.QueryRowContext(ctx, `SELECT role FROM channel_messages WHERE channel_id = 'chan-9'`).Scan(&role); err != nil {
+		t.Fatal(err)
+	}
+	if role != "boss" {
+		t.Fatalf("unknown token rewritten to %q", role)
+	}
+}

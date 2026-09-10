@@ -165,6 +165,14 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		_ = os.RemoveAll(stagingRoot)
 		return report, err
 	}
+	// Vocabulary cutover: the staged store was reconstructed from the V1 tape
+	// byte-identically, so forward-migrate and fence it before the flip makes
+	// it live. Failure leaves the original realization untouched.
+	if _, err := staged.MigrateAndFenceServingVocabulary(ctx); err != nil {
+		_ = staged.Close()
+		_ = os.RemoveAll(stagingRoot)
+		return report, fmt.Errorf("rematerialize: vocabulary migration refused: %w", err)
+	}
 	stagedWorkspace := staged.TexturePath()
 	if err := staged.Close(); err != nil {
 		_ = os.RemoveAll(stagingRoot)

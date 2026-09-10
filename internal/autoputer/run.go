@@ -490,7 +490,7 @@ func Run() {
 		gate.appender = replayAppender
 		gate.mu.Unlock()
 		s.SetHealthHandler(gate.ServeHTTP)
-		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, rtCfg.StorePath, replayBootstrapCtx, replayBootstrapCancel, func() error {
+		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, rtCfg.StorePath, db, replayBootstrapCtx, replayBootstrapCancel, func() error {
 			if fileSyncService != nil {
 				restored, err := fileSyncService.HydrateIfNeeded(ctx)
 				if err != nil {
@@ -514,6 +514,11 @@ func Run() {
 			} else if root := fileSyncService.hydratedRoot(); root != "" {
 				log.Printf("autoputer: file tree hydrated %d files from CAS root %s", restored, root)
 			}
+		}
+		// Vocabulary cutover: migrate any retained V1 rows and hold the
+		// serving fence closed before the runtime starts serving authority.
+		if _, err := db.MigrateAndFenceServingVocabulary(ctx); err != nil {
+			log.Fatalf("autoputer: vocabulary migration refused: %v", err)
 		}
 		startPeriodicDoltGC(rtCfg.StorePath)
 		if err := rt.Start(ctx); err != nil {
@@ -543,7 +548,7 @@ func startPeriodicDoltGC(storePath string) {
 // (Restart=on-failure) restart the guest and the next boot resumes from the
 // committed head. Never CAS during replay (B8); the appender is read-only over
 // the canonical tape.
-func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID, storePath string, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
+func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID, storePath string, db *store.Store, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
 	defer cancel()
 	// B14 host-drive boundary: when RUNTIME_RECOVERY_REPLAY_ONLY is set the
 	// reconstruct is a one-shot, deterministic projection materialization on
@@ -556,6 +561,15 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 	appender.SetReplayMode(true)
 	err := appender.Reconstruct(bootstrapCtx, client)
 	appender.SetReplayMode(false)
+	if err == nil {
+		// Vocabulary cutover: replay deposits V1 rows byte-identically, so
+		// forward-migrate and fence BEFORE the health gate opens or the
+		// runtime serves. Runs on the replay-only host drive too so the
+		// materialized store is V2 before the guest takes over.
+		if _, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx); migErr != nil {
+			log.Fatalf("autoputer: vocabulary migration refused: %v", migErr)
+		}
+	}
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			// 30m resume quantum complete; the final durable checkpoint was flushed

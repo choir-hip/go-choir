@@ -25,7 +25,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -247,10 +250,12 @@ func (s *Store) MigrateVocabularyToV2(ctx context.Context) (*MigrationReport, er
 			if !ok {
 				continue // unknown: left for the fence; drill asserts none
 			}
-			// Provenance first: identity mappings (research→research,
-			// engineering→engineering) still need exact restore on revert,
-			// or the canonical inverse would rewrite the original bytes.
-			if provenanceSpellings[strings.ToLower(raw)] {
+			// Provenance first: every changed row records its exact V1 token,
+			// not just non-canonical spellings. A later migration pass sees the
+			// migrated V2 value; without the original entry the merge cannot
+			// tell it from a V1-authored V2-spelling row and would record a
+			// spurious provenance entry that hijacks INV-PROV revert.
+			if provenanceSpellings[strings.ToLower(raw)] || v2 != raw {
 				record(t.table, v, t.col, raw)
 			}
 			if v2 == raw {
@@ -318,7 +323,7 @@ func (s *Store) migrateMetadataJSON(ctx context.Context, rep *MigrationReport, t
 			if !ok {
 				continue
 			}
-			if provenanceSpellings[strings.ToLower(raw)] {
+			if provenanceSpellings[strings.ToLower(raw)] || v2 != raw {
 				rep.Provenance[provKey(table, v, col+"."+rk)] = ProvEntry{
 					Table: table, Keys: v, Column: col + "." + rk, Exact: raw,
 				}
@@ -554,4 +559,162 @@ func migratedKeysForRevert(entry ProvEntry) map[string]string {
 		}
 	}
 	return out
+}
+
+// servingRoleQueries enumerates every role-bearing value the serving fence
+// must verify. It mirrors the drill's drillRoleColumns set plus the
+// metadata_json.agent_role key the migrator already rewrites. Desk-bearing ID
+// columns are excluded: they are compound tokens (management:owner), not
+// fence-checkable role values.
+var servingRoleQueries = map[string]string{
+	"agents.profile":               `SELECT DISTINCT profile FROM agents`,
+	"agents.role":                  `SELECT DISTINCT role FROM agents`,
+	"runs.agent_profile":           `SELECT DISTINCT agent_profile FROM runs`,
+	"runs.agent_role":              `SELECT DISTINCT agent_role FROM runs`,
+	"channel_messages.role":        `SELECT DISTINCT role FROM channel_messages`,
+	"inbox_deliveries.role":        `SELECT DISTINCT role FROM inbox_deliveries`,
+	"work_items.authority":         `SELECT DISTINCT authority_profile FROM work_items`,
+	"worker_updates.role":          `SELECT DISTINCT role FROM worker_updates`,
+	"runs.meta_profile":            `SELECT DISTINCT metadata_json->>'$.agent_profile' FROM runs WHERE metadata_json->>'$.agent_profile' IS NOT NULL`,
+	"runs.meta_role":               `SELECT DISTINCT metadata_json->>'$.agent_role' FROM runs WHERE metadata_json->>'$.agent_role' IS NOT NULL`,
+	"runs.meta_requested_by":       `SELECT DISTINCT metadata_json->>'$.requested_by_profile' FROM runs WHERE metadata_json->>'$.requested_by_profile' IS NOT NULL`,
+	"work_items.meta_requested_by": `SELECT DISTINCT details_json->>'$.requested_by_profile' FROM work_items WHERE details_json->>'$.requested_by_profile' IS NOT NULL`,
+}
+
+// servingRoleFields collects every distinct role-bearing value in the store
+// for the serving fence.
+func (s *Store) servingRoleFields(ctx context.Context) ([]vocabmigrate.Field, error) {
+	names := make([]string, 0, len(servingRoleQueries))
+	for name := range servingRoleQueries {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var fields []vocabmigrate.Field
+	for _, name := range names {
+		rows, err := s.db.QueryContext(ctx, servingRoleQueries[name])
+		if err != nil {
+			return nil, fmt.Errorf("vocab fence scan %s: %w", name, err)
+		}
+		for rows.Next() {
+			var v string
+			if err := rows.Scan(&v); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("vocab fence scan %s: %w", name, err)
+			}
+			fields = append(fields, vocabmigrate.Field{Key: name, Value: v})
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("vocab fence scan %s: %w", name, err)
+		}
+	}
+	return fields, nil
+}
+
+// VerifyServingVocabularyV2 refuses when any role-bearing value in the store
+// falls outside the active V2 vocabulary (frozen protocol always passes).
+func (s *Store) VerifyServingVocabularyV2(ctx context.Context) error {
+	fields, err := s.servingRoleFields(ctx)
+	if err != nil {
+		return err
+	}
+	return vocabmigrate.VerifyServingVocabulary(vocabmigrate.VocabularyV2, fields...)
+}
+
+// MigrateAndFenceServingVocabulary is the cutover transition: forward-migrate
+// every inventoried row, persist the merged provenance report for INV-PROV
+// revert across restarts, then hold the serving fence closed until every row
+// class agrees with the active V2 vocabulary. It is idempotent and safe to
+// run at every serving transition (post-replay boot, rematerialize flip,
+// base publish); a second run only picks up rows written since the last pass.
+func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context) (*MigrationReport, error) {
+	prior, err := s.loadVocabMigrationReport()
+	if err != nil {
+		return nil, err
+	}
+	rep, err := s.MigrateVocabularyToV2(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if prior != nil {
+		mergeVocabReports(prior, rep)
+		rep = prior
+	}
+	if err := s.persistVocabMigrationReport(rep); err != nil {
+		return nil, err
+	}
+	if err := s.VerifyServingVocabularyV2(ctx); err != nil {
+		return nil, fmt.Errorf("vocab serving fence: %w", err)
+	}
+	return rep, nil
+}
+
+// mergeVocabReports folds a fresh migration report into the persisted one.
+// Provenance entries whose post-migration row identity collides with a prior
+// entry are dropped: the prior entry retains the original V1 token, which is
+// the only correct INV-PROV source for that row.
+func mergeVocabReports(dst, src *MigrationReport) {
+	if dst.Provenance == nil {
+		dst.Provenance = map[string]ProvEntry{}
+	}
+	if dst.Counts == nil {
+		dst.Counts = map[string]int64{}
+	}
+	claimed := map[string]bool{}
+	for key, entry := range dst.Provenance {
+		claimed[key] = true
+		claimed[provKey(entry.Table, migratedKeysForRevert(entry), entry.Column)] = true
+	}
+	for key, entry := range src.Provenance {
+		if claimed[key] {
+			continue
+		}
+		dst.Provenance[key] = entry
+	}
+	for key, n := range src.Counts {
+		dst.Counts[key] += n
+	}
+}
+
+// vocabReportFileName is the sidecar carrying the migration report inside the
+// Dolt workspace directory. It lives outside the database so the witness
+// extractor never observes it (a report table would change the schema hash
+// and break live↔replay witness equality), while still traveling with the
+// store through rematerialize flips and projection-base blobs.
+const vocabReportFileName = "vocab-migration-report.json"
+
+func (s *Store) vocabReportPath() string {
+	return filepath.Join(s.texturePath, vocabReportFileName)
+}
+
+func (s *Store) persistVocabMigrationReport(rep *MigrationReport) error {
+	raw, err := json.Marshal(rep)
+	if err != nil {
+		return fmt.Errorf("vocab migrate report encode: %w", err)
+	}
+	path := s.vocabReportPath()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+		return fmt.Errorf("vocab migrate report persist: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("vocab migrate report persist: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) loadVocabMigrationReport() (*MigrationReport, error) {
+	raw, err := os.ReadFile(s.vocabReportPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("vocab migrate report load: %w", err)
+	}
+	rep := &MigrationReport{}
+	if err := json.Unmarshal(raw, rep); err != nil {
+		return nil, fmt.Errorf("vocab migrate report decode: %w", err)
+	}
+	return rep, nil
 }

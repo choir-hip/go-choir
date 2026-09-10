@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Single writer cutover (step 6) landed in-tree: CurrentVocabularyVersion=v2, V2-only writers, alias retirement, fail-closed refusal, client bundles. Next: commit, push, CI, staging deploy, deployed decoder-matrix proof."
+  slice: "Cutover gap found and repaired in-tree: step-6 intra-order required live-row forward-migration + serving fence BEFORE the writer flip, but MigrateVocabularyToV2/VerifyServingVocabulary had zero production callers. Wired: post-replay boot migration+fence (runReplayPhase, both credentialed and replay-only paths, plus the no-credential branch), rematerialize staged-to-live flip, rebuilder scratch pre-publish, live-append ActorProfile gate, RecoverPrepared known-vocabulary check, and durable workspace-sidecar provenance for restart-safe INV-PROV revert. Next: commit, push, CI, staging deploy, deployed decoder-matrix proof."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Cutover commit pending push/CI/staging proof. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Commit the cutover slice, push origin main, monitor CI and staging deploy, then run the deployed decoder-matrix and focused-contracts acceptance (items 7-8)."
+  blocker_or_risk: "Migration+fence wiring landed in-tree pending push/CI/staging proof; until deployed, a guest boot on the writer-cutover build would have served unmigrated V1 rows. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Commit the migration/fence wiring slice, push origin main, monitor CI and staging deploy, then run the deployed decoder-matrix and focused-contracts acceptance (items 7-8)."
 
 
 receipts:
@@ -385,4 +385,17 @@ receipts:
     disposition: "writer cutover unblocked; single cutover (step 6) with v2 identity/mapping receipt is next"
     problem_ref: "role-shaped owner tokens had no classification; --freeze red and cutover blocked"
     authorization_ref: "Owner ask ratification 2026-09-10T15:21:26Z"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-migrate-fence-wiring-2026-09-10
+    boundary: implement
+    commit_or_artifact: "this commit"
+    proof_refs:
+      - "go build ./... clean; store/computerevent/autoputer/agentcore/projectionbase suites green incl. TestVocabDrillMigrateRevertMigrate, TestMigrateAndFenceServingVocabulary (double-run provenance preservation), TestMigrateAndFenceRefusesUnknown, TestRematerializeRefusesFailureClasses"
+      - "gap evidence: grep showed zero production callers of MigrateVocabularyToV2/VerifyServingVocabulary before this change; drill and fence tests were the only exercisers"
+      - "provenance durability: report persisted as workspace sidecar (vocab-migration-report.json), not a Dolt table — a table changes the witnessed schema hash and broke TestRematerializeRefusesFailureClasses (behavior-bearing VM-local rows not event-derivable)"
+      - "provenance completeness widened: every changed row records its exact V1 token (not only non-canonical spellings) so a second migration pass cannot mint a spurious V2-spelling entry that hijacks INV-PROV revert; merge dedupes on post-migration row identity"
+    rollback_ref: "revert this commit; wiring is additive and the migration is idempotent, so revert restores the unwired (V1-serving) state"
+    disposition: "landing-order step 6 first half (live-row forward-migration + serving fence) now wired; deployed decoder-matrix proof (items 7-8) is next"
+    problem_ref: "migration and serving-fence machinery landed with zero production callers; the writer cutover flipped to V2 without migrating stored V1 rows or fencing the serving path, so the next guest boot would have served unmigrated V1 rows under a V2 writer set — documented and repaired in one commit because the defect was discovered mid-execution of the same landing step"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; step-6 intra-order (migration+fence before writer flip) is charter text, not new scope"
     candidate_or_evidence_refs: []

@@ -105,6 +105,14 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		return nil, fmt.Errorf("rebuilder: final head mismatch: got %s, want %s", finalHead.CanonicalEventHead, r.cfg.TargetHead)
 	}
 
+	// Vocabulary cutover: replay deposits V1 rows byte-identically, so
+	// forward-migrate and fence the scratch store before the witness and
+	// publish. The descriptor already stamps VocabularyVersion=v2; this makes
+	// the published content match it.
+	if _, err := scratchStore.MigrateAndFenceServingVocabulary(ctx); err != nil {
+		return nil, fmt.Errorf("rebuilder: vocabulary migration refused: %w", err)
+	}
+
 	// Extract state witness for canonical verification.
 	version := computerversion.ComputerVersion{
 		CodeRef:            computerversion.CodeRef("runtime:" + r.cfg.ComputerID),
