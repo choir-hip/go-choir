@@ -204,7 +204,7 @@ now:
   question: "Is the round-9 repaired draft with recovery fencing, per-function sets, and scoped conjecture ready for owner ratification?"
   reconciliation:
     observed_at: "2026-09-09T23:29:36Z"
-    source_ref: "main@690eb47b (round-8 repaired draft; re-observe HEAD at charter ratification)"
+    source_ref: "main@63dbead4 (round-9 repaired draft; re-observe HEAD at charter ratification)"
     deploy_identity: "staging https://choir.news ok via proxy 0475ed84 (last observed; re-observe at charter)"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md:79-85 (desks vocabulary)"
