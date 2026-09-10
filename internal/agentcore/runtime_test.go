@@ -475,7 +475,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 
 	rec := &types.RunRecord{
 		RunID:        "run-researcher-1",
-		AgentID:      "researcher:doc-1:1",
+		AgentID:      "research:doc-1:1",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
 		AgentProfile: agentprofile.Researcher,
@@ -679,7 +679,7 @@ func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
 
 	rec := &types.RunRecord{
 		RunID:        "run-super-skills",
-		AgentID:      "super:user-alice",
+		AgentID:      "management:user-alice",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
 		AgentProfile: agentprofile.Super,

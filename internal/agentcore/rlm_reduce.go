@@ -76,13 +76,16 @@ type ReductionReceipt struct {
 func spawnRoleAllowed(spawnerRole, childRole string) bool {
 	spawner := strings.ToLower(strings.TrimSpace(spawnerRole))
 	child := strings.ToLower(strings.TrimSpace(childRole))
+	// Frozen V2 spawn matrix (mapping §2): management allows any child;
+	// engineering allows engineering and research; research allows research;
+	// default false. No V1 token is accepted in any position.
 	switch spawner {
-	case "super":
+	case "management":
 		return true
-	case "co-super", "cosuper", "engineering":
-		return child == "researcher" || child == "co-super" || child == "cosuper" || child == "engineering"
-	case "researcher", "research":
-		return child == "researcher" || child == "research"
+	case "engineering":
+		return child == "engineering" || child == "research"
+	case "research":
+		return child == "research"
 	default:
 		return false
 	}

@@ -93,7 +93,7 @@ func runHasProfile(rec *types.RunRecord, profile string) bool {
 	if rec == nil {
 		return false
 	}
-	runProfile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	runProfile := agentProfileForRun(rec)
 	targetProfile, _ := agentprofile.Canonical(profile)
 	return runProfile == targetProfile
 }
@@ -420,7 +420,11 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	sourceClient := researchtools.NewSourceClientFromEnv()
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
-	superRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Super), cwd, searchClient, sourceClient, httpClient)
+	superPolicy, err := agentprofile.PolicyFor(agentprofile.Super)
+	if err != nil {
+		return err
+	}
+	superRegistry, err := rt.buildRegistryForRole(superPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -436,14 +440,22 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		}
 	}
 	coSuperRegistry := toolregistry.MustNewToolRegistry()
-	researcherRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Researcher), cwd, searchClient, sourceClient, httpClient)
+	researcherPolicy, err := agentprofile.PolicyFor(agentprofile.Researcher)
+	if err != nil {
+		return err
+	}
+	researcherRegistry, err := rt.buildRegistryForRole(researcherPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterCoagentUpdateTools(researcherRegistry, rt); err != nil {
 		return err
 	}
-	processorRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Processor), cwd, searchClient, sourceClient, httpClient)
+	processorPolicy, err := agentprofile.PolicyFor(agentprofile.Processor)
+	if err != nil {
+		return err
+	}
+	processorRegistry, err := rt.buildRegistryForRole(processorPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -453,22 +465,38 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterWireProcessorTools(processorRegistry, rt); err != nil {
 		return err
 	}
-	reconcilerRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Reconciler), cwd, searchClient, sourceClient, httpClient)
+	reconcilerPolicy, err := agentprofile.PolicyFor(agentprofile.Reconciler)
+	if err != nil {
+		return err
+	}
+	reconcilerRegistry, err := rt.buildRegistryForRole(reconcilerPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterCoagentUpdateTools(reconcilerRegistry, rt); err != nil {
 		return err
 	}
-	conductorRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Conductor), cwd, searchClient, sourceClient, httpClient)
+	conductorPolicy, err := agentprofile.PolicyFor(agentprofile.Conductor)
 	if err != nil {
 		return err
 	}
-	textureRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Texture), cwd, searchClient, sourceClient, httpClient)
+	conductorRegistry, err := rt.buildRegistryForRole(conductorPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
-	emailRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Email), cwd, searchClient, sourceClient, httpClient)
+	texturePolicy, err := agentprofile.PolicyFor(agentprofile.Texture)
+	if err != nil {
+		return err
+	}
+	textureRegistry, err := rt.buildRegistryForRole(texturePolicy, cwd, searchClient, sourceClient, httpClient)
+	if err != nil {
+		return err
+	}
+	emailPolicy, err := agentprofile.PolicyFor(agentprofile.Email)
+	if err != nil {
+		return err
+	}
+	emailRegistry, err := rt.buildRegistryForRole(emailPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}

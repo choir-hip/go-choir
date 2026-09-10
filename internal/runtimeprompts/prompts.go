@@ -47,11 +47,11 @@ func ReconcilerRuntimeOverlay() string {
 }
 
 func SuperRuntimeOverlay() string {
-	return mustRenderOverlay("super_runtime", nil)
+	return mustRenderOverlay("management_runtime", nil)
 }
 
 func CoSuperRuntimeOverlay() string {
-	return mustRenderOverlay("co_super_runtime", nil)
+	return mustRenderOverlay("engineering_runtime", nil)
 }
 
 // RLMCoSuperOverlay is the sealed-Go variant served when actuator=rlm:
@@ -59,11 +59,11 @@ func CoSuperRuntimeOverlay() string {
 // the JSON file/exec tools. The legacy catalog sentence is replaced, not
 // amended, so the model never sees two authorities.
 func RLMCoSuperOverlay() string {
-	return mustRenderOverlay("rlm_co_super_runtime", nil)
+	return mustRenderOverlay("rlm_engineering_runtime", nil)
 }
 
 func ResearcherRuntimeOverlay() string {
-	return mustRenderOverlay("researcher_runtime", nil)
+	return mustRenderOverlay("research_runtime", nil)
 }
 
 func RunContextOverlay(opts RunContextOptions) string {

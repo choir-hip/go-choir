@@ -19,8 +19,8 @@ func TestOGUpsertAndGetAgent(t *testing.T) {
 		AgentID:    "agent-og-1",
 		OwnerID:    "owner-og",
 		ComputerID: "autoputer-1",
-		Profile:    "researcher",
-		Role:       "researcher",
+		Profile:    "research",
+		Role:       "research",
 		ChannelID:  "ch-1",
 		CreatedAt:  time.Now().UTC(),
 		UpdatedAt:  time.Now().UTC(),
@@ -142,8 +142,8 @@ func TestOGUpsertAgentUpdate(t *testing.T) {
 		AgentID:    "agent-og-2",
 		OwnerID:    "owner-og",
 		ComputerID: "autoputer-1",
-		Profile:    "researcher",
-		Role:       "researcher",
+		Profile:    "research",
+		Role:       "research",
 		ChannelID:  "ch-1",
 		CreatedAt:  time.Now().UTC(),
 		UpdatedAt:  time.Now().UTC(),
@@ -370,7 +370,7 @@ func TestListAllRunsByStateOGExhaustsKeysetPages(t *testing.T) {
 	for i := range 3 {
 		rec := types.RunRecord{
 			RunID:      "run-og-state-page-" + string(rune('A'+i)),
-			AgentID:    "researcher:page",
+			AgentID:    "research:page",
 			OwnerID:    "owner-state-page",
 			ComputerID: "autoputer-1",
 			State:      types.RunCompleted,
@@ -397,7 +397,7 @@ func TestForEachRunsByStateExhaustsKeysetPages(t *testing.T) {
 	for i := range 3 {
 		rec := types.RunRecord{
 			RunID:      "run-og-foreach-page-" + string(rune('A'+i)),
-			AgentID:    "researcher:foreach-page",
+			AgentID:    "research:foreach-page",
 			OwnerID:    "owner-foreach-page",
 			ComputerID: "autoputer-1",
 			State:      types.RunCompleted,
@@ -434,7 +434,7 @@ func TestListRecentRunsByOwnerLoadsRequestedChildrenOnly(t *testing.T) {
 	ownerID := "owner-recent-window"
 	child := types.RunRecord{
 		RunID:            "run-recent-child",
-		AgentID:          "co-super:recent-child",
+		AgentID:          "engineering:recent-child",
 		RequestedByRunID: "parent-recent",
 		OwnerID:          ownerID,
 		ComputerID:       "autoputer-1",
@@ -444,7 +444,7 @@ func TestListRecentRunsByOwnerLoadsRequestedChildrenOnly(t *testing.T) {
 	}
 	root := types.RunRecord{
 		RunID:      "run-recent-root",
-		AgentID:    "researcher:recent-root",
+		AgentID:    "research:recent-root",
 		OwnerID:    ownerID,
 		ComputerID: "autoputer-1",
 		State:      types.RunCompleted,
@@ -453,7 +453,7 @@ func TestListRecentRunsByOwnerLoadsRequestedChildrenOnly(t *testing.T) {
 	}
 	foreign := types.RunRecord{
 		RunID:            "run-recent-foreign",
-		AgentID:          "co-super:recent-foreign",
+		AgentID:          "engineering:recent-foreign",
 		RequestedByRunID: "parent-recent-foreign",
 		OwnerID:          "owner-recent-foreign",
 		ComputerID:       "autoputer-1",
@@ -481,25 +481,25 @@ func TestListPassivatedPersistentSuperControlRunsByOwnerLoadsSuperOnly(t *testin
 	now := time.Now().UTC()
 	ownerID := "owner-passivated-super"
 	superRun := types.RunRecord{
-		RunID: "run-passivated-super", AgentID: "super:" + ownerID, OwnerID: ownerID,
-		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		RunID: "run-passivated-super", AgentID: "management:" + ownerID, OwnerID: ownerID,
+		ComputerID: "autoputer-1", AgentProfile: "management", AgentRole: "management",
 		State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{"request_source": "lifecycle_texture_control", "passivated_reason": "runtime_restarted"},
 	}
 	researcher := types.RunRecord{
-		RunID: "run-passivated-researcher", AgentID: "researcher:passivated", OwnerID: ownerID,
-		ComputerID: "autoputer-1", AgentProfile: "researcher", AgentRole: "researcher",
+		RunID: "run-passivated-researcher", AgentID: "research:passivated", OwnerID: ownerID,
+		ComputerID: "autoputer-1", AgentProfile: "research", AgentRole: "research",
 		State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
 	}
 	foreign := types.RunRecord{
-		RunID: "run-passivated-super-foreign", AgentID: "super:owner-passivated-super-foreign",
+		RunID: "run-passivated-super-foreign", AgentID: "management:owner-passivated-super-foreign",
 		OwnerID: "owner-passivated-super-foreign", ComputerID: "autoputer-1",
-		AgentProfile: "super", AgentRole: "super", State: types.RunPassivated,
+		AgentProfile: "management", AgentRole: "management", State: types.RunPassivated,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	completed := types.RunRecord{
-		RunID: "run-completed-super", AgentID: "super:" + ownerID, OwnerID: ownerID,
-		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		RunID: "run-completed-super", AgentID: "management:" + ownerID, OwnerID: ownerID,
+		ComputerID: "autoputer-1", AgentProfile: "management", AgentRole: "management",
 		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
 	}
 	for _, rec := range []types.RunRecord{superRun, researcher, foreign, completed} {
@@ -514,7 +514,7 @@ func TestListPassivatedPersistentSuperControlRunsByOwnerLoadsSuperOnly(t *testin
 	if len(got) != 1 || got[0].RunID != superRun.RunID {
 		t.Fatalf("passivated super runs = %+v, want [%s]", got, superRun.RunID)
 	}
-	byAgent, err := s.ListPassivatedPersistentSuperControlRunsByOwner(ctx, ownerID, "autoputer-1", "super:"+ownerID, 16)
+	byAgent, err := s.ListPassivatedPersistentSuperControlRunsByOwner(ctx, ownerID, "autoputer-1", "management:"+ownerID, 16)
 	if err != nil {
 		t.Fatalf("list passivated super runs by agent: %v", err)
 	}
@@ -1565,22 +1565,22 @@ func TestListRunsByOwnerStatesLoadsMatchingStatesOnly(t *testing.T) {
 	ownerID := "owner-run-states"
 	pending := types.RunRecord{
 		RunID: "run-pending-owner", AgentID: "agent-pending", OwnerID: ownerID,
-		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		ComputerID: "autoputer-1", AgentProfile: "management", AgentRole: "management",
 		State: types.RunPending, CreatedAt: now, UpdatedAt: now,
 	}
 	running := types.RunRecord{
 		RunID: "run-running-owner", AgentID: "agent-running", OwnerID: ownerID,
-		ComputerID: "autoputer-1", AgentProfile: "researcher", AgentRole: "researcher",
+		ComputerID: "autoputer-1", AgentProfile: "research", AgentRole: "research",
 		State: types.RunRunning, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second),
 	}
 	completed := types.RunRecord{
 		RunID: "run-completed-owner", AgentID: "agent-completed", OwnerID: ownerID,
-		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		ComputerID: "autoputer-1", AgentProfile: "management", AgentRole: "management",
 		State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
 	}
 	foreign := types.RunRecord{
 		RunID: "run-pending-foreign", AgentID: "agent-foreign", OwnerID: "owner-run-states-foreign",
-		ComputerID: "autoputer-1", AgentProfile: "super", AgentRole: "super",
+		ComputerID: "autoputer-1", AgentProfile: "management", AgentRole: "management",
 		State: types.RunPending, CreatedAt: now, UpdatedAt: now,
 	}
 	for _, rec := range []types.RunRecord{pending, running, completed, foreign} {
@@ -1606,10 +1606,10 @@ func TestAppendChannelMessageIdempotentReplay(t *testing.T) {
 	ctx := context.Background()
 	msg := &types.ChannelMessage{
 		ChannelID:      "ch-idem",
-		From:           "co-super",
-		FromAgentID:    "co-super:impl",
-		ToAgentID:      "super",
-		Role:           "co-super",
+		From:           "engineering",
+		FromAgentID:    "engineering:impl",
+		ToAgentID:      "management",
+		Role:           "engineering",
 		Content:        "hello",
 		IdempotencyKey: "rlm:cell-1:tray-1",
 	}
@@ -1619,10 +1619,10 @@ func TestAppendChannelMessageIdempotentReplay(t *testing.T) {
 	first := msg.Seq
 	replay := &types.ChannelMessage{
 		ChannelID:      "ch-idem",
-		From:           "co-super",
-		FromAgentID:    "co-super:impl",
-		ToAgentID:      "super",
-		Role:           "co-super",
+		From:           "engineering",
+		FromAgentID:    "engineering:impl",
+		ToAgentID:      "management",
+		Role:           "engineering",
 		Content:        "hello",
 		IdempotencyKey: "rlm:cell-1:tray-1",
 	}
@@ -1637,10 +1637,10 @@ func TestAppendChannelMessageIdempotentReplay(t *testing.T) {
 	}
 	conflict := &types.ChannelMessage{
 		ChannelID:      "ch-idem",
-		From:           "co-super",
-		FromAgentID:    "co-super:impl",
-		ToAgentID:      "super",
-		Role:           "co-super",
+		From:           "engineering",
+		FromAgentID:    "engineering:impl",
+		ToAgentID:      "management",
+		Role:           "engineering",
 		Content:        "changed",
 		IdempotencyKey: "rlm:cell-1:tray-1",
 	}

@@ -215,7 +215,7 @@ func rematerializeTapeRuntime(t *testing.T, computerID, storePath string, live *
 	genesis := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 		EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: "genesis", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
+		IdempotencyKey: "genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner",
 		PayloadCommitment: commitment, ProposedEffectRef: strings.Repeat("b", 64),
 		ResultingEffectiveCommitment: commitment, ReducerVersion: computerevent.ReducerVersionV1,
 	}
@@ -464,7 +464,7 @@ func TestRestoreFromTapeAppendsIntentAndStopsAtTarget(t *testing.T) {
 	later := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: laterID, ComputerID: computerID,
 		EventKind: computerevent.EventArtifactProduced, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: "later-artifact", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
+		IdempotencyKey: "later-artifact", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner",
 		PayloadCommitment: strings.Repeat("c", 64), ReducerVersion: computerevent.ReducerVersionV1,
 	}
 	if _, err := rt.eventAppender.AppendNew(ctx, later, computerevent.TransitionInput{}, nil); err != nil {

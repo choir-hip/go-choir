@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const (
@@ -92,8 +94,8 @@ func (b CoSuperAssignmentBinding) Validate() error {
 	if !strings.HasPrefix(b.ParentDecisionID, "decision:sha256:") || !ValidSHA256Digest(strings.TrimPrefix(b.ParentDecisionID, "decision:")) {
 		return fmt.Errorf("co-super assignment: parent_decision_id must be runtime-derived")
 	}
-	if b.ParentAgentID != "super:"+b.OwnerID {
-		return fmt.Errorf("co-super assignment: parent_agent_id must be exact persistent super:<owner>")
+	if b.ParentAgentID != agentprofile.Super+":"+b.OwnerID {
+		return fmt.Errorf("co-super assignment: parent_agent_id must be exact persistent management:<owner>")
 	}
 	if b.AssignedAgentID == b.ParentAgentID || b.AssignedWorkItemID == b.ParentWorkItemID {
 		return fmt.Errorf("co-super assignment: parent and assigned identities must be distinct")
@@ -564,6 +566,7 @@ func (o CoSuperOrphanObservation) Validate() error {
 	}
 	return nil
 }
+
 type OpenCoSuperAssignmentRequest struct {
 	CommandID     string                   `json:"command_id"`
 	CommandDigest string                   `json:"command_digest"`

@@ -2799,7 +2799,7 @@ func workerMailboxAllowsAssignedCoSuperSuperReport(update types.CoagentSourcePac
 	reportRole, _ := agentprofile.Canonical(update.Role)
 	return update.Direction == types.LifecyclePacketDirectionProducerReport &&
 		reportRole == agentprofile.CoSuper &&
-		strings.TrimSpace(update.TargetAgentID) == "super:"+ownerID
+		strings.TrimSpace(update.TargetAgentID) == agentprofile.Super+":"+ownerID
 }
 
 func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSourcePacket, message *types.ChannelMessage) (types.CoagentSourcePacket, bool, error) {

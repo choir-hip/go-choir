@@ -31,7 +31,7 @@ func testSessionBroker(t *testing.T) *Broker {
 
 func TestSessionFrameCodecRoundTrip(t *testing.T) {
 	frame := yaegikernel.SessionFrame{ID: "cell-9", Source: `x := 1`, Inbox: []yaegikernel.IncomingMessage{
-		{ID: "m-1", FromDesk: "super", ToDesk: "cosuper", Kind: "directive", Body: "go"},
+		{ID: "m-1", FromDesk: "management", ToDesk: "engineering", Kind: "directive", Body: "go"},
 	}}
 	raw, err := json.Marshal(frame)
 	if err != nil {
@@ -42,7 +42,7 @@ func TestSessionFrameCodecRoundTrip(t *testing.T) {
 		t.Fatalf("frame roundtrip = %+v, %v", back, err)
 	}
 	res := yaegikernel.SessionResult{ID: "cell-9", Stdout: "hi", Intents: []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "hi"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "hi"},
 	}}
 	raw, err = json.Marshal(res)
 	if err != nil {
@@ -159,7 +159,7 @@ func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	w, err := spawnSessionWorker(bin, workerSessionConfig{
 		computerID: "test-capsule", epoch: 1, activation: "run-e2e",
-		allowedRoot: root, timeout: 60 * time.Second, role: "co-super",
+		allowedRoot: root, timeout: 60 * time.Second, role: "engineering",
 	})
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
@@ -202,7 +202,7 @@ func TestSessionWorkerResearcherDeniedEndToEnd(t *testing.T) {
 	bin := buildBrokerBinary(t)
 	w, err := spawnSessionWorker(bin, workerSessionConfig{
 		computerID: "test-capsule", epoch: 1, activation: "run-researcher",
-		allowedRoot: t.TempDir(), timeout: 60 * time.Second, role: "researcher",
+		allowedRoot: t.TempDir(), timeout: 60 * time.Second, role: "research",
 	})
 	if err != nil {
 		t.Fatalf("spawn: %v", err)

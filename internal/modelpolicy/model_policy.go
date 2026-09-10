@@ -169,19 +169,19 @@ func (p Policy) Resolve(role string) provideriface.LLMSelection {
 	return fillSelection(provideriface.LLMSelection{}, p.Defaults)
 }
 
-// NormalizeRole canonicalizes model-policy role aliases.
+// NormalizeRole resolves exactly the V2 live vocabulary (identity map with
+// fail-closed default). V1 aliases refuse here; history decodes through the
+// frozen V1 decoder, never through this function.
 func NormalizeRole(role string) string {
-	switch strings.TrimSpace(strings.ToLower(role)) {
-	case "cosuper", "co_super", "co-super", "cosuper_coding", "co-super-coding":
-		return agentprofile.CoSuper
-	case "texture", "texture-agent":
-		return agentprofile.Texture
-	case "verifier", "verifier-text", "verifier_text":
-		return VerifierRole
-	case "verifier-multimodal", "verifier_multimodal":
-		return MultimodalVerifierRole
+	normalized := strings.TrimSpace(strings.ToLower(role))
+	switch normalized {
+	case agentprofile.Super, agentprofile.CoSuper, agentprofile.Researcher,
+		agentprofile.Conductor, agentprofile.Texture, agentprofile.Processor,
+		agentprofile.Reconciler, agentprofile.Email, VerifierRole,
+		MultimodalVerifierRole, "verifier-multimodal":
+		return normalized
 	default:
-		return strings.TrimSpace(strings.ToLower(role))
+		return ""
 	}
 }
 
@@ -318,16 +318,16 @@ provider = "chatgpt"
 model = "gpt-5.6-luna"
 reasoning = "low"
 
-[roles.super]
+[roles.management]
 provider = "chatgpt"
 model = "gpt-5.6-luna"
 reasoning = "high"
 
-[roles.co-super]
+[roles.engineering]
 provider = "deepseek"
 model = "deepseek-v4-flash"
 
-[roles.researcher]
+[roles.research]
 provider = "chatgpt"
 model = "gpt-5.6-luna"
 reasoning = "low"
@@ -416,6 +416,9 @@ func parsePolicy(raw, source string) (Policy, error) {
 			policy.Defaults.Source = source
 		case strings.HasPrefix(section, "roles."):
 			role := NormalizeRole(strings.TrimPrefix(section, "roles."))
+			if role == "" {
+				return Policy{}, fmt.Errorf("line %d: unknown role section %q", lineNo, section)
+			}
 			selection := policy.Roles[role]
 			applyValue(&selection, key, value)
 			selection.Source = source
@@ -477,6 +480,9 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 			overlay.Defaults.Source = source
 		case strings.HasPrefix(section, "roles."):
 			role := NormalizeRole(strings.TrimPrefix(section, "roles."))
+			if role == "" {
+				return policyOverlay{}, fmt.Errorf("line %d: unknown role section %q", lineNo, section)
+			}
 			selection := overlay.Roles[role]
 			applyValue(&selection, key, value)
 			selection.Source = source

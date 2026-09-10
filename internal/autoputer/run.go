@@ -432,7 +432,11 @@ func Run() {
 			agentprofile.Processor,
 			agentprofile.Reconciler,
 		} {
-			if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, agentprofile.PolicyFor(profile)); err != nil {
+			spawnPolicy, policyErr := agentprofile.PolicyFor(profile)
+			if policyErr != nil {
+				log.Fatalf("autoputer: spawn policy for %s: %v", profile, policyErr)
+			}
+			if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, spawnPolicy); err != nil {
 				log.Fatalf("autoputer: register coagent spawn tool for %s: %v", profile, err)
 			}
 		}

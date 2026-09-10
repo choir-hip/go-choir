@@ -24,7 +24,7 @@ func testChoirFixture(t *testing.T) (*Broker, *HandleIssuer, *ChoirScope, string
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, "co-super")
+	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, "engineering")
 	if err != nil {
 		t.Fatalf("choir scope: %v", err)
 	}
@@ -37,7 +37,7 @@ func dtoCall(t *testing.T, broker *Broker, issuer *HandleIssuer, action BrokerAc
 	if err != nil {
 		t.Fatal(err)
 	}
-	handleRef, err := issuer.Issue("computer-choir", "cosuper", 1, []BrokerAction{action}, time.Hour)
+	handleRef, err := issuer.Issue("computer-choir", "engineering", 1, []BrokerAction{action}, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,11 +110,11 @@ func TestChoirParityJailbreakRefused(t *testing.T) {
 // messaging record with receipts on both surfaces.
 func TestChoirParityAssignMessageReceipts(t *testing.T) {
 	broker, issuer, scope, _ := testChoirFixture(t)
-	assigned, err := scope.Assign("task-1", "researcher", "do it")
+	assigned, err := scope.Assign("task-1", "research", "do it")
 	if err != nil || assigned.AssignmentID == "" || assigned.Status != "dispatched" {
 		t.Fatalf("symbol assign = %+v, %v", assigned, err)
 	}
-	resp := dtoCall(t, broker, issuer, ActionAssign, AssignPayload{TaskID: "task-2", ActorProfile: "researcher", Instruction: "do it"})
+	resp := dtoCall(t, broker, issuer, ActionAssign, AssignPayload{TaskID: "task-2", ActorProfile: "research", Instruction: "do it"})
 	if !resp.Success {
 		t.Fatalf("dto assign: %s", resp.Error)
 	}

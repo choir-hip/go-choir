@@ -209,7 +209,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		}
 	}
 
-	agentID := "co-super:" + assignmentID
+	agentID := agentprofile.CoSuper + ":" + assignmentID
 	workID := "work:" + assignmentID
 	runID := "run:" + assignmentID
 	capsuleID := "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-")

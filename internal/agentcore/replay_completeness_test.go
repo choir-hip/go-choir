@@ -294,7 +294,7 @@ func TestReplayCompletenessReconstructsNonNilEventChain(t *testing.T) {
 		EventKind:                    computerevent.EventGenesisImported,
 		OccurredAt:                   time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey:               "genesis",
-		ActorProfile:                 "super",
+		ActorProfile:                 "management",
 		AuthorityRef:                 "owner",
 		PrivacyClass:                 "owner",
 		PayloadCommitment:            strings.Repeat("a", 64),

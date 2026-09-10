@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -32,7 +33,7 @@ func RegisterPersistentSuperReportTools(registry *toolregistry.ToolRegistry, rt 
 func requirePersistentSuperExecution(ctx context.Context) (*types.RunRecord, error) {
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	rec := execution.RunRecord
-	if rec == nil || rec.AgentID != persistentSuperAgentID(rec.OwnerID) || rec.AgentProfile != "super" || rec.AgentRole != "super" || rec.TrajectoryID != "" {
+	if rec == nil || rec.AgentID != persistentSuperAgentID(rec.OwnerID) || rec.AgentProfile != agentprofile.Super || rec.AgentRole != agentprofile.Super || rec.TrajectoryID != "" {
 		return nil, fmt.Errorf("assigned CoSuper tools require the exact non-lifecycle persistent Super")
 	}
 	return rec, nil
@@ -315,7 +316,7 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 				ControlBindingID: control.UpdateID, TargetWorkItemID: targetWorkID,
 				ConsumedDeliveryUpdateIDs: consumedForReport,
 				ProducerUpdateID:          producerUpdateID, UpdateID: "result:" + occurrence,
-				ChannelID: control.ChannelID, Role: "super", SourceRunID: parent.RunID,
+				ChannelID: control.ChannelID, Role: agentprofile.Super, SourceRunID: parent.RunID,
 				Packet: packet, Content: content, WorkDisposition: input.WorkDisposition,
 				WorkItemID: control.TargetWorkItemID, PayloadDigest: payloadDigest,
 			}

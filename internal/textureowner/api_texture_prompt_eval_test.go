@@ -39,7 +39,7 @@ provider = "xiaomi"
 model = "mimo-v2.5"
 reasoning = "medium"
 
-[roles.researcher]
+[roles.research]
 provider = "deepseek"
 model = "deepseek-v4-flash"
 `), 0o644); err != nil {
@@ -55,7 +55,7 @@ provider = "zai"
 model = "glm-5.2"
 reasoning = "medium"
 
-[roles.researcher]
+[roles.research]
 provider = "zai"
 model = "glm-5.2"
 reasoning = "medium"

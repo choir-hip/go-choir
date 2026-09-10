@@ -17,15 +17,15 @@ import (
 
 func watchdogSuperRun(ownerID, runID string, state types.RunState, updatedAt time.Time, flagged bool) types.RunRecord {
 	md := map[string]any{
-		runMetadataAgentProfile: "super",
-		runMetadataAgentRole:    "super",
+		runMetadataAgentProfile: "management",
+		runMetadataAgentRole:    "management",
 	}
 	if flagged {
 		md["actor_reactivated_from_passivated"] = true
 	}
 	return types.RunRecord{
 		RunID: runID, OwnerID: ownerID, AgentID: persistentSuperAgentID(ownerID),
-		AgentProfile: "super", AgentRole: "super", State: state,
+		AgentProfile: "management", AgentRole: "management", State: state,
 		CreatedAt: updatedAt, UpdatedAt: updatedAt, Metadata: md,
 	}
 }

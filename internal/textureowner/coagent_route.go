@@ -42,7 +42,7 @@ func (h *Handler) ensureCoagentTextureRevisionRoute(ctx context.Context, parentR
 	if parentRec == nil {
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires a parent run")
 	}
-	callerProfile, _ := agentprofile.Canonical(req.CallerProfile)
+	callerProfile := req.CallerProfile
 	if callerProfile != agentprofile.Processor && callerProfile != agentprofile.Reconciler {
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires processor or reconciler caller")
 	}
@@ -120,7 +120,7 @@ func (h *Handler) existingReconcilerTextureHandoff(ctx context.Context, parentRe
 		return types.RunRecord{}, false, fmt.Errorf("list existing reconciler Texture handoffs: %w", err)
 	}
 	for _, run := range runs {
-		routeRunProfile, _ := agentprofile.Canonical(agentProfileForRun(&run))
+		routeRunProfile := agentProfileForRun(&run)
 		if routeRunProfile != agentprofile.Texture ||
 			strings.TrimSpace(run.RequestedByRunID) != strings.TrimSpace(parentRec.RunID) ||
 			metadataStringValue(run.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
@@ -174,7 +174,7 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 		return types.Document{}, false, "", fmt.Errorf("create texture seed body_doc: %w", err)
 	}
 	selectedStyles, styleRationale := coagentTextureSelectedStyles(req)
-	seedCallerProfile, _ := agentprofile.Canonical(req.CallerProfile)
+	seedCallerProfile := req.CallerProfile
 	seedMetaMap := map[string]any{
 		"source":                         "coagent_texture_seed",
 		"artifact_kind":                  "source_brief",
@@ -423,7 +423,7 @@ func (h *Handler) coagentTextureSourceEntities(ctx context.Context, parentRec *t
 			continue
 		}
 		entity := contentItemRefToSourceEntity(item)
-		provenanceProfile, _ := agentprofile.Canonical(req.CallerProfile)
+		provenanceProfile := req.CallerProfile
 		entity.Provenance.CreatedBy = firstNonEmpty(provenanceProfile, entity.Provenance.CreatedBy)
 		entities, _ = mergeTextureSourceEntities(entities, []textureSourceEntity{entity})
 	}

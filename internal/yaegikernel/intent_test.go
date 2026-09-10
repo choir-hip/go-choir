@@ -17,7 +17,7 @@ func TestTrayStagesWithoutBlocking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spawnID, err := tray.Spawn("researcher", "survey the tree")
+	spawnID, err := tray.Spawn("research", "survey the tree")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,18 +73,18 @@ func TestCellBindingInboxAndStaging(t *testing.T) {
 	_, _, scope, _ := testChoirFixture(t)
 	hooks := scope.BindCell()
 	frame := SessionFrame{ID: "cell-1", Inbox: []IncomingMessage{
-		{ID: "m-1", FromDesk: "super", ToDesk: "cosuper", Kind: "directive", Body: "build it"},
+		{ID: "m-1", FromDesk: "management", ToDesk: "engineering", Kind: "directive", Body: "build it"},
 	}}
 	hooks.Begin(frame)
 	frame.Inbox[0].Body = "mutated after inject"
 	if got := scope.Inbox(); len(got) != 1 || got[0].Body != "build it" {
 		t.Fatalf("inbox snapshot not isolated: %+v", got)
 	}
-	res, err := scope.Message("super", "evidence_update", "built")
+	res, err := scope.Message("management", "evidence_update", "built")
 	if err != nil || res.MessageID == "" {
 		t.Fatalf("bound message = %+v, %v", res, err)
 	}
-	if _, err := scope.Spawn("researcher", "verify"); err != nil {
+	if _, err := scope.Spawn("research", "verify"); err != nil {
 		t.Fatalf("bound spawn: %v", err)
 	}
 	staged := hooks.End()
@@ -94,7 +94,7 @@ func TestCellBindingInboxAndStaging(t *testing.T) {
 	if len(scope.Inbox()) != 0 {
 		t.Fatal("inbox must clear at cell end")
 	}
-	if _, err := scope.Spawn("researcher", "late"); err == nil {
+	if _, err := scope.Spawn("research", "late"); err == nil {
 		t.Fatal("spawn outside a cell must fail")
 	}
 	if err := scope.Complete(CompleteCompleted, "v", "s", nil); err == nil {
@@ -116,7 +116,7 @@ func TestServeCellFailedDropsTray(t *testing.T) {
 		t.Fatalf("import choir: %v", err)
 	}
 	hooks := scope.BindCell()
-	good, err := serveCell(sess, SessionFrame{ID: "c-ok", Source: `choir.Message("super", "k", "hi")`}, nil, &hooks)
+	good, err := serveCell(sess, SessionFrame{ID: "c-ok", Source: `choir.Message("management", "k", "hi")`}, nil, &hooks)
 	if err != nil {
 		t.Fatalf("good cell: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestServeCellFailedDropsTray(t *testing.T) {
 	}
 	// Runtime failure (not a compile rejection): the cell stages then panics
 	// at execution, so it poisons and ships nothing.
-	bad, err := serveCell(sess, SessionFrame{ID: "c-bad", Source: `choir.Message("super", "k", "x"); panic("boom")`}, nil, &hooks)
+	bad, err := serveCell(sess, SessionFrame{ID: "c-bad", Source: `choir.Message("management", "k", "x"); panic("boom")`}, nil, &hooks)
 	if err == nil {
 		t.Fatal("bad cell must poison")
 	}
@@ -157,7 +157,7 @@ func TestChoirExportsCarryOrchestrationSurface(t *testing.T) {
 			t.Errorf("researcher exports must not carry %q", name)
 		}
 	}
-	if _, err := researcher.Spawn("researcher", "x"); err == nil {
+	if _, err := researcher.Spawn("research", "x"); err == nil {
 		t.Error("researcher spawn must be denied")
 	}
 }

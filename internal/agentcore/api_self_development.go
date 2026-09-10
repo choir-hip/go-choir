@@ -332,7 +332,7 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 			EventID:       eventID, ComputerID: computerID, EventKind: computerevent.EventTrajectoryStarted,
 			OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: eventIdempotency,
 			RequestCommitment: computerevent.ZeroHead, TrajectoryID: trajectoryID,
-			ActorProfile: "super", AuthorityRef: "public-self-development-api:" + ownerID,
+			ActorProfile: agentprofile.Super, AuthorityRef: "public-self-development-api:" + ownerID,
 			PrivacyClass: "private", ReducerVersion: computerevent.ReducerVersionV1,
 			DecisionRef: requestCommitment,
 		}

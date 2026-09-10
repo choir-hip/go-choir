@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -910,7 +911,7 @@ func (s *Store) ListPassivatedPersistentSuperControlRunsByOwner(ctx context.Cont
 			}
 		} else {
 			profile := strings.ToLower(ogMetadataText(meta, "agent_profile"))
-			if profile != "super" && !strings.HasPrefix(headerAgentID, "super:") {
+			if profile != agentprofile.Super && !strings.HasPrefix(headerAgentID, agentprofile.Super+":") {
 				continue
 			}
 		}

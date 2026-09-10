@@ -212,14 +212,14 @@ func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
 	}
 	defer s.Close()
 	now := time.Now().UTC()
-	parent := types.RunRecord{RunID: "parent", AgentID: "super:owner", AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: "owner", ComputerID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
+	parent := types.RunRecord{RunID: "parent", AgentID: "management:owner", AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: "owner", ComputerID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
 	if err := s.CreateRun(context.Background(), parent); err != nil {
 		t.Fatal(err)
 	}
 	rt := &Runtime{store: s, cfg: provideriface.Config{ComputerID: "computer"}}
 	for _, constraints := range []map[string]any{
 		{runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper},
-		{runMetadataAgentRole: "coagent"},
+		{runMetadataAgentRole: "engineering"},
 	} {
 		if _, err := rt.StartCoagentRun(context.Background(), parent.RunID, "forbidden", parent.OwnerID, constraints); err == nil || !strings.Contains(err.Error(), "refuses all CoSuper") {
 			t.Fatalf("generic CoSuper activation error=%v", err)
@@ -230,7 +230,7 @@ func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
 func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
 	rt := &Runtime{}
 	for _, kind := range []types.CoSuperAssignmentKind{types.CoSuperAssignmentImplementation, types.CoSuperAssignmentVerification} {
-		rec := &types.RunRecord{RunID: "assigned", AgentID: "co-super:assigned", AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
+		rec := &types.RunRecord{RunID: "assigned", AgentID: "engineering:assigned", AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
 		prompt, err := rt.systemPromptForRun(rec)
 		if err != nil {
 			t.Fatal(err)

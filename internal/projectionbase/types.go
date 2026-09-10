@@ -22,8 +22,9 @@ const (
 	// CurrentVocabularyVersion is the live protocol vocabulary a base is
 	// published and consumed under. Historic tape stays decodable under
 	// frozen V1 replay rules; the descriptor seam only records which live
-	// vocabulary the materialized base speaks. Mission 2 extends the known set.
-	CurrentVocabularyVersion = "v1"
+	// vocabulary the materialized base speaks. Mission 2 cutover: writers
+	// emit v2 only; v1-stamped bases stay installable via IsKnownVocabularyVersion.
+	CurrentVocabularyVersion = "v2"
 )
 
 // IsKnownVocabularyVersion reports whether a base speaking v may be installed

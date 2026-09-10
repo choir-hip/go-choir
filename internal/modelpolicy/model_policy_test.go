@@ -20,7 +20,7 @@ fallback_model = "gpt-5.5"
 reasoning = "low"
 max_tokens = 12000
 
-[roles.super]
+[roles.management]
 provider = "chatgpt"
 model = "gpt-5.5"
 reasoning = "medium"
@@ -37,7 +37,7 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	if super.Provider != "chatgpt" || super.Model != "gpt-5.5" || super.ReasoningEffort != "medium" || super.MaxTokens != 24000 {
 		t.Fatalf("super selection = %+v", super)
 	}
-	texture := policy.Resolve("texture-agent")
+	texture := policy.Resolve(agentprofile.Texture)
 	if texture.Provider != "fireworks" || texture.Model != "accounts/fireworks/models/deepseek-v4-flash" || texture.MaxTokens != 12000 {
 		t.Fatalf("texture selection = %+v", texture)
 	}
@@ -84,7 +84,7 @@ func TestManagerPreservesExistingPolicyAndLastValidCache(t *testing.T) {
 fallback_provider = "chatgpt"
 fallback_model = "gpt-5.5"
 
-[roles.super]
+[roles.management]
 provider = "chatgpt"
 model = "gpt-5.5"
 reasoning = "medium"
@@ -131,7 +131,7 @@ func TestManagerAppliesSafeOverlayAndRejectsUnsafeOrExpiredOverlay(t *testing.T)
 [overlay]
 expires_at = "2099-01-01T00:00:00Z"
 
-[roles.researcher]
+[roles.research]
 provider = "xiaomi"
 model = "mimo-v2.5"
 reasoning = "medium"
@@ -149,7 +149,7 @@ reasoning = "medium"
 		t.Fatalf("unsafe overlay error = %v", err)
 	}
 	expiredAt := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
-	if err := os.WriteFile(filepath.Join(overlayDir, "expired.toml"), []byte("[overlay]\nexpires_at = \""+expiredAt+"\"\n\n[roles.researcher]\nprovider = \"xiaomi\"\nmodel = \"mimo-v2.5\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(overlayDir, "expired.toml"), []byte("[overlay]\nexpires_at = \""+expiredAt+"\"\n\n[roles.research]\nprovider = \"xiaomi\"\nmodel = \"mimo-v2.5\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	fallback, err := manager.Resolve(context.Background(), "owner", agentprofile.Researcher, "expired")

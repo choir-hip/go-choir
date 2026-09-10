@@ -36,8 +36,8 @@ type ChoirScope struct {
 // SessionRoleResearcher is the read-only role: sessions bound to it observe
 // files and directories but cannot write, execute, assign, or message. The
 // role arrives on a trusted worker flag from the verified outer capability,
-// never from model input. Any other role string means full CoSuper scope.
-const SessionRoleResearcher = "researcher"
+// never from model input. Any other role string means full engineering scope.
+const SessionRoleResearcher = "research"
 
 // NewChoirScope mints a session-scoped handle for exactly the file, assign,
 // and message actions and returns the scope the choir symbols close over.

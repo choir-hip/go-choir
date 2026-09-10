@@ -3,8 +3,8 @@ package toolregistry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -137,8 +137,8 @@ func TestExecuteToolBatchSideEffectSkipPolicies(t *testing.T) {
 	}{
 		{"super bash", agentprofile.Super, "bash", `{"command":"echo x"}`, false},
 		{"cosuper bash", agentprofile.CoSuper, "bash", `{"command":"echo x"}`, false},
-		{"super co-super spawn", agentprofile.Super, "spawn_agent", `{"profile":"co-super","slot":"implementation","channel_id":"c"}`, false},
-		{"texture researcher", agentprofile.Texture, "spawn_agent", `{"profile":"researcher","channel_id":"c","objective":"find facts"}`, true},
+		{"super co-super spawn", agentprofile.Super, "spawn_agent", `{"profile":"engineering","slot":"implementation","channel_id":"c"}`, false},
+		{"texture researcher", agentprofile.Texture, "spawn_agent", `{"profile":"research","channel_id":"c","objective":"find facts"}`, true},
 		{"update", agentprofile.Researcher, "update_coagent", `{"summary":"x"}`, false},
 	}
 	for _, tc := range tests {
@@ -171,7 +171,7 @@ func TestExecuteToolBatchConductorTextureOwnsRoute(t *testing.T) {
 	}
 	results := ExecuteToolBatch(WithExecutionContext(context.Background(), ExecutionContext{Profile: agentprofile.Conductor}), registry, []types.ToolCall{
 		{ID: "texture", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"texture"}`)},
-		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"researcher"}`)},
+		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"research"}`)},
 		{ID: "texture-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"texture"}`)},
 	}, func(types.EventKind, string, json.RawMessage) {})
 	if len(executed) != 1 || executed[0] != agentprofile.Texture || results[1].IsError || results[2].IsError {

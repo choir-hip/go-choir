@@ -55,7 +55,7 @@ func TestRecordTextureAuditAppendsOneIdempotentPrivateEvent(t *testing.T) {
 	genesis := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: genesisID, ComputerID: computerID,
 		EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: "genesis", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
+		IdempotencyKey: "genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner",
 		PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64),
 		ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: computerevent.ReducerVersionV1,
 	}

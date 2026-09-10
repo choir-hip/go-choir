@@ -99,11 +99,11 @@ func TestReconcileCoSuperAssignmentCapsulesAfterRestartTerminalizesAbsentCapsule
 	run := types.RunRecord{
 		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
 		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
 		State: types.RunPending, Prompt: open.AssignedWork.Objective,
 		Metadata: map[string]any{
 			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "super",
+			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
 			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
 			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
 			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
@@ -172,11 +172,11 @@ func TestReconcileSkipsTerminalUnboundCapsule(t *testing.T) {
 		run := types.RunRecord{
 			RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
 			RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-			AgentProfile: "co-super", AgentRole: "co-super", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+			AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
 			State: types.RunPending, Prompt: open.AssignedWork.Objective,
 			Metadata: map[string]any{
 				"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-				"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "super",
+				"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
 				"assignment_id": open.AssignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
 				"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
 				"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
@@ -279,11 +279,11 @@ func TestRewarmAssignedCoSuperReconcilesAbsentCapsuleWithoutWake(t *testing.T) {
 	run := types.RunRecord{
 		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
 		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
 		State: types.RunPending, Prompt: open.AssignedWork.Objective,
 		Metadata: map[string]any{
 			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "super",
+			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
 			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
 			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
 			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,

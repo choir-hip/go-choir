@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -611,7 +612,7 @@ func (s *Store) requireCoSuperParentAuthority(ctx context.Context, binding types
 		return coSuperAuthorityObjects{}, err
 	}
 	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID ||
-		parentAgent.AgentID != binding.ParentAgentID || parentAgent.Profile != "super" || parentAgent.Role != "super" ||
+		parentAgent.AgentID != binding.ParentAgentID || parentAgent.Profile != agentprofile.Super || parentAgent.Role != agentprofile.Super ||
 		parentAgent.ChannelID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 ||
 		(parentAgent.ActiveRunID != "" && parentAgent.ActiveRunID != binding.ParentRunID) {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: exact non-lifecycle persistent Super unavailable: %w", ErrCoSuperAssignmentInvalid)
@@ -626,7 +627,7 @@ func (s *Store) requireCoSuperParentAuthority(ctx context.Context, binding types
 	}
 	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
 		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID || parentRun.TrajectoryID != "" ||
-		parentRun.AgentProfile != "super" || parentRun.AgentRole != "super" || !persistentSuperRunStateAllowed(parentRun.State) ||
+		parentRun.AgentProfile != agentprofile.Super || parentRun.AgentRole != agentprofile.Super || !persistentSuperRunStateAllowed(parentRun.State) ||
 		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID ||
 		!persistentSuperControlBinding(parentRun.Metadata, binding.TrajectoryID, binding.ParentWorkItemID, binding.ParentControlID) {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent decision/control run binding mismatch: %w", ErrCoSuperAssignmentInvalid)
@@ -637,7 +638,7 @@ func (s *Store) requireCoSuperParentAuthority(ctx context.Context, binding types
 	}
 	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID ||
 		parentWork.TrajectoryID != binding.TrajectoryID || parentWork.AssignedAgentID != binding.ParentAgentID ||
-		parentWork.AuthorityProfile != "super" || parentWork.Status != types.WorkItemOpen {
+		parentWork.AuthorityProfile != agentprofile.Super || parentWork.Status != types.WorkItemOpen {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent Super target work mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
 	return coSuperAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj,
@@ -669,7 +670,7 @@ func (s *Store) requireCoSuperHistoricalParentAuthority(ctx context.Context, bin
 		return coSuperAuthorityObjects{}, err
 	}
 	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID || parentAgent.AgentID != binding.ParentAgentID ||
-		parentAgent.Profile != "super" || parentAgent.Role != "super" || parentAgent.ChannelID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 {
+		parentAgent.Profile != agentprofile.Super || parentAgent.Role != agentprofile.Super || parentAgent.ChannelID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: historical persistent Super identity mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
 	parentRunObj, err := s.getRunObjectByOwnerOG(ctx, binding.OwnerID, binding.ParentRunID)
@@ -682,7 +683,7 @@ func (s *Store) requireCoSuperHistoricalParentAuthority(ctx context.Context, bin
 	}
 	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
 		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID || parentRun.TrajectoryID != "" ||
-		parentRun.AgentProfile != "super" || parentRun.AgentRole != "super" || !parentRun.State.Valid() ||
+		parentRun.AgentProfile != agentprofile.Super || parentRun.AgentRole != agentprofile.Super || !parentRun.State.Valid() ||
 		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID ||
 		!persistentSuperControlBinding(parentRun.Metadata, binding.TrajectoryID, binding.ParentWorkItemID, binding.ParentControlID) {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: historical parent control binding mismatch: %w", ErrCoSuperAssignmentInvalid)
@@ -692,7 +693,7 @@ func (s *Store) requireCoSuperHistoricalParentAuthority(ctx context.Context, bin
 		return coSuperAuthorityObjects{}, err
 	}
 	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID || parentWork.TrajectoryID != binding.TrajectoryID ||
-		parentWork.AssignedAgentID != binding.ParentAgentID || parentWork.AuthorityProfile != "super" ||
+		parentWork.AssignedAgentID != binding.ParentAgentID || parentWork.AuthorityProfile != agentprofile.Super ||
 		(parentWork.Status != types.WorkItemOpen && parentWork.Status != types.WorkItemCompleted && parentWork.Status != types.WorkItemCancelled && parentWork.Status != types.WorkItemRefused) {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: historical parent work binding mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
@@ -713,7 +714,7 @@ func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding t
 		return coSuperAuthorityObjects{}, err
 	}
 	if assignedAgent.OwnerID != binding.OwnerID || assignedAgent.ComputerID != binding.ComputerID ||
-		assignedAgent.AgentID != binding.AssignedAgentID || assignedAgent.Profile != "co-super" || assignedAgent.Role != "co-super" || assignedAgent.LifecycleVersion <= 0 {
+		assignedAgent.AgentID != binding.AssignedAgentID || assignedAgent.Profile != agentprofile.CoSuper || assignedAgent.Role != agentprofile.CoSuper || assignedAgent.LifecycleVersion <= 0 {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: assigned lifecycle CoSuper agent mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
 	assignedWorkObj, assignedWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.AssignedWorkItemID)
@@ -722,7 +723,7 @@ func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding t
 	}
 	if assignedWork.OwnerID != binding.OwnerID || assignedWork.ComputerID != binding.ComputerID ||
 		assignedWork.TrajectoryID != binding.TrajectoryID || assignedWork.AssignedAgentID != binding.AssignedAgentID ||
-		assignedWork.AuthorityProfile != "co-super" || assignedWork.Status != types.WorkItemOpen ||
+		assignedWork.AuthorityProfile != agentprofile.CoSuper || assignedWork.Status != types.WorkItemOpen ||
 		metadataExactString(assignedWork.Details, "parent_loop_id") != binding.ParentRunID ||
 		metadataExactString(assignedWork.Details, "parent_decision_id") != binding.ParentDecisionID ||
 		metadataExactString(assignedWork.Details, "parent_control_id") != binding.ParentControlID ||
@@ -942,7 +943,7 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 
 	assignedAgent := req.AssignedAgent
 	assignedAgent.AgentID, assignedAgent.OwnerID, assignedAgent.ComputerID = req.Binding.AssignedAgentID, req.Binding.OwnerID, req.Binding.ComputerID
-	assignedAgent.ComputerID, assignedAgent.Profile, assignedAgent.Role = req.Binding.ComputerID, "co-super", "co-super"
+	assignedAgent.ComputerID, assignedAgent.Profile, assignedAgent.Role = req.Binding.ComputerID, agentprofile.CoSuper, agentprofile.CoSuper
 	assignedAgent.ChannelID, assignedAgent.ActiveRunID = req.Binding.AssignedAgentID, ""
 	assignedAgent.LifecycleVersion, assignedAgent.LastReducerSeq = 1, transition.seq
 	assignedAgent.CreatedAt, assignedAgent.UpdatedAt = now, now
@@ -950,7 +951,7 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 	assignedWork.WorkItemID, assignedWork.OwnerID, assignedWork.ComputerID = req.Binding.AssignedWorkItemID, req.Binding.OwnerID, req.Binding.ComputerID
 	assignedWork.TrajectoryID, assignedWork.AssignedAgentID = req.Binding.TrajectoryID, req.Binding.AssignedAgentID
 	assignedWork.Objective = strings.TrimSpace(assignedWork.Objective)
-	assignedWork.AuthorityProfile, assignedWork.Status, assignedWork.ResultRef = "co-super", types.WorkItemOpen, ""
+	assignedWork.AuthorityProfile, assignedWork.Status, assignedWork.ResultRef = agentprofile.CoSuper, types.WorkItemOpen, ""
 	assignedWork.ObjectiveFingerprint = objectgraph.SHA256([]byte(assignedWork.Objective))
 	assignedWork.CreatedByRunID = req.Binding.ParentRunID
 	assignedWork.Details = map[string]any{
@@ -1194,11 +1195,11 @@ func validateCoSuperAssignmentRun(assignment types.CoSuperAssignment, assignedAg
 		metadataExactString(run.Metadata, "lifecycle_work_item_id") != assignment.Binding.AssignedWorkItemID ||
 		strings.TrimSpace(run.RunID) == "" || run.OwnerID != assignment.Binding.OwnerID || run.ComputerID != assignment.Binding.ComputerID ||
 		run.TrajectoryID != assignment.Binding.TrajectoryID || run.AgentID != assignment.Binding.AssignedAgentID ||
-		run.ChannelID != assignedAgent.ChannelID || run.AgentProfile != "co-super" || run.AgentRole != "co-super" || run.State != types.RunPending ||
+		run.ChannelID != assignedAgent.ChannelID || run.AgentProfile != agentprofile.CoSuper || run.AgentRole != agentprofile.CoSuper || run.State != types.RunPending ||
 		run.RequestedByRunID != assignment.Binding.ParentRunID || !run.CreatedAt.IsZero() || !run.UpdatedAt.IsZero() ||
 		run.FinishedAt != nil || run.Result != "" || run.Error != "" ||
 		metadataExactString(run.Metadata, "requested_by_agent_id") != assignment.Binding.ParentAgentID ||
-		metadataExactString(run.Metadata, "requested_by_profile") != "super" ||
+		metadataExactString(run.Metadata, "requested_by_profile") != agentprofile.Super ||
 		metadataExactString(run.Metadata, "assignment_id") != assignment.AssignmentID ||
 		metadataExactUint64(run.Metadata, "assignment_attempt") != assignment.Binding.Attempt ||
 		metadataExactString(run.Metadata, "assignment_kind") != string(assignment.Binding.Kind) ||
@@ -1424,7 +1425,7 @@ func buildCoSuperReturnPacket(now time.Time, seq int64, assignment types.CoSuper
 		ChannelID: strings.TrimSpace(parentRun.ChannelID), MessageSeq: seq, TrajectoryID: assignment.Binding.TrajectoryID,
 		Direction: types.LifecyclePacketDirectionProducerReport, ControlBindingID: assignment.Binding.ParentControlID,
 		ProducerWorkItemID: assignment.Binding.AssignedWorkItemID, TargetWorkItemID: assignment.Binding.ParentWorkItemID,
-		WorkItemID: assignment.Binding.AssignedWorkItemID, Role: "co-super", SourceRunID: assignment.BoundRunID,
+		WorkItemID: assignment.Binding.AssignedWorkItemID, Role: agentprofile.CoSuper, SourceRunID: assignment.BoundRunID,
 		PayloadDigest: payloadDigest, Disposition: types.UpdatePending, LifecycleVersion: 1, ReducerSeq: seq,
 		Packet: packetPayload, Content: content, CreatedAt: now,
 		DeliveredToRunID: deliveredRunID, DeliveredAt: deliveredAt,

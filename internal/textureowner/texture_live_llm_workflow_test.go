@@ -143,8 +143,8 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchTextureEffectsOff(t *testin
 		"Live verification: call web_search for cellular automata biological evolution toy model, then call update_coagent with one concise evidence-backed checkpoint for the parent texture agent. Do not include update_id; runtime derives it.",
 		liveLLMOwnerID,
 		map[string]any{
-			"agent_profile": "researcher",
-			"agent_role":    "researcher",
+			"agent_profile": "research",
+			"agent_role":    "research",
 			"channel_id":    decision.DocID,
 			"model":         model,
 		})
@@ -161,7 +161,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchTextureEffectsOff(t *testin
 	}
 	var researchUpdate *types.CoagentSourcePacket
 	for i := range updates {
-		if updates[i].Role == "researcher" {
+		if updates[i].Role == "research" {
 			researchUpdate = &updates[i]
 			break
 		}

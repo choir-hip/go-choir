@@ -107,7 +107,7 @@ func startBoundLegacyCoSuperResultRun(t *testing.T, s *store.Store, target types
 	trajectoryID := "legacy-result:" + suffix
 	parentRunID := "legacy-super:" + suffix
 	callerRunID := "legacy-cosuper:" + suffix
-	callerAgentID := "co-super:" + suffix
+	callerAgentID := "engineering:" + suffix
 	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{TrajectoryID: trajectoryID, OwnerID: target.OwnerID, ComputerID: computerID, Kind: types.TrajectoryKindTask, SubjectRefs: map[string]string{"channel_id": target.ChannelID}, Status: types.TrajectoryLive, SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true}}); err != nil {
 		t.Fatalf("create legacy result trajectory: %v", err)
 	}
@@ -430,18 +430,18 @@ func projectTestLifecycleProducer(t *testing.T, s *store.Store, ownerID, compute
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
-	agentID := "researcher:" + suffix
+	agentID := "research:" + suffix
 	workID := "producer-work:" + suffix
 	runID := "producer-run:" + suffix
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
 		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
-		Profile: "researcher", Role: "researcher", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+		Profile: "research", Role: "research", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed lifecycle producer: %v", err)
 	}
 	open := types.OpenLifecycleWorkRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "open-producer:" + suffix, TrajectoryID: trajectoryID,
-		WorkItem: types.WorkItemRecord{WorkItemID: workID, Objective: "produce durable update", AssignedAgentID: agentID, AuthorityProfile: "researcher"},
+		WorkItem: types.WorkItemRecord{WorkItemID: workID, Objective: "produce durable update", AssignedAgentID: agentID, AuthorityProfile: "research"},
 	}
 	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
 	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
@@ -449,7 +449,7 @@ func projectTestLifecycleProducer(t *testing.T, s *store.Store, ownerID, compute
 	}
 	run := types.RunRecord{
 		RunID: runID, AgentID: agentID, ChannelID: docID, TrajectoryID: trajectoryID,
-		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: ownerID, ComputerID: computerID,
+		AgentProfile: "research", AgentRole: "research", OwnerID: ownerID, ComputerID: computerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workID},
 	}
 	project := types.ReplaceLifecycleActivationRequest{

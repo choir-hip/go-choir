@@ -17,9 +17,9 @@ func TestApplyTextureTurnAssignsComputerScopedArrivalOrdinalsToSuperExecutionReq
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	superID := "super:" + start.OwnerID
+	superID := "management:" + start.OwnerID
 	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+		Profile: "management", Role: "management", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -27,7 +27,7 @@ func TestApplyTextureTurnAssignsComputerScopedArrivalOrdinalsToSuperExecutionReq
 	req.CommandID, req.Reason = "texture-turn-ordinal-first", "first opener"
 	control := textureTurnControl(t, "control-ordinal-a", superID, "work-super-target")
 	control.OpenWork = &types.WorkItemRecord{WorkItemID: "work-super-target", Objective: "coordinate exact implementation",
-		AuthorityProfile: "super", AssignedAgentID: superID, StepBudget: 8}
+		AuthorityProfile: "management", AssignedAgentID: superID, StepBudget: 8}
 	req.Controls = []types.TextureTurnControl{control}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	first, err := s.ApplyTextureTurn(ctx, req)
@@ -71,15 +71,15 @@ func TestApplyTextureTurnDoesNotSpendArrivalOrdinalOnResearcherControls(t *testi
 
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID, req.Reason = "texture-turn-researcher-no-spend", "research direction"
-	researcherAgentID := "researcher:ordinal-check"
+	researcherAgentID := "research:ordinal-check"
 	researcherWorkID := "research-work-ordinal-check"
 	control := textureTurnControl(t, "control-researcher-ordinal", researcherAgentID, researcherWorkID)
 	control.Packet.Kind = "question"
 	control.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
 	control.OpenAgent = &types.AgentRecord{AgentID: researcherAgentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID}
+		Profile: "research", Role: "research", ChannelID: start.InitialDocument.DocID}
 	control.OpenWork = &types.WorkItemRecord{WorkItemID: researcherWorkID, Objective: "research exact gap",
-		AuthorityProfile: "researcher", AssignedAgentID: researcherAgentID}
+		AuthorityProfile: "research", AssignedAgentID: researcherAgentID}
 	req.Controls = []types.TextureTurnControl{control}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	result, err := s.ApplyTextureTurn(ctx, req)
@@ -130,9 +130,9 @@ func TestArrivalOrdinalAllocationConflictsInsteadOfReusing(t *testing.T) {
 	s, start, _, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	superID := "super:" + start.OwnerID
+	superID := "management:" + start.OwnerID
 	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+		Profile: "management", Role: "management", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	// Directly allocate one ordinal to advance the counter...

@@ -256,8 +256,8 @@ func TestWorkerUpdateLegacyShapeRowIsNotDeliverable(t *testing.T) {
 		(owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq,
 		 trajectory_id, role, kind, summary, packet_json, content, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		ownerID, "update-legacy-1", "researcher:legacy", "texture:doc-legacy",
-		"doc-legacy", 1, "traj-legacy", "researcher",
+		ownerID, "update-legacy-1", "research:legacy", "texture:doc-legacy",
+		"doc-legacy", 1, "traj-legacy", "research",
 		"findings", "legacy findings summary", "", "Coagent update ready.\nKind: findings.",
 		time.Now().UTC(),
 	)
@@ -557,9 +557,9 @@ func TestUpdateRunAndMarkWorkerUpdatesDelivered(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	rec := types.RunRecord{
 		RunID:        "task-update-coagent-terminal",
-		AgentID:      "cosuper:impl",
+		AgentID:      "engineering:impl",
 		ChannelID:    "doc-m2",
-		AgentProfile: "cosuper",
+		AgentProfile: "engineering",
 		AgentRole:    "implementation",
 		OwnerID:      "user-alice",
 		ComputerID:   "autoputer-dev",
@@ -574,10 +574,10 @@ func TestUpdateRunAndMarkWorkerUpdatesDelivered(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-terminal-1",
 		OwnerID:       rec.OwnerID,
-		AgentID:       "super:primary",
+		AgentID:       "management:primary",
 		TargetAgentID: rec.AgentID,
 		ChannelID:     rec.ChannelID,
-		Role:          "super",
+		Role:          "management",
 		Packet:        testStoreCoagentPacket("decision_request", "finish M2"),
 		Content:       "finish M2",
 		CreatedAt:     now,
@@ -640,10 +640,10 @@ func TestBindWorkerUpdateTerminalOutcomePreservesDeliveryState(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-terminal-binding",
 		OwnerID:       "user-alice",
-		AgentID:       "researcher:terminal",
+		AgentID:       "research:terminal",
 		TargetAgentID: "texture:terminal",
 		ChannelID:     "doc-terminal",
-		Role:          "researcher",
+		Role:          "research",
 		Packet:        testStoreCoagentPacket("evidence_update", "terminal result"),
 		Content:       "terminal result",
 		CreatedAt:     now,
@@ -698,10 +698,10 @@ func TestCoagentMailboxCursorRequiresContiguousDeliveredUpdates(t *testing.T) {
 		{
 			UpdateID:      "update-mailbox-1",
 			OwnerID:       ownerID,
-			AgentID:       "researcher:one",
+			AgentID:       "research:one",
 			TargetAgentID: targetAgentID,
 			ChannelID:     channelID,
-			Role:          "researcher",
+			Role:          "research",
 			Packet:        testStoreCoagentPacket("evidence_update", "first finding"),
 			Content:       "first finding",
 			CreatedAt:     now,
@@ -709,10 +709,10 @@ func TestCoagentMailboxCursorRequiresContiguousDeliveredUpdates(t *testing.T) {
 		{
 			UpdateID:      "update-mailbox-2",
 			OwnerID:       ownerID,
-			AgentID:       "researcher:two",
+			AgentID:       "research:two",
 			TargetAgentID: targetAgentID,
 			ChannelID:     channelID,
-			Role:          "researcher",
+			Role:          "research",
 			Packet:        testStoreCoagentPacket("evidence_update", "second finding"),
 			Content:       "second finding",
 			CreatedAt:     now.Add(time.Second),
@@ -787,10 +787,10 @@ func TestCoagentMailboxBacklogAllUsesActorCursors(t *testing.T) {
 		update := types.CoagentSourcePacket{
 			UpdateID:      updateID,
 			OwnerID:       ownerID,
-			AgentID:       "researcher:mailbox",
+			AgentID:       "research:mailbox",
 			TargetAgentID: targetAgentID,
 			ChannelID:     channelID,
-			Role:          "researcher",
+			Role:          "research",
 			Packet:        testStoreCoagentPacket("evidence_update", updateID),
 			Content:       updateID,
 			CreatedAt:     at,
@@ -841,7 +841,7 @@ func TestCoagentMailboxBacklogIncludesFreshChannelBelowActorCursor(t *testing.T)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	ownerID := "user-alice"
-	targetAgentID := "super:user-alice"
+	targetAgentID := "management:user-alice"
 	dispatch := func(updateID, channelID string, at time.Time) types.CoagentSourcePacket {
 		t.Helper()
 		update := types.CoagentSourcePacket{

@@ -66,11 +66,11 @@ func bindCoSuperRequest(open types.OpenCoSuperAssignmentRequest, runID, capabili
 	run := types.RunRecord{
 		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
 		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
 		State: types.RunPending, Prompt: open.AssignedWork.Objective,
 		Metadata: map[string]any{
 			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "super",
+			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
 			"assignment_id": open.AssignmentID, "assignment_attempt": open.Binding.Attempt, "assignment_kind": string(open.Binding.Kind),
 			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
 			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
@@ -360,7 +360,7 @@ func TestCoSuperAssignmentRejectsCrossScopeAndAuthorityMismatches(t *testing.T) 
 	base := coSuperOpenRequest(f, 0, "assignment-scope", 1, types.CoSuperAssignmentImplementation, true, "opaque-scope", "capsule-scope")
 	for name, mutate := range map[string]func(*types.OpenCoSuperAssignmentRequest){
 		"owner": func(r *types.OpenCoSuperAssignmentRequest) {
-			r.Binding.OwnerID, r.Binding.ParentAgentID = "other-owner", "super:other-owner"
+			r.Binding.OwnerID, r.Binding.ParentAgentID = "other-owner", "management:other-owner"
 		},
 		"computer":       func(r *types.OpenCoSuperAssignmentRequest) { r.Binding.ComputerID = "other-computer" },
 		"trajectory":     func(r *types.OpenCoSuperAssignmentRequest) { r.Binding.TrajectoryID = "other-trajectory" },
@@ -416,7 +416,7 @@ func TestCoSuperAssignmentRejectsGenericLifecycleSuperSubstitute(t *testing.T) {
 		now := time.Now().UTC()
 		lifecycleRun := types.RunRecord{
 			RunID: f.parentRunID, AgentID: f.parentAgentID, TrajectoryID: f.trajectoryID,
-			AgentProfile: "super", AgentRole: "super", OwnerID: f.ownerID, ComputerID: f.computerID,
+			AgentProfile: "management", AgentRole: "management", OwnerID: f.ownerID, ComputerID: f.computerID,
 			State: types.RunRunning, CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{"assignment_trajectory_id": f.trajectoryID, "parent_work_item_id": f.parentWorkID,
 				"parent_decision_id": f.parentDecisionID, "parent_control_id": f.parentControlID},

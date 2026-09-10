@@ -25,16 +25,16 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5"}, "texture"); got != 0 {
 		t.Fatalf("ChatGPT interactive tokens = %d, want 0 to omit unsupported max_output_tokens", got)
 	}
-	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5", MaxTokens: 32768}, "super"); got != 0 {
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5", MaxTokens: 32768}, "management"); got != 0 {
 		t.Fatalf("explicit ChatGPT interactive tokens = %d, want 0 to omit unsupported max_output_tokens", got)
 	}
-	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "xiaomi", Model: "mimo-v2.5-pro"}, "super"); got != 0 {
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "xiaomi", Model: "mimo-v2.5-pro"}, "management"); got != 0 {
 		t.Fatalf("Xiaomi interactive tokens = %d, want 0 to omit OpenAI-compatible chat budget", got)
 	}
-	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", MaxTokens: 32768}, "super"); got != 32768 {
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", MaxTokens: 32768}, "management"); got != 32768 {
 		t.Fatalf("explicit Fireworks interactive tokens = %d, want 32768", got)
 	}
-	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"}, "super"); got != 8192 {
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"}, "management"); got != 8192 {
 		t.Fatalf("low-limit model interactive tokens = %d, want 8192", got)
 	}
 }

@@ -58,7 +58,7 @@ func TestEffectsRehearsalReversibleProposeConsensusPromoteRestore(t *testing.T) 
 		Sequence: 1, PreviousHead: computerevent.ZeroHead, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		EventKind: computerevent.EventEffectAccepted, IdempotencyKey: "rehearsal-reversible", RequestCommitment: strings.Repeat("1", 64),
 		TrajectoryID: "trajectory-binding", CapsuleID: "capsule-binding", ParentEventID: "operation-binding",
-		ActorProfile: "super", AuthorityRef: decisionpolicy.AuthorityRef(receipt), PrivacyClass: "owner",
+		ActorProfile: "management", AuthorityRef: decisionpolicy.AuthorityRef(receipt), PrivacyClass: "owner",
 		ExpectedDesiredEventHead: strings.Repeat("9", 64), ExpectedEffectiveEventHead: strings.Repeat("a", 64),
 		ExpectedDesiredStateCommitment: strings.Repeat("b", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
 		RequireExpectedHead: true, PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: strings.Repeat("2", 64),
@@ -185,7 +185,7 @@ func TestEffectsRehearsalReversibleProposeConsensusPromoteRestore(t *testing.T) 
 	later := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: laterID, ComputerID: computerID,
 		EventKind: computerevent.EventArtifactProduced, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: "rehearsal-later", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
+		IdempotencyKey: "rehearsal-later", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner",
 		PayloadCommitment: strings.Repeat("c", 64), ReducerVersion: computerevent.ReducerVersionV1,
 	}
 	if _, err := rt.eventAppender.AppendNew(ctx, later, computerevent.TransitionInput{}, nil); err != nil {

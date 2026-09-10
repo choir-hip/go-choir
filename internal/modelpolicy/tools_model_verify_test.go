@@ -40,7 +40,7 @@ func verifierContext() context.Context {
 	return toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		RunID:   "run-verify",
 		OwnerID: "owner",
-		Role:    "super",
+		Role:    "management",
 	})
 }
 

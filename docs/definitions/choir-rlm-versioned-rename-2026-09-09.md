@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Owner ratified frozen non-desk protocol (2026-09-10T15:21:26Z); --freeze ACCEPTED with zero unknowns. Next: single writer cutover (step 6, intra-ordered) with v2 identity/mapping receipt."
+  slice: "Single writer cutover (step 6) landed in-tree: CurrentVocabularyVersion=v2, V2-only writers, alias retirement, fail-closed refusal, client bundles. Next: commit, push, CI, staging deploy, deployed decoder-matrix proof."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Cutover is the remaining red work (forward-migration plus serving fence, then Current=v2 plus V2-only writers plus alias retirement plus fail-closed refusal plus client bundles, never partially deployed). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Land the single never-partially-deployed cutover intra-ordered: live-row forward-migration and serving fence, then CurrentVocabularyVersion=v2 plus V2-only writers plus alias retirement plus fail-closed refusal plus in-scope client bundles, with the v2 identity/mapping receipt."
+  blocker_or_risk: "Cutover commit pending push/CI/staging proof. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Commit the cutover slice, push origin main, monitor CI and staging deploy, then run the deployed decoder-matrix and focused-contracts acceptance (items 7-8)."
 
 
 receipts:

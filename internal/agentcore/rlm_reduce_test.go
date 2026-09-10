@@ -12,12 +12,12 @@ import (
 
 func testReductionScope() ReductionScope {
 	return ReductionScope{
-		FromAgentID: "co-super:impl",
-		FromRole:    "co-super",
+		FromAgentID: "engineering:impl",
+		FromRole:    "engineering",
 		ChannelID:   "chan-reduce-test",
 		RunID:       "run-reduce-test",
 		OwnerID:     "user-alice",
-		ReturnTo:    "super:root",
+		ReturnTo:    "management:root",
 		Cursor:      0,
 	}
 }
@@ -41,7 +41,7 @@ func TestReduceFailedCellDropsTray(t *testing.T) {
 	scope := testReductionScope()
 	ctx := testReductionCtx(scope)
 	intents := []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "lost"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "lost"},
 	}
 	receipt, err := ReduceCellIntents(ctx, rt, scope, intents, false)
 	if err != nil {
@@ -70,7 +70,7 @@ func TestReduceSuccessPersistsAndCommits(t *testing.T) {
 	scope := testReductionScope()
 	ctx := testReductionCtx(scope)
 	intents := []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", MsgKind: "evidence_update", Body: "built x"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", MsgKind: "evidence_update", Body: "built x"},
 		{LocalID: "tray-2", Kind: yaegikernel.IntentComplete, Result: yaegikernel.CompleteCompleted, Verdict: "ok", Summary: "done", EvidenceRefs: []string{"ref-1"}},
 	}
 	receipt, err := ReduceCellIntents(ctx, rt, scope, intents, true)
@@ -87,7 +87,7 @@ func TestReduceSuccessPersistsAndCommits(t *testing.T) {
 	if len(inbox) != 2 || highWater == 0 {
 		t.Fatalf("assembled inbox = %+v, highWater %d", inbox, highWater)
 	}
-	if inbox[0].Kind != "evidence_update" || inbox[0].Body != "built x" || inbox[0].ToDesk != "super" {
+	if inbox[0].Kind != "evidence_update" || inbox[0].Body != "built x" || inbox[0].ToDesk != "management" {
 		t.Fatalf("message envelope decoded = %+v", inbox[0])
 	}
 	if inbox[1].Kind != "complete" || inbox[1].Body != "done" {
@@ -128,17 +128,17 @@ func TestReduceEnforcesTrustBoundary(t *testing.T) {
 		}},
 		"researcher spawns engineering": {func() ReductionScope {
 			s := testReductionScope()
-			s.FromRole = "researcher"
+			s.FromRole = "research"
 			return s
 		}(), []yaegikernel.StagedIntent{
-			{LocalID: "a", Kind: yaegikernel.IntentSpawn, Role: "co-super", Objective: "escalate"},
+			{LocalID: "a", Kind: yaegikernel.IntentSpawn, Role: "engineering", Objective: "escalate"},
 		}},
 	}
 	for name, tc := range cases {
 		for i := range tc.intents {
 			if tc.intents[i].Kind == "" {
 				tc.intents[i].Kind = yaegikernel.IntentMessage
-				tc.intents[i].ToDesk = "super"
+				tc.intents[i].ToDesk = "management"
 				tc.intents[i].Body = "x"
 			}
 			if tc.intents[i].LocalID == "" {
@@ -155,9 +155,9 @@ func TestReduceEnforcesTrustBoundary(t *testing.T) {
 	}
 	// Researcher-to-researcher fan-out is legitimate.
 	researcher := testReductionScope()
-	researcher.FromRole = "researcher"
+	researcher.FromRole = "research"
 	receipt, err := ReduceCellIntents(ctx, rt, researcher, []yaegikernel.StagedIntent{
-		{LocalID: "a", Kind: yaegikernel.IntentSpawn, Role: "researcher", Objective: "survey"},
+		{LocalID: "a", Kind: yaegikernel.IntentSpawn, Role: "research", Objective: "survey"},
 	}, true)
 	if err != nil || !receipt.Committed {
 		t.Fatalf("researcher fan-out = %+v, %v", receipt, err)
@@ -172,8 +172,8 @@ func TestReduceAddressesScopedFanIn(t *testing.T) {
 	scope := testReductionScope()
 	ctx := testReductionCtx(scope)
 	intents := []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentSpawn, Role: "researcher", Objective: "survey"},
-		{LocalID: "tray-2", Kind: yaegikernel.IntentMessage, ToDesk: "co-super:peer", Body: "mesh"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentSpawn, Role: "research", Objective: "survey"},
+		{LocalID: "tray-2", Kind: yaegikernel.IntentMessage, ToDesk: "engineering:peer", Body: "mesh"},
 		{LocalID: "tray-3", Kind: yaegikernel.IntentComplete, Result: yaegikernel.CompleteCompleted, Summary: "done"},
 	}
 	if _, err := ReduceCellIntents(ctx, rt, scope, intents, true); err != nil {
@@ -190,7 +190,7 @@ func TestReduceAddressesScopedFanIn(t *testing.T) {
 	if bySeq[1].ToAgentID != scope.ReturnTo || bySeq[3].ToAgentID != scope.ReturnTo {
 		t.Fatalf("spawn/complete escaped return target: %+v", msgs)
 	}
-	if bySeq[2].ToAgentID != "co-super:peer" {
+	if bySeq[2].ToAgentID != "engineering:peer" {
 		t.Fatalf("mesh message misrouted: %+v", msgs)
 	}
 }
@@ -200,7 +200,7 @@ func TestCommitAdvancesOnlyInboxHighWater(t *testing.T) {
 	scope := testReductionScope()
 	ctx := testReductionCtx(scope)
 
-	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "super", "super", "snapshot-mail"); err != nil {
+	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "management", "management", "snapshot-mail"); err != nil {
 		t.Fatal(err)
 	}
 	reduction := &rlmCallReduction{
@@ -210,11 +210,11 @@ func TestCommitAdvancesOnlyInboxHighWater(t *testing.T) {
 		scope:     scope,
 		highWater: 1,
 	}
-	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "peer", "researcher", "late-inbound"); err != nil {
+	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "peer", "research", "late-inbound"); err != nil {
 		t.Fatal(err)
 	}
 	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "outbound"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "outbound"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestReduceCellIntentsIdempotentReplay(t *testing.T) {
 	scope.CellID = "cell-replay"
 	ctx := testReductionCtx(scope)
 	intents := []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "same"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "same"},
 	}
 	first, err := ReduceCellIntents(ctx, rt, scope, intents, true)
 	if err != nil || !first.Committed || len(first.Intents) != 1 {
@@ -283,13 +283,13 @@ func TestReduceCellIntentsSequentialCellsAtSameCursor(t *testing.T) {
 	scope := testReductionScope()
 	ctx := testReductionCtx(scope)
 	first, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "cell-a"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "cell-a"},
 	}, true)
 	if err != nil || !first.Committed {
 		t.Fatalf("first cell = %+v, %v", first, err)
 	}
 	second, err := ReduceCellIntents(ctx, rt, scope, []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "cell-b"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "cell-b"},
 	}, true)
 	if err != nil || !second.Committed {
 		t.Fatalf("second cell = %+v, %v", second, err)
@@ -351,7 +351,7 @@ func TestReduceCellIntentsReplaySkipsEventAndWake(t *testing.T) {
 		return nil
 	})
 	intents := []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "same"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "same"},
 	}
 	if _, err := ReduceCellIntents(ctx, rt, scope, intents, true); err != nil {
 		t.Fatal(err)
@@ -391,7 +391,7 @@ func TestChannelCastWakesAddressedActor(t *testing.T) {
 		return nil
 	})
 	ctx := testReductionCtx(testReductionScope())
-	if _, err := rt.ChannelCast(ctx, "chan-wake", "super:root", "", "co-super:impl", "co-super", "hi"); err != nil {
+	if _, err := rt.ChannelCast(ctx, "chan-wake", "management:root", "", "engineering:impl", "engineering", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
@@ -400,7 +400,7 @@ func TestChannelCastWakesAddressedActor(t *testing.T) {
 		t.Fatalf("wakes = %v, want channel_message to super:root with chan-wake:1", wakes)
 	}
 	mu.Unlock()
-	if _, err := rt.ChannelCast(ctx, "chan-wake", "super:root", "", "co-super:impl", "co-super", "hi"); err != nil {
+	if _, err := rt.ChannelCast(ctx, "chan-wake", "management:root", "", "engineering:impl", "engineering", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
@@ -409,7 +409,7 @@ func TestChannelCastWakesAddressedActor(t *testing.T) {
 		t.Fatalf("same-body second envelope collapsed: %v", wakes)
 	}
 	mu.Unlock()
-	if _, err := rt.ChannelCast(ctx, "chan-wake", "", "", "co-super:impl", "co-super", "broadcast"); err != nil {
+	if _, err := rt.ChannelCast(ctx, "chan-wake", "", "", "engineering:impl", "engineering", "broadcast"); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()

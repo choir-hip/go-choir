@@ -198,8 +198,8 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 			delivered = true
 			_ = json.NewEncoder(w).Encode(authorProposalDeliveryResponse{
 				DeliveryID:    "delivery-1",
-				TargetAgentID: "super:author-1",
-				ChannelID:     "super:author-1",
+				TargetAgentID: "management:author-1",
+				ChannelID:     "management:author-1",
 				State:         "delivered",
 			})
 		default:

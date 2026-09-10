@@ -81,7 +81,7 @@ func assignedCoSuperRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	profile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	profile := agentProfileForRun(rec)
 	return profile == agentprofile.CoSuper &&
 		metadataStringValue(rec.Metadata, "assignment_id") != ""
 }

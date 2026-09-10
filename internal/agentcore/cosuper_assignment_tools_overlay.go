@@ -17,7 +17,7 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 	if rec == nil {
 		return base, "", nil
 	}
-	profile, _ := agentprofile.Canonical(agentProfileForRun(rec))
+	profile := agentProfileForRun(rec)
 	if profile != agentprofile.CoSuper {
 		return base, "", nil
 	}

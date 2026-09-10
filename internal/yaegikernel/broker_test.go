@@ -19,7 +19,7 @@ func TestHandleIssuerAndVerifier(t *testing.T) {
 	}
 
 	scopes := []BrokerAction{ActionExec, ActionReadFile}
-	handleRef, err := issuer.Issue("computer-test-1", "cosuper", 1, scopes, 10*time.Minute)
+	handleRef, err := issuer.Issue("computer-test-1", "engineering", 1, scopes, 10*time.Minute)
 	if err != nil {
 		t.Fatalf("Issue failed: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestBrokerExecAndPathSecurity(t *testing.T) {
 	}
 
 	scopes := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionAssign, ActionMessage}
-	handleRef, err := issuer.Issue("computer-test-1", "cosuper", 1, scopes, 10*time.Minute)
+	handleRef, err := issuer.Issue("computer-test-1", "engineering", 1, scopes, 10*time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestBrokerEpochFencing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handleRef, err := issuer.Issue("computer-test-1", "cosuper", 1, []BrokerAction{ActionExec}, 10*time.Minute)
+	handleRef, err := issuer.Issue("computer-test-1", "engineering", 1, []BrokerAction{ActionExec}, 10*time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}

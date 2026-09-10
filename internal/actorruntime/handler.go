@@ -244,7 +244,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		}
 		return h.memoryFromRunState(rec)
 	}
-	if strings.HasPrefix(strings.TrimSpace(u.Content), "sha256:") && agentID == "super:"+ownerID {
+	if strings.HasPrefix(strings.TrimSpace(u.Content), "sha256:") && agentID == agentprofile.Super+":"+ownerID {
 		log.Printf("actorruntime: persistent Super live occurrence received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
 		rec, terminal, liveErr := h.rt.ResolvePersistentSuperLiveOccurrence(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
 		if liveErr != nil {

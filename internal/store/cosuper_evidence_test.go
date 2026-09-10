@@ -51,7 +51,7 @@ func TestCoSuperGrantAttestationIsStampedValidatedAndDigested(t *testing.T) {
 	bind := bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-evidence-grant")
 	verbs := coSuperCompiledVerbs()
 	now := time.Now().UTC()
-	bind.GrantPolicyAttestation = &types.CoSuperGrantPolicyAttestation{Role: "co-super", GrantedVerbs: verbs, VerbSetDigest: coSuperVerbSetDigest(verbs), PolicyDigest: coSuperPolicyDigest("co-super", verbs, open.Binding.NetworkMode, open.Binding.FilesystemMode, true), SignedCapabilityDigest: objectgraph.SHA256([]byte("signed-capability")), SpawnAcknowledged: true, ActiveAcknowledged: true, GrantAcknowledged: true, SpawnedAt: now.Add(-time.Second), GrantedAt: now}
+	bind.GrantPolicyAttestation = &types.CoSuperGrantPolicyAttestation{Role: "engineering", GrantedVerbs: verbs, VerbSetDigest: coSuperVerbSetDigest(verbs), PolicyDigest: coSuperPolicyDigest("engineering", verbs, open.Binding.NetworkMode, open.Binding.FilesystemMode, true), SignedCapabilityDigest: objectgraph.SHA256([]byte("signed-capability")), SpawnAcknowledged: true, ActiveAcknowledged: true, GrantAcknowledged: true, SpawnedAt: now.Add(-time.Second), GrantedAt: now}
 	bind.CommandDigest, _ = ComputeBindCoSuperAssignmentDigest(bind)
 	result, err := s.BindCoSuperAssignment(context.Background(), bind)
 	if err != nil {
@@ -91,7 +91,7 @@ func TestCoSuperExecutionAndFateAttestationsFateShareAndRemainOrdered(t *testing
 	verbs := coSuperCompiledVerbs()
 	now := time.Now().UTC()
 	bind := bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-evidence-full")
-	bind.GrantPolicyAttestation = &types.CoSuperGrantPolicyAttestation{Role: "co-super", GrantedVerbs: verbs, VerbSetDigest: coSuperVerbSetDigest(verbs), PolicyDigest: coSuperPolicyDigest("co-super", verbs, open.Binding.NetworkMode, open.Binding.FilesystemMode, true), SignedCapabilityDigest: objectgraph.SHA256([]byte("cap")), SpawnAcknowledged: true, ActiveAcknowledged: true, GrantAcknowledged: true, SpawnedAt: now.Add(-time.Second), GrantedAt: now}
+	bind.GrantPolicyAttestation = &types.CoSuperGrantPolicyAttestation{Role: "engineering", GrantedVerbs: verbs, VerbSetDigest: coSuperVerbSetDigest(verbs), PolicyDigest: coSuperPolicyDigest("engineering", verbs, open.Binding.NetworkMode, open.Binding.FilesystemMode, true), SignedCapabilityDigest: objectgraph.SHA256([]byte("cap")), SpawnAcknowledged: true, ActiveAcknowledged: true, GrantAcknowledged: true, SpawnedAt: now.Add(-time.Second), GrantedAt: now}
 	bind.CommandDigest, _ = ComputeBindCoSuperAssignmentDigest(bind)
 	bound, err := s.BindCoSuperAssignment(ctx, bind)
 	if err != nil {
@@ -137,7 +137,7 @@ func TestCoSuperExecutionAndFateAttestationsFateShareAndRemainOrdered(t *testing
 }
 
 func TestCoSuperAttestationCommandDigestsExcludeOnlyStoreStampedFields(t *testing.T) {
-	base := types.BindCoSuperAssignmentRequest{CommandID: "bind", OwnerID: "owner", ComputerID: "computer", AssignmentID: "assignment", Attempt: 1, RunID: "run", OpaqueCapability: "opaque", CapsuleID: "capsule", GrantPolicyAttestation: &types.CoSuperGrantPolicyAttestation{Role: "co-super", GrantedVerbs: []string{"exec"}, VerbSetDigest: objectgraph.SHA256([]byte("verbs")), PolicyDigest: objectgraph.SHA256([]byte("policy")), SignedCapabilityDigest: objectgraph.SHA256([]byte("signed")), SpawnAcknowledged: true, ActiveAcknowledged: true, GrantAcknowledged: true, SpawnedAt: time.Now().UTC(), GrantedAt: time.Now().UTC()}}
+	base := types.BindCoSuperAssignmentRequest{CommandID: "bind", OwnerID: "owner", ComputerID: "computer", AssignmentID: "assignment", Attempt: 1, RunID: "run", OpaqueCapability: "opaque", CapsuleID: "capsule", GrantPolicyAttestation: &types.CoSuperGrantPolicyAttestation{Role: "engineering", GrantedVerbs: []string{"exec"}, VerbSetDigest: objectgraph.SHA256([]byte("verbs")), PolicyDigest: objectgraph.SHA256([]byte("policy")), SignedCapabilityDigest: objectgraph.SHA256([]byte("signed")), SpawnAcknowledged: true, ActiveAcknowledged: true, GrantAcknowledged: true, SpawnedAt: time.Now().UTC(), GrantedAt: time.Now().UTC()}}
 	one, _ := ComputeBindCoSuperAssignmentDigest(base)
 	derived := base
 	copy := *base.GrantPolicyAttestation

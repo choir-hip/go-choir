@@ -58,7 +58,7 @@ func newRecordWireProcessorDecisionTool(rt *Runtime) toolregistry.Tool {
 			if runRec == nil {
 				return "", fmt.Errorf("record_wire_processor_decision missing run context")
 			}
-			profile, _ := agentprofile.Canonical(agentProfileForRun(runRec))
+			profile := agentProfileForRun(runRec)
 			if profile != agentprofile.Processor {
 				return "", fmt.Errorf("record_wire_processor_decision requires a processor run")
 			}

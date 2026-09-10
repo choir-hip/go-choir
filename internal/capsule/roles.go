@@ -4,9 +4,9 @@ package capsule
 type AgentRole string
 
 const (
-	RoleSuper      AgentRole = "super"      // lifecycle/authority only; no broker verbs
-	RoleCoSuper    AgentRole = "co-super"   // read/write/exec inside one granted capsule
-	RoleResearcher AgentRole = "researcher" // read-only inspection across capsules
+	RoleSuper      AgentRole = "management"  // lifecycle/authority only; no broker verbs
+	RoleCoSuper    AgentRole = "engineering" // read/write/exec inside one granted capsule
+	RoleResearcher AgentRole = "research"    // read-only inspection across capsules
 )
 
 // Actuator route authority (Def 2 route_authority): one flag, three

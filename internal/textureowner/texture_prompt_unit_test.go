@@ -364,7 +364,7 @@ func TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T)
 	}
 	recent := []types.ChannelMessage{{
 		Role:    agentprofile.Researcher,
-		From:    "researcher:one",
+		From:    "research:one",
 		Content: "Findings: identified matchups, but final scores are still unavailable from this packet.",
 	}}
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
@@ -400,7 +400,7 @@ func TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches(t *testing.T) 
 	}
 	recent := []types.ChannelMessage{{
 		Role:    agentprofile.Researcher,
-		From:    "researcher:one",
+		From:    "research:one",
 		Content: "A usable source packet is ready for incorporation.",
 	}}
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
@@ -550,7 +550,7 @@ func TestTexturePromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(
 	}
 	recent := []types.ChannelMessage{{
 		Role:    agentprofile.Super,
-		From:    "super:one",
+		From:    "management:one",
 		Content: "Worker update ready.\n\nFindings:\n- [CMD] command exited 0 and printed the expected hash.",
 	}}
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
@@ -581,7 +581,7 @@ func TestTexturePromptMixedObligationKeepsExactExecuteAffordanceWithoutKeywordBr
 	}
 	recent := []types.ChannelMessage{{
 		Role:    agentprofile.Researcher,
-		From:    "researcher:one",
+		From:    "research:one",
 		Content: "Worker update ready.\n\nFindings:\n- [S1] Texture documents have durable revisions.",
 	}}
 	request := buildAgentRevisionRequest(current, nil, map[string]any{

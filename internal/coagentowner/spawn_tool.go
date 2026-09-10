@@ -78,13 +78,17 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			} else {
 				profile = role
 			}
-			callerProfile, _ := agentprofile.Canonical(exec.Profile)
+			callerProfile := exec.Profile
 			if callerProfile == agentprofile.Texture && exec.RunRecord != nil &&
 				strings.TrimSpace(exec.RunRecord.TrajectoryID) != "" &&
 				metadataString(exec.RunRecord.Metadata, "lifecycle_work_item_id") != "" {
 				return "", fmt.Errorf("lifecycle Texture cannot use spawn_agent; atomically open a Researcher with open_researcher, objective, and its first typed control in patch_texture, rewrite_texture, or record_texture_decision controls")
 			}
-			if !agentprofile.CanSpawn(callerProfile, profile) {
+			canSpawn, err := agentprofile.CanSpawn(callerProfile, profile)
+			if err != nil {
+				return "", fmt.Errorf("spawn policy refused: %w", err)
+			}
+			if !canSpawn {
 				return "", fmt.Errorf("%s cannot spawn %s", callerProfile, profile)
 			}
 			if profile == agentprofile.Texture {
@@ -152,7 +156,6 @@ func canonicalTargets(values []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(values))
 	for _, value := range values {
-		value, _ = agentprofile.Canonical(value)
 		if value != "" && !seen[value] {
 			seen[value] = true
 			out = append(out, value)

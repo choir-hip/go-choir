@@ -111,10 +111,13 @@ func TestKnownVocabularySetIsV1V2(t *testing.T) {
 }
 
 // TestVocabularySelectorsMatchSeam pins the fence/migration vocabulary
-// selectors to the descriptor seam: V1 equals Current, V2 is known.
+// selectors to the descriptor seam: V2 equals Current post-cutover, V1 stays known.
 func TestVocabularySelectorsMatchSeam(t *testing.T) {
-	if vocabmigrate.VocabularyV1 != CurrentVocabularyVersion {
-		t.Errorf("fence V1 selector %q != seam %q", vocabmigrate.VocabularyV1, CurrentVocabularyVersion)
+	if vocabmigrate.VocabularyV2 != CurrentVocabularyVersion {
+		t.Errorf("fence V2 selector %q != seam %q", vocabmigrate.VocabularyV2, CurrentVocabularyVersion)
+	}
+	if !IsKnownVocabularyVersion(vocabmigrate.VocabularyV1) {
+		t.Errorf("fence V1 selector %q not in known set", vocabmigrate.VocabularyV1)
 	}
 	if !IsKnownVocabularyVersion(vocabmigrate.VocabularyV2) {
 		t.Errorf("fence V2 selector %q not in widened known set", vocabmigrate.VocabularyV2)

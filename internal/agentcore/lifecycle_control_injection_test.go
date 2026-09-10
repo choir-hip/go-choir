@@ -991,7 +991,7 @@ func seedAtomicResearcherControl(t *testing.T, s *store.Store, suffix string) at
 	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
 		t.Fatal(err)
 	}
-	agentID, workID := "researcher:atomic-"+suffix, "research-work-atomic-"+suffix
+	agentID, workID := "research:atomic-"+suffix, "research-work-atomic-"+suffix
 	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}}
 	content := "research exact gap"
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
@@ -1016,21 +1016,21 @@ func seedAtomicResearcherControl(t *testing.T, s *store.Store, suffix string) at
 func TestLifecycleActivationKeysSeparateLogicalJoinFromBuildAndCanonicalAttempt(t *testing.T) {
 	updates := []types.CoagentSourcePacket{{UpdateID: "u1", TargetWorkItemID: "w1", LifecycleVersion: 1}, {UpdateID: "u2", TargetWorkItemID: "w1", LifecycleVersion: 2}}
 	work := map[string]types.WorkItemRecord{"w1": {WorkItemID: "w1", LifecycleVersion: 3}}
-	logicalA, failedA, _, err := lifecycleActivationKeys("owner", "computer", "trajectory", "researcher", "build-a", updates, work)
+	logicalA, failedA, _, err := lifecycleActivationKeys("owner", "computer", "trajectory", "research", "build-a", updates, work)
 	if err != nil {
 		t.Fatal(err)
 	}
-	logicalB, failedB, _, _ := lifecycleActivationKeys("owner", "computer", "trajectory", "researcher", "build-b", updates, work)
+	logicalB, failedB, _, _ := lifecycleActivationKeys("owner", "computer", "trajectory", "research", "build-b", updates, work)
 	if logicalA != logicalB || failedA == failedB {
 		t.Fatalf("build keys logical=(%s,%s) failed=(%s,%s)", logicalA, logicalB, failedA, failedB)
 	}
 	work["w1"] = types.WorkItemRecord{WorkItemID: "w1", LifecycleVersion: 4}
-	logicalC, failedC, _, _ := lifecycleActivationKeys("owner", "computer", "trajectory", "researcher", "build-a", updates, work)
+	logicalC, failedC, _, _ := lifecycleActivationKeys("owner", "computer", "trajectory", "research", "build-a", updates, work)
 	if logicalC != logicalA || failedC == failedA {
 		t.Fatalf("version keys logical=(%s,%s) failed=(%s,%s)", logicalA, logicalC, failedA, failedC)
 	}
 	reordered := []types.CoagentSourcePacket{updates[1], updates[0]}
-	logicalD, _, _, _ := lifecycleActivationKeys("owner", "computer", "trajectory", "researcher", "build-a", reordered, work)
+	logicalD, _, _, _ := lifecycleActivationKeys("owner", "computer", "trajectory", "research", "build-a", reordered, work)
 	if logicalD == logicalA {
 		t.Fatal("ordered control join did not affect logical activation key")
 	}
@@ -1923,7 +1923,7 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 
 	// Seed open and bind an assignment directly on the store
 	assignmentID := "assignment-super-cancel-rewake"
-	assignedAgentID := "co-super:" + assignmentID
+	assignedAgentID := "engineering:" + assignmentID
 	assignedWorkID := "work:" + assignmentID
 	capability := "opaque-test-capability"
 	openReq := types.OpenCoSuperAssignmentRequest{
@@ -1956,11 +1956,11 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 	assignedRun := types.RunRecord{
 		RunID: assignedRunID, AgentID: assignedAgentID, ChannelID: assignedAgentID,
 		RequestedByRunID: firstRun.RunID, TrajectoryID: fixture.trajectoryID,
-		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
+		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		State: types.RunPending, Prompt: "implement feature",
 		Metadata: map[string]any{
 			"work_item_ids": []string{openReq.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": openReq.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": openReq.Binding.ParentAgentID, "requested_by_profile": "super",
+			"requested_by_agent_id": openReq.Binding.ParentAgentID, "requested_by_profile": "management",
 			"assignment_id": openReq.AssignmentID, "assignment_attempt": openReq.Binding.Attempt, "assignment_kind": string(openReq.Binding.Kind),
 			"assigned_work_item_id": openReq.Binding.AssignedWorkItemID, "parent_work_item_id": openReq.Binding.ParentWorkItemID,
 			"parent_decision_id": openReq.Binding.ParentDecisionID, "parent_control_id": openReq.Binding.ParentControlID,
@@ -2110,7 +2110,7 @@ func seedCancelledCoSuperReport(t *testing.T, rt *Runtime, s *store.Store, owner
 	}
 
 	assignmentID := "assignment-" + suffix
-	assignedAgentID := "co-super:" + assignmentID
+	assignedAgentID := "engineering:" + assignmentID
 	assignedWorkID := "work:" + assignmentID
 	capability := "opaque-test-capability-" + suffix
 	char := string(suffix[len(suffix)-1])
@@ -2144,11 +2144,11 @@ func seedCancelledCoSuperReport(t *testing.T, rt *Runtime, s *store.Store, owner
 	assignedRun := types.RunRecord{
 		RunID: assignedRunID, AgentID: assignedAgentID, ChannelID: assignedAgentID,
 		RequestedByRunID: firstRun.RunID, TrajectoryID: fixture.trajectoryID,
-		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
+		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		State: types.RunPending, Prompt: "implement feature",
 		Metadata: map[string]any{
 			"work_item_ids": []string{openReq.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": openReq.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": openReq.Binding.ParentAgentID, "requested_by_profile": "super",
+			"requested_by_agent_id": openReq.Binding.ParentAgentID, "requested_by_profile": "management",
 			"assignment_id": openReq.AssignmentID, "assignment_attempt": openReq.Binding.Attempt, "assignment_kind": string(openReq.Binding.Kind),
 			"assigned_work_item_id": openReq.Binding.AssignedWorkItemID, "parent_work_item_id": openReq.Binding.ParentWorkItemID,
 			"parent_decision_id": openReq.Binding.ParentDecisionID, "parent_control_id": openReq.Binding.ParentControlID,
