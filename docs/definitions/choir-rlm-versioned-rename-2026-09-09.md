@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Tuple refactor landed end-to-end (19dd5116; CI green with zero failures incl. sharded heavies; staging serving 19dd5116). Next: migrate/revert/migrate drill on staging ending on V1 serving rows (landing step 5)."
+  slice: "Migration core landed (internal/vocabmigrate: frozen §3 map, canonical + provenance inverses, per-class appliers, round-trip tests green, inventory at 316 rows, both gates PASS). Awaiting CI verdict. Next: serving-fence wiring (appender deposits, base rebuild in scratch, rematerialize flip, boot dispatch, RecoverPrepared) then the staging drill."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Tuple commit in flight; owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover only). Full agentcore/store/textureowner suites time out identically on baseline (environmental; CI shards them). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Run the migrate/revert/migrate drill on staging ending on V1 serving rows (landing step 5); drill never leaves staging serving mixed vocabulary."
+  blocker_or_risk: "Migration core in flight; serving fence and drill outstanding. Owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover only). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Wire the serving fence: forward-migration before live authority on every deposit/serve path (appender replay deposits, base rebuild in scratch, rematerialize flip, boot dispatch, RecoverPrepared recovery), then the staging migrate/revert/migrate drill."
 
 
 receipts:

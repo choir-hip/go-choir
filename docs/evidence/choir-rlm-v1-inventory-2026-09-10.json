@@ -5,7 +5,7 @@
   "generator": "scripts/v1-inventory-queries.py",
   "query_version": 1,
   "corpus_manifest": "docs/evidence/choir-rlm-v1-inventory-corpus-2026-09-10.txt",
-  "row_count": 310,
+  "row_count": 316,
   "unknown_allowlisted": [
    "main@57c26060|internal/agentcore/rematerialize.go|restoreIntentOwner",
    "main@57c26060|internal/textureowner/texture_agent_revision.go|revisionRoleOwner",
@@ -13,7 +13,8 @@
   ],
   "supplements": [
    "decoder-commit: +2 frozen-table rows for internal/computerevent/decode.go (Define update; no prior rows touched)",
-   "step-4 re-freeze v2: hunk-mapped anchor refresh after the inert Canonical tuple refactor; step4TupleHoists rows dissolved back into owning site rows; every row keeps its key"
+   "step-4 re-freeze v2: hunk-mapped anchor refresh after the inert Canonical tuple refactor; step4TupleHoists rows dissolved back into owning site rows; every row keeps its key",
+   "migration-core commit: +6 rows for internal/vocabmigrate/migrate.go (Define update; frozen \u00a73 embodiment)"
   ]
  },
  "rows": [
@@ -10668,6 +10669,247 @@
     "\"cosuper-coding\": \"co-super\","
    ],
    "note": "NormalizeRole-only extra in normalized form; never unioned with the canonical table."
+  },
+  {
+   "key": "main@57c26060|internal/vocabmigrate/migrate.go|forwardV1ToV2",
+   "file": "internal/vocabmigrate/migrate.go",
+   "lines": [
+    30,
+    34,
+    35,
+    36,
+    37,
+    55,
+    57
+   ],
+   "symbol": "forwardV1ToV2",
+   "field_path": "forwardV1ToV2",
+   "class": 2,
+   "namespace": "migrate.frozen.map",
+   "v1_tokens": [
+    "super",
+    "co-super",
+    "cosuper",
+    "coagent",
+    "co-agent",
+    "co_super",
+    "cosuper_coding",
+    "co-super-coding",
+    "engineering",
+    "researcher",
+    "researchers",
+    "research",
+    "research-agent",
+    "web-research",
+    "web-researcher"
+   ],
+   "v2_token": "per-map",
+   "carrier": "n/a (the map itself)",
+   "liveness": "live",
+   "role": "def",
+   "digest": "V2DOM",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "\"super\": \"management\",",
+    "\"co-super\": \"engineering\", \"cosuper\": \"engineering\",",
+    "\"coagent\": \"engineering\", \"co-agent\": \"engineering\",",
+    "\"co_super\": \"engineering\", \"cosuper_coding\": \"engineering\",",
+    "\"co-super-coding\": \"engineering\", \"engineering\": \"engineering\",",
+    "for _, tok := range []string{\"researcher\", \"researchers\", \"research\",",
+    "forwardV1ToV2[tok] = \"research\""
+   ],
+   "note": "Single frozen \u00a73 map; init() completes the research desk. Q5-fired literals."
+  },
+  {
+   "key": "main@57c26060|internal/vocabmigrate/migrate.go|inverseV2ToV1Canonical",
+   "file": "internal/vocabmigrate/migrate.go",
+   "lines": [
+    90,
+    91,
+    92,
+    93,
+    94
+   ],
+   "symbol": "inverseV2ToV1Canonical",
+   "field_path": "inverseV2ToV1Canonical",
+   "class": 2,
+   "namespace": "migrate.frozen.map",
+   "v1_tokens": [
+    "management",
+    "engineering",
+    "research"
+   ],
+   "v2_token": "super,co-super,researcher",
+   "carrier": "n/a",
+   "liveness": "live",
+   "role": "def",
+   "digest": "V2DOM",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "return \"super\", true",
+    "case \"engineering\":",
+    "return \"co-super\", true",
+    "case \"research\":",
+    "return \"researcher\", true"
+   ],
+   "note": "INV-CANON representatives; many-to-one spellings need ProvenanceLog."
+  },
+  {
+   "key": "main@57c26060|internal/vocabmigrate/migrate.go|agentIDPrefixTable",
+   "file": "internal/vocabmigrate/migrate.go",
+   "lines": [
+    170
+   ],
+   "symbol": "agentIDPrefixTable",
+   "field_path": "agentIDPrefixTable",
+   "class": 10,
+   "namespace": "migrate.prefix",
+   "v1_tokens": [
+    "super:",
+    "co-super:",
+    "cosuper:",
+    "researcher:"
+   ],
+   "v2_token": "management:,engineering:,research:",
+   "carrier": "agent ID prefix",
+   "liveness": "live",
+   "role": "writer",
+   "digest": "V2DOM",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "for _, prefix := range []string{\"super:\", \"co-super:\", \"cosuper:\", \"researcher:\"} {"
+   ],
+   "note": "Constructed ID prefixes rename with the desk token per charter tie-break."
+  },
+  {
+   "key": "main@57c26060|internal/vocabmigrate/migrate.go|applierRunRecord",
+   "file": "internal/vocabmigrate/migrate.go",
+   "lines": [
+    193,
+    194
+   ],
+   "symbol": "applierRunRecord",
+   "field_path": "applierRunRecord",
+   "class": 7,
+   "namespace": "migrate.applier",
+   "v1_tokens": [
+    "super",
+    "co-super",
+    "cosuper",
+    "coagent",
+    "co-agent",
+    "co_super",
+    "cosuper_coding",
+    "co-super-coding",
+    "engineering",
+    "researcher",
+    "researchers",
+    "research",
+    "research-agent",
+    "web-research",
+    "web-researcher"
+   ],
+   "v2_token": "per-map",
+   "carrier": "RunRecord AgentProfile/AgentRole",
+   "liveness": "live",
+   "role": "writer",
+   "digest": "V2DOM",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "rec.AgentProfile = out.mapToken(\"agent_profile\", rec.AgentProfile, log)",
+    "rec.AgentRole = out.mapToken(\"agent_role\", rec.AgentRole, log)"
+   ],
+   "note": "Generic mapToken call sites; values flow from live rows."
+  },
+  {
+   "key": "main@57c26060|internal/vocabmigrate/migrate.go|applierWorkItem",
+   "file": "internal/vocabmigrate/migrate.go",
+   "lines": [
+    209
+   ],
+   "symbol": "applierWorkItem",
+   "field_path": "applierWorkItem",
+   "class": 8,
+   "namespace": "migrate.applier",
+   "v1_tokens": [
+    "super",
+    "co-super",
+    "cosuper",
+    "coagent",
+    "co-agent",
+    "co_super",
+    "cosuper_coding",
+    "co-super-coding",
+    "engineering",
+    "researcher",
+    "researchers",
+    "research",
+    "research-agent",
+    "web-research",
+    "web-researcher"
+   ],
+   "v2_token": "per-map",
+   "carrier": "WorkItemRecord AuthorityProfile",
+   "liveness": "live",
+   "role": "writer",
+   "digest": "V2DOM",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "work.AuthorityProfile = out.mapToken(\"authority_profile\", work.AuthorityProfile, log)"
+   ],
+   "note": "Generic mapToken call site."
+  },
+  {
+   "key": "main@57c26060|internal/vocabmigrate/migrate.go|applierMessageRoles",
+   "file": "internal/vocabmigrate/migrate.go",
+   "lines": [
+    218,
+    225
+   ],
+   "symbol": "applierMessageRoles",
+   "field_path": "applierMessageRoles",
+   "class": 9,
+   "namespace": "migrate.applier",
+   "v1_tokens": [
+    "super",
+    "co-super",
+    "cosuper",
+    "coagent",
+    "co-agent",
+    "co_super",
+    "cosuper_coding",
+    "co-super-coding",
+    "engineering",
+    "researcher",
+    "researchers",
+    "research",
+    "research-agent",
+    "web-research",
+    "web-researcher"
+   ],
+   "v2_token": "per-map",
+   "carrier": "ChannelMessage/InboxDelivery Role",
+   "liveness": "live",
+   "role": "carrier",
+   "digest": "V2DOM",
+   "forward": "MAP",
+   "inverse": "INV-CANON",
+   "verification": "verified",
+   "texts": [
+    "msg.Role = out.mapToken(\"role\", msg.Role, log)",
+    "msg.Role = out.mapToken(\"role\", msg.Role, log)"
+   ],
+   "note": "Q13 fires on msg.Role textually but these are desk-role carriers, not provider-message roles; classified live carrier."
   }
  ],
  "negative_sweeps": [
