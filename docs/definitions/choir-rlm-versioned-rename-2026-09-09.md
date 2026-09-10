@@ -198,9 +198,10 @@ now:
   question: "Does this draft specify all three desk renames executably, ready for owner ratification?"
   reconciliation:
     observed_at: "2026-09-10T03:45:36Z"
-    source_ref: "main@89145513 (round-10 repaired draft HEAD, observed live at charter)"
+    source_ref: "main@cf8ea58f (opus workability repairs; re-observe HEAD at charter ratification)"
     deploy_identity: "staging https://choir.news ok via proxy 0475ed84; missions 0 and 1 completed with deployed proof"
     authority_identities:
+      - "docs/reports/choir-rlm-mission-state-2026-09-08.md (carried mission order, rename-first)"
       - "docs/designs/rlm-target-architecture-2026-09-04.md:79-85 (desks vocabulary)"
       - "docs/definitions/choir-rlm-restore-zero-2026-09-08.md (completed predecessor)"
       - "docs/definitions/choir-rlm-settlement-gate-2026-09-09.md (completed predecessor)"
