@@ -193,7 +193,7 @@ now:
   question: "Is the round-7 repaired draft with live-set enumeration, stamp independence, and central enforcement ready for owner ratification?"
   reconciliation:
     observed_at: "2026-09-09T23:29:36Z"
-    source_ref: "main@2a381611 (round-6 repaired draft; re-observe HEAD at charter ratification)"
+    source_ref: "main@364bbaf6 (round-7 repaired draft; re-observe HEAD at charter ratification)"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md:79-85 (desks vocabulary)"
       - "docs/definitions/choir-rlm-restore-zero-2026-09-08.md (completed predecessor)"
