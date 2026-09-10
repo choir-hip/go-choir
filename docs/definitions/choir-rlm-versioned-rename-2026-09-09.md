@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Mapping-table freeze landed as code-free Define (docs/evidence/choir-rlm-v2-mapping-2026-09-10.md): per-function V1 acceptor tables, V2 identity maps, three-desk forward map with inverses, overlay map, v2 receipt field list, and owner-as-frozen-protocol proposal awaiting owner ratification. Next: never-reverted IsKnownVocabularyVersion widening commit, then frozen V1 decoder, in normative landing order."
+  slice: "Widening landed end-to-end (c19e3028; CI green incl. staging deploy serving c19e3028). Next: frozen V1 decoder with two centralized decode roots (historic vs V2 write-admission), V1 aliases still accepted live, per landing-order step 3."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Owner ratification outstanding on the owner-as-frozen-protocol proposal (item 4 §7); --freeze stays red until then, but the widening and decoder slices do not depend on it. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Land the never-reverted IsKnownVocabularyVersion widening commit ({v1,v2} only, Current stays v1), then the frozen V1 decoder with two centralized decode roots."
+  blocker_or_risk: "Owner ratification outstanding on the owner-as-frozen-protocol proposal (item 4 §7); decoder slice does not depend on it. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Land the frozen V1 decoder with two centralized decode roots (historic raw-preserving vs V2 write-admission), V1 aliases still accepted live; decoder matrix enumerates every current call site with CI rejecting new decode roots."
 
 
 receipts:
@@ -297,4 +297,16 @@ receipts:
     disposition: "acceptance item 4 frozen as Define; widening commit is next; writer cutover waits on owner ratification"
     problem_ref: "every equivalence was implied across four disjoint alias tables; owner token had no classification"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; §7 itself proposes, does not settle — owner ratification still required"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-widening-2026-09-10
+    boundary: implement
+    commit_or_artifact: "c19e3028 red(projectionbase): widen known vocabulary set to v1 and v2, never revert"
+    proof_refs:
+      - "go test ./internal/projectionbase ok (93s); v1-inventory gate PASS locally and in CI"
+      - "CI run 34441610853 completed/success incl. staging deploy; staging /health ok serving c19e3028"
+      - "verify_test unknown-vocabulary case now pins v3 refusal; TestKnownVocabularySetIsV1V2 pins {v1,v2} with whitespace handling"
+    rollback_ref: "never revert this commit (would strand v2-stamped bases); cutover rollback reverts CurrentVocabularyVersion only, in a later revertible commit"
+    disposition: "landing-order step 2 landed; frozen V1 decoder with two centralized decode roots is next"
+    problem_ref: "v1-stamped bases would refuse install after the writer cutover without the widened known set"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
     candidate_or_evidence_refs: []
