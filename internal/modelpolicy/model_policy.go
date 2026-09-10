@@ -178,9 +178,13 @@ func NormalizeRole(role string) string {
 	switch normalized {
 	case agentprofile.Super, agentprofile.CoSuper, agentprofile.Researcher,
 		agentprofile.Conductor, agentprofile.Texture, agentprofile.Processor,
-		agentprofile.Reconciler, agentprofile.Email, VerifierRole,
-		MultimodalVerifierRole, "verifier-multimodal":
+		agentprofile.Reconciler, agentprofile.Email, VerifierRole:
 		return normalized
+	case MultimodalVerifierRole, "verifier-multimodal":
+		// One canonical spelling: the hyphenated form normalizes to the
+		// underscore policy key so a stored value can never pass the fence
+		// while missing its roles.<name> section.
+		return MultimodalVerifierRole
 	default:
 		return ""
 	}

@@ -221,3 +221,35 @@ func TestIsTexture(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalVerifierSpellingUnifies(t *testing.T) {
+	t.Parallel()
+	for _, value := range []string{"verifier_multimodal", "verifier-multimodal", " VERIFIER-MULTIMODAL "} {
+		got, err := Canonical(value)
+		if err != nil {
+			t.Fatalf("Canonical(%q) error = %v", value, err)
+		}
+		if got != "verifier_multimodal" {
+			t.Fatalf("Canonical(%q) = %q, want verifier_multimodal", value, got)
+		}
+	}
+}
+
+// TestPolicyForDefaultIsNotDefaultAllow pins the fail-closed default: a
+// canonical-but-unlisted profile (the verifier roles) gets a bare policy
+// with every capability false and no spawn/message targets.
+func TestPolicyForDefaultIsNotDefaultAllow(t *testing.T) {
+	t.Parallel()
+	for _, profile := range []string{"verifier", "verifier_multimodal"} {
+		policy, err := PolicyFor(profile)
+		if err != nil {
+			t.Fatalf("PolicyFor(%q) error = %v", profile, err)
+		}
+		if policy.AllowReadOnlyFiles || policy.AllowResearchTools ||
+			policy.AllowEvidenceTools || policy.AllowMemoryTools ||
+			policy.AllowModelDiagnosticTools || policy.AllowCoAgentTools ||
+			len(policy.AllowedSpawnTargets) != 0 || len(policy.AllowedMessageTargets) != 0 {
+			t.Fatalf("PolicyFor(%q) grants capabilities: %+v", profile, policy)
+		}
+	}
+}

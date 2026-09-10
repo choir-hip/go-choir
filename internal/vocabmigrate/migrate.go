@@ -43,11 +43,13 @@ var forwardV1ToV2 = map[string]string{
 	"co-super-coding": "engineering", "engineering": "engineering",
 }
 
-// Desk tokens that survive the rename unchanged.
+// Desk tokens that survive the rename unchanged. The multimodal verifier has
+// one canonical spelling (the modelpolicy roles.<name> key); the hyphenated
+// form folds to it through the forward map below.
 var staysLive = map[string]bool{
 	"texture": true, "conductor": true, "processor": true,
 	"reconciler": true, "email": true, "verifier": true,
-	"verifier-multimodal": true, "verifier_multimodal": true,
+	"verifier_multimodal": true,
 }
 
 // Frozen protocol values: never desk vocabulary, never migrated.
@@ -62,6 +64,9 @@ func init() {
 		"research-agent", "web-research", "web-researcher"} {
 		forwardV1ToV2[tok] = "research"
 	}
+	// Spelling fold: the hyphenated multimodal verifier is a V1-era spelling
+	// of the canonical underscore policy key.
+	forwardV1ToV2["verifier-multimodal"] = "verifier_multimodal"
 }
 
 // ForwardV1ToV2 maps one frozen V1 desk token to its V2 live name.
@@ -99,8 +104,11 @@ func InverseV2ToV1Canonical(v2 string) (string, bool) {
 	case "research":
 		return "researcher", true
 	case "texture", "conductor", "processor", "reconciler", "email",
-		"verifier", "verifier-multimodal", "verifier_multimodal":
+		"verifier", "verifier_multimodal":
 		return strings.TrimSpace(strings.ToLower(v2)), true
+	case "verifier-multimodal":
+		// Non-canonical spelling inverts to the canonical underscore form.
+		return "verifier_multimodal", true
 	default:
 		return "", false
 	}

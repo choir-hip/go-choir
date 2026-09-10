@@ -35,7 +35,7 @@ var v2LiveSet = map[string]bool{
 	"management": true, "engineering": true, "research": true,
 	"texture": true, "conductor": true, "processor": true,
 	"reconciler": true, "email": true, "verifier": true,
-	"verifier-multimodal": true, "verifier_multimodal": true,
+	"verifier_multimodal": true,
 }
 
 // Field is one role-bearing value presented to the fence.

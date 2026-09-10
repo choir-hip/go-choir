@@ -116,6 +116,10 @@ func PolicyFor(profile string) (Policy, error) {
 			AllowedMessageTargets:     []string{Texture, Researcher},
 		}, nil
 	default:
+		// Canonical but unlisted profiles (the verifier roles) get a bare
+		// policy: every capability flag false, no spawn or message targets.
+		// This is fail-closed by construction — never add a permissive
+		// default here.
 		return Policy{Profile: strings.TrimSpace(profile)}, nil
 	}
 }
@@ -143,8 +147,12 @@ func Canonical(profile string) (string, error) {
 	normalized := strings.ToLower(strings.TrimSpace(profile))
 	switch normalized {
 	case Super, CoSuper, Researcher, Texture, Conductor, Processor, Reconciler, Email,
-		"verifier", "verifier-multimodal":
+		"verifier":
 		return normalized, nil
+	case "verifier-multimodal", "verifier_multimodal":
+		// One canonical spelling (the modelpolicy roles.<name> key): the
+		// hyphenated form folds to verifier_multimodal.
+		return "verifier_multimodal", nil
 	default:
 		return "", UnknownProfileError{Input: profile}
 	}
