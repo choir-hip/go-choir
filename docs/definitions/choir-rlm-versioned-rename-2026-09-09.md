@@ -194,11 +194,11 @@ measures:
 
 now:
   status: working
-  slice: "Chartered 2026-09-10T04:28:08Z by owner ratification; sole executable root for versioned rename. Next: the mechanical inventory census as the first charter Define, then decode, writer, activation, carrier, deployed proof, and focused contracts in order. missions 0 and 1 complete; charter ratification pending"
+  slice: "Census Define frozen 2026-09-10: mechanical V1 inventory mapped across all twelve classes at main@8bc16619 (four parallel scout slices, no code touched). Next: freeze the machine-readable V1 inventory artifact plus versioned corpus manifest and CI gate spec, then decode, writer, activation, carrier, deployed proof, and focused contracts in normative landing order. Missions 0 and 1 complete; charter ratified 2026-09-10T04:28:08Z."
   question: none
   reconciliation:
-    observed_at: "2026-09-10T03:45:36Z"
-    source_ref: "main@4ee0e9bf (grok workability repairs; re-observe HEAD at charter ratification)"
+    observed_at: "2026-09-10T05:30:00Z"
+    source_ref: "main@8bc16619 (charter promotion commit; four-scout mechanical census base)"
     deploy_identity: "staging https://choir.news ok via proxy 0475ed84; missions 0 and 1 completed with deployed proof"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md (carried mission order, rename-first)"
@@ -209,7 +209,7 @@ now:
       - "AGENTS.md; docs/standing-questions.md"
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "docs/reports/choir-rlm-restore-zero-completion-report-2026-09-09.md, scripts/generate_restore_zero_completion_pdf_2026_09_09.py, scripts/__pycache__/, tmp/ — unknown-owner unrelated WIP, preserve read-only leave-in-place"
-    status: reconciling
+    status: reconciled
   candidate:
     id: none
     state: none
@@ -228,12 +228,19 @@ now:
     recorded_at: "2026-09-10T04:28:08Z"
     consequence: "Chartered executable. Red rename work is authorized under the 9 acceptance items in order; problem-documentation-first precedes every repair-code commit; census lands as the first charter Define."
   evidence_refs:
-    - "internal/agentprofile/agentprofile.go"
-    - "internal/capsule/roles.go"
-    - "internal/computerevent/event.go and appender.go"
-    - "internal/projectionbase/types.go"
-  blocker_or_risk: "Charter census unproven until the mechanical inventory lands; actuator and staging proofs outstanding. R1 drill debt stays mission-0-owned; cutover stays remainder holder (R6); tool retirement belongs to the R7 successor."
-  next_action: "Execute the mechanical inventory census as the first charter Define, with problem documentation preceding any repair-code commit."
+    - "internal/agentprofile/agentprofile.go:6-15 constants; 32-113 PolicyFor; 116-139 Canonical; 147-168 CanSpawn/CanMessage"
+    - "internal/capsule/roles.go:4-9 AgentRole constants; 42-57 RoleVerbSets; internal/capsule/capability.go:19 AgentRole carrier"
+    - "internal/agentcore/rlm_reduce.go:76-89 spawnRoleAllowed; 166-195 ReduceCellIntents raw in.Role persistence"
+    - "internal/modelpolicy/model_policy.go:172-186 NormalizeRole; 391-439 parsePolicy; 441-506 parseOverlay"
+    - "internal/promptstore/store.go:35-49 promptRoles; 159-167 normalizePromptRole; defaults/*.yaml role ids and V1 prose"
+    - "internal/runtimeprompts/overlays/ super/co_super/rlm_co_super/researcher_runtime.yaml role ids; prompts.go:49-67 selectors"
+    - "frontend/src/lib/TextureEditor.svelte:166 SOURCE_PANEL_MODEL_ROLES live protocol list"
+    - "internal/computerevent/event.go:20-62 EventKind frozen set; 140-201 Validate; appender.go:271-423 append gates; projection_batch.go:11-40 format discriminator"
+    - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
+    - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
+    - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
+  blocker_or_risk: "Census mapped; freeze unproven until the machine-readable inventory artifact plus corpus manifest and CI gate land. Actuator and staging proofs outstanding. R1 drill debt stays mission-0-owned; cutover stays remainder holder (R6); tool retirement belongs to the R7 successor."
+  next_action: "Freeze the V1 inventory artifact plus versioned corpus manifest and CI gate spec (acceptance item 1); no repair-code commits before that freeze lands."
 
 
 receipts:
@@ -249,4 +256,17 @@ receipts:
     disposition: "versioned-rename promoted to sole working entrypoint; predecessors remain completed non-entrypoints; cutover retained as remainder holder"
     problem_ref: "super/co-super terminology confusing relative to desk roles; researcher implying singularity for a transparently scaling RLM"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-census-2026-09-10
+    boundary: define
+    commit_or_artifact: "code-free Define; census base main@8bc16619; no source touched"
+    proof_refs:
+      - "CensusProfiles: agentprofile Canonical/PolicyFor/CanSpawn callers; capsule RoleVerbSets gates; Yaegi ProfileRegistry/GetProfile zero production callers (delete-first)"
+      - "CensusReducerPrompt: spawnRoleAllowed V1 synonym set; promptRoles/normalizePromptRole strict-canonical; NormalizeRole no-research-branch; SOURCE_PANEL_MODEL_ROLES live protocol"
+      - "CensusPersistMail: run/lifecycle/assignment/mailbox/ID-prefix/graph rows with writer-vs-equality split; rematerialize.go:351 owner token classified charter-pending"
+      - "CensusGrantsEvents: terminal-proposition V1 digest domain; EventKind/command-prefix/tool-name frozen-protocol exclusions; full decode-root list for decoder matrix"
+    rollback_ref: "registry-only change; revert restores pre-census now card"
+    disposition: "census mapped; freeze (artifact plus corpus manifest plus CI gate) is the next Define before any repair-code commit"
+    problem_ref: "live alias normalizers accept legacy values on the live write path; vocabulary seam gates descriptors while tape decode stays unversioned; Event.Validate actor_profile non-emptiness only at tape-append gate; raw spawn synonyms authorize while ReduceCellIntents persists raw roles"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; problem-documentation-first per AGENTS.md"
     candidate_or_evidence_refs: []
