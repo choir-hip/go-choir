@@ -15,6 +15,9 @@ live owners elsewhere.
   A promoted working Definition is the sole current authority root.
 - RLM mission research and consensus record:
   [`reports/choir-rlm-mission-state-2026-09-08.md`](reports/choir-rlm-mission-state-2026-09-08.md).
+- Predictive ICRL research direction (the *RLMs are RLMs* working memo, held
+  outside this repo): [`memo-predictive-icrl-delta-2026-09-10.md`](memo-predictive-icrl-delta-2026-09-10.md).
+  It is research input, not architecture authority.
 - Detailed architecture: [`current-architecture.md`](current-architecture.md).
 
 ## History
