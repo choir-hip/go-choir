@@ -1,7 +1,7 @@
 ---
 definition_version: 2
 definition_id: choir-rlm-versioned-rename-2026-09-09
-execution_mode: draft_non_executable
+execution_mode: mission_orchestrator
 
 start:
   captured_at: "2026-09-09T23:29:36Z"
@@ -193,9 +193,9 @@ measures:
     cannot_prove: "Cannot prove decoder totality beyond the inventoried classes."
 
 now:
-  status: blocked_incomplete
-  slice: "grok workability repaired draft under owner review; missions 0 and 1 complete; charter ratification pending"
-  question: "Does this draft specify all three desk renames with a single cutover, ready for owner ratification?"
+  status: working
+  slice: "Chartered 2026-09-10T04:28:08Z by owner ratification; sole executable root for versioned rename. Next: the mechanical inventory census as the first charter Define, then decode, writer, activation, carrier, deployed proof, and focused contracts in order. missions 0 and 1 complete; charter ratification pending"
+  question: none
   reconciliation:
     observed_at: "2026-09-10T03:45:36Z"
     source_ref: "main@4ee0e9bf (grok workability repairs; re-observe HEAD at charter ratification)"
@@ -221,17 +221,32 @@ now:
   decision:
     selected: "Mission 2 will charter versioned rename as drafted after review; closes no predecessor acceptance; retains cutover remainder-holder status and mission-0 drill debt ownership."
     kind: architecture
-    status: proposal
-    source: orchestrator
-    evidence_ref: "Owner-settled mission order and rename-first direction; scout surface map 2026-09-09"
-    owner_ratification_ref: "charter ratification still required before execution"
-    recorded_at: "2026-09-09T23:29:36Z"
-    consequence: "Draft and review only. No rename repair executes under this file before charter ratification with fresh reconciliation."
+    status: settled
+    source: owner
+    evidence_ref: "Owner charter ratification 2026-09-10T04:28:08Z; opus conditional accept with all repairs verified in text; grok workability pass applied; live reconciliation main@933fa22f with staging proxy 0475ed84 ok"
+    owner_ratification_ref: "ratified 2026-09-10T04:28:08Z; executable promotion lands atomically with this receipt"
+    recorded_at: "2026-09-10T04:28:08Z"
+    consequence: "Chartered executable. Red rename work is authorized under the 9 acceptance items in order; problem-documentation-first precedes every repair-code commit; census lands as the first charter Define."
   evidence_refs:
     - "internal/agentprofile/agentprofile.go"
     - "internal/capsule/roles.go"
     - "internal/computerevent/event.go and appender.go"
     - "internal/projectionbase/types.go"
-  blocker_or_risk: "Charter ratification pending. Draft registered as blocked in all three registries; census lands as the first charter Define."
-  next_action: "Registries already carry this Definition as blocked, draft_non_executable, entrypoint false. After owner ratification: one read-only reconciliation of HEAD, deploy identity, dirty paths, and source anchors; then the code-free census Define (inventory artifact) before any repair commit. Do not re-register., docs/mission-graph.yaml, and docs/doc-authority-manifest.yaml as blocked, non-executable, and entrypoint false, recording registry-conformance evidence; then pin the reviewed draft digest, perform one fresh read-only reconciliation of HEAD, deployment identity, dirty paths, source anchors, census corpus, and registry state, and stop for owner ratification before implementation."
+  blocker_or_risk: "Charter census unproven until the mechanical inventory lands; actuator and staging proofs outstanding. R1 drill debt stays mission-0-owned; cutover stays remainder holder (R6); tool retirement belongs to the R7 successor."
+  next_action: "Execute the mechanical inventory census as the first charter Define, with problem documentation preceding any repair-code commit."
 
+
+receipts:
+  - id: versioned-rename-charter-2026-09-10
+    boundary: define
+    commit_or_artifact: "933fa22f (owner-reviewed reconciled draft); executable promotion lands atomically in this commit"
+    proof_refs:
+      - "docs/definitions/choir-rlm-restore-zero-2026-09-08.md completed status consumed read-only"
+      - "docs/definitions/choir-rlm-settlement-gate-2026-09-09.md completed status consumed read-only"
+      - "docs/mission-residues.md R1, R6, R7"
+      - "ten panel rounds plus opus and grok workability passes, zero HOLD verdicts"
+    rollback_ref: "registry-only change; revert restores blocked-draft topology"
+    disposition: "versioned-rename promoted to sole working entrypoint; predecessors remain completed non-entrypoints; cutover retained as remainder holder"
+    problem_ref: "super/co-super terminology confusing relative to desk roles; researcher implying singularity for a transparently scaling RLM"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z"
+    candidate_or_evidence_refs: []

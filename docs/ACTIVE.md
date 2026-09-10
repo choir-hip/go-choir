@@ -87,13 +87,12 @@ with effects OFF. Deployed evidence:
 The cutover's withheld settlement acceptance is closed; the cutover stays remainder
 holder (residue R6). Mission-0 live drill debt stays mission-0-owned (residue R1).
 
-## Blocked Definition — RLM Versioned Rename (draft)
+## Executable Definition — RLM Versioned Rename (chartered 2026-09-10)
 
 [`definitions/choir-rlm-versioned-rename-2026-09-09.md`](definitions/choir-rlm-versioned-rename-2026-09-09.md)
-is a **blocked non-executable draft** holding the versioned-rename scope:
+is the **sole working entrypoint**, chartered by owner ratification 2026-09-10T04:28:08Z after ten panel rounds plus opus and grok workability passes with zero HOLD verdicts. Red rename work executes under its 9 acceptance items in order, starting with the mechanical inventory census as the first charter Define.
 rename-first versioned desk vocabulary with frozen V1 decode, V2-only writers,
-activation refusal, and the exhaustive V1 inventory. Nothing executes under it
-before owner charter ratification with fresh reconciliation. The cutover stays
+activation refusal, and the exhaustive V1 inventory. The cutover stays
 remainder holder (residue R6); mission-0 drill debt stays mission-0-owned
 (residue R1); tool and operation retirement belongs to the Engineering-proof
 successor (residue R7).

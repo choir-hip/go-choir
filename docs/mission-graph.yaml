@@ -561,19 +561,19 @@ nodes:
     title: RLM Versioned Rename
     path: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
     ledger: ''
-    status: blocked
+    status: working
     kind: spine
-    entrypoint: false
-    execution_mode: draft_non_executable
+    entrypoint: true
+    execution_mode: mission_orchestrator
     depends_on:
       - choir-rlm-target-architecture-cutover-2026-09-04
       - choir-rlm-restore-zero-2026-09-08
       - choir-rlm-settlement-gate-2026-09-09
     enables: []
     note: >-
-      Blocked non-executable draft holding the versioned-rename scope.
-      Charter ratification with fresh reconciliation pending. Nothing executes
-      under it before then.
+      Sole working entrypoint, chartered 2026-09-10T04:28:08Z by owner
+      ratification. Red rename work executes under its 9 acceptance items
+      in order, census first.
     sources:
       - docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
       - docs/ACTIVE.md
