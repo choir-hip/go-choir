@@ -90,12 +90,16 @@ holder (residue R6). Mission-0 live drill debt stays mission-0-owned (residue R1
 ## Executable Definition — RLM Versioned Rename (chartered 2026-09-10)
 
 [`definitions/choir-rlm-versioned-rename-2026-09-09.md`](definitions/choir-rlm-versioned-rename-2026-09-09.md)
-is the **sole working entrypoint**, chartered by owner ratification 2026-09-10T04:28:08Z after ten panel rounds plus opus and grok workability passes with zero HOLD verdicts. Red rename work executes under its 9 acceptance items in order, starting with the mechanical inventory census as the first charter Define.
-rename-first versioned desk vocabulary with frozen V1 decode, V2-only writers,
-activation refusal, and the exhaustive V1 inventory. The cutover stays
-remainder holder (residue R6); mission-0 drill debt stays mission-0-owned
-(residue R1); tool and operation retirement belongs to the Engineering-proof
-successor (residue R7).
+is the **sole working entrypoint**, chartered by owner ratification 2026-09-10T04:28:08Z after ten panel rounds plus opus and grok workability passes with zero HOLD verdicts. It owns the rename-first versioned desk vocabulary with frozen V1 decode, V2-only writers, activation refusal, and the exhaustive V1 inventory. The cutover stays remainder holder (residue R6); mission-0 drill debt stays mission-0-owned (residue R1); tool and operation retirement belongs to the Engineering-proof successor (residue R7).
+
+The writer cutover landed and deployed (staging serves `cb571960`, retained
+computer active at epoch 896), but a post-cutover review on 2026-09-10 found
+that the migration and serving fence cover only retired relational tables while
+the live carrier is the object graph, that live readers now refuse historic V1
+values, and that two write roots still persist raw tokens. Acceptance items 3,
+5, 6, and 8 are **reopened**; items 10-15 carry the closing obligations.
+Adjudicated findings: [`evidence/choir-rlm-rename-post-cutover-review-2026-09-10.md`](evidence/choir-rlm-rename-post-cutover-review-2026-09-10.md).
+The mission is not complete and may not be settled until items 10-15 close.
 ## Blocked Definition — RLM Target Architecture Cutover (remainder holder)
 
 [`definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`](definitions/choir-rlm-target-architecture-cutover-2026-09-04.md)
@@ -241,9 +245,10 @@ Supporting maintenance Definitions retain their evidence and status:
 `documentation-authority-reduction-2026-07-09.md`. They are settled,
 superseded, or historical as stated by their source Definitions, not entrypoints.
 
-RLM restore-zero remains the sole working entrypoint on staging
-`computer-03335285269bdba4f94377e56879f9e6`. Do not mark complete until a retained
-boot consumes a near-head snapshot with prefix reads = 0.
+RLM restore-zero completed 2026-09-09 and is historical evidence, not an
+entrypoint. The sole working entrypoint is the RLM Versioned Rename above; on
+staging `computer-03335285269bdba4f94377e56879f9e6` its cutover repair wave is
+active and the mission may not be settled until acceptance items 10-15 close.
 
 ## Unowned External Work
 

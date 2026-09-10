@@ -572,8 +572,10 @@ nodes:
     enables: []
     note: >-
       Sole working entrypoint, chartered 2026-09-10T04:28:08Z by owner
-      ratification. Red rename work executes under its 9 acceptance items
-      in order, census first.
+      ratification. The writer cutover landed and deployed, but the
+      post-cutover review of 2026-09-10 reopened acceptance items 3, 5, 6,
+      and 8 and added items 10-15; the repair wave is active and the mission
+      may not settle until those close.
     sources:
       - docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
       - docs/ACTIVE.md
