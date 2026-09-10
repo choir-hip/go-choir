@@ -399,3 +399,15 @@ receipts:
     problem_ref: "migration and serving-fence machinery landed with zero production callers; the writer cutover flipped to V2 without migrating stored V1 rows or fencing the serving path, so the next guest boot would have served unmigrated V1 rows under a V2 writer set — documented and repaired in one commit because the defect was discovered mid-execution of the same landing step"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; step-6 intra-order (migration+fence before writer flip) is charter text, not new scope"
     candidate_or_evidence_refs: []
+  - id: versioned-rename-toml-decode-2026-09-10
+    boundary: implement
+    commit_or_artifact: "this commit"
+    proof_refs:
+      - "staging evidence: post-refresh /api/model-policy/resolve answered V2 roles but reported policy_error 'unknown role section roles.super' — the computer-owned model-policy.toml still carried a V1 section and failed closed to platform_fallback, silently discarding owner model choices"
+      - "fix: decodeRoleSection decodes persisted roles.<name> headers through NormalizeRole (V2) then the frozen V1 map; computer-owned TOML is unmarked persistence defaulting to V1, so decode — not file rewrite — is the charter's carrier semantics; unknown sections still refuse"
+      - "modelpolicy suite ok; V1 section names (super, co-super, researcher, aliases) now resolve to V2 roles; V2 names unchanged"
+    rollback_ref: "revert restores fail-closed TOML parse (V1 sections refuse to platform fallback)"
+    disposition: "computer-owned TOML overlay carrier now decodes V1 at the boundary; residual: computer-authored V1-named prompt files (promptstore role validation + file naming) unobserved on staging, tracked as residual risk"
+    problem_ref: "post-cutover staging proof exposed the TOML overlay carrier as unmigrated: owner's [roles.super] section invalidated the whole policy; documented and repaired in one commit under the same landing step"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; decode item names computer-owned model-policy TOML overlays as a carrier class"
+    candidate_or_evidence_refs: []

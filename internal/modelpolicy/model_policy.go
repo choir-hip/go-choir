@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 const (
@@ -183,6 +184,21 @@ func NormalizeRole(role string) string {
 	default:
 		return ""
 	}
+}
+
+// decodeRoleSection resolves a persisted TOML roles.<name> section header.
+// Computer-owned TOML overlays are unmarked persistence and default to V1:
+// V2 names resolve through NormalizeRole; V1 names decode through the frozen
+// V1 map (the file's bytes stay immutable; the vocabulary is selected at the
+// decode boundary). Unknown sections refuse.
+func decodeRoleSection(name string) string {
+	if role := NormalizeRole(name); role != "" {
+		return role
+	}
+	if v2, ok := vocabmigrate.ForwardV1ToV2(name); ok {
+		return v2
+	}
+	return ""
 }
 
 // RuntimeConfigFallbackSelection resolves the legacy runtime-config fallback.
@@ -415,7 +431,7 @@ func parsePolicy(raw, source string) (Policy, error) {
 			applyValue(&policy.Defaults, key, value)
 			policy.Defaults.Source = source
 		case strings.HasPrefix(section, "roles."):
-			role := NormalizeRole(strings.TrimPrefix(section, "roles."))
+			role := decodeRoleSection(strings.TrimPrefix(section, "roles."))
 			if role == "" {
 				return Policy{}, fmt.Errorf("line %d: unknown role section %q", lineNo, section)
 			}
@@ -479,7 +495,7 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 			applyValue(&overlay.Defaults, key, value)
 			overlay.Defaults.Source = source
 		case strings.HasPrefix(section, "roles."):
-			role := NormalizeRole(strings.TrimPrefix(section, "roles."))
+			role := decodeRoleSection(strings.TrimPrefix(section, "roles."))
 			if role == "" {
 				return policyOverlay{}, fmt.Errorf("line %d: unknown role section %q", lineNo, section)
 			}
