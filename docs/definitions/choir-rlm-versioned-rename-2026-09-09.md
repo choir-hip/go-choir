@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Migration core landed (internal/vocabmigrate: frozen §3 map, canonical + provenance inverses, per-class appliers, round-trip tests green, inventory at 316 rows, both gates PASS). Awaiting CI verdict. Next: serving-fence wiring (appender deposits, base rebuild in scratch, rematerialize flip, boot dispatch, RecoverPrepared) then the staging drill."
+  slice: "Migration core landed end-to-end (b2eccab3; CI green with zero failures; staging serving b2eccab3). Next: serving-fence wiring, then the staging migrate/revert/migrate drill ending on V1 rows."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -335,5 +335,17 @@ receipts:
     rollback_ref: "revert restores string Canonical; inert so revert is safe at any point before the cutover"
     disposition: "landing-order step 4 landed; migrate/revert/migrate drill ending on V1 serving rows (step 5) is next"
     problem_ref: "stringly-typed Canonical hid unknown-profile passthrough from every enforcement point"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-migrate-core-2026-09-10
+    boundary: implement
+    commit_or_artifact: "b2eccab3 red(migrate): frozen V1-to-V2 row migration core with proven inverses"
+    proof_refs:
+      - "vocabmigrate suite ok (forward fan-in, inverse, round-trips, provenance, prefixes, protocol-skip, metadata)"
+      - "CI completed/success with zero failures; staging /health ok serving b2eccab3"
+      - "inventory at 316 rows (+6 map/applier rows by Define update); corpus covers the new file; both gates PASS"
+    rollback_ref: "revert removes the unused package; nothing calls it yet so revert is safe"
+    disposition: "decode item part 1 landed; serving-fence wiring (part 2) is next, then the staging drill"
+    problem_ref: "live rows had no frozen mapping embodiment; forward and inverse lived only as doc tables"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
     candidate_or_evidence_refs: []
