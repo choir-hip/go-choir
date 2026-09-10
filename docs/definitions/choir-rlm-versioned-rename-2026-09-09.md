@@ -183,10 +183,9 @@ now:
   question: "Is the round-5 repaired draft with frozen token sets, two-part rollback, and enumerated partition ready for owner ratification?"
   reconciliation:
     observed_at: "2026-09-09T23:29:36Z"
-    source_ref: "main@34629502"
+    source_ref: "main@2fe1841a (round-5 repaired draft; re-observe HEAD at charter ratification)"
     deploy_identity: "staging https://choir.news ok via proxy 0475ed84; missions 0 and 1 completed with deployed proof"
     authority_identities:
-      - "docs/reports/choir-rlm-mission-state-2026-09-08.md (carried mission order, rename-first)"
       - "docs/designs/rlm-target-architecture-2026-09-04.md:79-85 (desks vocabulary)"
       - "docs/definitions/choir-rlm-restore-zero-2026-09-08.md (completed predecessor)"
       - "docs/definitions/choir-rlm-settlement-gate-2026-09-09.md (completed predecessor)"
