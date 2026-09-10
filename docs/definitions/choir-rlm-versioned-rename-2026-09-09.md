@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Drill landed with CI proof (drill PASS in CI shard; workflow green; deploy correctly skipped). Next: owner ratification of the §7 owner classification, then the single writer cutover (step 6)."
+  slice: "Owner ratified frozen non-desk protocol (2026-09-10T15:21:26Z); --freeze ACCEPTED with zero unknowns. Next: single writer cutover (step 6, intra-ordered) with v2 identity/mapping receipt."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -219,14 +219,14 @@ now:
     digest: none
     scope: []
   decision:
-    selected: "Mission 2 will charter versioned rename as drafted after review; closes no predecessor acceptance; retains cutover remainder-holder status and mission-0 drill debt ownership."
-    kind: architecture
+    selected: "Owner tokens classify as frozen non-desk protocol (mapping §7 proposal accepted as written, including the named fallback)."
+    kind: purpose
     status: settled
     source: owner
-    evidence_ref: "Owner charter ratification 2026-09-10T04:28:08Z; opus conditional accept with all repairs verified in text; grok workability pass applied; live reconciliation main@933fa22f with staging proxy 0475ed84 ok"
-    owner_ratification_ref: "ratified 2026-09-10T04:28:08Z; executable promotion lands atomically with this receipt"
-    recorded_at: "2026-09-10T04:28:08Z"
-    consequence: "Chartered executable. Red rename work is authorized under the 9 acceptance items in order; problem-documentation-first precedes every repair-code commit; census lands as the first charter Define."
+    evidence_ref: "Owner ask ratification 2026-09-10T15:21Z (mission-2 cutover gate question); mapping doc §7 rationale stands"
+    owner_ratification_ref: "ratified 2026-09-10T15:21:26Z; --freeze unblocks on re-freeze flipping the 3 rows to verified/frozen"
+    recorded_at: "2026-09-10T15:21:26Z"
+    consequence: "Writer cutover unblocked. Charter architecture decision (owner ratification 2026-09-10T04:28:08Z) retained in receipts; this card now carries the live classification decision."
   evidence_refs:
     - "internal/agentprofile/agentprofile.go:6-15 constants; 32-113 PolicyFor; 116-139 Canonical; 147-168 CanSpawn/CanMessage"
     - "internal/capsule/roles.go:4-9 AgentRole constants; 42-57 RoleVerbSets; internal/capsule/capability.go:19 AgentRole carrier"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Drill commit in flight; owner ratification still outstanding on owner-as-frozen-protocol (blocks --freeze and writer cutover). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Obtain owner ratification of the mapping-table owner classification, then land the single writer cutover (landing step 6) with the v2 identity/mapping receipt."
+  blocker_or_risk: "Cutover is the remaining red work (forward-migration plus serving fence, then Current=v2 plus V2-only writers plus alias retirement plus fail-closed refusal plus client bundles, never partially deployed). R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Land the single never-partially-deployed cutover intra-ordered: live-row forward-migration and serving fence, then CurrentVocabularyVersion=v2 plus V2-only writers plus alias retirement plus fail-closed refusal plus in-scope client bundles, with the v2 identity/mapping receipt."
 
 
 receipts:
@@ -374,4 +374,15 @@ receipts:
     disposition: "landing-order step 5 machinery landed on scratch; single writer cutover (step 6) is next with owner-ratified mapping"
     problem_ref: "proven inverse existed only as unit claims over structs, never over real SQL round-trips with joins and authorization"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-owner-ratification-2026-09-10
+    boundary: define
+    commit_or_artifact: "owner ask decision 2026-09-10T15:21:26Z (this commit records it)"
+    proof_refs:
+      - "now.decision carries selected/kind/source/evidence/time/consequence for owner-as-frozen-protocol"
+      - "3 owner rows flipped to verified/frozen with decode-cover positions; check-v1-inventory.sh --freeze: FREEZE ACCEPTED (zero unknown rows)"
+    rollback_ref: "registry-only change; revert restores pending-ratification card (cutover re-blocks)"
+    disposition: "writer cutover unblocked; single cutover (step 6) with v2 identity/mapping receipt is next"
+    problem_ref: "role-shaped owner tokens had no classification; --freeze red and cutover blocked"
+    authorization_ref: "Owner ask ratification 2026-09-10T15:21:26Z"
     candidate_or_evidence_refs: []

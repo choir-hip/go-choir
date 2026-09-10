@@ -16,7 +16,8 @@
    "step-4 re-freeze v2: hunk-mapped anchor refresh after the inert Canonical tuple refactor; step4TupleHoists rows dissolved back into owning site rows; every row keeps its key",
    "migration-core commit: +6 rows for internal/vocabmigrate/migrate.go (Define update; frozen \u00a73 embodiment)",
    "fence-core commit: +1 row for internal/vocabmigrate/fence.go v2LiveSet (Define update; enforcement wiring deferred to cutover)",
-   "drill commit: +4 rows for internal/store/vocab_migrate.go (Define update; SQL migration production code)"
+   "drill commit: +4 rows for internal/store/vocab_migrate.go (Define update; SQL migration production code)",
+   "owner-ratification 2026-09-10T15:21:26Z: 3 owner rows flipped unknown-allowlisted to verified/frozen; --freeze unblocked"
   ]
  },
  "rows": [
@@ -1734,19 +1735,18 @@
    "v1_tokens": [
     "owner"
    ],
-   "v2_token": "PENDING-ITEM-4",
+   "v2_token": "frozen (non-desk protocol)",
    "carrier": "Event.ActorProfile (tape)",
-   "liveness": "unknown",
+   "liveness": "frozen",
    "role": "writer",
    "digest": "TAPE",
    "forward": "TBD",
    "inverse": "TBD",
-   "verification": "unknown",
-   "allowlist": "owner-classification-pending-item-4",
+   "verification": "verified",
    "texts": [
     "ActorProfile: \"owner\", AuthorityRef: \"platform-control:restore\","
    ],
-   "note": "role-shaped owner token; charter classifies at mapping-table item as V2 profile or frozen non-desk protocol"
+   "note": "Owner-classified 2026-09-10T15:21:26Z as frozen non-desk protocol (mapping \u00a77 ratified); frozen V1 decode cover in exactly these positions; activation must not refuse, like trusted-core. role-shaped owner token; charter classifies at mapping-table item as V2 profile or frozen non-desk protocol"
   },
   {
    "key": "main@57c26060|internal/agentcore/rematerialize.go|privacyOwnerNamespace",
@@ -7664,19 +7664,18 @@
    "v1_tokens": [
     "owner"
    ],
-   "v2_token": "PENDING-ITEM-4",
+   "v2_token": "frozen (non-desk protocol)",
    "carrier": "revision Role",
-   "liveness": "unknown",
+   "liveness": "frozen",
    "role": "writer",
    "digest": "V2DOM",
    "forward": "TBD",
    "inverse": "TBD",
-   "verification": "unknown",
-   "allowlist": "owner-classification-pending-item-4",
+   "verification": "verified",
    "texts": [
     "Role:          \"owner\","
    ],
-   "note": "role-shaped owner token in revision path"
+   "note": "Owner-classified 2026-09-10T15:21:26Z as frozen non-desk protocol (mapping \u00a77 ratified); frozen V1 decode cover in exactly these positions; activation must not refuse, like trusted-core. role-shaped owner token in revision path"
   },
   {
    "key": "main@57c26060|internal/textureowner/texture_agent_revision.go|revisionFromOwner",
@@ -7691,19 +7690,18 @@
    "v1_tokens": [
     "owner"
    ],
-   "v2_token": "PENDING-ITEM-4",
+   "v2_token": "frozen (non-desk protocol)",
    "carrier": "revision From",
-   "liveness": "unknown",
+   "liveness": "frozen",
    "role": "writer",
    "digest": "V2DOM",
    "forward": "TBD",
    "inverse": "TBD",
-   "verification": "unknown",
-   "allowlist": "owner-classification-pending-item-4",
+   "verification": "verified",
    "texts": [
     "From:      \"owner\","
    ],
-   "note": "role-shaped owner token in revision path"
+   "note": "Owner-classified 2026-09-10T15:21:26Z as frozen non-desk protocol (mapping \u00a77 ratified); frozen V1 decode cover in exactly these positions; activation must not refuse, like trusted-core. role-shaped owner token in revision path"
   },
   {
    "key": "main@57c26060|internal/textureowner/texture_agent_revision.go|revisionProfileGuards",
