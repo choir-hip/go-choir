@@ -7,6 +7,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 func validTestDescriptor() Descriptor {
@@ -106,6 +107,17 @@ func TestKnownVocabularySetIsV1V2(t *testing.T) {
 		if IsKnownVocabularyVersion(v) {
 			t.Errorf("IsKnownVocabularyVersion(%q) = true, want false", v)
 		}
+	}
+}
+
+// TestVocabularySelectorsMatchSeam pins the fence/migration vocabulary
+// selectors to the descriptor seam: V1 equals Current, V2 is known.
+func TestVocabularySelectorsMatchSeam(t *testing.T) {
+	if vocabmigrate.VocabularyV1 != CurrentVocabularyVersion {
+		t.Errorf("fence V1 selector %q != seam %q", vocabmigrate.VocabularyV1, CurrentVocabularyVersion)
+	}
+	if !IsKnownVocabularyVersion(vocabmigrate.VocabularyV2) {
+		t.Errorf("fence V2 selector %q not in widened known set", vocabmigrate.VocabularyV2)
 	}
 }
 

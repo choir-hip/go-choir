@@ -6,11 +6,7 @@ package vocabmigrate
 // refusing V1 aliases so no unmigrated row holds post-cutover authority;
 // unknown active vocabularies fail closed; empty values skip.
 
-import (
-	"testing"
-
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
-)
+import "testing"
 
 func TestFenceV1PassesHistoricSuite(t *testing.T) {
 	v1tokens := []string{
@@ -81,14 +77,5 @@ func TestEventActorFieldsProjection(t *testing.T) {
 	}
 	if err := VerifyServingVocabulary(VocabularyV1, fields...); err != nil {
 		t.Fatalf("fence refused V1 actor: %v", err)
-	}
-}
-
-func TestVocabularySelectorsMatchSeam(t *testing.T) {
-	if VocabularyV1 != projectionbase.CurrentVocabularyVersion {
-		t.Fatalf("fence V1 selector %q != seam %q", VocabularyV1, projectionbase.CurrentVocabularyVersion)
-	}
-	if !projectionbase.IsKnownVocabularyVersion(VocabularyV2) {
-		t.Fatalf("fence V2 selector %q not in widened known set", VocabularyV2)
 	}
 }
