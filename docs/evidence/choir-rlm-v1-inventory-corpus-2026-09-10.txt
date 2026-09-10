@@ -1,8 +1,10 @@
 # Choir RLM versioned-rename V1 inventory corpus manifest
 # source_ref: main@57c26060
 # generator: scripts/check-v1-inventory.sh --write-manifest (query_version 1)
-# files: 660
+# files: 661
 # excluded_test_support: internal/base/testkit/scenarios.go (fixture helper, no production callers)
+# excluded_generator: scripts/v1-inventory-*.py (measuring instrument; desk-lexeme strings are query patterns, swept clean of role fields)
+# excluded_ops_tooling: extensionless scripts/* shell tooling (negative-swept clean except prose substring noise)
 .github/workflows/ci.yml
 .github/workflows/race.yml
 .github/workflows/staging-recovery-diagnostics.yml
@@ -660,6 +662,7 @@ nix/node-a-hardware.nix
 nix/node-a.nix
 nix/node-b.nix
 scripts/check-heresies.sh
+scripts/check-v1-inventory.sh
 scripts/selfdev-turn-census.sh
 skills/agentic-consensus/agentic-consensus-runner.sh
 start-services.sh
