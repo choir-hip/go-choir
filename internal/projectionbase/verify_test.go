@@ -54,7 +54,7 @@ func TestDescriptorBindsEveryField(t *testing.T) {
 		"zero reducer":       func(d *Descriptor) { d.ReducerVersion = 0 },
 		"zero schema":        func(d *Descriptor) { d.SchemaVersion = 0 },
 		"missing vocabulary": func(d *Descriptor) { d.VocabularyVersion = "" },
-		"unknown vocabulary": func(d *Descriptor) { d.VocabularyVersion = "v2" },
+		"unknown vocabulary": func(d *Descriptor) { d.VocabularyVersion = "v3" },
 		"empty witness":      func(d *Descriptor) { d.VMLocalContentWitness = selfdevprotocol.VMLocalContentWitness{} },
 	}
 	for name, mutate := range cases {
@@ -90,6 +90,22 @@ func TestDescriptorBindsEveryField(t *testing.T) {
 	scoped.VMLocalContentWitness = w
 	if err := scoped.Validate(); err == nil {
 		t.Errorf("foreign witness db: out-of-scope database was accepted")
+	}
+}
+
+// TestKnownVocabularySetIsV1V2 pins the mission-2 never-reverted widening:
+// {v1, v2} exactly. A v1-stamped base stays installable after cutover;
+// anything outside the set fails closed.
+func TestKnownVocabularySetIsV1V2(t *testing.T) {
+	for _, v := range []string{"v1", "v2", " v1 ", " v2 "} {
+		if !IsKnownVocabularyVersion(v) {
+			t.Errorf("IsKnownVocabularyVersion(%q) = false, want true", v)
+		}
+	}
+	for _, v := range []string{"", "v3", "V1", "v12", "legacy"} {
+		if IsKnownVocabularyVersion(v) {
+			t.Errorf("IsKnownVocabularyVersion(%q) = true, want false", v)
+		}
 	}
 }
 

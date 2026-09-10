@@ -27,9 +27,18 @@ const (
 )
 
 // IsKnownVocabularyVersion reports whether a base speaking v may be installed
-// or replayed by this build. Unknown live versions fail closed.
+// or replayed by this build. Unknown live versions fail closed. Mission 2
+// widens the known set to {v1, v2} exactly once and never reverts this commit:
+// a v1-stamped base must stay installable after the writer cutover advances
+// CurrentVocabularyVersion to v2 in a later revertible commit. Rollback of the
+// cutover reverts Current but never this set.
 func IsKnownVocabularyVersion(v string) bool {
-	return strings.TrimSpace(v) == CurrentVocabularyVersion
+	switch strings.TrimSpace(v) {
+	case "v1", "v2":
+		return true
+	default:
+		return false
+	}
 }
 
 // Config configures the offline projection rebuilder.
