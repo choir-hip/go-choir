@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Cutover gap found and repaired in-tree: step-6 intra-order required live-row forward-migration + serving fence BEFORE the writer flip, but MigrateVocabularyToV2/VerifyServingVocabulary had zero production callers. Wired: post-replay boot migration+fence (runReplayPhase, both credentialed and replay-only paths, plus the no-credential branch), rematerialize staged-to-live flip, rebuilder scratch pre-publish, live-append ActorProfile gate, RecoverPrepared known-vocabulary check, and durable workspace-sidecar provenance for restart-safe INV-PROV revert. Next: commit, push, CI, staging deploy, deployed decoder-matrix proof."
+  slice: "Deployed cutover proof complete on staging: computer-03335285269bdba4f94377e56879f9e6 refreshed to epoch 896 on cb571960, booted through replay+migration+fence to active; /api/model-policy/resolve answers all ten V2 roles from the owner's own model-policy.toml (V1 roles.super section decoded to management, no platform_fallback) and refuses every V1 name and unknown token with 400. Remaining: residual prompt-file naming risk; R6/R7 successors."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -239,8 +239,8 @@ now:
     - "internal/agentcore/api_self_development.go, chain_bootstrap.go, self_development_materializer.go raw Event ActorProfile Super writers; actorcore adapter/handler researcher canonical consumers (late GrantsEvents rows)"
     - "internal/types/task.go, cosuper_assignment.go; internal/store/cosuper_assignments.go:182-218 terminal proposition V1 domain; internal/objectgraph/object.go:97-174 content/edge hashing"
     - "internal/yaegikernel/profiles.go: no production callers (delete-first, test-only)"
-  blocker_or_risk: "Migration+fence wiring landed in-tree pending push/CI/staging proof; until deployed, a guest boot on the writer-cutover build would have served unmigrated V1 rows. R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Commit the migration/fence wiring slice, push origin main, monitor CI and staging deploy, then run the deployed decoder-matrix and focused-contracts acceptance (items 7-8)."
+  blocker_or_risk: "Residual: computer-authored V1-named prompt files (promptstore role validation + file naming) unobserved on staging; R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
+  next_action: "Record terminal receipt; monitor for residual V1-serving surfaces (prompt files, object-graph carriers) on subsequent boots."
 
 
 receipts:
@@ -410,4 +410,17 @@ receipts:
     disposition: "computer-owned TOML overlay carrier now decodes V1 at the boundary; residual: computer-authored V1-named prompt files (promptstore role validation + file naming) unobserved on staging, tracked as residual risk"
     problem_ref: "post-cutover staging proof exposed the TOML overlay carrier as unmigrated: owner's [roles.super] section invalidated the whole policy; documented and repaired in one commit under the same landing step"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; decode item names computer-owned model-policy TOML overlays as a carrier class"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-deployed-proof-2026-09-10
+    boundary: land
+    commit_or_artifact: "7cee94d5 red(cutover): wire live-row vocabulary migration and serving fence; cb571960 red(cutover): decode V1 role sections in computer-owned model-policy TOML"
+    proof_refs:
+      - "CI runs 34520537774 and 34524276181 completed/success; staging /health serves cb571960 ok"
+      - "computer-03335285269bdba4f94377e56879f9e6 refresh receipts 01a08ce9 (epoch 894→895, 7cee94d5) and 01a08d03 (epoch 895→896, cb571960); state=active after each — the serving fence held: boot would have failed closed had unmigrated V1 rows remained"
+      - "deployed /api/model-policy/resolve: all ten V2 roles (management, engineering, research, texture, conductor, processor, reconciler, email, verifier, verifier-multimodal) resolve 200 from the owner's own model-policy.toml; V1 names (super, co-super, cosuper, researcher, researchers, coagent, co-agent, co_super, web-research) and unknowns refuse 400 unknown role"
+      - "designed cutover window observed: pre-refresh guest answered V1 names (stale bundle semantics); post-refresh refuses until clients speak V2"
+    rollback_ref: "git revert 7cee94d5 cb571960 plus computer refresh onto prior image; INV-PROV provenance sidecar retained in the workspace for exact V1 restoration"
+    disposition: "landing-order step 6 complete with deployed proof; items 7-8 acceptance evidence recorded"
+    problem_ref: "n/a — terminal landing receipt"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z"
     candidate_or_evidence_refs: []
