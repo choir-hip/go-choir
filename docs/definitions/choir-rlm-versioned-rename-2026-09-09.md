@@ -180,10 +180,9 @@ measures:
     kind: weak_signal
     baseline: "Draft consensus pending."
     desired: "No additional agreement threshold."
-    decision_use: "Explains draft review scope only."
-    cannot_prove: "Cannot authorize promotion, prove code, or advance completion."
 
 now:
+  status: blocked_incomplete
   slice: "round-4 repaired draft under focused verification; missions 0 and 1 complete; charter ratification pending"
   question: "Is the round-4 repaired draft with two-part rollback, frozen EventKind, and enumerated partition ready for owner ratification?"
   reconciliation:
@@ -221,6 +220,8 @@ now:
     - "internal/agentprofile/agentprofile.go"
     - "internal/capsule/roles.go"
     - "internal/computerevent/event.go and appender.go"
+    - "internal/projectionbase/types.go"
+  blocker_or_risk: "Charter ratification pending. V1 inventory exhaustiveness unproven beyond scout anchors; successor v2 mapping receipt and frozen wire tokens freeze at charter."
   next_action: "Focused verification consensus on round-4 repairs; pin the reviewed draft digest; reconcile source, deployment, and individual WIP paths; record owner ratification and the code-free Define receipt; verify all three navigation registries before enabling execution."
 
 receipts: []
