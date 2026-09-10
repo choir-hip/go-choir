@@ -194,7 +194,7 @@ measures:
 
 now:
   status: working
-  slice: "Serving-fence verification core landed (VerifyServingVocabulary + v2LiveSet + refusal contracts, vocabmigrate suite green, inventory at 317 rows, both gates PASS). Enforcement wiring deliberately deferred: landing refusal before migration/drill is a charter defect, so the fence binds paths at the cutover after forward-migration runs. Awaiting CI verdict. Next: drill design (migrate/revert/migrate ending on V1 rows) against the fence guarantee."
+  slice: "Fence core landed end-to-end (70057ab7; CI green with zero failures; staging serving 70057ab7). Next: drill design (migrate/revert/migrate ending on V1 rows) against the fence guarantee, then the single cutover."
   question: none
   reconciliation:
     observed_at: "2026-09-10T05:30:00Z"
@@ -347,5 +347,18 @@ receipts:
     rollback_ref: "revert removes the unused package; nothing calls it yet so revert is safe"
     disposition: "decode item part 1 landed; serving-fence wiring (part 2) is next, then the staging drill"
     problem_ref: "live rows had no frozen mapping embodiment; forward and inverse lived only as doc tables"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
+    candidate_or_evidence_refs: []
+  - id: versioned-rename-fence-core-2026-09-10
+    boundary: implement
+    commit_or_artifact: "70057ab7 red(migrate): serving-fence verification core with refusal contracts"
+    proof_refs:
+      - "vocabmigrate suite ok (fence contracts incl. V2-alias refusal and seam pin)"
+      - "CI completed/success with zero failures; staging /health ok serving 70057ab7 (one transient empty response mid-rollout, healthy after)"
+      - "inventory at 317 rows (+1 fence-table row by Define update); corpus covers the new file; both gates PASS"
+      - "appender enforcement wiring written then fully reverted in-tree: landing refusal before migration/drill is a charter defect"
+    rollback_ref: "revert removes uncalled fence code; nothing calls it yet so revert is safe"
+    disposition: "decode item fence core landed; enforcement binds paths at the cutover after forward-migration runs; drill design is next"
+    problem_ref: "no executable guarantee stood behind the serving fence; migration had no refusal counterpart"
     authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; mapping freeze c908494e precedes per problem-documentation-first"
     candidate_or_evidence_refs: []
