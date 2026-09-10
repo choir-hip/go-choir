@@ -207,3 +207,102 @@ Repair order recorded in the Definition: object-graph vocabulary boundary →
 historic read acceptance → close live write roots → migration correctness →
 verifier key unification → gate breadth → full deployed matrix and fetched
 artifact → settle.
+
+## 7. Repair-wave census addendum (2026-09-10, post-review)
+
+Direct evidence gathered on Node B against the retained computer's store
+(quarantine image `data.img.quarantine-1-2864e5d885aa3f56`, Sep 9, static;
+the live image's `vocab-migration-report.json` reads `{"provenance":{},
+"counts":{}}` — the migration ran and found zero rows).
+
+### C1 — Present-tense F1 confirmation
+
+`og_objects` in the computer store holds V1 desk tokens on the live carrier:
+
+| object_kind | V1-token rows | dominant carriers |
+|---|---|---|
+| choir.event | 23,139 | metadata/body `agent_id`, `channel_id` (`co-super:`/`super:` prefixes) |
+| choir.lifecycle_command | 2,732 | nested StoredResult role/ID fields |
+| choir.lifecycle_event | 2,732 | body `AgentID`, refs |
+| choir.run | 1,871 | `agent_profile`/`agent_role` = `super`/`co-super`/`researcher`; `agent_id` |
+| choir.agent | 803 | `agent_id` = `co-super:assignment-*` (800), `super:` (1), `researcher:` (2) |
+| choir.co_super_assignment | 800 | binding IDs, nested grant attestation `Role` |
+| choir.channel_message | 55 | `role` = `co-super` |
+| choir.worker_update | 52 | `role` = `co-super` |
+
+All six migrated relational tables (`agents`, `runs`, `channel_messages`,
+`inbox_deliveries`, `work_items`, `worker_updates`) contain **zero rows** in
+the computer store. The fence verified an empty set.
+
+### C2 — New finding: `run_memory_entries` is a live carrier
+
+34,781 rows; `agent_id` prefixes: `super` 26,949, `co-super` 7,208,
+`texture` 516, `researcher` 76. The table is live — written by
+`internal/store/run_memory.go:131` and `project.go:316`, read at
+`run_memory.go:55-131` and `residue_import.go:434`. It was absent from both
+the migration targets and the review's F1 table list. Its `role` column is
+message-role vocabulary (`assistant`/`user`/`runtime_injection`), not desk
+vocabulary — migrate `agent_id`, do not fence `role`.
+
+### C3 — New finding: rematerialize witness ordering defect
+
+`internal/agentcore/rematerialize.go:150-167` extracts the staged replay
+witness and compares it against the checkpoint's `VMLocalContentWitness`
+**before** `MigrateAndFenceServingVocabulary` runs at :171. Once the live
+store is OG-migrated, a staged V1 replay can never match the live witness —
+every rematerialize would fail. The migration must precede witness
+extraction on the staged side. (`projectionbase/rebuilder.go:91-114` already
+has the correct order: ReconstructThrough → MigrateAndFence → extract.)
+
+### C4 — Tombstone reads are inconsistent; in-place migration required
+
+`GetObject` (objectgraph/dolt_store.go:140), `ListObjectsByMetadataPage`
+(:479), and `ListObjectsByOwnerAndBody` (:511) return tombstoned rows. A
+copy-forward + tombstone migration would leave V1 rows serving through
+direct-ID and metadata lookups — non-compliant. The OG migration must be an
+in-place rewrite: body/metadata fields, recomputed `content_hash`, rewritten
+`canonical_id` where the identity key is desk-bearing, `og_edges`
+`from_id`/`to_id` rewrite plus `edge_id` recomputation, and body-embedded
+canonical references (ArtifactRefs, ReportRefs, CandidateID, source-graph
+refs) rewritten to the new IDs. Because referencing objects' own
+content-derived IDs change when their embedded refs are rewritten, the
+canonical-ID map is a bounded fixpoint computation, not a two-pass rewrite.
+
+### C5 — Replay emits raw V1; migration covers it positionally
+
+`projectObject`/`projectObjectEdge` (store/project.go:208-280) write
+tape-supplied `canonical_id`/`content_hash`/`body`/`metadata` verbatim — no
+recomputation. Replayed OG rows arrive V1-stamped; the post-replay
+`MigrateAndFenceServingVocabulary` call sites (autoputer/run.go:520,569;
+rematerialize.go:171; rebuilder.go:112) are correctly positioned to cover
+them once the migration covers OG.
+
+### C6 — No tape-digest equality on OG bodies
+
+No code compares `og_objects.content_hash` or OG body digests against tape
+event/artifact digests. Tape integrity is a separate digest domain
+(computer_events.go:34-36, payload_resolver.go:73-80). Migrating OG event
+bodies does not invalidate tape digests. Witness equality operates on
+whole-table hashes (`dolt_state_extractor.go:342-398`), so live and replayed
+stores converge when both run the same migration.
+
+### C7 — `computer_event_index.event_json` is a tape mirror — do not migrate
+
+257 rows contain V1 tokens inside `event_json`; this column mirrors
+immutable tape event bytes and must stay V1. The fence must not scan it.
+
+### C8 — Comparison-site classification (item 11 scope)
+
+~150 `== agentprofile.*` sites classified: nearly all are OG-backed or
+live-request comparisons correct post-migration. Only two sites read
+immutable historic bytes and need the frozen V1 interpreter:
+`platform/checkpoints.go:217` and
+`agentcore/self_development_decision_binding.go:54`. Mixed/unknown sites
+(runtime.go:342,385,1332; tools_worker_update.go:468; texture_turn.go:728)
+resolve to V2-domain post-migration.
+
+### C9 — Owner TOML verifier spelling
+
+The computer-owned `model-policy.toml` uses `[roles.verifier_multimodal]`
+(underscore). Canonical spelling for item 14: `verifier_multimodal`;
+`NormalizeRole` maps both spellings to it.
