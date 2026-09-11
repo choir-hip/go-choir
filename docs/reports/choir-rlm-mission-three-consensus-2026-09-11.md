@@ -169,3 +169,15 @@ settlement-authority transfer that retiring `record_assignment_result` requires.
 Define as a **code-free** boundary: it records the three defects above, freezes the nine-operation
 mapping table and the prompt/REPL manifest, and states the falsifiers. Repair code follows the
 problem record, never precedes it.
+
+## Owner override, 2026-09-11
+
+Two adjudications above are overridden by the owner and the Definition now follows the owner:
+
+- **(a) provider preparation as a separate sequence** is withdrawn. OpenCode Go and Zen setup is
+  phase 1 inside this mission. It still keeps its own rollback (the stub adapters), its own
+  Landing Loop, and its own problem record, so an ops failure is still not confused with a prompt
+  failure.
+- **the `actuator=tools` rollback question is closed.** That branch is deleted, not preserved. No
+  rollback logic will be used. The deletion still waits for a proven RLM, and the bar for "proven"
+  is the owner's call.

@@ -3,13 +3,15 @@ definition_version: 2
 definition_id: choir-rlm-engineering-carrier-2026-09-11
 execution_mode: mission_orchestrator
 
-# DRAFT — not chartered, not the working entrypoint. Mission two
-# (`choir-rlm-versioned-rename-2026-09-09`) remains the sole working entrypoint until it reaches
-# terminal deployed acceptance and the provider-preparation sequence (see now.blocker_or_risk)
-# lands with its own Landing Loop. This file exists so the mission can be ratified and run with
+# DRAFT - not started, not the active mission. Mission two
+# (`choir-rlm-versioned-rename-2026-09-09`) stays the active one until it reaches terminal deployed
+# acceptance and the owner ratifies the settlement-authority transfer named below. This file is
+# written so the mission can be started with
 # `/goal docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md` without re-deriving scope.
 # Drafted from the 2026-09-11 thirteen-agent consensus; adjudication record:
 # `docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md`.
+# Owner decisions 2026-09-11: provider setup is phase 1 of this mission; the actuator=tools path is
+# deleted, not kept as a rollback, once RLM is proven.
 
 start:
   captured_at: "2026-09-11T04:20:00Z"
@@ -64,7 +66,7 @@ start:
 
 now:
   status: blocked_incomplete
-  slice: "Draft only. Mission three is chartered when its three preconditions clear: (1) mission two reaches terminal deployed acceptance and releases the working-entrypoint position; (2) the OpenCode provider preparation lands with its own Landing Loop and a terminal receipt; (3) the owner ratifies the settlement-authority transfer that retiring `record_assignment_result` requires, superseding the mission-one clause that mailbox Complete never creates a terminal."
+  slice: "Draft only. Mission three starts when two things are true: (1) mission two reaches terminal deployed acceptance and gives up the working-entrypoint position; (2) the owner ratifies the settlement-authority transfer that retiring `record_assignment_result` requires, replacing the mission-one clause that a mailbox Complete never creates a terminal. The OpenCode provider setup is phase 1 inside this mission (owner decision, 2026-09-11), not a precondition outside it."
   question: none
   reconciliation:
     observed_at: "2026-09-11T04:20:00Z"
@@ -79,8 +81,8 @@ now:
     - "internal/agentcore/run_acceptance.go:627-645,790-791,843 (tool-name-keyed acceptance evidence)"
     - "internal/agentcore/rlm_reduce.go:167-198; internal/agentcore/cosuper_assignment_fate.go:20 (reducer versus fate author)"
     - "internal/agentcore/tools_capsule.go:746-773; internal/yaegikernel/eval.go:301-317 (eval envelope and fence stripping)"
-  blocker_or_risk: "Blocked on three preconditions, none of which is in this mission's authority: mission two settlement, provider preparation landing, and owner ratification of the settlement-authority transfer. Substantive risks: retiring the four settlement tools without first moving settlement into the reducer leaves the desk with no terminal authority; retiring `commit_transaction`/`record_self_development_verification` silently weakens run acceptance until those checkpoints stop keying on tool names; deleting the four capsule operations also removes them from the `actuator=tools` route that mission one preserved as a rollback; `update_coagent` retirement must stay desk-scoped or Texture and research paths break; a text-only roster member (`hy3`) cannot serve an image-reading task."
-  next_action: "On charter: run the first Define as a code-free boundary — record the three discovered defects (alias with empty required, tool-name-keyed acceptance, reducer-is-not-a-settler), freeze the nine-operation mapping table and the prompt/REPL manifest, and state the falsifiers. No repair commit precedes that record."
+  blocker_or_risk: "Blocked on two things, neither in this mission's authority: mission two settlement, and owner ratification of the settlement-authority transfer. Risks: retiring the four settlement tools before the reducer owns settlement leaves the desk with no way to finish an assignment; retiring `commit_transaction`/`record_self_development_verification` weakens run acceptance until those checkpoints stop reading tool names; `update_coagent` retirement must stay desk-scoped or Texture and the research tools break; a text-only roster member (hy3) cannot serve an image task; phase 1 touches gateway/provider code and Node B credentials, which is red-class work inside an orange mission and needs its own rollback (the stub adapters) and its own Landing Loop."
+  next_action: "Phase 1 first: wire OpenCode Go and Zen (session identity on the wire, product User-Agent, fail-closed empty identity, three request shapes, keys on Node B), prove one live call per shape, and record the receipt. The problem record for phase 1 already exists in `docs/reports/choir-opencode-provider-research-2026-09-10.md`. Then the code-free Define: record the three defects, freeze the nine-operation mapping table and the prompt/REPL manifest, and state the falsifiers. No repair commit precedes that record."
 
 finish:
   deliver: "The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk's only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the nine R7 names are deleted rather than hidden and each earned its deletion by replay proof, run acceptance no longer keys on tool names, one model-independent prompt with one REPL initialization serves a diverse roster with zero output repair, and Texture's packet/reducer design is specified against the canonical writer's invariants without landing code."
@@ -98,7 +100,7 @@ finish:
       - "cmd/capsule-broker/session_worker.go"
       - "internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml"
   acceptance:
-    - action: "T0-preparation (gate, owned outside this mission): land the OpenCode Go and Zen providers with a per-conversation session identity carried additively (no routing or policy change), a product User-Agent, fail-closed refusal when the identity is empty, the three wire shapes routed by model id, credentials delivered by the existing Node B path, and one live call per wire shape. Record the terminal receipt. This is the overview's 'only preparatory act': no evaluation runs, no promotion weight, no substrate change."
+    - action: "P1-provider: wire up the OpenCode Go and Zen providers inside this mission. Add a per-conversation session identity to provider requests (additive only: no routing change, no policy change), send a product User-Agent, refuse to run when the identity is empty, route the three request shapes by model id, install the keys the existing Node B way, and prove one live call per shape. No evaluation runs, no promotion weight, no substrate change. Problem record: `docs/reports/choir-opencode-provider-research-2026-09-10.md`."
       proves: "Cross-model comparison is never gated on credential plumbing, and a provider outage can never be mistaken for a prompt or carrier failure."
       evidence_class: deployed_proof
     - action: "T1-simplify: reduce `capsule_go_eval` to a single required `source` string, delete the `code` alias, reduce the tool description to one sentence that states the affordance, and move the explanation arbitrary LLMs need into the desk's static affordance overlay. A call with no source and a fenced source both fail as parse or compile errors; neither is repaired, and neither executes an empty cell."
@@ -128,7 +130,7 @@ finish:
     - action: "T4-replay: for each retired operation, capture the golden receipt before cutover (canonical input, semantic identity, exact receipt bytes, reference and digest, and an effect census); after cutover and a forced actor rewarm, invoke the successor under the same semantic identity and require exact canonical equality with zero additional effects; reuse the identity with changed canonical input and require a pre-effect conflict; use a fresh identity and prove a fresh operation. For the read-only operations, mutate the underlying state between calls: the same identity must return the original observation while a new identity observes the change."
       proves: "Each deletion is earned: replay through the new path returns the original receipt, and the new path is not merely similar."
       evidence_class: deployed_proof
-    - action: "T4-registry: cut the assigned-CoSuper registry to the eval envelope alone, update the overlay's catalogue sentence to name that one tool plus the in-cell surface, and update both closed-set tests. Record explicitly what happens to the `actuator=tools` route and whether its four capsule operations remain as a named, unreachable-from-RLM rollback or are deleted with that consequence stated."
+    - action: "T4-registry: cut the assigned-CoSuper registry to the eval envelope alone, update the overlay catalogue sentence to name that one tool plus the in-cell surface, and update both closed-set tests. The `actuator=tools` branch and the four capsule file/exec operations it carries are slated for deletion, not kept as a rollback (owner decision, 2026-09-11); nothing in this mission may depend on them as a fallback."
       proves: "Engineering has one envelope; the JSON remainder is deleted rather than hidden, and the rollback story is stated rather than discovered."
       evidence_class: local_test
     - action: "T4-delete: delete the nine retired JSON paths and their reducer aliases, including the admission-grammar special cases that exist only for them. Unknown JSON tool names fail closed."
@@ -137,7 +139,8 @@ finish:
     - action: "T5-roster: run one frozen desk task (inspect, edit, execute a test, complete with the exact receipt reference) on the verified diverse roster — at least five models, at least three vendors, all three wire shapes, including free and cheap members — under the frozen prompt digest, with no per-model fork, no repair, and no extra hints or retries. Record per-model pass or fail, tokens, latency and failure mode. A failing model is marked and either excluded with a recorded reason or fixed for every model; a per-model accommodation is a mission failure, not a fix."
       proves: "One prompt genuinely serves a diverse roster, which is the owner's completion goal, without reintroducing the overfit that produced the fence workaround."
       evidence_class: deployed_proof
-    - action: "T5-cache-exit: confirm the later cache mission is unblocked — the session identity travels on the wire outside any cache-keyed payload, the static affordance body carries no timestamps, prompt assembly order is unchanged, and the eval schema version is recorded. No optimization, no hit-rate target and no per-model cache key is claimed here."
+    - action: "T5-cache-exit: confirm the later cache mission is unblocked - the session identity travels on the wire outside any cache-keyed payload, the static affordance body carries no timestamps, prompt assembly order is unchanged, and the eval schema version is recorded. No optimization, no hit-rate target and no per-model cache key is claimed here."
+    - action: "T5b-tools-actuator: once RLM is proven at the bar the owner sets, delete the `actuator=tools` registry branch and the four capsule operations it carries, with the tool-profile tests updated to prove the branch is gone. Until that bar is met the branch may stay as an unused fallback, but no mission proof may rely on it and no rollback path may target it."
       proves: "The next mission inherits a stable prefix and a stable identity rather than a second re-plumbing job."
       evidence_class: static_analysis
     - action: "T6-texture-design (non-gating): publish the Texture packet and reducer design that translates documents, patches, diffs, source graphs, controls and dispositions into the same in-cell discipline, stated as constraints against the canonical writer's invariants (single-writer, stale-base comparison, atomic revision-graph identity, retry-preserved pending mutations, versioned compare-and-swap, fresh-but-not-replay wakes, per-document locking, atomic researcher opening) and citing them from their own authority. No Texture runtime code lands in this mission."
@@ -146,7 +149,7 @@ finish:
     - action: "T6-landing: run the Landing Loop on behaviors changed here — commit, push, monitor CI, monitor the staging deploy, verify the deployed commit identity, and run the deployed acceptance proof with effects OFF, then record the receipts. Settle this Definition and move the three registries atomically, closing residue R7."
       proves: "The cutover is proven on the deployed product path, and the mission record is closed with artifacts rather than narrative."
       evidence_class: deployed_proof
-  rollback: "Revert the mission commits and redeploy; the retired JSON paths return with the revert. The `actuator=tools` route is either preserved deliberately or its removal is named as a deliberate rollback reduction. Product restore remains a separate forward transaction on the computer's event chain, never a fix for a failed deploy."
+  rollback: "Revert the mission commits and redeploy; the retired JSON paths return with the revert. Phase 1 provider work rolls back by restoring the stub adapters and removing the installed keys. The `actuator=tools` branch is deliberately not a rollback target: it is deleted on the owner's bar and is not kept as a product fallback (owner decision, 2026-09-11). Product restore stays a separate forward transaction on the computer's event chain, never a fix for a failed deploy."
   landing:
     required: true
     environment: "staging https://choir.news with effects OFF"
@@ -166,6 +169,7 @@ finish:
 
 boundaries:
   mutation_class: orange
+  red_subclass: "phase 1 (gateway/provider routing and Node B credentials) and phase 4 (run acceptance)"
   drafting_mutation_class: green
   authority_sources:
     - "owner mission-three goals stated 2026-09-10 (one prompt per desk for all models; no code-level parsing workarounds; simplest possible eval tool with the explanation in the system prompt; diverse roster; cache-conscious but not cache-optimizing)"
@@ -182,14 +186,14 @@ boundaries:
     - "Cache optimization, promotion weights, or any evaluation that promotes."
     - "Management and Research desk cutovers."
     - "Any per-model prompt fork, schema hint, retry ladder or output repair."
-    - "Provider credential-management substrate work beyond the preparation Definition."
+    - "Provider credential-management substrate work beyond phase 1 of this mission."
   protected_surfaces:
     - "run acceptance"
-    - "gateway and provider calls (preparation only)"
+    - "gateway and provider calls (phase 1)"
     - "Texture canonical writes (design constraint only)"
     - "capsule execution and the capability broker"
   completion_evidence_floor:
-    - "deployed_proof for the roster conformance, the replay-for-deletion proofs and the final landing"
+    - "deployed_proof for the phase 1 provider calls, the roster conformance, the replay-for-deletion proofs and the final landing"
     - "local_test for the envelope simplification, the prompt invariant, the settlement path, the acceptance rebuild and the parity gaps"
     - "static_analysis for the repair deletion, the registry cut, the path deletion and the cache exit"
   conjecture_delta:
@@ -215,6 +219,18 @@ measures:
   - "Prompt digest equality across roster members for a fixed desk."
 
 receipts:
+  - id: engineering-carrier-owner-decisions-2026-09-11
+    boundary: define
+    commit_or_artifact: "owner decisions recorded 2026-09-11 in conversation; folded into this Definition and the consensus record"
+    proof_refs:
+      - "owner: sweep the OpenCode configuration into this mission as its first phase"
+      - "owner: get rid of the actuator=tools path; no rollback logic is planned to be used, held until RLM is fully proven"
+    rollback_ref: "none; a decision record"
+    disposition: "recorded: phase 1 is provider setup; actuator=tools is deletion-slated, not preserved"
+    problem_ref: "docs/reports/choir-opencode-provider-research-2026-09-10.md (provider problem record); docs/mission-residues.md R7 (retirement inventory)"
+    authorization_ref: "owner statement 2026-09-11"
+    candidate_or_evidence_refs: []
+
   - id: engineering-carrier-mission-three-consensus-2026-09-11
     boundary: define
     commit_or_artifact: "docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md; draft base main@6f1a8014"
@@ -222,71 +238,84 @@ receipts:
       - "thirteen-agent convergent panel at .agentic-consensus/mission3/run1 (non-durable process diagnostics): codex, claude/opus, cursor, opencode, devin, gpt-5.6 sol and luna, gemini-3.8, cursor-grok-4.6, muse-spark-1.3-contributor-free, nemotron-3-ultra-free, glm-5.3-flash, ling-3.0-flash-fin-free; 13 ok, 0 failed"
       - "orchestrator re-verification in source of: the eval alias with empty required, the five CleanGoSource call sites, the tool-name-keyed acceptance checkpoints, the reducer-versus-fate split, both closed-set tests, and the absence of model conditionals in the prompt path"
     rollback_ref: "docs-only draft; revert this commit to remove the draft Definition and the consensus record"
-    disposition: "drafted, not chartered: awaits mission-two settlement, the provider-preparation landing, and owner ratification of the settlement-authority transfer"
+    disposition: "drafted, not chartered: awaits mission-two settlement and owner ratification of the settlement-authority transfer; the OpenCode provider setup is folded in as phase 1 (owner decision, 2026-09-11)"
     problem_ref: "docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md findings on acceptance evidence, empty-envelope execution, the hidden remainder and the settlement-authority split"
     authorization_ref: "owner instruction 2026-09-11 to draft mission three with agentic consensus"
     candidate_or_evidence_refs: []
 ---
 
-# RLM Mission 3 — Engineering crosses the carrier
+# Mission 3 - Engineering moves onto the in-cell carrier
 
-Draft. Not chartered; not the working entrypoint. Mission two
-(`choir-rlm-versioned-rename-2026-09-09`) holds that position until it reaches terminal deployed
-acceptance, the OpenCode provider preparation lands with its own Landing Loop, and the owner
-ratifies the settlement-authority transfer named below.
+This is a draft. It is not started. Mission two is still the active mission. This one starts when
+mission two is finished and you say go.
 
-## What this mission is
+## What this mission does
 
-Engineering becomes the first desk to live entirely on the in-cell carrier. `capsule_go_eval`
-becomes the desk's only JSON envelope; every other affordance — files, execution, messaging,
-spawning, completion, verification, inspection — becomes a typed in-cell function staging intents
-for the one reducer; the nine residue-R7 names are deleted rather than hidden, each earning its
-deletion through replay proof. In parallel, Texture's packet and reducer design is written against
-the canonical writer's invariants and lands as a document, not as code. One model-independent
-prompt with one REPL initialization serves a diverse roster with zero output repair.
+Engineering is the first desk to run fully on the in-cell carrier. Right now the desk is split in
+two: one tool is the new way, nine JSON tools are the old way. After this mission:
 
-Owner completion goal: **one prompt per desk that works for all models**, reached through the
-structural invariant (no repair, one required parameter, identical prompt digest, a guard against
-model conditionals) and evidenced by the frozen roster run.
+- `capsule_go_eval` is the desk's only JSON tool. The model hands it Go source.
+- Everything else is a normal Go function inside the cell: files, running commands, messages,
+  spawning, finishing, verification, inspection.
+- The nine old JSON tool names are gone, not hidden. Each one has to prove it works the new way
+  before it is deleted.
+- The prompt is the same for every model. No per-model text, no per-model branching, and no code
+  that fixes up model output.
 
-## The three defects this mission must document before it repairs
+That last point is the real goal: one prompt per desk that works for every model.
 
-1. **The envelope is not minimal.** `source` and `code` are interchangeable, nothing is required,
-   a call with neither executes an empty cell, and a call with both silently picks one.
-2. **Acceptance evidence keys on tool names.** `capsule_effect_frozen` and
-   `capsule_verification_recorded` are built by scanning for `commit_transaction` and
-   `record_self_development_verification` behind presence guards, so retiring those tools silently
-   weakens run acceptance.
-3. **The reducer is not a settler.** Staged Complete only mails an envelope; `record_assignment_result`
-   is the sole assignment-fate author. Retiring it moves settlement authority into the reducer and
-   supersedes a mission-one owner clause.
+## Why the old way existed
 
-## Phase ladder
+Two reasons, and we now handle both differently.
 
-| Phase | Work | Gate |
+1. Models sometimes wrap code in fences. We fixed that in code, in a function called
+   `CleanGoSource`. That is why some weaker models worked at all. This mission deletes that
+   function. If a model wraps its code, we see it as a model problem instead of hiding it.
+2. Some models did not understand the old two-field envelope. So the envelope carried an
+   explanation. The explanation moves into the system prompt, where it belongs, and the envelope
+   gets smaller: one field, required, nothing to guess.
+
+## Three defects, written down before any fix
+
+1. The envelope is not simple. `source` and `code` mean the same thing, nothing is required, and a
+   call that sends neither runs an empty cell. A call that sends both silently picks one.
+2. Run acceptance reads tool names. It marks a run as having a frozen effect and a recorded
+   verification by looking for results named `commit_transaction` and
+   `record_self_development_verification`. Delete those tools and a run still says "passed" while
+   carrying less evidence.
+3. The reducer cannot finish an assignment. Today a staged Complete is only a mailbox message, and
+   `record_assignment_result` is the one thing that writes the assignment's fate. Deleting it moves
+   that authority into the reducer. This replaces a rule you set in mission one.
+
+## Phases
+
+| Phase | Work | Done when |
 | --- | --- | --- |
-| T0 | Provider preparation (OpenCode Go and Zen, session identity, three wire shapes) — a separate Definition with its own Landing Loop | Terminal receipt before this mission charters |
-| T1 | Envelope simplification, `CleanGoSource` deletion at all five sites, prompt and initialization invariant with a guard | Code-free Define first; no repair commit before the problem record |
-| T2 | Operation-equivalence freeze: nine mappings, receipt classes, canonical versus excluded fields, citer inventory, desk scope | Frozen table before any deletion |
-| T3 | Reducer-owned settlement, acceptance rebuild off tool names, parity gaps (verifier slot, message validation), missing in-cell affordances | Owner ratification for the settlement transfer |
-| T4 | Replay-for-deletion per operation, registry cut to the eval envelope, deletion of the retired paths | No deletion without its replay proof |
-| T5 | Frozen-roster conformance on one prompt, cache-mission exit notes | Roster evidence before completion |
-| T6 | Texture design artifact (non-gating), Landing Loop, registry closure, R7 closed | Deployed proof with effects OFF |
+| 1 | OpenCode Go and Zen setup: session id on the wire, product User-Agent, three request shapes, keys on Node B | One live call works for each request shape, and staging health lists both providers |
+| 2 | Shrink the eval tool to one required field; delete `CleanGoSource` and all its call sites | No repair code is left; bad input fails loudly; the prompt digest is identical for every model |
+| 3 | Freeze the mapping: old name to new function, receipt class, and what counts as the same answer | The table is published and every old name is accounted for |
+| 4 | Build what is missing: reducer owns settlement, acceptance stops reading tool names, two parity gaps closed, new in-cell functions for freeze, verify, inspect | Each is covered by a test, including the case where evidence is missing |
+| 5 | For every old operation: same input gives the same receipt and no extra side effects, then delete it | All nine have a green replay record and the registry holds one tool |
+| 6 | One frozen prompt, one desk task, a diverse set of models | The chosen roster passes with no per-model changes |
+| 7 | Texture design document (no code); then the normal deploy and proof | Design published; staging runs the new path with effects off |
 
-## Roster
+Phase 1 can start as soon as this mission is chartered. It is separate from the prompt work, and
+its problem record already exists in `docs/reports/choir-opencode-provider-research-2026-09-10.md`.
 
-Verified 2026-09-10 and recorded in
-`docs/reports/choir-opencode-provider-research-2026-09-10.md` §11: free Zen
-(`muse-spark-1.3-contributor-free`, `ling-3.0-flash-fin-free`, and the two Nemotron ids as telemetry
-because of ~100s pool latency) and cheap Go (`deepseek-v4.1-flash`, `glm-5.3-flash`,
-`qwen3.8-flash`, `mimo-v2.5`, `hy3`, `muse-spark-1.3-contributor`). Image input is verified for
-every roster member except `hy3`.
+## Models in the roster
 
-## Decisions this draft asks the owner to confirm at charter
+Checked 2026-09-10; the list is in `docs/reports/choir-opencode-provider-research-2026-09-10.md`
+section 11. Free Zen ids: `muse-spark-1.3-contributor-free`, `ling-3.0-flash-fin-free`, and the two
+Nemotron ids (recorded but not gating, because their pool waits about 100 seconds). Cheap Go ids:
+`deepseek-v4.1-flash`, `glm-5.3-flash`, `qwen3.8-flash`, `mimo-v2.5`, `hy3`,
+`muse-spark-1.3-contributor`. Every one of them can read images except `hy3`.
 
-- Ratify the settlement-authority transfer that retiring `record_assignment_result` requires, and
-  the supersession of the mission-one clause that mailbox Complete never creates a terminal.
-- Confirm that the `actuator=tools` route keeps its four capsule operations as a named rollback, or
-  accept their deletion and the reduced rollback story.
-- Confirm that the roster run is required evidence whose failure responses are pre-declared
-  (exclude the model, or fix the shared prompt for every model) and never a per-model fork.
+## Owner decisions
+
+Recorded 2026-09-11:
+
+- OpenCode setup is phase 1 of this mission, not a separate mission.
+- `actuator=tools` gets deleted. It is not kept as a rollback. The deletion waits until RLM is
+  proven, and no mission proof may depend on that branch.
+- Settlement authority: waiting on your answer.
+- Roster pass rule: waiting on your answer.
