@@ -154,7 +154,7 @@ now:
   next_action: 'Execute P0-define as one code-free commit: publish the freeze artifact with the four defects, the nine-operation mapping table (old name, in-cell successor, receipt class, canonical identity fields, exclusion list, fixture path), the prompt and REPL-initialization manifest with its entropy-exclusion list, the falsifiers, the replay-harness specification, and the chosen model-selection mechanism. No repair, settlement or deletion code in that commit.'
 finish:
   deliver: 'The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk''s only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden and each earned its deletion by replay proof, the assignment fate is authored by the reducer, run acceptance no longer keys on tool names and fails loudly when evidence is missing, one model-independent prompt with one REPL initialization serves the expected roster with zero output repair, and the proved replay harness plus its fixtures remain as durable evidence.'
-  artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened.'
+  artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened, and one adjudicated review receipt per frozen boundary (P0, P3, P4, P5).'
   non_gating_artifacts:
     - 'Texture packet/reducer design document: translates documents, patches, diffs, source graphs, controls and dispositions into the same in-cell discipline, stated as constraints against the canonical writer''s invariants and citing them from their own authority. No Texture runtime code lands in this mission. This artifact must not gate completion.'
   entrypoints:
@@ -182,6 +182,9 @@ finish:
     - action: 'P0-define (code-free; first mission commit; zero repair code): record the four discovered defects (envelope alias with empty required; tool-name-keyed acceptance checkpoints; reducer-is-not-a-settler; verifier-slot unreachable on the assigned path); publish the frozen nine-operation mapping table (old JSON name, in-cell successor or intent kind, receipt class, canonical identity fields, pre-declared exclusion list for nondeterministic fields, fixture path); publish the frozen prompt/REPL initialization manifest and the entropy-exclusion list (exact field paths) used by the digest comparison; publish the falsifiers; and publish the replay-harness specification (fixture schema, canonicalizer, effect census, durable receipt store, rewarm procedure). The four defects are new problems, so this boundary precedes any repair commit.'
       proves: Scope, identity and falsifiers are evidence-bounded before any carrier code moves.
       evidence_class: static_analysis
+    - action: 'P0-review (agentic consensus, frozen-artifact review): bind the review to the P0-define artifact by base ref, scoped paths and content digest; run the bundled panel (skill://agentic-consensus, skills/agentic-consensus/agentic-consensus-runner.sh, convergent, --prompt-file, --out-dir under .agentic-consensus/) with one decision question: do the frozen nine-operation mapping table, its receipt classes and canonical/exclusion lists, the replay-harness specification and the prompt/REPL manifest actually support per-operation replay proof and deletion, and where would that proof be vacuous? Re-verify every load-bearing panel claim locally in source before acting; fold accepted findings into the artifact; adjudicate one outcome (accept, repair, reject, escalate) with the reason; record the panel''s cost, latency and failure modes. A panel is an evidence receipt bound to the frozen artifact, never a vote, and it may not change scope, authority or the evidence floor without an owner decision. Fold the outcome into the next implementation commit; do not create a standalone consensus commit.'
+      proves: The artifact that authorizes every later deletion survived adversarial review before any code moved.
+      evidence_class: static_analysis
     - action: 'P1-provider (red; its own Landing Loop): wire the OpenCode Go and Zen providers. Freeze, before implementation, the model-to-wire-shape map (chat completions, Responses, Anthropic Messages), the `conversation_id`/session identity bound to the durable `RunID`, the product User-Agent, the fail-closed rule for an empty identity, the credential variable names, a prior host-config digest and backup, and a spend cap. Deliver the keys through the authorized product/CLI path, or record an owner-executed break-glass step if no product path exists; never ad hoc SSH. Prove one live call per wire shape plus the empty-identity negative probe, with the receipt fields (request shape, model id, status, latency, identity present) named in the evidence artifact.'
       proves: Cross-model comparison is never gated on credential plumbing, and a provider outage can never be mistaken for a prompt or carrier failure.
       evidence_class: deployed_proof
@@ -206,6 +209,9 @@ finish:
     - action: 'P3-in-cell-surface: provide the missing in-cell affordances: a staged freeze intent, a staged verify intent, and a synchronous read-only bundle inspection under the overview''s read-only exemption. Each is bound to the P0-define mapping table''s receipt semantics.'
       proves: Every affordance the desk needs exists on the carrier before the JSON remainder disappears.
       evidence_class: local_test
+    - action: 'P3-review (agentic consensus, red-boundary review): freeze the candidate commit for the settlement, acceptance and parity work and review exactly those diffs, asking where two settlement authors, a silently weakened acceptance checkpoint, or an unreachable verifier gate could still survive. Re-verify each claim in source, adjudicate and fold. A finding that would change authority or the evidence floor escalates to the owner instead of being applied.'
+      proves: The three red changes are adversarially checked before the deletions that depend on them.
+      evidence_class: static_analysis
     - action: 'P4-harness: build the replay harness before any golden receipt is captured: versioned fixture driver, canonical-receipt projector with the pre-declared exclusion list, effect census reader, durable receipt store, legacy capture adapter, successor adapter, a caller-supplied semantic identity for in-cell operations (they mint a new request id per call today), a state-mutating read fixture, and a forced actor/host rewarm control that is reachable without SSH or is named as an owner-executed break-glass step. Capture goldens against the pre-cutover deployed build. Declare explicitly which operation classes are proven by recorded fixture instead of live capture, and why.'
       proves: The replay proof can exist, and its substrate is durable rather than improvised at deletion time.
       evidence_class: local_test
@@ -218,6 +224,9 @@ finish:
     - action: 'P4-delete: delete the five overlay JSON tool paths and their reducer aliases, including the admission-grammar special cases that exist only for them, with the citer sweep in the same change. Do NOT delete the four capsule file/exec operations, which the `actuator=tools` fallback composes until R8. Update every live prompt that names a retired tool, including the RLM engineering overlay (`internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml`), the engineering overlay (`internal/runtimeprompts/overlays/engineering_runtime.yaml`) and the engineering prompt default (`internal/promptstore/defaults/engineering.yaml`), so no served prompt instructs a name that no longer exists.'
       proves: No dual path survives on the desk, and the deferred branch still compiles and serves.
       evidence_class: local_test
+    - action: 'P4-review (agentic consensus, deletion-candidate review): bind to the frozen candidate that cuts the assigned registry and deletes the five overlay names, and ask where legacy behaviour, prompt citers, or the deferred tools fallback would break. Re-verify claims in source, adjudicate and fold. If the candidate changes materially after the review, the review is stale and reruns proportionately.'
+      proves: The deletion set is bounded by evidence, and no citer or fallback breaks on it.
+      evidence_class: static_analysis
     - action: 'P5-roster: run one frozen desk task (inspect, edit, run a test, complete with the exact receipt reference) under one prompt, with the task artifact path fixed in P0-define. All four expected-pass ids must complete it (`muse-spark-1.3-contributor-free` or the paid `muse-spark-1.3-contributor` counts as one id). Every other roster member is an experiment: run it, record pass or fail, tokens, latency and failure mode, and never let it gate. Record which id served each run so a quota switch is never read as a model failure, and exclude `hy3` from any image-bearing step by name. Resolve the model-selection mechanism before this item can run - an owner-visible model-policy overlay id on the assignment path, or a per-run engineering policy swap that is restored afterwards - and name the chosen mechanism in P0-define. The assignment path cannot select a model today.'
       proves: One prompt genuinely serves the expected roster, which is the owner's completion goal.
       evidence_class: deployed_proof
@@ -227,6 +236,9 @@ finish:
     - action: 'P5b-tools-actuator: prove by test that the RLM profile never reaches the `actuator=tools` registry, and keep that branch functional and unused. Register residue R8 in `docs/mission-residues.md` at settle, naming the deferred deletion and its revisit trigger (management and research desks crossing to RLM). No mission proof may depend on the branch and no rollback path may target it.'
       proves: The deferred branch is provably out of the desk's reach while remaining a working fallback.
       evidence_class: local_test
+    - action: 'P5-review (agentic consensus, roster interpretation): present the frozen roster results (per-id pass/fail, tokens, latency, failure mode, quota switches) and ask whether the one-prompt invariant holds or a per-model accommodation has crept in. Adjudicate the only responses the mission may take - exclude a model with a recorded reason, or fix the shared prompt for every model - and escalate to the owner if the answer would change the mission''s stopping condition.'
+      proves: The one-prompt claim is judged from evidence rather than asserted from a green run.
+      evidence_class: static_analysis
     - action: 'P6-landing: run the Landing Loop on behaviors changed here, with an intermediate deploy before the deployed replay and roster proofs (later phases cannot supply earlier deployed evidence). Run the exact deployed engineering-assignment scenario and record the accepted run and acceptance ids, the trace evidence that no legacy tool was used, and the traces that prove reducer settlement. Then move docs/ACTIVE.md, docs/mission-graph.yaml and docs/doc-authority-manifest.yaml atomically, close residue R7, leave R8 open, and settle this Definition. Already-accepted runs are not retroactively rescored.'
       proves: The cutover is proven on the deployed product path, and the mission record is closed with artifacts.
       evidence_class: deployed_proof
@@ -261,6 +273,7 @@ boundaries:
     - docs/reports/choir-rlm-missions-overview-2026-09-09.md
     - docs/mission-residues.md (R7 inherited, R8 deferred)
     - docs/standing-questions.md
+    - skills/agentic-consensus/SKILL.md (review panel contract)
   must_preserve:
     - Historic tape decodability under frozen versioned rules; no rewrite of prior bytes.
     - 'The mission-two live vocabulary: engineering-desk writes go through the version-selected live names.'
@@ -307,6 +320,7 @@ boundaries:
       - 'Live prompts instruct retired names: the RLM engineering overlay and the engineering prompt defaults still name tools this mission deletes.'
     introduced: []
     repaired: none; mark repaired only after the deployed receipts exist
+  review_policy: Agentic consensus runs only at frozen boundaries (after P0, after the P3 red work, on the P4 deletion candidate, and on the P5 roster results), bound to a frozen candidate identity with base ref, scoped paths and digest. Use the bundled panel (skill://agentic-consensus). Deterministic checks come first; a panel is added only where its answer can change a real decision. A reproducible minority blocker outranks an unsupported majority pass. Panel output is an evidence receipt with one adjudicated outcome, folded into the boundary commit that changed the artifact, never a standalone consensus commit and never a substitute for the required evidence class.
 measures:
   - kind: gate
     name: code-level output repairs in the carrier path
@@ -338,6 +352,12 @@ measures:
     desired: 4
     decision_use: blocks completion
     cannot_prove: behaviour on models outside the tested roster
+  - kind: telemetry
+    name: consensus review yield at frozen boundaries
+    baseline: two 13-agent panels on 2026-09-11 for one mission (24 must-fix findings at the first, 8 review clusters at the second; one panelist lost to a provider quota)
+    desired: each boundary panel yields a small number of decision-changing findings; a panel whose findings change no decision is dropped at the next boundary
+    decision_use: decides whether the next boundary keeps a panel and how wide it is
+    cannot_prove: that a defect would have been missed without a panel, or that a panel's absence would have failed the mission
 receipts:
   - id: engineering-carrier-owner-decisions-2026-09-11
     boundary: define
@@ -428,6 +448,7 @@ receipts:
       - 'predecessor receipt satisfied: mission two completed at e3396329 (CI 34571343061, deployed proof artifact published) with entrypoint false and next_action none'
       - 'post-mission-two work disposed: GC a907f713 with the offline GC executed (18.6 GiB journal to 2.1 GiB store, guest rebooted clean at 12.4% used) and test/CI work e22b99d4, 58d4e2dc, 278263ab green on CI 34622877021 and race 34626445187'
       - 'owner answered the four pre-charter questions: charter now; nix/deploy-provider-creds.sh; subscription caps with auto-reload off; model-policy overlay id'
+      - 'owner: agentic consensus runs as mission steps at the frozen boundaries (after P0 and later), not as a separate assurance project'
     rollback_ref: revert this commit to return the mission to queued-draft status; no runtime effect
     disposition: 'chartered: this Definition is the sole working entrypoint and P0-define is the next action'
     problem_ref: docs/reports/choir-rlm-mission-three-review-2026-09-11.md (executability review and post-review addendum)
@@ -480,7 +501,10 @@ are hidden from the desk but alive on the fallback route.
 
 ## Ordering
 
-P0 code-free freeze, then P1 provider setup (independent of P2-P4 and may run in parallel), then the
-carrier repairs, the settlement and acceptance work, the replay harness and deletions, the roster
-experiment, and finally the landing with an intermediate deploy before the deployed replay and
-roster proofs. No repair, settlement or deletion code precedes P0.
+P0 code-free freeze, then an agentic-consensus review of that frozen artifact, then P1 provider
+setup (independent of P2-P4 and may run in parallel), then the carrier repairs, the settlement and
+acceptance work, the replay harness and deletions, the roster experiment, and finally the landing
+with an intermediate deploy before the deployed replay and roster proofs. Consensus review gates sit
+at the frozen boundaries: after P0, after the red P3 work, on the P4 deletion candidate, and on the
+P5 roster results. Each is bound to a frozen candidate, locally verified, adjudicated to one
+outcome, and folded into the boundary commit. No repair, settlement or deletion code precedes P0.
