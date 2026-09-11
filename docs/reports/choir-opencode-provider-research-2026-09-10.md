@@ -43,7 +43,8 @@ Six findings decide the shape of this work.
    (`internal/provider/provider.go:70-105`) carries no session field and `HandleInference`
    (`internal/gateway/handlers.go:386-400`) has only `computerID`. Because Go and free Zen
    cannot be called without one, this is a hard prerequisite rather than a refinement. The
-   additive integration path is specified in §10.
+   additive integration path is specified in §10, and the recommended value is `RunID`, which
+   survives both rewarm and the agent-to-agent callback arc.
 
 ---
 
@@ -521,25 +522,65 @@ runtime→gateway path and the provider-metadata precedents.
 | Gateway handler | `ProviderRequest` (`internal/gateway/handlers.go:32-83`) | none; `computerID` exists only in the auth path and logs (`handlers.go:343-358`) | `handlers.go:386-400` |
 | Provider adapter | `provider.LLMRequest` (`internal/provider/provider.go:69-105`) | none | adapters set only auth/content headers |
 
+Note while mapping this path: `types.InboxDelivery` and its store schema and writer exist
+(`internal/types/task.go:523-548`, `internal/store/store.go:239-257`,
+`internal/store/graph_store.go:1859-1883`) but nothing calls `CreateInboxDelivery`. The RLM
+"mailbox" in use is the channel log plus the per-run cursor, not an inbox-delivery row.
+
 Nothing in `task.Metadata` reaches the gateway HTTP body today. The model-policy keys
 (`internal/modelpolicy/model_policy.go:18-27`: `llm_provider`, `llm_model`,
 `llm_reasoning_effort`, `llm_max_tokens`, `llm_policy_source`, `llm_policy_error`,
 `llm_policy_overlay_id`) are consumed runtime-side by `provideriface` and never forwarded.
 
-### 10.2 Candidate identities
+### 10.2 Candidate identities (verified against the actor path)
 
-| Candidate | Durable? | Unique per conversation? | Verdict |
-| --- | --- | --- | --- |
-| `RunRecord.RunID` (`task.go:89-97`) | yes, persisted for the record's lifetime | per run; a rewarm starts a new run | **recommended**, with the rewarm caveat (§10.7) |
-| `TrajectoryID` (`task.go:103-115`) | yes | spans related runs and agents; may be absent | too broad — would merge distinct conversations |
-| `ChannelID` (`task.go:98-101`) | yes | shared coordination surface across runs/agents | wrong axis — coordination, not conversation |
-| `ComputerID` (`task.go:132-137`) | yes | one per computer | fallback only when no run id exists |
-| RLM `activationID` (`internal/yaegikernel/choir.go:44-62`) | no — in-memory worker scope | per activation | unusable as a cache key; not visible at the gateway |
-| Browser `SessionID` (`internal/types/browser.go:19-33`) | yes | unrelated substrate | out of scope |
+The earlier draft of this section assumed rewarm mints a new run. That is wrong, and the
+correction is what makes `RunID` the right choice.
 
-`RunID` is also the key of durable provider-facing run memory
-(`internal/store/run_memory.go:229-256`), which makes it the closest thing Choir has to a
-provider conversation key.
+| Candidate | Stable across park/resume? | Stable across rewarm? | Stable across A→B→A? | Verdict |
+| --- | --- | --- | --- | --- |
+| `RunRecord.RunID` | yes | yes | yes, per agent | **recommended** |
+| `TrajectoryID` | yes | yes | yes | rejected — deliberately spans agents and workers |
+| `ChannelID` | yes | yes | yes | rejected — coordination surface, spans run families |
+| `AgentID` / actor mailbox | yes | yes | yes | rejected — merges an agent's concurrent runs |
+| `ComputerID` | yes | yes | yes | fallback only |
+| RLM `activationID` | in-memory only | no | no | unusable as a cache key |
+
+Evidence for the `RunID` row:
+
+- **Park/resume keeps the run.** `resumeState` stores only `{RunID, Phase}` in the actor memory
+  snapshot (`internal/actorruntime/handler.go:20-27`); on a coagent result the handler decodes it,
+  loads that exact run, sets `actor_reactivate_existing_memory`, and calls
+  `ExecuteActivationSync` on the same record (`handler.go:335-433`). A new run is minted only when
+  there is no parked pointer *and* the run is terminally complete (`handler.go:340-350` →
+  `reconcileCoagentWake`).
+- **Channel mail never mints a run.** `handleChannelMessage` documents this outright — "unlike
+  coagent_result, this kind never mints a new run: spawn/assign create runs, channel mail only
+  wakes an existing activation" — and resumes `rs.RunID` in place (`handler.go:99-145`).
+- **Children get their own id, by design.** `StartCoagentRun` mints a fresh uuid `RunID` for the
+  child, sets `RequestedByRunID` to the requester, and inherits the trajectory
+  (`internal/agentcore/runtime.go:947-1000`, `:1059-1133`). B's conversation is B's; A's remains A's.
+- **Run memory is keyed by run.** `ListRunMemoryEntries(ctx, ownerID, runID)`
+  (`internal/agentcore/run_memory.go:~52-58`) is exactly the provider-facing conversation history,
+  so `RunID` is already the key of the thing being cached.
+
+Where the id does change — a replacement run after a terminal reconcile, self-development
+passivation, or a new child — the prompt is rebuilt from a compaction snapshot
+(`seedActorMemorySnapshot`, `internal/agentcore/run_memory.go:66-131`, which writes an
+`actor_rewarm` summary carrying `source_loop_id`). The prefix is therefore different by
+construction, so a cache miss there is inherent to the prompt, not caused by the id choice.
+
+Rejected alternatives matter because each is superficially attractive:
+
+- `TrajectoryID` is the only durable identity that spans the whole A→B→A arc
+  (`internal/types/trajectory.go:45-51`, carried on channel messages and worker updates), and it
+  is inherited by children. That is precisely why it must not be the session id: it would merge
+  agents and workflow branches onto one route.
+- `AgentID` and the actor mailbox identity (`owner\x00computer\x00agent`) are stable across
+  everything but are per-agent, not per-conversation, so two concurrent runs of one agent would
+  share a session.
+- `ChannelID` is a shared coordination surface across runs, and `activationID` lives only in the
+  capsule worker's memory.
 
 ### 10.3 Recommended additive path
 
@@ -606,17 +647,100 @@ structs, and no routing decision reads the field.
 - Core vocabulary: no new event kinds, trajectory fields, or durable trace keys. If the id must
   ever be *recorded* (rather than sent), that is a separate, reviewed decision.
 
-### 10.7 Open question: rewarm
+### 10.7 Resolved: the agent-to-agent arc does not break affinity
 
-Actor rewarm seeds a new run from prior run memory (`internal/agentcore/run_memory.go:66-131`), so
-a conversation that survives a rewarm changes `RunID` and therefore loses cache affinity at that
-boundary. `[INFERENCE]` For OpenCode's prompt caching this is a single cache miss per rewarm,
-which is acceptable for a first cut. If it is not, the correct fix is a conversation identity
-owned by the run-memory lineage, not a wider id such as `TrajectoryID` — and that is a larger
-change than mission three should carry. The alternative fallback is `computer-<ComputerID>`,
-which is stable but pins every conversation of a computer to one route.
+The concern that motivated this section — A messages B, waits, receives a callback, and comes
+back as a *different* conversation — does not happen in the normal path:
 
-## 11. Open questions for the owner
+```
+A running (RunID=A)  ->  sends to B            ->  A parks: memory = {RunID: A, phase: parked}
+B running (RunID=B)  ->  channel mail to A     ->  A resumes RunID=A on the same RunRecord
+```
+
+Both directions are the same-record path, verified above. Two caveats, both accepted:
+
+- A **replacement** run (A's run went terminal before the reply, or self-development passivation
+  replaced it) gets a new `RunID`, and its prompt is rebuilt from a compaction summary, so the
+  prefix differs anyway.
+- A **cold actor with no snapshot pointer** does not admit a run from channel mail at all
+  (`handler.go:108-121`), so there is no conversation to keep warm in that case.
+
+If a future requirement demands a durable conversation identity that survives replacement runs —
+for example so the cache mission can reason about hit rate across a rewrite — the shape is a
+lineage id created at conversation admission and inherited by replacement and child runs, linked
+to the run-memory lineage rather than to the trajectory. That is a new durable vocabulary item
+with real ceremony, and it belongs to the cache-optimization mission, not to mission three.
+
+Superseded text: an earlier draft of this report claimed rewarm "seeds a new run from prior run
+memory" and therefore loses affinity. The new-run path exists, but it is the replacement path,
+not the ordinary coagent wait.
+
+## 11. Model roster for mission three (diverse by design)
+
+Mission three should not inherit the panel's cost champion (`gpt-5.6-luna`) as its default
+reasoning surface. The roster below was chosen for family diversity across three wire shapes,
+with free ids for testing and sub-$0.65-per-1M-output ids for evidence runs. Every id in it was
+call-verified on 2026-09-10 (§9.2).
+
+### Tier F — free, for testing (Zen)
+
+| Family | Id | Route | Context | Measured |
+| --- | --- | --- | --- | --- |
+| Meta | `muse-spark-1.3-contributor-free` | responses | 1M | 1.4s |
+| Meta | `muse-spark-1.2-contributor-free` | responses | 1M | 1.2s |
+| Ling (Ant) | `ling-3.0-flash-fin-free` | chat | 262k | 1.0s |
+| NVIDIA | `nemotron-3-ultra-free` | chat | 1M | 96.7s (pool latency) |
+| NVIDIA | `nemotron-3.5-lightning-free` | chat | 262k | 102.8s (pool latency) |
+| Xiaomi | `mimo-v2.5-free` | chat | 200k | `429` from this environment |
+| Stealth | `big-pickle` | chat | 200k | `429` from this environment |
+| DeepSeek | `deepseek-v4-flash-free` | chat | 200k | listed, not serving |
+
+### Tier C — cheap paid, under $0.65 per 1M output
+
+| Family | Provider | Id | Route | Context | In/Out $ | Measured |
+| --- | --- | --- | --- | --- | --- | --- |
+| DeepSeek | Go | `deepseek-v4.1-flash` | chat | 1M | 0.15/0.60 | 1.3s |
+| DeepSeek | Go | `deepseek-v4-flash` | chat | 1M | 0.15/0.60 | 1.7s |
+| DeepSeek | Zen | `deepseek-v4-flash` | chat | 1M | 0.14/0.28 | 3.5s |
+| DeepSeek (vision) | Go | `deepseek-v4-flash-vision-exp` | chat | 1M | 0.15/0.60 | 1.6s |
+| Zhipu | Go | `glm-5.3-flash` | chat | 1M | 0.15/0.50 | 0.7s |
+| Alibaba | Go | `qwen3.8-flash` | messages | 1M | 0.15/0.47 | 1.1s |
+| Xiaomi | Go | `mimo-v2.5` | chat | 1M | 0.14/0.28 | 1.2s |
+| Tencent | Go | `hy3` | chat | 256k | 0.14/0.58 | 1.6s |
+| Meta | Go | `muse-spark-1.3-contributor` | responses | 1M | 0.10/0.20 | 1.0s |
+| OpenAI | Zen | `gpt-5-nano` | responses | 400k | 0.05/0.40 | 1.1s |
+
+Nine vendor families across three wire shapes — chat completions, Responses, and Anthropic
+Messages — which is the diversity the mission wants, and none of them is a GPT-5.6 tier.
+
+### Anti-overfit notes
+
+- The reason to spread across families is not cost alone. A prompt or harness shaped around one
+  model's output conventions (the earlier Go-code markdown episode) silently encodes that model's
+  quirks. Per-model measurement, not a single shared prompt, is what the mission should record.
+- `hy3-preview` is listed on Go but returns `400`/`500`; do not include it.
+- Both contributor-consent ids served on this workspace, but they are training-consented models:
+  the owner decision in §12.1 governs whether they carry anything but test traffic.
+
+### Cache-affinity requirements to record now (owned by the later cache mission)
+
+1. **Session identity must be stable across a conversation.** Satisfied by `RunID` (§10.2) once
+   the plumbing in §10.3 lands.
+2. **Prompt prefix must be byte-stable turn to turn,** or affinity buys nothing. Partially
+   audited: tool ordering is sorted (`internal/toolregistry/toolregistry.go:123`,
+   `toolloop.go:1533`), and run memory is append-only, so the tool block and history prefix look
+   deterministic. The unaudited surface is whether the system prompt and any injected metadata are
+   byte-identical across turns — worth one measurement, not an assumption.
+3. **Compaction and replacement runs change the prefix by construction** (§10.7). Any hit-rate
+   target must exclude those boundaries or the measurement will look like a routing failure.
+4. **Cache reads are the economics.** DeepSeek V4.1 Flash on Go is $0.30/1M fresh input at peak
+   and $0.006/1M cached read — a ~50x delta — and the vendor's own usage estimates assume
+   ~71,300 cached tokens per request. Hit rate is a first-class cost lever, not a tuning detail.
+5. **Reasoning tokens count against the reply budget.** Observed: a 4-token cap was consumed
+   entirely by reasoning, returning empty `content`. Budgets must be set for thinking models or
+   the output is silently empty.
+
+## 12. Open questions for the owner
 
 1. **Training consent.** Are Muse Spark *Contributor* models permitted for any Choir traffic?
    If not, Phase B serves only the free Zen twin (also contributor-consented) or nothing.
@@ -636,5 +760,9 @@ which is stable but pins every conversation of a computer to one route.
 7. **Dependence on free tiers.** `big-pickle` and `mimo-v2.5-free` are already rate-limited from
    this environment and `deepseek-v4-flash-free` is listed but not serving. Should any Choir
    route depend on a free model, or are free models research- and panel-only?
-8. **Conversation scope.** Is one `conversation_id` per run enough (§10.7), or must it survive
-   actor rewarm, which starts a new run and would therefore change the id?
+8. **Conversation scope — answered in §10.2/§10.7.** Rewarm and the agent-to-agent arc both
+   resume the same `RunID`; only replacement runs mint a new one, and they rebuild the prompt from
+   a compaction summary, so the id choice costs nothing extra there. Remaining decision: accept a
+   cache miss at those boundaries, or fund a durable lineage id in the cache mission.
+9. **Roster.** Is the §11 roster the diverse set mission three should define against, and should
+   any free id be excluded because it is already rate-limited or unserved?
