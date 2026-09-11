@@ -31,10 +31,12 @@ if (( ${#all_packages[@]} == 0 )); then
   exit 0
 fi
 
-# Determine if we use store sub-sharding (default for 6 shards: 4 store shards + 2 non-store shards)
+# Determine if we use store sub-sharding. Store gets all but two shards; the
+# remaining two cover every other non-runtime package. Requires at least 4
+# total shards so both sides stay non-empty.
 store_sharded=0
-store_shards=4
-if (( total_shards > store_shards )); then
+store_shards=$(( total_shards - 2 ))
+if (( total_shards >= 4 )); then
   for package in "${all_packages[@]}"; do
     if [[ "$package" == "$store_package_full" || "$package" == "$store_package" ]]; then
       store_sharded=1

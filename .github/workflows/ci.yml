@@ -175,7 +175,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v6
 
@@ -188,9 +188,10 @@ jobs:
       - name: Go test non-runtime shard
         shell: bash
         env:
-          TOTAL_SHARDS: 6
+          TOTAL_SHARDS: 8
           SHARD_INDEX: ${{ matrix.shard }}
           RACE_SELECTED: ${{ needs.plan.outputs.race_selected }}
+          TMPDIR: /dev/shm
         run: |
           if [[ "$RACE_SELECTED" == "true" ]]; then
             scripts/go-test-non-runtime-shards -race
@@ -203,11 +204,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: plan
-    if: needs.plan.outputs.go == 'true'
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v6
 
@@ -218,12 +218,12 @@ jobs:
           cache: true
 
       - name: Go test agentcore/textureowner shard
-        shell: bash
         env:
-          TOTAL_SHARDS: 6
+          TOTAL_SHARDS: 8
           SHARD_INDEX: ${{ matrix.shard }}
           RACE_SELECTED: ${{ needs.plan.outputs.race_selected }}
           QUARANTINE_FILE: scripts/go-test-scale-tests
+          TMPDIR: /dev/shm
         run: |
           if [[ "$RACE_SELECTED" == "true" ]]; then
             scripts/go-test-runtime-shards -race
