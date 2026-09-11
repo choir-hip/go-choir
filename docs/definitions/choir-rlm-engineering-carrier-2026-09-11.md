@@ -26,10 +26,10 @@ start:
       required: 'The disk/GC cleanup that followed mission two landed as tracked commits (`internal/store/dolt_maintenance.go`, `internal/vmctl/`, `internal/vmmanager/manager.go`, `nix/node-b.nix`, currently through a907f713). Record its deploy/monitoring receipt and classify it as out of this mission''s scope: this mission owns none of it and must not modify or revert it. At charter, re-run `git status --short` and classify every dirty path.'
       status: satisfied
     - gate: registry_promotion
-      required: 'Promote this Definition atomically in docs/ACTIVE.md, docs/mission-graph.yaml, and docs/doc-authority-manifest.yaml as the sole row with `entrypoint: true`. Today the mission is absent from the graph and the manifest, and zero `entrypoint: true` rows exist.'
-      status: pending
+      required: 'Promote this Definition atomically in docs/ACTIVE.md, docs/mission-graph.yaml, and docs/doc-authority-manifest.yaml as the sole row with `entrypoint: true`. Today the mission is absent from the graph and the manifest, and zero `entrypoint: true` rows exist. Promoted at charter: docs/ACTIVE.md carries a Working Definition section, docs/mission-graph.yaml carries a working spine node with entrypoint true, and docs/doc-authority-manifest.yaml carries a working definition entry.'
+      status: satisfied
     - gate: owner_charter
-      required: The owner dates a charter statement for this Definition. This is the only remaining authority act; nothing else in the gate needs a decision.
+      required: Owner dated the charter statement on 2026-09-11 and answered the four pre-charter questions (charter now; nix/deploy-provider-creds.sh; subscription caps with auto-reload off; model-policy overlay id).
       status: satisfied
   source:
     canonical_ref: main@0bdc1746 (charter base; re-pin if the charter commit differs)
@@ -441,7 +441,7 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
-    registry_conformance_ref: docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml updated in the same commit
+    registry_conformance_ref: docs/ACTIVE.md Working Definition section, docs/mission-graph.yaml working spine node with the only entrypoint:true row, docs/doc-authority-manifest.yaml working definition entry; doccheck warnings 7 -> 2 (both remaining are outside this mission)
 view:
   path: none
   generator: node skills/definition/scripts/dashboard.mjs docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md --serve 127.0.0.1:8787 --watch (skill-owned; served on demand, never committed)
