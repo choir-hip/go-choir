@@ -110,12 +110,12 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P0-review (P0-define freeze artifact published; agentic-consensus panel bound to it next)
+  slice: P4-review adjudicated (repair); P4-replay proofs pending — the P0 hard gate requires goldens + deployed replay before the deletion candidate is accepted
   question: none
   reconciliation:
-    observed_at: '2026-09-11T18:58:00Z'
-    source_ref: main@73815790 (P0-define commit lands on this base; freeze artifact sha256 3eb10539c5bb596bc33eeaf8705fa69ccff0d67dc9fae7b24384af28e183693a)
-    deploy_identity: staging https://choir.news serves the mission-two commit e3396329 plus the GC commits through a907f713; effects OFF; OpenCode Go and Zen not wired
+    observed_at: '2026-09-11T22:45:00Z'
+    source_ref: main@009e3c52 (P4 deletions + P4-review repair pushed; CI 34655136501 pending)
+    deploy_identity: staging https://choir.news serves the mission-two commit e3396329 plus GC commits through a907f713; effects OFF; OpenCode Go and Zen not wired
     authority_identities:
       - docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md (this file, sole entrypoint after charter)
       - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
@@ -123,8 +123,9 @@ now:
       - docs/reports/choir-opencode-provider-research-2026-09-10.md
       - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
       - docs/mission-residues.md (R7 inherited, R8 deferred)
+      - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
     policy_resolution_ref: not_applicable (no cell policy resolution observed yet; P5-roster establishes the eval-arm overlay)
-    worktree_inventory_ref: 2026-09-11 read-only git status at 0bdc1746
+    worktree_inventory_ref: 2026-09-11 read-only git status at 009e3c52
     status: reconciled
   candidate:
     id: none
@@ -135,7 +136,7 @@ now:
     digest: none
     scope: []
   decision:
-    selected: 'Owner route bundle 2026-09-11: the reducer authors assignment fate; OpenCode Go/Zen setup is phase 1 inside this mission, using nix/deploy-provider-creds.sh with existing subscription caps and auto-reload off; the actuator=tools deletion is deferred to residue R8 and is never a rollback target; the roster test is an experiment whose expected-pass ids are deepseek-v4.1-flash, muse-spark-1.3 (free while the quota lasts, then the paid id), glm-5.3-flash and gpt-5.6-luna, with every other id recorded and non-gating; a failing model means fixing the shared prompt for every model; the roster gains model selection through an owner-visible model-policy overlay id now, with runtime model policy set inside the Go RLM code as the direction so new model strings need no code change.'
+    selected: 'Owner route bundle 2026-09-11: the reducer authors assignment fate; OpenCode Go/Zen setup is phase 1 inside this mission, using nix/deploy-provider-creds.sh with existing subscription caps and auto-reload off; the actuator=tools deletion is deferred to residue R8 and is never a rollback target; the roster test is an experiment whose expected-pass ids are deepseek-v4.1-flash, muse-spark-1.3 (free while the quota lasts, then the paid id), glm-5.3-flash and gpt-5.6-luna, with every other id recorded and non-gating; a failing model means fixing the shared prompt for every model; the roster gains model selection through an owner-visible model-policy overlay id now, with runtime model policy set inside the Go RLM code as the direction so new model s…
     kind: authority
     status: settled
     source: owner
@@ -151,8 +152,8 @@ now:
     - docs/mission-residues.md
     - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
     - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
-  blocker_or_risk: 'None blocking: chartered and unblocked. Carried risks: retiring a settlement tool before the reducer authors fate; retiring an acceptance-named tool silently removing its checkpoint; the verifier slot being unreachable on the assigned path today; the four capsule operations needing to stay functional for the tools fallback; phase-1 gateway/provider and credential work being red inside this mission; the shared-prompt fix rule growing the prompt toward the weakest model; the replay harness and the run-level model-selection mechanism not existing yet.'
-  next_action: 'P1-provider deployed proof: commit 2af02977 (OpenCode Go and Zen providers, run-bound conversation_id, fail-closed empty identity) is pushed; CI run 34638328332 in progress; on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway, recorded in docs/evidence/choir-rlm-engineering-carrier-p1-provider-freeze-2026-09-11.md. P0-review is adjudicated (repair; findings folded into artifact revision 2 at e69de37a).'
+  blocker_or_risk: 'P4-review adjudicated repair: the tools-actuator fallback prompt no longer names update_coagent, but the P0 hard gate (goldens + deployed replay proofs per retired operation) is unmet. The deletion candidate at 304ae6b7 is not accepted until those proofs land. Carried risks: retiring a settlement tool before the reducer authors fate; retiring an acceptance-named tool silently removing its checkpoint; the verifier slot being unreachable on the assigned path today; the four capsule operations needing to stay functional for the tools fallback; phase-1 gateway/provider and credential work being red inside this mission; the shared-prompt fix rule growing the prompt toward the weakest model; the replay harness and the run-level model-selection mechanism not existing yet.'
+  next_action: 'P4-replay: capture goldens for the five retired operations against the pre-cutover deployed build, run per-operation successor replay proofs (local + deployed), then refreeze the deletion candidate and rerun P4-review. P1-provider deployed proof remains pending: commit 2af02977 is pushed; on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway.'
 finish:
   deliver: 'The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk''s only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden and each earned its deletion by replay proof, the assignment fate is authored by the reducer, run acceptance no longer keys on tool names and fails loudly when evidence is missing, one model-independent prompt with one REPL initialization serves the expected roster with zero output repair, and the proved replay harness plus its fixtures remain as durable evidence.'
   artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened, and one adjudicated review receipt per frozen boundary (P0, P3, P4, P5).'
