@@ -436,6 +436,14 @@ documents:
     annotations: {doc_role: evidence, authority: consensus_record, lifecycle: living}
     witnesses: [docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md, docs/reports/choir-rlm-mission-three-review-2026-09-11.md]
     refresh_triggers: [mission_state_change]
+  - path: docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: evidence, authority: frozen_boundary_artifact, lifecycle: frozen}
+    witnesses: [docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md]
+    refresh_triggers: [mission_state_change]
+
 
   - path: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
     claim_scope: current

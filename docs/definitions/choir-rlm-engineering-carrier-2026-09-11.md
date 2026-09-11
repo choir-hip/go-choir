@@ -110,11 +110,11 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P0-define (code-free freeze artifact; first mission commit, not yet started)
+  slice: P0-review (P0-define freeze artifact published; agentic-consensus panel bound to it next)
   question: none
   reconciliation:
-    observed_at: '2026-09-11T13:40:00Z'
-    source_ref: main@0bdc1746
+    observed_at: '2026-09-11T18:58:00Z'
+    source_ref: main@73815790 (P0-define commit lands on this base; freeze artifact sha256 3eb10539c5bb596bc33eeaf8705fa69ccff0d67dc9fae7b24384af28e183693a)
     deploy_identity: staging https://choir.news serves the mission-two commit e3396329 plus the GC commits through a907f713; effects OFF; OpenCode Go and Zen not wired
     authority_identities:
       - docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md (this file, sole entrypoint after charter)
@@ -150,8 +150,9 @@ now:
     - docs/reports/choir-rlm-missions-overview-2026-09-09.md
     - docs/mission-residues.md
     - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
+    - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
   blocker_or_risk: 'None blocking: chartered and unblocked. Carried risks: retiring a settlement tool before the reducer authors fate; retiring an acceptance-named tool silently removing its checkpoint; the verifier slot being unreachable on the assigned path today; the four capsule operations needing to stay functional for the tools fallback; phase-1 gateway/provider and credential work being red inside this mission; the shared-prompt fix rule growing the prompt toward the weakest model; the replay harness and the run-level model-selection mechanism not existing yet.'
-  next_action: 'Execute P0-define as one code-free commit: publish the freeze artifact with the four defects, the nine-operation mapping table (old name, in-cell successor, receipt class, canonical identity fields, exclusion list, fixture path), the prompt and REPL-initialization manifest with its entropy-exclusion list, the falsifiers, the replay-harness specification, and the chosen model-selection mechanism. No repair, settlement or deletion code in that commit.'
+  next_action: 'Run P0-review: bind the bundled convergent panel (skills/agentic-consensus/agentic-consensus-runner.sh, --prompt-file, --out-dir under .agentic-consensus/) to the frozen artifact at base main@73815790, path docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md, sha256 3eb10539c5bb596bc33eeaf8705fa69ccff0d67dc9fae7b24384af28e183693a, with the single decision question whether the nine-operation mapping table, receipt classes, canonical/exclusion lists, replay-harness specification and prompt/REPL manifest support per-operation replay proof and deletion, and where that proof would be vacuous. Re-verify load-bearing panel claims in source, adjudicate one outcome, fold into the next implementation commit.'
 finish:
   deliver: 'The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk''s only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden and each earned its deletion by replay proof, the assignment fate is authored by the reducer, run acceptance no longer keys on tool names and fails loudly when evidence is missing, one model-independent prompt with one REPL initialization serves the expected roster with zero output repair, and the proved replay harness plus its fixtures remain as durable evidence.'
   artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened, and one adjudicated review receipt per frozen boundary (P0, P3, P4, P5).'
@@ -463,6 +464,30 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: docs/ACTIVE.md Working Definition section, docs/mission-graph.yaml working spine node with the only entrypoint:true row, docs/doc-authority-manifest.yaml working definition entry; doccheck warnings 7 -> 2 (both remaining are outside this mission)
+  - id: engineering-carrier-p0-define-2026-09-11
+    boundary: define
+    commit_or_artifact: docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md (sha256 3eb10539c5bb596bc33eeaf8705fa69ccff0d67dc9fae7b24384af28e183693a at base main@73815790)
+    proof_refs:
+      - 'four defects recorded with file:line evidence: envelope alias with empty required (tools_capsule.go:746-773), tool-name-keyed acceptance checkpoints (run_acceptance.go:627-645,281-313), reducer-is-not-a-settler (rlm_reduce.go:150-198 vs cosuper_assignment_fate.go:525-810), verifier-slot unreachable (tools_capsule.go:410-412,491-493 vs cosuper_assignment_runtime.go:342-355)'
+      - 'nine-operation mapping table frozen: tools-branch closed set minus capsule_go_eval; rows 1-4 deferred to R8, rows 5-9 deleted this mission; receipt classes, canonical identity fields, exclusion lists and fixture paths declared per row'
+      - 'prompt/REPL manifest and entropy-exclusion list frozen: assembly order tool_profiles.go:195-302 plus sorted catalog toolregistry.go:169-194; exclusions limited to now_utc, per-run assignment/run-context identity fields, and the user message'
+      - 'falsifiers published including the vacuous-proof conditions for the mapping table and the exclusion list'
+      - 'replay-harness specification published: fixture schema v1, canonicalizer, effect census, durable receipt store docs/evidence/rlm-replay/, legacy and successor adapters, caller-supplied semantic identity, state-mutating read fixture, rewarm procedure'
+      - 'model-selection mechanism chosen: owner-visible model-policy overlay id threaded through assign_co_super -> StartAssignedCoSuperRequest -> request digest -> run metadata before EnrichMetadata'
+      - 'frozen desk task published at artifact section 7'
+    rollback_ref: revert this commit; docs-only, no runtime effect
+    disposition: 'published and frozen; P0-review panel is bound to this artifact identity'
+    problem_ref: the four defects in start.observed_artifact, recorded in artifact section 1
+    authorization_ref: owner charter 2026-09-11; P0-define acceptance item
+    candidate_or_evidence_refs:
+      - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: docs/doc-authority-manifest.yaml frozen_boundary_artifact entry added in the same commit
 view:
   path: none
   generator: node skills/definition/scripts/dashboard.mjs docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md --serve 127.0.0.1:8787 --watch (skill-owned; served on demand, never committed)
