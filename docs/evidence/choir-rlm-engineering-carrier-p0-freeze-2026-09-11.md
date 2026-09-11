@@ -106,14 +106,21 @@ evidence).
 | 2 | `capsule_read_file` | `choir.ReadFile(path)` — existing | transient_observation | path, content_sha256 (harness-derived from returned content) | broker rcpt_ id | `internal/agentcore/testdata/rlm_replay/capsule_read_file/v1/` |
 | 3 | `capsule_write_file` | `choir.WriteFile(path, content)` — existing | transient_mutation | path, content_sha256, bytes_written. Parameter-surface gap frozen for R8: legacy accepts `mode`; `choir.WriteFile` never passes it and the broker defaults 0o644 (`choir.go:158-167`, `broker.go:259`) | broker rcpt_ id, mod_time (wall clock, `broker.go:268-271`) | `internal/agentcore/testdata/rlm_replay/capsule_write_file/v1/` |
 | 4 | `capsule_list_dir` | `choir.ListDir(path)` — existing | transient_observation | path, entries (already sorted — `os.ReadDir` order, `broker.go:290-298`) | broker rcpt_ id | `internal/agentcore/testdata/rlm_replay/capsule_list_dir/v1/` |
-| 5 | `commit_transaction` | staged Freeze intent — PLANNED (P3-in-cell-surface), not current | selfdev_freeze | operation_id (stable per trajectory binding), trajectory_id, base_event_head (replay valid only on an unmoved chain — the fixture pins the head), content_digest (= bundle_digest), change_count, classifier_version, classifier_digest, groups, state=frozen | handle, event ids/timestamps, staged bundle file path | `internal/agentcore/testdata/rlm_replay/commit_transaction/v1/` |
-| 6 | `inspect_self_development_bundle` | synchronous read-only bundle inspection — PLANNED (P3-in-cell-surface), not current; gated on P3-parity verifier slot | read_only_inspection | operation_id, bundle_digest, content_digest, source_tree_ref, runtime_artifact_ref, base_event_head, runtime_files (path+sha256, sorted), build_recipe_ref, test_receipts, dependency_toolchain_refs, classifier_version, classifier_digest, groups | execution_receipts: compare receipt REFS only, never bodies (bodies embed occurred_at); resource_receipts are strings — compared verbatim | `internal/agentcore/testdata/rlm_replay/inspect_self_development_bundle/v1/` |
-| 7 | `record_self_development_verification` | staged Verify intent — PLANNED (P3-in-cell-surface), not current; gated on P3-parity verifier slot | selfdev_verify | operation_id, bundle_digest, decision, sorted verifier_refs (content), resulting operation state, verifier_ref (the exact stable verifier-event reference distinguishes replay from reconstruction) | event_id, event timestamp, verifier_run_id (per-run; embedded in the idempotency payload `tools_capsule.go:529-537`), idempotency-record internals | `internal/agentcore/testdata/rlm_replay/record_self_development_verification/v1/` |
-| 8 | `record_assignment_result` | `choir.Complete(result, verdict, summary, evidenceRefs)` → IntentComplete — staging exists; fate authorship added in P3-settlement | lifecycle_fate | assignment_id, attempt, proposition_digest, disposition, result, verdict, summary, sorted evidence_refs, command_ids (`capsule-command:` + sha256(receipt_ref), `tools_capsule.go:919-921`), output_digests, candidate_id; terminal report_id is deterministic (TerminalReportID over owner/computer/assignment/attempt/proposition digest, `cosuper_assignment_fate.go:590`) and stays canonical; freeze receipt ids and lifecycle command receipt fields are replay identity and stay canonical | partial report_id (embeds tool_call_id — substituted by cell intent identity), timestamps, wake metadata | `internal/agentcore/testdata/rlm_replay/record_assignment_result/v1/` |
+| 5 | `commit_transaction` | staged Freeze intent — PLANNED (P3-in-cell-surface), not current | selfdev_freeze | canonical fields are loaded from the persisted operation/bundle record, NOT the tool envelope — the already-frozen short-circuit returns only `{handle,bundle_digest,operation_id,state}` (`tools_capsule.go:306-313`): operation_id (stable per trajectory binding), trajectory_id, base_event_head (environment binding — replay valid only on an unmoved chain; the fixture pins the head), content_digest (= bundle_digest), change_count, classifier_version, classifier_digest, groups, state=frozen | handle, event ids/timestamps, staged bundle file path | `internal/agentcore/testdata/rlm_replay/commit_transaction/v1/` |
+| 6 | `inspect_self_development_bundle` | synchronous read-only bundle inspection — PLANNED (P3-in-cell-surface), not current; gated on P3-parity verifier slot | read_only_inspection | operation_id, content_digest (the receipt emits `content_digest`, not `bundle_digest`, `tools_capsule.go:454-464`), source_tree_ref, runtime_artifact_ref, base_event_head, runtime_files (path+sha256, sorted), build_recipe_ref, test_receipts, dependency_toolchain_refs, classifier_version, classifier_digest, groups | execution_receipts: compare receipt REFS only, never bodies (bodies embed occurred_at); resource_receipts are strings — compared verbatim | `internal/agentcore/testdata/rlm_replay/inspect_self_development_bundle/v1/` |
+| 7 | `record_self_development_verification` | staged Verify intent — PLANNED (P3-in-cell-surface), not current; gated on P3-parity verifier slot | selfdev_verify | canonical fields from the persisted operation/event record, NOT the tool envelope — the replay short-circuit omits decision/verifier_refs (`tools_capsule.go:513-524`) and the returned bundle_digest is post-finalize, not the input: operation_id, decision, resulting operation state, verifier_ref (the exact stable verifier-event reference distinguishes replay from reconstruction) | event_id, event timestamp, verifier_run_id (per-run; embedded in the idempotency payload `tools_capsule.go:529-537`), input verifier_refs and input bundle_digest (request fields, not receipt fields), idempotency-record internals | `internal/agentcore/testdata/rlm_replay/record_self_development_verification/v1/` |
+| 8 | `record_assignment_result` | `choir.Complete(result, verdict, summary, evidenceRefs)` → IntentComplete — staging exists; fate authorship added in P3-settlement | lifecycle_fate | canonical fields from the persisted fate/report store record, NOT the tool envelope or the Go return: assignment_id, attempt, proposition_digest, disposition, result, verdict, summary, sorted evidence_refs, command_ids and output_digests as STORED report fields (never re-derived — receipt_refs hash occurred_at, `executor.go:645-656,707-717`), candidate object, replay flag (`CoSuperAssignmentCommandResult.Replay`, `types/cosuper_assignment.go:527-534` — read from the store, absent from the tool JSON `tools_capsule.go:938-939`); terminal report_id is deterministic (TerminalReportID over owner/computer/assignment/attempt/proposition digest, `cosuper_assignment_fate.go:590`) and stays canonical; freeze receipt ids and lifecycle command receipt fields are replay identity and stay canonical | partial report_id (embeds tool_call_id — substituted by cell intent identity), timestamps, wake metadata | `internal/agentcore/testdata/rlm_replay/record_assignment_result/v1/` |
 | 9 | `update_coagent` | `choir.Message(toDesk, kind, body)` → IntentMessage — staging exists; authority parity added in P3-parity | lifecycle_update | update_id (durable derivation), caller_agent_id, target_agent_id, channel_id, trajectory_id, packet kind + normalized packet digest, durable cursor (replay identity) | timestamps, wake/dispatch ids, call-disposition `status` (`submitted` on first execution vs `existing` on replay — normalized, `tools_worker_update.go:288-293`) | `internal/agentcore/testdata/rlm_replay/update_coagent/v1/` |
 
-Durable golden receipts captured against the pre-cutover deployed build live at
-`docs/evidence/rlm-replay/<operation>-golden-v1.json`.
+Durable golden receipts will be captured against the pre-cutover deployed
+build at `docs/evidence/rlm-replay/<operation>-golden-v1.json` (future tense —
+neither that directory nor `internal/agentcore/testdata/rlm_replay/` exists
+yet; both are P4-harness outputs).
+
+**Deletion prerequisite (hard gate):** no row-5-9 tool name is deleted until
+ALL of: P3 settlement parity landed, P3 acceptance migration landed, the
+deployed negative acceptance proof recorded, and that operation's P4 golden
+receipt + replay proof recorded.
 
 **P3 scope items the table exposes** (frozen here so P3 cannot shrink them):
 
@@ -157,9 +164,14 @@ identity change the replay proof must still honor on the declared fields):
   and they gate nothing in this mission since rows 1-4 are deferred to R8.
 - Row 8 partial-report identity embeds the provider `tool_call_id`
   (`cosuper_assignment_fate.go:593-595`); the successor derives the equivalent
-  identity from the cell intent identity (cell id + local id + content digest,
-  `rlm_reduce.go:156-163`). The proposition digest, assignment/attempt identity
-  and disposition are invariant across the substitution.
+  identity from assignment/attempt + proposition digest
+  (`cosuper_assignment_fate.go:576-583`) — NOT the tray-scoped
+  `rlm:<cell>:<local>:sha` key (`rlm_reduce.go:156-163`), which changes on
+  every replay cell and would write a second envelope. The proposition digest,
+  assignment/attempt identity and disposition are invariant across the
+  substitution. `execution_refs` fold into `choir.Complete`'s evidenceRefs
+  carrying `capsule-go-eval:`/`capsule-exec:` receipt refs; the successor
+  adapter reads the store fate/report, not the Go return.
 - Row 9's durable update id derivation
   (`tools_worker_update.go:1009-1030`) must be reproduced by the staged message
   path; the reducer's current `rlm:<cell>:<local>:sha` idempotency key is
@@ -179,7 +191,9 @@ order:
 3. Role prompt — `promptStore.Load(ownerID, "engineering")`, default
    `internal/promptstore/defaults/engineering.yaml`.
 4. Skill context — optional, `rt.skillContextForProfile(profile)`
-   (`tool_profiles.go:230-233`); deterministic file bytes.
+   (`tool_profiles.go:230-233`); a 1200-byte extract plus the ABSOLUTE
+   `Source:` path (`internal/agentcore/skill_context.go:17-45,58-69`) — the
+   absolute path is host-path entropy, not desk-constant.
 5. CoSuper overlay — `RLMCoSuperOverlay()` when `capsule.HostSelectsRLM()`
    (`tool_profiles.go:260-265`), body
    `internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml`.
@@ -195,7 +209,10 @@ order, not sorted (`internal/toolregistry/toolregistry.go:169-194`, invoked at
 (`runtime.go:3287-3302`). Tool schemas travel separately via
 `registry.Definitions()` (`toolregistry.go:159-167`), not inside the catalog
 text. No model id is read anywhere in this path; the only route conditional is
-the actuator (`capsule/actuator.go`, `tool_profiles.go:261`).
+the actuator (`capsule/actuator.go`, `tool_profiles.go:261`). A second
+assembly path concatenates the user message INTO the system string
+(`tool_profiles.go:303-316`, used at `runtime.go:3664`), so "user message
+excluded" is path-dependent — the digest spec names which path it covers.
 
 Known served-prompt defects the P4 overlay rewrite must fix (panel finding):
 the RLM overlay's worked example reads `ctx["assignment_id"]`
@@ -207,8 +224,10 @@ the RLM overlay's worked example reads `ctx["assignment_id"]`
 ### 3.2 Entropy-exclusion list
 
 The desk prompt digest is computed over a canonical tuple: the assembled
-system prompt, the catalog text, and the complete tool definitions including
-schemas (in registry order). The prompt is a flat rendered string, so
+system prompt, the catalog text, and the canonical JSON of the complete
+`Definitions()` set including schemas (in registry order — the catalog text
+alone carries only names + 80-char truncated descriptions and would NOT move
+when P2 deletes the `code` alias). The prompt is a flat rendered string, so
 exclusions are TEXTUAL masks over named dynamic fragments, not structured
 field paths:
 
@@ -219,14 +238,22 @@ field paths:
 - The run-context overlay's agent id, requester agent id, and channel id
   values — per-run routing identity (the texture delivery field is
   Researcher-only and empty for CoSuper).
+- The skill-context `Source:` absolute path — host-path entropy; the skill
+  CONTENT digest (or basename) stays inside the digest, and the configured
+  skills-root identity is pinned in `environment`.
 - The initial user message `rec.Prompt` — excluded from the system-prompt
   digest; the roster fixes the task text separately (§7).
 
-Everything else — core prompt, role prompt, skill context bytes, RLM overlay
+Everything else — core prompt, role prompt, skill content digest, RLM overlay
 body, the `assignment_kind` value, the catalog text, and the tool definitions
 including schemas — is INSIDE the digest. `assignment_kind` stays in: it is
 constant for a fixed desk task, and an implementation run vs a verification
 run digesting differently is by design.
+
+Digest equality proves prompt equality only. It does NOT prove
+model-selection equality: the replay fixture's `environment` additionally
+records effective provider, model, reasoning effort, max tokens, and
+policy-overlay identity, and the roster compares those fields separately.
 
 ### 3.3 REPL initialization manifest
 
@@ -279,20 +306,28 @@ Built in P4-harness before any golden capture. Components:
 - **Effect census**: per receipt class, a named vector of durable witnesses —
   event ranges, operation transitions, lifecycle command rows, update rows,
   receipt artifacts, mailbox rows, frozen-bundle files, and worktree
-  digest/metadata — each bound to the semantic identity. Transient
-  re-execution detection additionally requires a host-side dispatch/admission
-  journal keyed by semantic identity (an attempt counter or controlled
-  sentinel effect for write/exec), since identical-byte rewrites and
-  side-effecting commands are invisible to before/after state alone. Replay
-  must produce zero additional effects on every component.
+  digest/metadata — each bound to the semantic identity. For row 3 the census
+  MUST include a filesystem-write invocation witness (mtime/inode or a
+  controlled sentinel): a repeated `WriteFile` always rewrites and returns the
+  same byte count (`broker.go:255-271`), so before/after content alone cannot
+  distinguish replay from re-execution. Transient re-execution detection
+  additionally requires a host-side dispatch/admission journal keyed by
+  semantic identity (an attempt counter or controlled sentinel effect for
+  write/exec). Replay must produce zero additional effects on every
+  component.
 - **Durable receipt store**: `docs/evidence/rlm-replay/<op>-golden-v1.json`,
   bound to the capture build SHA.
 - **Legacy capture adapter**: invokes the JSON tool path on the pre-cutover
   deployed build and records the canonical receipt.
-- **Successor adapter**: invokes the in-cell successor under the same
-  `semantic_identity`; the successor-returned receipt/ref must be resolvable
-  independently from its durable store — a fixture-only run validates the
-  canonicalizer but never authorizes deletion by itself.
+- **Successor adapter** (class-specific contract): invokes the in-cell
+  successor under the same `semantic_identity`. Transient rows must prove
+  state observation/mutation through the real successor, not fixture replay;
+  mutation rows must census the actual filesystem effect; durable rows must
+  compare the stored replay receipt and effect vector; every reused identity
+  is checked before dispatch. For durable rows the successor-returned
+  receipt/ref must be resolvable independently from its durable store — a
+  fixture-only run validates the canonicalizer but never authorizes deletion
+  by itself.
 - **Caller-supplied semantic identity**: in-cell broker calls mint a fresh
   `rcpt_*` request id per call today (`choir.go:84-110`,
   `yaegikernel/broker.go:114-125`); the harness requires a caller-supplied
@@ -350,9 +385,11 @@ The task text served to every roster run, verbatim:
 > of fields declared on GoEvalRequest;
 > (2) write /workspace/platform/tmp/rlm-desk-task-marker.txt containing exactly
 > the line `carrier-check`;
-> (3) run `go vet ./internal/capsule` and record its exit code;
+> (3) run `go -C /workspace/platform vet ./internal/capsule` (choir.Exec runs
+> `exec.CommandContext` directly — no shell, no cwd parameter, so the command
+> must be a single self-contained invocation) and record its exit code;
 > (4) complete the assignment with result=completed, verdict=pass, a summary
-> naming the field count and the exit code, and evidence refs containing
+> naming the field count and the exit code, and execution_refs containing
 > exactly the execution receipt refs of the cells that performed steps 1-3.
 
 Pass requires: the marker file content exact, the vet exit code reported
