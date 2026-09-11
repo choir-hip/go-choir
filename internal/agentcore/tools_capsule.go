@@ -86,19 +86,7 @@ func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime)
 	return nil
 }
 
-// registerCapsuleBoundSelfDevelopmentTools installs freeze/inspect/verify tools
-// that require an assigned CoSuper capsule binding. They are not host-file,
-// spawn, materialize, checkpoint, route, VM, or owner-decision authority.
-func registerCapsuleBoundSelfDevelopmentTools(registry *toolregistry.ToolRegistry) error {
-	for _, tool := range []toolregistry.Tool{
-		newCommitTransactionTool(), newInspectSelfDevelopmentBundleTool(), newRecordSelfDevelopmentVerificationTool(),
-	} {
-		if err := registry.Register(tool); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+
 
 func requireCapsuleRole(ctx context.Context, role capsule.AgentRole) (*CapsuleToolCtx, error) {
 	value := capsuleCtxFromCtx(ctx)
@@ -238,38 +226,6 @@ func newListCapsulesTool() toolregistry.Tool {
 	}
 }
 
-func newCommitTransactionTool() toolregistry.Tool {
-	type args struct {
-		Handle                  string   `json:"handle"`
-		BuildRecipeRef          string   `json:"build_recipe_ref"`
-		TestReceipts            []string `json:"test_receipts"`
-		DependencyToolchainRefs []string `json:"dependency_toolchain_refs"`
-	}
-	arrayOfStrings := map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
-	return toolregistry.Tool{
-		Name: "commit_transaction", Description: "Classify and freeze the capsule diff as a complete verifier-ready effect bundle draft.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"handle": map[string]any{"type": "string"}, "build_recipe_ref": map[string]any{"type": "string"},
-			"test_receipts": arrayOfStrings, "dependency_toolchain_refs": arrayOfStrings,
-		}, []string{"handle", "build_recipe_ref", "test_receipts", "dependency_toolchain_refs"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleMutationRole(ctx)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			out, err := freezeCapsuleEffectBundle(ctx, toolCtx, toolregistry.ExecutionContextFrom(ctx).RunRecord,
-				input.Handle, input.BuildRecipeRef, input.TestReceipts, input.DependencyToolchainRefs)
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(out)
-		},
-	}
-}
 
 // freezeCapsuleEffectBundle classifies and freezes the capsule diff as a
 // complete verifier-ready effect bundle draft. It is the shared body of the
@@ -400,36 +356,6 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	}, nil
 }
 
-func newInspectSelfDevelopmentBundleTool() toolregistry.Tool {
-	type args struct {
-		OperationID  string `json:"operation_id"`
-		BundleDigest string `json:"bundle_digest"`
-	}
-	return toolregistry.Tool{
-		Name:        "inspect_self_development_bundle",
-		Description: "Verify the immutable staged release and classifier metadata for an exact frozen self-development bundle.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"operation_id":  map[string]any{"type": "string"},
-			"bundle_digest": map[string]any{"type": "string"},
-		}, []string{"operation_id", "bundle_digest"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			out, err := inspectSelfDevelopmentBundle(ctx, toolCtx, toolregistry.ExecutionContextFrom(ctx).RunRecord, input.OperationID, input.BundleDigest)
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(out)
-		},
-	}
-}
-
 // inspectSelfDevelopmentBundle verifies the immutable staged release and
 // classifier metadata for an exact frozen self-development bundle. It is the
 // shared body of the inspect_self_development_bundle JSON tool and the
@@ -489,40 +415,6 @@ func inspectSelfDevelopmentBundle(ctx context.Context, toolCtx *CapsuleToolCtx, 
 	}, nil
 }
 
-func newRecordSelfDevelopmentVerificationTool() toolregistry.Tool {
-	type args struct {
-		OperationID  string   `json:"operation_id"`
-		BundleDigest string   `json:"bundle_digest"`
-		Decision     string   `json:"decision"`
-		VerifierRefs []string `json:"verifier_refs"`
-	}
-	return toolregistry.Tool{
-		Name:        "record_self_development_verification",
-		Description: "Record an independent verifier decision for the exact frozen self-development bundle.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"operation_id":  map[string]any{"type": "string"},
-			"bundle_digest": map[string]any{"type": "string"},
-			"decision":      map[string]any{"type": "string", "enum": []string{"pass", "fail"}},
-			"verifier_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-		}, []string{"operation_id", "bundle_digest", "decision", "verifier_refs"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			out, err := recordSelfDevelopmentVerification(ctx, toolCtx, toolregistry.ExecutionContextFrom(ctx).RunRecord,
-				input.OperationID, input.BundleDigest, input.Decision, input.VerifierRefs)
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(out)
-		},
-	}
-}
 
 // recordSelfDevelopmentVerification records an independent verifier decision
 // for the exact frozen self-development bundle. It is the shared body of the

@@ -112,7 +112,7 @@ func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build assigned registry: %v", err)
 	}
-	want := []string{"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "update_coagent"}
+	want := []string{"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
 		t.Fatalf("assigned registry tools = %v, want exact %v", got, want)
 	}
@@ -123,7 +123,7 @@ func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
 	}
 }
 
-func TestCapsuleLocalAndHostSelfDevelopmentInstallersAreDisjoint(t *testing.T) {
+func TestCapsuleLocalInstallerIsExact(t *testing.T) {
 	capsuleLocal := toolregistry.MustNewToolRegistry()
 	if err := RegisterCapsuleLocalTools(capsuleLocal, nil); err != nil {
 		t.Fatalf("register capsule-local tools: %v", err)
@@ -132,16 +132,6 @@ func TestCapsuleLocalAndHostSelfDevelopmentInstallersAreDisjoint(t *testing.T) {
 		"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file",
 	}; !slices.Equal(got, want) {
 		t.Fatalf("capsule-local tools = %v, want %v", got, want)
-	}
-
-	hostSelfDevelopment := toolregistry.MustNewToolRegistry()
-	if err := registerCapsuleBoundSelfDevelopmentTools(hostSelfDevelopment); err != nil {
-		t.Fatalf("register host self-development tools: %v", err)
-	}
-	if got, want := registryToolNames(hostSelfDevelopment), []string{
-		"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification",
-	}; !slices.Equal(got, want) {
-		t.Fatalf("host self-development tools = %v, want %v", got, want)
 	}
 }
 
@@ -248,6 +238,7 @@ func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
 }
 
 func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
+	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
 	rt := &Runtime{}
 	for _, kind := range []types.CoSuperAssignmentKind{types.CoSuperAssignmentImplementation, types.CoSuperAssignmentVerification} {
 		rec := &types.RunRecord{RunID: "assigned", AgentID: "engineering:assigned", AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
@@ -258,12 +249,12 @@ func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
 		if !strings.Contains(prompt, "kind="+string(kind)) {
 			t.Fatalf("prompt does not name exact %s assignment: %s", kind, prompt)
 		}
-		if !strings.Contains(prompt, "update_coagent") {
-			t.Fatalf("assigned CoSuper prompt omits update_coagent Super report channel: %s", prompt)
+		if !strings.Contains(prompt, "choir.Message") {
+			t.Fatalf("assigned CoSuper prompt omits the in-cell report channel: %s", prompt)
 		}
-		for _, name := range []string{"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification"} {
-			if !strings.Contains(prompt, name) {
-				t.Fatalf("assigned CoSuper prompt omits %s: %s", name, prompt)
+		for _, name := range []string{"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "update_coagent", "record_assignment_result"} {
+			if strings.Contains(prompt, name) {
+				t.Fatalf("assigned CoSuper prompt still names retired tool %s: %s", name, prompt)
 			}
 		}
 		if strings.Contains(prompt, "may be added later") || strings.Contains(prompt, "report one precise result through update_coagent") {
@@ -301,11 +292,11 @@ func TestRLMAssignedCoSuperOverlayIsSealedGo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build RLM assigned registry: %v", err)
 	}
-	want := []string{"capsule_go_eval", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "update_coagent"}
+	want := []string{"capsule_go_eval"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
 		t.Fatalf("RLM assigned registry tools = %v, want exact %v", got, want)
 	}
-	for _, absent := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir"} {
+	for _, absent := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "update_coagent", "record_assignment_result"} {
 		if _, ok := registry.Lookup(absent); ok {
 			t.Fatalf("RLM registry kept JSON capsule tool %q", absent)
 		}

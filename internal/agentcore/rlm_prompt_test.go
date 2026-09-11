@@ -28,7 +28,7 @@ func TestCoSuperPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"capsule_go_eval", "choir.Inbox", "choir.Spawn", "choir.Complete", "do not exist in this mode"} {
+	for _, want := range []string{"capsule_go_eval", "choir.Inbox", "choir.Spawn", "choir.Complete", "No other JSON tool exists in this mode"} {
 		if !strings.Contains(rlmPrompt, want) {
 			t.Errorf("RLM prompt missing %q", want)
 		}

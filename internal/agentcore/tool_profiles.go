@@ -296,6 +296,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		RequesterAgentID:       requesterAgentID,
 		TextureDeliveryAgentID: textureDeliveryAgentID,
 		ChannelID:              channelID,
+		InCellCarrier:          profile == agentprofile.CoSuper && capsule.HostSelectsRLM(),
 	}))
 	return b.String(), nil
 }
@@ -330,35 +331,17 @@ func buildAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, erro
 	if err := RegisterCapsuleLocalTools(registry, rt); err != nil {
 		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
 	}
-	if err := RegisterCoagentUpdateTools(registry, rt); err != nil {
-		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
-	}
-	if err := registerCapsuleBoundSelfDevelopmentTools(registry); err != nil {
-		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
-	}
 	return registry, nil
 }
 
 // buildRLMAssignedCoSuperRegistry is the sealed-Go overlay (Def 2 item 4):
-// capsule_go_eval is the sole capsule-effect entry (the broker dispatches it
-// to the persistent session worker with prebound choir ops). The JSON file
-// and exec tools are removed — choir.ReadFile/WriteFile/ListDir/Exec inside
-// cells subsume them. Report/update channels and bundle-verification tools
-// stay: they are host reconciliation, not capsule effects, and have no
-// in-cell equivalent.
+// capsule_go_eval is the sole JSON envelope — the desk's only tool. Every
+// other affordance is a typed in-cell choir function staging intents for the
+// one reducer: files, commands, messages, spawning, completion, freeze,
+// verify, and bundle inspection.
 func buildRLMAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
-	for _, tool := range []toolregistry.Tool{
-		newCapsuleGoEvalTool(rt),
-		newCommitTransactionTool(),
-		newInspectSelfDevelopmentBundleTool(),
-		newRecordSelfDevelopmentVerificationTool(),
-	} {
-		if err := registry.Register(tool); err != nil {
-			return nil, fmt.Errorf("build RLM assigned co-super registry: %w", err)
-		}
-	}
-	if err := RegisterCoagentUpdateTools(registry, rt); err != nil {
+	if err := registry.Register(newCapsuleGoEvalTool(rt)); err != nil {
 		return nil, fmt.Errorf("build RLM assigned co-super registry: %w", err)
 	}
 	return registry, nil

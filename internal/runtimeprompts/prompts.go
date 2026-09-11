@@ -28,6 +28,9 @@ type RunContextOptions struct {
 	RequesterAgentID       string
 	TextureDeliveryAgentID string
 	ChannelID              string
+	// InCellCarrier is true when the run's desk lives on the in-cell carrier:
+	// peer coordination is choir.Message, not a JSON tool.
+	InCellCarrier bool
 }
 
 func TemporalContext(opts TemporalContextOptions) string {
