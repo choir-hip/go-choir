@@ -192,6 +192,18 @@ start:
         internal/capsule/types.go:101-113; cmd/capsule-broker/session_worker.go:26-33,274-289,336,386;
         internal/yaegikernel/sidecar.go:166-180; internal/yaegikernel/choir.go:20-61,265-272
     - claim: >-
+        The assigned-CoSuper run cannot select a model: `StartAssignedCoSuperRequest` carries only
+        the objective, kind, candidate, parent work item and tool call, and the run metadata is then
+        enriched from the role policy. The owner-visible eval-arm mechanism
+        (`model_policy_overlay_id`, `System/model-policy-overlays/<id>.toml`) exists on the coagent
+        spawn tool and the Texture prompt-eval API, but not on the assignment path. The roster test
+        therefore needs a model-selection mechanism that does not exist yet.
+      claim_scope: current
+      evidence_ref: >-
+        internal/agentcore/cosuper_assignment_runtime.go:51-57,342-355;
+        internal/modelpolicy/model_policy.go:134; internal/coagentowner/spawn_tool.go:34,54,136;
+        internal/textureowner/api_texture_prompt_eval.go:22-68
+    - claim: >-
         The gateway and provider request structs carry no session identity and the gateway decoder
         ignores unknown JSON fields, so an additive optional field is version-skew safe.
       claim_scope: current
@@ -502,7 +514,10 @@ finish:
         `muse-spark-1.3-contributor` counts as one id). Every other roster member is an experiment:
         run it, record pass or fail, tokens, latency and failure mode, and never let it gate. Record
         which id served each run so a quota switch is never read as a model failure, and exclude
-        `hy3` from any image-bearing step by name.
+        `hy3` from any image-bearing step by name. Resolve the model-selection mechanism before
+        this item can run - an owner-visible model-policy overlay id on the assignment path, or a
+        per-run engineering policy swap that is restored afterwards - and name the chosen mechanism
+        in P0-define. The assignment path cannot select a model today.
       proves: "One prompt genuinely serves the expected roster, which is the owner's completion goal."
       evidence_class: deployed_proof
     - action: >-
@@ -602,6 +617,7 @@ boundaries:
     - "deployed_proof for phase 1 provider calls, settlement, the acceptance rebuild negative, replay per operation class, the live registry observation, the roster, and the final landing"
     - "local_test for the envelope simplification, the repair deletion, the prompt invariant, the parity work, the in-cell surface, the replay harness, the prompt-fix rule, the tools-actuator reachability, and the path deletion"
     - "static_analysis for the P0-define boundary and the citer sweep"
+    - "broad-package local runs use scripts/go-test-runtime-shards or scripts/go-test-non-runtime-shards, never a single whole-package run (internal/store is fsync-bound and internal/agentcore and internal/textureowner are sharded in CI)"
   conjecture_delta:
     discovered:
       - >-
@@ -725,12 +741,18 @@ receipts:
     candidate_or_evidence_refs: []
   - id: engineering-carrier-entry-reconciliation
     boundary: define
-    commit_or_artifact: "pending: filled at charter"
-    proof_refs: []
-    rollback_ref: "none"
-    disposition: "pending the entry gate in start.entry_gate"
-    problem_ref: "start.start_correction stale-ref correction"
-    authorization_ref: "none yet; read-only reconciliation only"
+    commit_or_artifact: >-
+      read-only reconciliation 2026-09-11 at a846bd21: `docs/reports/choir-rlm-mission-2-versioned-rename-report-2026-09-11.md`
+      and `docs/reports/choir-testing-ci-speedup-report-2026-09-11.md` reviewed; git status clean
+      apart from three preserved untracked paths
+    proof_refs:
+      - "predecessor deployed proof artifact read: e3396329, CI 34571343061, staged computer epoch 909, effects OFF"
+      - "post-mission-two work disposed: GC fix a907f713 with the offline GC executed (18.6 GiB journal -> 2.1 GiB store, head seq 148655, guest rebooted clean at 12.4% used); test/CI work e22b99d4, 58d4e2dc, 278263ab with green CI run 34622877021 and race run 34626445187"
+      - "registries re-checked: ACTIVE.md lists this mission as the next queued mission; mission-graph.yaml and doc-authority-manifest.yaml still carry no node for it; zero entrypoint: true rows exist"
+    rollback_ref: "none; read-only reconciliation"
+    disposition: "partially satisfied: predecessor receipt read and post-mission-two work disposed; registry promotion and owner charter still pending"
+    problem_ref: "start.start_correction stale-ref correction; the assigned-run model-selection gap added to start.observed_artifact"
+    authorization_ref: "owner instruction 2026-09-11 to review the completion and CI reports before starting"
     candidate_or_evidence_refs: []
 ---
 

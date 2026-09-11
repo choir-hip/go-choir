@@ -120,3 +120,29 @@ The orchestrator re-checked each load-bearing claim in source before folding it 
 Charter on the entry gate alone: re-read the predecessor receipt, dispose the post-mission-two work,
 promote this Definition in the three registries atomically, and date the owner charter. The first
 executed action is `P0-define`, code-free. No repair, settlement, or deletion code precedes it.
+
+## Post-review addendum, 2026-09-11 (entry reconciliation)
+
+After the panel, the owner completed mission two and landed a testing/CI speedup. Both were
+reviewed:
+
+- `docs/reports/choir-rlm-mission-2-versioned-rename-report-2026-09-11.md` — settled with deployed
+  proof at `e3396329` (CI `34571343061`, staged computer epoch 909), 77 commits, two heresies
+  discovered and repaired (a post-cutover panel found the initial deployed proof narrower than
+  claimed; a boot stall found silent migration meeting the stall detector), and the post-settlement
+  disk exhaustion fixed by `a907f713` (18.6 GiB journal → 2.1 GiB store, guest rebooted clean at
+  12.4% used).
+- `docs/reports/choir-testing-ci-speedup-report-2026-09-11.md` — store bootstrap batching
+  (`58d4e2dc`) and shard changes (`e22b99d4`, `278263ab`) measured at −45% store shard sum on green
+  CI `34622877021`; no new permanent test, correctly, since the existing migration tests assert the
+  consumer-visible schema outcome.
+
+One new gap found by this reconciliation and folded into the Definition: **the assigned-CoSuper run
+cannot select a model.** `StartAssignedCoSuperRequest` carries no model or policy field, and the
+owner-visible eval-arm mechanism (`model_policy_overlay_id`) exists only on the coagent spawn tool
+and the Texture prompt-eval API. The roster test therefore needs a model-selection mechanism that
+does not exist yet; it is recorded as an observed artifact and as a precondition inside `P5-roster`.
+
+Entry gate status after reconciliation: predecessor receipt read (satisfied), post-mission-two work
+disposed (satisfied), registry promotion (pending), owner charter (pending).
+
