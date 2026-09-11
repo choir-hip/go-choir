@@ -23,7 +23,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // CapsuleToolCtx is injected by guest core. Opaque handles are bound to the
@@ -745,18 +744,16 @@ func newCapsuleExecTool() toolregistry.Tool {
 func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		Source    string `json:"source"`
-		Code      string `json:"code"`
 		Cwd       string `json:"cwd"`
 		TimeoutMS int    `json:"timeout_ms"`
 	}
 	return toolregistry.Tool{
-		Name: "capsule_go_eval", Description: "Evaluate model-authored Go source inside the assigned isolated capsule (persistent Yaegi interpreter). Pass raw Go source directly without markdown fences (never ```go) or surrounding prose. Top-level variables and imports persist across successful cells.",
+		Name: "capsule_go_eval", Description: "Evaluate model-authored Go source inside the assigned isolated capsule.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"source":     map[string]any{"type": "string", "description": "Raw Go source for one REPL cell. Bare top-level statements or declarations. Do not wrap in markdown code fences."},
-			"code":       map[string]any{"type": "string", "description": "Alias for source."},
+			"source":     map[string]any{"type": "string", "description": "Raw Go source for one REPL cell."},
 			"cwd":        map[string]any{"type": "string", "description": "Optional working directory inside /workspace/platform."},
 			"timeout_ms": map[string]any{"type": "integer", "description": "Evaluation timeout in milliseconds."},
-		}, []string{}, false),
+		}, []string{"source"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			toolCtx, err := requireCurrentAssignedCapsule(ctx)
 			if err != nil {
@@ -766,12 +763,10 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return "", err
 			}
-			src := input.Source
-			if src == "" {
-				src = input.Code
+			if strings.TrimSpace(input.Source) == "" {
+				return "", fmt.Errorf("capsule_go_eval: source is required")
 			}
-			src = yaegikernel.CleanGoSource(src)
-			req := capsule.GoEvalRequest{Source: src, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS}
+			req := capsule.GoEvalRequest{Source: input.Source, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS}
 			reduction := rlmReductionForCall(ctx, rt, toolCtx)
 			if reduction.active {
 				req.Inbox = reduction.inbox

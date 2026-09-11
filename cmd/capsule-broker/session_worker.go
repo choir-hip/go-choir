@@ -389,7 +389,7 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		resultBytes, _ := json.Marshal(result)
 		return BrokerRPCResponse{Result: resultBytes}
 	}
-	res, err := w.eval(yaegikernel.CleanGoSource(p.Source), p.Inbox, timeout)
+	res, err := w.eval(p.Source, p.Inbox, timeout)
 	if err != nil {
 		b.dropSession(cap.AgentRunID)
 		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session eval: %v", err), Duration: time.Since(start), Reuse: yaegikernel.ReuseUnsafeToReuse, DiagKind: yaegikernel.DiagWorker}

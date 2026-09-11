@@ -83,7 +83,6 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 	res := EvalResult{}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	src = CleanGoSource(src)
 	if s == nil || s.interp == nil {
 		return res, fmt.Errorf("yaegi: session unavailable")
 	}
