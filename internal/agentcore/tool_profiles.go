@@ -297,6 +297,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		TextureDeliveryAgentID: textureDeliveryAgentID,
 		ChannelID:              channelID,
 		InCellCarrier:          profile == agentprofile.CoSuper && capsule.HostSelectsRLM(),
+		NoReportChannel:        profile == agentprofile.CoSuper && !capsule.HostSelectsRLM(),
 	}))
 	return b.String(), nil
 }

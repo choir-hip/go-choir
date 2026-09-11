@@ -31,6 +31,9 @@ type RunContextOptions struct {
 	// InCellCarrier is true when the run's desk lives on the in-cell carrier:
 	// peer coordination is choir.Message, not a JSON tool.
 	InCellCarrier bool
+	// NoReportChannel is true when the desk has no peer-coordination tool at
+	// all (tools-actuator assigned CoSuper): the prompt must not name one.
+	NoReportChannel bool
 }
 
 func TemporalContext(opts TemporalContextOptions) string {
