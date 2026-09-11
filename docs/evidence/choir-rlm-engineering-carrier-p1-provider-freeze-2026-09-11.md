@@ -83,3 +83,33 @@ Revert the adapter commits, remove `OPENCODE_API_KEY` from the Node B env file
 (restore from the backup above), restart `go-choir-gateway`, and prove staging
 health returns to the pre-phase-1 identity. The adapter path is greenfield —
 no OpenCode adapter exists today — so the revert target is the added code.
+
+## Live proof (2026-09-11, deployed)
+
+Deployed build: `main@2af02977` on Node B (`go-choir-gateway` restarted
+19:43:29 UTC; `resolved 9 provider(s)` including `opencode-go` seed
+`deepseek-v4.1-flash` and `opencode-zen` seed `muse-spark-1.3-contributor-free`).
+Credential delivery: `nix/deploy-provider-creds.sh node-b` (21 env entries;
+`OPENCODE_API_KEY` present). Probe credential issued through
+`POST /provider/v1/credentials/issue` (loopback + `X-Internal-Caller`) for
+`computer_id=p1-provider-probe`.
+
+| Probe | Request shape | Model id | Status | Latency | Identity present |
+| --- | --- | --- | --- | --- | --- |
+| Chat completions | `POST /zen/go/v1/chat/completions` | `deepseek-v4.1-flash` via `opencode-go` | 200, `stop_reason=max_tokens`, usage 35+16 | 1.54s | `conversation_id=p1-probe-run-001` sent as `x-opencode-session` |
+| Responses | `POST /zen/v1/responses` (SSE) | `muse-spark-1.3-contributor-free` via `opencode-zen` | 200, `stop_reason=end_turn`, text `ok`, usage 12+216 | 2.05s | `conversation_id=p1-probe-run-004` |
+| Empty-identity negative | chat completions, no `conversation_id` | `deepseek-v4.1-flash` | 502 with OUR error `opencode-go: conversation_id is required for OpenCode requests` — fail-closed before egress; never an upstream 400 `MissingSessionID` | 12ms | absent by construction |
+
+Gateway journal confirms `provider: opencode-go call` / `opencode-zen stream
+complete` lines and `inference succeeded` entries for autoputer
+`p1-provider-probe`.
+
+**Discovered defect (recorded before fix, per problem-documentation-first):**
+an upstream `response.incomplete` event (reason `max_output_tokens`, observed
+live at `max_output_tokens=64` where 61 of 64 tokens were reasoning) is
+silently skipped by `parseOpenAIStream`; the call returns empty text with
+`stop_reason=""` and zero usage instead of surfacing the truncation. On the
+roster this would read as a model returning nothing — a false model failure.
+Fix: map `response.incomplete` to `stop_reason` from
+`incomplete_details.reason` and carry its usage; map `response.failed` to an
+error. Folded into the P1 repair commit.
