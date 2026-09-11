@@ -152,7 +152,7 @@ now:
     - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
     - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
   blocker_or_risk: 'None blocking: chartered and unblocked. Carried risks: retiring a settlement tool before the reducer authors fate; retiring an acceptance-named tool silently removing its checkpoint; the verifier slot being unreachable on the assigned path today; the four capsule operations needing to stay functional for the tools fallback; phase-1 gateway/provider and credential work being red inside this mission; the shared-prompt fix rule growing the prompt toward the weakest model; the replay harness and the run-level model-selection mechanism not existing yet.'
-  next_action: 'Run P0-review: bind the bundled convergent panel (skills/agentic-consensus/agentic-consensus-runner.sh, --prompt-file, --out-dir under .agentic-consensus/) to the frozen artifact at base main@73815790, path docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md, sha256 3eb10539c5bb596bc33eeaf8705fa69ccff0d67dc9fae7b24384af28e183693a, with the single decision question whether the nine-operation mapping table, receipt classes, canonical/exclusion lists, replay-harness specification and prompt/REPL manifest support per-operation replay proof and deletion, and where that proof would be vacuous. Re-verify load-bearing panel claims in source, adjudicate one outcome, fold into the next implementation commit.'
+  next_action: 'P1-provider deployed proof: commit 2af02977 (OpenCode Go and Zen providers, run-bound conversation_id, fail-closed empty identity) is pushed; CI run 34638328332 in progress; on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway, recorded in docs/evidence/choir-rlm-engineering-carrier-p1-provider-freeze-2026-09-11.md. P0-review is adjudicated (repair; findings folded into artifact revision 2 at e69de37a).'
 finish:
   deliver: 'The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk''s only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden and each earned its deletion by replay proof, the assignment fate is authored by the reducer, run acceptance no longer keys on tool names and fails loudly when evidence is missing, one model-independent prompt with one REPL initialization serves the expected roster with zero output repair, and the proved replay harness plus its fixtures remain as durable evidence.'
   artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened, and one adjudicated review receipt per frozen boundary (P0, P3, P4, P5).'
@@ -488,6 +488,26 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: docs/doc-authority-manifest.yaml frozen_boundary_artifact entry added in the same commit
+  - id: engineering-carrier-p0-review-2026-09-11
+    boundary: define
+    commit_or_artifact: 'adjudicated P0-review of the frozen artifact; findings folded into artifact revision 2 (commits 98447096, e69de37a); panel diagnostics at .agentic-consensus/p0-review/ (non-durable)'
+    proof_refs:
+      - 'two convergent panel runs bound to the frozen artifact (base main@73815790, sha256 3eb10539c5bb596bc33eeaf8705fa69ccff0d67dc9fae7b24384af28e183693a): run1 4 ok of 5, run2 7 ok of 8; adjudicated outcome repair'
+      - 'confirmed findings folded: receipt-class taxonomy (host-authored content-addressed, not signed), row-1 reclassification to transient_mutation, store-record canonical fields for rows 5-8, capture-entropy-vs-replay-identity split, per-operation conflict semantics, row-8 successor identity from assignment/attempt+proposition digest, Definitions() schema digest, skill-path entropy exclusion, filesystem-write witness, class-specific successor adapter contract, hard deletion prerequisite, desk-task execution_refs and go -C fix'
+      - 'orchestrator source re-verification of panel claims before folding'
+    rollback_ref: revert commits 98447096 and e69de37a; docs-only, no runtime effect
+    disposition: 'adjudicated repair; artifact revision 2 is the frozen boundary for all later phases'
+    problem_ref: the four defects in start.observed_artifact, recorded in artifact section 1
+    authorization_ref: owner charter 2026-09-11; P0-review acceptance item
+    candidate_or_evidence_refs:
+      - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: not_applicable
 view:
   path: none
   generator: node skills/definition/scripts/dashboard.mjs docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md --serve 127.0.0.1:8787 --watch (skill-owned; served on demand, never committed)
