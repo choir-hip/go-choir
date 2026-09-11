@@ -32,6 +32,7 @@ package store
 // still converges dangling references.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -306,6 +307,9 @@ func (o *ogObjectRow) identityFieldMigrated() bool {
 // their current forms (from a persisted prior report) so a re-run after a
 // mid-apply crash still resolves references.
 func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed map[string]string) (objs []*ogObjectRow, edges []*ogEdgeRow, err error) {
+	// Stream rows: only rows that migrate or embed obj:/edge: references are
+	// retained. Loading every row's body+metadata at once OOMs the guest on
+	// real computers (observed: autoputer OOM-killed at ~3.7GB on staging).
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, body, metadata, tombstone, superseded_by FROM og_objects`)
 	if err != nil {
@@ -320,6 +324,58 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 			return nil, nil, fmt.Errorf("og migrate scan: %w", err)
 		}
 		o.tombstone = tomb != 0
+		hasRefs := bytes.Contains(o.body, []byte("obj:")) || bytes.Contains(o.body, []byte("edge:")) ||
+			bytes.Contains(o.metadata, []byte("obj:")) || bytes.Contains(o.metadata, []byte("edge:"))
+		if err := json.Unmarshal(o.metadata, &o.metaJSON); err != nil {
+			o.metaJSON = nil
+		}
+		var body any
+		if err := json.Unmarshal(o.body, &body); err == nil {
+			o.bodyJSON = body
+		}
+		record := func(prefix string) func(string, string) string {
+			return func(path, v string) string {
+				migrated, changed := ogLeafMigrate(v)
+				if !changed {
+					return v
+				}
+				o.fields[prefix+path] = v
+				o.dirty = true
+				return migrated
+			}
+		}
+		if o.metaJSON != nil {
+			ogWalkStrings(o.metaJSON, "", record("metadata."))
+		}
+		if o.bodyJSON != nil {
+			ogWalkStrings(o.bodyJSON, "", record("body."))
+		}
+		if !o.dirty && !hasRefs {
+			continue // untouched row: never retained
+		}
+		if o.dirty {
+			if o.bodyJSON != nil {
+				newBody, err := json.Marshal(o.bodyJSON)
+				if err != nil {
+					rows.Close()
+					return nil, nil, fmt.Errorf("og migrate %s body encode: %w", o.canonicalID, err)
+				}
+				o.body = newBody
+			}
+			newMeta, err := objectgraph.NormalizeMetadata(o.metaJSON)
+			if err != nil {
+				rows.Close()
+				return nil, nil, fmt.Errorf("og migrate %s metadata encode: %w", o.canonicalID, err)
+			}
+			o.metadata = newMeta
+			o.newHash = objectgraph.ContentHash(objectgraph.ObjectKind(o.kind), o.body, o.metadata)
+			if err := o.ogRekey(); err != nil {
+				rows.Close()
+				return nil, nil, err
+			}
+		} else {
+			o.newID = o.canonicalID
+		}
 		objs = append(objs, o)
 	}
 	rows.Close()
@@ -346,54 +402,6 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 	edgeRows.Close()
 	if err := edgeRows.Err(); err != nil {
 		return nil, nil, err
-	}
-
-	// Pass 1: token and ID migration on every leaf.
-	for _, o := range objs {
-		if err := json.Unmarshal(o.metadata, &o.metaJSON); err != nil {
-			o.metaJSON = nil
-		}
-		var body any
-		if err := json.Unmarshal(o.body, &body); err == nil {
-			o.bodyJSON = body
-		}
-		record := func(prefix string) func(string, string) string {
-			return func(path, v string) string {
-				migrated, changed := ogLeafMigrate(v)
-				if !changed {
-					return v
-				}
-				o.fields[prefix+path] = v
-				o.dirty = true
-				return migrated
-			}
-		}
-		if o.metaJSON != nil {
-			ogWalkStrings(o.metaJSON, "", record("metadata."))
-		}
-		if o.bodyJSON != nil {
-			ogWalkStrings(o.bodyJSON, "", record("body."))
-		}
-		if !o.dirty {
-			o.newID = o.canonicalID
-			continue
-		}
-		if o.bodyJSON != nil {
-			newBody, err := json.Marshal(o.bodyJSON)
-			if err != nil {
-				return nil, nil, fmt.Errorf("og migrate %s body encode: %w", o.canonicalID, err)
-			}
-			o.body = newBody
-		}
-		newMeta, err := objectgraph.NormalizeMetadata(o.metaJSON)
-		if err != nil {
-			return nil, nil, fmt.Errorf("og migrate %s metadata encode: %w", o.canonicalID, err)
-		}
-		o.metadata = newMeta
-		o.newHash = objectgraph.ContentHash(objectgraph.ObjectKind(o.kind), o.body, o.metadata)
-		if err := o.ogRekey(); err != nil {
-			return nil, nil, err
-		}
 	}
 
 	// ID map: every historical ID resolves to the current one. Seed first so
