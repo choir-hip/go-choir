@@ -673,8 +673,9 @@ define against. Every id in it was call-verified on 2026-09-10.
 | NVIDIA | `nemotron-3-ultra-free` | chat | 1M | 96.7s (pool latency) |
 | NVIDIA | `nemotron-3.5-lightning-free` | chat | 262k | 102.8s (pool latency) |
 
-The two Nemotron ids are the only free chat models that survive pruning, and both run at roughly
-100 seconds. For interactive free testing the practical set is Meta (Responses) and Ling (chat).
+Free chat coverage is Ling plus the two Nemotron ids, and both Nemotron ids run at roughly 100
+seconds on the free pool. For interactive free testing the practical set is therefore Meta
+(Responses) and Ling (chat).
 
 ### Tier C — cheap paid, under $0.65 per 1M output
 
