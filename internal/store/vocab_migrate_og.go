@@ -393,6 +393,9 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 	}
 	edges = []*ogEdgeRow{}
 	for edgeRows.Next() {
+		if progress != nil {
+			progress()
+		}
 		e := &ogEdgeRow{}
 		var tomb int
 		if err := edgeRows.Scan(&e.edgeID, &e.fromID, &e.toID, &e.kind, &e.metadata, &tomb); err != nil {
@@ -455,6 +458,9 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 			}
 		}
 		for _, o := range objs {
+			if progress != nil {
+				progress()
+			}
 			before := o.newID
 			rewriteRefs(o)
 			if o.dirty {
@@ -487,6 +493,9 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 		}
 		// Edges: rewrite endpoints, recompute edge_id.
 		for _, e := range edges {
+			if progress != nil {
+				progress()
+			}
 			from, to := e.newFrom, e.newTo
 			if from == "" {
 				from = e.fromID
@@ -528,6 +537,9 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 	// version_id / superseded_by columns carry canonical IDs; rewrite through
 	// the map. Recorded as column provenance so revert restores exactly.
 	for _, o := range objs {
+		if progress != nil {
+			progress()
+		}
 		if cur, ok := idMap[o.versionID]; ok && cur != o.versionID {
 			o.fields["col.version_id"] = o.versionID
 			o.versionID = cur

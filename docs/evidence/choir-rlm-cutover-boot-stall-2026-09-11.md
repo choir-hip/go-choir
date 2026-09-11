@@ -64,6 +64,30 @@ finishes that in 30s, so `RecoveryRebase`/`RecoveryInstall` can never succeed
 for a store of this size — the recovery path is structurally broken, and the
 guest crash-loops instead of refusing once.
 
+**D5 — marker naming skew auto-creates empty store.**
+`rebuilder.go` archives scratch stores using marker `runtime.db` and workspace
+`runtime.texture/`. In the VM guest, `nix/autoputer-vm.nix` configures
+`RUNTIME_STORE_PATH = /mnt/persistent/state`. `InstallVerifiedBase` unpacked
+`runtime.db` and `runtime.texture/` into staging; `verifyInstalledHead` called
+`choirstore.Open(stagingRoot/state)`. Because `stagingRoot/state` did not exist,
+`Open` treated it as `freshStore = true`, auto-created an empty database
+`stagingRoot/state.texture`, bootstrapped empty tables, and queried
+`computer_event_projection_heads`. It returned `sql.ErrNoRows` (`head == nil, err == nil`),
+failing in 1–2 seconds with `installed base has no head: <nil>`.
+
+**D6 — unpack error leaks temporary files and amplifies disk consumption.**
+`InstallVerifiedBase` created `.base-download-*` temp file and removed it only
+on success (`install.go:108`), leaving the 15 GiB tar file on disk whenever
+unpack failed (e.g. `ENOSPC`). Coexisting tar file (15 GiB) + unpacked store
+(15 GiB) + retained store (15.5 GiB) requires ~45 GiB on a 32 GiB volume.
+
+**D7 — fixpoint loop in planOGMigration lacked progress ticks.**
+`planOGMigration` called `progress()` during the initial SQL object/edge query
+loop (reaching 101,198 in ~5s), but did not tick `progress()` inside the
+8-pass fixpoint loop over 10,378 objects. The counter froze at 101,198 for >5
+minutes while Firecracker consumed 100%+ CPU, causing `waitForGuestReady`'s
+5-minute stall detector to kill the VM.
+
 ## Belief state
 
 - D1 is the primary defect: it fires on every boot of any computer whose
@@ -134,6 +158,19 @@ Conclusions:
 
 - discovered: D1 (silent post-replay work vs stall detector), D2
   (stall-kill -> disk quarantine escalation), D3 (30s whole-body timeout on
-  base download).
-- introduced: none in this receipt.
-- repaired: none.
+  base download), D4 (author_label fence false positive), D5 (marker naming
+  skew auto-creating empty store), D6 (unpack temp-file leak), D7 (fixpoint
+  loop missing progress ticks).
+- introduced: none.
+- repaired: D1, D3, D4 (in 05b109a5); D5, D6, D7 (in cutover repairs commit).
+
+## Resolution (2026-09-11)
+
+- Restored intact quarantined disk `data.img.quarantine-1-40e7813a346e3d7a`
+  to `data.img` (18.6 GiB free; local=148566=H, W=148431, tail=0).
+- Booted via `RecoveryResume` with zero network download and zero disk
+  amplification.
+- Migration and fence completed with `progress` reaching 176,222; `FencedAt`
+  was permanently persisted to `vocab-migration-report.json`.
+- Subsequent reboot verified: fast-path boot from stopped to ready takes 29s.
+- Staging health verified: `https://choir.news/health` returns `ok`.

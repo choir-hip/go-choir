@@ -303,4 +303,33 @@ func TestInstallRefusesFailureClasses(t *testing.T) {
 			t.Fatalf("partial store did not refuse: %v", err)
 		}
 	})
+	t.Run("marker normalization for state layout", func(t *testing.T) {
+		dir := t.TempDir()
+		desc, err := InstallVerifiedBase(ctx, base, dir, "state", computerID, digests[2], 3)
+		if err != nil {
+			t.Fatalf("InstallVerifiedBase with state marker: %v", err)
+		}
+		if desc.Sequence != result.Descriptor.Sequence {
+			t.Fatalf("unexpected descriptor: %+v", desc)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "state")); err != nil {
+			t.Fatalf("state marker missing: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "state.texture")); err != nil {
+			t.Fatalf("state.texture workspace missing: %v", err)
+		}
+	})
+	t.Run("missing marker refuses without creating store", func(t *testing.T) {
+		dir := t.TempDir()
+		err := verifyInstalledHead(dir, "nonexistent.db", result.Descriptor)
+		if !errors.Is(err, ErrBaseRefused) {
+			t.Fatalf("expected ErrBaseRefused, got %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "nonexistent.db")); !os.IsNotExist(err) {
+			t.Fatalf("verifyInstalledHead auto-created marker file")
+		}
+		if _, err := os.Stat(filepath.Join(dir, "nonexistent.texture")); !os.IsNotExist(err) {
+			t.Fatalf("verifyInstalledHead auto-created texture workspace")
+		}
+	})
 }

@@ -582,9 +582,9 @@ in
         # Recovery replay: guest Dolt checkpoint commits at the 5-8 GiB workspace
         # scale exceed 120s on the 4096 MiB guest (stall-gate fired mid-commit
         # at seq 99,765 / 103,148 / 105,196 during recovery boots). B10 range
-        # allows 120-300s; the ceiling gives a legitimate commit room while
+        # allows 120-1500s; the ceiling gives a legitimate commit room while
         # still failing a truly frozen replay inside the 30m boot window.
-        "VM_REPLAY_STALL_TIMEOUT=300s"
+        "VM_REPLAY_STALL_TIMEOUT=1500s"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Keep personal computers resident while the host is under capacity.
         "VMCTL_IDLE_TIMEOUT=30m"

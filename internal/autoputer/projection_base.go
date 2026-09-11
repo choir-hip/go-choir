@@ -37,6 +37,8 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 	if storeDir == "" || storeDir == "." || markerName == "" || markerName == "." || markerName == "/" || computerID == "" || platformURL == "" || capability == nil {
 		return false, nil
 	}
+	sweepStagingArtifacts(storeDir)
+
 
 	empty := isStoreEmpty(storeDir)
 	var localSeq uint64
@@ -176,4 +178,17 @@ func isStoreEmpty(dir string) bool {
 		}
 	}
 	return true
+}
+
+func sweepStagingArtifacts(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, "restore-staging-") || strings.HasPrefix(name, ".base-download-") || strings.HasPrefix(name, ".base-staging") {
+			_ = os.RemoveAll(filepath.Join(dir, name))
+		}
+	}
 }

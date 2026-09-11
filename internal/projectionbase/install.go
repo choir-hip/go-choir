@@ -84,13 +84,17 @@ func InstallVerifiedBase(ctx context.Context, src BaseSource, storeDir, markerNa
 		return Descriptor{}, fmt.Errorf("%w: stage base download: %v", ErrBaseRefused, err)
 	}
 	tmpPath := tmpFile.Name()
+	defer func() {
+		if tmpPath != "" {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 	hasher := sha256.New()
 	if err := src.DownloadBlob(ctx, computerID, descriptor.BlobSHA256, io.MultiWriter(tmpFile, hasher)); err != nil {
 		_ = tmpFile.Close()
 		return Descriptor{}, err
 	}
 	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tmpPath)
 		return Descriptor{}, fmt.Errorf("%w: close base download: %v", ErrBaseRefused, err)
 	}
 	if digest := hex.EncodeToString(hasher.Sum(nil)); digest != descriptor.BlobSHA256 {
@@ -102,10 +106,38 @@ func InstallVerifiedBase(ctx context.Context, src BaseSource, storeDir, markerNa
 	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
 		return Descriptor{}, fmt.Errorf("%w: create staging dir: %v", ErrBaseRefused, err)
 	}
+	defer func() {
+		_ = os.RemoveAll(stagingDir)
+	}()
 	if err := Unpack(tmpPath, stagingDir); err != nil {
 		return Descriptor{}, fmt.Errorf("%w: unpack base: %v", ErrBaseRefused, err)
 	}
 	_ = os.Remove(tmpPath)
+	tmpPath = ""
+
+	// Normalize unpacked marker and workspace names to match markerName if needed.
+	// For example, an archive packed with "runtime.db" and "runtime.texture" being
+	// installed where markerName is "state" must be normalized to "state" and "state.texture".
+	targetMarkerInStaging := filepath.Join(stagingDir, markerName)
+	if _, err := os.Stat(targetMarkerInStaging); os.IsNotExist(err) {
+		stagedEntries, err := os.ReadDir(stagingDir)
+		if err == nil {
+			for _, entry := range stagedEntries {
+				if !entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
+					srcMarker := filepath.Join(stagingDir, entry.Name())
+					srcWorkspace := choirstore.TextureWorkspacePath(srcMarker)
+					if info, err := os.Stat(srcWorkspace); err == nil && info.IsDir() {
+						dstWorkspace := choirstore.TextureWorkspacePath(targetMarkerInStaging)
+						if err := os.Rename(srcMarker, targetMarkerInStaging); err == nil {
+							_ = os.Rename(srcWorkspace, dstWorkspace)
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
 	entries, err := os.ReadDir(stagingDir)
 	if err != nil {
 		return Descriptor{}, fmt.Errorf("%w: read staging dir: %v", ErrBaseRefused, err)
@@ -156,10 +188,20 @@ func reinstallComplete(storeDir, markerName, computerID, targetHead string, targ
 		}
 		return false, fmt.Errorf("%w: read store dir: %v", ErrBaseRefused, err)
 	}
-	if len(entries) == 0 {
+	var nonStagingEntries []os.DirEntry
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".") && !strings.HasPrefix(entry.Name(), "restore-staging-") {
+			nonStagingEntries = append(nonStagingEntries, entry)
+		}
+	}
+	if len(nonStagingEntries) == 0 {
 		return false, nil
 	}
-	store, err := choirstore.Open(filepath.Join(storeDir, markerName))
+	markerPath := filepath.Join(storeDir, markerName)
+	if _, err := os.Stat(markerPath); err != nil {
+		return false, fmt.Errorf("%w: non-empty store lacks marker %s (partial install suspected)", ErrBaseRefused, markerName)
+	}
+	store, err := choirstore.Open(markerPath)
 	if err != nil {
 		return false, fmt.Errorf("%w: non-empty store is unopenable (partial install suspected)", ErrBaseRefused)
 	}
@@ -178,7 +220,11 @@ func reinstallComplete(storeDir, markerName, computerID, targetHead string, targ
 // the store opens and its head equals the descriptor computer, sequence, and
 // canonical head.
 func verifyInstalledHead(storeDir, markerName string, descriptor Descriptor) error {
-	store, err := choirstore.Open(filepath.Join(storeDir, markerName))
+	markerPath := filepath.Join(storeDir, markerName)
+	if _, err := os.Stat(markerPath); err != nil {
+		return fmt.Errorf("%w: installed base marker %s does not exist: %v", ErrBaseRefused, markerName, err)
+	}
+	store, err := choirstore.Open(markerPath)
 	if err != nil {
 		return fmt.Errorf("%w: installed base does not open: %v", ErrBaseRefused, err)
 	}
