@@ -118,6 +118,7 @@ func main() {
 		sessionActivation  string
 		sessionAllowedRoot string
 		sessionRole        string
+		sessionSlot        string
 		sessionSockFD      int
 	)
 
@@ -133,6 +134,7 @@ func main() {
 	flag.StringVar(&sessionActivation, "session-activation", "", "Session worker activation identity")
 	flag.StringVar(&sessionAllowedRoot, "session-allowed-root", "/tmp", "Session worker filesystem root")
 	flag.StringVar(&sessionRole, "session-role", "", "Session worker role bounding the prebound choir surface (trusted, from verified capability)")
+	flag.StringVar(&sessionSlot, "session-slot", "", "Session worker co-super slot bound into the choir scope (trusted, from verified capability)")
 	flag.IntVar(&sessionSockFD, "session-sock-fd", -1, "inherited multiplexed session socket fd (Step 2 transport); -1 selects legacy stdio")
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
@@ -153,6 +155,7 @@ func main() {
 			Epoch:           sessionEpoch,
 			AllowedRoot:     sessionAllowedRoot,
 			Role:            sessionRole,
+			Slot:            sessionSlot,
 		}
 		if sessionSockFD >= 0 {
 			// Multiplexed session socket (Step 2): the broker passed its

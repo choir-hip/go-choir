@@ -353,7 +353,6 @@ func buildRLMAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, e
 		newCommitTransactionTool(),
 		newInspectSelfDevelopmentBundleTool(),
 		newRecordSelfDevelopmentVerificationTool(),
-		newRecordAssignedCoSuperReportTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return nil, fmt.Errorf("build RLM assigned co-super registry: %w", err)

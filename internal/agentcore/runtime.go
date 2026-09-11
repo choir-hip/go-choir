@@ -3391,7 +3391,12 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolregistry.WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
 	if assignedCoSuperOverlay {
-		toolLoopOptions = append(toolLoopOptions, toolregistry.WithDetachedTerminalToolClosure(30*time.Second, terminalAssignedCoSuperReportCall))
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolResult("capsule_go_eval", func(output string) bool {
+			var decoded struct {
+				FateTerminal bool `json:"fate_terminal"`
+			}
+			return json.Unmarshal([]byte(output), &decoded) == nil && decoded.FateTerminal
+		}))
 	}
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
@@ -3415,9 +3420,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 
 	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
-		if errors.Is(err, toolregistry.ErrDetachedTerminalToolCommitted) {
-			return
-		}
 		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)
 			return

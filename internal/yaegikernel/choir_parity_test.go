@@ -24,7 +24,7 @@ func testChoirFixture(t *testing.T) (*Broker, *HandleIssuer, *ChoirScope, string
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, "engineering")
+	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, "engineering", "implementation")
 	if err != nil {
 		t.Fatalf("choir scope: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestChoirResearcherScopeIsReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, SessionRoleResearcher)
+	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, SessionRoleResearcher, "")
 	if err != nil {
 		t.Fatal(err)
 	}

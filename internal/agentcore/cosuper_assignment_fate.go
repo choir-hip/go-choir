@@ -2,7 +2,6 @@ package agentcore
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -15,19 +14,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-func terminalAssignedCoSuperReportCall(call types.ToolCall) bool {
-	if call.Name != "record_assignment_result" || strings.TrimSpace(call.ID) == "" {
-		return false
-	}
-	var input struct {
-		Result types.CoSuperAssignmentResultKind `json:"result"`
-	}
-	if err := json.Unmarshal(call.Arguments, &input); err != nil {
-		return false
-	}
-	return input.Result == types.CoSuperResultCompleted || input.Result == types.CoSuperResultFailed || input.Result == types.CoSuperResultBlocked
-}
 
 func coSuperFateRequest(assignment types.CoSuperAssignment, disposition types.CoSuperCapsuleDisposition, intentRef, ackRef string) types.SetCoSuperCapsuleDispositionRequest {
 	req := types.SetCoSuperCapsuleDispositionRequest{

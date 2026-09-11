@@ -24,6 +24,10 @@ type ChoirScope struct {
 	epoch        uint64
 	activationID string
 	readOnly     bool
+	// slot is the co-super slot carried from the verified capability
+	// (implementation|verifier). Verifier-only affordances gate on it; the
+	// model can never set it.
+	slot string
 	// Cell binding (RLM Step 4): while a cell is bound, messaging and
 	// delegation stage into the tray and return in microseconds without
 	// blocking; Inbox() reads the bound snapshot. Unbound scopes keep the
@@ -42,7 +46,7 @@ const SessionRoleResearcher = "research"
 // NewChoirScope mints a session-scoped handle for exactly the file, assign,
 // and message actions and returns the scope the choir symbols close over.
 // The caller (worker session setup) owns the broker lifetime.
-func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationID string, epoch uint64, role string) (*ChoirScope, error) {
+func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationID string, epoch uint64, role, slot string) (*ChoirScope, error) {
 	if broker == nil {
 		return nil, fmt.Errorf("choir: broker is required")
 	}
@@ -58,7 +62,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	if err != nil {
 		return nil, fmt.Errorf("choir: issue session handle: %w", err)
 	}
-	return &ChoirScope{broker: broker, handleRef: handleRef, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly}, nil
+	return &ChoirScope{broker: broker, handleRef: handleRef, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, slot: slot}, nil
 }
 
 // BindCell binds one cell: installs the inbox snapshot and a fresh tray,
@@ -132,6 +136,11 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		exports["Outcome"] = reflect.ValueOf(s.Outcome)
 		exports["Spawn"] = reflect.ValueOf(s.Spawn)
 		exports["Complete"] = reflect.ValueOf(s.Complete)
+		exports["Freeze"] = reflect.ValueOf(s.Freeze)
+	}
+	if s != nil && s.slot == "verifier" {
+		exports["Verify"] = reflect.ValueOf(s.Verify)
+		exports["InspectBundle"] = reflect.ValueOf(s.InspectBundle)
 	}
 	return interp.Exports{"choir/choir": exports}
 }
@@ -238,16 +247,64 @@ func (s *ChoirScope) Spawn(role, objective string) (string, error) {
 }
 
 // Complete marks the assignment finished with a typed verdict. It stages
-// into the cell tray; the reducer binds execution receipts to it. At most
-// one complete per cell. It requires a bound cell.
-func (s *ChoirScope) Complete(result, verdict, summary string, evidenceRefs []string) error {
+// into the cell tray; the reducer authors the assignment fate from it. At
+// most one complete per cell. It requires a bound cell. executionRefs are
+// the exact capsule-go-eval receipt_ref strings the evidence binds to; a
+// terminal completed pass requires at least one.
+func (s *ChoirScope) Complete(result, verdict, summary string, evidenceRefs, executionRefs []string) error {
 	if err := s.mutateDenied("Complete"); err != nil {
 		return err
 	}
 	if s.tray == nil {
 		return fmt.Errorf("choir: complete requires a bound cell")
 	}
-	return s.tray.Complete(result, verdict, summary, evidenceRefs)
+	return s.tray.Complete(result, verdict, summary, evidenceRefs, executionRefs)
+}
+
+// Freeze stages the self-development freeze: the reducer freezes the cell's
+// bound capsule diff as a verifier-ready effect bundle on cell return. The
+// capsule handle is the bound handle, never model input. At most one freeze
+// per cell; requires a bound cell.
+func (s *ChoirScope) Freeze(buildRecipeRef string, testReceipts, dependencyToolchainRefs []string) error {
+	if err := s.mutateDenied("Freeze"); err != nil {
+		return err
+	}
+	if s.tray == nil {
+		return fmt.Errorf("choir: freeze requires a bound cell")
+	}
+	return s.tray.Freeze(buildRecipeRef, testReceipts, dependencyToolchainRefs)
+}
+
+// Verify stages the independent verifier decision for the mounted frozen
+// bundle. Verifier-slot activations only; the reducer records it against the
+// exact mounted bundle on cell return. At most one verify per cell;
+// requires a bound cell.
+func (s *ChoirScope) Verify(decision string, verifierRefs []string) error {
+	if err := s.mutateDenied("Verify"); err != nil {
+		return err
+	}
+	if s.slot != "verifier" {
+		return fmt.Errorf("choir: verify is restricted to the co-super verifier slot")
+	}
+	if s.tray == nil {
+		return fmt.Errorf("choir: verify requires a bound cell")
+	}
+	return s.tray.Verify(decision, verifierRefs)
+}
+
+// InspectBundle synchronously verifies the mounted frozen self-development
+// bundle: parses the draft, re-checks every runtime file digest, and returns
+// the canonical receipt fields. Read-only under the observation exemption;
+// verifier-slot activations only. The mount itself is the binding: the host
+// installs exactly the operation's frozen bundle read-only at spawn.
+func (s *ChoirScope) InspectBundle() (map[string]any, error) {
+	if s == nil {
+		return nil, fmt.Errorf("choir: scope unavailable")
+	}
+	if s.slot != "verifier" {
+		return nil, fmt.Errorf("choir: inspect_bundle is restricted to the co-super verifier slot")
+	}
+	return inspectMountedBundle()
 }
 
 // Inbox returns the cell-start snapshot of unread messages. It is
@@ -269,6 +326,7 @@ func (s *ChoirScope) Context() map[string]string {
 	return map[string]string{
 		"computer_id":   s.computerID,
 		"activation_id": s.activationID,
+		"co_super_slot": s.slot,
 	}
 }
 

@@ -69,7 +69,7 @@ func (e *Executor) ListOwned(string) []CapsuleControlSummary { return nil }
 func (e *Executor) MintCapability(string, AgentRole, string, time.Duration) (*Capability, error) {
 	return nil, stubErr("mint")
 }
-func (e *Executor) MintCapabilityHandle(string, AgentRole, string, string, time.Duration) (*Capability, error) {
+func (e *Executor) MintCapabilityHandle(string, AgentRole, string, string, time.Duration, string) (*Capability, error) {
 	return nil, stubErr("mint")
 }
 func (e *Executor) AssignmentHandle(string, string) (string, error) {

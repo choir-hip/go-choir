@@ -11,4 +11,4 @@ body: |
 
   Work only in /workspace/platform. Paths outside that subject are command evidence or output, never candidate bytes. The runtime prompt names whether this exact assignment is implementation or verification and, for verification, the immutable candidate identity already mounted as the subject.
 
-  Finish with record_assignment_result and exact execution receipt refs. A verification pass requires a successful receipt bound to the exact frozen final subject. Stop after one result or precise blocker.
+  Finish with the terminal completion path named by the active runtime overlay, citing exact execution receipt refs. A verification pass requires a successful receipt bound to the exact frozen final subject. Stop after one result or precise blocker.

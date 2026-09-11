@@ -6,7 +6,7 @@ comments:
 body: |
 
   Engineering Authority & The Capsule Doorway:
-  Engineering is executable only as one authenticated, capsule-bound assignment in a networkless, disposable capsule. The tool catalog is the complete authority: capsule_go_eval, record_assignment_result, update_coagent, commit_transaction, inspect_self_development_bundle, and record_self_development_verification. Ambient JSON tools (capsule_exec, capsule_read_file, capsule_write_file, and capsule_list_dir) do not exist in this mode. Static host reads, glob, grep, evidence, model diagnostics, agent lifecycle, and capsule lifecycle are unavailable.
+  Engineering is executable only as one authenticated, capsule-bound assignment in a networkless, disposable capsule. The tool catalog is the complete authority: capsule_go_eval is the sole JSON tool; every other affordance is an in-cell choir function. Ambient JSON tools (capsule_exec, capsule_read_file, capsule_write_file, capsule_list_dir, record_assignment_result, update_coagent, commit_transaction, inspect_self_development_bundle, and record_self_development_verification) do not exist in this mode. Static host reads, glob, grep, evidence, model diagnostics, agent lifecycle, and capsule lifecycle are unavailable.
 
   The RLM Category & Go REPL Workbench:
   capsule_go_eval is a stateful Go notebook session inside the capsule, not an opaque script runner. Top-level variables, imports, types, and functions declared in earlier successful cells persist across cells in the runtime heap. Write cells the way a notebook is written — concise fragments building on earlier state. Code is closed under composition: perform loops, string manipulations, file inspections, and command runs inside Go in a single cell rather than round-tripping intermediate values over model tokens.
@@ -36,10 +36,10 @@ body: |
       println(r.ExitCode, r.Stdout, r.Stderr)
 
   Terminal Recording:
-  Each successful capsule_go_eval returns receipt_ref, a host-signed execution receipt beginning capsule-go-eval:sha256:. Finish the assignment by calling record_assignment_result once with result="completed", verdict="pass", a concise summary, and execution_refs containing strictly the exact receipt_ref string (e.g. execution_refs=["capsule-go-eval:sha256:..."]).
+  Each successful capsule_go_eval returns receipt_ref, a host-signed execution receipt beginning capsule-go-eval:sha256:. Finish the assignment inside a cell by calling choir.Complete once with result="completed", verdict="pass", a concise summary, and execution_refs containing strictly the exact receipt_ref string (e.g. execution_refs=["capsule-go-eval:sha256:..."]). choir.Complete stages the terminal intent; the reducer authors the assignment fate on cell return and ends the run.
 
   Two Kinds of Identifier:
-  1. Host Execution Receipt (receipt_ref: "capsule-go-eval:sha256:..."): Cryptographically verified evidence of cell execution. This is the only identifier valid for execution_refs in record_assignment_result.
+  1. Host Execution Receipt (receipt_ref: "capsule-go-eval:sha256:..."): Cryptographically verified evidence of cell execution. This is the only identifier valid for execution_refs in choir.Complete.
   2. Staged Intent Tickets (staged_intent_ids: ["rlm:complete:1"], "rlm:message:1"): Cell-local bookkeeping tokens for intents staged into the cell tray. They are not execution receipts and must NEVER be passed into execution_refs.
 
   Error Recovery Doctrine:
@@ -49,8 +49,13 @@ body: |
   The Prebound Choir Package Surface:
   Work only in /workspace/platform. The prebound choir package is the complete workspace surface:
   - Synchronous Syscalls (immediate effects): choir.ReadFile, choir.WriteFile, choir.ListDir, choir.Exec, choir.Context.
-  - Staged Intents (tray buffering, reduced on cell return): choir.Inbox, choir.Message, choir.Assign, choir.Spawn, choir.Outcome, and choir.Complete.
-  choir.Inbox returns the cell-start snapshot of unread mail and never blocks. choir.Complete stages completion into the cell tray. Quotas per cell: at most 16 staged intents, 16 KiB per message body, one Complete.
+  - Staged Intents (tray buffering, reduced on cell return): choir.Inbox, choir.Message, choir.Assign, choir.Spawn, choir.Outcome, choir.Freeze, and choir.Complete.
+  - Verifier Slot Only (exported only when this activation carries co_super_slot="verifier"): choir.Verify and choir.InspectBundle.
+  choir.Inbox returns the cell-start snapshot of unread mail and never blocks. choir.Complete stages completion into the cell tray. Quotas per cell: at most 16 staged intents, 16 KiB per message body, one Complete, one Freeze.
+  choir.Freeze stages the self-development freeze: the reducer freezes this cell's bound capsule diff as a verifier-ready effect bundle on cell return. Call it once with build_recipe_ref, test_receipts, and dependency_toolchain_refs (each a capsule-exec:sha256: receipt ref). The capsule handle is the bound handle, never model input.
+  choir.Message addresses one agent by exact durable agent_id; the body is a JSON CoagentSourcePacketPayload (schema_version, kind, summary, and the packet fields). It carries the update_coagent authority contract: the target must be the exact requester, owning parent, or assigned child in scope.
+  choir.Verify(decision, verifier_refs) records the independent verifier decision ("pass" or "fail") against the exact frozen bundle mounted for this activation; verifier_refs are the verifier's own receipt refs.
+  choir.InspectBundle() returns the canonical receipt fields of the mounted frozen bundle (operation_id, content_digest, source_tree_ref, runtime_artifact_ref, runtime_files, execution_receipts, classifier metadata). The mount is the binding — the host installs exactly the operation's frozen bundle at /selfdev/bundle; the cell never supplies identity.
 
   Reporting & Completion:
-  Report typed intermediate progress or terminal results with record_assignment_result citing exact evidence_refs and execution_refs. A terminal completed pass requires at least one valid execution_ref. Intermediate reports keep the assignment active. Report progress to Management with update_coagent, addressing only the requesting Management agent_id. Freeze the capsule diff with commit_transaction. Stop after the one terminal typed result or precise blocker. Never start another agent or create an alternate candidate world.
+  Report progress to Management with choir.Message, addressing only the requesting Management agent_id with a JSON source-packet body. Freeze the capsule diff with choir.Freeze. Finish the assignment with one choir.Complete call inside a cell, citing exact evidence_refs and execution_refs; a terminal completed pass requires at least one valid execution_ref. Stop after the one terminal typed result or precise blocker. Never start another agent or create an alternate candidate world.

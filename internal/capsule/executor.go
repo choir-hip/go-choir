@@ -268,6 +268,18 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if err := makeSubjectTreeReadOnly(filepath.Join(sourceLower, "workspace", "platform")); err != nil {
 		return nil, err
 	}
+	if spec.VerifierBundleDir != "" {
+		bundleTarget := filepath.Join(sourceLower, "selfdev", "bundle")
+		if err := copyCanonicalSubjectTree(ctx, spec.VerifierBundleDir, bundleTarget); err != nil {
+			return nil, fmt.Errorf("capsule verifier bundle copy: %w", err)
+		}
+		if err := os.WriteFile(filepath.Join(bundleTarget, "binding.json"), []byte(spec.VerifierBinding), 0o444); err != nil {
+			return nil, fmt.Errorf("capsule verifier binding: %w", err)
+		}
+		if err := makeSubjectTreeReadOnly(bundleTarget); err != nil {
+			return nil, err
+		}
+	}
 	caps.SourceSnapshotDigest = sourceDigest
 	lowerLayers := sourceLower + ":" + e.lowerDir
 	if err := MountOverlayFS(caps.MergedDir, caps.UpperDir, caps.WorkDir, lowerLayers); err != nil {
@@ -488,13 +500,13 @@ func (e *Executor) MintCapability(agentRunID string, role AgentRole, capsuleID s
 	if err != nil {
 		return nil, err
 	}
-	return e.MintCapabilityHandle(agentRunID, role, capsuleID, handle, ttl)
+	return e.MintCapabilityHandle(agentRunID, role, capsuleID, handle, ttl, "")
 }
 
 // MintCapabilityHandle installs a runtime-precommitted opaque handle after the
 // assignment opener has durably bound its digest. The handle remains usable
 // only by the exact run/capsule pair and is never returned to the parent Super.
-func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsuleID, handle string, ttl time.Duration) (*Capability, error) {
+func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsuleID, handle string, ttl time.Duration, slot string) (*Capability, error) {
 	if strings.TrimSpace(agentRunID) == "" || strings.TrimSpace(handle) == "" || handle != strings.TrimSpace(handle) || ttl <= 0 || ttl > 24*time.Hour {
 		return nil, fmt.Errorf("capsule capability requires run identity, canonical opaque handle, and ttl in (0,24h]")
 	}
@@ -520,7 +532,7 @@ func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsu
 	}
 	capability := &Capability{
 		CapabilityID: capabilityID, Handle: handle, CapsuleID: capsuleID, AgentRunID: agentRunID,
-		AgentRole: role, TargetCapsule: capsuleID, Verbs: cloneVerbSet(RoleVerbSets[role]),
+		AgentRole: role, Slot: slot, TargetCapsule: capsuleID, Verbs: cloneVerbSet(RoleVerbSets[role]),
 		ExpiresAt: time.Now().UTC().Add(ttl),
 	}
 	if err := SignCapability(capability, e.privateKey, "guest-ephemeral"); err != nil {

@@ -25,6 +25,13 @@ type SpawnSpec struct {
 	// refuses any digest mismatch, closing the durable-open/spawn race.
 	SourceArtifactRef     string
 	ExpectedSubjectDigest string
+
+	// VerifierBundleDir is a trusted-runtime input: the host-side directory of
+	// the exact frozen self-development bundle to install read-only at
+	// /selfdev/bundle for a verifier-slot activation. VerifierBinding carries
+	// the durable operation identity written to binding.json beside it.
+	VerifierBundleDir string
+	VerifierBinding   string
 }
 
 type SourcePreflight struct {
@@ -126,6 +133,14 @@ type GoEvalResult struct {
 	Fallback        bool                       `json:"fallback,omitempty"`
 	StagedIntentIDs []string                   `json:"staged_intent_ids,omitempty"`
 	Intents         []yaegikernel.StagedIntent `json:"intents,omitempty"`
+	// FateTerminal is set by guest core when this cell's reduction committed a
+	// terminal assignment fate; the run loop ends on it.
+	FateTerminal bool `json:"fate_terminal,omitempty"`
+	// FreezeResult/VerifyResult carry the committed freeze/verify receipts for
+	// this cell so the model sees the same result the retired JSON tools
+	// returned.
+	FreezeResult map[string]any `json:"freeze_result,omitempty"`
+	VerifyResult map[string]any `json:"verify_result,omitempty"`
 	// Reuse carries the session reuse disposition for a failed cell
 	// (preserve: heap intact, worker alive). DiagKind carries the
 	// diagnostic kind with the message verbatim. Settlement-gate item 1.

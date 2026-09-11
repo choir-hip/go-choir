@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -35,7 +38,7 @@ const (
 
 type assignmentCapsuleRuntime interface {
 	Spawn(context.Context, capsule.SpawnSpec) (*capsule.Capsule, error)
-	MintCapabilityHandle(string, capsule.AgentRole, string, string, time.Duration) (*capsule.Capability, error)
+	MintCapabilityHandle(string, capsule.AgentRole, string, string, time.Duration, string) (*capsule.Capability, error)
 	RevokeCapability(string, string) error
 	ForceDestroy(context.Context, string) error
 	ExtractGranted(context.Context, string, string) ([]capsule.FileChange, error)
@@ -253,10 +256,26 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelSpawn()
-	created, err := rt.capsuleExecutor.Spawn(spawnCtx, capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
+	spec := capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
 		MemoryMax: coSuperAssignmentMemoryMax, CpuQuota: coSuperAssignmentCPUQuota, CpuPeriod: 100000, PidsMax: coSuperAssignmentPidsMax,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
-		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest})
+		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest}
+	if req.Kind == types.CoSuperAssignmentVerification && rt.selfdevOperations != nil && rt.selfdevUpdaterRoot != "" {
+		// The verifier's exact-binding mount: the host installs the operation's
+		// frozen bundle read-only at /selfdev/bundle with a binding.json the
+		// in-cell inspect reads. Absent or unfrozen bundle → no mount; the
+		// cell's InspectBundle then reports the binding unavailable.
+		if operation, opErr := rt.selfdevOperations.GetByTrajectory(spawnCtx, computerID, trajectoryID); opErr == nil &&
+			operation.BundleDigest != "" && (operation.State == selfdev.StateFrozen || operation.State == selfdev.StateVerified || operation.State == selfdev.StateAwaitingApproval) {
+			bundleDir := filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest)
+			if info, statErr := os.Stat(bundleDir); statErr == nil && info.IsDir() {
+				bindingJSON, _ := json.Marshal(map[string]string{"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest})
+				spec.VerifierBundleDir = bundleDir
+				spec.VerifierBinding = string(bindingJSON)
+			}
+		}
+	}
+	created, err := rt.capsuleExecutor.Spawn(spawnCtx, spec)
 	if err != nil {
 		return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("spawn assigned capsule after durable open: %w", err))
 	}
@@ -303,7 +322,11 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("assigned capsule acknowledgement mismatch"))
 	}
 	spawnedAt := time.Now().UTC()
-	capability, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleCoSuper, capsuleID, opaque, 24*time.Hour)
+	slot := "implementation"
+	if req.Kind == types.CoSuperAssignmentVerification {
+		slot = "verifier"
+	}
+	capability, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleCoSuper, capsuleID, opaque, 24*time.Hour, slot)
 	grantedAt := time.Now().UTC()
 	if err != nil {
 		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("mint exact assignment capability: %w", err))
@@ -348,6 +371,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			runMetadataTrajectoryID: trajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID,
 			"requested_by_agent_id": parent.AgentID, "requested_by_profile": agentprofile.Super,
 			"assignment_id": assignmentID, "assignment_attempt": attempt, "assignment_kind": string(req.Kind),
+			runMetadataCoSuperSlot:  slot,
 			"assigned_work_item_id": workID, "capsule_id": capsuleID,
 			"parent_decision_id": parentDecisionID, "parent_control_id": parentControlID,
 			"parent_work_item_id": parentWorkID, "scope_digest": scopeDigest, "request_digest": requestDigest,

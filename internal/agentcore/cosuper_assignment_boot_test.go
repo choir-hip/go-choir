@@ -19,7 +19,7 @@ type absentAssignmentCapsule struct{}
 func (absentAssignmentCapsule) Spawn(context.Context, capsule.SpawnSpec) (*capsule.Capsule, error) {
 	return nil, fmt.Errorf("spawn unavailable after restart")
 }
-func (absentAssignmentCapsule) MintCapabilityHandle(string, capsule.AgentRole, string, string, time.Duration) (*capsule.Capability, error) {
+func (absentAssignmentCapsule) MintCapabilityHandle(string, capsule.AgentRole, string, string, time.Duration, string) (*capsule.Capability, error) {
 	return nil, fmt.Errorf("mint unavailable after restart")
 }
 func (absentAssignmentCapsule) RevokeCapability(string, string) error { return nil }

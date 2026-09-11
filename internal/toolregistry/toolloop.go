@@ -57,10 +57,7 @@ type ToolLoopParkResult struct {
 
 type ToolLoopParkWaiterFunc func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error)
 
-type DetachedTerminalToolPredicate func(call types.ToolCall) bool
-
 var ErrToolLoopPassivated = errors.New("tool loop passivated")
-var ErrDetachedTerminalToolCommitted = errors.New("detached terminal tool committed")
 
 type ToolLoopPassivatedError struct {
 	Reason string
@@ -99,15 +96,15 @@ type toolLoopOptions struct {
 	providerPreconditionFallbacks []provideriface.LLMSelection
 	conversationID                string
 
-	initialToolChoice           string
-	terminalTools               map[string]bool
-	passivatingTools            map[string]bool
-	requiredWriteTools          map[string]bool
-	completionGuard             ToolLoopCompletionGuardFunc
-	parkWaiter                  ToolLoopParkWaiterFunc
-	detachedTerminalTool        DetachedTerminalToolPredicate
-	detachedTerminalToolTimeout time.Duration
-	budget                      ToolLoopBudget
+	initialToolChoice   string
+	terminalTools       map[string]bool
+	terminalToolResults map[string]func(string) bool
+	passivatingTools    map[string]bool
+	requiredWriteTools  map[string]bool
+	completionGuard     ToolLoopCompletionGuardFunc
+	parkWaiter          ToolLoopParkWaiterFunc
+
+	budget ToolLoopBudget
 }
 
 type pendingRequiredTool struct {
@@ -179,19 +176,33 @@ func WithInitialToolChoice(choice string) ToolLoopOption {
 // unless the same tool batch yields a recognized mechanical required-next-tool
 // protocol. This is for side-effect tools whose successful execution is the
 // run's observable result.
+// WithTerminalToolSuccesses makes successful tool calls terminal for this loop
+// (e.g., "apply_patch"). A tool is terminal only when it succeeded and
+// returned structured output.
 func WithTerminalToolSuccesses(names ...string) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
-		if len(names) == 0 {
-			return
-		}
 		if opts.terminalTools == nil {
 			opts.terminalTools = make(map[string]bool, len(names))
 		}
 		for _, name := range names {
-			name = strings.TrimSpace(name)
-			if name != "" {
-				opts.terminalTools[name] = true
+			if trimmed := strings.TrimSpace(name); trimmed != "" {
+				opts.terminalTools[trimmed] = true
 			}
+		}
+	}
+}
+
+// WithTerminalToolResult makes a tool result terminal when the predicate
+// accepts its structured output (e.g. an eval result carrying a committed
+// terminal assignment fate). Unlike WithTerminalToolSuccesses the decision
+// reads the result payload, not just the tool name.
+func WithTerminalToolResult(name string, predicate func(output string) bool) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		if trimmed := strings.TrimSpace(name); trimmed != "" && predicate != nil {
+			if opts.terminalToolResults == nil {
+				opts.terminalToolResults = make(map[string]func(string) bool)
+			}
+			opts.terminalToolResults[trimmed] = predicate
 		}
 	}
 }
@@ -246,19 +257,6 @@ func WithRequiredWriteTools(names ...string) ToolLoopOption {
 func WithParkWaiter(waiter ToolLoopParkWaiterFunc) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.parkWaiter = waiter
-	}
-}
-
-// WithDetachedTerminalToolClosure permits one sole, runtime-selected terminal
-// evidence tool call to finish under a bounded cancellation-detached context.
-// It does not detach provider calls, mixed batches, partial tools, injected
-// turns, or any later iteration.
-func WithDetachedTerminalToolClosure(timeout time.Duration, predicate DetachedTerminalToolPredicate) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		if timeout > 0 && predicate != nil {
-			opts.detachedTerminalToolTimeout = timeout
-			opts.detachedTerminalTool = predicate
-		}
 	}
 }
 
@@ -631,45 +629,28 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 			}
 
-			terminalClosure := options.detachedTerminalTool != nil && batchContainsAdmittedTerminalTool(resp.ToolCalls, options.detachedTerminalTool)
-			runToolTurn := func() ([]types.ToolResult, error) {
-				toolCtx := ctx
-				if terminalClosure {
-					detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), options.detachedTerminalToolTimeout)
-					defer cancel()
-					toolCtx = detached
-				}
-				// Append the assistant's response (with tool calls) to conversation.
-				assistantPayload := map[string]any{
-					"role":    "assistant",
-					"content": buildAssistantContent(resp.Text, resp.ToolCalls),
-				}
-				if strings.TrimSpace(resp.ReasoningContent) != "" {
-					assistantPayload["reasoning_content"] = resp.ReasoningContent
-				}
-				assistantMsg, _ := json.Marshal(assistantPayload)
-				if err := appendMessageWithContext(toolCtx, "assistant", assistantMsg); err != nil {
-					return nil, fmt.Errorf("tool loop persist assistant message: %w", err)
-				}
-				toolResults := ExecuteToolBatch(toolCtx, registry, resp.ToolCalls, emit)
-				toolResultMsg, _ := json.Marshal(map[string]any{
-					"role":    "user",
-					"content": buildToolResultContent(toolResults),
-				})
-				if err := appendMessageWithContext(toolCtx, "user", toolResultMsg); err != nil {
-					return nil, fmt.Errorf("tool loop persist tool result message: %w", err)
-				}
-				return toolResults, nil
+			// Append the assistant's response (with tool calls) to conversation.
+			assistantPayload := map[string]any{
+				"role":    "assistant",
+				"content": buildAssistantContent(resp.Text, resp.ToolCalls),
 			}
-			toolResults, toolTurnErr := runToolTurn()
-			if toolTurnErr != nil {
-				return "", totalUsage, toolTurnErr
+			if strings.TrimSpace(resp.ReasoningContent) != "" {
+				assistantPayload["reasoning_content"] = resp.ReasoningContent
+			}
+			assistantMsg, _ := json.Marshal(assistantPayload)
+			if err := appendMessageWithContext(ctx, "assistant", assistantMsg); err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop persist assistant message: %w", err)
+			}
+			toolResults := ExecuteToolBatch(ctx, registry, resp.ToolCalls, emit)
+			toolResultMsg, _ := json.Marshal(map[string]any{
+				"role":    "user",
+				"content": buildToolResultContent(toolResults),
+			})
+			if err := appendMessageWithContext(ctx, "user", toolResultMsg); err != nil {
+				return "", totalUsage, fmt.Errorf("tool loop persist tool result message: %w", err)
 			}
 			activeRequired := requiredNextTool
 			requiredCalled := requiredToolCalled(activeRequired, resp.ToolCalls)
-			if terminalClosure && len(toolResults) == 1 && !toolResults[0].IsError {
-				return "", totalUsage, ErrDetachedTerminalToolCommitted
-			}
 			if injectUserTurns != nil {
 				injected, err := injectUserTurns(false)
 				if err != nil {
@@ -748,7 +729,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 						})
 						emit(types.EventRunProgress, "required_next_tool_satisfied", payload)
 					}
-					if terminalTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.terminalTools); len(terminalTools) > 0 {
+					if terminalTools := successfulTerminalToolNamesWithResults(resp.ToolCalls, toolResults, options.terminalTools, options.terminalToolResults); len(terminalTools) > 0 {
 						if emit != nil {
 							payload, _ := json.Marshal(map[string]any{
 								"iteration": i + 1,
@@ -789,7 +770,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					})
 					emit(types.EventRunRetry, "required_next_tool", payload)
 				}
-			} else if terminalTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.terminalTools); len(terminalTools) > 0 {
+			} else if terminalTools := successfulTerminalToolNamesWithResults(resp.ToolCalls, toolResults, options.terminalTools, options.terminalToolResults); len(terminalTools) > 0 {
 				if emit != nil {
 					payload, _ := json.Marshal(map[string]any{
 						"iteration": i + 1,
@@ -1362,7 +1343,11 @@ func requiredNextToolProtocolAllowed(string, string, map[string]any) bool {
 }
 
 func successfulTerminalToolNames(calls []types.ToolCall, results []types.ToolResult, terminalTools map[string]bool) []string {
-	if len(terminalTools) == 0 {
+	return successfulTerminalToolNamesWithResults(calls, results, terminalTools, nil)
+}
+
+func successfulTerminalToolNamesWithResults(calls []types.ToolCall, results []types.ToolResult, terminalTools map[string]bool, terminalResults map[string]func(string) bool) []string {
+	if len(terminalTools) == 0 && len(terminalResults) == 0 {
 		return nil
 	}
 	limit := len(calls)
@@ -1373,7 +1358,16 @@ func successfulTerminalToolNames(calls []types.ToolCall, results []types.ToolRes
 	seen := make(map[string]bool, limit)
 	for i := 0; i < limit; i++ {
 		name := strings.TrimSpace(calls[i].Name)
-		if name == "" || !terminalTools[name] || results[i].IsError || !IsStructuredToolSuccess(results[i].Output) {
+		if name == "" || results[i].IsError || !IsStructuredToolSuccess(results[i].Output) {
+			continue
+		}
+		terminal := terminalTools[name]
+		if !terminal {
+			if pred, ok := terminalResults[name]; ok && pred(results[i].Output) {
+				terminal = true
+			}
+		}
+		if !terminal {
 			continue
 		}
 		if !seen[name] {
@@ -1774,17 +1768,4 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func batchContainsAdmittedTerminalTool(calls []types.ToolCall, predicate DetachedTerminalToolPredicate) bool {
-	if predicate == nil || len(calls) == 0 {
-		return false
-	}
-	if len(calls) == 1 && predicate(calls[0]) {
-		return true
-	}
-	if len(calls) == 2 && calls[0].Name == "capsule_go_eval" && predicate(calls[1]) {
-		return true
-	}
-	return false
 }

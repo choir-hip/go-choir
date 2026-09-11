@@ -31,6 +31,7 @@ type workerSessionConfig struct {
 	allowed     []string
 	timeout     time.Duration
 	role        string
+	slot        string
 }
 
 // sessionWorker owns one persistent worker process serving framed eval cells
@@ -87,6 +88,7 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 		"--session-allowed-root", cfg.allowedRoot,
 		"--session-epoch", fmt.Sprintf("%d", cfg.epoch),
 		"--session-role", cfg.role,
+		"--session-slot", cfg.slot,
 		"--session-sock-fd", "3",
 	}
 	cmd := exec.Command(bin, args...)
@@ -271,7 +273,7 @@ func (w *sessionWorker) killLocked() {
 // capability and bounds the prebound choir surface. The allowed set is the
 // server-owned stdlib surface plus the prebound choir package: never
 // model-controlled.
-func (b *Broker) sessionConfigFor(activationID, role string) workerSessionConfig {
+func (b *Broker) sessionConfigFor(activationID, role, slot string) workerSessionConfig {
 	allowed := yaegikernel.DefaultSafeStdlibPackagesList()
 	computerID := b.capsuleID
 	if computerID == "" {
@@ -285,13 +287,14 @@ func (b *Broker) sessionConfigFor(activationID, role string) workerSessionConfig
 		allowed:     allowed,
 		timeout:     60 * time.Second,
 		role:        role,
+		slot:        slot,
 	}
 }
 
 // sessionFor returns the live worker for an activation, spawning it on first
 // use. A dead worker is replaced, never resurrected: post-poison state is
 // never trusted.
-func (b *Broker) sessionFor(agentRunID, role string) (*sessionWorker, error) {
+func (b *Broker) sessionFor(agentRunID, role, slot string) (*sessionWorker, error) {
 	if b == nil {
 		return nil, fmt.Errorf("session worker: broker unavailable")
 	}
@@ -303,7 +306,7 @@ func (b *Broker) sessionFor(agentRunID, role string) (*sessionWorker, error) {
 	if b.brokerBin == "" {
 		return nil, fmt.Errorf("session worker: broker binary path unavailable")
 	}
-	w, err := spawnSessionWorker(b.brokerBin, b.sessionConfigFor(agentRunID, role))
+	w, err := spawnSessionWorker(b.brokerBin, b.sessionConfigFor(agentRunID, role, slot))
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +336,7 @@ func (b *Broker) handleInitSession(_ context.Context, cap *capsule.Capability, _
 		return BrokerRPCResponse{Error: "init_session: activation required"}
 	}
 	b.dropSession(cap.AgentRunID)
-	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole))
+	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole), cap.Slot)
 	if err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("init_session: %v", err)}
 	}
@@ -383,7 +386,7 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		return BrokerRPCResponse{Error: "go_eval: parent deadline already exceeded"}
 	}
 	start := time.Now()
-	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole))
+	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole), cap.Slot)
 	if err != nil {
 		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session worker unavailable: %v", err), Duration: time.Since(start), Reuse: yaegikernel.ReuseUnsafeToReuse, DiagKind: yaegikernel.DiagWorker}
 		resultBytes, _ := json.Marshal(result)

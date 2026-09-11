@@ -2,55 +2,54 @@ package agentcore
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-func TestRecordAssignedCoSuperReportEnforcesExecutionReceiptOnPass(t *testing.T) {
-	tool := newRecordAssignedCoSuperReportTool(nil)
-
-	toolCtx := &CapsuleToolCtx{
-		Executor:                  new(capsule.Executor),
-		AgentRunID:                "run-test",
-		ComputerID:                "computer-test",
-		Role:                      capsule.RoleCoSuper,
-		CapsuleHandle:             "handle-test",
-		ValidateCurrentObligation: func(ctx context.Context) error { return nil },
+// TestCompleteIntentEnforcesExecutionReceiptOnPass proves the reducer's fate
+// path keeps the retired tool's admission contract: a terminal completed pass
+// without execution refs fails closed, and an rlm:* intent token is rejected
+// as an execution receipt. Both checks fire before the fate saga, so a
+// minimal run record and executor suffice.
+func TestCompleteIntentEnforcesExecutionReceiptOnPass(t *testing.T) {
+	newReduction := func() *rlmCallReduction {
+		return &rlmCallReduction{
+			active: true,
+			rec:    &types.RunRecord{RunID: "run-test", OwnerID: "owner", ComputerID: "computer"},
+			toolCtx: &CapsuleToolCtx{
+				Executor: new(capsule.Executor),
+			},
+			scope: ReductionScope{RunID: "run-test"},
+		}
 	}
-	ctx := WithCapsuleCtx(context.Background(), toolCtx)
 
-	// Test 1: Completed + Pass with empty execution_refs must fail closed
-	emptyRefsInput, _ := json.Marshal(map[string]any{
-		"result":         "completed",
-		"verdict":        "pass",
-		"summary":        "completed without execution receipts",
-		"evidence_refs":  []string{},
-		"execution_refs": []string{},
+	// Completed + pass with empty execution_refs must fail closed.
+	_, err := newReduction().commitCompleteIntent(context.Background(), yaegikernel.StagedIntent{
+		Kind: yaegikernel.IntentComplete, Result: "completed", Verdict: "pass", Summary: "done",
 	})
-	_, err := tool.Func(ctx, emptyRefsInput)
-	if err == nil {
-		t.Fatal("expected error for completed pass with empty execution_refs, got nil")
-	}
-	if !strings.Contains(err.Error(), "terminal completed pass requires at least one valid execution_ref") {
-		t.Fatalf("expected terminal pass empty-refs error, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "terminal completed pass requires at least one valid execution_ref") {
+		t.Fatalf("empty refs err = %v, want terminal pass empty-refs reject", err)
 	}
 
-	// Test 2: Passing rlm:* intent token in execution_refs must fail closed with typed error
-	intentRefInput, _ := json.Marshal(map[string]any{
-		"result":         "completed",
-		"verdict":        "pass",
-		"summary":        "completed with intent token",
-		"evidence_refs":  []string{},
-		"execution_refs": []string{"rlm:complete:1"},
+	// An rlm:* intent token in execution_refs must fail closed at receipt
+	// resolution, never reaching the saga.
+	_, err = newReduction().commitCompleteIntent(context.Background(), yaegikernel.StagedIntent{
+		Kind: yaegikernel.IntentComplete, Result: "completed", Verdict: "pass", Summary: "done",
+		ExecutionRefs: []string{"rlm:complete:1"},
 	})
-	_, err = tool.Func(ctx, intentRefInput)
-	if err == nil {
-		t.Fatal("expected error for execution_refs with rlm:complete:1, got nil")
+	if err == nil || !strings.Contains(err.Error(), "internal intent token, not an execution receipt") {
+		t.Fatalf("intent token err = %v, want intent token rejection", err)
 	}
-	if !strings.Contains(err.Error(), "internal intent token, not an execution receipt") {
-		t.Fatalf("expected intent token rejection error, got: %v", err)
+
+	// An empty summary fails closed.
+	_, err = newReduction().commitCompleteIntent(context.Background(), yaegikernel.StagedIntent{
+		Kind: yaegikernel.IntentComplete, Result: "completed", Verdict: "pass",
+	})
+	if err == nil || !strings.Contains(err.Error(), "summary is required") {
+		t.Fatalf("empty summary err = %v, want summary required", err)
 	}
 }

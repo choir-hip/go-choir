@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -172,7 +173,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		})
 	}
 
-	addAcceptanceDurableAgentCapsuleCheckpoints(&builder, trajectoryRuns, events)
+	addAcceptanceDurableAgentCapsuleCheckpoints(ctx, rt, &builder, trajectoryRuns, events)
 
 	addAcceptanceContinuationAndCompactionCheckpoints(&builder, events)
 
@@ -611,38 +612,74 @@ func compactStringRefs(refs []string) []string {
 	return out
 }
 
-func addAcceptanceDurableAgentCapsuleCheckpoints(builder *acceptanceBuilder, runs []types.RunRecord, events []types.EventRecord) {
+func addAcceptanceDurableAgentCapsuleCheckpoints(ctx context.Context, rt *Runtime, builder *acceptanceBuilder, runs []types.RunRecord, events []types.EventRecord) {
 	var completedRefs []string
-	for _, run := range runs {
+	var implRun, verifyRun *types.RunRecord
+	for i := range runs {
+		run := runs[i]
 		if traceRunProfile(run) != agentprofile.CoSuper || run.State != types.RunCompleted {
 			continue
 		}
 		completedRefs = append(completedRefs, builder.addRunEvidence(run, "durable CoSuper run completed"))
+		switch metadataStringValue(run.Metadata, "assignment_kind") {
+		case string(types.CoSuperAssignmentImplementation):
+			implRun = &runs[i]
+		case string(types.CoSuperAssignmentVerification):
+			verifyRun = &runs[i]
+		}
 	}
 	if len(completedRefs) > 0 {
 		builder.addCheckpoint("durable_agent_completed", "passed", time.Time{}, 0, completedRefs, map[string]any{
 			"role": agentprofile.CoSuper, "run_count": len(completedRefs),
 		})
 	}
-	if results := collectAcceptanceToolResults(events, "commit_transaction"); len(results) > 0 {
-		item := results[len(results)-1]
-		ref := builder.addEventEvidence(item.event, "guest-local capsule effect bundle frozen", map[string]any{
-			"tool": "commit_transaction", "bundle_digest": payloadString(item.output, "bundle_digest"),
+	// Freeze/verify evidence is canonical operation state, not tool names:
+	// the reducer commits the selfdev operation transition, and acceptance
+	// reads the operation row. A completed implementation run without a
+	// frozen bundle fails loudly.
+	var operation *selfdev.Operation
+	if rt != nil && rt.selfdevOperations != nil {
+		if op, err := rt.selfdevOperations.GetByTrajectory(ctx, runsComputerID(runs), trajectoryIDFromRuns(runs)); err == nil {
+			operation = &op
+		}
+	}
+	if operation != nil && operation.BundleDigest != "" &&
+		(operation.State == selfdev.StateFrozen || operation.State == selfdev.StateVerified || operation.State == selfdev.StateAwaitingApproval) {
+		builder.addCheckpoint("capsule_effect_frozen", "passed", time.Time{}, 0, nil, map[string]any{
+			"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest, "state": operation.State,
 		})
-		builder.addCheckpoint("capsule_effect_frozen", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
-			"bundle_digest": payloadString(item.output, "bundle_digest"),
+	} else if implRun != nil {
+		builder.addCheckpoint("capsule_effect_frozen", "failed", time.Time{}, 0, nil, map[string]any{
+			"detail": "completed implementation run without a frozen self-development bundle",
 		})
 	}
-	if results := collectAcceptanceToolResults(events, "record_self_development_verification"); len(results) > 0 {
-		item := results[len(results)-1]
-		ref := builder.addEventEvidence(item.event, "independent capsule verification recorded", map[string]any{
-			"tool":               "record_self_development_verification",
-			"verification_event": payloadString(item.output, "verification_event"),
+	if operation != nil && len(operation.VerifierRefs) > 0 {
+		builder.addCheckpoint("capsule_verification_recorded", "passed", time.Time{}, 0, nil, map[string]any{
+			"operation_id": operation.OperationID, "verifier_refs": operation.VerifierRefs, "state": operation.State,
 		})
-		builder.addCheckpoint("capsule_verification_recorded", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
-			"verification_event": payloadString(item.output, "verification_event"),
+	} else if verifyRun != nil {
+		builder.addCheckpoint("capsule_verification_recorded", "failed", time.Time{}, 0, nil, map[string]any{
+			"detail": "completed verification run without a recorded verifier decision",
 		})
 	}
+}
+
+func runsComputerID(runs []types.RunRecord) string {
+	for _, run := range runs {
+		if run.ComputerID != "" {
+			return run.ComputerID
+		}
+	}
+	return ""
+}
+
+func trajectoryIDFromRuns(runs []types.RunRecord) string {
+	for _, run := range runs {
+		if id := traceTrajectoryIDForRun(run); id != "" {
+			return id
+		}
+	}
+	return ""
 }
 
 func addAcceptanceContinuationAndCompactionCheckpoints(builder *acceptanceBuilder, events []types.EventRecord) {
