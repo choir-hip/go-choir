@@ -2,26 +2,78 @@
 definition_version: 2
 definition_id: choir-rlm-engineering-carrier-2026-09-11
 execution_mode: mission_orchestrator
-
-# DRAFT - not started, not the active mission. Mission two
-# (`choir-rlm-versioned-rename-2026-09-09`) stays the active one until it reaches terminal deployed
-# acceptance and the owner ratifies the settlement-authority transfer named below. This file is
-# written so the mission can be started with
-# `/goal docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md` without re-deriving scope.
-# Drafted from the 2026-09-11 thirteen-agent consensus; adjudication record:
-# `docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md`.
-# Owner decisions 2026-09-11: provider setup is phase 1 of this mission; the actuator=tools path is
-# deleted, not kept as a rollback, once RLM is proven.
+# DRAFT — not chartered, not an entrypoint. This file is the mission authority prepared for
+# `/goal docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md`; it stays read-only until the
+# entry gate under `start.entry_gate` is satisfied and the owner charters it. Predecessor:
+# `choir-rlm-versioned-rename-2026-09-09` (now `completed` at deployed commit e3396329).
+# Adjudication record: `docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md`.
+# Executability review (13-agent panel, 2026-09-11): `docs/reports/choir-rlm-mission-three-review-2026-09-11.md`.
+# Owner decisions 2026-09-11 are recorded in `now.decision` and are binding.
 
 start:
-  captured_at: "2026-09-11T04:20:00Z"
+  captured_at: "2026-09-11T12:10:00Z"
+  predecessor_receipt:
+    mission: choir-rlm-versioned-rename-2026-09-09
+    definition_status: completed
+    status_token_note: >-
+      The predecessor records `now.status: completed`. That is not one of the Definition skill's
+      tokens (`working`, `blocked_incomplete`, `complete`, `superseded`). Read it as complete and
+      do not key any gate on the literal token.
+    deployed_sha: e3396329
+    settlement_sha: bddd4f00
+    ci_run: "34571343061"
+    staging_identity: >-
+      staging https://choir.news serves the mission-two deployed commit e3396329 on the retained
+      computer computer-03335285269bdba4f94377e56879f9e6; effects OFF; pre-A checkpoint 99949fe2.
+    deployed_proof: docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
+    entrypoint: false
+    next_action: none
+    inherited_residues: [R6, R7]
+  entry_gate:
+    - gate: predecessor_terminal_receipt
+      required: >-
+        Read the deployed-proof artifact and confirm the deployed commit, the CI run, the staging
+        deploy identity (https://choir.news/health returns that commit), the effects-OFF state, and
+        the retained computer. Confirm mission two records `entrypoint: false` and
+        `next_action: none` in docs/ACTIVE.md, docs/mission-graph.yaml, and
+        docs/doc-authority-manifest.yaml. Every fact is already in this `start` block; the gate is
+        re-reading them, not re-litigating them.
+    - gate: post_mission_two_work_disposition
+      required: >-
+        The disk/GC cleanup that followed mission two landed as tracked commits
+        (`internal/store/dolt_maintenance.go`, `internal/vmctl/`, `internal/vmmanager/manager.go`,
+        `nix/node-b.nix`, currently through a907f713). Record its deploy/monitoring receipt and
+        classify it as out of this mission's scope: this mission owns none of it and must not
+        modify or revert it. At charter, re-run `git status --short` and classify every dirty path.
+    - gate: registry_promotion
+      required: >-
+        Promote this Definition atomically in docs/ACTIVE.md, docs/mission-graph.yaml, and
+        docs/doc-authority-manifest.yaml as the sole row with `entrypoint: true`. Today the mission
+        is absent from the graph and the manifest, and zero `entrypoint: true` rows exist.
+    - gate: owner_charter
+      required: >-
+        The owner dates a charter statement for this Definition. This is the only remaining
+        authority act; nothing else in the gate needs a decision.
   source:
-    canonical_ref: "main@6f1a8014 (draft base; re-pin at charter)"
-    deploy_identity: "staging https://choir.news serves cb571960 via proxy 0475ed84; retained computer computer-03335285269bdba4f94377e56879f9e6 active at epoch 896; effects OFF; OpenCode Go and Zen providers not yet wired"
+    canonical_ref: "main@a907f713 (stale draft base was 6f1a8014; re-pin to the charter commit via start_correction)"
+    deploy_identity: >-
+      staging https://choir.news serves e3396329 plus the post-mission-two GC commits (a907f713);
+      retained computer computer-03335285269bdba4f94377e56879f9e6; effects OFF; OpenCode Go and Zen
+      providers not wired (no OpenCode adapter string exists in Go source today).
   worktree_inventory:
     status: reconciled
-    evidence_ref: "2026-09-11 read-only git status; single worktree /Users/wiz/go-choir with pre-existing untracked user artifacts only"
-    preservation_rule: "Preserve every non-primary worktree and all unrelated WIP. This Definition owns the Engineering carrier surface: the eval envelope, the assigned-CoSuper registry, reducer intent reduction, run acceptance checkpoints, prompt assembly for the engineering desk, and the OpenCode provider preparation."
+    evidence_ref: >-
+      2026-09-11 read-only `git status --short` at a907f713: clean tree, three pre-existing
+      untracked paths (`tmp/`, `scripts/__pycache__/`,
+      `scripts/generate_restore_zero_completion_pdf_2026_09_09.py`) left in place. Review-panel
+      reports of tracked GC/vmctl/store WIP described the mid-cleanup state; that work has since
+      been committed as a907f713. Re-verify at charter.
+    preservation_rule: >-
+      Preserve every non-primary worktree and all unrelated WIP. This Definition owns the
+      engineering carrier surface: the eval envelope, the assigned-CoSuper registry and its RLM
+      overlay, reducer intent reduction, run acceptance checkpoints, the engineering-desk prompt
+      assembly, the in-cell session scope, and the OpenCode provider adapters. It owns no GC,
+      disk-maintenance, vmctl ownership, or Node B runtime work.
   worktrees:
     - path: /Users/wiz/go-choir
       status: clean
@@ -34,304 +86,709 @@ start:
       ref: none
       base: none
   observed_artifact:
-    - claim: "The evaluation envelope is not minimal: `capsule_go_eval` declares two interchangeable string parameters (`source`, `code` described as 'Alias for source.'), an empty required list, a silent source-wins fallback, and then calls `yaegikernel.CleanGoSource`."
+    - claim: >-
+        The evaluation envelope is not minimal: `capsule_go_eval` declares two interchangeable
+        string parameters (`source`, and `code` described as "Alias for source."), an empty
+        required list, a silent source-wins fallback, and then calls `yaegikernel.CleanGoSource`.
       claim_scope: current
-      evidence_ref: "internal/agentcore/tools_capsule.go:746-773"
-    - claim: "A call with neither parameter executes an empty cell; a call with both silently resolves to `source`. Neither case fails at the schema boundary."
+      evidence_ref: internal/agentcore/tools_capsule.go:746-773
+    - claim: >-
+        A call with neither parameter executes an empty cell; a call with both silently resolves to
+        `source`. Neither case fails at the schema boundary.
       claim_scope: current
-      evidence_ref: "internal/agentcore/tools_capsule.go:754,769-772"
+      evidence_ref: internal/agentcore/tools_capsule.go:754,769-772
     - claim: "`CleanGoSource` strips markdown fences from model-authored Go at five call sites."
       claim_scope: current
-      evidence_ref: "internal/yaegikernel/eval.go:301-317; callers tools_capsule.go:773, eval.go:122,148, session.go:86, cmd/capsule-broker/session_worker.go:392"
-    - claim: "The assigned CoSuper registry is an exact closed set of ten JSON tools (the eval envelope plus the nine R7 retirement names) under the tools actuator, while the RLM overlay already excludes the four capsule file/exec operations. The remainder is hidden, not deleted."
+      evidence_ref: >-
+        internal/yaegikernel/eval.go:301-317; callers tools_capsule.go:773, eval.go:122,148,
+        session.go:86, cmd/capsule-broker/session_worker.go:392
+    - claim: >-
+        Run acceptance builds the `capsule_effect_frozen` and `capsule_verification_recorded`
+        checkpoints by scanning for tool results NAMED `commit_transaction` and
+        `record_self_development_verification`, each behind a `len(results) > 0` guard. The
+        collector skips error results, so retiring a tool silently removes its checkpoint instead
+        of failing the run.
       claim_scope: current
-      evidence_ref: "internal/agentcore/tool_profiles_authority_test.go:110 (TestAssignedCoSuperBuilderIsExactClosedSet), :275 (TestRLMAssignedCoSuperOverlayIsSealedGo)"
-    - claim: "Run acceptance builds the `capsule_effect_frozen` and `capsule_verification_recorded` checkpoints by scanning for tool results named `commit_transaction` and `record_self_development_verification`, each behind a `len(results) > 0` guard, and weights those checkpoints. Retiring the tools removes evidence without failing acceptance."
+      evidence_ref: internal/agentcore/run_acceptance.go:627-645,281-313,790-791,843
+    - claim: >-
+        The two verifier-gated tools cannot pass their gate on the only live CoSuper activation
+        path: both gates require `RunRecord.Metadata["co_super_slot"] == "verifier"`, the assigned
+        CoSuper runtime writes `assignment_kind` but never `co_super_slot`, and the generic
+        CoSuper activation path is refused outright.
       claim_scope: current
-      evidence_ref: "internal/agentcore/run_acceptance.go:627-645,790-791,843"
-    - claim: "The reducer is a message router, not a settlement authority: `ReduceCellIntents` commits Message, Spawn and Complete only as mailbox envelopes, while `record_assignment_result` is the sole assignment-fate author."
+      evidence_ref: >-
+        internal/agentcore/tools_capsule.go:410-412,491-493;
+        internal/agentcore/cosuper_assignment_runtime.go:342-355;
+        internal/agentcore/runtime.go:987-988. No test pins either gate.
+    - claim: >-
+        The reducer is a message router, not a settlement authority: `ReduceCellIntents` commits
+        Message, Spawn and Complete only as mailbox envelopes, while `record_assignment_result`
+        runs the assignment-fate saga (proposition digest, slot gate, freeze/revoke ordering,
+        lifecycle CAS, late-evidence and cancellation races).
       claim_scope: current
-      evidence_ref: "internal/agentcore/rlm_reduce.go:167-198; internal/agentcore/cosuper_assignment_fate.go:20"
-    - claim: "No model-id conditional exists anywhere in prompt assembly or REPL initialization; the RLM affordance text is one static overlay and initialization is one session setup."
+      evidence_ref: >-
+        internal/agentcore/rlm_reduce.go:150-198; internal/agentcore/cosuper_assignment_fate.go:18-45,525-810;
+        the run loop's detached-terminal predicate calls it at internal/agentcore/runtime.go:3392
+    - claim: >-
+        The in-cell message path carries almost none of `update_coagent`'s authority validation:
+        it checks only read-only mutation denial, a non-empty recipient, and tray quotas, and the
+        reducer checks intent count, kind, destination and body. Missing: caller and target durable
+        identity, owner/computer/run/trajectory/context binding, role message policy and CoSuper
+        slot, target existence/profile/channel, typed packet schema validation, lifecycle and work
+        binding, and durable update-id derivation.
       claim_scope: current
-      evidence_ref: "internal/agentcore/tool_profiles.go:195-302; internal/runtimeprompts/prompts.go:57-62; cmd/capsule-broker/session_worker.go:274-285; internal/yaegikernel/session.go:53-72; internal/yaegikernel/choir.go:113-132"
-    - claim: "The gateway and provider request structs carry no session identity, and the gateway decoder ignores unknown JSON fields, so an additive optional field is version-skew safe."
+      evidence_ref: >-
+        internal/yaegikernel/choir.go:201-224; internal/yaegikernel/intent.go:100-121;
+        internal/agentcore/rlm_reduce.go:97-133; validation inventory at
+        internal/agentcore/tools_worker_update.go:179-230,329-753,1145-1415
+    - claim: >-
+        Live prompts still instruct retired names: the RLM engineering overlay names
+        `update_coagent` in its tool catalogue and its reporting instruction, and the engineering
+        prompt defaults instruct `record_assignment_result`.
       claim_scope: current
-      evidence_ref: "internal/provider/provider.go:69-105; internal/gateway/handlers.go:32-83,364-368"
+      evidence_ref: >-
+        internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml:9,56;
+        internal/runtimeprompts/overlays/engineering_runtime.yaml:7-8
+    - claim: >-
+        The `actuator=tools` route is not dead code: the broker serves RLM only when RLM is
+        requested AND the session worker is ready, and otherwise falls back to tools; an empty
+        actuator value parses to tools; the tools branch of the assigned-CoSuper builder composes
+        `RegisterCapsuleLocalTools`, which registers six tools including `capsule_go_eval` and
+        `record_assignment_result`. The RLM branch composes a separate sealed list.
+      claim_scope: current
+      evidence_ref: >-
+        cmd/capsule-broker/main.go:63-79,251-255,674-689; internal/capsule/actuator.go:16-21,37-47;
+        internal/vmmanager/manager.go:1519-1521; internal/agentcore/tool_profiles.go:325-358;
+        internal/agentcore/tools_capsule.go:76-87
+    - claim: >-
+        The assigned-CoSuper registry is an exact closed set of ten JSON tools under the tools
+        actuator, while the RLM overlay already excludes the four capsule file/exec operations.
+        The remainder is hidden from the desk, not deleted.
+      claim_scope: current
+      evidence_ref: >-
+        internal/agentcore/tool_profiles_authority_test.go:110-123 (TestAssignedCoSuperBuilderIsExactClosedSet),
+        :271-291 (TestRLMAssignedCoSuperOverlayIsSealedGo)
+    - claim: >-
+        No model-id conditional exists anywhere in prompt assembly or REPL initialization, so the
+        one-prompt invariant holds today by construction rather than by test.
+      claim_scope: current
+      evidence_ref: >-
+        internal/agentcore/tool_profiles.go:195-302; internal/runtimeprompts/prompts.go:57-62;
+        cmd/capsule-broker/session_worker.go:274-285; internal/yaegikernel/session.go:53-72;
+        internal/yaegikernel/choir.go:113-132
+    - claim: >-
+        No replay harness, golden-receipt store, canonical-receipt projector, effect census, or
+        forced-rewarm control exists. In-cell reads mint a new request id per call, so a
+        caller-supplied semantic identity does not exist yet and must be built.
+      claim_scope: current
+      evidence_ref: internal/yaegikernel/choir.go:84-110; no fixture store found under internal/
+    - claim: >-
+        The verifier slot is not representable in the worker scope: the capsule request carries
+        only source, cwd, allowed packages, timeout and inbox; the broker passes only the agent
+        role to the session worker; `ChoirScope` carries read-only state but no role or slot and
+        exports only computer and activation identity.
+      claim_scope: current
+      evidence_ref: >-
+        internal/capsule/types.go:101-113; cmd/capsule-broker/session_worker.go:26-33,274-289,336,386;
+        internal/yaegikernel/sidecar.go:166-180; internal/yaegikernel/choir.go:20-61,265-272
+    - claim: >-
+        The gateway and provider request structs carry no session identity and the gateway decoder
+        ignores unknown JSON fields, so an additive optional field is version-skew safe.
+      claim_scope: current
+      evidence_ref: internal/provider/provider.go:69-105; internal/gateway/handlers.go:32-83,364-368
   unknowns:
-    - "Untested here: whether every `update_coagent` citer outside Engineering (Texture, research tools) has a working in-cell path, and what validation the staged message path loses."
-    - "Untested here: the exact durable form of the verifier slot and whether `ChoirScope` can carry it."
-    - "Untested here: whether the four capsule operations are load-bearing for the preserved `actuator=tools` rollback route."
-    - "Assumed from the 2026-09-10 provider research note and to be re-pinned at the preparation Definition: live session-header enforcement, per-model wire shape, roster call results, image-input matrix, one-key coverage."
+    - >-
+      Live provider facts (session-header enforcement, per-model wire shape, roster call results,
+      image-input matrix) come from the 2026-09-10 research note; phase 1 re-pins them with its own
+      live probes before any roster conclusion.
+    - >-
+      Whether self-development operations can be staged with effects OFF for golden-receipt
+      capture, or whether that class must be proven by recorded fixture. Phase 4 resolves this and
+      the Definition must not assume either answer.
+  start_correction:
+    - correction: >-
+        The draft pinned `main@6f1a8014`, staging `cb571960`, retained-computer epoch 896, and
+        described mission two as still holding the working-entrypoint position while blocking this
+        mission on it.
+      corrected: >-
+        Mission two is `completed` at deployed commit e3396329 (CI 34571343061, deployed proof
+        artifact published, settlement doc bddd4f00), records `entrypoint: false` and
+        `next_action: none`, and its post-completion GC work landed through a907f713. The stale
+        gate is replaced by `start.predecessor_receipt` and `start.entry_gate`; `now` no longer
+        treats mission two as unfinished.
+      evidence_ref: >-
+        docs/definitions/choir-rlm-versioned-rename-2026-09-09.md:220-290;
+        docs/ACTIVE.md:248-251; docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
+    - correction: >-
+        The draft's worktree inventory said "untracked user artifacts only" and derived its claims
+        from a mid-cleanup tree.
+      corrected: >-
+        Re-verified at a907f713: clean tree with three pre-existing untracked paths, preserved. The
+        GC commits are in-tree and out of this mission's scope.
+      evidence_ref: "2026-09-11 read-only git status at a907f713"
 
 now:
   status: blocked_incomplete
-  slice: "Draft only. One thing is left before this mission can start: mission two must reach terminal deployed acceptance and give up the working-entrypoint position. The owner ratified the settlement-authority transfer on 2026-09-11 (the reducer owns assignment fate; the mission-one clause that a mailbox Complete never creates a terminal is replaced), and the OpenCode provider setup is phase 1 inside this mission, not a precondition outside it."
+  slice: "Entry reconciliation"
   question: none
   reconciliation:
-    observed_at: "2026-09-11T04:20:00Z"
-    source_ref: "main@6f1a8014 (draft base)"
-    deploy_identity: "staging https://choir.news serves cb571960; effects OFF; provider preparation not yet landed"
+    observed_at: "2026-09-11T12:10:00Z"
+    source_ref: "main@a907f713 (re-pin at charter)"
+    deploy_identity: "staging https://choir.news serves e3396329; effects OFF; OpenCode providers not wired"
+  candidate:
+    id: none
+    state: none
+    ref: none
+    owner: none
+    base: none
+    digest: none
+  decision:
+    - kind: authority
+      source: owner
+      status: settled
+      dated: "2026-09-11"
+      text: >-
+        The reducer owns assignment fate: the in-cell `choir.Complete` writes the durable
+        assignment fate, replacing the mission-one clause that a mailbox Complete never creates a
+        terminal.
+      consequence: >-
+        `record_assignment_result` must stop being an author and be deleted, not shadowed; the
+        reduction path must gain the fate saga's identity derivation, digest and lifecycle CAS.
+    - kind: scope
+      source: owner
+      status: settled
+      dated: "2026-09-11"
+      text: "OpenCode Go and Zen configuration is phase 1 inside this mission, not a separate mission."
+      consequence: "Phase 1 keeps its own problem record, its own Landing Loop, and its own rollback."
+    - kind: scope
+      source: owner
+      status: settled
+      dated: "2026-09-11"
+      text: >-
+        The `actuator=tools` branch is deleted, not kept as a rollback; the wait ends when the
+        management and research desks also cross to RLM.
+      consequence: >-
+        The branch stays functional but unused through this mission (residue R8 owns the deletion);
+        the four capsule operations are NOT deleted here.
+    - kind: acceptance
+      source: owner
+      status: settled
+      dated: "2026-09-11"
+      text: >-
+        The roster test is an experiment. Expected to pass on one prompt: `deepseek-v4.1-flash`,
+        `muse-spark-1.3-contributor-free` (paid `muse-spark-1.3-contributor` when the free quota
+        runs out), `glm-5.3-flash`, and gpt-5.6-luna. Other models are recorded, never gating.
+      consequence: >-
+        Success is stated as an experiment with a named expected set; all four expected ids must
+        pass, and a failing id is either fixed for every model or recorded as an owner-visible
+        exclusion.
+    - kind: acceptance
+      source: owner
+      status: settled
+      dated: "2026-09-11"
+      text: "When a model fails, the shared prompt is fixed for every model; never a per-model branch."
+      consequence: "Prompt revisions are bounded, and digest plus size are recorded per revision."
+    - kind: scope
+      source: owner
+      status: settled
+      dated: "2026-09-11"
+      text: "gpt-5.6-luna already runs on the existing ChatGPT-authenticated path; phase 1 does not provision it."
+      consequence: "A luna failure on that path is a provider event, not a prompt failure."
   evidence_refs:
-    - "docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md (13-agent consensus, adjudications, dissent)"
-    - "docs/reports/choir-opencode-provider-research-2026-09-10.md (provider prerequisite plan, live conformance matrix, verified roster, one-prompt invariant)"
-    - "docs/reports/choir-rlm-missions-overview-2026-09-09.md (mission stack scope and ordering)"
-    - "docs/mission-residues.md R7 (retirement inventory and the replay-returns-original-receipt obligation)"
-    - "internal/agentcore/tool_profiles_authority_test.go:110,275 (registry closed sets)"
-    - "internal/agentcore/run_acceptance.go:627-645,790-791,843 (tool-name-keyed acceptance evidence)"
-    - "internal/agentcore/rlm_reduce.go:167-198; internal/agentcore/cosuper_assignment_fate.go:20 (reducer versus fate author)"
-    - "internal/agentcore/tools_capsule.go:746-773; internal/yaegikernel/eval.go:301-317 (eval envelope and fence stripping)"
-  blocker_or_risk: "Blocked on one thing, not in this mission's authority: mission two settlement. Risks: retiring the four settlement tools before the reducer owns settlement leaves the desk with no way to finish an assignment; retiring `commit_transaction`/`record_self_development_verification` weakens run acceptance until those checkpoints stop reading tool names; `update_coagent` retirement must stay desk-scoped or Texture and the research tools break; a text-only roster member (hy3) cannot serve an image task; phase 1 touches gateway/provider code and Node B credentials, which is red-class work inside an orange mission and needs its own rollback (the stub adapters) and its own Landing Loop; the owner's failure rule (fix the shared prompt for everyone) risks growing the prompt toward the weakest model, so every revision records its digest and size."
-  next_action: "Phase 1 first: wire OpenCode Go and Zen (session identity on the wire, product User-Agent, fail-closed empty identity, three request shapes, keys on Node B), prove one live call per shape, and record the receipt. The problem record for phase 1 already exists in `docs/reports/choir-opencode-provider-research-2026-09-10.md`. Then the code-free Define: record the three defects, freeze the nine-operation mapping table and the prompt/REPL manifest, and state the falsifiers. No repair commit precedes that record."
+    - docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md
+    - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
+    - docs/reports/choir-opencode-provider-research-2026-09-10.md
+    - docs/reports/choir-rlm-missions-overview-2026-09-09.md
+    - docs/mission-residues.md
+    - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
+  blocker_or_risk: >-
+    Blocked on the entry gate only: predecessor receipt re-read, post-mission-two work disposition,
+    atomic registry promotion, owner charter. Risks carried into execution: retiring a settlement
+    tool before the reducer authors fate leaves the desk unable to finish an assignment; retiring
+    an acceptance-named tool silently removes its checkpoint; the verifier slot is unreachable on
+    the assigned path today, so verification evidence is already missing; the four capsule
+    operations must stay functional for the tools fallback while the desk stops using them; phase 1
+    touches gateway/provider code and Node B credentials (red) inside this mission; the shared-prompt
+    fix rule can grow the prompt toward the weakest model, so every revision records digest and
+    size; the replay harness does not exist and must be built before any golden receipt is captured.
+  next_action: >-
+    Read-only entry reconciliation, then charter: fetch the predecessor deployed-proof artifact and
+    confirm the deployed commit, CI run and staging identity; record the post-mission-two GC
+    disposition; re-run `git status --short`; re-pin `start.source.canonical_ref` to the charter
+    commit through `start_correction`; promote this Definition in ACTIVE.md, mission-graph.yaml and
+    doc-authority-manifest.yaml with `entrypoint: true`; then execute acceptance item P0-define as
+    the first mission commit.
 
 finish:
-  deliver: "The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk's only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the nine R7 names are deleted rather than hidden and each earned its deletion by replay proof, run acceptance no longer keys on tool names, one model-independent prompt with one REPL initialization serves a diverse roster with zero output repair, and Texture's packet/reducer design is specified against the canonical writer's invariants without landing code."
-  artifact: "One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, and the Texture design artifact."
+  deliver: >-
+    The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval`
+    is the desk's only JSON envelope, every other affordance is a typed in-cell function staging
+    intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden
+    and each earned its deletion by replay proof, the assignment fate is authored by the reducer,
+    run acceptance no longer keys on tool names and fails loudly when evidence is missing, one
+    model-independent prompt with one REPL initialization serves the expected roster with zero
+    output repair, and the proved replay harness plus its fixtures remain as durable evidence.
+  artifact: >-
+    One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope,
+    the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed
+    assigned registry, the frozen roster conformance evidence, the replay harness with golden
+    receipts, and the closed R7 residue with R8 opened.
+  non_gating_artifacts:
+    - >-
+      Texture packet/reducer design document: translates documents, patches, diffs, source graphs,
+      controls and dispositions into the same in-cell discipline, stated as constraints against the
+      canonical writer's invariants and citing them from their own authority. No Texture runtime
+      code lands in this mission. This artifact must not gate completion.
   entrypoints:
     implementation:
-      - "internal/agentcore/tools_capsule.go"
-      - "internal/agentcore/tool_profiles.go"
-      - "internal/agentcore/rlm_reduce.go"
-      - "internal/agentcore/cosuper_assignment_fate.go"
-      - "internal/agentcore/run_acceptance.go"
-      - "internal/yaegikernel/eval.go"
-      - "internal/yaegikernel/session.go"
-      - "internal/yaegikernel/choir.go"
-      - "cmd/capsule-broker/session_worker.go"
-      - "internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml"
+      - internal/agentcore/tools_capsule.go
+      - internal/agentcore/tool_profiles.go
+      - internal/agentcore/rlm_reduce.go
+      - internal/agentcore/cosuper_assignment_fate.go
+      - internal/agentcore/cosuper_assignment_runtime.go
+      - internal/agentcore/run_acceptance.go
+      - internal/agentcore/tools_worker_update.go
+      - internal/yaegikernel/eval.go
+      - internal/yaegikernel/session.go
+      - internal/yaegikernel/choir.go
+      - internal/yaegikernel/sidecar.go
+      - internal/capsule/types.go
+      - cmd/capsule-broker/session_worker.go
+      - internal/provider/provider.go
+      - internal/gateway/handlers.go
+      - internal/modelcatalog/catalog.go
+      - internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml
+      - internal/runtimeprompts/overlays/engineering_runtime.yaml
+      - internal/promptstore/defaults/engineering.yaml
   acceptance:
-    - action: "P1-provider: wire up the OpenCode Go and Zen providers inside this mission. Add a per-conversation session identity to provider requests (additive only: no routing change, no policy change), send a product User-Agent, refuse to run when the identity is empty, route the three request shapes by model id, install the keys the existing Node B way, and prove one live call per shape. No evaluation runs, no promotion weight, no substrate change. Problem record: `docs/reports/choir-opencode-provider-research-2026-09-10.md`."
-      proves: "Cross-model comparison is never gated on credential plumbing, and a provider outage can never be mistaken for a prompt or carrier failure."
-      evidence_class: deployed_proof
-    - action: "T1-simplify: reduce `capsule_go_eval` to a single required `source` string, delete the `code` alias, reduce the tool description to one sentence that states the affordance, and move the explanation arbitrary LLMs need into the desk's static affordance overlay. A call with no source and a fenced source both fail as parse or compile errors; neither is repaired, and neither executes an empty cell."
-      proves: "The affordance the prompt describes is the only affordance the schema offers, and the envelope is small enough to explain once in the prompt."
-      evidence_class: local_test
-    - action: "T1-repair-deletion: delete `CleanGoSource` and its test, and every call site, including the broker worker path at `cmd/capsule-broker/session_worker.go:392`. Prove zero references remain and that a fenced cell now fails with an actionable error instead of being silently stripped."
-      proves: "No code-level output repair exists on the carrier; a model that wraps code in fences is visible as a prompt or model problem, not absorbed."
+    - action: >-
+        P0-define (code-free; first mission commit; zero repair code): record the four discovered
+        defects (envelope alias with empty required; tool-name-keyed acceptance checkpoints;
+        reducer-is-not-a-settler; verifier-slot unreachable on the assigned path); publish the
+        frozen nine-operation mapping table (old JSON name, in-cell successor or intent kind,
+        receipt class, canonical identity fields, pre-declared exclusion list for nondeterministic
+        fields, fixture path); publish the frozen prompt/REPL initialization manifest and the
+        entropy-exclusion list (exact field paths) used by the digest comparison; publish the
+        falsifiers; and publish the replay-harness specification (fixture schema, canonicalizer,
+        effect census, durable receipt store, rewarm procedure). The four defects are new
+        problems, so this boundary precedes any repair commit.
+      proves: "Scope, identity and falsifiers are evidence-bounded before any carrier code moves."
       evidence_class: static_analysis
-    - action: "T1-invariant: freeze the desk's resolved affordance component and its REPL initialization manifest, and assert a byte-identical prompt digest for a fixed desk across every roster model after excluding run entropy (timestamp, assignment and run-context tails). Add a guard that fails if any model identifier or per-model branch appears anywhere in the prompt-assembly or session-initialization path."
+    - action: >-
+        P1-provider (red; its own Landing Loop): wire the OpenCode Go and Zen providers. Freeze,
+        before implementation, the model-to-wire-shape map (chat completions, Responses, Anthropic
+        Messages), the `conversation_id`/session identity bound to the durable `RunID`, the product
+        User-Agent, the fail-closed rule for an empty identity, the credential variable names, a
+        prior host-config digest and backup, and a spend cap. Deliver the keys through the
+        authorized product/CLI path, or record an owner-executed break-glass step if no product
+        path exists; never ad hoc SSH. Prove one live call per wire shape plus the empty-identity
+        negative probe, with the receipt fields (request shape, model id, status, latency, identity
+        present) named in the evidence artifact.
+      proves: >-
+        Cross-model comparison is never gated on credential plumbing, and a provider outage can
+        never be mistaken for a prompt or carrier failure.
+      evidence_class: deployed_proof
+    - action: >-
+        P2-simplify: reduce `capsule_go_eval` to a single required `source` string, delete the
+        `code` alias, cut the description to one sentence stating the affordance, and move the
+        explanation into the desk's static prompt body. A call with no source and a call with a
+        fenced source both fail as parse or compile errors; neither executes an empty cell or gets
+        repaired.
+      proves: "The affordance the prompt describes is the only affordance the schema offers."
+      evidence_class: local_test
+    - action: >-
+        P2-repair-deletion: delete `CleanGoSource` and its test and all five call sites, including
+        the broker worker path. Prove zero references remain; prove a fenced cell now fails with an
+        actionable error instead of being silently stripped; and state the non-regression for the
+        shared broker session path that the `actuator=tools` fallback still uses.
+      proves: "No code-level output repair exists on the carrier; a model that wraps code in fences is visible, not absorbed."
+      evidence_class: local_test
+    - action: >-
+        P2-invariant: compute the desk prompt digest from the prompts ACTUALLY assembled during the
+        roster runs, and assert equality across roster models for a fixed desk against the frozen
+        entropy-exclusion list from P0-define. Ship the standing guard that fails when any model id
+        or per-model branch appears in the prompt-assembly or session-initialization path, and
+        re-pin the digest after the P4-registry catalogue rewrite changes the prompt text.
       proves: "The prompt varies by desk and never by model, and the property cannot regress silently."
       evidence_class: local_test
-    - action: "T2-freeze: publish the operation-equivalence table for all nine retirement names — old JSON name, in-cell successor or intent kind, receipt class, canonical identity fields, the pre-declared exclusion list for nondeterministic fields, and the fixture that will prove it. Inventory every citer of each name and mark desk scope, naming the Texture and research paths explicitly."
-      proves: "Scope is evidence-bounded and no retired name is left ambiguous or silently desk-leaking."
-      evidence_class: static_analysis
-    - action: "T3-settlement: make the staged Complete intent a settlement author by wiring it into the existing assignment-fate saga so the reducer-owned terminal produces the same durable fate, idempotency and conflict behaviour that `record_assignment_result` produces today. Owner ratified this transfer on 2026-09-11, replacing the mission-one clause that a mailbox Complete never creates a terminal. Two completion verbs must not survive."
-      proves: "Settlement has exactly one author under the new carrier, so the fate tool can be deleted rather than shadowed."
-      evidence_class: local_test
-    - action: "T3-acceptance: rebuild the `capsule_effect_frozen` and `capsule_verification_recorded` checkpoints so they derive from canonical events and in-cell receipts rather than from tool results named `commit_transaction` and `record_self_development_verification`, and make a run that lacks the evidence fail loudly instead of reporting `passed` with fewer checkpoints. Prove the negative: a run without the in-cell equivalent must not pass."
+    - action: >-
+        P3-settlement (red): make the reduction path the assignment-fate author. The in-cell
+        Complete intent must produce the same durable fate as today's tool: same assignment/attempt
+        identity derivation, same proposition digest, same lifecycle compare-and-swap, same freeze
+        and revoke ordering, same late-evidence and cancellation-race behaviour, and the partial
+        (non-terminal) result path. Then delete the tool: registration, handler, the detached-terminal
+        name predicate in the run loop, and the admission-grammar special cases that exist only for
+        it. Prove single authorship: zero live references to the retired name; duplicate Complete
+        intents are idempotent (replay returns the original fate receipt and writes no second fate
+        step); a reused identity with changed input conflicts before any effect; a crash between
+        message and fate writes is recoverable.
+      proves: "Settlement has exactly one author under the new carrier, with the old semantics preserved."
+      evidence_class: deployed_proof
+    - action: >-
+        P3-acceptance (red): rebuild the `capsule_effect_frozen` and `capsule_verification_recorded`
+        checkpoints so they derive from canonical events and in-cell receipts, not from tool results
+        named `commit_transaction` and `record_self_development_verification`. Record the checkpoint
+        count before the change as a baseline and require it not to decrease. Make a run that lacks
+        the evidence fail loudly and name the missing evidence. Prove the negative on staging: a run
+        without the in-cell freeze/verify evidence must not report an accepted level.
       proves: "Retirement cannot silently weaken run acceptance, and the acceptance score stops depending on tool names."
-      evidence_class: local_test
-    - action: "T3-parity: close the two parity gaps before any deletion — carry the verifier slot durably into the session scope so verifier-gated capabilities exist in-cell, and either carry `update_coagent`'s validation into the staged message path or record an explicit, ratified reduction of it."
+      evidence_class: deployed_proof
+    - action: >-
+        P3-parity: close both parity gaps before any deletion, without an escape hatch. (a) Carry
+        the verifier slot into the cell: capability role, the capsule eval request, the session
+        worker config, and `ChoirScope` must all carry the durable assignment kind/slot, and an
+        in-cell function must expose it. Add the tests that pin both verifier gates, which do not
+        exist today, and make the assigned verification run populate the slot so the two
+        verifier-gated capabilities are reachable. (b) Carry `update_coagent`'s authority checks
+        into the staged message path: caller and target durable identity, owner/computer/run/
+        trajectory/context binding, role message policy and CoSuper slot, target existence and
+        channel, typed packet schema validation, lifecycle/work binding, and durable update-id
+        derivation. Desk-scope the retirement and prove Texture and research citers keep working.
+        If any check cannot be carried, the substitution is an owner decision recorded in
+        `now.decision` before deletion; an orchestrator may not self-approve a reduction.
       proves: "Retiring a tool does not retire the authority or the checks that tool performed."
       evidence_class: local_test
-    - action: "T3-in-cell-surface: provide the missing in-cell affordances — a staged freeze intent, a staged verify intent, and a synchronous read-only bundle inspection (the overview's read-only exemption, not a two-turn protocol)."
+    - action: >-
+        P3-in-cell-surface: provide the missing in-cell affordances: a staged freeze intent, a
+        staged verify intent, and a synchronous read-only bundle inspection under the overview's
+        read-only exemption. Each is bound to the P0-define mapping table's receipt semantics.
       proves: "Every affordance the desk needs exists on the carrier before the JSON remainder disappears."
       evidence_class: local_test
-    - action: "T4-replay: for each retired operation, capture the golden receipt before cutover (canonical input, semantic identity, exact receipt bytes, reference and digest, and an effect census); after cutover and a forced actor rewarm, invoke the successor under the same semantic identity and require exact canonical equality with zero additional effects; reuse the identity with changed canonical input and require a pre-effect conflict; use a fresh identity and prove a fresh operation. For the read-only operations, mutate the underlying state between calls: the same identity must return the original observation while a new identity observes the change."
-      proves: "Each deletion is earned: replay through the new path returns the original receipt, and the new path is not merely similar."
-      evidence_class: deployed_proof
-    - action: "T4-registry: cut the assigned-CoSuper registry to the eval envelope alone, update the overlay catalogue sentence to name that one tool plus the in-cell surface, and update both closed-set tests. The `actuator=tools` branch and the four capsule file/exec operations it carries are slated for deletion, not kept as a rollback (owner decision, 2026-09-11); nothing in this mission may depend on them as a fallback."
-      proves: "Engineering has one envelope; the JSON remainder is deleted rather than hidden, and the rollback story is stated rather than discovered."
+    - action: >-
+        P4-harness: build the replay harness before any golden receipt is captured: versioned
+        fixture driver, canonical-receipt projector with the pre-declared exclusion list, effect
+        census reader, durable receipt store, legacy capture adapter, successor adapter, a
+        caller-supplied semantic identity for in-cell operations (they mint a new request id per
+        call today), a state-mutating read fixture, and a forced actor/host rewarm control that is
+        reachable without SSH or is named as an owner-executed break-glass step. Capture goldens
+        against the pre-cutover deployed build. Declare explicitly which operation classes are
+        proven by recorded fixture instead of live capture, and why.
+      proves: "The replay proof can exist, and its substrate is durable rather than improvised at deletion time."
       evidence_class: local_test
-    - action: "T4-delete: delete the nine retired JSON paths and their reducer aliases, including the admission-grammar special cases that exist only for them. Unknown JSON tool names fail closed."
-      proves: "No dual path survives the cutover."
-      evidence_class: static_analysis
-    - action: "T5-roster: run one frozen desk task (inspect, edit, run a test, complete with the exact receipt reference) under one prompt. Expected to pass, per the owner on 2026-09-11: `deepseek-v4.1-flash`, `muse-spark-1.3-contributor-free`, `glm-5.3-flash`, and gpt-5.6-luna (that last one already runs on the existing ChatGPT-authenticated path, not the OpenCode Zen or Go catalogue, so phase 1 does not provision it and the roster run uses that existing surface). Muse Spark runs on the free Zen id while its free quota lasts, then continues the same testing on the paid twin `muse-spark-1.3-contributor` (Go, responses); a free-usage limit is a quota event, not a model failure, and every run record names the id that served it. Every other roster member is an experiment: run it, record pass or fail, tokens, latency and failure mode, and do not let it block the mission. This is experimental work whose success condition is learning what the yaegi tool API and system prompt must say for these models to use the desk."
-    - action: "T5-prompt-fix: when a model fails, fix the shared prompt for every model - never a per-model branch, hint, retry ladder or schema fork. Record the prompt digest and size for each revision so growth is visible, and re-run the failing models against the new prompt. The same affordance failing across models is a prompt defect and is fixed in the shared body."
-      proves: "One prompt genuinely serves a diverse roster, which is the owner's completion goal, without reintroducing the overfit that produced the fence workaround."
+    - action: >-
+        P4-replay: for each retired operation, invoke the successor under the same semantic
+        identity and require canonical equality on the declared fields (never raw byte equality),
+        zero additional effects by the effect census, a pre-effect conflict on reused identity with
+        changed canonical input, and a fresh operation on a new identity. For read-only operations,
+        mutate the underlying state between calls: the same identity returns the original
+        observation and a new identity observes the change. One deployed proof per operation class,
+        with the local harness run per operation.
+      proves: "Each deletion is earned: replay through the new path returns the original receipt and no more."
       evidence_class: deployed_proof
-    - action: "T5-cache-exit: confirm the later cache mission is unblocked - the session identity travels on the wire outside any cache-keyed payload, the static affordance body carries no timestamps, prompt assembly order is unchanged, and the eval schema version is recorded. No optimization, no hit-rate target and no per-model cache key is claimed here."
-    - action: "T5b-tools-actuator: keep the `actuator=tools` branch alive but unused through this mission, and prove the RLM path never reaches it. Deletion is deferred until the management and research desks also cross to RLM (owner decision, 2026-09-11); the deferred deletion is residue R8, closed when the last desk crosses. No mission proof may depend on the branch and no rollback path may target it."
-      proves: "The next mission inherits a stable prefix and a stable identity rather than a second re-plumbing job."
-      evidence_class: static_analysis
-    - action: "T6-texture-design (non-gating): publish the Texture packet and reducer design that translates documents, patches, diffs, source graphs, controls and dispositions into the same in-cell discipline, stated as constraints against the canonical writer's invariants (single-writer, stale-base comparison, atomic revision-graph identity, retry-preserved pending mutations, versioned compare-and-swap, fresh-but-not-replay wakes, per-document locking, atomic researcher opening) and citing them from their own authority. No Texture runtime code lands in this mission."
-      proves: "Mission four has a specified object, and the engineering carrier does not foreclose Texture."
-      evidence_class: static_analysis
-    - action: "T6-landing: run the Landing Loop on behaviors changed here — commit, push, monitor CI, monitor the staging deploy, verify the deployed commit identity, and run the deployed acceptance proof with effects OFF, then record the receipts. Settle this Definition and move the three registries atomically, closing residue R7."
-      proves: "The cutover is proven on the deployed product path, and the mission record is closed with artifacts rather than narrative."
+    - action: >-
+        P4-registry: cut the assigned-CoSuper RLM registry to the eval envelope alone. Assert
+        exactly: `TestAssignedCoSuperBuilderIsExactClosedSet` covers the tools branch, and the RLM
+        overlay test asserts the sealed set contains only `capsule_go_eval` plus the reconciliation
+        and report channels that stay, with the overlay catalogue sentence naming that one tool and
+        the in-cell surface. Observe the live catalogue on staging to prove the singleton registry,
+        since a unit test cannot prove the deployed catalogue. Unknown JSON tool names fail closed.
+      proves: "Engineering has one envelope and the JSON remainder is deleted rather than hidden."
       evidence_class: deployed_proof
-  rollback: "Revert the mission commits and redeploy; the retired JSON paths return with the revert. Phase 1 provider work rolls back by restoring the stub adapters and removing the installed keys. The `actuator=tools` branch is deliberately not a rollback target and is not deleted in this mission: it is held until the other desks cross (residue R8). Product restore stays a separate forward transaction on the computer's event chain, never a fix for a failed deploy."
+    - action: >-
+        P4-delete: delete the five overlay JSON tool paths and their reducer aliases, including the
+        admission-grammar special cases that exist only for them, with the citer sweep in the same
+        change. Do NOT delete the four capsule file/exec operations, which the `actuator=tools`
+        fallback composes until R8. Update every live prompt that names a retired tool, including
+        the RLM engineering overlay (`internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml`),
+        the engineering overlay (`internal/runtimeprompts/overlays/engineering_runtime.yaml`) and the
+        engineering prompt default (`internal/promptstore/defaults/engineering.yaml`), so no served
+        prompt instructs a name that no longer exists.
+      proves: "No dual path survives on the desk, and the deferred branch still compiles and serves."
+      evidence_class: local_test
+    - action: >-
+        P5-roster: run one frozen desk task (inspect, edit, run a test, complete with the exact
+        receipt reference) under one prompt, with the task artifact path fixed in P0-define. All
+        four expected-pass ids must complete it (`muse-spark-1.3-contributor-free` or the paid
+        `muse-spark-1.3-contributor` counts as one id). Every other roster member is an experiment:
+        run it, record pass or fail, tokens, latency and failure mode, and never let it gate. Record
+        which id served each run so a quota switch is never read as a model failure, and exclude
+        `hy3` from any image-bearing step by name.
+      proves: "One prompt genuinely serves the expected roster, which is the owner's completion goal."
+      evidence_class: deployed_proof
+    - action: >-
+        P5-prompt-fix: when a model fails, fix the shared prompt for every model, never a per-model
+        branch, hint, retry ladder or schema fork. Record the digest and size of every revision and
+        re-run the full expected roster against the new prompt. Bound the loop: after three shared
+        revisions without all four expected ids passing, stop and record `blocked_incomplete` with
+        the honest result rather than continuing to grow the prompt.
+      proves: "A model failure is treated as a prompt defect or an honest blockage, never as an accommodation."
+      evidence_class: local_test
+    - action: >-
+        P5b-tools-actuator: prove by test that the RLM profile never reaches the `actuator=tools`
+        registry, and keep that branch functional and unused. Register residue R8 in
+        `docs/mission-residues.md` at settle, naming the deferred deletion and its revisit trigger
+        (management and research desks crossing to RLM). No mission proof may depend on the branch
+        and no rollback path may target it.
+      proves: "The deferred branch is provably out of the desk's reach while remaining a working fallback."
+      evidence_class: local_test
+    - action: >-
+        P6-landing: run the Landing Loop on behaviors changed here, with an intermediate deploy
+        before the deployed replay and roster proofs (later phases cannot supply earlier deployed
+        evidence). Run the exact deployed engineering-assignment scenario and record the accepted
+        run and acceptance ids, the trace evidence that no legacy tool was used, and the
+        traces that prove reducer settlement. Then move docs/ACTIVE.md, docs/mission-graph.yaml and
+        docs/doc-authority-manifest.yaml atomically, close residue R7, leave R8 open, and settle
+        this Definition. Already-accepted runs are not retroactively rescored.
+      proves: "The cutover is proven on the deployed product path, and the mission record is closed with artifacts."
+      evidence_class: deployed_proof
+  rollback: >-
+    Phase-specific, plus one source rollback. Source: revert the mission commits and redeploy; the
+    retired JSON paths return with the revert. Phase 1: revert the adapter commits, remove the
+    installed Node B credential, restart the gateway, and prove staging health returns to the
+    pre-phase-1 identity; the adapter path is greenfield (no OpenCode adapter exists today), so the
+    revert target is the added code, not a stub. Phase 3 settlement: revert to the previous fate
+    author and re-verify that a run without in-cell evidence fails loudly; never leave both authors
+    live. Phase 4: revert the acceptance rebuild and confirm the checkpoint baseline is restored.
+    The `actuator=tools` branch is deliberately not a rollback target and is not deleted here: it is
+    held until the other desks cross (residue R8). Product restore stays a separate forward
+    transaction on the computer's event chain, never a fix for a failed deploy.
   landing:
     required: true
     environment: "staging https://choir.news with effects OFF"
     required_receipts:
-      - "pushed commit SHA and CI run"
+      - "pushed commit SHA and CI run for each landing"
       - "staging deploy and health/commit identity"
-      - "deployed acceptance command and result, with accepted run/acceptance ids"
-      - "the frozen roster conformance evidence artifact"
+      - "the deployed engineering-assignment acceptance command and result with accepted ids"
+      - "the frozen roster conformance evidence artifact naming the id that served each run"
+      - "the replay harness golden-receipt artifact"
   not_done_when:
-    - "Mission two has not reached terminal deployed acceptance."
-    - "The provider-preparation sequence has not landed with a terminal receipt."
-    - "Any retired name still exists on the live RLM path, or any retirement lacks its replay proof."
-    - "Any run acceptance checkpoint still keys on a tool name, or a run can report `passed` with fewer checkpoints than before."
+    - "The entry gate is unsatisfied: no predecessor receipt re-read, no post-mission-two work disposition, no atomic registry promotion, no owner charter."
+    - "Any retired tool name is still reachable on the RLM path, or any retirement lacks its replay proof artifact."
+    - "Any run-acceptance checkpoint still keys on a tool name, or a run can report an accepted level with fewer checkpoints than the recorded baseline."
+    - "More than one code path can author the assignment fate, or the reducer-authored terminal does not reproduce the existing identity, digest and lifecycle semantics."
+    - "The verifier slot is still unreachable on the assigned path, or either verifier gate lacks its pinning test."
     - "Any model identifier or per-model branch appears anywhere in prompt assembly or REPL initialization."
     - "Any code path strips, repairs or tolerates malformed model output to make a cell work."
-    - "None of the owner's expected-pass models (deepseek-v4.1-flash, muse-spark-1.3 on either the free or the paid id, glm-5.3-flash, gpt-5.6-luna) has completed the desk task on the frozen prompt."
+    - "Fewer than all four expected-pass ids complete the frozen desk task, or a roster failure was answered with a per-model accommodation."
+    - "The four capsule file/exec operations were deleted or broken while residue R8 still defers their deletion."
 
 boundaries:
-  mutation_class: orange
-  red_subclass: "phase 1 (gateway/provider routing and Node B credentials) and phase 4 (run acceptance)"
+  mutation_class: red
+  red_subclass: >-
+    Phase 1 (gateway/provider routing, Node B credentials, model routing) and phase 3 (assignment
+    fate, run acceptance, canonical events/evidence) are red surfaces; the rest of the mission is
+    orange inside a red-class mission.
   drafting_mutation_class: green
   authority_sources:
-    - "owner mission-three goals stated 2026-09-10 (one prompt per desk for all models; no code-level parsing workarounds; simplest possible eval tool with the explanation in the system prompt; diverse roster; cache-conscious but not cache-optimizing)"
-    - "docs/reports/choir-rlm-missions-overview-2026-09-09.md mission 3 scope"
-    - "docs/mission-residues.md R6 and R7"
-    - "docs/standing-questions.md"
+    - "owner decisions 2026-09-11 recorded in now.decision"
+    - docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md
+    - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
+    - docs/reports/choir-rlm-missions-overview-2026-09-09.md
+    - docs/mission-residues.md (R7 inherited, R8 deferred)
+    - docs/standing-questions.md
   must_preserve:
     - "Historic tape decodability under frozen versioned rules; no rewrite of prior bytes."
-    - "Mission-two vocabulary: this mission writes engineering-desk values only through the version-selected live vocabulary."
+    - "The mission-two live vocabulary: engineering-desk writes go through the version-selected live names."
     - "The read-only synchronous exemption for observations."
+    - "The `actuator=tools` fallback stays functional until residue R8 deletes it."
     - "Provider credentials stay host-side; the conversation identity is request metadata, never a trust input."
+    - "Already-accepted runs are not retroactively rescored when the acceptance checkpoints are rebuilt."
   excluded:
     - "Texture runtime code, canonical-writer mutation, and any deletion of Texture JSON writers."
     - "Cache optimization, promotion weights, or any evaluation that promotes."
-    - "Management and Research desk cutovers."
+    - "Management and Research desk cutovers; the four capsule operations stay for the tools fallback."
     - "Any per-model prompt fork, schema hint, retry ladder or output repair."
-    - "Provider credential-management substrate work beyond phase 1 of this mission."
+    - "Disk/GC maintenance, vmctl ownership, Node B runtime, and every commit landed around a907f713."
+    - "Dual settlement authors: the JSON fate path and the reducer path may not both exist after P3."
+    - "`actuator=tools` as a rollback target."
   protected_surfaces:
+    - "gateway and provider calls, model routing, Node B credential store"
+    - "assignment-fate saga and its lifecycle compare-and-swap"
     - "run acceptance"
-    - "gateway and provider calls (phase 1)"
-    - "Texture canonical writes (design constraint only)"
+    - "canonical events and evidence projection"
     - "capsule execution and the capability broker"
+    - "Texture canonical writes (design constraint only)"
   completion_evidence_floor:
-    - "deployed_proof for the phase 1 provider calls, the roster conformance, the replay-for-deletion proofs and the final landing"
-    - "local_test for the envelope simplification, the prompt invariant, the settlement path, the acceptance rebuild and the parity gaps"
-    - "static_analysis for the repair deletion, the registry cut, the path deletion and the cache exit"
+    - "deployed_proof for phase 1 provider calls, settlement, the acceptance rebuild negative, replay per operation class, the live registry observation, the roster, and the final landing"
+    - "local_test for the envelope simplification, the repair deletion, the prompt invariant, the parity work, the in-cell surface, the replay harness, the prompt-fix rule, the tools-actuator reachability, and the path deletion"
+    - "static_analysis for the P0-define boundary and the citer sweep"
   conjecture_delta:
     discovered:
-      - "Falsified: that retiring the nine names is nine interchangeable deletions whose replacements already exist. `record_assignment_result` is the only assignment-fate author, `commit_transaction` and `record_self_development_verification` are the only sources of two acceptance checkpoints, and `inspect_self_development_bundle` is verifier-slot gated. Substitutes exist for the four capsule operations and the bundle inspection; they do not exist for the settlement and freeze paths."
-      - "Falsified: that a chat-completions-only provider adapter is sufficient for the mission's roster. Muse Spark serves only the Responses API and Qwen serves the Anthropic Messages shape."
+      - >-
+        Falsified: that the nine retirements are nine interchangeable deletions whose replacements
+        exist. `record_assignment_result` is the only assignment-fate author, two acceptance
+        checkpoints are keyed on the retiring tool names, and the two verifier-gated tools cannot
+        pass their gate on the live assigned path at all.
+      - >-
+        Falsified: that the `actuator=tools` branch is dead code. It is the live fallback whenever
+        the session worker is not ready, and it composes four of the operations the retirement
+        inventory names.
+      - >-
+        Falsified: that a chat-completions-only provider adapter suffices for the roster. Muse
+        Spark serves only the Responses API and Qwen serves the Anthropic Messages shape.
     falsifiers:
-      - "If the frozen roster cannot pass the desk task on a single prompt without per-model accommodation, the one-prompt invariant is false as stated and the mission reports that rather than tuning around it."
-      - "If replay through the new path cannot reproduce an original receipt for any retired operation, that operation is not deletable in this mission."
+      - >-
+        If any retired operation cannot reproduce its original receipt through the new path under
+        the same semantic identity, that operation is not deletable in this mission.
+      - >-
+        If the expected roster cannot pass the frozen desk task on one shared prompt after three
+        revisions, the one-prompt invariant is false as stated and the mission reports that rather
+        than tuning around it.
+      - >-
+        If only one code path cannot be shown to author the assignment fate, the settlement transfer
+        is incomplete and P3 has failed regardless of test colour.
   heresy_delta:
     discovered:
-      - "Tool-name-keyed acceptance evidence: run acceptance proves a frozen effect and a recorded verification by scanning for two tool *names* behind a presence guard, so deleting the tools removes evidence while acceptance still reports `passed`."
-      - "Empty-envelope execution: because neither eval parameter is required, a call with neither executes an empty cell, and a call with both silently selects one."
-      - "Hidden remainder: the RLM overlay already drops the four capsule operations while the shared registry still carries all ten, so the desk is dual-pathed by configuration rather than by capability."
-      - "Settlement authority outside the reducer: the assignment fate is written by a JSON tool while the in-cell Complete intent only mails an envelope."
+      - >-
+        Verifier-slot unreachability: both verifier-gated tools require a metadata key that the only
+        live CoSuper activation path never writes, so bundle inspection and verification recording
+        are unreachable today and their acceptance checkpoint can never be produced.
+      - >-
+        Tool-name-keyed acceptance evidence: a retiring name silently removes a checkpoint instead of
+        failing the run, because the collector skips error results and the checkpoint is only added
+        when a result exists.
+      - >-
+        Empty-envelope execution: with no required parameter, a call with neither field runs an
+        empty cell and a call with both silently selects one.
+      - >-
+        Hidden remainder: the RLM overlay already drops the four capsule operations while the shared
+        builder still carries all ten tools, so the desk is dual-pathed by configuration.
+      - >-
+        Settlement authority outside the reducer: the assignment fate is written by a JSON tool
+        while the in-cell Complete intent only mails an envelope, and the run loop's detached-terminal
+        predicate keys on that tool's name.
+      - >-
+        Live prompts instruct retired names: the RLM engineering overlay and the engineering prompt
+        defaults still name tools this mission deletes.
     introduced: []
     repaired: "none; mark repaired only after the deployed receipts exist"
 measures:
-  - "Per-model desk-task pass or fail on the frozen prompt, with tokens and latency."
-  - "Count of code-level output repairs in the carrier path (target zero, measured by a guard rather than by prose)."
-  - "Retired operations with a green replay proof (target nine of nine)."
-  - "Acceptance checkpoints per run before and after the acceptance rebuild (must not decrease silently)."
-  - "Prompt digest equality across roster members for a fixed desk, with prompt size recorded at each revision."
+  - kind: count
+    name: code-level output repairs in the carrier path
+    baseline: 5
+    desired: 0
+    decision_use: "blocks P2 completion if any survives"
+    cannot_prove: "whether a model wraps code in fences for reasons the prompt could remove"
+  - kind: count
+    name: acceptance checkpoints per accepted run
+    baseline: 2
+    desired: ">= 2, derived from in-cell evidence rather than tool names"
+    decision_use: "blocks P3-acceptance; counts silently dropping is the failure mode"
+    cannot_prove: "whether the in-cell evidence is as trustworthy as the tool-result evidence it replaces"
+  - kind: count
+    name: retired operations with a green replay proof
+    baseline: 0
+    desired: 5
+    decision_use: "blocks each deletion"
+    cannot_prove: "whether the four deferred capsule operations retain their semantics under R8"
+  - kind: string
+    name: prompt digest and size per revision, per desk
+    baseline: "unmeasured; measured at the P0-define freeze"
+    desired: "identical digest across roster ids for a fixed desk; size recorded per revision"
+    decision_use: "detects per-model forks and prompt growth toward the weakest model"
+    cannot_prove: "that a passing roster means a good prompt rather than a tolerant task"
+  - kind: count
+    name: expected-pass ids completing the frozen desk task
+    baseline: 0
+    desired: 4
+    decision_use: "blocks completion"
+    cannot_prove: "behaviour on models outside the tested roster"
 
 receipts:
   - id: engineering-carrier-owner-decisions-2026-09-11
     boundary: define
-    commit_or_artifact: "owner decisions recorded 2026-09-11 in conversation; folded into this Definition and the consensus record"
+    commit_or_artifact: "owner decisions recorded 2026-09-11 in conversation; folded into now.decision and the consensus record"
     proof_refs:
+      - "owner: the reducer, from inside the cell, marks an assignment finished"
       - "owner: sweep the OpenCode configuration into this mission as its first phase"
       - "owner: get rid of the actuator=tools path; no rollback logic is planned to be used; the bar is the other desks crossing, so deletion is deferred to residue R8"
-      - "owner: the reducer, from inside the cell, marks an assignment finished"
-      - "owner: the roster is experimental with deepseek-v4.1-flash, muse-spark-1.3-contributor-free, glm-5.3-flash and gpt-5.6-luna expected to pass; other models are worth testing; success condition is the experiment itself"
+      - "owner: the roster is experimental with deepseek-v4.1-flash, muse-spark-1.3, glm-5.3-flash and gpt-5.6-luna expected to pass; other models are worth testing; success condition is the experiment itself"
       - "owner: when a model fails, fix the shared prompt for every model"
-      - "owner: Muse Spark runs on the free Zen id while the free quota lasts, then continues the same testing on the paid `muse-spark-1.3-contributor`"
+      - "owner: Muse Spark runs on the free Zen id while the free quota lasts, then continues the same testing on the paid muse-spark-1.3-contributor"
+      - "owner: gpt-5.6-luna already runs on the existing ChatGPT-authenticated path"
     rollback_ref: "none; a decision record"
-    disposition: "recorded: phase 1 is provider setup; actuator=tools is deletion-slated, not preserved"
-    problem_ref: "docs/reports/choir-opencode-provider-research-2026-09-10.md (provider problem record); docs/mission-residues.md R7 (retirement inventory)"
+    disposition: "recorded and settled; binding on this mission"
+    problem_ref: docs/reports/choir-opencode-provider-research-2026-09-10.md
     authorization_ref: "owner statement 2026-09-11"
     candidate_or_evidence_refs: []
-
   - id: engineering-carrier-mission-three-consensus-2026-09-11
     boundary: define
-    commit_or_artifact: "docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md; draft base main@6f1a8014"
+    commit_or_artifact: "docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md"
     proof_refs:
-      - "thirteen-agent convergent panel at .agentic-consensus/mission3/run1 (non-durable process diagnostics): codex, claude/opus, cursor, opencode, devin, gpt-5.6 sol and luna, gemini-3.8, cursor-grok-4.6, muse-spark-1.3-contributor-free, nemotron-3-ultra-free, glm-5.3-flash, ling-3.0-flash-fin-free; 13 ok, 0 failed"
-      - "orchestrator re-verification in source of: the eval alias with empty required, the five CleanGoSource call sites, the tool-name-keyed acceptance checkpoints, the reducer-versus-fate split, both closed-set tests, and the absence of model conditionals in the prompt path"
-    rollback_ref: "docs-only draft; revert this commit to remove the draft Definition and the consensus record"
-    disposition: "drafted, not chartered: awaits mission-two settlement and owner ratification of the settlement-authority transfer; the OpenCode provider setup is folded in as phase 1 (owner decision, 2026-09-11)"
-    problem_ref: "docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md findings on acceptance evidence, empty-envelope execution, the hidden remainder and the settlement-authority split"
+      - "thirteen-agent convergent panel at .agentic-consensus/mission3/run1 (non-durable process diagnostics): 13 ok, 0 failed"
+      - "orchestrator re-verification of the eval alias with empty required, the five CleanGoSource call sites, the tool-name-keyed acceptance checkpoints, the reducer-versus-fate split, both closed-set tests, and the absence of model conditionals in the prompt path"
+    rollback_ref: "docs-only draft; revert to remove"
+    disposition: "adjudicated; owner answers folded into now.decision"
+    problem_ref: "the four discovered defects recorded in start.observed_artifact"
     authorization_ref: "owner instruction 2026-09-11 to draft mission three with agentic consensus"
+    candidate_or_evidence_refs: []
+  - id: engineering-carrier-executability-review-2026-09-11
+    boundary: define
+    commit_or_artifact: "docs/reports/choir-rlm-mission-three-review-2026-09-11.md"
+    proof_refs:
+      - "thirteen-agent convergent review panel at .agentic-consensus/mission3-review/run1: 12 ok, 1 quota failure (omp-gemini38, Cloud Code Assist 429), 0 task failures"
+      - "orchestrator source verification of the verifier-slot gates, the assigned-CoSuper metadata, the acceptance collector's error filter, the actuator route resolution, and the tools-branch registry composition"
+    rollback_ref: "docs-only review record; revert to remove"
+    disposition: "adjudicated into this revision; every must-fix item is folded into finish.acceptance, now, or boundaries"
+    problem_ref: "the four discovered defects and the stale draft refs recorded in start.start_correction"
+    authorization_ref: "owner instruction 2026-09-11 to review the draft and make it executable"
+    candidate_or_evidence_refs: []
+  - id: engineering-carrier-entry-reconciliation
+    boundary: define
+    commit_or_artifact: "pending: filled at charter"
+    proof_refs: []
+    rollback_ref: "none"
+    disposition: "pending the entry gate in start.entry_gate"
+    problem_ref: "start.start_correction stale-ref correction"
+    authorization_ref: "none yet; read-only reconciliation only"
     candidate_or_evidence_refs: []
 ---
 
-# Mission 3 - Engineering moves onto the in-cell carrier
+# Mission 3 — Engineering moves onto the in-cell carrier
 
-This is a draft. It is not started. Mission two is still the active mission. This one starts when
-mission two is finished and you say go.
+Draft authority, prepared for `/goal`. It is not chartered and not an entrypoint. Mission two is
+finished (`completed` at deployed commit `e3396329`); the entry gate in `start.entry_gate` is what
+remains before this file becomes the sole working entrypoint.
 
 ## What this mission does
 
-Engineering is the first desk to run fully on the in-cell carrier. Right now the desk is split in
-two: one tool is the new way, nine JSON tools are the old way. After this mission:
+Engineering is the first desk to run fully on the in-cell carrier. Today the desk is split in two:
+one JSON tool is the new way, five overlay JSON tools are the old way, and four capsule operations
+are hidden from the desk but alive on the fallback route. After this mission:
 
 - `capsule_go_eval` is the desk's only JSON tool. The model hands it Go source.
 - Everything else is a normal Go function inside the cell: files, running commands, messages,
   spawning, finishing, verification, inspection.
-- The nine old JSON tool names are gone, not hidden. Each one has to prove it works the new way
-  before it is deleted.
-- The prompt is the same for every model. No per-model text, no per-model branching, and no code
-  that fixes up model output.
+- The five JSON tool names are deleted, not hidden, and each earned its deletion with a replay
+  proof.
+- The reducer writes the assignment fate. The JSON fate tool is gone.
+- Run acceptance stops reading tool names and fails loudly when evidence is missing.
+- One prompt serves every model. No per-model text, no per-model branching, no code that repairs
+  model output.
 
-That last point is the real goal: one prompt per desk that works for every model.
+## Four defects, written down before any fix
 
-## Why the old way existed
-
-Two reasons, and we now handle both differently.
-
-1. Models sometimes wrap code in fences. We fixed that in code, in a function called
-   `CleanGoSource`. That is why some weaker models worked at all. This mission deletes that
-   function. If a model wraps its code, we see it as a model problem instead of hiding it.
-2. Some models did not understand the old two-field envelope. So the envelope carried an
-   explanation. The explanation moves into the system prompt, where it belongs, and the envelope
-   gets smaller: one field, required, nothing to guess.
-
-## Three defects, written down before any fix
-
-1. The envelope is not simple. `source` and `code` mean the same thing, nothing is required, and a
-   call that sends neither runs an empty cell. A call that sends both silently picks one.
-2. Run acceptance reads tool names. It marks a run as having a frozen effect and a recorded
-   verification by looking for results named `commit_transaction` and
-   `record_self_development_verification`. Delete those tools and a run still says "passed" while
-   carrying less evidence.
-3. The reducer cannot finish an assignment. Today a staged Complete is only a mailbox message, and
-   `record_assignment_result` is the one thing that writes the assignment's fate. Deleting it moves
-   that authority into the reducer. This replaces a rule you set in mission one.
+1. **The envelope is not simple.** `source` and `code` mean the same thing, nothing is required, a
+   call with neither runs an empty cell, and a call with both silently picks one.
+2. **Acceptance reads tool names.** Two checkpoints are built by scanning for results named
+   `commit_transaction` and `record_self_development_verification`. Delete the tools and the
+   checkpoints vanish silently instead of failing the run.
+3. **The reducer cannot finish an assignment.** A staged Complete is only a mailbox message.
+   `record_assignment_result` writes the fate, and the run loop's terminal predicate keys on its
+   name.
+4. **The verifier slot is unreachable.** Both verifier-gated tools require a metadata key that the
+   live assigned path never writes. Bundle inspection and verification recording cannot be reached
+   today, and their acceptance checkpoint can never be produced.
 
 ## Phases
 
 | Phase | Work | Done when |
 | --- | --- | --- |
-| 1 | OpenCode Go and Zen setup: session id on the wire, product User-Agent, three request shapes, keys on Node B | One live call works for each request shape, and staging health lists both providers |
-| 2 | Shrink the eval tool to one required field; delete `CleanGoSource` and all its call sites | No repair code is left; bad input fails loudly; the prompt digest is identical for every model |
-| 3 | Freeze the mapping: old name to new function, receipt class, and what counts as the same answer | The table is published and every old name is accounted for |
-| 4 | Build what is missing: reducer owns settlement, acceptance stops reading tool names, two parity gaps closed, new in-cell functions for freeze, verify, inspect | Each is covered by a test, including the case where evidence is missing |
-| 5 | For every old operation: same input gives the same receipt and no extra side effects, then delete it | All nine have a green replay record and the registry holds one tool |
-| 6 | One frozen prompt, one desk task, a diverse set of models (experiment) | deepseek-v4.1-flash, muse-spark-1.3-contributor-free, glm-5.3-flash and gpt-5.6-luna complete the task under one prompt; the others are recorded |
-| 7 | Texture design document (no code); then the normal deploy and proof | Design published; staging runs the new path with effects off |
+| P0 | Code-free Define: four defects, nine-operation mapping table, prompt/REPL manifest, entropy exclusions, falsifiers, replay-harness spec | Published, with zero repair code in the same commit |
+| P1 | OpenCode Go and Zen providers, session identity, three wire shapes, keys by the authorized path | One live call per shape, empty-identity negative probe, own Landing Loop, spend cap respected |
+| P2 | Envelope to one required field; delete `CleanGoSource`; prompt digest + guard | Bad input fails loudly; no repair code; digest identical across models |
+| P3 | Reducer authors fate; acceptance rebuilt off tool names; parity gaps closed; in-cell freeze/verify/inspect | Single settlement author; checkpoints not fewer; verifier gates pinned and reachable |
+| P4 | Replay harness built, goldens captured pre-cutover, per-operation replay, registry cut, five names deleted | Every deletion has a green replay proof; live catalogue shows one tool |
+| P5 | Frozen desk task on the roster; shared-prompt revisions bounded; tools-actuator reachability proven | All four expected ids pass on one prompt; R8 registered |
+| P6 | Landing with an intermediate deploy before deployed replay/roster proofs; registry move; R7 closed | Deployed engineering-assignment acceptance recorded with accepted ids |
 
-Phase 1 can start as soon as this mission is chartered. It is separate from the prompt work, and
-its problem record already exists in `docs/reports/choir-opencode-provider-research-2026-09-10.md`.
+P1 is independent of P2–P4 (disjoint surfaces) and may run in parallel. P0 must land before any
+repair, settlement, or deletion code.
 
-## Models in the roster
+## Owner decisions (2026-09-11)
 
-The roster is an experiment, not a fixed list. The owner expects these four to pass on one prompt:
-`deepseek-v4.1-flash`, `muse-spark-1.3-contributor-free`, `glm-5.3-flash`, and gpt-5.6-luna.
-gpt-5.6-luna is already set up: it runs on the existing ChatGPT-authenticated path, not the
-OpenCode Zen or Go catalogue, so phase 1 does not need to provision it.
-
-Muse Spark starts on the free Zen id and moves to the paid twin `muse-spark-1.3-contributor` when
-the free quota runs out. That is a quota switch, not a model failure, and each run record says which
-id served it.
-
-Everything else is worth testing and gets recorded: `ling-3.0-flash-fin-free`, the two Nemotron ids,
-`qwen3.8-flash`, `mimo-v2.5`, `hy3`. Every one can read images except `hy3`. Checked 2026-09-10 and listed in `docs/reports/choir-opencode-provider-research-2026-09-10.md`
-section 11.
-
-## Owner decisions
-
-Recorded 2026-09-11:
-
-- OpenCode setup is phase 1 of this mission, not a separate mission.
-- `actuator=tools` gets deleted. It is not kept as a rollback. The wait ends when the management
-  and research desks also cross, so the branch sits unused through this mission and the deletion is
-  residue R8.
-- The reducer, from inside the cell, marks an assignment finished. This replaces the mission-one
-  rule that a mailbox Complete cannot finish one.
-- The roster is experimental. Success is learning what the tool API and system prompt must say,
-  with those four models expected to work.
-- When a model fails, the shared prompt gets fixed for everyone. Never a per-model branch.
+Recorded in `now.decision`: the reducer owns assignment fate; provider setup is phase 1 inside this
+mission; `actuator=tools` is deleted on the other desks' crossing (residue R8) and is not a
+rollback; the roster is an experiment with four expected ids; a failing model means fixing the
+shared prompt; Muse Spark moves to the paid id when the free quota runs out; gpt-5.6-luna rides the
+existing ChatGPT-authenticated path.
