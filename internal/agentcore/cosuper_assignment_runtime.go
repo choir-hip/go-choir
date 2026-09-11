@@ -267,20 +267,32 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		MemoryMax: coSuperAssignmentMemoryMax, CpuQuota: coSuperAssignmentCPUQuota, CpuPeriod: 100000, PidsMax: coSuperAssignmentPidsMax,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
 		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest}
-	if req.Kind == types.CoSuperAssignmentVerification && rt.selfdevOperations != nil && rt.selfdevUpdaterRoot != "" {
-		// The verifier's exact-binding mount: the host installs the operation's
-		// frozen bundle read-only at /selfdev/bundle with a binding.json the
-		// in-cell inspect reads. Absent or unfrozen bundle → no mount; the
-		// cell's InspectBundle then reports the binding unavailable.
-		if operation, opErr := rt.selfdevOperations.GetByTrajectory(spawnCtx, computerID, trajectoryID); opErr == nil &&
-			operation.BundleDigest != "" && (operation.State == selfdev.StateFrozen || operation.State == selfdev.StateVerified || operation.State == selfdev.StateAwaitingApproval) {
-			bundleDir := filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest)
-			if info, statErr := os.Stat(bundleDir); statErr == nil && info.IsDir() {
-				bindingJSON, _ := json.Marshal(map[string]string{"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest})
-				spec.VerifierBundleDir = bundleDir
-				spec.VerifierBinding = string(bindingJSON)
-			}
+	if req.Kind == types.CoSuperAssignmentVerification {
+		// The verifier's exact-binding mount is mandatory: the host installs
+		// the operation's frozen bundle read-only at /selfdev/bundle with a
+		// binding.json the in-cell inspect reads. A verification assignment
+		// without a mountable frozen bundle has nothing to verify; fail
+		// closed rather than spawn a verifier whose inspection capability is
+		// unreachable.
+		if rt.selfdevOperations == nil || rt.selfdevUpdaterRoot == "" {
+			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment requires the self-development operation store and updater root"))
 		}
+		operation, opErr := rt.selfdevOperations.GetByTrajectory(spawnCtx, computerID, trajectoryID)
+		if opErr != nil {
+			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment cannot resolve its self-development operation: %w", opErr))
+		}
+		if operation.BundleDigest == "" ||
+			(operation.State != selfdev.StateFrozen && operation.State != selfdev.StateVerified && operation.State != selfdev.StateAwaitingApproval) {
+			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment requires a frozen self-development bundle (state %s)", operation.State))
+		}
+		bundleDir := filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest)
+		info, statErr := os.Stat(bundleDir)
+		if statErr != nil || !info.IsDir() {
+			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment bundle directory unavailable: %v", statErr))
+		}
+		bindingJSON, _ := json.Marshal(map[string]string{"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest})
+		spec.VerifierBundleDir = bundleDir
+		spec.VerifierBinding = string(bindingJSON)
 	}
 	created, err := rt.capsuleExecutor.Spawn(spawnCtx, spec)
 	if err != nil {
@@ -354,7 +366,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	slices.Sort(actualVerbs)
 	if capability.AgentRole != capsule.RoleCoSuper || capability.AgentRunID != runID || capability.CapsuleID != capsuleID || capability.TargetCapsule != capsuleID ||
-		capability.Handle != opaque || !slices.Equal(actualVerbs, compiledVerbs) || len(capability.ExternalAccess) != 0 || strings.TrimSpace(capability.KeyID) == "" ||
+		capability.Handle != opaque || capability.Slot != slot || !slices.Equal(actualVerbs, compiledVerbs) || len(capability.ExternalAccess) != 0 || strings.TrimSpace(capability.KeyID) == "" ||
 		len(capability.Signature) == 0 || !capability.ExpiresAt.After(grantedAt) || capability.ExpiresAt.After(grantedAt.Add(24*time.Hour+time.Second)) {
 		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("minted assignment capability acknowledgement mismatch"))
 	}

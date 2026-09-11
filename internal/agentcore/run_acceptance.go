@@ -643,8 +643,13 @@ func addAcceptanceDurableAgentCapsuleCheckpoints(ctx context.Context, rt *Runtim
 			operation = &op
 		}
 	}
-	if operation != nil && operation.BundleDigest != "" &&
-		(operation.State == selfdev.StateFrozen || operation.State == selfdev.StateVerified || operation.State == selfdev.StateAwaitingApproval) {
+	// Freeze evidence is the durable bundle digest on the operation row, not
+	// a state allowlist: every state reachable after frozen (verified,
+	// awaiting_approval, accepted, applied, failed, rolled_back, degraded)
+	// preserves the freeze fact while the digest is bound. A verify-fail
+	// trajectory keeps its frozen bundle; the checkpoint must not misreport
+	// that history as absence.
+	if operation != nil && operation.BundleDigest != "" {
 		builder.addCheckpoint("capsule_effect_frozen", "passed", time.Time{}, 0, nil, map[string]any{
 			"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest, "state": operation.State,
 		})
@@ -757,9 +762,17 @@ func acceptanceContinuationEventDetails(ev types.EventRecord) map[string]any {
 
 func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types.RunAcceptanceLevel, types.RunAcceptanceState) {
 	has := map[string]bool{}
+	capsuleFailed := false
 	for _, checkpoint := range checkpoints {
 		if checkpoint.State == "passed" {
 			has[checkpoint.Kind] = true
+		}
+		// A failed capsule evidence checkpoint is loud AND gating: a
+		// completed implementation/verification run without its freeze/verify
+		// evidence must not report an accepted level.
+		if checkpoint.State == "failed" &&
+			(checkpoint.Kind == "capsule_effect_frozen" || checkpoint.Kind == "capsule_verification_recorded") {
+			capsuleFailed = true
 		}
 	}
 	level := types.RunAcceptanceDocsLevel
@@ -768,7 +781,7 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 	if has["submitted"] && textureOpened {
 		level = types.RunAcceptanceStagingSmokeLevel
 	}
-	if has["submitted"] && textureOpened && has["super_direction_opened"] {
+	if has["submitted"] && textureOpened && has["super_direction_opened"] && !capsuleFailed {
 		state = types.RunAcceptanceAccepted
 	}
 	// RunAcceptance is trajectory diagnostics only. Export, promotion, and

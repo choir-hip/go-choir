@@ -292,6 +292,24 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if err := installBrokerMount(ctx, e.brokerPath, caps.MergedDir); err != nil {
 		return nil, err
 	}
+	if spec.VerifierBundleDir != "" {
+		// The frozen bundle must not be shadowable through the overlay upper:
+		// a writable verifier cell could otherwise replace /selfdev/bundle and
+		// inspect a bundle that is not the operation's. Bind the lower copy
+		// read-only over the merged path so the mount itself is the binding.
+		bundleMount := filepath.Join(caps.MergedDir, "selfdev", "bundle")
+		bundleSource := filepath.Join(sourceLower, "selfdev", "bundle")
+		if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
+			return unix.Mount(bundleSource, bundleMount, "", unix.MS_BIND, "")
+		}); err != nil {
+			return nil, fmt.Errorf("capsule bind verifier bundle: %w", err)
+		}
+		if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
+			return unix.Mount("", bundleMount, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, "")
+		}); err != nil {
+			return nil, fmt.Errorf("capsule harden verifier bundle mount: %w", err)
+		}
+	}
 	cgroup, err := CreateCgroup(spec.CapsuleID, spec)
 	if err != nil {
 		return nil, err
@@ -512,6 +530,17 @@ func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsu
 	}
 	if role != RoleCoSuper && role != RoleResearcher {
 		return nil, fmt.Errorf("capsule capability role %q is not grantable", role)
+	}
+	// Slot is part of the minted authority: assigned CoSuper runs carry
+	// implementation or verifier; every other grant carries none. An
+	// arbitrary slot must not mint.
+	switch slot {
+	case "", "implementation", "verifier":
+	default:
+		return nil, fmt.Errorf("capsule capability slot %q is not grantable", slot)
+	}
+	if role == RoleResearcher && slot != "" {
+		return nil, fmt.Errorf("capsule capability slot %q on a researcher grant", slot)
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -1686,26 +1715,13 @@ func prepareCapsuleRoot(root, upperDir string) error {
 			return fmt.Errorf("capsule bind device %s: %w", device, err)
 		}
 	}
-	pts := filepath.Join(root, "dev", "pts")
-	if err := os.MkdirAll(pts, 0o755); err != nil {
-		return fmt.Errorf("capsule prepare dev/pts: %w", err)
-	}
-	if err := unix.Mount("/dev/pts", pts, "", unix.MS_BIND, ""); err != nil {
-		return fmt.Errorf("capsule bind dev/pts: %w", err)
-	}
-	if err := writeCapsuleIdentityEtc(upperDir); err != nil {
-		return err
-	}
-	_ = filepath.Walk(upperDir, func(p string, info os.FileInfo, err error) error {
-		if err == nil {
-			_ = os.Chown(p, capsuleNamespaceHostID, capsuleNamespaceHostID)
-		}
-		return nil
-	})
 	return nil
 }
 
 func unmountCapsuleRoot(root string) error {
+	// Nested mounts detach before the overlay root; order is leaf-first.
+	bundleMount := filepath.Join(root, "selfdev", "bundle")
+	_ = unix.Unmount(bundleMount, unix.MNT_DETACH)
 	currentSystemMount := filepath.Join(root, "run", "current-system")
 	_ = unix.Unmount(currentSystemMount, unix.MNT_DETACH)
 	brokerMount := filepath.Join(root, "run", "capsule", "broker")

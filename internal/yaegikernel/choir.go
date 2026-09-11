@@ -278,8 +278,9 @@ func (s *ChoirScope) Freeze(buildRecipeRef string, testReceipts, dependencyToolc
 // Verify stages the independent verifier decision for the mounted frozen
 // bundle. Verifier-slot activations only; the reducer records it against the
 // exact mounted bundle on cell return. At most one verify per cell;
-// requires a bound cell.
-func (s *ChoirScope) Verify(decision string, verifierRefs []string) error {
+// requires a bound cell. bundleDigest is the content_digest InspectBundle
+// returned; the reducer asserts it equals the operation's durable digest.
+func (s *ChoirScope) Verify(decision string, verifierRefs []string, bundleDigest string) error {
 	if err := s.mutateDenied("Verify"); err != nil {
 		return err
 	}
@@ -289,7 +290,7 @@ func (s *ChoirScope) Verify(decision string, verifierRefs []string) error {
 	if s.tray == nil {
 		return fmt.Errorf("choir: verify requires a bound cell")
 	}
-	return s.tray.Verify(decision, verifierRefs)
+	return s.tray.Verify(decision, verifierRefs, bundleDigest)
 }
 
 // InspectBundle synchronously verifies the mounted frozen self-development
@@ -333,10 +334,22 @@ func (s *ChoirScope) Context() map[string]string {
 // Outcome records the cell's outcome as a durable self-report message to the
 // owning activation, returning its receipt. It is the model-visible end of a
 // read->compute->write->assign arc: the value is retained broker-side where
-// the host reconciles it.
+// the host reconciles it. It stages as IntentOutcome, a distinct kind, so a
+// staged Message cannot claim the outcome envelope path and skip the
+// assigned desk's update authority.
 func (s *ChoirScope) Outcome(value string) (MessageResult, error) {
 	if s == nil {
 		return MessageResult{}, fmt.Errorf("choir: scope unavailable")
+	}
+	if err := s.mutateDenied("Outcome"); err != nil {
+		return MessageResult{}, err
+	}
+	if s.tray != nil {
+		localID, err := s.tray.Outcome(s.activationID, value)
+		if err != nil {
+			return MessageResult{}, err
+		}
+		return MessageResult{MessageID: localID}, nil
 	}
 	return s.Message(s.activationID, "outcome", value)
 }

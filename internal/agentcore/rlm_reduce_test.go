@@ -133,6 +133,13 @@ func TestReduceEnforcesTrustBoundary(t *testing.T) {
 		}(), []yaegikernel.StagedIntent{
 			{LocalID: "a", Kind: yaegikernel.IntentSpawn, Role: "engineering", Objective: "escalate"},
 		}},
+		"complete not last": {testReductionScope(), []yaegikernel.StagedIntent{
+			{LocalID: "a", Kind: yaegikernel.IntentComplete, Result: "completed"},
+			{LocalID: "b", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "x"},
+		}},
+		"verify missing digest": {testReductionScope(), []yaegikernel.StagedIntent{
+			{LocalID: "a", Kind: yaegikernel.IntentVerify, Decision: "pass", VerifierRefs: []string{"ref"}},
+		}},
 	}
 	for name, tc := range cases {
 		for i := range tc.intents {

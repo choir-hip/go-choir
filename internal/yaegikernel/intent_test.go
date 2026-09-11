@@ -172,22 +172,25 @@ func TestFreezeVerifyStaging(t *testing.T) {
 	if err := tray.Freeze("x", []string{"y"}, []string{"z"}); err == nil {
 		t.Fatal("second freeze must be rejected")
 	}
-	if err := tray.Verify("pass", []string{"ref-1"}); err != nil {
+	if err := tray.Verify("pass", []string{"ref-1"}, "sha256:abc"); err != nil {
 		t.Fatal(err)
 	}
-	if err := tray.Verify("fail", []string{"ref-2"}); err == nil {
+	if err := tray.Verify("fail", []string{"ref-2"}, "sha256:abc"); err == nil {
 		t.Fatal("second verify must be rejected")
 	}
 	staged := tray.Drain()
 	if len(staged) != 2 || staged[0].Kind != IntentFreeze || staged[1].Kind != IntentVerify {
 		t.Fatalf("staged = %+v", staged)
 	}
-	if staged[0].BuildRecipeRef != "capsule-exec:sha256:aa" || staged[1].Decision != "pass" {
+	if staged[0].BuildRecipeRef != "capsule-exec:sha256:aa" || staged[1].Decision != "pass" || staged[1].BundleDigest != "sha256:abc" {
 		t.Fatalf("staged fields = %+v", staged)
 	}
 	var bad Tray
-	if err := bad.Verify("maybe", nil); err == nil {
+	if err := bad.Verify("maybe", nil, "sha256:abc"); err == nil {
 		t.Fatal("invalid decision must be rejected at staging")
+	}
+	if err := bad.Verify("pass", []string{"ref"}, ""); err == nil {
+		t.Fatal("missing bundle digest must be rejected at staging")
 	}
 }
 
@@ -214,7 +217,7 @@ func TestVerifierSlotExports(t *testing.T) {
 			t.Errorf("verifier exports missing %q", name)
 		}
 	}
-	if err := scope.Verify("pass", []string{"ref"}); err == nil {
+	if err := scope.Verify("pass", []string{"ref"}, "sha256:abc"); err == nil {
 		t.Error("implementation Verify must be denied")
 	}
 	if _, err := scope.InspectBundle(); err == nil {

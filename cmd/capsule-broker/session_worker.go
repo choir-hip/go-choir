@@ -301,6 +301,12 @@ func (b *Broker) sessionFor(agentRunID, role, slot string) (*sessionWorker, erro
 	b.sessionMu.Lock()
 	defer b.sessionMu.Unlock()
 	if w, ok := b.sessionWorkers[agentRunID]; ok && w != nil && !w.dead {
+		// Slot is part of the session's authority: a worker minted for one
+		// slot must never serve another. Slot is fixed per run at mint, so a
+		// mismatch is a wiring bug, not a rekey opportunity.
+		if w.config.slot != slot || w.config.role != role {
+			return nil, fmt.Errorf("session worker: live worker for %s carries role %q slot %q, not role %q slot %q", agentRunID, w.config.role, w.config.slot, role, slot)
+		}
 		return w, nil
 	}
 	if b.brokerBin == "" {

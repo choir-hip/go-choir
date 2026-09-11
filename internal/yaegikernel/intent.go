@@ -2,6 +2,7 @@ package yaegikernel
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,11 @@ const (
 	IntentMessage  = "message"
 	IntentSpawn    = "spawn"
 	IntentComplete = "complete"
+	// IntentOutcome is the cell's own result notice to its activation desk.
+	// It is a distinct kind, not a MsgKind on IntentMessage, so a staged
+	// message cannot claim the outcome envelope path and skip the assigned
+	// desk's update authority.
+	IntentOutcome = "outcome"
 	// IntentFreeze stages the self-development freeze (commit_transaction
 	// successor): the reducer freezes the capsule diff as a verifier-ready
 	// effect bundle on cell return.
@@ -76,9 +82,12 @@ type StagedIntent struct {
 	TestReceipts            []string `json:"test_receipts,omitempty"`
 	DependencyToolchainRefs []string `json:"dependency_toolchain_refs,omitempty"`
 	// Verify fields (IntentVerify): the verifier decision and its evidence
-	// refs against the mounted frozen bundle.
+	// refs against the mounted frozen bundle. BundleDigest binds the decision
+	// to the exact bundle the cell inspected; the reducer asserts it equals
+	// the operation's durable bundle digest.
 	Decision     string   `json:"decision,omitempty"`
 	VerifierRefs []string `json:"verifier_refs,omitempty"`
+	BundleDigest string   `json:"bundle_digest,omitempty"`
 }
 
 // Tray stages one cell's outbound intents. It is not safe for concurrent use:
@@ -144,19 +153,36 @@ func (t *Tray) Freeze(buildRecipeRef string, testReceipts, dependencyToolchainRe
 // Verify stages the independent verifier decision for the mounted frozen
 // bundle. At most one verify per cell; the reducer records it on cell
 // return. decision is pass or fail; verifierRefs are the verifier's evidence.
-func (t *Tray) Verify(decision string, verifierRefs []string) error {
+// bundleDigest is the exact content digest the cell inspected; the reducer
+// asserts it equals the operation's durable bundle digest, so a decision can
+// never land on a bundle other than the one the cell examined.
+func (t *Tray) Verify(decision string, verifierRefs []string, bundleDigest string) error {
 	switch decision {
 	case "pass", "fail":
 	default:
 		return fmt.Errorf("tray: verify decision %q not in {pass, fail}", decision)
+	}
+	if strings.TrimSpace(bundleDigest) == "" {
+		return fmt.Errorf("tray: verify requires the inspected bundle digest")
 	}
 	for _, in := range t.intents {
 		if in.Kind == IntentVerify {
 			return fmt.Errorf("tray: at most one verify per cell")
 		}
 	}
-	_, err := t.stage(StagedIntent{Kind: IntentVerify, Decision: decision, VerifierRefs: verifierRefs})
+	_, err := t.stage(StagedIntent{Kind: IntentVerify, Decision: decision, VerifierRefs: verifierRefs, BundleDigest: bundleDigest})
 	return err
+}
+
+// Outcome stages the cell's own result notice to its activation desk. It is a
+// distinct intent kind, not a MsgKind on Message, so a staged message cannot
+// claim the outcome envelope path and skip the assigned desk's update
+// authority.
+func (t *Tray) Outcome(toDesk, body string) (string, error) {
+	if toDesk == "" {
+		return "", fmt.Errorf("tray: outcome requires a destination desk")
+	}
+	return t.stage(StagedIntent{Kind: IntentOutcome, ToDesk: toDesk, Body: body})
 }
 
 func (t *Tray) stage(in StagedIntent) (string, error) {
