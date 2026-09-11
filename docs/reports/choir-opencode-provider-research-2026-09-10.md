@@ -789,7 +789,7 @@ RLM REPL variables. It may vary by desk, never by model. Two consequences are bi
 
 | Site | What it does | Class |
 | --- | --- | --- |
-| `internal/yaegikernel/eval.go:301-317` (`CleanGoSource`), called from `agentcore/tools_capsule.go:768`, `yaegikernel/eval.go:121-124,147-150`, `session.go:85-87` | strips leading ``` / ~~~ fences and the language line, and a trailing fence, from model-authored Go | **direct violation** on the RLM path |
+| `internal/yaegikernel/eval.go:301-317` (`CleanGoSource`), called from `agentcore/tools_capsule.go:773` and `yaegikernel/eval.go:122,148` (`session.go:86`) | strips leading ``` / ~~~ fences and the language line, and a trailing fence, from model-authored Go | **direct violation** on the RLM path |
 | `agentcore/tools_capsule.go:753-757` | the tool description already forbids fences twice ("Pass raw Go source directly without markdown fences (never ```go)", "Do not wrap in markdown code fences"), and the schema offers both `source` and `code` | prompt/schema redundancy; the stripper is defense that masks whether the instruction works |
 | `internal/provider/provider.go:1144-1152`, `:707-719`, `:809-832`; `internal/toolregistry/toolloop.go:513-555,1248-1269` | DeepSeek rejects thinking with exact tool choice, so reasoning is forced off with tools, and a tool loop retries by pattern-matching a provider error string | provider-behavior workaround, adjacent class — not output parsing, but model-specific behavior the mission will meet again on DeepSeek V4.1 Flash |
 | `agentcore/run_memory.go:683-693`; `agentcore/email_lifecycle.go:434-517` | JSON substring extraction from first `{` to last `}`; email body marker trimming | model-agnostic tolerance on other surfaces; not RLM prompt workarounds |
