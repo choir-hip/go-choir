@@ -87,19 +87,19 @@ with effects OFF. Deployed evidence:
 The cutover's withheld settlement acceptance is closed; the cutover stays remainder
 holder (residue R6). Mission-0 live drill debt stays mission-0-owned (residue R1).
 
-## Executable Definition — RLM Versioned Rename (chartered 2026-09-10)
+## Completed Definition — RLM Versioned Rename
 
 [`definitions/choir-rlm-versioned-rename-2026-09-09.md`](definitions/choir-rlm-versioned-rename-2026-09-09.md)
-is the **sole working entrypoint**, chartered by owner ratification 2026-09-10T04:28:08Z after ten panel rounds plus opus and grok workability passes with zero HOLD verdicts. It owns the rename-first versioned desk vocabulary with frozen V1 decode, V2-only writers, activation refusal, and the exhaustive V1 inventory. The cutover stays remainder holder (residue R6); mission-0 drill debt stays mission-0-owned (residue R1); tool and operation retirement belongs to the Engineering-proof successor (residue R7).
-
-The writer cutover landed and deployed (staging serves `cb571960`, retained
-computer active at epoch 896), but a post-cutover review on 2026-09-10 found
-that the migration and serving fence cover only retired relational tables while
-the live carrier is the object graph, that live readers now refuse historic V1
-values, and that two write roots still persist raw tokens. Acceptance items 3,
-5, 6, and 8 are **reopened**; items 10-15 carry the closing obligations.
-Adjudicated findings: [`evidence/choir-rlm-rename-post-cutover-review-2026-09-10.md`](evidence/choir-rlm-rename-post-cutover-review-2026-09-10.md).
-The mission is not complete and may not be settled until items 10-15 close.
+completed 2026-09-11 (deployed commit `e3396329`, CI run `34571343061`). All 15
+acceptance items are satisfied: frozen V1 field inventory artifact published (12 classes),
+version-selected V1 decode seam, writer cutover to V2 canonical desks (`management`, `engineering`, `research`),
+frozen per-function mapping table, unknown live refusal, live alias retirement, engineering desk end-to-end proof,
+staging decoder matrix verification, carrier coverage over object-graph objects and edges with crash-consistent
+migration and write guard, historic reader compatibility, closed write roots, longest-first ID substitution,
+unified verifier spelling, and physical staging proof on `computer-03335285269bdba4f94377e56879f9e6` with effects OFF.
+Deployed evidence: [`evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md`](evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md).
+The cutover stays remainder holder (residue R6); mission-0 live drill debt stays mission-0-owned (residue R1);
+tool and operation retirement belongs to the Engineering-carrier successor mission.
 ## Blocked Definition — RLM Target Architecture Cutover (remainder holder)
 
 [`definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`](definitions/choir-rlm-target-architecture-cutover-2026-09-04.md)
@@ -246,10 +246,9 @@ Supporting maintenance Definitions retain their evidence and status:
 superseded, or historical as stated by their source Definitions, not entrypoints.
 
 RLM restore-zero completed 2026-09-09 and is historical evidence, not an
-entrypoint. The sole working entrypoint is the RLM Versioned Rename above; on
-staging `computer-03335285269bdba4f94377e56879f9e6` its cutover repair wave is
-active and the mission may not be settled until acceptance items 10-15 close.
-
+entrypoint. RLM versioned rename completed 2026-09-11 (deployed commit `e3396329`).
+The next queued mission is the RLM Engineering Carrier (`definitions/choir-rlm-engineering-carrier-2026-09-11.md`,
+drafted).
 ## Unowned External Work
 
 No Definition owns runtime dissolution, broader Wire work, external capsules,

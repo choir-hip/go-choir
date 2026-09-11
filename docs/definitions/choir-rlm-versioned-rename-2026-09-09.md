@@ -217,13 +217,13 @@ measures:
     cannot_prove: "Cannot prove decoder totality beyond the inventoried classes."
 
 now:
-  status: working
-  slice: "Cutover landed and deployed (a14abf05 writer cutover, 1f51aaf5 purity gate, 7cee94d5 migration and fence wiring, cb571960 TOML V1 decode; staging serves cb571960, retained computer active at epoch 896). A post-cutover review (five read-only slices plus a twelve-model consensus panel) found that the migration and serving fence cover only retired relational tables while the live carrier is the object graph, that live read paths now refuse historic V1 values, and that two write roots still persist raw tokens. Acceptance items 3, 5, 6, and 8 are reopened; items 10-15 carry the closing obligations. The repair wave begins with the object-graph vocabulary boundary."
+  status: completed
+  slice: "Completed on deployed proof of commit e3396329 (CI run 34571343061, staging https://choir.news serves e3396329 ok, retained computer active at epoch 909, fast-path reboot verified in 29s). All 15 acceptance items are satisfied: frozen V1 field inventory artifact published (12 classes), version-selected V1 decode seam, writer cutover to V2 canonical desks (management, engineering, research), frozen per-function mapping table, unknown live refusal, live alias retirement, engineering desk end-to-end proof, staging decoder matrix verification, carrier coverage over object-graph objects and edges with crash-consistent migration and write guard, historic reader compatibility, closed write roots, longest-first ID substitution, unified verifier spelling, and physical staging proof on computer-03335285269bdba4f94377e56879f9e6 with effects OFF. Deployed evidence: docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md."
   question: none
   reconciliation:
-    observed_at: "2026-09-10T22:19:35Z"
-    source_ref: "main@ae62fc82 (terminal cutover receipt commit; post-cutover review and repair base)"
-    deploy_identity: "staging https://choir.news serves cb571960 via proxy 0475ed84 ok; retained computer computer-03335285269bdba4f94377e56879f9e6 active at epoch 896"
+    observed_at: "2026-09-11T07:15:00Z"
+    source_ref: "main@e3396329 (deployed commit with green CI 34571343061)"
+    deploy_identity: "staging https://choir.news serves e3396329 via proxy 0475ed84 ok; retained computer computer-03335285269bdba4f94377e56879f9e6 active at epoch 909"
     authority_identities:
       - "docs/reports/choir-rlm-mission-state-2026-09-08.md (carried mission order, rename-first)"
       - "docs/designs/rlm-target-architecture-2026-09-04.md:79-85 (desks vocabulary)"
@@ -268,11 +268,26 @@ now:
     - "internal/agentprofile/agentprofile.go:9-16 versus internal/platform/checkpoints.go:217 and internal/agentcore/self_development_decision_binding.go:54 (historic V1 refusal; verified); internal/computerevent/decode.go:94 CanonicalActorProfile unused at those sites"
     - "internal/agentcore/rlm_reduce.go:76-92,178-186 (management accepts any child token; raw Role and ToDesk persisted) and internal/agentcore/api.go:755-769 (unvalidated channel cast role)"
     - "internal/modelpolicy/model_policy.go:28,176-189,389 (verifier-multimodal versus verifier_multimodal key split; verified); internal/store/vocab_migrate.go:95 (-super- matched before -co-super-; verified)"
-  blocker_or_risk: "Open: the object-graph carrier is neither migrated nor fenced (F1, confirmed present-tense: ~30K V1-stamped og_objects rows on the live computer store, all six migrated relational tables empty, migration report {\"provenance\":{},\"counts\":{}}); historic V1 values refused by checkpoint verifier and decision-binding readers (F2, scoped to two tape-sourced sites by census); raw-token write roots in the management spawn path and internal channel cast (F5, F6); compound-ID mislabel and non-atomic provenance (F3, F4); verifier key split (F7, canonical spelling verifier_multimodal per owner TOML). New census findings C2/C3: run_memory_entries is a live carrier holding 34,781 V1 agent_id rows missed by migration and review; rematerialize extracts the staged witness before migration so post-migration rematerialize would fail until reordered. Items 3, 5, 6, 8 reopened; the terminal receipt completion claim is superseded. Residuals: computer-authored prompt files unobserved; R1 drill debt mission-0-owned; cutover remainder holder (R6); tool retirement R7 successor."
-  next_action: "Repair wave: land migration correctness first (item 13: longest-first compound ID ordering, provenance-durable-before-mutation crash consistency) since OG migration depends on it; then the object-graph vocabulary boundary (item 10: in-place rewrite of og_objects body/metadata role fields and desk-bearing IDs, content_hash recompute, canonical_id rewrite via bounded fixpoint over embedded refs, og_edges endpoint+edge_id rewrite, fence extension to OG role fields, run_memory_entries.agent_id, rematerialize witness-ordering fix); then items 11, 12, 14, 15 in order. Do not settle or write a terminal receipt before items 10-15 close."
+  blocker_or_risk: none
+  next_action: none
 
 
 receipts:
+  - id: versioned-rename-completion-2026-09-11
+    boundary: implement
+    commit_or_artifact: "e3396329 (deployed proof commit); CI run 34571343061 green; staging serves e3396329 ok; owner computer active at epoch 909"
+    proof_refs:
+      - "docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md"
+      - "docs/evidence/choir-rlm-v1-inventory-corpus-2026-09-10.txt (item 1)"
+      - "docs/evidence/choir-rlm-v2-mapping-2026-09-10.md (item 4)"
+      - "docs/evidence/choir-rlm-decoder-matrix-2026-09-10.md (item 8)"
+      - "docs/evidence/choir-rlm-rename-post-cutover-review-2026-09-10.md (items 10-15 scope)"
+      - "docs/evidence/choir-rlm-cutover-boot-stall-2026-09-11.md (D1-D7 repaired)"
+    rollback_ref: "data.img.quarantine-1-40e7813a346e3d7a on node-b; git revert e3396329..cb571960"
+    disposition: "RLM versioned rename and cutover completed with deployed proof on physical staging computer computer-03335285269bdba4f94377e56879f9e6 at epoch 909; all 15 acceptance items satisfied; fast-path reboot verified in 29s"
+    problem_ref: "super/co-super terminology confusing relative to desk roles; researcher implying singularity for a transparently scaling RLM; cutover repair wave and boot stall resolved"
+    authorization_ref: "Owner charter ratification 2026-09-10T04:28:08Z; cutover gate ratification 2026-09-10T15:21:26Z"
+    candidate_or_evidence_refs: []
   - id: versioned-rename-charter-2026-09-10
     boundary: define
     commit_or_artifact: "933fa22f (owner-reviewed reconciled draft); executable promotion lands atomically in this commit"

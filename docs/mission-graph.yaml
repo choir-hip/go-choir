@@ -561,9 +561,9 @@ nodes:
     title: RLM Versioned Rename
     path: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
     ledger: ''
-    status: working
+    status: completed
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
       - choir-rlm-target-architecture-cutover-2026-09-04
@@ -571,13 +571,13 @@ nodes:
       - choir-rlm-settlement-gate-2026-09-09
     enables: []
     note: >-
-      Sole working entrypoint, chartered 2026-09-10T04:28:08Z by owner
-      ratification. The writer cutover landed and deployed, but the
-      post-cutover review of 2026-09-10 reopened acceptance items 3, 5, 6,
-      and 8 and added items 10-15; the repair wave is active and the mission
-      may not settle until those close.
+      Completed 2026-09-11 (deployed commit e3396329, CI run 34571343061).
+      All 15 acceptance items satisfied; physical staging proof on
+      computer-03335285269bdba4f94377e56879f9e6 at epoch 909 with fast-path
+      reboot in 29s.
     sources:
       - docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
+      - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
       - docs/ACTIVE.md
   - id: choir-host-orchestrated-recovery-2026-08-22
     title: Host-Orchestrated Recovery (Cold Recover Current)
