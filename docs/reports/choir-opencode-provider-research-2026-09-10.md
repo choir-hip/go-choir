@@ -118,34 +118,15 @@ Route by id, and auth by route. All four shapes exist under both base URLs.
 | Anthropic Messages | `/zen/v1/messages`, `/zen/go/v1/messages` | `x-api-key: <key>` | `claude-*`, `mini*max` (MiniMax), `qwen3.8-max`, `qwen3.7-max`, `qwen3.7-plus`, `qwen3.6-plus` |
 | Gemini-shaped | `/zen/v1/models/<model-id>` | `x-goog-api-key: <key>` | `gemini-*` |
 
-Auth headers are read at `packages/console/app/src/routes/zen/v1/chat/completions.ts:9`,
+The table maps the protocol surface, not the roster: which of these ids mission three actually
+uses is fixed in §11. Auth headers are read at
+`packages/console/app/src/routes/zen/v1/chat/completions.ts:9`,
 `v1/messages.ts:9`, `v1/models/[model].ts:9`, `v1/responses.ts:9`, and
 `go/v1/chat/completions.ts:9`.
 
 **Consequence for mission three.** DeepSeek V4.1 Flash — the model the owner specifically
 wants — is chat/completions and fits Choir's existing OpenAI-compatible adapter shape
 unchanged. Muse Spark is Responses-shaped and does not.
-
-### Models relevant to mission three
-
-| Model | Provider | Id | Route | Price per 1M (in/out) | Cap |
-| --- | --- | --- | --- | --- | --- |
-| DeepSeek V4.1 Flash | Go | `deepseek-v4.1-flash` | chat | $0.15/$0.60 off-peak, $0.30/$1.20 peak | $15/mo |
-| DeepSeek V4 Flash | Go | `deepseek-v4-flash` | chat | same peak split | $30/mo |
-| DeepSeek V4 Flash | Zen | `deepseek-v4-flash` | chat | $0.14/$0.28 | PAYG |
-| DeepSeek V4 Flash (free) | Zen | `deepseek-v4-flash-free` | chat | free | — |
-| Muse Spark 1.3 Contributor | Go | `muse-spark-1.3-contributor` | **responses** | $0.10/$0.20, cache read $0.002 | $60/mo |
-| Muse Spark 1.3 Contributor (free) | Zen | `muse-spark-1.3-contributor-free` | **responses** | free | — |
-| GLM 5.3 Flash | Go/Zen | `glm-5.3-flash` | chat | $0.15/$0.50 | $60/mo |
-| MiMo V2.5 (free on Zen) | Zen | `mimo-v2.5-free` | chat | free (observed rate-limited) | — |
-| Nemotron 3 Ultra (free) | Zen | `nemotron-3-ultra-free` | chat | free | — |
-
-Verified metadata: `deepseek-v4.1-flash` reports 1M context, `reasoning: true`,
-`tool_call: true`; `muse-spark-1.3-contributor` reports 1M context, `reasoning: true`,
-`tool_call: true`.
-
-DeepSeek peak hours are 01:00-04:00 and 06:00-10:00 UTC Monday-Friday; all other hours and
-weekends are off-peak. Off-peak is roughly half price on Go.
 
 ---
 
@@ -340,9 +321,9 @@ in base URL, key env var, and model list:
 - `opencode-zen` → `https://opencode.ai/zen/v1`
 - `opencode-go` → `https://opencode.ai/zen/go/v1`
 
-Seed with ids that exercise free, cheap, and paid paths without the Responses dependency:
-`deepseek-v4.1-flash`, `deepseek-v4-flash`, `glm-5.3-flash`, `deepseek-v4-flash-free`,
-`mimo-v2.5-free`, `ling-3.0-flash-fin-free`, `nemotron-3-ultra-free`, `big-pickle`.
+Seed Phase A from the §11 roster's chat-shaped ids only: `deepseek-v4.1-flash`, `glm-5.3-flash`,
+`mimo-v2.5`, `hy3` on Go, and `ling-3.0-flash-fin-free`, `nemotron-3-ultra-free`,
+`nemotron-3.5-lightning-free` on Zen.
 Send `User-Agent: choir-gateway/<version>` and `x-opencode-session: <session id>` on every
 request; fail closed if the session id is empty rather than sending the request, so the
 failure is ours and visible instead of a 400 from upstream.
@@ -352,8 +333,9 @@ Muse Spark 1.3 Contributor (`opencode-go`) and its free Zen twin require `/respo
 the ChatGPT Responses codec shape. Gate it on the owner's training-consent decision and on
 the Go workspace's region configuration.
 
-**Deferred.** Anthropic Messages ids (`x-api-key`, different body shape) and Gemini-shaped
-ids. Neither is needed for mission three.
+**Phase C — Messages path.** `qwen3.8-flash` uses the Anthropic shape with `x-api-key`. It is the
+only Alibaba entry in the roster, so it is worth including once Phase A's plumbing is proven.
+Gemini-shaped ids remain deferred; nothing in the roster needs them.
 
 **Cost guardrails to land with Phase A** (Choir has none today):
 
@@ -677,50 +659,62 @@ not the ordinary coagent wait.
 
 ## 11. Model roster for mission three (diverse by design)
 
-Mission three should not inherit the panel's cost champion (`gpt-5.6-luna`) as its default
-reasoning surface. The roster below was chosen for family diversity across three wire shapes,
-with free ids for testing and sub-$0.65-per-1M-output ids for evidence runs. Every id in it was
-call-verified on 2026-09-10 (§9.2).
+Owner pruning applied 2026-09-10: Muse Spark 1.2 is out, only DeepSeek V4.1 is kept from the V4
+family, GPT-5 Nano is out, and every id that returned `429` or is listed-but-unserved is out. The
+evidence for those exclusions remains in §9.2 — the roster below is what mission three should
+define against. Every id in it was call-verified on 2026-09-10.
 
 ### Tier F — free, for testing (Zen)
 
 | Family | Id | Route | Context | Measured |
 | --- | --- | --- | --- | --- |
 | Meta | `muse-spark-1.3-contributor-free` | responses | 1M | 1.4s |
-| Meta | `muse-spark-1.2-contributor-free` | responses | 1M | 1.2s |
 | Ling (Ant) | `ling-3.0-flash-fin-free` | chat | 262k | 1.0s |
 | NVIDIA | `nemotron-3-ultra-free` | chat | 1M | 96.7s (pool latency) |
 | NVIDIA | `nemotron-3.5-lightning-free` | chat | 262k | 102.8s (pool latency) |
-| Xiaomi | `mimo-v2.5-free` | chat | 200k | `429` from this environment |
-| Stealth | `big-pickle` | chat | 200k | `429` from this environment |
-| DeepSeek | `deepseek-v4-flash-free` | chat | 200k | listed, not serving |
+
+The two Nemotron ids are the only free chat models that survive pruning, and both run at roughly
+100 seconds. For interactive free testing the practical set is Meta (Responses) and Ling (chat).
 
 ### Tier C — cheap paid, under $0.65 per 1M output
 
-| Family | Provider | Id | Route | Context | In/Out $ | Measured |
-| --- | --- | --- | --- | --- | --- | --- |
-| DeepSeek | Go | `deepseek-v4.1-flash` | chat | 1M | 0.15/0.60 | 1.3s |
-| DeepSeek | Go | `deepseek-v4-flash` | chat | 1M | 0.15/0.60 | 1.7s |
-| DeepSeek | Zen | `deepseek-v4-flash` | chat | 1M | 0.14/0.28 | 3.5s |
-| DeepSeek (vision) | Go | `deepseek-v4-flash-vision-exp` | chat | 1M | 0.15/0.60 | 1.6s |
-| Zhipu | Go | `glm-5.3-flash` | chat | 1M | 0.15/0.50 | 0.7s |
-| Alibaba | Go | `qwen3.8-flash` | messages | 1M | 0.15/0.47 | 1.1s |
-| Xiaomi | Go | `mimo-v2.5` | chat | 1M | 0.14/0.28 | 1.2s |
-| Tencent | Go | `hy3` | chat | 256k | 0.14/0.58 | 1.6s |
-| Meta | Go | `muse-spark-1.3-contributor` | responses | 1M | 0.10/0.20 | 1.0s |
-| OpenAI | Zen | `gpt-5-nano` | responses | 400k | 0.05/0.40 | 1.1s |
+| Family | Provider | Id | Route | Context | In/Out $ | Go cap | Measured |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DeepSeek | Go | `deepseek-v4.1-flash` | chat | 1M | 0.15/0.60 | $15/mo | 1.3s |
+| Zhipu | Go | `glm-5.3-flash` | chat | 1M | 0.15/0.50 | $60/mo | 0.7s |
+| Alibaba | Go | `qwen3.8-flash` | messages | 1M | 0.15/0.47 | $30/mo | 1.1s |
+| Xiaomi | Go | `mimo-v2.5` | chat | 1M | 0.14/0.28 | $60/mo | 1.2s |
+| Tencent | Go | `hy3` | chat | 256k | 0.14/0.58 | $60/mo | 1.6s |
+| Meta | Go | `muse-spark-1.3-contributor` | responses | 1M | 0.10/0.20 | $60/mo | 1.0s |
 
-Nine vendor families across three wire shapes — chat completions, Responses, and Anthropic
-Messages — which is the diversity the mission wants, and none of them is a GPT-5.6 tier.
+Eight vendor families across three wire shapes — chat completions, Responses, and Anthropic
+Messages. DeepSeek V4.1 Flash prices off-peak $0.15/$0.60 and peak $0.30/$1.20; peak hours are
+01:00-04:00 and 06:00-10:00 UTC Monday-Friday, all other hours and weekends off-peak.
+`deepseek-v4.1-flash` and `muse-spark-1.3-contributor` both report 1M context, `reasoning: true`,
+`tool_call: true`.
+
+### Excluded (owner decision 2026-09-10)
+
+| Id | Reason |
+| --- | --- |
+| `muse-spark-1.2-contributor`, `muse-spark-1.2-contributor-free` | superseded by 1.3 |
+| `deepseek-v4-flash` (Go and Zen) | only V4.1 is kept from this family |
+| `deepseek-v4-flash-vision-exp` (Go and Zen) | same family rule — note this removes the only vision-capable id from the roster; reinstate deliberately if image input is wanted |
+| `deepseek-v4-flash-free` | listed, not serving: `400 Model is unavailable.` on three attempts |
+| `gpt-5-nano` | owner: old |
+| `mimo-v2.5-free` | `429` on three attempts |
+| `big-pickle` | `429` on three attempts |
+| `hy3-preview` | listed, not serving: `400` on chat, `500` on responses |
 
 ### Anti-overfit notes
 
 - The reason to spread across families is not cost alone. A prompt or harness shaped around one
   model's output conventions (the earlier Go-code markdown episode) silently encodes that model's
   quirks. Per-model measurement, not a single shared prompt, is what the mission should record.
-- `hy3-preview` is listed on Go but returns `400`/`500`; do not include it.
 - Both contributor-consent ids served on this workspace, but they are training-consented models:
-  the owner decision in §12.1 governs whether they carry anything but test traffic.
+  the owner decision in §12 item 1 governs whether they carry anything but test traffic.
+- Free-tier ids are testing capacity only. Two of eight were already rate-limited and one was
+  listed-but-unserved before pruning, so no Choir route should depend on a free id.
 
 ### Cache-affinity requirements to record now (owned by the later cache mission)
 
@@ -745,24 +739,19 @@ Messages — which is the diversity the mission wants, and none of them is a GPT
 1. **Training consent.** Are Muse Spark *Contributor* models permitted for any Choir traffic?
    If not, Phase B serves only the free Zen twin (also contributor-consented) or nothing.
 2. **Money.** Disable Zen auto-reload and set monthly limits before wiring? (Recommended.)
-3. **Session identity.** Approve plumbing a real session id through `LLMRequest` (option 1 in
-   §5), or accept the per-computer fallback for the first cut?
+3. **Session identity.** Approve the `RunID` plumbing in §10.3, or accept the per-computer
+   fallback for the first cut?
 4. **Free-keyless Zen.** Should the gateway be allowed to use `Authorization: Bearer public`
    at all, or must every call carry a real key for attribution and quota accounting?
 5. **Catalog authority.** Pin a curated id list in the Go catalog (deterministic, stale
    eventually) or discover the live catalog at build/startup (fresh, non-deterministic)?
    `[INFERENCE]` recommend the pinned list plus a periodic drift check, because routing is a
    red surface and should not change without a commit.
-6. **Go region requirement.** The deployed handler currently rejects `deepseek-v4-flash` and
-   `deepseek-v4-pro` on Go unless the workspace region includes `cn`
-   (`handler.ts:158-166`). Verify this against the owner's workspace before depending on
-   DeepSeek through Go rather than Zen.
-7. **Dependence on free tiers.** `big-pickle` and `mimo-v2.5-free` are already rate-limited from
-   this environment and `deepseek-v4-flash-free` is listed but not serving. Should any Choir
-   route depend on a free model, or are free models research- and panel-only?
-8. **Conversation scope — answered in §10.2/§10.7.** Rewarm and the agent-to-agent arc both
+6. **Go region requirement.** The deployed handler rejects `deepseek-v4-flash` and
+   `deepseek-v4-pro` on Go unless the workspace region includes `cn` (`handler.ts:158-166`).
+   The pruned roster keeps `deepseek-v4.1-flash`, which was not in that check list and answered
+   normally, so the constraint appears not to apply — worth confirming before Phase A ships.
+7. **Conversation scope — answered in §10.2/§10.7.** Rewarm and the agent-to-agent arc both
    resume the same `RunID`; only replacement runs mint a new one, and they rebuild the prompt from
    a compaction summary, so the id choice costs nothing extra there. Remaining decision: accept a
    cache miss at those boundaries, or fund a durable lineage id in the cache mission.
-9. **Roster.** Is the §11 roster the diverse set mission three should define against, and should
-   any free id be excluded because it is already rate-limited or unserved?
