@@ -666,12 +666,12 @@ define against. Every id in it was call-verified on 2026-09-10.
 
 ### Tier F — free, for testing (Zen)
 
-| Family | Id | Route | Context | Measured |
-| --- | --- | --- | --- | --- |
-| Meta | `muse-spark-1.3-contributor-free` | responses | 1M | 1.4s |
-| Ling (Ant) | `ling-3.0-flash-fin-free` | chat | 262k | 1.0s |
-| NVIDIA | `nemotron-3-ultra-free` | chat | 1M | 96.7s (pool latency) |
-| NVIDIA | `nemotron-3.5-lightning-free` | chat | 262k | 102.8s (pool latency) |
+| Family | Id | Route | Context | Image | Measured |
+| --- | --- | --- | --- | --- | --- |
+| Meta | `muse-spark-1.3-contributor-free` | responses | 1M | **yes** | 1.4s |
+| Ling (Ant) | `ling-3.0-flash-fin-free` | chat | 262k | no | 1.0s |
+| NVIDIA | `nemotron-3-ultra-free` | chat | 1M | no | 96.7s (pool latency) |
+| NVIDIA | `nemotron-3.5-lightning-free` | chat | 262k | no | 102.8s (pool latency) |
 
 Free chat coverage is Ling plus the two Nemotron ids, and both Nemotron ids run at roughly 100
 seconds on the free pool. For interactive free testing the practical set is therefore Meta
@@ -679,14 +679,14 @@ seconds on the free pool. For interactive free testing the practical set is ther
 
 ### Tier C — cheap paid, under $0.65 per 1M output
 
-| Family | Provider | Id | Route | Context | In/Out $ | Go cap | Measured |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DeepSeek | Go | `deepseek-v4.1-flash` | chat | 1M | 0.15/0.60 | $15/mo | 1.3s |
-| Zhipu | Go | `glm-5.3-flash` | chat | 1M | 0.15/0.50 | $60/mo | 0.7s |
-| Alibaba | Go | `qwen3.8-flash` | messages | 1M | 0.15/0.47 | $30/mo | 1.1s |
-| Xiaomi | Go | `mimo-v2.5` | chat | 1M | 0.14/0.28 | $60/mo | 1.2s |
-| Tencent | Go | `hy3` | chat | 256k | 0.14/0.58 | $60/mo | 1.6s |
-| Meta | Go | `muse-spark-1.3-contributor` | responses | 1M | 0.10/0.20 | $60/mo | 1.0s |
+| Family | Provider | Id | Route | Context | Image | In/Out $ | Go cap | Measured |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DeepSeek | Go | `deepseek-v4.1-flash` | chat | 1M | **yes** | 0.15/0.60 | $15/mo | 1.3s |
+| Zhipu | Go | `glm-5.3-flash` | chat | 1M | **yes** | 0.15/0.50 | $60/mo | 0.7s |
+| Alibaba | Go | `qwen3.8-flash` | messages | 1M | **yes** | 0.15/0.47 | $30/mo | 1.1s |
+| Xiaomi | Go | `mimo-v2.5` | chat | 1M | **yes** | 0.14/0.28 | $60/mo | 1.2s |
+| Tencent | Go | `hy3` | chat | 256k | no (text only) | 0.14/0.58 | $60/mo | 1.6s |
+| Meta | Go | `muse-spark-1.3-contributor` | responses | 1M | **yes** | 0.10/0.20 | $60/mo | 1.0s |
 
 Eight vendor families across three wire shapes — chat completions, Responses, and Anthropic
 Messages. DeepSeek V4.1 Flash prices off-peak $0.15/$0.60 and peak $0.30/$1.20; peak hours are
@@ -694,13 +694,23 @@ Messages. DeepSeek V4.1 Flash prices off-peak $0.15/$0.60 and peak $0.30/$1.20; 
 `deepseek-v4.1-flash` and `muse-spark-1.3-contributor` both report 1M context, `reasoning: true`,
 `tool_call: true`.
 
+**Image input verified, not assumed.** On 2026-09-10 a 7-segment PNG rendering the number 427 was
+sent to each id over its own route, asking for the digits. `deepseek-v4.1-flash`,
+`glm-5.3-flash`, `mimo-v2.5` (chat), `qwen3.8-flash` (messages) and
+`muse-spark-1.3-contributor` plus its free Zen twin (responses) all returned `427`. `hy3`
+returned `400` with an upstream "No endpoint" error, matching its text-only metadata. So the
+owner's expectation holds for five of six cheap paid ids, with `hy3` the exception.
+Method note: a first attempt using colour identification was discarded — a no-image control
+showed `mimo-v2.5` answering "Red" regardless, and `qwen3.8-flash` answering "White" with no
+image at all. Only the non-guessable digit test is evidence.
+
 ### Excluded (owner decision 2026-09-10)
 
 | Id | Reason |
 | --- | --- |
 | `muse-spark-1.2-contributor`, `muse-spark-1.2-contributor-free` | superseded by 1.3 |
 | `deepseek-v4-flash` (Go and Zen) | only V4.1 is kept from this family |
-| `deepseek-v4-flash-vision-exp` (Go and Zen) | same family rule — note this removes the only vision-capable id from the roster; reinstate deliberately if image input is wanted |
+| `deepseek-v4-flash-vision-exp` (Go and Zen) | same family rule; vision remains covered by five roster ids, so nothing capability-wise is lost |
 | `deepseek-v4-flash-free` | listed, not serving: `400 Model is unavailable.` on three attempts |
 | `gpt-5-nano` | owner: old |
 | `mimo-v2.5-free` | `429` on three attempts |
@@ -713,7 +723,7 @@ Messages. DeepSeek V4.1 Flash prices off-peak $0.15/$0.60 and peak $0.30/$1.20; 
   model's output conventions (the earlier Go-code markdown episode) silently encodes that model's
   quirks. Per-model measurement, not a single shared prompt, is what the mission should record.
 - Both contributor-consent ids served on this workspace, but they are training-consented models:
-  the owner decision in §12 item 1 governs whether they carry anything but test traffic.
+  the owner decision in §13 item 1 governs whether they carry anything but test traffic.
 - Free-tier ids are testing capacity only. Two of eight were already rate-limited and one was
   listed-but-unserved before pruning, so no Choir route should depend on a free id.
 
@@ -735,7 +745,92 @@ Messages. DeepSeek V4.1 Flash prices off-peak $0.15/$0.60 and peak $0.30/$1.20; 
    entirely by reasoning, returning empty `content`. Budgets must be set for thinking models or
    the output is silently empty.
 
-## 12. Open questions for the owner
+## 12. The one-prompt invariant (owner-stated, 2026-09-10)
+
+Mission three's goal as stated by the owner: **one prompt that works for all models.** "Prompt"
+means the explanation of the RLM environment's affordances plus the initial configuration of the
+RLM REPL variables. It may vary by desk, never by model. Two consequences are binding:
+
+1. **No code-level parsing workarounds.** Markdown stripping and similar output repair are not
+   acceptable as per-model accommodations. This is an invariant, not a preference.
+2. **One clean context initialization per desk.** Each desk gets a single affordance text and a
+   single REPL initialization, shared by every model that serves that desk.
+
+### 12.1 The seam already exists, and nothing in it is model-conditional
+
+- Final system prompt assembly is `systemPromptForRun`
+  (`internal/agentcore/tool_profiles.go:195-302`), in this order: core prompt
+  (`promptstore/store.go:51-59`, shared context at `defaults/core.yaml:6-13`); temporal grounding
+  (`tool_profiles.go:222-225`); role-specific instructions, owner override or `defaults/<role>.md`
+  (`promptstore/store.go:81-109`); optional skill context, gated to Conductor/Texture/Management/
+  Engineering (`agentcore/skill_context.go:48-57`); then the actuator overlay — for RLM the branch
+  is `capsule.HostSelectsRLM` at `tool_profiles.go:262-266`; then the assignment tail
+  (`:268-282`); then the run-context tail (`:294-302`). The tool catalog is appended afterwards by
+  `RunToolLoop` → `BuildSystemPrompt`
+  (`internal/toolregistry/toolloop.go:303-311`, catalog rendering at `toolregistry.go:172-200`),
+  and the user's objective is not part of the system string at all — it is the initial user
+  message (`agentcore/runtime.go:3278-3286`).
+- The RLM affordance text is a single static body:
+  `internal/runtimeprompts/prompts.go:57-62` loads
+  `internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml` (authority and stateful-notebook
+  framing at lines 8-13; examples, receipts, error handling, choir surface, and reporting at
+  15-47).
+- REPL/session initialization is `cmd/capsule-broker/session_worker.go:274-285` (allowlist,
+  broker, scope, `NewSession`), backed by `internal/yaegikernel/session.go:53-72` (one persistent
+  Yaegi interpreter, filtered symbol set loaded once), with the `choir` package prebound by
+  `ChoirExports` (`internal/yaegikernel/choir.go:113-132`).
+- Every variation above is role-, owner-, configuration- or run-driven. **Model id does not appear
+  anywhere in that path.** A search of the prompt and RLM surfaces
+  found no model-id-conditional prompt or initialization; model metadata is enriched at
+  `internal/agentcore/runtime.go:778-780` and consumed as `llmConfig` at `:3332`, never read by
+  `systemPromptForRun`. The invariant is therefore a preservation requirement, not a rewrite.
+
+### 12.2 What violates or sits adjacent to it today
+
+| Site | What it does | Class |
+| --- | --- | --- |
+| `internal/yaegikernel/eval.go:301-317` (`CleanGoSource`), called from `agentcore/tools_capsule.go:768`, `yaegikernel/eval.go:121-124,147-150`, `session.go:85-87` | strips leading ``` / ~~~ fences and the language line, and a trailing fence, from model-authored Go | **direct violation** on the RLM path |
+| `agentcore/tools_capsule.go:753-757` | the tool description already forbids fences twice ("Pass raw Go source directly without markdown fences (never ```go)", "Do not wrap in markdown code fences"), and the schema offers both `source` and `code` | prompt/schema redundancy; the stripper is defense that masks whether the instruction works |
+| `internal/provider/provider.go:1144-1152`, `:707-719`, `:809-832`; `internal/toolregistry/toolloop.go:513-555,1248-1269` | DeepSeek rejects thinking with exact tool choice, so reasoning is forced off with tools, and a tool loop retries by pattern-matching a provider error string | provider-behavior workaround, adjacent class — not output parsing, but model-specific behavior the mission will meet again on DeepSeek V4.1 Flash |
+| `agentcore/run_memory.go:683-693`; `agentcore/email_lifecycle.go:434-517` | JSON substring extraction from first `{` to last `}`; email body marker trimming | model-agnostic tolerance on other surfaces; not RLM prompt workarounds |
+| `internal/provider/provider.go:2163-2171` | recognizes image-capable models by id (gpt-5.5/5.4/kimi-k2p6) | capability validation, not parsing — but it is a model-id list that should not grow into a prompt branch |
+| `internal/toolregistry/toolloop.go:680-753`, `:1015-1020`, `:700-744` | re-prompts with a reminder when a model ends without a required tool call, and appends a continuation instruction after `max_tokens` | generic protocol recovery, model-agnostic — keep; these are prompt-level nudges, not format repair |
+
+The single direct violation is `CleanGoSource`. The tool surface already takes code as a
+structured `source` argument and already instructs against fences, so the stripping is redundant;
+its real cost is that it hides whether the instruction generalizes across models. Silent tolerance
+converts a prompt weakness into a passing test.
+
+### 12.3 Falsifiable acceptance for the invariant
+
+1. **Prompt identity.** For a fixed desk, the assembled system prompt plus tool catalog is
+   byte-identical across every model in §11. Diff the rendered prompt per model.
+2. **No model branches.** A guard test greps the prompt/RLM assembly path for model-id
+   conditionals and fails on any new one. (There are none today, so this locks in zero.)
+3. **No fence handling.** `CleanGoSource` is deleted, or retained only with a dated justification
+   and a test proving no roster model emits fences. Deleting it makes a fenced cell fail loudly
+   instead of silently passing.
+4. **Roster task, one prompt.** Each roster model completes one fixed desk task through
+   `capsule_go_eval` with no reformatting, no retry-with-repair, and no human intervention.
+   Record per-model pass/fail plus tokens; a model that fails marks the roster, not the prompt,
+   unless it fails for a reason shared by others.
+5. **One initialization.** REPL variables and prebound modules are established once per
+   activation, identical for all models, with no model-conditional setup.
+
+### 12.4 Interactions the mission must set per desk, not per model
+
+- **Thinking budget.** A small reply cap is consumed entirely by reasoning and returns empty
+  `content` (§9.3). The budget belongs to the desk's configuration, shared by all models.
+- **Vision is a capability filter, not a prompt variant.** Image input is verified for five of the
+  six cheap paid ids and for the free Meta id (§11); `hy3` is text-only. A desk that invites image
+  reading should filter its roster by verified modality rather than carry a different prompt for
+  text-only models. Phrase affordances as what the environment provides, and let capability decide
+  who serves the desk.
+- **Provider behavior differences are allowed to differ; prompt text is not.** Forcing reasoning
+  off for DeepSeek-with-tools is a transport accommodation. It must stay in the adapter and must
+  not leak into prompt text or desk instructions.
+
+## 13. Open questions for the owner
 
 1. **Training consent.** Are Muse Spark *Contributor* models permitted for any Choir traffic?
    If not, Phase B serves only the free Zen twin (also contributor-consented) or nothing.
@@ -752,7 +847,13 @@ Messages. DeepSeek V4.1 Flash prices off-peak $0.15/$0.60 and peak $0.30/$1.20; 
    `deepseek-v4-pro` on Go unless the workspace region includes `cn` (`handler.ts:158-166`).
    The pruned roster keeps `deepseek-v4.1-flash`, which was not in that check list and answered
    normally, so the constraint appears not to apply — worth confirming before Phase A ships.
-7. **Conversation scope — answered in §10.2/§10.7.** Rewarm and the agent-to-agent arc both
+7. **`CleanGoSource` disposition.** Does mission three delete the fence stripper outright (making
+   a fenced cell fail loudly) or keep it with a dated justification? The invariant in §12.3 leans
+   toward deletion.
+8. **The `code` alias.** `capsule_go_eval` accepts both `source` and `code` for the same value.
+   Should mission three collapse that to one name, so the affordance the prompt describes is the
+   only affordance the schema offers?
+9. **Conversation scope — answered in §10.2/§10.7.** Rewarm and the agent-to-agent arc both
    resume the same `RunID`; only replacement runs mint a new one, and they rebuild the prompt from
    a compaction summary, so the id choice costs nothing extra there. Remaining decision: accept a
    cache miss at those boundaries, or fund a durable lineage id in the cache mission.
