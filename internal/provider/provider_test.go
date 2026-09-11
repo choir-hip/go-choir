@@ -4126,6 +4126,60 @@ func TestOpenCodeProviderUsesFrozenWireShapesAndSessionHeaders(t *testing.T) {
 	}
 }
 
+func TestOpenCodeProviderSurfacesIncompleteAndFailedResponses(t *testing.T) {
+	t.Run("incomplete carries stop reason and usage", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-inc\",\"model\":\"muse-spark-1.3-contributor-free\"}}\n\n")
+			fmt.Fprint(w, "data: {\"type\":\"response.incomplete\",\"response\":{\"id\":\"resp-inc\",\"model\":\"muse-spark-1.3-contributor-free\",\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"usage\":{\"input_tokens\":12,\"output_tokens\":64}}}\n\n")
+		}))
+		defer server.Close()
+
+		p, err := NewOpenCodeProvider(OpenCodeConfig{APIKey: "test-key", BaseURL: server.URL, ModelID: "muse-spark-1.3-contributor-free"})
+		if err != nil {
+			t.Fatalf("NewOpenCodeProvider: %v", err)
+		}
+		p.httpClient = server.Client()
+		resp, err := p.Call(context.Background(), LLMRequest{
+			Model:          "muse-spark-1.3-contributor-free",
+			ConversationID: "run-inc",
+			Messages:       []Message{{Role: "user", Content: []Block{{Type: "text", Text: "hello"}}}},
+		})
+		if err != nil {
+			t.Fatalf("Call: %v", err)
+		}
+		if resp.StopReason != "max_output_tokens" {
+			t.Fatalf("stop_reason = %q, want max_output_tokens", resp.StopReason)
+		}
+		if resp.Usage.OutputTokens != 64 {
+			t.Fatalf("output_tokens = %d, want 64", resp.Usage.OutputTokens)
+		}
+	})
+
+	t.Run("failed surfaces an error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-fail\"}}\n\n")
+			fmt.Fprint(w, "data: {\"type\":\"response.failed\",\"response\":{\"id\":\"resp-fail\",\"status\":\"failed\",\"error\":{\"code\":\"server_error\"}}}\n\n")
+		}))
+		defer server.Close()
+
+		p, err := NewOpenCodeProvider(OpenCodeConfig{APIKey: "test-key", BaseURL: server.URL, ModelID: "muse-spark-1.3-contributor-free"})
+		if err != nil {
+			t.Fatalf("NewOpenCodeProvider: %v", err)
+		}
+		p.httpClient = server.Client()
+		_, err = p.Call(context.Background(), LLMRequest{
+			Model:          "muse-spark-1.3-contributor-free",
+			ConversationID: "run-fail",
+			Messages:       []Message{{Role: "user", Content: []Block{{Type: "text", Text: "hello"}}}},
+		})
+		if err == nil || !strings.Contains(err.Error(), "server_error") {
+			t.Fatalf("Call error = %v, want server_error", err)
+		}
+	})
+}
+
 func TestOpenCodeProviderRejectsUnknownModelBeforeHTTP(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

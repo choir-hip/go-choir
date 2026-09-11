@@ -3208,7 +3208,7 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 				})
 				result.StopReason = "tool_use"
 			}
-		case "response.completed":
+		case "response.completed", "response.incomplete":
 			response, _ := payload["response"].(map[string]any)
 			if response != nil {
 				result.ID = stringValue(response["id"])
@@ -3219,6 +3219,13 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 					result.Usage.InputTokens = int(numberValue(usage["input_tokens"]))
 					result.Usage.OutputTokens = int(numberValue(usage["output_tokens"]))
 				}
+				if typ == "response.incomplete" {
+					if details, ok := response["incomplete_details"].(map[string]any); ok {
+						if reason := stringValue(details["reason"]); reason != "" {
+							result.StopReason = reason
+						}
+					}
+				}
 			}
 			if result.StopReason == "" {
 				result.StopReason = "end_turn"
@@ -3228,6 +3235,17 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 				StopReason: result.StopReason,
 				Usage:      &StreamUsage{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens},
 			})
+		case "response.failed":
+			response, _ := payload["response"].(map[string]any)
+			errType := "failed"
+			if response != nil {
+				if e, ok := response["error"].(map[string]any); ok {
+					if code := stringValue(e["code"]); code != "" {
+						errType = code
+					}
+				}
+			}
+			return fmt.Errorf("%s: response %s (sanitized)", providerName, errType)
 		}
 		return nil
 	}); err != nil {
