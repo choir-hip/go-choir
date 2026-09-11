@@ -2205,7 +2205,7 @@ func (m *Manager) QuarantineDataImage(stateRoot, vmID string, recoveryGeneration
 	dataImage := filepath.Join(vmDir, "data.img")
 	quarantine := filepath.Join(vmDir, fmt.Sprintf("data.img.quarantine-%d-%s", recoveryGeneration, operationID))
 	if maxRetained > 0 {
-		if err := pruneCompletedQuarantines(vmDir, maxRetained); err != nil {
+		if _, err := pruneCompletedQuarantines(vmDir, maxRetained); err != nil {
 			return "", err
 		}
 	}
@@ -2261,6 +2261,7 @@ type recoveryQuarantine struct {
 	path       string
 	generation uint64
 	operation  string
+	modTime    time.Time
 }
 
 func recoveryVMStateDir(stateRoot, vmID string) (string, error) {
@@ -2355,10 +2356,10 @@ func ensureQuarantineCapacity(vmDir string, info os.FileInfo) error {
 	return nil
 }
 
-func pruneCompletedQuarantines(vmDir string, maxRetained int) error {
+func pruneCompletedQuarantines(vmDir string, maxRetained int) (int, error) {
 	entries, err := os.ReadDir(vmDir)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	const prefix = "data.img.quarantine-"
 	var quarantines []recoveryQuarantine
@@ -2378,41 +2379,79 @@ func pruneCompletedQuarantines(vmDir string, maxRetained int) error {
 			continue
 		}
 		path := filepath.Join(vmDir, name)
-		if _, err := regularFileInfo(path); err != nil {
-			return fmt.Errorf("validate retained quarantine %s: %w", path, err)
+		info, err := regularFileInfo(path)
+		if err != nil {
+			return 0, fmt.Errorf("validate retained quarantine %s: %w", path, err)
 		}
-		quarantines = append(quarantines, recoveryQuarantine{path: path, generation: generation, operation: operation})
+		quarantines = append(quarantines, recoveryQuarantine{path: path, generation: generation, operation: operation, modTime: info.ModTime()})
 	}
+	// Oldest first: generation is monotonic per VM, mtime breaks ties within a
+	// generation (operation IDs are random hex, not ordered).
 	sort.Slice(quarantines, func(left, right int) bool {
 		if quarantines[left].generation != quarantines[right].generation {
 			return quarantines[left].generation < quarantines[right].generation
 		}
-		return quarantines[left].operation < quarantines[right].operation
+		return quarantines[left].modTime.Before(quarantines[right].modTime)
 	})
+	prunedCount := 0
 	for len(quarantines) >= maxRetained {
 		pruned := false
 		for index, quarantine := range quarantines {
-			if !recoveryJournalDone(vmDir, quarantine.generation, quarantine.operation) {
+			if !recoveryJournalPrunable(vmDir, quarantine.generation, quarantine.operation) {
 				continue
 			}
 			if err := os.Remove(quarantine.path); err != nil {
-				return fmt.Errorf("prune completed recovery quarantine: %w", err)
+				return prunedCount, fmt.Errorf("prune completed recovery quarantine: %w", err)
 			}
 			if err := syncDirectory(vmDir); err != nil {
-				return fmt.Errorf("sync recovery quarantine pruning: %w", err)
+				return prunedCount, fmt.Errorf("sync recovery quarantine pruning: %w", err)
 			}
 			quarantines = append(quarantines[:index], quarantines[index+1:]...)
 			pruned = true
+			prunedCount++
 			break
 		}
 		if !pruned {
-			return fmt.Errorf("recovery quarantine retention capacity reached")
+			return prunedCount, fmt.Errorf("recovery quarantine retention capacity reached")
 		}
 	}
-	return nil
+	return prunedCount, nil
 }
 
-func recoveryJournalDone(vmDir string, generation uint64, operation string) bool {
+// PruneRecoveryQuarantines sweeps every VM dir under stateRoot and removes
+// post-swap quarantine images beyond maxRetained per VM. It is the periodic
+// counterpart to the per-recovery prune in QuarantineDataImage: without it,
+// snapshots accumulate forever on VMs that never recover again.
+func (m *Manager) PruneRecoveryQuarantines(stateRoot string, maxRetained int) (int, error) {
+	if maxRetained < 1 {
+		maxRetained = 1
+	}
+	entries, err := os.ReadDir(stateRoot)
+	if err != nil {
+		return 0, err
+	}
+	pruned := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		vmDir := filepath.Join(stateRoot, entry.Name())
+		// Keep maxRetained post-swap quarantines: prune down to maxRetained.
+		n, err := pruneCompletedQuarantines(vmDir, maxRetained+1)
+		pruned += n
+		if err != nil {
+			return pruned, fmt.Errorf("prune %s: %w", vmDir, err)
+		}
+	}
+	return pruned, nil
+}
+
+// recoveryJournalPrunable reports whether a quarantined image may be deleted.
+// Only post-swap phases qualify: once the journal records "swapped" (or any
+// later phase) the VM runs the staged image and the quarantine is a rollback
+// copy, not the live store. Pre-swap phases (fenced, stopped, key_copied,
+// staging) mean the quarantine may hold the only copy of the original image.
+func recoveryJournalPrunable(vmDir string, generation uint64, operation string) bool {
 	journal, err := os.ReadFile(filepath.Join(vmDir, fmt.Sprintf("rec-%d-%s.journal", generation, operation)))
 	if err != nil {
 		return false
@@ -2420,7 +2459,15 @@ func recoveryJournalDone(vmDir string, generation uint64, operation string) bool
 	var record struct {
 		Phase string `json:"phase"`
 	}
-	return json.Unmarshal(journal, &record) == nil && record.Phase == "done"
+	if json.Unmarshal(journal, &record) != nil {
+		return false
+	}
+	switch record.Phase {
+	case "swapped", "booted", "verified", "route_published", "done":
+		return true
+	default:
+		return false
+	}
 }
 
 func syncDirectory(path string) error {

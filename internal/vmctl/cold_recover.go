@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -138,6 +139,26 @@ type coldRecoveryRecord struct {
 type coldRecoveryStorage interface {
 	QuarantineDataImage(stateRoot, vmID string, recoveryGeneration uint64, operationID string, maxRetained int) (string, error)
 	StageSparseImage(stateRoot, vmID string, recoveryGeneration uint64, operationID string, sizeMB int) (string, error)
+	// PruneRecoveryQuarantines sweeps every VM dir under stateRoot and removes
+	// post-swap quarantine images beyond maxRetained. Called from the reclaim
+	// sweep so snapshots are collected even when no recovery is running.
+	PruneRecoveryQuarantines(stateRoot string, maxRetained int) (int, error)
+}
+
+// recoveryQuarantineRetained bounds retained post-swap data-image snapshots.
+// The newest one is the rollback path for the last recovery; older completed
+// snapshots are dead weight — four accumulated 32 GiB sparse images (~49 GiB
+// real) on node-b before this bound existed (2026-09-11).
+func recoveryQuarantineRetained() int {
+	raw := strings.TrimSpace(os.Getenv("VMCTL_RECOVERY_QUARANTINE_RETAINED"))
+	if raw == "" {
+		return 2
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v < 1 {
+		return 2
+	}
+	return v
 }
 
 type coldRecoveryState struct {
@@ -540,7 +561,7 @@ func (h *Handler) HandleColdRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	quarantine, err = storage.QuarantineDataImage(root, ownership.VMID, generation, operationID, 0)
+	quarantine, err = storage.QuarantineDataImage(root, ownership.VMID, generation, operationID, recoveryQuarantineRetained())
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "could not quarantine data image"})
 		return

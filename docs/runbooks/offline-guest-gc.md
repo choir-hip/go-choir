@@ -3,7 +3,15 @@
 When the guest's `.choir-dolt-gc-disposition.json` reports
 `outcome: skipped_size` and the store keeps growing, reclaim unreachable
 chunk history from the host with the VM stopped. Proven 2026-09-03
-(9.8 GB → 1.7 GB, heads/rows/branch history intact).
+(9.8 GB → 1.7 GB) and 2026-09-11 (18.6 GB journal → 2.1 GB store,
+heads/rows/branch history intact).
+
+Since 2026-09-11 the in-guest GC is journal-aware: the noms journal no longer
+counts toward the 5 GiB live-store guard, a journal ≥1 GiB
+(`RUNTIME_DOLT_GC_JOURNAL_GIB`) triggers routine GC, and the low-space
+emergency path bypasses the size guard entirely. `skipped_size` now means the
+*live* store (used minus journal) exceeds 5 GiB — a genuinely large working
+set, not journal bloat.
 
 ## Preconditions
 
@@ -50,4 +58,7 @@ backup is disposable only after the post-GC boot serves product traffic.
 ## Cleanup
 
 Remove scratch copies, scripts, and `/tmp/guestq`; detach all helper loops.
-Do not leave mounts under `/mnt/guest*`.
+Do not leave mounts under `/mnt/guest*`. Note: mounts made inside a guest's
+mount namespace (e.g. via a running firecracker process's `/tmp`) are
+unreachable from the host and pin deleted files until that VM exits —
+prefer mounting helper images from the init namespace only.

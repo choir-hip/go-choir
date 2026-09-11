@@ -86,13 +86,14 @@ type ownershipResponse struct {
 }
 
 type reclaimResponse struct {
-	Status          string               `json:"status"`
-	VMsReclaimed    int                  `json:"vms_reclaimed"`
-	RetentionPruned int                  `json:"retention_pruned"`
-	VMsStopped      int                  `json:"vms_stopped"`
-	ReclaimBefore   PressureReclaimPlan  `json:"reclaim_before"`
-	ReclaimAfter    PressureReclaimPlan  `json:"reclaim_after"`
-	Retention       RetentionPruneResult `json:"retention"`
+	Status            string               `json:"status"`
+	VMsReclaimed      int                  `json:"vms_reclaimed"`
+	RetentionPruned   int                  `json:"retention_pruned"`
+	VMsStopped        int                  `json:"vms_stopped"`
+	QuarantinesPruned int                  `json:"quarantines_pruned"`
+	ReclaimBefore     PressureReclaimPlan  `json:"reclaim_before"`
+	ReclaimAfter      PressureReclaimPlan  `json:"reclaim_after"`
+	Retention         RetentionPruneResult `json:"retention"`
 }
 
 // Handler provides HTTP handlers for the vmctl service.
@@ -821,14 +822,26 @@ func (h *Handler) runReclaimSweep(ctx context.Context) reclaimResponse {
 	reclaimed := h.registry.ReclaimPressureVMs(ctx, h.AuthorizeComputerVersionRoute)
 	retention := h.registry.PruneRetention(ctx, h.AuthorizeComputerVersionRoute)
 	stopped := h.registry.StopIdleVMs(ctx, h.AuthorizeComputerVersionRoute)
+	quarantinesPruned := 0
+	if state := h.coldRecovery(); state != nil {
+		state.mu.Lock()
+		storage, root := state.storage, state.stateRoot
+		state.mu.Unlock()
+		if storage != nil && root != "" {
+			if n, err := storage.PruneRecoveryQuarantines(root, recoveryQuarantineRetained()); err == nil {
+				quarantinesPruned = n
+			}
+		}
+	}
 	return reclaimResponse{
-		Status:          "ok",
-		VMsReclaimed:    reclaimed,
-		RetentionPruned: retention.Deleted,
-		VMsStopped:      stopped,
-		ReclaimBefore:   before,
-		ReclaimAfter:    h.registry.PressureReclaimPlan(),
-		Retention:       retention,
+		Status:            "ok",
+		VMsReclaimed:      reclaimed,
+		RetentionPruned:   retention.Deleted,
+		VMsStopped:        stopped,
+		QuarantinesPruned: quarantinesPruned,
+		ReclaimBefore:     before,
+		ReclaimAfter:      h.registry.PressureReclaimPlan(),
+		Retention:         retention,
 	}
 }
 
