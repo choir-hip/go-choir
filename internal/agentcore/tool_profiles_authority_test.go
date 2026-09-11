@@ -205,6 +205,26 @@ func TestAssignmentIdentityUsesOnlyAuthenticatedParentRunAndToolCall(t *testing.
 	}
 }
 
+// TestAssignCoSuperSchemaCarriesModelPolicyOverlay proves the owner-visible
+// model-selection mechanism is reachable on the assignment path: the schema
+// exposes model_policy_overlay_id and the request digest covers it, so a
+// replayed call with a different overlay conflicts rather than silently
+// reusing the original model selection.
+func TestAssignCoSuperSchemaCarriesModelPolicyOverlay(t *testing.T) {
+	registry := toolregistry.MustNewToolRegistry()
+	if err := RegisterAssignedCoSuperTools(registry, &Runtime{}); err != nil {
+		t.Fatal(err)
+	}
+	tool, ok := registry.Lookup("assign_co_super")
+	if !ok {
+		t.Fatal("assign_co_super missing")
+	}
+	properties, _ := tool.Parameters["properties"].(map[string]any)
+	if _, present := properties["model_policy_overlay_id"]; !present {
+		t.Fatal("model_policy_overlay_id missing from assign_co_super schema")
+	}
+}
+
 func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
 	s, err := openTestStore(filepath.Join(t.TempDir(), "runtime.db"))
 	if err != nil {

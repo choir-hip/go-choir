@@ -52,11 +52,12 @@ type assignmentCapsuleRuntime interface {
 }
 
 type StartAssignedCoSuperRequest struct {
-	Objective        string
-	Kind             types.CoSuperAssignmentKind
-	CandidateID      string
-	ParentWorkItemID string
-	ToolCallID       string
+	Objective            string
+	Kind                 types.CoSuperAssignmentKind
+	CandidateID          string
+	ParentWorkItemID     string
+	ToolCallID           string
+	ModelPolicyOverlayID string
 }
 
 type AssignedCoSuperStart struct {
@@ -115,9 +116,15 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	attempt := uint64(1) // one authenticated tool call is one runtime-derived attempt
 	assignmentID := deterministicAssignmentIdentity(parent, req)
-	requestDigest := objectgraph.SHA256([]byte(strings.Join([]string{
+	requestDigestParts := []string{
 		"choir:co-super-request:v1", req.Objective, string(req.Kind), req.CandidateID, parentWorkID,
-	}, "\x00")))
+	}
+	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
+		// The overlay participates in replay/conflict identity only when
+		// supplied, so digests for pre-overlay requests stay stable.
+		requestDigestParts = append(requestDigestParts, overlay)
+	}
+	requestDigest := objectgraph.SHA256([]byte(strings.Join(requestDigestParts, "\x00")))
 	// Replay is resolved before reading mutable current source/work projections.
 	// The authenticated provider call identity is the authority; changed semantic
 	// arguments conflict under that same identity.
@@ -379,7 +386,15 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			"source_artifact_ref": preflight.ArtifactRef, "source_candidate_id": req.CandidateID,
 		},
 	}
+	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
+		run.Metadata[modelpolicy.MetadataPolicyOverlayID] = overlay
+	}
 	run.Metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, agentprofile.CoSuper, run.Metadata)
+	// Fail closed on policy errors like the Texture eval path: an unknown or
+	// unresolvable overlay must not silently fall back to the default model.
+	if policyErr := metadataStringValue(run.Metadata, modelpolicy.MetadataPolicyError); policyErr != "" {
+		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("model policy overlay did not resolve: %s", policyErr))
+	}
 	if model := metadataStringValue(run.Metadata, modelpolicy.MetadataModel); model != "" {
 		run.Metadata[runMetadataModel] = model
 	}

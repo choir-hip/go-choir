@@ -41,18 +41,20 @@ func requirePersistentSuperExecution(ctx context.Context) (*types.RunRecord, err
 
 func newAssignCoSuperTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
-		Objective        string                      `json:"objective"`
-		Kind             types.CoSuperAssignmentKind `json:"kind"`
-		ParentWorkItemID string                      `json:"parent_work_item_id"`
-		CandidateID      string                      `json:"candidate_id,omitempty"`
+		Objective            string                      `json:"objective"`
+		Kind                 types.CoSuperAssignmentKind `json:"kind"`
+		ParentWorkItemID     string                      `json:"parent_work_item_id"`
+		CandidateID          string                      `json:"candidate_id,omitempty"`
+		ModelPolicyOverlayID string                      `json:"model_policy_overlay_id,omitempty"`
 	}
 	return toolregistry.Tool{
 		Name: "assign_co_super", Description: "Open one exact durable assignment and, only after its bind receipt commits, wake a writable networkless capsule CoSuper.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"objective":           map[string]any{"type": "string"},
-			"kind":                map[string]any{"type": "string", "enum": []string{"implementation", "verification"}},
-			"parent_work_item_id": map[string]any{"type": "string"},
-			"candidate_id":        map[string]any{"type": "string", "description": "Required only for verification; exact candidate returned by a completed implementation assignment."},
+			"objective":               map[string]any{"type": "string"},
+			"kind":                    map[string]any{"type": "string", "enum": []string{"implementation", "verification"}},
+			"parent_work_item_id":     map[string]any{"type": "string"},
+			"candidate_id":            map[string]any{"type": "string", "description": "Required only for verification; exact candidate returned by a completed implementation assignment."},
+			"model_policy_overlay_id": map[string]any{"type": "string", "description": "Optional owner-visible model policy overlay id from System/model-policy-overlays/<id>.toml; selects the assigned run's provider/model."},
 		}, []string{"objective", "kind", "parent_work_item_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			parent, err := requirePersistentSuperExecution(ctx)
@@ -67,6 +69,7 @@ func newAssignCoSuperTool(rt *Runtime) toolregistry.Tool {
 			started, err := rt.startAssignedCoSuper(ctx, parent.RunID, parent.OwnerID, StartAssignedCoSuperRequest{
 				Objective: input.Objective, Kind: input.Kind, CandidateID: input.CandidateID,
 				ParentWorkItemID: input.ParentWorkItemID, ToolCallID: execution.ToolCallID,
+				ModelPolicyOverlayID: input.ModelPolicyOverlayID,
 			})
 			if err != nil {
 				return "", err
