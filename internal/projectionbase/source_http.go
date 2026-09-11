@@ -25,6 +25,10 @@ type HTTPSource struct {
 	baseURL    string
 	capability CapabilityFunc
 	client     *http.Client
+	// blobClient streams base blobs. It carries NO whole-request timeout: a
+	// retained store's base is tens of GiB and cannot finish inside a fixed
+	// deadline. Cancellation comes from the caller's context only.
+	blobClient *http.Client
 }
 
 // NewHTTPSource returns a platform base source. A nil capability fails closed
@@ -34,6 +38,7 @@ func NewHTTPSource(baseURL string, capability CapabilityFunc) *HTTPSource {
 		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		capability: capability,
 		client:     &http.Client{Timeout: 30 * time.Second},
+		blobClient: &http.Client{},
 	}
 }
 
@@ -49,6 +54,10 @@ func (s *HTTPSource) bearer(ctx context.Context) (string, error) {
 }
 
 func (s *HTTPSource) get(ctx context.Context, path string, query url.Values) (*http.Response, error) {
+	return s.getWith(ctx, s.client, path, query)
+}
+
+func (s *HTTPSource) getWith(ctx context.Context, client *http.Client, path string, query url.Values) (*http.Response, error) {
 	token, err := s.bearer(ctx)
 	if err != nil {
 		return nil, err
@@ -58,7 +67,7 @@ func (s *HTTPSource) get(ctx context.Context, path string, query url.Values) (*h
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	return s.client.Do(req)
+	return client.Do(req)
 }
 
 // Watermark returns the advertised base. A missing watermark is a missing
@@ -129,14 +138,16 @@ func (s *HTTPSource) Descriptor(ctx context.Context, computerID, baseRef string)
 }
 
 // DownloadBlob streams the base blob. Digest verification belongs to the
-// installer after the stream completes, never to the wire.
+// installer after the stream completes, never to the wire. The blob client
+// carries no whole-request timeout: a retained store's base is tens of GiB
+// and cannot finish inside a fixed deadline; the caller's ctx cancels.
 func (s *HTTPSource) DownloadBlob(ctx context.Context, computerID, baseRef string, dst io.Writer) error {
 	computerID = strings.TrimSpace(computerID)
 	baseRef = strings.TrimSpace(baseRef)
 	if computerID == "" || baseRef == "" || dst == nil {
 		return fmt.Errorf("%w: computer, base digest, and destination are required", ErrBaseRefused)
 	}
-	resp, err := s.get(ctx, "/internal/computers/files/projection-base/blob", url.Values{"computer_id": {computerID}, "base_ref": {baseRef}})
+	resp, err := s.getWith(ctx, s.blobClient, "/internal/computers/files/projection-base/blob", url.Values{"computer_id": {computerID}, "base_ref": {baseRef}})
 	if err != nil {
 		return err
 	}

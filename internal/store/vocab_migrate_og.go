@@ -306,7 +306,7 @@ func (o *ogObjectRow) identityFieldMigrated() bool {
 // row without mutating the store. seed maps historical canonical/edge IDs to
 // their current forms (from a persisted prior report) so a re-run after a
 // mid-apply crash still resolves references.
-func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed map[string]string) (objs []*ogObjectRow, edges []*ogEdgeRow, err error) {
+func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed map[string]string, progress func()) (objs []*ogObjectRow, edges []*ogEdgeRow, err error) {
 	// Stream rows: only rows that migrate or embed obj:/edge: references are
 	// retained. Loading every row's body+metadata at once OOMs the guest on
 	// real computers (observed: autoputer OOM-killed at ~3.7GB on staging).
@@ -317,6 +317,9 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 	}
 	objs = []*ogObjectRow{}
 	for rows.Next() {
+		if progress != nil {
+			progress()
+		}
 		o := &ogObjectRow{fields: map[string]string{}}
 		var tomb int
 		if err := rows.Scan(&o.canonicalID, &o.kind, &o.ownerID, &o.computerID, &o.versionID, &o.body, &o.metadata, &tomb, &o.supersededBy); err != nil {
@@ -614,13 +617,10 @@ func ogSeedFromReport(rep *MigrationReport) map[string]string {
 	return seed
 }
 
-// ogRoleLeafKeys are the JSON key names whose values are desk vocabulary on
-// the live carrier. Message-role fields (run_memory_entry.role =
-// assistant/user) are excluded by kind below.
 var ogRoleLeafKeys = map[string]bool{
 	"role": true, "profile": true, "agent_profile": true, "agent_role": true,
 	"authority_profile": true, "requested_by_profile": true, "actor_profile": true,
-	"author_label": true, "target_profile": true,
+	"target_profile": true,
 }
 
 // ogRoleSkipKinds lists kinds whose same-named fields are not desk
@@ -659,9 +659,7 @@ func ogRoleFieldsFromJSON(kind string, raw []byte, prefix string, out *[]vocabmi
 // servingOGRoleFields collects every role-bearing leaf in og_objects for the
 // serving fence: declared role keys in metadata and body (recursive, so
 // nested attestation roles are covered), excluding non-desk same-named
-// fields. computer_event_index.event_json is a tape mirror and is never
-// scanned.
-func (s *Store) servingOGRoleFields(ctx context.Context) ([]vocabmigrate.Field, error) {
+func (s *Store) servingOGRoleFields(ctx context.Context, progress func()) ([]vocabmigrate.Field, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT canonical_id, object_kind, body, metadata FROM og_objects`)
 	if err != nil {
@@ -670,6 +668,9 @@ func (s *Store) servingOGRoleFields(ctx context.Context) ([]vocabmigrate.Field, 
 	defer rows.Close()
 	var fields []vocabmigrate.Field
 	for rows.Next() {
+		if progress != nil {
+			progress()
+		}
 		var id, kind string
 		var body, meta []byte
 		if err := rows.Scan(&id, &kind, &body, &meta); err != nil {

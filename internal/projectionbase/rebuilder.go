@@ -109,7 +109,7 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 	// forward-migrate and fence the scratch store before the witness and
 	// publish. The descriptor already stamps VocabularyVersion=v2; this makes
 	// the published content match it.
-	if _, err := scratchStore.MigrateAndFenceServingVocabulary(ctx); err != nil {
+	if _, err := scratchStore.MigrateAndFenceServingVocabulary(ctx, true, nil); err != nil {
 		return nil, fmt.Errorf("rebuilder: vocabulary migration refused: %w", err)
 	}
 

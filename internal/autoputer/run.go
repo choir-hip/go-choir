@@ -54,6 +54,10 @@ type replayHealthGate struct {
 	pending  bool
 	appender *computerevent.ComputerEventAppender
 	base     http.HandlerFunc
+	// progress ticks during post-replay work (vocabulary migration, fence
+	// verification) so the host stall detector sees liveness while the
+	// applied sequence is stationary.
+	progress uint64
 }
 
 func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +69,7 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pending := g.pending
 	app := g.appender
 	base := g.base
+	progress := g.progress
 	g.mu.Unlock()
 	if pending {
 		var snap computerevent.ReplaySnapshot
@@ -77,6 +82,7 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"status":             "replaying",
 			"sequence":           snap.Sequence,
 			"committed_sequence": snap.CommittedSequence,
+			"progress":           progress,
 		})
 		return
 	}
@@ -90,6 +96,15 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (g *replayHealthGate) setPending(pending bool) {
 	g.mu.Lock()
 	g.pending = pending
+	g.mu.Unlock()
+}
+
+// tick records one unit of post-replay progress. The host stall detector
+// treats a changing progress counter as liveness while the applied replay
+// sequence is stationary (vocabulary migration, fence verification).
+func (g *replayHealthGate) tick() {
+	g.mu.Lock()
+	g.progress++
 	g.mu.Unlock()
 }
 
@@ -517,7 +532,7 @@ func Run() {
 		}
 		// Vocabulary cutover: migrate any retained V1 rows and hold the
 		// serving fence closed before the runtime starts serving authority.
-		if _, err := db.MigrateAndFenceServingVocabulary(ctx); err != nil {
+		if _, err := db.MigrateAndFenceServingVocabulary(ctx, false, nil); err != nil {
 			log.Fatalf("autoputer: vocabulary migration refused: %v", err)
 		}
 		startPeriodicDoltGC(rtCfg.StorePath)
@@ -565,8 +580,12 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		// Vocabulary cutover: replay deposits V1 rows byte-identically, so
 		// forward-migrate and fence BEFORE the health gate opens or the
 		// runtime serves. Runs on the replay-only host drive too so the
-		// materialized store is V2 before the guest takes over.
-		if _, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx); migErr != nil {
+		// materialized store is V2 before the guest takes over. A boot that
+		// replayed zero events over a previously fenced store skips the
+		// rescan; the gate heartbeat keeps the host stall detector alive
+		// while scans run.
+		replayed := appender.ReplaySnapshot().Sequence > 0
+		if _, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx, replayed, gate.tick); migErr != nil {
 			log.Fatalf("autoputer: vocabulary migration refused: %v", migErr)
 		}
 	}

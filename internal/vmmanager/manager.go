@@ -1888,6 +1888,9 @@ type guestHealthProbeResult struct {
 	ReplayInProgress        bool
 	ReplaySequence          uint64
 	ReplayCommittedSequence uint64
+	// ReplayProgress ticks during post-replay work (vocabulary migration,
+	// fence verification) while the applied sequence is stationary.
+	ReplayProgress uint64
 }
 
 func (r guestHealthProbeResult) String() string {
@@ -1932,11 +1935,13 @@ func (m *Manager) probeGuestHealthDetailed(hostURL string) guestHealthProbeResul
 			Status            string `json:"status"`
 			Sequence          uint64 `json:"sequence"`
 			CommittedSequence uint64 `json:"committed_sequence"`
+			Progress          uint64 `json:"progress"`
 		}
 		if json.Unmarshal(body, &replayBody) == nil && replayBody.Status == "replaying" {
 			result.ReplayInProgress = true
 			result.ReplaySequence = replayBody.Sequence
 			result.ReplayCommittedSequence = replayBody.CommittedSequence
+			result.ReplayProgress = replayBody.Progress
 		}
 	}
 	return result
@@ -1958,6 +1963,7 @@ func (m *Manager) waitForGuestReady(hostURL string) error {
 	}
 	var lastProbe guestHealthProbeResult
 	var lastReplaySeq uint64
+	var lastReplayProgress uint64
 	var lastSequenceAdvance time.Time
 	firstReplay := true
 	for {
@@ -1966,9 +1972,10 @@ func (m *Manager) waitForGuestReady(hostURL string) error {
 			return nil
 		}
 		if lastProbe.ReplayInProgress {
-			if firstReplay || lastProbe.ReplaySequence != lastReplaySeq {
+			if firstReplay || lastProbe.ReplaySequence != lastReplaySeq || lastProbe.ReplayProgress != lastReplayProgress {
 				firstReplay = false
 				lastReplaySeq = lastProbe.ReplaySequence
+				lastReplayProgress = lastProbe.ReplayProgress
 				lastSequenceAdvance = time.Now()
 			}
 			// A replaying guest is alive and progressing: extend the boot window.

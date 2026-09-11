@@ -388,7 +388,7 @@ func TestMigrateAndFenceServingVocabulary(t *testing.T) {
 	original := drillSnapshot(t, s)
 
 	// First transition: migrates, persists the report, fence passes.
-	if _, err := s.MigrateAndFenceServingVocabulary(ctx); err != nil {
+	if _, err := s.MigrateAndFenceServingVocabulary(ctx, true, nil); err != nil {
 		t.Fatalf("first migrate+fence: %v", err)
 	}
 	rep, err := s.loadVocabMigrationReport()
@@ -401,7 +401,7 @@ func TestMigrateAndFenceServingVocabulary(t *testing.T) {
 
 	// Second transition (e.g. next boot): must not overwrite the original
 	// V1 provenance with the migrated V2 spellings.
-	if _, err := s.MigrateAndFenceServingVocabulary(ctx); err != nil {
+	if _, err := s.MigrateAndFenceServingVocabulary(ctx, true, nil); err != nil {
 		t.Fatalf("second migrate+fence: %v", err)
 	}
 	rep, err = s.loadVocabMigrationReport()
@@ -422,7 +422,7 @@ func TestMigrateAndFenceRefusesUnknown(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	drillExec(t, s, `INSERT INTO channel_messages (channel_id, seq, owner_id, from_agent_id, from_loop_id, to_agent_id, to_loop_id, trajectory_id, from_name, role, content, created_at) VALUES
 		('chan-9', 3, 'owner', 'alias:one', '', '', '', 'traj-9', '', 'boss', 'mystery', ?)`, now)
-	if _, err := s.MigrateAndFenceServingVocabulary(ctx); err == nil {
+	if _, err := s.MigrateAndFenceServingVocabulary(ctx, true, nil); err == nil {
 		t.Fatal("fence passed with unknown role token serving")
 	}
 	var role string

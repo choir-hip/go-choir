@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
@@ -62,6 +63,13 @@ type ProvEntry struct {
 type MigrationReport struct {
 	Provenance map[string]ProvEntry `json:"provenance"`
 	Counts     map[string]int64     `json:"counts"`
+	// FencedAt marks that the serving fence verified this store after the
+	// recorded migration completed. A report without it means a prior run
+	// crashed between apply and verify; the next serving transition must
+	// re-run the full path. When set, a boot that replayed zero events may
+	// skip the rescan: replay is the only unguarded writer, and the write
+	// guard has refused non-V2 rows since the report existed.
+	FencedAt string `json:"fenced_at,omitempty"`
 	// OGObjects records every migrated og_objects row for INV-PROV revert:
 	// the original canonical ID plus every changed leaf's original value.
 	// Revert restores recorded leaves exactly, recomputes content_hash and
@@ -199,14 +207,11 @@ var vocabIDTargets = []idTarget{
 	{"inbox_deliveries", []string{"delivery_id"}, "from_agent_id"},
 	{"work_items", []string{"work_item_id"}, "assigned_agent_id"},
 	{"work_items", []string{"work_item_id"}, "work_item_id"},
-	{"worker_updates", []string{"owner_id", "update_id"}, "agent_id"},
-	{"worker_updates", []string{"owner_id", "update_id"}, "target_agent_id"},
-	{"coagent_mailboxes", []string{"owner_id", "agent_id"}, "agent_id"},
-	{"run_memory_entries", []string{"entry_id"}, "agent_id"},
 }
 
-// scanRows reads key columns plus one value column for every row.
-func (s *Store) scanRows(ctx context.Context, table string, keyCols []string, col string) (keys []map[string]string, vals []string, err error) {
+// scanRows reads key columns plus one value column for every row. progress,
+// when non-nil, is ticked once per row so callers can expose liveness.
+func (s *Store) scanRows(ctx context.Context, table string, keyCols []string, col string, progress func()) (keys []map[string]string, vals []string, err error) {
 	cols := append(append([]string{}, keyCols...), col)
 	q := fmt.Sprintf(`SELECT %s FROM %s`, strings.Join(cols, ", "), table)
 	rows, err := s.db.QueryContext(ctx, q)
@@ -215,6 +220,9 @@ func (s *Store) scanRows(ctx context.Context, table string, keyCols []string, co
 	}
 	defer rows.Close()
 	for rows.Next() {
+		if progress != nil {
+			progress()
+		}
 		raw := make([]string, len(cols))
 		ptrs := make([]any, len(raw))
 		for i := range raw {
@@ -274,7 +282,7 @@ type vocabWrite struct {
 // provenance report plus the pending write set without mutating any row.
 // Unknown tokens are left in place: the fence (not this function) refuses
 // them, and the drill asserts zero unknowns.
-func (s *Store) planVocabularyMigration(ctx context.Context) (*MigrationReport, []vocabWrite, error) {
+func (s *Store) planVocabularyMigration(ctx context.Context, progress func()) (*MigrationReport, []vocabWrite, error) {
 	rep := &MigrationReport{Provenance: map[string]ProvEntry{}, Counts: map[string]int64{}}
 	var writes []vocabWrite
 	record := func(table string, keys map[string]string, col, exact string) {
@@ -283,7 +291,7 @@ func (s *Store) planVocabularyMigration(ctx context.Context) (*MigrationReport, 
 		}
 	}
 	for _, t := range vocabValueTargets {
-		keys, vals, err := s.scanRows(ctx, t.table, t.keyCols, t.col)
+		keys, vals, err := s.scanRows(ctx, t.table, t.keyCols, t.col, progress)
 		if err != nil {
 			return nil, nil, fmt.Errorf("vocab migrate %s.%s scan: %w", t.table, t.col, err)
 		}
@@ -312,7 +320,7 @@ func (s *Store) planVocabularyMigration(ctx context.Context) (*MigrationReport, 
 		}
 	}
 	for _, t := range vocabIDTargets {
-		keys, vals, err := s.scanRows(ctx, t.table, t.keyCols, t.col)
+		keys, vals, err := s.scanRows(ctx, t.table, t.keyCols, t.col, progress)
 		if err != nil {
 			return nil, nil, fmt.Errorf("vocab migrate %s.%s id scan: %w", t.table, t.col, err)
 		}
@@ -329,11 +337,11 @@ func (s *Store) planVocabularyMigration(ctx context.Context) (*MigrationReport, 
 		}
 	}
 	if err := s.planMetadataJSON(ctx, rep, &writes, "runs", "loop_id", "metadata_json",
-		[]string{"agent_profile", "agent_role", "requested_by_profile"}); err != nil {
+		[]string{"agent_profile", "agent_role", "requested_by_profile"}, progress); err != nil {
 		return nil, nil, err
 	}
 	if err := s.planMetadataJSON(ctx, rep, &writes, "work_items", "work_item_id", "details_json",
-		[]string{"requested_by_profile"}); err != nil {
+		[]string{"requested_by_profile"}, progress); err != nil {
 		return nil, nil, err
 	}
 	return rep, writes, nil
@@ -376,11 +384,11 @@ func isKeyColumn(t idTarget, col string) bool {
 // need provenance durable before mutation (the cutover path) use the
 // plan/persist/apply sequence inside MigrateAndFenceServingVocabulary.
 func (s *Store) MigrateVocabularyToV2(ctx context.Context) (*MigrationReport, error) {
-	rep, writes, err := s.planVocabularyMigration(ctx)
+	rep, writes, err := s.planVocabularyMigration(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	objs, edges, err := s.planOGMigration(ctx, rep, nil)
+	objs, edges, err := s.planOGMigration(ctx, rep, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -397,8 +405,8 @@ func (s *Store) MigrateVocabularyToV2(ctx context.Context) (*MigrationReport, er
 // migrateMetadataJSON rewrites desk-bearing role keys inside a JSON text
 // column row by row through the frozen applier (never string surgery),
 // retaining provenance for non-canonical spellings.
-func (s *Store) planMetadataJSON(ctx context.Context, rep *MigrationReport, writes *[]vocabWrite, table, key, col string, roleKeys []string) error {
-	keys, vals, err := s.scanRows(ctx, table, []string{key}, col)
+func (s *Store) planMetadataJSON(ctx context.Context, rep *MigrationReport, writes *[]vocabWrite, table, key, col string, roleKeys []string, progress func()) error {
+	keys, vals, err := s.scanRows(ctx, table, []string{key}, col, progress)
 	if err != nil {
 		return fmt.Errorf("vocab migrate %s.%s metadata scan: %w", table, col, err)
 	}
@@ -491,7 +499,7 @@ func (s *Store) RevertVocabularyToV1(ctx context.Context, rep *MigrationReport) 
 					keyCols = append(keyCols, k)
 				}
 				sort.Strings(keyCols)
-				keys, vals, err := s.scanRows(ctx, entry.Table, keyCols, jsonCol)
+				keys, vals, err := s.scanRows(ctx, entry.Table, keyCols, jsonCol, nil)
 				if err != nil {
 					return fmt.Errorf("vocab revert provenance %s scan: %w", entry.Table, err)
 				}
@@ -534,7 +542,7 @@ func (s *Store) RevertVocabularyToV1(ctx context.Context, rep *MigrationReport) 
 			tryKeys := []map[string]string{migratedKeysForRevert(entry), entry.Keys}
 			done := false
 			for _, tk := range tryKeys {
-				keys, vals, err := s.scanRows(ctx, entry.Table, cols, entry.Column)
+				keys, vals, err := s.scanRows(ctx, entry.Table, cols, entry.Column, nil)
 				if err != nil {
 					return fmt.Errorf("vocab revert provenance %s scan: %w", entry.Table, err)
 				}
@@ -566,7 +574,7 @@ func (s *Store) RevertVocabularyToV1(ctx context.Context, rep *MigrationReport) 
 		}
 	}
 	for _, t := range vocabValueTargets {
-		keys, vals, err := s.scanRows(ctx, t.table, t.keyCols, t.col)
+		keys, vals, err := s.scanRows(ctx, t.table, t.keyCols, t.col, nil)
 		if err != nil {
 			return fmt.Errorf("vocab revert %s.%s scan: %w", t.table, t.col, err)
 		}
@@ -582,7 +590,7 @@ func (s *Store) RevertVocabularyToV1(ctx context.Context, rep *MigrationReport) 
 		}
 	}
 	for _, t := range vocabIDTargets {
-		keys, vals, err := s.scanRows(ctx, t.table, t.keyCols, t.col)
+		keys, vals, err := s.scanRows(ctx, t.table, t.keyCols, t.col, nil)
 		if err != nil {
 			return fmt.Errorf("vocab revert %s.%s id scan: %w", t.table, t.col, err)
 		}
@@ -601,7 +609,7 @@ func (s *Store) RevertVocabularyToV1(ctx context.Context, rep *MigrationReport) 
 		{"runs", "loop_id", "metadata_json"},
 		{"work_items", "work_item_id", "details_json"},
 	} {
-		keys, vals, err := s.scanRows(ctx, t.table, []string{t.key}, t.col)
+		keys, vals, err := s.scanRows(ctx, t.table, []string{t.key}, t.col, nil)
 		if err != nil {
 			return fmt.Errorf("vocab revert %s.%s metadata scan: %w", t.table, t.col, err)
 		}
@@ -681,8 +689,9 @@ var servingRoleQueries = map[string]string{
 }
 
 // servingRoleFields collects every distinct role-bearing value in the store
-// for the serving fence.
-func (s *Store) servingRoleFields(ctx context.Context) ([]vocabmigrate.Field, error) {
+// for the serving fence. progress, when non-nil, is ticked once per scanned
+// row so callers can expose liveness.
+func (s *Store) servingRoleFields(ctx context.Context, progress func()) ([]vocabmigrate.Field, error) {
 	names := make([]string, 0, len(servingRoleQueries))
 	for name := range servingRoleQueries {
 		names = append(names, name)
@@ -695,6 +704,9 @@ func (s *Store) servingRoleFields(ctx context.Context) ([]vocabmigrate.Field, er
 			return nil, fmt.Errorf("vocab fence scan %s: %w", name, err)
 		}
 		for rows.Next() {
+			if progress != nil {
+				progress()
+			}
 			var v string
 			if err := rows.Scan(&v); err != nil {
 				rows.Close()
@@ -707,7 +719,7 @@ func (s *Store) servingRoleFields(ctx context.Context) ([]vocabmigrate.Field, er
 			return nil, fmt.Errorf("vocab fence scan %s: %w", name, err)
 		}
 	}
-	ogFields, err := s.servingOGRoleFields(ctx)
+	ogFields, err := s.servingOGRoleFields(ctx, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -717,13 +729,14 @@ func (s *Store) servingRoleFields(ctx context.Context) ([]vocabmigrate.Field, er
 
 // VerifyServingVocabularyV2 refuses when any role-bearing value in the store
 // falls outside the active V2 vocabulary (frozen protocol always passes).
-func (s *Store) VerifyServingVocabularyV2(ctx context.Context) error {
-	fields, err := s.servingRoleFields(ctx)
+func (s *Store) VerifyServingVocabularyV2(ctx context.Context, progress func()) error {
+	fields, err := s.servingRoleFields(ctx, progress)
 	if err != nil {
 		return err
 	}
 	return vocabmigrate.VerifyServingVocabulary(vocabmigrate.VocabularyV2, fields...)
 }
+
 
 // MigrateAndFenceServingVocabulary is the cutover transition: plan the
 // forward migration, persist the merged provenance report BEFORE any row
@@ -734,19 +747,34 @@ func (s *Store) VerifyServingVocabularyV2(ctx context.Context) error {
 // vocabulary. It is idempotent and safe to run at every serving transition
 // (post-replay boot, rematerialize flip, base publish); a second run only
 // picks up rows written since the last pass.
-func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context) (*MigrationReport, error) {
+//
+// replayed reports whether the tape replay applied events this boot. When
+// zero events were applied and a previously fenced report exists, the full
+// rescan is skipped: replay is the only writer that bypasses the write
+// guard, so a fenced store with no replayed events cannot contain non-V2
+// rows. progress, when non-nil, is ticked once per scanned row so callers
+// can expose liveness during long scans (the guest health gate reports it
+// to the host stall detector).
+func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed bool, progress func()) (*MigrationReport, error) {
 	prior, err := s.loadVocabMigrationReport()
 	if err != nil {
 		return nil, err
 	}
-	rep, writes, err := s.planVocabularyMigration(ctx)
+	if !replayed && prior != nil && prior.FencedAt != "" {
+		// Fast path: nothing replayed and the fence already verified this
+		// store. The write guard has refused non-V2 rows since the report
+		// existed, so the serving vocabulary is still V2.
+		s.vocabCutover.Store(true)
+		return prior, nil
+	}
+	rep, writes, err := s.planVocabularyMigration(ctx, progress)
 	if err != nil {
 		return nil, err
 	}
 	// OG planning seeds its reference map from the persisted report so a
 	// re-run after a mid-apply crash still resolves references to objects
 	// already migrated under their new IDs.
-	objs, edges, err := s.planOGMigration(ctx, rep, ogSeedFromReport(prior))
+	objs, edges, err := s.planOGMigration(ctx, rep, ogSeedFromReport(prior), progress)
 	if err != nil {
 		return nil, err
 	}
@@ -766,8 +794,14 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context) (*Migratio
 	if err := s.applyOGMigration(ctx, objs, edges); err != nil {
 		return nil, err
 	}
-	if err := s.VerifyServingVocabularyV2(ctx); err != nil {
+	if err := s.VerifyServingVocabularyV2(ctx, progress); err != nil {
 		return nil, fmt.Errorf("vocab serving fence: %w", err)
+	}
+	// The fence verified: stamp the report so a zero-replay boot can skip
+	// the rescan, and persist the stamp before opening the gate.
+	rep.FencedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if err := s.persistVocabMigrationReport(rep); err != nil {
+		return nil, err
 	}
 	s.vocabCutover.Store(true)
 	return rep, nil
