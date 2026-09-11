@@ -22,9 +22,11 @@ Sources used:
 
 Six findings decide the shape of this work.
 
-1. **`x-opencode-session` is now hard-required on OpenCode Go.** A Go inference request
-   without it returns `HTTP 400 {"type":"error","error":{"type":"MissingSessionID", ...}}`.
-   This is not advisory. The email warning was real and enforcement is live.
+1. **`x-opencode-session` is now hard-required on OpenCode Go and on Zen free-tier models.**
+   A request without it returns `HTTP 400 {"type":"error","error":{"type":"MissingSessionID", ...}}`
+   — on every Go model, and on every free Zen model ("OpenCode's free tier can only be used in
+   OpenCode"). Paid Zen models still answer without it. This is not advisory: the email warning
+   was real, enforcement is live, and the adapter must send the header unconditionally (§9.1).
 2. **The free tier is real, and it needs no API key at all.** `Authorization: Bearer public`
    plus a free model id reaches Zen anonymously. `muse-spark-1.3-contributor-free` returned
    `HTTP 200` on `/zen/v1/responses` with no credential.
@@ -39,9 +41,9 @@ Six findings decide the shape of this work.
    this machine comes from `omp`, which is what the panel skill invokes.
 6. **Choir has no place to put a per-conversation session id today.** `LLMRequest`
    (`internal/provider/provider.go:70-105`) carries no session field and `HandleInference`
-   (`internal/gateway/handlers.go:386-400`) has only `computerID`. This is the one genuine
-   design decision mission three must settle, and it is a red-surface decision because it
-   touches routing semantics.
+   (`internal/gateway/handlers.go:386-400`) has only `computerID`. Because Go and free Zen
+   cannot be called without one, this is a hard prerequisite rather than a refinement. The
+   additive integration path is specified in §10.
 
 ---
 
@@ -321,20 +323,10 @@ Templates to copy:
 or conversation identity. `HandleInference` (`internal/gateway/handlers.go:386-400`) has
 `computerID` but no session id, and the gateway has no inbound session header today.
 
-Options, in preference order:
-
-1. **Plumb an explicit session id.** Add a field to `LLMRequest` and `ProviderRequest`,
-   populated from the runtime's run identity (`provideriface.Execute` receives
-   `task *types.RunRecord`, `internal/provideriface/provider.go:38-49`) and, where the call
-   originates from an autoputer conversation, from that conversation's id. This gives real
-   per-conversation pinning, which is the vendor's intent and the cache-affinity win.
-2. **Derive a stable per-computer id** (for example `computer-<id>`) when no session id is
-   available. Meets the requirement, pins one route per computer, loses cross-run affinity.
-3. **Constant literal.** Cheapest, satisfies the letter of the requirement, and is the worst
-   of the three for cache behavior. Acceptable only as a temporary bridge.
-
-Never per-request random. Reject that option in the mission's design step so it does not get
-"fixed" later by someone optimizing for a green test.
+The candidate identities, the exact additive path, and the compatibility argument are
+specified in §10. One rule is fixed here because it is easy to get wrong later: the value must
+be stable across the consecutive calls of one conversation, and a per-request random value must
+be rejected outright — it would defeat sticky routing and read as abuse.
 
 ---
 
@@ -388,7 +380,7 @@ ids. Neither is needed for mission three.
 
 ---
 
-## 8. Observed evidence log (2026-09-10)
+## 8. Initial probe log (round 1; the full matrix is §9)
 
 ```
 GET  https://opencode.ai/zen/v1/models                 -> 200, 70 ids, no auth
@@ -419,7 +411,212 @@ grep -r "User-Agent" internal/provider
 
 ---
 
-## 9. Open questions for the owner
+## 9. Live conformance matrix (2026-09-10)
+
+Every probe below used `OPENCODE_API_KEY` from the repo's gitignored `.env`,
+`x-opencode-client: choir`, `User-Agent: choir-research/0.1`,
+`x-opencode-session: choir-research-probe-2026-09-10`, and a 4-token reply budget
+(`max_tokens: 4` for chat/messages, `max_output_tokens: 24-32` for responses). Thirty-three
+probes total. No key value was printed or written to any file.
+
+### 9.1 Session-header and credential requirement — the decisive rule
+
+| Surface | Free models | Paid models |
+| --- | --- | --- |
+| Zen `/zen/v1` | **header required**: without it `400 MissingSessionID` — "OpenCode's free tier can only be used in OpenCode" | header optional: paid chat completed with no session header |
+| Go `/zen/go/v1` | no free models are served | **header required**: without it `400 MissingSessionID` |
+
+| Credential used | Zen free | Zen paid | Go paid |
+| --- | --- | --- | --- |
+| `OPENCODE_API_KEY` (workspace key) | `200` | `200` | `200` |
+| `Bearer public` (anonymous) | `200` | `401 AuthError: Missing API key.` | `401 AuthError: Missing API key.` |
+
+Three consequences, all verified:
+
+1. **One secret covers both providers.** The same `.env` value authenticated all nine Go probes
+   and every Zen probe. models.dev lists `OPENCODE_API_KEY` as the env var for both provider ids,
+   which the probes confirm. No second key is needed.
+2. **The header is unconditional.** It is required on every Go request and every free Zen
+   request, so the adapter sends it always rather than branching per provider. Sending it on paid
+   Zen calls costs nothing.
+3. **The free-tier gate keys off header presence, not a client-name allowlist.** Requests
+   carrying `x-opencode-client: choir` were accepted, so a third-party client with a session id
+   is permitted — anything else would have broken the OMP and Hermes integrations.
+
+### 9.2 Model matrix
+
+Free models — the complete live Zen free set (8 ids):
+
+| Provider | Model | Route | Result | Latency | Observation |
+| --- | --- | --- | --- | --- | --- |
+| Zen | `ling-3.0-flash-fin-free` | chat | `200` | 1.0s | clean |
+| Zen | `nemotron-3-ultra-free` | chat | `200` | **96.7s** | unusable latency (§9.3) |
+| Zen | `nemotron-3.5-lightning-free` | chat | `200` | **102.8s** | unusable latency (§9.3) |
+| Zen | `muse-spark-1.3-contributor-free` | responses | `200` | 1.4s | clean, 1M context |
+| Zen | `muse-spark-1.2-contributor-free` | responses | `200` | 1.2s | clean |
+| Zen | `big-pickle` | chat | `429` | 0.2s | `FreeUsageLimitError`, 3 attempts |
+| Zen | `mimo-v2.5-free` | chat | `429` | 0.2s | `FreeUsageLimitError`, 3 attempts |
+| Zen | `deepseek-v4-flash-free` | chat | `400` | 0.2s | "Model is unavailable." 3 attempts |
+
+Paid models under $0.65 per 1M output, latest of each family:
+
+| Provider | Model | Route | Out $/1M | Result | Latency | Observation |
+| --- | --- | --- | --- | --- | --- | --- |
+| Zen | `deepseek-v4-flash` | chat | 0.28 | `200` | 3.5s | content empty, all 4 tokens went to reasoning |
+| Zen | `deepseek-v4-flash-vision-exp` | chat | 0.28 | `200` | 0.9s | vision variant |
+| Zen | `glm-5.3-flash` | chat | 0.50 | `200` | 1.1s | |
+| Zen | `gpt-5-nano` | responses | 0.40 | `200` | 1.1s | `output_tokens: 0` under a 32-token cap |
+| Go | `deepseek-v4.1-flash` | chat | 0.60 | `200` | 1.3s | released 2026-09-10; the newest DeepSeek flash |
+| Go | `deepseek-v4-flash` | chat | 0.60 | `200` | 1.7s | |
+| Go | `deepseek-v4-flash-vision-exp` | chat | 0.60 | `200` | 1.6s | |
+| Go | `glm-5.3-flash` | chat | 0.50 | `200` | 0.7s | fastest measured |
+| Go | `mimo-v2.5` | chat | 0.28 | `200` | 1.2s | billed 254 prompt tokens for 19 (see §9.3) |
+| Go | `hy3` | chat | 0.58 | `200` | 1.6s | |
+| Go | `qwen3.8-flash` | messages | 0.47 | `200` | 1.1s | Anthropic shape, `x-api-key` |
+| Go | `muse-spark-1.3-contributor` | responses | 0.20 | `200` | 1.0s | training consent already enabled on this workspace |
+| Go | `muse-spark-1.2-contributor` | responses | 0.20 | `200` | 1.0s | same |
+| Go | `deepseek-flash` | chat / responses | n/a | `200` / `200` | 1.2s / 1.4s | live-only id, absent from models.dev |
+| Go | `hy3-preview` | chat / responses | n/a | `400` / `500` | — | listed but not serving |
+
+### 9.3 Operational findings
+
+- **Free-tier latency is not interactive.** The two Nemotron free ids took 96.7s and 102.8s for
+  a 4-token reply while reporting only 5 reasoning tokens each — this is upstream queueing on the
+  free pool, not thinking time. Every other model answered in 0.7-5.2s.
+- **Two free ids are already rate-limited from this environment.** `big-pickle` and
+  `mimo-v2.5-free` returned `429 FreeUsageLimitError` on three attempts spread over roughly ten
+  minutes. Free access is per-IP/per-workspace limited and cannot be treated as dependable
+  capacity.
+- **One live free id does not serve at all.** `deepseek-v4-flash-free` returned
+  `400 "Model is unavailable."` on three attempts while its paid twin answered normally. It is
+  listed and unserved — a vendor-side condition, not a credential problem.
+- **Reasoning-first models return empty content under a small cap.** `zen/deepseek-v4-flash` with
+  `max_tokens: 4` spent all four on `reasoning_tokens` and returned `content: ""`.
+  `zen/gpt-5-nano` returned `output_tokens: 0`. `[INFERENCE]` Any Choir probe that asserts
+  non-empty content must budget for reasoning tokens, and the adapter's reasoning-effort mapping
+  decides whether `content` is ever populated.
+- **Metering differs by surface for identical text.** Zen billed `deepseek-v4-flash` 11 prompt
+  tokens where Go billed 37 for the same request; Go's `mimo-v2.5` billed 254. Cost accounting
+  cannot assume one tokenizer, and the model policy's max-token budgets should be generous enough
+  for the worst observed expansion.
+- **Both Muse Spark contributor ids served on Go**, which means the training-consent acceptance
+  for this workspace is already in place. The open question is therefore only whether Choir
+  traffic may use them, not whether it can.
+- **The Anthropic-shaped surface works with the same key** (`qwen3.8-flash` via `/messages` with
+  `x-api-key`), so a future phase can add it without new credentials.
+
+## 10. Conversation identity: where to integrate (prep, no code)
+
+Design research only; no code, config, or credential change. Two read-only passes mapped the
+runtime→gateway path and the provider-metadata precedents.
+
+### 10.1 What crosses the wire today
+
+| Hop | Struct | Identity present | Where it is dropped |
+| --- | --- | --- | --- |
+| Run admission | `types.RunRecord` (`internal/types/task.go:89-157`) | `RunID`, `AgentID`, `ChannelID`, `TrajectoryID`, `OwnerID`, `ComputerID`, open `Metadata map[string]any` | — |
+| Tool loop | `ToolLoopRequest` (`internal/provideriface/provider.go:70-94`) | none | built each iteration at `internal/toolregistry/toolloop.go:399-433` |
+| Runtime provider | `gatewayruntime` `llmRequest` (`internal/gatewayruntime/provider.go:359-376`) | none; reads only policy metadata keys | `provider.go:59-138` |
+| HTTP call | `POST /provider/v1/inference` | only `Content-Type`, `Authorization`, `Accept` (`provider.go:190-217`) | identity never marshalled |
+| Gateway handler | `ProviderRequest` (`internal/gateway/handlers.go:32-83`) | none; `computerID` exists only in the auth path and logs (`handlers.go:343-358`) | `handlers.go:386-400` |
+| Provider adapter | `provider.LLMRequest` (`internal/provider/provider.go:69-105`) | none | adapters set only auth/content headers |
+
+Nothing in `task.Metadata` reaches the gateway HTTP body today. The model-policy keys
+(`internal/modelpolicy/model_policy.go:18-27`: `llm_provider`, `llm_model`,
+`llm_reasoning_effort`, `llm_max_tokens`, `llm_policy_source`, `llm_policy_error`,
+`llm_policy_overlay_id`) are consumed runtime-side by `provideriface` and never forwarded.
+
+### 10.2 Candidate identities
+
+| Candidate | Durable? | Unique per conversation? | Verdict |
+| --- | --- | --- | --- |
+| `RunRecord.RunID` (`task.go:89-97`) | yes, persisted for the record's lifetime | per run; a rewarm starts a new run | **recommended**, with the rewarm caveat (§10.7) |
+| `TrajectoryID` (`task.go:103-115`) | yes | spans related runs and agents; may be absent | too broad — would merge distinct conversations |
+| `ChannelID` (`task.go:98-101`) | yes | shared coordination surface across runs/agents | wrong axis — coordination, not conversation |
+| `ComputerID` (`task.go:132-137`) | yes | one per computer | fallback only when no run id exists |
+| RLM `activationID` (`internal/yaegikernel/choir.go:44-62`) | no — in-memory worker scope | per activation | unusable as a cache key; not visible at the gateway |
+| Browser `SessionID` (`internal/types/browser.go:19-33`) | yes | unrelated substrate | out of scope |
+
+`RunID` is also the key of durable provider-facing run memory
+(`internal/store/run_memory.go:229-256`), which makes it the closest thing Choir has to a
+provider conversation key.
+
+### 10.3 Recommended additive path
+
+One provider-neutral optional field, copied explicitly at each hop. Name: `conversation_id`.
+
+| Step | File | Change |
+| --- | --- | --- |
+| 1 | `internal/provideriface/provider.go:70-94` | add `ConversationID string` to `ToolLoopRequest` |
+| 2 | `internal/toolregistry/toolloop.go:399-433` | populate it from the run identity available in the execution context (`internal/agentcore/runtime.go:3278-3307`) |
+| 3 | `internal/provider/provider.go:69-105` | add `ConversationID string \`json:"conversation_id,omitempty"\`` to `LLMRequest` |
+| 4 | `internal/provider/bridge.go:200-211,509-522` | carry the field through the tool-loop→provider bridge |
+| 5 | `internal/gatewayruntime/provider.go:59-138,359-376` | set it from `task.RunID` on the Execution path and from the tool-loop request on the tool path |
+| 6 | `internal/gateway/handlers.go:32-83,386-400` | add `conversation_id` to `ProviderRequest`, copy into `LLMRequest` |
+| 7 | `internal/gateway/client.go:63-84,177-203` | marshal it in both `Call` and `Stream` |
+| 8 | `internal/gateway/openai_compat.go:141-156` | copy it if the inbound compatibility route should carry it |
+| 9 | OpenCode adapter (new) | translate to `x-opencode-session`, set the client User-Agent |
+
+Provider-specific parts stay in the adapter: header name, header value normalization
+(trim, length cap, character safety — `encoding/json` will happily carry a newline), and the
+User-Agent constant (`choir-gateway/<version>`). Nothing provider-named goes into shared
+structs, and no routing decision reads the field.
+
+### 10.4 Compatibility
+
+- The gateway inference decoder is `json.NewDecoder(r.Body).Decode` with no
+  `DisallowUnknownFields` (`internal/gateway/handlers.go:364-368`), so **version skew is safe in
+  both directions**: a new autoputer sending `conversation_id` to an old gateway is ignored, and
+  an old autoputer sending nothing to a new gateway yields the empty string, which the adapter
+  treats as absent.
+- The strict decoders in the repo are on different surfaces — the internal run API envelope
+  (`internal/agentcore/api.go:534-538`) and the channel cast (`:735-743`) — and are untouched by
+  this field.
+- Existing tests observe the request through capture stubs rather than exact-body equality
+  (`internal/gateway/gateway_test.go:284-307`, `internal/gatewayruntime/provider_test.go:15-74`),
+  so an extra optional field does not break them. They should nonetheless be extended to assert
+  the value is copied, since a silently dropped id is exactly the failure this adapter cannot
+  detect at runtime: the call still succeeds, just without cache affinity.
+
+### 10.5 Constraints from doctrine
+
+- `docs/agent-product-doctrine.md:212-224` — keep provider call semantics uniform; prefer policy
+  and product state over role branches. A single provider-neutral field with adapter-local
+  translation is the conforming shape; a per-provider field on `LLMRequest` is not.
+- `docs/agent-product-doctrine.md:279-309` — provider secrets and catalogs are platform-owned,
+  while model selection policy is computer-owned. The OpenCode header/UA constants are
+  platform-owned adapter details and must not become policy.
+- `docs/choir-doctrine.md:782-787` — the harness owns provider choice and the gateway holds
+  credentials host-side. The conversation id is request metadata, not a credential, and must not
+  become a trust input.
+- `AGENTS.md:85-99` — provider/model routing is `orange` and gateway/provider calls are `red`;
+  threading a request field through the gateway is red-ceremony work regardless of how small the
+  diff is.
+- There is no existing per-provider header mechanism in `internal/provider`; every adapter sets
+  headers directly (`provider.go:463-471`, `:579-583`, `:762-765`, `:927-929`, `:1081-1083`,
+  `:1253-1255`, `:1488-1489`) and none sets a User-Agent. Introducing a generic header-modifier
+  map would be a new abstraction for one consumer — do not.
+
+### 10.6 What must not change
+
+- Routing and policy resolution: `modelcatalog.SupportedModels`, `resolveProvider`, and the
+  model-policy TOML semantics are untouched; the conversation id is opaque to all of them.
+- The credential boundary: the id never carries secrets, and the gateway continues to inject
+  credentials host-side.
+- Core vocabulary: no new event kinds, trajectory fields, or durable trace keys. If the id must
+  ever be *recorded* (rather than sent), that is a separate, reviewed decision.
+
+### 10.7 Open question: rewarm
+
+Actor rewarm seeds a new run from prior run memory (`internal/agentcore/run_memory.go:66-131`), so
+a conversation that survives a rewarm changes `RunID` and therefore loses cache affinity at that
+boundary. `[INFERENCE]` For OpenCode's prompt caching this is a single cache miss per rewarm,
+which is acceptable for a first cut. If it is not, the correct fix is a conversation identity
+owned by the run-memory lineage, not a wider id such as `TrajectoryID` — and that is a larger
+change than mission three should carry. The alternative fallback is `computer-<ComputerID>`,
+which is stable but pins every conversation of a computer to one route.
+
+## 11. Open questions for the owner
 
 1. **Training consent.** Are Muse Spark *Contributor* models permitted for any Choir traffic?
    If not, Phase B serves only the free Zen twin (also contributor-consented) or nothing.
@@ -436,3 +633,8 @@ grep -r "User-Agent" internal/provider
    `deepseek-v4-pro` on Go unless the workspace region includes `cn`
    (`handler.ts:158-166`). Verify this against the owner's workspace before depending on
    DeepSeek through Go rather than Zen.
+7. **Dependence on free tiers.** `big-pickle` and `mimo-v2.5-free` are already rate-limited from
+   this environment and `deepseek-v4-flash-free` is listed but not serving. Should any Choir
+   route depend on a free model, or are free models research- and panel-only?
+8. **Conversation scope.** Is one `conversation_id` per run enough (§10.7), or must it survive
+   actor rewarm, which starts a new run and would therefore change the id?
