@@ -66,7 +66,7 @@ start:
 
 now:
   status: blocked_incomplete
-  slice: "Draft only. Mission three starts when two things are true: (1) mission two reaches terminal deployed acceptance and gives up the working-entrypoint position; (2) the owner ratifies the settlement-authority transfer that retiring `record_assignment_result` requires, replacing the mission-one clause that a mailbox Complete never creates a terminal. The OpenCode provider setup is phase 1 inside this mission (owner decision, 2026-09-11), not a precondition outside it."
+  slice: "Draft only. One thing is left before this mission can start: mission two must reach terminal deployed acceptance and give up the working-entrypoint position. The owner ratified the settlement-authority transfer on 2026-09-11 (the reducer owns assignment fate; the mission-one clause that a mailbox Complete never creates a terminal is replaced), and the OpenCode provider setup is phase 1 inside this mission, not a precondition outside it."
   question: none
   reconciliation:
     observed_at: "2026-09-11T04:20:00Z"
@@ -81,7 +81,7 @@ now:
     - "internal/agentcore/run_acceptance.go:627-645,790-791,843 (tool-name-keyed acceptance evidence)"
     - "internal/agentcore/rlm_reduce.go:167-198; internal/agentcore/cosuper_assignment_fate.go:20 (reducer versus fate author)"
     - "internal/agentcore/tools_capsule.go:746-773; internal/yaegikernel/eval.go:301-317 (eval envelope and fence stripping)"
-  blocker_or_risk: "Blocked on two things, neither in this mission's authority: mission two settlement, and owner ratification of the settlement-authority transfer. Risks: retiring the four settlement tools before the reducer owns settlement leaves the desk with no way to finish an assignment; retiring `commit_transaction`/`record_self_development_verification` weakens run acceptance until those checkpoints stop reading tool names; `update_coagent` retirement must stay desk-scoped or Texture and the research tools break; a text-only roster member (hy3) cannot serve an image task; phase 1 touches gateway/provider code and Node B credentials, which is red-class work inside an orange mission and needs its own rollback (the stub adapters) and its own Landing Loop."
+  blocker_or_risk: "Blocked on one thing, not in this mission's authority: mission two settlement. Risks: retiring the four settlement tools before the reducer owns settlement leaves the desk with no way to finish an assignment; retiring `commit_transaction`/`record_self_development_verification` weakens run acceptance until those checkpoints stop reading tool names; `update_coagent` retirement must stay desk-scoped or Texture and the research tools break; a text-only roster member (hy3) cannot serve an image task; phase 1 touches gateway/provider code and Node B credentials, which is red-class work inside an orange mission and needs its own rollback (the stub adapters) and its own Landing Loop; the owner's failure rule (fix the shared prompt for everyone) risks growing the prompt toward the weakest model, so every revision records its digest and size."
   next_action: "Phase 1 first: wire OpenCode Go and Zen (session identity on the wire, product User-Agent, fail-closed empty identity, three request shapes, keys on Node B), prove one live call per shape, and record the receipt. The problem record for phase 1 already exists in `docs/reports/choir-opencode-provider-research-2026-09-10.md`. Then the code-free Define: record the three defects, freeze the nine-operation mapping table and the prompt/REPL manifest, and state the falsifiers. No repair commit precedes that record."
 
 finish:
@@ -115,7 +115,7 @@ finish:
     - action: "T2-freeze: publish the operation-equivalence table for all nine retirement names — old JSON name, in-cell successor or intent kind, receipt class, canonical identity fields, the pre-declared exclusion list for nondeterministic fields, and the fixture that will prove it. Inventory every citer of each name and mark desk scope, naming the Texture and research paths explicitly."
       proves: "Scope is evidence-bounded and no retired name is left ambiguous or silently desk-leaking."
       evidence_class: static_analysis
-    - action: "T3-settlement: make the staged Complete intent a settlement author by wiring it into the existing assignment-fate saga so the reducer-owned terminal produces the same durable fate, idempotency and conflict behaviour that `record_assignment_result` produces today. Record the owner ratification that supersedes the mission-one clause forbidding mailbox Complete from creating a terminal. Two completion verbs must not survive."
+    - action: "T3-settlement: make the staged Complete intent a settlement author by wiring it into the existing assignment-fate saga so the reducer-owned terminal produces the same durable fate, idempotency and conflict behaviour that `record_assignment_result` produces today. Owner ratified this transfer on 2026-09-11, replacing the mission-one clause that a mailbox Complete never creates a terminal. Two completion verbs must not survive."
       proves: "Settlement has exactly one author under the new carrier, so the fate tool can be deleted rather than shadowed."
       evidence_class: local_test
     - action: "T3-acceptance: rebuild the `capsule_effect_frozen` and `capsule_verification_recorded` checkpoints so they derive from canonical events and in-cell receipts rather than from tool results named `commit_transaction` and `record_self_development_verification`, and make a run that lacks the evidence fail loudly instead of reporting `passed` with fewer checkpoints. Prove the negative: a run without the in-cell equivalent must not pass."
@@ -136,11 +136,12 @@ finish:
     - action: "T4-delete: delete the nine retired JSON paths and their reducer aliases, including the admission-grammar special cases that exist only for them. Unknown JSON tool names fail closed."
       proves: "No dual path survives the cutover."
       evidence_class: static_analysis
-    - action: "T5-roster: run one frozen desk task (inspect, edit, execute a test, complete with the exact receipt reference) on the verified diverse roster — at least five models, at least three vendors, all three wire shapes, including free and cheap members — under the frozen prompt digest, with no per-model fork, no repair, and no extra hints or retries. Record per-model pass or fail, tokens, latency and failure mode. A failing model is marked and either excluded with a recorded reason or fixed for every model; a per-model accommodation is a mission failure, not a fix."
+    - action: "T5-roster: run one frozen desk task (inspect, edit, run a test, complete with the exact receipt reference) under one prompt. Expected to pass, per the owner on 2026-09-11: `deepseek-v4.1-flash`, `muse-spark-1.3-contributor-free`, `glm-5.3-flash`, and gpt-5.6-luna (that last one already runs on the existing ChatGPT-authenticated path, not the OpenCode Zen or Go catalogue, so phase 1 does not provision it and the roster run uses that existing surface). Every other roster member is an experiment: run it, record pass or fail, tokens, latency and failure mode, and do not let it block the mission. This is experimental work whose success condition is learning what the yaegi tool API and system prompt must say for these models to use the desk."
+    - action: "T5-prompt-fix: when a model fails, fix the shared prompt for every model - never a per-model branch, hint, retry ladder or schema fork. Record the prompt digest and size for each revision so growth is visible, and re-run the failing models against the new prompt. The same affordance failing across models is a prompt defect and is fixed in the shared body."
       proves: "One prompt genuinely serves a diverse roster, which is the owner's completion goal, without reintroducing the overfit that produced the fence workaround."
       evidence_class: deployed_proof
     - action: "T5-cache-exit: confirm the later cache mission is unblocked - the session identity travels on the wire outside any cache-keyed payload, the static affordance body carries no timestamps, prompt assembly order is unchanged, and the eval schema version is recorded. No optimization, no hit-rate target and no per-model cache key is claimed here."
-    - action: "T5b-tools-actuator: once RLM is proven at the bar the owner sets, delete the `actuator=tools` registry branch and the four capsule operations it carries, with the tool-profile tests updated to prove the branch is gone. Until that bar is met the branch may stay as an unused fallback, but no mission proof may rely on it and no rollback path may target it."
+    - action: "T5b-tools-actuator: keep the `actuator=tools` branch alive but unused through this mission, and prove the RLM path never reaches it. Deletion is deferred until the management and research desks also cross to RLM (owner decision, 2026-09-11); the deferred deletion is residue R8, closed when the last desk crosses. No mission proof may depend on the branch and no rollback path may target it."
       proves: "The next mission inherits a stable prefix and a stable identity rather than a second re-plumbing job."
       evidence_class: static_analysis
     - action: "T6-texture-design (non-gating): publish the Texture packet and reducer design that translates documents, patches, diffs, source graphs, controls and dispositions into the same in-cell discipline, stated as constraints against the canonical writer's invariants (single-writer, stale-base comparison, atomic revision-graph identity, retry-preserved pending mutations, versioned compare-and-swap, fresh-but-not-replay wakes, per-document locking, atomic researcher opening) and citing them from their own authority. No Texture runtime code lands in this mission."
@@ -149,7 +150,7 @@ finish:
     - action: "T6-landing: run the Landing Loop on behaviors changed here — commit, push, monitor CI, monitor the staging deploy, verify the deployed commit identity, and run the deployed acceptance proof with effects OFF, then record the receipts. Settle this Definition and move the three registries atomically, closing residue R7."
       proves: "The cutover is proven on the deployed product path, and the mission record is closed with artifacts rather than narrative."
       evidence_class: deployed_proof
-  rollback: "Revert the mission commits and redeploy; the retired JSON paths return with the revert. Phase 1 provider work rolls back by restoring the stub adapters and removing the installed keys. The `actuator=tools` branch is deliberately not a rollback target: it is deleted on the owner's bar and is not kept as a product fallback (owner decision, 2026-09-11). Product restore stays a separate forward transaction on the computer's event chain, never a fix for a failed deploy."
+  rollback: "Revert the mission commits and redeploy; the retired JSON paths return with the revert. Phase 1 provider work rolls back by restoring the stub adapters and removing the installed keys. The `actuator=tools` branch is deliberately not a rollback target and is not deleted in this mission: it is held until the other desks cross (residue R8). Product restore stays a separate forward transaction on the computer's event chain, never a fix for a failed deploy."
   landing:
     required: true
     environment: "staging https://choir.news with effects OFF"
@@ -159,13 +160,13 @@ finish:
       - "deployed acceptance command and result, with accepted run/acceptance ids"
       - "the frozen roster conformance evidence artifact"
   not_done_when:
-    - "Mission two has not reached terminal deployed acceptance, or this Definition has not been chartered and owner-ratified for the settlement-authority transfer."
+    - "Mission two has not reached terminal deployed acceptance."
     - "The provider-preparation sequence has not landed with a terminal receipt."
     - "Any retired name still exists on the live RLM path, or any retirement lacks its replay proof."
     - "Any run acceptance checkpoint still keys on a tool name, or a run can report `passed` with fewer checkpoints than before."
     - "Any model identifier or per-model branch appears anywhere in prompt assembly or REPL initialization."
     - "Any code path strips, repairs or tolerates malformed model output to make a cell work."
-    - "Only one model, or one vendor, has been exercised on the frozen prompt."
+    - "None of the owner's expected-pass models (deepseek-v4.1-flash, muse-spark-1.3-contributor-free, glm-5.3-flash, gpt-5.6-luna) has completed the desk task on the frozen prompt."
 
 boundaries:
   mutation_class: orange
@@ -216,7 +217,7 @@ measures:
   - "Count of code-level output repairs in the carrier path (target zero, measured by a guard rather than by prose)."
   - "Retired operations with a green replay proof (target nine of nine)."
   - "Acceptance checkpoints per run before and after the acceptance rebuild (must not decrease silently)."
-  - "Prompt digest equality across roster members for a fixed desk."
+  - "Prompt digest equality across roster members for a fixed desk, with prompt size recorded at each revision."
 
 receipts:
   - id: engineering-carrier-owner-decisions-2026-09-11
@@ -224,7 +225,10 @@ receipts:
     commit_or_artifact: "owner decisions recorded 2026-09-11 in conversation; folded into this Definition and the consensus record"
     proof_refs:
       - "owner: sweep the OpenCode configuration into this mission as its first phase"
-      - "owner: get rid of the actuator=tools path; no rollback logic is planned to be used, held until RLM is fully proven"
+      - "owner: get rid of the actuator=tools path; no rollback logic is planned to be used; the bar is the other desks crossing, so deletion is deferred to residue R8"
+      - "owner: the reducer, from inside the cell, marks an assignment finished"
+      - "owner: the roster is experimental with deepseek-v4.1-flash, muse-spark-1.3-contributor-free, glm-5.3-flash and gpt-5.6-luna expected to pass; other models are worth testing; success condition is the experiment itself"
+      - "owner: when a model fails, fix the shared prompt for every model"
     rollback_ref: "none; a decision record"
     disposition: "recorded: phase 1 is provider setup; actuator=tools is deletion-slated, not preserved"
     problem_ref: "docs/reports/choir-opencode-provider-research-2026-09-10.md (provider problem record); docs/mission-residues.md R7 (retirement inventory)"
@@ -296,7 +300,7 @@ Two reasons, and we now handle both differently.
 | 3 | Freeze the mapping: old name to new function, receipt class, and what counts as the same answer | The table is published and every old name is accounted for |
 | 4 | Build what is missing: reducer owns settlement, acceptance stops reading tool names, two parity gaps closed, new in-cell functions for freeze, verify, inspect | Each is covered by a test, including the case where evidence is missing |
 | 5 | For every old operation: same input gives the same receipt and no extra side effects, then delete it | All nine have a green replay record and the registry holds one tool |
-| 6 | One frozen prompt, one desk task, a diverse set of models | The chosen roster passes with no per-model changes |
+| 6 | One frozen prompt, one desk task, a diverse set of models (experiment) | deepseek-v4.1-flash, muse-spark-1.3-contributor-free, glm-5.3-flash and gpt-5.6-luna complete the task under one prompt; the others are recorded |
 | 7 | Texture design document (no code); then the normal deploy and proof | Design published; staging runs the new path with effects off |
 
 Phase 1 can start as soon as this mission is chartered. It is separate from the prompt work, and
@@ -304,18 +308,26 @@ its problem record already exists in `docs/reports/choir-opencode-provider-resea
 
 ## Models in the roster
 
-Checked 2026-09-10; the list is in `docs/reports/choir-opencode-provider-research-2026-09-10.md`
-section 11. Free Zen ids: `muse-spark-1.3-contributor-free`, `ling-3.0-flash-fin-free`, and the two
-Nemotron ids (recorded but not gating, because their pool waits about 100 seconds). Cheap Go ids:
-`deepseek-v4.1-flash`, `glm-5.3-flash`, `qwen3.8-flash`, `mimo-v2.5`, `hy3`,
-`muse-spark-1.3-contributor`. Every one of them can read images except `hy3`.
+The roster is an experiment, not a fixed list. The owner expects these four to pass on one prompt:
+`deepseek-v4.1-flash`, `muse-spark-1.3-contributor-free`, `glm-5.3-flash`, and gpt-5.6-luna.
+gpt-5.6-luna is already set up: it runs on the existing ChatGPT-authenticated path, not the
+OpenCode Zen or Go catalogue, so phase 1 does not need to provision it.
+
+Everything else is worth testing and gets recorded: `ling-3.0-flash-fin-free`, the two Nemotron ids,
+`qwen3.8-flash`, `mimo-v2.5`, `hy3`, `muse-spark-1.3-contributor`. Every one can read images except
+`hy3`. Checked 2026-09-10 and listed in `docs/reports/choir-opencode-provider-research-2026-09-10.md`
+section 11.
 
 ## Owner decisions
 
 Recorded 2026-09-11:
 
 - OpenCode setup is phase 1 of this mission, not a separate mission.
-- `actuator=tools` gets deleted. It is not kept as a rollback. The deletion waits until RLM is
-  proven, and no mission proof may depend on that branch.
-- Settlement authority: waiting on your answer.
-- Roster pass rule: waiting on your answer.
+- `actuator=tools` gets deleted. It is not kept as a rollback. The wait ends when the management
+  and research desks also cross, so the branch sits unused through this mission and the deletion is
+  residue R8.
+- The reducer, from inside the cell, marks an assignment finished. This replaces the mission-one
+  rule that a mailbox Complete cannot finish one.
+- The roster is experimental. Success is learning what the tool API and system prompt must say,
+  with those four models expected to work.
+- When a model fails, the shared prompt gets fixed for everyone. Never a per-model branch.

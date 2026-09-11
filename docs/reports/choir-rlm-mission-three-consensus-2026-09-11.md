@@ -181,3 +181,18 @@ Two adjudications above are overridden by the owner and the Definition now follo
 - **the `actuator=tools` rollback question is closed.** That branch is deleted, not preserved. No
   rollback logic will be used. The deletion still waits for a proven RLM, and the bar for "proven"
   is the owner's call.
+
+The four remaining questions were answered the same day:
+
+- **Settlement authority** goes to the reducer: the in-cell Complete writes the assignment fate,
+  replacing the mission-one clause.
+- **The bar for deleting `actuator=tools`** is the other desks crossing, so the branch is held
+  unused through mission three and the deletion is residue R8.
+- **The roster is an experiment.** The owner expects `deepseek-v4.1-flash`,
+  `muse-spark-1.3-contributor-free`, `glm-5.3-flash` and gpt-5.6-luna to pass on one prompt, and
+  wants the rest tested and recorded. Note that gpt-5.6-luna already runs on the existing
+  ChatGPT-authenticated path, not the OpenCode Zen or Go catalogue, so phase 1 does not provision it.
+- **A failing model is a prompt problem**: fix the shared prompt for every model, never a per-model
+  branch. This accepts claude's bloat risk and answers it with a recorded digest and size per
+  revision.
+
