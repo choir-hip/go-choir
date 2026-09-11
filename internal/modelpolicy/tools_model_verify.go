@@ -90,9 +90,11 @@ func (m *Manager) verifyModelCapability(ctx context.Context, input verifyModelCa
 		Provider:        selection.Provider,
 		Model:           selection.Model,
 		ReasoningEffort: selection.ReasoningEffort,
-		System:          "You are a Choir verifier. Answer only the verification prompt. Do not mutate state.",
-		Messages:        messages,
-		MaxTokens:       maxTokens,
+		ConversationID:  "model-verify:" + selection.Model,
+
+		System:    "You are a Choir verifier. Answer only the verification prompt. Do not mutate state.",
+		Messages:  messages,
+		MaxTokens: maxTokens,
 	})
 	if err != nil {
 		return "", err

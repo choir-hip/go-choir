@@ -210,6 +210,9 @@ func TestRuntimeWithToolRegistryUsesToolLoop(t *testing.T) {
 	if fetched.Result != "Final answer from tool loop" {
 		t.Errorf("result: got %q, want Final answer from tool loop", fetched.Result)
 	}
+	if got := provider.lastReq.ConversationID; got != rec.RunID {
+		t.Errorf("conversation_id: got %q, want %q", got, rec.RunID)
+	}
 
 	// Token usage should be stored in metadata.
 	if fetched.Metadata == nil {

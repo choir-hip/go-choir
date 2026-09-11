@@ -145,6 +145,24 @@ func TestRunToolLoopEndTurn(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopPopulatesConversationIDFromOption(t *testing.T) {
+	provider := newMockToolLoopProvider(&provideriface.ToolLoopResponse{
+		StopReason: "end_turn",
+		Text:       "done",
+		Model:      "test-model",
+	})
+	_, _, err := RunToolLoop(context.Background(), provider, nil,
+		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+		"You are helpful.", 0, func(types.EventKind, string, json.RawMessage) {}, nil,
+		WithToolLoopConversationID("run-123"))
+	if err != nil {
+		t.Fatalf("RunToolLoop: %v", err)
+	}
+	if got := provider.lastReq.ConversationID; got != "run-123" {
+		t.Fatalf("ConversationID = %q, want run-123", got)
+	}
+}
+
 func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{

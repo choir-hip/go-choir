@@ -3386,6 +3386,8 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	toolLoopOptions := []toolregistry.ToolLoopOption{
 		toolregistry.WithToolLoopMemoryHooks(memory.hooks()),
 		toolregistry.WithToolLoopLLMConfig(llmConfig),
+		toolregistry.WithToolLoopConversationID(rec.RunID),
+
 		toolregistry.WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
 	if assignedCoSuperOverlay {

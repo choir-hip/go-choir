@@ -43,10 +43,12 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 	provider.SetRuntimeLLMConfig("fireworks", "accounts/fireworks/models/deepseek-v4-flash", "none")
 
 	resp, err := provider.CallWithTools(context.Background(), provideriface.ToolLoopRequest{
-		System:     "system",
-		Messages:   []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hi"}]}`)},
-		ToolChoice: "required",
-		MaxTokens:  2048,
+		System:         "system",
+		Messages:       []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hi"}]}`)},
+		ToolChoice:     "required",
+		ConversationID: "run-gateway-runtime",
+
+		MaxTokens: 2048,
 		ToolDefinitions: []provideriface.ToolDefinition{{
 			Name:        "lookup",
 			Description: "look something up",
@@ -62,6 +64,10 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 	if gotReq.Provider != "fireworks" || gotReq.Model != "accounts/fireworks/models/deepseek-v4-flash" || gotReq.ReasoningEffort != "none" {
 		t.Fatalf("gateway request policy = provider %q model %q reasoning %q", gotReq.Provider, gotReq.Model, gotReq.ReasoningEffort)
 	}
+	if gotReq.ConversationID != "run-gateway-runtime" {
+		t.Fatalf("conversation_id = %q, want run-gateway-runtime", gotReq.ConversationID)
+	}
+
 	if gotReq.Stream {
 		t.Fatal("CallWithTools should use non-streaming gateway request")
 	}

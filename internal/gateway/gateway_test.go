@@ -405,6 +405,34 @@ func TestHandleInference_AuthSuccess(t *testing.T) {
 	}
 }
 
+func TestHandleInferencePassesConversationIDToProvider(t *testing.T) {
+	h, reg, mp := setupHandler(t)
+	credential, err := reg.IssueCredential("autoputer-conversation")
+	if err != nil {
+		t.Fatalf("IssueCredential: %v", err)
+	}
+	body, err := json.Marshal(ProviderRequest{
+		ConversationID: "run-gateway-123",
+		Messages:       []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "hello"}}}},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
+	req.Header.Set("Authorization", "Bearer "+credential.RawToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.HandleInference(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+	if mp.lastReq == nil || mp.lastReq.ConversationID != "run-gateway-123" {
+		t.Fatalf("provider conversation_id = %#v, want run-gateway-123", mp.lastReq)
+	}
+}
+
 func TestHandleInference_DeniesExternalPeerWithValidToken(t *testing.T) {
 	h, reg, _ := setupHandler(t)
 
@@ -2680,6 +2708,20 @@ func TestProviderRouting_SupportedModelsTable(t *testing.T) {
 			response: &provider.LLMResponse{
 				Text: "xm", Model: "mimo-v2.5", StopReason: "end_turn",
 				ProviderName: "xiaomi", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
+			},
+		},
+		"opencode-go": {
+			name: "opencode-go", real: true,
+			response: &provider.LLMResponse{
+				Text: "oc-go", Model: "deepseek-v4.1-flash", StopReason: "end_turn",
+				ProviderName: "opencode-go", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
+			},
+		},
+		"opencode-zen": {
+			name: "opencode-zen", real: true,
+			response: &provider.LLMResponse{
+				Text: "oc-zen", Model: "muse-spark-1.3-contributor-free", StopReason: "end_turn",
+				ProviderName: "opencode-zen", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
 			},
 		},
 	}

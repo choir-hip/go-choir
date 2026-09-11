@@ -97,15 +97,17 @@ type toolLoopOptions struct {
 	memoryHooks                   ToolLoopMemoryHooks
 	llmConfig                     provideriface.LLMSelection
 	providerPreconditionFallbacks []provideriface.LLMSelection
-	initialToolChoice             string
-	terminalTools                 map[string]bool
-	passivatingTools              map[string]bool
-	requiredWriteTools            map[string]bool
-	completionGuard               ToolLoopCompletionGuardFunc
-	parkWaiter                    ToolLoopParkWaiterFunc
-	detachedTerminalTool          DetachedTerminalToolPredicate
-	detachedTerminalToolTimeout   time.Duration
-	budget                        ToolLoopBudget
+	conversationID                string
+
+	initialToolChoice           string
+	terminalTools               map[string]bool
+	passivatingTools            map[string]bool
+	requiredWriteTools          map[string]bool
+	completionGuard             ToolLoopCompletionGuardFunc
+	parkWaiter                  ToolLoopParkWaiterFunc
+	detachedTerminalTool        DetachedTerminalToolPredicate
+	detachedTerminalToolTimeout time.Duration
+	budget                      ToolLoopBudget
 }
 
 type pendingRequiredTool struct {
@@ -142,6 +144,14 @@ func WithToolLoopMemoryHooks(hooks ToolLoopMemoryHooks) ToolLoopOption {
 func WithToolLoopLLMConfig(config provideriface.LLMSelection) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.llmConfig = config
+	}
+}
+
+// WithToolLoopConversationID carries the durable run identity into every
+// provider request emitted by the loop.
+func WithToolLoopConversationID(conversationID string) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.conversationID = strings.TrimSpace(conversationID)
 	}
 }
 
@@ -415,6 +425,8 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			Provider:        activeLLMConfig.Provider,
 			Model:           activeLLMConfig.Model,
 			ReasoningEffort: activeLLMConfig.ReasoningEffort,
+			ConversationID:  options.conversationID,
+
 			System:          systemPrompt,
 			Messages:        messages,
 			ToolDefinitions: toolDefs,
