@@ -88,6 +88,39 @@ guest crash-loops instead of refusing once.
 3. D3 needs a streaming download without whole-request timeout (per-read
    deadline or none), independent of D1.
 
+## Probe measurements (2026-09-11, host-side on quarantined disk copy)
+
+`go test` probe (`internal/store`, commit `2366d7b8`) ran each phase of
+`MigrateAndFenceServingVocabulary` against a copy of the quarantined
+14 GiB store on node-b:
+
+| phase | time |
+| --- | --- |
+| store open | 6s |
+| load report | 0s (report exists, `{"provenance":{},"counts":{}}` — store already V2) |
+| plan SQL | 0s (0 writes, 0 provenance) |
+| plan OG | **4m21s** (10378 objects + 8393 edges retained) |
+| persist report | 0s |
+| apply SQL / apply OG | 0s |
+| verify fence | **FAILS**: `vocabfence: og:choir.lifecycle_command:body.stored_result.revision.author_label="appagent" not in v2 vocabulary` |
+
+Conclusions:
+
+- Slow, not deadlock: the guest was killed mid-scan at 5m01s; plan-og alone
+  is 4m21s and the fence adds a second full `og_objects` scan, so the total
+  exceeds the window on every boot even with zero migration work.
+- **D4 — fence false positive.** `author_label` sits in `ogRoleLeafKeys`
+  (vocab_migrate_og.go:623) but is a human-readable author label
+  (`types/texture.go:113`: username or "appagent"), not desk vocabulary.
+  `choir.lifecycle_command` objects embed texture revisions carrying it.
+  Even if the scan finished inside the window, the guest would
+  `log.Fatalf` on this refusal — the computer is unbootable two ways.
+  The inventory missed this carrier class; the fence is behaving as
+  specified against an incomplete leaf-key classification.
+- The epoch-896 deployed proof ran `cb571960`, before the OG fence scan
+  existed (`1e96e0b2`/`2366d7b8`); this path was never exercised on a real
+  store until this boot.
+
 ## Rollback refs
 
 - Retained disk: `data.img.quarantine-1-40e7813a346e3d7a` (node-b,
