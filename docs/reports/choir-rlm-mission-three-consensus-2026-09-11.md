@@ -196,3 +196,7 @@ The four remaining questions were answered the same day:
   branch. This accepts claude's bloat risk and answers it with a recorded digest and size per
   revision.
 
+Later the same day the owner added the Muse Spark quota rule: run the free Zen id while the free
+quota lasts, then continue the same testing on the paid twin `muse-spark-1.3-contributor`. A
+free-usage limit is a quota event recorded as such, never a model failure.
+

@@ -136,7 +136,7 @@ finish:
     - action: "T4-delete: delete the nine retired JSON paths and their reducer aliases, including the admission-grammar special cases that exist only for them. Unknown JSON tool names fail closed."
       proves: "No dual path survives the cutover."
       evidence_class: static_analysis
-    - action: "T5-roster: run one frozen desk task (inspect, edit, run a test, complete with the exact receipt reference) under one prompt. Expected to pass, per the owner on 2026-09-11: `deepseek-v4.1-flash`, `muse-spark-1.3-contributor-free`, `glm-5.3-flash`, and gpt-5.6-luna (that last one already runs on the existing ChatGPT-authenticated path, not the OpenCode Zen or Go catalogue, so phase 1 does not provision it and the roster run uses that existing surface). Every other roster member is an experiment: run it, record pass or fail, tokens, latency and failure mode, and do not let it block the mission. This is experimental work whose success condition is learning what the yaegi tool API and system prompt must say for these models to use the desk."
+    - action: "T5-roster: run one frozen desk task (inspect, edit, run a test, complete with the exact receipt reference) under one prompt. Expected to pass, per the owner on 2026-09-11: `deepseek-v4.1-flash`, `muse-spark-1.3-contributor-free`, `glm-5.3-flash`, and gpt-5.6-luna (that last one already runs on the existing ChatGPT-authenticated path, not the OpenCode Zen or Go catalogue, so phase 1 does not provision it and the roster run uses that existing surface). Muse Spark runs on the free Zen id while its free quota lasts, then continues the same testing on the paid twin `muse-spark-1.3-contributor` (Go, responses); a free-usage limit is a quota event, not a model failure, and every run record names the id that served it. Every other roster member is an experiment: run it, record pass or fail, tokens, latency and failure mode, and do not let it block the mission. This is experimental work whose success condition is learning what the yaegi tool API and system prompt must say for these models to use the desk."
     - action: "T5-prompt-fix: when a model fails, fix the shared prompt for every model - never a per-model branch, hint, retry ladder or schema fork. Record the prompt digest and size for each revision so growth is visible, and re-run the failing models against the new prompt. The same affordance failing across models is a prompt defect and is fixed in the shared body."
       proves: "One prompt genuinely serves a diverse roster, which is the owner's completion goal, without reintroducing the overfit that produced the fence workaround."
       evidence_class: deployed_proof
@@ -166,7 +166,7 @@ finish:
     - "Any run acceptance checkpoint still keys on a tool name, or a run can report `passed` with fewer checkpoints than before."
     - "Any model identifier or per-model branch appears anywhere in prompt assembly or REPL initialization."
     - "Any code path strips, repairs or tolerates malformed model output to make a cell work."
-    - "None of the owner's expected-pass models (deepseek-v4.1-flash, muse-spark-1.3-contributor-free, glm-5.3-flash, gpt-5.6-luna) has completed the desk task on the frozen prompt."
+    - "None of the owner's expected-pass models (deepseek-v4.1-flash, muse-spark-1.3 on either the free or the paid id, glm-5.3-flash, gpt-5.6-luna) has completed the desk task on the frozen prompt."
 
 boundaries:
   mutation_class: orange
@@ -229,6 +229,7 @@ receipts:
       - "owner: the reducer, from inside the cell, marks an assignment finished"
       - "owner: the roster is experimental with deepseek-v4.1-flash, muse-spark-1.3-contributor-free, glm-5.3-flash and gpt-5.6-luna expected to pass; other models are worth testing; success condition is the experiment itself"
       - "owner: when a model fails, fix the shared prompt for every model"
+      - "owner: Muse Spark runs on the free Zen id while the free quota lasts, then continues the same testing on the paid `muse-spark-1.3-contributor`"
     rollback_ref: "none; a decision record"
     disposition: "recorded: phase 1 is provider setup; actuator=tools is deletion-slated, not preserved"
     problem_ref: "docs/reports/choir-opencode-provider-research-2026-09-10.md (provider problem record); docs/mission-residues.md R7 (retirement inventory)"
@@ -313,9 +314,12 @@ The roster is an experiment, not a fixed list. The owner expects these four to p
 gpt-5.6-luna is already set up: it runs on the existing ChatGPT-authenticated path, not the
 OpenCode Zen or Go catalogue, so phase 1 does not need to provision it.
 
+Muse Spark starts on the free Zen id and moves to the paid twin `muse-spark-1.3-contributor` when
+the free quota runs out. That is a quota switch, not a model failure, and each run record says which
+id served it.
+
 Everything else is worth testing and gets recorded: `ling-3.0-flash-fin-free`, the two Nemotron ids,
-`qwen3.8-flash`, `mimo-v2.5`, `hy3`, `muse-spark-1.3-contributor`. Every one can read images except
-`hy3`. Checked 2026-09-10 and listed in `docs/reports/choir-opencode-provider-research-2026-09-10.md`
+`qwen3.8-flash`, `mimo-v2.5`, `hy3`. Every one can read images except `hy3`. Checked 2026-09-10 and listed in `docs/reports/choir-opencode-provider-research-2026-09-10.md`
 section 11.
 
 ## Owner decisions

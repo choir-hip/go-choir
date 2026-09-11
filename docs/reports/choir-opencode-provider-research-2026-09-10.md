@@ -677,6 +677,14 @@ Free chat coverage is Ling plus the two Nemotron ids, and both Nemotron ids run 
 seconds on the free pool. For interactive free testing the practical set is therefore Meta
 (Responses) and Ling (chat).
 
+**Free-tier quota continuation (owner, 2026-09-11).** Free ids are finite. When
+`muse-spark-1.3-contributor-free` hits its free-usage limit, that is a quota event, not a model
+result: expire the free id and continue the same test on the paid twin
+`muse-spark-1.3-contributor` (Go, responses, $0.10/$0.20 per 1M, 1M context, image input
+verified). One logical roster slot, two ids, and every run record names the id that served it, so
+a quota switch is never mistaken for a model failure. The same reading applies to any other free
+id that starts returning `429`: keep the family, move the route.
+
 ### Tier C — cheap paid, under $0.65 per 1M output
 
 | Family | Provider | Id | Route | Context | Image | In/Out $ | Go cap | Measured |
