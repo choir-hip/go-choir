@@ -3,6 +3,17 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
+## Working Definition — RLM Engineering Carrier
+
+[`definitions/choir-rlm-engineering-carrier-2026-09-11.md`](definitions/choir-rlm-engineering-carrier-2026-09-11.md)
+is the sole working entrypoint, chartered 2026-09-11 by owner statement. It moves the engineering
+desk fully onto the in-cell carrier: `capsule_go_eval` becomes the desk's only JSON tool, the five
+overlay JSON tool names are deleted behind per-operation replay proofs, the reducer authors the
+assignment fate, run acceptance stops keying on tool names, the OpenCode Go and Zen providers are
+wired as phase 1, and one prompt serves the expected roster with no output repair. Current slice:
+P0-define, a code-free freeze artifact. Executable with
+`/goal docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md`.
+
 ## Completed Definition — Private Programmable Go Actor Kernel
 
 [`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
@@ -246,9 +257,10 @@ Supporting maintenance Definitions retain their evidence and status:
 superseded, or historical as stated by their source Definitions, not entrypoints.
 
 RLM restore-zero completed 2026-09-09 and is historical evidence, not an
-entrypoint. RLM versioned rename completed 2026-09-11 (deployed commit `e3396329`).
-The next queued mission is the RLM Engineering Carrier (`definitions/choir-rlm-engineering-carrier-2026-09-11.md`,
-drafted).
+entrypoint. RLM versioned rename completed 2026-09-11 (deployed commit `e3396329`) and is
+non-entrypoint evidence. The RLM Engineering Carrier
+(`definitions/choir-rlm-engineering-carrier-2026-09-11.md`) is chartered and holds the sole working
+entrypoint.
 ## Unowned External Work
 
 No Definition owns runtime dissolution, broader Wire work, external capsules,
