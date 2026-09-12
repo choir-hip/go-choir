@@ -148,6 +148,11 @@ type ClassifyResult struct {
 
 // Classify groups file changes by ledger kind. Ephemeral paths are ignored.
 // Unknown paths are returned separately for commit-time rejection.
+//
+// FileChange.Path is relative to the capsule upperdir root (walkUpperdir
+// emits filepath.Rel results), while the ledger rules name absolute guest
+// paths. Paths are normalized to absolute form for matching only; the
+// recorded change keeps its original path so receipts stay stable.
 func (c *Classifier) Classify(changes []capsule.FileChange) *ClassifyResult {
 	result := &ClassifyResult{
 		Version: c.Version,
@@ -155,14 +160,18 @@ func (c *Classifier) Classify(changes []capsule.FileChange) *ClassifyResult {
 	}
 
 	for _, change := range changes {
+		matchPath := change.Path
+		if !strings.HasPrefix(matchPath, "/") {
+			matchPath = "/" + matchPath
+		}
 		// Check ignore patterns first.
-		if c.isIgnored(change.Path) {
+		if c.isIgnored(matchPath) {
 			result.Ignored = append(result.Ignored, change)
 			continue
 		}
 
 		// Find matching ledger kind.
-		kind := c.classifyPath(change.Path)
+		kind := c.classifyPath(matchPath)
 		if kind == LedgerUnknown {
 			result.Unknown = append(result.Unknown, change)
 		} else {
