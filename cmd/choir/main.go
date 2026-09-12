@@ -73,6 +73,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runSearch(rest, stdout, stderr)
 	case "run":
 		return runRun(rest, stdout, stderr)
+	case "roster":
+		return runRoster(rest, stdout, stderr)
 	case "computer":
 		return runComputer(rest, stdout, stderr)
 	case "identity":
@@ -123,6 +125,9 @@ Commands:
   run status <id>     Get the status of a prompt-bar submission
   run list            List recent owner-scoped runs
   run cancel <id>     Cancel an owner-scoped pending or running run
+  roster preflight    Gate a roster arm (overlay resolve, task pin, no live run)
+  roster start        Submit the frozen roster instruction via texture tell
+  roster collect      Poll reads and write the roster receipt
   computer replay-completeness  Capture live-versus-event-replay state evidence
   computer replace-workspace  Quarantine the VM-local workspace onto current DDL
   computer rematerialize-from-tape  Rebuild VM-local state from the event tape
