@@ -36,7 +36,10 @@ import (
 const rosterTaskRef = "docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md#7"
 
 // rosterTellVersion pins the wrapper instruction bytes around the frozen task.
-const rosterTellVersion = "roster-v1"
+// v2 replaced the `model_policy_overlay_id=<id>` prose literal (which the
+// assignment opener now refuses) with an argument-name-plus-quoted-value
+// instruction; v1 receipts name the old wrapper.
+const rosterTellVersion = "roster-v2"
 
 // rosterEngineeringRole is the overlay role key the assignment path resolves
 // (agentprofile.CoSuper is the token "engineering").
@@ -213,11 +216,18 @@ func rosterFirstString(row map[string]any, keys ...string) string {
 // rosterTellText builds the frozen wrapper instruction: overlay binding plus
 // the frozen task bytes verbatim. The wrapper is fixed by rosterTellVersion;
 // any byte change alters the tell and is visible in the receipt.
+//
+// The overlay id is named as a quoted value beside its argument name, never as
+// the literal `model_policy_overlay_id=<id>`: the assignment opener fails
+// closed when an objective carries that literal while the structured
+// ModelPolicyOverlayID field is empty (cosuper_assignment_runtime.go), and
+// management copies wrapper prose into objectives.
 func rosterTellText(overlayID string, task []byte) string {
 	var b strings.Builder
-	b.WriteString("ROSTER-V1 open exactly one implementation assignment with model_policy_overlay_id=")
+	b.WriteString("ROSTER-V1 open exactly one implementation assignment for the frozen desk task below. ")
+	b.WriteString("Set the assign_co_super argument named model_policy_overlay_id — the structured field, not the objective text — to the value \"")
 	b.WriteString(strings.TrimSpace(overlayID))
-	b.WriteString(" for the frozen desk task below, served byte-for-byte with no paraphrase, no extra steps, and no second assignment:\n")
+	b.WriteString("\". The objective argument must be exactly the task below, byte-for-byte, with no preface, no paraphrase, no extra steps, and no second assignment:\n")
 	b.Write(task)
 	return b.String()
 }

@@ -37,8 +37,18 @@ func TestRosterTellTextCarriesOverlayAndTaskVerbatim(t *testing.T) {
 	if !strings.HasPrefix(text, "ROSTER-V1 ") {
 		t.Fatalf("tell missing version prefix: %q", text)
 	}
-	if !strings.Contains(text, "model_policy_overlay_id=p5-deepseek-v41-flash") {
+	if !strings.Contains(text, `"p5-deepseek-v41-flash"`) {
 		t.Fatalf("tell missing overlay binding: %q", text)
+	}
+	// The assignment opener fails closed on an objective carrying the literal
+	// `model_policy_overlay_id=<id>` while the structured field is empty, and
+	// management copies wrapper prose into objectives. The wrapper must therefore
+	// never emit that literal, or every tell re-triggers the guard it landed.
+	if strings.Contains(text, "model_policy_overlay_id=") {
+		t.Fatalf("tell emits the prose literal the assignment opener refuses: %q", text)
+	}
+	if !strings.Contains(text, "model_policy_overlay_id") {
+		t.Fatalf("tell does not name the structured argument: %q", text)
 	}
 	if !strings.HasSuffix(text, string(task)) {
 		t.Fatalf("tell mutates task bytes: %q", text)
