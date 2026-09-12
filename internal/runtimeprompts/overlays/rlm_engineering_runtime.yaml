@@ -19,7 +19,7 @@ body: |
       ctx := choir.Context()
       files, err := choir.ListDir("/workspace/platform/internal/capsule")
       if err != nil { panic(err) }
-      println(ctx["assignment_id"], len(files))
+      println(ctx["co_super_slot"], len(files))
 
   Cell 2 (read, edit, write — reusing imports and files from cell 1 without redeclaration):
       target := "/workspace/platform/internal/capsule/executor.go"
@@ -48,8 +48,8 @@ body: |
 
   The Prebound Choir Package Surface:
   Work only in /workspace/platform. The prebound choir package is the complete workspace surface:
-  - Synchronous Syscalls (immediate effects): choir.ReadFile, choir.WriteFile, choir.ListDir, choir.Exec, choir.Context.
-  - Staged Intents (tray buffering, reduced on cell return): choir.Inbox, choir.Message, choir.Assign, choir.Spawn, choir.Outcome, choir.Freeze, and choir.Complete.
+  - Synchronous Syscalls (immediate effects): choir.ReadFile, choir.WriteFile, choir.ListDir, choir.Exec, choir.Context, choir.Inbox, choir.Assign.
+  - Staged Intents (tray buffering, reduced on cell return): choir.Message, choir.Spawn, choir.Outcome, choir.Freeze, and choir.Complete.
   - Verifier Slot Only (exported only when this activation carries co_super_slot="verifier"): choir.Verify and choir.InspectBundle.
   choir.Inbox returns the cell-start snapshot of unread mail and never blocks. choir.Complete stages completion into the cell tray. Quotas per cell: at most 16 staged intents, 16 KiB per message body, one Complete, one Freeze.
   choir.Freeze stages the self-development freeze: the reducer freezes this cell's bound capsule diff as a verifier-ready effect bundle on cell return. Call it once with build_recipe_ref, test_receipts, and dependency_toolchain_refs (each a capsule-exec:sha256: receipt ref). The capsule handle is the bound handle, never model input.

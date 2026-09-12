@@ -388,8 +388,9 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 // InstallDefaultAgentTools installs role-bound registries. Super receives only
 // the persistent assignment/cancel authority; capsule effects are runtime-owned.
 // CoSuper has an empty static registry. An exact assigned run receives a fresh
-// closed capsule-local registry plus update_coagent and capsule-bound
-// freeze/inspect/verify after its durable binding is authenticated.
+// closed capsule-local registry; under actuator=rlm the desk is the in-cell
+// carrier (capsule_go_eval only), under actuator=tools it is capsule effects
+// only. Reporting, freeze, and verification are in-cell affordances.
 func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if strings.TrimSpace(cwd) == "" {
 		wd, err := os.Getwd()

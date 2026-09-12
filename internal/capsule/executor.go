@@ -939,7 +939,7 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 		}
 		receipt, openErr := e.OpenExecutionReceipt(ref)
 		if openErr != nil {
-			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject: receipt unavailable")
+			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject: %s: %w", ref, openErr)
 		}
 		if reason := grantedExecutionBindReason(receipt, agentRunID, handleDigest, caps.ID, worktreeDigest, caps.SourceSnapshotDigest); reason != "" {
 			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject: %s", reason)

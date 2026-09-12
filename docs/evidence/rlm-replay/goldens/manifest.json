@@ -15,14 +15,14 @@
   "verify_handle": "h-rlm-verify",
   "verify_candidate_id": "candidate-rlm-verify",
   "operation_id": "selfdev-rlm-replay",
-  "bundle_digest": "50d4cdab1b7185906446f9d089082bac4942b513bb39d318303f87ed6855c8e9",
+  "bundle_digest": "dfdc97a57005f3192172963b09c0d91d2d04590ac7df015d542b2982bbcd462f",
   "cell_receipt_refs": [
-    "capsule-go-eval:sha256:0029ce3df82af6eca517744b39fc000db3326dc64a10d6d31a43f2147b4f49b5",
-    "capsule-go-eval:sha256:f593e15f8242576126111f10fdff42ab8c37f028ff5108f4c01783153a60ea1a",
-    "capsule-go-eval:sha256:3c97df0cb6d711251ec3f8e39e7d314c0e296f05bd181db14310045c621eee96"
+    "capsule-go-eval:sha256:51896d870799e865c01fdca45b112e27144f172551febefcbe1db4224c9f2b24",
+    "capsule-go-eval:sha256:fd196ee2e4c1568bb78e7cc9a34564c4f07a3193d5b7198a16a850368ed9af02",
+    "capsule-go-eval:sha256:03bb688bb7154c1153a1bc104fa14dfea775b7c26539974e0bba12f37166ce2e"
   ],
   "report_tool_call_id": "tool-call-rlm-report",
   "parent_agent_id": "management:owner-rlm-replay",
   "parent_run_id": "run-management-assignment",
-  "captured_at": "2026-09-12T00:40:24.574254413Z"
+  "captured_at": "2026-09-12T03:08:35.062312297Z"
 }

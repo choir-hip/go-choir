@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -73,8 +71,9 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 }
 
 // RegisterCapsuleLocalTools installs only execution and report effects scoped
-// to an already-bound capsule. Freeze/inspect/verify are a separate installer
-// composed by the assigned CoSuper registry, not inherited from any host profile.
+// to an already-bound capsule. Freeze/verify/report are in-cell affordances
+// staged through choir functions and authored by the reducer; no JSON tool
+// installs them.
 func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	for _, tool := range []toolregistry.Tool{
 		newCapsuleExecTool(), newCapsuleGoEvalTool(rt), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(),
@@ -355,66 +354,6 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 		"operation_id": operation.OperationID, "state": operation.State,
 	}, nil
 }
-
-// inspectSelfDevelopmentBundle verifies the immutable staged release and
-// classifier metadata for an exact frozen self-development bundle. It is the
-// shared body of the inspect_self_development_bundle JSON tool and the
-// in-cell synchronous inspection surface; rec is the bound run record whose
-// co_super_slot must be the verifier slot.
-func inspectSelfDevelopmentBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec *types.RunRecord, operationID, bundleDigest string) (map[string]any, error) {
-	if rec == nil || normalizeCoSuperSlot(metadataStringValue(rec.Metadata, runMetadataCoSuperSlot)) != "verifier" {
-		return nil, fmt.Errorf("bundle inspection is restricted to the co-super verifier slot")
-	}
-	operationID, bundleDigest = strings.TrimSpace(operationID), strings.TrimSpace(bundleDigest)
-	if operationID == "" || !computerevent.IsSHA256(bundleDigest) || toolCtx.OperationStore == nil || strings.TrimSpace(toolCtx.UpdaterRoot) == "" {
-		return nil, fmt.Errorf("exact frozen bundle binding is required")
-	}
-	operation, err := toolCtx.OperationStore.Get(ctx, toolCtx.ComputerID, operationID)
-	if err != nil || operation.BundleDigest != bundleDigest || operation.TrajectoryID != trajectoryIDForRun(rec) {
-		return nil, fmt.Errorf("frozen operation binding mismatch")
-	}
-	root := filepath.Join(toolCtx.UpdaterRoot, "incoming", bundleDigest)
-	rawBundle, err := os.ReadFile(filepath.Join(root, "bundle.draft.json"))
-	if err != nil {
-		return nil, fmt.Errorf("immutable bundle draft unavailable")
-	}
-	var record transaction.CapsuleEffectBundle
-	decoder := json.NewDecoder(bytes.NewReader(rawBundle))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&record); err != nil || record.ContentDigest != bundleDigest ||
-		record.BaseEventHead != operation.BaseHead || record.Validate(false) != nil {
-		return nil, fmt.Errorf("invalid frozen bundle draft")
-	}
-	for _, file := range record.RuntimeFiles {
-		path := filepath.Join(root, filepath.FromSlash(file.Path))
-		inputFile, err := os.Open(path)
-		if err != nil {
-			return nil, fmt.Errorf("frozen runtime file unavailable: %s", file.Path)
-		}
-		hash := sha256.New()
-		_, copyErr := io.Copy(hash, inputFile)
-		closeErr := inputFile.Close()
-		if copyErr != nil || closeErr != nil || hex.EncodeToString(hash.Sum(nil)) != file.SHA256 {
-			return nil, fmt.Errorf("frozen runtime file digest mismatch: %s", file.Path)
-		}
-	}
-	evidenceRefs := append([]string{record.BuildRecipeRef}, record.TestReceipts...)
-	evidenceRefs = append(evidenceRefs, record.DependencyToolchainRefs...)
-	executionReceipts, err := toolCtx.Executor.ResolveExecutionReceipts(evidenceRefs)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"operation_id": operation.OperationID, "content_digest": record.ContentDigest,
-		"source_tree_ref": record.SourceTreeRef, "runtime_artifact_ref": record.RuntimeArtifactRef,
-		"base_event_head": record.BaseEventHead, "runtime_files": record.RuntimeFiles,
-		"build_recipe_ref": record.BuildRecipeRef, "test_receipts": record.TestReceipts,
-		"dependency_toolchain_refs": record.DependencyToolchainRefs, "resource_receipts": record.ResourceReceipts,
-		"execution_receipts": executionReceipts,
-		"classifier_version": record.ClassifierV, "classifier_digest": record.ClassifierDigest, "groups": record.Groups,
-	}, nil
-}
-
 
 // recordSelfDevelopmentVerification records an independent verifier decision
 // for the exact frozen self-development bundle. It is the shared body of the

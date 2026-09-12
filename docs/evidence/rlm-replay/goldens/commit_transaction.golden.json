@@ -3,25 +3,55 @@
   "tool": "commit_transaction",
   "successor": "choir.Freeze",
   "build_sha": "a907f713",
-  "semantic_id": "run:rlm-impl|h-rlm-impl",
+  "semantic_id": "selfdev-rlm-replay",
   "input": {
-    "build_recipe_ref": "capsule-exec:sha256:1eeb8cd5a4eccb324d1f217606ce219e7312cf074cfcdaf7f76a0b8200444c22",
+    "build_recipe_ref": "capsule-exec:sha256:66927ac368cf0514450d1f5eaebb98f2201922464c62143e5840f7cc3aeccf07",
     "dependency_toolchain_refs": [
-      "capsule-exec:sha256:cd97ad519817881bf53a2efeff953682c96b1e05d418bfcd4b0a9ad6d5fb7b58"
+      "capsule-exec:sha256:f0647f0cc44a18f492da8a2f7c742e674b290413d738b4c2cfaaddfaf315b7e3"
     ],
     "handle": "h-rlm-impl",
     "test_receipts": [
-      "capsule-exec:sha256:9ccf665ec5f5b6d63fbe6771cbe450464cafa62480d4286aa19d32e028fda38f"
+      "capsule-exec:sha256:344eb7dd7f6aea30581e14ae44c5dc1d1b66915e444468a5f2a2f00a8494eaa6"
     ]
   },
   "declared_fields": [
-    "rejected",
-    "reject_reason"
+    "base_event_head",
+    "change_count",
+    "classifier_digest",
+    "classifier_version",
+    "content_digest",
+    "groups",
+    "operation_id",
+    "state",
+    "trajectory_id"
   ],
   "receipt": {
+    "bundle_digest": "dfdc97a57005f3192172963b09c0d91d2d04590ac7df015d542b2982bbcd462f",
+    "change_count": 28,
+    "classifier_digest": "57d42a0c450e3403edf7cbd8f41c73501e478c2ae73d6052d825f49148d39643",
+    "classifier_version": "v1",
+    "content_digest": "dfdc97a57005f3192172963b09c0d91d2d04590ac7df015d542b2982bbcd462f",
+    "groups": {
+      "Artifact": [
+        {
+          "kind": "added",
+          "mode": 493,
+          "path": "var/lib/artifact/release/bin/autoputer"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "var/lib/artifact/release/frontend/index.html"
+        }
+      ]
+    },
     "handle": "h-rlm-impl",
-    "reject_reason": "unknown paths rejected at commit time: 28 paths",
-    "rejected": true
+    "operation_id": "selfdev-rlm-replay",
+    "state": "frozen"
   },
-  "captured_at": "2026-09-12T00:40:24.170614884Z"
+  "durable": {
+    "base_event_head": "f15504f57f2952f6604bc33d7a22713d0ce87dfde2ed0f4c3251339873c7ff7f",
+    "trajectory_id": "trajectory-assignment"
+  },
+  "captured_at": "2026-09-12T03:08:34.593947495Z"
 }

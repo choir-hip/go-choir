@@ -1,6 +1,7 @@
 package transaction
 
 import (
+	"os"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
@@ -102,6 +103,12 @@ func TestClassifierRelativeUpperdirPaths(t *testing.T) {
 		{Path: "workspace/main.go", Kind: capsule.ChangeModified, Mode: 0o644},
 		{Path: "tmp/cache.txt", Kind: capsule.ChangeAdded, Mode: 0o644},
 		{Path: "unknown/path.txt", Kind: capsule.ChangeAdded, Mode: 0o644},
+		// Scaffolding: directories and runtime-written /etc identity files
+		// must not classify or reject.
+		{Path: "etc", Kind: capsule.ChangeAdded, Mode: 0o755 | os.ModeDir},
+		{Path: "var", Kind: capsule.ChangeAdded, Mode: 0o755 | os.ModeDir},
+		{Path: "etc/hosts", Kind: capsule.ChangeAdded, Mode: 0o644},
+		{Path: "etc/passwd", Kind: capsule.ChangeAdded, Mode: 0o644},
 	}
 
 	result := c.Classify(changes)
@@ -112,8 +119,10 @@ func TestClassifierRelativeUpperdirPaths(t *testing.T) {
 	if len(result.Groups[LedgerSource]) != 1 {
 		t.Errorf("Source group: expected 1, got %d", len(result.Groups[LedgerSource]))
 	}
-	if len(result.Ignored) != 1 {
-		t.Errorf("Ignored: expected 1, got %d", len(result.Ignored))
+	// tmp/cache.txt + etc/hosts + etc/passwd are ignored; the two directory
+	// entries are skipped entirely (not counted anywhere).
+	if len(result.Ignored) != 3 {
+		t.Errorf("Ignored: expected 3, got %d", len(result.Ignored))
 	}
 	if len(result.Unknown) != 1 {
 		t.Errorf("Unknown: expected 1, got %d", len(result.Unknown))

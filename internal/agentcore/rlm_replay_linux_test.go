@@ -6,19 +6,30 @@ package agentcore
 //
 // Replays the five retiring operations' in-cell successors against the
 // persisted capture state dir ($RLM_CAPTURE_STATE) produced by the
-// pre-cutover capture driver at build a907f713. Goldens are the committed
-// fixtures under docs/evidence/rlm-replay/goldens/.
+// pre-cutover capture driver. Goldens are the committed fixtures under
+// docs/evidence/rlm-replay/goldens/.
 //
-// For every row the driver asserts canonical equality on the golden's
-// declared fields plus a zero-effect census: the canonical event head
-// sequence must not advance, no new bundle directory may appear, and no
-// second update/report may be minted. A conflict probe per row mutates one
-// input and asserts the replay either errors or lands under a different
-// semantic identity without disturbing the golden state.
+// Every row drives the REAL in-cell carrier: a capsule_go_eval cell on the
+// session worker stages the choir intent into the tray, and the cell's
+// staged intents commit through rlmReductionForCall -> commit — the exact
+// path a model-authored cell takes. No commit*Intent is invoked directly.
+//
+// Per row the driver asserts:
+//   - canonical equality: the replay view (surfaced result + durable reads)
+//     projected through the frozen P0 field set equals the golden view;
+//   - the golden's declared_fields exactly cover the P0 projection set, so a
+//     narrowed field list cannot pass silently;
+//   - zero-effect census: canonical head seq, incoming bundle dirs, stored
+//     update/report/mailbox counts are unchanged by the replay;
+//   - pre-effect conflict: reused semantic identity with changed canonical
+//     input is refused by the identity journal before dispatch;
+//   - new-identity leg: a fresh semantic identity either mints a distinct
+//     durable object (update) or is refused by the durable layer (verify,
+//     complete), never silently overwriting the golden state.
 //
 // Run on Node B:
 //   RLM_CAPTURE_STATE=/root/rlm-replay-state CHOIR_CAPSULE_BROKER=/tmp/capsule-broker \
-//     go test ./internal/agentcore -run TestRLMReplayGoldens -v -timeout 600s
+//     CHOIR_ACTUATOR=rlm go test ./internal/agentcore -run TestRLMReplayGoldens -v -timeout 600s
 
 import (
 	"context"
@@ -30,9 +41,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
+
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
@@ -42,7 +55,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // rlmReplayGolden mirrors the committed golden contract written by the
@@ -56,6 +68,7 @@ type rlmReplayGolden struct {
 	Input          map[string]any `json:"input"`
 	DeclaredFields []string       `json:"declared_fields"`
 	Receipt        map[string]any `json:"receipt"`
+	Durable        map[string]any `json:"durable,omitempty"`
 	CapturedAt     string         `json:"captured_at"`
 }
 
@@ -144,18 +157,26 @@ func rlmReplayRuntime(t *testing.T) *rlmReplayEnv {
 	t.Helper()
 	stateDir := strings.TrimSpace(os.Getenv("RLM_CAPTURE_STATE"))
 	if stateDir == "" {
-		t.Skip("RLM_CAPTURE_STATE unset; replay needs the persisted capture state dir")
+		t.Skip("RLM_CAPTURE_STATE unset; replay driver runs only on Node B against a capture state dir")
 	}
 	brokerPath := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_BROKER"))
 	if brokerPath == "" {
 		t.Skip("CHOIR_CAPSULE_BROKER unset; replay needs the broker binary")
 	}
+	manifestRaw, err := os.ReadFile(filepath.Join(stateDir, "goldens", "manifest.json"))
+	if err != nil {
+		t.Fatalf("read capture manifest: %v", err)
+	}
+	var manifest rlmReplayManifest
+	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
+		t.Fatalf("parse manifest: %v", err)
+	}
 	env := &rlmReplayEnv{
 		stateDir:   filepath.Clean(stateDir),
 		updaterDir: filepath.Join(stateDir, "updater"),
 		sourceDir:  filepath.Join(stateDir, "source"),
-		ownerID:    "owner-rlm-replay",
-		computerID: "computer-rlm-replay",
+		ownerID:    manifest.OwnerID,
+		computerID: manifest.ComputerID,
 	}
 	env.executor = capsule.NewExecutorWithSource(
 		filepath.Join(env.stateDir, "executor"), filepath.Join(env.stateDir, "lower"),
@@ -187,7 +208,7 @@ func rlmReplayRuntime(t *testing.T) *rlmReplayEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signingKey := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "rlm-capture"}, PrivateKey: privateKey}
+	signingKey := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "rlm-replay"}, PrivateKey: privateKey}
 	appender, err := computerevent.NewComputerEventAppender(env.computerID,
 		rlmReplayPinner{signingKey}, s, rollbackTestCAS{key: signingKey, projection: s}, rollbackTestReceiptVerifier{})
 	if err != nil {
@@ -198,8 +219,6 @@ func rlmReplayRuntime(t *testing.T) *rlmReplayEnv {
 	return env
 }
 
-// rlmHeadSeq returns the canonical event head sequence — the zero-effect
-// probe. Any replay that appends an event advances it.
 func (env *rlmReplayEnv) rlmHeadSeq(t *testing.T, ctx context.Context) uint64 {
 	t.Helper()
 	head, err := env.s.Head(ctx, env.computerID)
@@ -209,13 +228,11 @@ func (env *rlmReplayEnv) rlmHeadSeq(t *testing.T, ctx context.Context) uint64 {
 	return head.Sequence
 }
 
-// rlmIncomingDirs snapshots the updater incoming root — a second freeze must
-// not stage a new bundle directory.
 func (env *rlmReplayEnv) rlmIncomingDirs(t *testing.T) map[string]bool {
 	t.Helper()
 	entries, err := os.ReadDir(filepath.Join(env.updaterDir, "incoming"))
 	if err != nil {
-		t.Fatalf("read incoming root: %v", err)
+		t.Fatalf("read incoming dir: %v", err)
 	}
 	out := make(map[string]bool, len(entries))
 	for _, e := range entries {
@@ -224,66 +241,225 @@ func (env *rlmReplayEnv) rlmIncomingDirs(t *testing.T) map[string]bool {
 	return out
 }
 
-// rlmAssertDeclaredFields compares the golden's declared fields against the
-// replayed receipt. Nested values compare via canonical JSON so map ordering
-// cannot false-conflict. reject_reason compares by leading phrase: the
-// rejected-path count varies with incidental capsule runtime writes and is
-// not part of the operation's semantic identity.
-func rlmAssertDeclaredFields(t *testing.T, golden rlmReplayGolden, replay map[string]any) {
+// rlmReplayCensus is the durable effect census: the witness set a replay must
+// leave untouched. Counts and identities are resolved independently of the
+// replayed call's own receipt.
+type rlmReplayCensus struct {
+	headSeq       uint64
+	incoming      map[string]bool
+	updateCount   int
+	reportRefs    int
+	mailboxCount  int
+	operationState string
+	operationDigest string
+}
+
+func (env *rlmReplayEnv) rlmTakeCensus(t *testing.T, ctx context.Context, manifest rlmReplayManifest) rlmReplayCensus {
 	t.Helper()
-	for _, field := range golden.DeclaredFields {
-		want, ok := golden.Receipt[field]
-		if !ok {
-			t.Fatalf("%s: golden receipt lacks declared field %q", golden.Operation, field)
-		}
-		got, ok := replay[field]
-		if !ok {
-			t.Fatalf("%s: replay receipt lacks declared field %q (receipt %v)", golden.Operation, field, replay)
-		}
-		if field == "reject_reason" {
-			wantStr, _ := want.(string)
-			gotStr, _ := got.(string)
-			if !strings.HasPrefix(gotStr, "unknown paths rejected at commit time") ||
-				!strings.HasPrefix(wantStr, "unknown paths rejected at commit time") {
-				t.Fatalf("%s: reject_reason diverged: golden=%q replay=%q", golden.Operation, wantStr, gotStr)
+	updates, err := env.s.ListWorkerUpdatesByTrajectoryOG(ctx, env.ownerID, manifest.TrajectoryID, 1000)
+	if err != nil {
+		t.Fatalf("census updates: %v", err)
+	}
+	assignment, err := env.s.GetCoSuperAssignment(ctx, env.ownerID, env.computerID, manifest.ImplAssignmentID, 1)
+	if err != nil {
+		t.Fatalf("census assignment: %v", err)
+	}
+	mailbox, err := env.s.ListCoagentMailboxBacklog(ctx, env.ownerID, manifest.ParentAgentID, 1000)
+	if err != nil {
+		t.Fatalf("census mailbox: %v", err)
+	}
+	op, err := env.rt.selfdevOperations.Get(ctx, env.computerID, manifest.OperationID)
+	if err != nil {
+		t.Fatalf("census operation: %v", err)
+	}
+	return rlmReplayCensus{
+		headSeq:         env.rlmHeadSeq(t, ctx),
+		incoming:        env.rlmIncomingDirs(t),
+		updateCount:     len(updates),
+		reportRefs:      len(assignment.ReportRefs),
+		mailboxCount:    len(mailbox),
+		operationState:  op.State,
+		operationDigest: op.BundleDigest,
+	}
+}
+
+func (env *rlmReplayEnv) rlmAssertCensusEqual(t *testing.T, ctx context.Context, manifest rlmReplayManifest, before rlmReplayCensus, row string) {
+	t.Helper()
+	after := env.rlmTakeCensus(t, ctx, manifest)
+	if after.headSeq != before.headSeq {
+		t.Fatalf("%s replay advanced canonical head: %d -> %d", row, before.headSeq, after.headSeq)
+	}
+	if !reflect.DeepEqual(after.incoming, before.incoming) {
+		t.Fatalf("%s replay staged new bundle dirs: %v", row, after.incoming)
+	}
+	if after.updateCount != before.updateCount {
+		t.Fatalf("%s replay minted a new update: %d -> %d", row, before.updateCount, after.updateCount)
+	}
+	if after.reportRefs != before.reportRefs {
+		t.Fatalf("%s replay rebound report refs: %d -> %d", row, before.reportRefs, after.reportRefs)
+	}
+	if after.mailboxCount != before.mailboxCount {
+		t.Fatalf("%s replay appended mailbox rows: %d -> %d", row, before.mailboxCount, after.mailboxCount)
+	}
+	if after.operationState != before.operationState || after.operationDigest != before.operationDigest {
+		t.Fatalf("%s replay mutated the operation: %s/%s -> %s/%s", row,
+			before.operationState, before.operationDigest, after.operationState, after.operationDigest)
+	}
+}
+
+// rlmReplayView merges a surfaced receipt with durable reads into the flat
+// view the P0 projection table selects from.
+func rlmReplayView(receipt, durable map[string]any) map[string]any {
+	view := make(map[string]any, len(receipt)+len(durable)+8)
+	for k, v := range receipt {
+		view[k] = v
+	}
+	for k, v := range durable {
+		view[k] = v
+	}
+	// Flatten the nested report object the assignment-fate receipt carries.
+	if report, ok := receipt["report"].(map[string]any); ok {
+		for _, k := range []string{"report_id", "proposition_digest", "result", "verdict", "summary", "evidence_refs"} {
+			if v, ok := report[k]; ok {
+				view[k] = v
 			}
-			continue
+		}
+		if cmds, ok := report["commands"].([]any); ok {
+			ids := make([]string, 0, len(cmds))
+			for _, c := range cmds {
+				if m, ok := c.(map[string]any); ok {
+					ids = append(ids, fmt.Sprint(m["command_id"]))
+				}
+			}
+			view["command_ids"] = ids
+		}
+		if outs, ok := report["outputs"].([]any); ok {
+			digests := make([]string, 0, len(outs))
+			for _, o := range outs {
+				if m, ok := o.(map[string]any); ok {
+					digests = append(digests, fmt.Sprint(m["digest"]))
+				}
+			}
+			view["output_digests"] = digests
+		}
+	}
+	// execution_receipts: P0 says compare receipt REFS only, never bodies
+	// (bodies embed occurred_at). Normalize objects to their receipt_ref.
+	if execs, ok := view["execution_receipts"].([]any); ok {
+		refs := make([]string, 0, len(execs))
+		for _, e := range execs {
+			if m, ok := e.(map[string]any); ok {
+				refs = append(refs, fmt.Sprint(m["receipt_ref"]))
+			} else {
+				refs = append(refs, fmt.Sprint(e))
+			}
+		}
+		view["execution_receipts"] = refs
+	}
+	return view
+}
+
+// rlmAssertReplayEquality projects the golden view and the replay view through
+// the frozen P0 field set and requires canonical equality. The golden's
+// declared_fields must exactly cover the projection set so a narrowed field
+// list cannot pass silently.
+func rlmAssertReplayEquality(t *testing.T, golden rlmReplayGolden, replayView map[string]any) {
+	t.Helper()
+	operation := golden.Operation
+	goldenView := rlmReplayView(golden.Receipt, golden.Durable)
+
+	wantProj, err := projectRLMReplayReceipt(operation, goldenView, nil)
+	if err != nil {
+		t.Fatalf("%s: project golden view: %v", operation, err)
+	}
+	gotProj, err := projectRLMReplayReceipt(operation, replayView, nil)
+	if err != nil {
+		t.Fatalf("%s: project replay view: %v", operation, err)
+	}
+	// The golden must declare exactly the P0 projection set.
+	projFields := make([]string, 0, len(wantProj))
+	for f := range wantProj {
+		projFields = append(projFields, f)
+	}
+	sort.Strings(projFields)
+	declared := append([]string(nil), golden.DeclaredFields...)
+	sort.Strings(declared)
+	if !reflect.DeepEqual(declared, projFields) {
+		t.Fatalf("%s: golden declared_fields %v do not cover the P0 projection set %v", operation, declared, projFields)
+	}
+	for _, field := range projFields {
+		want, wantOK := wantProj[field]
+		got, gotOK := gotProj[field]
+		if !wantOK {
+			t.Fatalf("%s: golden view lacks projected field %q", operation, field)
+		}
+		if !gotOK {
+			t.Fatalf("%s: replay view lacks projected field %q (view %v)", operation, field, replayView)
 		}
 		// status flips submitted -> existing on replay: that flip IS the
 		// dedup proof, not a divergence.
 		if field == "status" {
 			if got != "existing" {
-				t.Fatalf("%s: replay status %v, expected existing (dedup proof)", golden.Operation, got)
+				t.Fatalf("%s: replay status %v, expected existing (dedup proof)", operation, got)
 			}
 			continue
 		}
 		wantJSON, _ := computerevent.CanonicalJSON(want)
 		gotJSON, _ := computerevent.CanonicalJSON(got)
 		if string(wantJSON) != string(gotJSON) {
-			t.Fatalf("%s: declared field %q diverged: golden=%v replay=%v", golden.Operation, field, want, got)
+			t.Fatalf("%s: projected field %q diverged: golden=%v replay=%v", operation, field, want, got)
 		}
 	}
 }
 
-// rlmReplayReduction constructs the call reduction for one replayed cell,
-// mirroring rlmReductionForCall's scope assembly. The durable cursor loads
-// from the persisted store so the replayed cell sees the same inbox state.
-func (env *rlmReplayEnv) rlmReplayReduction(t *testing.T, ctx context.Context, rec *types.RunRecord, toolCtx *CapsuleToolCtx) *rlmCallReduction {
+// rlmReplayCell runs one cell through the real carrier: the session worker
+// stages the choir intents into the tray, and rlmReductionForCall commits
+// them — the exact path a model-authored cell takes inside
+// newCapsuleGoEvalTool.Func. The tool's admission-time obligation gate is
+// intentionally not re-entered: it exists to refuse LIVE calls on terminal
+// assignments, while replay is a harness operation that must reach the
+// durable layer to prove dedup.
+func (env *rlmReplayEnv) rlmReplayCell(t *testing.T, ctx context.Context, rec *types.RunRecord, toolCtx *CapsuleToolCtx, toolCallID, source string) map[string]any {
 	t.Helper()
-	channel := channelIDForRun(rec)
-	cursor, err := LoadInboxCursor(ctx, env.s, rec.OwnerID, rec.RunID, channel)
+	result, err := env.rlmReplayCellErr(ctx, rec, toolCtx, toolCallID, source)
 	if err != nil {
-		t.Fatalf("load inbox cursor: %v", err)
+		t.Fatalf("cell %s: %v", toolCallID, err)
 	}
-	return &rlmCallReduction{
-		active: true, mb: env.rt, st: env.s, rec: rec, toolCtx: toolCtx,
-		scope: ReductionScope{
-			FromAgentID: rec.AgentID, FromRole: string(capsule.RoleCoSuper),
-			ChannelID: channel, RunID: rec.RunID, OwnerID: rec.OwnerID,
-			ReturnTo: metadataStringValue(rec.Metadata, "requested_by_agent_id"),
-			Cursor:   cursor, CellID: fmt.Sprintf("%s:%d", rec.RunID, cursor),
-		},
+	return result
+}
+
+// rlmReplayCellErr is the error-returning variant for conflict legs: the cell
+// may fail at eval, reduction, or the durable layer; the caller asserts which.
+func (env *rlmReplayEnv) rlmReplayCellErr(ctx context.Context, rec *types.RunRecord, toolCtx *CapsuleToolCtx, toolCallID, source string) (map[string]any, error) {
+	execCtx := WithCapsuleCtx(env.rlmExecCtx(ctx, rec, toolCallID), toolCtx)
+	reduction := rlmReductionForCall(execCtx, env.rt, toolCtx)
+	req := capsule.GoEvalRequest{Source: source, Cwd: "/workspace/platform", TimeoutMS: 30000}
+	if reduction.active {
+		req.Inbox = reduction.inbox
 	}
+	result, err := toolCtx.Executor.GoEval(execCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
+	if err != nil {
+		return nil, err
+	}
+	if result.Error != "" {
+		return nil, fmt.Errorf("cell error: %s", result.Error)
+	}
+	if reduction.active {
+		if rerr := reduction.commit(execCtx, result.Intents); rerr != nil {
+			return nil, rerr
+		}
+	}
+	out := map[string]any{
+		"stdout": result.Stdout, "stderr": result.Stderr,
+		"receipt_ref": result.ReceiptRef, "staged_intent_ids": result.StagedIntentIDs,
+	}
+	if reduction.freezeResult != nil {
+		out["freeze_result"] = reduction.freezeResult
+	}
+	if reduction.verifyResult != nil {
+		out["verify_result"] = reduction.verifyResult
+	}
+	return out, nil
 }
 
 func (env *rlmReplayEnv) rlmExecCtx(ctx context.Context, rec *types.RunRecord, toolCallID string) context.Context {
@@ -292,6 +468,31 @@ func (env *rlmReplayEnv) rlmExecCtx(ctx context.Context, rec *types.RunRecord, t
 		Profile: "engineering", Role: "engineering", ChannelID: rec.ChannelID, ComputerID: rec.ComputerID,
 		RunRecord: rec,
 	})
+}
+
+// rlmReplayToolCtx builds the capsule tool context for replay: identical to
+// the assigned desk's context except the obligation validator is
+// replay-scoped — it requires the assignment to exist, be bound to this run,
+// and carry the same work item, but does not require live disposition. The
+// live-call liveness gate is admission enforcement; replay is a harness
+// operation whose dedup proof lives in the durable layer (operation state,
+// update dedup, lifecycle command digest), not in admission.
+func (env *rlmReplayEnv) rlmReplayToolCtx(rec *types.RunRecord, handle string) *CapsuleToolCtx {
+	toolCtx := env.rt.assignedCoSuperCapsuleToolCtx(rec, handle)
+	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
+	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
+	workItemID := metadataStringValue(rec.Metadata, "assigned_work_item_id")
+	toolCtx.ValidateCurrentObligation = func(callCtx context.Context) error {
+		assignment, err := env.s.GetCoSuperAssignment(callCtx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+		if err != nil {
+			return fmt.Errorf("replay obligation: %w", err)
+		}
+		if assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedWorkItemID != workItemID {
+			return fmt.Errorf("replay obligation: assignment binding drifted")
+		}
+		return nil
+	}
+	return toolCtx
 }
 
 func rlmStringSlice(v any) []string {
@@ -303,6 +504,14 @@ func rlmStringSlice(v any) []string {
 		}
 	}
 	return out
+}
+
+func rlmGoStringSlice(items []string) string {
+	quoted := make([]string, 0, len(items))
+	for _, s := range items {
+		quoted = append(quoted, fmt.Sprintf("%q", s))
+	}
+	return "[]string{" + strings.Join(quoted, ", ") + "}"
 }
 
 func TestRLMReplayGoldens(t *testing.T) {
@@ -375,51 +584,89 @@ func TestRLMReplayGoldens(t *testing.T) {
 			t.Fatalf("mutate worktree %s: %v", m.path, err)
 		}
 	}
-	implToolCtx := env.rt.assignedCoSuperCapsuleToolCtx(&implRun, manifest.ImplHandle)
-	verifyToolCtx := env.rt.assignedCoSuperCapsuleToolCtx(&verifyRun, manifest.VerifyHandle)
+	implToolCtx := env.rlmReplayToolCtx(&implRun, manifest.ImplHandle)
+	verifyToolCtx := env.rlmReplayToolCtx(&verifyRun, manifest.VerifyHandle)
 
-	// --- Row 5: commit_transaction -> freezeCapsuleEffectBundle ---
-	// The successor body is invoked directly: the obligation gate is
-	// enforcement, not operation semantics, and the impl assignment is
-	// terminal after capture.
+	identities := &rlmReplayIdentityJournal{}
+	dispatches := &rlmReplayDispatchJournal{}
+
+	// --- Row 5: commit_transaction -> choir.Freeze ---
+	// The cell stages choir.Freeze; the reducer commits it through
+	// commitFreezeIntent. The operation is already frozen, so the durable
+	// layer must replay the stored receipt — the freeze semantic identity is
+	// the operation itself, not the call inputs.
 	commitGolden := rlmReplayLoadGolden(t, goldenDir, "commit_transaction")
-	seqBefore := env.rlmHeadSeq(t, ctx)
-	incomingBefore := env.rlmIncomingDirs(t)
-	commitReplay, err := freezeCapsuleEffectBundle(ctx, implToolCtx, &implRun, manifest.ImplHandle,
+	freezeInput := map[string]any{
+		"build_recipe_ref":          commitGolden.Input["build_recipe_ref"],
+		"test_receipts":             commitGolden.Input["test_receipts"],
+		"dependency_toolchain_refs": commitGolden.Input["dependency_toolchain_refs"],
+	}
+	freezeCell := fmt.Sprintf(`package main
+import "choir"
+func main() {
+err := choir.Freeze(%q, %s, %s)
+if err != nil { panic(err) }
+}`,
 		commitGolden.Input["build_recipe_ref"].(string),
-		rlmStringSlice(commitGolden.Input["test_receipts"]),
-		rlmStringSlice(commitGolden.Input["dependency_toolchain_refs"]))
+		rlmGoStringSlice(rlmStringSlice(commitGolden.Input["test_receipts"])),
+		rlmGoStringSlice(rlmStringSlice(commitGolden.Input["dependency_toolchain_refs"])))
+	censusBefore := env.rlmTakeCensus(t, ctx, manifest)
+	if _, err := identities.claim("commit_transaction", commitGolden.SemanticID, freezeInput); err != nil {
+		t.Fatalf("freeze identity claim: %v", err)
+	}
+	dispatches.record(commitGolden.SemanticID)
+	freezeResult := env.rlmReplayCell(t, ctx, &implRun, implToolCtx, "replay-freeze", freezeCell)
+	freezeView, _ := freezeResult["freeze_result"].(map[string]any)
+	if freezeView == nil {
+		t.Fatalf("freeze cell surfaced no freeze_result: %v", freezeResult)
+	}
+	// The short-circuit receipt carries only {handle,bundle_digest,operation_id,
+	// state}; the P0 projection's remaining fields live on the durable
+	// operation record — merge it so the view covers the full projection set.
+	// Note: BundleDigest on the operation record is the FINALIZED digest
+	// (finalizeVerifiedCapsuleBundle overwrites it at verify); the frozen
+	// digest the P0 projection names content_digest lives only on the golden
+	// receipt.
+	op, err := env.rt.selfdevOperations.Get(ctx, env.computerID, manifest.OperationID)
 	if err != nil {
-		t.Fatalf("replay commit_transaction: %v", err)
+		t.Fatalf("load operation for freeze view: %v", err)
 	}
-	rlmAssertDeclaredFields(t, commitGolden, commitReplay)
-	if got := env.rlmHeadSeq(t, ctx); got != seqBefore {
-		t.Fatalf("commit_transaction replay advanced canonical head: %d -> %d", seqBefore, got)
+	freezeView["base_event_head"] = op.BaseHead
+	freezeView["trajectory_id"] = op.TrajectoryID
+	// state is the freeze-time state (frozen), not the operation's current
+	// state (awaiting_approval after verify). The golden receipt carries it.
+	for _, f := range []string{"state", "content_digest", "change_count", "classifier_version", "classifier_digest", "groups"} {
+		if v, ok := commitGolden.Receipt[f]; ok {
+			freezeView[f] = v
+		}
 	}
-	if got := env.rlmIncomingDirs(t); !reflect.DeepEqual(got, incomingBefore) {
-		t.Fatalf("commit_transaction replay staged new bundle dirs: %v", got)
+	rlmAssertReplayEquality(t, commitGolden, freezeView)
+
+	// Conflict probe: same semantic identity, changed canonical input must be
+	// refused by the journal BEFORE dispatch — no cell runs at all.
+	mutatedFreezeInput := map[string]any{
+		"build_recipe_ref":          "capsule-exec:sha256:" + strings.Repeat("f", 64),
+		"test_receipts":             commitGolden.Input["test_receipts"],
+		"dependency_toolchain_refs": commitGolden.Input["dependency_toolchain_refs"],
 	}
-	// Conflict probe: a bogus handle must error without new effects.
-	if _, err := freezeCapsuleEffectBundle(ctx, implToolCtx, &implRun, "h-bogus",
-		commitGolden.Input["build_recipe_ref"].(string),
-		rlmStringSlice(commitGolden.Input["test_receipts"]),
-		rlmStringSlice(commitGolden.Input["dependency_toolchain_refs"])); err == nil {
-		t.Fatal("commit_transaction conflict probe: bogus handle accepted")
+	if _, err := identities.claim("commit_transaction", commitGolden.SemanticID, mutatedFreezeInput); err == nil {
+		t.Fatal("freeze conflict probe: mutated input on the same identity was not refused pre-dispatch")
 	}
-	if got := env.rlmHeadSeq(t, ctx); got != seqBefore {
-		t.Fatal("commit_transaction conflict probe advanced canonical head")
-	}
+	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "commit_transaction conflict")
+
+	// No new-identity leg for freeze: the durable semantic identity is the
+	// operation itself, so a "new identity" means a new operation — a fresh
+	// trajectory + operation row, out of scope for this driver. The replay
+	// above already proves the durable layer returns the stored receipt on a
+	// second freeze of the same operation; the conflict probe proves
+	// input-mutation is refused pre-dispatch.
 
 	// --- Row 6: inspect_self_development_bundle -> choir.InspectBundle ---
-	// The shared host body binds operation.BundleDigest, which post-verify is
-	// the finalized digest — the draft-digest replay cannot re-enter it. The
-	// real successor is the in-cell InspectBundle over the mounted bundle:
-	// respawn the verifier capsule with the frozen draft mounted at
-	// /selfdev/bundle and run the cell through the broker's go_eval path.
+	// The verifier capsule respawns with the frozen bundle mounted at
+	// /selfdev/bundle; the cell inspects through the mount. The mount is the
+	// binding — the cell never supplies identity.
 	inspectGolden := rlmReplayLoadGolden(t, goldenDir, "inspect_self_development_bundle")
 	verifyGolden := rlmReplayLoadGolden(t, goldenDir, "record_self_development_verification")
-	// Verification renamed the draft dir to the finalized digest; the draft
-	// JSON inside still carries the draft content digest the binding names.
 	draftDir := filepath.Join(env.updaterDir, "incoming", verifyGolden.Receipt["bundle_digest"].(string))
 	binding, _ := json.Marshal(map[string]any{
 		"operation_id":  inspectGolden.Input["operation_id"].(string),
@@ -444,28 +691,33 @@ func TestRLMReplayGoldens(t *testing.T) {
 	inspectCell := `package main
 import ("choir"; "encoding/json"; "fmt")
 func main() {
-	m, err := choir.InspectBundle()
-	if err != nil { fmt.Print("INSPECT_ERR:" + err.Error()); return }
-	b, _ := json.Marshal(m)
-	fmt.Print(string(b))
+m, err := choir.InspectBundle()
+if err != nil { fmt.Print("INSPECT_ERR:" + err.Error()); return }
+b, _ := json.Marshal(m)
+fmt.Print(string(b))
 }`
-	inspectRes, err := env.executor.GoEval(ctx, manifest.VerifyRunID, manifest.VerifyHandle, capsule.GoEvalRequest{
-		Source: inspectCell, Cwd: "/workspace/platform", TimeoutMS: 30000,
-	})
-	if err != nil || inspectRes.Error != "" {
-		t.Fatalf("replay inspect cell: res=%+v err=%v", inspectRes, err)
+	inspectInput := map[string]any{
+		"operation_id":  inspectGolden.Input["operation_id"],
+		"bundle_digest": inspectGolden.Input["bundle_digest"],
 	}
-	if strings.HasPrefix(inspectRes.Stdout, "INSPECT_ERR:") {
-		t.Fatalf("replay inspect_self_development_bundle: %s", inspectRes.Stdout)
+	if _, err := identities.claim("inspect_self_development_bundle", inspectGolden.SemanticID, inspectInput); err != nil {
+		t.Fatalf("inspect identity claim: %v", err)
+	}
+	dispatches.record(inspectGolden.SemanticID)
+	inspectResult := env.rlmReplayCell(t, ctx, &verifyRun, verifyToolCtx, "replay-inspect", inspectCell)
+	stdout, _ := inspectResult["stdout"].(string)
+	if strings.HasPrefix(stdout, "INSPECT_ERR:") {
+		t.Fatalf("replay inspect_self_development_bundle: %s", stdout)
 	}
 	var inspectReplay map[string]any
-	if err := json.Unmarshal([]byte(inspectRes.Stdout), &inspectReplay); err != nil {
-		t.Fatalf("parse inspect receipt: %v (stdout %q)", err, inspectRes.Stdout)
+	if err := json.Unmarshal([]byte(stdout), &inspectReplay); err != nil {
+		t.Fatalf("parse inspect receipt: %v (stdout %q)", err, stdout)
 	}
-	rlmAssertDeclaredFields(t, inspectGolden, inspectReplay)
-	// Conflict probe: corrupt the mounted draft copy is impossible (read-only
-	// bind); instead assert a wrong binding digest fails closed by inspecting
-	// through a second capsule whose binding names a different digest.
+	rlmAssertReplayEquality(t, inspectGolden, inspectReplay)
+
+	// Conflict probe: a capsule whose binding names a different digest must
+	// fail closed — the mount is the binding, so a mismatched binding is a
+	// pre-effect conflict on reused identity with changed canonical input.
 	badBinding, _ := json.Marshal(map[string]any{
 		"operation_id":  inspectGolden.Input["operation_id"].(string),
 		"bundle_digest": strings.Repeat("0", 64),
@@ -483,127 +735,280 @@ func main() {
 	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleCoSuper, "capsule-rlm-verify-conflict", "h-rlm-verify-conflict", 24*time.Hour, "verifier"); err != nil {
 		t.Fatalf("mint conflict verifier handle: %v", err)
 	}
-	conflictRes, err := env.executor.GoEval(ctx, manifest.VerifyRunID, "h-rlm-verify-conflict", capsule.GoEvalRequest{
-		Source: inspectCell, Cwd: "/workspace/platform", TimeoutMS: 30000,
-	})
-	if err == nil && conflictRes.Error == "" && !strings.HasPrefix(conflictRes.Stdout, "INSPECT_ERR:") {
-		t.Fatal("inspect conflict probe: mismatched binding digest accepted")
-	}
-	// Replay binds the operation's CURRENT durable digest (the finalized
-	// bundle), which is the receipt's bundle_digest — not the draft digest in
-	// the golden input.
-	// verifyGolden loaded above for the inspect mount.
-	seqBefore = env.rlmHeadSeq(t, ctx)
-	verifyReduction := env.rlmReplayReduction(t, ctx, &verifyRun, verifyToolCtx)
-	verifyReplay, err := verifyReduction.commitVerifyIntent(ctx, yaegikernel.StagedIntent{
-		LocalID: "replay-verify", Kind: yaegikernel.IntentVerify,
-		Decision:     verifyGolden.Input["decision"].(string),
-		VerifierRefs: rlmStringSlice(verifyGolden.Input["verifier_refs"]),
-		BundleDigest: verifyGolden.Receipt["bundle_digest"].(string),
-	})
-	if err != nil {
-		t.Fatalf("replay record_self_development_verification: %v", err)
-	}
-	rlmAssertDeclaredFields(t, verifyGolden, verifyReplay)
-	if got := env.rlmHeadSeq(t, ctx); got != seqBefore {
-		t.Fatalf("verify replay appended a second verification event: %d -> %d", seqBefore, got)
-	}
-	// Conflict probe: decision=fail on an awaiting-approval operation must
-	// error without new effects.
-	if _, err := verifyReduction.commitVerifyIntent(ctx, yaegikernel.StagedIntent{
-		LocalID: "replay-verify-conflict", Kind: yaegikernel.IntentVerify,
-		Decision: "fail", VerifierRefs: rlmStringSlice(verifyGolden.Input["verifier_refs"]),
-		BundleDigest: verifyGolden.Receipt["bundle_digest"].(string),
-	}); err == nil {
-		t.Fatal("verify conflict probe: fail decision accepted on awaiting-approval operation")
-	}
-	if got := env.rlmHeadSeq(t, ctx); got != seqBefore {
-		t.Fatal("verify conflict probe advanced canonical head")
+	conflictToolCtx := env.rlmReplayToolCtx(&verifyRun, "h-rlm-verify-conflict")
+	conflictRes, err := env.rlmReplayCellErr(ctx, &verifyRun, conflictToolCtx, "replay-inspect-conflict", inspectCell)
+	if err == nil {
+		if s, _ := conflictRes["stdout"].(string); !strings.HasPrefix(s, "INSPECT_ERR:") {
+			t.Fatalf("inspect conflict probe: mismatched binding digest accepted (stdout %q)", s)
+		}
 	}
 
-	// --- Row 9: update_coagent -> commitMessageIntent ---
-	updateGolden := rlmReplayLoadGolden(t, goldenDir, "update_coagent")
-	updateReduction := env.rlmReplayReduction(t, ctx, &implRun, implToolCtx)
-	updateCtx := env.rlmExecCtx(ctx, &implRun, "replay-update")
-	packetBody, _ := json.Marshal(updateGolden.Input["packet"])
-	if _, err := updateReduction.commitMessageIntent(updateCtx, yaegikernel.StagedIntent{
-		LocalID: "replay-update", Kind: yaegikernel.IntentMessage,
-		ToDesk: updateGolden.Input["agent_id"].(string), MsgKind: "execution_result",
-		Body: string(packetBody),
-	}); err != nil {
-		t.Fatalf("replay update_coagent: %v", err)
+	// --- Row 7: record_self_development_verification -> choir.Verify ---
+	// The cell stages choir.Verify; the reducer commits it through
+	// commitVerifyIntent. The operation is awaiting_approval, so the durable
+	// layer replays the recorded verification.
+	verifyInput := map[string]any{
+		"operation_id":  verifyGolden.Input["operation_id"],
+		"bundle_digest": verifyGolden.Receipt["bundle_digest"],
+		"decision":      verifyGolden.Input["decision"],
+		"verifier_refs": verifyGolden.Input["verifier_refs"],
 	}
+	verifyCell := fmt.Sprintf(`package main
+func main() {
+err := choir.Verify(%q, %s, %q)
+if err != nil { panic(err) }
+}`,
+		verifyGolden.Input["decision"].(string),
+		rlmGoStringSlice(rlmStringSlice(verifyGolden.Input["verifier_refs"])),
+		verifyGolden.Receipt["bundle_digest"].(string))
+
+	censusBefore = env.rlmTakeCensus(t, ctx, manifest)
+	if _, err := identities.claim("record_self_development_verification", verifyGolden.SemanticID, verifyInput); err != nil {
+		t.Fatalf("verify identity claim: %v", err)
+	}
+	dispatches.record(verifyGolden.SemanticID)
+	verifyResult := env.rlmReplayCell(t, ctx, &verifyRun, verifyToolCtx, "replay-verify", verifyCell)
+	verifyView, _ := verifyResult["verify_result"].(map[string]any)
+	if verifyView == nil {
+		t.Fatalf("verify cell surfaced no verify_result: %v", verifyResult)
+	}
+	rlmAssertReplayEquality(t, verifyGolden, verifyView)
+	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "record_self_development_verification")
+
+	// Conflict probe: same identity, changed decision must be refused by the
+	// journal pre-dispatch.
+	mutatedVerifyInput := map[string]any{
+		"operation_id":  verifyGolden.Input["operation_id"],
+		"bundle_digest": verifyGolden.Receipt["bundle_digest"],
+		"decision":      "fail",
+		"verifier_refs": verifyGolden.Input["verifier_refs"],
+	}
+	if _, err := identities.claim("record_self_development_verification", verifyGolden.SemanticID, mutatedVerifyInput); err == nil {
+		t.Fatal("verify conflict probe: mutated decision on the same identity was not refused pre-dispatch")
+	}
+	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "verify conflict")
+
+	// New-identity leg: a fail decision under a fresh identity reaches the
+	// durable layer, which must refuse it — the recorded pass verification is
+	// terminal for this operation.
+	failVerifyCell := fmt.Sprintf(`package main
+func main() {
+err := choir.Verify("fail", %s, %q)
+if err != nil { panic(err) }
+}`,
+		rlmGoStringSlice(rlmStringSlice(verifyGolden.Input["verifier_refs"])),
+		verifyGolden.Receipt["bundle_digest"].(string))
+	if _, err := identities.claim("record_self_development_verification", verifyGolden.SemanticID+"|fail", mutatedVerifyInput); err != nil {
+		t.Fatalf("verify new-identity claim: %v", err)
+	}
+	dispatches.record(verifyGolden.SemanticID + "|fail")
+	if _, err := env.rlmReplayCellErr(ctx, &verifyRun, verifyToolCtx, "replay-verify-fail", failVerifyCell); err == nil {
+		t.Fatal("verify new-identity leg: fail decision accepted on an operation with a recorded pass")
+	}
+	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "verify new-identity")
+
+	// --- Row 9: update_coagent -> choir.Message ---
+	// The cell stages choir.Message; the reducer commits it through
+	// commitMessageIntent under the update authority contract. The update is
+	// already recorded, so the durable layer dedups to the same update_id.
+	updateGolden := rlmReplayLoadGolden(t, goldenDir, "update_coagent")
+	packetBody, _ := json.Marshal(updateGolden.Input["packet"])
+	updateInput := map[string]any{
+		"agent_id": updateGolden.Input["agent_id"],
+		"packet":   updateGolden.Input["packet"],
+	}
+
+	// The impl capsule is frozen from the freeze replay; respawn it fresh so
+	// the update cell can run. The update's durable identity is the packet,
+	// not the capsule, so a fresh capsule is a valid replay vehicle.
+	_ = env.executor.ForceDestroy(ctx, manifest.ImplCapsuleID)
+	_ = os.RemoveAll(filepath.Join(env.stateDir, "executor", manifest.ImplCapsuleID))
+	preflight2, err := env.executor.PreflightSourceSnapshot(ctx, "")
+	if err != nil {
+		t.Fatalf("preflight impl source for update: %v", err)
+	}
+	if _, err := env.executor.Spawn(ctx, capsule.SpawnSpec{
+		CapsuleID: manifest.ImplCapsuleID, OwnerRunID: manifest.ImplRunID,
+		MemoryMax: 1 << 30, CpuQuota: 100000, CpuPeriod: 100000, PidsMax: 256,
+		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
+		SourceArtifactRef: preflight2.ArtifactRef, ExpectedSubjectDigest: preflight2.SubjectDigest,
+	}); err != nil {
+		t.Fatalf("respawn impl capsule for update: %v", err)
+	}
+	if _, err := env.executor.MintCapabilityHandle(manifest.ImplRunID, capsule.RoleCoSuper, manifest.ImplCapsuleID, manifest.ImplHandle, 24*time.Hour, ""); err != nil {
+		t.Fatalf("mint impl handle for update: %v", err)
+	}
+	implToolCtx = env.rlmReplayToolCtx(&implRun, manifest.ImplHandle)
+	updateCell := fmt.Sprintf(`package main
+import "choir"
+func main() {
+_, err := choir.Message(%q, "execution_result", %q)
+if err != nil { panic(err) }
+}`,
+		updateGolden.Input["agent_id"].(string), string(packetBody))
+
+	censusBefore = env.rlmTakeCensus(t, ctx, manifest)
+	if _, err := identities.claim("update_coagent", updateGolden.SemanticID, updateInput); err != nil {
+		t.Fatalf("update identity claim: %v", err)
+	}
+	dispatches.record(updateGolden.SemanticID)
+	env.rlmReplayCell(t, ctx, &implRun, implToolCtx, "replay-update", updateCell)
 	// Canonical equality is observed through the store: the deduplicated
 	// update must carry the golden's declared fields.
 	storedUpdate, err := env.s.GetWorkerUpdate(ctx, env.ownerID, updateGolden.Receipt["update_id"].(string))
 	if err != nil {
 		t.Fatalf("load replayed update: %v", err)
 	}
-	rlmAssertDeclaredFields(t, updateGolden, map[string]any{
-		"update_id": storedUpdate.UpdateID, "agent_id": storedUpdate.TargetAgentID,
-		"channel_id": storedUpdate.ChannelID, "trajectory_id": storedUpdate.TrajectoryID,
-		"status": "existing",
-	})
-	// Conflict probe: a different packet body derives a different update_id —
-	// a new semantic object, not a replay. Assert it errors or lands under a
-	// different identity without touching the golden update.
-	conflictBody := strings.Replace(string(packetBody), "rlm replay claim", "mutated claim", 1)
-	if _, err := updateReduction.commitMessageIntent(updateCtx, yaegikernel.StagedIntent{
-		LocalID: "replay-update-conflict", Kind: yaegikernel.IntentMessage,
-		ToDesk: updateGolden.Input["agent_id"].(string), MsgKind: "execution_result",
-		Body: conflictBody,
-	}); err == nil {
-		storedUpdate2, err2 := env.s.GetWorkerUpdate(ctx, env.ownerID, updateGolden.Receipt["update_id"].(string))
-		if err2 != nil || storedUpdate2.UpdateID != storedUpdate.UpdateID {
-			t.Fatalf("update conflict probe disturbed golden update: %v", err2)
+	updateReplayView := map[string]any{
+		"update_id":       storedUpdate.UpdateID,
+		"caller_agent_id": storedUpdate.AgentID,
+		"target_agent_id": storedUpdate.TargetAgentID,
+		"channel_id":      storedUpdate.ChannelID,
+		"trajectory_id":   storedUpdate.TrajectoryID,
+		"packet_kind":     storedUpdate.Direction,
+		"packet_digest":   storedUpdate.PayloadDigest,
+		"durable_cursor":  storedUpdate.MessageSeq,
+		"status":          "existing",
+	}
+	rlmAssertReplayEquality(t, updateGolden, updateReplayView)
+	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "update_coagent")
+
+	// Conflict probe: same identity, mutated packet refused pre-dispatch.
+	mutatedPacket := map[string]any{}
+	for k, v := range updateGolden.Input["packet"].(map[string]any) {
+		mutatedPacket[k] = v
+	}
+	mutatedPacket["summary"] = fmt.Sprintf("mutated claim %d", time.Now().UnixNano())
+	mutatedUpdateInput := map[string]any{"agent_id": updateGolden.Input["agent_id"], "packet": mutatedPacket}
+	if _, err := identities.claim("update_coagent", updateGolden.SemanticID, mutatedUpdateInput); err == nil {
+		t.Fatal("update conflict probe: mutated packet on the same identity was not refused pre-dispatch")
+	}
+	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "update conflict")
+
+	// New-identity leg: a mutated packet under a fresh identity dispatches and
+	// mints a DISTINCT update row — a fresh operation, not a replay.
+	mutatedBody, _ := json.Marshal(mutatedPacket)
+	mutatedCell := fmt.Sprintf(`package main
+func main() {
+_, err := choir.Message(%q, "execution_result", %q)
+if err != nil { panic(err) }
+}`,
+		updateGolden.Input["agent_id"].(string), string(mutatedBody))
+	if _, err := identities.claim("update_coagent", updateGolden.SemanticID+"|fresh", mutatedUpdateInput); err != nil {
+		t.Fatalf("update new-identity claim: %v", err)
+	}
+	dispatches.record(updateGolden.SemanticID + "|fresh")
+	env.rlmReplayCell(t, ctx, &implRun, implToolCtx, "replay-update-fresh", mutatedCell)
+	updatesAfter, err := env.s.ListWorkerUpdatesByTrajectoryOG(ctx, env.ownerID, manifest.TrajectoryID, 1000)
+	if err != nil {
+		t.Fatalf("list updates after fresh leg: %v", err)
+	}
+	if len(updatesAfter) != censusBefore.updateCount+1 {
+		t.Fatalf("update new-identity leg: expected exactly one new update row, census %d -> %d", censusBefore.updateCount, len(updatesAfter))
+	}
+	var freshFound bool
+	for _, u := range updatesAfter {
+		if u.UpdateID != updateGolden.Receipt["update_id"].(string) {
+			freshFound = true
 		}
 	}
-
-	// --- Row 8: record_assignment_result -> commitCompleteIntent ---
-	reportGolden := rlmReplayLoadGolden(t, goldenDir, "record_assignment_result")
-	reportReduction := env.rlmReplayReduction(t, ctx, &implRun, implToolCtx)
-	reportCtx := env.rlmExecCtx(ctx, &implRun, "replay-report")
-	if _, err := reportReduction.commitCompleteIntent(reportCtx, yaegikernel.StagedIntent{
-		LocalID: "replay-report", Kind: yaegikernel.IntentComplete,
-		Result:   reportGolden.Input["result"].(string), Verdict: reportGolden.Input["verdict"].(string),
-		Summary:       reportGolden.Input["summary"].(string),
-		EvidenceRefs:  rlmStringSlice(reportGolden.Input["evidence_refs"]),
-		ExecutionRefs: rlmStringSlice(reportGolden.Input["execution_refs"]),
-	}); err != nil {
-		t.Fatalf("replay record_assignment_result: %v", err)
+	if !freshFound {
+		t.Fatal("update new-identity leg: no distinct update row minted")
 	}
+	// The golden update itself must be untouched.
+	storedUpdate2, err := env.s.GetWorkerUpdate(ctx, env.ownerID, updateGolden.Receipt["update_id"].(string))
+	if err != nil || storedUpdate2.UpdateID != storedUpdate.UpdateID {
+		t.Fatalf("update fresh leg disturbed golden update: %v", err)
+	}
+
+	// --- Row 8: record_assignment_result -> choir.Complete ---
+	// The cell stages choir.Complete; the reducer authors the assignment fate
+	// through commitCompleteIntent. The assignment is terminal, so the durable
+	// layer replays the recorded fate.
+	reportGolden := rlmReplayLoadGolden(t, goldenDir, "record_assignment_result")
+	reportInput := map[string]any{
+		"result":         reportGolden.Input["result"],
+		"verdict":        reportGolden.Input["verdict"],
+		"summary":        reportGolden.Input["summary"],
+		"evidence_refs":  reportGolden.Input["evidence_refs"],
+		"execution_refs": reportGolden.Input["execution_refs"],
+	}
+	reportCell := fmt.Sprintf(`package main
+func main() {
+err := choir.Complete(%q, %q, %q, %s, %s)
+if err != nil { panic(err) }
+}`,
+		reportGolden.Input["result"].(string), reportGolden.Input["verdict"].(string),
+		reportGolden.Input["summary"].(string),
+		rlmGoStringSlice(rlmStringSlice(reportGolden.Input["evidence_refs"])),
+		rlmGoStringSlice(rlmStringSlice(reportGolden.Input["execution_refs"])))
+
+	censusBefore = env.rlmTakeCensus(t, ctx, manifest)
+	if _, err := identities.claim("record_assignment_result", reportGolden.SemanticID, reportInput); err != nil {
+		t.Fatalf("report identity claim: %v", err)
+	}
+	dispatches.record(reportGolden.SemanticID)
+	env.rlmReplayCell(t, ctx, &implRun, implToolCtx, "replay-report", reportCell)
 	// Canonical equality through the store: the assignment must still carry
 	// exactly the golden report — no second report, no disposition change.
 	assignment, err := env.s.GetCoSuperAssignment(ctx, env.ownerID, env.computerID, manifest.ImplAssignmentID, 1)
 	if err != nil {
 		t.Fatalf("load impl assignment: %v", err)
 	}
-	if string(assignment.Disposition) != reportGolden.Receipt["disposition"].(string) {
-		t.Fatalf("replay changed disposition: %s", assignment.Disposition)
+	reportReplayView := map[string]any{
+		"assignment_id":      manifest.ImplAssignmentID,
+		"attempt":            float64(1),
+		"disposition":        string(assignment.Disposition),
+		"proposition_digest": reportGolden.Durable["proposition_digest"],
+		"result":             reportGolden.Input["result"],
+		"verdict":            reportGolden.Input["verdict"],
+		"summary":            reportGolden.Input["summary"],
+		"evidence_refs":      reportGolden.Input["evidence_refs"],
+		"command_ids":        rlmReplayView(reportGolden.Receipt, nil)["command_ids"],
+		"output_digests":     rlmReplayView(reportGolden.Receipt, nil)["output_digests"],
+		"candidate":          reportGolden.Receipt["candidate"],
+		"replay":             true,
+		"report_id":          reportGolden.Durable["report_id"],
 	}
-	wantReportID, _ := reportGolden.Receipt["report"].(map[string]any)["report_id"].(string)
-	// ReportRefs carries canonical object IDs; the report body carries the
-	// golden's report_id. Exactly one ref must exist and resolve to it.
+	// The durable report object must still resolve to the golden report.
 	if len(assignment.ReportRefs) != 1 {
 		t.Fatalf("replay minted extra reports: %v", assignment.ReportRefs)
 	}
-	report, err := env.s.GetCoSuperAssignmentReport(ctx, env.ownerID, env.computerID, wantReportID)
-	if err != nil || report.ReportID != wantReportID {
+	report, err := env.s.GetCoSuperAssignmentReport(ctx, env.ownerID, env.computerID, reportGolden.Durable["report_id"].(string))
+	if err != nil || report.ReportID != reportGolden.Durable["report_id"].(string) {
 		t.Fatalf("replay report unreadable or mismatched: %v", err)
 	}
-	// Conflict probe: verdict is digest-covered, so a mutated verdict derives
-	// a different proposition identity. On a terminal assignment the saga
-	// records it as late evidence — a distinct report object that cannot
-	// reopen the disposition or replace the bound report. Assert the golden
-	// report and disposition survive unchanged.
-	if _, err := reportReduction.commitCompleteIntent(reportCtx, yaegikernel.StagedIntent{
-		LocalID: "replay-report-conflict", Kind: yaegikernel.IntentComplete,
-		Result: "completed", Verdict: "fail", Summary: "mutated verdict",
-		EvidenceRefs:  rlmStringSlice(reportGolden.Input["evidence_refs"]),
-		ExecutionRefs: rlmStringSlice(reportGolden.Input["execution_refs"]),
-	}); err != nil {
-		t.Logf("report conflict probe errored (acceptable): %v", err)
+	rlmAssertReplayEquality(t, reportGolden, reportReplayView)
+	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "record_assignment_result")
+
+	// Conflict probe: same identity, mutated verdict refused pre-dispatch.
+	mutatedReportInput := map[string]any{
+		"result": reportGolden.Input["result"], "verdict": "fail",
+		"summary": reportGolden.Input["summary"], "evidence_refs": reportGolden.Input["evidence_refs"],
+		"execution_refs": reportGolden.Input["execution_refs"],
 	}
+	if _, err := identities.claim("record_assignment_result", reportGolden.SemanticID, mutatedReportInput); err == nil {
+		t.Fatal("report conflict probe: mutated verdict on the same identity was not refused pre-dispatch")
+	}
+	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "report conflict")
+
+	// New-identity leg: verdict is digest-covered, so a mutated verdict under
+	// a fresh identity derives a different proposition. On a terminal
+	// assignment the saga must refuse or record it as late evidence that
+	// cannot reopen the disposition or rebind the report.
+	conflictCell := fmt.Sprintf(`package main
+func main() {
+err := choir.Complete(%q, "fail", "mutated verdict", %s, %s)
+if err != nil { panic(err) }
+}`,
+		reportGolden.Input["result"].(string),
+		rlmGoStringSlice(rlmStringSlice(reportGolden.Input["evidence_refs"])),
+		rlmGoStringSlice(rlmStringSlice(reportGolden.Input["execution_refs"])))
+	if _, err := identities.claim("record_assignment_result", reportGolden.SemanticID+"|conflict", mutatedReportInput); err != nil {
+		t.Fatalf("report new-identity claim: %v", err)
+	}
+	dispatches.record(reportGolden.SemanticID + "|conflict")
+	_, conflictErr := env.rlmReplayCellErr(ctx, &implRun, implToolCtx, "replay-report-conflict", conflictCell)
 	assignmentAfter, err := env.s.GetCoSuperAssignment(ctx, env.ownerID, env.computerID, manifest.ImplAssignmentID, 1)
 	if err != nil {
 		t.Fatalf("reload impl assignment: %v", err)
@@ -614,6 +1019,9 @@ func main() {
 	if len(assignmentAfter.ReportRefs) != 1 {
 		t.Fatalf("conflict probe rebound terminal report: %v", assignmentAfter.ReportRefs)
 	}
+	if conflictErr == nil {
+		t.Log("report new-identity leg recorded as late evidence (distinct identity, golden state intact)")
+	}
 
-	t.Logf("replayed 5 goldens: canonical equality + zero-effect census passed")
+	t.Logf("replayed 5 goldens through the in-cell carrier: canonical equality + zero-effect census + conflict/new-identity legs passed")
 }

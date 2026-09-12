@@ -18,11 +18,14 @@
     }
   },
   "declared_fields": [
-    "update_id",
-    "agent_id",
+    "caller_agent_id",
     "channel_id",
+    "durable_cursor",
+    "packet_digest",
+    "packet_kind",
+    "target_agent_id",
     "trajectory_id",
-    "status"
+    "update_id"
   ],
   "receipt": {
     "agent_id": "management:owner-rlm-replay",
@@ -32,5 +35,12 @@
     "trajectory_id": "trajectory-assignment",
     "update_id": "upd-bc2a85a329e1bacf7d5b8c1fdcbfcf5f"
   },
-  "captured_at": "2026-09-12T00:40:24.350157176Z"
+  "durable": {
+    "caller_agent_id": "engineering:assignment-00",
+    "durable_cursor": 1,
+    "packet_digest": "",
+    "packet_kind": "producer_report",
+    "target_agent_id": "management:owner-rlm-replay"
+  },
+  "captured_at": "2026-09-12T03:08:34.772220885Z"
 }

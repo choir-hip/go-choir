@@ -3,9 +3,9 @@
   "tool": "record_self_development_verification",
   "successor": "choir.Verify",
   "build_sha": "a907f713",
-  "semantic_id": "run:rlm-verify|selfdev-rlm-replay|50d4cdab1b7185906446f9d089082bac4942b513bb39d318303f87ed6855c8e9|pass",
+  "semantic_id": "run:rlm-verify|selfdev-rlm-replay|dfdc97a57005f3192172963b09c0d91d2d04590ac7df015d542b2982bbcd462f|pass",
   "input": {
-    "bundle_digest": "50d4cdab1b7185906446f9d089082bac4942b513bb39d318303f87ed6855c8e9",
+    "bundle_digest": "dfdc97a57005f3192172963b09c0d91d2d04590ac7df015d542b2982bbcd462f",
     "decision": "pass",
     "operation_id": "selfdev-rlm-replay",
     "verifier_refs": [
@@ -13,18 +13,17 @@
     ]
   },
   "declared_fields": [
+    "decision",
     "operation_id",
     "state",
-    "bundle_digest",
-    "decision",
     "verifier_ref"
   ],
   "receipt": {
-    "bundle_digest": "5f5f4a8087695c45301bb42b366dcfbadee88a1523f342d6410ac61c1d84f041",
+    "bundle_digest": "ea242a5c89439b2130eff432eaed1d6b7dd1d12039373d46b7e4d2356097a9b9",
     "decision": "pass",
     "operation_id": "selfdev-rlm-replay",
     "state": "awaiting_approval",
-    "verifier_ref": "e64445762f6c14f073554f653cb0f2f6d8b0f41190c1807d25a3b23e26c5eb51"
+    "verifier_ref": "eef8cd6899d297a31b8992e46fd92f8974515a2b864c923168a710c825dcdbca"
   },
-  "captured_at": "2026-09-12T00:40:24.336728909Z"
+  "captured_at": "2026-09-12T03:08:34.757312213Z"
 }

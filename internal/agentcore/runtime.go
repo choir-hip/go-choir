@@ -3309,9 +3309,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 				assignedCoSuperOverlay = true
 				registry = overlay
 				// Exact assigned CoSupers receive the runtime-held capsule handle
-				// plus capsule-bound freeze/inspect/verify authority. Host file,
-				// spawn, materialize, checkpoint, route, VM, and owner decision
-				// authority are not injected.
+				// for in-cell capsule effects. Host file, spawn, materialize,
+				// checkpoint, route, VM, and owner decision authority are not
+				// injected.
 				ctx = WithCapsuleCtx(ctx, rt.assignedCoSuperCapsuleToolCtx(rec, handle))
 			}
 		}

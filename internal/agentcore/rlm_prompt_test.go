@@ -48,6 +48,30 @@ func TestCoSuperPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
 	if strings.Contains(toolsPrompt, "choir.Spawn") {
 		t.Error("tools prompt leaks RLM orchestration surface")
 	}
+	// The tools-actuator fallback desk is capsule effects only: none of the
+	// five retired overlay names may be presented as reachable.
+	for _, retired := range []string{"update_coagent", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "record_assignment_result"} {
+		if strings.Contains(toolsPrompt, retired) {
+			t.Errorf("tools prompt still names retired tool %q as reachable", retired)
+		}
+	}
+}
+
+// TestRLMPromptOmitsRetiredToolNames guards the same invariant on the RLM
+// overlay: the sealed-Go prompt must never present a retired JSON tool name
+// as callable.
+func TestRLMPromptOmitsRetiredToolNames(t *testing.T) {
+	rt := &Runtime{}
+	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
+	rlmPrompt, err := rt.systemPromptForRun(testCoSuperRun())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, retired := range []string{"update_coagent", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "record_assignment_result"} {
+		if strings.Contains(rlmPrompt, retired) {
+			t.Errorf("RLM prompt still names retired tool %q", retired)
+		}
+	}
 }
 
 // TestCoSuperPromptIsModelIndependent is the standing one-prompt guard: the

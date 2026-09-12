@@ -678,7 +678,14 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 	// RLM route serves cells on the activation's persistent session worker;
 	// tools route keeps the one-shot worker. The route is resolved once per
 	// call so an unhold/flag change takes effect without reboot.
-	if b.effectiveRoute() == actuatorRLM {
+	if b.actuator == actuatorRLM {
+		if !b.sessionWorkerReady {
+			// Post-cutover the RLM desk is the in-cell carrier only: degrading
+			// to the one-shot worker would serve a desk with no choir scope
+			// and no terminal authority. Fail the call with a typed session
+			// diagnostic instead of silently degrading.
+			return BrokerRPCResponse{Error: "session_unavailable: actuator=rlm requested but the session worker is not ready"}
+		}
 		return b.handleGoEvalSession(ctx, cap, params)
 	}
 	return b.handleGoEvalOneShot(ctx, cap, params)
