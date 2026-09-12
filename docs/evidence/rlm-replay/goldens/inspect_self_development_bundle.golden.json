@@ -2,7 +2,7 @@
   "operation": "inspect_self_development_bundle",
   "tool": "inspect_self_development_bundle",
   "successor": "choir.InspectBundle",
-  "build_sha": "a907f713",
+  "build_sha": "8f987d7f",
   "semantic_id": "run:rlm-verify|selfdev-rlm-replay|dfdc97a57005f3192172963b09c0d91d2d04590ac7df015d542b2982bbcd462f",
   "input": {
     "bundle_digest": "dfdc97a57005f3192172963b09c0d91d2d04590ac7df015d542b2982bbcd462f",
@@ -116,5 +116,6 @@
       "capsule-exec:sha256:344eb7dd7f6aea30581e14ae44c5dc1d1b66915e444468a5f2a2f00a8494eaa6"
     ]
   },
-  "captured_at": "2026-09-12T03:08:34.727083034Z"
+  "captured_at": "2026-09-12T03:08:34.727083034Z",
+  "build_sha_note": "capture ran 2026-09-12T03:08Z on Node B on 8f987d7f-equivalent tree (classifier normalization + verify-decision receipt line present; legacy tools present, deleted only in 50fee6ed); restamped: a907f713 predates the classifier fix, 50fee6ed postdates capture and deletes the capture tools"
 }

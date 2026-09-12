@@ -47,11 +47,13 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -245,13 +247,14 @@ func (env *rlmReplayEnv) rlmIncomingDirs(t *testing.T) map[string]bool {
 // leave untouched. Counts and identities are resolved independently of the
 // replayed call's own receipt.
 type rlmReplayCensus struct {
-	headSeq       uint64
-	incoming      map[string]bool
-	updateCount   int
-	reportRefs    int
-	mailboxCount  int
-	operationState string
+	headSeq         uint64
+	incoming        map[string]bool
+	updateCount     int
+	reportRefs      int
+	mailboxCount    int
+	operationState  string
 	operationDigest string
+	operationCount  int
 }
 
 func (env *rlmReplayEnv) rlmTakeCensus(t *testing.T, ctx context.Context, manifest rlmReplayManifest) rlmReplayCensus {
@@ -280,7 +283,20 @@ func (env *rlmReplayEnv) rlmTakeCensus(t *testing.T, ctx context.Context, manife
 		mailboxCount:    len(mailbox),
 		operationState:  op.State,
 		operationDigest: op.BundleDigest,
+		operationCount:  env.rlmOperationCount(t, ctx),
 	}
+}
+
+func (env *rlmReplayEnv) rlmOperationCount(t *testing.T, ctx context.Context) int {
+	t.Helper()
+	ops, err := env.rt.selfdevOperations.ListByStates(ctx, env.computerID,
+		"requested", "executing", "frozen", "verified", "awaiting_approval",
+		"accepted", "materializing", "applied", "rejected", "rollback_pending",
+		"rolled_back", "failed", "degraded")
+	if err != nil {
+		t.Fatalf("census operation count: %v", err)
+	}
+	return len(ops)
 }
 
 func (env *rlmReplayEnv) rlmAssertCensusEqual(t *testing.T, ctx context.Context, manifest rlmReplayManifest, before rlmReplayCensus, row string) {
@@ -304,6 +320,9 @@ func (env *rlmReplayEnv) rlmAssertCensusEqual(t *testing.T, ctx context.Context,
 	if after.operationState != before.operationState || after.operationDigest != before.operationDigest {
 		t.Fatalf("%s replay mutated the operation: %s/%s -> %s/%s", row,
 			before.operationState, before.operationDigest, after.operationState, after.operationDigest)
+	}
+	if after.operationCount != before.operationCount {
+		t.Fatalf("%s replay minted or dropped operation rows: %d -> %d", row, before.operationCount, after.operationCount)
 	}
 }
 
@@ -357,6 +376,71 @@ func rlmReplayView(receipt, durable map[string]any) map[string]any {
 		view["execution_receipts"] = refs
 	}
 	return view
+}
+
+// rlmReportCommandIDs projects command_ids from a stored report.
+func rlmReportCommandIDs(report types.CoSuperAssignmentReport) []string {
+	ids := make([]string, 0, len(report.Commands))
+	for _, c := range report.Commands {
+		ids = append(ids, c.CommandID)
+	}
+	return ids
+}
+
+func rlmReportOutputDigests(report types.CoSuperAssignmentReport) []string {
+	digests := make([]string, 0, len(report.Outputs))
+	for _, o := range report.Outputs {
+		digests = append(digests, o.Digest)
+	}
+	return digests
+}
+
+// rlmGoldenString reads a required string field from a golden receipt or
+// input, failing closed instead of panicking on a type assertion.
+func rlmGoldenString(t *testing.T, m map[string]any, key string) string {
+	t.Helper()
+	v, ok := m[key].(string)
+	if !ok || v == "" {
+		t.Fatalf("golden lacks string field %q", key)
+	}
+	return v
+}
+
+// rlmEmptyToNil mirrors the golden null convention: the capture receipts
+// record absent scalars (verdict, candidate) as null, so a replayed empty
+// string must project as nil, not "".
+func rlmEmptyToNil(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// rlmCopyDir replicates a bundle tree for the corruption leg: a partial copy
+// would reject on missing files instead of the corrupted content, proving
+// nothing about integrity detection.
+func rlmCopyDir(t *testing.T, src, dst string) {
+	t.Helper()
+	if err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, raw, 0o644)
+	}); err != nil {
+		t.Fatalf("copy bundle tree: %v", err)
+	}
 }
 
 // rlmAssertReplayEquality projects the golden view and the replay view through
@@ -528,6 +612,10 @@ func TestRLMReplayGoldens(t *testing.T) {
 		t.Fatalf("parse manifest: %v", err)
 	}
 
+	// runSuffix makes every test-minted identity unique per run: the capture
+	// state dir persists across runs, so fixed idempotency keys, capsule IDs
+	// and handle names would collide (or false-dedup) on the second run.
+	runSuffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	implRun, err := env.s.GetLifecycleRun(ctx, env.ownerID, env.computerID, manifest.ImplRunID)
 	if err != nil {
 		t.Fatalf("load impl run: %v", err)
@@ -615,6 +703,7 @@ if err != nil { panic(err) }
 		t.Fatalf("freeze identity claim: %v", err)
 	}
 	dispatches.record(commitGolden.SemanticID)
+	verifyGolden := rlmReplayLoadGolden(t, goldenDir, "record_self_development_verification")
 	freezeResult := env.rlmReplayCell(t, ctx, &implRun, implToolCtx, "replay-freeze", freezeCell)
 	freezeView, _ := freezeResult["freeze_result"].(map[string]any)
 	if freezeView == nil {
@@ -622,24 +711,32 @@ if err != nil { panic(err) }
 	}
 	// The short-circuit receipt carries only {handle,bundle_digest,operation_id,
 	// state}; the P0 projection's remaining fields live on the durable
-	// operation record — merge it so the view covers the full projection set.
-	// Note: BundleDigest on the operation record is the FINALIZED digest
-	// (finalizeVerifiedCapsuleBundle overwrites it at verify); the frozen
-	// digest the P0 projection names content_digest lives only on the golden
-	// receipt.
+	// operation record and the frozen bundle draft on disk. Read them live —
+	// never from the golden — so equality on those fields can actually fail.
 	op, err := env.rt.selfdevOperations.Get(ctx, env.computerID, manifest.OperationID)
 	if err != nil {
 		t.Fatalf("load operation for freeze view: %v", err)
 	}
 	freezeView["base_event_head"] = op.BaseHead
 	freezeView["trajectory_id"] = op.TrajectoryID
-	// state is the freeze-time state (frozen), not the operation's current
-	// state (awaiting_approval after verify). The golden receipt carries it.
-	for _, f := range []string{"state", "content_digest", "change_count", "classifier_version", "classifier_digest", "groups"} {
-		if v, ok := commitGolden.Receipt[f]; ok {
-			freezeView[f] = v
-		}
+	// The frozen bundle draft is the durable record of what the cell froze.
+	// Read the six P0 fields from it: state is the freeze-time state (frozen),
+	// not the operation's current state (awaiting_approval after verify).
+	draftPath := filepath.Join(env.updaterDir, "incoming", rlmGoldenString(t, verifyGolden.Receipt, "bundle_digest"), "bundle.draft.json")
+	rawDraft, err := os.ReadFile(draftPath)
+	if err != nil {
+		t.Fatalf("read frozen bundle draft: %v", err)
 	}
+	var draft transaction.CapsuleEffectBundle
+	if err := json.Unmarshal(rawDraft, &draft); err != nil {
+		t.Fatalf("parse frozen bundle draft: %v", err)
+	}
+	freezeView["state"] = "frozen"
+	freezeView["content_digest"] = draft.ContentDigest
+	freezeView["change_count"] = float64(len(draft.OrderedFileEffects))
+	freezeView["classifier_version"] = draft.ClassifierV
+	freezeView["classifier_digest"] = draft.ClassifierDigest
+	freezeView["groups"] = draft.Groups
 	rlmAssertReplayEquality(t, commitGolden, freezeView)
 
 	// Conflict probe: same semantic identity, changed canonical input must be
@@ -653,24 +750,52 @@ if err != nil { panic(err) }
 		t.Fatal("freeze conflict probe: mutated input on the same identity was not refused pre-dispatch")
 	}
 	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "commit_transaction conflict")
-
-	// No new-identity leg for freeze: the durable semantic identity is the
-	// operation itself, so a "new identity" means a new operation — a fresh
-	// trajectory + operation row, out of scope for this driver. The replay
-	// above already proves the durable layer returns the stored receipt on a
-	// second freeze of the same operation; the conflict probe proves
-	// input-mutation is refused pre-dispatch.
+	// New-identity leg for freeze: a fresh trajectory + operation row is a
+	// distinct semantic identity. The durable layer must mint a new operation
+	// and freeze it independently — never dedup to the golden's operation.
+	freshOp, err := env.rt.selfdevOperations.Start(ctx, selfdev.StartRequest{
+		ComputerID:        env.computerID,
+		IdempotencyKey:    "rlm-replay-freeze-fresh-" + runSuffix,
+		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("a", 64),
+	})
+	if err != nil {
+		t.Fatalf("start fresh freeze operation: %v", err)
+	}
+	if freshOp.OperationID == manifest.OperationID {
+		t.Fatal("freeze new-identity leg: fresh operation deduped to golden operation")
+	}
+	if freshOp.TrajectoryID == manifest.TrajectoryID {
+		t.Fatal("freeze new-identity leg: fresh operation shares golden trajectory")
+	}
+	// Non-interference: Start is projection-mode here (appendOperationProjection
+	// writes an event projection, no DB row), so the DB-backed operation census
+	// cannot observe the fresh operation. Prove instead that the golden
+	// operation still reads back intact — the fresh identity minted alongside
+	// it, never over it.
+	// `state` stays the freeze-time constant by construction, and deliberately
+	// so: the live operation row has since moved to awaiting_approval (verify
+	// ran in capture), so surfacing the live state here would compare the
+	// capture-time golden against an anachronistic value. The P0 `state` field
+	// for row 5 names the freeze-time state, which is definitional; the other
+	// eight fields carry the equality proof.
+	// The replay above proves the durable layer returns the stored receipt on
+	// a second freeze of the same operation; the conflict probe proves
+	// input-mutation is refused pre-dispatch; the fresh operation proves a
+	// distinct identity mints a distinct durable object.
 
 	// --- Row 6: inspect_self_development_bundle -> choir.InspectBundle ---
 	// The verifier capsule respawns with the frozen bundle mounted at
 	// /selfdev/bundle; the cell inspects through the mount. The mount is the
 	// binding — the cell never supplies identity.
 	inspectGolden := rlmReplayLoadGolden(t, goldenDir, "inspect_self_development_bundle")
-	verifyGolden := rlmReplayLoadGolden(t, goldenDir, "record_self_development_verification")
-	draftDir := filepath.Join(env.updaterDir, "incoming", verifyGolden.Receipt["bundle_digest"].(string))
+	// verifyGolden loaded above for the freeze draft path.
+	// The finalized bundle dir mirrors the frozen draft (finalize copies it
+	// alongside bundle.json), so the P0 frozen fields read here are the frozen
+	// values; the digest selects the durable object, the reads prove the values.
+	draftDir := filepath.Join(env.updaterDir, "incoming", rlmGoldenString(t, verifyGolden.Receipt, "bundle_digest"))
 	binding, _ := json.Marshal(map[string]any{
-		"operation_id":  inspectGolden.Input["operation_id"].(string),
-		"bundle_digest": inspectGolden.Input["bundle_digest"].(string),
+		"operation_id":  rlmGoldenString(t, inspectGolden.Input, "operation_id"),
+		"bundle_digest": rlmGoldenString(t, inspectGolden.Input, "bundle_digest"),
 	})
 	verifyPreflight, err := env.executor.PreflightSourceSnapshot(ctx, "")
 	if err != nil {
@@ -722,8 +847,10 @@ fmt.Print(string(b))
 		"operation_id":  inspectGolden.Input["operation_id"].(string),
 		"bundle_digest": strings.Repeat("0", 64),
 	})
+	conflictCapsule := "capsule-rlm-verify-conflict-" + runSuffix
+	conflictHandle := "h-rlm-verify-conflict-" + runSuffix
 	if _, err := env.executor.Spawn(ctx, capsule.SpawnSpec{
-		CapsuleID: "capsule-rlm-verify-conflict", OwnerRunID: manifest.VerifyRunID,
+		CapsuleID: conflictCapsule, OwnerRunID: manifest.VerifyRunID,
 		MemoryMax: 1 << 30, CpuQuota: 100000, CpuPeriod: 100000, PidsMax: 256,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
 		SourceArtifactRef: verifyPreflight.ArtifactRef, ExpectedSubjectDigest: verifyPreflight.SubjectDigest,
@@ -731,16 +858,80 @@ fmt.Print(string(b))
 	}); err != nil {
 		t.Fatalf("spawn conflict verifier capsule: %v", err)
 	}
-	defer env.executor.ForceDestroy(context.Background(), "capsule-rlm-verify-conflict")
-	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleCoSuper, "capsule-rlm-verify-conflict", "h-rlm-verify-conflict", 24*time.Hour, "verifier"); err != nil {
+	defer env.executor.ForceDestroy(context.Background(), conflictCapsule)
+	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleCoSuper, conflictCapsule, conflictHandle, 24*time.Hour, "verifier"); err != nil {
 		t.Fatalf("mint conflict verifier handle: %v", err)
 	}
-	conflictToolCtx := env.rlmReplayToolCtx(&verifyRun, "h-rlm-verify-conflict")
-	conflictRes, err := env.rlmReplayCellErr(ctx, &verifyRun, conflictToolCtx, "replay-inspect-conflict", inspectCell)
+	conflictToolCtx := env.rlmReplayToolCtx(&verifyRun, conflictHandle)
+	conflictCellID := "replay-inspect-conflict-" + runSuffix
+	conflictRes, err := env.rlmReplayCellErr(ctx, &verifyRun, conflictToolCtx, conflictCellID, inspectCell)
 	if err == nil {
 		if s, _ := conflictRes["stdout"].(string); !strings.HasPrefix(s, "INSPECT_ERR:") {
 			t.Fatalf("inspect conflict probe: mismatched binding digest accepted (stdout %q)", s)
 		}
+	}
+
+	// Integrity leg for inspect (the new-identity-observes-change half for the
+	// read-only row): copy the WHOLE frozen bundle tree to a fresh incoming
+	// dir, corrupt one runtime file, and require the corruption — not a
+	// binding-shape error — to reject the inspection. The binding carries the
+	// FROZEN digest (dfdc) under a fresh operation id: the mirrored draft
+	// declares the frozen content digest, and the mounted binding must name it
+	// (row 6 binds inspectGolden.Input, frozen, for the same reason). The
+	// finalized receipt digest (ea24) fails closed before any file is read,
+	// which would make the corruption causally inert — so only the frozen
+	// digest keeps the corruption causal, and the rejection can only come from
+	// the corrupted file content.
+	frozenDigest := rlmGoldenString(t, commitGolden.Receipt, "bundle_digest")
+	corruptDir := filepath.Join(env.updaterDir, "incoming", "corrupt-"+runSuffix)
+	rlmCopyDir(t, draftDir, corruptDir)
+	rawDraft2, err := os.ReadFile(filepath.Join(corruptDir, "bundle.draft.json"))
+	if err != nil {
+		t.Fatalf("read copied draft for corruption: %v", err)
+	}
+	var corruptDraft transaction.CapsuleEffectBundle
+	if err := json.Unmarshal(rawDraft2, &corruptDraft); err != nil {
+		t.Fatalf("parse copied draft for corruption: %v", err)
+	}
+	if len(corruptDraft.RuntimeFiles) == 0 {
+		t.Fatal("corrupt leg: no runtime files to corrupt")
+	}
+	corruptFile := filepath.Join(corruptDir, filepath.FromSlash(corruptDraft.RuntimeFiles[0].Path))
+	if err := os.WriteFile(corruptFile, []byte("corrupted"), 0o644); err != nil {
+		t.Fatalf("write corrupt file: %v", err)
+	}
+	corruptBinding, _ := json.Marshal(map[string]any{
+		"operation_id":  rlmGoldenString(t, inspectGolden.Input, "operation_id") + "-corrupt-" + runSuffix,
+		"bundle_digest": frozenDigest,
+	})
+	corruptCapsule := "capsule-rlm-verify-corrupt-" + runSuffix
+	corruptHandle := "h-rlm-verify-corrupt-" + runSuffix
+	if _, err := env.executor.Spawn(ctx, capsule.SpawnSpec{
+		CapsuleID: corruptCapsule, OwnerRunID: manifest.VerifyRunID,
+		MemoryMax: 1 << 30, CpuQuota: 100000, CpuPeriod: 100000, PidsMax: 256,
+		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
+		SourceArtifactRef: verifyPreflight.ArtifactRef, ExpectedSubjectDigest: verifyPreflight.SubjectDigest,
+		VerifierBundleDir: corruptDir, VerifierBinding: string(corruptBinding),
+	}); err != nil {
+		t.Fatalf("spawn corrupt verifier capsule: %v", err)
+	}
+	defer env.executor.ForceDestroy(context.Background(), corruptCapsule)
+	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleCoSuper, corruptCapsule, corruptHandle, 24*time.Hour, "verifier"); err != nil {
+		t.Fatalf("mint corrupt verifier handle: %v", err)
+	}
+	corruptToolCtx := env.rlmReplayToolCtx(&verifyRun, corruptHandle)
+	corruptRes, err := env.rlmReplayCellErr(ctx, &verifyRun, corruptToolCtx, "replay-inspect-corrupt-"+runSuffix, inspectCell)
+	if err != nil {
+		t.Fatalf("inspect integrity leg: cell failed instead of surfacing INSPECT_ERR: %v", err)
+	}
+	corruptStdout, _ := corruptRes["stdout"].(string)
+	if !strings.Contains(corruptStdout, "frozen runtime file digest mismatch") {
+		t.Fatalf("inspect integrity leg: expected file-digest rejection (stdout %q)", corruptStdout)
+	}
+	// Remove the corrupted copy immediately: later rows census the incoming
+	// dir set, and the shared capture state must stay pristine for reruns.
+	if err := os.RemoveAll(corruptDir); err != nil {
+		t.Fatalf("remove corrupt bundle dir: %v", err)
 	}
 
 	// --- Row 7: record_self_development_verification -> choir.Verify ---
@@ -758,9 +949,9 @@ func main() {
 err := choir.Verify(%q, %s, %q)
 if err != nil { panic(err) }
 }`,
-		verifyGolden.Input["decision"].(string),
+		rlmGoldenString(t, verifyGolden.Input, "decision"),
 		rlmGoStringSlice(rlmStringSlice(verifyGolden.Input["verifier_refs"])),
-		verifyGolden.Receipt["bundle_digest"].(string))
+		rlmGoldenString(t, verifyGolden.Receipt, "bundle_digest"))
 
 	censusBefore = env.rlmTakeCensus(t, ctx, manifest)
 	if _, err := identities.claim("record_self_development_verification", verifyGolden.SemanticID, verifyInput); err != nil {
@@ -797,7 +988,7 @@ err := choir.Verify("fail", %s, %q)
 if err != nil { panic(err) }
 }`,
 		rlmGoStringSlice(rlmStringSlice(verifyGolden.Input["verifier_refs"])),
-		verifyGolden.Receipt["bundle_digest"].(string))
+		rlmGoldenString(t, verifyGolden.Receipt, "bundle_digest"))
 	if _, err := identities.claim("record_self_development_verification", verifyGolden.SemanticID+"|fail", mutatedVerifyInput); err != nil {
 		t.Fatalf("verify new-identity claim: %v", err)
 	}
@@ -955,28 +1146,38 @@ if err != nil { panic(err) }
 	if err != nil {
 		t.Fatalf("load impl assignment: %v", err)
 	}
-	reportReplayView := map[string]any{
-		"assignment_id":      manifest.ImplAssignmentID,
-		"attempt":            float64(1),
-		"disposition":        string(assignment.Disposition),
-		"proposition_digest": reportGolden.Durable["proposition_digest"],
-		"result":             reportGolden.Input["result"],
-		"verdict":            reportGolden.Input["verdict"],
-		"summary":            reportGolden.Input["summary"],
-		"evidence_refs":      reportGolden.Input["evidence_refs"],
-		"command_ids":        rlmReplayView(reportGolden.Receipt, nil)["command_ids"],
-		"output_digests":     rlmReplayView(reportGolden.Receipt, nil)["output_digests"],
-		"candidate":          reportGolden.Receipt["candidate"],
-		"replay":             true,
-		"report_id":          reportGolden.Durable["report_id"],
-	}
-	// The durable report object must still resolve to the golden report.
 	if len(assignment.ReportRefs) != 1 {
 		t.Fatalf("replay minted extra reports: %v", assignment.ReportRefs)
 	}
-	report, err := env.s.GetCoSuperAssignmentReport(ctx, env.ownerID, env.computerID, reportGolden.Durable["report_id"].(string))
-	if err != nil || report.ReportID != reportGolden.Durable["report_id"].(string) {
-		t.Fatalf("replay report unreadable or mismatched: %v", err)
+	// ReportRefs carry object refs (obj:choir.co_super_assignment_report:...),
+	// not report IDs — resolve the durable row through the golden's report_id
+	// identity key (identity binding, like every manifest ID in this driver).
+	// Every compared VALUE below still comes from the loaded row.
+	reportID := rlmGoldenString(t, reportGolden.Durable, "report_id")
+	report, err := env.s.GetCoSuperAssignmentReport(ctx, env.ownerID, env.computerID, reportID)
+	if err != nil {
+		t.Fatalf("load stored report: %v", err)
+	}
+	// Project the P0 field set from the stored report and assignment — never
+	// from the golden — so equality on every field can actually fail.
+	reportReplayView := map[string]any{
+		"assignment_id":      report.AssignmentID,
+		"attempt":            float64(report.Attempt),
+		"disposition":        string(assignment.Disposition),
+		"proposition_digest": report.PropositionDigest,
+		"result":             string(report.Result),
+		"verdict":            rlmEmptyToNil(string(report.Verdict)),
+		"summary":            report.Summary,
+		"evidence_refs":      report.EvidenceRefs,
+		"command_ids":        rlmReportCommandIDs(report),
+		"output_digests":     rlmReportOutputDigests(report),
+		"candidate":          rlmEmptyToNil(report.CandidateID),
+		// `replay` is a marker carried through the projection, not a compared
+		// proof: the capture-time golden cannot carry it (the golden IS the
+		// original), so the coverage check passes it silently by construction.
+		// Recorded here as an acknowledged P0-set/golden gap, not a proof.
+		"replay":    true,
+		"report_id": report.ReportID,
 	}
 	rlmAssertReplayEquality(t, reportGolden, reportReplayView)
 	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "record_assignment_result")

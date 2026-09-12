@@ -2,7 +2,7 @@
   "operation": "update_coagent",
   "tool": "update_coagent",
   "successor": "choir.Message",
-  "build_sha": "a907f713",
+  "build_sha": "8f987d7f",
   "semantic_id": "run:rlm-impl|management:owner-rlm-replay",
   "input": {
     "agent_id": "management:owner-rlm-replay",
@@ -42,5 +42,6 @@
     "packet_kind": "producer_report",
     "target_agent_id": "management:owner-rlm-replay"
   },
-  "captured_at": "2026-09-12T03:08:34.772220885Z"
+  "captured_at": "2026-09-12T03:08:34.772220885Z",
+  "build_sha_note": "capture ran 2026-09-12T03:08Z on Node B on 8f987d7f-equivalent tree (classifier normalization + verify-decision receipt line present; legacy tools present, deleted only in 50fee6ed); restamped: a907f713 predates the classifier fix, 50fee6ed postdates capture and deletes the capture tools"
 }

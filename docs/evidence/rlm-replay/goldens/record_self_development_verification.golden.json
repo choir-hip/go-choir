@@ -2,7 +2,7 @@
   "operation": "record_self_development_verification",
   "tool": "record_self_development_verification",
   "successor": "choir.Verify",
-  "build_sha": "a907f713",
+  "build_sha": "8f987d7f",
   "semantic_id": "run:rlm-verify|selfdev-rlm-replay|dfdc97a57005f3192172963b09c0d91d2d04590ac7df015d542b2982bbcd462f|pass",
   "input": {
     "bundle_digest": "dfdc97a57005f3192172963b09c0d91d2d04590ac7df015d542b2982bbcd462f",
@@ -25,5 +25,6 @@
     "state": "awaiting_approval",
     "verifier_ref": "eef8cd6899d297a31b8992e46fd92f8974515a2b864c923168a710c825dcdbca"
   },
-  "captured_at": "2026-09-12T03:08:34.757312213Z"
+  "captured_at": "2026-09-12T03:08:34.757312213Z",
+  "build_sha_note": "capture ran 2026-09-12T03:08Z on Node B on 8f987d7f-equivalent tree (classifier normalization + verify-decision receipt line present; legacy tools present, deleted only in 50fee6ed); restamped: a907f713 predates the classifier fix, 50fee6ed postdates capture and deletes the capture tools"
 }

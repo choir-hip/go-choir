@@ -1,5 +1,5 @@
 {
-  "build_sha": "a907f713",
+  "build_sha": "8f987d7f",
   "owner_id": "owner-rlm-replay",
   "computer_id": "computer-rlm-replay",
   "trajectory_id": "trajectory-assignment",
@@ -24,5 +24,6 @@
   "report_tool_call_id": "tool-call-rlm-report",
   "parent_agent_id": "management:owner-rlm-replay",
   "parent_run_id": "run-management-assignment",
-  "captured_at": "2026-09-12T03:08:35.062312297Z"
+  "captured_at": "2026-09-12T03:08:35.062312297Z",
+  "build_sha_note": "capture ran 2026-09-12T03:08Z on Node B on 8f987d7f-equivalent tree (classifier normalization + verify-decision receipt line present; legacy tools present, deleted only in 50fee6ed); restamped: a907f713 predates the classifier fix, 50fee6ed postdates capture and deletes the capture tools"
 }

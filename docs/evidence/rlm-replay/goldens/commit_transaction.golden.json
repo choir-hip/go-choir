@@ -2,7 +2,7 @@
   "operation": "commit_transaction",
   "tool": "commit_transaction",
   "successor": "choir.Freeze",
-  "build_sha": "a907f713",
+  "build_sha": "8f987d7f",
   "semantic_id": "selfdev-rlm-replay",
   "input": {
     "build_recipe_ref": "capsule-exec:sha256:66927ac368cf0514450d1f5eaebb98f2201922464c62143e5840f7cc3aeccf07",
@@ -53,5 +53,6 @@
     "base_event_head": "f15504f57f2952f6604bc33d7a22713d0ce87dfde2ed0f4c3251339873c7ff7f",
     "trajectory_id": "trajectory-assignment"
   },
-  "captured_at": "2026-09-12T03:08:34.593947495Z"
+  "captured_at": "2026-09-12T03:08:34.593947495Z",
+  "build_sha_note": "capture ran 2026-09-12T03:08Z on Node B on 8f987d7f-equivalent tree (classifier normalization + verify-decision receipt line present; legacy tools present, deleted only in 50fee6ed); restamped: a907f713 predates the classifier fix, 50fee6ed postdates capture and deletes the capture tools"
 }

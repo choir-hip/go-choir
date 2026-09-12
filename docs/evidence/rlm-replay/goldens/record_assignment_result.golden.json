@@ -2,7 +2,7 @@
   "operation": "record_assignment_result",
   "tool": "record_assignment_result",
   "successor": "choir.Complete",
-  "build_sha": "a907f713",
+  "build_sha": "8f987d7f",
   "semantic_id": "run:rlm-impl|completed|none",
   "input": {
     "evidence_refs": [
@@ -145,5 +145,6 @@
       "obj:choir.co_super_assignment_report:b3duZXItcmxtLXJlcGxheQ:key-070062009ef9ba080dc8108e7dabd0132d97a2a87ab88374418e9adb3d64106f"
     ]
   },
-  "captured_at": "2026-09-12T03:08:35.062195106Z"
+  "captured_at": "2026-09-12T03:08:35.062195106Z",
+  "build_sha_note": "capture ran 2026-09-12T03:08Z on Node B on 8f987d7f-equivalent tree (classifier normalization + verify-decision receipt line present; legacy tools present, deleted only in 50fee6ed); restamped: a907f713 predates the classifier fix, 50fee6ed postdates capture and deletes the capture tools"
 }
