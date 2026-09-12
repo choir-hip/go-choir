@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 PROMPT-FIX-1 DEPLOYED (rev1 CI success 34710684124, staging 73de83d0 18:36; tell -005 submitted on rev1 prompt, preflight clean; watching whether management passes structured overlay id and engineering sends one-eval-per-turn with verdict=none)
+  slice: P5 RETRY-006 (tell -005 REFUSED at texture turn 18:39:26, no management run: turn reason paraphrases open_persistent_super target-load refusal texture_turn_runtime.go:load-exact-target; trajectory holds 93 engineering + 1 texture agents, super resolves via global scope; code unchanged since -004 success so state/transient-driven, not rev1 (rev1 touches management+engineering prompts only, management never ran); owner request open+blocked; next: re-tell -006 to test transient vs systemic)
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
