@@ -22,7 +22,6 @@
     "content_digest",
     "groups",
     "operation_id",
-    "state",
     "trajectory_id"
   ],
   "receipt": {

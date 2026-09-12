@@ -23,15 +23,15 @@ import (
 const rlmReplayFixtureVersion = 1
 
 const (
-	rlmReplayCapsuleExec       = "capsule_exec"
-	rlmReplayCapsuleReadFile   = "capsule_read_file"
-	rlmReplayCapsuleWriteFile  = "capsule_write_file"
-	rlmReplayCapsuleListDir    = "capsule_list_dir"
-	rlmReplayCommitTransaction = "commit_transaction"
-	rlmReplayInspectBundle     = "inspect_self_development_bundle"
+	rlmReplayCapsuleExec        = "capsule_exec"
+	rlmReplayCapsuleReadFile    = "capsule_read_file"
+	rlmReplayCapsuleWriteFile   = "capsule_write_file"
+	rlmReplayCapsuleListDir     = "capsule_list_dir"
+	rlmReplayCommitTransaction  = "commit_transaction"
+	rlmReplayInspectBundle      = "inspect_self_development_bundle"
 	rlmReplayRecordVerification = "record_self_development_verification"
-	rlmReplayAssignmentResult  = "record_assignment_result"
-	rlmReplayUpdateCoagent     = "update_coagent"
+	rlmReplayAssignmentResult   = "record_assignment_result"
+	rlmReplayUpdateCoagent      = "update_coagent"
 )
 
 var rlmReplayOperations = map[string]struct{}{
@@ -67,20 +67,20 @@ type rlmReplayCanonicalReceipt struct {
 type rlmReplayProofMode string
 
 const (
-	rlmReplayLiveCapture      rlmReplayProofMode = "live_capture"
-	rlmReplayRecordedFixture  rlmReplayProofMode = "recorded_fixture"
+	rlmReplayLiveCapture     rlmReplayProofMode = "live_capture"
+	rlmReplayRecordedFixture rlmReplayProofMode = "recorded_fixture"
 )
 
 var rlmReplayProofPlan = map[string]rlmReplayProofMode{
-	rlmReplayCapsuleExec:       rlmReplayLiveCapture,
-	rlmReplayCapsuleReadFile:   rlmReplayLiveCapture,
-	rlmReplayCapsuleWriteFile:  rlmReplayLiveCapture,
-	rlmReplayCapsuleListDir:    rlmReplayLiveCapture,
-	rlmReplayCommitTransaction: rlmReplayRecordedFixture,
-	rlmReplayInspectBundle:     rlmReplayRecordedFixture,
+	rlmReplayCapsuleExec:        rlmReplayLiveCapture,
+	rlmReplayCapsuleReadFile:    rlmReplayLiveCapture,
+	rlmReplayCapsuleWriteFile:   rlmReplayLiveCapture,
+	rlmReplayCapsuleListDir:     rlmReplayLiveCapture,
+	rlmReplayCommitTransaction:  rlmReplayRecordedFixture,
+	rlmReplayInspectBundle:      rlmReplayRecordedFixture,
 	rlmReplayRecordVerification: rlmReplayRecordedFixture,
-	rlmReplayAssignmentResult:  rlmReplayLiveCapture,
-	rlmReplayUpdateCoagent:     rlmReplayLiveCapture,
+	rlmReplayAssignmentResult:   rlmReplayLiveCapture,
+	rlmReplayUpdateCoagent:      rlmReplayLiveCapture,
 }
 
 func canonicalRLMReplayReceipt(operation string, receipt any, exclusions []string) (rlmReplayCanonicalReceipt, error) {
@@ -95,8 +95,37 @@ func canonicalRLMReplayReceipt(operation string, receipt any, exclusions []strin
 	return rlmReplayCanonicalReceipt{JSON: canonical, SHA256: computerevent.DigestBytes(canonical)}, nil
 }
 
+// rlmReplayP0Fields is the static P0 projection set per operation. The
+// equality guard requires every golden's declared_fields to cover exactly
+// this set minus explicitly named exclusions, so a silently dropped field
+// fails loudly instead of passing vacuously on both sides.
+func rlmReplayP0Fields(operation string) []string {
+	switch operation {
+	case rlmReplayCapsuleExec:
+		return []string{"command", "cwd", "exit_code", "stdout_sha256", "stderr_sha256"}
+	case rlmReplayCapsuleReadFile:
+		return []string{"path", "content_sha256"}
+	case rlmReplayCapsuleWriteFile:
+		return []string{"path", "content_sha256", "bytes_written"}
+	case rlmReplayCapsuleListDir:
+		return []string{"path", "entries"}
+	case rlmReplayCommitTransaction:
+		return []string{"operation_id", "trajectory_id", "base_event_head", "content_digest", "change_count", "classifier_version", "classifier_digest", "groups", "state"}
+	case rlmReplayInspectBundle:
+		return []string{"operation_id", "content_digest", "source_tree_ref", "runtime_artifact_ref", "base_event_head", "runtime_files", "build_recipe_ref", "test_receipts", "dependency_toolchain_refs", "resource_receipts", "execution_receipts", "classifier_version", "classifier_digest", "groups"}
+	case rlmReplayRecordVerification:
+		return []string{"operation_id", "decision", "state", "verifier_ref"}
+	case rlmReplayAssignmentResult:
+		return []string{"assignment_id", "attempt", "proposition_digest", "disposition", "result", "verdict", "summary", "evidence_refs", "command_ids", "output_digests", "candidate", "replay", "report_id"}
+	case rlmReplayUpdateCoagent:
+		return []string{"update_id", "caller_agent_id", "target_agent_id", "channel_id", "trajectory_id", "packet_kind", "packet_digest", "durable_cursor"}
+	}
+	return nil
+}
+
 func projectRLMReplayReceipt(operation string, receipt any, exclusions []string) (map[string]any, error) {
-	if _, ok := rlmReplayOperations[operation]; !ok {
+	fields := rlmReplayP0Fields(operation)
+	if fields == nil {
 		return nil, fmt.Errorf("replay: unknown operation %q", operation)
 	}
 	value, err := replayObject(receipt)
@@ -105,27 +134,6 @@ func projectRLMReplayReceipt(operation string, receipt any, exclusions []string)
 	}
 	for _, exclusion := range exclusions {
 		delete(value, exclusion)
-	}
-	var fields []string
-	switch operation {
-	case rlmReplayCapsuleExec:
-		fields = []string{"command", "cwd", "exit_code", "stdout_sha256", "stderr_sha256"}
-	case rlmReplayCapsuleReadFile:
-		fields = []string{"path", "content_sha256"}
-	case rlmReplayCapsuleWriteFile:
-		fields = []string{"path", "content_sha256", "bytes_written"}
-	case rlmReplayCapsuleListDir:
-		fields = []string{"path", "entries"}
-	case rlmReplayCommitTransaction:
-		fields = []string{"operation_id", "trajectory_id", "base_event_head", "content_digest", "change_count", "classifier_version", "classifier_digest", "groups", "state"}
-	case rlmReplayInspectBundle:
-		fields = []string{"operation_id", "content_digest", "source_tree_ref", "runtime_artifact_ref", "base_event_head", "runtime_files", "build_recipe_ref", "test_receipts", "dependency_toolchain_refs", "resource_receipts", "execution_receipts", "classifier_version", "classifier_digest", "groups"}
-	case rlmReplayRecordVerification:
-		fields = []string{"operation_id", "decision", "state", "verifier_ref"}
-	case rlmReplayAssignmentResult:
-		fields = []string{"assignment_id", "attempt", "proposition_digest", "disposition", "result", "verdict", "summary", "evidence_refs", "command_ids", "output_digests", "candidate", "replay", "report_id"}
-	case rlmReplayUpdateCoagent:
-		fields = []string{"update_id", "caller_agent_id", "target_agent_id", "channel_id", "trajectory_id", "packet_kind", "packet_digest", "durable_cursor"}
 	}
 	out := make(map[string]any, len(fields))
 	for _, field := range fields {
@@ -162,10 +170,10 @@ func normalizeRLMReplayValue(field string, value any) any {
 		}
 		if rlmReplayOrderIsNotSemantic(field) {
 			sort.Slice(out, func(i, j int) bool {
-			left, _ := computerevent.CanonicalJSON(out[i])
-			right, _ := computerevent.CanonicalJSON(out[j])
-			return string(left) < string(right)
-		})
+				left, _ := computerevent.CanonicalJSON(out[i])
+				right, _ := computerevent.CanonicalJSON(out[j])
+				return string(left) < string(right)
+			})
 		}
 		return out
 	case map[string]any:
@@ -322,14 +330,14 @@ type rlmReplayEffectCensus struct {
 // at least one independently resolved durable witness; transient effects also
 // retain the pre-dispatch journal required to detect a re-execution.
 var rlmReplayWitnessNames = map[string][]string{
-	"durable_execution":      {"receipt_artifact", "worktree_digest"},
-	"transient_observation":  {"dispatch_admission_attempt"},
-	"transient_mutation":     {"filesystem_write_invocation", "dispatch_admission_attempt"},
-	"selfdev_freeze":         {"event_range", "operation_transition", "frozen_bundle_file", "worktree_digest"},
-	"read_only_inspection":   {"frozen_bundle_file", "receipt_artifact"},
-	"selfdev_verify":         {"event_range", "operation_transition", "receipt_artifact"},
-	"lifecycle_fate":         {"lifecycle_command_row", "update_row", "mailbox_row", "receipt_artifact"},
-	"lifecycle_update":       {"update_row", "mailbox_row", "durable_cursor"},
+	"durable_execution":     {"receipt_artifact", "worktree_digest"},
+	"transient_observation": {"dispatch_admission_attempt"},
+	"transient_mutation":    {"filesystem_write_invocation", "dispatch_admission_attempt"},
+	"selfdev_freeze":        {"event_range", "operation_transition", "frozen_bundle_file", "worktree_digest"},
+	"read_only_inspection":  {"frozen_bundle_file", "receipt_artifact"},
+	"selfdev_verify":        {"event_range", "operation_transition", "receipt_artifact"},
+	"lifecycle_fate":        {"lifecycle_command_row", "update_row", "mailbox_row", "receipt_artifact"},
+	"lifecycle_update":      {"update_row", "mailbox_row", "durable_cursor"},
 }
 
 func rlmReplayReadCensus(receiptClass, identity string, observed map[string]string) (rlmReplayEffectCensus, error) {
