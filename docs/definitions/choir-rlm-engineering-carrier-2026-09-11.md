@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P4-review r3 adjudicated REPAIR (unstick panel 4 repair-first / 1 recapture-required); repair verified GREEN twice on Node B (TestRLMReplayGoldens, fresh snapshots, 1.3s each); P4-review r4 pending on the frozen repair candidate
+  slice: P4-review r4 ACCEPT (spot re-review claude+codex accept; triple-green same-snapshot + polish green on Node B); P4-replay local harness complete; next: push through CI/staging deploy, then deployed per-operation replay proofs
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'

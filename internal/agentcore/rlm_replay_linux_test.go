@@ -629,12 +629,26 @@ func TestRLMReplayGoldens(t *testing.T) {
 
 	// The manifest stamp binds every golden: a restamped manifest with stale
 	// goldens (or vice versa) must fail here, not as a mysterious field
-	// divergence rows later.
-	for _, name := range []string{"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "record_assignment_result", "update_coagent"} {
-		golden := rlmReplayLoadGolden(t, goldenDir, name)
+	// divergence rows later. The list derives from the directory so a sixth
+	// golden cannot escape the coherence assert silently.
+	goldenEntries, err := os.ReadDir(goldenDir)
+	if err != nil {
+		t.Fatalf("list goldens: %v", err)
+	}
+	coherentCount := 0
+	for _, e := range goldenEntries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".golden.json") {
+			continue
+		}
+		golden := rlmReplayLoadGolden(t, goldenDir, strings.TrimSuffix(name, ".golden.json"))
 		if golden.BuildSHA != manifest.BuildSHA {
 			t.Fatalf("golden %s build_sha %q drifts from manifest build_sha %q", name, golden.BuildSHA, manifest.BuildSHA)
 		}
+		coherentCount++
+	}
+	if coherentCount == 0 {
+		t.Fatal("no golden fixtures found")
 	}
 
 	// runSuffix makes every test-minted identity unique per run: the capture
@@ -655,10 +669,17 @@ func TestRLMReplayGoldens(t *testing.T) {
 	// so the frozen worktree digest matches the capture. A killed prior run
 	// leaves the on-disk capsule dir (and possibly a stale overlay mount);
 	// ForceDestroy only handles live capsules, so clear the state directly.
-	// Sweep prior-run capsule state, including per-run suffixed conflict and
-	// corrupt capsules: a killed run leaves on-disk dirs (and possibly stale
-	// overlay mounts) that ForceDestroy alone does not clear. New suffixes
-	// avoid collision, but hygiene keeps the shared state dir bounded.
+	// Sweep stale corrupt-bundle dirs too: a SIGKILLed run can die between
+	// rlmCopyDir and cleanup, and the incoming census would absorb the
+	// leftover as baseline forever. t.Cleanup covers graceful exits; this
+	// covers kills.
+	if incoming, err := os.ReadDir(filepath.Join(env.stateDir, "updater", "incoming")); err == nil {
+		for _, e := range incoming {
+			if strings.HasPrefix(e.Name(), "corrupt-") {
+				_ = os.RemoveAll(filepath.Join(env.stateDir, "updater", "incoming", e.Name()))
+			}
+		}
+	}
 	sweepIDs := []string{manifest.ImplCapsuleID, manifest.VerifyCapsuleID, "capsule-rlm-verify-conflict"}
 	if entries, err := os.ReadDir(filepath.Join(env.stateDir, "executor")); err == nil {
 		for _, e := range entries {
