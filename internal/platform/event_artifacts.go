@@ -29,8 +29,8 @@ func NewEventArtifactService(platform *Service, keys computerevent.KeyResolver) 
 }
 
 func (s *EventArtifactService) PinEvent(_ context.Context, computerID string, canonicalEvent []byte, requestCommitment string) (computerevent.PinResult, error) {
-	var event computerevent.Event
-	if err := json.Unmarshal(canonicalEvent, &event); err != nil {
+	event, err := computerevent.DecodeHistoricEvent(canonicalEvent)
+	if err != nil {
 		return computerevent.PinResult{}, fmt.Errorf("event artifact service: invalid event: %w", err)
 	}
 	normalized, err := event.CanonicalBytes()

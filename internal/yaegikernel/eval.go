@@ -3,6 +3,7 @@ package yaegikernel
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -22,6 +23,61 @@ type EvalResult struct {
 	Stderr   string        `json:"stderr"`
 	Value    reflect.Value `json:"-"`
 	Duration time.Duration `json:"duration"`
+}
+
+// ReuseDisposition answers whether the live interpreter may serve the next
+// cell after a failed evaluation (settlement-gate item 1). It is orthogonal
+// to DiagnosticKind: disposition is reuse safety, kind is what happened.
+// Only failures proven by the isolation matrix to occur before interpreter
+// entry (host import preflight, compile-phase rejection) preserve.
+type ReuseDisposition string
+
+const (
+	// ReusePreserve: nothing executed; the heap is exactly intact and the
+	// worker stays alive. No string matching is involved: the phase decides.
+	ReusePreserve ReuseDisposition = "preserve"
+	// ReuseUnsafeToReuse: the cell may have partially executed (failed
+	// execution demonstrably leaves partial mutation) or the worker may be
+	// dead; poison and respawn from the durable snapshot.
+	ReuseUnsafeToReuse ReuseDisposition = "unsafe_to_reuse"
+)
+
+// DiagnosticKind names the failure phase with the original message preserved
+// verbatim. Compile-phase rejections (syntax, type, declaration, undefined
+// symbol) share DiagCompile: splitting them further would require string
+// matching Yaegi messages, which the settlement contract forbids.
+type DiagnosticKind string
+
+const (
+	DiagImportPreflight DiagnosticKind = "import_preflight"
+	DiagCompile         DiagnosticKind = "compile"
+	DiagRuntime         DiagnosticKind = "runtime"
+	DiagPanic           DiagnosticKind = "panic"
+	DiagTimeout         DiagnosticKind = "timeout"
+	DiagOverflow        DiagnosticKind = "overflow"
+	DiagWorker          DiagnosticKind = "worker"
+)
+
+// EvalError is a typed evaluation failure: reuse disposition and diagnostic
+// kind travel as fields, the original message verbatim. Callers MUST switch
+// on Reuse/Kind via AsEvalError; matching on message text carries no
+// classification.
+type EvalError struct {
+	err   error
+	Reuse ReuseDisposition
+	Kind  DiagnosticKind
+}
+
+func (e *EvalError) Error() string { return e.err.Error() }
+func (e *EvalError) Unwrap() error { return e.err }
+
+// AsEvalError recovers the typed failure, if the error carries one.
+func AsEvalError(err error) (*EvalError, bool) {
+	var ee *EvalError
+	if errors.As(err, &ee) {
+		return ee, true
+	}
+	return nil, false
 }
 
 // Evaluator evaluates model-authored Go source code in a constrained Yaegi interpreter.
@@ -64,7 +120,6 @@ func buildFilteredSymbols(allowlist *Allowlist, extraSymbols interp.Exports) int
 // import is not permitted under the allowlist.
 func (e *Evaluator) CheckImports(src string) error {
 	fset := token.NewFileSet()
-	// Parse as a full file or package
 	node, err := parser.ParseFile(fset, "src.go", src, parser.ImportsOnly)
 	if err != nil {
 		// If src is a snippet without 'package main', wrap it to check imports
@@ -90,7 +145,6 @@ func (e *Evaluator) CheckImports(src string) error {
 func (e *Evaluator) Eval(ctx context.Context, src string) (EvalResult, error) {
 	start := time.Now()
 	res := EvalResult{}
-
 	// Static check first to fail fast on disallowed imports
 	if err := e.CheckImports(src); err != nil {
 		res.Duration = time.Since(start)
@@ -191,7 +245,6 @@ func cleanImportPathFromSymbolKey(key string) string {
 	return key
 }
 
-
 // maxEvalOutputBytes bounds model-authored interpreter output so a runaway
 // print loop cannot consume the capsule memory limit before the broker cap.
 const maxEvalOutputBytes = 2 * 1024 * 1024 // 2 MiB
@@ -242,3 +295,4 @@ func (w *overflowWriter) Write(p []byte) (int, error) {
 	}
 	return n, err
 }
+

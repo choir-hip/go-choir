@@ -24,7 +24,7 @@ Choir Doctrine, not added here first.
 ## What Is Deliberately Not Here
 
 - Current deployment health, commit identity, live error rates, and feature
-  readiness — use [`NOW.md`](NOW.md) with its freshness boundary.
+  readiness — re-observe directly; `ACTIVE.md` for work state.
 - Service names, commands, model/provider choices, browser/desktop surface
   details, or materializer implementation.
 - Active mission status and mutable task state — use [`ACTIVE.md`](ACTIVE.md).

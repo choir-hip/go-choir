@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -151,13 +152,20 @@ func ComputeBindCoSuperAssignmentDigest(req types.BindCoSuperAssignmentRequest) 
 }
 
 func normalizeCoSuperReportForDigest(report types.CoSuperAssignmentReport) types.CoSuperAssignmentReport {
-	report.Schema, report.AssignmentID = "", ""
+	report.Schema, report.ReportID, report.AssignmentID = "", "", ""
 	report.Attempt, report.OwnerID, report.ComputerID, report.TrajectoryID = 0, "", "", ""
 	report.RunID, report.AssignedAgentID = "", ""
 	report.Late, report.CertifiesOriginalSubject = false, false
 	report.CandidateSubjectDigest, report.CandidateID = "", ""
 	report.ExecutionAttestations = nil
 	report.CreatedAt = time.Time{}
+	// v1 settlement identity: excluded metadata and reducer derivations never
+	// enter command identity, so a reworded identical proposition replays the
+	// original command receipt instead of conflicting on prose. The terminal
+	// proposition digest (slot gate) decides semantic conflicts separately.
+	report.Summary = ""
+	report.CandidateArtifactRef = ""
+	report.PropositionDigest, report.RecordCommandID = "", ""
 	return report
 }
 
@@ -170,6 +178,119 @@ func ComputeRecordCoSuperAssignmentReportDigest(req types.RecordCoSuperAssignmen
 		normalizeExecutionAttestationForCommandDigest(&req.ExecutionAttestations[i])
 	}
 	return computeCoSuperCommandDigest(req)
+}
+
+// TerminalPropositionV1 is the frozen version domain for terminal settlement
+// identity (settlement gate item 3). Every proposition digest input is
+// prefixed with it; the receipt is docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md.
+const TerminalPropositionV1 = "choir:terminal-proposition:v1"
+
+// terminalPropositionCommandV1 is one ordered command claim: digest, declared
+// execution reference, and exit code. CommandID is derivation, never input.
+type terminalPropositionCommandV1 struct {
+	CommandDigest string `json:"command_digest"`
+	ExecutionRef  string `json:"execution_ref"`
+	ExitCode      int    `json:"exit_code"`
+}
+
+// terminalPropositionOutputV1 is one ordered output claim: kind and content
+// digest. OutputID and Ref are deterministic derivations of execution_ref+kind,
+// never digest inputs.
+type terminalPropositionOutputV1 struct {
+	Kind   string `json:"kind"`
+	Digest string `json:"digest"`
+}
+
+// terminalPropositionV1 is the frozen canonical proposition: exactly the
+// submitted-claim content that settles terminal truth, plus the pinned
+// pre-execution subject belief. Ordered sequences keep submission order;
+// evidence is a key-sorted set. Excluded: provider/transport/retry/batch/model
+// metadata, summary and prose, timestamps, late flag, schema tags, report/command
+// identifiers, mutations/attestations/candidate-discovery overlays (all bound
+// post-reservation and validated by field rules, never digested), and the
+// proposition digest itself.
+type terminalPropositionV1 struct {
+	Version               string                         `json:"v"`
+	Result                string                         `json:"result"`
+	Verdict               string                         `json:"verdict"`
+	ObservedSubjectDigest string                         `json:"observed_subject_digest"`
+	Commands              []terminalPropositionCommandV1 `json:"commands"`
+	Outputs               []terminalPropositionOutputV1  `json:"outputs"`
+	EvidenceRefs          []string                       `json:"evidence_refs"`
+}
+
+// ComputeTerminalPropositionDigest reduces a submitted terminal report to its
+// v1 proposition digest. pinnedSubjectDigest is the attempt's binding subject
+// digest (the pre-execution belief); the submitted observed value is validated
+// elsewhere and never enters identity, so post-reservation ack overlays cannot
+// move the digest. Attestations, mutations, and candidate discovery are
+// post-reservation overlays: validated by exact field rules, never digested.
+// Nil slices normalize to empty (a missing list and an empty list are the same
+// proposition). Any error fails closed.
+func ComputeTerminalPropositionDigest(pinnedSubjectDigest string, result types.CoSuperAssignmentResultKind, verdict types.CoSuperAssignmentVerdict, commands []types.CoSuperRecordedCommand, outputs []types.CoSuperRecordedOutput, evidenceRefs []string) (string, error) {
+	pinnedSubjectDigest = strings.ToLower(strings.TrimSpace(pinnedSubjectDigest))
+	if !types.ValidSHA256Digest(pinnedSubjectDigest) {
+		return "", fmt.Errorf("terminal proposition: pinned subject digest is required: %w", ErrCoSuperAssignmentInvalid)
+	}
+	prop := terminalPropositionV1{
+		Version:               TerminalPropositionV1,
+		Result:                string(result),
+		Verdict:               string(verdict),
+		ObservedSubjectDigest: pinnedSubjectDigest,
+		Commands:              make([]terminalPropositionCommandV1, 0, len(commands)),
+		Outputs:               make([]terminalPropositionOutputV1, 0, len(outputs)),
+		EvidenceRefs:          make([]string, 0, len(evidenceRefs)),
+	}
+	for _, command := range commands {
+		digest := strings.ToLower(strings.TrimSpace(command.CommandDigest))
+		if !types.ValidSHA256Digest(digest) {
+			return "", fmt.Errorf("terminal proposition: command digest is required: %w", ErrCoSuperAssignmentInvalid)
+		}
+		prop.Commands = append(prop.Commands, terminalPropositionCommandV1{
+			CommandDigest: digest,
+			ExecutionRef:  strings.TrimSpace(command.ExecutionRef),
+			ExitCode:      command.ExitCode,
+		})
+	}
+	for _, output := range outputs {
+		digest := strings.ToLower(strings.TrimSpace(output.Digest))
+		if !types.ValidSHA256Digest(digest) {
+			return "", fmt.Errorf("terminal proposition: output digest is required: %w", ErrCoSuperAssignmentInvalid)
+		}
+		prop.Outputs = append(prop.Outputs, terminalPropositionOutputV1{
+			Kind:   strings.TrimSpace(output.Kind),
+			Digest: digest,
+		})
+	}
+	seenEvidence := make(map[string]struct{}, len(evidenceRefs))
+	for _, ref := range evidenceRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		if _, exists := seenEvidence[ref]; !exists {
+			seenEvidence[ref] = struct{}{}
+			prop.EvidenceRefs = append(prop.EvidenceRefs, ref)
+		}
+	}
+	slices.Sort(prop.EvidenceRefs)
+	payload, err := json.Marshal(prop)
+	if err != nil {
+		return "", err
+	}
+	return objectgraph.SHA256([]byte(TerminalPropositionV1 + "\x00" + string(payload))), nil
+}
+
+// TerminalReportID derives the terminal report identifier from its reservation
+// slot and proposition digest. It is derivation, never digest input: a
+// provider-fresh resubmission of the same proposition replays the same ID.
+func TerminalReportID(ownerID, computerID, assignmentID string, attempt uint64, propositionDigest string) string {
+	slot := strings.Join([]string{
+		strings.TrimSpace(ownerID), strings.TrimSpace(computerID),
+		strings.TrimSpace(assignmentID), strconv.FormatUint(attempt, 10),
+		propositionDigest,
+	}, "\x00")
+	return "report:" + objectgraph.SHA256([]byte(TerminalPropositionV1+"\x00"+slot))
 }
 
 func ComputeCancelCoSuperAssignmentDigest(req types.CancelCoSuperAssignmentRequest) (string, error) {
@@ -491,7 +612,7 @@ func (s *Store) requireCoSuperParentAuthority(ctx context.Context, binding types
 		return coSuperAuthorityObjects{}, err
 	}
 	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID ||
-		parentAgent.AgentID != binding.ParentAgentID || parentAgent.Profile != "super" || parentAgent.Role != "super" ||
+		parentAgent.AgentID != binding.ParentAgentID || parentAgent.Profile != agentprofile.Super || parentAgent.Role != agentprofile.Super ||
 		parentAgent.ChannelID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 ||
 		(parentAgent.ActiveRunID != "" && parentAgent.ActiveRunID != binding.ParentRunID) {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: exact non-lifecycle persistent Super unavailable: %w", ErrCoSuperAssignmentInvalid)
@@ -506,7 +627,7 @@ func (s *Store) requireCoSuperParentAuthority(ctx context.Context, binding types
 	}
 	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
 		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID || parentRun.TrajectoryID != "" ||
-		parentRun.AgentProfile != "super" || parentRun.AgentRole != "super" || !persistentSuperRunStateAllowed(parentRun.State) ||
+		parentRun.AgentProfile != agentprofile.Super || parentRun.AgentRole != agentprofile.Super || !persistentSuperRunStateAllowed(parentRun.State) ||
 		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID ||
 		!persistentSuperControlBinding(parentRun.Metadata, binding.TrajectoryID, binding.ParentWorkItemID, binding.ParentControlID) {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent decision/control run binding mismatch: %w", ErrCoSuperAssignmentInvalid)
@@ -517,7 +638,7 @@ func (s *Store) requireCoSuperParentAuthority(ctx context.Context, binding types
 	}
 	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID ||
 		parentWork.TrajectoryID != binding.TrajectoryID || parentWork.AssignedAgentID != binding.ParentAgentID ||
-		parentWork.AuthorityProfile != "super" || parentWork.Status != types.WorkItemOpen {
+		parentWork.AuthorityProfile != agentprofile.Super || parentWork.Status != types.WorkItemOpen {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent Super target work mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
 	return coSuperAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj,
@@ -549,7 +670,7 @@ func (s *Store) requireCoSuperHistoricalParentAuthority(ctx context.Context, bin
 		return coSuperAuthorityObjects{}, err
 	}
 	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID || parentAgent.AgentID != binding.ParentAgentID ||
-		parentAgent.Profile != "super" || parentAgent.Role != "super" || parentAgent.ChannelID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 {
+		parentAgent.Profile != agentprofile.Super || parentAgent.Role != agentprofile.Super || parentAgent.ChannelID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: historical persistent Super identity mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
 	parentRunObj, err := s.getRunObjectByOwnerOG(ctx, binding.OwnerID, binding.ParentRunID)
@@ -562,7 +683,7 @@ func (s *Store) requireCoSuperHistoricalParentAuthority(ctx context.Context, bin
 	}
 	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
 		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID || parentRun.TrajectoryID != "" ||
-		parentRun.AgentProfile != "super" || parentRun.AgentRole != "super" || !parentRun.State.Valid() ||
+		parentRun.AgentProfile != agentprofile.Super || parentRun.AgentRole != agentprofile.Super || !parentRun.State.Valid() ||
 		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID ||
 		!persistentSuperControlBinding(parentRun.Metadata, binding.TrajectoryID, binding.ParentWorkItemID, binding.ParentControlID) {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: historical parent control binding mismatch: %w", ErrCoSuperAssignmentInvalid)
@@ -572,7 +693,7 @@ func (s *Store) requireCoSuperHistoricalParentAuthority(ctx context.Context, bin
 		return coSuperAuthorityObjects{}, err
 	}
 	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID || parentWork.TrajectoryID != binding.TrajectoryID ||
-		parentWork.AssignedAgentID != binding.ParentAgentID || parentWork.AuthorityProfile != "super" ||
+		parentWork.AssignedAgentID != binding.ParentAgentID || parentWork.AuthorityProfile != agentprofile.Super ||
 		(parentWork.Status != types.WorkItemOpen && parentWork.Status != types.WorkItemCompleted && parentWork.Status != types.WorkItemCancelled && parentWork.Status != types.WorkItemRefused) {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: historical parent work binding mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
@@ -593,7 +714,7 @@ func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding t
 		return coSuperAuthorityObjects{}, err
 	}
 	if assignedAgent.OwnerID != binding.OwnerID || assignedAgent.ComputerID != binding.ComputerID ||
-		assignedAgent.AgentID != binding.AssignedAgentID || assignedAgent.Profile != "co-super" || assignedAgent.Role != "co-super" || assignedAgent.LifecycleVersion <= 0 {
+		assignedAgent.AgentID != binding.AssignedAgentID || assignedAgent.Profile != agentprofile.CoSuper || assignedAgent.Role != agentprofile.CoSuper || assignedAgent.LifecycleVersion <= 0 {
 		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: assigned lifecycle CoSuper agent mismatch: %w", ErrCoSuperAssignmentInvalid)
 	}
 	assignedWorkObj, assignedWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.AssignedWorkItemID)
@@ -602,7 +723,7 @@ func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding t
 	}
 	if assignedWork.OwnerID != binding.OwnerID || assignedWork.ComputerID != binding.ComputerID ||
 		assignedWork.TrajectoryID != binding.TrajectoryID || assignedWork.AssignedAgentID != binding.AssignedAgentID ||
-		assignedWork.AuthorityProfile != "co-super" || assignedWork.Status != types.WorkItemOpen ||
+		assignedWork.AuthorityProfile != agentprofile.CoSuper || assignedWork.Status != types.WorkItemOpen ||
 		metadataExactString(assignedWork.Details, "parent_loop_id") != binding.ParentRunID ||
 		metadataExactString(assignedWork.Details, "parent_decision_id") != binding.ParentDecisionID ||
 		metadataExactString(assignedWork.Details, "parent_control_id") != binding.ParentControlID ||
@@ -807,6 +928,9 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 	if replay, found, err := s.replayCoSuperAssignmentCommand(ctx, req.Binding.OwnerID, req.Binding.ComputerID, req.CommandID, req.CommandDigest, req.AssignmentID, req.Binding.Attempt, ""); found || err != nil {
 		return replay, err
 	}
+	if err := s.validateCoSuperSupersedeTuple(ctx, req); err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
 	authority, err := s.requireCoSuperParentAuthority(ctx, req.Binding)
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
@@ -819,7 +943,7 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 
 	assignedAgent := req.AssignedAgent
 	assignedAgent.AgentID, assignedAgent.OwnerID, assignedAgent.ComputerID = req.Binding.AssignedAgentID, req.Binding.OwnerID, req.Binding.ComputerID
-	assignedAgent.ComputerID, assignedAgent.Profile, assignedAgent.Role = req.Binding.ComputerID, "co-super", "co-super"
+	assignedAgent.ComputerID, assignedAgent.Profile, assignedAgent.Role = req.Binding.ComputerID, agentprofile.CoSuper, agentprofile.CoSuper
 	assignedAgent.ChannelID, assignedAgent.ActiveRunID = req.Binding.AssignedAgentID, ""
 	assignedAgent.LifecycleVersion, assignedAgent.LastReducerSeq = 1, transition.seq
 	assignedAgent.CreatedAt, assignedAgent.UpdatedAt = now, now
@@ -827,7 +951,7 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 	assignedWork.WorkItemID, assignedWork.OwnerID, assignedWork.ComputerID = req.Binding.AssignedWorkItemID, req.Binding.OwnerID, req.Binding.ComputerID
 	assignedWork.TrajectoryID, assignedWork.AssignedAgentID = req.Binding.TrajectoryID, req.Binding.AssignedAgentID
 	assignedWork.Objective = strings.TrimSpace(assignedWork.Objective)
-	assignedWork.AuthorityProfile, assignedWork.Status, assignedWork.ResultRef = "co-super", types.WorkItemOpen, ""
+	assignedWork.AuthorityProfile, assignedWork.Status, assignedWork.ResultRef = agentprofile.CoSuper, types.WorkItemOpen, ""
 	assignedWork.ObjectiveFingerprint = objectgraph.SHA256([]byte(assignedWork.Objective))
 	assignedWork.CreatedByRunID = req.Binding.ParentRunID
 	assignedWork.Details = map[string]any{
@@ -883,6 +1007,60 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 		objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID}, objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID})
 	return s.commitCoSuperLifecycleCommand(ctx, transition, types.LifecycleOpenCoSuperAssignment, types.LifecycleCoSuperAssignmentOpened,
 		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "", []objectgraph.Object{assignmentObj, agentObj, workObj}, conditions, edges, nil, nil)
+}
+
+// validateCoSuperSupersedeTuple enforces the frozen correction rule
+// (settlement gate item 3, v1): attempt 1 never carries a tuple; attempt > 1
+// always carries one naming a recorded prior report of the same assignment's
+// earlier attempt with a valid kind, a non-empty reason, and a well-formed
+// structured-fields delta digest. The tuple rides the open command digest, so
+// a correction cannot be re-targeted without invalidating the command.
+func (s *Store) validateCoSuperSupersedeTuple(ctx context.Context, req types.OpenCoSuperAssignmentRequest) error {
+	tuple := req.Supersedes
+	if tuple == nil {
+		if req.Binding.Attempt > 1 {
+			return fmt.Errorf("co-super assignment: attempt %d requires the superseding tuple: %w", req.Binding.Attempt, ErrCoSuperAssignmentInvalid)
+		}
+		return nil
+	}
+	if req.Binding.Attempt <= 1 {
+		return fmt.Errorf("co-super assignment: attempt 1 cannot carry a superseding tuple: %w", ErrCoSuperAssignmentInvalid)
+	}
+	if strings.TrimSpace(tuple.SupersedesAssignmentID) != strings.TrimSpace(req.AssignmentID) {
+		return fmt.Errorf("co-super assignment: supersede targets its own assignment: %w", ErrCoSuperAssignmentInvalid)
+	}
+	if tuple.SupersedesAttempt == 0 || tuple.SupersedesAttempt >= req.Binding.Attempt {
+		return fmt.Errorf("co-super assignment: supersede names a strictly earlier attempt: %w", ErrCoSuperAssignmentInvalid)
+	}
+	switch tuple.SupersedeKind {
+	case types.CoSuperSupersedeCorrection, types.CoSuperSupersedeRetryAfterBlock, types.CoSuperSupersedeOwnerReopen:
+	default:
+		return fmt.Errorf("co-super assignment: invalid supersede kind %q: %w", tuple.SupersedeKind, ErrCoSuperAssignmentInvalid)
+	}
+	if strings.TrimSpace(tuple.ReasonEnum) == "" || strings.TrimSpace(tuple.PriorReceiptRef) == "" {
+		return fmt.Errorf("co-super assignment: supersede requires reason and prior receipt: %w", ErrCoSuperAssignmentInvalid)
+	}
+	if !types.ValidSHA256Digest(strings.TrimSpace(tuple.DeltaDigest)) {
+		return fmt.Errorf("co-super assignment: supersede delta digest must be exact sha256: %w", ErrCoSuperAssignmentInvalid)
+	}
+	_, prior, err := s.getCoSuperAssignmentObject(ctx, req.Binding.OwnerID, req.Binding.ComputerID, req.AssignmentID, tuple.SupersedesAttempt)
+	if err != nil {
+		return fmt.Errorf("co-super assignment: superseded attempt unavailable: %w", ErrCoSuperAssignmentInvalid)
+	}
+	for _, ref := range prior.ReportRefs {
+		obj, getErr := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(ref))
+		if getErr != nil {
+			continue
+		}
+		stored, decodeErr := decodeLifecycleObject[types.CoSuperAssignmentReport](obj)
+		if decodeErr != nil {
+			continue
+		}
+		if strings.TrimSpace(stored.ReportID) == strings.TrimSpace(tuple.PriorReceiptRef) {
+			return nil
+		}
+	}
+	return fmt.Errorf("co-super assignment: prior receipt is not a recorded report of the superseded attempt: %w", ErrCoSuperAssignmentInvalid)
 }
 
 func (s *Store) getCoSuperAssignmentObject(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) (objectgraph.Object, types.CoSuperAssignment, error) {
@@ -1017,11 +1195,11 @@ func validateCoSuperAssignmentRun(assignment types.CoSuperAssignment, assignedAg
 		metadataExactString(run.Metadata, "lifecycle_work_item_id") != assignment.Binding.AssignedWorkItemID ||
 		strings.TrimSpace(run.RunID) == "" || run.OwnerID != assignment.Binding.OwnerID || run.ComputerID != assignment.Binding.ComputerID ||
 		run.TrajectoryID != assignment.Binding.TrajectoryID || run.AgentID != assignment.Binding.AssignedAgentID ||
-		run.ChannelID != assignedAgent.ChannelID || run.AgentProfile != "co-super" || run.AgentRole != "co-super" || run.State != types.RunPending ||
+		run.ChannelID != assignedAgent.ChannelID || run.AgentProfile != agentprofile.CoSuper || run.AgentRole != agentprofile.CoSuper || run.State != types.RunPending ||
 		run.RequestedByRunID != assignment.Binding.ParentRunID || !run.CreatedAt.IsZero() || !run.UpdatedAt.IsZero() ||
 		run.FinishedAt != nil || run.Result != "" || run.Error != "" ||
 		metadataExactString(run.Metadata, "requested_by_agent_id") != assignment.Binding.ParentAgentID ||
-		metadataExactString(run.Metadata, "requested_by_profile") != "super" ||
+		metadataExactString(run.Metadata, "requested_by_profile") != agentprofile.Super ||
 		metadataExactString(run.Metadata, "assignment_id") != assignment.AssignmentID ||
 		metadataExactUint64(run.Metadata, "assignment_attempt") != assignment.Binding.Attempt ||
 		metadataExactString(run.Metadata, "assignment_kind") != string(assignment.Binding.Kind) ||
@@ -1247,7 +1425,7 @@ func buildCoSuperReturnPacket(now time.Time, seq int64, assignment types.CoSuper
 		ChannelID: strings.TrimSpace(parentRun.ChannelID), MessageSeq: seq, TrajectoryID: assignment.Binding.TrajectoryID,
 		Direction: types.LifecyclePacketDirectionProducerReport, ControlBindingID: assignment.Binding.ParentControlID,
 		ProducerWorkItemID: assignment.Binding.AssignedWorkItemID, TargetWorkItemID: assignment.Binding.ParentWorkItemID,
-		WorkItemID: assignment.Binding.AssignedWorkItemID, Role: "co-super", SourceRunID: assignment.BoundRunID,
+		WorkItemID: assignment.Binding.AssignedWorkItemID, Role: agentprofile.CoSuper, SourceRunID: assignment.BoundRunID,
 		PayloadDigest: payloadDigest, Disposition: types.UpdatePending, LifecycleVersion: 1, ReducerSeq: seq,
 		Packet: packetPayload, Content: content, CreatedAt: now,
 		DeliveredToRunID: deliveredRunID, DeliveredAt: deliveredAt,
@@ -1386,6 +1564,62 @@ func (s *Store) projectCoSuperTerminal(ctx context.Context, assignment types.CoS
 	return append(objects, runUpdated), append(conditions, coSuperObjectCondition(runObj)), nil
 }
 
+// SlotTerminalReport scans an assignment's recorded reports for settlement
+// slot relevance (settlement gate item 3, v1). Partial reports use the
+// separate nonterminal sequence and never compete. It returns the occupying
+// report ID for a same-digest match (late or terminal: a match replays its
+// receipt with no new effects) and, separately, a non-late terminal occupant
+// with a different digest (only a non-late submission may conflict with it;
+// late evidence never competes for terminal truth). Legacy rows without a
+// stored digest recompute best-effort from the pinned belief; a stale overlay
+// can only fail closed, never accept twice.
+func (s *Store) SlotTerminalReport(ctx context.Context, assignment types.CoSuperAssignment, propositionDigest string) (matchID, matchCommandID, conflictID string, err error) {
+	if assignment.PendingProposal != nil {
+		if assignment.PendingProposal.PropositionDigest != propositionDigest {
+			if conflictID == "" {
+				conflictID = assignment.PendingProposal.Report.ReportID
+			}
+		}
+	}
+	for _, ref := range assignment.ReportRefs {
+		obj, getErr := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(ref))
+		if getErr != nil {
+			if errors.Is(getErr, objectgraph.ErrNotFound) {
+				continue
+			}
+			return "", "", "", getErr
+		}
+		stored, decodeErr := decodeLifecycleObject[types.CoSuperAssignmentReport](obj)
+		if decodeErr != nil {
+			continue
+		}
+		if stored.Result == types.CoSuperResultPartial {
+			continue
+		}
+		digest := strings.TrimSpace(stored.PropositionDigest)
+		if digest == "" {
+			digest, decodeErr = ComputeTerminalPropositionDigest(
+				assignment.Binding.SubjectDigest,
+				stored.Result, stored.Verdict,
+				stored.Commands, stored.Outputs, stored.EvidenceRefs)
+			if decodeErr != nil {
+				return "", "", stored.ReportID, fmt.Errorf("legacy terminal report proposition recompute failed: %w", decodeErr)
+			}
+		}
+		if digest == propositionDigest {
+			replayCommandID := strings.TrimSpace(stored.RecordCommandID)
+			if replayCommandID == "" {
+				replayCommandID = "co-super-report:" + assignment.AssignmentID + ":" + stored.ReportID
+			}
+			return stored.ReportID, replayCommandID, "", nil
+		}
+		if !stored.Late && conflictID == "" {
+			conflictID = stored.ReportID
+		}
+	}
+	return "", "", conflictID, nil
+}
+
 func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.RecordCoSuperAssignmentReportRequest) (types.CoSuperAssignmentCommandResult, error) {
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
 	req.OwnerID, req.ComputerID, req.AssignmentID = strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID), strings.TrimSpace(req.AssignmentID)
@@ -1411,12 +1645,51 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	if assignment.LifecycleVersion != req.ExpectedLifecycleVersion || assignment.BoundRunID == "" || assignment.Disposition == types.CoSuperAssignmentOpen {
 		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentInvalid
 	}
+	// v1 terminal settlement gate: the authoritative proposition digest is
+	// computed over the submitted claims with the pinned pre-execution belief
+	// before any derivation (late/verdict/candidate overlays below). Partial
+	// reports never compete and skip the gate. A same-digest occupant (late or
+	// terminal) replays its receipt with no new effects; a non-late terminal
+	// occupant with a different digest conflicts a non-late submission before
+	// any report, fate, outbox, wake, or physical effect. Late evidence never
+	// competes for terminal truth.
 	_, intentErr := s.GetLifecycleCancellationIntent(ctx, req.OwnerID, req.ComputerID, assignment.Binding.TrajectoryID)
 	cancellationIntended := intentErr == nil
 	if intentErr != nil && !errors.Is(intentErr, ErrNotFound) {
 		return types.CoSuperAssignmentCommandResult{}, intentErr
 	}
-	lateAuthority := cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
+	propositionDigest := ""
+	if req.Report.Result != types.CoSuperResultPartial {
+		var propErr error
+		propositionDigest, propErr = ComputeTerminalPropositionDigest(
+			assignment.Binding.SubjectDigest,
+			req.Report.Result, req.Report.Verdict,
+			req.Report.Commands, req.Report.Outputs, req.Report.EvidenceRefs)
+		if propErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, propErr
+		}
+		if req.Report.PropositionDigest != "" && req.Report.PropositionDigest != propositionDigest {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment report proposition digest mismatch: %s vs %s: %w", req.Report.PropositionDigest, propositionDigest, ErrCoSuperAssignmentInvalid)
+		}
+		expectedReportID := TerminalReportID(req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt, propositionDigest)
+		if req.Report.PropositionDigest != "" && req.Report.ReportID != expectedReportID {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment report report_id mismatch: %s vs %s: %w", req.Report.ReportID, expectedReportID, ErrCoSuperAssignmentInvalid)
+		}
+	}
+	pendingMatches := assignment.PendingProposal != nil && assignment.PendingProposal.PropositionDigest == propositionDigest && !cancellationIntended && !assignment.Disposition.Terminal()
+	lateAuthority := (cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked) && !pendingMatches
+	if req.Report.Result != types.CoSuperResultPartial {
+		matchID, matchCommandID, conflictID, scanErr := s.SlotTerminalReport(ctx, assignment, propositionDigest)
+		if scanErr != nil {
+			return types.CoSuperAssignmentCommandResult{}, scanErr
+		}
+		if matchID != "" {
+			return s.ReplayRecordedCoSuperAssignmentReport(ctx, req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt, matchID, matchCommandID)
+		}
+		if conflictID != "" {
+			return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentCommandConflict
+		}
+	}
 	var parentAuthority coSuperAuthorityObjects
 	if lateAuthority {
 		parentAuthority, err = s.requireCoSuperHistoricalParentAuthority(ctx, assignment.Binding)
@@ -1442,6 +1715,8 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	report.OwnerID, report.ComputerID, report.TrajectoryID = assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID
 	report.RunID, report.AssignedAgentID = assignment.BoundRunID, assignment.Binding.AssignedAgentID
 	report.Late = lateAuthority
+	report.PropositionDigest = propositionDigest
+	report.RecordCommandID = req.CommandID
 	if report.Late {
 		report.CertifiesOriginalSubject, report.CandidateSubjectDigest, report.CandidateID, report.CandidateArtifactRef = false, "", "", ""
 		if report.Verdict == types.CoSuperVerdictPass {
@@ -1539,6 +1814,7 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	}
 	if assignment.Disposition != previousDisposition && assignment.Disposition.Terminal() {
 		assignment.DispositionReason = "reducer-derived from report " + report.ReportID
+		assignment.PendingProposal = nil
 		assignment.TerminalAt = &now
 	}
 	assignment.LifecycleVersion++
@@ -1774,6 +2050,10 @@ func (s *Store) SetCoSuperCapsuleDisposition(ctx context.Context, req types.SetC
 	}
 	assignment.CapsuleDisposition, assignment.CapsuleIntentRef, assignment.CapsuleAckRef = req.Disposition, req.IntentRef, req.AckRef
 	assignment.LifecycleVersion++
+	if req.PendingProposal != nil {
+		copy := *req.PendingProposal
+		assignment.PendingProposal = &copy
+	}
 	assignment.UpdatedAt = now
 	if req.FateStep != nil {
 		step := *req.FateStep
@@ -1845,4 +2125,74 @@ func (s *Store) GetCoSuperSubjectCandidate(ctx context.Context, ownerID, compute
 		return types.CoSuperSubjectCandidate{}, ErrNotFound
 	}
 	return candidate, nil
+}
+
+// RecordCoSuperOrphanObservation processes an authenticated immutable orphan observation (settlement gate item 6).
+// If the child run has an assignment obligation, the reducer validates the slot family:
+// - An in-flight pending proposal must reconcile through the fate saga, never through the orphan path.
+// - An already terminal assignment replays or conflicts.
+// - An unreserved bound assignment is closed by the reducer deriving a terminal failed proposition.
+func (s *Store) RecordCoSuperOrphanObservation(ctx context.Context, obs types.CoSuperOrphanObservation) (types.CoSuperAssignmentCommandResult, error) {
+	if err := obs.Validate(); err != nil {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("%w: %v", ErrCoSuperAssignmentInvalid, err)
+	}
+	if strings.TrimSpace(obs.AssignmentID) == "" {
+		return types.CoSuperAssignmentCommandResult{}, nil
+	}
+	assignmentObj, assignment, err := s.getCoSuperAssignmentObject(ctx, obs.OwnerID, obs.ComputerID, obs.AssignmentID, obs.Attempt)
+	if err != nil {
+		return types.CoSuperAssignmentCommandResult{}, err
+	}
+	_ = assignmentObj
+	// Obligation check: if a pending proposal is in-flight, route exclusively through fate saga.
+	if assignment.PendingProposal != nil {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment: pending proposal in-flight; must reconcile through fate saga, not orphan path: %w", ErrCoSuperAssignmentCommandConflict)
+	}
+	if assignment.BoundRunID != "" && assignment.BoundRunID != obs.RunID {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("co-super assignment: orphan run %s does not match bound run %s: %w", obs.RunID, assignment.BoundRunID, ErrCoSuperAssignmentInvalid)
+	}
+	// Terminal check: if already terminal, replay the recorded orphan close when this
+	// observation's derived report is the occupant; otherwise conflict. The report ID
+	// is derived identically to the close path below, so a retry replays instead of
+	// conflicting with itself.
+	if assignment.Disposition.Terminal() {
+		commandID := fmt.Sprintf("co-super-orphan:%s:%d:%s", obs.AssignmentID, obs.Attempt, obs.RunID)
+		replayVerdict := types.CoSuperVerdictNone
+		if assignment.Binding.Kind == types.CoSuperAssignmentVerification {
+			replayVerdict = types.CoSuperVerdictAbstain
+		}
+		replayPropDigest, _ := ComputeTerminalPropositionDigest(assignment.Binding.SubjectDigest, types.CoSuperResultFailed, replayVerdict, nil, nil, nil)
+		replayReportID := TerminalReportID(obs.OwnerID, obs.ComputerID, obs.AssignmentID, obs.Attempt, replayPropDigest)
+		if replay, replayErr := s.ReplayRecordedCoSuperAssignmentReport(ctx, obs.OwnerID, obs.ComputerID, obs.AssignmentID, obs.Attempt, replayReportID, commandID); replayErr == nil {
+			return replay, nil
+		}
+		return types.CoSuperAssignmentCommandResult{}, ErrCoSuperAssignmentCommandConflict
+	}
+	verdict := types.CoSuperVerdictNone
+	if assignment.Binding.Kind == types.CoSuperAssignmentVerification {
+		verdict = types.CoSuperVerdictAbstain
+	}
+	orphanPropDigest, _ := ComputeTerminalPropositionDigest(assignment.Binding.SubjectDigest, types.CoSuperResultFailed, verdict, nil, nil, nil)
+	reportID := TerminalReportID(obs.OwnerID, obs.ComputerID, obs.AssignmentID, obs.Attempt, orphanPropDigest)
+	report := types.CoSuperAssignmentReport{
+		Schema:                types.CoSuperAssignmentSchemaV1,
+		ReportID:              reportID,
+		Result:                types.CoSuperResultFailed,
+		Verdict:               verdict,
+		ObservedSubjectDigest: assignment.Binding.SubjectDigest,
+		Summary:               fmt.Sprintf("orphan close: child run %s terminated without packet (%s)", obs.RunID, obs.Reason),
+		EvidenceRefs:          nil,
+		CreatedAt:             obs.ObservedAt,
+	}
+	req := types.RecordCoSuperAssignmentReportRequest{
+		CommandID:                fmt.Sprintf("co-super-orphan:%s:%d:%s", obs.AssignmentID, obs.Attempt, obs.RunID),
+		OwnerID:                  obs.OwnerID,
+		ComputerID:               obs.ComputerID,
+		AssignmentID:             obs.AssignmentID,
+		Attempt:                  obs.Attempt,
+		ExpectedLifecycleVersion: assignment.LifecycleVersion,
+		Report:                   report,
+	}
+	req.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(req)
+	return s.RecordCoSuperAssignmentReport(ctx, req)
 }

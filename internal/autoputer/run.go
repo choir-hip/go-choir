@@ -54,6 +54,10 @@ type replayHealthGate struct {
 	pending  bool
 	appender *computerevent.ComputerEventAppender
 	base     http.HandlerFunc
+	// progress ticks during post-replay work (vocabulary migration, fence
+	// verification) so the host stall detector sees liveness while the
+	// applied sequence is stationary.
+	progress uint64
 }
 
 func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +69,7 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pending := g.pending
 	app := g.appender
 	base := g.base
+	progress := g.progress
 	g.mu.Unlock()
 	if pending {
 		var snap computerevent.ReplaySnapshot
@@ -77,6 +82,7 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"status":             "replaying",
 			"sequence":           snap.Sequence,
 			"committed_sequence": snap.CommittedSequence,
+			"progress":           progress,
 		})
 		return
 	}
@@ -90,6 +96,15 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (g *replayHealthGate) setPending(pending bool) {
 	g.mu.Lock()
 	g.pending = pending
+	g.mu.Unlock()
+}
+
+// tick records one unit of post-replay progress. The host stall detector
+// treats a changing progress counter as liveness while the applied replay
+// sequence is stationary (vocabulary migration, fence verification).
+func (g *replayHealthGate) tick() {
+	g.mu.Lock()
+	g.progress++
 	g.mu.Unlock()
 }
 
@@ -260,6 +275,12 @@ func Run() {
 			cancel()
 			log.Fatalf("autoputer: resolve canonical event head before keyring: %v", err)
 		}
+		if materialized, baseErr := materializeProjectionBaseIfNeeded(bootstrapCtx, rtCfg.StorePath, computerID, platformURL, credentials.Capability, db); baseErr != nil {
+			cancel()
+			log.Fatalf("autoputer: required projection base refused; refusing genesis fallback: %v", baseErr)
+		} else if materialized {
+			log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
+		}
 		privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
 		privateCipher, err := computerevent.LoadGuestPrivateArtifactCipher(privacyKeyPath, computerID, canonicalHead == nil)
 		if err != nil {
@@ -426,7 +447,11 @@ func Run() {
 			agentprofile.Processor,
 			agentprofile.Reconciler,
 		} {
-			if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, agentprofile.PolicyFor(profile)); err != nil {
+			spawnPolicy, policyErr := agentprofile.PolicyFor(profile)
+			if policyErr != nil {
+				log.Fatalf("autoputer: spawn policy for %s: %v", profile, policyErr)
+			}
+			if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, spawnPolicy); err != nil {
 				log.Fatalf("autoputer: register coagent spawn tool for %s: %v", profile, err)
 			}
 		}
@@ -480,7 +505,7 @@ func Run() {
 		gate.appender = replayAppender
 		gate.mu.Unlock()
 		s.SetHealthHandler(gate.ServeHTTP)
-		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, replayBootstrapCtx, replayBootstrapCancel, func() error {
+		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, rtCfg.StorePath, db, replayBootstrapCtx, replayBootstrapCancel, func() error {
 			if fileSyncService != nil {
 				restored, err := fileSyncService.HydrateIfNeeded(ctx)
 				if err != nil {
@@ -504,6 +529,11 @@ func Run() {
 			} else if root := fileSyncService.hydratedRoot(); root != "" {
 				log.Printf("autoputer: file tree hydrated %d files from CAS root %s", restored, root)
 			}
+		}
+		// Vocabulary cutover: migrate any retained V1 rows and hold the
+		// serving fence closed before the runtime starts serving authority.
+		if _, err := db.MigrateAndFenceServingVocabulary(ctx, false, nil); err != nil {
+			log.Fatalf("autoputer: vocabulary migration refused: %v", err)
 		}
 		startPeriodicDoltGC(rtCfg.StorePath)
 		if err := rt.Start(ctx); err != nil {
@@ -533,7 +563,7 @@ func startPeriodicDoltGC(storePath string) {
 // (Restart=on-failure) restart the guest and the next boot resumes from the
 // committed head. Never CAS during replay (B8); the appender is read-only over
 // the canonical tape.
-func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID string, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
+func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID, storePath string, db *store.Store, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
 	defer cancel()
 	// B14 host-drive boundary: when RUNTIME_RECOVERY_REPLAY_ONLY is set the
 	// reconstruct is a one-shot, deterministic projection materialization on
@@ -543,21 +573,22 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 	// workspace durably checkpointed. The guest boot afterwards sees
 	// local==platform and takes over verification + route authority.
 	replayOnly := strings.TrimSpace(os.Getenv("RUNTIME_RECOVERY_REPLAY_ONLY")) == "1"
-	if client != nil {
-		platformURL := client.BaseURL()
-		capSource := client.Capability()
-		if platformURL != "" && capSource != nil {
-			storeDirectory := storeDir(provideriface.DefaultStorePath)
-			if materialized, err := materializeProjectionBaseIfNeeded(bootstrapCtx, storeDirectory, computerID, platformURL, capSource); err != nil {
-				log.Printf("autoputer: ProjectionBase materialization deferred: %v", err)
-			} else if materialized {
-				log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
-			}
-		}
-	}
 	appender.SetReplayMode(true)
 	err := appender.Reconstruct(bootstrapCtx, client)
 	appender.SetReplayMode(false)
+	if err == nil {
+		// Vocabulary cutover: replay deposits V1 rows byte-identically, so
+		// forward-migrate and fence BEFORE the health gate opens or the
+		// runtime serves. Runs on the replay-only host drive too so the
+		// materialized store is V2 before the guest takes over. A boot that
+		// replayed zero events over a previously fenced store skips the
+		// rescan; the gate heartbeat keeps the host stall detector alive
+		// while scans run.
+		replayed := appender.ReplaySnapshot().Sequence > 0
+		if _, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx, replayed, gate.tick); migErr != nil {
+			log.Fatalf("autoputer: vocabulary migration refused: %v", migErr)
+		}
+	}
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			// 30m resume quantum complete; the final durable checkpoint was flushed
@@ -679,6 +710,9 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 	}
 	if strings.TrimSpace(rtCfg.ModelPolicyPath) == "" {
 		rtCfg.ModelPolicyPath = provideriface.DefaultModelPolicyPath(filesRoot)
+	}
+	if platformURL := strings.TrimSpace(os.Getenv("CHOIR_PLATFORM_URL")); platformURL != "" {
+		rtCfg.CorpusdURL = platformURL
 	}
 	return rtCfg
 }

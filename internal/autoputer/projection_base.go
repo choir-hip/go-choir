@@ -2,11 +2,9 @@ package autoputer
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,137 +13,148 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
+	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
-type watermarkResponse struct {
-	WatermarkSequence uint64 `json:"watermark_sequence"`
-	BaseRef           string `json:"base_ref"`
-}
-
-// materializeProjectionBaseIfNeeded inspects storeDir and, if empty, queries
-// the platform for a verified ProjectionBase watermark and unpacks it before
-// the local embedded Dolt/SQLite store is opened.
-func materializeProjectionBaseIfNeeded(ctx context.Context, storeDir, computerID, platformURL string, capability func(context.Context) (string, error)) (bool, error) {
-	storeDir = filepath.Clean(storeDir)
+// materializeProjectionBaseIfNeeded installs or rebases onto a verified
+// ProjectionBase before reconstruct. The contract:
+//
+//   - empty store + no canonical chain: explicit new-computer genesis
+//   - chain exists: a verified base is REQUIRED and the remaining tail
+//     (start, H] must be ≤ MaxRecoveryTailEvents
+//   - local < W: staged rebase (sibling install + quarantine/swap)
+//   - local ≥ W and tail in bound: resume from the retained head
+//
+// A non-empty store is never skipped. Silent genesis fallback is deleted.
+func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerID, platformURL string, capability func(context.Context) (string, error), live *choirstore.Store) (bool, error) {
+	storePath = filepath.Clean(storePath)
+	markerName := filepath.Base(storePath)
+	storeDir := filepath.Dir(storePath)
 	computerID = strings.TrimSpace(computerID)
 	platformURL = strings.TrimRight(strings.TrimSpace(platformURL), "/")
-	if storeDir == "" || computerID == "" || platformURL == "" || capability == nil {
+	if storeDir == "" || storeDir == "." || markerName == "" || markerName == "." || markerName == "/" || computerID == "" || platformURL == "" || capability == nil {
 		return false, nil
 	}
+	sweepStagingArtifacts(storeDir)
 
-	if !isStoreEmpty(storeDir) {
-		return false, nil
-	}
 
-	token, err := capability(ctx)
-	if err != nil || strings.TrimSpace(token) == "" {
-		return false, nil
-	}
-
-	watermarkURL := fmt.Sprintf("%s/internal/computers/files/watermark?computer_id=%s", platformURL, url.QueryEscape(computerID))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, watermarkURL, nil)
-	if err != nil {
-		return false, nil
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return false, nil
-	}
-
-	var wm watermarkResponse
-	if err := json.NewDecoder(resp.Body).Decode(&wm); err != nil {
-		return false, nil
-	}
-
-	baseRef := strings.TrimSpace(wm.BaseRef)
-	if wm.WatermarkSequence == 0 || baseRef == "" {
-		return false, nil
-	}
-
-	// Fetch the ProjectionBase blob from the payload artifact endpoint
-	artifactRef := "artifact:sha256:" + baseRef
-	payloadURL := fmt.Sprintf("%s/internal/computers/events/payload?computer_id=%s&artifact_ref=%s", platformURL, url.QueryEscape(computerID), url.QueryEscape(artifactRef))
-	payloadReq, err := http.NewRequestWithContext(ctx, http.MethodGet, payloadURL, nil)
-	if err != nil {
-		return false, nil
-	}
-	payloadReq.Header.Set("Authorization", "Bearer "+token)
-
-	payloadResp, err := client.Do(payloadReq)
-	if err != nil {
-		return false, nil
-	}
-	defer payloadResp.Body.Close()
-
-	if payloadResp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("projection base: payload fetch status %d", payloadResp.StatusCode)
-	}
-
-	tmpFile, err := os.CreateTemp(storeDir, ".projection-base-download-*")
-	if err != nil {
-		return false, fmt.Errorf("projection base: create temp download file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	defer func() {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
-	}()
-
-	hasher := sha256.New()
-	writer := io.MultiWriter(tmpFile, hasher)
-	if _, err := io.Copy(writer, payloadResp.Body); err != nil {
-		return false, fmt.Errorf("projection base: write payload: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return false, fmt.Errorf("projection base: close temp download: %w", err)
-	}
-
-	digest := hex.EncodeToString(hasher.Sum(nil))
-	if digest != baseRef {
-		return false, fmt.Errorf("projection base: blob digest mismatch: got %s, want %s", digest, baseRef)
-	}
-
-	stagingDir := filepath.Join(storeDir, ".projection-base-staging")
-	_ = os.RemoveAll(stagingDir)
-	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
-		return false, fmt.Errorf("projection base: create staging dir: %w", err)
-	}
-	defer os.RemoveAll(stagingDir)
-
-	if err := projectionbase.Unpack(tmpPath, stagingDir); err != nil {
-		return false, fmt.Errorf("projection base: unpack blob: %w", err)
-	}
-
-	// Move unpacked contents into storeDir
-	entries, err := os.ReadDir(stagingDir)
-	if err != nil {
-		return false, fmt.Errorf("projection base: read staging dir: %w", err)
-	}
-	for _, entry := range entries {
-		src := filepath.Join(stagingDir, entry.Name())
-		dst := filepath.Join(storeDir, entry.Name())
-		if err := os.Rename(src, dst); err != nil {
-			return false, fmt.Errorf("projection base: install entry %s: %w", entry.Name(), err)
+	empty := isStoreEmpty(storeDir)
+	var localSeq uint64
+	if !empty {
+		if live != nil {
+			head, err := live.Head(ctx, computerID)
+			if err != nil {
+				return false, fmt.Errorf("%w: retained store head: %v", projectionbase.ErrBaseRefused, err)
+			}
+			if head != nil {
+				localSeq = head.Sequence
+			}
+		} else {
+			seq, err := projectionbase.PeekLocalSequence(ctx, storePath, computerID)
+			if err != nil {
+				return false, err
+			}
+			localSeq = seq
 		}
 	}
 
-	// Fsync storeDir
-	if dir, err := os.Open(storeDir); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
+	head, err := queryCanonicalHead(ctx, platformURL, computerID, capability)
+	if err != nil {
+		return false, err
+	}
+	chainExists := head != nil && head.Sequence > 0
+	var targetHead string
+	var targetSeq uint64
+	if chainExists {
+		targetHead = head.CanonicalEventHead
+		targetSeq = head.Sequence
 	}
 
-	log.Printf("autoputer: ProjectionBase materialized at sequence %d (base %s)", wm.WatermarkSequence, baseRef)
-	return true, nil
+	source := projectionbase.NewHTTPSource(platformURL, projectionbase.CapabilityFunc(capability))
+	var watermarkSeq uint64
+	if chainExists {
+		seq, _, wmErr := source.Watermark(ctx, computerID)
+		if wmErr != nil && !errors.Is(wmErr, projectionbase.ErrBaseRefused) {
+			return false, wmErr
+		}
+		if wmErr == nil {
+			watermarkSeq = seq
+		}
+	}
+
+	plan, err := projectionbase.PlanRecovery(empty, localSeq, chainExists, watermarkSeq, targetSeq)
+	if err != nil {
+		return false, err
+	}
+	switch plan.Action {
+	case projectionbase.RecoveryGenesis, projectionbase.RecoveryResume:
+		log.Printf("autoputer: projection recovery %s for %s (local=%d W=%d H=%d tail=%d)", plan.Action, computerID, localSeq, watermarkSeq, targetSeq, plan.TailEvents)
+		return false, nil
+	case projectionbase.RecoveryInstall:
+		descriptor, err := projectionbase.InstallVerifiedBase(ctx, source, storeDir, markerName, computerID, targetHead, targetSeq)
+		if err != nil {
+			return false, fmt.Errorf("autoputer: required projection base refused: %w", err)
+		}
+		log.Printf("autoputer: ProjectionBase installed at sequence %d (base %s) for target %d", descriptor.Sequence, descriptor.BlobSHA256, targetSeq)
+		return true, nil
+	case projectionbase.RecoveryRebase:
+		if live != nil {
+			if err := live.Close(); err != nil {
+				return false, fmt.Errorf("autoputer: close retained store before rebase: %w", err)
+			}
+		}
+		descriptor, err := projectionbase.RebaseRetainedStore(ctx, source, storePath, computerID, targetHead, targetSeq)
+		if err != nil {
+			if live != nil {
+				_ = live.Reopen(storePath)
+			}
+			return false, fmt.Errorf("autoputer: required projection rebase refused: %w", err)
+		}
+		if live != nil {
+			if err := live.Reopen(storePath); err != nil {
+				return false, fmt.Errorf("autoputer: reopen rebased store: %w", err)
+			}
+		}
+		log.Printf("autoputer: ProjectionBase rebased retained store from %d onto W=%d (base %s) for target %d", localSeq, descriptor.Sequence, descriptor.BlobSHA256, targetSeq)
+		return true, nil
+	default:
+		return false, fmt.Errorf("%w: unknown recovery action %s", projectionbase.ErrBaseRefused, plan.Action)
+	}
+}
+
+// queryCanonicalHead reads the platform canonical head. A missing head is the
+// explicit bootstrap signal (nil, nil); any other failure is loud because
+// boot cannot distinguish a new computer from a broken recovery without it.
+func queryCanonicalHead(ctx context.Context, platformURL, computerID string, capability func(context.Context) (string, error)) (*computerevent.Head, error) {
+	token, err := capability(ctx)
+	if err != nil || strings.TrimSpace(token) == "" {
+		return nil, fmt.Errorf("autoputer: platform capability unavailable: %w", err)
+	}
+	query := url.Values{"computer_id": {computerID}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, platformURL+"/internal/computers/events/head?"+query.Encode(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("autoputer: canonical head request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(token))
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("autoputer: canonical head fetch: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("autoputer: canonical head status %d", resp.StatusCode)
+	}
+	var head computerevent.Head
+	if err := json.NewDecoder(resp.Body).Decode(&head); err != nil {
+		return nil, fmt.Errorf("autoputer: decode canonical head: %w", err)
+	}
+	return &head, nil
 }
 
 func isStoreEmpty(dir string) bool {
@@ -158,6 +167,9 @@ func isStoreEmpty(dir string) bool {
 		if strings.HasPrefix(name, ".") && name != ".dolt" {
 			continue
 		}
+		if strings.HasPrefix(name, "restore-staging-") || strings.HasPrefix(name, "restore-quarantine-") {
+			continue
+		}
 		if name == ".dolt" || strings.HasSuffix(name, ".db") || strings.HasSuffix(name, ".sqlite") {
 			return false
 		}
@@ -166,4 +178,17 @@ func isStoreEmpty(dir string) bool {
 		}
 	}
 	return true
+}
+
+func sweepStagingArtifacts(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, "restore-staging-") || strings.HasPrefix(name, ".base-download-") || strings.HasPrefix(name, ".base-staging") {
+			_ = os.RemoveAll(filepath.Join(dir, name))
+		}
+	}
 }

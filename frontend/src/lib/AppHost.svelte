@@ -3,6 +3,7 @@
   import AppSurface from './apps/AppSurface.svelte';
   import { getAppDefinition, type ChoirAppDefinition } from './apps/registry';
   import type { ComponentType } from 'svelte';
+  import { handoffToComputerSurfaceIfStale, isDynamicImportError } from './computer-surface-handoff.js';
 
   export let win: any;
   export let currentUser: any = null;
@@ -30,9 +31,16 @@
     loadError = '';
     try {
       const module = await definition.component();
-      if (token === loadToken) Component = module.default;
+      if (token === loadToken) {
+        Component = module.default;
+      }
     } catch (err) {
-      if (token === loadToken) loadError = err instanceof Error ? err.message : 'Could not load app';
+      if (token === loadToken) {
+        if (isDynamicImportError(err) && await handoffToComputerSurfaceIfStale()) {
+          return;
+        }
+        loadError = err instanceof Error ? err.message : 'Could not load app';
+      }
     }
   }
 

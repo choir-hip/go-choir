@@ -294,7 +294,7 @@ func TestReplayCompletenessReconstructsNonNilEventChain(t *testing.T) {
 		EventKind:                    computerevent.EventGenesisImported,
 		OccurredAt:                   time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey:               "genesis",
-		ActorProfile:                 "super",
+		ActorProfile:                 "management",
 		AuthorityRef:                 "owner",
 		PrivacyClass:                 "owner",
 		PayloadCommitment:            strings.Repeat("a", 64),
@@ -313,6 +313,7 @@ func TestReplayCompletenessReconstructsNonNilEventChain(t *testing.T) {
 		store:         liveStore,
 		eventAppender: appender,
 	}
+	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
 	report, err := rt.ReplayCompleteness(ctx, computerID)
 	if err != nil {
 		t.Fatal(err)

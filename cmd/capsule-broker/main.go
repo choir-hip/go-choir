@@ -118,6 +118,7 @@ func main() {
 		sessionActivation  string
 		sessionAllowedRoot string
 		sessionRole        string
+		sessionSlot        string
 		sessionSockFD      int
 	)
 
@@ -133,6 +134,7 @@ func main() {
 	flag.StringVar(&sessionActivation, "session-activation", "", "Session worker activation identity")
 	flag.StringVar(&sessionAllowedRoot, "session-allowed-root", "/tmp", "Session worker filesystem root")
 	flag.StringVar(&sessionRole, "session-role", "", "Session worker role bounding the prebound choir surface (trusted, from verified capability)")
+	flag.StringVar(&sessionSlot, "session-slot", "", "Session worker co-super slot bound into the choir scope (trusted, from verified capability)")
 	flag.IntVar(&sessionSockFD, "session-sock-fd", -1, "inherited multiplexed session socket fd (Step 2 transport); -1 selects legacy stdio")
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
@@ -153,6 +155,7 @@ func main() {
 			Epoch:           sessionEpoch,
 			AllowedRoot:     sessionAllowedRoot,
 			Role:            sessionRole,
+			Slot:            sessionSlot,
 		}
 		if sessionSockFD >= 0 {
 			// Multiplexed session socket (Step 2): the broker passed its
@@ -675,7 +678,14 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 	// RLM route serves cells on the activation's persistent session worker;
 	// tools route keeps the one-shot worker. The route is resolved once per
 	// call so an unhold/flag change takes effect without reboot.
-	if b.effectiveRoute() == actuatorRLM {
+	if b.actuator == actuatorRLM {
+		if !b.sessionWorkerReady {
+			// Post-cutover the RLM desk is the in-cell carrier only: degrading
+			// to the one-shot worker would serve a desk with no choir scope
+			// and no terminal authority. Fail the call with a typed session
+			// diagnostic instead of silently degrading.
+			return BrokerRPCResponse{Error: "session_unavailable: actuator=rlm requested but the session worker is not ready"}
+		}
 		return b.handleGoEvalSession(ctx, cap, params)
 	}
 	return b.handleGoEvalOneShot(ctx, cap, params)
@@ -683,9 +693,10 @@ func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, para
 
 // handleGoEvalOneShot spawns this same broker binary in --exec-go-stdin
 // worker mode as a separate killable process group, so a runaway interpreter
-// is SIGKILLed on timeout and never runs in guest core. The session fallback
-// calls this directly to avoid re-entering route dispatch (which would
-// recurse under RLM when no session worker can start).
+// is SIGKILLed on timeout and never runs in guest core. It serves only
+// explicit actuator=tools calls via route dispatch above; the RLM session
+// path never diverts here (a session start failure returns a typed session
+// diagnostic instead).
 func (b *Broker) handleGoEvalOneShot(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	var p capsule.GoEvalRequest
 	if err := json.Unmarshal(params, &p); err != nil {

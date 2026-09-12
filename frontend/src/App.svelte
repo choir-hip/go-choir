@@ -25,6 +25,7 @@
   import Desktop from './lib/Desktop.svelte';
   import LegalDocument from './lib/LegalDocument.svelte';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
+  import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
   import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
@@ -319,10 +320,18 @@
       const session = await checkSession();
       if (session?.authenticated) {
         window.localStorage?.setItem('choir.auth.returning', 'true');
-        maybeReplayPendingIntent(pendingAuthIntent);
-        clearConsumedAppIntentFromURL(pendingAuthIntent);
         authOverlayOpen = false;
         pendingAuthIntent = null;
+
+        // Await prewarm so the user's computer microVM is awake and serving
+        await prewarmAuthenticatedComputer().catch(() => {});
+
+        // Under C15/I25, the UI that renders a user computer is that computer's surface.
+        // The unauthenticated document was loaded from the host platform shell.
+        // Handoff cleanly to the authenticated computer's surface so the browser
+        // executes the computer's exact asset graph instead of mixing host and guest chunk hashes.
+        window.location.replace(window.location.href);
+        return;
       }
     } catch (err) {
       // Ceremony failed or was cancelled — stay in signed-out
@@ -438,7 +447,11 @@
       void loadUniversalWirePublicLink(universalWirePublicToken);
     }
     const initialIntent = initialAppIntentFromURL();
-    checkSession().then((session) => {
+    checkSession().then(async (session) => {
+      if (session?.authenticated) {
+        await prewarmAuthenticatedComputer().catch(() => {});
+        if (await handoffToComputerSurfaceIfStale()) return;
+      }
       if (!initialIntent) return;
       if (session?.authenticated) {
         maybeReplayPendingIntent(initialIntent);

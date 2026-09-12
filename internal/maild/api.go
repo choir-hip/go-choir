@@ -8,12 +8,16 @@ import (
 	"io"
 	"net/http"
 	"net/mail"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type messageListResponse struct {
-	Messages []messageSummary `json:"messages"`
+	Messages   []messageSummary `json:"messages"`
+	NextCursor string           `json:"next_cursor,omitempty"`
+	Total      int              `json:"total"`
+	Unread     int              `json:"unread"`
 }
 
 type messageSummary struct {
@@ -133,11 +137,22 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 2 && parts[1] == "read" {
+		switch r.Method {
+		case http.MethodPost:
+			h.handleMessageRead(w, r, ownerID, messageID)
+		case http.MethodDelete:
+			h.handleMessageUnread(w, r, ownerID, messageID)
+		default:
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		}
+		return
+	}
+	if len(parts) == 2 && parts[1] == "unread" {
 		if r.Method != http.MethodPost {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		h.handleMessageRead(w, r, ownerID, messageID)
+		h.handleMessageUnread(w, r, ownerID, messageID)
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -174,16 +189,36 @@ func normalizedTrustedEmail(value string) string {
 }
 
 func (h *Handler) handleMessageList(w http.ResponseWriter, r *http.Request, ownerID string) {
-	messages, err := h.store.ListMessages(r.Context(), ownerID, r.URL.Query().Get("folder"), 50)
+	q := r.URL.Query()
+	folder := q.Get("folder")
+	cursor := q.Get("cursor")
+	// Default to 100 messages per page to display full typical inboxes
+	limit := 100
+	if l := q.Get("limit"); l != "" {
+		if val, err := strconv.Atoi(l); err == nil && val > 0 {
+			limit = val
+		}
+	}
+	res, err := h.store.ListMessagesPaged(r.Context(), ListMessagesOptions{
+		OwnerID: ownerID,
+		Folder:  folder,
+		Limit:   limit,
+		Cursor:  cursor,
+	})
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	out := make([]messageSummary, 0, len(messages))
-	for _, msg := range messages {
+	out := make([]messageSummary, 0, len(res.Messages))
+	for _, msg := range res.Messages {
 		out = append(out, summarizeMessage(msg))
 	}
-	writeJSON(w, http.StatusOK, messageListResponse{Messages: out})
+	writeJSON(w, http.StatusOK, messageListResponse{
+		Messages:   out,
+		NextCursor: res.NextCursor,
+		Total:      res.Total,
+		Unread:     res.Unread,
+	})
 }
 
 func (h *Handler) handleMessageDetail(w http.ResponseWriter, r *http.Request, ownerID, messageID string) {
@@ -306,6 +341,14 @@ func (h *Handler) handleMessageRead(w http.ResponseWriter, r *http.Request, owne
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "read"})
+}
+
+func (h *Handler) handleMessageUnread(w http.ResponseWriter, r *http.Request, ownerID, messageID string) {
+	if err := h.store.MarkMessageUnread(r.Context(), ownerID, messageID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "unread"})
 }
 
 func summarizeMessage(msg EmailMessage) messageSummary {

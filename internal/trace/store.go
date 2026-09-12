@@ -227,7 +227,7 @@ func NewSQLiteStore(path string) (*SQLStore, error) {
 			return nil, fmt.Errorf("trace store: create dir: %w", err)
 		}
 	}
-	db, err := sql.Open("sqlite", path+"?_busy_timeout=60000")
+	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(60000)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("trace store: open sqlite: %w", err)
 	}

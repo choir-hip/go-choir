@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -23,6 +24,9 @@ func main() {
 	scratchDir := fs.String("scratch-dir", "", "Scratch directory for projection reconstruction (defaults to temp dir)")
 	keyFile := fs.String("key-file", "", "Path to privacy key file or mode-0400 guest key JSON")
 	keyHex := fs.String("key-hex", "", "Hex-encoded 32-byte privacy key")
+	advertise := fs.Bool("advertise", false, "POST the published blob as this computer's advertised watermark")
+	platformURL := fs.String("platform-url", os.Getenv("CHOIR_PLATFORM_URL"), "Platform URL for --advertise (or CHOIR_PLATFORM_URL)")
+	capability := fs.String("capability", os.Getenv("CHOIR_PLATFORM_CAPABILITY"), "Bearer capability for --advertise (or CHOIR_PLATFORM_CAPABILITY)")
 	batchSize := fs.Int("batch-size", projectionbase.DefaultBatchSize, "Number of events per database transaction")
 	memoryLimitMB := fs.Int64("memory-limit-mb", 2048, "Memory limit in MB for replay process")
 
@@ -59,8 +63,13 @@ func main() {
 				Key string `json:"key"`
 			}
 			if err := json.Unmarshal(raw, &kf); err == nil && kf.Key != "" {
-				// Base64-decoded in computerevent.
-				keyMaterial = []byte(kf.Key)
+				if dec, err := base64.StdEncoding.DecodeString(kf.Key); err == nil && len(dec) == 32 {
+					keyMaterial = dec
+				} else if dec, err := base64.RawStdEncoding.DecodeString(kf.Key); err == nil && len(dec) == 32 {
+					keyMaterial = dec
+				} else {
+					keyMaterial = []byte(kf.Key)
+				}
 			} else {
 				keyMaterial = raw
 			}
@@ -89,7 +98,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	diskSource := projectionbase.NewDiskEventSource(cfg.ArtifactsRoot, cfg.ComputerID)
+	diskSource := projectionbase.NewDiskEventSource(cfg.ArtifactsRoot, cfg.ComputerID, cfg.TargetHead)
 
 	fmt.Printf("Starting offline projection base rebuild for %s through head %s...\n", cfg.ComputerID, cfg.TargetHead)
 	result, err := rebuilder.Run(ctx, diskSource)
@@ -107,4 +116,12 @@ func main() {
 	fmt.Println("ProjectionBase successfully published:")
 	fmt.Println(string(out))
 	fmt.Printf("Blob artifact path: %s\n", result.BlobPath)
+
+	if *advertise {
+		if err := projectionbase.AdvertiseWatermark(ctx, *platformURL, *capability, cfg.ComputerID, result.Descriptor.Sequence, result.Descriptor.BlobSHA256); err != nil {
+			fmt.Fprintf(os.Stderr, "choir-rebuild-base: advertise watermark failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Advertised watermark sequence %d (%s)\n", result.Descriptor.Sequence, result.Descriptor.BlobSHA256)
+	}
 }

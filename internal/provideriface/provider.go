@@ -82,6 +82,9 @@ type ToolLoopRequest struct {
 
 	// ReasoningEffort is the provider-specific per-run reasoning control.
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// ConversationID is the durable run identity forwarded to providers that
+	// require a per-conversation session header.
+	ConversationID string `json:"conversation_id,omitempty"`
 
 	// System is the system prompt (potentially including the tool catalog).
 	System string `json:"system"`

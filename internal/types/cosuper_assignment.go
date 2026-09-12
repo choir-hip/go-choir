@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const (
@@ -92,8 +94,8 @@ func (b CoSuperAssignmentBinding) Validate() error {
 	if !strings.HasPrefix(b.ParentDecisionID, "decision:sha256:") || !ValidSHA256Digest(strings.TrimPrefix(b.ParentDecisionID, "decision:")) {
 		return fmt.Errorf("co-super assignment: parent_decision_id must be runtime-derived")
 	}
-	if b.ParentAgentID != "super:"+b.OwnerID {
-		return fmt.Errorf("co-super assignment: parent_agent_id must be exact persistent super:<owner>")
+	if b.ParentAgentID != agentprofile.Super+":"+b.OwnerID {
+		return fmt.Errorf("co-super assignment: parent_agent_id must be exact persistent management:<owner>")
 	}
 	if b.AssignedAgentID == b.ParentAgentID || b.AssignedWorkItemID == b.ParentWorkItemID {
 		return fmt.Errorf("co-super assignment: parent and assigned identities must be distinct")
@@ -264,6 +266,17 @@ type CoSuperAssignment struct {
 	CreatedAt              time.Time                      `json:"created_at"`
 	UpdatedAt              time.Time                      `json:"updated_at"`
 	TerminalAt             *time.Time                     `json:"terminal_at,omitempty"`
+	PendingProposal        *CoSuperPendingProposal        `json:"pending_proposal,omitempty"`
+}
+
+// CoSuperPendingProposal holds the reducer-owned pending proposal (settlement gate item 5)
+// committed durably before issuing physical freeze/revoke actions.
+type CoSuperPendingProposal struct {
+	PropositionDigest string                  `json:"proposition_digest"`
+	Report            CoSuperAssignmentReport `json:"report"`
+	FreezeIntentRef   string                  `json:"freeze_intent_ref"`
+	RevokeIntentRef   string                  `json:"revoke_intent_ref,omitempty"`
+	CreatedAt         time.Time               `json:"created_at"`
 }
 
 func (a CoSuperAssignment) Validate() error {
@@ -379,6 +392,15 @@ type CoSuperAssignmentReport struct {
 	Summary                  string                        `json:"summary,omitempty"`
 	EvidenceRefs             []string                      `json:"evidence_refs,omitempty"`
 	CreatedAt                time.Time                     `json:"created_at"`
+	// PropositionDigest is the reducer-derived v1 terminal-proposition digest
+	// (settlement gate item 3): sha over the canonical submitted-proposition
+	// content plus the pinned pre-execution subject belief. It is derivation,
+	// never digest input; the store computes it authoritatively at record.
+	PropositionDigest string `json:"proposition_digest,omitempty"`
+	// RecordCommandID is the lifecycle command that recorded this report
+	// (derivation, never identity input): same-digest replays resolve the
+	// original receipt through it.
+	RecordCommandID string `json:"record_command_id,omitempty"`
 }
 
 func (r CoSuperAssignmentReport) ValidateAgainst(a CoSuperAssignment) error {
@@ -511,6 +533,40 @@ type CoSuperAssignmentCommandResult struct {
 	Replay     bool                     `json:"replay"`
 }
 
+// CoSuperOrphanReason names why a child run is observed as orphaned (settlement gate item 6).
+type CoSuperOrphanReason string
+
+const (
+	OrphanReasonProcessExitedWithoutPacket CoSuperOrphanReason = "process_exited_without_packet"
+	OrphanReasonCancelled                  CoSuperOrphanReason = "cancelled"
+	OrphanReasonConfirmedDead              CoSuperOrphanReason = "confirmed_dead"
+)
+
+// CoSuperOrphanObservation is an authenticated immutable observation submitted
+// to the reducer when a child run terminates without a terminal packet (settlement gate item 6).
+type CoSuperOrphanObservation struct {
+	OwnerID      string              `json:"owner_id"`
+	ComputerID   string              `json:"computer_id"`
+	RunID        string              `json:"run_id"`
+	AssignmentID string              `json:"assignment_id,omitempty"`
+	Attempt      uint64              `json:"attempt,omitempty"`
+	Reason       CoSuperOrphanReason `json:"reason"`
+	ObservedAt   time.Time           `json:"observed_at"`
+	EvidenceRef  string              `json:"evidence_ref,omitempty"`
+}
+
+func (o CoSuperOrphanObservation) Validate() error {
+	if strings.TrimSpace(o.OwnerID) == "" || strings.TrimSpace(o.ComputerID) == "" || strings.TrimSpace(o.RunID) == "" {
+		return fmt.Errorf("orphan observation: owner_id, computer_id, and run_id are required")
+	}
+	switch o.Reason {
+	case OrphanReasonProcessExitedWithoutPacket, OrphanReasonCancelled, OrphanReasonConfirmedDead:
+	default:
+		return fmt.Errorf("orphan observation: invalid reason %q", o.Reason)
+	}
+	return nil
+}
+
 type OpenCoSuperAssignmentRequest struct {
 	CommandID     string                   `json:"command_id"`
 	CommandDigest string                   `json:"command_digest"`
@@ -518,8 +574,32 @@ type OpenCoSuperAssignmentRequest struct {
 	Binding       CoSuperAssignmentBinding `json:"binding"`
 	AssignedAgent AgentRecord              `json:"assigned_agent"`
 	AssignedWork  WorkItemRecord           `json:"assigned_work"`
+	// Supersedes carries the frozen correction tuple (settlement gate item 3):
+	// a correction lands only as a new attempt carrying it. Attempt 1 never
+	// carries it; attempt > 1 always does.
+	Supersedes *CoSuperSupersedeTuple `json:"supersedes,omitempty"`
 }
 
+// CoSuperSupersedeKind names why a new attempt supersedes a prior one.
+type CoSuperSupersedeKind string
+
+const (
+	CoSuperSupersedeCorrection      CoSuperSupersedeKind = "correction"
+	CoSuperSupersedeRetryAfterBlock CoSuperSupersedeKind = "retry_after_block"
+	CoSuperSupersedeOwnerReopen     CoSuperSupersedeKind = "owner_reopen"
+)
+
+// CoSuperSupersedeTuple is the frozen correction tuple: who is superseded,
+// which receipt it corrects, why, and a digest over structured fields only
+// (never summary or prose).
+type CoSuperSupersedeTuple struct {
+	SupersedesAssignmentID string               `json:"supersedes_assignment_id"`
+	SupersedesAttempt      uint64               `json:"supersedes_attempt"`
+	PriorReceiptRef        string               `json:"prior_receipt_ref"`
+	SupersedeKind          CoSuperSupersedeKind `json:"supersede_kind"`
+	ReasonEnum             string               `json:"reason_enum"`
+	DeltaDigest            string               `json:"delta_digest"`
+}
 type BindCoSuperAssignmentRequest struct {
 	CommandID                string                         `json:"command_id"`
 	CommandDigest            string                         `json:"command_digest"`
@@ -570,4 +650,5 @@ type SetCoSuperCapsuleDispositionRequest struct {
 	IntentRef                string                    `json:"intent_ref"`
 	AckRef                   string                    `json:"ack_ref,omitempty"`
 	FateStep                 *CoSuperCapsuleFateStep   `json:"fate_step,omitempty"`
+	PendingProposal          *CoSuperPendingProposal   `json:"pending_proposal,omitempty"`
 }

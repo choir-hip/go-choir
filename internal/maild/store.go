@@ -3,6 +3,7 @@ package maild
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -218,10 +219,12 @@ type StoreStats struct {
 // OpenStore opens a maild store with a global routing database. Per-user
 // mailbox databases are opened on demand via mailboxForOwner.
 func OpenStore(dbPath string, storageRoot string) (*Store, error) {
-	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(60000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("open routing sqlite: %w", err)
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping routing sqlite: %w", err)
@@ -272,10 +275,12 @@ func (s *Store) mailboxForOwner(ownerID string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create mailbox dir for %s: %w", ownerID, err)
 	}
 	dbPath := filepath.Join(dir, "mail.db")
-	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(60000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("open mailbox sqlite for %s: %w", ownerID, err)
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping mailbox sqlite for %s: %w", ownerID, err)
@@ -661,6 +666,8 @@ func ensureMailboxSchema(db *sql.DB) error {
 			sent_at text,
 			created_at text not null
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_email_messages_listing
+			ON email_messages(mailbox_owner_id, direction, trust_status, received_at, sent_at, created_at, id)`,
 		`CREATE TABLE IF NOT EXISTS email_message_recipients (
 			id text primary key,
 			message_id text not null,
@@ -1145,19 +1152,67 @@ func (s *Store) Stats(ctx context.Context) (StoreStats, error) {
 	}
 	return stats, nil
 }
+// ListMessagesOptions configures message listing and pagination.
+type ListMessagesOptions struct {
+	OwnerID string
+	Folder  string
+	Limit   int
+	Cursor  string
+}
 
-// ListMessages returns owner-visible messages for a simple v0 folder.
-func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit int) ([]EmailMessage, error) {
-	db, err := s.mailboxForOwner(ownerID)
-	if err != nil {
-		return nil, err
+// ListMessagesResult returns paginated messages with cursor and counts.
+type ListMessagesResult struct {
+	Messages   []EmailMessage
+	NextCursor string
+	Total      int
+	Unread     int
+}
+
+func decodeMessageCursor(raw string) (sortAt string, id string, err error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", "", nil
 	}
-	if limit <= 0 || limit > 100 {
-		limit = 50
+	bytes, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		bytes, err = base64.URLEncoding.DecodeString(raw)
+		if err != nil {
+			return "", "", fmt.Errorf("invalid cursor: %w", err)
+		}
+	}
+	parts := strings.SplitN(string(bytes), "\x00", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("malformed cursor payload")
+	}
+	return parts[0], parts[1], nil
+}
+
+func encodeMessageCursor(sortAt, id string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(sortAt + "\x00" + id))
+}
+
+func messageSortAt(msg EmailMessage) string {
+	if strings.TrimSpace(msg.ReceivedAt) != "" {
+		return msg.ReceivedAt
+	}
+	if strings.TrimSpace(msg.SentAt) != "" {
+		return msg.SentAt
+	}
+	return msg.CreatedAt
+}
+
+// ListMessagesPaged returns owner-visible messages with keyset pagination and folder counts.
+func (s *Store) ListMessagesPaged(ctx context.Context, opts ListMessagesOptions) (ListMessagesResult, error) {
+	db, err := s.mailboxForOwner(opts.OwnerID)
+	if err != nil {
+		return ListMessagesResult{}, err
+	}
+	limit := opts.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 100
 	}
 	where := "mailbox_owner_id = ?"
-	args := []any{ownerID}
-	switch strings.ToLower(strings.TrimSpace(folder)) {
+	countArgs := []any{opts.OwnerID}
+	switch strings.ToLower(strings.TrimSpace(opts.Folder)) {
 	case "", "inbox":
 		where += " AND direction = 'inbound' AND trust_status <> 'quarantined'"
 	case "sent":
@@ -1165,10 +1220,29 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 	case "quarantine":
 		where += " AND trust_status = 'quarantined'"
 	default:
-		return nil, fmt.Errorf("unsupported folder %q", folder)
+		return ListMessagesResult{}, fmt.Errorf("unsupported folder %q", opts.Folder)
 	}
-	args = append(args, limit)
-	rows, err := db.QueryContext(ctx, `SELECT
+
+	var total, unread int
+	countQuery := `SELECT count(*), count(CASE WHEN (read_at IS NULL OR read_at = '') AND direction = 'inbound' THEN 1 END) FROM email_messages WHERE ` + where
+	if err := db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total, &unread); err != nil {
+		return ListMessagesResult{}, fmt.Errorf("count messages: %w", err)
+	}
+
+	const sortExpr = "coalesce(nullif(received_at, ''), nullif(sent_at, ''), created_at)"
+	args := []any{opts.OwnerID}
+	pageWhere := where
+	if opts.Cursor != "" {
+		sortAt, id, err := decodeMessageCursor(opts.Cursor)
+		if err != nil {
+			return ListMessagesResult{}, err
+		}
+		pageWhere += fmt.Sprintf(" AND (%s < ? OR (%s = ? AND id < ?))", sortExpr, sortExpr)
+		args = append(args, sortAt, sortAt, id)
+	}
+
+	args = append(args, limit+1)
+	query := fmt.Sprintf(`SELECT
 		id, provider, coalesce(provider_message_id, ''), coalesce(provider_event_id, ''),
 		direction, mailbox_owner_id, coalesce(alias_id, ''), from_address,
 		coalesce(from_display, ''), subject, coalesce(text_body, ''),
@@ -1177,27 +1251,53 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 		coalesce(received_at, ''), coalesce(sent_at, ''), created_at,
 		EXISTS(SELECT 1 FROM email_attachments a WHERE a.message_id = email_messages.id)
 		FROM email_messages
-		WHERE `+where+`
-		ORDER BY coalesce(received_at, sent_at, created_at) DESC
-		LIMIT ?`, args...)
+		WHERE %s
+		ORDER BY %s DESC, id DESC
+		LIMIT ?`, pageWhere, sortExpr)
+
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list messages: %w", err)
+		return ListMessagesResult{}, fmt.Errorf("list messages: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	messages := make([]EmailMessage, 0)
 	for rows.Next() {
 		msg, err := scanMessage(rows)
 		if err != nil {
-			return nil, err
+			return ListMessagesResult{}, err
 		}
 		messages = append(messages, msg)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return ListMessagesResult{}, err
 	}
-	return messages, nil
+
+	var nextCursor string
+	if len(messages) > limit {
+		nextCursor = encodeMessageCursor(messageSortAt(messages[limit-1]), messages[limit-1].ID)
+		messages = messages[:limit]
+	}
+
+	return ListMessagesResult{
+		Messages:   messages,
+		NextCursor: nextCursor,
+		Total:      total,
+		Unread:     unread,
+	}, nil
 }
 
+// ListMessages returns owner-visible messages for a simple v0 folder.
+func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit int) ([]EmailMessage, error) {
+	res, err := s.ListMessagesPaged(ctx, ListMessagesOptions{
+		OwnerID: ownerID,
+		Folder:  folder,
+		Limit:   limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.Messages, nil
+}
 // GetMessage returns an owner-visible message by id.
 func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (EmailMessage, error) {
 	db, err := s.mailboxForOwner(ownerID)
@@ -1420,6 +1520,26 @@ func (s *Store) MarkMessageRead(ctx context.Context, ownerID, messageID string, 
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("mark read rows: %w", err)
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// MarkMessageUnread marks a message unread for its owner by clearing read_at.
+func (s *Store) MarkMessageUnread(ctx context.Context, ownerID, messageID string) error {
+	db, err := s.mailboxForOwner(ownerID)
+	if err != nil {
+		return err
+	}
+	result, err := db.ExecContext(ctx, `UPDATE email_messages SET read_at = NULL WHERE mailbox_owner_id = ? AND id = ?`, ownerID, messageID)
+	if err != nil {
+		return fmt.Errorf("mark unread: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("mark unread rows: %w", err)
 	}
 	if rows == 0 {
 		return sql.ErrNoRows

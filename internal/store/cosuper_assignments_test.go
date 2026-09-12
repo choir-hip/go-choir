@@ -66,11 +66,11 @@ func bindCoSuperRequest(open types.OpenCoSuperAssignmentRequest, runID, capabili
 	run := types.RunRecord{
 		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
 		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "co-super", AgentRole: "co-super", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
 		State: types.RunPending, Prompt: open.AssignedWork.Objective,
 		Metadata: map[string]any{
 			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "super",
+			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
 			"assignment_id": open.AssignmentID, "assignment_attempt": open.Binding.Attempt, "assignment_kind": string(open.Binding.Kind),
 			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
 			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
@@ -311,7 +311,23 @@ func TestCoSuperAssignmentsAllowManyParallelAttemptsAndReplay(t *testing.T) {
 	for err := range errs {
 		t.Fatalf("concurrent many-assignment open: %v", err)
 	}
+	// v1 correction rule: attempt 2 carries the tuple naming a recorded prior
+	// report. Bind the first attempt and record partial progress first.
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(first, f.assignedRunIDs[0], "opaque-capability-00")); err != nil {
+		t.Fatal(err)
+	}
+	priorPartial := assignmentReportRequest(first, 2, "report-parallel-prior", first.Binding.SubjectDigest, types.CoSuperResultPartial, types.CoSuperVerdictNone)
+	recorded, err := s.RecordCoSuperAssignmentReport(ctx, priorPartial)
+	if err != nil || recorded.Report == nil {
+		t.Fatalf("prior partial: %+v err=%v", recorded, err)
+	}
 	attemptTwo := coSuperOpenRequest(f, 12, first.AssignmentID, 2, types.CoSuperAssignmentVerification, true, "opaque-attempt-two", "capsule-attempt-two")
+	attemptTwo.Supersedes = &types.CoSuperSupersedeTuple{
+		SupersedesAssignmentID: first.AssignmentID, SupersedesAttempt: 1,
+		PriorReceiptRef: recorded.Report.ReportID, SupersedeKind: types.CoSuperSupersedeRetryAfterBlock,
+		ReasonEnum: "parallel_attempt_supersession", DeltaDigest: objectgraph.SHA256([]byte("parallel-delta")),
+	}
+	attemptTwo.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(attemptTwo)
 	if _, err := s.OpenCoSuperAssignment(ctx, attemptTwo); err != nil {
 		t.Fatalf("open second attempt: %v", err)
 	}
@@ -344,7 +360,7 @@ func TestCoSuperAssignmentRejectsCrossScopeAndAuthorityMismatches(t *testing.T) 
 	base := coSuperOpenRequest(f, 0, "assignment-scope", 1, types.CoSuperAssignmentImplementation, true, "opaque-scope", "capsule-scope")
 	for name, mutate := range map[string]func(*types.OpenCoSuperAssignmentRequest){
 		"owner": func(r *types.OpenCoSuperAssignmentRequest) {
-			r.Binding.OwnerID, r.Binding.ParentAgentID = "other-owner", "super:other-owner"
+			r.Binding.OwnerID, r.Binding.ParentAgentID = "other-owner", "management:other-owner"
 		},
 		"computer":       func(r *types.OpenCoSuperAssignmentRequest) { r.Binding.ComputerID = "other-computer" },
 		"trajectory":     func(r *types.OpenCoSuperAssignmentRequest) { r.Binding.TrajectoryID = "other-trajectory" },
@@ -400,7 +416,7 @@ func TestCoSuperAssignmentRejectsGenericLifecycleSuperSubstitute(t *testing.T) {
 		now := time.Now().UTC()
 		lifecycleRun := types.RunRecord{
 			RunID: f.parentRunID, AgentID: f.parentAgentID, TrajectoryID: f.trajectoryID,
-			AgentProfile: "super", AgentRole: "super", OwnerID: f.ownerID, ComputerID: f.computerID,
+			AgentProfile: "management", AgentRole: "management", OwnerID: f.ownerID, ComputerID: f.computerID,
 			State: types.RunRunning, CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{"assignment_trajectory_id": f.trajectoryID, "parent_work_item_id": f.parentWorkID,
 				"parent_decision_id": f.parentDecisionID, "parent_control_id": f.parentControlID},
@@ -1037,11 +1053,14 @@ func TestCoSuperCancellationQueuesOneFailureAndLateResultIsEvidenceOnly(t *testi
 	if err != nil || !lateReplay.Replay || lateReplay.Update != nil || lateReplay.Candidate != nil {
 		t.Fatalf("late exact replay = %+v err=%v", lateReplay, err)
 	}
-	lateConflict := late
-	lateConflict.Report.Summary = "changed late result"
-	lateConflict.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(lateConflict)
-	if _, err := s.RecordCoSuperAssignmentReport(ctx, lateConflict); !errors.Is(err, ErrCoSuperAssignmentCommandConflict) {
-		t.Fatalf("late conflict = %v", err)
+	lateReword := late
+	lateReword.Report.Summary = "changed late result"
+	lateReword.ExpectedLifecycleVersion = lateResult.Assignment.LifecycleVersion
+	lateReword.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(lateReword)
+	// reworded identical proposition replays the original receipt.
+	reworded, err := s.RecordCoSuperAssignmentReport(ctx, lateReword)
+	if err != nil || !reworded.Replay || reworded.Report == nil || reworded.Report.ReportID != lateResult.Report.ReportID {
+		t.Fatalf("late reword replay = %+v err=%v", reworded, err)
 	}
 	latePartial := assignmentReportRequest(open, lateResult.Assignment.LifecycleVersion, "late-partial-result", open.Binding.SubjectDigest, types.CoSuperResultPartial, types.CoSuperVerdictNone)
 	latePartial.Report.Summary = "in-flight partial result arrived after revoke"
@@ -1257,5 +1276,456 @@ func TestSystemAssignmentCancellationAfterTrajectoryProjectionUsesHistoricalAuth
 	work, err := s.GetLifecycleWorkItem(ctx, f.ownerID, f.computerID, open.Binding.AssignedWorkItemID)
 	if err != nil || work.Status != types.WorkItemCancelled {
 		t.Fatalf("terminal work: %+v %v", work, err)
+	}
+}
+
+// TestTerminalPropositionDigestExcludesMetadata (settlement gate item 3, v1):
+// the digest is invariant over excluded metadata (summary prose, evidence
+// order, identifier derivations, nil-vs-empty lists) and sensitive to every
+// canonical input (result, verdict, commands incl. order/exit, outputs,
+// evidence set, pinned belief).
+func TestTerminalPropositionDigestExcludesMetadata(t *testing.T) {
+	pinned := objectgraph.SHA256([]byte("subject"))
+	commands := []types.CoSuperRecordedCommand{{CommandID: "capsule-command:x", CommandDigest: objectgraph.SHA256([]byte("command")), ExecutionRef: "capsule-exec:sha256:1", ExitCode: 0}}
+	outputs := []types.CoSuperRecordedOutput{{OutputID: "o:stdout", Kind: "stdout", Digest: objectgraph.SHA256([]byte("out")), Ref: "r#stdout"}}
+	digest := func() string {
+		d, err := ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone, commands, outputs, []string{"b", "a"})
+		if err != nil {
+			t.Fatalf("digest: %v", err)
+		}
+		return d
+	}
+	base := digest()
+	// Evidence order normalizes.
+	ordered, err := ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone, commands, outputs, []string{"a", "b"})
+	if err != nil || ordered != base {
+		t.Fatalf("evidence order changed digest: %q vs %q err=%v", ordered, base, err)
+	}
+	// Nil and empty lists are the same proposition.
+	emptyCmds, err := ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("empty digest: %v", err)
+	}
+	emptyCmds2, err := ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone,
+		[]types.CoSuperRecordedCommand{}, []types.CoSuperRecordedOutput{}, []string{})
+	if err != nil || emptyCmds != emptyCmds2 {
+		t.Fatalf("nil vs empty differ: %q vs %q err=%v", emptyCmds, emptyCmds2, err)
+	}
+	// Identifier derivations (command/output IDs) never enter identity.
+	renamed := append([]types.CoSuperRecordedCommand(nil), commands...)
+	renamed[0].CommandID = "different-id"
+	renamedOut := append([]types.CoSuperRecordedOutput(nil), outputs...)
+	renamedOut[0].OutputID, renamedOut[0].Ref = "other", "other#ref"
+	sameIDs, err := ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone, renamed, renamedOut, []string{"a", "b"})
+	if err != nil || sameIDs != base {
+		t.Fatalf("identifier derivations changed digest: %q vs %q err=%v", sameIDs, base, err)
+	}
+	cases := map[string]func() (string, error){
+		"result": func() (string, error) {
+			return ComputeTerminalPropositionDigest(pinned, types.CoSuperResultFailed, types.CoSuperVerdictNone, commands, outputs, []string{"a"})
+		},
+		"verdict": func() (string, error) {
+			return ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictFail, commands, outputs, []string{"a"})
+		},
+		"command-exit": func() (string, error) {
+			alt := append([]types.CoSuperRecordedCommand(nil), commands...)
+			alt[0].ExitCode = 3
+			return ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone, alt, outputs, []string{"a"})
+		},
+		"command-order": func() (string, error) {
+			extra := types.CoSuperRecordedCommand{CommandDigest: objectgraph.SHA256([]byte("second")), ExecutionRef: "capsule-exec:sha256:2"}
+			return ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone, append([]types.CoSuperRecordedCommand{extra}, commands...), outputs, []string{"a"})
+		},
+		"outputs-only": func() (string, error) {
+			alt := append([]types.CoSuperRecordedOutput(nil), outputs...)
+			alt[0].Digest = objectgraph.SHA256([]byte("changed-output"))
+			return ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone, commands, alt, []string{"a"})
+		},
+		"evidence-add": func() (string, error) {
+			return ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone, commands, outputs, []string{"a", "c"})
+		},
+		"pinned-belief": func() (string, error) {
+			return ComputeTerminalPropositionDigest(objectgraph.SHA256([]byte("other-subject")), types.CoSuperResultCompleted, types.CoSuperVerdictNone, commands, outputs, []string{"a"})
+		},
+	}
+	// Recompute base with canonical evidence for sensitivity comparison.
+	base, err = ComputeTerminalPropositionDigest(pinned, types.CoSuperResultCompleted, types.CoSuperVerdictNone, commands, outputs, []string{"a"})
+	if err != nil {
+		t.Fatalf("base digest: %v", err)
+	}
+	for name, fn := range cases {
+		got, err := fn()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got == base {
+			t.Fatalf("%s change did not move the digest", name)
+		}
+	}
+	if _, err := ComputeTerminalPropositionDigest("not-a-digest", types.CoSuperResultCompleted, types.CoSuperVerdictNone, nil, nil, nil); err == nil {
+		t.Fatal("invalid pinned belief must fail closed")
+	}
+	// ReportID derives from slot plus digest, never the reverse.
+	idA := TerminalReportID("o", "c", "a", 1, base)
+	idB := TerminalReportID("o", "c", "a", 1, base)
+	idC := TerminalReportID("o", "c", "a", 2, base)
+	if idA == "" || idA != idB || idA == idC {
+		t.Fatalf("report IDs not slot-bound derivations: %q %q %q", idA, idB, idC)
+	}
+}
+
+// TestTerminalSlotReplayAndConflict (settlement gate item 3, v1): same
+// proposition under a fresh command envelope replays with no new effects;
+// excluded-metadata rewording replays; a same-digest occupant always replays;
+// the scan reports a non-late terminal occupant for conflict gating.
+func TestTerminalSlotReplayAndConflict(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-terminal-slot", 1, types.CoSuperAssignmentImplementation, true, "cap-slot", "capsule-slot")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-slot")); err != nil {
+		t.Fatal(err)
+	}
+	firstReq := assignmentReportRequest(open, 2, "report-slot-a", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	first, err := s.RecordCoSuperAssignmentReport(ctx, firstReq)
+	if err != nil || first.Report == nil || first.Report.PropositionDigest == "" || first.Report.RecordCommandID != firstReq.CommandID {
+		t.Fatalf("first terminal: %+v err=%v", first, err)
+	}
+	if first.Assignment.Disposition != types.CoSuperAssignmentCompleted {
+		t.Fatalf("first terminal disposition = %v", first.Assignment.Disposition)
+	}
+	// Same proposition, fresh command envelope and reworded summary: replays.
+	retryReq := assignmentReportRequest(open, first.Assignment.LifecycleVersion, "report-slot-a", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	retryReq.CommandID = "command-report-slot-a-retry"
+	retryReq.Report.Summary = "reworded identical outcome under fresh envelopes"
+	retryReq.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(retryReq)
+	retry, err := s.RecordCoSuperAssignmentReport(ctx, retryReq)
+	if err != nil || !retry.Replay || retry.Report == nil || retry.Report.ReportID != first.Report.ReportID || retry.Report.PropositionDigest != first.Report.PropositionDigest {
+		t.Fatalf("reworded replay = %+v err=%v", retry, err)
+	}
+	if retry.Assignment.LifecycleVersion != first.Assignment.LifecycleVersion {
+		t.Fatalf("replay advanced lifecycle %d -> %d", first.Assignment.LifecycleVersion, retry.Assignment.LifecycleVersion)
+	}
+	// A different proposition on the completed slot conflicts: the slot is
+	// reserved, and corrections proceed only as a new attempt carrying the
+	// supersede tuple.
+	changedReq := assignmentReportRequest(open, first.Assignment.LifecycleVersion, "report-slot-b", open.Binding.SubjectDigest, types.CoSuperResultFailed, types.CoSuperVerdictNone)
+	changedReq.Report.Outputs[0].Digest = objectgraph.SHA256([]byte("changed-output"))
+	changedReq.CommandDigest, _ = ComputeRecordCoSuperAssignmentReportDigest(changedReq)
+	_, err = s.RecordCoSuperAssignmentReport(ctx, changedReq)
+	if !errors.Is(err, ErrCoSuperAssignmentCommandConflict) {
+		t.Fatalf("changed proposition conflict = %v, want ErrCoSuperAssignmentCommandConflict", err)
+	}
+	// The scan names the non-late terminal occupant for conflict gating.
+	loaded, err := s.GetCoSuperAssignment(ctx, f.ownerID, f.computerID, open.AssignmentID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchID, _, conflictID, err := s.SlotTerminalReport(ctx, loaded, first.Report.PropositionDigest)
+	if err != nil || matchID != first.Report.ReportID || conflictID != "" {
+		t.Fatalf("scan match = %q %q err=%v", matchID, conflictID, err)
+	}
+	otherDigest, err := ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, types.CoSuperResultFailed, types.CoSuperVerdictNone, firstReq.Report.Commands, firstReq.Report.Outputs, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchID, _, conflictID, err = s.SlotTerminalReport(ctx, loaded, otherDigest)
+	if err != nil || matchID != "" || conflictID != first.Report.ReportID {
+		t.Fatalf("scan conflict = %q %q err=%v", matchID, conflictID, err)
+	}
+}
+
+// TestTerminalSlotPartialNeverOccupies (settlement gate item 3, v1): partials
+// flow through the nonterminal sequence around terminal settlement without
+// occupying the slot or conflicting.
+func TestTerminalSlotPartialNeverOccupies(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-partial-slot", 1, types.CoSuperAssignmentImplementation, true, "cap-partial", "capsule-partial")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-partial")); err != nil {
+		t.Fatal(err)
+	}
+	partial := assignmentReportRequest(open, 2, "report-partial-slot", open.Binding.SubjectDigest, types.CoSuperResultPartial, types.CoSuperVerdictNone)
+	progress, err := s.RecordCoSuperAssignmentReport(ctx, partial)
+	if err != nil || progress.Replay || progress.Assignment.Disposition == types.CoSuperAssignmentCompleted {
+		t.Fatalf("partial = %+v err=%v", progress, err)
+	}
+	terminal := assignmentReportRequest(open, progress.Assignment.LifecycleVersion, "report-terminal-slot", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	done, err := s.RecordCoSuperAssignmentReport(ctx, terminal)
+	if err != nil || done.Replay || done.Assignment.Disposition != types.CoSuperAssignmentCompleted {
+		t.Fatalf("terminal after partial = %+v err=%v", done, err)
+	}
+}
+
+// TestOpenSupersedeTuple (settlement gate item 3, v1): attempt 1 never carries
+// the tuple; attempt > 1 always does, naming a recorded prior report of the
+// same assignment's earlier attempt with a valid kind, reason, and delta.
+func TestOpenSupersedeTuple(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 2)
+	open := coSuperOpenRequest(f, 0, "assignment-supersede", 1, types.CoSuperAssignmentImplementation, true, "cap-sup-0", "capsule-sup-0")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-sup-0")); err != nil {
+		t.Fatal(err)
+	}
+	priorReq := assignmentReportRequest(open, 2, "report-supersede-prior", open.Binding.SubjectDigest, types.CoSuperResultPartial, types.CoSuperVerdictNone)
+	prior, err := s.RecordCoSuperAssignmentReport(ctx, priorReq)
+	if err != nil || prior.Report == nil {
+		t.Fatalf("prior partial: %+v err=%v", prior, err)
+	}
+	validTuple := func() *types.CoSuperSupersedeTuple {
+		return &types.CoSuperSupersedeTuple{
+			SupersedesAssignmentID: open.AssignmentID, SupersedesAttempt: 1,
+			PriorReceiptRef: prior.Report.ReportID, SupersedeKind: types.CoSuperSupersedeCorrection,
+			ReasonEnum: "proposition_conflict", DeltaDigest: objectgraph.SHA256([]byte("structured-delta")),
+		}
+	}
+	attempt2 := coSuperOpenRequest(f, 1, "assignment-supersede", 2, types.CoSuperAssignmentImplementation, true, "cap-sup-1", "capsule-sup-1")
+	bare := attempt2
+	bare.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(bare)
+	if _, err := s.OpenCoSuperAssignment(ctx, bare); !errors.Is(err, ErrCoSuperAssignmentInvalid) {
+		t.Fatalf("attempt 2 without tuple = %v, want invalid", err)
+	}
+	badKind := attempt2
+	badKind.Supersedes = validTuple()
+	badKind.Supersedes.SupersedeKind = "reword"
+	badKind.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(badKind)
+	if _, err := s.OpenCoSuperAssignment(ctx, badKind); !errors.Is(err, ErrCoSuperAssignmentInvalid) {
+		t.Fatalf("bad kind = %v, want invalid", err)
+	}
+	badReceipt := attempt2
+	badReceipt.Supersedes = validTuple()
+	badReceipt.Supersedes.PriorReceiptRef = "report:unknown"
+	badReceipt.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(badReceipt)
+	if _, err := s.OpenCoSuperAssignment(ctx, badReceipt); !errors.Is(err, ErrCoSuperAssignmentInvalid) {
+		t.Fatalf("unknown receipt = %v, want invalid", err)
+	}
+	badDelta := attempt2
+	badDelta.Supersedes = validTuple()
+	badDelta.Supersedes.DeltaDigest = "not-a-digest"
+	badDelta.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(badDelta)
+	if _, err := s.OpenCoSuperAssignment(ctx, badDelta); !errors.Is(err, ErrCoSuperAssignmentInvalid) {
+		t.Fatalf("bad delta = %v, want invalid", err)
+	}
+	good := attempt2
+	good.Supersedes = validTuple()
+	good.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(good)
+	second, err := s.OpenCoSuperAssignment(ctx, good)
+	if err != nil || second.Assignment.Binding.Attempt != 2 {
+		t.Fatalf("correction attempt = %+v err=%v", second, err)
+	}
+	first := coSuperOpenRequest(f, 0, "assignment-supersede-fresh", 1, types.CoSuperAssignmentImplementation, true, "cap-sup-f", "capsule-sup-f")
+	first.Supersedes = validTuple()
+	first.Supersedes.SupersedesAssignmentID = "assignment-supersede-fresh"
+	first.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(first)
+	if _, err := s.OpenCoSuperAssignment(ctx, first); !errors.Is(err, ErrCoSuperAssignmentInvalid) {
+		t.Fatalf("attempt 1 with tuple = %v, want invalid", err)
+	}
+}
+
+func TestCoSuperPendingProposalDurabilityAndAtomicRevokeFinality(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 1)
+	open := coSuperOpenRequest(f, 0, "assignment-pending-saga", 1, types.CoSuperAssignmentImplementation, true, "cap-saga", "capsule-saga")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	bindReq := bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-saga")
+	bound, err := s.BindCoSuperAssignment(ctx, bindReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reportReq := assignmentReportRequest(open, bound.Assignment.LifecycleVersion, "report-saga-1", open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	propDigest, err := ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, reportReq.Report.Result, reportReq.Report.Verdict, reportReq.Report.Commands, reportReq.Report.Outputs, reportReq.Report.EvidenceRefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Commit PendingProposal with FreezeRequested
+	freezeIntent := "capsule-freeze-intent:" + propDigest
+	proposal := types.CoSuperPendingProposal{
+		PropositionDigest: propDigest,
+		Report:            reportReq.Report,
+		FreezeIntentRef:   freezeIntent,
+		CreatedAt:         time.Now().UTC(),
+	}
+	freezeReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-freeze-req", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: bound.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleFreezeRequested, IntentRef: freezeIntent,
+		PendingProposal: &proposal,
+	}
+	freezeReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(freezeReq)
+	requested, err := s.SetCoSuperCapsuleDisposition(ctx, freezeReq)
+	if err != nil {
+		t.Fatalf("set freeze requested: %v", err)
+	}
+	if requested.Assignment.PendingProposal == nil || requested.Assignment.PendingProposal.PropositionDigest != propDigest {
+		t.Fatalf("pending proposal not stored: %+v", requested.Assignment.PendingProposal)
+	}
+	if requested.Assignment.Disposition != types.CoSuperAssignmentBound || requested.Assignment.TerminalAt != nil {
+		t.Fatalf("disposition advanced while pending: %+v", requested.Assignment)
+	}
+
+	// 2. Pending slot blocks competing different-digest terminal proposal
+	otherDigest := objectgraph.SHA256([]byte("other-digest"))
+	_, _, conflictID, err := s.SlotTerminalReport(ctx, requested.Assignment, otherDigest)
+	if err != nil || conflictID != reportReq.Report.ReportID {
+		t.Fatalf("pending conflict = %q err=%v, want %s", conflictID, err, reportReq.Report.ReportID)
+	}
+	sameMatchID, _, sameConflictID, err := s.SlotTerminalReport(ctx, requested.Assignment, propDigest)
+	if err != nil || sameMatchID != "" || sameConflictID != "" {
+		t.Fatalf("pending match = %q conflict = %q err=%v, want empty match and conflict", sameMatchID, sameConflictID, err)
+	}
+	// 3. Freeze ack preserves PendingProposal
+	freezeAckReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-freeze-ack", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: requested.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleFrozen, IntentRef: freezeIntent, AckRef: "capsule-ack:freeze-1",
+		PendingProposal: requested.Assignment.PendingProposal,
+	}
+	freezeAckReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(freezeAckReq)
+	frozen, err := s.SetCoSuperCapsuleDisposition(ctx, freezeAckReq)
+	if err != nil {
+		t.Fatalf("set frozen: %v", err)
+	}
+	if frozen.Assignment.PendingProposal == nil {
+		t.Fatal("pending proposal lost on freeze ack")
+	}
+
+	// 4. Revoke ack preserves PendingProposal
+	revokeIntent := "capsule-revoke-intent:1"
+	revokeReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-revoke-req", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: frozen.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: revokeIntent,
+		PendingProposal: frozen.Assignment.PendingProposal,
+	}
+	revokeReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(revokeReq)
+	revokeReqResult, err := s.SetCoSuperCapsuleDisposition(ctx, revokeReq)
+	if err != nil {
+		t.Fatalf("set revoke requested: %v", err)
+	}
+	revokeAckReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-revoke-ack", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: revokeReqResult.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleRevoked, IntentRef: revokeIntent, AckRef: "capsule-revoke:" + objectgraph.SHA256([]byte("revoke-ack")),
+		PendingProposal: revokeReqResult.Assignment.PendingProposal,
+	}
+	revokeAckReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(revokeAckReq)
+	revoked, err := s.SetCoSuperCapsuleDisposition(ctx, revokeAckReq)
+	if err != nil {
+		t.Fatalf("set revoked: %v", err)
+	}
+
+	// 5. Atomic finalization: terminal report recorded, pending proposal cleared, disposition Completed, TerminalAt set
+	finalReportReq := assignmentReportRequest(open, revoked.Assignment.LifecycleVersion, reportReq.Report.ReportID, open.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
+	final, err := s.RecordCoSuperAssignmentReport(ctx, finalReportReq)
+	if err != nil {
+		t.Fatalf("record final report: %v", err)
+	}
+	if final.Assignment.Disposition != types.CoSuperAssignmentCompleted || final.Assignment.TerminalAt == nil {
+		t.Fatalf("final settlement disposition = %v, terminal_at=%v", final.Assignment.Disposition, final.Assignment.TerminalAt)
+	}
+	if final.Assignment.PendingProposal != nil {
+		t.Fatalf("pending proposal not cleared after final settlement: %+v", final.Assignment.PendingProposal)
+	}
+}
+
+func TestRecordCoSuperOrphanObservation(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installCoSuperAssignmentAuthority(t, s, 2)
+	open := coSuperOpenRequest(f, 0, "assignment-orphan-1", 1, types.CoSuperAssignmentImplementation, true, "cap-orphan-1", "capsule-orphan-1")
+	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	bindReq := bindCoSuperRequest(open, f.assignedRunIDs[0], "cap-orphan-1")
+	if _, err := s.BindCoSuperAssignment(ctx, bindReq); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Unreserved bound assignment is closed as orphan by reducer
+	obs := types.CoSuperOrphanObservation{
+		OwnerID:      open.Binding.OwnerID,
+		ComputerID:   open.Binding.ComputerID,
+		RunID:        f.assignedRunIDs[0],
+		AssignmentID: open.AssignmentID,
+		Attempt:      1,
+		Reason:       types.OrphanReasonProcessExitedWithoutPacket,
+		ObservedAt:   time.Now().UTC(),
+	}
+	result, err := s.RecordCoSuperOrphanObservation(ctx, obs)
+	if err != nil {
+		t.Fatalf("record orphan observation: %v", err)
+	}
+	if result.Report == nil || result.Report.Result != types.CoSuperResultFailed || result.Report.Verdict != types.CoSuperVerdictNone {
+		t.Fatalf("orphan report = %+v", result.Report)
+	}
+
+	// 2. An in-flight pending proposal rejects orphan disposition
+	openPending := coSuperOpenRequest(f, 1, "assignment-orphan-pending", 1, types.CoSuperAssignmentImplementation, true, "cap-orphan-p", "capsule-orphan-p")
+	if _, err := s.OpenCoSuperAssignment(ctx, openPending); err != nil {
+		t.Fatal(err)
+	}
+	boundPending, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(openPending, f.assignedRunIDs[1], "cap-orphan-p"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	freezeReq := types.SetCoSuperCapsuleDispositionRequest{
+		CommandID: "cmd-freeze-pending", OwnerID: openPending.Binding.OwnerID, ComputerID: openPending.Binding.ComputerID,
+		AssignmentID: openPending.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: boundPending.Assignment.LifecycleVersion,
+		Disposition: types.CoSuperCapsuleFreezeRequested, IntentRef: "capsule-freeze-intent:pending-obs",
+		PendingProposal: &types.CoSuperPendingProposal{
+			PropositionDigest: objectgraph.SHA256([]byte("pending-obs")),
+			Report:            types.CoSuperAssignmentReport{ReportID: "report-pending-obs"},
+			FreezeIntentRef:   "capsule-freeze-intent:pending-obs",
+			CreatedAt:         time.Now().UTC(),
+		},
+	}
+	freezeReq.CommandDigest, _ = ComputeSetCoSuperCapsuleDispositionDigest(freezeReq)
+	if _, err := s.SetCoSuperCapsuleDisposition(ctx, freezeReq); err != nil {
+		t.Fatalf("set freeze requested: %v", err)
+	}
+
+	obsPending := types.CoSuperOrphanObservation{
+		OwnerID:      openPending.Binding.OwnerID,
+		ComputerID:   openPending.Binding.ComputerID,
+		RunID:        f.assignedRunIDs[1],
+		AssignmentID: openPending.AssignmentID,
+		Attempt:      1,
+		Reason:       types.OrphanReasonConfirmedDead,
+		ObservedAt:   time.Now().UTC(),
+	}
+	if _, err := s.RecordCoSuperOrphanObservation(ctx, obsPending); !errors.Is(err, ErrCoSuperAssignmentCommandConflict) {
+		t.Fatalf("orphan observation on pending proposal err = %v, want conflict", err)
+	}
+
+	// 3. Observation for a run that is not the bound run is rejected as invalid.
+	obsMismatch := obs
+	obsMismatch.RunID = "run-not-bound-to-assignment"
+	if _, err := s.RecordCoSuperOrphanObservation(ctx, obsMismatch); !errors.Is(err, ErrCoSuperAssignmentInvalid) {
+		t.Fatalf("orphan observation on wrong run err = %v, want invalid", err)
+	}
+
+	// 4. Retrying the recorded orphan observation replays the original close.
+	retry, err := s.RecordCoSuperOrphanObservation(ctx, obs)
+	if err != nil {
+		t.Fatalf("orphan observation retry: %v", err)
+	}
+	if !retry.Replay || retry.Report == nil || retry.Report.ReportID != result.Report.ReportID {
+		t.Fatalf("orphan retry replay = %+v, want replay of report %s", retry, result.Report.ReportID)
 	}
 }

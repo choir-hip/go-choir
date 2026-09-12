@@ -3,6 +3,7 @@ package textureowner
 import (
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -59,9 +60,9 @@ func minInt(left, right int) int {
 func persistentSuperAgentID(ownerID string) string {
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
-		return "super"
+		return agentprofile.Super
 	}
-	return "super:" + ownerID
+	return agentprofile.Super + ":" + ownerID
 }
 
 func coagentPacketSourceURIs(packet types.CoagentSourcePacketPayload, kinds ...string) []string {

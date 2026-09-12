@@ -1,6 +1,7 @@
 package agentprofile
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -8,38 +9,48 @@ import (
 func TestCanonical(t *testing.T) {
 	t.Parallel()
 
-	aliases := map[string][]string{
-		Researcher: {"researcher", "researchers", "research", "research-agent", "web-research", "web-researcher", " WEB_RESEARCHER "},
-		CoSuper:    {"cosuper", "co-super", "coagent", "co-agent", " CO_AGENT "},
-		Texture:    {"texture", "texture-agent", "document-agent", " DOCUMENT_AGENT "},
-		Processor:  {"processor", "news-processor", "source-processor", "universal-wire-processor", " NEWS_PROCESSOR "},
-		Reconciler: {"reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "universal-wire-reconciler", " STORY_RECONCILER "},
-		Email:      {"email", "email-agent", "email-appagent", "mail", "mail-agent", " EMAIL_APPAGENT "},
-		Super:      {"super", " SUPER "},
+	live := map[string][]string{
+		Researcher: {"research", " RESEARCH "},
+		CoSuper:    {"engineering", " ENGINEERING "},
+		Texture:    {"texture", " TEXTURE "},
+		Processor:  {"processor"},
+		Reconciler: {"reconciler"},
+		Email:      {"email"},
+		Super:      {"management", " MANAGEMENT "},
 		Conductor:  {"conductor", " CONDUCTOR "},
 	}
-	for want, values := range aliases {
+	for want, values := range live {
 		for _, value := range values {
 			value := value
 			t.Run(value, func(t *testing.T) {
 				t.Parallel()
-				if got := Canonical(value); got != want {
+				got, err := Canonical(value)
+				if err != nil {
+					t.Fatalf("Canonical(%q) error = %v", value, err)
+				}
+				if got != want {
 					t.Fatalf("Canonical(%q) = %q, want %q", value, got, want)
 				}
 			})
 		}
 	}
-	for _, tt := range []struct {
-		in   string
-		want string
-	}{
-		{"", ""},
-		{"   ", ""},
-		{"Custom_Profile", "custom-profile"},
-		{" Mixed Unknown ", "mixed unknown"},
+	// Retired V1 aliases and unknowns fail closed with the empty string,
+	// never the input token.
+	for _, value := range []string{
+		"", "   ", "super", "co-super", "cosuper", "coagent", "co-agent",
+		"researchers", "research-agent", "web-research", "texture-agent",
+		"document_agent", "news-processor", "Custom_Profile", " Mixed Unknown ",
 	} {
-		if got := Canonical(tt.in); got != tt.want {
-			t.Fatalf("Canonical(%q) = %q, want %q", tt.in, got, tt.want)
+		got, err := Canonical(value)
+		if err == nil {
+			t.Fatalf("Canonical(%q) error = nil, want UnknownProfileError", value)
+		}
+		var unknown UnknownProfileError
+		if !errors.As(err, &unknown) {
+			t.Fatalf("Canonical(%q) error = %T, want UnknownProfileError", value, err)
+		}
+		if got != "" {
+			t.Fatalf("Canonical(%q) = %q, want empty (fail-closed)", value, got)
 		}
 	}
 }
@@ -84,21 +95,23 @@ func TestPolicyFor(t *testing.T) {
 		},
 	}
 	for profile, want := range tests {
-		if got := PolicyFor(profile); !reflect.DeepEqual(got, want) {
+		got, err := PolicyFor(profile)
+		if err != nil {
+			t.Errorf("PolicyFor(%q) error = %v", profile, err)
+		} else if !reflect.DeepEqual(got, want) {
 			t.Errorf("PolicyFor(%q) = %#v, want %#v", profile, got, want)
 		}
 	}
-	if got, want := PolicyFor(" NEWS_PROCESSOR "), tests[Processor]; !reflect.DeepEqual(got, want) {
-		t.Errorf("PolicyFor(alias) = %#v, want %#v", got, want)
+	if _, err := PolicyFor(" NEWS_PROCESSOR "); err == nil {
+		t.Error("PolicyFor(retired alias) error = nil, want UnknownProfileError")
 	}
-	if got := PolicyFor(" Custom_Profile "); !reflect.DeepEqual(got, Policy{Profile: "Custom_Profile"}) {
-		t.Errorf("PolicyFor(unknown) = %#v", got)
+	if _, err := PolicyFor(" Custom_Profile "); err == nil {
+		t.Error("PolicyFor(unknown) error = nil, want UnknownProfileError")
 	}
-	if got := PolicyFor("   "); !reflect.DeepEqual(got, Policy{}) {
-		t.Errorf("PolicyFor(empty) = %#v", got)
+	if got, err := PolicyFor("   "); err == nil || !reflect.DeepEqual(got, Policy{}) {
+		t.Errorf("PolicyFor(empty) = %#v, %v, want (Policy{}, error)", got, err)
 	}
 }
-
 func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 	t.Parallel()
 
@@ -123,24 +136,54 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 		t.Run(caller, func(t *testing.T) {
 			t.Parallel()
 			for _, target := range profiles {
-				if got, want := CanSpawn(caller, target), spawn[caller][target]; got != want {
-					t.Errorf("CanSpawn(%q, %q) = %v, want %v", caller, target, got, want)
+				gotSpawn, err := CanSpawn(caller, target)
+				if err != nil {
+					t.Fatalf("CanSpawn(%q, %q) error = %v", caller, target, err)
 				}
-				if got, want := CanMessage(caller, target), message[caller][target]; got != want {
-					t.Errorf("CanMessage(%q, %q) = %v, want %v", caller, target, got, want)
+				if gotSpawn != spawn[caller][target] {
+					t.Errorf("CanSpawn(%q, %q) = %v, want %v", caller, target, gotSpawn, spawn[caller][target])
+				}
+				gotMsg, err := CanMessage(caller, target)
+				if err != nil {
+					t.Fatalf("CanMessage(%q, %q) error = %v", caller, target, err)
+				}
+				if gotMsg != message[caller][target] {
+					t.Errorf("CanMessage(%q, %q) = %v, want %v", caller, target, gotMsg, message[caller][target])
 				}
 			}
 		})
 	}
 
-	if CanSpawn(Texture, Super) || !CanMessage(Texture, Super) {
+	mustSpawn := func(caller, target string) bool {
+		t.Helper()
+		ok, err := CanSpawn(caller, target)
+		if err != nil {
+			t.Fatalf("CanSpawn(%q, %q) error = %v", caller, target, err)
+		}
+		return ok
+	}
+	mustMessage := func(caller, target string) bool {
+		t.Helper()
+		ok, err := CanMessage(caller, target)
+		if err != nil {
+			t.Fatalf("CanMessage(%q, %q) error = %v", caller, target, err)
+		}
+		return ok
+	}
+	if mustSpawn(Texture, Super) || !mustMessage(Texture, Super) {
 		t.Fatal("Texture must message but never spawn Super")
 	}
-	if CanMessage(Texture, CoSuper) {
+	if mustMessage(Texture, CoSuper) {
 		t.Fatal("Texture must never message CoSuper")
 	}
-	if !CanSpawn(Conductor, "document_agent") || CanMessage(Conductor, "document_agent") {
-		t.Fatal("canonical aliases must preserve Conductor spawn-only Texture authority")
+	if !mustSpawn(Conductor, Texture) || mustMessage(Conductor, Texture) {
+		t.Fatal("Conductor keeps spawn-only Texture authority under V2 names")
+	}
+	if _, err := CanSpawn(Conductor, "document_agent"); err == nil {
+		t.Fatal("retired alias document_agent must refuse spawn")
+	}
+	if _, err := CanMessage(Conductor, "document_agent"); err == nil {
+		t.Fatal("retired alias document_agent must refuse message")
 	}
 	for _, check := range []struct {
 		caller string
@@ -150,23 +193,63 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 		{Super, "unknown"},
 		{"unknown", "unknown"},
 	} {
-		if CanSpawn(check.caller, check.target) || CanMessage(check.caller, check.target) {
-			t.Errorf("unknown policy unexpectedly allowed %q -> %q", check.caller, check.target)
+		if ok, _ := CanSpawn(check.caller, check.target); ok {
+			t.Errorf("unknown policy unexpectedly allowed spawn %q -> %q", check.caller, check.target)
+		}
+		if _, err := CanSpawn(check.caller, check.target); err == nil {
+			t.Errorf("unknown policy missing spawn error %q -> %q", check.caller, check.target)
+		}
+		if ok, _ := CanMessage(check.caller, check.target); ok {
+			t.Errorf("unknown policy unexpectedly allowed message %q -> %q", check.caller, check.target)
+		}
+		if _, err := CanMessage(check.caller, check.target); err == nil {
+			t.Errorf("unknown policy missing message error %q -> %q", check.caller, check.target)
 		}
 	}
 }
 
 func TestIsTexture(t *testing.T) {
 	t.Parallel()
-
-	for _, profile := range []string{Texture, "texture-agent", "DOCUMENT_AGENT"} {
+	for _, profile := range []string{Texture, " TEXTURE "} {
 		if !IsTexture(profile) {
 			t.Errorf("IsTexture(%q) = false", profile)
 		}
 	}
-	for _, profile := range []string{"", Researcher, "unknown"} {
+	for _, profile := range []string{"", Researcher, "unknown", "texture-agent", "DOCUMENT_AGENT"} {
 		if IsTexture(profile) {
 			t.Errorf("IsTexture(%q) = true", profile)
+		}
+	}
+}
+
+func TestCanonicalVerifierSpellingUnifies(t *testing.T) {
+	t.Parallel()
+	for _, value := range []string{"verifier_multimodal", "verifier-multimodal", " VERIFIER-MULTIMODAL "} {
+		got, err := Canonical(value)
+		if err != nil {
+			t.Fatalf("Canonical(%q) error = %v", value, err)
+		}
+		if got != "verifier_multimodal" {
+			t.Fatalf("Canonical(%q) = %q, want verifier_multimodal", value, got)
+		}
+	}
+}
+
+// TestPolicyForDefaultIsNotDefaultAllow pins the fail-closed default: a
+// canonical-but-unlisted profile (the verifier roles) gets a bare policy
+// with every capability false and no spawn/message targets.
+func TestPolicyForDefaultIsNotDefaultAllow(t *testing.T) {
+	t.Parallel()
+	for _, profile := range []string{"verifier", "verifier_multimodal"} {
+		policy, err := PolicyFor(profile)
+		if err != nil {
+			t.Fatalf("PolicyFor(%q) error = %v", profile, err)
+		}
+		if policy.AllowReadOnlyFiles || policy.AllowResearchTools ||
+			policy.AllowEvidenceTools || policy.AllowMemoryTools ||
+			policy.AllowModelDiagnosticTools || policy.AllowCoAgentTools ||
+			len(policy.AllowedSpawnTargets) != 0 || len(policy.AllowedMessageTargets) != 0 {
+			t.Fatalf("PolicyFor(%q) grants capabilities: %+v", profile, policy)
 		}
 	}
 }

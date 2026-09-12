@@ -45,6 +45,11 @@ type Config struct {
 	// CookieSecure controls whether auth cookies set the Secure flag.
 	// Should be true on deployed HTTPS origins, false only for localhost.
 	CookieSecure bool
+
+	// RotationGraceTTL is the grace window during which a recently rotated refresh
+	// token can still be used to return the rotated session, preventing concurrent
+	// requests (e.g. multi-tab) from being signed out.
+	RotationGraceTTL time.Duration
 }
 
 const (
@@ -91,7 +96,8 @@ func LoadConfig() (*Config, error) {
 		JWTPrivateKeyPath: envOr("AUTH_JWT_PRIVATE_KEY_PATH", DefaultJWTPrivateKeyPath),
 		AccessTokenTTL:    envDuration("AUTH_ACCESS_TOKEN_TTL", DefaultAccessTokenTTL),
 		RefreshTokenTTL:   envDuration("AUTH_REFRESH_TOKEN_TTL", DefaultRefreshTokenTTL),
-		CookieSecure:      envBool("AUTH_COOKIE_SECURE", DefaultCookieSecure),
+		RotationGraceTTL:  envDuration("AUTH_ROTATION_GRACE_TTL", 15*time.Second),
+		CookieSecure:      envBool("AUTH_COOKIE_SECURE", false),
 	}
 
 	originsStr := envOr("AUTH_RP_ORIGINS", DefaultRPOrigins)

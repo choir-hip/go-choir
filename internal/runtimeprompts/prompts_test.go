@@ -20,8 +20,7 @@ func TestResearcherRuntimeOverlayIncludesParallelSaturation(t *testing.T) {
 
 func TestSuperRuntimeOverlayIncludesAuthorityBoundary(t *testing.T) {
 	overlay := SuperRuntimeOverlay()
-	if !strings.Contains(overlay, "Super authority boundary") {
-		t.Fatalf("super runtime overlay missing authority boundary: %q", overlay)
+	if !strings.Contains(overlay, "Management authority boundary") {
+		t.Fatalf("management runtime overlay missing authority boundary: %q", overlay)
 	}
 }
-

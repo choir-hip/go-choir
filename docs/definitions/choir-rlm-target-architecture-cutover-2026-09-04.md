@@ -147,20 +147,23 @@ measures:
     cannot_prove: "cannot prove model reasoning capability"
 
 now:
-  status: working
-  slice: "landing: substrate repairs + G1 producer implemented locally; awaiting CI and Node B deploy"
+  status: blocked_incomplete
+  slice: "remainder holder: execution proof retained; run acceptance withheld for terminal digest/settlement remainder owned by mission 1 (choir-rlm-settlement-gate-2026-09-09); restore spine is choir-rlm-restore-zero-2026-09-08"
   question: none
   reconciliation:
-    observed_at: "2026-09-05T02:50:00Z"
-    source_ref: "worktree with G1 producer + reducer repairs on top of main@19bcd957"
-    deploy_identity: "staging https://choir.news deployed_commit 66939532248ee2d83c17d1f3f05d0f820e06c35b; G1 producer not yet on Node B; computer-03335285269bdba4f94377e56879f9e6 active; effects OFF"
+    observed_at: "2026-09-05T20:07:00Z"
+    source_ref: "main@3724db1abb9c1538dfa8f32c0974102814c00df1"
+    deploy_identity: "staging https://choir.news deployed_commit a281f1c0df394a719fb48fdb7f61af9dffcac5d3; computer-03335285269bdba4f94377e56879f9e6 active epoch 886 actuator=rlm; guest deployed_at 2026-09-05T19:55:16Z; Source/platform HEAD 7574d899; guest health ready; effects propose_only; pre-A fence 99949fe2 untouched"
     authority_identities:
       - "docs/designs/rlm-target-architecture-2026-09-04.md"
       - "docs/reports/choir-status-and-next-steps-2026-09-04.md"
-      - ".agentic-consensus/agentic-consensus-20260904-155821/manifest.tsv"
+      - "docs/reports/choir-rlm-substrate-repairs-and-g1-producer-2026-09-05.md"
+      - ".agentic-consensus/agentic-consensus-20260904-234730/manifest.tsv"
       - "docs/evidence/rlm-live-proof-staging-gaps-2026-09-04.md (G1 owner-gate)"
+      - "docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md"
+      - "docs/evidence/rlm-option-b-exact-bind-go-eval-2026-09-05.md"
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "git status --short; clean"
+    worktree_inventory_ref: "git status --short"
     status: reconciled
   candidate:
     id: none
@@ -180,16 +183,18 @@ now:
     recorded_at: "2026-09-04T16:20:00Z"
     consequence: "Proceed to Step 1 implementation under this Definition."
   evidence_refs:
-    - "CI run 33931633587 on 66939532 passed 100% green: all 21 jobs succeeded including Docs Truth Check, Go Vet+Build, all 12 race shards, scale tests, heresy detector, and Deploy to Staging"
-    - "Node B deployed successfully: https://choir.news reports x-choir-build-commit: 66939532248ee2d83c17d1f3f05d0f820e06c35b at 2026-09-05T00:24:48Z"
-    - "internal/capsule/actuator.go (Step 1 guest contract: choir.actuator boot param wins, env fallback, fail-closed tools)"
-    - "cmd/capsule-broker direct-argv exec with allowlist + 500ms group reap (Step 3)"
-    - "internal/yaegikernel/transport.go framed UDS + socketpair worker migration (Step 2)"
-    - "internal/yaegikernel/intent.go tray/Inbox/hooks + internal/agentcore/rlm_reduce.go Dolt persist, run-memory cursor, two-phase ack (Step 4)"
-    - "internal/actor/coalesce.go bounded wakes + spawnRoleAllowed + scoped fan-in (Step 5)"
-    - "internal/runtimeprompts/overlays/rlm_co_super_runtime.yaml + sealed registry (Step 6)"
-  blocker_or_risk: "G1 producer and reducer repairs are implemented locally and not yet on Node B. Sealed Option B proof still requires this commit to pass CI, deploy, then an owner-scoped refresh with actuator=rlm on computer-03335285269bdba4f94377e56879f9e6."
-  next_action: "Commit, push, confirm CI green and Node B deploy of the G1 producer; then run Option B sealed proof (in-capsule read-compute-write-assign, effects OFF)."
+    - "CI run 34008713289 on 796dcb64 success including Deploy to Staging (https://github.com/choir-hip/go-choir/actions/runs/34008713289)"
+    - "Node B deployed: https://choir.news reports build commit 796dcb64e4e952c667962e7cc99ea277f4bed92a deployed at 2026-09-06T03:57:55Z"
+    - "LifecycleReceipt 01a074dd-a578-7558-893f-59e59d7ff4ba idempotency refresh-1788667068 epoch 887→888 (retained computer computer-03335285269bdba4f94377e56879f9e6, realization candidate-fleet-e15cb89f25d963c220319b7b-epoch-888)"
+    - "ExecutionIdentity receipt 01a0764d-2e9d-7514-9b70-1cebb48c4d8d on epoch 888 confirms autoputer commit 796dcb64 and guest-core signature intact"
+    - "Super run 31294013-1c77-4f66-8035-93209aea3930 bound exact sealed Option B assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913 in capsule-42eb741f-f8a1-5ec2-abc7-48cdceaa3edc"
+    - "CoSuper run run:assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913 completed; invoked capsule_go_eval running verbatim Go cell reading AGENTS.md and writing /workspace/platform/rlm-option-b-proof-2026-09-05.txt with exit 0, yielding receipt capsule-go-eval:sha256:a3e3c3e3a8a7c2ec17d7af8cee781b7b572986faf9ea74a07e732bd2e9384f28"
+    - "Pre-A checkpoint 99949fe2 published restore fence intact on Dolt platform computer_checkpoints; effects OFF"
+  dated_corrections:
+    - date: "2026-09-09"
+      note: "Withheld settlement acceptance closed 2026-09-09 under mission choir-rlm-settlement-gate-2026-09-09 with deployed proof on staging computer-03335285269bdba4f94377e56879f9e6 at commit 6b758878 (CI run 34401118732). Remainder-holder status retained per owner direction 2026-09-09 (residue R6); this Definition remains non-executable and blocked from standalone completion until fully superseded by a named successor."
+  blocker_or_risk: "Withheld settlement acceptance closed under choir-rlm-settlement-gate-2026-09-09. Remainder-holder status retained per owner direction 2026-09-09 (residue R6). This Definition remains non-executable and blocked from standalone completion until fully superseded by a named successor."
+  next_action: "None. Retained as non-executable remainder holder (residue R6). Full supersession deferred to future mission."
 receipts:
   - id: rlm-target-architecture-consensus-and-definition-2026-09-04
     boundary: define
@@ -202,6 +207,47 @@ receipts:
     disposition: "accepted as Definition governing complete RLM target architecture cutover; supersedes choir-rlm-session-interpreter-cutover-2026-09-02"
     problem_ref: not_applicable
     authorization_ref: "Owner directive 2026-09-04; Agentic consensus 8-model panel unanimous adjudications"
+    candidate_or_evidence_refs: []
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+  - id: rlm-target-architecture-live-proof-2026-09-06
+    boundary: verify
+    commit_or_artifact: "796dcb64e4e952c667962e7cc99ea277f4bed92a"
+    proof_refs:
+      - "ExecutionIdentity receipt 01a0764d-2e9d-7514-9b70-1cebb48c4d8d (epoch 888)"
+      - "CoSuper run run:assignment-b1d5dc65-bffa-5059-aa9c-e4cab45b8913"
+      - "capsule-go-eval receipt capsule-go-eval:sha256:a3e3c3e3a8a7c2ec17d7af8cee781b7b572986faf9ea74a07e732bd2e9384f28"
+      - "In-capsule proof file /workspace/platform/rlm-option-b-proof-2026-09-05.txt"
+      - "LifecycleReceipt 01a074dd-a578-7558-893f-59e59d7ff4ba (epoch 887→888)"
+    rollback_ref: "checkpoint 99949fe2 remains the immutable pre-A fence"
+    disposition: "verified live on staging computer-03335285269bdba4f94377e56879f9e6 realization candidate-fleet-e15cb89f25d963c220319b7b-epoch-888"
+    problem_ref: not_applicable
+    authorization_ref: "Owner directive 2026-09-04"
+    candidate_or_evidence_refs:
+      - "https://github.com/choir-hip/go-choir/actions/runs/34008713289"
+    landing:
+      source_commit: "796dcb64e4e952c667962e7cc99ea277f4bed92a"
+      ci_ref: "34008713289"
+      deploy_ref: "Deploy to Staging (Node B)"
+      environment_identity: "staging https://choir.news"
+      deployed_acceptance: "Super exact bind, sealed overlay, capsule_go_eval exit 0, proof file wrote, restore fence intact"
+    registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
+  - id: rlm-cutover-remainder-disposition-2026-09-09
+    boundary: define
+    commit_or_artifact: "this commit"
+    proof_refs:
+      - "docs/definitions/choir-rlm-restore-zero-2026-09-08.md"
+      - "docs/definitions/choir-rlm-settlement-gate-2026-09-09.md"
+      - "docs/reports/choir-rlm-mission-state-2026-09-08.md"
+    rollback_ref: "registry-only change; revert this commit restores working status"
+    disposition: "blocked_incomplete remainder holder, non-entrypoint; execution proof retained; run-acceptance remainder transferred to mission 1"
+    problem_ref: "terminal digest-conflict remainder (withheld run acceptance)"
+    authorization_ref: "Owner topology answers 2026-09-09: cutover Blocked remainder holder; mission 1 Blocked stub"
     candidate_or_evidence_refs: []
     landing:
       source_commit: not_applicable

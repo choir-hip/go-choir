@@ -136,8 +136,8 @@ func TestExecuteToolBatchSideEffectSkipPolicies(t *testing.T) {
 	}{
 		{"super bash", agentprofile.Super, "bash", `{"command":"echo x"}`, false},
 		{"cosuper bash", agentprofile.CoSuper, "bash", `{"command":"echo x"}`, false},
-		{"super co-super spawn", agentprofile.Super, "spawn_agent", `{"profile":"co-super","slot":"implementation","channel_id":"c"}`, false},
-		{"texture researcher", agentprofile.Texture, "spawn_agent", `{"profile":"researcher","channel_id":"c","objective":"find facts"}`, true},
+		{"super co-super spawn", agentprofile.Super, "spawn_agent", `{"profile":"engineering","slot":"implementation","channel_id":"c"}`, false},
+		{"texture researcher", agentprofile.Texture, "spawn_agent", `{"profile":"research","channel_id":"c","objective":"find facts"}`, true},
 		{"update", agentprofile.Researcher, "update_coagent", `{"summary":"x"}`, false},
 	}
 	for _, tc := range tests {
@@ -170,7 +170,7 @@ func TestExecuteToolBatchConductorTextureOwnsRoute(t *testing.T) {
 	}
 	results := ExecuteToolBatch(WithExecutionContext(context.Background(), ExecutionContext{Profile: agentprofile.Conductor}), registry, []types.ToolCall{
 		{ID: "texture", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"texture"}`)},
-		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"researcher"}`)},
+		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"research"}`)},
 		{ID: "texture-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"texture"}`)},
 	}, func(types.EventKind, string, json.RawMessage) {})
 	if len(executed) != 1 || executed[0] != agentprofile.Texture || results[1].IsError || results[2].IsError {
@@ -215,5 +215,39 @@ func TestExecuteToolBatchInstallsProviderToolCallID(t *testing.T) {
 	results := ExecuteToolBatch(WithExecutionContext(context.Background(), ExecutionContext{ToolCallID: "stale"}), registry, []types.ToolCall{{ID: "provider-call-42", Name: "capture_call_id"}}, func(types.EventKind, string, json.RawMessage) {})
 	if len(results) != 1 || results[0].IsError || results[0].Output != "provider-call-42" {
 		t.Fatalf("results=%+v", results)
+	}
+}
+
+func TestExecuteToolBatchAssignedCoSuperAdmissionGrammar(t *testing.T) {
+	registry := NewToolRegistry()
+	var executed []string
+	_ = registry.Register(Tool{Name: "capsule_go_eval", Func: func(_ context.Context, args json.RawMessage) (string, error) {
+		executed = append(executed, "eval")
+		return `{"stdout":"ok"}`, nil
+	}})
+	_ = registry.Register(Tool{Name: "bash", Func: func(_ context.Context, _ json.RawMessage) (string, error) {
+		executed = append(executed, "bash")
+		return `{"exit_code":0}`, nil
+	}})
+
+	// Two evals in one turn: statically refused, none run. One cell per turn is
+	// the surviving grammar rule after the record_assignment_result retirement.
+	executed = nil
+	results := ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"source":"1"}`)},
+		{ID: "2", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"source":"2"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 0 || !results[0].IsError || !results[1].IsError || !strings.Contains(results[0].Output, "at most one capsule_go_eval call") {
+		t.Fatalf("two evals not refused: executed=%v results=%+v", executed, results)
+	}
+
+	// One eval plus a companion: admitted; no retired-name special cases remain.
+	executed = nil
+	results = ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "1", Name: "capsule_go_eval", Arguments: json.RawMessage(`{"source":"1"}`)},
+		{ID: "2", Name: "bash", Arguments: json.RawMessage(`{"cmd":"ls"}`)},
+	}, func(types.EventKind, string, json.RawMessage) {})
+	if len(executed) != 2 || executed[0] != "eval" || executed[1] != "bash" || results[0].IsError || results[1].IsError {
+		t.Fatalf("eval+companion failed: executed=%v results=%+v", executed, results)
 	}
 }

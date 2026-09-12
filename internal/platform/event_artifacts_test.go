@@ -740,7 +740,7 @@ func TestCheckpointVerifierEvidenceRequiresPinnedCoSuperPass(t *testing.T) {
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: "computer-verify",
 		Sequence: 2, PreviousHead: platformTestDigest('b'), EventKind: computerevent.EventVerificationRecorded,
 		OccurredAt: now.Format(time.RFC3339Nano), IdempotencyKey: "verification-event", RequestCommitment: platformTestDigest('c'),
-		TrajectoryID: "trajectory-verify", CapsuleID: "capsule-verify", ActorProfile: "co-super",
+		TrajectoryID: "trajectory-verify", CapsuleID: "capsule-verify", ActorProfile: "engineering",
 		AuthorityRef: "guest-core:self-development-verifier", OutputArtifactRefs: []string{"artifact:sha256:" + payloadDigest},
 		PayloadCommitment: payloadDigest, PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
 		ExpectedDesiredEventHead: platformTestDigest('b'), ExpectedEffectiveEventHead: platformTestDigest('b'),

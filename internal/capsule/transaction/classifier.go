@@ -130,6 +130,15 @@ func NewClassifier() *Classifier {
 			{Prefix: "/dev"},
 			{Prefix: "/proc"},
 			{Prefix: "/sys"},
+			// Capsule scaffolding written by the runtime on every spawn:
+			// these are runtime noise, not ledger content. /etc/systemd
+			// stays classified (LedgerVM) - only the fixed identity files
+			// are ignored.
+			{Prefix: "/etc/hosts"},
+			{Prefix: "/etc/passwd"},
+			{Prefix: "/etc/group"},
+			{Prefix: "/etc/nsswitch.conf"},
+			{Prefix: "/etc/resolv.conf"},
 			{Glob: "*.cache"},
 			{Glob: "*.tmp"},
 			{Glob: "*.log"},
@@ -148,6 +157,14 @@ type ClassifyResult struct {
 
 // Classify groups file changes by ledger kind. Ephemeral paths are ignored.
 // Unknown paths are returned separately for commit-time rejection.
+//
+// FileChange.Path is relative to the capsule upperdir root (walkUpperdir
+// emits filepath.Rel results), while the ledger rules name absolute guest
+// paths. Paths are normalized to absolute form for matching only; the
+// recorded change keeps its original path so receipts stay stable.
+// Directory entries are structural noise: a directory's presence is implied
+// by the file changes beneath it, and recording directories would force
+// every spawn's scaffolding dirs (etc/, var/, root/) to classify or reject.
 func (c *Classifier) Classify(changes []capsule.FileChange) *ClassifyResult {
 	result := &ClassifyResult{
 		Version: c.Version,
@@ -155,14 +172,21 @@ func (c *Classifier) Classify(changes []capsule.FileChange) *ClassifyResult {
 	}
 
 	for _, change := range changes {
+		if change.Mode.IsDir() {
+			continue
+		}
+		matchPath := change.Path
+		if !strings.HasPrefix(matchPath, "/") {
+			matchPath = "/" + matchPath
+		}
 		// Check ignore patterns first.
-		if c.isIgnored(change.Path) {
+		if c.isIgnored(matchPath) {
 			result.Ignored = append(result.Ignored, change)
 			continue
 		}
 
 		// Find matching ledger kind.
-		kind := c.classifyPath(change.Path)
+		kind := c.classifyPath(matchPath)
 		if kind == LedgerUnknown {
 			result.Unknown = append(result.Unknown, change)
 		} else {

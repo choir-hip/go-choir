@@ -78,6 +78,8 @@ func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit prov
 		Model:           model,
 		System:          "You are a helpful assistant running inside the ChoirOS autoputer runtime. Respond concisely and helpfully.",
 		ReasoningEffort: reasoning,
+		ConversationID:  task.RunID,
+
 		Messages: []message{
 			{Role: "user", Content: []block{{Type: "text", Text: task.Prompt}}},
 		},
@@ -134,6 +136,7 @@ func (p *Provider) CallWithTools(ctx context.Context, req provideriface.ToolLoop
 		MaxTokens:       req.MaxTokens,
 		Stream:          false,
 		ReasoningEffort: firstNonEmpty(req.ReasoningEffort, p.reasoningEffort),
+		ConversationID:  req.ConversationID,
 	}
 
 	resp, err := p.call(ctx, llmReq)
@@ -391,8 +394,10 @@ func canonicalJSON(raw json.RawMessage) json.RawMessage {
 }
 
 type llmRequest struct {
-	Provider        string    `json:"provider,omitempty"`
-	Model           string    `json:"model,omitempty"`
+	Provider       string `json:"provider,omitempty"`
+	Model          string `json:"model,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+
 	Messages        []message `json:"messages"`
 	System          string    `json:"system,omitempty"`
 	Tools           []toolDef `json:"tools,omitempty"`

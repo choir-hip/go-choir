@@ -27,9 +27,11 @@ func (s *Store) FinalizedDecisionForOperation(ctx context.Context, computerID, o
 			&record.Request.Next.ReducerVersion, &record.Request.Next.CredentialRevocationEpoch, &rawReceipt); err != nil {
 			return computerevent.DurableEvent{}, false, err
 		}
-		if err := json.Unmarshal([]byte(rawEvent), &record.Request.Event); err != nil {
+		event, err := computerevent.DecodeHistoricEvent([]byte(rawEvent))
+		if err != nil {
 			return computerevent.DurableEvent{}, false, err
 		}
+		record.Request.Event = event
 		if record.Request.Event.ParentEventID != operationID || record.Request.Event.TrajectoryID != trajectoryID || record.Request.Event.CapsuleID != capsuleID {
 			continue
 		}

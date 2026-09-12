@@ -71,6 +71,9 @@ type LLMRequest struct {
 	// Provider is the provider identifier (e.g. "chatgpt", "zai",
 	// "fireworks", "bedrock") for gateway-routed requests.
 	Provider string `json:"provider,omitempty"`
+	// ConversationID is the durable calling-run identity used by providers
+	// that require request affinity/session headers.
+	ConversationID string `json:"conversation_id,omitempty"`
 
 	// Model is the model identifier (provider-specific).
 	Model string `json:"model"`
@@ -346,6 +349,13 @@ type ProviderConfig struct {
 	// ChatGPTReasoningEffort seeds the ChatGPT provider's reasoning effort for
 	// requests that do not carry a per-request value.
 	ChatGPTReasoningEffort string
+	// OpenCodeGoModels lists OpenCode Go model IDs. The first entry seeds the
+	// provider instance; request.Model controls per-call selection.
+	OpenCodeGoModels []string
+
+	// OpenCodeZenModels lists OpenCode Zen model IDs. The first entry seeds the
+	// provider instance; request.Model controls per-call selection.
+	OpenCodeZenModels []string
 
 	// SelectedProvider is the explicitly selected provider for direct autoputer
 	// runtime calls. Empty means no direct provider is selected.
@@ -1512,6 +1522,268 @@ func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openA
 		payload.Reasoning = &openAIReasoning{Effort: effort}
 	}
 	return payload
+}
+
+// OpenCodeProvider routes OpenCode Go and Zen models over their documented
+// per-model API wire shapes. Every request carries the durable run identity
+// OpenCode requires for session affinity.
+type OpenCodeProvider struct {
+	apiKey       string
+	modelID      string
+	baseURL      string
+	providerName string
+	httpClient   *http.Client
+}
+
+// OpenCodeConfig configures an OpenCode Go or Zen provider.
+type OpenCodeConfig struct {
+	APIKey       string
+	BaseURL      string
+	ModelID      string
+	ProviderName string
+}
+
+type openCodeWireShape uint8
+
+const (
+	openCodeChatCompletions openCodeWireShape = iota + 1
+	openCodeResponses
+	openCodeMessages
+)
+
+func NewOpenCodeProvider(cfg OpenCodeConfig) (*OpenCodeProvider, error) {
+	apiKey := strings.TrimSpace(cfg.APIKey)
+	if apiKey == "" {
+		return nil, fmt.Errorf("opencode provider requires api key")
+	}
+	modelID := strings.TrimSpace(cfg.ModelID)
+	if modelID == "" {
+		return nil, fmt.Errorf("opencode provider requires model_id")
+	}
+	if _, err := openCodeWireShapeForModel(modelID); err != nil {
+		return nil, err
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	if baseURL == "" {
+		return nil, fmt.Errorf("opencode provider requires base_url")
+	}
+	providerName := strings.TrimSpace(cfg.ProviderName)
+	if providerName == "" {
+		providerName = "opencode"
+	}
+	return &OpenCodeProvider{
+		apiKey:       apiKey,
+		modelID:      modelID,
+		baseURL:      baseURL,
+		providerName: providerName,
+		httpClient:   &http.Client{Timeout: defaultProviderHTTPTimeout},
+	}, nil
+}
+
+func NewOpenCodeGoProviderFromEnv(modelID string) (*OpenCodeProvider, error) {
+	baseURL := strings.TrimSpace(os.Getenv("OPENCODE_GO_BASE_URL"))
+	if baseURL == "" {
+		baseURL = "https://opencode.ai/zen/go/v1"
+	}
+	return NewOpenCodeProvider(OpenCodeConfig{
+		APIKey:       openCodeAPIKeyFromEnv(),
+		BaseURL:      baseURL,
+		ModelID:      modelID,
+		ProviderName: "opencode-go",
+	})
+}
+
+func NewOpenCodeZenProviderFromEnv(modelID string) (*OpenCodeProvider, error) {
+	baseURL := strings.TrimSpace(os.Getenv("OPENCODE_ZEN_BASE_URL"))
+	if baseURL == "" {
+		baseURL = "https://opencode.ai/zen/v1"
+	}
+	return NewOpenCodeProvider(OpenCodeConfig{
+		APIKey:       openCodeAPIKeyFromEnv(),
+		BaseURL:      baseURL,
+		ModelID:      modelID,
+		ProviderName: "opencode-zen",
+	})
+}
+
+func openCodeAPIKeyFromEnv() string {
+	if key := strings.TrimSpace(os.Getenv("OPENCODE_API_KEY")); key != "" {
+		return key
+	}
+	return strings.TrimSpace(os.Getenv("OPENCODE_GO_API_KEY"))
+}
+
+func (p *OpenCodeProvider) Name() string { return p.providerName }
+func (p *OpenCodeProvider) IsReal() bool { return true }
+
+func (p *OpenCodeProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
+	return p.call(ctx, req, func(StreamChunk) {})
+}
+
+func (p *OpenCodeProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	req.Stream = true
+	return p.call(ctx, req, onChunk)
+}
+
+func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	conversationID := strings.TrimSpace(req.ConversationID)
+	if conversationID == "" {
+		return nil, fmt.Errorf("%s: conversation_id is required for OpenCode requests", p.providerName)
+	}
+	modelID := effectiveModel(req.Model, p.modelID)
+	shape, err := openCodeWireShapeForModel(modelID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateMediaRequest(modelID, req); err != nil {
+		return nil, fmt.Errorf("%s: %w", p.providerName, err)
+	}
+
+	var endpoint string
+	var body any
+	var accept string
+	switch shape {
+	case openCodeChatCompletions:
+		endpoint = openCodeEndpoint(p.baseURL, "chat/completions")
+		body = p.buildChatCompletionsRequestBody(req, modelID)
+		if req.Stream {
+			accept = "text/event-stream"
+		} else {
+			accept = "application/json"
+		}
+	case openCodeResponses:
+		endpoint = openCodeEndpoint(p.baseURL, "responses")
+		body = p.buildResponsesRequestBody(req, modelID)
+		accept = "text/event-stream"
+	case openCodeMessages:
+		endpoint = openCodeEndpoint(p.baseURL, "messages")
+		body = p.buildMessagesRequestBody(req, modelID)
+		if req.Stream {
+			accept = "text/event-stream"
+		} else {
+			accept = "application/json"
+		}
+	default:
+		return nil, fmt.Errorf("%s: unsupported OpenCode wire shape", p.providerName)
+	}
+
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("%s: build request: %w", p.providerName, err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", accept)
+	httpReq.Header.Set("User-Agent", "choir-gateway/0.1")
+	httpReq.Header.Set("x-opencode-session", conversationID)
+	if shape == openCodeMessages {
+		httpReq.Header.Set("x-api-key", p.apiKey)
+		httpReq.Header.Set("anthropic-version", "2023-06-01")
+	} else {
+		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
+
+	log.Printf("provider: %s call model=%s", p.providerName, modelID)
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("%s: http call: %w", p.providerName, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	switch shape {
+	case openCodeChatCompletions:
+		if req.Stream {
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				_, _ = io.ReadAll(resp.Body)
+				return nil, fmt.Errorf("%s: status %s (sanitized)", p.providerName, resp.Status)
+			}
+			return parseOpenAIChatCompletionsStream(resp.Body, modelID, p.providerName, onChunk)
+		}
+		return parseOpenAIChatCompletionsResponse(resp, modelID, p.providerName)
+	case openCodeResponses:
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_, _ = io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("%s: status %s (sanitized)", p.providerName, resp.Status)
+		}
+		return parseOpenAIStream(resp.Body, modelID, p.providerName, onChunk)
+	case openCodeMessages:
+		if req.Stream {
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				_, _ = io.ReadAll(resp.Body)
+				return nil, fmt.Errorf("%s: status %s (sanitized)", p.providerName, resp.Status)
+			}
+			return parseSSEStream(resp.Body, modelID, p.providerName, onChunk)
+		}
+		return parseAnthropicResponse(resp, modelID, p.providerName)
+	}
+	return nil, fmt.Errorf("%s: unsupported OpenCode wire shape", p.providerName)
+}
+
+func (p *OpenCodeProvider) buildChatCompletionsRequestBody(req LLMRequest, modelID string) openAIChatCompletionRequest {
+	body := openAIChatCompletionRequest{
+		Model:      modelID,
+		Messages:   convertOpenAIChatMessages(req.System, req.Messages),
+		Tools:      convertOpenAIChatTools(req.Tools),
+		ToolChoice: openAIChatToolChoice(req.ToolChoice),
+		Stream:     req.Stream,
+	}
+	if req.MaxTokens > 0 {
+		maxTokens := req.MaxTokens
+		body.MaxTokens = &maxTokens
+	}
+	return body
+}
+
+func (p *OpenCodeProvider) buildResponsesRequestBody(req LLMRequest, modelID string) openAIRequest {
+	body := openAIRequest{
+		Model:           modelID,
+		Instructions:    strings.TrimSpace(req.System),
+		Input:           convertOpenAIInput(req.Messages),
+		Tools:           convertOpenAITools(req.Tools),
+		ToolChoice:      openAIResponsesToolChoice(req.ToolChoice),
+		MaxOutputTokens: req.MaxTokens,
+		Store:           false,
+		// Responses parsing is event-stream based for both Call and Stream.
+		Stream: true,
+	}
+	return body
+}
+
+func (p *OpenCodeProvider) buildMessagesRequestBody(req LLMRequest, modelID string) anthropicRequest {
+	return anthropicRequest{
+		Model:      modelID,
+		MaxTokens:  defaultMaxTokens(req.MaxTokens),
+		Stream:     req.Stream,
+		Messages:   convertMessages(req.Messages),
+		Tools:      convertToolDefs(req.Tools),
+		ToolChoice: anthropicToolChoice(req.ToolChoice),
+		System: func() []anthropicSystemBlock {
+			if strings.TrimSpace(req.System) == "" {
+				return nil
+			}
+			return []anthropicSystemBlock{{Type: "text", Text: req.System}}
+		}(),
+	}
+}
+
+func openCodeEndpoint(baseURL, suffix string) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if strings.HasSuffix(base, "/"+suffix) {
+		return base
+	}
+	return base + "/" + suffix
+}
+
+func openCodeWireShapeForModel(modelID string) (openCodeWireShape, error) {
+	switch strings.TrimSpace(modelID) {
+	case "deepseek-v4.1-flash", "glm-5.3-flash", "hy3":
+		return openCodeChatCompletions, nil
+	case "muse-spark-1.3-contributor", "muse-spark-1.3-contributor-free":
+		return openCodeResponses, nil
+	case "qwen3.7-max":
+		return openCodeMessages, nil
+	default:
+		return 0, fmt.Errorf("opencode provider: unsupported model %q", modelID)
+	}
 }
 
 func effectiveReasoning(requested, fallback string) string {
@@ -2936,7 +3208,7 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 				})
 				result.StopReason = "tool_use"
 			}
-		case "response.completed":
+		case "response.completed", "response.incomplete":
 			response, _ := payload["response"].(map[string]any)
 			if response != nil {
 				result.ID = stringValue(response["id"])
@@ -2947,6 +3219,13 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 					result.Usage.InputTokens = int(numberValue(usage["input_tokens"]))
 					result.Usage.OutputTokens = int(numberValue(usage["output_tokens"]))
 				}
+				if typ == "response.incomplete" {
+					if details, ok := response["incomplete_details"].(map[string]any); ok {
+						if reason := stringValue(details["reason"]); reason != "" {
+							result.StopReason = reason
+						}
+					}
+				}
 			}
 			if result.StopReason == "" {
 				result.StopReason = "end_turn"
@@ -2956,6 +3235,17 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 				StopReason: result.StopReason,
 				Usage:      &StreamUsage{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens},
 			})
+		case "response.failed":
+			response, _ := payload["response"].(map[string]any)
+			errType := "failed"
+			if response != nil {
+				if e, ok := response["error"].(map[string]any); ok {
+					if code := stringValue(e["code"]); code != "" {
+						errType = code
+					}
+				}
+			}
+			return fmt.Errorf("%s: response %s (sanitized)", providerName, errType)
 		}
 		return nil
 	}); err != nil {
@@ -3448,6 +3738,21 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 		}); err == nil {
 			mp.Register("fireworks", p)
 			log.Printf("provider: resolved fireworks (seed_model=%s reasoning=%s)", p.modelID, p.reasoning)
+		}
+	}
+
+	// Try OpenCode Go and Zen. Both use the same primary credential with the
+	// historical Go-specific variable accepted only as a fallback.
+	if openCodeAPIKeyFromEnv() != "" && len(cfg.OpenCodeGoModels) > 0 {
+		if p, err := NewOpenCodeGoProviderFromEnv(cfg.OpenCodeGoModels[0]); err == nil {
+			mp.Register("opencode-go", p)
+			log.Printf("provider: resolved opencode-go (seed_model=%s)", p.modelID)
+		}
+	}
+	if openCodeAPIKeyFromEnv() != "" && len(cfg.OpenCodeZenModels) > 0 {
+		if p, err := NewOpenCodeZenProviderFromEnv(cfg.OpenCodeZenModels[0]); err == nil {
+			mp.Register("opencode-zen", p)
+			log.Printf("provider: resolved opencode-zen (seed_model=%s)", p.modelID)
 		}
 	}
 

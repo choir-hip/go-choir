@@ -159,7 +159,7 @@ func TestResolveCoagentUpdateAuthorityRequiresExplicitScopedTargetAndEveryLookup
 	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, "", ""); err == nil || !strings.Contains(err.Error(), "explicit agent_id") {
 		t.Fatalf("missing target err=%v", err)
 	}
-	for _, op := range []string{"agent:" + target, "agent:researcher:producer-a", "lifecycle-run:run-producer-a", "lifecycle-trajectory:trajectory-a", "lifecycle-run:run-texture-a", "lifecycle-work:work-producer-a"} {
+	for _, op := range []string{"agent:" + target, "agent:research:producer-a", "lifecycle-run:run-producer-a", "lifecycle-trajectory:trajectory-a", "lifecycle-run:run-texture-a", "lifecycle-work:work-producer-a"} {
 		t.Run(op, func(t *testing.T) {
 			rt, f, ctx, target := lifecycleAuthorityFixture(agentprofile.Researcher)
 			f.errors[op] = errors.New("injected lookup failure")
@@ -275,7 +275,7 @@ func TestResolveCoagentUpdateAuthorityRefusesLegacySuperCoSuperMessaging(t *test
 
 func assignedCoSuperSuperReportFixture() (*Runtime, *coagentAuthorityFakeStore, context.Context, string) {
 	const owner, computer, trajectory = "owner-a", "computer-a", "trajectory-a"
-	superID, callerID, callerRunID, parentRunID := "super:"+owner, "co-super:assigned-a", "run-cosuper-a", "run-super-a"
+	superID, callerID, callerRunID, parentRunID := "management:"+owner, "engineering:assigned-a", "run-cosuper-a", "run-super-a"
 	target := types.AgentRecord{AgentID: superID, OwnerID: owner, ComputerID: computer, Profile: agentprofile.Super, Role: agentprofile.Super, ChannelID: superID}
 	callerAgent := types.AgentRecord{AgentID: callerID, OwnerID: owner, ComputerID: computer, Profile: agentprofile.CoSuper, Role: agentprofile.CoSuper, ChannelID: callerID}
 	parent := types.RunRecord{RunID: parentRunID, AgentID: superID, OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, ChannelID: superID, Metadata: map[string]any{"assignment_trajectory_id": trajectory}}
@@ -329,7 +329,7 @@ func TestResolveCoagentUpdateAuthorityAssignedCoSuperReportRefusals(t *testing.T
 	t.Run("requester drift", func(t *testing.T) {
 		rt, f, ctx, target := assignedCoSuperSuperReportFixture()
 		caller := f.lifecycleRuns["run-cosuper-a"]
-		caller.Metadata["requested_by_agent_id"] = "super:other"
+		caller.Metadata["requested_by_agent_id"] = "management:other"
 		f.lifecycleRuns[caller.RunID] = caller
 		ctx = toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller))
 		if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
@@ -355,7 +355,7 @@ func TestResolveCoagentUpdateAuthorityPreCutoverCompatibilityAndRefusals(t *test
 	for name, mutate := range map[string]func(*coagentAuthorityFakeStore){
 		"arbitrary super": func(f *coagentAuthorityFakeStore) {
 			v := f.agents[target]
-			v.AgentID = "super:arbitrary"
+			v.AgentID = "management:arbitrary"
 			v.Profile = agentprofile.Super
 			v.Role = agentprofile.Super
 			delete(f.agents, target)

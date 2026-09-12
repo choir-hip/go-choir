@@ -31,6 +31,7 @@ type workerSessionConfig struct {
 	allowed     []string
 	timeout     time.Duration
 	role        string
+	slot        string
 }
 
 // sessionWorker owns one persistent worker process serving framed eval cells
@@ -87,6 +88,7 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 		"--session-allowed-root", cfg.allowedRoot,
 		"--session-epoch", fmt.Sprintf("%d", cfg.epoch),
 		"--session-role", cfg.role,
+		"--session-slot", cfg.slot,
 		"--session-sock-fd", "3",
 	}
 	cmd := exec.Command(bin, args...)
@@ -271,7 +273,7 @@ func (w *sessionWorker) killLocked() {
 // capability and bounds the prebound choir surface. The allowed set is the
 // server-owned stdlib surface plus the prebound choir package: never
 // model-controlled.
-func (b *Broker) sessionConfigFor(activationID, role string) workerSessionConfig {
+func (b *Broker) sessionConfigFor(activationID, role, slot string) workerSessionConfig {
 	allowed := yaegikernel.DefaultSafeStdlibPackagesList()
 	computerID := b.capsuleID
 	if computerID == "" {
@@ -285,25 +287,32 @@ func (b *Broker) sessionConfigFor(activationID, role string) workerSessionConfig
 		allowed:     allowed,
 		timeout:     60 * time.Second,
 		role:        role,
+		slot:        slot,
 	}
 }
 
 // sessionFor returns the live worker for an activation, spawning it on first
 // use. A dead worker is replaced, never resurrected: post-poison state is
 // never trusted.
-func (b *Broker) sessionFor(agentRunID, role string) (*sessionWorker, error) {
+func (b *Broker) sessionFor(agentRunID, role, slot string) (*sessionWorker, error) {
 	if b == nil {
 		return nil, fmt.Errorf("session worker: broker unavailable")
 	}
 	b.sessionMu.Lock()
 	defer b.sessionMu.Unlock()
 	if w, ok := b.sessionWorkers[agentRunID]; ok && w != nil && !w.dead {
+		// Slot is part of the session's authority: a worker minted for one
+		// slot must never serve another. Slot is fixed per run at mint, so a
+		// mismatch is a wiring bug, not a rekey opportunity.
+		if w.config.slot != slot || w.config.role != role {
+			return nil, fmt.Errorf("session worker: live worker for %s carries role %q slot %q, not role %q slot %q", agentRunID, w.config.role, w.config.slot, role, slot)
+		}
 		return w, nil
 	}
 	if b.brokerBin == "" {
 		return nil, fmt.Errorf("session worker: broker binary path unavailable")
 	}
-	w, err := spawnSessionWorker(b.brokerBin, b.sessionConfigFor(agentRunID, role))
+	w, err := spawnSessionWorker(b.brokerBin, b.sessionConfigFor(agentRunID, role, slot))
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +342,7 @@ func (b *Broker) handleInitSession(_ context.Context, cap *capsule.Capability, _
 		return BrokerRPCResponse{Error: "init_session: activation required"}
 	}
 	b.dropSession(cap.AgentRunID)
-	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole))
+	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole), cap.Slot)
 	if err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("init_session: %v", err)}
 	}
@@ -360,10 +369,11 @@ func (b *Broker) handleCloseSession(_ context.Context, cap *capsule.Capability, 
 // handleGoEvalSession evaluates one cell on the activation's persistent
 // worker. A dead or poisoned worker is dropped and reported (never silently
 // retried: the cell may have partially executed). When no session worker can
-// start, the cell falls back to the one-shot tools worker and the result is
-// marked Fallback: the Def 2 fallback is per-call behavior with a receipt,
-// not a flag. The cell deadline never exceeds the parent RPC deadline: a
-// model-supplied TimeoutMS cannot extend the activation budget.
+// start, the cell is not executed anywhere: the broker returns a typed
+// session diagnostic (unsafe-to-reuse/worker) instead of diverting to the
+// one-shot tools worker, which serves only explicit actuator=tools calls.
+// The cell deadline never exceeds the parent RPC deadline: a model-supplied
+// TimeoutMS cannot extend the activation budget.
 func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	var p capsule.GoEvalRequest
 	if err := json.Unmarshal(params, &p); err != nil {
@@ -382,51 +392,41 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		return BrokerRPCResponse{Error: "go_eval: parent deadline already exceeded"}
 	}
 	start := time.Now()
-	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole))
+	w, err := b.sessionFor(cap.AgentRunID, string(cap.AgentRole), cap.Slot)
 	if err != nil {
-		return b.fallbackGoEval(ctx, cap, params, fmt.Sprintf("session worker unavailable: %v", err))
+		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session worker unavailable: %v", err), Duration: time.Since(start), Reuse: yaegikernel.ReuseUnsafeToReuse, DiagKind: yaegikernel.DiagWorker}
+		resultBytes, _ := json.Marshal(result)
+		return BrokerRPCResponse{Result: resultBytes}
 	}
 	res, err := w.eval(p.Source, p.Inbox, timeout)
 	if err != nil {
 		b.dropSession(cap.AgentRunID)
-		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session eval: %v", err), Duration: time.Since(start)}
+		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session eval: %v", err), Duration: time.Since(start), Reuse: yaegikernel.ReuseUnsafeToReuse, DiagKind: yaegikernel.DiagWorker}
 		resultBytes, _ := json.Marshal(result)
 		return BrokerRPCResponse{Result: resultBytes}
 	}
 	result := capsule.GoEvalResult{
-		Stdout:   res.Stdout,
-		Stderr:   res.Stderr,
-		Error:    res.Error,
-		Duration: time.Since(start),
-		Receipts: res.Receipts,
+		Stdout:          res.Stdout,
+		Stderr:          res.Stderr,
+		Error:           res.Error,
+		Duration:        time.Since(start),
+		StagedIntentIDs: res.Receipts,
+		Reuse:           res.Reuse,
+		DiagKind:        res.DiagKind,
 	}
 	if res.Error != "" {
-		// Poisoned cells drop their tray: no intents ship, the inbox cursor
-		// cannot advance, and the worker is discarded, never reused.
+		// Failed cells drop their tray: no intents ship and the inbox cursor
+		// cannot advance. Only unsafe-to-reuse failures discard the worker:
+		// a preserving rejection (typed by the session, never string
+		// matching) keeps the live worker. Transport-level failures above
+		// already dropped it.
 		result.ExitCode = 1
-		b.dropSession(cap.AgentRunID)
+		if res.Reuse != yaegikernel.ReusePreserve {
+			b.dropSession(cap.AgentRunID)
+		}
 	} else {
 		result.Intents = res.Intents
 	}
-	resultBytes, _ := json.Marshal(result)
-	return BrokerRPCResponse{Result: resultBytes}
-}
-
-// fallbackGoEval runs the cell on the one-shot tools worker after a session
-// spawn failure and marks the result Fallback with the session error that
-// caused it. When the one-shot path also fails, both errors are reported so
-// the fallback attempt is visible, never silent.
-func (b *Broker) fallbackGoEval(ctx context.Context, cap *capsule.Capability, params json.RawMessage, sessionErr string) BrokerRPCResponse {
-	resp := b.handleGoEvalOneShot(ctx, cap, params)
-	if resp.Error != "" {
-		return BrokerRPCResponse{Error: fmt.Sprintf("%s; tools fallback also failed: %v", sessionErr, resp.Error)}
-	}
-	var result capsule.GoEvalResult
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
-		return BrokerRPCResponse{Error: fmt.Sprintf("%s; tools fallback result undecodable: %v", sessionErr, err)}
-	}
-	result.Fallback = true
-	result.Stderr += "\n[rlm fallback: " + sessionErr + "]"
 	resultBytes, _ := json.Marshal(result)
 	return BrokerRPCResponse{Result: resultBytes}
 }

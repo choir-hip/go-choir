@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -68,7 +69,7 @@ func (e *Executor) ListOwned(string) []CapsuleControlSummary { return nil }
 func (e *Executor) MintCapability(string, AgentRole, string, time.Duration) (*Capability, error) {
 	return nil, stubErr("mint")
 }
-func (e *Executor) MintCapabilityHandle(string, AgentRole, string, string, time.Duration) (*Capability, error) {
+func (e *Executor) MintCapabilityHandle(string, AgentRole, string, string, time.Duration, string) (*Capability, error) {
 	return nil, stubErr("mint")
 }
 func (e *Executor) AssignmentHandle(string, string) (string, error) {
@@ -91,7 +92,14 @@ func (e *Executor) PersistGrantedFreezeReceipt(context.Context, string, string) 
 func (e *Executor) OpenCapsuleFateReceipt(string) (CapsuleFateReceipt, error) {
 	return CapsuleFateReceipt{}, stubErr("freeze receipt")
 }
-func (e *Executor) OpenExecutionReceipt(string) (ExecutionReceipt, error) {
+func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
+	ref = strings.TrimSpace(ref)
+	if strings.HasPrefix(ref, "rlm:") {
+		return ExecutionReceipt{}, fmt.Errorf("receipt reference %q is an internal intent token, not an execution receipt (expected capsule-go-eval:sha256:* or capsule-exec:sha256:*)", ref)
+	}
+	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") {
+		return ExecutionReceipt{}, fmt.Errorf("executor receipt %q is invalid: unsupported prefix (expected capsule-go-eval:sha256:* or capsule-exec:sha256:*)", ref)
+	}
 	return ExecutionReceipt{}, stubErr("execution receipt")
 }
 func (e *Executor) OpenGrantedExecutionReceipt(string) (GrantedExecutionReceipt, error) {
@@ -100,8 +108,16 @@ func (e *Executor) OpenGrantedExecutionReceipt(string) (GrantedExecutionReceipt,
 func (e *Executor) ResolveGrantedExecutionReceipts(context.Context, string, string, []string) ([]ExecutionReceipt, error) {
 	return nil, stubErr("execution receipts")
 }
-func (e *Executor) ResolveExecutionReceipts([]string) ([]ExecutionReceipt, error) {
-	return nil, stubErr("execution receipts")
+func (e *Executor) ResolveExecutionReceipts(refs []string) ([]ExecutionReceipt, error) {
+	receipts := make([]ExecutionReceipt, 0, len(refs))
+	for _, ref := range refs {
+		receipt, err := e.OpenExecutionReceipt(ref)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, receipt)
+	}
+	return receipts, nil
 }
 func (e *Executor) ReadFile(context.Context, string, string, string) ([]byte, error) {
 	return nil, stubErr("read")

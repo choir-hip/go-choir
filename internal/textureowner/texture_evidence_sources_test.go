@@ -79,7 +79,7 @@ func TestEvidenceRecordToSourceEntity_URLOnlyIsWholeResource(t *testing.T) {
 func TestCoagentPacketHTTPSourceStaysURLBackedNotSyntheticContentItem(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		OwnerID: "owner-url-source",
-		AgentID: "researcher:url-source",
+		AgentID: "research:url-source",
 		Role:    agentprofile.Researcher,
 		Packet: types.CoagentSourcePacketPayload{
 			Sources: []types.CoagentPacketSource{{
@@ -110,7 +110,7 @@ func TestCoagentPacketHTTPSourceStaysURLBackedNotSyntheticContentItem(t *testing
 func TestCoagentPacketHTTPSourcePreservesSourceTextForTransclusion(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		OwnerID: "owner-url-source-text",
-		AgentID: "researcher:url-source-text",
+		AgentID: "research:url-source-text",
 		Role:    agentprofile.Researcher,
 		Packet: types.CoagentSourcePacketPayload{
 			Sources: []types.CoagentPacketSource{{
@@ -188,7 +188,7 @@ func TestCoagentPacketContentIDSourceHydratesImportedText(t *testing.T) {
 
 	update := types.CoagentSourcePacket{
 		OwnerID: ownerID,
-		AgentID: "researcher:content-id-source-text",
+		AgentID: "research:content-id-source-text",
 		Role:    agentprofile.Researcher,
 		Packet: types.CoagentSourcePacketPayload{
 			Sources: []types.CoagentPacketSource{{
@@ -259,7 +259,7 @@ func TestEvidenceRecordToSourceEntity_CommandOutputIsAddressable(t *testing.T) {
 	rec := types.EvidenceRecord{
 		EvidenceID: "ev-command",
 		OwnerID:    "user-command",
-		AgentID:    "super:verify",
+		AgentID:    "management:verify",
 		Kind:       "command_output",
 		Title:      "Focused runtime tests",
 		SourceURI:  "command_output:cmd-runtime-source-handoff",
@@ -272,7 +272,7 @@ func TestEvidenceRecordToSourceEntity_CommandOutputIsAddressable(t *testing.T) {
 	if entity.Target.TargetKind != "command_output" || entity.Target.PublicRecordID != "cmd-runtime-source-handoff" {
 		t.Fatalf("unexpected command target %#v", entity.Target)
 	}
-	if entity.Display.OpenSurface != "source_window" || entity.Provenance.CreatedBy != "super:verify" {
+	if entity.Display.OpenSurface != "source_window" || entity.Provenance.CreatedBy != "management:verify" {
 		t.Fatalf("unexpected command display/provenance %#v", entity)
 	}
 }
@@ -304,7 +304,7 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 	if err := s.CreateEvidence(ctx, types.EvidenceRecord{
 		EvidenceID: "ev-cloud-audit",
 		OwnerID:    ownerID,
-		AgentID:    "researcher:refs",
+		AgentID:    "research:refs",
 		Kind:       "source_excerpt",
 		Title:      "Cloud evidence",
 		SourceURI:  "https://example.test/evidence",
@@ -325,7 +325,7 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-refs-source-entities",
 		OwnerID:       ownerID,
-		AgentID:       "researcher:refs",
+		AgentID:       "research:refs",
 		TargetAgentID: targetAgentID,
 		ChannelID:     "doc-refs",
 		Role:          agentprofile.Researcher,
@@ -390,7 +390,7 @@ func TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping(
 	updates := []types.CoagentSourcePacket{{
 		UpdateID:      "update-super-execution-sources",
 		OwnerID:       ownerID,
-		AgentID:       "super:execution",
+		AgentID:       "management:execution",
 		TargetAgentID: "texture:doc-execution",
 		ChannelID:     "doc-execution",
 		Role:          agentprofile.Super,
@@ -470,7 +470,7 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-native-source-refs",
 		OwnerID:       ownerID,
-		AgentID:       "researcher:native-sources",
+		AgentID:       "research:native-sources",
 		TargetAgentID: targetAgentID,
 		ChannelID:     docID,
 		Role:          agentprofile.Researcher,
@@ -579,7 +579,7 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 	if err := s.CreateEvidence(ctx, types.EvidenceRecord{
 		EvidenceID: evidenceID,
 		OwnerID:    ownerID,
-		AgentID:    "researcher:summary-source",
+		AgentID:    "research:summary-source",
 		Kind:       "source_excerpt",
 		Title:      "OpenAI GPT-5.5 docs evidence",
 		SourceURI:  "https://developers.openai.com/api/docs/models/gpt-5.5",
@@ -617,7 +617,7 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-summary-source",
 		OwnerID:       ownerID,
-		AgentID:       "researcher:summary-source",
+		AgentID:       "research:summary-source",
 		TargetAgentID: targetAgentID,
 		ChannelID:     docID,
 		Role:          agentprofile.Researcher,
@@ -798,7 +798,7 @@ func TestSelfDevelopmentJoinableIdentitiesRideExistingPacketSources(t *testing.T
 	}
 	update := types.CoagentSourcePacket{
 		OwnerID: "owner-joinable",
-		AgentID: "super:joinable",
+		AgentID: "management:joinable",
 		Role:    agentprofile.Super,
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
@@ -843,10 +843,10 @@ func TestSelfDevelopmentJoinIgnoresProseAndPersistsInRevisionMetadata(t *testing
 	}
 	doc.CurrentRevisionID = parent.RevisionID
 	entities := []textureSourceEntity{
-		executionEvidenceSourceEntity("operation", operationID, operationID, "super"),
-		executionEvidenceSourceEntity("capsule_bundle", bundleDigest, bundleDigest, "super"),
-		executionEvidenceSourceEntity("receipt", "receipt-meta-1", "receipt-meta-1", "super"),
-		executionEvidenceSourceEntity("event_head", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "super"),
+		executionEvidenceSourceEntity("operation", operationID, operationID, "management"),
+		executionEvidenceSourceEntity("capsule_bundle", bundleDigest, bundleDigest, "management"),
+		executionEvidenceSourceEntity("receipt", "receipt-meta-1", "receipt-meta-1", "management"),
+		executionEvidenceSourceEntity("event_head", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "management"),
 	}
 	rec := &types.RunRecord{
 		RunID: "run-joinable-metadata", OwnerID: ownerID, AgentID: currentTextureAgentID(docID),

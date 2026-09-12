@@ -6,12 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strings"
-
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
+	"strings"
+	"time"
 )
 
 // commits a successful cell's staged tray into durable state and wakes
@@ -76,13 +78,16 @@ type ReductionReceipt struct {
 func spawnRoleAllowed(spawnerRole, childRole string) bool {
 	spawner := strings.ToLower(strings.TrimSpace(spawnerRole))
 	child := strings.ToLower(strings.TrimSpace(childRole))
+	// Frozen V2 spawn matrix (mapping §2): management allows any child;
+	// engineering allows engineering and research; research allows research;
+	// default false. No V1 token is accepted in any position.
 	switch spawner {
-	case "super":
+	case "management":
 		return true
-	case "co-super", "cosuper", "engineering":
-		return child == "researcher" || child == "co-super" || child == "cosuper" || child == "engineering"
-	case "researcher", "research":
-		return child == "researcher" || child == "research"
+	case "engineering":
+		return child == "engineering" || child == "research"
+	case "research":
+		return child == "research"
 	default:
 		return false
 	}
@@ -96,7 +101,7 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 		return fmt.Errorf("reduce: %d intents exceed cell quota %d", len(intents), yaegikernel.MaxIntentsPerCell)
 	}
 	complete := 0
-	for _, in := range intents {
+	for i, in := range intents {
 		switch in.Kind {
 		case yaegikernel.IntentMessage:
 			if in.ToDesk == "" {
@@ -104,6 +109,13 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			}
 			if len(in.Body) > yaegikernel.MaxIntentBody {
 				return fmt.Errorf("reduce: message %s exceeds body quota", in.LocalID)
+			}
+		case yaegikernel.IntentOutcome:
+			if in.ToDesk == "" {
+				return fmt.Errorf("reduce: outcome %s missing destination", in.LocalID)
+			}
+			if len(in.Body) > yaegikernel.MaxIntentBody {
+				return fmt.Errorf("reduce: outcome %s exceeds body quota", in.LocalID)
 			}
 		case yaegikernel.IntentSpawn:
 			if !spawnRoleAllowed(scope.FromRole, in.Role) {
@@ -114,10 +126,29 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			}
 		case yaegikernel.IntentComplete:
 			complete++
+			// Complete commits terminal fate; any intent after it could fail
+			// and leave the cell reporting failure after fate already landed.
+			if i != len(intents)-1 {
+				return fmt.Errorf("reduce: complete %s must be the final intent in its cell", in.LocalID)
+			}
 			switch in.Result {
-			case yaegikernel.CompleteCompleted, yaegikernel.CompleteFailed, yaegikernel.CompleteBlocked:
+			case yaegikernel.CompleteCompleted, yaegikernel.CompleteFailed, yaegikernel.CompleteBlocked, yaegikernel.CompletePartial:
 			default:
 				return fmt.Errorf("reduce: complete result %q invalid", in.Result)
+			}
+		case yaegikernel.IntentFreeze:
+			if strings.TrimSpace(in.BuildRecipeRef) == "" || len(in.TestReceipts) == 0 || len(in.DependencyToolchainRefs) == 0 {
+				return fmt.Errorf("reduce: freeze %s requires build recipe, test receipts, and dependency/toolchain refs", in.LocalID)
+			}
+		case yaegikernel.IntentVerify:
+			if in.Decision != "pass" && in.Decision != "fail" {
+				return fmt.Errorf("reduce: verify %s decision %q invalid", in.LocalID, in.Decision)
+			}
+			if len(in.VerifierRefs) == 0 {
+				return fmt.Errorf("reduce: verify %s requires verifier refs", in.LocalID)
+			}
+			if strings.TrimSpace(in.BundleDigest) == "" {
+				return fmt.Errorf("reduce: verify %s requires the inspected bundle digest", in.LocalID)
 			}
 		default:
 			return fmt.Errorf("reduce: unknown intent kind %q", in.Kind)
@@ -172,19 +203,7 @@ func ReduceCellIntents(ctx context.Context, mb rlmMailbox, scope ReductionScope,
 	}
 	receipt := ReductionReceipt{Cursor: scope.Cursor}
 	for _, in := range intents {
-		var to, content string
-		switch in.Kind {
-		case yaegikernel.IntentMessage:
-			to = in.ToDesk
-			content = encodeEnvelope(rlmEnvelope{Kind: "message", MsgKind: in.MsgKind, Body: in.Body, From: scope.FromAgentID})
-		case yaegikernel.IntentSpawn:
-			to = scope.ReturnTo
-			content = encodeEnvelope(rlmEnvelope{Kind: "spawn_request", Role: in.Role, Objective: in.Objective, From: scope.FromAgentID})
-		case yaegikernel.IntentComplete:
-			to = scope.ReturnTo
-			content = encodeEnvelope(rlmEnvelope{Kind: "complete", Result: in.Result, Verdict: in.Verdict, Summary: in.Summary, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
-		}
-		seq, err := mb.CastEnvelope(ctx, scope.ChannelID, to, scope.FromAgentID, scope.FromRole, content, intentIdempotencyKey(scope, in.LocalID, to, content))
+		seq, err := castStagedIntent(ctx, mb, scope, in)
 		if err != nil {
 			return ReductionReceipt{Cursor: scope.Cursor}, fmt.Errorf("reduce: persist %s: %w", in.LocalID, err)
 		}
@@ -192,6 +211,30 @@ func ReduceCellIntents(ctx context.Context, mb rlmMailbox, scope ReductionScope,
 	}
 	receipt.Committed = true
 	return receipt, nil
+}
+
+// castStagedIntent mails one envelope-eligible intent to its durable channel
+// target. Freeze and verify intents never mail: their effects land through
+// the reduction's own commit path, not the channel log.
+func castStagedIntent(ctx context.Context, mb rlmMailbox, scope ReductionScope, in yaegikernel.StagedIntent) (uint64, error) {
+	var to, content string
+	switch in.Kind {
+	case yaegikernel.IntentMessage:
+		to = in.ToDesk
+		content = encodeEnvelope(rlmEnvelope{Kind: "message", MsgKind: in.MsgKind, Body: in.Body, From: scope.FromAgentID})
+	case yaegikernel.IntentOutcome:
+		to = in.ToDesk
+		content = encodeEnvelope(rlmEnvelope{Kind: "message", MsgKind: "outcome", Body: in.Body, From: scope.FromAgentID})
+	case yaegikernel.IntentSpawn:
+		to = scope.ReturnTo
+		content = encodeEnvelope(rlmEnvelope{Kind: "spawn_request", Role: in.Role, Objective: in.Objective, From: scope.FromAgentID})
+	case yaegikernel.IntentComplete:
+		to = scope.ReturnTo
+		content = encodeEnvelope(rlmEnvelope{Kind: "complete", Result: in.Result, Verdict: in.Verdict, Summary: in.Summary, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
+	default:
+		return 0, fmt.Errorf("intent kind %q has no envelope path", in.Kind)
+	}
+	return mb.CastEnvelope(ctx, scope.ChannelID, to, scope.FromAgentID, scope.FromRole, content, intentIdempotencyKey(scope, in.LocalID, to, content))
 }
 
 // AssembleCellInbox reads the durable mailbox since the cursor and maps it to
@@ -279,17 +322,27 @@ func CommitInboxCursor(ctx context.Context, st rlmCursorStore, ownerID, runID, c
 	return err
 }
 
-// rlmCallReduction carries one go_eval call's inbox assembly through to its
-// post-cell commit. Inactive outside RLM mode or without a runtime: the tools
-// path stays byte-identical then, and reduction is a no-op.
+// path stays byte-identical then, and reduction is a no-op. rec and toolCtx
+// are retained so a staged Complete intent can author the assignment fate
+// (P3-settlement: the reducer is the single fate author).
 type rlmCallReduction struct {
 	active    bool
 	mb        rlmMailbox
 	st        rlmCursorStore
 	scope     ReductionScope
+	rec       *types.RunRecord
+	toolCtx   *CapsuleToolCtx
 	inbox     []yaegikernel.IncomingMessage
 	highWater uint64
 	receipt   ReductionReceipt
+	// fateTerminal is set when a Complete intent committed a terminal
+	// assignment fate; the eval tool surfaces it so the run loop can end.
+	fateTerminal bool
+	// freezeResult/verifyResult carry the staged freeze/verify outcomes back
+	// to the cell result so the model sees the same receipt the retired JSON
+	// tools returned.
+	freezeResult map[string]any
+	verifyResult map[string]any
 }
 
 // rlmReductionForCall assembles the cell-start inbox snapshot from the durable
@@ -321,9 +374,11 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 		requester = metadataStringValue(execCtx.RunRecord.Metadata, "requested_by_agent_id")
 	}
 	return &rlmCallReduction{
-		active: true,
-		mb:     rt,
-		st:     rt.store,
+		active:  true,
+		mb:      rt,
+		st:      rt.store,
+		rec:     execCtx.RunRecord,
+		toolCtx: toolCtx,
 		scope: ReductionScope{
 			FromAgentID: execCtx.AgentID,
 			FromRole:    string(toolCtx.Role),
@@ -343,13 +398,66 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 // inbox cursor to the consumed snapshot high-water only. Outbound intent
 // sequences live on the same channel log and must not fence unread inbound
 // mail that arrived after the snapshot. Failed cells never reach this path.
+// A staged Complete intent authors the assignment fate through the same saga
+// the retired JSON tool used; the fate commit runs detached so teardown
+// cannot interrupt it.
 func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.StagedIntent) error {
 	if r == nil || !r.active {
 		return nil
 	}
-	receipt, err := ReduceCellIntents(ctx, r.mb, r.scope, intents, true)
-	if err != nil {
+	if err := validateCellIntents(r.scope, intents); err != nil {
 		return err
+	}
+	receipt := ReductionReceipt{Cursor: r.scope.Cursor}
+	for _, in := range intents {
+		var seq uint64
+		var err error
+		switch in.Kind {
+		case yaegikernel.IntentComplete:
+			// The fate commit runs detached so teardown cannot interrupt it;
+			// the completion envelope still mails to the requester after the
+			// fate lands.
+			fateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			var terminal bool
+			terminal, err = r.commitCompleteIntent(fateCtx, in)
+			cancel()
+			if err == nil {
+				if terminal {
+					r.fateTerminal = true
+				}
+				seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
+			}
+		case yaegikernel.IntentFreeze:
+			var out map[string]any
+			out, err = r.commitFreezeIntent(ctx, in)
+			if err == nil {
+				r.freezeResult = out
+			}
+		case yaegikernel.IntentVerify:
+			var out map[string]any
+			out, err = r.commitVerifyIntent(ctx, in)
+			if err == nil {
+				r.verifyResult = out
+			}
+		case yaegikernel.IntentMessage:
+			// Every staged message on an assigned desk carries the
+			// update_coagent authority contract. The outcome envelope path is
+			// reachable only through IntentOutcome, which ChoirScope.Outcome
+			// stages — a model-authored MsgKind cannot claim it.
+			if r.isAssignedDesk() {
+				seq, err = r.commitMessageIntent(ctx, in)
+			} else {
+				seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
+			}
+		case yaegikernel.IntentOutcome:
+			seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
+		default:
+			seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
+		}
+		if err != nil {
+			return fmt.Errorf("reduce: persist %s: %w", in.LocalID, err)
+		}
+		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: seq, Kind: in.Kind})
 	}
 	highWater := r.highWater
 	if highWater < r.scope.Cursor {
@@ -361,5 +469,172 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 	r.receipt = receipt
 	r.receipt.Cursor = highWater
 	r.receipt.Committed = true
+	return nil
+}
+
+// isAssignedDesk reports whether this reduction serves an exact bound
+// assignment run; its messages carry the update_coagent authority contract.
+func (r *rlmCallReduction) isAssignedDesk() bool {
+	return r != nil && r.rec != nil && metadataStringValue(r.rec.Metadata, "assignment_id") != ""
+}
+
+// commitFreezeIntent reduces a staged Freeze intent through the same freeze
+// body the commit_transaction tool runs; the capsule handle is the bound
+// handle, never model input. The mutation-role gate is the same predicate
+// the JSON tool enforces: an exact bound writable CoSuper assignment.
+func (r *rlmCallReduction) commitFreezeIntent(ctx context.Context, in yaegikernel.StagedIntent) (map[string]any, error) {
+	if r.rec == nil || r.toolCtx == nil || r.toolCtx.Executor == nil {
+		return nil, fmt.Errorf("reduce: freeze intent without assignment authority")
+	}
+	if _, err := requireCapsuleMutationRole(ctx); err != nil {
+		return nil, err
+	}
+	return freezeCapsuleEffectBundle(ctx, r.toolCtx, r.rec, r.toolCtx.CapsuleHandle,
+		in.BuildRecipeRef, in.TestReceipts, in.DependencyToolchainRefs)
+}
+
+// commitVerifyIntent reduces a staged Verify intent through the same
+// verification body the record_self_development_verification tool runs. The
+// operation binding resolves from the run's trajectory — the mounted bundle
+// the cell inspected is the operation's frozen bundle by construction — and
+// the intent's bundle digest must equal the operation's durable digest, so a
+// decision can never land on a bundle other than the one the cell examined.
+func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikernel.StagedIntent) (map[string]any, error) {
+	if r.rec == nil || r.toolCtx == nil || r.toolCtx.OperationStore == nil {
+		return nil, fmt.Errorf("reduce: verify intent without verification authority")
+	}
+	trajectoryID := trajectoryIDForRun(r.rec)
+	if trajectoryID == "" {
+		return nil, fmt.Errorf("reduce: verify intent without trajectory binding")
+	}
+	operation, err := r.toolCtx.OperationStore.GetByTrajectory(ctx, r.toolCtx.ComputerID, trajectoryID)
+	if err != nil {
+		return nil, fmt.Errorf("reduce: resolve self-development operation: %w", err)
+	}
+	if in.BundleDigest != operation.BundleDigest {
+		return nil, fmt.Errorf("reduce: verify %s bundle digest does not match the operation's frozen bundle", in.LocalID)
+	}
+	return recordSelfDevelopmentVerification(ctx, r.toolCtx, r.rec, operation.OperationID, operation.BundleDigest, in.Decision, in.VerifierRefs)
+}
+
+// commitMessageIntent reduces one staged Message intent on an assigned desk
+// through the update_coagent authority path: the intent body is the
+// CoagentSourcePacketPayload JSON, the desk is the explicit target agent, and
+// the same durable update + wake sequence the retired tool ran executes here.
+// It returns the channel sequence of the emitted message event.
+func (r *rlmCallReduction) commitMessageIntent(ctx context.Context, in yaegikernel.StagedIntent) (uint64, error) {
+	rt := r.rt()
+	if rt == nil || rt.store == nil {
+		return 0, fmt.Errorf("reduce: message intent without update authority")
+	}
+	var payload types.CoagentSourcePacketPayload
+	decoder := json.NewDecoder(strings.NewReader(in.Body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
+		return 0, fmt.Errorf("reduce: message %s body is not a coagent source packet: %w", in.LocalID, err)
+	}
+	if decoder.More() {
+		return 0, fmt.Errorf("reduce: message %s body carries trailing data", in.LocalID)
+	}
+	packet := normalizeCoagentSourcePacketPayload(payload)
+	if err := validateCoagentSourcePacketPayload(packet); err != nil {
+		return 0, err
+	}
+	if in.MsgKind != "" && in.MsgKind != packet.Kind {
+		return 0, fmt.Errorf("reduce: message %s kind %q does not match packet kind %q", in.LocalID, in.MsgKind, packet.Kind)
+	}
+	execution := toolregistry.ExecutionContextFrom(ctx)
+	execution.ToolCallID = intentIdempotencyKey(r.scope, in.LocalID, in.ToDesk, in.Body)
+	toolCallCtx := toolregistry.WithExecutionContext(ctx, execution)
+	authority, err := resolveCoagentUpdateAuthorityWithStore(toolCallCtx, rt, rt.store, strings.TrimSpace(in.ToDesk), "")
+	if err != nil {
+		return 0, err
+	}
+	update := types.CoagentSourcePacket{
+		OwnerID: authority.callerRun.OwnerID, ComputerID: authority.callerRun.ComputerID,
+		AgentID: authority.callerRun.AgentID, TargetAgentID: authority.target.AgentID,
+		ChannelID: authority.target.ChannelID, TrajectoryID: authority.trajectoryID,
+		Role: authority.callerProfile, SourceRunID: authority.callerRun.RunID,
+		Packet: packet, CreatedAt: time.Now().UTC(),
+	}
+	if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Super {
+		update.Direction = types.LifecyclePacketDirectionProducerReport
+	}
+	update.UpdateID = deriveWorkerUpdateID(update)
+	update.Content = buildWorkerUpdateMessage(update)
+	message := &types.ChannelMessage{
+		ChannelID: update.ChannelID, From: update.SourceRunID,
+		FromAgentID: update.AgentID, FromRunID: update.SourceRunID,
+		ToAgentID: update.TargetAgentID, TrajectoryID: update.TrajectoryID,
+		Role: update.Role, Content: update.Content, Timestamp: update.CreatedAt,
+	}
+	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
+	if err != nil {
+		return 0, err
+	}
+	if stored.Disposition == "" && !created {
+		if err := validateExistingWorkerUpdate(stored, update); err != nil {
+			return 0, err
+		}
+	}
+	if stored.Disposition == "" && created {
+		rt.emitChannelMessageEvent(ctx, *message, update.OwnerID)
+		rt.wakeUpdatedCoagent(ctx, stored)
+	}
+	return uint64(stored.MessageSeq), nil
+}
+
+// commitCompleteIntent authors the assignment fate for one staged Complete
+// intent. It returns whether the committed fate is terminal. The report is
+// built exactly as the retired record_assignment_result tool built it:
+// execution refs resolve to bound commands/outputs, a terminal completed
+// pass requires at least one, and the summary is mandatory. The cell intent
+// identity substitutes for the provider tool_call_id in the partial-report
+// identity (a content-derived key so a replayed cell replays the same
+// report rather than minting a second one).
+func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegikernel.StagedIntent) (bool, error) {
+	if r.rec == nil || r.toolCtx == nil || r.toolCtx.Executor == nil {
+		return false, fmt.Errorf("reduce: complete intent without assignment authority")
+	}
+	summary := strings.TrimSpace(in.Summary)
+	if summary == "" {
+		return false, fmt.Errorf("reduce: complete intent summary is required")
+	}
+	result := types.CoSuperAssignmentResultKind(strings.TrimSpace(in.Result))
+	verdict := types.CoSuperAssignmentVerdict(strings.TrimSpace(in.Verdict))
+	evidenceRefs := sortedUniqueStrings(in.EvidenceRefs)
+	executionRefs := trimNonEmptyStrings(in.ExecutionRefs)
+	if result == types.CoSuperResultCompleted && verdict == types.CoSuperVerdictPass && len(executionRefs) == 0 {
+		return false, fmt.Errorf("reduce: terminal completed pass requires at least one valid execution_ref")
+	}
+	receipts, err := r.toolCtx.Executor.ResolveExecutionReceipts(executionRefs)
+	if err != nil {
+		return false, err
+	}
+	report := types.CoSuperAssignmentReport{Result: result, Verdict: verdict, Summary: summary,
+		EvidenceRefs: evidenceRefs, Commands: recordedCommandsFromReceipts(receipts), Outputs: recordedOutputsFromReceipts(receipts)}
+	// Content-derived identity: a replayed cell (same intent content) replays
+	// the same report instead of minting a second one.
+	intentIdentity := "rlm-complete:" + r.scope.RunID + ":" + objectgraph.SHA256([]byte(strings.Join([]string{
+		in.Result, in.Verdict, summary, strings.Join(evidenceRefs, "\x1f"), strings.Join(executionRefs, "\x1f"),
+	}, "\x00")))
+	rt := r.rt()
+	if rt == nil {
+		return false, fmt.Errorf("reduce: complete intent without runtime")
+	}
+	cmdResult, err := rt.recordAssignedCoSuperReport(ctx, r.rec, intentIdentity, report)
+	if err != nil {
+		return false, err
+	}
+	if !cmdResult.Replay && cmdResult.Update != nil {
+		rt.wakeUpdatedCoagent(ctx, *cmdResult.Update)
+	}
+	return result != types.CoSuperResultPartial, nil
+}
+
+func (r *rlmCallReduction) rt() *Runtime {
+	if mb, ok := r.mb.(*Runtime); ok {
+		return mb
+	}
 	return nil
 }

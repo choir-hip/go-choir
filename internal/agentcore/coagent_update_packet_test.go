@@ -13,7 +13,7 @@ func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 	t.Parallel()
 	updates := []types.CoagentSourcePacket{{
 		UpdateID:      "upd-1",
-		AgentID:       "researcher:doc-1",
+		AgentID:       "research:doc-1",
 		TargetAgentID: "texture:doc-1",
 		ChannelID:     "doc-1",
 		Packet: newCoagentPacket(

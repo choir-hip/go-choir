@@ -1,6 +1,7 @@
 package transaction
 
 import (
+	"os"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
@@ -89,6 +90,46 @@ func TestTransactionBuilderAcceptsKnownPaths(t *testing.T) {
 	}
 	if len(record.Groups["Blob"]) != 1 {
 		t.Errorf("Blob group: expected 1, got %d", len(record.Groups["Blob"]))
+	}
+}
+// TestClassifierRelativeUpperdirPaths pins the production path contract:
+// walkUpperdir emits paths relative to the upperdir root, so the classifier
+// must normalize them to absolute guest paths for rule matching. Before the
+// fix every real diff classified as unknown and commit always rejected.
+func TestClassifierRelativeUpperdirPaths(t *testing.T) {
+	c := NewClassifier()
+	changes := []capsule.FileChange{
+		{Path: "var/lib/dolt/choir/items.sql", Kind: capsule.ChangeAdded, Mode: 0o644},
+		{Path: "workspace/main.go", Kind: capsule.ChangeModified, Mode: 0o644},
+		{Path: "tmp/cache.txt", Kind: capsule.ChangeAdded, Mode: 0o644},
+		{Path: "unknown/path.txt", Kind: capsule.ChangeAdded, Mode: 0o644},
+		// Scaffolding: directories and runtime-written /etc identity files
+		// must not classify or reject.
+		{Path: "etc", Kind: capsule.ChangeAdded, Mode: 0o755 | os.ModeDir},
+		{Path: "var", Kind: capsule.ChangeAdded, Mode: 0o755 | os.ModeDir},
+		{Path: "etc/hosts", Kind: capsule.ChangeAdded, Mode: 0o644},
+		{Path: "etc/passwd", Kind: capsule.ChangeAdded, Mode: 0o644},
+	}
+
+	result := c.Classify(changes)
+
+	if len(result.Groups[LedgerDolt]) != 1 {
+		t.Errorf("Dolt group: expected 1, got %d", len(result.Groups[LedgerDolt]))
+	}
+	if len(result.Groups[LedgerSource]) != 1 {
+		t.Errorf("Source group: expected 1, got %d", len(result.Groups[LedgerSource]))
+	}
+	// tmp/cache.txt + etc/hosts + etc/passwd are ignored; the two directory
+	// entries are skipped entirely (not counted anywhere).
+	if len(result.Ignored) != 3 {
+		t.Errorf("Ignored: expected 3, got %d", len(result.Ignored))
+	}
+	if len(result.Unknown) != 1 {
+		t.Errorf("Unknown: expected 1, got %d", len(result.Unknown))
+	}
+	// Recorded changes keep their original relative paths.
+	if result.Groups[LedgerSource][0].Path != "workspace/main.go" {
+		t.Errorf("recorded path rewritten: %q", result.Groups[LedgerSource][0].Path)
 	}
 }
 

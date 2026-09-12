@@ -24,7 +24,7 @@ func TestDefaultTexturePromptUsesDecisionNotesWithoutForcedSemanticSequence(t *t
 		"Canonical document text is reader-facing belief state",
 		"off-document decision texts",
 		"Texture owns meaning and learning",
-		"Super owns privileged execution",
+		"Management owns privileged execution",
 		"chooses among them agentically",
 	} {
 		if !strings.Contains(normalizedPrompt, want) {
@@ -51,11 +51,11 @@ func assertNoForcedSemanticDelegation(t *testing.T, prompt string) {
 	t.Helper()
 	for _, forbidden := range []string{
 		"call spawn_agent",
-		"call spawn_agent with role=\"researcher\" in this run",
+		"call spawn_agent with role=\"research\" in this run",
 		"then call spawn_agent",
-		"researcher spawn in the same run",
-		"spawn a researcher",
-		"Open new researcher work when",
+		"research spawn in the same run",
+		"spawn a research agent",
+		"Open new research work when",
 		"call request_super_execution",
 		"request_super_execution in the same run",
 		"first call request_super_execution",
@@ -86,7 +86,7 @@ func TestTexturePromptInitialRevisionUsesSingleWriterLoop(t *testing.T) {
 		"Invariant: canonical meaning is Texture-owned",
 		"For factual/current/search requests, do not answer substantive world facts from model recall",
 		"immediate model-prior/interim V1 is allowed before retrieval only as an explicitly uncertain scaffold",
-		"Probe morphisms (spawn_agent researcher) gather world knowledge",
+		"Probe morphisms (spawn_agent research) gather world knowledge",
 		"depth scales with subject matter",
 		"marginal returns diminish",
 		"Worker messages can wake later texture runs and trigger the next revision.",
@@ -116,7 +116,7 @@ func TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent(t *testing
 		"Do not add factual claims, citations, or coding results from model priors as grounded",
 		"coding, execution, and verification claims require durable evidence packets",
 		"Do not include a [CMD] evidence label unless a durable source packet already contains actual command evidence",
-		"For coding or execution requests, use only the atomic persistent-Super control path above",
+		"For coding or execution requests, use only the atomic persistent-Management control path above",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("factual first-revision prompt missing %q:\n%s", want, request)
@@ -364,7 +364,7 @@ func TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T)
 	}
 	recent := []types.ChannelMessage{{
 		Role:    agentprofile.Researcher,
-		From:    "researcher:one",
+		From:    "research:one",
 		Content: "Findings: identified matchups, but final scores are still unavailable from this packet.",
 	}}
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
@@ -380,9 +380,9 @@ func TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T)
 		"If recent worker source packets are only partial and the document needs more evidence",
 		"write only the reader-facing artifact state that the usable claims and packet.sources support",
 		"Do not paste process metadata, source-status notes, or checkpoint labels into the canonical document body",
-		"Do not write that a follow-up researcher was dispatched",
+		"Do not write that a follow-up research was dispatched",
 		"Never describe coordination as already done unless the tool action really happened",
-		"Phrases such as \"researcher dispatched\"",
+		"Phrases such as \"research dispatched\"",
 		"If you only patch_texture or rewrite_texture, phrase remaining work as \"next needed\" or \"still unresolved\"",
 	} {
 		if !strings.Contains(request, want) {
@@ -400,7 +400,7 @@ func TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches(t *testing.T) 
 	}
 	recent := []types.ChannelMessage{{
 		Role:    agentprofile.Researcher,
-		From:    "researcher:one",
+		From:    "research:one",
 		Content: "A usable source packet is ready for incorporation.",
 	}}
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
@@ -414,7 +414,7 @@ func TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches(t *testing.T) 
 		t.Fatalf("narrative execution words suppressed evidence incorporation:\n%s", request)
 	}
 	for _, forbidden := range []string{
-		"The owner explicitly asked for researcher help.",
+		"The owner explicitly asked for research help.",
 		"The original request still needs Execute evidence",
 	} {
 		if strings.Contains(request, forbidden) {
@@ -425,8 +425,8 @@ func TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches(t *testing.T) 
 	structured := buildAgentRevisionRequest(current, nil, map[string]any{
 		runMetadataExplicitResearcher: true,
 	}, textureAgentRevisionRequest{Intent: "initial_conductor_workflow"}, "", true, nil, nil)
-	if !strings.Contains(structured, "The owner explicitly asked for researcher help.") {
-		t.Fatalf("structured researcher intent did not select the policy branch:\n%s", structured)
+	if !strings.Contains(structured, "The owner explicitly asked for research help.") {
+		t.Fatalf("structured research intent did not select the policy branch:\n%s", structured)
 	}
 }
 
@@ -550,7 +550,7 @@ func TestTexturePromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(
 	}
 	recent := []types.ChannelMessage{{
 		Role:    agentprofile.Super,
-		From:    "super:one",
+		From:    "management:one",
 		Content: "Worker update ready.\n\nFindings:\n- [CMD] command exited 0 and printed the expected hash.",
 	}}
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
@@ -581,7 +581,7 @@ func TestTexturePromptMixedObligationKeepsExactExecuteAffordanceWithoutKeywordBr
 	}
 	recent := []types.ChannelMessage{{
 		Role:    agentprofile.Researcher,
-		From:    "researcher:one",
+		From:    "research:one",
 		Content: "Worker update ready.\n\nFindings:\n- [S1] Texture documents have durable revisions.",
 	}}
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
@@ -594,7 +594,7 @@ func TestTexturePromptMixedObligationKeepsExactExecuteAffordanceWithoutKeywordBr
 		"This Texture run was woken by durable execution source packets",
 		"Make useful claims and packet sources visible with patch_texture",
 		"If the follow-up needs generated artifacts, execution, or verification, use only an atomic open_persistent_super control",
-		"Never request or spawn CoSuper directly",
+		"Never request or spawn Engineering directly",
 		"Never use `[CMD]` as a pending/requested/target-only label",
 	} {
 		if !strings.Contains(request, want) {

@@ -100,7 +100,7 @@ func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
 func TestUpdateCoagentRefusesPresentInvalidWorkDisposition(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
-	run := d9CoagentRun("run-invalid-producer-disposition", "owner-invalid-producer-disposition", "researcher:invalid", agentprofile.Researcher, "doc-invalid", "")
+	run := d9CoagentRun("run-invalid-producer-disposition", "owner-invalid-producer-disposition", "research:invalid", agentprofile.Researcher, "doc-invalid", "")
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run))
 	for name, value := range map[string]string{"null": "null", "blank": `" "`, "unknown": `"done"`} {
 		t.Run(name, func(t *testing.T) {
@@ -482,7 +482,7 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 		rec, err := rt.createRunWithMetadata(context.Background(), "legacy Researcher work", "owner-admission-legacy", map[string]any{
 			runMetadataAgentProfile: agentprofile.Researcher,
 			runMetadataAgentRole:    agentprofile.Researcher,
-			runMetadataAgentID:      "researcher:admission-legacy",
+			runMetadataAgentID:      "research:admission-legacy",
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -499,7 +499,7 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 		rec, err := rt.createRunWithMetadata(context.Background(), "malformed declared lifecycle control", "owner-admission-missing-trajectory", map[string]any{
 			runMetadataAgentProfile:               agentprofile.Researcher,
 			runMetadataAgentRole:                  agentprofile.Researcher,
-			runMetadataAgentID:                    "researcher:admission-missing-trajectory",
+			runMetadataAgentID:                    "research:admission-missing-trajectory",
 			runMetadataTrajectoryID:               "missing-canonical-lifecycle-trajectory",
 			"request_source":                      "lifecycle_texture_control",
 			lifecycleLogicalActivationKeyMetadata: "sha256:declared-logical",
@@ -555,7 +555,7 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 		rt, s := testRuntime(t)
 		counting := newResearcherAdmissionCountingProvider()
 		rt.provider = counting
-		const ownerID, docID, agentID = "owner-admission-legacy-trajectory", "doc-admission-legacy-trajectory", "researcher:legacy-trajectory"
+		const ownerID, docID, agentID = "owner-admission-legacy-trajectory", "doc-admission-legacy-trajectory", "research:legacy-trajectory"
 		trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 		now := time.Now().UTC()
 		if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
@@ -606,7 +606,7 @@ func TestUpdateCoagentRejectsLegacyFieldsAndExecutionRequestWithoutActions(t *te
 	ctx := context.Background()
 	ownerID := "user-d9-reject"
 	docID := "doc-d9-reject"
-	superRun := d9CoagentRun("run-d9-reject", ownerID, "super:d9", agentprofile.Super, docID, currentTextureAgentID(docID))
+	superRun := d9CoagentRun("run-d9-reject", ownerID, "management:d9", agentprofile.Super, docID, currentTextureAgentID(docID))
 	for _, raw := range []json.RawMessage{
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy","findings":["old shape"]}`),
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy","evidence_ids":["ev-old"]}`),
@@ -622,7 +622,7 @@ func TestUpdateCoagentRejectsMalformedExecutionRequestPackets(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	superRun := d9CoagentRun("run-d9-malformed", "user-d9-malformed", "super:d9-malformed", agentprofile.Super, "doc-d9-malformed", currentTextureAgentID("doc-d9-malformed"))
+	superRun := d9CoagentRun("run-d9-malformed", "user-d9-malformed", "management:d9-malformed", agentprofile.Super, "doc-d9-malformed", currentTextureAgentID("doc-d9-malformed"))
 	validSafety := `"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}`
 	for name, raw := range map[string]json.RawMessage{
 		"missing action type": json.RawMessage(`{
@@ -674,7 +674,7 @@ func TestUpdateCoagentRejectsUnsupportedSourceAndSelectorKinds(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	run := d9CoagentRun("run-d9-source-vocab", "user-d9-source-vocab", "researcher:d9-source-vocab", agentprofile.Researcher, "doc-d9-source-vocab", "")
+	run := d9CoagentRun("run-d9-source-vocab", "user-d9-source-vocab", "research:d9-source-vocab", agentprofile.Researcher, "doc-d9-source-vocab", "")
 	for name, raw := range map[string]json.RawMessage{
 		"unsupported source kind": json.RawMessage(`{
 			"schema_version":"coagent_source_packet.v1",
@@ -870,7 +870,7 @@ func TestPendingCoagentUpdatesRejectsLifecycleMarkerAsAuthority(t *testing.T) {
 	)
 	update := types.CoagentSourcePacket{
 		UpdateID: "update-legacy-marker-injector", OwnerID: ownerID,
-		AgentID: "researcher:legacy-marker-injector", TargetAgentID: targetAgentID,
+		AgentID: "research:legacy-marker-injector", TargetAgentID: targetAgentID,
 		ChannelID: "doc-legacy-marker-injector", TrajectoryID: "legacy-trajectory-marker-injector",
 		Role: agentprofile.Researcher,
 		Packet: types.CoagentSourcePacketPayload{
@@ -908,7 +908,7 @@ func TestUpdateCoagentRejectsTrajectoryMarkerAsLifecycleAuthority(t *testing.T) 
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 	legacy := d9CoagentRun(
 		"run-legacy-producer-lifecycle-collision", ownerID,
-		"researcher:legacy-producer-lifecycle-collision", agentprofile.Researcher, docID, "",
+		"research:legacy-producer-lifecycle-collision", agentprofile.Researcher, docID, "",
 	)
 	legacy.ComputerID, legacy.TrajectoryID = "autoputer-test", trajectoryID
 	legacy.Metadata[runMetadataTrajectoryID] = trajectoryID

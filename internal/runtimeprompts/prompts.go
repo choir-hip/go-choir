@@ -28,6 +28,12 @@ type RunContextOptions struct {
 	RequesterAgentID       string
 	TextureDeliveryAgentID string
 	ChannelID              string
+	// InCellCarrier is true when the run's desk lives on the in-cell carrier:
+	// peer coordination is choir.Message, not a JSON tool.
+	InCellCarrier bool
+	// NoReportChannel is true when the desk has no peer-coordination tool at
+	// all (tools-actuator assigned CoSuper): the prompt must not name one.
+	NoReportChannel bool
 }
 
 func TemporalContext(opts TemporalContextOptions) string {
@@ -47,11 +53,11 @@ func ReconcilerRuntimeOverlay() string {
 }
 
 func SuperRuntimeOverlay() string {
-	return mustRenderOverlay("super_runtime", nil)
+	return mustRenderOverlay("management_runtime", nil)
 }
 
 func CoSuperRuntimeOverlay() string {
-	return mustRenderOverlay("co_super_runtime", nil)
+	return mustRenderOverlay("engineering_runtime", nil)
 }
 
 // RLMCoSuperOverlay is the sealed-Go variant served when actuator=rlm:
@@ -59,11 +65,11 @@ func CoSuperRuntimeOverlay() string {
 // the JSON file/exec tools. The legacy catalog sentence is replaced, not
 // amended, so the model never sees two authorities.
 func RLMCoSuperOverlay() string {
-	return mustRenderOverlay("rlm_co_super_runtime", nil)
+	return mustRenderOverlay("rlm_engineering_runtime", nil)
 }
 
 func ResearcherRuntimeOverlay() string {
-	return mustRenderOverlay("researcher_runtime", nil)
+	return mustRenderOverlay("research_runtime", nil)
 }
 
 func RunContextOverlay(opts RunContextOptions) string {

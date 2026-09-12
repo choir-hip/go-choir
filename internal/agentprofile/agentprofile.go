@@ -2,13 +2,16 @@
 // normalization, capabilities, and spawn/message policy.
 package agentprofile
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	Conductor  = "conductor"
-	Super      = "super"
-	CoSuper    = "co-super"
-	Researcher = "researcher"
+	Super      = "management"
+	CoSuper    = "engineering"
+	Researcher = "research"
 	Texture    = "texture"
 	Processor  = "processor"
 	Reconciler = "reconciler"
@@ -29,14 +32,19 @@ type Policy struct {
 }
 
 // PolicyFor returns the capability, spawn, and message policy for profile.
-func PolicyFor(profile string) Policy {
-	switch Canonical(profile) {
+// It fails closed on unknown profiles: no default policy is synthesized.
+func PolicyFor(profile string) (Policy, error) {
+	canonical, err := Canonical(profile)
+	if err != nil {
+		return Policy{}, err
+	}
+	switch canonical {
 	case Conductor:
 		return Policy{
 			Profile:             Conductor,
 			AllowCoAgentTools:   true,
 			AllowedSpawnTargets: []string{Texture},
-		}
+		}, nil
 	case Researcher:
 		return Policy{
 			Profile:                   Researcher,
@@ -48,7 +56,7 @@ func PolicyFor(profile string) Policy {
 			AllowCoAgentTools:         true,
 			AllowedSpawnTargets:       nil,
 			AllowedMessageTargets:     []string{Texture},
-		}
+		}, nil
 	case Texture:
 		// Texture is the artifact control plane, not an evidence gatherer. It does
 		// not receive researcher-owned evidence tools (save/read/list_evidence) or
@@ -62,7 +70,7 @@ func PolicyFor(profile string) Policy {
 			AllowCoAgentTools:     false,
 			AllowedSpawnTargets:   []string{Researcher},
 			AllowedMessageTargets: []string{Researcher, Super},
-		}
+		}, nil
 	case Processor:
 		return Policy{
 			Profile:                   Processor,
@@ -74,7 +82,7 @@ func PolicyFor(profile string) Policy {
 			AllowCoAgentTools:         true,
 			AllowedSpawnTargets:       []string{Texture},
 			AllowedMessageTargets:     []string{Texture},
-		}
+		}, nil
 	case Reconciler:
 		return Policy{
 			Profile:                   Reconciler,
@@ -86,15 +94,15 @@ func PolicyFor(profile string) Policy {
 			AllowCoAgentTools:         true,
 			AllowedSpawnTargets:       []string{Texture},
 			AllowedMessageTargets:     []string{Texture},
-		}
+		}, nil
 	case Email:
-		return Policy{Profile: Email}
+		return Policy{Profile: Email}, nil
 	case CoSuper:
 		// CoSuper has no static tool authority. The assignment runtime constructs a
 		// fresh per-run registry from the exact capsule-local closed set plus
 		// update_coagent. Message policy allows reports to Super; executability of
 		// those packets is sender-authorized at Super, not granted by packet.kind.
-		return Policy{Profile: CoSuper, AllowedMessageTargets: []string{Super}}
+		return Policy{Profile: CoSuper, AllowedMessageTargets: []string{Super}}, nil
 	case Super:
 		return Policy{
 			Profile:                   Super,
@@ -106,63 +114,98 @@ func PolicyFor(profile string) Policy {
 			AllowCoAgentTools:         true,
 			AllowedSpawnTargets:       []string{Researcher},
 			AllowedMessageTargets:     []string{Texture, Researcher},
-		}
+		}, nil
 	default:
-		return Policy{Profile: strings.TrimSpace(profile)}
+		// Canonical but unlisted profiles (the verifier roles) get a bare
+		// policy: every capability flag false, no spawn or message targets.
+		// This is fail-closed by construction — never add a permissive
+		// default here.
+		return Policy{Profile: strings.TrimSpace(profile)}, nil
 	}
 }
 
-// Canonical normalizes a profile name and its accepted aliases.
-func Canonical(profile string) string {
-	profile = strings.TrimSpace(profile)
-	normalized := strings.ToLower(strings.ReplaceAll(profile, "_", "-"))
+// UnknownProfileError reports a profile token outside the V2 live vocabulary.
+// Fail-closed: unknown live values return the empty string with this typed
+// error, never the input token. Callers that proceed only on a non-empty
+// canonical fail closed automatically; bare `!=` comparisons must check the
+// error explicitly (a non-empty unknown token with a checked error is a
+// writer-purity failure).
+type UnknownProfileError struct {
+	Input string
+}
+
+func (e UnknownProfileError) Error() string {
+	return fmt.Sprintf("agentprofile: unknown profile %q", e.Input)
+}
+
+// Canonical resolves exactly the V2 live vocabulary (mapping §2 identity
+// map, zero alias branches, fail-closed default). V1 aliases refuse here;
+// history decodes through the frozen V1 decoder (computerevent package),
+// never through this function. The verifier roles have no agentprofile
+// constants (modelpolicy owns them) and resolve as themselves.
+func Canonical(profile string) (string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(profile))
 	switch normalized {
-	case "researcher", "researchers", "research", "research-agent", "web-research", "web-researcher":
-		return Researcher
-	case "cosuper", "co-super", "coagent", "co-agent":
-		return CoSuper
-	case "texture", "texture-agent", "document-agent":
-		return Texture
-	case "processor", "news-processor", "source-processor", "universal-wire-processor":
-		return Processor
-	case "reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "universal-wire-reconciler":
-		return Reconciler
-	case "email", "email-agent", "email-appagent", "mail", "mail-agent":
-		return Email
-	case Super:
-		return Super
-	case Conductor:
-		return Conductor
+	case Super, CoSuper, Researcher, Texture, Conductor, Processor, Reconciler, Email,
+		"verifier":
+		return normalized, nil
+	case "verifier-multimodal", "verifier_multimodal":
+		// One canonical spelling (the modelpolicy roles.<name> key): the
+		// hyphenated form folds to verifier_multimodal.
+		return "verifier_multimodal", nil
 	default:
-		return normalized
+		return "", UnknownProfileError{Input: profile}
 	}
 }
 
 // IsTexture reports whether profile resolves to the Texture profile.
 func IsTexture(profile string) bool {
-	return Canonical(profile) == Texture
+	canonical, _ := Canonical(profile)
+	return canonical == Texture
 }
 
-// CanSpawn reports whether callerProfile may spawn targetProfile.
-func CanSpawn(callerProfile, targetProfile string) bool {
-	policy := PolicyFor(callerProfile)
-	targetProfile = Canonical(targetProfile)
+// CanSpawn reports whether callerProfile may spawn targetProfile, failing
+// closed on unknown profiles on either side.
+func CanSpawn(callerProfile, targetProfile string) (bool, error) {
+	policy, err := PolicyFor(callerProfile)
+	if err != nil {
+		return false, err
+	}
+	target, err := Canonical(targetProfile)
+	if err != nil {
+		return false, err
+	}
 	for _, allowed := range policy.AllowedSpawnTargets {
-		if targetProfile == Canonical(allowed) {
-			return true
+		canonicalAllowed, err := Canonical(allowed)
+		if err != nil {
+			return false, err
+		}
+		if target == canonicalAllowed {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
-// CanMessage reports whether callerProfile may address targetProfile.
-func CanMessage(callerProfile, targetProfile string) bool {
-	policy := PolicyFor(callerProfile)
-	targetProfile = Canonical(targetProfile)
+// CanMessage reports whether callerProfile may address targetProfile,
+// failing closed on unknown profiles on either side.
+func CanMessage(callerProfile, targetProfile string) (bool, error) {
+	policy, err := PolicyFor(callerProfile)
+	if err != nil {
+		return false, err
+	}
+	target, err := Canonical(targetProfile)
+	if err != nil {
+		return false, err
+	}
 	for _, allowed := range policy.AllowedMessageTargets {
-		if targetProfile == Canonical(allowed) {
-			return true
+		canonicalAllowed, err := Canonical(allowed)
+		if err != nil {
+			return false, err
+		}
+		if target == canonicalAllowed {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }

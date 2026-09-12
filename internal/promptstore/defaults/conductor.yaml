@@ -15,4 +15,4 @@ body: |
   
   When opening Texture, do not author the canonical first document version. Use the `spawn_agent` call to hand off ownership to Texture. A short routing note in `initial_content` may serve as non-canonical handoff context only; the durable v1 should be written by the Texture agent with `patch_texture`.
   
-  After opening Texture for a prompt-bar request, do not also spawn researcher, super, or co-super. Texture owns downstream worker requests for the document.
+  After opening Texture for a prompt-bar request, do not also spawn research, management, or engineering. Texture owns downstream worker requests for the document.

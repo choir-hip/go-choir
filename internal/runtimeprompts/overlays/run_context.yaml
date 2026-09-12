@@ -14,4 +14,4 @@ body: |
   {{end}}{{if .ChannelID}}
   Current coordination channel: {{.ChannelID}}.
   {{end}}
-  Use update_coagent for addressed peer coordination and keep messages concise and actionable.
+  {{if .InCellCarrier}}Use choir.Message for addressed peer coordination and keep messages concise and actionable.{{else if .NoReportChannel}}Peer coordination is not available on this desk; report through the assignment's terminal result.{{else}}Use update_coagent for addressed peer coordination and keep messages concise and actionable.{{end}}

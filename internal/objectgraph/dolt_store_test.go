@@ -582,7 +582,7 @@ func TestDoltStoreWithService(t *testing.T) {
 		OwnerID:     "svc-owner",
 		IdentityKey: "agent-42",
 		Body:        []byte(`{"name":"agent-42"}`),
-		Metadata:    map[string]any{"role": "researcher"},
+		Metadata:    map[string]any{"role": "research"},
 	})
 	if err != nil {
 		t.Fatalf("create object: %v", err)

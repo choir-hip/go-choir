@@ -145,8 +145,8 @@ func TestBindLifecycleControlDeliveryVersionsAndActivationRefreshFateShare(t *te
 func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	now := time.Now().UTC()
-	superID := "super:" + start.OwnerID
-	if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	superID := "management:" + start.OwnerID
+	if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, Profile: "management", Role: "management", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	packet := textureTurnControlPacket("persistent-super")
@@ -154,13 +154,13 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	workID := "persistent-super-work"
 	turnReq := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	turnReq.CommandID = "turn-persistent-super-delivery"
-	turnReq.Controls = []types.TextureTurnControl{{ControlID: "control-persistent-super", TargetAgentID: superID, TargetWorkItemID: workID, OpenWork: &types.WorkItemRecord{WorkItemID: workID, Objective: "execute exact request", AuthorityProfile: "super", AssignedAgentID: superID}, Packet: packet, Content: "control persistent-super", PayloadDigest: digest}}
+	turnReq.Controls = []types.TextureTurnControl{{ControlID: "control-persistent-super", TargetAgentID: superID, TargetWorkItemID: workID, OpenWork: &types.WorkItemRecord{WorkItemID: workID, Objective: "execute exact request", AuthorityProfile: "management", AssignedAgentID: superID}, Packet: packet, Content: "control persistent-super", PayloadDigest: digest}}
 	setTextureTurnDigest(t, &turnReq, TextureSourceGraphWriteSet{})
 	turn, err := s.ApplyTextureTurn(context.Background(), turnReq)
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := types.RunRecord{RunID: "persistent-super-run", OwnerID: start.OwnerID, ComputerID: start.ComputerID, AgentID: superID, AgentProfile: "super", AgentRole: "super", ChannelID: start.InitialDocument.DocID, State: types.RunRunning, Metadata: map[string]any{"assignment_trajectory_id": start.TrajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID}, CreatedAt: now, UpdatedAt: now}
+	run := types.RunRecord{RunID: "persistent-super-run", OwnerID: start.OwnerID, ComputerID: start.ComputerID, AgentID: superID, AgentProfile: "management", AgentRole: "management", ChannelID: start.InitialDocument.DocID, State: types.RunRunning, Metadata: map[string]any{"assignment_trajectory_id": start.TrajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID}, CreatedAt: now, UpdatedAt: now}
 	if err := s.CreateRun(context.Background(), run); err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	report := types.QueueLifecycleUpdateRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "queue-super-progress", TrajectoryID: start.TrajectoryID,
 		TargetAgentID: caller.AgentID, ProducerAgentID: superID, ControlBindingID: turn.Controls[0].UpdateID, TargetWorkItemID: start.InitialWork.WorkItemID,
 		ConsumedDeliveryUpdateIDs: []string{turn.Controls[0].UpdateID},
-		ProducerUpdateID:          "super-progress-occurrence", UpdateID: "super-progress-result", ChannelID: start.InitialDocument.DocID, Role: "super", SourceRunID: run.RunID,
+		ProducerUpdateID:          "super-progress-occurrence", UpdateID: "super-progress-result", ChannelID: start.InitialDocument.DocID, Role: "management", SourceRunID: run.RunID,
 		Packet: reportPacket, Content: "super progress", WorkDisposition: types.WorkItemCompleted, WorkItemID: workID, PayloadDigest: reportPayloadDigest}
 	report.CommandDigest, _ = ComputeQueuePersistentSuperReportDigest(report)
 	if _, err := s.QueueLifecycleUpdate(context.Background(), report); !errors.Is(err, ErrLifecycleInvalidTransition) {
@@ -287,7 +287,7 @@ func TestDeliveredLifecycleControlReaderSurvivesStoreRestart(t *testing.T) {
 }
 
 func TestQueueLifecycleUpdateDigestPreservesHistoricalShape(t *testing.T) {
-	base := types.QueueLifecycleUpdateRequest{CommandID: "command", TrajectoryID: "trajectory", TargetAgentID: "texture", ProducerAgentID: "researcher", UpdateID: "update", ProducerUpdateID: "producer-update", PayloadDigest: strings.Repeat("a", 64), WorkItemID: "producer-work", SourceRunID: "run", ChannelID: "channel", Role: "researcher", WorkDisposition: types.WorkItemOpen}
+	base := types.QueueLifecycleUpdateRequest{CommandID: "command", TrajectoryID: "trajectory", TargetAgentID: "texture", ProducerAgentID: "research", UpdateID: "update", ProducerUpdateID: "producer-update", PayloadDigest: strings.Repeat("a", 64), WorkItemID: "producer-work", SourceRunID: "run", ChannelID: "channel", Role: "research", WorkDisposition: types.WorkItemOpen}
 	historical, err := ComputeQueueLifecycleUpdateDigest(base)
 	if err != nil {
 		t.Fatal(err)

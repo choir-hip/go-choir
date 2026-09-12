@@ -32,7 +32,11 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 	}
 	texture := textureowner.NewHandler(core)
 	registry := core.ToolRegistryForProfile(agentprofile.Reconciler)
-	if err := RegisterSpawnTool(registry, core, texture, agentprofile.PolicyFor(agentprofile.Reconciler)); err != nil {
+	reconcilerPolicy, err := agentprofile.PolicyFor(agentprofile.Reconciler)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RegisterSpawnTool(registry, core, texture, reconcilerPolicy); err != nil {
 		t.Fatal(err)
 	}
 
@@ -101,19 +105,23 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 
 func TestSpawnAgentRejectsInvalidExplicitProfile(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
-	if err := RegisterSpawnTool(registry, nil, nil, agentprofile.PolicyFor(agentprofile.Super)); err != nil {
+	superPolicy, err := agentprofile.PolicyFor(agentprofile.Super)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RegisterSpawnTool(registry, nil, nil, superPolicy); err != nil {
 		t.Fatal(err)
 	}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		RunID: "parent-run", OwnerID: "user-alice", Profile: agentprofile.Super,
 	})
 
-	for _, profile := range []string{"texture", "texture researcher", "research", "research-agent", "Researcher", "coagent"} {
-		_, err := registry.Execute(ctx, "spawn_agent", json.RawMessage(`{"objective":"Research the subject.","role":"researcher","profile":"`+profile+`"}`))
+	for _, profile := range []string{"texture", "texture research", "management", "engineering", "Researcher", "conductor"} {
+		_, err := registry.Execute(ctx, "spawn_agent", json.RawMessage(`{"objective":"Research the subject.","role":"research","profile":"`+profile+`"}`))
 		if err == nil {
 			t.Fatalf("spawn_agent accepted explicit profile %q outside the caller's allowed targets", profile)
 		}
-		if got := err.Error(); got != "profile must be one of researcher" {
+		if got := err.Error(); got != "profile must be one of research" {
 			t.Fatalf("spawn_agent profile %q error = %q", profile, got)
 		}
 	}

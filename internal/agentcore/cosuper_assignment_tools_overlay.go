@@ -14,7 +14,11 @@ import (
 )
 
 func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.RunRecord, base *toolregistry.ToolRegistry) (*toolregistry.ToolRegistry, string, error) {
-	if rec == nil || agentprofile.Canonical(agentProfileForRun(rec)) != agentprofile.CoSuper {
+	if rec == nil {
+		return base, "", nil
+	}
+	profile := agentProfileForRun(rec)
+	if profile != agentprofile.CoSuper {
 		return base, "", nil
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
@@ -57,8 +61,8 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 	// Never clone the static profile registry. Assignment authority is a fresh
 	// exact closed set so no read_file/glob/grep/evidence/model host callback
 	// can cross the durable assignment boundary by registry inheritance.
-	// update_coagent is the Super report channel. Freeze/inspect/verify are
-	// capsule-bound worker authority, not host mutation or owner decision.
+	// capsule_go_eval is the sole JSON envelope; every other affordance is an
+	// in-cell choir function staging intents for the one reducer.
 	registry, err := buildAssignedCoSuperRegistry(rt)
 	if err != nil {
 		return nil, "", err

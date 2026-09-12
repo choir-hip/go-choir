@@ -43,7 +43,7 @@ func TestTextureAgentRevisionTaskTypeCompatibility(t *testing.T) {
 	if !isTextureAgentRevisionTaskType(textureAgentRevisionTaskType) {
 		t.Fatalf("%q should be recognized as current Texture revision task type", textureAgentRevisionTaskType)
 	}
-	if isTextureAgentRevisionTaskType("researcher") {
+	if isTextureAgentRevisionTaskType("research") {
 		t.Fatal("unrelated task type should not be recognized as Texture revision task type")
 	}
 }

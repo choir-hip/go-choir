@@ -15,7 +15,7 @@ import (
 // unprivileged filesystem access control.
 //
 // For the broker: restricts access to the capsule's merged dir + broker
-// store + /dev/pts (for PTY).
+// store + the character devices below.
 //
 // For the workload: restricts access to the capsule's merged dir only.
 type LandlockRestrictor struct {
@@ -23,14 +23,16 @@ type LandlockRestrictor struct {
 }
 
 // NewBrokerLandlock creates a Landlock restrictor for the broker process.
-// The broker needs access to: capsule merged dir, broker store, /dev/pts,
+// The broker needs access to: capsule merged dir, broker store,
 // /dev/null, /dev/zero, /dev/urandom, /tmp (for session temp files).
+// /dev/pts is intentionally absent: the capsule no longer bind-mounts a
+// devpts instance, and an allow path that does not exist fails closed at
+// Apply time.
 func NewBrokerLandlock(mergedDir, brokerStore string) *LandlockRestrictor {
 	return &LandlockRestrictor{
 		paths: []string{
 			mergedDir,
 			brokerStore,
-			"/dev/pts",
 			"/dev/null",
 			"/dev/zero",
 			"/dev/urandom",
@@ -42,13 +44,12 @@ func NewBrokerLandlock(mergedDir, brokerStore string) *LandlockRestrictor {
 }
 
 // NewWorkloadLandlock creates a Landlock restrictor for the workload process.
-// The workload only gets access to the capsule's merged dir + /dev/pts +
+// The workload only gets access to the capsule's merged dir +
 // /dev/null + /dev/zero + /dev/urandom.
 func NewWorkloadLandlock(mergedDir string) *LandlockRestrictor {
 	return &LandlockRestrictor{
 		paths: []string{
 			mergedDir,
-			"/dev/pts",
 			"/dev/null",
 			"/dev/zero",
 			"/dev/urandom",
@@ -67,10 +68,14 @@ func (r *LandlockRestrictor) Apply() error {
 		return fmt.Errorf("no paths configured for Landlock restriction")
 	}
 
+	// MAKE_REG is required to create new files (os.WriteFile, choir.WriteFile).
+	// WRITE_FILE only covers existing inodes; without MAKE_REG, overlay copy-up
+	// of a new /workspace/platform artifact fails closed with EACCES.
 	directoryAccess := landlock.AccessFSSet(ll.AccessFSWriteFile |
 		ll.AccessFSReadFile |
 		ll.AccessFSReadDir |
 		ll.AccessFSMakeDir |
+		ll.AccessFSMakeReg |
 		ll.AccessFSRemoveFile |
 		ll.AccessFSRemoveDir |
 		ll.AccessFSMakeSym |
