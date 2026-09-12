@@ -189,8 +189,13 @@ now:
       surface: cmd/capsule-broker/main.go:75-80 + capsule.HostSelectsRLM
       evidence: 'when sessionWorkerReady is false the broker degrades go_eval to the one-shot worker (no ChoirScope) while HostSelectsRLM still serves the RLM registry and prompt; post-cutover that desk has zero terminal authority. Latent only because sessionWorkerReady is the constant true'
       repair: 'make the readiness fallback fail the activation with a typed diagnostic instead of silently serving a desk with no terminal authority, or gate HostSelectsRLM on the same readiness signal'
-    - id: replay-golden-provenance-false-2026-09-12
+    - id: replay-r4-adjudication-2026-09-12
       class: discovered
+      surface: P4-review r4 (.agentic-consensus/p4-review-r4/run/, 5/5 panelists)
+      evidence: 'repair (claude, sol, codex) vs accept (muse-spark, opencode). Adjudicated REPAIR: the fresh-Start junk row, failure-unsafe corrupt cleanup, stale next_action, fabricated row-5 state, golden-relative coverage guard, and fixed cell IDs are real defects with small fixes. Majority keeps restamp-with-qualifier over recapture (sol dissent recorded); no product-surface change for the replay marker (sol dissent recorded, exclusion+residue instead); fresh-Freeze independence deferred, not proven (sol/codex major).'
+      repair: 'implement the r4 repair batch; verify same state dir three consecutive runs; commit docs-first then code; proceed to the deployed replay proofs'
+    - id: replay-golden-provenance-false-2026-09-12
+      class: introduced
       surface: docs/evidence/rlm-replay/goldens/ (build_sha on all six goldens + manifest)
       evidence: 'goldens stamped a907f713 (predates the 8f987d7f classifier fix; frozen success on relative upperdir paths is impossible on that tree) then 50fee6ed (committed 04:07Z, 59 min AFTER captured_at 03:08Z; deletes the capture tools). Capture ran 03:08Z on Node B on an 8f987d7f-equivalent tree: frozen success proves the classifier fix, the verify receipt decision field proves the 9f255cd3 receipt line. P4-review r3 + unstick panel (4 repair-first, 1 recapture-required) adjudicated restamp-with-qualifier over recapture.'
       repair: 'restamp build_sha to 8f987d7f with a note naming the equivalence evidence and both false predecessors; no hand-recapture (capture driver is deleted on HEAD, making recapture impossible without resurrection)'
@@ -209,12 +214,17 @@ now:
       surface: internal/agentcore/rlm_replay_linux_test.go row 9 vs record_assignment_result.golden.json
       evidence: 'capture receipts record absent scalars as null (verdict, candidate); the repaired view projected "" for both, which CanonicalJSON distinguishes from null. Silent until row 9 first executes (rows 1-6 run first).'
       repair: 'nil-when-empty projection in the replay view; no golden edit (golden nulls are the honest capture shape)'
-    - id: replay-p0-replay-marker-gap-2026-09-12
+    - id: replay-row5-state-excluded-2026-09-12
       class: discovered
-      surface: internal/agentcore/rlm_replay_test.go:126 (P0 projection set includes replay; no golden can carry it)
-      evidence: 'projectRLMReplayReceipt only projects fields present in the view, so the P0-required replay field is carried by the driver view but silently uncompared — a P0-set/golden structural gap, not a driver bug. Unstick panel split (blocker vs acknowledged limitation).'
-      repair: 'disclose as carried-not-compared marker in the driver; carry as residue rather than hand-editing golden receipt bytes'
-  next_action: 'P4-repair: fix the freeze classifier path normalization; rebuild the replay driver to route successors through the real in-cell carrier with P0-table-derived declared fields, wired effect census, required pre-effect conflicts, and a new-identity leg; recapture the freeze golden on the pre-cutover tree with the classifier fix; resolve the inspect host-body orphan; fix the two frozen prompt defects and guard the r1 repair; then refreeze and run P4-review r3. P1-provider deployed proof remains pending: commit 2af02977 is pushed; on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway.'
+      surface: commit_transaction golden declared_fields + rlmAssertReplayEquality exclusions
+      evidence: 'row-5 state names the freeze-time state but the live row has since moved to awaiting_approval; the live receipt state is a real divergence, and a literal is a fabricated pass. P4-review r4 (claude-4, codex-2) requires exclusion over overwrite.'
+      repair: 'drop state from the compared set via named exclusion (golden declared + both projections); carry as accepted claim-narrowing residue'
+    - id: replay-fresh-freeze-deferred-2026-09-12
+      class: discovered
+      surface: internal/agentcore/rlm_replay_linux_test.go freeze new-identity leg
+      evidence: 'the leg proves Start identity allocation (distinct object, no dedup, zero residue after row delete), not an independent choir.Freeze of the fresh operation. P4-review r4 (sol-2, codex-3) holds the P4 fresh-operation-through-successor contract unsatisfied for row 5.'
+      repair: 'narrow the leg claim to allocation; defer fresh-Freeze execution; revisit if the acceptance review demands it'
+  next_action: 'P4-r4-repair: land the r4 batch (fresh-row delete + census proof, failure-safe corrupt cleanup, P0-relative coverage with named state/replay exclusions, build-sha coherence, suffixed cell IDs, swept capsule dirs, gofmt), verify TestRLMReplayGoldens three consecutive runs on one Node B state snapshot, then commit docs-first and code, adjudicate r4-accept, and proceed to the deployed per-operation replay proofs. P1-provider deployed proof remains pending: on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway.'
   deliver: 'The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk''s only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden and each earned its deletion by replay proof, the assignment fate is authored by the reducer, run acceptance no longer keys on tool names and fails loudly when evidence is missing, one model-independent prompt with one REPL initialization serves the expected roster with zero output repair, and the proved replay harness plus its fixtures remain as durable evidence.'
   artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened, and one adjudicated review receipt per frozen boundary (P0, P3, P4, P5).'
   non_gating_artifacts:
