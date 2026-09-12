@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 PILOT-RUNNING (tell -004 gate PASSED, eng run e83004ba opened 17:17, routing proven, deepseek 402 at 17:17:24; symlink root cause fixed via skip-worktree index; INCIDENT: sim `git checkout <old> -- .` with --work-tree rewound .git/index and poisoned main as c0008639 (238 files), caught in 4 min, CI cancelled, exact revert 5694e936, tree verified identical; NEVER checkout-with-pathspec for simulation, use git archive/worktree; next: DeepSeek top-up OR chatgpt-arm pivot; e830 must go terminal before next tell)
+  slice: P5 PROMPT-FIX-1 (e830 TERMINAL completed/blocked: served id deepseek/deepseek-v4-flash base policy, NOT the overlay arm; 9.5M in/69k out; D1 model batched >1 capsule_go_eval/turn -> admission_grammar_refusal internal/toolregistry/batch_executor.go:164, none run, prompt never teaches one-per-turn; D2 overlay id traveled as prose only, no llm_policy_overlay_id in run metadata, management prompt never teaches structured field; D3 RLM prompt L39 teaches verdict=pass but implementation must carry verdict=none types/cosuper_assignment.go:437-438; shared prompt rev1 next, then re-run arms)
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
