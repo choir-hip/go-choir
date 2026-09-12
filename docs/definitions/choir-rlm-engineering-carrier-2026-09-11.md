@@ -110,12 +110,12 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P4-replay local proofs green on Node B (5/5 goldens, canonical equality + zero-effect census + conflict probes); deployed replay and P4-review refreeze pending
+  slice: P4-review r2 adjudicated REPAIR (5 repair / 4 accept of 12 panelists); repair items scoped below; P4-review r3 pending
   question: none
   reconciliation:
-    observed_at: '2026-09-12T01:25:00Z'
-    source_ref: main@009e3c52 plus uncommitted replay harness (rlm_replay_linux_test.go) and two defect repairs (landlock /dev/pts, verify replay-detection digest binding)
-    deploy_identity: staging https://choir.news serves the mission-two commit e3396329 plus GC commits through a907f713; effects OFF; OpenCode Go and Zen not wired
+    observed_at: '2026-09-12T02:45:00Z'
+    source_ref: main@12c6b3a0 (deployed; replay harness + goldens landed; P4-review r2 panel artifacts under .agentic-consensus/p4-review-r2/)
+    deploy_identity: staging https://choir.news deployed at 12c6b3a0 via forced workflow_dispatch deploy (the 9f255cd3 push run failed at build before deploy, so the impact classifier saw only the test-file follow-up); effects OFF; OpenCode Go and Zen not wired
     authority_identities:
       - docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md (this file, sole entrypoint after charter)
       - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
@@ -164,8 +164,32 @@ now:
       surface: record_self_development_verification replay detection (internal/agentcore/tools_capsule.go)
       evidence: 'replayed verify intent names operation.BundleDigest (the finalized digest) but the early-return compared finalBundle.ContentDigest (the draft digest inside bundle.json); the two gates disagree so a replayed verify could never hit the idempotent path and fell through to a live re-verification attempt'
       repair: 'early return now binds operation.BundleDigest and requires the recorded verifier ref in the finalized bundle receipts; verified by the replay driver row for record_self_development_verification'
-  next_action: 'Commit the two defect repairs plus the replay harness and goldens; then deployed replay proof against staging and P4-review refreeze. P1-provider deployed proof remains pending: commit 2af02977 is pushed; on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway.'
-finish:
+    - id: freeze-classifier-always-rejects-2026-09-12
+      class: discovered
+      surface: freezeCapsuleEffectBundle classifier (internal/agentcore/tools_capsule.go; shared by the retired commit_transaction tool and the in-cell choir.Freeze reducer path)
+      evidence: 'capture driver on the pre-cutover build: every real diff rejects with "unknown paths rejected at commit time" because the classifier matches absolute ledger prefixes against RELATIVE upperdir paths (rlm_capture_linux_test.go:607-631). Consequence: the in-cell freeze surface cannot succeed on the live path today - a substrate defect, not a replay-harness artifact. The commit_transaction golden is therefore a rejection receipt, which the P4-review r2 panel ruled does not earn the deletion (P0 falsifier 4: constant-field comparison is vacuous).'
+      repair: 'fix the classifier path normalization so real diffs classify; recapture a successful freeze golden on the pre-cutover tree with the fix applied; replay through the reducer path (choir.Freeze staging) against the full P0 row-5 field set'
+    - id: replay-harness-vacuity-gaps-2026-09-12
+      class: introduced
+      surface: internal/agentcore/rlm_replay_linux_test.go
+      evidence: 'P4-review r2 findings: (a) rows 5/7/8/9 call the shared bodies directly instead of staging intents through the real choir cell/tray/reducer path; (b) declared_fields are hand-narrowed - record_assignment_result omits proposition_digest/report_id, inspect omits runtime_files/groups, update_coagent omits packet digest/cursor; (c) rlmReplayEffectCensus and the successor adapter exist in rlm_replay_test.go but are never invoked - the "zero-effect census" log line overstates what ran; (d) conflict probes tolerate success-or-any-error instead of requiring a pre-effect conflict; (e) no fresh-operation-on-new-identity leg per row'
+      repair: 'route each successor through the real in-cell carrier with the identity journal; generate declared fields from the frozen P0 projection table and assert golden field-set equality; wire the effect census per row; require pre-effect conflict; add the new-identity leg'
+    - id: inspect-host-body-orphaned-2026-09-12
+      class: discovered
+      surface: inspectSelfDevelopmentBundle (internal/agentcore/tools_capsule.go:359-364)
+      evidence: 'the in-cell inspector calls inspectMountedBundle (internal/yaegikernel/inspect_bundle.go), not the retained host body; the host body has zero non-test callers. The "shared bodies stay for the reducer" claim was wrong for inspect; two inspector implementations can now drift'
+      repair: 'delete the orphaned host body or consolidate both inspectors on one implementation; correct the stale comments (tool_profiles.go:391, tools_capsule.go:75, runtime.go:3311)'
+    - id: rlm-prompt-frozen-defects-2026-09-12
+      class: discovered
+      surface: internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml
+      evidence: 'P0 froze two required P4 fixes that did not land: the worked example reads ctx["assignment_id"] but Choir.Context() exports only computer_id/activation_id/co_super_slot (choir.go:322-331); the overlay lists choir.Assign as staged but Assign is a synchronous broker call (choir.go:199-209)'
+      repair: 'replace the example context key and move choir.Assign to the synchronous list; add a prompt test asserting the tools-actuator overlay omits retired names (r1 repair currently unguarded)'
+    - id: broker-rlm-tools-readiness-fallback-2026-09-12
+      class: discovered
+      surface: cmd/capsule-broker/main.go:75-80 + capsule.HostSelectsRLM
+      evidence: 'when sessionWorkerReady is false the broker degrades go_eval to the one-shot worker (no ChoirScope) while HostSelectsRLM still serves the RLM registry and prompt; post-cutover that desk has zero terminal authority. Latent only because sessionWorkerReady is the constant true'
+      repair: 'make the readiness fallback fail the activation with a typed diagnostic instead of silently serving a desk with no terminal authority, or gate HostSelectsRLM on the same readiness signal'
+  next_action: 'P4-repair: fix the freeze classifier path normalization; rebuild the replay driver to route successors through the real in-cell carrier with P0-table-derived declared fields, wired effect census, required pre-effect conflicts, and a new-identity leg; recapture the freeze golden on the pre-cutover tree with the classifier fix; resolve the inspect host-body orphan; fix the two frozen prompt defects and guard the r1 repair; then refreeze and run P4-review r3. P1-provider deployed proof remains pending: commit 2af02977 is pushed; on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway.'
   deliver: 'The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk''s only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden and each earned its deletion by replay proof, the assignment fate is authored by the reducer, run acceptance no longer keys on tool names and fails loudly when evidence is missing, one model-independent prompt with one REPL initialization serves the expected roster with zero output repair, and the proved replay harness plus its fixtures remain as durable evidence.'
   artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened, and one adjudicated review receipt per frozen boundary (P0, P3, P4, P5).'
   non_gating_artifacts:
