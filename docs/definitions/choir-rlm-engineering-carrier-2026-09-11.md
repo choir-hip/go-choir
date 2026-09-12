@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 roster system BUILT (choir roster preflight/start/collect + tests green, pushed 1a481513; P0 §7 rev3 verdict=none; pilot overlay bytes staged); awaiting pilot trigger — needs owner API-key tell + Texture doc id + overlay placement call (SSH break-glass vs owner-placed)
+  slice: P5 PILOT-READY (choir roster + files verbs built, tested, pushed; P0 §7 rev3; overlay bytes frozen; design panel adjudicated iii); blocked on owner trigger: API-key tell + Texture doc id + overlay placement; spend per run under caps, auto-reload OFF
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
