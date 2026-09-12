@@ -1,0 +1,11 @@
+# Pilot roster arm: deepseek-v4.1-flash via opencode-go (chat completions).
+# Install at <filesRoot>/System/model-policy-overlays/p5-deepseek-v41-flash.toml
+# on the guest computer (NOT in git). Bounded life: forces revisit.
+# Role key is `engineering` (agentprofile.CoSuper token); the assignment path
+# resolves role=engineering with this overlay id.
+[overlay]
+expires_at = "2026-10-15T00:00:00Z"
+
+[roles.engineering]
+provider = "opencode-go"
+model = "deepseek-v4.1-flash"

@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P4 code+proofs landed (registry cut + deletions deployed at d6b4fab1; citer sweep clean; r3/r4/spot reviews adjudicated); P5 ENTRY-READY: model-selection overlay id already on the assign path (761c4a1e, deployed); live-catalogue observation folds into the landing acceptance run; next: P5 roster execution
+  slice: P5 roster CLI design ADJUDICATED (panel .agentic-consensus/p5-roster-cli/run/ 11/13; shape iii majority — thin choir roster client over existing owner inputs; i-minority dissents recorded with guardrails folded in); BLOCKER: P0 §7 demands verdict=pass but implementation reports must carry verdict none (ValidateAgainst) — frozen-task amendment required before pilot; overlay role key confirmed [roles.engineering] (CoSuper=engineering); next: amend §7, build roster CLI, stage pilot overlay
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'

@@ -388,14 +388,19 @@ The task text served to every roster run, verbatim:
 > (3) run `go -C /workspace/platform vet ./internal/capsule` (choir.Exec runs
 > `exec.CommandContext` directly — no shell, no cwd parameter, so the command
 > must be a single self-contained invocation) and record its exit code;
-> (4) complete the assignment with result=completed, verdict=pass, a summary
+> (4) complete the assignment with result=completed, a summary
 > naming the field count and the exit code, and execution_refs containing
 > exactly the execution receipt refs of the cells that performed steps 1-3.
+> (Implementation reports carry no verification verdict: report `verdict=none`.
+> Revision 3 amends the as-frozen `verdict=pass`, which
+> `CoSuperAssignmentReport.ValidateAgainst` refuses on implementation
+> assignments — the frozen text as written could never pass. The amendment is
+> record-shape only; steps 1-3 and the pass criteria are unchanged.)
 
 Pass requires: the marker file content exact, the vet exit code reported
-correctly, the completion carrying the exact receipt references, and no
-retired tool name invoked. `hy3` is excluded from any image-bearing step by
-name; this task bears no images.
+correctly, the completion carrying result=completed with verdict=none and the
+exact receipt references, and no retired tool name invoked. `hy3` is excluded
+from any image-bearing step by name; this task bears no images.
 
 ## 8. Binding
 
@@ -408,3 +413,7 @@ name; this task bears no images.
   manifest support per-operation replay proof and deletion — and where would
   that proof be vacuous? Panel answer: repair — the confirmed defects are
   fixed in revision 2; the residual vacuity notes are recorded per row.
+
+- Revision 3 (2026-09-12): §7 step 4 amended `verdict=pass` → `verdict=none`
+  per the P5 roster-CLI design panel (implementation reports must carry
+  verdict none); record-shape only, steps and pass criteria unchanged.
