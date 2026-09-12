@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 roster CLI design ADJUDICATED (panel .agentic-consensus/p5-roster-cli/run/ 11/13; shape iii majority — thin choir roster client over existing owner inputs; i-minority dissents recorded with guardrails folded in); BLOCKER: P0 §7 demands verdict=pass but implementation reports must carry verdict none (ValidateAgainst) — frozen-task amendment required before pilot; overlay role key confirmed [roles.engineering] (CoSuper=engineering); next: amend §7, build roster CLI, stage pilot overlay
+  slice: P5 roster system BUILT (choir roster preflight/start/collect + tests green, pushed 1a481513; P0 §7 rev3 verdict=none; pilot overlay bytes staged); awaiting pilot trigger — needs owner API-key tell + Texture doc id + overlay placement call (SSH break-glass vs owner-placed)
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
