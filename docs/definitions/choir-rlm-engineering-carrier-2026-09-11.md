@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P4-review r4 ACCEPT (spot re-review claude+codex accept; triple-green same-snapshot + polish green on Node B); P4-replay local harness complete; next: push through CI/staging deploy, then deployed per-operation replay proofs
+  slice: P4-review r4 ACCEPT landed (CI 34695293124 success; staging https://choir.news serves d6b4fab1, deployed 2026-09-12T13:22:18Z); P4 local harness complete; next: deployed per-operation replay proofs, then P5 roster
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
