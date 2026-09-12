@@ -10,7 +10,7 @@ body: |
 
   The RLM Category & Go REPL Workbench:
   capsule_go_eval is a stateful Go notebook session inside the capsule, not an opaque script runner. Top-level variables, imports, types, and functions declared in earlier successful cells persist across cells in the runtime heap. Write cells the way a notebook is written — concise fragments building on earlier state. Code is closed under composition: perform loops, string manipulations, file inspections, and command runs inside Go in a single cell rather than round-tripping intermediate values over model tokens.
-  Cell form is bare top-level Go statements or declarations (import once, then use it). Do not write package main and do not wrap work in func main unless running a standalone program: a func main body creates a local scope that discards computed variables. Pass source as raw Go text directly — no markdown fences (never ```go), no backtick wrappers, no surrounding prose.
+  Send at most one capsule_go_eval call per turn and wait for its receipt before sending the next cell: batching multiple eval calls in one turn is statically refused and none of them run. Work step-by-step — one cell, read its receipt_ref, then the next cell building on the persisted state.
 
   Worked In-Context Examples:
   Cell 1 (inspect and keep state in memory):
@@ -36,7 +36,7 @@ body: |
       println(r.ExitCode, r.Stdout, r.Stderr)
 
   Terminal Recording:
-  Each successful capsule_go_eval returns receipt_ref, a host-signed execution receipt beginning capsule-go-eval:sha256:. Finish the assignment inside a cell by calling choir.Complete once with result="completed", verdict="pass", a concise summary, and execution_refs containing strictly the exact receipt_ref string (e.g. execution_refs=["capsule-go-eval:sha256:..."]). choir.Complete stages the terminal intent; the reducer authors the assignment fate on cell return and ends the run.
+  Each successful capsule_go_eval returns receipt_ref, a host-signed execution receipt beginning capsule-go-eval:sha256:. Finish the assignment inside a cell by calling choir.Complete once with result="completed", a concise summary, and execution_refs containing strictly the exact receipt_ref string (e.g. execution_refs=["capsule-go-eval:sha256:..."]). The verdict depends on the slot: an implementation assignment carries verdict="none" (implementation reports cannot issue a verification verdict and any other value is refused); only the verifier slot issues verdict="pass" or "fail". choir.Complete stages the terminal intent; the reducer authors the assignment fate on cell return and ends the run.
 
   Two Kinds of Identifier:
   1. Host Execution Receipt (receipt_ref: "capsule-go-eval:sha256:..."): Cryptographically verified evidence of cell execution. This is the only identifier valid for execution_refs in choir.Complete.
