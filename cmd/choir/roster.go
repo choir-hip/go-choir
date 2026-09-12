@@ -38,8 +38,11 @@ const rosterTaskRef = "docs/evidence/choir-rlm-engineering-carrier-p0-freeze-202
 // rosterTellVersion pins the wrapper instruction bytes around the frozen task.
 // v2 replaced the `model_policy_overlay_id=<id>` prose literal (which the
 // assignment opener now refuses) with an argument-name-plus-quoted-value
-// instruction; v1 receipts name the old wrapper.
-const rosterTellVersion = "roster-v2"
+// instruction; v3 adds the superseded-arm disposition and the explicit
+// authorization of this one arm, after v2 arms were refused as duplicates of
+// the open work items earlier arms had left behind. v1/v2 receipts name their
+// own wrapper.
+const rosterTellVersion = "roster-v3"
 
 // rosterEngineeringRole is the overlay role key the assignment path resolves
 // (agentprofile.CoSuper is the token "engineering").
@@ -222,12 +225,21 @@ func rosterFirstString(row map[string]any, keys ...string) string {
 // closed when an objective carries that literal while the structured
 // ModelPolicyOverlayID field is empty (cosuper_assignment_runtime.go), and
 // management copies wrapper prose into objectives.
+//
+// v3 adds the superseded-arm disposition. v2 arms were refused with "preserve
+// the single-active-assignment invariant. Do not open a duplicate": the
+// harness mints one execution work item per tell and never dispositioned the
+// old ones, so opening a new arm read as a duplicate. No owner-facing work-item
+// disposition route exists, so the desk must clear them through its own
+// reporting path, and the arm must be named as explicitly authorized.
 func rosterTellText(overlayID string, task []byte) string {
 	var b strings.Builder
-	b.WriteString("ROSTER-V1 open exactly one implementation assignment for the frozen desk task below. ")
+	b.WriteString("ROSTER-V1 arm execution. Two required acts, in order. ")
+	b.WriteString("(1) Disposition every earlier open ROSTER-V1 work item on this trajectory as cancelled with the reason \"superseded by a newer roster arm\", so no superseded arm stays active and none blocks this one. ")
+	b.WriteString("(2) Open exactly one implementation assignment for the frozen desk task below; this arm is explicitly authorized by the owner, and exactly one assignment is authorized, never two. ")
 	b.WriteString("Set the assign_co_super argument named model_policy_overlay_id — the structured field, not the objective text — to the value \"")
 	b.WriteString(strings.TrimSpace(overlayID))
-	b.WriteString("\". The objective argument must be exactly the task below, byte-for-byte, with no preface, no paraphrase, no extra steps, and no second assignment:\n")
+	b.WriteString("\". The objective argument must be exactly the task below, byte-for-byte, with no preface, no paraphrase, and no extra steps:\n")
 	b.Write(task)
 	return b.String()
 }

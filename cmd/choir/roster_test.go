@@ -50,6 +50,14 @@ func TestRosterTellTextCarriesOverlayAndTaskVerbatim(t *testing.T) {
 	if !strings.Contains(text, "model_policy_overlay_id") {
 		t.Fatalf("tell does not name the structured argument: %q", text)
 	}
+	// v2 arms were refused as duplicates of the open work items earlier arms
+	// left behind, so the wrapper must both clear them and authorize this arm.
+	if !strings.Contains(text, "Disposition every earlier open ROSTER-V1 work item") {
+		t.Fatalf("tell does not disposition superseded arms: %q", text)
+	}
+	if !strings.Contains(text, "explicitly authorized") {
+		t.Fatalf("tell does not authorize this arm: %q", text)
+	}
 	if !strings.HasSuffix(text, string(task)) {
 		t.Fatalf("tell mutates task bytes: %q", text)
 	}
