@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 PILOT-RUNNING (tell -004 PASSED the gate: eng run assignment-e83004ba + capsule-7b32ced7 opened 17:17, overlay->opencode-go->deepseek routing PROVEN via gateway log; model call FAILED deepseek 402 Payment Required 17:17:24, run wedged running since; root cause of -001..-003 refusals found+fixed: guest Source/platform lacked 2 untracked-by-sync symlinks (CLAUDE.md, result @7574d899); files API cannot make symlinks so set skip-worktree on both via uploaded index (sim-verified both gate commands clean); durable fix = symlink-capable sync; next: owner tops up DeepSeek OR pivots pilot to funded chatgpt arm; e830 must go terminal before next tell (preflight live-run gate))
+  slice: P5 PILOT-RUNNING (tell -004 gate PASSED, eng run e83004ba opened 17:17, routing proven, deepseek 402 at 17:17:24; symlink root cause fixed via skip-worktree index; INCIDENT: sim `git checkout <old> -- .` with --work-tree rewound .git/index and poisoned main as c0008639 (238 files), caught in 4 min, CI cancelled, exact revert 5694e936, tree verified identical; NEVER checkout-with-pathspec for simulation, use git archive/worktree; next: DeepSeek top-up OR chatgpt-arm pivot; e830 must go terminal before next tell)
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
