@@ -43,6 +43,31 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   three. Source: `docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md` item T5b.
   Revisit: when the last desk crosses; close it with the tool-profile tests proving the branch is
   gone.
+- **R9 — deepseek/xiaomi provider policy heresy (owner ratification 2026-09-12).** The owner
+  ratified the active provider set as opencode-go (with opencode-zen per carrier phase-1 setup)
+  and chatgpt; the deepseek and xiaomi provider accounts are not configured and must not be
+  silently substituted for. Compiled heresy being deleted in the carrier mission:
+  `model_policy.go:32-46` constants (`defaultDeepSeekProvider`, `defaultXiaomiProvider`,
+  `defaultConductorModel = "deepseek-v4-flash"`, `defaultSuperModel = "deepseek-v4-pro"`), the
+  `:347-393` default-policy seeds and platform-fallback map, the `:630-651` deepseek↔xiaomi
+  swap-table ladder (replaced by loud refusal — entitlement admits or refuses, never silently
+  substitutes), `modelcatalog` entries, gateway env seeds, nix `DEFAULT_GATEWAY_*_MODELS`
+  defaults, and the gateway model-id prefix heuristics. Roster model ids are unaffected:
+  `deepseek-v4.1-flash` routes through the funded opencode-go provider. Full red ceremony applies
+  (provider routing is a protected surface); rollback is git revert plus nix redeploy.
+  Source: owner statements 2026-09-12 and `docs/reports/choir-model-policy-consensus-2026-09-12.md`.
+  Revisit: carrier mission deletion completes it; any survivor becomes a named residue here.
+- **R10 — Super substrate retirement (owner ratification 2026-09-12).** The owner states Super
+  should be gone. Mission 2 (`choir-rlm-versioned-rename-2026-09-09`) renamed the vocabulary
+  only: V1 `co-super` names decode through the frozen V1 map into `engineering`, while the
+  machinery stays live — `internal/agentcore/super_controller.go` (2,809 lines, the persistent
+  privileged drainer and CoSuper activation surfaces) and 1,331 `CoSuper`/`co_super` references.
+  The carrier mission keeps what it chartered (assignment-fate saga, `update_coagent` parity,
+  `actuator=tools` to R8); the full substrate retirement is stack-level. Source: owner statement
+  2026-09-12, recorded in receipt engineering-carrier-completion-route-2026-09-12.
+  Revisit: mission 6 (management as host-side activation) carries the activation rewrite;
+  close the remainder at the post-11 residue pass with the profile tests proving the surface is
+  gone.
 
 ## Closed
 
