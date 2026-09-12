@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 ARM-2-RUNNING (chatgpt tell opened mgmt 0d512e91 19:04 -> eng 0f95f728 19:06 capsule-e4df7e5a; e830 reclaimed to cancelled; BUT structured overlay id still not passed (base deepseek-v4-flash served, no llm_policy_overlay_id) despite rev1 management sentence deployed 18:36 — rev1-D2 non-compliant on first contact, needs stronger rev2; watching eng run for rev1-D1 one-per-turn and D3 verdict=none compliance)
+  slice: P5 GUARD (0f95f728 402-looping on unfunded deepseek because overlay miss routes paid work to base policy: prompt-only fix insufficient; adding deterministic open-time guard — objective naming model_policy_overlay_id=X with empty structured field fails closed with instructive error, creating a management self-correction loop; orange, rollback=revert; then re-tell)
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
