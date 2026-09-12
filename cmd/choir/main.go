@@ -75,6 +75,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runRun(rest, stdout, stderr)
 	case "roster":
 		return runRoster(rest, stdout, stderr)
+	case "files":
+		return runFiles(rest, stdout, stderr)
 	case "computer":
 		return runComputer(rest, stdout, stderr)
 	case "identity":
@@ -123,11 +125,12 @@ Commands:
   search <query>      Search the corpus
   run start <text>    Submit a prompt to the conductor (starts a run)
   run status <id>     Get the status of a prompt-bar submission
-  run list            List recent owner-scoped runs
-  run cancel <id>     Cancel an owner-scoped pending or running run
   roster preflight    Gate a roster arm (overlay resolve, task pin, no live run)
   roster start        Submit the frozen roster instruction via texture tell
   roster collect      Poll reads and write the roster receipt
+  files mkdir <path>  Create a directory in the guest store
+  files put <path>    Upload stdin or --local file to the guest store
+  files get <path>    Download a guest store file to stdout
   computer replay-completeness  Capture live-versus-event-replay state evidence
   computer replace-workspace  Quarantine the VM-local workspace onto current DDL
   computer rematerialize-from-tape  Rebuild VM-local state from the event tape
@@ -291,6 +294,51 @@ func (c *client) do(method, path string, body any, out any) error {
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &apiErrorResp{Status: resp.StatusCode, Body: string(respBody)}
+	}
+	if out == nil {
+		return nil
+	}
+	if err := json.Unmarshal(respBody, out); err != nil {
+		return fmt.Errorf("decode response: %w (body: %s)", err, truncate(string(respBody), 200))
+	}
+	return nil
+}
+
+// doRawBytes sends raw bytes and returns raw response bytes for
+// non-JSON surfaces such as the files API.
+func (c *client) doRawBytes(method, path string, body []byte) ([]byte, error) {
+	var reqBody io.Reader
+	if body != nil {
+		reqBody = bytes.NewReader(body)
+	}
+	req, err := http.NewRequest(method, c.host+path, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/octet-stream")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request %s %s: %w", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, &apiErrorResp{Status: resp.StatusCode, Body: string(respBody)}
+	}
+	return respBody, nil
+}
+
+// doRaw sends raw bytes and decodes a JSON response.
+func (c *client) doRaw(method, path string, body []byte, out any) error {
+	respBody, err := c.doRawBytes(method, path, body)
+	if err != nil {
+		return err
 	}
 	if out == nil {
 		return nil
