@@ -110,12 +110,12 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 GUARD (0f95f728 402-looping on unfunded deepseek because overlay miss routes paid work to base policy: prompt-only fix insufficient; adding deterministic open-time guard — objective naming model_policy_overlay_id=X with empty structured field fails closed with instructive error, creating a management self-correction loop; orange, rollback=revert; then re-tell)
+  slice: 'P5 roster arm 1, funded: the open-time guard is landed and deployed (c7bbca4d), the 402-era orphan assignment is cancelled, and preflight is green for p5-deepseek-v41-flash resolving to opencode-go/deepseek-v4.1-flash; next is one roster start then collect into docs/evidence/rlm-roster/'
   question: none
   reconciliation:
-    observed_at: '2026-09-12T02:45:00Z'
-    source_ref: main@12c6b3a0 (deployed; replay harness + goldens landed; P4-review r2 panel artifacts under .agentic-consensus/p4-review-r2/)
-    deploy_identity: staging https://choir.news deployed at 12c6b3a0 via forced workflow_dispatch deploy (the 9f255cd3 push run failed at build before deploy, so the impact classifier saw only the test-file follow-up); effects OFF; OpenCode Go and Zen not wired
+    observed_at: '2026-09-12T20:20:00Z'
+    source_ref: main@c7bbca4d (deployed; CI 34714402217 green; guard landed on the assignment opener)
+    deploy_identity: staging https://choir.news serves c7bbca4d (built 2026-09-12T19:31:09Z, deployed 19:57:30Z); effects OFF; the p5-deepseek-v41-flash overlay resolves to opencode-go/deepseek-v4.1-flash on the retained computer computer-03335285269bdba4f94377e56879f9e6
     authority_identities:
       - docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md (this file, sole entrypoint after charter)
       - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
@@ -224,7 +224,17 @@ now:
       surface: internal/agentcore/rlm_replay_linux_test.go freeze new-identity leg
       evidence: 'the leg proves Start identity allocation (distinct object, no dedup, zero residue after row delete), not an independent choir.Freeze of the fresh operation. P4-review r4 (sol-2, codex-3) holds the P4 fresh-operation-through-successor contract unsatisfied for row 5.'
       repair: 'narrow the leg claim to allocation; defer fresh-Freeze execution; revisit if the acceptance review demands it'
-  next_action: 'P4-r4-repair: land the r4 batch (fresh-row delete + census proof, failure-safe corrupt cleanup, P0-relative coverage with named state/replay exclusions, build-sha coherence, suffixed cell IDs, swept capsule dirs, gofmt), verify TestRLMReplayGoldens three consecutive runs on one Node B state snapshot, then commit docs-first and code, adjudicate r4-accept, and proceed to the deployed per-operation replay proofs. P1-provider deployed proof remains pending: on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway.'
+    - id: roster-orphan-live-run-blocks-preflight-2026-09-12
+      class: discovered
+      surface: run:assignment-0f95f728-4381-52d5-93da-62515ce2951a (retained computer) + cmd/choir/roster.go rosterLiveEngineeringRun
+      evidence: 'the 402-era chatgpt arm opened 19:06:04Z and stopped updating 19:06:06Z (state running, metadata model_policy_overlay_id null while the prompt named p5-chatgpt-g56luna in prose) and was still running an hour later: the unfunded 402 produced no terminal disposition. Because preflight refuses while any engineering CoSuper run is non-terminal, the orphan silently blocked the next arm and the re-tell could not open. Its parent management run 0d512e91-bcc3-465f-9a91-61ef64d7879e remains running (parked on the assignment).'
+      repair: 'cancelled the orphan with choir run cancel (state cancelled, observed); the durable trajectory 24693e87 was NOT cancelled - it is the long-lived document work channel (created 2026-08-20, lifecycle_version 748) the tells target, and trajectory cancel CAS flags forced the read that revealed it. Open: whether a cancelled assignment releases its bound work item so a fresh assignment can open, and the parked parent run'
+    - id: roster-arm1-paraphrased-task-body-2026-09-12
+      class: discovered
+      surface: run:assignment-0f95f728 prompt body vs docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md §7
+      evidence: 'the served body is a paraphrase, not the frozen bytes: it reads "(3) run ... directly as one self-contained invocation and record its exit code; (4) complete with ... verdict=none. No paraphrase, no extra steps, no second assignment." where §7 reads the choir.Exec parenthetical, the verdict=none revision note, and the exact-receipt-refs clause. An arm served non-frozen task text is not roster-comparable, and this one would have been counted'
+      repair: 'froze the task bytes in-repo at docs/evidence/rlm-roster/p5-frozen-desk-task.txt (1051 bytes, sha256 a0386c97...) and passed them through --expected-task-sha256, which refuses any mismatch; the wrapper is bumped to roster-v2 so v1 receipts remain distinguishable'
+  next_action: 'P5-roster arm 1: the funded arm is preflighted green (overlay p5-deepseek-v41-flash resolves to opencode-go/deepseek-v4.1-flash; task digest pinned; no live engineering run). Fire one roster start for that arm, then roster collect with --artifact into docs/evidence/rlm-roster/, and verify from the run event stream that the desk served the singleton catalogue (provider_call_started tool_names == [capsule_go_eval]) and the assigned provider was the funded one. Then repeat per expected-pass id. Open items carried: the parked parent management run 0d512e91, and whether the roster harness ever advanced past the paraphrase.'
   deliver: 'The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk''s only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden and each earned its deletion by replay proof, the assignment fate is authored by the reducer, run acceptance no longer keys on tool names and fails loudly when evidence is missing, one model-independent prompt with one REPL initialization serves the expected roster with zero output repair, and the proved replay harness plus its fixtures remain as durable evidence.'
   artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened, and one adjudicated review receipt per frozen boundary (P0, P3, P4, P5).'
   non_gating_artifacts:

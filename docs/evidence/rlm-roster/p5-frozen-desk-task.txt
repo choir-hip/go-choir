@@ -1,0 +1,16 @@
+Inside the capsule, working only in /workspace/platform:
+(1) read /workspace/platform/internal/capsule/types.go and report the number
+of fields declared on GoEvalRequest;
+(2) write /workspace/platform/tmp/rlm-desk-task-marker.txt containing exactly
+the line `carrier-check`;
+(3) run `go -C /workspace/platform vet ./internal/capsule` (choir.Exec runs
+`exec.CommandContext` directly — no shell, no cwd parameter, so the command
+must be a single self-contained invocation) and record its exit code;
+(4) complete the assignment with result=completed, a summary
+naming the field count and the exit code, and execution_refs containing
+exactly the execution receipt refs of the cells that performed steps 1-3.
+(Implementation reports carry no verification verdict: report `verdict=none`.
+Revision 3 amends the as-frozen `verdict=pass`, which
+`CoSuperAssignmentReport.ValidateAgainst` refuses on implementation
+assignments — the frozen text as written could never pass. The amendment is
+record-shape only; steps 1-3 and the pass criteria are unchanged.)

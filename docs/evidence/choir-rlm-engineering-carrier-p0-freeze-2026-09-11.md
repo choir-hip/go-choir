@@ -380,6 +380,13 @@ Canonical task artifact: this file, this section
 (`docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md` §7).
 The task text served to every roster run, verbatim:
 
+Frozen bytes are pinned in-repo at
+`docs/evidence/rlm-roster/p5-frozen-desk-task.txt`
+(sha256 `a0386c97d302b748e0b708a21176e9daabee406176d4294b8d514464215b560b`,
+1051 bytes). That file is the `--task-file` argument to `choir roster
+preflight|start|collect`; the blockquote below is a copy of those bytes, and
+the file is authoritative if they ever diverge.
+
 > Inside the capsule, working only in /workspace/platform:
 > (1) read /workspace/platform/internal/capsule/types.go and report the number
 > of fields declared on GoEvalRequest;
