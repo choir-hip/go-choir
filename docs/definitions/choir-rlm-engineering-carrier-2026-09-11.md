@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 RETRY-006 (tell -005 REFUSED at texture turn 18:39:26, no management run: turn reason paraphrases open_persistent_super target-load refusal texture_turn_runtime.go:load-exact-target; trajectory holds 93 engineering + 1 texture agents, super resolves via global scope; code unchanged since -004 success so state/transient-driven, not rev1 (rev1 touches management+engineering prompts only, management never ran); owner request open+blocked; next: re-tell -006 to test transient vs systemic)
+  slice: P5 ARM-2 (tell -006 refused 18:56:38 same shape, systemic not transient: texture turns now checkpoint instead of opening 5th/6th persistent-super work while four ROSTER-V1 super-work items stay open; supervisor correctly refuses mechanical duplicates; deepseek line paused with e830 terminal evidence kept; pivoting to funded chatgpt arm gpt-5.6-luna as new overlay id = new supervision line, doubles as refusal-cause probe)
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
