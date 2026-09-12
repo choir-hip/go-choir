@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 PILOT-READY (roster+files verbs CI-green 34700585106; P0 §7 rev3; design adjudicated iii); P5b closed by existing tests (SealedGo singleton + ExactClosedSet tools branch, CI-green); blocked on owner trigger: API-key tell + Texture doc id + overlay placement + spend
+  slice: P5 PILOT-RUNNING (tell -001 accepted on supervised doc 040930e8, traj 24693e87; management run f9ba173c REFUSED assignment: staging source snapshot has dirty tracked files, no capsule/steps ran, verdict=none preserved; staging still d6b4fab1 with 147b3cd8 pending CI/deploy; next: re-tell -002 after clean deploy settles)
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
