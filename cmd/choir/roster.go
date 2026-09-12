@@ -26,6 +26,10 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 // rosterTaskRef names the frozen desk-task artifact every roster run serves.
@@ -172,8 +176,18 @@ func rosterLiveEngineeringRun(c *client) (bool, string, error) {
 		if !ok {
 			continue
 		}
-		profile := rosterFirstString(row, "agent_profile", "agentProfile", "profile", "role")
-		if !strings.Contains(strings.ToLower(profile), "cosuper") && !strings.Contains(strings.ToLower(profile), "engineering") {
+		// Match through the sanctioned vocabulary boundary: run-list profiles
+		// may carry legacy V1 spellings, and V1 desk token literals are
+		// forbidden in production sources (writer-purity gate), so never
+		// match them directly. NormalizeRole covers live names;
+		// ForwardV1ToV2 covers frozen V1 spellings.
+		profile := modelpolicy.NormalizeRole(rosterFirstString(row, "agent_profile", "agentProfile", "profile", "role"))
+		if profile == "" {
+			if v2, ok := vocabmigrate.ForwardV1ToV2(rosterFirstString(row, "agent_profile", "agentProfile", "profile", "role")); ok {
+				profile = v2
+			}
+		}
+		if profile != agentprofile.CoSuper {
 			continue
 		}
 		state := rosterFirstString(row, "state", "status", "disposition", "lifecycle_state")

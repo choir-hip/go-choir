@@ -114,7 +114,8 @@ func TestRosterPreflightRefusesLiveEngineeringRun(t *testing.T) {
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{"runs": []any{
-			map[string]any{"run_id": "run-live", "agent_profile": "engineering", "state": "executing"},
+			map[string]any{"run_id": "run-done", "agent_profile": "engineering", "state": "completed"},
+			map[string]any{"run_id": "run-legacy", "agent_profile": "cosuper", "state": "executing"},
 		}})
 	}))
 	defer srv.Close()
