@@ -2128,52 +2128,6 @@ func TestReplayedOldRefreshTokenFailsAfterRotation(t *testing.T) {
 		t.Error("should NOT be authenticated with replayed old refresh token after rotation")
 	}
 }
-func TestConcurrentRefreshRotationGraceWindow(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-	h.config.RotationGraceTTL = 15 * time.Second
-
-	user, err := h.store.CreateUser("grace-user", "grace@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	rawRefresh, err := h.generateRefreshToken(user, "test-device")
-	if err != nil {
-		t.Fatalf("generate refresh token: %v", err)
-	}
-	oldRefreshCookie := &http.Cookie{Name: RefreshTokenCookieName, Value: rawRefresh}
-
-	// Request 1: triggers rotation.
-	req1 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
-	req1.AddCookie(oldRefreshCookie)
-	rec1 := httptest.NewRecorder()
-	h.HandleSession(rec1, req1)
-
-	var resp1 sessionResponse
-	if err := json.NewDecoder(rec1.Body).Decode(&resp1); err != nil {
-		t.Fatalf("decode resp1: %v", err)
-	}
-	if !resp1.Authenticated {
-		t.Fatal("request 1 should be authenticated")
-	}
-
-	// Request 2 (concurrent tab using the old refresh cookie within grace window).
-	req2 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
-	req2.AddCookie(oldRefreshCookie)
-	rec2 := httptest.NewRecorder()
-	h.HandleSession(rec2, req2)
-
-	var resp2 sessionResponse
-	if err := json.NewDecoder(rec2.Body).Decode(&resp2); err != nil {
-		t.Fatalf("decode resp2: %v", err)
-	}
-	if !resp2.Authenticated {
-		t.Fatal("request 2 within grace window should succeed and remain authenticated")
-	}
-	if resp2.User.ID != user.ID {
-		t.Errorf("user ID mismatch: got %q, want %q", resp2.User.ID, user.ID)
-	}
-}
 
 // --- ValidateAccessToken tests (for proxy use) ---
 
@@ -3771,7 +3725,7 @@ func TestConcurrentSessionsOnReLogin(t *testing.T) {
 		}
 	}
 
-	// Logout from session 1 without ?all=true should only invalidate session 1.
+	// Logout from session 1 should invalidate ALL sessions (current behavior).
 	logoutReq := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
 	for _, c := range rec1.Result().Cookies() {
 		logoutReq.AddCookie(c)
@@ -3779,8 +3733,9 @@ func TestConcurrentSessionsOnReLogin(t *testing.T) {
 	logoutRec := httptest.NewRecorder()
 	h.HandleLogout(logoutRec, logoutReq)
 
-	// Session 2's refresh token should REMAIN valid and restorable across devices.
+	// Session 2's refresh token should also be invalidated.
 	req2 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+	// Use an expired access JWT to force refresh token usage.
 	for _, c := range rec2.Result().Cookies() {
 		if c.Name == RefreshTokenCookieName {
 			req2.AddCookie(c)
@@ -3793,38 +3748,10 @@ func TestConcurrentSessionsOnReLogin(t *testing.T) {
 	if err := json.NewDecoder(checkRec2.Body).Decode(&resp2); err != nil {
 		t.Fatalf("session 2 after logout 1: decode: %v", err)
 	}
-	if !resp2.Authenticated {
-		t.Error("session 2 should remain restorable after single-device logout")
-	}
-
-	// Now issue another session and test that ?all=true DOES invalidate all sessions.
-	rec3 := httptest.NewRecorder()
-	_, err = h.issueSession(rec3, httptest.NewRequest(http.MethodGet, "/", nil), user)
-	if err != nil {
-		t.Fatalf("issue session 3: %v", err)
-	}
-	logoutAllReq := httptest.NewRequest(http.MethodPost, "/auth/logout?all=true", nil)
-	for _, c := range rec2.Result().Cookies() {
-		logoutAllReq.AddCookie(c)
-	}
-	logoutAllRec := httptest.NewRecorder()
-	h.HandleLogout(logoutAllRec, logoutAllReq)
-
-	// Session 3 should now be invalidated.
-	req3 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
-	for _, c := range rec3.Result().Cookies() {
-		if c.Name == RefreshTokenCookieName {
-			req3.AddCookie(c)
-		}
-	}
-	checkRec3 := httptest.NewRecorder()
-	h.HandleSession(checkRec3, req3)
-	var resp3 sessionResponse
-	if err := json.NewDecoder(checkRec3.Body).Decode(&resp3); err != nil {
-		t.Fatalf("session 3 after logout all: decode: %v", err)
-	}
-	if resp3.Authenticated {
-		t.Error("session 3 should be invalidated after global logout (?all=true)")
+	// After logout (which deletes all refresh sessions for the user),
+	// session 2 should not be restorable via refresh.
+	if resp2.Authenticated {
+		t.Error("session 2 should not be restorable after global logout deleted all refresh sessions")
 	}
 }
 

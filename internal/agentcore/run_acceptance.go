@@ -12,7 +12,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -173,7 +172,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		})
 	}
 
-	addAcceptanceDurableAgentCapsuleCheckpoints(ctx, rt, &builder, trajectoryRuns, events)
+	addAcceptanceDurableAgentCapsuleCheckpoints(&builder, trajectoryRuns, events)
 
 	addAcceptanceContinuationAndCompactionCheckpoints(&builder, events)
 
@@ -612,79 +611,38 @@ func compactStringRefs(refs []string) []string {
 	return out
 }
 
-func addAcceptanceDurableAgentCapsuleCheckpoints(ctx context.Context, rt *Runtime, builder *acceptanceBuilder, runs []types.RunRecord, events []types.EventRecord) {
+func addAcceptanceDurableAgentCapsuleCheckpoints(builder *acceptanceBuilder, runs []types.RunRecord, events []types.EventRecord) {
 	var completedRefs []string
-	var implRun, verifyRun *types.RunRecord
-	for i := range runs {
-		run := runs[i]
+	for _, run := range runs {
 		if traceRunProfile(run) != agentprofile.CoSuper || run.State != types.RunCompleted {
 			continue
 		}
 		completedRefs = append(completedRefs, builder.addRunEvidence(run, "durable CoSuper run completed"))
-		switch metadataStringValue(run.Metadata, "assignment_kind") {
-		case string(types.CoSuperAssignmentImplementation):
-			implRun = &runs[i]
-		case string(types.CoSuperAssignmentVerification):
-			verifyRun = &runs[i]
-		}
 	}
 	if len(completedRefs) > 0 {
 		builder.addCheckpoint("durable_agent_completed", "passed", time.Time{}, 0, completedRefs, map[string]any{
 			"role": agentprofile.CoSuper, "run_count": len(completedRefs),
 		})
 	}
-	// Freeze/verify evidence is canonical operation state, not tool names:
-	// the reducer commits the selfdev operation transition, and acceptance
-	// reads the operation row. A completed implementation run without a
-	// frozen bundle fails loudly.
-	var operation *selfdev.Operation
-	if rt != nil && rt.selfdevOperations != nil {
-		if op, err := rt.selfdevOperations.GetByTrajectory(ctx, runsComputerID(runs), trajectoryIDFromRuns(runs)); err == nil {
-			operation = &op
-		}
-	}
-	// Freeze evidence is the durable bundle digest on the operation row, not
-	// a state allowlist: every state reachable after frozen (verified,
-	// awaiting_approval, accepted, applied, failed, rolled_back, degraded)
-	// preserves the freeze fact while the digest is bound. A verify-fail
-	// trajectory keeps its frozen bundle; the checkpoint must not misreport
-	// that history as absence.
-	if operation != nil && operation.BundleDigest != "" {
-		builder.addCheckpoint("capsule_effect_frozen", "passed", time.Time{}, 0, nil, map[string]any{
-			"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest, "state": operation.State,
+	if results := collectAcceptanceToolResults(events, "commit_transaction"); len(results) > 0 {
+		item := results[len(results)-1]
+		ref := builder.addEventEvidence(item.event, "guest-local capsule effect bundle frozen", map[string]any{
+			"tool": "commit_transaction", "bundle_digest": payloadString(item.output, "bundle_digest"),
 		})
-	} else if implRun != nil {
-		builder.addCheckpoint("capsule_effect_frozen", "failed", time.Time{}, 0, nil, map[string]any{
-			"detail": "completed implementation run without a frozen self-development bundle",
+		builder.addCheckpoint("capsule_effect_frozen", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
+			"bundle_digest": payloadString(item.output, "bundle_digest"),
 		})
 	}
-	if operation != nil && len(operation.VerifierRefs) > 0 {
-		builder.addCheckpoint("capsule_verification_recorded", "passed", time.Time{}, 0, nil, map[string]any{
-			"operation_id": operation.OperationID, "verifier_refs": operation.VerifierRefs, "state": operation.State,
+	if results := collectAcceptanceToolResults(events, "record_self_development_verification"); len(results) > 0 {
+		item := results[len(results)-1]
+		ref := builder.addEventEvidence(item.event, "independent capsule verification recorded", map[string]any{
+			"tool":               "record_self_development_verification",
+			"verification_event": payloadString(item.output, "verification_event"),
 		})
-	} else if verifyRun != nil {
-		builder.addCheckpoint("capsule_verification_recorded", "failed", time.Time{}, 0, nil, map[string]any{
-			"detail": "completed verification run without a recorded verifier decision",
+		builder.addCheckpoint("capsule_verification_recorded", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
+			"verification_event": payloadString(item.output, "verification_event"),
 		})
 	}
-}
-
-func runsComputerID(runs []types.RunRecord) string {
-	for _, run := range runs {
-		if run.ComputerID != "" {
-			return run.ComputerID
-		}
-	}
-	return ""
-}
-
-func trajectoryIDFromRuns(runs []types.RunRecord) string {
-	for _, run := range runs {
-		if id := traceTrajectoryIDForRun(run); id != "" {
-			return id
-		}
-	}
-	return ""
 }
 
 func addAcceptanceContinuationAndCompactionCheckpoints(builder *acceptanceBuilder, events []types.EventRecord) {
@@ -762,17 +720,9 @@ func acceptanceContinuationEventDetails(ev types.EventRecord) map[string]any {
 
 func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types.RunAcceptanceLevel, types.RunAcceptanceState) {
 	has := map[string]bool{}
-	capsuleFailed := false
 	for _, checkpoint := range checkpoints {
 		if checkpoint.State == "passed" {
 			has[checkpoint.Kind] = true
-		}
-		// A failed capsule evidence checkpoint is loud AND gating: a
-		// completed implementation/verification run without its freeze/verify
-		// evidence must not report an accepted level.
-		if checkpoint.State == "failed" &&
-			(checkpoint.Kind == "capsule_effect_frozen" || checkpoint.Kind == "capsule_verification_recorded") {
-			capsuleFailed = true
 		}
 	}
 	level := types.RunAcceptanceDocsLevel
@@ -781,7 +731,7 @@ func acceptanceLevelAndState(checkpoints []types.RunAcceptanceCheckpoint) (types
 	if has["submitted"] && textureOpened {
 		level = types.RunAcceptanceStagingSmokeLevel
 	}
-	if has["submitted"] && textureOpened && has["super_direction_opened"] && !capsuleFailed {
+	if has["submitted"] && textureOpened && has["super_direction_opened"] {
 		state = types.RunAcceptanceAccepted
 	}
 	// RunAcceptance is trajectory diagnostics only. Export, promotion, and

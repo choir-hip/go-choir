@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2]
     steps:
       - uses: actions/checkout@v6
 
@@ -80,6 +80,6 @@ jobs:
       - name: Go test non-runtime shard with -race
         shell: bash
         env:
-          TOTAL_SHARDS: 4
+          TOTAL_SHARDS: 3
           SHARD_INDEX: ${{ matrix.shard }}
         run: scripts/go-test-non-runtime-shards -race

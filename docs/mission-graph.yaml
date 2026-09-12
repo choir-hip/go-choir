@@ -414,7 +414,7 @@ nodes:
     title: Substrate & Scheduling Readiness
     path: docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
     ledger: ''
-    status: settled
+    status: completed
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -463,15 +463,15 @@ nodes:
     title: Choir RLM Target Architecture Cutover
     path: docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
     ledger: ''
-    status: blocked
+    status: working
     kind: spine
-    entrypoint: false
-    execution_mode: blocked_incomplete
+    entrypoint: true
+    execution_mode: mission_orchestrator
     depends_on:
       - choir-substrate-and-scheduling-readiness-2026-09-02
       - choir-rlm-session-interpreter-cutover-2026-09-02
     enables:
-      - choir-rlm-settlement-gate-2026-09-09
+      - choir-supervised-self-development-on-rlm-2026-09-02
     note: >-
       Phase 2 comprehensive RLM target architecture cutover. 6-step implementation
       sequence across cmd/capsule-broker, internal/yaegikernel, internal/actor, and
@@ -480,11 +480,6 @@ nodes:
       Go-channel mailbox delivery, choir.Inbox() cell-start snapshot with two-phase
       cursor commitment, bounded adaptive coalescing, role-bounded fan-out/fan-in,
       and live sealed proof on staging computer-03335285269bdba4f94377e56879f9e6.
-      Dispositioned 2026-09-09 to blocked remainder holder with owner topology
-      authority: execution proof retained; run acceptance closed under completed
-      choir-rlm-settlement-gate-2026-09-09 (2026-09-09 with deployed proof) with
-      no open settlement remainder.
-      Restore spine is choir-rlm-restore-zero-2026-09-08. Do not mark complete.
     sources:
       - docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
       - docs/designs/rlm-target-architecture-2026-09-04.md
@@ -501,83 +496,15 @@ nodes:
     execution_mode: blocked_incomplete
     depends_on:
       - choir-rlm-target-architecture-cutover-2026-09-04
-      - choir-rlm-restore-zero-2026-09-08
-      - choir-rlm-settlement-gate-2026-09-09
+    enables: []
     note: >-
-      Phase 3 of autonomous engineering sequence, paused pending restore-zero
-      and desk-rename deployed acceptance (settlement-gate acceptance closed
-      2026-09-09). Candidate A solitaire proof, 5-ref freeze, qualified consensus
-      under reversible-selfdev-v1, promotion, falsification, and restore to
-      pre-A checkpoint 99949fe2 on the RLM surface.
+      Phase 3 of autonomous engineering sequence. Candidate A solitaire proof,
+      5-ref freeze, qualified consensus under reversible-selfdev-v1, promotion,
+      falsification, and restore to pre-A checkpoint 99949fe2 on the RLM surface.
     sources:
       - docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
       - docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md
       - docs/choir-doctrine.md
-      - docs/ACTIVE.md
-  - id: choir-rlm-restore-zero-2026-09-08
-    title: RLM Restore-Zero
-    path: docs/definitions/choir-rlm-restore-zero-2026-09-08.md
-    ledger: ''
-    status: settled
-    kind: spine
-    entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-rlm-target-architecture-cutover-2026-09-04
-    enables:
-      - choir-rlm-settlement-gate-2026-09-09
-    note: >-
-      Completed 2026-09-09: owner-scoped refresh booted 9341b5d1 on the retained
-      owner store. PlanRecovery resume local=148431 W=148431 H=148431 tail=0;
-      no prefix page fetches. G4 constructed-computer CI skip left intact.
-    sources:
-      - docs/definitions/choir-rlm-restore-zero-2026-09-08.md
-      - docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md
-      - docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md
-      - docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md
-      - docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md
-      - docs/reports/choir-rlm-mission-state-2026-09-08.md
-      - docs/ACTIVE.md
-  - id: choir-rlm-settlement-gate-2026-09-09
-    title: RLM Settlement Gate
-    path: docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
-    ledger: ''
-    status: settled
-    kind: spine
-    entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-rlm-target-architecture-cutover-2026-09-04
-    note: >-
-      Completed 2026-09-09 with full CI green (run 34408184941, superset of
-      prior green run 34401118732) and deployed proof on staging
-      computer-03335285269bdba4f94377e56879f9e6 at commit 0475ed84.
-      All 8 acceptance items satisfied.
-    sources:
-      - docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
-      - docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md
-      - docs/ACTIVE.md
-  - id: choir-rlm-versioned-rename-2026-09-09
-    title: RLM Versioned Rename
-    path: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
-    ledger: ''
-    status: settled
-    kind: spine
-    entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-rlm-target-architecture-cutover-2026-09-04
-      - choir-rlm-restore-zero-2026-09-08
-      - choir-rlm-settlement-gate-2026-09-09
-    enables: []
-    note: >-
-      Completed 2026-09-11 (deployed commit e3396329, CI run 34571343061).
-      All 15 acceptance items satisfied; physical staging proof on
-      computer-03335285269bdba4f94377e56879f9e6 at epoch 909 with fast-path
-      reboot in 29s.
-    sources:
-      - docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
-      - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
       - docs/ACTIVE.md
   - id: choir-host-orchestrated-recovery-2026-08-22
     title: Host-Orchestrated Recovery (Cold Recover Current)
@@ -662,7 +589,7 @@ nodes:
     title: Durable Substrate Overhauls
     path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
     ledger: ''
-    status: settled
+    status: completed
     kind: spine
     entrypoint: false
     execution_mode: completed_non_executable
@@ -713,7 +640,7 @@ nodes:
     title: Private Go Actor Kernel
     path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
     ledger: ''
-    status: settled
+    status: completed
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -921,31 +848,6 @@ nodes:
     sources:
       - docs/definitions/choir-run-truth-suite-2026-07-11.md
       - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
-      - docs/choir-doctrine.md
-      - AGENTS.md
-      - docs/standing-questions.md
-
-  - id: choir-rlm-engineering-carrier-2026-09-11
-    title: RLM Engineering Carrier
-    path: docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md
-    ledger: ''
-    status: working
-    kind: spine
-    entrypoint: true
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-rlm-versioned-rename-2026-09-09
-    enables: []
-    note: >-
-      Chartered 2026-09-11 as the sole working entrypoint. First slice is P0-define, a code-free
-      freeze artifact. Moves the engineering desk fully onto the in-cell carrier: one JSON
-      envelope, five overlay names deleted behind replay proofs, reducer-authored assignment fate,
-      acceptance off tool names, one model-independent prompt, and OpenCode Go/Zen provider setup
-      as phase 1.
-    sources:
-      - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
-      - docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md
-      - docs/reports/choir-opencode-provider-research-2026-09-10.md
       - docs/choir-doctrine.md
       - AGENTS.md
       - docs/standing-questions.md

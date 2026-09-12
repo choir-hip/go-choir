@@ -73,10 +73,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runSearch(rest, stdout, stderr)
 	case "run":
 		return runRun(rest, stdout, stderr)
-	case "roster":
-		return runRoster(rest, stdout, stderr)
-	case "files":
-		return runFiles(rest, stdout, stderr)
 	case "computer":
 		return runComputer(rest, stdout, stderr)
 	case "identity":
@@ -125,12 +121,8 @@ Commands:
   search <query>      Search the corpus
   run start <text>    Submit a prompt to the conductor (starts a run)
   run status <id>     Get the status of a prompt-bar submission
-  roster preflight    Gate a roster arm (overlay resolve, task pin, no live run)
-  roster start        Submit the frozen roster instruction via texture tell
-  roster collect      Poll reads and write the roster receipt
-  files mkdir <path>  Create a directory in the guest store
-  files put <path>    Upload stdin or --local file to the guest store
-  files get <path>    Download a guest store file to stdout
+  run list            List recent owner-scoped runs
+  run cancel <id>     Cancel an owner-scoped pending or running run
   computer replay-completeness  Capture live-versus-event-replay state evidence
   computer replace-workspace  Quarantine the VM-local workspace onto current DDL
   computer rematerialize-from-tape  Rebuild VM-local state from the event tape
@@ -160,24 +152,16 @@ Output is JSON to stdout; diagnostics and errors go to stderr.`)
 
 // client holds shared CLI state.
 type client struct {
-	host       string
-	apiKey     string
-	computerID string
-	http       *http.Client
-	stdout     io.Writer
-	stderr     io.Writer
+	host   string
+	apiKey string
+	http   *http.Client
+	stdout io.Writer
+	stderr io.Writer
 }
 
 func newClient(flags *flag.FlagSet, args []string, stdout, stderr io.Writer) (*client, error) {
 	apiKeyFile := flags.String("api-key-file", "", "Read API key from a mode-0600 file; '-' reads stdin; defaults to $"+apiKeyEnvVar)
 	host := flags.String("host", envOr(hostEnvVar, defaultHost), "Choir host")
-	// Verbs with their own --computer flag (computer-scoped routes) register it
-	// before newClient; share that definition instead of redefining it. The
-	// value is read after Parse so verb-passed flags resolve correctly.
-	var sharedComputer *string
-	if flags.Lookup("computer") == nil {
-		sharedComputer = flags.String("computer", envOr("CHOIR_COMPUTER", ""), "Stable ComputerID targeting for owner-wide API keys (sent as X-Choir-Computer)")
-	}
 	timeout := flags.String("timeout", "", "Request timeout (for example 75s or 2m)")
 	if err := flags.Parse(args); err != nil {
 		return nil, err
@@ -204,19 +188,12 @@ func newClient(flags *flag.FlagSet, args []string, stdout, stderr io.Writer) (*c
 	if err != nil {
 		return nil, err
 	}
-	computerIDStr := ""
-	if sharedComputer != nil {
-		computerIDStr = strings.TrimSpace(*sharedComputer)
-	} else if defined := flags.Lookup("computer"); defined != nil {
-		computerIDStr = strings.TrimSpace(defined.Value.String())
-	}
 	return &client{
-		host:       h,
-		apiKey:     key,
-		computerID: computerIDStr,
-		http:       &http.Client{Timeout: requestTimeout},
-		stdout:     stdout,
-		stderr:     stderr,
+		host:   h,
+		apiKey: key,
+		http:   &http.Client{Timeout: requestTimeout},
+		stdout: stdout,
+		stderr: stderr,
 	}, nil
 }
 
@@ -294,9 +271,6 @@ func (c *client) do(method, path string, body any, out any) error {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	if c.computerID != "" {
-		req.Header.Set("X-Choir-Computer", c.computerID)
-	}
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -312,54 +286,6 @@ func (c *client) do(method, path string, body any, out any) error {
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &apiErrorResp{Status: resp.StatusCode, Body: string(respBody)}
-	}
-	if out == nil {
-		return nil
-	}
-	if err := json.Unmarshal(respBody, out); err != nil {
-		return fmt.Errorf("decode response: %w (body: %s)", err, truncate(string(respBody), 200))
-	}
-	return nil
-}
-
-// doRawBytes sends raw bytes and returns raw response bytes for
-// non-JSON surfaces such as the files API.
-func (c *client) doRawBytes(method, path string, body []byte) ([]byte, error) {
-	var reqBody io.Reader
-	if body != nil {
-		reqBody = bytes.NewReader(body)
-	}
-	req, err := http.NewRequest(method, c.host+path, reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	if c.computerID != "" {
-		req.Header.Set("X-Choir-Computer", c.computerID)
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/octet-stream")
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request %s %s: %w", method, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, &apiErrorResp{Status: resp.StatusCode, Body: string(respBody)}
-	}
-	return respBody, nil
-}
-
-// doRaw sends raw bytes and decodes a JSON response.
-func (c *client) doRaw(method, path string, body []byte, out any) error {
-	respBody, err := c.doRawBytes(method, path, body)
-	if err != nil {
-		return err
 	}
 	if out == nil {
 		return nil

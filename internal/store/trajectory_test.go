@@ -170,7 +170,7 @@ func TestWorkItemFingerprintDedupAndOpenObligationsQuery(t *testing.T) {
 		OwnerID:              "user-alice",
 		TrajectoryID:         "traj-wi",
 		Objective:            "port the continuation mechanics to work items",
-		AuthorityProfile:     "management",
+		AuthorityProfile:     "super",
 		StepBudget:           50,
 		TokenBudget:          200000,
 		ObjectiveFingerprint: "fp-1",
@@ -287,7 +287,7 @@ func TestListOpenAssignedWorkItemsOnlyReturnsLiveAssignedOpenItems(t *testing.T)
 		OwnerID:         "user-alice",
 		TrajectoryID:    "traj-live",
 		Objective:       "resume assigned open work",
-		AssignedAgentID: "engineering:assigned",
+		AssignedAgentID: "cosuper:assigned",
 	})
 	if err != nil {
 		t.Fatalf("create keeper: %v", err)
@@ -303,7 +303,7 @@ func TestListOpenAssignedWorkItemsOnlyReturnsLiveAssignedOpenItems(t *testing.T)
 		OwnerID:         "user-alice",
 		TrajectoryID:    "traj-live",
 		Objective:       "completed assigned work",
-		AssignedAgentID: "engineering:assigned",
+		AssignedAgentID: "cosuper:assigned",
 	})
 	if err != nil {
 		t.Fatalf("create completed: %v", err)
@@ -315,7 +315,7 @@ func TestListOpenAssignedWorkItemsOnlyReturnsLiveAssignedOpenItems(t *testing.T)
 		OwnerID:         "user-alice",
 		TrajectoryID:    "traj-settled",
 		Objective:       "settled trajectory work",
-		AssignedAgentID: "engineering:settled",
+		AssignedAgentID: "cosuper:settled",
 	}); !errors.Is(err, ErrConcurrentStateChange) {
 		t.Fatalf("create settled work item error = %v, want ErrConcurrentStateChange", err)
 	}

@@ -17,7 +17,7 @@ import (
 
 func testLog(t *testing.T) *SQLiteLog {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "actor.db")+"?_pragma=busy_timeout(60000)&_pragma=journal_mode(WAL)")
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "actor.db")+"?_busy_timeout=60000")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

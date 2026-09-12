@@ -57,21 +57,16 @@ func deferTextureOccurrence(err error) error {
 }
 
 func textureRunRecord(rec types.RunRecord) bool {
-	recordProfile, _ := agentprofile.Canonical(rec.AgentProfile)
-	recordRole, _ := agentprofile.Canonical(rec.AgentRole)
-	if recordProfile == agentprofile.Texture ||
-		recordRole == agentprofile.Texture {
+	if agentprofile.Canonical(rec.AgentProfile) == agentprofile.Texture ||
+		agentprofile.Canonical(rec.AgentRole) == agentprofile.Texture {
 		return true
 	}
 	if rec.Metadata == nil {
 		return false
 	}
 	for _, key := range []string{"agent_profile", "agent_role"} {
-		if value, ok := rec.Metadata[key].(string); ok {
-			metaProfile, _ := agentprofile.Canonical(value)
-			if metaProfile == agentprofile.Texture {
-				return true
-			}
+		if value, ok := rec.Metadata[key].(string); ok && agentprofile.Canonical(value) == agentprofile.Texture {
+			return true
 		}
 	}
 	return false
@@ -244,31 +239,6 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		}
 		return h.memoryFromRunState(rec)
 	}
-	if strings.HasPrefix(strings.TrimSpace(u.Content), "sha256:") && agentID == agentprofile.Super+":"+ownerID {
-		log.Printf("actorruntime: persistent Super live occurrence received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
-		rec, terminal, liveErr := h.rt.ResolvePersistentSuperLiveOccurrence(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
-		if liveErr != nil {
-			if errors.Is(liveErr, agentcore.ErrInvalidPersistentSuperRecovery) {
-				log.Printf("actorruntime: persistent Super live occurrence discarded as invalid agent=%s: %v", agentID, liveErr)
-				return nil, nil
-			}
-			if errors.Is(liveErr, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
-				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, liveErr)
-			}
-			return nil, fmt.Errorf("%w: actorruntime: defer persistent Super live occurrence: %v", actor.ErrDeferUnprocessed, liveErr)
-		}
-		if terminal {
-			log.Printf("actorruntime: persistent Super live occurrence terminal agent=%s", agentID)
-			return nil, nil
-		}
-		if rec == nil {
-			return nil, fmt.Errorf("actorruntime: persistent Super live occurrence returned no exact run")
-		}
-		// Locked mint already dispatched initial_dispatch. Resident exact-match
-		// Super is already bound. Do not execute here (recovery prefix does).
-		log.Printf("actorruntime: persistent Super live occurrence bound run=%s", rec.RunID)
-		return nil, nil
-	}
 	if strings.HasPrefix(agentID, agentprofile.Texture+":") {
 		if h.textureOwner == nil {
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
@@ -375,11 +345,9 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		if rec.State.Active() {
 			log.Printf("actorruntime: reactivating run %s in state %s (not passivated) for coagent_result", rs.RunID, rec.State)
 		}
-		wakeProfile, _ := agentprofile.Canonical(rec.AgentProfile)
-		wakeRole, _ := agentprofile.Canonical(rec.AgentRole)
 		lifecycleControlResearcher :=
-			(wakeProfile == agentprofile.Researcher ||
-				wakeRole == agentprofile.Researcher) &&
+			(agentprofile.Canonical(rec.AgentProfile) == agentprofile.Researcher ||
+				agentprofile.Canonical(rec.AgentRole) == agentprofile.Researcher) &&
 				strings.TrimSpace(metadataString(rec.Metadata, "request_source")) == "lifecycle_texture_control"
 		if lifecycleControlResearcher {
 			if strings.TrimSpace(u.TrajectoryID) == "" || strings.TrimSpace(u.TrajectoryID) != strings.TrimSpace(rec.TrajectoryID) {
@@ -473,10 +441,8 @@ func (h *actorHandler) reconcileCoagentWake(ctx context.Context, update actor.Up
 	if err != nil {
 		return nil, fmt.Errorf("lookup scoped agent for coagent_result: %w", err)
 	}
-	wakeAgentProfile, _ := agentprofile.Canonical(agent.Profile)
-	wakeAgentRole, _ := agentprofile.Canonical(agent.Role)
-	if wakeAgentProfile == agentprofile.Texture ||
-		wakeAgentRole == agentprofile.Texture {
+	if agentprofile.Canonical(agent.Profile) == agentprofile.Texture ||
+		agentprofile.Canonical(agent.Role) == agentprofile.Texture {
 		return nil, fmt.Errorf("Texture subject has noncanonical agent identity")
 	}
 	return h.rt.ReconcileCoagentWake(ctx, ownerID, agentID)

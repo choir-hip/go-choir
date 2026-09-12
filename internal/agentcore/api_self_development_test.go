@@ -73,7 +73,7 @@ func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T
 		t.Fatal(err)
 	}
 	genesisID, _ := computerevent.NewEventID()
-	genesis := computerevent.Event{SchemaVersion: 1, EventID: genesisID, ComputerID: computerID, EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64), ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: 1}
+	genesis := computerevent.Event{SchemaVersion: 1, EventID: genesisID, ComputerID: computerID, EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "genesis", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64), ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: 1}
 	if _, err := appender.AppendNew(ctx, genesis, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("a", 64)}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T
 		t.Fatal(err)
 	}
 	updateID, _ := computerevent.NewEventID()
-	update := computerevent.Event{SchemaVersion: 1, EventID: updateID, ComputerID: computerID, EventKind: computerevent.EventResearcherUpdate, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "current-update", ActorProfile: "research", AuthorityRef: "typed-update", PayloadCommitment: strings.Repeat("0", 64), PrivacyClass: "owner", ResultingEffectiveCommitment: strings.Repeat("f", 64), ReducerVersion: 1}
+	update := computerevent.Event{SchemaVersion: 1, EventID: updateID, ComputerID: computerID, EventKind: computerevent.EventResearcherUpdate, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "current-update", ActorProfile: "researcher", AuthorityRef: "typed-update", PayloadCommitment: strings.Repeat("0", 64), PrivacyClass: "owner", ResultingEffectiveCommitment: strings.Repeat("f", 64), ReducerVersion: 1}
 	if _, err := appender.AppendNew(ctx, update, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("f", 64)}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProje
 	genesis := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: genesisID, ComputerID: computerID,
 		EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: "recovery-genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner",
+		IdempotencyKey: "recovery-genesis", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
 		PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64),
 		ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: computerevent.ReducerVersionV1,
 	}
@@ -239,7 +239,7 @@ func TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProje
 		IdempotencyKey: "recovery-decision", RequestCommitment: computerevent.ZeroHead,
 		TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, PreviousHead: head.CanonicalEventHead,
 		ParentEventID: operation.OperationID,
-		ActorProfile:  "management", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
+		ActorProfile:  "super", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
 		ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
 		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 		RequireExpectedHead: true, PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: bundleDigest,
@@ -353,7 +353,7 @@ func TestExactTerminalDecisionReplayDoesNotDependOnLaterCurrentMode(t *testing.T
 		Sequence: 1, PreviousHead: computerevent.ZeroHead, EventKind: computerevent.EventEffectRejected,
 		OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "decision-replay", RequestCommitment: computerevent.ZeroHead,
 		TrajectoryID: "trajectory-replay", CapsuleID: "capsule-replay", ParentEventID: "operation-replay",
-		ActorProfile: "management", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
+		ActorProfile: "super", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
 		ExpectedDesiredEventHead: strings.Repeat("a", 64), ExpectedEffectiveEventHead: strings.Repeat("b", 64),
 		ExpectedDesiredStateCommitment: strings.Repeat("c", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
 		RequireExpectedHead: true, PayloadCommitment: strings.Repeat("e", 64),
@@ -576,7 +576,7 @@ func TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode(t *testing
 	genesis := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: genesisID, ComputerID: computerID,
 		EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: "start-recovery-genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner",
+		IdempotencyKey: "start-recovery-genesis", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
 		PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64),
 		ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: computerevent.ReducerVersionV1,
 	}
@@ -597,7 +597,7 @@ func TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode(t *testing
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 		EventKind: computerevent.EventTrajectoryStarted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: "selfdev-start-" + identityDigest, TrajectoryID: "trajectory-" + identityDigest[32:],
-		ActorProfile: "management", AuthorityRef: "public-self-development-api:owner", PrivacyClass: "private",
+		ActorProfile: "super", AuthorityRef: "public-self-development-api:owner", PrivacyClass: "private",
 		PayloadCommitment: strings.Repeat("c", 64), ProposedEffectRef: strings.Repeat("c", 64),
 		DecisionRef: requestCommitment, OutputArtifactRefs: []string{"artifact:sha256:" + strings.Repeat("c", 64)},
 		ReducerVersion: computerevent.ReducerVersionV1,
@@ -1023,7 +1023,7 @@ func TestFinalizedDecisionBindingRejectsCrossAuthorityJoinsAndAllowsAcceptedDesc
 		Sequence: 1, PreviousHead: computerevent.ZeroHead, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		EventKind: computerevent.EventEffectAccepted, IdempotencyKey: "decision-binding", RequestCommitment: strings.Repeat("1", 64),
 		TrajectoryID: "trajectory-binding", CapsuleID: "capsule-binding", ParentEventID: "operation-binding",
-		ActorProfile: "management", AuthorityRef: "external-owner:owner-binding", PrivacyClass: "owner",
+		ActorProfile: "super", AuthorityRef: "external-owner:owner-binding", PrivacyClass: "owner",
 		ExpectedDesiredEventHead: strings.Repeat("9", 64), ExpectedEffectiveEventHead: strings.Repeat("a", 64),
 		ExpectedDesiredStateCommitment: strings.Repeat("b", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
 		RequireExpectedHead: true,
@@ -1129,7 +1129,7 @@ func TestFinalizedDecisionBindingAcceptsQualifiedConsensusReceipt(t *testing.T) 
 		Sequence: 1, PreviousHead: computerevent.ZeroHead, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		EventKind: computerevent.EventEffectAccepted, IdempotencyKey: "decision-binding-consensus", RequestCommitment: strings.Repeat("1", 64),
 		TrajectoryID: "trajectory-binding", CapsuleID: "capsule-binding", ParentEventID: "operation-binding",
-		ActorProfile: "management", AuthorityRef: decisionpolicy.AuthorityRef(receipt), PrivacyClass: "owner",
+		ActorProfile: "super", AuthorityRef: decisionpolicy.AuthorityRef(receipt), PrivacyClass: "owner",
 		ExpectedDesiredEventHead: strings.Repeat("9", 64), ExpectedEffectiveEventHead: strings.Repeat("a", 64),
 		ExpectedDesiredStateCommitment: strings.Repeat("b", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
 		RequireExpectedHead: true,

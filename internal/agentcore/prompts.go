@@ -129,11 +129,7 @@ func (h *APIHandler) promptResponse(ownerID string, prompt promptstore.Descripto
 	}
 	registry := h.rt.ToolRegistryForProfile(prompt.Role)
 	effective := toolregistry.BuildSystemPrompt(systemPrompt, registry)
-	promptPolicy, err := agentprofile.PolicyFor(prompt.Role)
-	if err != nil {
-		return promptDescriptorResponse{}, err
-	}
-	rolePolicy := rolePolicyFromSpec(promptPolicy)
+	rolePolicy := rolePolicyFromSpec(agentprofile.PolicyFor(prompt.Role))
 	providerPolicy := providerPolicyForRuntime(h.rt.provider)
 	if !rolePolicy.AllowCoAgentTools {
 		providerPolicy.SupportsPerRunModelOverride = false

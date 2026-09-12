@@ -43,7 +43,7 @@ require "$ci" 'sbom-semantic-fingerprint-test'
 require "$race" 'pull_request:'
 require "$race" '      - .github/workflows/race.yml'
 require "$race" 'name: Go Test (non-runtime race shard ${{ matrix.shard }})'
-require "$race" 'shard: [0, 1, 2, 3]'
+require "$race" 'shard: [0, 1, 2]'
 require "$race" 'run: scripts/go-test-non-runtime-shards -race'
 reject "$race" 'go list ./...'
 

@@ -25,7 +25,7 @@ They are the whole default packet; historical material is opt-in.
 3. [`choir-doctrine.md`](choir-doctrine.md) — apex doctrine.
 4. [`semantic-registry.md`](semantic-registry.md) — compact, non-overriding
    map of the doctrine's stable semantics.
-5. [`NOW.md`](NOW.md) — retired 2026-09-08; routes to live owners.
+5. [`NOW.md`](NOW.md) — dated facts and freshness limits.
 6. [`ACTIVE.md`](ACTIVE.md) — confirmed active/completed Definitions and
    work-state caveats.
 7. [`computer-ontology.md`](computer-ontology.md) — persistent computer,
@@ -46,7 +46,8 @@ Read the relevant contract before touching its protected surface.
   north star and defers to doctrine.
 - `semantic-registry.md` is a compact derived map; domain contracts govern only
   their stated scope and cannot override doctrine.
-- `NOW.md` is retired; it routes deployment-health questions to direct observation and work-state questions to `ACTIVE.md`.
+- `NOW.md` holds dated, evidence-scoped observations. Stale observations become
+  unknown; follow its links for fuller current architecture and platform state.
 - `ACTIVE.md` is the curated work view. A promoted working Definition is the
   sole current authority root; completed Definitions remain evidence.
 - `mission-graph.yaml` is discovery metadata. Definitions own their state; the

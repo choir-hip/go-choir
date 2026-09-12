@@ -13,9 +13,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -169,9 +167,9 @@ func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T
 		AgentRole:    agentprofile.Texture,
 	}
 	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
-		{ID: "research-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"research","channel_id":"doc-1","objective":"research current scores"}`)},
-		{ID: "research-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"research","channel_id":"doc-1","objective":"research   current   scores"}`)},
-		{ID: "research-3", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"research","channel_id":"doc-1","objective":"research injury notes"}`)},
+		{ID: "research-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research current scores"}`)},
+		{ID: "research-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research   current   scores"}`)},
+		{ID: "research-3", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research injury notes"}`)},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	if len(executed) != 2 {
@@ -409,7 +407,7 @@ func terminalResearcherRunFixture(runID, ownerID, docID, result string, state ty
 	finishedAt := now
 	rec := types.RunRecord{
 		RunID:            runID,
-		AgentID:          "research:" + runID,
+		AgentID:          "researcher:" + runID,
 		RequestedByRunID: "texture-parent:" + runID,
 		ChannelID:        docID,
 		OwnerID:          ownerID,
@@ -422,7 +420,7 @@ func terminalResearcherRunFixture(runID, ownerID, docID, result string, state ty
 		Metadata: map[string]any{
 			runMetadataAgentProfile: agentprofile.Researcher,
 			runMetadataAgentRole:    agentprofile.Researcher,
-			runMetadataAgentID:      "research:" + runID,
+			runMetadataAgentID:      "researcher:" + runID,
 			runMetadataChannelID:    docID,
 			"requested_by_profile":  agentprofile.Texture,
 			"requested_by_agent_id": "texture:" + docID,
@@ -438,7 +436,7 @@ func TestRootTerminalRunSkipsOutcomeBindingWithoutStoreLookup(t *testing.T) {
 	rt, _ := testRuntime(t)
 	root := types.RunRecord{
 		RunID:        "unpersisted-root-terminal",
-		AgentID:      "engineering:unpersisted-root-terminal",
+		AgentID:      "co-super:unpersisted-root-terminal",
 		AgentProfile: agentprofile.CoSuper,
 		AgentRole:    agentprofile.CoSuper,
 		State:        types.RunCompleted,
@@ -446,143 +444,6 @@ func TestRootTerminalRunSkipsOutcomeBindingWithoutStoreLookup(t *testing.T) {
 	}
 	if err := rt.bindTerminalRunOutcome(context.Background(), &root, false); err != nil {
 		t.Fatalf("root terminal run performed a binding store lookup: %v", err)
-	}
-}
-
-func TestFallbackAbstainsOnAssignmentRun(t *testing.T) {
-	rt, s := testRuntime(t)
-	ctx := context.Background()
-	now := time.Now().UTC()
-	rec := terminalResearcherRunFixture(
-		"owner",
-		"computer",
-		"run-assigned-child",
-		"run-parent-requester",
-		"channel-1",
-		now,
-	)
-	rec.Metadata["assignment_id"] = "assignment-xyz"
-	if err := s.CreateRun(ctx, rec); err != nil {
-		t.Fatal(err)
-	}
-	if err := rt.bindTerminalRunOutcome(ctx, &rec, false); err != nil {
-		t.Fatalf("bind terminal outcome on assignment run: %v", err)
-	}
-	updates, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, "texture:"+rec.ChannelID, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(updates) != 0 {
-		t.Fatalf("fallback synthesized updates for assignment run: %+v", updates)
-	}
-}
-
-func TestFallbackRecordsOrphanObservationOnAssignedTerminalRun(t *testing.T) {
-	rt, s := testRuntime(t)
-	ctx := context.Background()
-	now := time.Now().UTC()
-	seed, err := store.SeedCoSuperAssignmentAuthority(s, "owner-orphan-prod", rt.TextureComputerID(), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assignmentID := "assignment-orphan-prod"
-	capability := "opaque-orphan-prod"
-	capsuleID := "capsule-orphan-prod"
-	open := types.OpenCoSuperAssignmentRequest{
-		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.CoSuperAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: capsuleID,
-			NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
-			FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
-	}
-	if open.CommandDigest, err = store.ComputeOpenCoSuperAssignmentDigest(open); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
-		t.Fatal(err)
-	}
-	runID := seed.AssignedRunIDs[0]
-	run := types.RunRecord{
-		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-		State: types.RunPending, Prompt: open.AssignedWork.Objective,
-		Metadata: map[string]any{
-			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
-			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-		},
-	}
-	bind := types.BindCoSuperAssignmentRequest{
-		CommandID: "command-bind-" + assignmentID + "-1",
-		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
-		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-		OpaqueCapability: capability, CapsuleID: capsuleID,
-	}
-	if bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.BindCoSuperAssignment(ctx, bind); err != nil {
-		t.Fatal(err)
-	}
-	persisted, err := s.GetLifecycleRun(ctx, seed.OwnerID, seed.ComputerID, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	persisted.State, persisted.Result, persisted.UpdatedAt, persisted.FinishedAt =
-		types.RunCompleted, "child exited without terminal packet", now, &now
-	if err := s.UpdateRun(ctx, persisted); err != nil {
-		t.Fatal(err)
-	}
-	probe := types.RunRecord{
-		RunID: runID, OwnerID: seed.OwnerID, RequestedByRunID: seed.ParentRunID,
-		AgentProfile: agentprofile.CoSuper,
-	}
-	if err := rt.bindTerminalRunOutcome(ctx, &probe, false); err != nil {
-		t.Fatalf("fallback orphan observation: %v", err)
-	}
-	assignment, err := s.GetCoSuperAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !assignment.Disposition.Terminal() {
-		t.Fatalf("assignment disposition = %v, want terminal orphan close", assignment.Disposition)
-	}
-	propDigest, err := store.ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, types.CoSuperResultFailed, types.CoSuperVerdictNone, nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reportID := store.TerminalReportID(seed.OwnerID, seed.ComputerID, assignmentID, 1, propDigest)
-	report, err := s.GetCoSuperAssignmentReport(ctx, seed.OwnerID, seed.ComputerID, reportID)
-	if err != nil {
-		t.Fatalf("orphan report %s: %v", reportID, err)
-	}
-	if report.Result != types.CoSuperResultFailed {
-		t.Fatalf("orphan report result = %v, want failed", report.Result)
-	}
-	updates, err := s.ListPendingWorkerUpdates(ctx, seed.OwnerID, "texture:"+run.ChannelID, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(updates) != 0 {
-		t.Fatalf("fallback synthesized updates for assignment run: %+v", updates)
 	}
 }
 
@@ -799,7 +660,7 @@ func TestBootBindsExplicitUpdateAcrossDispatchBeforeToolResultCrashWindow(t *tes
 func TestDerivedWorkerUpdateIDSurvivesReplaceableSourceRun(t *testing.T) {
 	base := types.CoagentSourcePacket{
 		OwnerID:       "owner-update-id",
-		AgentID:       "research:update-id",
+		AgentID:       "researcher:update-id",
 		TargetAgentID: "texture:update-id",
 		ChannelID:     "doc-update-id",
 		Role:          agentprofile.Researcher,
@@ -821,7 +682,7 @@ func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
 	now := time.Now().UTC()
 	rec := types.RunRecord{
 		RunID:            "run-super-explicit-terminal",
-		AgentID:          "management:explicit-terminal",
+		AgentID:          "super:explicit-terminal",
 		RequestedByRunID: "run-super-explicit-parent",
 		ChannelID:        "doc-super-explicit-terminal",
 		OwnerID:          "owner-super-explicit-terminal",
@@ -833,10 +694,10 @@ func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
 		Metadata: map[string]any{
 			runMetadataAgentProfile: agentprofile.Super,
 			runMetadataAgentRole:    agentprofile.Super,
-			runMetadataAgentID:      "management:explicit-terminal",
+			runMetadataAgentID:      "super:explicit-terminal",
 			runMetadataChannelID:    "doc-super-explicit-terminal",
 			runMetadataTrajectoryID: "trajectory-super-explicit-terminal",
-			"requested_by_agent_id": "engineering:explicit-terminal",
+			"requested_by_agent_id": "co-super:explicit-terminal",
 		},
 	}
 	if err := s.CreateRun(ctx, rec); err != nil {
@@ -846,7 +707,7 @@ func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
 		OwnerID:       rec.OwnerID,
 		SourceRunID:   rec.RunID,
 		AgentID:       rec.AgentID,
-		TargetAgentID: "engineering:explicit-terminal",
+		TargetAgentID: "co-super:explicit-terminal",
 		ChannelID:     rec.ChannelID,
 		TrajectoryID:  trajectoryIDForRun(&rec),
 		Role:          agentprofile.Super,
@@ -942,7 +803,7 @@ func TestTerminalOutcomeIgnoresExplicitUpdateToNonRequester(t *testing.T) {
 	unrelated := types.CoagentSourcePacket{
 		OwnerID:       rec.OwnerID,
 		AgentID:       rec.AgentID,
-		TargetAgentID: "engineering:unrelated-recipient",
+		TargetAgentID: "co-super:unrelated-recipient",
 		ChannelID:     rec.ChannelID,
 		TrajectoryID:  trajectoryIDForRun(&rec),
 		Role:          agentprofile.Researcher,
@@ -1037,14 +898,14 @@ func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testi
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()
 	ownerID := "owner-generic-terminal-repair"
-	targetAgentID := "management:generic-terminal-parent"
+	targetAgentID := "super:generic-terminal-parent"
 	channelID := "channel-generic-terminal-repair"
 	for i := range 2 {
 		runID := "run-cosuper-generic-terminal-" + string(rune('A'+i))
 		finishedAt := now.Add(time.Duration(i) * time.Second)
 		rec := types.RunRecord{
 			RunID:            runID,
-			AgentID:          "engineering:" + runID,
+			AgentID:          "co-super:" + runID,
 			RequestedByRunID: "parent-generic-terminal",
 			ChannelID:        channelID,
 			OwnerID:          ownerID,
@@ -1058,7 +919,7 @@ func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testi
 			Metadata: map[string]any{
 				runMetadataAgentProfile: agentprofile.CoSuper,
 				runMetadataAgentRole:    agentprofile.CoSuper,
-				runMetadataAgentID:      "engineering:" + runID,
+				runMetadataAgentID:      "co-super:" + runID,
 				runMetadataChannelID:    channelID,
 				runMetadataTrajectoryID: "trajectory-" + runID,
 				"requested_by_agent_id": targetAgentID,
@@ -1096,12 +957,12 @@ func TestBootTerminalRepairSkipsHistoricalRootRuns(t *testing.T) {
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()
 	ownerID := "owner-historical-root-skip"
-	targetAgentID := "management:historical-root-parent"
+	targetAgentID := "super:historical-root-parent"
 	channelID := "channel-historical-root-skip"
 	for i := range 5 {
 		root := types.RunRecord{
 			RunID:        "run-historical-root-" + string(rune('A'+i)),
-			AgentID:      "research:historical-root-" + string(rune('A'+i)),
+			AgentID:      "researcher:historical-root-" + string(rune('A'+i)),
 			OwnerID:      ownerID,
 			AgentProfile: agentprofile.Researcher,
 			AgentRole:    agentprofile.Researcher,
@@ -1121,7 +982,7 @@ func TestBootTerminalRepairSkipsHistoricalRootRuns(t *testing.T) {
 	}
 	child := types.RunRecord{
 		RunID:            "run-historical-root-child",
-		AgentID:          "engineering:historical-root-child",
+		AgentID:          "co-super:historical-root-child",
 		RequestedByRunID: "parent-historical-root",
 		ChannelID:        channelID,
 		OwnerID:          ownerID,
@@ -1135,7 +996,7 @@ func TestBootTerminalRepairSkipsHistoricalRootRuns(t *testing.T) {
 		Metadata: map[string]any{
 			runMetadataAgentProfile: agentprofile.CoSuper,
 			runMetadataAgentRole:    agentprofile.CoSuper,
-			runMetadataAgentID:      "engineering:historical-root-child",
+			runMetadataAgentID:      "co-super:historical-root-child",
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: "trajectory-historical-root-child",
 			"requested_by_agent_id": targetAgentID,
@@ -1164,12 +1025,12 @@ func TestBootTerminalRepairUsesOwnerScopedRecentWindow(t *testing.T) {
 	ownerID := "owner-scoped-terminal-repair"
 	otherOwner := "owner-foreign-terminal-repair"
 	t.Setenv("CHOIR_OWNER_ID", ownerID)
-	targetAgentID := "management:scoped-terminal-parent"
+	targetAgentID := "super:scoped-terminal-parent"
 	channelID := "channel-scoped-terminal-repair"
 	child := func(runID, owner string) types.RunRecord {
 		return types.RunRecord{
 			RunID:            runID,
-			AgentID:          "engineering:" + runID,
+			AgentID:          "co-super:" + runID,
 			RequestedByRunID: "parent-scoped-terminal",
 			ChannelID:        channelID,
 			OwnerID:          owner,
@@ -1183,7 +1044,7 @@ func TestBootTerminalRepairUsesOwnerScopedRecentWindow(t *testing.T) {
 			Metadata: map[string]any{
 				runMetadataAgentProfile: agentprofile.CoSuper,
 				runMetadataAgentRole:    agentprofile.CoSuper,
-				runMetadataAgentID:      "engineering:" + runID,
+				runMetadataAgentID:      "co-super:" + runID,
 				runMetadataChannelID:    channelID,
 				runMetadataTrajectoryID: "trajectory-" + runID,
 				"requested_by_agent_id": targetAgentID,
@@ -1375,7 +1236,7 @@ func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 		AgentProfile: agentprofile.Conductor,
 	}))
 	calls := []types.ToolCall{
-		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"research","objective":"research"}`)},
+		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","objective":"research"}`)},
 		{ID: "texture", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"texture","objective":"open document","initial_content":"# Draft"}`)},
 	}
 
@@ -1417,9 +1278,9 @@ func TestExecuteToolsSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 		AgentProfile: agentprofile.Super,
 	}))
 	calls := []types.ToolCall{
-		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"engineering","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
-		{ID: "spawn-implementation-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"engineering","slot":"implementation","channel_id":"doc-1","objective":"implement again"}`)},
-		{ID: "spawn-verifier", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"engineering","slot":"verifier","channel_id":"doc-1","objective":"verify"}`)},
+		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
+		{ID: "spawn-implementation-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement again"}`)},
+		{ID: "spawn-verifier", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"verifier","channel_id":"doc-1","objective":"verify"}`)},
 		{ID: "cast-1", Name: "update_coagent", Arguments: json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"proceed with exact evidence","agent_id":"agent-impl","claims":[{"text":"proceed with exact evidence"}]}`)},
 		{ID: "cast-2", Name: "update_coagent", Arguments: json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"proceed with exact evidence","agent_id":"agent-impl","claims":[{"text":"proceed with exact evidence"}]}`)},
 	}

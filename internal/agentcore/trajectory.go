@@ -15,8 +15,7 @@ import (
 // portfolio M1) says these classifications are reviewed after the first real
 // settlement cycle, not defended.
 func trajectoryKindForRun(rec *types.RunRecord) types.TrajectoryKind {
-	profile := agentProfileForRun(rec)
-	switch profile {
+	switch agentprofile.Canonical(agentProfileForRun(rec)) {
 	case agentprofile.Processor:
 		return types.TrajectoryKindPublication
 	case agentprofile.Conductor, agentprofile.Texture, agentprofile.Email:

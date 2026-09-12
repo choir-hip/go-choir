@@ -56,9 +56,8 @@ func (rt *Runtime) verifyRequiredTextureRevisions(ctx context.Context, rec *type
 	}
 	written := make(map[string]struct{})
 	for _, child := range runs {
-		childProfile := agentProfileForRun(&child)
 		if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
-			childProfile != agentprofile.Texture ||
+			agentprofile.Canonical(agentProfileForRun(&child)) != agentprofile.Texture ||
 			metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 			continue
 		}
@@ -108,9 +107,8 @@ func (rt *Runtime) awaitRequiredTextureRevisions(ctx context.Context, rec *types
 		children := 0
 		active := false
 		for _, child := range runs {
-			childProfile := agentProfileForRun(&child)
 			if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
-				childProfile != agentprofile.Texture ||
+				agentprofile.Canonical(agentProfileForRun(&child)) != agentprofile.Texture ||
 				metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 				continue
 			}

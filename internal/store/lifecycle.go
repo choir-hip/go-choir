@@ -679,7 +679,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: agent profile and role must match: %w", ErrLifecycleInvalidTransition)
 	}
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", agentprofile.Researcher, "processor", "reconciler":
+	case "texture", "researcher", "processor", "reconciler":
 	default:
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: effects-capable agent profile is not admissible: %w", ErrLifecycleInvalidTransition)
 	}
@@ -1775,7 +1775,7 @@ func (s *Store) requireLifecycleAssignedAgent(ctx context.Context, ownerID, comp
 		return types.AgentRecord{}, err
 	}
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", agentprofile.Researcher, "processor", "reconciler":
+	case "texture", "researcher", "processor", "reconciler":
 	default:
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
@@ -1836,7 +1836,7 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 	var resultAgent *types.AgentRecord
 	if errors.Is(agentErr, ErrNotFound) {
 		switch strings.TrimSpace(work.AuthorityProfile) {
-		case agentprofile.Researcher, "processor", "reconciler":
+		case "researcher", "processor", "reconciler":
 		default:
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent profile: %w", ErrLifecycleInvalidTransition)
 		}
@@ -2181,7 +2181,7 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	// The first valid work-bound Researcher activation is the cutover from a
 	// generic durable agent record to lifecycle identity. Projection does not
 	// advance the trajectory reducer, so it adopts the current reducer sequence.
-	if agent.Profile == agentprofile.Researcher && agent.LifecycleVersion <= 0 && len(boundWorkItemIDs) > 0 && lifecycleRunOwnsActivation(run.State) {
+	if agent.Profile == "researcher" && agent.LifecycleVersion <= 0 && len(boundWorkItemIDs) > 0 && lifecycleRunOwnsActivation(run.State) {
 		agent.LifecycleVersion = 1
 		agent.LastReducerSeq = trajectory.ReducerSeq
 	}
@@ -2613,9 +2613,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		key    string
 	}
 	var deliveredPacketConsumptions []deliveredPacketConsumption
-	persistentSuperProducer := req.ProducerAgentID == agentprofile.Super+":"+ownerID
+	persistentSuperProducer := req.ProducerAgentID == "super:"+ownerID
 	if persistentSuperProducer {
-		if req.ControlBindingID == "" || req.TargetWorkItemID == "" || req.Role != agentprofile.Super {
+		if req.ControlBindingID == "" || req.TargetWorkItemID == "" || req.Role != "super" {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		producerRunObj, err = s.getRunObjectByOwnerOG(ctx, ownerID, req.SourceRunID)
@@ -2631,7 +2631,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		}
 		if producerRunObj.ComputerID != "" || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
 			producerRun.ComputerID != computerID || producerRun.TrajectoryID != "" || producerRun.AgentID != req.ProducerAgentID ||
-			producerRun.AgentProfile != agentprofile.Super || producerRun.AgentRole != agentprofile.Super || !producerRunStateAllowed ||
+			producerRun.AgentProfile != "super" || producerRun.AgentRole != "super" || !producerRunStateAllowed ||
 			producerRun.ChannelID != req.ChannelID || metadataExactString(producerRun.Metadata, "assignment_trajectory_id") != req.TrajectoryID ||
 			!persistentSuperControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition

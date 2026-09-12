@@ -353,8 +353,7 @@ func (h *APIHandler) runStatusWithTrajectory(ctx context.Context, rec *types.Run
 		WaitingOn:         append([]string(nil), obligations.WaitingOn...),
 		OpenWorkItemCount: len(obligations.OpenWorkItems),
 	}
-	profile := agentProfileForRun(rec)
-	if profile == agentprofile.Processor && ownerID != "" {
+	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Processor && ownerID != "" {
 		item, found, err := h.rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
 		if err == nil && found {
 			resp.ProcessorResolution = &runProcessorResolutionStatusResponse{
@@ -382,15 +381,9 @@ func (h *APIHandler) HandleModelPolicyResolve(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	rawRole := strings.TrimSpace(r.URL.Query().Get("role"))
-	if rawRole == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "missing role"})
-		return
-	}
-	role := modelpolicy.NormalizeRole(rawRole)
+	role := modelpolicy.NormalizeRole(r.URL.Query().Get("role"))
 	if role == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "unknown role"})
-		return
+		role = agentprofile.Conductor
 	}
 	metadata := map[string]any{
 		runMetadataAgentProfile: role,
@@ -551,9 +544,9 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]any)
 	}
-	profile, err := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))
-	if err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "agent_profile is required and must be a live vocabulary profile"})
+	profile := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))
+	if profile == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "agent_profile is required"})
 		return
 	}
 	switch profile {

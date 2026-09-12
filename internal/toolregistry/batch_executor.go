@@ -18,21 +18,6 @@ import (
 // execution policy and returns results in provider call order.
 func ExecuteToolBatch(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, emit provideriface.EventEmitFunc) []types.ToolResult {
 	results := make([]types.ToolResult, len(calls))
-
-	// Stage 1 (pre-dispatch): narrow assigned-CoSuper admission grammar
-	// (settlement gate item 4). Statically refuse contradictory or forbidden
-	// batches with none run.
-	if refusalErr := validateCoSuperBatchAdmission(calls); refusalErr != nil {
-		for i, call := range calls {
-			results[i] = types.ToolResult{
-				CallID:  call.ID,
-				Output:  fmt.Sprintf("tool_error: %v", refusalErr),
-				IsError: true,
-			}
-		}
-		return results
-	}
-
 	skipped := plannedToolSkips(ctx, calls)
 
 	if shouldExecuteToolsSequentially(calls) {
@@ -137,7 +122,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "update_coagent", "save_evidence", "capsule_go_eval":
+	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "update_coagent", "save_evidence":
 		return true
 	default:
 		return false
@@ -153,18 +138,6 @@ func isTextureWriteToolName(name string) bool {
 	}
 }
 
-func validateCoSuperBatchAdmission(calls []types.ToolCall) error {
-	evalCount := 0
-	for _, call := range calls {
-		if strings.TrimSpace(call.Name) == "capsule_go_eval" {
-			evalCount++
-		}
-	}
-	if evalCount > 1 {
-		return fmt.Errorf("admission_grammar_refusal: at most one capsule_go_eval call allowed per turn (found %d)", evalCount)
-	}
-	return nil
-}
 func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]string {
 	profile := ExecutionContextFrom(ctx).Profile
 	if profile == "" || len(calls) == 0 {
@@ -276,9 +249,9 @@ func toolCallSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
 	if err := json.Unmarshal(call.Arguments, &in); err != nil {
 		return "", false
 	}
-	profile, _ := agentprofile.Canonical(in.Profile)
+	profile := agentprofile.Canonical(in.Profile)
 	if profile == "" {
-		profile, _ = agentprofile.Canonical(in.Role)
+		profile = agentprofile.Canonical(in.Role)
 	}
 	if profile != agentprofile.CoSuper {
 		return "", false
@@ -300,9 +273,9 @@ func toolCallTextureResearcherSpawnKey(call types.ToolCall) (string, bool) {
 	if err := json.Unmarshal(call.Arguments, &in); err != nil {
 		return "", false
 	}
-	profile, _ := agentprofile.Canonical(in.Profile)
+	profile := agentprofile.Canonical(in.Profile)
 	if profile == "" {
-		profile, _ = agentprofile.Canonical(in.Role)
+		profile = agentprofile.Canonical(in.Role)
 	}
 	if profile != agentprofile.Researcher {
 		return "", false
@@ -339,9 +312,9 @@ func toolCallSpawnProfile(call types.ToolCall) string {
 	if err := json.Unmarshal(call.Arguments, &in); err != nil {
 		return ""
 	}
-	profile, _ := agentprofile.Canonical(in.Profile)
+	profile := agentprofile.Canonical(in.Profile)
 	if profile == "" {
-		profile, _ = agentprofile.Canonical(in.Role)
+		profile = agentprofile.Canonical(in.Role)
 	}
 	return profile
 }

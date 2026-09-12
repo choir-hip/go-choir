@@ -20,7 +20,7 @@ func TestSettleLifecycleProducerReports(t *testing.T) {
 	now := time.Now().UTC()
 
 	superAgentID := agentprofile.Super + ":" + startReq.OwnerID
-	producerAgentID := "engineering:assignment-97191e37-657c-5acf-af18-f1c80d09def2"
+	producerAgentID := "co-super:assignment-97191e37-657c-5acf-af18-f1c80d09def2"
 
 	// Seed three pending cancel producer reports from the CoSuper assignment
 	reportIDs := []string{
@@ -39,7 +39,7 @@ func TestSettleLifecycleProducerReports(t *testing.T) {
 			TargetAgentID:    superAgentID,
 			ChannelID:        superAgentID,
 			TrajectoryID:     startReq.TrajectoryID,
-			Role:             "engineering",
+			Role:             "co-super",
 			Direction:        types.LifecyclePacketDirectionProducerReport,
 			LifecycleVersion: 1,
 			ReducerSeq:       int64(10 + i),
@@ -72,11 +72,11 @@ func TestSettleLifecycleProducerReports(t *testing.T) {
 		ProducerUpdateID: "other",
 		OwnerID:          startReq.OwnerID,
 		ComputerID:       startReq.ComputerID,
-		AgentID:          "engineering:other-assignment",
+		AgentID:          "co-super:other-assignment",
 		TargetAgentID:    superAgentID,
 		ChannelID:        superAgentID,
 		TrajectoryID:     startReq.TrajectoryID,
-		Role:             "engineering",
+		Role:             "co-super",
 		Direction:        types.LifecyclePacketDirectionProducerReport,
 		LifecycleVersion: 1,
 		ReducerSeq:       20,

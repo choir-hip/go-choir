@@ -163,7 +163,7 @@
   const SOURCE_FLOW_GAP = 24;
   const SOURCE_FLOW_LINE_HEIGHT = 29;
   const SOURCE_DIAGNOSIS_TIMEOUT_MS = 12000;
-  const SOURCE_PANEL_MODEL_ROLES = ['conductor', 'texture', 'research', 'management'];
+  const SOURCE_PANEL_MODEL_ROLES = ['conductor', 'texture', 'researcher', 'super'];
 
   function revisionSourceEntities(revision = currentRevision, bundle = publishedBundle) {
     return deriveRevisionSourceEntities({

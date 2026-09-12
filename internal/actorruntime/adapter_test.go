@@ -118,19 +118,19 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start durable lifecycle: %v", err)
 	}
-	producerAgentID := "research:" + docID
+	producerAgentID := "researcher:" + docID
 	producerWorkID := "producer-work:" + docID
 	producerRunID := "producer-run:" + docID
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
 		AgentID: producerAgentID, OwnerID: ownerID, ComputerID: computerID,
-		Profile: "research", Role: "research", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+		Profile: "researcher", Role: "researcher", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed lifecycle producer: %v", err)
 	}
 	open := types.OpenLifecycleWorkRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "open-producer:" + docID,
 		TrajectoryID: start.TrajectoryID,
-		WorkItem:     types.WorkItemRecord{WorkItemID: producerWorkID, Objective: "produce durable update", AssignedAgentID: producerAgentID, AuthorityProfile: "research"},
+		WorkItem:     types.WorkItemRecord{WorkItemID: producerWorkID, Objective: "produce durable update", AssignedAgentID: producerAgentID, AuthorityProfile: "researcher"},
 	}
 	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
 	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
@@ -138,7 +138,7 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 	}
 	producerRun := types.RunRecord{
 		RunID: producerRunID, AgentID: producerAgentID, ChannelID: docID, TrajectoryID: start.TrajectoryID,
-		AgentProfile: "research", AgentRole: "research", OwnerID: ownerID, ComputerID: computerID,
+		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: ownerID, ComputerID: computerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": producerWorkID},
 	}
 	projectProducer := types.ReplaceLifecycleActivationRequest{
@@ -154,7 +154,7 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 	queue := types.QueueLifecycleUpdateRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue:" + updateID, TrajectoryID: start.TrajectoryID,
 		TargetAgentID: agentID, ProducerAgentID: producerAgentID, ProducerUpdateID: updateID, UpdateID: updateID,
-		ChannelID: docID, Role: "research", SourceRunID: producerRunID,
+		ChannelID: docID, Role: "researcher", SourceRunID: producerRunID,
 		WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
 		Packet: packet, Content: content, PayloadDigest: payloadDigest,
 	}
@@ -204,7 +204,7 @@ func seedActorLifecycleControl(t *testing.T, s *store.Store, suffix string) acto
 	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
 		t.Fatalf("project actor Texture run: %v", err)
 	}
-	agentID, workID := "research:actor-"+suffix, "research-work-actor-"+suffix
+	agentID, workID := "researcher:actor-"+suffix, "research-work-actor-"+suffix
 	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}}
 	content := "research exact gap"
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
@@ -314,23 +314,23 @@ func TestInitialDispatchUpdateIdentityIsStableAndScoped(t *testing.T) {
 
 func TestChannelMessageUpdateIdentityIsStableAndScoped(t *testing.T) {
 	seed := "chan-a:1"
-	first := actorDispatchUpdateID("owner-a", "computer-a", "management:root", "channel_message", seed, "", "engineering:impl")
-	replay := actorDispatchUpdateID("owner-a", "computer-a", "management:root", "channel_message", seed, "", "engineering:impl")
+	first := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", seed, "", "co-super:impl")
+	replay := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", seed, "", "co-super:impl")
 	if first != replay {
 		t.Fatalf("channel_message replay IDs differ: %q != %q", first, replay)
 	}
-	sameBodyNextSeq := actorDispatchUpdateID("owner-a", "computer-a", "management:root", "channel_message", "chan-a:2", "", "engineering:impl")
+	sameBodyNextSeq := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "chan-a:2", "", "co-super:impl")
 	if sameBodyNextSeq == first {
 		t.Fatalf("distinct channel seqs collapsed to %q", first)
 	}
-	otherChannel := actorDispatchUpdateID("owner-a", "computer-a", "management:root", "channel_message", "chan-b:1", "", "engineering:impl")
+	otherChannel := actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", "chan-b:1", "", "co-super:impl")
 	if otherChannel == first {
 		t.Fatalf("distinct channel IDs collapsed to %q", first)
 	}
 	for name, changed := range map[string]string{
-		"owner": actorDispatchUpdateID("owner-b", "computer-a", "management:root", "channel_message", seed, "", "engineering:impl"),
-		"agent": actorDispatchUpdateID("owner-a", "computer-a", "management:other", "channel_message", seed, "", "engineering:impl"),
-		"from":  actorDispatchUpdateID("owner-a", "computer-a", "management:root", "channel_message", seed, "", "engineering:other"),
+		"owner": actorDispatchUpdateID("owner-b", "computer-a", "super:root", "channel_message", seed, "", "co-super:impl"),
+		"agent": actorDispatchUpdateID("owner-a", "computer-a", "super:other", "channel_message", seed, "", "co-super:impl"),
+		"from":  actorDispatchUpdateID("owner-a", "computer-a", "super:root", "channel_message", seed, "", "co-super:other"),
 	} {
 		if changed == first {
 			t.Fatalf("%s change reused channel_message ID %q", name, first)
@@ -435,7 +435,7 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 		t.Fatalf("create running Texture mutation: %v", err)
 	}
 
-	logDB, err := sql.Open("sqlite", actorLogPath(dbPath)+"?_pragma=busy_timeout(60000)&_pragma=journal_mode(WAL)")
+	logDB, err := sql.Open("sqlite", actorLogPath(dbPath)+"?_busy_timeout=60000")
 	if err != nil {
 		t.Fatalf("open actor log: %v", err)
 	}
@@ -1428,7 +1428,7 @@ func TestScopedActorMailboxDoesNotCrossOwner(t *testing.T) {
 	for _, ownerID := range []string{"owner-scope-a", "owner-scope-b"} {
 		if err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
 			AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test",
-			Profile: "research", Role: "research", ChannelID: "channel-" + ownerID,
+			Profile: "researcher", Role: "researcher", ChannelID: "channel-" + ownerID,
 		}); err != nil {
 			t.Fatalf("upsert scoped agent %s: %v", ownerID, err)
 		}
@@ -1438,7 +1438,7 @@ func TestScopedActorMailboxDoesNotCrossOwner(t *testing.T) {
 	now := time.Now().UTC()
 	packet := types.CoagentSourcePacket{
 		UpdateID: "scoped-update-a", OwnerID: "owner-scope-a", ComputerID: "autoputer-test",
-		AgentID: "producer-a", TargetAgentID: agentID, ChannelID: "channel-owner-scope-a", Role: "research",
+		AgentID: "producer-a", TargetAgentID: agentID, ChannelID: "channel-owner-scope-a", Role: "researcher",
 		Packet:  types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "scoped update"},
 		Content: "scoped wake", CreatedAt: now,
 	}
@@ -2173,7 +2173,7 @@ func seedAdapterLifecycleResearcherControl(t *testing.T, s *store.Store, rt *age
 	t.Helper()
 	ctx := context.Background()
 	docID, trajectoryID := "doc-adapter-admission-"+suffix, "trajectory-adapter-admission-"+suffix
-	textureAgentID, researcherAgentID := "texture:"+docID, "research:"+suffix
+	textureAgentID, researcherAgentID := "texture:"+docID, "researcher:"+suffix
 	now := time.Now().UTC()
 	start := types.StartLifecycleRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-adapter-admission-" + suffix,
@@ -2491,17 +2491,8 @@ func TestAdapterSQLiteResearcherAdmissionRecoveryExecutesWithoutSnapshot(t *test
 	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
 		t.Fatalf("recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
 	}
-	var memory []byte
-	var snapErr error
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		memory, snapErr = adapter.log.LoadSnapshot(ctx, mailboxID)
-		if snapErr == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if snapErr != nil || len(memory) != 0 {
-		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, snapErr)
+	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
+		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, err)
 	}
 	if got := counting.calls.Load(); got != 1 {
 		t.Fatalf("provider calls=%d", got)
@@ -2566,17 +2557,8 @@ func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.
 	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
 		t.Fatalf("injection recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
 	}
-	var memory []byte
-	var snapErr error
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		memory, snapErr = adapter.log.LoadSnapshot(ctx, mailboxID)
-		if snapErr == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if snapErr != nil || len(memory) != 0 {
-		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, snapErr)
+	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
+		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, err)
 	}
 	if got := counting.calls.Load(); got != 1 {
 		t.Fatalf("provider calls=%d", got)

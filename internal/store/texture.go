@@ -244,21 +244,10 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 		return nil, fmt.Errorf("texture workspace: bootstrap object graph: %w", err)
 	}
 	s.ogStore = ogDoltStore
-	ogDoltStore.SetWriteValidator(s.vocabWriteGuard)
-	if rep, err := s.loadVocabMigrationReport(); err == nil && rep != nil {
-		s.vocabCutover.Store(true)
-	}
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,
 	})
 	return s, nil
-}
-
-// TextureWorkspacePath is the Dolt workspace derived from a runtime marker.
-// Recovery swaps this directory together with the marker; it must not invent
-// a second store.
-func TextureWorkspacePath(path string) string {
-	return deriveTextureWorkspacePath(path)
 }
 
 func deriveTextureWorkspacePath(path string) string {

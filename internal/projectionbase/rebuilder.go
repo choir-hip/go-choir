@@ -105,14 +105,6 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		return nil, fmt.Errorf("rebuilder: final head mismatch: got %s, want %s", finalHead.CanonicalEventHead, r.cfg.TargetHead)
 	}
 
-	// Vocabulary cutover: replay deposits V1 rows byte-identically, so
-	// forward-migrate and fence the scratch store before the witness and
-	// publish. The descriptor already stamps VocabularyVersion=v2; this makes
-	// the published content match it.
-	if _, err := scratchStore.MigrateAndFenceServingVocabulary(ctx, true, nil); err != nil {
-		return nil, fmt.Errorf("rebuilder: vocabulary migration refused: %w", err)
-	}
-
 	// Extract state witness for canonical verification.
 	version := computerversion.ComputerVersion{
 		CodeRef:            computerversion.CodeRef("runtime:" + r.cfg.ComputerID),
@@ -171,18 +163,15 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		BlobSizeBytes:         blobSize,
 		ReducerVersion:        finalHead.ReducerVersion,
 		SchemaVersion:         int(computerevent.SchemaVersionV1),
-		VocabularyVersion:     CurrentVocabularyVersion,
 		VMLocalContentWitness: witness,
 		CreatedAt:             time.Now().UTC(),
 	}
+
 	if err := descriptor.Validate(); err != nil {
 		return nil, fmt.Errorf("rebuilder: validate descriptor: %w", err)
 	}
 
 	blobPath := filepath.Join(r.cfg.ArtifactsRoot, "sha256", Namespace, blobSHA256)
-	if _, err := publisher.PublishDescriptor(descriptor, blobSHA256); err != nil {
-		return nil, fmt.Errorf("rebuilder: publish descriptor sidecar: %w", err)
-	}
 	return &Result{
 		Descriptor: descriptor,
 		BlobPath:   blobPath,

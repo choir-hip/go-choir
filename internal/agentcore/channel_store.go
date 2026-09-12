@@ -7,10 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 // ChannelMessage is the store-backed channel message type. The old in-memory
@@ -40,16 +38,6 @@ func (rt *Runtime) CastEnvelope(ctx context.Context, channelID, toAgentID, from,
 }
 
 func (rt *Runtime) channelCast(ctx context.Context, channelID, toAgentID, toRunID, from, role, content, idempotencyKey string) (uint64, error) {
-	// Canonicalize-or-refuse the cast role: live writes persist only V2
-	// canonical names or frozen protocol values (owner, trusted-core).
-	// Replay never reaches this path — it re-wakes without re-persisting.
-	if trimmed := strings.TrimSpace(role); trimmed != "" {
-		if canonical, err := agentprofile.Canonical(trimmed); err == nil {
-			role = canonical
-		} else if !vocabmigrate.IsFrozenProtocol(trimmed) {
-			return 0, fmt.Errorf("channel cast: role %q is not in the live vocabulary", trimmed)
-		}
-	}
 	trajectoryID := ""
 	if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil && runRec.Metadata != nil {
 		if id, _ := runRec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(id) != "" {

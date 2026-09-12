@@ -27,7 +27,7 @@ func SeedCoSuperAssignmentAuthority(s *Store, ownerID, computerID string, count 
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	f := CoSuperAssignmentSeed{
 		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: "trajectory-assignment",
-		ParentAgentID: "management:" + ownerID, ParentRunID: "run-management-assignment", ParentWorkID: "work-management-assignment",
+		ParentAgentID: "super:" + ownerID, ParentRunID: "run-super-assignment", ParentWorkID: "work-super-assignment",
 		ParentDecisionID: "decision:" + objectgraph.SHA256([]byte("decision-assignment")), ParentControlID: "control-assignment",
 	}
 	trajectory := types.TrajectoryRecord{
@@ -40,17 +40,17 @@ func SeedCoSuperAssignmentAuthority(s *Store, ownerID, computerID string, count 
 	revision := types.Revision{RevisionID: "revision-assignment", DocID: document.DocID, OwnerID: f.OwnerID, ComputerID: f.ComputerID, AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", Content: "assignment authority", CreatedAt: now}
 	parentAgent := types.AgentRecord{
 		AgentID: f.ParentAgentID, OwnerID: f.OwnerID, ComputerID: f.ComputerID,
-		Profile: "management", Role: "management", ChannelID: f.ParentAgentID, ActiveRunID: f.ParentRunID,
+		Profile: "super", Role: "super", ChannelID: f.ParentAgentID, ActiveRunID: f.ParentRunID,
 		LifecycleVersion: 0, CreatedAt: now, UpdatedAt: now,
 	}
 	parentWork := types.WorkItemRecord{
 		WorkItemID: f.ParentWorkID, TrajectoryID: f.TrajectoryID, OwnerID: f.OwnerID, ComputerID: f.ComputerID,
-		Objective: "coordinate delegated assignments", AuthorityProfile: "management", Status: types.WorkItemOpen,
+		Objective: "coordinate delegated assignments", AuthorityProfile: "super", Status: types.WorkItemOpen,
 		AssignedAgentID: f.ParentAgentID, LifecycleVersion: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	parentRun := types.RunRecord{
 		RunID: f.ParentRunID, AgentID: f.ParentAgentID, ChannelID: f.ParentAgentID,
-		AgentProfile: "management", AgentRole: "management", OwnerID: f.OwnerID, ComputerID: f.ComputerID,
+		AgentProfile: "super", AgentRole: "super", OwnerID: f.OwnerID, ComputerID: f.ComputerID,
 		State: types.RunRunning, Prompt: "coordinate", CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
 			"assignment_trajectory_id": f.TrajectoryID, "work_item_ids": []string{f.ParentWorkID},
@@ -83,7 +83,7 @@ func SeedCoSuperAssignmentAuthority(s *Store, ownerID, computerID string, count 
 	}
 	objects := []objectgraph.Object{trajObj, agentObj, workObj, docObj, revObj}
 	for i := 0; i < count; i++ {
-		f.AssignedAgentIDs = append(f.AssignedAgentIDs, fmt.Sprintf("engineering:assignment-%02d", i))
+		f.AssignedAgentIDs = append(f.AssignedAgentIDs, fmt.Sprintf("co-super:assignment-%02d", i))
 		f.AssignedWorkIDs = append(f.AssignedWorkIDs, fmt.Sprintf("work-cosuper-assignment-%02d", i))
 		f.AssignedRunIDs = append(f.AssignedRunIDs, fmt.Sprintf("run-cosuper-assignment-%02d", i))
 	}

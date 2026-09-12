@@ -140,16 +140,6 @@ type VMOwnership struct {
 	// fails closed to tools at boot. An unflagged refresh preserves this
 	// field; an explicit write is cutover or rollback.
 	Actuator string `json:"actuator,omitempty"`
-
-	// DivergenceStatus classifies the computer's divergence from platform baseline:
-	// "tracking" (clean baseline, can auto-fast-forward non-breaking platform updates)
-	// "divergent" (has diverged ledgers/packages; updates require rebase/proposal)
-	// "canary" (pinned constructed verification canary; never touched by automatic refresh)
-	DivergenceStatus string `json:"divergence_status,omitempty"`
-
-	// PlatformBaseRef is the base platform release commit or version this computer
-	// was provisioned from or last cleanly rebased against.
-	PlatformBaseRef string `json:"platform_base_ref,omitempty"`
 }
 
 // IsReady returns true if the VM is in a state that can serve routed requests.
@@ -219,22 +209,6 @@ func (r *OwnershipRegistry) ClearHold(computerID string) error {
 		return fmt.Errorf("vmctl: no ownership for computer %s", computerID)
 	}
 	own.HoldStatus = nil
-	return r.writePersistenceLocked()
-}
-
-// SetDivergenceStatus records the divergence classification ("tracking", "divergent", "canary")
-// and the platform base reference for a computer.
-func (r *OwnershipRegistry) SetDivergenceStatus(computerID, status, platformBaseRef string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	own := r.byComputerIDLocked(computerID)
-	if own == nil {
-		return fmt.Errorf("vmctl: no ownership for computer %s", computerID)
-	}
-	own.DivergenceStatus = status
-	if platformBaseRef != "" {
-		own.PlatformBaseRef = platformBaseRef
-	}
 	return r.writePersistenceLocked()
 }
 

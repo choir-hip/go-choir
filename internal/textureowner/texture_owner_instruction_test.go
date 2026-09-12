@@ -260,7 +260,7 @@ func TestLifecycleTextureResearcherOpenerDerivesIdentitiesAndCommitsBeforeWake(t
 	}}}
 	snapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
 	controls, err := handler.textureTurnControls(t.Context(), &run, doc, snapshot, args)
-	if err != nil || len(controls) != 1 || controls[0].OpenAgent == nil || controls[0].OpenWork == nil || !strings.HasPrefix(controls[0].TargetAgentID, "research:") || controls[0].OpenAgent.AgentID != controls[0].TargetAgentID || controls[0].OpenWork.WorkItemID != controls[0].TargetWorkItemID {
+	if err != nil || len(controls) != 1 || controls[0].OpenAgent == nil || controls[0].OpenWork == nil || !strings.HasPrefix(controls[0].TargetAgentID, "researcher:") || controls[0].OpenAgent.AgentID != controls[0].TargetAgentID || controls[0].OpenWork.WorkItemID != controls[0].TargetWorkItemID {
 		t.Fatalf("runtime-derived Researcher opener=%+v err=%v", controls, err)
 	}
 	openWork := controls[0].OpenWork
@@ -275,7 +275,7 @@ func TestLifecycleTextureResearcherOpenerDerivesIdentitiesAndCommitsBeforeWake(t
 		t.Fatalf("atomic Researcher runtime turn=%+v err=%v", result, err)
 	}
 	createdAgent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, controls[0].TargetAgentID)
-	if err != nil || createdAgent.Profile != "research" || createdAgent.LifecycleVersion != 1 {
+	if err != nil || createdAgent.Profile != "researcher" || createdAgent.LifecycleVersion != 1 {
 		t.Fatalf("created Researcher=%+v err=%v", createdAgent, err)
 	}
 	legacy, err := core.Store().ListPendingWorkerUpdates(t.Context(), start.OwnerID, controls[0].TargetAgentID, 10)
@@ -396,12 +396,12 @@ func TestLifecycleTextureSemanticControlErrorKeepsSameRunWritableForAtomicResear
 	}
 	var researcher types.AgentRecord
 	for _, candidate := range afterValid.Agents {
-		if strings.HasPrefix(candidate.AgentID, "research:") {
+		if strings.HasPrefix(candidate.AgentID, "researcher:") {
 			researcher = candidate
 			break
 		}
 	}
-	if researcher.AgentID == "" || researcher.Profile != "research" || researcher.LifecycleVersion != 1 {
+	if researcher.AgentID == "" || researcher.Profile != "researcher" || researcher.LifecycleVersion != 1 {
 		t.Fatalf("corrected retry Researcher = %+v", researcher)
 	}
 	mutation, err := core.Store().GetAgentMutationByRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)

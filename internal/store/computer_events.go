@@ -243,11 +243,9 @@ func (s *Store) Prepared(ctx context.Context, computerID string) ([]computereven
 		if err := rows.Scan(&rawEvent, &request.EventDigest, &request.EventArtifactDigest, &request.EventPinReceiptDigest, &rawPins, &request.Next.DesiredEventHead, &request.Next.EffectiveEventHead, &request.Next.PendingTransitionRef, &request.Next.DesiredStateCommitment, &request.Next.EffectiveStateCommitment, &request.Next.ReducerVersion, &request.Next.CredentialRevocationEpoch, &request.Input.TargetStateCommitment, &request.Input.RestoredPriorEffective); err != nil {
 			return nil, err
 		}
-		event, err := computerevent.DecodeHistoricEvent([]byte(rawEvent))
-		if err != nil {
+		if err := json.Unmarshal([]byte(rawEvent), &request.Event); err != nil {
 			return nil, err
 		}
-		request.Event = event
 		if err := json.Unmarshal([]byte(rawPins), &request.PayloadPinReceiptDigests); err != nil {
 			return nil, err
 		}
@@ -280,8 +278,8 @@ func (s *Store) EventByIdempotency(ctx context.Context, computerID, idempotencyK
 	if status != "finalized" {
 		return computerevent.Event{}, false, fmt.Errorf("computer event projection: event is %s", status)
 	}
-	event, err := computerevent.DecodeHistoricEvent([]byte(raw))
-	if err != nil {
+	var event computerevent.Event
+	if err := json.Unmarshal([]byte(raw), &event); err != nil {
 		return computerevent.Event{}, false, fmt.Errorf("computer event projection: decode event: %w", err)
 	}
 	return event, true, nil
@@ -296,8 +294,8 @@ func (s *Store) EventByDigest(ctx context.Context, computerID, eventDigest strin
 	if err != nil {
 		return computerevent.Event{}, false, err
 	}
-	event, err := computerevent.DecodeHistoricEvent([]byte(raw))
-	if err != nil {
+	var event computerevent.Event
+	if err := json.Unmarshal([]byte(raw), &event); err != nil {
 		return computerevent.Event{}, false, err
 	}
 	return event, true, nil

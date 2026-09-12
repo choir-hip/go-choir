@@ -39,7 +39,7 @@ provider = "xiaomi"
 model = "mimo-v2.5"
 reasoning = "medium"
 
-[roles.research]
+[roles.researcher]
 provider = "deepseek"
 model = "deepseek-v4-flash"
 `), 0o644); err != nil {
@@ -55,7 +55,7 @@ provider = "zai"
 model = "glm-5.2"
 reasoning = "medium"
 
-[roles.research]
+[roles.researcher]
 provider = "zai"
 model = "glm-5.2"
 reasoning = "medium"
@@ -97,8 +97,7 @@ reasoning = "medium"
 	}
 	var textureRun *types.RunRecord
 	for i := range runs {
-		profile, _ := agentprofile.Canonical(runs[i].AgentProfile)
-		if profile == agentprofile.Texture {
+		if agentprofile.Canonical(runs[i].AgentProfile) == agentprofile.Texture {
 			textureRun = &runs[i]
 			break
 		}

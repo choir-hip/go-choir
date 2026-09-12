@@ -12,8 +12,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 var ErrNeedsProjectionRepair = errors.New("computer event projection repair required")
@@ -120,12 +118,7 @@ type ComputerEventAppender struct {
 	cipher           *PrivateArtifactCipher
 	livePayloads     map[string][]byte
 	replayProjection bool
-	// replayObserver receives tail-bounded recovery telemetry: page
-	// enumerations, applied sequences, and durable commits. Nil disables
-	// observation with a single branch per site; recovery evidence, not
-	// control flow — the observer can never alter replay.
-	replayObserver ReplayObserver
-	mu             sync.Mutex
+	mu               sync.Mutex
 	// Replay progress snapshot (guarded by mu) so the guest health surface can
 	// report a replay in progress with its sequence to the host wait-for-ready
 	// probe without racing the replay goroutine.
@@ -134,23 +127,6 @@ type ComputerEventAppender struct {
 	replayCommittedSeq       uint64
 	replayCheckpointEvery    int
 	replayCheckpointInterval time.Duration
-}
-
-// ReplayObserver records recovery-critical replay work for tail-bounded cost
-// evidence. Implementations must be goroutine-safe and non-blocking; replay
-// never waits for observation.
-type ReplayObserver interface {
-	PageFetched(afterSequence uint64, count int)
-	RecordApplied(sequence uint64)
-	CheckpointCommitted(sequence uint64)
-}
-
-// SetReplayObserver installs the recovery telemetry observer. Nil disables.
-func (a *ComputerEventAppender) SetReplayObserver(observer ReplayObserver) {
-	if a == nil {
-		return
-	}
-	a.replayObserver = observer
 }
 
 // ReplaySnapshot describes the durable replay progress for the liveness probe.
@@ -568,14 +544,6 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 	if event.ComputerID != a.computerID {
 		return Receipt{}, fmt.Errorf("computer event appender: wrong computer")
 	}
-	// Serving fence: every live append must speak the active V2 vocabulary.
-	// Replay never reaches appendLocked (reconstruct applies tape events
-	// directly), so historic V1 events are unaffected; frozen protocol
-	// (owner, trusted-core) always passes.
-	if err := vocabmigrate.VerifyServingVocabulary(vocabmigrate.VocabularyV2,
-		vocabmigrate.EventActorFields(event.ActorProfile)...); err != nil {
-		return Receipt{}, fmt.Errorf("computer event appender: %w", err)
-	}
 	payloadPinReceiptDigests = nonNilStrings(payloadPinReceiptDigests)
 	pinIntentCommitment, err := ComputePinIntentCommitment(event, input)
 	if err != nil {
@@ -667,16 +635,6 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 			}
 			continue
 		}
-		// Serving fence for recovered prepared events: a prepared row may
-		// carry a historic V1 actor (committed pre-cutover, legal tape
-		// history) or a V2 actor, so the check accepts either vocabulary and
-		// refuses only tokens known to neither.
-		fields := vocabmigrate.EventActorFields(request.Event.ActorProfile)
-		if errV2 := vocabmigrate.VerifyServingVocabulary(vocabmigrate.VocabularyV2, fields...); errV2 != nil {
-			if errV1 := vocabmigrate.VerifyServingVocabulary(vocabmigrate.VocabularyV1, fields...); errV1 != nil {
-				return fmt.Errorf("computer event appender: prepared event actor %q is not in any known vocabulary", request.Event.ActorProfile)
-			}
-		}
 		platformHead, err := a.cas.Head(ctx, a.computerID)
 		if err != nil {
 			return fmt.Errorf("computer event appender: recovery head: %w", err)
@@ -766,9 +724,6 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
 		}
 		a.setReplayProgress(record.Request.Event.Sequence, a.committedReplaySeq())
-		if observer := a.replayObserver; observer != nil {
-			observer.RecordApplied(record.Request.Event.Sequence)
-		}
 		if elapsed := time.Since(applyStarted); elapsed > 2*time.Second {
 			log.Printf("computer event appender: replay apply slow seq=%d elapsed=%s", record.Request.Event.Sequence, elapsed)
 		}
@@ -811,9 +766,6 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			page, err := pageSource.EventsPage(ctx, a.computerID, after, pageSize)
 			if err != nil {
 				return fmt.Errorf("computer event appender: fetch durable chain: %w", err)
-			}
-			if observer := a.replayObserver; observer != nil {
-				observer.PageFetched(after, len(page))
 			}
 			if elapsed := time.Since(pageStarted); elapsed > 2*time.Second {
 				log.Printf("computer event appender: replay page fetch after=%d count=%d elapsed=%s", after, len(page), elapsed)
@@ -916,9 +868,6 @@ func (a *ComputerEventAppender) commitReplay(ctx context.Context) error {
 		a.replayCommittedSeq = a.replaySeq
 	}
 	a.mu.Unlock()
-	if observer := a.replayObserver; observer != nil {
-		observer.CheckpointCommitted(a.committedReplaySeq())
-	}
 	return nil
 }
 
@@ -1032,7 +981,6 @@ func (a *ComputerEventAppender) replayInto(ctx context.Context, projection Proje
 		reader:           a.reader,
 		cipher:           a.cipher,
 		replayProjection: true,
-		replayObserver:   a.replayObserver,
 	}
 	if targetHead == "" {
 		return dryRun.Reconstruct(ctx, source)

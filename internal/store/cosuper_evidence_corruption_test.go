@@ -300,7 +300,7 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedVerifyEvent(t *testing.T) {
 	expect("report event run or agent scope", runMismatch)
 
 	agentMismatch := ev
-	agentMismatch.AgentID = "engineering:other"
+	agentMismatch.AgentID = "co-super:other"
 	expect("report event agent scope mismatch", agentMismatch)
 
 	t.Run("ambiguous report event", func(t *testing.T) {

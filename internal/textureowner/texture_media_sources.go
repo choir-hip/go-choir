@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
@@ -326,7 +325,7 @@ func sourceServiceItemRefToSourceEntity(itemID, contextText string) textureSourc
 			ResearchState: "represented",
 		},
 		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           agentprofile.Researcher,
+			CreatedBy:           "researcher",
 			RightsScope:         "source_service_projection",
 			UntrustedSourceText: true,
 		},
@@ -364,7 +363,7 @@ func contentItemRefToSourceEntity(item types.ContentItem) textureSourceEntity {
 			ResearchState: "represented",
 		},
 		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           agentprofile.Researcher,
+			CreatedBy:           "researcher",
 			RightsScope:         "private_user_source",
 			UntrustedSourceText: true,
 		},

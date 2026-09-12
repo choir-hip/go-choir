@@ -131,7 +131,7 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 
 	ctx := context.Background()
 	ownerID := "user-alice"
-	agentID := "engineering:work-sweep"
+	agentID := "cosuper:work-sweep"
 	trajectoryID := "traj-work-sweep"
 	channelID := "channel-work-sweep"
 
@@ -250,7 +250,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 	trajectoryID := "traj-passivated-spawn"
 	parentID := "texture-passivated-spawn-parent"
 	childID := "researcher-passivated-spawn-child"
-	agentID := "research:passivated-spawn"
+	agentID := "researcher:passivated-spawn"
 	channelID := "doc-passivated-spawn"
 	objective := "research restart-resilient spawned work"
 
@@ -439,7 +439,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 	trajectoryID := "traj-passivated-spawn-sweep"
 	parentID := "texture-passivated-spawn-sweep-parent"
 	childID := "researcher-passivated-spawn-sweep-child"
-	agentID := "research:passivated-spawn-sweep"
+	agentID := "researcher:passivated-spawn-sweep"
 	channelID := "doc-passivated-spawn-sweep"
 	objective := "research restart-resilient spawned work after passivation"
 
@@ -602,7 +602,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 
 	ctx := context.Background()
 	ownerID := "user-alice"
-	agentID := "engineering:combined-rewarm"
+	agentID := "cosuper:combined-rewarm"
 	trajectoryID := "traj-combined-rewarm"
 	otherTrajectoryID := "traj-combined-rewarm-other"
 	channelID := "channel-combined-rewarm"
@@ -693,7 +693,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-combined-rewarm",
 		OwnerID:       ownerID,
-		AgentID:       "engineering:verifier",
+		AgentID:       "co-super:verifier",
 		TargetAgentID: agentID,
 		ChannelID:     channelID,
 		TrajectoryID:  trajectoryID,
@@ -717,7 +717,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 	otherUpdate := types.CoagentSourcePacket{
 		UpdateID:      "update-combined-rewarm-other",
 		OwnerID:       ownerID,
-		AgentID:       "engineering:reviewer",
+		AgentID:       "co-super:reviewer",
 		TargetAgentID: agentID,
 		ChannelID:     channelID,
 		TrajectoryID:  otherTrajectoryID,
@@ -1033,7 +1033,7 @@ func TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill(t *testing.T) {
 
 const (
 	m3RestartOwnerID     = "user-alice"
-	m3RestartAgentID     = "research:process-restart"
+	m3RestartAgentID     = "researcher:process-restart"
 	m3RestartTrajectory  = "traj-process-restart"
 	m3RestartChannelID   = "channel-process-restart"
 	m3RestartUpdateID    = "update-process-restart"
@@ -1340,7 +1340,7 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      m3RestartUpdateID,
 		OwnerID:       m3RestartOwnerID,
-		AgentID:       "research:process-producer",
+		AgentID:       "researcher:process-producer",
 		TargetAgentID: m3RestartAgentID,
 		ChannelID:     m3RestartChannelID,
 		TrajectoryID:  m3RestartTrajectory,
@@ -1502,8 +1502,8 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 	trajectoryID := "traj-resident-reuse"
 
 	active, err := rt.StartRunWithMetadata(ctx, "continue active work", ownerID, map[string]any{
-		runMetadataAgentProfile: agentprofile.Researcher,
-		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataAgentProfile: agentprofile.CoSuper,
+		runMetadataAgentRole:    agentprofile.CoSuper,
 		runMetadataAgentID:      agentID,
 		runMetadataChannelID:    "chan-resident-reuse",
 		runMetadataTrajectoryID: trajectoryID,
@@ -1520,11 +1520,11 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-resident-reuse",
 		OwnerID:       ownerID,
-		AgentID:       "engineering:impl",
+		AgentID:       "co-super:impl",
 		TargetAgentID: agentID,
 		ChannelID:     active.ChannelID,
 		TrajectoryID:  trajectoryID,
-		Role:          agentprofile.Researcher,
+		Role:          agentprofile.CoSuper,
 		Packet:        testCoagentUpdatePacket("evidence_update", "new steering input"),
 		Content:       "new steering input",
 		CreatedAt:     time.Now().UTC(),
@@ -1598,7 +1598,7 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-blocked-history",
 		OwnerID:       ownerID,
-		AgentID:       "engineering:impl",
+		AgentID:       "co-super:impl",
 		TargetAgentID: agentID,
 		ChannelID:     blocked.ChannelID,
 		TrajectoryID:  trajectoryID,
@@ -1680,7 +1680,7 @@ func TestTrajectoryObligationsReportPendingUpdateCoagent(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-stall-1",
 		OwnerID:       ownerID,
-		AgentID:       "engineering:verifier",
+		AgentID:       "co-super:verifier",
 		TargetAgentID: superAgent.AgentID,
 		ChannelID:     superAgent.ChannelID,
 		TrajectoryID:  trajectoryID,
@@ -1736,7 +1736,7 @@ func TestUpdateCoagentDeliveryRequiresSuccessfulActivation(t *testing.T) {
 			update := types.CoagentSourcePacket{
 				UpdateID:      updateID,
 				OwnerID:       ownerID,
-				AgentID:       "engineering:impl",
+				AgentID:       "co-super:impl",
 				TargetAgentID: targetAgentID,
 				ChannelID:     "chan-delivery-" + tc.name,
 				TrajectoryID:  "traj-delivery-" + tc.name,
@@ -1838,7 +1838,7 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-stray-1",
 		OwnerID:       ownerID,
-		AgentID:       "engineering:impl",
+		AgentID:       "co-super:impl",
 		TargetAgentID: "coagent:right",
 		ChannelID:     "chan-stray",
 		TrajectoryID:  "traj-stray",
@@ -1971,7 +1971,7 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		UpdateID:      "update-warm-1",
 		OwnerID:       ownerID,
-		AgentID:       "engineering:impl",
+		AgentID:       "co-super:impl",
 		TargetAgentID: targetAgentID,
 		ChannelID:     rec.ChannelID,
 		TrajectoryID:  trajectoryID,

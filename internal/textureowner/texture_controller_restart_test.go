@@ -19,19 +19,19 @@ func projectTextureOwnerTestProducer(t *testing.T, s *store.Store, start types.S
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
-	agentID := "research:" + suffix
+	agentID := "researcher:" + suffix
 	workID := "producer-work:" + suffix
 	runID := "producer-run:" + suffix
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
 		AgentID: agentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "research", Role: "research", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
+		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("seed lifecycle producer: %v", err)
 	}
 	open := types.OpenLifecycleWorkRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "open-producer:" + suffix,
 		TrajectoryID: start.TrajectoryID,
-		WorkItem:     types.WorkItemRecord{WorkItemID: workID, Objective: "produce durable update", AssignedAgentID: agentID, AuthorityProfile: "research"},
+		WorkItem:     types.WorkItemRecord{WorkItemID: workID, Objective: "produce durable update", AssignedAgentID: agentID, AuthorityProfile: "researcher"},
 	}
 	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
 	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
@@ -39,7 +39,7 @@ func projectTextureOwnerTestProducer(t *testing.T, s *store.Store, start types.S
 	}
 	run := types.RunRecord{
 		RunID: runID, AgentID: agentID, ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID,
-		AgentProfile: "research", AgentRole: "research", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		AgentProfile: "researcher", AgentRole: "researcher", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{"lifecycle_work_item_id": workID},
 	}
 	project := types.ReplaceLifecycleActivationRequest{
@@ -98,7 +98,7 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 		OwnerID: ownerID, ComputerID: "autoputer-texture-restart", CommandID: "queue-texture-restart",
 		TrajectoryID: start.TrajectoryID, TargetAgentID: agentID,
 		ProducerAgentID: producerAgentID, ProducerUpdateID: "update-texture-restart",
-		UpdateID: "update-texture-restart", ChannelID: docID, Role: "research", SourceRunID: producerRunID,
+		UpdateID: "update-texture-restart", ChannelID: docID, Role: "researcher", SourceRunID: producerRunID,
 		WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
 		Packet: packet, Content: "Durable finding", PayloadDigest: payloadDigest,
 	}
@@ -216,7 +216,7 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 		OwnerID: ownerID, ComputerID: "computer-b", CommandID: "queue:computer-b",
 		TrajectoryID: trajectoryID, TargetAgentID: agentID, ProducerAgentID: producerAgentID,
 		ProducerUpdateID: "update-computer-b", UpdateID: "update-computer-b", ChannelID: docID,
-		Role: "research", SourceRunID: producerRunID, WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
+		Role: "researcher", SourceRunID: producerRunID, WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
 		Packet: packet, Content: "computer B update", PayloadDigest: payloadDigest,
 	}
 	queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)

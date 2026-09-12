@@ -46,8 +46,6 @@ type resolveRequest struct {
 	// Actuator is an optional owner-scoped route write (tools|rlm).
 	// Omitted on refresh preserves the stored value.
 	Actuator string `json:"actuator,omitempty"`
-	// Force bypasses divergence protection on refresh.
-	Force bool `json:"force,omitempty"`
 }
 
 // resolveResponse is the JSON response for POST /internal/vmctl/resolve.
@@ -81,19 +79,16 @@ type ownershipResponse struct {
 	SnapshotKind              string                           `json:"snapshot_kind,omitempty"`
 	ConstructionVersion       *computerversion.ComputerVersion `json:"construction_version,omitempty"`
 	ConstructionDiskReceiptID string                           `json:"construction_disk_receipt_id,omitempty"`
-	DivergenceStatus          string                           `json:"divergence_status,omitempty"`
-	PlatformBaseRef           string                           `json:"platform_base_ref,omitempty"`
 }
 
 type reclaimResponse struct {
-	Status            string               `json:"status"`
-	VMsReclaimed      int                  `json:"vms_reclaimed"`
-	RetentionPruned   int                  `json:"retention_pruned"`
-	VMsStopped        int                  `json:"vms_stopped"`
-	QuarantinesPruned int                  `json:"quarantines_pruned"`
-	ReclaimBefore     PressureReclaimPlan  `json:"reclaim_before"`
-	ReclaimAfter      PressureReclaimPlan  `json:"reclaim_after"`
-	Retention         RetentionPruneResult `json:"retention"`
+	Status          string               `json:"status"`
+	VMsReclaimed    int                  `json:"vms_reclaimed"`
+	RetentionPruned int                  `json:"retention_pruned"`
+	VMsStopped      int                  `json:"vms_stopped"`
+	ReclaimBefore   PressureReclaimPlan  `json:"reclaim_before"`
+	ReclaimAfter    PressureReclaimPlan  `json:"reclaim_after"`
+	Retention       RetentionPruneResult `json:"retention"`
 }
 
 // Handler provides HTTP handlers for the vmctl service.
@@ -451,46 +446,6 @@ func (h *Handler) HandleUnhold(w http.ResponseWriter, r *http.Request) {
 	}
 	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "unheld", "computer_id": req.ComputerID})
 }
-
-type setDivergenceRequest struct {
-	ComputerID       string `json:"computer_id"`
-	DivergenceStatus string `json:"divergence_status"`
-	PlatformBaseRef  string `json:"platform_base_ref,omitempty"`
-}
-
-// HandleSetDivergence updates the divergence classification for a computer.
-func (h *Handler) HandleSetDivergence(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
-		return
-	}
-	var req setDivergenceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
-		return
-	}
-	if req.ComputerID == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "computer_id is required"})
-		return
-	}
-	if req.DivergenceStatus == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "divergence_status is required"})
-		return
-	}
-	if err := h.registry.SetDivergenceStatus(req.ComputerID, req.DivergenceStatus, req.PlatformBaseRef); err != nil {
-		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, map[string]string{
-		"status":            "updated",
-		"computer_id":       req.ComputerID,
-		"divergence_status": req.DivergenceStatus,
-	})
-}
 func (h *Handler) HandleRemove(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
@@ -756,14 +711,6 @@ func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	existing := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
-	if existing != nil && existing.DivergenceStatus == "divergent" && !req.Force {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{
-			Error: fmt.Sprintf("vmctl: computer %s is classified as divergent; refusing automatic refresh without force=true", existing.ComputerID),
-		})
-		return
-	}
-
 	own, err := h.registry.RefreshVMForDesktop(req.UserID, req.DesktopID)
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
@@ -822,26 +769,14 @@ func (h *Handler) runReclaimSweep(ctx context.Context) reclaimResponse {
 	reclaimed := h.registry.ReclaimPressureVMs(ctx, h.AuthorizeComputerVersionRoute)
 	retention := h.registry.PruneRetention(ctx, h.AuthorizeComputerVersionRoute)
 	stopped := h.registry.StopIdleVMs(ctx, h.AuthorizeComputerVersionRoute)
-	quarantinesPruned := 0
-	if state := h.coldRecovery(); state != nil {
-		state.mu.Lock()
-		storage, root := state.storage, state.stateRoot
-		state.mu.Unlock()
-		if storage != nil && root != "" {
-			if n, err := storage.PruneRecoveryQuarantines(root, recoveryQuarantineRetained()); err == nil {
-				quarantinesPruned = n
-			}
-		}
-	}
 	return reclaimResponse{
-		Status:            "ok",
-		VMsReclaimed:      reclaimed,
-		RetentionPruned:   retention.Deleted,
-		VMsStopped:        stopped,
-		QuarantinesPruned: quarantinesPruned,
-		ReclaimBefore:     before,
-		ReclaimAfter:      h.registry.PressureReclaimPlan(),
-		Retention:         retention,
+		Status:          "ok",
+		VMsReclaimed:    reclaimed,
+		RetentionPruned: retention.Deleted,
+		VMsStopped:      stopped,
+		ReclaimBefore:   before,
+		ReclaimAfter:    h.registry.PressureReclaimPlan(),
+		Retention:       retention,
 	}
 }
 
@@ -1005,14 +940,6 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		if constructed {
 			snapshotKind = "constructed-computer-version"
 		}
-		divergenceStatus := own.DivergenceStatus
-		if divergenceStatus == "" {
-			if constructed {
-				divergenceStatus = "canary"
-			} else {
-				divergenceStatus = "tracking"
-			}
-		}
 		result = append(result, ownershipResponse{
 			VMID:                      own.VMID,
 			ComputerID:                own.ComputerID,
@@ -1030,8 +957,6 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 			SnapshotKind:              snapshotKind,
 			ConstructionVersion:       constructionVersion,
 			ConstructionDiskReceiptID: diskReceiptID,
-			DivergenceStatus:          divergenceStatus,
-			PlatformBaseRef:           own.PlatformBaseRef,
 		})
 	}
 
@@ -1461,7 +1386,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/reclaim", h.HandleReclaim)
 	s.HandleFunc("/internal/vmctl/hold", h.HandleHold)
 	s.HandleFunc("/internal/vmctl/unhold", h.HandleUnhold)
-	s.HandleFunc("/internal/vmctl/divergence", h.HandleSetDivergence)
 	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
 	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)

@@ -31,7 +31,7 @@ The default panel is:
 10. OMP `opencode-zen/muse-spark-1.3-contributor-free` with `--thinking high`.
 11. OMP `opencode-zen/nemotron-3-ultra-free` with `--thinking high`.
 12. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
-13. OMP `opencode-zen/ling-3.0-flash-fin-free` with `--thinking high`.
+13. OMP `opencode-zen/hy3-free` with `--thinking high`.
 
 `claude` is in the default panel, pinned to `opus`. `fable` is request-only: pass `--claude-model fable` when the user explicitly asks for it — never in the default panel.
 
@@ -71,7 +71,7 @@ omp-cursor-grok46
 omp-muse-spark
 omp-nemotron-3-ultra
 omp-glm53-flash
-omp-ling
+omp-hy3
 ```
 
 ## Verified CLI Invocation Contracts
@@ -235,7 +235,7 @@ omp -p --mode text --model cursor/cursor-grok-4.6-high --thinking high --no-sess
 omp -p --mode text --model opencode-zen/muse-spark-1.3-contributor-free --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/nemotron-3-ultra-free --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/glm-5.3-flash --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-zen/ling-3.0-flash-fin-free --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-zen/hy3-free --thinking high --no-session "$PROMPT"
 ```
 
 The runner also passes `--auto-approve` and `--max-time` to OMP so a tool call
@@ -260,8 +260,8 @@ Optional overrides:
 --omp-nemotron-3-ultra-thinking LEVEL
 --omp-glm53-flash-model MODEL
 --omp-glm53-flash-thinking LEVEL
---omp-ling-model MODEL
---omp-ling-thinking LEVEL
+--omp-hy3-model MODEL
+--omp-hy3-thinking LEVEL
 --no-tools-omp
 ```
 

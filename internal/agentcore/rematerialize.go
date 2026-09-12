@@ -13,10 +13,10 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -34,11 +34,6 @@ type RematerializeReport struct {
 	FrontendRestaged     bool   `json:"frontend_restaged"`
 	StoreClosed          bool   `json:"store_closed"`
 	PinCheckoutUsed      bool   `json:"pin_checkout_used"`
-	BaseSequence         uint64 `json:"base_sequence"`
-	BaseBlobSHA256       string `json:"base_blob_sha256"`
-	TailTargetSequence   uint64 `json:"tail_target_sequence"`
-	TailEventsApplied    int    `json:"tail_events_applied"`
-	TailPagesFetched     int    `json:"tail_pages_fetched"`
 }
 
 type rematerializeAPIRequest struct {
@@ -94,31 +89,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		return report, err
 	}
 
-	targetHead := strings.TrimSpace(checkpoint.Request.AcceptedEventHead)
-	if !computerevent.IsSHA256(targetHead) {
-		return report, fmt.Errorf("%w: recovery target head is required", ErrRematerializeUnavailable)
-	}
-	src, err := rt.resolveRestoreBaseSource()
+	staged, err := choirstore.OpenFresh(stagedMarker)
 	if err != nil {
-		return report, err
-	}
-	targetSequence, err := resolveRecoveryTarget(ctx, src, computerID, targetHead)
-	if err != nil {
-		_ = os.RemoveAll(stagingRoot)
-		return report, err
-	}
-	staged, descriptor, err := installStagedBase(ctx, src, stagingRoot, filepath.Base(stagedMarker), computerID, targetHead, targetSequence)
-	if err != nil {
-		_ = os.RemoveAll(stagingRoot)
-		return report, err
-	}
-	report.BaseSequence = descriptor.Sequence
-	report.BaseBlobSHA256 = descriptor.BlobSHA256
-	report.TailTargetSequence = targetSequence
-	if _, err := projectionbase.PlanRecovery(true, 0, true, descriptor.Sequence, targetSequence); err != nil {
-		_ = staged.Close()
-		_ = os.RemoveAll(stagingRoot)
-		return report, err
+		return report, fmt.Errorf("rematerialize: open staged realization: %w", err)
 	}
 	request.StagedWorkspacePath = staged.TexturePath()
 	if err := selfdevprotocol.RematerializeFromRequest(request); err != nil {
@@ -126,23 +99,12 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		_ = os.RemoveAll(stagingRoot)
 		return report, err
 	}
-	observer := &restoreReplayObserver{}
-	rt.eventAppender.SetReplayObserver(observer)
-	reconstructErr := rt.eventAppender.ReconstructThroughTarget(ctx, staged, targetHead)
-	rt.eventAppender.SetReplayObserver(nil)
-	if reconstructErr != nil {
+	targetHead := strings.TrimSpace(checkpoint.Request.AcceptedEventHead)
+	if err := rt.eventAppender.ReconstructThroughTarget(ctx, staged, targetHead); err != nil {
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
-		return report, fmt.Errorf("rematerialize: reconstruct through target: %w", reconstructErr)
+		return report, fmt.Errorf("rematerialize: reconstruct through target: %w", err)
 	}
-	applied, err := observer.tailReceipt(descriptor.Sequence, targetSequence)
-	if err != nil {
-		_ = staged.Close()
-		_ = os.RemoveAll(stagingRoot)
-		return report, err
-	}
-	report.TailEventsApplied = applied
-	report.TailPagesFetched = observer.pages
 	version := replayCompletenessVersion(rt, nil)
 	if head, err := staged.Head(ctx, computerID); err == nil {
 		version = replayCompletenessVersion(rt, head)
@@ -164,14 +126,6 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
 		return report, err
-	}
-	// Vocabulary cutover: the staged store was reconstructed from the V1 tape
-	// byte-identically, so forward-migrate and fence it before the flip makes
-	// it live. Failure leaves the original realization untouched.
-	if _, err := staged.MigrateAndFenceServingVocabulary(ctx, true, nil); err != nil {
-		_ = staged.Close()
-		_ = os.RemoveAll(stagingRoot)
-		return report, fmt.Errorf("rematerialize: vocabulary migration refused: %w", err)
 	}
 	stagedWorkspace := staged.TexturePath()
 	if err := staged.Close(); err != nil {
@@ -272,7 +226,11 @@ func (h *APIHandler) rematerializeComputerFromTape(w http.ResponseWriter, r *htt
 	}
 	report, err := h.rt.RematerializeFromTape(r.Context(), computerID, request.Checkpoint)
 	if err != nil {
-		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrRematerializeUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		writeAPIJSON(w, status, apiError{Error: err.Error()})
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, report)
@@ -308,28 +266,23 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 		return
 	}
 	if err := h.rt.appendRestoreIntent(r.Context(), computerID, request.Checkpoint); err != nil {
-		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrRematerializeUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		writeAPIJSON(w, status, apiError{Error: err.Error()})
 		return
 	}
 	report, err := h.rt.RematerializeFromTape(r.Context(), computerID, request.Checkpoint)
 	if err != nil {
-		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrRematerializeUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		writeAPIJSON(w, status, apiError{Error: err.Error()})
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, report)
-}
-
-// rematerializeRefusalStatus maps recovery failures to visible refusals: a
-// refused required base is a conflict the operator resolves by publishing or
-// selecting a compatible base, never a server error to retry blindly.
-func rematerializeRefusalStatus(err error) int {
-	if errors.Is(err, projectionbase.ErrBaseRefused) {
-		return http.StatusConflict
-	}
-	if errors.Is(err, ErrRematerializeUnavailable) {
-		return http.StatusServiceUnavailable
-	}
-	return http.StatusInternalServerError
 }
 
 func (rt *Runtime) appendRestoreIntent(ctx context.Context, computerID string, checkpoint selfdevprotocol.Checkpoint) error {

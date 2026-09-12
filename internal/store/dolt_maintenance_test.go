@@ -49,76 +49,18 @@ func TestPlanDoltGC_WarningAtSevenGiB(t *testing.T) {
 	}
 }
 
-// Emergency GC must bypass the live-size guard: a huge store with almost no
-// free space still attempts collection (ENOSPC is unrecoverable; OOM is not).
-func TestMaybeRunDoltGCEmergencyBypassesSizeGuard(t *testing.T) {
+func TestPlanDoltGC_EmergencyLowAvail(t *testing.T) {
 	usage := doltGCDiskUsage{
-		TotalBytes: 32 * gibBytes,
-		UsedBytes:  20 * gibBytes,
+		TotalBytes: 8 * gibBytes,
+		UsedBytes:  8*gibBytes - (300 << 20),
 		AvailBytes: 300 << 20,
 	}
-	defer stubDiskUsage(usage)()
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "ws.db")
-	if err := os.MkdirAll(resolveTextureWorkspacePath(storePath), 0o755); err != nil {
-		t.Fatal(err)
+	plan := planDoltGC(usage, 7, 1)
+	if !plan.Run {
+		t.Fatal("expected emergency gc below 512 MiB free")
 	}
-	// GC on an empty workspace is a no-op success — proof the emergency path
-	// ran rather than skipping on store size.
-	if err := MaybeRunDoltGC(dir, storePath); err != nil {
-		t.Fatalf("emergency gc: %v", err)
-	}
-	raw, err := os.ReadFile(filepath.Join(dir, doltGCDispositionFileName))
-	if err != nil {
-		t.Fatalf("disposition missing: %v", err)
-	}
-	var got doltGCDisposition
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("decode disposition: %v", err)
-	}
-	if got.Outcome != "ran" {
-		t.Fatalf("outcome = %q, want ran (emergency must bypass size guard)", got.Outcome)
-	}
-}
-
-// The journal is collectible garbage: a large journal over a small live store
-// must trigger GC, not trip the size guard (2026-09-11 feedback loop).
-func TestMaybeRunDoltGCJournalTriggersAndBypassesGuard(t *testing.T) {
-	usage := doltGCDiskUsage{
-		TotalBytes: 32 * gibBytes,
-		UsedBytes:  8 * gibBytes, // 6 GiB journal + 2 GiB live
-		AvailBytes: 24 * gibBytes,
-	}
-	defer stubDiskUsage(usage)()
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "ws.db")
-	nomsDir := filepath.Join(resolveTextureWorkspacePath(storePath), "texture", ".dolt", "noms")
-	if err := os.MkdirAll(nomsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	journal := filepath.Join(nomsDir, doltJournalFileID)
-	if err := os.WriteFile(journal, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Truncate(journal, 6*gibBytes); err != nil {
-		t.Fatal(err)
-	}
-	if err := MaybeRunDoltGC(dir, storePath); err != nil {
-		t.Fatalf("journal-triggered gc: %v", err)
-	}
-	raw, err := os.ReadFile(filepath.Join(dir, doltGCDispositionFileName))
-	if err != nil {
-		t.Fatalf("disposition missing: %v", err)
-	}
-	var got doltGCDisposition
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("decode disposition: %v", err)
-	}
-	if got.Outcome == "skipped_size" {
-		t.Fatalf("journal counted toward live-size guard: %+v", got)
-	}
-	if got.JournalGiB != 6 {
-		t.Fatalf("journal_gib = %d, want 6", got.JournalGiB)
+	if plan.Reason == "" {
+		t.Fatal("expected emergency reason")
 	}
 }
 

@@ -21,14 +21,7 @@ const (
 	defaultDoltGCMilestoneGiB = 1
 	doltGCWarningUsedGiB      = 7
 	doltGCEmergencyAvailBytes = 512 << 20 // 512 MiB free
-	// defaultDoltGCJournalGiB bounds the noms journal before routine GC runs.
-	// The journal is the collectible garbage; letting it grow unbounded is how
-	// a 18.6 GiB journal accumulated under ~2 GiB of live data (2026-09-11).
-	defaultDoltGCJournalGiB = 1
-	// doltJournalFileID is the fixed noms journal table-file name
-	// (dolt store/chunks JournalFileID).
-	doltJournalFileID = "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
-	gibBytes          = 1024 * 1024 * 1024
+	gibBytes                  = 1024 * 1024 * 1024
 )
 const doltGCDispositionFileName = ".choir-dolt-gc-disposition.json"
 
@@ -41,7 +34,6 @@ type doltGCDisposition struct {
 	At           string `json:"at"`
 	Outcome      string `json:"outcome"`
 	UsedGiB      uint64 `json:"used_gib"`
-	JournalGiB   uint64 `json:"journal_gib,omitempty"`
 	ThresholdGiB uint64 `json:"threshold_gib,omitempty"`
 	Detail       string `json:"detail,omitempty"`
 }
@@ -82,37 +74,6 @@ func doltGCMilestoneGiB() uint64 {
 		return defaultDoltGCMilestoneGiB
 	}
 	return v
-}
-
-// doltGCJournalGiB returns the journal size that triggers routine GC.
-func doltGCJournalGiB() uint64 {
-	raw := strings.TrimSpace(os.Getenv("RUNTIME_DOLT_GC_JOURNAL_GIB"))
-	if raw == "" {
-		return defaultDoltGCJournalGiB
-	}
-	v, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil || v == 0 {
-		return defaultDoltGCJournalGiB
-	}
-	return v
-}
-
-// doltJournalBytes returns the total size of noms journal files under the
-// workspace. The journal holds every not-yet-collected chunk; it is the
-// collectible garbage, so it must not count toward the live-store size guard
-// that protects bounded guests from OOM during GC.
-func doltJournalBytes(workspacePath string) uint64 {
-	var total uint64
-	matches, err := filepath.Glob(filepath.Join(workspacePath, "*", ".dolt", "noms", doltJournalFileID))
-	if err != nil {
-		return 0
-	}
-	for _, path := range matches {
-		if info, statErr := os.Stat(path); statErr == nil {
-			total += uint64(info.Size())
-		}
-	}
-	return total
 }
 
 func doltGCDisabled() bool {
@@ -166,8 +127,12 @@ func planDoltGC(usage doltGCDiskUsage, previousMilestoneGiB, milestoneGiB uint64
 	if persistentdisk.Warning(usage) {
 		plan.Warning = true
 	}
-	// Emergency low-space GC is handled in MaybeRunDoltGC before this planner
-	// runs; it must bypass the live-size guard, so it cannot live here.
+	if usage.AvailBytes <= doltGCEmergencyAvailBytes {
+		plan.Run = true
+		plan.TargetMilestone = currentMilestone
+		plan.Reason = fmt.Sprintf("low free space (%d MiB avail)", usage.AvailBytes/(1024*1024))
+		return plan
+	}
 	if currentMilestone > previousMilestoneGiB {
 		plan.Run = true
 		plan.TargetMilestone = currentMilestone
@@ -251,46 +216,21 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 		return err
 	}
 
-	journalBytes := doltJournalBytes(workspacePath)
-	liveBytes := usage.UsedBytes
-	if journalBytes < liveBytes {
-		liveBytes -= journalBytes
-	} else {
-		liveBytes = 0
-	}
-
-	// Emergency first: below the low-space watermark GC must run regardless of
-	// store size. ENOSPC is unrecoverable; an OOM during emergency GC is
-	// diagnosable and retryable. The size guard below must never suppress this.
-	if usage.AvailBytes <= doltGCEmergencyAvailBytes {
-		log.Printf("store: dolt gc emergency: avail=%d MiB; running despite store size", usage.AvailBytes/(1024*1024))
-		if err := runDoltGCWorkspace(workspacePath); err != nil {
-			writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "error", UsedGiB: usage.UsedBytes / gibBytes, JournalGiB: journalBytes / gibBytes, Detail: err.Error()})
-			return err
-		}
-		after, afterErr := diskUsageForGC(persistentDir)
-		if afterErr == nil {
-			afterLive := after.UsedBytes - min(after.UsedBytes, doltJournalBytes(workspacePath))
-			milestoneGiB := doltGCMilestoneGiB()
-			_ = writeDoltGCMilestoneMarker(filepath.Join(persistentDir, doltGCMilestoneMarkerName), afterLive/(milestoneGiB*gibBytes))
-		}
-		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "ran", UsedGiB: usage.UsedBytes / gibBytes, JournalGiB: journalBytes / gibBytes, Detail: "emergency low-space gc"})
-		return nil
-	}
-
 	// The embedded Dolt GC (DOLT_GC()) builds its working set in memory; its
-	// demand scales with the live chunk set, not the journal. On a bounded
-	// guest a multi-GiB live store gets the process OOM-killed before GC
-	// finishes (evidence: recovery boot #2 crash loop, 2026-08-24). The guard
-	// measures live bytes (used minus journal): the journal is the garbage GC
-	// reclaims, so counting it would suppress exactly the runs that shrink it
-	// — the 2026-09-11 feedback loop where an 18.6 GiB journal over ~2 GiB of
-	// live data skipped every GC until the disk nearly filled.
+	// demand scales with the workspace size and on a 4096 MiB guest a
+	// multi-GiB chunk store gets the process OOM-killed before the GC finishes
+	// (evidence: recovery boot #2 crash loop, 2026-08-24). While the
+	// persistent disk holds a large store the GC is skipped with a diagnostic;
+	// the milestone marker is left untouched so a later small-store run can
+	// Guest units no longer set RUNTIME_DOLT_GC_DISABLED (substrate cleanup
+	// 2026-08-25 removed the B11 disablement); this size guard is the safety
+	// net that keeps the GC from ever bricking a constrained guest through
+	// restart churn.
 	const safeGuestGCUsedGiB = 5
-	if liveBytes > safeGuestGCUsedGiB*gibBytes {
-		log.Printf("store: dolt gc skipped: live=%d GiB exceeds safe bounded-guest GC size (%d GiB); reclaim deferred",
-			liveBytes/gibBytes, safeGuestGCUsedGiB)
-		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "skipped_size", UsedGiB: usage.UsedBytes / gibBytes, JournalGiB: journalBytes / gibBytes, ThresholdGiB: safeGuestGCUsedGiB, Detail: "host-side offline GC required; see docs/runbooks/offline-guest-gc.md"})
+	if usage.UsedBytes > safeGuestGCUsedGiB*gibBytes {
+		log.Printf("store: dolt gc skipped: used=%d GiB exceeds safe bounded-guest GC size (%d GiB); reclaim deferred",
+			usage.UsedBytes/gibBytes, safeGuestGCUsedGiB)
+		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "skipped_size", UsedGiB: usage.UsedBytes / gibBytes, ThresholdGiB: safeGuestGCUsedGiB, Detail: "host-side offline GC required; see docs/runbooks/offline-guest-gc.md"})
 		return nil
 	}
 
@@ -301,16 +241,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 		return err
 	}
 
-	// Milestones track live bytes so journal growth alone never advances the
-	// marker and suppresses the next live-data trigger.
-	liveUsage := usage
-	liveUsage.UsedBytes = liveBytes
-	plan := planDoltGC(liveUsage, previous, milestoneGiB)
-	journalGiB := doltGCJournalGiB()
-	if !plan.Run && journalBytes >= journalGiB*gibBytes {
-		plan.Run = true
-		plan.Reason = fmt.Sprintf("journal reached %d GiB (now ~%d GiB)", journalGiB, journalBytes/gibBytes)
-	}
+	plan := planDoltGC(usage, previous, milestoneGiB)
 	if plan.Warning && !plan.Run {
 		log.Printf(
 			"store: persistent disk high-water notice: used=%d GiB total=%d GiB avail=%d MiB (default cap 8 GiB); next dolt gc at next %d GiB milestone or low-space emergency",
@@ -321,7 +252,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 		)
 	}
 	if !plan.Run {
-		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "noop", UsedGiB: usage.UsedBytes / gibBytes, JournalGiB: journalBytes / gibBytes, Detail: plan.Reason})
+		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "noop", UsedGiB: usage.UsedBytes / gibBytes, Detail: plan.Reason})
 		return nil
 	}
 
@@ -342,7 +273,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 		)
 	}
 	if err := runDoltGCWorkspace(workspacePath); err != nil {
-		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "error", UsedGiB: usage.UsedBytes / gibBytes, JournalGiB: journalBytes / gibBytes, Detail: err.Error()})
+		writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "error", UsedGiB: usage.UsedBytes / gibBytes, Detail: err.Error()})
 		return err
 	}
 
@@ -350,14 +281,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 	if err != nil {
 		return err
 	}
-	afterJournal := doltJournalBytes(workspacePath)
-	afterLive := after.UsedBytes
-	if afterJournal < afterLive {
-		afterLive -= afterJournal
-	} else {
-		afterLive = 0
-	}
-	afterMilestone := afterLive / (milestoneGiB * gibBytes)
+	afterMilestone := after.UsedBytes / (milestoneGiB * gibBytes)
 	if afterMilestone < plan.TargetMilestone {
 		plan.TargetMilestone = afterMilestone
 	}
@@ -372,7 +296,7 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 		after.AvailBytes/(1024*1024),
 		plan.TargetMilestone,
 	)
-	writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "ran", UsedGiB: after.UsedBytes / gibBytes, JournalGiB: afterJournal / gibBytes, Detail: plan.Reason})
+	writeDoltGCDisposition(persistentDir, doltGCDisposition{Outcome: "ran", UsedGiB: after.UsedBytes / gibBytes, Detail: plan.Reason})
 	return nil
 }
 

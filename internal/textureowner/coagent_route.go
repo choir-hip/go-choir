@@ -42,7 +42,7 @@ func (h *Handler) ensureCoagentTextureRevisionRoute(ctx context.Context, parentR
 	if parentRec == nil {
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires a parent run")
 	}
-	callerProfile := req.CallerProfile
+	callerProfile := agentprofile.Canonical(req.CallerProfile)
 	if callerProfile != agentprofile.Processor && callerProfile != agentprofile.Reconciler {
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires processor or reconciler caller")
 	}
@@ -120,8 +120,7 @@ func (h *Handler) existingReconcilerTextureHandoff(ctx context.Context, parentRe
 		return types.RunRecord{}, false, fmt.Errorf("list existing reconciler Texture handoffs: %w", err)
 	}
 	for _, run := range runs {
-		routeRunProfile := agentProfileForRun(&run)
-		if routeRunProfile != agentprofile.Texture ||
+		if agentprofile.Canonical(agentProfileForRun(&run)) != agentprofile.Texture ||
 			strings.TrimSpace(run.RequestedByRunID) != strings.TrimSpace(parentRec.RunID) ||
 			metadataStringValue(run.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 			continue
@@ -174,14 +173,13 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 		return types.Document{}, false, "", fmt.Errorf("create texture seed body_doc: %w", err)
 	}
 	selectedStyles, styleRationale := coagentTextureSelectedStyles(req)
-	seedCallerProfile := req.CallerProfile
 	seedMetaMap := map[string]any{
 		"source":                         "coagent_texture_seed",
 		"artifact_kind":                  "source_brief",
 		"revision_role":                  textureRevisionRoleInput,
 		"input_origin":                   textureInputOriginForCaller(req.CallerProfile),
 		"texture_version_stage":          "pre_article_brief",
-		"created_from":                   seedCallerProfile,
+		"created_from":                   agentprofile.Canonical(req.CallerProfile),
 		"requested_by_run_id":            parentRec.RunID,
 		"requested_by_agent_id":          strings.TrimSpace(parentRec.AgentID),
 		"requested_by_channel_id":        strings.TrimSpace(parentRec.ChannelID),
@@ -204,7 +202,7 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 		RevisionID: seedRevisionID, DocID: doc.DocID, OwnerID: ownerID,
 		ComputerID: computerID, TrajectoryID: trajectoryID,
 		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: strings.TrimSpace(firstNonEmpty(parentRec.AgentID, seedCallerProfile)),
+		AuthorLabel: strings.TrimSpace(firstNonEmpty(parentRec.AgentID, agentprofile.Canonical(req.CallerProfile))),
 		Content:     projectedContent, BodyDoc: bodyDoc, SourceEntities: sourceEntitiesJSON,
 		Citations: json.RawMessage("[]"), Metadata: seedMeta, CreatedAt: now,
 	}
@@ -423,8 +421,7 @@ func (h *Handler) coagentTextureSourceEntities(ctx context.Context, parentRec *t
 			continue
 		}
 		entity := contentItemRefToSourceEntity(item)
-		provenanceProfile := req.CallerProfile
-		entity.Provenance.CreatedBy = firstNonEmpty(provenanceProfile, entity.Provenance.CreatedBy)
+		entity.Provenance.CreatedBy = firstNonEmpty(agentprofile.Canonical(req.CallerProfile), entity.Provenance.CreatedBy)
 		entities, _ = mergeTextureSourceEntities(entities, []textureSourceEntity{entity})
 	}
 	return entities

@@ -57,12 +57,12 @@ documents:
     refresh_triggers: [doctrine_change, domain_contract_change]
 
   - path: docs/NOW.md
-    claim_scope: retired
-    is_root: []
-    is_evidence: false
-    annotations: {doc_role: retired_pointer, authority: derived_support, lifecycle: retired}
-    witnesses: [docs/ACTIVE.md]
-    refresh_triggers: []
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: true
+    annotations: {doc_role: observed_current_state, authority: evidence_scoped, lifecycle: living}
+    witnesses: [docs/NOW.md, docs/current-architecture.md, docs/platform-os-app-state.md]
+    refresh_triggers: [staging_deploy, current_state_route_choice]
 
   - path: docs/ACTIVE.md
     claim_scope: current
@@ -175,14 +175,6 @@ documents:
     annotations: {doc_role: operating_rationale, authority: support, lifecycle: living}
     witnesses: [docs/memo-problem-documentation-first.md, AGENTS.md]
     refresh_triggers: [problem_documentation_policy_change]
-
-  - path: docs/memo-predictive-icrl-delta-2026-09-10.md
-    claim_scope: current
-    is_root: []
-    is_evidence: false
-    annotations: {doc_role: research_delta, authority: support, lifecycle: living}
-    witnesses: [docs/memo-predictive-icrl-delta-2026-09-10.md, docs/choir-vision.md, docs/computer-ontology.md, docs/standing-questions.md]
-    refresh_triggers: [memo_revision, computer_ontology_change]
 
   - path: docs/memo-per-computer-frontend-2026-08-13.md
     claim_scope: current
@@ -392,73 +384,10 @@ documents:
 
   - path: docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
     claim_scope: current
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: blocked_remainder_holder, lifecycle: blocked, entrypoint: false}
+    is_root: [authority, entry]
+    annotations: {doc_role: definition, authority: active_mission_contract, lifecycle: active, entrypoint: true}
     supersedes: [docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md]
-    remainder_owned_by: [docs/definitions/choir-rlm-settlement-gate-2026-09-09.md]
-    witnesses: [docs/designs/rlm-target-architecture-2026-09-04.md, docs/reports/choir-status-and-next-steps-2026-09-04.md, docs/reports/choir-rlm-substrate-repairs-and-g1-producer-2026-09-05.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md]
-    refresh_triggers: []
-  - path: docs/definitions/choir-rlm-restore-zero-2026-09-08.md
-    claim_scope: current
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: completed_mission_contract, lifecycle: complete, entrypoint: false}
-    witnesses: [docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md, docs/reports/choir-rlm-mission-state-2026-09-08.md, docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md, docs/computer-ontology.md]
-    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
-  - path: docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
-    claim_scope: current
-    is_root: [authority]
-    is_evidence: false
-    annotations: {doc_role: definition, authority: completed_mission_contract, lifecycle: completed, entrypoint: false}
-    witnesses: [docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md, docs/reports/choir-rlm-mission-state-2026-09-08.md, docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md, docs/definitions/choir-rlm-restore-zero-2026-09-08.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md, docs/computer-ontology.md]
-    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
-  - path: docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md
-    claim_scope: current
-    is_root: [authority]
-    is_evidence: false
-    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: working, entrypoint: true}
-    witnesses: [docs/reports/choir-rlm-mission-three-review-2026-09-11.md, docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md, docs/reports/choir-opencode-provider-research-2026-09-10.md, docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md, docs/mission-residues.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md]
-    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
-
-  - path: docs/reports/choir-rlm-mission-three-review-2026-09-11.md
-    claim_scope: current
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: evidence, authority: review_record, lifecycle: living}
-    witnesses: [docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md, docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md]
-    refresh_triggers: [mission_state_change]
-
-  - path: docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md
-    claim_scope: current
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: evidence, authority: consensus_record, lifecycle: living}
-    witnesses: [docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md, docs/reports/choir-rlm-mission-three-review-2026-09-11.md]
-    refresh_triggers: [mission_state_change]
-  - path: docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
-    claim_scope: current
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: evidence, authority: frozen_boundary_artifact, lifecycle: frozen}
-    witnesses: [docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md]
-    refresh_triggers: [mission_state_change]
-  - path: docs/evidence/choir-rlm-engineering-carrier-p1-provider-freeze-2026-09-11.md
-    claim_scope: current
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: evidence, authority: frozen_boundary_artifact, lifecycle: frozen}
-    witnesses: [docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md, docs/reports/choir-opencode-provider-research-2026-09-10.md]
-    refresh_triggers: [mission_state_change]
-
-
-
-  - path: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
-    claim_scope: current
-    is_root: [authority]
-    is_evidence: false
-    annotations: {doc_role: definition, authority: completed_mission_contract, lifecycle: completed, entrypoint: false}
-    witnesses: [docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md, docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md, docs/definitions/choir-rlm-restore-zero-2026-09-08.md, docs/definitions/choir-rlm-settlement-gate-2026-09-09.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md]
+    witnesses: [docs/designs/rlm-target-architecture-2026-09-04.md, docs/reports/choir-status-and-next-steps-2026-09-04.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
   - path: docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
     claim_scope: current

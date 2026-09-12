@@ -175,10 +175,6 @@ type SessionWorkerConfig struct {
 	Epoch           uint64
 	AllowedRoot     string
 	Role            string
-	// Slot is the co-super slot (implementation|verifier) carried from the
-	// verified capability; the choir scope reports it through Context and
-	// gates the verifier-only affordances on it.
-	Slot string
 }
 
 // ExecuteWorkerSessionStdin serves framed eval cells on stdin/stdout with one
@@ -233,7 +229,7 @@ func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope
 	if err != nil {
 		os.Exit(2)
 	}
-	scope, err := NewChoirScope(broker, issuer, computerID, cfg.ActivationID, cfg.Epoch, cfg.Role, cfg.Slot)
+	scope, err := NewChoirScope(broker, issuer, computerID, cfg.ActivationID, cfg.Epoch, cfg.Role)
 	if err != nil {
 		os.Exit(2)
 	}

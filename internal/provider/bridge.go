@@ -125,8 +125,6 @@ func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emi
 		Model:           llmConfig.Model,
 		System:          "You are a helpful assistant running inside the ChoirOS autoputer runtime. Respond concisely and helpfully.",
 		ReasoningEffort: llmConfig.ReasoningEffort,
-		ConversationID:  task.RunID,
-
 		Messages: []Message{
 			{
 				Role: "user",
@@ -210,7 +208,6 @@ func (b *BridgeProvider) CallWithTools(ctx context.Context, req provideriface.To
 		MaxTokens:       req.MaxTokens,
 		Stream:          false,
 		ReasoningEffort: req.ReasoningEffort,
-		ConversationID:  req.ConversationID,
 	}
 
 	log.Printf("bridge: calling %s provider with %d tools (messages=%d)",
@@ -456,8 +453,6 @@ func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunReco
 		Model:           model,
 		System:          "You are a helpful assistant running inside the ChoirOS autoputer runtime. Respond concisely and helpfully.",
 		ReasoningEffort: reasoning,
-		ConversationID:  task.RunID,
-
 		Messages: []Message{
 			{Role: "user", Content: []Block{{Type: "text", Text: task.Prompt}}},
 		},
@@ -522,7 +517,6 @@ func (g *GatewayBridgeProvider) CallWithTools(ctx context.Context, req provideri
 		MaxTokens:       req.MaxTokens,
 		Stream:          false,
 		ReasoningEffort: firstNonEmpty(req.ReasoningEffort, g.reasoningEffort),
-		ConversationID:  req.ConversationID,
 	}
 
 	log.Printf("gateway-bridge: calling gateway with %d tools (messages=%d)", len(req.ToolDefinitions), len(req.Messages))

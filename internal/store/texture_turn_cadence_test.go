@@ -20,7 +20,7 @@ import (
 func cadenceSuperOpenerFixture(t *testing.T, s *Store, suffix string) (*Store, types.StartLifecycleRequest, types.RunRecord, string) {
 	t.Helper()
 	_, start, caller, _ := setupLifecycleTextureTargetFixtureWithStore(t, s)
-	return s, start, caller, "management:" + start.OwnerID
+	return s, start, caller, "super:" + start.OwnerID
 }
 
 func callerForTest(start types.StartLifecycleRequest, runID string) types.RunRecord {

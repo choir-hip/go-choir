@@ -16,8 +16,7 @@ const (
 )
 
 func textureInputOriginForCaller(profile string) string {
-	canonicalProfile, _ := agentprofile.Canonical(profile)
-	switch canonicalProfile {
+	switch agentprofile.Canonical(profile) {
 	case agentprofile.Processor:
 		return textureInputOriginProcessorHandoff
 	case agentprofile.Reconciler:

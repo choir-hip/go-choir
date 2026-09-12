@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -14,6 +15,19 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+func terminalAssignedCoSuperReportCall(call types.ToolCall) bool {
+	if call.Name != "record_assignment_result" || strings.TrimSpace(call.ID) == "" {
+		return false
+	}
+	var input struct {
+		Result types.CoSuperAssignmentResultKind `json:"result"`
+	}
+	if err := json.Unmarshal(call.Arguments, &input); err != nil {
+		return false
+	}
+	return input.Result == types.CoSuperResultCompleted || input.Result == types.CoSuperResultFailed || input.Result == types.CoSuperResultBlocked
+}
 
 func coSuperFateRequest(assignment types.CoSuperAssignment, disposition types.CoSuperCapsuleDisposition, intentRef, ackRef string) types.SetCoSuperCapsuleDispositionRequest {
 	req := types.SetCoSuperCapsuleDispositionRequest{
@@ -64,11 +78,8 @@ func (rt *Runtime) assignedCapsule() assignmentCapsuleRuntime {
 }
 
 func assignedCoSuperRun(rec *types.RunRecord) bool {
-	if rec == nil {
-		return false
-	}
-	profile := agentProfileForRun(rec)
-	return profile == agentprofile.CoSuper &&
+	return rec != nil &&
+		agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.CoSuper &&
 		metadataStringValue(rec.Metadata, "assignment_id") != ""
 }
 
@@ -554,33 +565,10 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	if assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedAgentID != rec.AgentID {
 		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("report run is not the exact bound assignment")
 	}
-	// v1 terminal identity (settlement gate item 3): the proposition digest
-	// covers the submitted claims with the pinned pre-execution belief.
-	// Provider-call identifiers, summary prose, and transport metadata never
-	// enter identity. The canonical observed input is the binding subject
-	// digest pinned server-side; post-reservation ack facts overlay derivation
-	// and never rewrite the digest. Cancellation-wins is a reducer disposition
-	// recorded by the store; the submitted packet is never rewritten here.
-	report.ObservedSubjectDigest = assignment.Binding.SubjectDigest
+	report.ReportID = "report:" + objectgraph.SHA256([]byte(strings.Join([]string{
+		"choir:co-super-report:v1", rec.OwnerID, rec.ComputerID, rec.RunID, assignmentID, fmt.Sprint(attempt), strings.TrimSpace(toolCallID),
+	}, "\x00")))
 	terminal := report.Result != types.CoSuperResultPartial
-	propositionDigest := ""
-	if terminal {
-		var propErr error
-		propositionDigest, propErr = store.ComputeTerminalPropositionDigest(
-			assignment.Binding.SubjectDigest,
-			report.Result, report.Verdict,
-			report.Commands, report.Outputs, report.EvidenceRefs)
-		if propErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, propErr
-		}
-		report.ReportID = store.TerminalReportID(assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignmentID, attempt, propositionDigest)
-		report.PropositionDigest = propositionDigest
-	} else {
-		report.ReportID = "report:" + objectgraph.SHA256([]byte(strings.Join([]string{
-			"choir:co-super-report:v1", assignment.Binding.OwnerID, assignment.Binding.ComputerID, rec.RunID, assignmentID, fmt.Sprint(attempt), strings.TrimSpace(toolCallID),
-		}, "\x00")))
-		report.PropositionDigest = ""
-	}
 	cancellationIntended := false
 	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.TrajectoryID); intentErr == nil {
 		cancellationIntended = true
@@ -588,48 +576,38 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		return types.CoSuperAssignmentCommandResult{}, intentErr
 	}
 	lateFate := cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
-	storedReport, reportErr := rt.store.GetCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, report.ReportID)
+	// Cancellation wins: a racing verification result is evidence-only and can
+	// never retain or derive Pass semantics.
+	if lateFate && report.Verdict == types.CoSuperVerdictPass {
+		report.Verdict = types.CoSuperVerdictAbstain
+	}
+	report.Mutations = nil
+	report.ObservedSubjectDigest = assignment.Binding.SubjectDigest
+	report.CertifiesOriginalSubject = false
+	fingerprintParts := []string{string(report.Result), string(report.Verdict), report.ReportID, strings.TrimSpace(report.Summary)}
+	fingerprintParts = append(fingerprintParts, report.EvidenceRefs...)
+	for _, command := range report.Commands {
+		fingerprintParts = append(fingerprintParts, command.ExecutionRef, command.CommandDigest)
+	}
+	terminalFingerprint := objectgraph.SHA256([]byte(strings.Join(fingerprintParts, "\x00")))
+
+	storedReport, reportErr := rt.store.GetCoSuperAssignmentReport(ctx, rec.OwnerID, rec.ComputerID, report.ReportID)
 	reportExists := reportErr == nil
 	if reportErr != nil && !errors.Is(reportErr, store.ErrNotFound) {
 		return types.CoSuperAssignmentCommandResult{}, reportErr
 	}
 	if reportExists {
-		// The derived ReportID already binds the digest; a stored row with a
-		// different digest is a defensive conflict (legacy rows without the
-		// field recompute best-effort from the pinned belief and can only
-		// fail closed here).
-		storedDigest := strings.TrimSpace(storedReport.PropositionDigest)
-		if storedDigest == "" {
-			var recomputeErr error
-			storedDigest, recomputeErr = store.ComputeTerminalPropositionDigest(
-				assignment.Binding.SubjectDigest,
-				storedReport.Result, storedReport.Verdict,
-				storedReport.Commands, storedReport.Outputs, storedReport.EvidenceRefs)
-			if recomputeErr != nil {
-				return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
-			}
+		// The stored runtime-derived report is the only replay authority. A
+		// changed result/verdict/evidence conflicts before any fate effect.
+		storedParts := []string{string(storedReport.Result), string(storedReport.Verdict), storedReport.ReportID, strings.TrimSpace(storedReport.Summary)}
+		storedParts = append(storedParts, storedReport.EvidenceRefs...)
+		for _, command := range storedReport.Commands {
+			storedParts = append(storedParts, command.ExecutionRef, command.CommandDigest)
 		}
-		if storedDigest != propositionDigest {
+		if objectgraph.SHA256([]byte(strings.Join(storedParts, "\x00"))) != terminalFingerprint {
 			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
 		}
 		report = storedReport
-	}
-	if terminal && !reportExists {
-		// Slot gate before any physical effect: a same-digest occupant replays
-		// its receipt with no new effects; a non-late terminal occupant with a
-		// different digest conflicts a non-late submission, while late evidence
-		// never competes for terminal truth.
-		matchID, matchCommandID, conflictID, scanErr := rt.store.SlotTerminalReport(ctx, assignment, propositionDigest)
-		if scanErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, scanErr
-		}
-		if matchID != "" {
-			return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
-				assignment.AssignmentID, assignment.Binding.Attempt, matchID, matchCommandID)
-		}
-		if conflictID != "" && !lateFate {
-			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
-		}
 	}
 	if !terminal && reportExists {
 		return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
@@ -642,12 +620,6 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	// capsule effect can reopen/revise the cancelled assignment.
 	if lateFate {
 		if reportExists {
-			if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
-				assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
-				if err != nil {
-					return types.CoSuperAssignmentCommandResult{}, err
-				}
-			}
 			return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
 				assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "co-super-report:"+assignment.AssignmentID+":"+report.ReportID)
 		}
@@ -664,22 +636,13 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		return rt.commitAssignedCoSuperReport(ctx, assignment, report)
 	}
 
-	intent := "capsule-freeze-intent:" + propositionDigest
+	intent := "capsule-freeze-intent:" + terminalFingerprint
 	switch assignment.CapsuleDisposition {
 	case types.CoSuperCapsuleActive:
 		if reportExists {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("stored terminal report cannot precede freeze intent")
 		}
-		proposal := &types.CoSuperPendingProposal{
-			PropositionDigest: propositionDigest,
-			Report:            report,
-			FreezeIntentRef:   intent,
-			CreatedAt:         time.Now().UTC(),
-		}
-		freezeReq := coSuperFateRequest(assignment, types.CoSuperCapsuleFreezeRequested, intent, "")
-		freezeReq.PendingProposal = proposal
-		freezeReq.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(freezeReq)
-		requested, err := rt.store.SetCoSuperCapsuleDisposition(ctx, freezeReq)
+		requested, err := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleFreezeRequested, intent, ""))
 		if err != nil {
 			return types.CoSuperAssignmentCommandResult{}, err
 		}
@@ -721,10 +684,6 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		fateAck, fateAckErr := coSuperFateAckRequest(assignment, types.CoSuperCapsuleFrozen, intent, ack, "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:"), "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:"), freezeReceipt.OccurredAt, false)
 		if fateAckErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("invalid freeze receipt occurred_at: %w", fateAckErr)
-		}
-		if assignment.PendingProposal != nil {
-			fateAck.PendingProposal = assignment.PendingProposal
-			fateAck.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(fateAck)
 		}
 		frozen, err := rt.store.SetCoSuperCapsuleDisposition(ctx, fateAck)
 		if err != nil {
@@ -769,32 +728,28 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 
 	var result types.CoSuperAssignmentCommandResult
 	if reportExists {
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
-			assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
-			if err != nil {
-				return types.CoSuperAssignmentCommandResult{}, err
-			}
-		}
 		commandID := "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID
 		result, err = rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, commandID)
 	} else {
-		// Revocation must precede terminal commitment! No terminal state is visible until revoke ack.
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
-			assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
-			if err != nil {
-				return types.CoSuperAssignmentCommandResult{}, err
-			}
-		}
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report requires revoked executor acknowledgement")
+		if assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen {
+			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report requires frozen executor acknowledgement")
 		}
 		result, err = rt.commitAssignedCoSuperReport(ctx, assignment, report)
 	}
 	if err != nil {
 		return result, err
 	}
+	current := result.Assignment
+	if current.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		current, err = rt.revokeAssignedCapsule(ctx, current, "terminal assignment report recorded")
+		if err != nil {
+			return result, err
+		}
+	}
+	result.Assignment = current
 	return result, nil
 }
+
 func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentReport, error) {
 	refs := make([]string, 0, len(report.Commands))
 	for _, command := range report.Commands {
@@ -868,9 +823,7 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 			return report, fmt.Errorf("assignment command evidence does not bind unique exact final subject")
 		}
 		seen[receipt.GrantedReceiptRef] = true
-		if report.Commands[i].ExitCode != receipt.ExitCode {
-			return report, fmt.Errorf("assignment command exit code changed after freeze: %d vs %d", report.Commands[i].ExitCode, receipt.ExitCode)
-		}
+		report.Commands[i].ExitCode = receipt.ExitCode
 		report.ExecutorReceiptRefs = append(report.ExecutorReceiptRefs, receipt.GrantedReceiptRef)
 		if assignment.GrantPolicyAttestation != nil {
 			attestation, buildErr := coSuperExecutionAttestationFromReceipt(assignment, report.ReportID, report.Commands[i], receipt)

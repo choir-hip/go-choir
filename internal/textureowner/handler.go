@@ -324,13 +324,11 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 		return ""
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
-		configuredProfile, _ := agentprofile.Canonical(rec.AgentProfile)
-		return configuredProfile
+		return agentprofile.Canonical(rec.AgentProfile)
 	}
 	if rec.Metadata != nil {
 		if profile, _ := rec.Metadata[runMetadataAgentProfile].(string); strings.TrimSpace(profile) != "" {
-			configuredMetaProfile, _ := agentprofile.Canonical(profile)
-			return configuredMetaProfile
+			return agentprofile.Canonical(profile)
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
@@ -344,13 +342,11 @@ func agentRoleForRun(rec *types.RunRecord) string {
 		return agentprofile.Super
 	}
 	if strings.TrimSpace(rec.AgentRole) != "" {
-		configuredRole, _ := agentprofile.Canonical(rec.AgentRole)
-		return configuredRole
+		return agentprofile.Canonical(rec.AgentRole)
 	}
 	if rec.Metadata != nil {
 		if role, _ := rec.Metadata[runMetadataAgentRole].(string); strings.TrimSpace(role) != "" {
-			configuredMetaRole, _ := agentprofile.Canonical(role)
-			return configuredMetaRole
+			return agentprofile.Canonical(role)
 		}
 	}
 	return agentProfileForRun(rec)
@@ -414,13 +410,11 @@ func agentProfileForRun(rec *types.RunRecord) string {
 		return agentprofile.Super
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
-		configuredProfile, _ := agentprofile.Canonical(rec.AgentProfile)
-		return configuredProfile
+		return agentprofile.Canonical(rec.AgentProfile)
 	}
 	if rec.Metadata != nil {
 		if profile, _ := rec.Metadata[runMetadataAgentProfile].(string); strings.TrimSpace(profile) != "" {
-			configuredMetaProfile, _ := agentprofile.Canonical(profile)
-			return configuredMetaProfile
+			return agentprofile.Canonical(profile)
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); taskType == textureAgentRevisionTaskType {

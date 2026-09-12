@@ -31,7 +31,7 @@ func testSessionBroker(t *testing.T) *Broker {
 
 func TestSessionFrameCodecRoundTrip(t *testing.T) {
 	frame := yaegikernel.SessionFrame{ID: "cell-9", Source: `x := 1`, Inbox: []yaegikernel.IncomingMessage{
-		{ID: "m-1", FromDesk: "management", ToDesk: "engineering", Kind: "directive", Body: "go"},
+		{ID: "m-1", FromDesk: "super", ToDesk: "cosuper", Kind: "directive", Body: "go"},
 	}}
 	raw, err := json.Marshal(frame)
 	if err != nil {
@@ -42,7 +42,7 @@ func TestSessionFrameCodecRoundTrip(t *testing.T) {
 		t.Fatalf("frame roundtrip = %+v, %v", back, err)
 	}
 	res := yaegikernel.SessionResult{ID: "cell-9", Stdout: "hi", Intents: []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "hi"},
+		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "super", Body: "hi"},
 	}}
 	raw, err = json.Marshal(res)
 	if err != nil {
@@ -80,24 +80,13 @@ func TestGoEvalSessionFailsClosedWithoutBinary(t *testing.T) {
 	params, _ := json.Marshal(map[string]string{"source": `1 + 1`})
 	cap := &capsule.Capability{AgentRunID: "run-test"}
 	resp := b.handleGoEvalSession(context.Background(), cap, params)
-	// Spawn failure executes nothing: a typed session diagnostic in the
-	// Result (never a top-level Error, never the one-shot worker — brokerBin
-	// is nonexistent, so any fallback attempt would surface its own error).
-	if resp.Error != "" {
-		t.Fatalf("resp = %+v, want Result with typed diagnostic, not top-level Error", resp)
+	// Spawn failure attempts the one-shot tools fallback and reports both
+	// errors when it also fails — never a fake result, never silent.
+	if resp.Error == "" || !strings.Contains(resp.Error, "session worker") {
+		t.Fatalf("resp = %+v, want session-worker transport error", resp)
 	}
-	var result capsule.GoEvalResult
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
-		t.Fatalf("unmarshal result: %v", err)
-	}
-	if result.ExitCode != 1 || result.Error == "" || !strings.Contains(result.Error, "session worker") {
-		t.Fatalf("result = %+v, want exit 1 with session-worker diagnostic", result)
-	}
-	if result.Fallback {
-		t.Fatalf("result = %+v, one-shot fallback must never run on the RLM route", result)
-	}
-	if result.Reuse != yaegikernel.ReuseUnsafeToReuse || result.DiagKind != yaegikernel.DiagWorker {
-		t.Fatalf("result = %+v, want unsafe_to_reuse/worker", result)
+	if !strings.Contains(resp.Error, "fallback") {
+		t.Fatalf("resp = %+v, want visible fallback attempt", resp)
 	}
 	if len(b.sessionWorkers) != 0 {
 		t.Fatalf("failed eval left %d workers", len(b.sessionWorkers))
@@ -159,7 +148,7 @@ func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	w, err := spawnSessionWorker(bin, workerSessionConfig{
 		computerID: "test-capsule", epoch: 1, activation: "run-e2e",
-		allowedRoot: root, timeout: 60 * time.Second, role: "engineering",
+		allowedRoot: root, timeout: 60 * time.Second, role: "co-super",
 	})
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
@@ -202,7 +191,7 @@ func TestSessionWorkerResearcherDeniedEndToEnd(t *testing.T) {
 	bin := buildBrokerBinary(t)
 	w, err := spawnSessionWorker(bin, workerSessionConfig{
 		computerID: "test-capsule", epoch: 1, activation: "run-researcher",
-		allowedRoot: t.TempDir(), timeout: 60 * time.Second, role: "research",
+		allowedRoot: t.TempDir(), timeout: 60 * time.Second, role: "researcher",
 	})
 	if err != nil {
 		t.Fatalf("spawn: %v", err)

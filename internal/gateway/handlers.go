@@ -35,15 +35,12 @@ type gatewayHealthResponse struct {
 // to the upstream provider (VAL-GATEWAY-004).
 type ProviderRequest struct {
 	// Provider is the requested provider ("chatgpt", "bedrock", "zai",
-	// "deepseek", "xiaomi", "fireworks", "opencode-go", or "opencode-zen").
-	// If empty, the gateway requires model-based routing.
+	// "deepseek", "xiaomi", or "fireworks"). If empty, the gateway requires
+	// model-based routing.
 	Provider string `json:"provider,omitempty"`
 
 	// Model is an optional model override.
 	Model string `json:"model,omitempty"`
-	// ConversationID is the durable caller-run identity used for provider
-	// session affinity. It is routing metadata, not a trust input.
-	ConversationID string `json:"conversation_id,omitempty"`
 
 	// Messages is the conversation history in Anthropic Messages format.
 	Messages []provider.Message `json:"messages"`
@@ -397,7 +394,6 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		MaxTokens:       req.MaxTokens,
 		Stream:          req.Stream,
 		ReasoningEffort: req.ReasoningEffort,
-		ConversationID:  req.ConversationID,
 	}
 
 	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v)",

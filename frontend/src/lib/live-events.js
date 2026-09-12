@@ -34,9 +34,10 @@ export function isDrivingSession() {
 }
 
 export function observeRemoteDriverSession(remoteSessionId = '') {
-  // A remote event indicates another session saved state.
-  // We do NOT unilaterally zero out local interaction authority (driverLeaseUntil = 0);
-  // local user interactions remain authoritative for local window operations.
+  const normalized = String(remoteSessionId || '').trim();
+  if (normalized && normalized !== currentSessionId()) {
+    driverLeaseUntil = 0;
+  }
 }
 
 export function dispatchLiveEvent(message) {

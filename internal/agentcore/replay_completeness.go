@@ -20,28 +20,23 @@ import (
 // failure, not a clean replay result.
 var ErrReplayCompletenessUnavailable = errors.New("replay completeness probe unavailable")
 
-const replayCompletenessSchemaVersion = 4
+const replayCompletenessSchemaVersion = 3
 
 // ReplayCompletenessReport is the read-only evidence returned by the product
 // replay probe. Replay state is built in a disposable Dolt workspace; the live
 // runtime store is only observed.
 type ReplayCompletenessReport struct {
-	SchemaVersion      int                               `json:"schema_version"`
-	ComputerID         string                            `json:"computer_id"`
-	CapturedAt         string                            `json:"captured_at"`
-	LiveHead           *computerevent.Head               `json:"live_head"`
-	ReplayHead         *computerevent.Head               `json:"replay_head"`
-	Live               computerversion.ObservationSet    `json:"live"`
-	Replay             computerversion.ObservationSet    `json:"replay"`
-	Result             computerversion.EquivalenceResult `json:"result"`
-	Eligibility        ReplayEligibility                 `json:"eligibility"`
-	ProbeDigest        string                            `json:"probe_digest"`
-	RunMemory          ReplayRunMemoryComparison         `json:"run_memory"`
-	BaseSequence       uint64                            `json:"base_sequence"`
-	BaseBlobSHA256     string                            `json:"base_blob_sha256"`
-	TailTargetSequence uint64                            `json:"tail_target_sequence"`
-	TailEventsApplied  int                               `json:"tail_events_applied"`
-	TailPagesFetched   int                               `json:"tail_pages_fetched"`
+	SchemaVersion int                               `json:"schema_version"`
+	ComputerID    string                            `json:"computer_id"`
+	CapturedAt    string                            `json:"captured_at"`
+	LiveHead      *computerevent.Head               `json:"live_head"`
+	ReplayHead    *computerevent.Head               `json:"replay_head"`
+	Live          computerversion.ObservationSet    `json:"live"`
+	Replay        computerversion.ObservationSet    `json:"replay"`
+	Result        computerversion.EquivalenceResult `json:"result"`
+	Eligibility   ReplayEligibility                 `json:"eligibility"`
+	ProbeDigest   string                            `json:"probe_digest"`
+	RunMemory     ReplayRunMemoryComparison         `json:"run_memory"`
 }
 
 // ReplayRunMemoryComparison summarizes row-level run-memory projection drift
@@ -239,23 +234,14 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: create disposable workspace: %w", err)
 	}
 	defer os.RemoveAll(tempRoot)
-	replayStore, baseSequence, baseBlob, targetSequence, observer, err := rt.openProbeReplayStore(ctx, computerID, tempRoot, liveHead)
+
+	replayStore, err := choirstore.OpenFresh(filepath.Join(tempRoot, "runtime.db"))
 	if err != nil {
-		return ReplayCompletenessReport{}, err
+		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: open disposable workspace: %w", err)
 	}
 	defer replayStore.Close()
-	rt.eventAppender.SetReplayObserver(observer)
-	reconstructErr := rt.eventAppender.ReconstructInto(ctx, replayStore)
-	rt.eventAppender.SetReplayObserver(nil)
-	if reconstructErr != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: reconstruct event chain: %w", reconstructErr)
-	}
-	tailApplied := 0
-	if targetSequence > 0 {
-		tailApplied, err = observer.tailReceipt(baseSequence, targetSequence)
-		if err != nil {
-			return ReplayCompletenessReport{}, err
-		}
+	if err := rt.eventAppender.ReconstructInto(ctx, replayStore); err != nil {
+		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: reconstruct event chain: %w", err)
 	}
 	replayHead, err := replayStore.Head(ctx, computerID)
 	if err != nil {
@@ -299,21 +285,16 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		filterReplayHeadObservation(live), filterReplayHeadObservation(replay),
 	)
 	report := ReplayCompletenessReport{
-		SchemaVersion:      replayCompletenessSchemaVersion,
-		ComputerID:         computerID,
-		CapturedAt:         time.Now().UTC().Format(time.RFC3339Nano),
-		LiveHead:           liveHead,
-		ReplayHead:         replayHead,
-		Live:               live,
-		Replay:             replay,
-		Result:             result,
-		Eligibility:        replayEligibility(liveHead, replayHead, live, replay, result),
-		RunMemory:          runMemory,
-		BaseSequence:       baseSequence,
-		BaseBlobSHA256:     baseBlob,
-		TailTargetSequence: targetSequence,
-		TailEventsApplied:  tailApplied,
-		TailPagesFetched:   observer.pages,
+		SchemaVersion: replayCompletenessSchemaVersion,
+		ComputerID:    computerID,
+		CapturedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		LiveHead:      liveHead,
+		ReplayHead:    replayHead,
+		Live:          live,
+		Replay:        replay,
+		Result:        result,
+		Eligibility:   replayEligibility(liveHead, replayHead, live, replay, result),
+		RunMemory:     runMemory,
 	}
 	raw, err := computerevent.CanonicalJSON(report)
 	if err != nil {
@@ -321,34 +302,6 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 	}
 	report.ProbeDigest = computerevent.DigestBytes(raw)
 	return report, nil
-}
-
-// openProbeReplayStore builds the disposable replay projection for the probe.
-// A live chain replays from its verified base (tail-only); an empty store
-// probes the explicit bootstrap path without one. The caller closes the store
-// and removes the temp root.
-func (rt *Runtime) openProbeReplayStore(ctx context.Context, computerID, tempRoot string, liveHead *computerevent.Head) (*choirstore.Store, uint64, string, uint64, *restoreReplayObserver, error) {
-	observer := &restoreReplayObserver{}
-	if liveHead == nil || liveHead.Sequence == 0 {
-		replayStore, err := choirstore.OpenFresh(filepath.Join(tempRoot, "runtime.db"))
-		if err != nil {
-			return nil, 0, "", 0, nil, fmt.Errorf("replay completeness: open disposable workspace: %w", err)
-		}
-		return replayStore, 0, "", 0, observer, nil
-	}
-	src, err := rt.resolveRestoreBaseSource()
-	if err != nil {
-		return nil, 0, "", 0, nil, err
-	}
-	targetSequence, err := resolveRecoveryTarget(ctx, src, computerID, liveHead.CanonicalEventHead)
-	if err != nil {
-		return nil, 0, "", 0, nil, err
-	}
-	staged, descriptor, err := installStagedBase(ctx, src, tempRoot, "runtime.db", computerID, liveHead.CanonicalEventHead, targetSequence)
-	if err != nil {
-		return nil, 0, "", 0, nil, err
-	}
-	return staged, descriptor.Sequence, descriptor.BlobSHA256, targetSequence, observer, nil
 }
 
 func replayCompletenessVersion(rt *Runtime, head *computerevent.Head) computerversion.ComputerVersion {

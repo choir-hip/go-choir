@@ -141,18 +141,14 @@ func (s *Store) FailLifecycleControlActivation(ctx context.Context, req types.Fa
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	failAgentProfile, _ := agentprofile.Canonical(agent.Profile)
-	failAgentRole, _ := agentprofile.Canonical(agent.Role)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID || failAgentProfile != agentprofile.Researcher || failAgentRole != agentprofile.Researcher || agent.LifecycleVersion <= 0 || strings.TrimSpace(agent.ActiveRunID) != req.RunID {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != req.AgentID || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher || agent.LifecycleVersion <= 0 || strings.TrimSpace(agent.ActiveRunID) != req.RunID {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	runObj, run, err := s.textureTurnRunObject(ctx, ownerID, computerID, req.RunID)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	failRunProfile, _ := agentprofile.Canonical(run.AgentProfile)
-	failRunRole, _ := agentprofile.Canonical(run.AgentRole)
-	if run.OwnerID != ownerID || run.ComputerID != computerID || run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID || failRunProfile != agentprofile.Researcher || failRunRole != agentprofile.Researcher || !lifecycleRunOwnsActivation(run.State) || metadataStringValueStore(run.Metadata, "request_source") != "lifecycle_texture_control" || metadataStringValueStore(run.Metadata, "lifecycle_logical_activation_key") != req.LogicalActivationKey || metadataStringValueStore(run.Metadata, "lifecycle_failed_attempt_key") != req.FailedAttemptKey || !lifecycleControlBindingsEmpty(run.Metadata) {
+	if run.OwnerID != ownerID || run.ComputerID != computerID || run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID || agentprofile.Canonical(run.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(run.AgentRole) != agentprofile.Researcher || !lifecycleRunOwnsActivation(run.State) || metadataStringValueStore(run.Metadata, "request_source") != "lifecycle_texture_control" || metadataStringValueStore(run.Metadata, "lifecycle_logical_activation_key") != req.LogicalActivationKey || metadataStringValueStore(run.Metadata, "lifecycle_failed_attempt_key") != req.FailedAttemptKey || !lifecycleControlBindingsEmpty(run.Metadata) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	if strings.TrimSpace(run.Prompt) != req.ActivationRefresh.Prompt || metadataStringValueStore(run.Metadata, "lifecycle_activation_build_commit") != req.ActivationRefresh.BuildCommit {

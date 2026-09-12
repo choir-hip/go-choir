@@ -34,11 +34,6 @@ type SessionResult struct {
 	DurationMs int64          `json:"duration_ms"`
 	Receipts   []string       `json:"receipts,omitempty"`
 	Intents    []StagedIntent `json:"intents,omitempty"`
-	// Reuse carries the session reuse disposition for a failed cell
-	// (preserve: worker stays alive; otherwise the worker is poisoned).
-	// DiagKind carries the diagnostic kind with the message verbatim.
-	Reuse    ReuseDisposition `json:"reuse,omitempty"`
-	DiagKind DiagnosticKind   `json:"diag_kind,omitempty"`
 }
 
 // RunSessionLoop serves framed eval cells on r/w using a single persistent
@@ -91,13 +86,12 @@ func RunSessionLoopWithDrainAndHooks(r io.Reader, w io.Writer, newSession func()
 	return scanner.Err()
 }
 
-// serveCell evaluates one frame on the session and reports the result. An
-// unsafe-to-reuse failure poisons the session: the caller ships the error
-// result and respawns a clean worker, never reusing poisoned state. A proven
-// non-executing rejection ships the error result with the worker alive.
-// Hooks bind the cell's tray and inbox snapshot around evaluation (nil hooks
-// = legacy synchronous behavior, no staged intents). A failed cell drops its
-// tray: only successful cells reduce intents and advance the inbox cursor.
+// serveCell evaluates one frame on the session and reports the result. A
+// failed cell poisons the session: the caller ships the error result and
+// respawns a clean worker, never reusing poisoned state. Hooks bind the
+// cell's tray and inbox snapshot around evaluation (nil hooks = legacy
+// synchronous behavior, no staged intents). A failed cell drops its tray:
+// only successful cells reduce intents and advance the inbox cursor.
 func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *CellHooks) (SessionResult, error) {
 	if hooks != nil && hooks.Begin != nil {
 		hooks.Begin(frame)
@@ -114,15 +108,6 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	}
 	if evalErr != nil {
 		out.Error = evalErr.Error()
-		if ee, ok := AsEvalError(evalErr); ok {
-			out.Reuse = ee.Reuse
-			out.DiagKind = ee.Kind
-			if ee.Reuse == ReusePreserve {
-				// Proven non-executing rejection: the heap is intact, so
-				// the worker stays alive. No intents ship (nothing ran).
-				return out, nil
-			}
-		}
 		return out, evalErr
 	}
 	out.Intents = staged

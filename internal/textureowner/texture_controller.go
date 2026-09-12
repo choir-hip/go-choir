@@ -51,8 +51,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 	}
 	textureSubjects := make([]types.AgentRecord, 0)
 	for _, subject := range subjects {
-		subjectProfile, _ := agentprofile.Canonical(subject.Profile)
-		if subjectProfile != agentprofile.Texture {
+		if agentprofile.Canonical(subject.Profile) != agentprofile.Texture {
 			continue
 		}
 		docID := docIDFromTextureAgentID(subject.AgentID)
@@ -480,9 +479,7 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 		return fmt.Errorf("validate Texture activation: run authority mismatch")
 	}
 	agent, err := rt.Store.GetAgentByScope(ctx, ownerID, computerID, agentID)
-	agentProfile, _ := agentprofile.Canonical(agent.Profile)
-	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if err != nil || agentProfile != agentprofile.Texture || agentRole != agentprofile.Texture ||
+	if err != nil || agentprofile.Canonical(agent.Profile) != agentprofile.Texture || agentprofile.Canonical(agent.Role) != agentprofile.Texture ||
 		agent.ChannelID != docID || agent.LifecycleVersion <= 0 {
 		if err != nil {
 			return fmt.Errorf("validate Texture activation subject: %w", err)
@@ -491,8 +488,7 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 	}
 	workID := strings.TrimSpace(metadataStringValue(run.Metadata, "lifecycle_work_item_id"))
 	work, err := rt.Store.GetLifecycleWorkItem(ctx, ownerID, computerID, workID)
-	workAuthorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)
-	if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != doc.TrajectoryID || work.AssignedAgentID != agentID || workAuthorityProfile != agentprofile.Texture {
+	if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != doc.TrajectoryID || work.AssignedAgentID != agentID || agentprofile.Canonical(work.AuthorityProfile) != agentprofile.Texture {
 		if err != nil {
 			return fmt.Errorf("validate Texture activation work: %w", err)
 		}
@@ -1059,7 +1055,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 			}
 			return zero, "", producerAgentErr
 		}
-		producerProfile, _ := agentprofile.Canonical(producerAgent.Profile)
+		producerProfile := agentprofile.Canonical(producerAgent.Profile)
 		if producerAgent.OwnerID != o.OwnerID || producerAgent.ComputerID != o.ComputerID || producerAgent.ChannelID != o.DocumentID ||
 			(producerProfile != agentprofile.Researcher && producerProfile != agentprofile.Super && producerProfile != agentprofile.CoSuper) ||
 			(producerProfile == agentprofile.Super && producerAgent.AgentID != persistentSuperAgentID(o.OwnerID)) ||
@@ -1073,8 +1069,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 			}
 			return zero, "", producerWorkErr
 		}
-		producerWorkAuthorityProfile, _ := agentprofile.Canonical(producerWork.AuthorityProfile)
-		if producerWork.TrajectoryID != o.TrajectoryID || producerWork.AssignedAgentID != o.ProducerAgentID || producerWork.LifecycleVersion <= 0 || producerWorkAuthorityProfile != producerProfile {
+		if producerWork.TrajectoryID != o.TrajectoryID || producerWork.AssignedAgentID != o.ProducerAgentID || producerWork.LifecycleVersion <= 0 || agentprofile.Canonical(producerWork.AuthorityProfile) != producerProfile {
 			return zero, "", invalidTextureOccurrence("Texture producer work authority mismatch")
 		}
 		producerRun, producerRunErr := rt.Core.GetRun(ctx, canonical.SourceRunID, o.OwnerID)
@@ -1088,9 +1083,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		if producerProfile == agentprofile.Super {
 			trajectoryBound = producerRun.TrajectoryID == "" && metadataStringValue(producerRun.Metadata, "assignment_trajectory_id") == o.TrajectoryID
 		}
-		producerRunProfile, _ := agentprofile.Canonical(producerRun.AgentProfile)
-		producerRunRole, _ := agentprofile.Canonical(producerRun.AgentRole)
-		if producerRun.RunID != canonical.SourceRunID || producerRun.OwnerID != o.OwnerID || producerRun.ComputerID != o.ComputerID || producerRun.AgentID != o.ProducerAgentID || !trajectoryBound || producerRun.ChannelID != o.DocumentID || producerRunProfile != producerProfile || producerRunRole != producerProfile {
+		if producerRun.RunID != canonical.SourceRunID || producerRun.OwnerID != o.OwnerID || producerRun.ComputerID != o.ComputerID || producerRun.AgentID != o.ProducerAgentID || !trajectoryBound || producerRun.ChannelID != o.DocumentID || agentprofile.Canonical(producerRun.AgentProfile) != producerProfile || agentprofile.Canonical(producerRun.AgentRole) != producerProfile {
 			return zero, "", invalidTextureOccurrence("Texture producer source run authority mismatch")
 		}
 		if authorityErr := rt.Core.ValidateLifecycleProducerReportAuthority(ctx, canonical); authorityErr != nil {
@@ -1157,9 +1150,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		return o, TextureActorOccurrenceTerminal, nil
 	}
 	agent, err := rt.Store.GetAgentByScope(ctx, o.OwnerID, o.ComputerID, o.TargetAgentID)
-	agentProfile, _ := agentprofile.Canonical(agent.Profile)
-	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if err != nil || agentProfile != agentprofile.Texture || agentRole != agentprofile.Texture || agent.ChannelID != o.DocumentID || agent.LifecycleVersion <= 0 {
+	if err != nil || agentprofile.Canonical(agent.Profile) != agentprofile.Texture || agentprofile.Canonical(agent.Role) != agentprofile.Texture || agent.ChannelID != o.DocumentID || agent.LifecycleVersion <= 0 {
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return zero, "", invalidTextureOccurrence("Texture occurrence subject is missing")
@@ -1187,8 +1178,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		// only when the canonical snapshot has one unique open Texture work; an
 		// ambiguous scope is not mailbox authority.
 		for _, candidate := range snapshot.WorkItems {
-			candidateAuthorityProfile, _ := agentprofile.Canonical(candidate.AuthorityProfile)
-			if candidate.Status != types.WorkItemOpen || candidate.AssignedAgentID != o.TargetAgentID || candidateAuthorityProfile != agentprofile.Texture {
+			if candidate.Status != types.WorkItemOpen || candidate.AssignedAgentID != o.TargetAgentID || agentprofile.Canonical(candidate.AuthorityProfile) != agentprofile.Texture {
 				continue
 			}
 			if workID != "" {
@@ -1201,8 +1191,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		return zero, "", invalidTextureOccurrence("Texture occurrence lacks exact target work identity")
 	}
 	work, err := rt.Store.GetLifecycleWorkItem(ctx, o.OwnerID, o.ComputerID, workID)
-	workAuthorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)
-	if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != o.TrajectoryID || work.AssignedAgentID != o.TargetAgentID || workAuthorityProfile != agentprofile.Texture {
+	if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != o.TrajectoryID || work.AssignedAgentID != o.TargetAgentID || agentprofile.Canonical(work.AuthorityProfile) != agentprofile.Texture {
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return zero, "", invalidTextureOccurrence("Texture occurrence open work is missing")

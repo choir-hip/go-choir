@@ -351,9 +351,8 @@ func resolveCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	if strings.TrimSpace(target.AgentID) != explicitTargetAgentID || target.OwnerID != ownerID || target.ComputerID != computerID {
 		return authority, fmt.Errorf("resolve explicit update_coagent target: durable scope mismatch")
 	}
-	targetProfile, _ := agentprofile.Canonical(target.Profile)
-	targetRole, _ := agentprofile.Canonical(target.Role)
-	if targetProfile == "" || targetRole != targetProfile || strings.TrimSpace(target.ChannelID) == "" {
+	targetProfile := agentprofile.Canonical(target.Profile)
+	if targetProfile == "" || agentprofile.Canonical(target.Role) != targetProfile || strings.TrimSpace(target.ChannelID) == "" {
 		return authority, fmt.Errorf("resolve explicit update_coagent target: profile, role, and channel must be canonical")
 	}
 	authority.target, authority.targetProfile = target, targetProfile
@@ -362,13 +361,11 @@ func resolveCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	if err != nil {
 		return authority, fmt.Errorf("resolve update_coagent caller agent: %w", err)
 	}
-	callerProfile, _ := agentprofile.Canonical(callerAgent.Profile)
-	callerRole, _ := agentprofile.Canonical(callerAgent.Role)
-	executionProfile, _ := agentprofile.Canonical(execution.Profile)
-	if callerProfile == "" || callerRole != callerProfile {
+	callerProfile := agentprofile.Canonical(callerAgent.Profile)
+	if callerProfile == "" || agentprofile.Canonical(callerAgent.Role) != callerProfile {
 		return authority, fmt.Errorf("resolve update_coagent caller agent: profile/role mismatch")
 	}
-	if executionProfile == "" || executionProfile != callerProfile {
+	if executionProfile := agentprofile.Canonical(execution.Profile); executionProfile == "" || executionProfile != callerProfile {
 		return authority, fmt.Errorf("resolve update_coagent caller agent: execution profile mismatch")
 	}
 	authority.callerAgent, authority.callerProfile = callerAgent, callerProfile
@@ -415,12 +412,10 @@ func resolveCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 }
 
 func validateLoadedCallerRun(execution toolregistry.ExecutionContext, run types.RunRecord, profile, computerID string) error {
-	configuredProfile := configuredAgentProfileForRun(&run)
-	runRole := agentRoleForRun(&run)
 	if run.RunID != strings.TrimSpace(execution.RunID) || run.AgentID != strings.TrimSpace(execution.AgentID) ||
 		run.OwnerID != strings.TrimSpace(execution.OwnerID) || run.ComputerID != computerID ||
-		configuredProfile != profile ||
-		runRole != profile {
+		agentprofile.Canonical(configuredAgentProfileForRun(&run)) != profile ||
+		agentprofile.Canonical(agentRoleForRun(&run)) != profile {
 		return fmt.Errorf("update_coagent durable caller run does not match execution identity")
 	}
 	provided := execution.RunRecord
@@ -448,18 +443,15 @@ func enforceCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	computerID := strings.TrimSpace(execution.ComputerID)
 	callerAgentID := strings.TrimSpace(execution.AgentID)
 	callerRunID := strings.TrimSpace(execution.RunID)
-	callerProfile := execution.Profile
+	callerProfile := agentprofile.Canonical(execution.Profile)
+	targetProfile = agentprofile.Canonical(targetProfile)
 	if ownerID == "" || computerID == "" || callerAgentID == "" || callerRunID == "" || execution.RunRecord == nil {
 		return fmt.Errorf("update_coagent missing owner/computer/agent/run authority")
 	}
 	if target.AgentID == "" || target.OwnerID != ownerID || target.ComputerID != computerID || targetProfile == "" {
 		return fmt.Errorf("update_coagent target scope/profile is not authoritative")
 	}
-	canMessage, err := agentprofile.CanMessage(callerProfile, targetProfile)
-	if err != nil {
-		return fmt.Errorf("update_coagent message policy refused: %w", err)
-	}
-	if !canMessage {
+	if !agentprofile.CanMessage(callerProfile, targetProfile) {
 		if targetProfile == agentprofile.Email {
 			return fmt.Errorf("update_coagent %s cannot message %s; route owner intent through Texture request_email_draft artifact handoff", callerProfile, targetProfile)
 		}
@@ -520,16 +512,14 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 	if err != nil {
 		return fmt.Errorf("resolve lifecycle producer work: %w", err)
 	}
-	authorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)
 	if work.OwnerID != authority.callerRun.OwnerID || work.ComputerID != authority.callerRun.ComputerID ||
 		work.TrajectoryID != trajectoryID || work.Status != types.WorkItemOpen || work.AssignedAgentID != authority.callerRun.AgentID ||
-		authorityProfile != authority.callerProfile {
+		agentprofile.Canonical(work.AuthorityProfile) != authority.callerProfile {
 		return fmt.Errorf("update_coagent lifecycle producer work binding mismatch")
 	}
-	requesterProfile, _ := agentprofile.Canonical(metadataStringValue(work.Details, "requested_by_profile"))
 	if metadataStringValue(work.Details, "requested_by_agent_id") != authority.target.AgentID ||
 		metadataStringValue(work.Details, "requested_by_run_id") != parent.RunID ||
-		requesterProfile != agentprofile.Texture {
+		agentprofile.Canonical(metadataStringValue(work.Details, "requested_by_profile")) != agentprofile.Texture {
 		return fmt.Errorf("update_coagent lifecycle work lacks exact requesting Texture provenance")
 	}
 	authority.workItemID = workItemID
@@ -538,7 +528,7 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 
 func loadLifecycleRequesterRun(ctx context.Context, authorityStore coagentUpdateAuthorityStore, caller types.RunRecord, target types.AgentRecord) (types.RunRecord, error) {
 	requesterAgentID := metadataStringValue(caller.Metadata, "requested_by_agent_id")
-	requesterProfile, _ := agentprofile.Canonical(metadataStringValue(caller.Metadata, "requested_by_profile"))
+	requesterProfile := agentprofile.Canonical(metadataStringValue(caller.Metadata, "requested_by_profile"))
 	requesterRunID, err := exactRequesterRunID(caller)
 	if err != nil {
 		return types.RunRecord{}, err
@@ -550,10 +540,8 @@ func loadLifecycleRequesterRun(ctx context.Context, authorityStore coagentUpdate
 	if err != nil {
 		return types.RunRecord{}, fmt.Errorf("resolve requesting lifecycle Texture run: %w", err)
 	}
-	parentProfile := configuredAgentProfileForRun(&parent)
-	parentRole := agentRoleForRun(&parent)
-	if parent.AgentID != target.AgentID || parentProfile != agentprofile.Texture ||
-		parentRole != agentprofile.Texture || strings.TrimSpace(trajectoryIDForRun(&parent)) != strings.TrimSpace(trajectoryIDForRun(&caller)) {
+	if parent.AgentID != target.AgentID || agentprofile.Canonical(configuredAgentProfileForRun(&parent)) != agentprofile.Texture ||
+		agentprofile.Canonical(agentRoleForRun(&parent)) != agentprofile.Texture || strings.TrimSpace(trajectoryIDForRun(&parent)) != strings.TrimSpace(trajectoryIDForRun(&caller)) {
 		return types.RunRecord{}, fmt.Errorf("update_coagent requesting lifecycle Texture run binding mismatch")
 	}
 	return parent, nil
@@ -655,18 +643,15 @@ func loadLegacyRequesterRun(ctx context.Context, authorityStore coagentUpdateAut
 	if err != nil {
 		return types.RunRecord{}, err
 	}
-	requesterProfile, _ := agentprofile.Canonical(metadataStringValue(caller.Metadata, "requested_by_profile"))
-	targetProfile, _ := agentprofile.Canonical(target.Profile)
 	if metadataStringValue(caller.Metadata, "requested_by_agent_id") != target.AgentID ||
-		requesterProfile != targetProfile {
+		agentprofile.Canonical(metadataStringValue(caller.Metadata, "requested_by_profile")) != agentprofile.Canonical(target.Profile) {
 		return types.RunRecord{}, fmt.Errorf("update_coagent target does not match caller requester metadata")
 	}
 	parent, err := loadScopedLegacyRun(ctx, authorityStore, caller.OwnerID, caller.ComputerID, requesterRunID)
 	if err != nil {
 		return types.RunRecord{}, fmt.Errorf("resolve pre-cutover requester run: %w", err)
 	}
-	parentProfile := configuredAgentProfileForRun(&parent)
-	if parent.AgentID != target.AgentID || parentProfile != targetProfile ||
+	if parent.AgentID != target.AgentID || agentprofile.Canonical(configuredAgentProfileForRun(&parent)) != agentprofile.Canonical(target.Profile) ||
 		(parent.TrajectoryID != "" && caller.TrajectoryID != "" && parent.TrajectoryID != caller.TrajectoryID) {
 		return types.RunRecord{}, fmt.Errorf("update_coagent pre-cutover requester identity mismatch")
 	}
@@ -739,9 +724,8 @@ func validateAssignedCoSuperPersistentSuperReport(ctx context.Context, authority
 	if metadataStringValue(authority.callerRun.Metadata, "assignment_id") == "" || metadataIntValue(authority.callerRun.Metadata, "assignment_attempt") <= 0 {
 		return fmt.Errorf("update_coagent calling CoSuper lacks exact assignment")
 	}
-	requesterProfile, _ := agentprofile.Canonical(metadataStringValue(authority.callerRun.Metadata, "requested_by_profile"))
 	if metadataStringValue(authority.callerRun.Metadata, "requested_by_agent_id") != authority.target.AgentID ||
-		requesterProfile != agentprofile.Super {
+		agentprofile.Canonical(metadataStringValue(authority.callerRun.Metadata, "requested_by_profile")) != agentprofile.Super {
 		return fmt.Errorf("update_coagent calling CoSuper was not requested by the target Super")
 	}
 	requesterRunID, err := exactRequesterRunID(authority.callerRun)
@@ -752,11 +736,9 @@ func validateAssignedCoSuperPersistentSuperReport(ctx context.Context, authority
 	if err != nil {
 		return fmt.Errorf("resolve owning persistent Super run: %w", err)
 	}
-	parentProfile := configuredAgentProfileForRun(&parent)
-	parentRole := agentRoleForRun(&parent)
 	if parent.AgentID != authority.target.AgentID ||
-		parentProfile != agentprofile.Super ||
-		parentRole != agentprofile.Super ||
+		agentprofile.Canonical(configuredAgentProfileForRun(&parent)) != agentprofile.Super ||
+		agentprofile.Canonical(agentRoleForRun(&parent)) != agentprofile.Super ||
 		parent.TrajectoryID != "" {
 		return fmt.Errorf("update_coagent owning Super run binding mismatch")
 	}
@@ -799,8 +781,7 @@ func validateCoSuperTextureResultPath(ctx context.Context, authorityStore coagen
 	if err != nil {
 		return fmt.Errorf("resolve owning super run: %w", err)
 	}
-	owningSuperProfile := configuredAgentProfileForRun(&owningSuper)
-	if owningSuperProfile != agentprofile.Super {
+	if agentprofile.Canonical(configuredAgentProfileForRun(&owningSuper)) != agentprofile.Super {
 		return fmt.Errorf("update_coagent co-super assignment owner is not Super")
 	}
 	if _, err := loadLegacyRequesterRun(ctx, authorityStore, owningSuper, authority.target); err != nil {

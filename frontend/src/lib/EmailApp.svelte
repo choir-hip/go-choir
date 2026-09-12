@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { previewEmailMessages } from './public-preview-data';
   import { mediaRouteForFileName } from './media-utils.js';
@@ -17,6 +17,7 @@
     { id: 'quarantine', label: 'Quarantine' },
   ];
   const EMAIL_REQUEST_TIMEOUT_MS = 15000;
+
   let aliases = [];
   let activeFolder = normalizeFolder(appContext?.activeFolder) || 'inbox';
   let messages = [];
@@ -24,10 +25,6 @@
   let detail = null;
   let loading = false;
   let detailLoading = false;
-  let nextCursor = '';
-  let loadingMore = false;
-  let folderTotals: Record<string, number> = {};
-  let folderUnread: Record<string, number> = {};
   let error = '';
   let actionStatus = '';
   let replyOpen = false;
@@ -62,22 +59,12 @@
     void openContextDraft(appContext.draftId);
   }
 
-  function handleVisibilityOrFocus() {
-    if (document.visibilityState === 'visible' && authenticated && !loading && !loadingMore) {
-      void loadMessages(activeFolder, { persist: false, background: true });
-    }
-  }
-
   onMount(() => {
     mounted = true;
-    window.addEventListener('focus', handleVisibilityOrFocus);
-    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
   });
 
   onDestroy(() => {
     mounted = false;
-    window.removeEventListener('focus', handleVisibilityOrFocus);
-    document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     invalidateEmailRequests();
     if (appStateEmitTimer) clearTimeout(appStateEmitTimer);
   });
@@ -239,21 +226,17 @@
     }
     detailLoadGeneration += 1;
     detailLoading = false;
-    if (!options.background) {
-      loading = true;
-      error = '';
-    }
+    loading = true;
+    error = '';
     activeFolder = nextFolder;
     detailPaneOpen = Boolean(options.openPane);
     if (options.persist !== false) emitAppState();
     try {
       if (nextFolder === 'drafts') {
-        nextCursor = '';
         await loadDrafts(options, requestId);
         return;
       }
-      // Request initial 100 messages to ensure full mailbox display with keyset pagination
-      const res = await fetchEmailWithTimeout(`/api/email/messages?folder=${encodeURIComponent(nextFolder)}&limit=100`);
+      const res = await fetchEmailWithTimeout(`/api/email/messages?folder=${encodeURIComponent(nextFolder)}`);
       if (!res.ok) {
         if (res.status === 401) throw new AuthRequiredError();
         throw new Error('Could not load mail');
@@ -261,28 +244,7 @@
       const data = await res.json();
       if (!isLatestMessageLoad(requestId)) return;
       loadedOnce = true;
-      const incoming = data.messages || [];
-      if (typeof data.total === 'number') {
-        folderTotals[nextFolder] = data.total;
-        folderTotals = folderTotals;
-      }
-      if (typeof data.unread === 'number') {
-        folderUnread[nextFolder] = data.unread;
-        folderUnread = folderUnread;
-      }
-
-      if (options.background && messages.length > 0) {
-        const incomingMap = new Map(incoming.map((m) => [m.id, m]));
-        const olderMessages = messages.filter((m) => !incomingMap.has(m.id));
-        messages = [...incoming, ...olderMessages];
-        if (!nextCursor) {
-          nextCursor = data.next_cursor || '';
-        }
-      } else {
-        messages = incoming;
-        nextCursor = data.next_cursor || '';
-      }
-
+      messages = data.messages || [];
       if (options.selectedId && messages.some((message) => message.id === options.selectedId)) {
         selectedId = options.selectedId;
       }
@@ -290,7 +252,7 @@
         selectedId = messages[0]?.id || '';
         detail = null;
       }
-      if (selectedId && (!options.background || !detail)) {
+      if (selectedId) {
         await loadDetail(selectedId, {
           openPane: Boolean(options.openPane),
           persist: false,
@@ -298,55 +260,12 @@
         });
       }
     } catch (err) {
-      if (isLatestMessageLoad(requestId) && !options.background) handleError(err);
+      if (isLatestMessageLoad(requestId)) handleError(err);
     } finally {
       if (isLatestMessageLoad(requestId)) {
         loading = false;
         if (options.persist !== false) scheduleAppStateEmit();
       }
-    }
-  }
-
-  async function loadMoreMessages() {
-    if (!nextCursor || loadingMore || !authenticated || activeFolder === 'drafts') return;
-    const currentFolder = activeFolder;
-    const cursor = nextCursor;
-    const requestId = messageLoadGeneration;
-    loadingMore = true;
-    try {
-      const res = await fetchEmailWithTimeout(
-        `/api/email/messages?folder=${encodeURIComponent(currentFolder)}&cursor=${encodeURIComponent(cursor)}&limit=100`
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!isLatestMessageLoad(requestId) || activeFolder !== currentFolder) return;
-      nextCursor = data.next_cursor || '';
-      if (typeof data.total === 'number') {
-        folderTotals[currentFolder] = data.total;
-        folderTotals = folderTotals;
-      }
-      if (typeof data.unread === 'number') {
-        folderUnread[currentFolder] = data.unread;
-        folderUnread = folderUnread;
-      }
-      const incoming = data.messages || [];
-      if (incoming.length > 0) {
-        const seen = new Set(messages.map((m) => m.id));
-        const toAppend = incoming.filter((m) => !seen.has(m.id));
-        messages = [...messages, ...toAppend];
-      }
-    } catch (err) {
-      // transient pagination failure
-    } finally {
-      loadingMore = false;
-    }
-  }
-
-  function handleListScroll(event) {
-    const el = event.currentTarget;
-    if (!el || !nextCursor || loadingMore) return;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
-      void loadMoreMessages();
     }
   }
 
@@ -384,49 +303,6 @@
     await loadDetail(id, { openPane: true });
   }
 
-  function isMessageUnread(msg) {
-    return Boolean(msg && msg.direction === 'inbound' && !msg.read_at);
-  }
-
-  async function toggleReadStatus() {
-    if (!detail?.message || activeFolder === 'drafts' || !authenticated) return;
-    const msg = detail.message;
-    const currentlyUnread = !msg.read_at;
-    const newReadAt = currentlyUnread ? new Date().toISOString() : '';
-    msg.read_at = newReadAt;
-    detail = detail;
-
-    const target = messages.find((m) => m.id === msg.id);
-    if (target) {
-      target.read_at = newReadAt;
-      messages = messages;
-    }
-
-    if (currentlyUnread) {
-      if (folderUnread[activeFolder] > 0) {
-        folderUnread[activeFolder]--;
-        folderUnread = folderUnread;
-      }
-      try {
-        await fetchEmailWithTimeout(`/api/email/messages/${encodeURIComponent(msg.id)}/read`, {
-          method: 'POST',
-        });
-      } catch (err) {
-        console.warn('Failed to mark message read:', err);
-      }
-    } else {
-      folderUnread[activeFolder] = (folderUnread[activeFolder] || 0) + 1;
-      folderUnread = folderUnread;
-      try {
-        await fetchEmailWithTimeout(`/api/email/messages/${encodeURIComponent(msg.id)}/unread`, {
-          method: 'POST',
-        });
-      } catch (err) {
-        console.warn('Failed to mark message unread:', err);
-      }
-    }
-  }
-
   async function loadDetail(id, options = {}) {
     const requestId = ++detailLoadGeneration;
     const ownerMessageLoad = options.ownerMessageLoad || 0;
@@ -458,31 +334,6 @@
       const data = await res.json();
       if (!isLatestDetailLoad(requestId, ownerMessageLoad)) return;
       detail = data;
-
-      // Mark inbound unread message as read on viewing
-      const msg = data?.message;
-      if (msg && msg.direction === 'inbound' && !msg.read_at && activeFolder !== 'drafts') {
-        const readAt = new Date().toISOString();
-        msg.read_at = readAt;
-
-        const target = messages.find((m) => m.id === id);
-        if (target && !target.read_at) {
-          target.read_at = readAt;
-          messages = messages;
-          if (folderUnread[activeFolder] > 0) {
-            folderUnread[activeFolder]--;
-            folderUnread = folderUnread;
-          }
-        }
-
-        if (authenticated) {
-          void fetchEmailWithTimeout(`/api/email/messages/${encodeURIComponent(id)}/read`, {
-            method: 'POST',
-          }).catch((err) => {
-            console.warn('Failed to mark message read on server:', err);
-          });
-        }
-      }
     } catch (err) {
       if (isLatestDetailLoad(requestId, ownerMessageLoad)) handleError(err);
     } finally {
@@ -733,49 +584,32 @@
   }
 
   let bodyViewMode = 'html';
+  let emailIframe = null;
+  let iframeLoadToken = 0;
+
   $: hasHtmlBody = Boolean(detail?.html_body && detail.html_body.trim());
   $: effectiveBodyMode = hasHtmlBody ? bodyViewMode : 'text';
-
-  function sanitizeEmailHtml(html) {
-    if (!html) return '';
-    let sanitized = String(html)
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-      .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-      .replace(/<\/?(form|iframe|object|embed|base)\b[^>]*>/gi, '')
-      .replace(/href\s*=\s*["']?\s*javascript:[^"'>]*/gi, 'href="#"');
-
-    sanitized = sanitized.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
-      let cleaned = attrs.replace(/\s*target\s*=\s*["'][^"']*["']/gi, '');
-      cleaned = cleaned.replace(/\s*rel\s*=\s*["'][^"']*["']/gi, '');
-      return `<a ${cleaned} target="_blank" rel="noopener noreferrer">`;
-    });
-    return sanitized;
+  $: if (detail?.html_body && bodyViewMode === 'html') {
+    void tick().then(renderEmailIframe);
   }
 
   function buildIframeContent(html) {
-    const safeBody = sanitizeEmailHtml(html);
     return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: cid:; style-src 'unsafe-inline'; font-src https: data:; media-src https:; base-uri 'none'; form-action 'none';">
 <style>
-  html, body {
-    height: 100%;
-    margin: 0;
-    box-sizing: border-box;
-  }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 15px;
     line-height: 1.6;
     color: #1a1a1a;
     background: #fff;
+    margin: 0;
     padding: 16px;
     word-wrap: break-word;
     overflow-wrap: break-word;
-    overflow-y: auto;
   }
   img { max-width: 100%; height: auto; }
   table { max-width: 100%; }
@@ -789,8 +623,22 @@
   }
 </style>
 </head>
-<body>${safeBody}</body>
+<body>${html}</body>
 </html>`;
+  }
+
+  function renderEmailIframe() {
+    if (!emailIframe || !hasHtmlBody) return;
+    const token = ++iframeLoadToken;
+    const doc = emailIframe.contentDocument;
+    if (!doc) return;
+    doc.open();
+    doc.write(buildIframeContent(detail.html_body));
+    doc.close();
+  }
+
+  function handleIframeLoad() {
+    if (iframeLoadToken === 0) renderEmailIframe();
   }
 
   function attachmentIcon(attachment) {
@@ -879,7 +727,7 @@
     <header class="list-header">
       <div>
         <h2>{folders.find((folder) => folder.id === activeFolder)?.label || 'Inbox'}</h2>
-        <p>{(folderTotals[activeFolder] != null ? folderTotals[activeFolder] : messages.length)} {activeFolder === 'drafts' ? 'drafts' : 'messages'}{folderUnread[activeFolder] > 0 ? ` · ${folderUnread[activeFolder]} unread` : ''}</p>
+        <p>{messages.length} {activeFolder === 'drafts' ? 'drafts' : 'messages'}</p>
       </div>
       <div class="list-actions">
         <button type="button" on:click={openCompose} data-email-compose>Compose</button>
@@ -896,22 +744,16 @@
     {:else if messages.length === 0}
       <div class="empty-state">No messages</div>
     {:else}
-      <div class="rows" on:scroll={handleListScroll}>
+      <div class="rows">
         {#each messages as message}
           <button
             type="button"
             class="message-row"
             class:selected={message.id === selectedId}
-            class:unread={isMessageUnread(message)}
             on:click={() => loadDetail(message.id, { openPane: true })}
             data-email-message-id={message.id}
           >
-            <span class="sender">
-              {#if isMessageUnread(message)}
-                <span class="unread-dot" aria-label="Unread" title="Unread"></span>
-              {/if}
-              {message.from_display || message.from_address}
-            </span>
+            <span class="sender">{message.from_display || message.from_address}</span>
             <span class="time">{formatTime(message.received_at || message.sent_at || message.created_at)}</span>
             <span class="subject">{message.subject || '(no subject)'}</span>
             <span class="snippet">{message.snippet}</span>
@@ -921,19 +763,6 @@
             {/if}
           </button>
         {/each}
-        {#if loadingMore}
-          <div class="loading-more">Loading more messages...</div>
-        {:else if nextCursor}
-          <div class="load-more-container">
-            <button
-              type="button"
-              class="load-more-btn"
-              on:click={() => void loadMoreMessages()}
-            >
-              Load older messages
-            </button>
-          </div>
-        {/if}
       </div>
     {/if}
   </main>
@@ -984,21 +813,26 @@
         <strong>{formatTime(detail.message.received_at || detail.message.created_at)}</strong>
       </div>
 
-      <div class="detail-body-container">
-        {#if effectiveBodyMode === 'html' && hasHtmlBody}
-          <div class="body-html-container">
-            <iframe
-              class="body-html-iframe"
-              sandbox="allow-popups allow-popups-to-escape-sandbox"
-              referrerpolicy="no-referrer"
-              title="Email body"
-              srcdoc={buildIframeContent(detail.html_body)}
-            ></iframe>
-          </div>
-        {:else}
+      {#if effectiveBodyMode === 'html' && hasHtmlBody}
+        <div class="body-html-container">
+          <iframe
+            class="body-html-iframe"
+            bind:this={emailIframe}
+            autoputer="allow-same-origin"
+            title="Email body"
+            on:load={handleIframeLoad}
+          ></iframe>
+        </div>
+        <div class="body-toggle">
+          <button class:active={bodyViewMode === 'html'} on:click={() => (bodyViewMode = 'html')}>HTML</button>
+          <button class:active={bodyViewMode === 'text'} on:click={() => (bodyViewMode = 'text')}>Plain text</button>
+        </div>
+        {#if bodyViewMode === 'text'}
           <article class="body-text">{detail.text_body || 'No plain text body.'}</article>
         {/if}
-      </div>
+      {:else}
+        <article class="body-text">{detail.text_body || 'No plain text body.'}</article>
+      {/if}
 
       <details class="message-details" data-email-headers>
         <summary>Details</summary>
@@ -1063,33 +897,15 @@
         </div>
       {/if}
 
-      <div class="detail-footer">
-        <div class="body-toggle">
-          {#if hasHtmlBody}
-            <button class:active={effectiveBodyMode === 'html'} on:click={() => (bodyViewMode = 'html')}>HTML</button>
-            <button class:active={effectiveBodyMode === 'text'} on:click={() => (bodyViewMode = 'text')}>Plain text</button>
-          {/if}
-          {#if !detail.draft && detail.message?.direction === 'inbound'}
-            <button
-              type="button"
-              class="read-toggle-btn"
-              on:click={toggleReadStatus}
-              title={detail.message.read_at ? 'Mark as unread' : 'Mark as read'}
-              data-email-read-toggle
-            >
-              {detail.message.read_at ? 'Mark unread' : 'Mark read'}
-            </button>
-          {/if}
-        </div>
-        <div class="actions">
-          {#if detail.draft}
-            <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={emailApprovalLink}>Email approval link</button>
-            <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={sendDraft}>Send approved draft</button>
-          {:else}
-            <button type="button" on:click={() => (replyOpen = !replyOpen)}>{replyOpen ? 'Cancel' : 'Reply'}</button>
-          {/if}
-        </div>
+      <div class="actions">
+        {#if detail.draft}
+          <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={emailApprovalLink}>Email approval link</button>
+          <button type="button" disabled={sending || detail.draft.status === 'sent'} on:click={sendDraft}>Send approved draft</button>
+        {:else}
+          <button type="button" on:click={() => (replyOpen = !replyOpen)}>Reply</button>
+        {/if}
       </div>
+
       {#if replyOpen}
         <div class="reply-box">
           <label>
@@ -1245,30 +1061,8 @@
   }
 
   .rows {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
+    overflow: auto;
     padding: 10px;
-  }
-
-  .load-more-container {
-    padding: 12px;
-    display: flex;
-    justify-content: center;
-  }
-
-  .load-more-btn {
-    padding: 8px 16px;
-    font-size: 13px;
-    border: 1px solid var(--choir-border-strong);
-    background: var(--choir-state-selected);
-    color: var(--choir-text-accent);
-    border-radius: 6px;
-    cursor: pointer;
-  }
-
-  .load-more-btn:hover {
-    background: var(--choir-state-hover, rgba(255, 255, 255, 0.05));
   }
 
   .message-row {
@@ -1290,36 +1084,9 @@
     cursor: pointer;
   }
 
-  .unread-dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #3b82f6;
-    margin-right: 8px;
-    flex-shrink: 0;
-  }
-
   .sender {
     grid-area: sender;
-    display: flex;
-    align-items: center;
-    font-weight: 500;
-    color: var(--choir-text-muted);
-  }
-
-  .message-row.unread .sender {
     font-weight: 700;
-    color: var(--choir-text, inherit);
-  }
-
-  .message-row.unread .subject {
-    font-weight: 600;
-    color: var(--choir-text, inherit);
-  }
-
-  .message-row:not(.unread) .subject {
-    color: var(--choir-text-muted);
   }
 
   .time {
@@ -1357,9 +1124,7 @@
     display: flex;
     flex-direction: column;
     background: var(--choir-state-selected);
-    overflow: hidden;
-    height: 100%;
-    min-height: 0;
+    overflow: auto;
   }
 
   .detail-trust {
@@ -1389,19 +1154,13 @@
     gap: 12px;
   }
 
-  .detail-body-container {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    margin: 12px 20px 0;
+  .body-text {
+    white-space: pre-wrap;
+    line-height: 1.55;
   }
 
   .body-html-container {
-    flex: 1;
-    height: 100%;
-    min-height: 0;
+    margin: 18px 20px 0;
     border: 1px solid var(--choir-border-strong);
     border-radius: 8px;
     overflow: hidden;
@@ -1410,47 +1169,18 @@
 
   .body-html-iframe {
     width: 100%;
-    height: 100%;
-    min-height: 0;
+    min-height: 300px;
     border: none;
     display: block;
   }
 
-  .body-text {
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
-    white-space: pre-wrap;
-    line-height: 1.55;
-    margin: 0;
-    padding: 16px;
-    background: #fff;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 8px;
-  }
-
-  .detail-footer {
-    flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 20px;
-    margin-top: 12px;
-    border-top: 1px solid var(--choir-border-strong);
-    background: var(--choir-bg-elevated);
-  }
-
-  .loading-more {
-    padding: 10px 20px;
-    text-align: center;
-    font-size: 0.8rem;
-    color: var(--choir-text-muted);
-  }
-
   .body-toggle {
     display: flex;
-    gap: 4px;
+    gap: 2px;
+    margin: 0 20px;
+    margin-top: 8px;
   }
+
   .body-toggle button {
     padding: 4px 12px;
     border: 1px solid var(--choir-border-strong);

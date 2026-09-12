@@ -161,14 +161,6 @@ func loadProviderConfig() provider.ProviderConfig {
 		FireworksReasoningEffort: "medium",
 		ChatGPTModels:            []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"},
 		ChatGPTReasoningEffort:   "low",
-		OpenCodeGoModels: []string{
-			"deepseek-v4.1-flash",
-			"glm-5.3-flash",
-			"muse-spark-1.3-contributor",
-			"hy3",
-			"qwen3.7-max",
-		},
-		OpenCodeZenModels: []string{"muse-spark-1.3-contributor-free"},
 	}
 
 	// Allow overrides for non-default setups.
@@ -207,12 +199,6 @@ func loadProviderConfig() provider.ProviderConfig {
 	}
 	if v := os.Getenv("GATEWAY_CHATGPT_REASONING_EFFORT"); v != "" {
 		cfg.ChatGPTReasoningEffort = v
-	}
-	if v := os.Getenv("GATEWAY_OPENCODE_GO_MODELS"); v != "" {
-		cfg.OpenCodeGoModels = strings.Split(v, ",")
-	}
-	if v := os.Getenv("GATEWAY_OPENCODE_ZEN_MODELS"); v != "" {
-		cfg.OpenCodeZenModels = strings.Split(v, ",")
 	}
 
 	return cfg

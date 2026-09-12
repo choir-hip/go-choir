@@ -112,7 +112,7 @@ func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build assigned registry: %v", err)
 	}
-	want := []string{"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file"}
+	want := []string{"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "commit_transaction", "inspect_self_development_bundle", "record_assignment_result", "record_self_development_verification", "update_coagent"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
 		t.Fatalf("assigned registry tools = %v, want exact %v", got, want)
 	}
@@ -123,15 +123,25 @@ func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
 	}
 }
 
-func TestCapsuleLocalInstallerIsExact(t *testing.T) {
+func TestCapsuleLocalAndHostSelfDevelopmentInstallersAreDisjoint(t *testing.T) {
 	capsuleLocal := toolregistry.MustNewToolRegistry()
 	if err := RegisterCapsuleLocalTools(capsuleLocal, nil); err != nil {
 		t.Fatalf("register capsule-local tools: %v", err)
 	}
 	if got, want := registryToolNames(capsuleLocal), []string{
-		"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file",
+		"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file", "record_assignment_result",
 	}; !slices.Equal(got, want) {
 		t.Fatalf("capsule-local tools = %v, want %v", got, want)
+	}
+
+	hostSelfDevelopment := toolregistry.MustNewToolRegistry()
+	if err := registerCapsuleBoundSelfDevelopmentTools(hostSelfDevelopment); err != nil {
+		t.Fatalf("register host self-development tools: %v", err)
+	}
+	if got, want := registryToolNames(hostSelfDevelopment), []string{
+		"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification",
+	}; !slices.Equal(got, want) {
+		t.Fatalf("host self-development tools = %v, want %v", got, want)
 	}
 }
 
@@ -195,26 +205,6 @@ func TestAssignmentIdentityUsesOnlyAuthenticatedParentRunAndToolCall(t *testing.
 	}
 }
 
-// TestAssignCoSuperSchemaCarriesModelPolicyOverlay proves the owner-visible
-// model-selection mechanism is reachable on the assignment path: the schema
-// exposes model_policy_overlay_id and the request digest covers it, so a
-// replayed call with a different overlay conflicts rather than silently
-// reusing the original model selection.
-func TestAssignCoSuperSchemaCarriesModelPolicyOverlay(t *testing.T) {
-	registry := toolregistry.MustNewToolRegistry()
-	if err := RegisterAssignedCoSuperTools(registry, &Runtime{}); err != nil {
-		t.Fatal(err)
-	}
-	tool, ok := registry.Lookup("assign_co_super")
-	if !ok {
-		t.Fatal("assign_co_super missing")
-	}
-	properties, _ := tool.Parameters["properties"].(map[string]any)
-	if _, present := properties["model_policy_overlay_id"]; !present {
-		t.Fatal("model_policy_overlay_id missing from assign_co_super schema")
-	}
-}
-
 func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
 	s, err := openTestStore(filepath.Join(t.TempDir(), "runtime.db"))
 	if err != nil {
@@ -222,14 +212,14 @@ func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
 	}
 	defer s.Close()
 	now := time.Now().UTC()
-	parent := types.RunRecord{RunID: "parent", AgentID: "management:owner", AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: "owner", ComputerID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
+	parent := types.RunRecord{RunID: "parent", AgentID: "super:owner", AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: "owner", ComputerID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
 	if err := s.CreateRun(context.Background(), parent); err != nil {
 		t.Fatal(err)
 	}
 	rt := &Runtime{store: s, cfg: provideriface.Config{ComputerID: "computer"}}
 	for _, constraints := range []map[string]any{
 		{runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper},
-		{runMetadataAgentRole: "engineering"},
+		{runMetadataAgentRole: "coagent"},
 	} {
 		if _, err := rt.StartCoagentRun(context.Background(), parent.RunID, "forbidden", parent.OwnerID, constraints); err == nil || !strings.Contains(err.Error(), "refuses all CoSuper") {
 			t.Fatalf("generic CoSuper activation error=%v", err)
@@ -238,10 +228,9 @@ func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
 }
 
 func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
-	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
 	rt := &Runtime{}
 	for _, kind := range []types.CoSuperAssignmentKind{types.CoSuperAssignmentImplementation, types.CoSuperAssignmentVerification} {
-		rec := &types.RunRecord{RunID: "assigned", AgentID: "engineering:assigned", AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
+		rec := &types.RunRecord{RunID: "assigned", AgentID: "co-super:assigned", AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
 		prompt, err := rt.systemPromptForRun(rec)
 		if err != nil {
 			t.Fatal(err)
@@ -249,12 +238,12 @@ func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
 		if !strings.Contains(prompt, "kind="+string(kind)) {
 			t.Fatalf("prompt does not name exact %s assignment: %s", kind, prompt)
 		}
-		if !strings.Contains(prompt, "choir.Message") {
-			t.Fatalf("assigned CoSuper prompt omits the in-cell report channel: %s", prompt)
+		if !strings.Contains(prompt, "update_coagent") {
+			t.Fatalf("assigned CoSuper prompt omits update_coagent Super report channel: %s", prompt)
 		}
-		for _, name := range []string{"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "update_coagent", "record_assignment_result"} {
-			if strings.Contains(prompt, name) {
-				t.Fatalf("assigned CoSuper prompt still names retired tool %s: %s", name, prompt)
+		for _, name := range []string{"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification"} {
+			if !strings.Contains(prompt, name) {
+				t.Fatalf("assigned CoSuper prompt omits %s: %s", name, prompt)
 			}
 		}
 		if strings.Contains(prompt, "may be added later") || strings.Contains(prompt, "report one precise result through update_coagent") {
@@ -292,11 +281,11 @@ func TestRLMAssignedCoSuperOverlayIsSealedGo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build RLM assigned registry: %v", err)
 	}
-	want := []string{"capsule_go_eval"}
+	want := []string{"capsule_go_eval", "commit_transaction", "inspect_self_development_bundle", "record_assignment_result", "record_self_development_verification", "update_coagent"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
 		t.Fatalf("RLM assigned registry tools = %v, want exact %v", got, want)
 	}
-	for _, absent := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "update_coagent", "record_assignment_result"} {
+	for _, absent := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir"} {
 		if _, ok := registry.Lookup(absent); ok {
 			t.Fatalf("RLM registry kept JSON capsule tool %q", absent)
 		}

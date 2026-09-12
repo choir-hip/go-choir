@@ -43,7 +43,7 @@ func TestLegacySharedMailboxMigration(t *testing.T) {
 
 	// Create a legacy shared database (pre-multi-tenancy schema) with all tables
 	// in the single DBPath database.
-	legacyDB, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(60000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)")
+	legacyDB, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_foreign_keys=on")
 	if err != nil {
 		t.Fatalf("open legacy db: %v", err)
 	}

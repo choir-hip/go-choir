@@ -82,8 +82,7 @@ type HandoffDecision struct {
 
 // HandoffKindForCaller maps lifecycle actor profiles to their Texture product path.
 func HandoffKindForCaller(profile string) HandoffKind {
-	callerKind, _ := agentprofile.Canonical(profile)
-	switch callerKind {
+	switch agentprofile.Canonical(profile) {
 	case agentprofile.Conductor:
 		return HandoffKindUserPrompt
 	case agentprofile.Processor:

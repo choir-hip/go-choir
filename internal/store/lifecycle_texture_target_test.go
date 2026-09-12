@@ -48,9 +48,9 @@ func setupLifecycleTextureTargetFixtureWithStore(t *testing.T, s *Store) (*Store
 
 	now := time.Now().UTC()
 	researcher := types.AgentRecord{
-		AgentID: "research:texture-target", OwnerID: start.OwnerID,
+		AgentID: "researcher:texture-target", OwnerID: start.OwnerID,
 		ComputerID: start.ComputerID,
-		Profile:    "research", Role: "research", ChannelID: start.InitialDocument.DocID,
+		Profile:    "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgent(ctx, researcher); err != nil {
@@ -61,7 +61,7 @@ func setupLifecycleTextureTargetFixtureWithStore(t *testing.T, s *Store) (*Store
 		CommandID: "open-researcher-target-work", TrajectoryID: start.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: "work-researcher-target", Objective: "continue bounded research",
-			AuthorityProfile: "research", AssignedAgentID: researcher.AgentID,
+			AuthorityProfile: "researcher", AssignedAgentID: researcher.AgentID,
 			CreatedByRunID: caller.RunID,
 			Details: map[string]any{
 				"requested_by_profile":  "texture",
@@ -77,8 +77,8 @@ func setupLifecycleTextureTargetFixtureWithStore(t *testing.T, s *Store) (*Store
 	}
 	researcherRun := lifecycleRunFixture(start, "run-researcher-target", types.RunRunning)
 	researcherRun.AgentID = researcher.AgentID
-	researcherRun.AgentProfile = "research"
-	researcherRun.AgentRole = "research"
+	researcherRun.AgentProfile = "researcher"
+	researcherRun.AgentRole = "researcher"
 	researcherRun.Metadata = map[string]any{"lifecycle_work_item_id": opened.WorkItem.WorkItemID}
 	researcherRun.RequestedByRunID = caller.RunID
 	projectResearcher := types.ReplaceLifecycleActivationRequest{
@@ -110,7 +110,7 @@ func TestValidateLifecycleTextureControlTargetAcceptsBoundResearcherAndExactPers
 	if err != nil {
 		t.Fatalf("validate Researcher: %v", err)
 	}
-	if researcherBinding.TargetProfile != "research" || researcherBinding.TargetWorkItem == nil || researcherBinding.TargetRun == nil ||
+	if researcherBinding.TargetProfile != "researcher" || researcherBinding.TargetWorkItem == nil || researcherBinding.TargetRun == nil ||
 		researcherBinding.TargetWorkItem.WorkItemID != researcherWork.WorkItemID || researcherBinding.CallerRun.RunID != caller.RunID {
 		t.Fatalf("Researcher binding = %+v", researcherBinding)
 	}
@@ -133,10 +133,10 @@ func TestValidateLifecycleTextureControlTargetAcceptsBoundResearcherAndExactPers
 	}
 
 	now := time.Now().UTC()
-	superID := "management:" + start.OwnerID
+	superID := "super:" + start.OwnerID
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
 		AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "management", Role: "management", ChannelID: superID, CreatedAt: now, UpdatedAt: now,
+		Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("upsert persistent Super: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestValidateLifecycleTextureControlTargetAcceptsBoundResearcherAndExactPers
 	if err != nil {
 		t.Fatalf("validate persistent Super opener: %v", err)
 	}
-	if superBinding.TargetProfile != "management" || superBinding.TargetAgent.AgentID != superID || superBinding.TargetWorkItem != nil || superBinding.TargetAgent.LifecycleVersion != 0 {
+	if superBinding.TargetProfile != "super" || superBinding.TargetAgent.AgentID != superID || superBinding.TargetWorkItem != nil || superBinding.TargetAgent.LifecycleVersion != 0 {
 		t.Fatalf("Super binding = %+v", superBinding)
 	}
 }
@@ -156,10 +156,10 @@ func TestValidateLifecycleTextureControlTargetRejectsScopeRoleAndWorkMismatches(
 	now := time.Now().UTC()
 
 	for _, agent := range []types.AgentRecord{
-		{AgentID: "management:arbitrary", Profile: "management", Role: "management"},
-		{AgentID: "engineering:direct", Profile: "engineering", Role: "engineering"},
-		{AgentID: "research:unbound", Profile: "research", Role: "research"},
-		{AgentID: "research:non-lifecycle", Profile: "research", Role: "research"},
+		{AgentID: "super:arbitrary", Profile: "super", Role: "super"},
+		{AgentID: "co-super:direct", Profile: "co-super", Role: "co-super"},
+		{AgentID: "researcher:unbound", Profile: "researcher", Role: "researcher"},
+		{AgentID: "researcher:non-lifecycle", Profile: "researcher", Role: "researcher"},
 	} {
 		agent.OwnerID, agent.ComputerID, agent.ComputerID = start.OwnerID, start.ComputerID, start.ComputerID
 		agent.ChannelID, agent.CreatedAt, agent.UpdatedAt = start.InitialDocument.DocID, now, now
@@ -172,7 +172,7 @@ func TestValidateLifecycleTextureControlTargetRejectsScopeRoleAndWorkMismatches(
 		CommandID: "open-channel-shape-only-work", TrajectoryID: start.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: "work-channel-shape-only", Objective: "same channel is not provenance",
-			AuthorityProfile: "research", AssignedAgentID: "research:unbound",
+			AuthorityProfile: "researcher", AssignedAgentID: "researcher:unbound",
 			CreatedByRunID: "run-foreign-texture",
 			Details: map[string]any{
 				"requested_by_profile": "texture", "requested_by_agent_id": caller.AgentID,
@@ -189,7 +189,7 @@ func TestValidateLifecycleTextureControlTargetRejectsScopeRoleAndWorkMismatches(
 		CommandID: "open-non-lifecycle-researcher-work", TrajectoryID: start.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: "work-non-lifecycle-researcher", Objective: "generic actors cannot inherit lifecycle work",
-			AuthorityProfile: "research", AssignedAgentID: "research:non-lifecycle",
+			AuthorityProfile: "researcher", AssignedAgentID: "researcher:non-lifecycle",
 			CreatedByRunID: caller.RunID,
 			Details: map[string]any{
 				"requested_by_profile": "texture", "requested_by_agent_id": caller.AgentID,
@@ -226,21 +226,21 @@ func TestValidateLifecycleTextureControlTargetRejectsScopeRoleAndWorkMismatches(
 			req.CallerAgentID = legacyCaller.AgentID
 		},
 		"work missing":                   func(req *LifecycleTextureControlTargetRequest) { req.TargetWorkItemID = "" },
-		"work assigned to another agent": func(req *LifecycleTextureControlTargetRequest) { req.TargetAgentID = "research:unbound" },
+		"work assigned to another agent": func(req *LifecycleTextureControlTargetRequest) { req.TargetAgentID = "researcher:unbound" },
 		"non-lifecycle Researcher despite exact work provenance": func(req *LifecycleTextureControlTargetRequest) {
-			req.TargetAgentID = "research:non-lifecycle"
+			req.TargetAgentID = "researcher:non-lifecycle"
 			req.TargetWorkItemID = "work-non-lifecycle-researcher"
 		},
 		"channel shape without caller provenance": func(req *LifecycleTextureControlTargetRequest) {
-			req.TargetAgentID = "research:unbound"
+			req.TargetAgentID = "researcher:unbound"
 			req.TargetWorkItemID = "work-channel-shape-only"
 		},
 		"arbitrary Super": func(req *LifecycleTextureControlTargetRequest) {
-			req.TargetAgentID = "management:arbitrary"
+			req.TargetAgentID = "super:arbitrary"
 			req.TargetWorkItemID = ""
 		},
 		"direct CoSuper": func(req *LifecycleTextureControlTargetRequest) {
-			req.TargetAgentID = "engineering:direct"
+			req.TargetAgentID = "co-super:direct"
 			req.TargetWorkItemID = ""
 		},
 	}
@@ -445,9 +445,9 @@ func TestQueueLifecycleUpdateRequiresCanonicalTextureTargetAndProducerActivation
 
 	now := time.Now().UTC()
 	researcher := types.AgentRecord{
-		AgentID: "research:wrong-source-run", OwnerID: start.OwnerID,
+		AgentID: "researcher:wrong-source-run", OwnerID: start.OwnerID,
 		ComputerID: start.ComputerID,
-		Profile:    "research", Role: "research", ChannelID: start.InitialDocument.DocID,
+		Profile:    "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgent(ctx, researcher); err != nil {
@@ -458,7 +458,7 @@ func TestQueueLifecycleUpdateRequiresCanonicalTextureTargetAndProducerActivation
 		CommandID: "open-wrong-producer-run-work", TrajectoryID: start.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: "work-wrong-producer-run", Objective: "provide a mismatched activation",
-			AssignedAgentID: researcher.AgentID, AuthorityProfile: "research",
+			AssignedAgentID: researcher.AgentID, AuthorityProfile: "researcher",
 		},
 	}
 	open.CommandDigest, _ = ComputeOpenLifecycleWorkDigest(open)
@@ -466,7 +466,7 @@ func TestQueueLifecycleUpdateRequiresCanonicalTextureTargetAndProducerActivation
 		t.Fatalf("open wrong producer work: %v", err)
 	}
 	wrongRun := lifecycleRunFixture(start, "run-wrong-producer", types.RunRunning)
-	wrongRun.AgentID, wrongRun.AgentProfile, wrongRun.AgentRole = researcher.AgentID, "research", "research"
+	wrongRun.AgentID, wrongRun.AgentProfile, wrongRun.AgentRole = researcher.AgentID, "researcher", "researcher"
 	wrongRun.Metadata = map[string]any{"lifecycle_work_item_id": open.WorkItem.WorkItemID}
 	project := types.ReplaceLifecycleActivationRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID,

@@ -160,15 +160,6 @@ func TestRebuilderReplaysAndPublishesBase(t *testing.T) {
 	if result.Descriptor.Sequence != 1 {
 		t.Fatalf("Descriptor Sequence = %d, want 1", result.Descriptor.Sequence)
 	}
-	if result.Descriptor.VocabularyVersion != CurrentVocabularyVersion {
-		t.Fatalf("Descriptor VocabularyVersion = %q, want %q", result.Descriptor.VocabularyVersion, CurrentVocabularyVersion)
-	}
-	if !IsKnownVocabularyVersion(result.Descriptor.VocabularyVersion) {
-		t.Fatalf("rebuilt V1 base vocabulary %q fails closed", result.Descriptor.VocabularyVersion)
-	}
-	if err := result.Descriptor.Validate(); err != nil {
-		t.Fatalf("rebuilt V1 descriptor refused: %v", err)
-	}
 
 	if _, err := os.Stat(result.BlobPath); err != nil {
 		t.Fatalf("result blob does not exist at %s: %v", result.BlobPath, err)

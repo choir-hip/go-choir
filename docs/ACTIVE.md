@@ -3,17 +3,6 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
-## Working Definition — RLM Engineering Carrier
-
-[`definitions/choir-rlm-engineering-carrier-2026-09-11.md`](definitions/choir-rlm-engineering-carrier-2026-09-11.md)
-is the sole working entrypoint, chartered 2026-09-11 by owner statement. It moves the engineering
-desk fully onto the in-cell carrier: `capsule_go_eval` becomes the desk's only JSON tool, the five
-overlay JSON tool names are deleted behind per-operation replay proofs, the reducer authors the
-assignment fate, run acceptance stops keying on tool names, the OpenCode Go and Zen providers are
-wired as phase 1, and one prompt serves the expected roster with no output repair. Current slice:
-P0-define, a code-free freeze artifact. Executable with
-`/goal docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md`.
-
 ## Completed Definition — Private Programmable Go Actor Kernel
 
 [`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
@@ -70,56 +59,17 @@ without `RUNTIME_MAINTENANCE_HOLD` on staging `computer-03335285269bdba4f94377e5
 [`evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md`](evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md).
 Effects remain OFF.
 
-## Completed Definition — RLM Restore-Zero
-
-[`definitions/choir-rlm-restore-zero-2026-09-08.md`](definitions/choir-rlm-restore-zero-2026-09-08.md)
-completed 2026-09-09 on owner-scoped retained-store boot of `9341b5d1`.
-PlanRecovery resumed `computer-03335285269bdba4f94377e56879f9e6` at
-`local=148431 W=148431 H=148431 tail=0` (epoch 894, `10.200.12.2`).
-No prefix page fetches. CI constructed-computer skip (G4) was left intact.
-Proof: [`evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md`](evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md).
-Post-completion panel (12/13 routes; 8 accept-with-conditions, 4 reject):
-[`evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md`](evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md).
-The earlier W=1/W=13 HTTP 200 claim remains demoted. Follow-on: keep W near H;
-nontrivial-tail rematerialize/restore drill; proxy 502-during-resolve is not this mission.
-## Completed Definition — RLM Settlement Gate
-
-[`definitions/choir-rlm-settlement-gate-2026-09-09.md`](definitions/choir-rlm-settlement-gate-2026-09-09.md)
-completed 2026-09-09 (deployed commit `6b758878`, CI run `34401118732`). All 8
-acceptance items are satisfied: Yaegi compile gate with non-mutating heap preservation,
-deletion of session-spawn fallback `fallbackGoEval` from active RLM route,
-v1 terminal identity contract with proposition digest, derived ReportID, slot conflict
-gating and supersede tuple, narrow assigned-CoSuper admission grammar with sequential
-execution and toolloop decoupling, resumable fate saga with atomic final settlement
-strictly following durable revocation acknowledgement, single reducer author for orphan
-closure, and physical staging proof on `computer-03335285269bdba4f94377e56879f9e6`
-with effects OFF. Deployed evidence:
-[`evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md`](evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md).
-The cutover's withheld settlement acceptance is closed; the cutover stays remainder
-holder (residue R6). Mission-0 live drill debt stays mission-0-owned (residue R1).
-
-## Completed Definition — RLM Versioned Rename
-
-[`definitions/choir-rlm-versioned-rename-2026-09-09.md`](definitions/choir-rlm-versioned-rename-2026-09-09.md)
-completed 2026-09-11 (deployed commit `e3396329`, CI run `34571343061`). All 15
-acceptance items are satisfied: frozen V1 field inventory artifact published (12 classes),
-version-selected V1 decode seam, writer cutover to V2 canonical desks (`management`, `engineering`, `research`),
-frozen per-function mapping table, unknown live refusal, live alias retirement, engineering desk end-to-end proof,
-staging decoder matrix verification, carrier coverage over object-graph objects and edges with crash-consistent
-migration and write guard, historic reader compatibility, closed write roots, longest-first ID substitution,
-unified verifier spelling, and physical staging proof on `computer-03335285269bdba4f94377e56879f9e6` with effects OFF.
-Deployed evidence: [`evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md`](evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md).
-The cutover stays remainder holder (residue R6); mission-0 live drill debt stays mission-0-owned (residue R1);
-tool and operation retirement belongs to the Engineering-carrier successor mission.
-## Blocked Definition — RLM Target Architecture Cutover (remainder holder)
+## Active Definition — RLM Target Architecture Cutover
 
 [`definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`](definitions/choir-rlm-target-architecture-cutover-2026-09-04.md)
-is **blocked and non-executable** (dispositioned 2026-09-09 with owner topology
-authority). Execution proof retained (epoch 888 exit-0 cell, proof file, signed
-receipt, fence intact); run acceptance closed under completed mission 1
-(2026-09-09 with deployed proof); the cutover retains no open settlement
-remainder and stays remainder holder (residue R6). No action runs under
-it. Do not mark complete.
+is **active and executable**, superseding `choir-rlm-session-interpreter-cutover-2026-09-02.md`
+following the 8-model agentic consensus review and Rev 5 target architecture specification.
+Target: 6-step implementation sequence across `cmd/capsule-broker`, `internal/yaegikernel`,
+`internal/actor`, and `internal/agentcore`, including direct-argv execution, strict allowlists,
+multiplexed Unix domain socket frame protocol, in-cell intent staging (`choir.Message`, `choir.Spawn`,
+`choir.Complete`), post-cell Dolt reduction, Go-channel mailbox delivery, `choir.Inbox()` cell-start
+snapshots with two-phase cursor commitment, bounded adaptive coalescing, role-bounded fan-out/fan-in,
+and live sealed proof on staging `computer-03335285269bdba4f94377e56879f9e6` with ambient JSON tools removed.
 
 ## Superseded Definition — RLM Session Interpreter Cutover
 
@@ -129,7 +79,7 @@ is subsumed by the comprehensive RLM target architecture.
 ## Queued Definition — Supervised Self-Development on RLM
 
 [`definitions/choir-supervised-self-development-on-rlm-2026-09-02.md`](definitions/choir-supervised-self-development-on-rlm-2026-09-02.md)
-is **paused pending restore-zero and desk-rename deployed acceptance** (settlement-gate acceptance closed 2026-09-09).
+is **paused pending `choir-rlm-target-architecture-cutover-2026-09-04.md` deployed acceptance**.
 Target: Candidate change A solitaire implementation authored via RLM session cells, 5-ref freeze,
 qualified consensus under `reversible-selfdev-v1`, promotion, live play verification, falsification with B,
 and restore to pre-A checkpoint `99949fe2`.
@@ -256,11 +206,13 @@ Supporting maintenance Definitions retain their evidence and status:
 `documentation-authority-reduction-2026-07-09.md`. They are settled,
 superseded, or historical as stated by their source Definitions, not entrypoints.
 
-RLM restore-zero completed 2026-09-09 and is historical evidence, not an
-entrypoint. RLM versioned rename completed 2026-09-11 (deployed commit `e3396329`) and is
-non-entrypoint evidence. The RLM Engineering Carrier
-(`definitions/choir-rlm-engineering-carrier-2026-09-11.md`) is chartered and holds the sole working
-entrypoint.
+## Invocation
+
+Invoke the active Definition via
+`/goal docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`.
+RLM target architecture cutover executes on staging
+`computer-03335285269bdba4f94377e56879f9e6`.
+
 ## Unowned External Work
 
 No Definition owns runtime dissolution, broader Wire work, external capsules,

@@ -24,11 +24,11 @@ func TestCapsuleGoEvalToolDispatchesToExecutorGoEval(t *testing.T) {
 	// zero-value *capsule.Executor on non-linux, whose GoEval returns an error.
 	// We assert the error is the executor's go_eval error (proving dispatch).
 	toolCtx := &CapsuleToolCtx{
-		Executor:                  new(capsule.Executor),
-		AgentRunID:                "run-dispatch",
-		ComputerID:                "computer",
-		Role:                      capsule.RoleCoSuper,
-		CapsuleHandle:             "handle",
+		Executor:       new(capsule.Executor),
+		AgentRunID:     "run-dispatch",
+		ComputerID:     "computer",
+		Role:           capsule.RoleCoSuper,
+		CapsuleHandle:  "handle",
 		ValidateCurrentObligation: func(ctx context.Context) error { return nil },
 	}
 	ctx := WithCapsuleCtx(context.Background(), toolCtx)

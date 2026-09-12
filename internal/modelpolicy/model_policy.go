@@ -12,7 +12,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 const (
@@ -170,39 +169,20 @@ func (p Policy) Resolve(role string) provideriface.LLMSelection {
 	return fillSelection(provideriface.LLMSelection{}, p.Defaults)
 }
 
-// NormalizeRole resolves exactly the V2 live vocabulary (identity map with
-// fail-closed default). V1 aliases refuse here; history decodes through the
-// frozen V1 decoder, never through this function.
+// NormalizeRole canonicalizes model-policy role aliases.
 func NormalizeRole(role string) string {
-	normalized := strings.TrimSpace(strings.ToLower(role))
-	switch normalized {
-	case agentprofile.Super, agentprofile.CoSuper, agentprofile.Researcher,
-		agentprofile.Conductor, agentprofile.Texture, agentprofile.Processor,
-		agentprofile.Reconciler, agentprofile.Email, VerifierRole:
-		return normalized
-	case MultimodalVerifierRole, "verifier-multimodal":
-		// One canonical spelling: the hyphenated form normalizes to the
-		// underscore policy key so a stored value can never pass the fence
-		// while missing its roles.<name> section.
+	switch strings.TrimSpace(strings.ToLower(role)) {
+	case "cosuper", "co_super", "co-super", "cosuper_coding", "co-super-coding":
+		return agentprofile.CoSuper
+	case "texture", "texture-agent":
+		return agentprofile.Texture
+	case "verifier", "verifier-text", "verifier_text":
+		return VerifierRole
+	case "verifier-multimodal", "verifier_multimodal":
 		return MultimodalVerifierRole
 	default:
-		return ""
+		return strings.TrimSpace(strings.ToLower(role))
 	}
-}
-
-// decodeRoleSection resolves a persisted TOML roles.<name> section header.
-// Computer-owned TOML overlays are unmarked persistence and default to V1:
-// V2 names resolve through NormalizeRole; V1 names decode through the frozen
-// V1 map (the file's bytes stay immutable; the vocabulary is selected at the
-// decode boundary). Unknown sections refuse.
-func decodeRoleSection(name string) string {
-	if role := NormalizeRole(name); role != "" {
-		return role
-	}
-	if v2, ok := vocabmigrate.ForwardV1ToV2(name); ok {
-		return v2
-	}
-	return ""
 }
 
 // RuntimeConfigFallbackSelection resolves the legacy runtime-config fallback.
@@ -338,16 +318,16 @@ provider = "chatgpt"
 model = "gpt-5.6-luna"
 reasoning = "low"
 
-[roles.management]
+[roles.super]
 provider = "chatgpt"
 model = "gpt-5.6-luna"
 reasoning = "high"
 
-[roles.engineering]
+[roles.co-super]
 provider = "deepseek"
 model = "deepseek-v4-flash"
 
-[roles.research]
+[roles.researcher]
 provider = "chatgpt"
 model = "gpt-5.6-luna"
 reasoning = "low"
@@ -435,10 +415,7 @@ func parsePolicy(raw, source string) (Policy, error) {
 			applyValue(&policy.Defaults, key, value)
 			policy.Defaults.Source = source
 		case strings.HasPrefix(section, "roles."):
-			role := decodeRoleSection(strings.TrimPrefix(section, "roles."))
-			if role == "" {
-				return Policy{}, fmt.Errorf("line %d: unknown role section %q", lineNo, section)
-			}
+			role := NormalizeRole(strings.TrimPrefix(section, "roles."))
 			selection := policy.Roles[role]
 			applyValue(&selection, key, value)
 			selection.Source = source
@@ -499,10 +476,7 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 			applyValue(&overlay.Defaults, key, value)
 			overlay.Defaults.Source = source
 		case strings.HasPrefix(section, "roles."):
-			role := decodeRoleSection(strings.TrimPrefix(section, "roles."))
-			if role == "" {
-				return policyOverlay{}, fmt.Errorf("line %d: unknown role section %q", lineNo, section)
-			}
+			role := NormalizeRole(strings.TrimPrefix(section, "roles."))
 			selection := overlay.Roles[role]
 			applyValue(&selection, key, value)
 			selection.Source = source

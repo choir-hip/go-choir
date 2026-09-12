@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -19,7 +17,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -38,7 +35,7 @@ const (
 
 type assignmentCapsuleRuntime interface {
 	Spawn(context.Context, capsule.SpawnSpec) (*capsule.Capsule, error)
-	MintCapabilityHandle(string, capsule.AgentRole, string, string, time.Duration, string) (*capsule.Capability, error)
+	MintCapabilityHandle(string, capsule.AgentRole, string, string, time.Duration) (*capsule.Capability, error)
 	RevokeCapability(string, string) error
 	ForceDestroy(context.Context, string) error
 	ExtractGranted(context.Context, string, string) ([]capsule.FileChange, error)
@@ -52,12 +49,11 @@ type assignmentCapsuleRuntime interface {
 }
 
 type StartAssignedCoSuperRequest struct {
-	Objective            string
-	Kind                 types.CoSuperAssignmentKind
-	CandidateID          string
-	ParentWorkItemID     string
-	ToolCallID           string
-	ModelPolicyOverlayID string
+	Objective        string
+	Kind             types.CoSuperAssignmentKind
+	CandidateID      string
+	ParentWorkItemID string
+	ToolCallID       string
 }
 
 type AssignedCoSuperStart struct {
@@ -102,10 +98,8 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		return AssignedCoSuperStart{}, fmt.Errorf("verification requires one exact candidate_id and implementation forbids it")
 	}
 	ownerID, computerID := strings.TrimSpace(parent.OwnerID), strings.TrimSpace(parent.ComputerID)
-	parentProfile, _ := agentprofile.Canonical(parent.AgentProfile)
-	parentRole, _ := agentprofile.Canonical(parent.AgentRole)
 	if ownerID == "" || computerID == "" || parent.AgentID != persistentSuperAgentID(ownerID) ||
-		parentProfile != agentprofile.Super || parentRole != agentprofile.Super ||
+		agentprofile.Canonical(parent.AgentProfile) != agentprofile.Super || agentprofile.Canonical(parent.AgentRole) != agentprofile.Super ||
 		parent.TrajectoryID != "" || !persistentSuperRunStateAllowedRuntime(parent.State) {
 		return AssignedCoSuperStart{}, fmt.Errorf("only the exact non-lifecycle persistent Super may open assigned CoSuper work")
 	}
@@ -116,15 +110,9 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	attempt := uint64(1) // one authenticated tool call is one runtime-derived attempt
 	assignmentID := deterministicAssignmentIdentity(parent, req)
-	requestDigestParts := []string{
+	requestDigest := objectgraph.SHA256([]byte(strings.Join([]string{
 		"choir:co-super-request:v1", req.Objective, string(req.Kind), req.CandidateID, parentWorkID,
-	}
-	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
-		// The overlay participates in replay/conflict identity only when
-		// supplied, so digests for pre-overlay requests stay stable.
-		requestDigestParts = append(requestDigestParts, overlay)
-	}
-	requestDigest := objectgraph.SHA256([]byte(strings.Join(requestDigestParts, "\x00")))
+	}, "\x00")))
 	// Replay is resolved before reading mutable current source/work projections.
 	// The authenticated provider call identity is the authority; changed semantic
 	// arguments conflict under that same identity.
@@ -219,7 +207,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		}
 	}
 
-	agentID := agentprofile.CoSuper + ":" + assignmentID
+	agentID := "co-super:" + assignmentID
 	workID := "work:" + assignmentID
 	runID := "run:" + assignmentID
 	capsuleID := "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-")
@@ -263,38 +251,10 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelSpawn()
-	spec := capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
+	created, err := rt.capsuleExecutor.Spawn(spawnCtx, capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
 		MemoryMax: coSuperAssignmentMemoryMax, CpuQuota: coSuperAssignmentCPUQuota, CpuPeriod: 100000, PidsMax: coSuperAssignmentPidsMax,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
-		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest}
-	if req.Kind == types.CoSuperAssignmentVerification {
-		// The verifier's exact-binding mount is mandatory: the host installs
-		// the operation's frozen bundle read-only at /selfdev/bundle with a
-		// binding.json the in-cell inspect reads. A verification assignment
-		// without a mountable frozen bundle has nothing to verify; fail
-		// closed rather than spawn a verifier whose inspection capability is
-		// unreachable.
-		if rt.selfdevOperations == nil || rt.selfdevUpdaterRoot == "" {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment requires the self-development operation store and updater root"))
-		}
-		operation, opErr := rt.selfdevOperations.GetByTrajectory(spawnCtx, computerID, trajectoryID)
-		if opErr != nil {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment cannot resolve its self-development operation: %w", opErr))
-		}
-		if operation.BundleDigest == "" ||
-			(operation.State != selfdev.StateFrozen && operation.State != selfdev.StateVerified && operation.State != selfdev.StateAwaitingApproval) {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment requires a frozen self-development bundle (state %s)", operation.State))
-		}
-		bundleDir := filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest)
-		info, statErr := os.Stat(bundleDir)
-		if statErr != nil || !info.IsDir() {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment bundle directory unavailable: %v", statErr))
-		}
-		bindingJSON, _ := json.Marshal(map[string]string{"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest})
-		spec.VerifierBundleDir = bundleDir
-		spec.VerifierBinding = string(bindingJSON)
-	}
-	created, err := rt.capsuleExecutor.Spawn(spawnCtx, spec)
+		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest})
 	if err != nil {
 		return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("spawn assigned capsule after durable open: %w", err))
 	}
@@ -341,11 +301,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("assigned capsule acknowledgement mismatch"))
 	}
 	spawnedAt := time.Now().UTC()
-	slot := "implementation"
-	if req.Kind == types.CoSuperAssignmentVerification {
-		slot = "verifier"
-	}
-	capability, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleCoSuper, capsuleID, opaque, 24*time.Hour, slot)
+	capability, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleCoSuper, capsuleID, opaque, 24*time.Hour)
 	grantedAt := time.Now().UTC()
 	if err != nil {
 		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("mint exact assignment capability: %w", err))
@@ -366,7 +322,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	slices.Sort(actualVerbs)
 	if capability.AgentRole != capsule.RoleCoSuper || capability.AgentRunID != runID || capability.CapsuleID != capsuleID || capability.TargetCapsule != capsuleID ||
-		capability.Handle != opaque || capability.Slot != slot || !slices.Equal(actualVerbs, compiledVerbs) || len(capability.ExternalAccess) != 0 || strings.TrimSpace(capability.KeyID) == "" ||
+		capability.Handle != opaque || !slices.Equal(actualVerbs, compiledVerbs) || len(capability.ExternalAccess) != 0 || strings.TrimSpace(capability.KeyID) == "" ||
 		len(capability.Signature) == 0 || !capability.ExpiresAt.After(grantedAt) || capability.ExpiresAt.After(grantedAt.Add(24*time.Hour+time.Second)) {
 		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("minted assignment capability acknowledgement mismatch"))
 	}
@@ -390,7 +346,6 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			runMetadataTrajectoryID: trajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID,
 			"requested_by_agent_id": parent.AgentID, "requested_by_profile": agentprofile.Super,
 			"assignment_id": assignmentID, "assignment_attempt": attempt, "assignment_kind": string(req.Kind),
-			runMetadataCoSuperSlot:  slot,
 			"assigned_work_item_id": workID, "capsule_id": capsuleID,
 			"parent_decision_id": parentDecisionID, "parent_control_id": parentControlID,
 			"parent_work_item_id": parentWorkID, "scope_digest": scopeDigest, "request_digest": requestDigest,
@@ -398,15 +353,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			"source_artifact_ref": preflight.ArtifactRef, "source_candidate_id": req.CandidateID,
 		},
 	}
-	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
-		run.Metadata[modelpolicy.MetadataPolicyOverlayID] = overlay
-	}
 	run.Metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, agentprofile.CoSuper, run.Metadata)
-	// Fail closed on policy errors like the Texture eval path: an unknown or
-	// unresolvable overlay must not silently fall back to the default model.
-	if policyErr := metadataStringValue(run.Metadata, modelpolicy.MetadataPolicyError); policyErr != "" {
-		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("model policy overlay did not resolve: %s", policyErr))
-	}
 	if model := metadataStringValue(run.Metadata, modelpolicy.MetadataModel); model != "" {
 		run.Metadata[runMetadataModel] = model
 	}

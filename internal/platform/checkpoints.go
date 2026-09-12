@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
@@ -183,8 +182,8 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 			return fmt.Errorf("checkpoint authority: genesis verifier evidence refused")
 		}
 		rawEvent, err := os.ReadFile(filepath.Join(a.service.artifactsRoot, "sha256", "computer-event", certificate.VerificationEventDigest))
-		event, uerr := computerevent.DecodeHistoricEvent(rawEvent)
-		if err != nil || computerevent.DigestBytes(rawEvent) != certificate.VerificationEventDigest || uerr != nil {
+		var event computerevent.Event
+		if err != nil || computerevent.DigestBytes(rawEvent) != certificate.VerificationEventDigest || json.Unmarshal(rawEvent, &event) != nil {
 			return fmt.Errorf("checkpoint authority: genesis event artifact refused")
 		}
 		publicKey, _ := base64.RawStdEncoding.DecodeString(request.VerifierCertificate.PublicKey)
@@ -212,9 +211,9 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 	if err != nil || computerevent.DigestBytes(rawEvent) != certificate.VerificationEventDigest {
 		return fmt.Errorf("checkpoint authority: verifier event artifact refused")
 	}
-	event, uerr := computerevent.DecodeHistoricEvent(rawEvent)
-	if uerr != nil || event.EventKind != computerevent.EventVerificationRecorded ||
-		event.ActorProfile != agentprofile.CoSuper || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
+	var event computerevent.Event
+	if json.Unmarshal(rawEvent, &event) != nil || event.EventKind != computerevent.EventVerificationRecorded ||
+		event.ActorProfile != "co-super" || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
 		return fmt.Errorf("checkpoint authority: verifier event authority mismatch")
 	}
 	payloadRef, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])

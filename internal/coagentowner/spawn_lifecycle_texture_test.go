@@ -13,11 +13,7 @@ import (
 
 func TestLifecycleTextureSpawnAgentFailsClosedBeforeGenericMutation(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
-	texturePolicy, err := agentprofile.PolicyFor(agentprofile.Texture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := RegisterSpawnTool(registry, nil, nil, texturePolicy); err != nil {
+	if err := RegisterSpawnTool(registry, nil, nil, agentprofile.PolicyFor(agentprofile.Texture)); err != nil {
 		t.Fatal(err)
 	}
 	run := &types.RunRecord{
@@ -26,7 +22,7 @@ func TestLifecycleTextureSpawnAgentFailsClosedBeforeGenericMutation(t *testing.T
 		Metadata: map[string]any{"lifecycle_work_item_id": "work-texture"},
 	}
 	exec := toolregistry.ExecutionContext{RunID: run.RunID, OwnerID: run.OwnerID, ComputerID: run.ComputerID, AgentID: run.AgentID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: run.ChannelID, RunRecord: run}
-	_, err = registry.Execute(toolregistry.WithExecutionContext(context.Background(), exec), "spawn_agent", json.RawMessage(`{"role":"research","objective":"research exact gap"}`))
+	_, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), exec), "spawn_agent", json.RawMessage(`{"role":"researcher","objective":"research exact gap"}`))
 	if err == nil || !strings.Contains(err.Error(), "open_researcher") || !strings.Contains(err.Error(), "atomically") {
 		t.Fatalf("lifecycle Texture generic spawn refusal = %v", err)
 	}

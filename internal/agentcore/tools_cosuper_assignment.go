@@ -8,7 +8,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -33,7 +32,7 @@ func RegisterPersistentSuperReportTools(registry *toolregistry.ToolRegistry, rt 
 func requirePersistentSuperExecution(ctx context.Context) (*types.RunRecord, error) {
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	rec := execution.RunRecord
-	if rec == nil || rec.AgentID != persistentSuperAgentID(rec.OwnerID) || rec.AgentProfile != agentprofile.Super || rec.AgentRole != agentprofile.Super || rec.TrajectoryID != "" {
+	if rec == nil || rec.AgentID != persistentSuperAgentID(rec.OwnerID) || rec.AgentProfile != "super" || rec.AgentRole != "super" || rec.TrajectoryID != "" {
 		return nil, fmt.Errorf("assigned CoSuper tools require the exact non-lifecycle persistent Super")
 	}
 	return rec, nil
@@ -41,20 +40,18 @@ func requirePersistentSuperExecution(ctx context.Context) (*types.RunRecord, err
 
 func newAssignCoSuperTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
-		Objective            string                      `json:"objective"`
-		Kind                 types.CoSuperAssignmentKind `json:"kind"`
-		ParentWorkItemID     string                      `json:"parent_work_item_id"`
-		CandidateID          string                      `json:"candidate_id,omitempty"`
-		ModelPolicyOverlayID string                      `json:"model_policy_overlay_id,omitempty"`
+		Objective        string                      `json:"objective"`
+		Kind             types.CoSuperAssignmentKind `json:"kind"`
+		ParentWorkItemID string                      `json:"parent_work_item_id"`
+		CandidateID      string                      `json:"candidate_id,omitempty"`
 	}
 	return toolregistry.Tool{
 		Name: "assign_co_super", Description: "Open one exact durable assignment and, only after its bind receipt commits, wake a writable networkless capsule CoSuper.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"objective":               map[string]any{"type": "string"},
-			"kind":                    map[string]any{"type": "string", "enum": []string{"implementation", "verification"}},
-			"parent_work_item_id":     map[string]any{"type": "string"},
-			"candidate_id":            map[string]any{"type": "string", "description": "Required only for verification; exact candidate returned by a completed implementation assignment."},
-			"model_policy_overlay_id": map[string]any{"type": "string", "description": "Optional owner-visible model policy overlay id from System/model-policy-overlays/<id>.toml; selects the assigned run's provider/model."},
+			"objective":           map[string]any{"type": "string"},
+			"kind":                map[string]any{"type": "string", "enum": []string{"implementation", "verification"}},
+			"parent_work_item_id": map[string]any{"type": "string"},
+			"candidate_id":        map[string]any{"type": "string", "description": "Required only for verification; exact candidate returned by a completed implementation assignment."},
 		}, []string{"objective", "kind", "parent_work_item_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			parent, err := requirePersistentSuperExecution(ctx)
@@ -69,7 +66,6 @@ func newAssignCoSuperTool(rt *Runtime) toolregistry.Tool {
 			started, err := rt.startAssignedCoSuper(ctx, parent.RunID, parent.OwnerID, StartAssignedCoSuperRequest{
 				Objective: input.Objective, Kind: input.Kind, CandidateID: input.CandidateID,
 				ParentWorkItemID: input.ParentWorkItemID, ToolCallID: execution.ToolCallID,
-				ModelPolicyOverlayID: input.ModelPolicyOverlayID,
 			})
 			if err != nil {
 				return "", err
@@ -319,7 +315,7 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 				ControlBindingID: control.UpdateID, TargetWorkItemID: targetWorkID,
 				ConsumedDeliveryUpdateIDs: consumedForReport,
 				ProducerUpdateID:          producerUpdateID, UpdateID: "result:" + occurrence,
-				ChannelID: control.ChannelID, Role: agentprofile.Super, SourceRunID: parent.RunID,
+				ChannelID: control.ChannelID, Role: "super", SourceRunID: parent.RunID,
 				Packet: packet, Content: content, WorkDisposition: input.WorkDisposition,
 				WorkItemID: control.TargetWorkItemID, PayloadDigest: payloadDigest,
 			}

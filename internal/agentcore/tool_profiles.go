@@ -60,13 +60,11 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 		return ""
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
-		profile, _ := agentprofile.Canonical(rec.AgentProfile)
-		return profile
+		return agentprofile.Canonical(rec.AgentProfile)
 	}
 	if rec.Metadata != nil {
 		if profile, _ := rec.Metadata[runMetadataAgentProfile].(string); strings.TrimSpace(profile) != "" {
-			canonicalProfile, _ := agentprofile.Canonical(profile)
-			return canonicalProfile
+			return agentprofile.Canonical(profile)
 		}
 	}
 	return ""
@@ -77,25 +75,18 @@ func agentProfileForRun(rec *types.RunRecord) string {
 		return agentprofile.Super
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
-		profile, _ := agentprofile.Canonical(rec.AgentProfile)
-		return profile
+		return agentprofile.Canonical(rec.AgentProfile)
 	}
 	if rec.Metadata != nil {
 		if profile, _ := rec.Metadata[runMetadataAgentProfile].(string); strings.TrimSpace(profile) != "" {
-			canonicalProfile, _ := agentprofile.Canonical(profile)
-			return canonicalProfile
+			return agentprofile.Canonical(profile)
 		}
 	}
 	return agentprofile.Super
 }
 
 func runHasProfile(rec *types.RunRecord, profile string) bool {
-	if rec == nil {
-		return false
-	}
-	runProfile := agentProfileForRun(rec)
-	targetProfile, _ := agentprofile.Canonical(profile)
-	return runProfile == targetProfile
+	return rec != nil && agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Canonical(profile)
 }
 
 func agentRoleForRun(rec *types.RunRecord) string {
@@ -103,13 +94,11 @@ func agentRoleForRun(rec *types.RunRecord) string {
 		return agentprofile.Super
 	}
 	if strings.TrimSpace(rec.AgentRole) != "" {
-		role, _ := agentprofile.Canonical(rec.AgentRole)
-		return role
+		return agentprofile.Canonical(rec.AgentRole)
 	}
 	if rec.Metadata != nil {
 		if role, _ := rec.Metadata[runMetadataAgentRole].(string); strings.TrimSpace(role) != "" {
-			canonicalRole, _ := agentprofile.Canonical(role)
-			return canonicalRole
+			return agentprofile.Canonical(role)
 		}
 	}
 	return agentProfileForRun(rec)
@@ -296,8 +285,6 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		RequesterAgentID:       requesterAgentID,
 		TextureDeliveryAgentID: textureDeliveryAgentID,
 		ChannelID:              channelID,
-		InCellCarrier:          profile == agentprofile.CoSuper && capsule.HostSelectsRLM(),
-		NoReportChannel:        profile == agentprofile.CoSuper && !capsule.HostSelectsRLM(),
 	}))
 	return b.String(), nil
 }
@@ -332,17 +319,36 @@ func buildAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, erro
 	if err := RegisterCapsuleLocalTools(registry, rt); err != nil {
 		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
 	}
+	if err := RegisterCoagentUpdateTools(registry, rt); err != nil {
+		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
+	}
+	if err := registerCapsuleBoundSelfDevelopmentTools(registry); err != nil {
+		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
+	}
 	return registry, nil
 }
 
 // buildRLMAssignedCoSuperRegistry is the sealed-Go overlay (Def 2 item 4):
-// capsule_go_eval is the sole JSON envelope — the desk's only tool. Every
-// other affordance is a typed in-cell choir function staging intents for the
-// one reducer: files, commands, messages, spawning, completion, freeze,
-// verify, and bundle inspection.
+// capsule_go_eval is the sole capsule-effect entry (the broker dispatches it
+// to the persistent session worker with prebound choir ops). The JSON file
+// and exec tools are removed — choir.ReadFile/WriteFile/ListDir/Exec inside
+// cells subsume them. Report/update channels and bundle-verification tools
+// stay: they are host reconciliation, not capsule effects, and have no
+// in-cell equivalent.
 func buildRLMAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
-	if err := registry.Register(newCapsuleGoEvalTool(rt)); err != nil {
+	for _, tool := range []toolregistry.Tool{
+		newCapsuleGoEvalTool(rt),
+		newCommitTransactionTool(),
+		newInspectSelfDevelopmentBundleTool(),
+		newRecordSelfDevelopmentVerificationTool(),
+		newRecordAssignedCoSuperReportTool(rt),
+	} {
+		if err := registry.Register(tool); err != nil {
+			return nil, fmt.Errorf("build RLM assigned co-super registry: %w", err)
+		}
+	}
+	if err := RegisterCoagentUpdateTools(registry, rt); err != nil {
 		return nil, fmt.Errorf("build RLM assigned co-super registry: %w", err)
 	}
 	return registry, nil
@@ -388,9 +394,8 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 // InstallDefaultAgentTools installs role-bound registries. Super receives only
 // the persistent assignment/cancel authority; capsule effects are runtime-owned.
 // CoSuper has an empty static registry. An exact assigned run receives a fresh
-// closed capsule-local registry; under actuator=rlm the desk is the in-cell
-// carrier (capsule_go_eval only), under actuator=tools it is capsule effects
-// only. Reporting, freeze, and verification are in-cell affordances.
+// closed capsule-local registry plus update_coagent and capsule-bound
+// freeze/inspect/verify after its durable binding is authenticated.
 func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if strings.TrimSpace(cwd) == "" {
 		wd, err := os.Getwd()
@@ -404,11 +409,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	sourceClient := researchtools.NewSourceClientFromEnv()
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
-	superPolicy, err := agentprofile.PolicyFor(agentprofile.Super)
-	if err != nil {
-		return err
-	}
-	superRegistry, err := rt.buildRegistryForRole(superPolicy, cwd, searchClient, sourceClient, httpClient)
+	superRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Super), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -424,22 +425,14 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		}
 	}
 	coSuperRegistry := toolregistry.MustNewToolRegistry()
-	researcherPolicy, err := agentprofile.PolicyFor(agentprofile.Researcher)
-	if err != nil {
-		return err
-	}
-	researcherRegistry, err := rt.buildRegistryForRole(researcherPolicy, cwd, searchClient, sourceClient, httpClient)
+	researcherRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Researcher), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterCoagentUpdateTools(researcherRegistry, rt); err != nil {
 		return err
 	}
-	processorPolicy, err := agentprofile.PolicyFor(agentprofile.Processor)
-	if err != nil {
-		return err
-	}
-	processorRegistry, err := rt.buildRegistryForRole(processorPolicy, cwd, searchClient, sourceClient, httpClient)
+	processorRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Processor), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -449,38 +442,22 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterWireProcessorTools(processorRegistry, rt); err != nil {
 		return err
 	}
-	reconcilerPolicy, err := agentprofile.PolicyFor(agentprofile.Reconciler)
-	if err != nil {
-		return err
-	}
-	reconcilerRegistry, err := rt.buildRegistryForRole(reconcilerPolicy, cwd, searchClient, sourceClient, httpClient)
+	reconcilerRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Reconciler), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterCoagentUpdateTools(reconcilerRegistry, rt); err != nil {
 		return err
 	}
-	conductorPolicy, err := agentprofile.PolicyFor(agentprofile.Conductor)
+	conductorRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Conductor), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
-	conductorRegistry, err := rt.buildRegistryForRole(conductorPolicy, cwd, searchClient, sourceClient, httpClient)
+	textureRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Texture), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
-	texturePolicy, err := agentprofile.PolicyFor(agentprofile.Texture)
-	if err != nil {
-		return err
-	}
-	textureRegistry, err := rt.buildRegistryForRole(texturePolicy, cwd, searchClient, sourceClient, httpClient)
-	if err != nil {
-		return err
-	}
-	emailPolicy, err := agentprofile.PolicyFor(agentprofile.Email)
-	if err != nil {
-		return err
-	}
-	emailRegistry, err := rt.buildRegistryForRole(emailPolicy, cwd, searchClient, sourceClient, httpClient)
+	emailRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Email), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}

@@ -54,15 +54,15 @@ func applyObservationSourceVersion(t *testing.T, s *store.Store, start types.Sta
 	}
 	now := time.Now().UTC()
 	producer := types.AgentRecord{
-		AgentID: "research:observation", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "research", Role: "research", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
+		AgentID: "researcher:observation", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgent(context.Background(), producer); err != nil {
 		t.Fatalf("upsert producer: %v", err)
 	}
 	open := types.OpenLifecycleWorkRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "open-observation-producer-work", TrajectoryID: start.TrajectoryID,
-		WorkItem: types.WorkItemRecord{WorkItemID: "work-observation-producer", Objective: "produce observed source update", AuthorityProfile: "research", AssignedAgentID: producer.AgentID},
+		WorkItem: types.WorkItemRecord{WorkItemID: "work-observation-producer", Objective: "produce observed source update", AuthorityProfile: "researcher", AssignedAgentID: producer.AgentID},
 	}
 	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
 	opened, err := s.OpenLifecycleWork(context.Background(), open)
@@ -149,8 +149,8 @@ func applyObservationTextureTurnWithInbound(t *testing.T, s *store.Store, start 
 	}
 
 	producer := types.AgentRecord{
-		AgentID: "research:observation-turn", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "research", Role: "research", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
+		AgentID: "researcher:observation-turn", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.UpsertAgent(ctx, producer); err != nil {
 		t.Fatalf("upsert turn producer: %v", err)
@@ -158,7 +158,7 @@ func applyObservationTextureTurnWithInbound(t *testing.T, s *store.Store, start 
 	open := types.OpenLifecycleWorkRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "open-observation-turn-producer", TrajectoryID: start.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
-			WorkItemID: "work-observation-turn-producer", Objective: "produce multiple reports", AuthorityProfile: "research",
+			WorkItemID: "work-observation-turn-producer", Objective: "produce multiple reports", AuthorityProfile: "researcher",
 			AssignedAgentID: producer.AgentID, CreatedByRunID: caller.RunID,
 			Details: map[string]any{"requested_by_profile": "texture", "requested_by_agent_id": caller.AgentID, "requested_by_run_id": caller.RunID},
 		},
@@ -169,7 +169,7 @@ func applyObservationTextureTurnWithInbound(t *testing.T, s *store.Store, start 
 		t.Fatalf("open turn producer work: %+v, %v", opened.WorkItem, err)
 	}
 	producerRun := types.RunRecord{
-		RunID: "run-observation-turn-producer", AgentID: producer.AgentID, AgentProfile: "research", AgentRole: "research",
+		RunID: "run-observation-turn-producer", AgentID: producer.AgentID, AgentProfile: "researcher", AgentRole: "researcher",
 		ChannelID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		State: types.RunRunning, CreatedAt: now, UpdatedAt: now, RequestedByRunID: caller.RunID,
 		Metadata: map[string]any{"lifecycle_work_item_id": opened.WorkItem.WorkItemID},
@@ -196,7 +196,7 @@ func applyObservationTextureTurnWithInbound(t *testing.T, s *store.Store, start 
 			OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "queue-observation-turn-" + id,
 			TrajectoryID: start.TrajectoryID, TargetAgentID: caller.AgentID, ProducerAgentID: producer.AgentID,
 			ProducerUpdateID: "producer-observation-turn-" + id, UpdateID: "update-observation-turn-" + id,
-			ChannelID: start.InitialDocument.DocID, Role: "research", SourceRunID: producerRun.RunID,
+			ChannelID: start.InitialDocument.DocID, Role: "researcher", SourceRunID: producerRun.RunID,
 			Packet: packet, Content: content, PayloadDigest: payloadDigest, WorkItemID: opened.WorkItem.WorkItemID,
 			WorkDisposition: types.WorkItemOpen,
 		}

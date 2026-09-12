@@ -53,30 +53,9 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 	if strings.TrimSpace(persisted.RequestedByRunID) == "" {
 		return terminalOutcomeBinding{}, nil
 	}
-	// Durable lifecycle updates and CoSuper assignments are already canonical obligations.
-	// Terminal run state is only their activation projection; it must not synthesize or bind
+	// Durable lifecycle updates are already canonical obligations. Terminal run
+	// state is only their activation projection; it must not synthesize or bind
 	// a second worker-update authority from the RunRecord outcome.
-	assignmentID := strings.TrimSpace(metadataStringValue(persisted.Metadata, "assignment_id"))
-	if assignmentID != "" {
-		attempt := uint64(metadataIntValue(persisted.Metadata, "assignment_attempt"))
-		reason := types.OrphanReasonProcessExitedWithoutPacket
-		if persisted.State == types.RunCancelled {
-			reason = types.OrphanReasonCancelled
-		}
-		obs := types.CoSuperOrphanObservation{
-			OwnerID:      persisted.OwnerID,
-			ComputerID:   persisted.ComputerID,
-			RunID:        persisted.RunID,
-			AssignmentID: assignmentID,
-			Attempt:      attempt,
-			Reason:       reason,
-			ObservedAt:   time.Now().UTC(),
-		}
-		if _, err := rt.store.RecordCoSuperOrphanObservation(ctx, obs); err != nil && !errors.Is(err, store.ErrCoSuperAssignmentCommandConflict) {
-			return terminalOutcomeBinding{}, fmt.Errorf("record orphan observation for run %s: %w", persisted.RunID, err)
-		}
-		return terminalOutcomeBinding{}, nil
-	}
 	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||
 		len(metadataStringSlice(persisted.Metadata["work_item_ids"])) > 0
 	if hasLifecycleMarker && strings.TrimSpace(persisted.ComputerID) != "" {
@@ -189,8 +168,7 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 }
 
 func terminalOutcomeCapableProfile(profile string) bool {
-	canonicalProfile, _ := agentprofile.Canonical(profile)
-	return canonicalProfile != ""
+	return agentprofile.Canonical(profile) != ""
 }
 
 func (rt *Runtime) terminalOutcomeRequesterTarget(ctx context.Context, rec *types.RunRecord) (string, string, bool, error) {
@@ -231,7 +209,7 @@ func (rt *Runtime) terminalOutcomeRequesterTarget(ctx context.Context, rec *type
 }
 
 func terminalOutcomeReferenceUpdate(rec *types.RunRecord, targetAgentID, channelID, outcomeDigest string) types.CoagentSourcePacket {
-	profile := agentProfileForRun(rec)
+	profile := agentprofile.Canonical(agentProfileForRun(rec))
 	kind := "evidence_update"
 	summary := fmt.Sprintf("%s run completed with an authoritative terminal result.", profile)
 	if rec.State != types.RunCompleted {
@@ -272,8 +250,6 @@ func terminalOutcomeReferenceUpdate(rec *types.RunRecord, targetAgentID, channel
 }
 
 func terminalOutcomeExplicitProducerIdentityMatches(update types.CoagentSourcePacket, rec *types.RunRecord, targetAgentID, channelID string) bool {
-	updateRole, _ := agentprofile.Canonical(update.Role)
-	runProfile := agentProfileForRun(rec)
 	return update.UpdateID == deriveWorkerUpdateID(update) &&
 		update.OwnerID == rec.OwnerID &&
 		update.AgentID == agentIDForRun(rec) &&
@@ -281,7 +257,7 @@ func terminalOutcomeExplicitProducerIdentityMatches(update types.CoagentSourcePa
 		update.ChannelID == channelID &&
 		update.TrajectoryID == trajectoryIDForRun(rec) &&
 		update.SourceRunID == rec.RunID &&
-		updateRole == runProfile
+		agentprofile.Canonical(update.Role) == agentprofile.Canonical(agentProfileForRun(rec))
 }
 
 func terminalOutcomeUpdateLater(candidate, current types.CoagentSourcePacket) bool {

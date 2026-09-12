@@ -401,7 +401,7 @@ func TestQueueLifecycleUpdateValidatesProducerWorkBinding(t *testing.T) {
 		CommandID: "command-open-producer-work", TrajectoryID: start.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: "work-binding-producer", Objective: "produce an update",
-			AssignedAgentID: "producer-agent", AuthorityProfile: "research",
+			AssignedAgentID: "producer-agent", AuthorityProfile: "researcher",
 		},
 	}
 	open.CommandDigest, _ = ComputeOpenLifecycleWorkDigest(open)
@@ -541,7 +541,7 @@ func TestLifecycleSettlementWaitsForUpdateDisposition(t *testing.T) {
 	apply.CommandID = "command-apply-1"
 	apply.Disposition = types.UpdateIncorporated
 	apply.Revision = types.Revision{
-		RevisionID: "revision-lifecycle-v1", AuthorKind: types.AuthorAppAgent, AuthorLabel: "research", Content: "Incorporated update",
+		RevisionID: "revision-lifecycle-v1", AuthorKind: types.AuthorAppAgent, AuthorLabel: "researcher", Content: "Incorporated update",
 		BodyDoc:    lifecycleStructuredBodyDoc(start.InitialDocument.DocID, "revision-lifecycle-v1", "Incorporated update"),
 		CreatedAt:  time.Unix(100, 0).UTC(),
 		Provenance: json.RawMessage(`{"schema_version":1,"authored_at":"1970-01-01T00:01:40Z","authoring_model":{"provider":"test","model":"stable"}}`),
@@ -2161,7 +2161,7 @@ func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T)
 		const workItemID = "work-active-run-authority"
 		agent := types.AgentRecord{
 			AgentID: agentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-			Profile: "research", Role: "research", ChannelID: channelID,
+			Profile: "researcher", Role: "researcher", ChannelID: channelID,
 		}
 		if err := s.UpsertAgent(ctx, agent); err != nil {
 			t.Fatalf("seed generic agent: %v", err)
@@ -2171,7 +2171,7 @@ func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T)
 			CommandID: "command-open-active-run-authority", TrajectoryID: start.TrajectoryID,
 			WorkItem: types.WorkItemRecord{
 				WorkItemID: workItemID, Objective: "prove reducer-owned activation",
-				AssignedAgentID: agentID, AuthorityProfile: "research",
+				AssignedAgentID: agentID, AuthorityProfile: "researcher",
 			},
 		}
 		open.CommandDigest, _ = ComputeOpenLifecycleWorkDigest(open)
@@ -2181,7 +2181,7 @@ func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T)
 		now := time.Now().UTC()
 		run := types.RunRecord{
 			RunID: "run-active-run-authority", AgentID: agentID, ChannelID: channelID,
-			TrajectoryID: start.TrajectoryID, AgentProfile: "research", AgentRole: "research",
+			TrajectoryID: start.TrajectoryID, AgentProfile: "researcher", AgentRole: "researcher",
 			OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunPending,
 			Prompt: "resume durable research", CreatedAt: now, UpdatedAt: now,
 			Metadata: map[string]any{"lifecycle_work_item_id": workItemID},
@@ -2633,8 +2633,8 @@ func TestLifecycleRejectsEffectsCapableSubjectAndAssignment(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	superStart := lifecycleStartFixture()
-	superStart.Agent.AgentID = "management:forbidden"
-	superStart.Agent.Profile, superStart.Agent.Role = "management", "management"
+	superStart.Agent.AgentID = "super:forbidden"
+	superStart.Agent.Profile, superStart.Agent.Role = "super", "super"
 	superStart.InitialWork.AssignedAgentID = superStart.Agent.AgentID
 	superStart.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(superStart)
 	if _, err := s.StartLifecycle(ctx, superStart); !errors.Is(err, ErrLifecycleInvalidTransition) {
@@ -2648,8 +2648,8 @@ func TestLifecycleRejectsEffectsCapableSubjectAndAssignment(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
-		AgentID: "management:forbidden", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "management", Role: "management", CreatedAt: now, UpdatedAt: now,
+		AgentID: "super:forbidden", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		Profile: "super", Role: "super", CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2658,7 +2658,7 @@ func TestLifecycleRejectsEffectsCapableSubjectAndAssignment(t *testing.T) {
 		TrajectoryID: start.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: "work-forbidden", Objective: "must not run",
-			AuthorityProfile: "management", AssignedAgentID: "management:forbidden",
+			AuthorityProfile: "super", AssignedAgentID: "super:forbidden",
 		},
 	}
 	open.CommandDigest, _ = ComputeOpenLifecycleWorkDigest(open)
@@ -3479,11 +3479,11 @@ func TestDispatchWorkerUpdateAllowsAssignedCoSuperPersistentSuperReport(t *testi
 		UpdateID:      "update-cosuper-super-report",
 		OwnerID:       start.OwnerID,
 		ComputerID:    start.ComputerID,
-		AgentID:       "engineering:assigned-a",
-		TargetAgentID: "management:" + start.OwnerID,
-		ChannelID:     "management:" + start.OwnerID,
+		AgentID:       "co-super:assigned-a",
+		TargetAgentID: "super:" + start.OwnerID,
+		ChannelID:     "super:" + start.OwnerID,
 		TrajectoryID:  start.TrajectoryID,
-		Role:          "engineering",
+		Role:          "co-super",
 		Direction:     types.LifecyclePacketDirectionProducerReport,
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
@@ -3501,7 +3501,7 @@ func TestDispatchWorkerUpdateAllowsAssignedCoSuperPersistentSuperReport(t *testi
 	if err != nil || !created {
 		t.Fatalf("assigned CoSuper Super report dispatch: created=%v err=%v", created, err)
 	}
-	if stored.Direction != types.LifecyclePacketDirectionProducerReport || stored.TargetAgentID != "management:"+start.OwnerID {
+	if stored.Direction != types.LifecyclePacketDirectionProducerReport || stored.TargetAgentID != "super:"+start.OwnerID {
 		t.Fatalf("stored report = %+v", stored)
 	}
 
@@ -3524,18 +3524,18 @@ func TestListPendingLifecycleUpdatesArrivalOrdinalSort(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	targetAgent := "management:" + start.OwnerID
+	targetAgent := "super:" + start.OwnerID
 
 	// update1: higher ReducerSeq (50), earlier ArrivalOrdinal (10)
 	update1 := types.CoagentSourcePacket{
 		UpdateID:         "update-arrival-1",
 		OwnerID:          start.OwnerID,
 		ComputerID:       start.ComputerID,
-		AgentID:          "engineering:assigned-a",
+		AgentID:          "co-super:assigned-a",
 		TargetAgentID:    targetAgent,
 		ChannelID:        targetAgent,
 		TrajectoryID:     start.TrajectoryID,
-		Role:             "engineering",
+		Role:             "co-super",
 		Direction:        types.LifecyclePacketDirectionProducerReport,
 		LifecycleVersion: 1,
 		ReducerSeq:       50,
@@ -3555,11 +3555,11 @@ func TestListPendingLifecycleUpdatesArrivalOrdinalSort(t *testing.T) {
 		UpdateID:         "update-arrival-2",
 		OwnerID:          start.OwnerID,
 		ComputerID:       start.ComputerID,
-		AgentID:          "engineering:assigned-a",
+		AgentID:          "co-super:assigned-a",
 		TargetAgentID:    targetAgent,
 		ChannelID:        targetAgent,
 		TrajectoryID:     start.TrajectoryID,
-		Role:             "engineering",
+		Role:             "co-super",
 		Direction:        types.LifecyclePacketDirectionProducerReport,
 		LifecycleVersion: 1,
 		ReducerSeq:       10,

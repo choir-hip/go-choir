@@ -30,7 +30,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -114,10 +113,6 @@ type Store struct {
 	og                      *objectgraph.Service
 	ogStore                 *objectgraph.DoltStore
 	ogReadStore             *objectgraph.DoltStore
-	// vocabCutover marks the store post-cutover: the OG write guard refuses
-	// declared role fields outside the V2 vocabulary. Set when the migration
-	// report exists (open) or when the fenced cutover persists it.
-	vocabCutover atomic.Bool
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
@@ -848,12 +843,6 @@ func Open(dbPath string) (*Store, error) {
 	}
 	log.Printf("store: open phase=objectgraph-schema status=complete")
 	s.ogStore = ogDoltStore
-	ogDoltStore.SetWriteValidator(s.vocabWriteGuard)
-	// A persisted migration report means this store already cut over: the
-	// write guard activates immediately on reopen.
-	if rep, err := s.loadVocabMigrationReport(); err == nil && rep != nil {
-		s.vocabCutover.Store(true)
-	}
 	// Create a read-only DoltStore using the read connection pool so OG
 	// reads don't block during write transactions on the main connection.
 	if readDB != nil {
@@ -889,7 +878,7 @@ func (s *Store) bootstrap() error {
 		return fmt.Errorf("apply schema: %w", err)
 	}
 
-	if err := s.ensureColumns([]struct {
+	for _, migration := range []struct {
 		table string
 		name  string
 		ddl   string
@@ -934,13 +923,15 @@ func (s *Store) bootstrap() error {
 		{"desktop_sessions", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"desktop_app_instances", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"desktop_window_placements", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-	}); err != nil {
-		return err
+	} {
+		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
+			return err
+		}
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_owner_stream_seq ON events(owner_id, stream_seq)`); err != nil {
 		return fmt.Errorf("create idx_events_owner_stream_seq: %w", err)
 	}
-	// After column migration so existing databases gain runs.trajectory_id before its index.
+	// After ensureColumn so existing databases gain runs.trajectory_id first.
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_runs_trajectory_id ON runs(trajectory_id)`); err != nil {
 		return fmt.Errorf("create idx_runs_trajectory_id: %w", err)
 	}
@@ -992,6 +983,34 @@ func normalizeDesktopID(desktopID string) string {
 	return desktopID
 }
 
+func (s *Store) ensureColumn(table, name, ddl string) error {
+	if err := validateIdentifier(table); err != nil {
+		return err
+	}
+	if err := validateIdentifier(name); err != nil {
+		return err
+	}
+	var count int
+	if err := s.db.QueryRow(`
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = ?
+  AND column_name = ?`,
+		table,
+		name,
+	).Scan(&count); err != nil {
+		return fmt.Errorf("information_schema.columns(%s.%s): %w", table, name, err)
+	}
+	if count > 0 {
+		return nil
+	}
+	if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, name, ddl)); err != nil {
+		return fmt.Errorf("alter table %s add column %s: %w", table, name, err)
+	}
+	return nil
+}
+
 func validateIdentifier(name string) error {
 	if name == "" {
 		return fmt.Errorf("empty SQL identifier")
@@ -1001,82 +1020,6 @@ func validateIdentifier(name string) error {
 			continue
 		}
 		return fmt.Errorf("unsafe SQL identifier %q", name)
-	}
-	return nil
-}
-
-// ensureColumns checks all requested columns in one information_schema query
-// and ALTERs only the missing ones. This replaces N sequential ensureColumn
-// calls (each ~95ms on embedded Dolt) with a single round-trip.
-func (s *Store) ensureColumns(migrations []struct {
-	table string
-	name  string
-	ddl   string
-}) error {
-	if len(migrations) == 0 {
-		return nil
-	}
-	// Collect unique tables for the IN clause.
-	tables := make(map[string]struct{})
-	for _, m := range migrations {
-		if err := validateIdentifier(m.table); err != nil {
-			return err
-		}
-		if err := validateIdentifier(m.name); err != nil {
-			return err
-		}
-		tables[m.table] = struct{}{}
-	}
-	// Build IN clause with placeholders.
-	tableList := make([]string, 0, len(tables))
-	for t := range tables {
-		tableList = append(tableList, t)
-	}
-	placeholders := make([]string, len(tableList))
-	args := make([]any, len(tableList))
-	for i, t := range tableList {
-		placeholders[i] = "?"
-		args[i] = t
-	}
-	query := fmt.Sprintf(`
-SELECT table_name, column_name
-FROM information_schema.columns
-WHERE table_schema = DATABASE()
-  AND table_name IN (%s)`, strings.Join(placeholders, ","))
-	rows, err := s.db.Query(query, args...)
-	if err != nil {
-		return fmt.Errorf("information_schema.columns batch: %w", err)
-	}
-	existing := make(map[string]map[string]struct{})
-	for rows.Next() {
-		var table, col string
-		if err := rows.Scan(&table, &col); err != nil {
-			rows.Close()
-			return err
-		}
-		if existing[table] == nil {
-			existing[table] = make(map[string]struct{})
-		}
-		existing[table][col] = struct{}{}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	// ALTER only missing columns.
-	for _, m := range migrations {
-		if _, ok := existing[m.table][m.name]; ok {
-			continue
-		}
-		if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", m.table, m.name, m.ddl)); err != nil {
-			return fmt.Errorf("alter table %s add column %s: %w", m.table, m.name, err)
-		}
-		// Record the addition so a duplicate entry later in the list skips
-		// instead of double-ALTERing (matches old per-column loop semantics).
-		if existing[m.table] == nil {
-			existing[m.table] = make(map[string]struct{})
-		}
-		existing[m.table][m.name] = struct{}{}
 	}
 	return nil
 }
@@ -2853,10 +2796,9 @@ func workerMailboxAllowsAssignedCoSuperSuperReport(update types.CoagentSourcePac
 	if ownerID == "" {
 		return false
 	}
-	reportRole, _ := agentprofile.Canonical(update.Role)
 	return update.Direction == types.LifecyclePacketDirectionProducerReport &&
-		reportRole == agentprofile.CoSuper &&
-		strings.TrimSpace(update.TargetAgentID) == agentprofile.Super+":"+ownerID
+		agentprofile.Canonical(update.Role) == agentprofile.CoSuper &&
+		strings.TrimSpace(update.TargetAgentID) == "super:"+ownerID
 }
 
 func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSourcePacket, message *types.ChannelMessage) (types.CoagentSourcePacket, bool, error) {

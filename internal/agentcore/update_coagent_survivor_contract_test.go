@@ -97,7 +97,7 @@ func TestSurvivorContract_RejectsEveryLegacyTopLevelField(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	superRun := d9CoagentRun("run-survivor-reject", "user-survivor-reject", "management:survivor-reject", agentprofile.Super, "doc-survivor-reject", currentTextureAgentID("doc-survivor-reject"))
+	superRun := d9CoagentRun("run-survivor-reject", "user-survivor-reject", "super:survivor-reject", agentprofile.Super, "doc-survivor-reject", currentTextureAgentID("doc-survivor-reject"))
 	for _, field := range []string{
 		"findings",
 		"evidence_ids",
@@ -135,7 +135,7 @@ func TestSurvivorContract_RejectsUnknownTopLevelField(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	superRun := d9CoagentRun("run-survivor-unknown", "user-survivor-unknown", "management:survivor-unknown", agentprofile.Super, "doc-survivor-unknown", currentTextureAgentID("doc-survivor-unknown"))
+	superRun := d9CoagentRun("run-survivor-unknown", "user-survivor-unknown", "super:survivor-unknown", agentprofile.Super, "doc-survivor-unknown", currentTextureAgentID("doc-survivor-unknown"))
 	raw := json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
@@ -211,7 +211,7 @@ func TestSurvivorContract_CoSuperExecutionRequestDoesNotOpenPersistentSuper(t *t
 	now := mustNow(t)
 	cosuperExec := types.CoagentSourcePacket{
 		OwnerID:       ownerID,
-		AgentID:       "engineering:survivor-exec",
+		AgentID:       "co-super:survivor-exec",
 		TargetAgentID: superAgent.AgentID,
 		ChannelID:     superAgent.ChannelID,
 		Role:          agentprofile.CoSuper,
@@ -360,7 +360,7 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 	now := mustNow(t)
 	nonExec := types.CoagentSourcePacket{
 		OwnerID:       ownerID,
-		AgentID:       "engineering:survivor-settle-mixed",
+		AgentID:       "cosuper:survivor-settle-mixed",
 		TargetAgentID: superAgent.AgentID,
 		ChannelID:     superAgent.ChannelID,
 		Role:          agentprofile.CoSuper,
@@ -435,7 +435,7 @@ func TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog(t *testi
 	exec := authorizedPersistentSuperExecutionRequest(ownerID, superAgent.AgentID, superAgent.ChannelID, "executable work before non-execution packet", now)
 	nonExec := types.CoagentSourcePacket{
 		OwnerID:       ownerID,
-		AgentID:       "engineering:survivor-settle-reversed",
+		AgentID:       "cosuper:survivor-settle-reversed",
 		TargetAgentID: superAgent.AgentID,
 		ChannelID:     superAgent.ChannelID,
 		Role:          agentprofile.CoSuper,
@@ -492,7 +492,7 @@ func TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog(t *testi
 func assignedCoSuperSuperReportPacket(ownerID, targetAgentID, channelID, summary string, now time.Time) types.CoagentSourcePacket {
 	update := types.CoagentSourcePacket{
 		OwnerID:       ownerID,
-		AgentID:       "engineering:survivor-report",
+		AgentID:       "co-super:survivor-report",
 		TargetAgentID: targetAgentID,
 		ChannelID:     channelID,
 		Role:          agentprofile.CoSuper,
@@ -512,7 +512,7 @@ func assignedCoSuperSuperReportPacket(ownerID, targetAgentID, channelID, summary
 
 func TestSurvivorContract_SenderAuthorizationNotPacketKind(t *testing.T) {
 	now := mustNow(t)
-	texture := authorizedPersistentSuperExecutionRequest("owner-auth", "management:owner-auth", "management:owner-auth", "texture control", now)
+	texture := authorizedPersistentSuperExecutionRequest("owner-auth", "super:owner-auth", "super:owner-auth", "texture control", now)
 	cases := []struct {
 		name       string
 		mutate     func(types.CoagentSourcePacket) types.CoagentSourcePacket
@@ -532,18 +532,18 @@ func TestSurvivorContract_SenderAuthorizationNotPacketKind(t *testing.T) {
 		}},
 		{name: "cosuper control execution_request spoof", mutate: func(u types.CoagentSourcePacket) types.CoagentSourcePacket {
 			u.Role = agentprofile.CoSuper
-			u.AgentID = "engineering:spoof"
+			u.AgentID = "co-super:spoof"
 			return u
 		}},
 		{name: "cosuper producer_report execution_request", mutate: func(u types.CoagentSourcePacket) types.CoagentSourcePacket {
 			u.Role = agentprofile.CoSuper
-			u.AgentID = "engineering:spoof"
+			u.AgentID = "co-super:spoof"
 			u.Direction = types.LifecyclePacketDirectionProducerReport
 			return u
 		}},
 		{name: "researcher control execution_request", mutate: func(u types.CoagentSourcePacket) types.CoagentSourcePacket {
 			u.Role = agentprofile.Researcher
-			u.AgentID = "research:spoof"
+			u.AgentID = "researcher:spoof"
 			return u
 		}},
 		{name: "cosuper producer_report evidence_update", mutate: func(u types.CoagentSourcePacket) types.CoagentSourcePacket {

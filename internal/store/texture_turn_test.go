@@ -60,7 +60,7 @@ func textureTurnQueueResearcherReport(t *testing.T, s *Store, start types.StartL
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "queue-" + id,
 		TrajectoryID: start.TrajectoryID, TargetAgentID: start.Agent.AgentID,
 		ProducerAgentID: work.AssignedAgentID, ProducerUpdateID: "producer-" + id, UpdateID: "update-" + id,
-		ChannelID: start.InitialDocument.DocID, Role: "research", SourceRunID: "run-researcher-target",
+		ChannelID: start.InitialDocument.DocID, Role: "researcher", SourceRunID: "run-researcher-target",
 		Packet: packet, Content: content, PayloadDigest: payloadDigest,
 		WorkItemID: work.WorkItemID, WorkDisposition: types.WorkItemOpen,
 	}
@@ -158,15 +158,15 @@ func TestApplyTextureTurnOrderedControlsAtomicReplayAndLegacyIsolation(t *testin
 func TestApplyTextureTurnResearcherOpenerAgentWorkAndFirstControlAreAtomic(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
-	targetAgentID, targetWorkID := "research:atomic-open", "work-researcher-atomic-open"
+	targetAgentID, targetWorkID := "researcher:atomic-open", "work-researcher-atomic-open"
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID = "texture-turn-researcher-opener"
 	control := textureTurnControl(t, "control-researcher-first", targetAgentID, targetWorkID)
 	control.Packet = types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What exact evidence resolves the gap?"}}
 	control.Content = "research exact gap"
 	control.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
-	control.OpenAgent = &types.AgentRecord{AgentID: targetAgentID, Profile: "research", Role: "research", ChannelID: start.InitialDocument.DocID}
-	control.OpenWork = &types.WorkItemRecord{WorkItemID: targetWorkID, Objective: "research exact gap", AuthorityProfile: "research", AssignedAgentID: targetAgentID}
+	control.OpenAgent = &types.AgentRecord{AgentID: targetAgentID, Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID}
+	control.OpenWork = &types.WorkItemRecord{WorkItemID: targetWorkID, Objective: "research exact gap", AuthorityProfile: "researcher", AssignedAgentID: targetAgentID}
 	req.Controls = []types.TextureTurnControl{control}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 
@@ -175,7 +175,7 @@ func TestApplyTextureTurnResearcherOpenerAgentWorkAndFirstControlAreAtomic(t *te
 		t.Fatalf("atomic Researcher opener = %+v, %v", result, err)
 	}
 	agent, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, targetAgentID)
-	if err != nil || agent.Profile != "research" || agent.Role != "research" || agent.ChannelID != start.InitialDocument.DocID || agent.LifecycleVersion != 1 {
+	if err != nil || agent.Profile != "researcher" || agent.Role != "researcher" || agent.ChannelID != start.InitialDocument.DocID || agent.LifecycleVersion != 1 {
 		t.Fatalf("atomic Researcher agent = %+v, %v", agent, err)
 	}
 	work, err := s.GetLifecycleWorkItem(ctx, start.OwnerID, start.ComputerID, targetWorkID)
@@ -201,9 +201,9 @@ func TestApplyTextureTurnResearcherOpenerRefusesMismatchedAgentWithoutPartialMut
 	ctx := context.Background()
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID = "texture-turn-researcher-opener-refusal"
-	control := textureTurnControl(t, "control-researcher-refused", "research:expected", "work-researcher-refused")
-	control.OpenAgent = &types.AgentRecord{AgentID: "research:forged", Profile: "research", Role: "research", ChannelID: start.InitialDocument.DocID}
-	control.OpenWork = &types.WorkItemRecord{WorkItemID: control.TargetWorkItemID, Objective: "must refuse", AuthorityProfile: "research", AssignedAgentID: control.TargetAgentID}
+	control := textureTurnControl(t, "control-researcher-refused", "researcher:expected", "work-researcher-refused")
+	control.OpenAgent = &types.AgentRecord{AgentID: "researcher:forged", Profile: "researcher", Role: "researcher", ChannelID: start.InitialDocument.DocID}
+	control.OpenWork = &types.WorkItemRecord{WorkItemID: control.TargetWorkItemID, Objective: "must refuse", AuthorityProfile: "researcher", AssignedAgentID: control.TargetAgentID}
 	req.Controls = []types.TextureTurnControl{control}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	before, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
@@ -214,7 +214,7 @@ func TestApplyTextureTurnResearcherOpenerRefusesMismatchedAgentWithoutPartialMut
 	if after.SnapshotCursor != before.SnapshotCursor {
 		t.Fatalf("refused Researcher opener partially mutated trajectory: %d -> %d", before.SnapshotCursor, after.SnapshotCursor)
 	}
-	if _, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, "research:forged"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, "researcher:forged"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("refused opener created agent: %v", err)
 	}
 	if _, err := s.GetLifecycleWorkItem(ctx, start.OwnerID, start.ComputerID, control.TargetWorkItemID); !errors.Is(err, ErrNotFound) {
@@ -226,16 +226,16 @@ func TestApplyTextureTurnPersistentSuperOpenerIsAtomic(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	superID := "management:" + start.OwnerID
+	superID := "super:" + start.OwnerID
 	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "management", Role: "management", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+		Profile: "super", Role: "super", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID, req.Reason = "texture-turn-super-opener", "Super execution is required"
 	control := textureTurnControl(t, "control-super-first", superID, "work-super-target")
 	control.OpenWork = &types.WorkItemRecord{WorkItemID: "work-super-target", Objective: "coordinate exact implementation",
-		AuthorityProfile: "management", AssignedAgentID: superID, StepBudget: 8}
+		AuthorityProfile: "super", AssignedAgentID: superID, StepBudget: 8}
 	req.Controls = []types.TextureTurnControl{control}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	result, err := s.ApplyTextureTurn(ctx, req)
@@ -524,19 +524,19 @@ func TestApplyTextureTurnRejectsAuthorityManifestAndConditionalFailuresWithoutMu
 }
 
 func TestApplyTextureTurnRefusesUnsafeTargetsBeforeAnyControlCommit(t *testing.T) {
-	for _, targetID := range []string{"engineering:direct", "management:arbitrary", "research:cross-scope"} {
+	for _, targetID := range []string{"co-super:direct", "super:arbitrary", "researcher:cross-scope"} {
 		t.Run(targetID, func(t *testing.T) {
 			s, start, caller, work := setupLifecycleTextureTargetFixture(t)
 			ctx := context.Background()
 			now := time.Now().UTC()
 			target := types.AgentRecord{AgentID: targetID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, ChannelID: start.InitialDocument.DocID, CreatedAt: now, UpdatedAt: now}
 			switch targetID {
-			case "engineering:direct":
-				target.Profile, target.Role = "engineering", "engineering"
-			case "management:arbitrary":
-				target.Profile, target.Role = "management", "management"
-			case "research:cross-scope":
-				target.Profile, target.Role, target.ComputerID, target.ComputerID = "research", "research", "computer-foreign", "computer-foreign"
+			case "co-super:direct":
+				target.Profile, target.Role = "co-super", "co-super"
+			case "super:arbitrary":
+				target.Profile, target.Role = "super", "super"
+			case "researcher:cross-scope":
+				target.Profile, target.Role, target.ComputerID, target.ComputerID = "researcher", "researcher", "computer-foreign", "computer-foreign"
 			}
 			if err := s.UpsertAgent(ctx, target); err != nil {
 				t.Fatal(err)
@@ -569,7 +569,7 @@ func TestApplyTextureTurnDigestConflictsOnOrderPayloadTargetWorkHeadAndOutcome(t
 		CallerAgentID: "texture:doc", CallerRunID: "run", ExpectedLifecycleVersion: 4, ExpectedCallerLifecycleVersion: 3,
 		ExpectedHeadRevisionID: "head", CallerWorkItemID: "texture-work", CallerWorkDisposition: types.WorkItemOpen,
 		Outcome: types.TextureTurnWait, Reason: "wait"}
-	base.Controls = []types.TextureTurnControl{textureTurnControl(t, "a", "research:a", "work-a"), textureTurnControl(t, "b", "research:b", "work-b")}
+	base.Controls = []types.TextureTurnControl{textureTurnControl(t, "a", "researcher:a", "work-a"), textureTurnControl(t, "b", "researcher:b", "work-b")}
 	original, err := ComputeApplyTextureTurnDigest(base)
 	if err != nil {
 		t.Fatal(err)
@@ -579,7 +579,7 @@ func TestApplyTextureTurnDigestConflictsOnOrderPayloadTargetWorkHeadAndOutcome(t
 			req.Controls[0], req.Controls[1] = req.Controls[1], req.Controls[0]
 		},
 		"payload": func(req *types.ApplyTextureTurnRequest) { req.Controls[0].PayloadDigest = "different" },
-		"target":  func(req *types.ApplyTextureTurnRequest) { req.Controls[0].TargetAgentID = "research:other" },
+		"target":  func(req *types.ApplyTextureTurnRequest) { req.Controls[0].TargetAgentID = "researcher:other" },
 		"work":    func(req *types.ApplyTextureTurnRequest) { req.Controls[0].TargetWorkItemID = "work-other" },
 		"head":    func(req *types.ApplyTextureTurnRequest) { req.ExpectedHeadRevisionID = "head-other" },
 		"outcome": func(req *types.ApplyTextureTurnRequest) { req.Outcome, req.Reason = types.TextureTurnBlock, "block" },

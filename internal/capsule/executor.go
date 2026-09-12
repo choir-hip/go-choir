@@ -268,18 +268,6 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if err := makeSubjectTreeReadOnly(filepath.Join(sourceLower, "workspace", "platform")); err != nil {
 		return nil, err
 	}
-	if spec.VerifierBundleDir != "" {
-		bundleTarget := filepath.Join(sourceLower, "selfdev", "bundle")
-		if err := copyCanonicalSubjectTree(ctx, spec.VerifierBundleDir, bundleTarget); err != nil {
-			return nil, fmt.Errorf("capsule verifier bundle copy: %w", err)
-		}
-		if err := os.WriteFile(filepath.Join(bundleTarget, "binding.json"), []byte(spec.VerifierBinding), 0o444); err != nil {
-			return nil, fmt.Errorf("capsule verifier binding: %w", err)
-		}
-		if err := makeSubjectTreeReadOnly(bundleTarget); err != nil {
-			return nil, err
-		}
-	}
 	caps.SourceSnapshotDigest = sourceDigest
 	lowerLayers := sourceLower + ":" + e.lowerDir
 	if err := MountOverlayFS(caps.MergedDir, caps.UpperDir, caps.WorkDir, lowerLayers); err != nil {
@@ -291,24 +279,6 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	}
 	if err := installBrokerMount(ctx, e.brokerPath, caps.MergedDir); err != nil {
 		return nil, err
-	}
-	if spec.VerifierBundleDir != "" {
-		// The frozen bundle must not be shadowable through the overlay upper:
-		// a writable verifier cell could otherwise replace /selfdev/bundle and
-		// inspect a bundle that is not the operation's. Bind the lower copy
-		// read-only over the merged path so the mount itself is the binding.
-		bundleMount := filepath.Join(caps.MergedDir, "selfdev", "bundle")
-		bundleSource := filepath.Join(sourceLower, "selfdev", "bundle")
-		if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
-			return unix.Mount(bundleSource, bundleMount, "", unix.MS_BIND, "")
-		}); err != nil {
-			return nil, fmt.Errorf("capsule bind verifier bundle: %w", err)
-		}
-		if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
-			return unix.Mount("", bundleMount, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, "")
-		}); err != nil {
-			return nil, fmt.Errorf("capsule harden verifier bundle mount: %w", err)
-		}
 	}
 	cgroup, err := CreateCgroup(spec.CapsuleID, spec)
 	if err != nil {
@@ -518,29 +488,18 @@ func (e *Executor) MintCapability(agentRunID string, role AgentRole, capsuleID s
 	if err != nil {
 		return nil, err
 	}
-	return e.MintCapabilityHandle(agentRunID, role, capsuleID, handle, ttl, "")
+	return e.MintCapabilityHandle(agentRunID, role, capsuleID, handle, ttl)
 }
 
 // MintCapabilityHandle installs a runtime-precommitted opaque handle after the
 // assignment opener has durably bound its digest. The handle remains usable
 // only by the exact run/capsule pair and is never returned to the parent Super.
-func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsuleID, handle string, ttl time.Duration, slot string) (*Capability, error) {
+func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsuleID, handle string, ttl time.Duration) (*Capability, error) {
 	if strings.TrimSpace(agentRunID) == "" || strings.TrimSpace(handle) == "" || handle != strings.TrimSpace(handle) || ttl <= 0 || ttl > 24*time.Hour {
 		return nil, fmt.Errorf("capsule capability requires run identity, canonical opaque handle, and ttl in (0,24h]")
 	}
 	if role != RoleCoSuper && role != RoleResearcher {
 		return nil, fmt.Errorf("capsule capability role %q is not grantable", role)
-	}
-	// Slot is part of the minted authority: assigned CoSuper runs carry
-	// implementation or verifier; every other grant carries none. An
-	// arbitrary slot must not mint.
-	switch slot {
-	case "", "implementation", "verifier":
-	default:
-		return nil, fmt.Errorf("capsule capability slot %q is not grantable", slot)
-	}
-	if role == RoleResearcher && slot != "" {
-		return nil, fmt.Errorf("capsule capability slot %q on a researcher grant", slot)
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -561,7 +520,7 @@ func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsu
 	}
 	capability := &Capability{
 		CapabilityID: capabilityID, Handle: handle, CapsuleID: capsuleID, AgentRunID: agentRunID,
-		AgentRole: role, Slot: slot, TargetCapsule: capsuleID, Verbs: cloneVerbSet(RoleVerbSets[role]),
+		AgentRole: role, TargetCapsule: capsuleID, Verbs: cloneVerbSet(RoleVerbSets[role]),
 		ExpiresAt: time.Now().UTC().Add(ttl),
 	}
 	if err := SignCapability(capability, e.privateKey, "guest-ephemeral"); err != nil {
@@ -660,15 +619,18 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 	// receipt for every admitted evaluation: success, interpreter error,
 	// timeout, cancellation, and receipt-persistence failure. The source digest
 	// is bound before dispatch so the record identifies exactly which program
-	// ran, even when it failed. WorktreeDigest is the post-evaluation subject:
-	// freeze/grant certifies that exact frozen tree, matching Exec.
+	// ran, even when it failed.
 	sourceDigest := computerevent.DigestBytes([]byte(request.Source))
+	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
+	if err != nil {
+		worktreeDigest = ""
+	}
 
-	result, evalErr := caps.GoEval(ctx, capability, request)
+	result, err := caps.GoEval(ctx, capability, request)
 	exitCode := 0
 	stdoutDigest := computerevent.DigestBytes([]byte(result.Stdout))
 	stderrDigest := computerevent.DigestBytes([]byte(result.Stderr))
-	if evalErr != nil {
+	if err != nil {
 		exitCode = 1
 		// An interpreter error or timeout must never look like a successful exit.
 		if result.ExitCode != 0 {
@@ -678,11 +640,6 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 		exitCode = result.ExitCode
 	}
 
-	worktreeDigest, digestErr := digestCapsuleWorktree(ctx, caps)
-	if digestErr != nil {
-		worktreeDigest = ""
-	}
-
 	receipt := ExecutionReceipt{
 		AgentRunID: agentRunID, CapabilityHandleDigest: computerevent.DigestBytes([]byte(handle)),
 		CapsuleID: caps.ID,
@@ -690,17 +647,17 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 		StdoutDigest: stdoutDigest, StderrDigest: stderrDigest,
 		WorktreeDigest: worktreeDigest, SourceTreeDigest: caps.SourceSnapshotDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
-	canonical, errJSON := computerevent.CanonicalJSON(receipt)
-	if errJSON != nil {
-		return GoEvalResult{}, errJSON
+	canonical, err := computerevent.CanonicalJSON(receipt)
+	if err != nil {
+		return GoEvalResult{}, err
 	}
 	receipt.ReceiptRef = "capsule-go-eval:sha256:" + computerevent.DigestBytes(canonical)
-	storedCanonical, errStored := computerevent.CanonicalJSON(receipt)
-	if errStored != nil {
-		return GoEvalResult{}, errStored
+	storedCanonical, err := computerevent.CanonicalJSON(receipt)
+	if err != nil {
+		return GoEvalResult{}, err
 	}
-	if errPersist := e.persistReceiptArtifact("execution", receipt.ReceiptRef, storedCanonical); errPersist != nil {
-		return GoEvalResult{}, errPersist
+	if err := e.persistReceiptArtifact("execution", receipt.ReceiptRef, storedCanonical); err != nil {
+		return GoEvalResult{}, err
 	}
 	e.mu.Lock()
 	e.executionReceipts[receipt.ReceiptRef] = receipt
@@ -709,10 +666,10 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 	// Bind the attempt outcome into the returned result so the actor can cite the
 	// exact receipt even on failure; a timeout must not report ExitCode 0.
 	result.ReceiptRef = receipt.ReceiptRef
-	if result.ExitCode == 0 && evalErr != nil {
+	if result.ExitCode == 0 && err != nil {
 		result.ExitCode = exitCode
 	}
-	return result, evalErr
+	return result, err
 }
 
 func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request ExecRequest) (ExecResult, error) {
@@ -847,13 +804,6 @@ func (e *Executor) OpenCapsuleFateReceipt(ref string) (CapsuleFateReceipt, error
 }
 
 func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
-	ref = strings.TrimSpace(ref)
-	if strings.HasPrefix(ref, "rlm:") {
-		return ExecutionReceipt{}, fmt.Errorf("receipt reference %q is an internal intent token, not an execution receipt (expected capsule-go-eval:sha256:* or capsule-exec:sha256:*)", ref)
-	}
-	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") {
-		return ExecutionReceipt{}, fmt.Errorf("executor receipt %q is invalid: unsupported prefix (expected capsule-go-eval:sha256:* or capsule-exec:sha256:*)", ref)
-	}
 	e.mu.RLock()
 	stored, ok := e.executionReceipts[ref]
 	e.mu.RUnlock()
@@ -878,12 +828,15 @@ func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
 	// capsule-fate), not a hard-coded one. A Go-eval receipt stored as
 	// capsule-go-eval:sha256: must re-verify after executor restart, or auditable
 	// evidence is not restart-durable.
-	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") {
+	if !strings.HasPrefix(ref, "capsule-exec:sha256:") && !strings.HasPrefix(ref, "capsule-go-eval:sha256:") && !strings.HasPrefix(ref, "capsule-fate:sha256:") {
 		return ExecutionReceipt{}, fmt.Errorf("executor receipt digest mismatch")
 	}
 	prefix := "capsule-exec:sha256:"
-	if strings.HasPrefix(ref, "capsule-go-eval:sha256:") {
+	switch {
+	case strings.HasPrefix(ref, "capsule-go-eval:sha256:"):
 		prefix = "capsule-go-eval:sha256:"
+	case strings.HasPrefix(ref, "capsule-fate:sha256:"):
+		prefix = "capsule-fate:sha256:"
 	}
 	if prefix+computerevent.DigestBytes(canonical) != ref {
 		return ExecutionReceipt{}, fmt.Errorf("executor receipt digest mismatch")
@@ -930,19 +883,20 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 	if err != nil {
 		return nil, err
 	}
-	handleDigest := computerevent.DigestBytes([]byte(handle))
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	receipts := make([]ExecutionReceipt, 0, len(refs))
 	seen := make(map[string]struct{}, len(refs))
 	for _, ref := range refs {
 		if _, duplicate := seen[ref]; duplicate {
 			continue
 		}
-		receipt, openErr := e.OpenExecutionReceipt(ref)
-		if openErr != nil {
-			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject: %s: %w", ref, openErr)
-		}
-		if reason := grantedExecutionBindReason(receipt, agentRunID, handleDigest, caps.ID, worktreeDigest, caps.SourceSnapshotDigest); reason != "" {
-			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject: %s", reason)
+		receipt, found := e.executionReceipts[ref]
+		handleDigest := computerevent.DigestBytes([]byte(handle))
+		if !found || receipt.AgentRunID != agentRunID || receipt.CapabilityHandleDigest != handleDigest ||
+			receipt.CapsuleID != caps.ID || receipt.ExitCode != 0 || receipt.WorktreeDigest != worktreeDigest ||
+			receipt.SourceTreeDigest != caps.SourceSnapshotDigest {
+			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject")
 		}
 		granted := GrantedExecutionReceipt{Execution: receipt, AgentRunID: agentRunID, CapabilityHandleDigest: handleDigest,
 			CapsuleID: caps.ID, Frozen: true, SourceSubjectDigest: caps.SourceSnapshotDigest, FinalSubjectDigest: worktreeDigest}
@@ -958,17 +912,8 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 		if persistErr := e.persistReceiptArtifact("granted", granted.ReceiptRef, canonical); persistErr != nil {
 			return nil, persistErr
 		}
-		receipt.GrantedReceiptRef = granted.ReceiptRef
-		e.mu.Lock()
-		if e.grantedReceipts == nil {
-			e.grantedReceipts = map[string]GrantedExecutionReceipt{}
-		}
-		if e.executionReceipts == nil {
-			e.executionReceipts = map[string]ExecutionReceipt{}
-		}
 		e.grantedReceipts[granted.ReceiptRef] = granted
-		e.executionReceipts[ref] = receipt
-		e.mu.Unlock()
+		receipt.GrantedReceiptRef = granted.ReceiptRef
 		seen[ref] = struct{}{}
 		receipts = append(receipts, receipt)
 	}
@@ -1715,13 +1660,26 @@ func prepareCapsuleRoot(root, upperDir string) error {
 			return fmt.Errorf("capsule bind device %s: %w", device, err)
 		}
 	}
+	pts := filepath.Join(root, "dev", "pts")
+	if err := os.MkdirAll(pts, 0o755); err != nil {
+		return fmt.Errorf("capsule prepare dev/pts: %w", err)
+	}
+	if err := unix.Mount("/dev/pts", pts, "", unix.MS_BIND, ""); err != nil {
+		return fmt.Errorf("capsule bind dev/pts: %w", err)
+	}
+	if err := writeCapsuleIdentityEtc(upperDir); err != nil {
+		return err
+	}
+	_ = filepath.Walk(upperDir, func(p string, info os.FileInfo, err error) error {
+		if err == nil {
+			_ = os.Chown(p, capsuleNamespaceHostID, capsuleNamespaceHostID)
+		}
+		return nil
+	})
 	return nil
 }
 
 func unmountCapsuleRoot(root string) error {
-	// Nested mounts detach before the overlay root; order is leaf-first.
-	bundleMount := filepath.Join(root, "selfdev", "bundle")
-	_ = unix.Unmount(bundleMount, unix.MNT_DETACH)
 	currentSystemMount := filepath.Join(root, "run", "current-system")
 	_ = unix.Unmount(currentSystemMount, unix.MNT_DETACH)
 	brokerMount := filepath.Join(root, "run", "capsule", "broker")

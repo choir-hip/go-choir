@@ -1367,7 +1367,7 @@ func TestTextureEditToolsRefusePresentInvalidWorkDisposition(t *testing.T) {
 		"updates_unknown":          json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","work_disposition":"open","update_dispositions":[{"update_id":"u","disposition":"incorporated","receipt":"fake"}]}`),
 		"rejection_without_reason": json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","work_disposition":"open","update_dispositions":[{"update_id":"u","disposition":"rejected"}]}`),
 		"control_raw_content":      json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","content":"escape","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
-		"control_target_agent":     json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","target_agent_id":"research:foreign","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
+		"control_target_agent":     json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","target_agent_id":"researcher:foreign","packet":{"kind":"question","summary":"q","questions":["q"]}}]}`),
 		"control_direction":        json.RawMessage(`{"doc_id":"doc","base_revision_id":"rev","content":"next","rationale":"test","controls":[{"target_work_item_id":"work","packet":{"kind":"question","summary":"q","questions":["q"],"direction":"target_control"}}]}`),
 	} {
 		t.Run(name, func(t *testing.T) {

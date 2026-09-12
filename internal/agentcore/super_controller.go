@@ -343,7 +343,7 @@ func (rt *Runtime) resumeSelfDevelopmentSuperForPendingInstruction(ctx context.C
 func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	rt.superReconcileMu.Lock()
 	defer rt.superReconcileMu.Unlock()
-	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, false, "")
+	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, false)
 }
 
 // reconcilePersistentSuperActorForOwnerStart is the wake path for the owner's
@@ -356,7 +356,7 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 func (rt *Runtime) reconcilePersistentSuperActorForOwnerStart(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	rt.superReconcileMu.Lock()
 	defer rt.superReconcileMu.Unlock()
-	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, true, "")
+	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, true)
 }
 
 // ResumeInterruptedPersistentSuperControlRun is the dedicated structurally isolated
@@ -396,7 +396,7 @@ func (rt *Runtime) resumeInterruptedPersistentSuperControlRunLocked(ctx context.
 	return nil, false, nil
 }
 
-func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string, allowInstructionResume bool, exactUpdateID string) (*types.RunRecord, error) {
+func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string, allowInstructionResume bool) (*types.RunRecord, error) {
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
 	}
@@ -406,26 +406,17 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, fmt.Errorf("check resident super run: %w", err)
 	} else if found {
-		if err := rt.persistentSuperResidentMatchesExact(&resident, exactUpdateID); err != nil {
-			return nil, err
-		}
 		return &resident, nil
 	}
 	if resumed, ok, err := rt.reactivateRestartedPersistentSuperControlRun(ctx, ownerID, agentID); err != nil {
 		return nil, err
 	} else if ok {
-		if err := rt.persistentSuperResidentMatchesExact(resumed, exactUpdateID); err != nil {
-			return nil, err
-		}
 		return resumed, nil
 	}
 	if active, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
 		if active.State == types.RunBlocked {
 			// A blocked Super is awaiting external input/approval; do not spawn
 			// a competing Super or mint an unprompted Texture rewake.
-			if err := rt.persistentSuperResidentMatchesExact(&active, exactUpdateID); err != nil {
-				return nil, err
-			}
 			return &active, nil
 		}
 	} else if !errors.Is(err, store.ErrNotFound) {
@@ -459,26 +450,6 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	}
 
 	first := updates[0]
-	if exact := strings.TrimSpace(exactUpdateID); exact != "" {
-		matched := false
-		for _, update := range updates {
-			if strings.TrimSpace(update.UpdateID) != exact {
-				continue
-			}
-			targetWork := firstNonEmpty(update.TargetWorkItemID, update.WorkItemID)
-			selected := selectLifecycleControlActivation(updates, update.TrajectoryID, map[string]bool{strings.TrimSpace(targetWork): true})
-			if len(selected) == 0 {
-				selected = []types.CoagentSourcePacket{update}
-			}
-			updates = selected
-			first = selected[0]
-			matched = true
-			break
-		}
-		if !matched {
-			return nil, fmt.Errorf("exact live Super control %s is not pending", exact)
-		}
-	}
 	requestSource := "update_coagent"
 	if lifecycleControls {
 		requestSource = "lifecycle_texture_control"
@@ -1371,9 +1342,7 @@ func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Conte
 	if err != nil {
 		return nil, fmt.Errorf("load exact persistent Super: %w", err)
 	}
-	agentProfile, _ := agentprofile.Canonical(agent.Profile)
-	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if agentProfile != agentprofile.Super || agentRole != agentprofile.Super || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
+	if agentprofile.Canonical(agent.Profile) != agentprofile.Super || agentprofile.Canonical(agent.Role) != agentprofile.Super || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
 		return nil, fmt.Errorf("persistent Super lifecycle control target has invalid authority")
 	}
 	updates, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
@@ -1415,14 +1384,12 @@ func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, own
 }
 
 func persistentSuperSenderAuthorized(update types.CoagentSourcePacket) bool {
-	role, _ := agentprofile.Canonical(update.Role)
-	return role == agentprofile.Texture &&
+	return agentprofile.Canonical(update.Role) == agentprofile.Texture &&
 		update.Direction == types.LifecyclePacketDirectionControl
 }
 
 func persistentSuperAdmissibleReport(update types.CoagentSourcePacket) bool {
-	role, _ := agentprofile.Canonical(update.Role)
-	if role != agentprofile.CoSuper ||
+	if agentprofile.Canonical(update.Role) != agentprofile.CoSuper ||
 		update.Direction != types.LifecyclePacketDirectionProducerReport {
 		return false
 	}
@@ -1699,7 +1666,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		}
 		return nil, fmt.Errorf("lookup coagent: %w", err)
 	}
-	profile, _ := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))
+	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))
 	lifecycleAgent := profile == agentprofile.Researcher && agent.LifecycleVersion > 0
 	if residentFound && !lifecycleAgent {
 		return &resident, nil
@@ -2445,10 +2412,8 @@ func (rt *Runtime) parkedLifecycleControlCandidate(ctx context.Context, ownerID,
 	var candidate *types.RunRecord
 	for index := range runs {
 		run := &runs[index]
-		scanProfile, _ := agentprofile.Canonical(run.AgentProfile)
-		scanRole, _ := agentprofile.Canonical(run.AgentRole)
 		if strings.TrimSpace(run.AgentID) != agentID || (run.State != types.RunPassivated && run.State != types.RunBlocked) ||
-			scanProfile != agentprofile.Researcher || scanRole != agentprofile.Researcher ||
+			agentprofile.Canonical(run.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(run.AgentRole) != agentprofile.Researcher ||
 			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" ||
 			metadataStringValue(run.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(run.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
 			continue
@@ -2536,18 +2501,14 @@ func (rt *Runtime) reconcileParkedLifecycleCoagentWakeLocked(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	agentProfile, _ := agentprofile.Canonical(agent.Profile)
-	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentProfile != agentprofile.Researcher || agentRole != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentprofile.Canonical(agent.Profile) != agentprofile.Researcher || agentprofile.Canonical(agent.Role) != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
 		return nil, store.ErrLifecycleInvalidTransition
 	}
 	rec, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID)
 	if err != nil {
 		return nil, err
 	}
-	runProfile, _ := agentprofile.Canonical(rec.AgentProfile)
-	runRole, _ := agentprofile.Canonical(rec.AgentRole)
-	if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || runProfile != agentprofile.Researcher || runRole != agentprofile.Researcher ||
+	if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || agentprofile.Canonical(rec.AgentProfile) != agentprofile.Researcher || agentprofile.Canonical(rec.AgentRole) != agentprofile.Researcher ||
 		(rec.State != types.RunPassivated && !rec.State.Active()) || metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
 		metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
 		return nil, store.ErrLifecycleInvalidTransition
@@ -2620,116 +2581,6 @@ func (rt *Runtime) ReconcileCoagentWake(ctx context.Context, ownerID, agentID st
 		return rt.reconcilePersistentSuperActor(ctx, ownerID, agentID)
 	}
 	return rt.reconcileUpdatedCoagentActor(ctx, ownerID, agentID)
-}
-
-func (rt *Runtime) persistentSuperResidentMatchesExact(rec *types.RunRecord, exactUpdateID string) error {
-	exact := strings.TrimSpace(exactUpdateID)
-	if rec == nil || exact == "" {
-		return nil
-	}
-	for _, id := range metadataStringSlice(rec.Metadata["worker_update_ids"]) {
-		if strings.TrimSpace(id) == exact {
-			return nil
-		}
-	}
-	for _, id := range persistentSuperBoundUpdateIDs(rec.Metadata["lifecycle_control_bindings"]) {
-		if id == exact {
-			return nil
-		}
-	}
-	return fmt.Errorf("%w: persistent Super slot occupied by run %s", ErrActivationOccurrenceMustRemainUnprocessed, rec.RunID)
-}
-
-func persistentSuperBoundUpdateIDs(raw any) []string {
-	appendID := func(dst []string, id string) []string {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return dst
-		}
-		return append(dst, id)
-	}
-	switch value := raw.(type) {
-	case []any:
-		out := make([]string, 0, len(value))
-		for _, rawEntry := range value {
-			switch entry := rawEntry.(type) {
-			case map[string]any:
-				out = appendID(out, fmt.Sprint(entry["update_id"]))
-			case map[string]string:
-				out = appendID(out, entry["update_id"])
-			}
-		}
-		return out
-	case []map[string]any:
-		out := make([]string, 0, len(value))
-		for _, entry := range value {
-			out = appendID(out, fmt.Sprint(entry["update_id"]))
-		}
-		return out
-	case []map[string]string:
-		out := make([]string, 0, len(value))
-		for _, entry := range value {
-			out = appendID(out, entry["update_id"])
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-// ResolvePersistentSuperLiveOccurrence binds a hashed live Texture→Super wake
-// to the exact pending control named by the occurrence. Generic
-// ReconcileCoagentWake remains FIFO; this path is the live trigger.
-func (rt *Runtime) ResolvePersistentSuperLiveOccurrence(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (*types.RunRecord, bool, error) {
-	if rt == nil || rt.store == nil {
-		return nil, false, fmt.Errorf("runtime store unavailable")
-	}
-	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
-	content, trajectoryID, fromAgentID = strings.TrimSpace(content), strings.TrimSpace(trajectoryID), strings.TrimSpace(fromAgentID)
-	if ownerID == "" || computerID == "" || agentID == "" || !strings.HasPrefix(content, "sha256:") {
-		return nil, false, fmt.Errorf("%w: unsupported live Super occurrence", ErrInvalidPersistentSuperRecovery)
-	}
-	if agentID != persistentSuperAgentID(ownerID) {
-		return nil, false, fmt.Errorf("%w: not persistent Super", ErrInvalidPersistentSuperRecovery)
-	}
-	if computerID != strings.TrimSpace(rt.TextureComputerID()) {
-		return nil, false, fmt.Errorf("%w: computer mismatch", ErrInvalidPersistentSuperRecovery)
-	}
-	rt.superReconcileMu.Lock()
-	defer rt.superReconcileMu.Unlock()
-	pending, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
-	if err != nil {
-		return nil, false, err
-	}
-	var matched types.CoagentSourcePacket
-	found := false
-	for _, update := range pending {
-		if lifecycleControlActorOccurrenceContent(update) != content {
-			continue
-		}
-		if trajectoryID != "" && strings.TrimSpace(update.TrajectoryID) != trajectoryID {
-			continue
-		}
-		if fromAgentID != "" && strings.TrimSpace(update.AgentID) != fromAgentID {
-			continue
-		}
-		if found {
-			return nil, false, fmt.Errorf("%w: ambiguous live Super occurrence", ErrInvalidPersistentSuperRecovery)
-		}
-		matched = update
-		found = true
-	}
-	if !found {
-		return nil, true, nil
-	}
-	rec, err := rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, false, matched.UpdateID)
-	if err != nil {
-		return nil, false, err
-	}
-	if rec == nil {
-		return nil, true, nil
-	}
-	return rec, false, nil
 }
 
 // LifecycleControlActorOccurrenceContent returns the deterministic actor-log

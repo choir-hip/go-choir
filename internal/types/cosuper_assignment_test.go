@@ -14,8 +14,8 @@ func validCoSuperAssignmentFixture(kind CoSuperAssignmentKind, writable bool) Co
 	now := time.Now().UTC()
 	binding := CoSuperAssignmentBinding{
 		OwnerID: "owner", ComputerID: "computer", TrajectoryID: "trajectory",
-		ParentAgentID: "management:owner", ParentRunID: "run-super", ParentDecisionID: "decision:" + assignmentDigest("d"), ParentControlID: "control-1",
-		ParentWorkItemID: "work-super", AssignedWorkItemID: "work-cosuper", AssignedAgentID: "engineering:one",
+		ParentAgentID: "super:owner", ParentRunID: "run-super", ParentDecisionID: "decision:" + assignmentDigest("d"), ParentControlID: "control-1",
+		ParentWorkItemID: "work-super", AssignedWorkItemID: "work-cosuper", AssignedAgentID: "co-super:one",
 		Kind: kind, Attempt: 1, ScopeDigest: assignmentDigest("a"), RequestDigest: assignmentDigest("e"), CapabilityDigest: assignmentDigest("b"), ExecutionHandleDigest: assignmentDigest("f"),
 		SubjectDigest: assignmentDigest("c"), SourceArtifactRef: "capsule-source-git:commit:" + assignmentDigest("c"), Writable: writable,
 		NetworkMode:    CoSuperCapsuleNetworkForbidden,
@@ -44,7 +44,7 @@ func TestCoSuperAssignmentBindingValidationExhaustive(t *testing.T) {
 		"owner":                         func(a *CoSuperAssignment) { a.Binding.OwnerID = "" },
 		"computer":                      func(a *CoSuperAssignment) { a.Binding.ComputerID = "" },
 		"trajectory":                    func(a *CoSuperAssignment) { a.Binding.TrajectoryID = "" },
-		"exact super":                   func(a *CoSuperAssignment) { a.Binding.ParentAgentID = "management:other" },
+		"exact super":                   func(a *CoSuperAssignment) { a.Binding.ParentAgentID = "super:other" },
 		"parent run":                    func(a *CoSuperAssignment) { a.Binding.ParentRunID = "" },
 		"parent decision":               func(a *CoSuperAssignment) { a.Binding.ParentDecisionID = "" },
 		"parent control":                func(a *CoSuperAssignment) { a.Binding.ParentControlID = "" },

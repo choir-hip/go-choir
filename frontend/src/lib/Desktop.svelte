@@ -23,7 +23,6 @@
   import { onDestroy } from 'svelte';
   import { tick } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError, renewSession } from './auth.js';
-  import { handoffToComputerSurfaceIfStale } from './computer-surface-handoff.js';
   import { submitConductorPrompt, waitForConductorDecision } from './conductor.js';
   import { fetchDesktopState, saveDesktopState } from './desktop.js';
   import { withDesktopSelector } from './desktop-selector.js';
@@ -296,7 +295,6 @@
         liveStatus.set('error');
         return;
       }
-      if (await handoffToComputerSurfaceIfStale()) return;
       appendBootLine('Opening live channel');
       connectLiveChannel();
       appendBootLine('Restoring desktop state');
@@ -428,13 +426,10 @@
     const payload = liveEventPayload(message);
     observeRemoteDriverSession(payload.source_session_id || '');
     if (!desktopLiveEventAffectsSharedState(message)) return;
-    // Desktop layout is viewport- and interaction-sensitive. If the local session
-    // is actively driving or has pending un-persisted local mutations (e.g. saveTimer is armed),
-    // we must merge shared state rather than replacing local state, so local window
-    // modes (e.g. minimized), active focus, and pending interactions are preserved.
-    if (isDrivingSession() || saveTimer !== null) {
-      void mergeRemoteDesktopSharedState();
-    } else if (shouldApplyRemoteDesktopStateUpdate()) {
+    // Desktop layout is viewport- and interaction-sensitive. Passive sessions
+    // should converge on the latest owner state; a session with a current local
+    // driver lease keeps its in-progress foreground geometry until it saves.
+    if (shouldApplyRemoteDesktopStateUpdate()) {
       void loadDesktopState();
     } else {
       void mergeRemoteDesktopSharedState();
@@ -860,13 +855,11 @@
   let unsubscribeIconPositions;
 
   function handlePageHide() {
-    if (saveTimer !== null) {
-      void flushDesktopState({ keepalive: true });
-    }
+    void flushDesktopState({ keepalive: true });
   }
 
   function handleVisibilityChange() {
-    if (document.visibilityState === 'hidden' && saveTimer !== null) {
+    if (document.visibilityState === 'hidden') {
       void flushDesktopState({ keepalive: true });
     }
   }

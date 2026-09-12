@@ -174,12 +174,10 @@ func (h *Handler) callTextureSemanticMergeModel(ctx context.Context, ownerID str
 		Provider:        selection.Provider,
 		Model:           selection.Model,
 		ReasoningEffort: selection.ReasoningEffort,
-		ConversationID:  toolregistry.ExecutionContextFrom(ctx).RunID,
-
-		System:     "You are Choir's Texture semantic merge engine. Return only valid JSON matching the requested schema. Do not write markdown prose.",
-		Messages:   []json.RawMessage{message},
-		ToolChoice: "none",
-		MaxTokens:  maxTokens,
+		System:          "You are Choir's Texture semantic merge engine. Return only valid JSON matching the requested schema. Do not write markdown prose.",
+		Messages:        []json.RawMessage{message},
+		ToolChoice:      "none",
+		MaxTokens:       maxTokens,
 	}, nil)
 	latency := time.Since(start)
 	evidence := map[string]any{

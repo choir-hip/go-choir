@@ -10,7 +10,7 @@ import (
 
 func TestActorRegistrationAndState(t *testing.T) {
 	mgr := NewActorStateManager()
-	actor, err := mgr.RegisterActor("actor-cosuper-1", "engineering", "gpt-5.6-sol")
+	actor, err := mgr.RegisterActor("actor-cosuper-1", "cosuper", "gpt-5.6-sol")
 	if err != nil {
 		t.Fatalf("RegisterActor failed: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestActorRegistrationAndState(t *testing.T) {
 
 func TestRewarmActorMonotonicEpochAndContinuity(t *testing.T) {
 	mgr := NewActorStateManager()
-	_, err := mgr.RegisterActor("actor-cosuper-2", "engineering", "gpt-5.6-sol")
+	_, err := mgr.RegisterActor("actor-cosuper-2", "cosuper", "gpt-5.6-sol")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestEpochFencingEndToEnd(t *testing.T) {
 	}
 
 	mgr := NewActorStateManager()
-	actor, err := mgr.RegisterActor("actor-fenced", "engineering", "model-v1")
+	actor, err := mgr.RegisterActor("actor-fenced", "cosuper", "model-v1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestEpochFencingEndToEnd(t *testing.T) {
 	}
 
 	// Issue handle for Epoch 1
-	h1, err := issuer.Issue("computer-1", "engineering", actor.CurrentEpoch, []BrokerAction{ActionExec}, 10*time.Minute)
+	h1, err := issuer.Issue("computer-1", "cosuper", actor.CurrentEpoch, []BrokerAction{ActionExec}, 10*time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestEpochFencingEndToEnd(t *testing.T) {
 	}
 
 	// Issue fresh handle for Epoch 2
-	h2, err := issuer.Issue("computer-1", "engineering", actor.CurrentEpoch, []BrokerAction{ActionExec}, 10*time.Minute)
+	h2, err := issuer.Issue("computer-1", "cosuper", actor.CurrentEpoch, []BrokerAction{ActionExec}, 10*time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}

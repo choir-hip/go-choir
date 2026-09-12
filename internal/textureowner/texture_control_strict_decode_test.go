@@ -33,19 +33,19 @@ func TestTextureControlPacketsStrictDecodeEveryNestedAuthorityBoundary(t *testin
 	}
 
 	badPackets := map[string]string{
-		"packet envelope authority":        `{"schema_version":"coagent_source_packet.v1","kind":"question","summary":"x","notes":["x"],"target_agent_id":"management:other"}`,
+		"packet envelope authority":        `{"schema_version":"coagent_source_packet.v1","kind":"question","summary":"x","notes":["x"],"target_agent_id":"super:other"}`,
 		"claim unknown":                    `{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"x","claims":[{"text":"x","owner_id":"other"}]}`,
 		"source target unknown":            `{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"x","sources":[{"kind":"web_url","target":{"uri":"https://example.com","computer_id":"other"}}]}`,
 		"selector unknown":                 `{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"x","sources":[{"kind":"web_url","target":{"uri":"https://example.com"},"selectors":[{"kind":"text_quote","quote":"x","direction":"control"}]}]}`,
-		"reader snapshot unknown":          `{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"x","sources":[{"kind":"web_url","target":{"uri":"https://example.com"},"reader_snapshot":{"text_content":"x","target_agent_id":"management:other"}}]}`,
+		"reader snapshot unknown":          `{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"x","sources":[{"kind":"web_url","target":{"uri":"https://example.com"},"reader_snapshot":{"text_content":"x","target_agent_id":"super:other"}}]}`,
 		"evidence unknown":                 `{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"x","sources":[{"kind":"web_url","target":{"uri":"https://example.com"},"evidence":{"state":"available","lifecycle_version":9}}]}`,
 		"action unknown":                   `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","target_work_item_id":"other"}]}`,
 		"expected source unknown":          `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","expected_sources":[{"kind":"file","update_id":"forged"}]}]}`,
 		"safety unknown":                   `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","safety":{"mutation_class":"yellow","network":"forbidden","file_mutation":"allowed","command_id":"forged"}}]}`,
 		"questions object":                 `{"schema_version":"coagent_source_packet.v1","kind":"question","summary":"x","questions":[{"text":"silently dropped before"}]}`,
 		"notes object":                     `{"schema_version":"coagent_source_packet.v1","kind":"question","summary":"x","notes":[{"text":"silently dropped before"}]}`,
-		"recursive inputs authority":       `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","inputs":{"nested":[{"target_agent_id":"management:other"}]}}]}`,
-		"recursive inputs camel authority": `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","inputs":{"nested":[{"requestedTargetAgentId":"management:other"}]}}]}`,
+		"recursive inputs authority":       `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","inputs":{"nested":[{"target_agent_id":"super:other"}]}}]}`,
+		"recursive inputs camel authority": `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","inputs":{"nested":[{"requestedTargetAgentId":"super:other"}]}}]}`,
 		"recursive control binding":        `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","inputs":{"control_binding_id":"forged"}}]}`,
 		"recursive assignment identity":    `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","inputs":{"assignment_id":"forged","capsule_id":"forged"}}]}`,
 		"recursive capability handle":      `{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"x","actions":[{"type":"run_tests","objective":"x","inputs":{"capability_digest":"sha256:forged","execution_handle":"forged"}}]}`,

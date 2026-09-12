@@ -1,17 +1,18 @@
 package autoputer
 
 import (
+	"archive/tar"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
-	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
-	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
 func TestIsStoreEmpty(t *testing.T) {
@@ -29,87 +30,84 @@ func TestIsStoreEmpty(t *testing.T) {
 	}
 }
 
-func bootTestServer(t *testing.T, headStatus int, headBody any, watermarkStatus int, watermarkBody any, calls *int) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		*calls++
-		switch r.URL.Path {
-		case "/internal/computers/events/head":
-			w.WriteHeader(headStatus)
-			if headBody != nil {
-				_ = json.NewEncoder(w).Encode(headBody)
-			}
-		case "/internal/computers/files/watermark":
-			w.WriteHeader(watermarkStatus)
-			if watermarkBody != nil {
-				_ = json.NewEncoder(w).Encode(watermarkBody)
-			}
-		default:
-			w.WriteHeader(http.StatusNotFound)
+func TestMaterializeProjectionBaseIfNeeded(t *testing.T) {
+	storeDir := t.TempDir()
+	computerID := "test-computer-1"
+
+	// Create a dummy tar archive representing a ProjectionBase
+	var tarBuf strings.Builder
+	hasher := sha256.New()
+	mw := io.MultiWriter(&tarBuf, hasher)
+	tw := tar.NewWriter(mw)
+
+	content := []byte("schema_version=1\n")
+	hdr := &tar.Header{
+		Name: "runtime.db",
+		Mode: 0o644,
+		Size: int64(len(content)),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	tarBytes := []byte(tarBuf.String())
+	digest := hex.EncodeToString(hasher.Sum(nil))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-cap" {
+			http.Error(w, "unauthorized", http.StatusForbidden)
+			return
 		}
+		if r.URL.Path == "/internal/computers/files/watermark" {
+			_ = json.NewEncoder(w).Encode(watermarkResponse{
+				WatermarkSequence: 100,
+				BaseRef:           digest,
+			})
+			return
+		}
+		if r.URL.Path == "/internal/computers/events/payload" {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(tarBytes)
+			return
+		}
+		http.NotFound(w, r)
 	}))
-}
-
-func TestMaterializeBootstrapsNewComputerWithoutBase(t *testing.T) {
-	var calls int
-	server := bootTestServer(t, http.StatusNotFound, nil, http.StatusNotFound, nil, &calls)
 	defer server.Close()
-	capability := func(ctx context.Context) (string, error) { return "test-cap", nil }
 
-	materialized, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(t.TempDir(), "runtime.db"), "computer-new", server.URL, capability, nil)
+	capability := func(ctx context.Context) (string, error) {
+		return "test-cap", nil
+	}
+
+	materialized, err := materializeProjectionBaseIfNeeded(context.Background(), storeDir, computerID, server.URL, capability)
 	if err != nil {
-		t.Fatalf("bootstrap refused: %v", err)
+		t.Fatalf("materializeProjectionBaseIfNeeded failed: %v", err)
 	}
-	if materialized {
-		t.Fatalf("bootstrap must not claim a base was installed")
+	if !materialized {
+		t.Fatalf("expected materialized to be true")
 	}
-}
 
-func TestMaterializeRefusesMissingBaseForExistingChain(t *testing.T) {
-	var calls int
-	head := map[string]any{"computer_id": "computer-old", "sequence": 42, "canonical_event_head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
-	server := bootTestServer(t, http.StatusOK, head, http.StatusNotFound, nil, &calls)
-	defer server.Close()
-	capability := func(ctx context.Context) (string, error) { return "test-cap", nil }
-
-	storeDir := t.TempDir()
-	_, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(storeDir, "runtime.db"), "computer-old", server.URL, capability, nil)
-	if !errors.Is(err, projectionbase.ErrBaseRefused) {
-		t.Fatalf("missing required base did not refuse: %v", err)
-	}
-	entries, readErr := os.ReadDir(storeDir)
-	if readErr != nil || len(entries) != 0 {
-		t.Fatalf("refused install mutated the store dir: %v %v", entries, readErr)
-	}
-}
-
-func TestMaterializeRefusesStaleWatermarkOnRetainedStore(t *testing.T) {
-	var calls int
-	head := map[string]any{
-		"computer_id":          "computer-live",
-		"sequence":             148333,
-		"canonical_event_head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}
-	watermark := map[string]any{"watermark_sequence": 13, "base_ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
-	server := bootTestServer(t, http.StatusOK, head, http.StatusOK, watermark, &calls)
-	defer server.Close()
-	capability := func(ctx context.Context) (string, error) { return "test-cap", nil }
-
-	storeDir := t.TempDir()
-	storePath := filepath.Join(storeDir, "runtime.db")
-	store, err := choirstore.Open(storePath)
+	// Verify unpacked file exists
+	unpacked := filepath.Join(storeDir, "runtime.db")
+	data, err := os.ReadFile(unpacked)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("read unpacked file failed: %v", err)
 	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
+	if string(data) != string(content) {
+		t.Fatalf("unpacked content mismatch: got %q, want %q", string(data), string(content))
 	}
 
-	_, err = materializeProjectionBaseIfNeeded(context.Background(), storePath, "computer-live", server.URL, capability, nil)
-	if !errors.Is(err, projectionbase.ErrBaseRefused) {
-		t.Fatalf("stale W=13 against H=148333 must refuse, got %v", err)
+	// Second run should short-circuit because storeDir is now non-empty
+	materialized2, err := materializeProjectionBaseIfNeeded(context.Background(), storeDir, computerID, server.URL, capability)
+	if err != nil {
+		t.Fatalf("second call failed: %v", err)
 	}
-	if _, statErr := os.Stat(storePath); statErr != nil {
-		t.Fatalf("refusal mutated the retained marker: %v", statErr)
+	if materialized2 {
+		t.Fatalf("expected second call to short-circuit and return false")
 	}
 }
