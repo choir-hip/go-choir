@@ -1,0 +1,247 @@
+{
+  "operation": "inspect_self_development_bundle",
+  "tool": "inspect_self_development_bundle",
+  "successor": "choir.InspectBundle",
+  "build_sha": "a907f713",
+  "semantic_id": "run:rlm-verify|selfdev-rlm-replay|50d4cdab1b7185906446f9d089082bac4942b513bb39d318303f87ed6855c8e9",
+  "input": {
+    "bundle_digest": "50d4cdab1b7185906446f9d089082bac4942b513bb39d318303f87ed6855c8e9",
+    "operation_id": "selfdev-rlm-replay"
+  },
+  "declared_fields": [
+    "operation_id",
+    "content_digest",
+    "source_tree_ref",
+    "runtime_artifact_ref",
+    "base_event_head",
+    "build_recipe_ref",
+    "test_receipts",
+    "dependency_toolchain_refs",
+    "resource_receipts",
+    "classifier_version",
+    "classifier_digest"
+  ],
+  "receipt": {
+    "base_event_head": "6077a955d4ce09aa4a00dea299834d8e1a35a7d668c851f8dc95c4382d8fe9f5",
+    "build_recipe_ref": "capsule-exec:sha256:1eeb8cd5a4eccb324d1f217606ce219e7312cf074cfcdaf7f76a0b8200444c22",
+    "classifier_digest": "3f15b3c776d297d565c0c6cbac4e406526e40dd226e3ecad4f210c0ee46f0c19",
+    "classifier_version": "v1",
+    "content_digest": "50d4cdab1b7185906446f9d089082bac4942b513bb39d318303f87ed6855c8e9",
+    "dependency_toolchain_refs": [
+      "capsule-exec:sha256:cd97ad519817881bf53a2efeff953682c96b1e05d418bfcd4b0a9ad6d5fb7b58"
+    ],
+    "execution_receipts": [
+      {
+        "agent_run_id": "run:rlm-impl",
+        "capability_handle_digest": "7164c6050c3aaec8b66518fbf137f21a5f23f0a9ecc980ea1f58462cd6d9e36e",
+        "capsule_id": "capsule-rlm-impl",
+        "command": "echo",
+        "cwd": "/workspace/platform",
+        "exit_code": 0,
+        "granted_receipt_ref": "capsule-granted-exec:sha256:34dd47b7e693511196e627161fc36594678756f07d3ea00e1b94399570bc672a",
+        "occurred_at": "2026-09-12T00:40:24.127921249Z",
+        "receipt_ref": "capsule-exec:sha256:1eeb8cd5a4eccb324d1f217606ce219e7312cf074cfcdaf7f76a0b8200444c22",
+        "source_tree_digest": "0926a812fa70c43ddc923baa1af65e1200b560be2067ab9e63cf8081b9738e42",
+        "stderr_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_digest": "89d666996727a98bd3eb6aa89923ea8656103bd77633a6903b12641ca827198b",
+        "worktree_digest": "0926a812fa70c43ddc923baa1af65e1200b560be2067ab9e63cf8081b9738e42"
+      },
+      {
+        "agent_run_id": "run:rlm-impl",
+        "capability_handle_digest": "7164c6050c3aaec8b66518fbf137f21a5f23f0a9ecc980ea1f58462cd6d9e36e",
+        "capsule_id": "capsule-rlm-impl",
+        "command": "echo",
+        "cwd": "/workspace/platform",
+        "exit_code": 0,
+        "granted_receipt_ref": "capsule-granted-exec:sha256:8843b88008efa45d8a06c67e66365f539e14fff7282877532d5218a6e15aa2f2",
+        "occurred_at": "2026-09-12T00:40:24.129349587Z",
+        "receipt_ref": "capsule-exec:sha256:9ccf665ec5f5b6d63fbe6771cbe450464cafa62480d4286aa19d32e028fda38f",
+        "source_tree_digest": "0926a812fa70c43ddc923baa1af65e1200b560be2067ab9e63cf8081b9738e42",
+        "stderr_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_digest": "d05ed3e3a98605c9346631872cbb76d74db472b66765a04b9f8c03fa72c71c04",
+        "worktree_digest": "0926a812fa70c43ddc923baa1af65e1200b560be2067ab9e63cf8081b9738e42"
+      },
+      {
+        "agent_run_id": "run:rlm-impl",
+        "capability_handle_digest": "7164c6050c3aaec8b66518fbf137f21a5f23f0a9ecc980ea1f58462cd6d9e36e",
+        "capsule_id": "capsule-rlm-impl",
+        "command": "echo",
+        "cwd": "/workspace/platform",
+        "exit_code": 0,
+        "granted_receipt_ref": "capsule-granted-exec:sha256:92673b9a7a7ab885048224ef2926e0badaf095a09c7c0801f64eb2acc841305c",
+        "occurred_at": "2026-09-12T00:40:24.130630589Z",
+        "receipt_ref": "capsule-exec:sha256:cd97ad519817881bf53a2efeff953682c96b1e05d418bfcd4b0a9ad6d5fb7b58",
+        "source_tree_digest": "0926a812fa70c43ddc923baa1af65e1200b560be2067ab9e63cf8081b9738e42",
+        "stderr_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_digest": "f9180874e641295decc3dd5d784a157a43025e48458e973ef5245c13277104a3",
+        "worktree_digest": "0926a812fa70c43ddc923baa1af65e1200b560be2067ab9e63cf8081b9738e42"
+      }
+    ],
+    "groups": {
+      "source": [
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "dev"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "dev/null"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "dev/pts"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "dev/random"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "dev/urandom"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "dev/zero"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "etc"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "etc/group"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "etc/hosts"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "etc/nsswitch.conf"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "etc/passwd"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "home"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "mnt"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "nix"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "nix/store"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "proc"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "root"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "run"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "sys"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "tmp"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "var"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "var/lib"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "var/lib/artifact"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "var/lib/artifact/release"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "var/lib/artifact/release/bin"
+        },
+        {
+          "kind": "added",
+          "mode": 493,
+          "path": "var/lib/artifact/release/bin/autoputer"
+        },
+        {
+          "kind": "added",
+          "mode": 2147484141,
+          "path": "var/lib/artifact/release/frontend"
+        },
+        {
+          "kind": "added",
+          "mode": 420,
+          "path": "var/lib/artifact/release/frontend/index.html"
+        }
+      ]
+    },
+    "operation_id": "selfdev-rlm-replay",
+    "resource_receipts": [
+      "resource:sha256:49a4c1280182fcb6f9ef71c401b1ae7039a26a5d1658625e0664c9c636e7a4d9"
+    ],
+    "runtime_artifact_ref": "runtime-artifact:sha256:c7e466ebf3e55b900ebcb7fffb699a4b2a2e90fc902e0f9e25a0d0658b06aced",
+    "runtime_files": [
+      {
+        "mode": 365,
+        "path": "bin/autoputer",
+        "sha256": "c816b51ea38272fa8ec80619e16ac6170f749431facb9276a9a6ff1439a2f86c"
+      },
+      {
+        "mode": 292,
+        "path": "frontend/index.html",
+        "sha256": "0da87924101172e97c7ad8e136a2dd176ee62093b04bbd62a7cdfd78d94670c7"
+      }
+    ],
+    "source_tree_ref": "source-tree:sha256:0926a812fa70c43ddc923baa1af65e1200b560be2067ab9e63cf8081b9738e42",
+    "test_receipts": [
+      "capsule-exec:sha256:9ccf665ec5f5b6d63fbe6771cbe450464cafa62480d4286aa19d32e028fda38f"
+    ]
+  },
+  "captured_at": "2026-09-12T00:40:24.308252707Z"
+}

@@ -1,0 +1,30 @@
+{
+  "operation": "record_self_development_verification",
+  "tool": "record_self_development_verification",
+  "successor": "choir.Verify",
+  "build_sha": "a907f713",
+  "semantic_id": "run:rlm-verify|selfdev-rlm-replay|50d4cdab1b7185906446f9d089082bac4942b513bb39d318303f87ed6855c8e9|pass",
+  "input": {
+    "bundle_digest": "50d4cdab1b7185906446f9d089082bac4942b513bb39d318303f87ed6855c8e9",
+    "decision": "pass",
+    "operation_id": "selfdev-rlm-replay",
+    "verifier_refs": [
+      "verifier-evidence:rlm-replay"
+    ]
+  },
+  "declared_fields": [
+    "operation_id",
+    "state",
+    "bundle_digest",
+    "decision",
+    "verifier_ref"
+  ],
+  "receipt": {
+    "bundle_digest": "5f5f4a8087695c45301bb42b366dcfbadee88a1523f342d6410ac61c1d84f041",
+    "decision": "pass",
+    "operation_id": "selfdev-rlm-replay",
+    "state": "awaiting_approval",
+    "verifier_ref": "e64445762f6c14f073554f653cb0f2f6d8b0f41190c1807d25a3b23e26c5eb51"
+  },
+  "captured_at": "2026-09-12T00:40:24.336728909Z"
+}

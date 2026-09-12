@@ -1,0 +1,36 @@
+{
+  "operation": "update_coagent",
+  "tool": "update_coagent",
+  "successor": "choir.Message",
+  "build_sha": "a907f713",
+  "semantic_id": "run:rlm-impl|management:owner-rlm-replay",
+  "input": {
+    "agent_id": "management:owner-rlm-replay",
+    "packet": {
+      "claims": [
+        {
+          "text": "rlm replay claim"
+        }
+      ],
+      "kind": "execution_result",
+      "schema_version": "coagent_source_packet.v1",
+      "summary": "rlm replay golden update"
+    }
+  },
+  "declared_fields": [
+    "update_id",
+    "agent_id",
+    "channel_id",
+    "trajectory_id",
+    "status"
+  ],
+  "receipt": {
+    "agent_id": "management:owner-rlm-replay",
+    "channel_id": "management:owner-rlm-replay",
+    "cursor": 1,
+    "status": "submitted",
+    "trajectory_id": "trajectory-assignment",
+    "update_id": "upd-bc2a85a329e1bacf7d5b8c1fdcbfcf5f"
+  },
+  "captured_at": "2026-09-12T00:40:24.350157176Z"
+}

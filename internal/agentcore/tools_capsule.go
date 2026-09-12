@@ -441,10 +441,16 @@ func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleTool
 		return nil, fmt.Errorf("verification does not bind the frozen operation")
 	}
 	if operation.State == selfdev.StateAwaitingApproval && decision == "pass" {
+		// Replay detection: the operation's durable digest is the finalized
+		// bundle digest, so the replayed intent names it — not the draft
+		// content digest inside bundle.json. The finalized bundle must still
+		// validate and carry the recorded verifier ref.
 		rawFinal, readErr := os.ReadFile(filepath.Join(toolCtx.UpdaterRoot, "incoming", operation.BundleDigest, "bundle.json"))
 		var finalBundle transaction.CapsuleEffectBundle
-		if readErr == nil && json.Unmarshal(rawFinal, &finalBundle) == nil && finalBundle.ContentDigest == bundleDigest && finalBundle.Validate(true) == nil {
-			return map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "verifier_ref": firstString(operation.VerifierRefs)}, nil
+		if readErr == nil && json.Unmarshal(rawFinal, &finalBundle) == nil &&
+			operation.BundleDigest == bundleDigest && finalBundle.Validate(true) == nil &&
+			selfDevelopmentContainsString(finalBundle.VerifierReceipts, firstString(operation.VerifierRefs)) {
+			return map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "decision": decision, "verifier_ref": firstString(operation.VerifierRefs)}, nil
 		}
 	}
 	if operation.BundleDigest != bundleDigest {

@@ -1,0 +1,27 @@
+{
+  "operation": "commit_transaction",
+  "tool": "commit_transaction",
+  "successor": "choir.Freeze",
+  "build_sha": "a907f713",
+  "semantic_id": "run:rlm-impl|h-rlm-impl",
+  "input": {
+    "build_recipe_ref": "capsule-exec:sha256:1eeb8cd5a4eccb324d1f217606ce219e7312cf074cfcdaf7f76a0b8200444c22",
+    "dependency_toolchain_refs": [
+      "capsule-exec:sha256:cd97ad519817881bf53a2efeff953682c96b1e05d418bfcd4b0a9ad6d5fb7b58"
+    ],
+    "handle": "h-rlm-impl",
+    "test_receipts": [
+      "capsule-exec:sha256:9ccf665ec5f5b6d63fbe6771cbe450464cafa62480d4286aa19d32e028fda38f"
+    ]
+  },
+  "declared_fields": [
+    "rejected",
+    "reject_reason"
+  ],
+  "receipt": {
+    "handle": "h-rlm-impl",
+    "reject_reason": "unknown paths rejected at commit time: 28 paths",
+    "rejected": true
+  },
+  "captured_at": "2026-09-12T00:40:24.170614884Z"
+}

@@ -1,0 +1,28 @@
+{
+  "build_sha": "a907f713",
+  "owner_id": "owner-rlm-replay",
+  "computer_id": "computer-rlm-replay",
+  "trajectory_id": "trajectory-assignment",
+  "impl_assignment_id": "assignment-rlm-impl",
+  "impl_run_id": "run:rlm-impl",
+  "impl_agent_id": "engineering:assignment-00",
+  "impl_capsule_id": "capsule-rlm-impl",
+  "impl_handle": "h-rlm-impl",
+  "verify_assignment_id": "assignment-rlm-verify",
+  "verify_run_id": "run:rlm-verify",
+  "verify_agent_id": "engineering:assignment-01",
+  "verify_capsule_id": "capsule-rlm-verify",
+  "verify_handle": "h-rlm-verify",
+  "verify_candidate_id": "candidate-rlm-verify",
+  "operation_id": "selfdev-rlm-replay",
+  "bundle_digest": "50d4cdab1b7185906446f9d089082bac4942b513bb39d318303f87ed6855c8e9",
+  "cell_receipt_refs": [
+    "capsule-go-eval:sha256:0029ce3df82af6eca517744b39fc000db3326dc64a10d6d31a43f2147b4f49b5",
+    "capsule-go-eval:sha256:f593e15f8242576126111f10fdff42ab8c37f028ff5108f4c01783153a60ea1a",
+    "capsule-go-eval:sha256:3c97df0cb6d711251ec3f8e39e7d314c0e296f05bd181db14310045c621eee96"
+  ],
+  "report_tool_call_id": "tool-call-rlm-report",
+  "parent_agent_id": "management:owner-rlm-replay",
+  "parent_run_id": "run-management-assignment",
+  "captured_at": "2026-09-12T00:40:24.574254413Z"
+}

@@ -1,0 +1,132 @@
+{
+  "operation": "record_assignment_result",
+  "tool": "record_assignment_result",
+  "successor": "choir.Complete",
+  "build_sha": "a907f713",
+  "semantic_id": "run:rlm-impl|completed|none",
+  "input": {
+    "evidence_refs": [
+      "evidence:rlm-replay"
+    ],
+    "execution_refs": [
+      "capsule-go-eval:sha256:0029ce3df82af6eca517744b39fc000db3326dc64a10d6d31a43f2147b4f49b5",
+      "capsule-go-eval:sha256:f593e15f8242576126111f10fdff42ab8c37f028ff5108f4c01783153a60ea1a",
+      "capsule-go-eval:sha256:3c97df0cb6d711251ec3f8e39e7d314c0e296f05bd181db14310045c621eee96"
+    ],
+    "result": "completed",
+    "summary": "rlm replay golden report",
+    "verdict": "none"
+  },
+  "declared_fields": [
+    "assignment_id",
+    "attempt",
+    "disposition"
+  ],
+  "receipt": {
+    "assignment_id": "assignment-rlm-impl",
+    "attempt": 1,
+    "candidate": null,
+    "disposition": "completed",
+    "receipt": {
+      "command_digest": "sha256:f161ae25a58b11fff24f8f182d1b58efa6dea6ee0ed2451ae69b9006a2a73b27",
+      "command_id": "co-super-report:assignment-rlm-impl:report:sha256:55c2db550905f10d6dc13c525c729451e4a2760fbd39ddf07684333ff2d1a178",
+      "computer_id": "computer-rlm-replay",
+      "created_at": "2026-09-12T00:40:24.562438303Z",
+      "kind": "record_co_super_assignment",
+      "owner_id": "owner-rlm-replay",
+      "reducer_seq": 10,
+      "reducer_version": "durable-work/v1",
+      "result_event_refs": [
+        "obj:choir.lifecycle_event:b3duZXItcmxtLXJlcGxheQ:key-4465fcba31775b55db616eaa96f35fcaf2ae927427897a290d793322cf4bea92"
+      ],
+      "trajectory_id": "trajectory-assignment"
+    },
+    "report": {
+      "assigned_agent_id": "engineering:assignment-00",
+      "assignment_id": "assignment-rlm-impl",
+      "attempt": 1,
+      "certifies_original_subject": false,
+      "commands": [
+        {
+          "command_digest": "sha256:9852cd4359fcfae9fbe459d3c2104376bf447b7d47acff2b35ed58f1c9c6d7ae",
+          "command_id": "capsule-command:sha256:ac71afd6a26f0d0c9af467e036fd269292c596519174ba4cb56f66b13d0b0ff8",
+          "execution_ref": "capsule-go-eval:sha256:0029ce3df82af6eca517744b39fc000db3326dc64a10d6d31a43f2147b4f49b5",
+          "exit_code": 0
+        },
+        {
+          "command_digest": "sha256:55f547df0574413fab1d33d3c4bd177ff7225feaf8a3c1f53c1b9d90dbc4bd7d",
+          "command_id": "capsule-command:sha256:20359bcdfa113a9395465687c864b8cdb17428d6b3e79cee7238fbc8341a336f",
+          "execution_ref": "capsule-go-eval:sha256:f593e15f8242576126111f10fdff42ab8c37f028ff5108f4c01783153a60ea1a",
+          "exit_code": 0
+        },
+        {
+          "command_digest": "sha256:ca532378a3abf6a7033c8ff8e10f8c30858237aa862f695cafdf9a251ee71851",
+          "command_id": "capsule-command:sha256:a71eabe3b06aac922cc686e6fe406aba50f6821ef8b926d117a7899746d60fe2",
+          "execution_ref": "capsule-go-eval:sha256:3c97df0cb6d711251ec3f8e39e7d314c0e296f05bd181db14310045c621eee96",
+          "exit_code": 0
+        }
+      ],
+      "computer_id": "computer-rlm-replay",
+      "created_at": "2026-09-12T00:40:24.562438303Z",
+      "evidence_refs": [
+        "evidence:rlm-replay"
+      ],
+      "executor_receipt_refs": [
+        "capsule-granted-exec:sha256:912ec6cf9cf43c61ca5922d0d01eb201d71989884978cd6579e284598b3db854",
+        "capsule-granted-exec:sha256:3fdb0536fdf10150b89da358541325eb1537ffbb76c4a1541971fcd9611db77b",
+        "capsule-granted-exec:sha256:a0122cb7bfec25269ba597efa9562215f2a67dc839bfb34cd23587315770a3f6"
+      ],
+      "late": false,
+      "loop_id": "run:rlm-impl",
+      "observed_subject_digest": "sha256:0926a812fa70c43ddc923baa1af65e1200b560be2067ab9e63cf8081b9738e42",
+      "outputs": [
+        {
+          "digest": "sha256:7c9b9b045a4aa399c24fe36656003c47257da45d1e0112934cad06e8827fadeb",
+          "kind": "stdout",
+          "output_id": "capsule-command:sha256:ac71afd6a26f0d0c9af467e036fd269292c596519174ba4cb56f66b13d0b0ff8:stdout",
+          "ref": "capsule-go-eval:sha256:0029ce3df82af6eca517744b39fc000db3326dc64a10d6d31a43f2147b4f49b5#stdout"
+        },
+        {
+          "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "kind": "stderr",
+          "output_id": "capsule-command:sha256:ac71afd6a26f0d0c9af467e036fd269292c596519174ba4cb56f66b13d0b0ff8:stderr",
+          "ref": "capsule-go-eval:sha256:0029ce3df82af6eca517744b39fc000db3326dc64a10d6d31a43f2147b4f49b5#stderr"
+        },
+        {
+          "digest": "sha256:52fb61e1f3c906870dfc6fe5354b6d0a75b4d0c8405dc287b09f01387c8ca31b",
+          "kind": "stdout",
+          "output_id": "capsule-command:sha256:20359bcdfa113a9395465687c864b8cdb17428d6b3e79cee7238fbc8341a336f:stdout",
+          "ref": "capsule-go-eval:sha256:f593e15f8242576126111f10fdff42ab8c37f028ff5108f4c01783153a60ea1a#stdout"
+        },
+        {
+          "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "kind": "stderr",
+          "output_id": "capsule-command:sha256:20359bcdfa113a9395465687c864b8cdb17428d6b3e79cee7238fbc8341a336f:stderr",
+          "ref": "capsule-go-eval:sha256:f593e15f8242576126111f10fdff42ab8c37f028ff5108f4c01783153a60ea1a#stderr"
+        },
+        {
+          "digest": "sha256:48e4658762a7c2e700168331fe57c77994b00e0b39e5b6a2638d1f81bee05d9a",
+          "kind": "stdout",
+          "output_id": "capsule-command:sha256:a71eabe3b06aac922cc686e6fe406aba50f6821ef8b926d117a7899746d60fe2:stdout",
+          "ref": "capsule-go-eval:sha256:3c97df0cb6d711251ec3f8e39e7d314c0e296f05bd181db14310045c621eee96#stdout"
+        },
+        {
+          "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "kind": "stderr",
+          "output_id": "capsule-command:sha256:a71eabe3b06aac922cc686e6fe406aba50f6821ef8b926d117a7899746d60fe2:stderr",
+          "ref": "capsule-go-eval:sha256:3c97df0cb6d711251ec3f8e39e7d314c0e296f05bd181db14310045c621eee96#stderr"
+        }
+      ],
+      "owner_id": "owner-rlm-replay",
+      "proposition_digest": "sha256:affac49e106cc9901356f1115d702e8dbd2d9d8cddad96814411ee13ec52b597",
+      "record_command_id": "co-super-report:assignment-rlm-impl:report:sha256:55c2db550905f10d6dc13c525c729451e4a2760fbd39ddf07684333ff2d1a178",
+      "report_id": "report:sha256:55c2db550905f10d6dc13c525c729451e4a2760fbd39ddf07684333ff2d1a178",
+      "result": "completed",
+      "schema": "choir.co_super_assignment/v1",
+      "summary": "rlm replay golden report",
+      "trajectory_id": "trajectory-assignment",
+      "verdict": "none"
+    }
+  },
+  "captured_at": "2026-09-12T00:40:24.574136537Z"
+}
