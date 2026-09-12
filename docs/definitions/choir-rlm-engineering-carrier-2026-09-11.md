@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 PILOT-RUNNING (tell -001 refused by dirty staging snapshot, run f9ba173c; dispatched CI 34703592375: all gates passed, Deploy failed on Node B Nix store `...update-autotools-gnu-config-scripts-hook is not valid` (infra, not code); next: rerun failed deploy job, verify identity, re-tell -002)
+  slice: P5 PILOT-BLOCKED (tell -002 also refused, run 1003ae05: $CHOIR_CAPSULE_SOURCE_ROOT dirty at assignment time despite clean deploy 46a7f779 at 16:27; dirt appears between deploy and assignment — source: immutableGitCommitIdentity git diff --quiet in internal/capsule/source_snapshot.go:201; need on Node B: git -C $CHOIR_CAPSULE_SOURCE_ROOT status --short + diff --stat to name the writer)
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
