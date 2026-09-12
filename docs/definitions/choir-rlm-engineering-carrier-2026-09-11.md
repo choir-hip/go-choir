@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P4-review r2 adjudicated REPAIR (5 repair / 4 accept of 12 panelists); repair items scoped below; P4-review r3 pending
+  slice: P4-review r3 adjudicated REPAIR (unstick panel 4 repair-first / 1 recapture-required); repair verified GREEN twice on Node B (TestRLMReplayGoldens, fresh snapshots, 1.3s each); P4-review r4 pending on the frozen repair candidate
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
@@ -189,6 +189,31 @@ now:
       surface: cmd/capsule-broker/main.go:75-80 + capsule.HostSelectsRLM
       evidence: 'when sessionWorkerReady is false the broker degrades go_eval to the one-shot worker (no ChoirScope) while HostSelectsRLM still serves the RLM registry and prompt; post-cutover that desk has zero terminal authority. Latent only because sessionWorkerReady is the constant true'
       repair: 'make the readiness fallback fail the activation with a typed diagnostic instead of silently serving a desk with no terminal authority, or gate HostSelectsRLM on the same readiness signal'
+    - id: replay-golden-provenance-false-2026-09-12
+      class: discovered
+      surface: docs/evidence/rlm-replay/goldens/ (build_sha on all six goldens + manifest)
+      evidence: 'goldens stamped a907f713 (predates the 8f987d7f classifier fix; frozen success on relative upperdir paths is impossible on that tree) then 50fee6ed (committed 04:07Z, 59 min AFTER captured_at 03:08Z; deletes the capture tools). Capture ran 03:08Z on Node B on an 8f987d7f-equivalent tree: frozen success proves the classifier fix, the verify receipt decision field proves the 9f255cd3 receipt line. P4-review r3 + unstick panel (4 repair-first, 1 recapture-required) adjudicated restamp-with-qualifier over recapture.'
+      repair: 'restamp build_sha to 8f987d7f with a note naming the equivalence evidence and both false predecessors; no hand-recapture (capture driver is deleted on HEAD, making recapture impossible without resurrection)'
+    - id: replay-driver-rerun-poisoning-2026-09-12
+      class: introduced
+      surface: internal/agentcore/rlm_replay_linux_test.go (freeze fresh-Start leg, corrupt incoming dir, fixed capsule/handle names)
+      evidence: 'fixed IdempotencyKey dedups on run 2 (projection-mode Start returns the existing row); corrupt-<digest> dir created inside shared RLM_CAPTURE_STATE with no cleanup, absorbed into later rows incoming baselines; fixed capsule/handle names collide on re-Spawn. Unstick panel unanimous; first Node B run also left corrupt-ea24... pollution in the shared state dir.'
+      repair: 'per-run unique suffix on all minted identities; immediate RemoveAll of the corrupt copy after the leg; full-tree copy so rejection is content-caused'
+    - id: replay-corrupt-leg-vacuous-2026-09-12
+      class: introduced
+      surface: internal/agentcore/rlm_replay_linux_test.go (inspect new-identity leg)
+      evidence: 'binding "corrupt-"+digest fails SHA-256 validation before any file is read (inspect_bundle.go:85-89), so the corruption was causally inert; err != nil arm asserted nothing; partial copy (draft + one file) could reject on missing files instead.'
+      repair: 'bind the valid digest under a fresh operation id, copy the whole bundle tree, require err == nil plus INSPECT_ERR containing frozen runtime file digest mismatch'
+    - id: replay-report-null-convention-2026-09-12
+      class: discovered
+      surface: internal/agentcore/rlm_replay_linux_test.go row 9 vs record_assignment_result.golden.json
+      evidence: 'capture receipts record absent scalars as null (verdict, candidate); the repaired view projected "" for both, which CanonicalJSON distinguishes from null. Silent until row 9 first executes (rows 1-6 run first).'
+      repair: 'nil-when-empty projection in the replay view; no golden edit (golden nulls are the honest capture shape)'
+    - id: replay-p0-replay-marker-gap-2026-09-12
+      class: discovered
+      surface: internal/agentcore/rlm_replay_test.go:126 (P0 projection set includes replay; no golden can carry it)
+      evidence: 'projectRLMReplayReceipt only projects fields present in the view, so the P0-required replay field is carried by the driver view but silently uncompared — a P0-set/golden structural gap, not a driver bug. Unstick panel split (blocker vs acknowledged limitation).'
+      repair: 'disclose as carried-not-compared marker in the driver; carry as residue rather than hand-editing golden receipt bytes'
   next_action: 'P4-repair: fix the freeze classifier path normalization; rebuild the replay driver to route successors through the real in-cell carrier with P0-table-derived declared fields, wired effect census, required pre-effect conflicts, and a new-identity leg; recapture the freeze golden on the pre-cutover tree with the classifier fix; resolve the inspect host-body orphan; fix the two frozen prompt defects and guard the r1 repair; then refreeze and run P4-review r3. P1-provider deployed proof remains pending: commit 2af02977 is pushed; on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway.'
   deliver: 'The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk''s only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden and each earned its deletion by replay proof, the assignment fate is authored by the reducer, run acceptance no longer keys on tool names and fails loudly when evidence is missing, one model-independent prompt with one REPL initialization serves the expected roster with zero output repair, and the proved replay harness plus its fixtures remain as durable evidence.'
   artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened, and one adjudicated review receipt per frozen boundary (P0, P3, P4, P5).'
