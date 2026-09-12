@@ -7,9 +7,14 @@ verdict. Requested by the owner 2026-09-12: design the move of model policy off
 gateway/guest config files and into runtime (yaegi) selection, under the hard
 requirement that **changing or adding a model never requires a deploy**.
 
-Panel: 12 agents recorded, 10 `ok`, 2 quota-failed (`omp-hy3`, `omp-gemini38`),
-`opencode` still running at synthesis time and duplicating `omp-muse-spark`'s
-model — treated as metadata, not evidence. Everything below marked *verified*
+Final panel health (the run finished after the first synthesis): 13 agents
+selected, **10 `ok`**, `omp-hy3` and `omp-gemini38` failed in 20s/30s (the same
+recurring quota pair as this mission's earlier panels), and `opencode` timed out
+at its 1200s deadline having emitted only its banner. `opencode` is configured
+with the same model as `omp-muse-spark`, so its loss removed no coverage —
+but note it means the "13-agent" default panel reliably yields about ten usable
+opinions, and the two quota failures are predictable and should be replaced or
+pre-excluded at the next boundary. Panel health is metadata, not evidence. Everything below marked *verified*
 was checked in the tree during synthesis; anything else is a panel claim.
 
 ## 1. Option families
