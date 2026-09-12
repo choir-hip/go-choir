@@ -135,3 +135,14 @@ run sub-routes) and `/api/trajectories/{id}/capsule-evidence/{assignment}`
 returns `413 capsule evidence exceeds response bounds`. Closing the item
 therefore needs a deploy: either the gateway's inference log line carrying tool
 names, or a bounded owner-facing projection of the run-progress events.
+
+The 413 is not specific to this assignment. `GetCoSuperCapsuleEvidence` reads
+the whole owner+computer object snapshot and refuses when
+`len(objects) > coSuperEvidenceMaxObjects`
+(`internal/store/cosuper_evidence.go:222-227`), so the route is permanently
+unavailable on a computer that has accumulated months of objects — including
+for a two-second arm — regardless of how small that arm's own evidence is. That
+also makes `roster collect`'s capsule-evidence read dead on the retained
+computer, so the per-assignment evidence the roster receipt wants has to come
+from a scoped projection until this is bounded per assignment rather than per
+computer.
