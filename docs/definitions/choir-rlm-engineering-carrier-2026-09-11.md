@@ -110,11 +110,11 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P4-review adjudicated (repair); P4-replay proofs pending — the P0 hard gate requires goldens + deployed replay before the deletion candidate is accepted
+  slice: P4-replay local proofs green on Node B (5/5 goldens, canonical equality + zero-effect census + conflict probes); deployed replay and P4-review refreeze pending
   question: none
   reconciliation:
-    observed_at: '2026-09-11T22:45:00Z'
-    source_ref: main@009e3c52 (P4 deletions + P4-review repair pushed; CI 34655136501 pending)
+    observed_at: '2026-09-12T01:25:00Z'
+    source_ref: main@009e3c52 plus uncommitted replay harness (rlm_replay_linux_test.go) and two defect repairs (landlock /dev/pts, verify replay-detection digest binding)
     deploy_identity: staging https://choir.news serves the mission-two commit e3396329 plus GC commits through a907f713; effects OFF; OpenCode Go and Zen not wired
     authority_identities:
       - docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md (this file, sole entrypoint after charter)
@@ -152,8 +152,19 @@ now:
     - docs/mission-residues.md
     - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
     - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
-  blocker_or_risk: 'P4-review adjudicated repair: the tools-actuator fallback prompt no longer names update_coagent, but the P0 hard gate (goldens + deployed replay proofs per retired operation) is unmet. The deletion candidate at 304ae6b7 is not accepted until those proofs land. Carried risks: retiring a settlement tool before the reducer authors fate; retiring an acceptance-named tool silently removing its checkpoint; the verifier slot being unreachable on the assigned path today; the four capsule operations needing to stay functional for the tools fallback; phase-1 gateway/provider and credential work being red inside this mission; the shared-prompt fix rule growing the prompt toward the weakest model; the replay harness and the run-level model-selection mechanism not existing yet.'
-  next_action: 'P4-replay: capture goldens for the five retired operations against the pre-cutover deployed build, run per-operation successor replay proofs (local + deployed), then refreeze the deletion candidate and rerun P4-review. P1-provider deployed proof remains pending: commit 2af02977 is pushed; on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway.'
+  blocker_or_risk: 'P4-review adjudicated repair: the tools-actuator fallback prompt no longer names update_coagent, but the P0 hard gate (goldens + deployed replay proofs per retired operation) is unmet. The deletion candidate at 304ae6b7 is not accepted until those proofs land. Carried risks: retiring a settlement tool before the reducer authors fate; retiring an acceptance-named tool silently removing its checkpoint; the verifier slot being unreachable on the assigned path today; the four capsule operations needing to stay functional for the tools fallback; phase-1 gateway/provider and credential work being red inside this mission; the shared-prompt fix rule growing the prompt toward the weakest model; the replay harness and the run-level model-selection …
+  problems_discovered:
+    - id: landlock-devpts-regression-2026-09-12
+      class: discovered
+      surface: capsule execution (internal/capsule/landlock.go)
+      evidence: 'TestRLMReplayGoldens on Node B: capsule admission failed at Landlock Apply; the path list still carried /dev/pts, which no longer exists in the capsule since the devpts bind-mount was removed - a nonexistent allow path fails closed. Pre-existing regression, not introduced by this mission'
+      repair: 'remove /dev/pts from the broker and workload Landlock path sets; verified by the replay driver reaching the interpreter'
+    - id: verify-replay-digest-binding-2026-09-12
+      class: discovered
+      surface: record_self_development_verification replay detection (internal/agentcore/tools_capsule.go)
+      evidence: 'replayed verify intent names operation.BundleDigest (the finalized digest) but the early-return compared finalBundle.ContentDigest (the draft digest inside bundle.json); the two gates disagree so a replayed verify could never hit the idempotent path and fell through to a live re-verification attempt'
+      repair: 'early return now binds operation.BundleDigest and requires the recorded verifier ref in the finalized bundle receipts; verified by the replay driver row for record_self_development_verification'
+  next_action: 'Commit the two defect repairs plus the replay harness and goldens; then deployed replay proof against staging and P4-review refreeze. P1-provider deployed proof remains pending: commit 2af02977 is pushed; on deploy, run nix/deploy-provider-creds.sh node-b, then one live call per wire shape plus the empty-identity negative probe through the deployed gateway.'
 finish:
   deliver: 'The engineering desk lives entirely on the in-cell carrier and nothing else: `capsule_go_eval` is the desk''s only JSON envelope, every other affordance is a typed in-cell function staging intents for the one reducer, the five overlay JSON tool names are deleted rather than hidden and each earned its deletion by replay proof, the assignment fate is authored by the reducer, run acceptance no longer keys on tool names and fails loudly when evidence is missing, one model-independent prompt with one REPL initialization serves the expected roster with zero output repair, and the proved replay harness plus its fixtures remain as durable evidence.'
   artifact: 'One deployed staging cutover on https://choir.news with effects OFF: the simplified envelope, the reducer-owned settlement path, the in-cell freeze/verify/inspect surface, the closed assigned registry, the frozen roster conformance evidence, the replay harness with golden receipts, and the closed R7 residue with R8 opened, and one adjudicated review receipt per frozen boundary (P0, P3, P4, P5).'
