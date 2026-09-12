@@ -1,20 +1,20 @@
-//go:build linux
+//go:build linux && rlmcapture
 
 package agentcore
 
 // RLM replay-harness capture driver (P4-replay, golden side).
 //
-// This file is NOT committed to main. It lives only in the pre-cutover
-// worktree at the deployed guest build (a907f713) and drives each retiring
-// JSON tool's Func against a real Runtime + real capsule executor + real
-// store, writing canonical golden receipts to $RLM_CAPTURE_STATE/goldens/.
-// The replay driver on main re-invokes the in-cell successor under the same
-// semantic identity against the same state dir and asserts canonical
-// equality on the declared fields.
+// This file is committed as durable evidence of how the golden receipts
+// under docs/evidence/rlm-replay/goldens/ were produced. It does NOT
+// compile on main: it drives the retiring JSON tools' Func directly and
+// references constructors deleted by the P4 cutover. It is gated behind
+// the `rlmcapture` build tag so normal builds and CI never see it; it
+// only compiles in the pre-cutover worktree at the deployed guest build
+// (a907f713) where it was run.
 //
-// Run on Node B:
+// Run on Node B (pre-cutover tree only):
 //   RLM_CAPTURE_STATE=/root/rlm-replay-state CHOIR_CAPSULE_BROKER=/tmp/capsule-broker \
-//     go test ./internal/agentcore -run TestRLMCaptureGoldens -v -timeout 600s
+//     go test -tags rlmcapture ./internal/agentcore -run TestRLMCaptureGoldens -v -timeout 600s
 
 import (
 	"context"
