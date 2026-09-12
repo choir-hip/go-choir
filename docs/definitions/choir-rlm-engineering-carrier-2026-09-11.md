@@ -110,7 +110,7 @@ start:
       evidence_ref: 2026-09-11 read-only git status at a907f713
 now:
   status: working
-  slice: P5 PILOT-READY (choir roster + files verbs built, tested, pushed; P0 §7 rev3; overlay bytes frozen; design panel adjudicated iii); blocked on owner trigger: API-key tell + Texture doc id + overlay placement; spend per run under caps, auto-reload OFF
+  slice: P5 PILOT-READY, code CI-green (34700585106 success incl. writer-purity; roster+files verbs; P0 §7 rev3; overlay bytes frozen; design adjudicated iii); staging stable at d6b4fab1 (deploy skipped, client-only change); blocked on owner trigger: API-key tell + Texture doc id + overlay placement
   question: none
   reconciliation:
     observed_at: '2026-09-12T02:45:00Z'
