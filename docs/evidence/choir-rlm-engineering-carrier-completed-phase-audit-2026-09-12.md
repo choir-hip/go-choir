@@ -19,6 +19,9 @@ Tree audited: `main@5f34baf1`, worktree clean. Commands run locally on darwin
 | P4-delete: the five overlay JSON names are deleted from the carrier | reference sweep for each name as a quoted tool name in non-test Go | **holds, with one desk-scoped exception explained below** — `commit_transaction`, `inspect_self_development_bundle`, `record_self_development_verification`, `record_assignment_result`: 0 non-test references each. `update_coagent`: 18, all of them desk-scoped (below) |
 | P4-delete: no served prompt instructs a name that no longer exists | sweep of `internal/runtimeprompts/` and `internal/promptstore/`, plus the assembly gating in code | **holds** — see below |
 | P3-acceptance: `capsule_effect_frozen` and `capsule_verification_recorded` derive from canonical evidence, not tool names, and their absence fails loudly | read the checkpoint construction and the level gate | **holds** — `internal/agentcore/run_acceptance.go:652-668` builds both from the durable operation record (`BundleDigest`, `OperationID`, `State`, `VerifierRefs`) and adds a `failed` checkpoint naming the missing evidence when a completed implementation or verification run lacks it; `:770-775` sets `capsuleFailed` on exactly those failed kinds, and the level computation at `:784` requires `!capsuleFailed`, so a run cannot report an accepted level without the evidence |
+| P3-settlement: one fate author, and the JSON fate tool is gone | non-test caller sweep plus registry check | **holds** — `recordAssignedCoSuperReport` has exactly two non-test occurrences, its definition (`internal/agentcore/cosuper_assignment_fate.go:511`) and one caller, the reducer at `internal/agentcore/rlm_reduce.go:625`; no registry registers `record_assignment_result` |
+| P3-parity (a): both verifier gates are pinned and the assigned path reaches them | `go test ./internal/agentcore -run 'VerifierGate'` | **holds** — `TestVerifierGateRejectsNonVerifierSlot` and `TestVerifierGateReachesBindingCheck` both PASS (`verifier_gate_test.go`) |
+| P3-parity (b): `update_coagent` authority checks carried into the staged path | `go test ./internal/agentcore -run 'Coagent'` | **holds** — package `ok` in 38.9s across the pending-update-survives-restart, rewarm, and `TestUpdateCoagentDeliveryRequiresSuccessfulActivation` cases |
 
 ## The `update_coagent` exception, resolved
 
@@ -43,6 +46,19 @@ and still named in prompts, which is intended rather than a regression:
   `profile == agentprofile.Researcher && isTextureAgentID(requesterAgentID)`.
   An assigned engineering CoSuper therefore never receives it, and its run
   context takes the `InCellCarrier` branch, which names `choir.Message`.
+
+## A corroboration for the activation diagnosis
+
+The same package already encodes the distinction the activation stall violates:
+`TestCoagentRewarmUsesResidentActivationNotActiveRunProxy` and
+`TestCoagentRewarmIgnoresBlockedHistoricalActivation`
+(`internal/agentcore/update_coagent_cutover_test.go`) require a coagent rewarm
+to act on **resident activation** rather than on an active-run projection. Both
+pass. The self-development Texture caller path reached by
+`reactivateSelfDevelopmentTextureCaller` writes a run to `state: running`
+through `ReplaceLifecycleActivation` without resident activation, which is
+exactly the proxy that guard exists to reject elsewhere — so the hazard is known
+and tested in this codebase, not speculative.
 
 ## Verified by artifact, not re-run here
 
