@@ -66,6 +66,42 @@ type AssignedCoSuperStart struct {
 	Replay     bool
 }
 
+// overlayIDNamedInObjective reports the model_policy_overlay_id value assigned
+// in prose inside an objective (model_policy_overlay_id=<id>), or "" when the
+// objective names none. A bare mention without an assignment is not a naming.
+// The id charset mirrors the overlay loader ([A-Za-z0-9_-]); a malformed
+// assignment is skipped in favour of a later well-formed one.
+func overlayIDNamedInObjective(objective string) string {
+	const key = "model_policy_overlay_id"
+	named := ""
+	rest := objective
+	for {
+		i := strings.Index(rest, key)
+		if i < 0 {
+			return named
+		}
+		after := strings.TrimSpace(rest[i+len(key):])
+		rest = after
+		if !strings.HasPrefix(after, "=") {
+			continue
+		}
+		after = strings.TrimSpace(strings.TrimPrefix(after, "="))
+		after = strings.Trim(after, "\"'")
+		end := strings.IndexFunc(after, func(r rune) bool {
+			return !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '-')
+		})
+		var id string
+		if end < 0 {
+			id = after
+		} else {
+			id = after[:end]
+		}
+		if id != "" && len(id) <= 96 {
+			named = id
+		}
+	}
+}
+
 func deterministicAssignmentIdentity(parent types.RunRecord, req StartAssignedCoSuperRequest) string {
 	seed := strings.Join([]string{
 		"choir:co-super-assignment:v2", parent.RunID, strings.TrimSpace(req.ToolCallID),
@@ -100,6 +136,17 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	if (req.Kind == types.CoSuperAssignmentVerification) != (req.CandidateID != "") {
 		return AssignedCoSuperStart{}, fmt.Errorf("verification requires one exact candidate_id and implementation forbids it")
+	}
+	// Fail closed on a prose-only overlay reference: the assignment path
+	// resolves provider/model ONLY from the structured ModelPolicyOverlayID
+	// field, so an objective naming model_policy_overlay_id=X with the field
+	// empty would silently serve the base policy (P5-roster: two live runs
+	// served the wrong provider while management carried the id as prose).
+	// The error text names the exact fix so the caller retries correctly.
+	if strings.TrimSpace(req.ModelPolicyOverlayID) == "" {
+		if named := overlayIDNamedInObjective(req.Objective); named != "" {
+			return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper objective names model_policy_overlay_id=%s but the structured field is empty: pass it as model_policy_overlay_id (prose names select nothing; the base policy would silently serve instead)", named)
+		}
 	}
 	ownerID, computerID := strings.TrimSpace(parent.OwnerID), strings.TrimSpace(parent.ComputerID)
 	parentProfile, _ := agentprofile.Canonical(parent.AgentProfile)
