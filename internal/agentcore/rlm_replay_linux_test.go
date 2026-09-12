@@ -654,7 +654,10 @@ func TestRLMReplayGoldens(t *testing.T) {
 	// runSuffix makes every test-minted identity unique per run: the capture
 	// state dir persists across runs, so fixed idempotency keys, capsule IDs
 	// and handle names would collide (or false-dedup) on the second run.
-	runSuffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	// Unix socket paths cap at 107 chars: the suffix stays short (pid + 4 hex
+	// time digits) and the suffixed capsule base names are abbreviated, so the
+	// broker listener path fits even under longer state dirs.
+	runSuffix := fmt.Sprintf("%d%x", os.Getpid(), time.Now().UnixNano()&0xffff)
 	implRun, err := env.s.GetLifecycleRun(ctx, env.ownerID, env.computerID, manifest.ImplRunID)
 	if err != nil {
 		t.Fatalf("load impl run: %v", err)
@@ -684,7 +687,8 @@ func TestRLMReplayGoldens(t *testing.T) {
 	if entries, err := os.ReadDir(filepath.Join(env.stateDir, "executor")); err == nil {
 		for _, e := range entries {
 			name := e.Name()
-			if strings.HasPrefix(name, "capsule-rlm-verify-conflict-") || strings.HasPrefix(name, "capsule-rlm-verify-corrupt-") {
+			if strings.HasPrefix(name, "capsule-rlm-vconf-") || strings.HasPrefix(name, "capsule-rlm-vcorr-") ||
+				strings.HasPrefix(name, "capsule-rlm-verify-conflict-") || strings.HasPrefix(name, "capsule-rlm-verify-corrupt-") {
 				sweepIDs = append(sweepIDs, name)
 			}
 		}
@@ -917,8 +921,8 @@ fmt.Print(string(b))
 		"operation_id":  inspectGolden.Input["operation_id"].(string),
 		"bundle_digest": strings.Repeat("0", 64),
 	})
-	conflictCapsule := "capsule-rlm-verify-conflict-" + runSuffix
-	conflictHandle := "h-rlm-verify-conflict-" + runSuffix
+	conflictCapsule := "capsule-rlm-vconf-" + runSuffix
+	conflictHandle := "h-rlm-vconf-" + runSuffix
 	if _, err := env.executor.Spawn(ctx, capsule.SpawnSpec{
 		CapsuleID: conflictCapsule, OwnerRunID: manifest.VerifyRunID,
 		MemoryMax: 1 << 30, CpuQuota: 100000, CpuPeriod: 100000, PidsMax: 256,
@@ -977,8 +981,8 @@ fmt.Print(string(b))
 		"operation_id":  rlmGoldenString(t, inspectGolden.Input, "operation_id") + "-corrupt-" + runSuffix,
 		"bundle_digest": frozenDigest,
 	})
-	corruptCapsule := "capsule-rlm-verify-corrupt-" + runSuffix
-	corruptHandle := "h-rlm-verify-corrupt-" + runSuffix
+	corruptCapsule := "capsule-rlm-vcorr-" + runSuffix
+	corruptHandle := "h-rlm-vcorr-" + runSuffix
 	if _, err := env.executor.Spawn(ctx, capsule.SpawnSpec{
 		CapsuleID: corruptCapsule, OwnerRunID: manifest.VerifyRunID,
 		MemoryMax: 1 << 30, CpuQuota: 100000, CpuPeriod: 100000, PidsMax: 256,
