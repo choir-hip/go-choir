@@ -51,12 +51,21 @@ func TestRosterTellTextCarriesOverlayAndTaskVerbatim(t *testing.T) {
 		t.Fatalf("tell does not name the structured argument: %q", text)
 	}
 	// v2 arms were refused as duplicates of the open work items earlier arms
-	// left behind, so the wrapper must both clear them and authorize this arm.
+	// left behind, so the wrapper must both clear them and shape the call.
 	if !strings.Contains(text, "Disposition every earlier open ROSTER-V1 work item") {
 		t.Fatalf("tell does not disposition superseded arms: %q", text)
 	}
-	if !strings.Contains(text, "explicitly authorized") {
-		t.Fatalf("tell does not authorize this arm: %q", text)
+	// A v3 arm opened with the structured field empty and silently served the
+	// base policy, so the wrapper must state the argument and its value as a
+	// JSON argument, without re-emitting the literal the opener refuses.
+	if !strings.Contains(text, "argument set to the value") {
+		t.Fatalf("tell does not state the overlay argument as a tool argument: %q", text)
+	}
+	if !strings.Contains(text, "never text inside the objective") {
+		t.Fatalf("tell does not forbid the overlay id inside the objective: %q", text)
+	}
+	if !strings.Contains(text, "Exactly one call, never two") {
+		t.Fatalf("tell does not authorize exactly one call: %q", text)
 	}
 	if !strings.HasSuffix(text, string(task)) {
 		t.Fatalf("tell mutates task bytes: %q", text)
@@ -191,5 +200,40 @@ func TestRosterCollectWritesTerminalReceipt(t *testing.T) {
 	}
 	if _, dup := os.Stat(artifact + ".tmp"); !os.IsNotExist(dup) {
 		t.Fatal("temp receipt left behind (non-atomic write)")
+	}
+}
+
+// TestRosterReceiptFailsWhenArmOverlayDidNotServe proves the receipt cannot
+// record a pass for an arm the base policy served: two live arms resolved
+// deepseek-v4-flash from the computer model policy while the tell named the
+// funded overlay, and a silent pass would have counted them in the roster.
+func TestRosterReceiptFailsWhenArmOverlayDidNotServe(t *testing.T) {
+	base := &rosterReceipt{}
+	applyRosterPolicySource(base, map[string]any{"metadata": map[string]any{
+		"llm_provider":      "deepseek",
+		"llm_model":         "deepseek-v4-flash",
+		"llm_policy_source": "/mnt/persistent/files/System/model-policy.toml",
+	}}, "p5-deepseek-v41-flash")
+	if base.FailureMode != rosterFailureBasePolicy {
+		t.Fatalf("base-policy arm failure mode = %q, want %q", base.FailureMode, rosterFailureBasePolicy)
+	}
+	if base.Pass == nil || *base.Pass {
+		t.Fatalf("base-policy arm pass = %v, want explicit false", base.Pass)
+	}
+	if base.ServedProvider != "deepseek" || base.ServedModel != "deepseek-v4-flash" {
+		t.Fatalf("served provider/model = %s/%s, want deepseek/deepseek-v4-flash", base.ServedProvider, base.ServedModel)
+	}
+
+	overlay := &rosterReceipt{}
+	applyRosterPolicySource(overlay, map[string]any{"metadata": map[string]any{
+		"llm_provider":      "opencode-go",
+		"llm_model":         "deepseek-v4.1-flash",
+		"llm_policy_source": "/mnt/persistent/files/System/model-policy-overlays/p5-deepseek-v41-flash.toml",
+	}}, "p5-deepseek-v41-flash")
+	if overlay.FailureMode != "" {
+		t.Fatalf("overlay-served arm recorded failure %q", overlay.FailureMode)
+	}
+	if overlay.Pass != nil {
+		t.Fatalf("overlay-served arm pass = %v, want unset (human-adjudicated)", *overlay.Pass)
 	}
 }

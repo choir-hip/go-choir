@@ -37,12 +37,13 @@ const rosterTaskRef = "docs/evidence/choir-rlm-engineering-carrier-p0-freeze-202
 
 // rosterTellVersion pins the wrapper instruction bytes around the frozen task.
 // v2 replaced the `model_policy_overlay_id=<id>` prose literal (which the
-// assignment opener now refuses) with an argument-name-plus-quoted-value
-// instruction; v3 adds the superseded-arm disposition and the explicit
-// authorization of this one arm, after v2 arms were refused as duplicates of
-// the open work items earlier arms had left behind. v1/v2 receipts name their
-// own wrapper.
-const rosterTellVersion = "roster-v3"
+// assignment opener refuses) with an argument-name instruction; v3 added the
+// superseded-arm disposition after v2 arms were refused as duplicates; v4
+// states the assign_co_super call and its overlay argument explicitly, because
+// a v3 arm opened with the structured field empty (run metadata null) and the
+// desk then silently served the base policy's unfunded deepseek model. v1/v2/v3
+// receipts name their own wrapper.
+const rosterTellVersion = "roster-v4"
 
 // rosterEngineeringRole is the overlay role key the assignment path resolves
 // (agentprofile.CoSuper is the token "engineering").
@@ -236,10 +237,10 @@ func rosterTellText(overlayID string, task []byte) string {
 	var b strings.Builder
 	b.WriteString("ROSTER-V1 arm execution. Two required acts, in order. ")
 	b.WriteString("(1) Disposition every earlier open ROSTER-V1 work item on this trajectory as cancelled with the reason \"superseded by a newer roster arm\", so no superseded arm stays active and none blocks this one. ")
-	b.WriteString("(2) Open exactly one implementation assignment for the frozen desk task below; this arm is explicitly authorized by the owner, and exactly one assignment is authorized, never two. ")
-	b.WriteString("Set the assign_co_super argument named model_policy_overlay_id — the structured field, not the objective text — to the value \"")
+	b.WriteString("(2) Call assign_co_super exactly once with kind=\"implementation\" and with its model_policy_overlay_id argument set to the value \"")
 	b.WriteString(strings.TrimSpace(overlayID))
-	b.WriteString("\". The objective argument must be exactly the task below, byte-for-byte, with no preface, no paraphrase, and no extra steps:\n")
+	b.WriteString("\" — a real JSON argument value, never text inside the objective. ")
+	b.WriteString("The objective argument must be exactly the task below, byte-for-byte, with no preface, no paraphrase, and no extra steps. Exactly one call, never two:\n")
 	b.Write(task)
 	return b.String()
 }
@@ -328,9 +329,45 @@ type rosterReceipt struct {
 	RunIDs             map[string]any `json:"run_ids,omitempty"`
 	HealthIdentity     map[string]any `json:"health_identity,omitempty"`
 	DeploySHA          string         `json:"deploy_sha,omitempty"`
+	PolicySource       string         `json:"policy_source,omitempty"`
 	CollectedAt        string         `json:"collected_at"`
 	Notes              string         `json:"notes,omitempty"`
 	NeedsHumanClassify bool           `json:"needs_human_classify"`
+}
+
+// rosterFailureBasePolicy names the arm-invalidating failure: the assignment
+// resolved its provider/model from the computer's base policy instead of the
+// arm's overlay, because the structured model_policy_overlay_id never reached
+// the assignment path. Two live arms did exactly that and silently spent on an
+// unfunded provider, so the receipt must fail loudly rather than record a pass.
+const rosterFailureBasePolicy = "policy_source_not_arm_overlay"
+
+// applyRosterPolicySource records the provider and model the bound run actually
+// resolved and, when the arm's overlay did not serve it, marks the receipt
+// failed with the observed source. The assignment records llm_policy_source at
+// open time, so a base-policy arm is detectable before any provider call.
+func applyRosterPolicySource(receipt *rosterReceipt, runDoc map[string]any, overlayID string) {
+	metadata, _ := runDoc["metadata"].(map[string]any)
+	if metadata == nil {
+		return
+	}
+	receipt.ServedProvider = rosterFirstString(metadata, "llm_provider", "provider")
+	receipt.ServedModel = rosterFirstString(metadata, "llm_model", "model")
+	source := rosterFirstString(metadata, "llm_policy_source")
+	if source == "" {
+		return
+	}
+	receipt.PolicySource = source
+	want := "/model-policy-overlays/" + strings.TrimSpace(overlayID) + ".toml"
+	if strings.HasSuffix(source, want) {
+		return
+	}
+	failed := false
+	receipt.Pass = &failed
+	receipt.FailureMode = rosterFailureBasePolicy
+	receipt.NeedsHumanClassify = true
+	receipt.Notes = fmt.Sprintf("assignment resolved %s/%s from %s, not the arm overlay %s: the structured model_policy_overlay_id did not reach the assignment path",
+		receipt.ServedProvider, receipt.ServedModel, source, want)
 }
 
 func runRosterCollect(args []string, stdout, stderr io.Writer) int {
@@ -419,6 +456,10 @@ func rosterCollectOnce(c *client, requestID, overlayID, assignmentID string, att
 		return receipt, false, nil
 	}
 	receipt.RunIDs["bound_run"] = runDoc
+	applyRosterPolicySource(receipt, runDoc, overlayID)
+	if receipt.FailureMode == rosterFailureBasePolicy {
+		return receipt, true, nil
+	}
 	disposition := rosterFirstString(runDoc, "disposition", "state", "status")
 	switch strings.ToLower(disposition) {
 	case "completed", "failed", "cancelled", "canceled", "terminal":
