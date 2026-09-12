@@ -93,6 +93,34 @@ passed through `--expected-task-sha256`.
 - The drainer run `1ad1dc39` had completed at 20:27:38Z, before the A4 tell, so
   no resident drainer existed to consume the instruction.
 
+### A5 — same tell re-fired, also never driven
+
+- Request id `p5-roster-v4b-deepseek-v41-flash-arm1`, `roster_tell_version:
+  roster-v4`, accepted with `cursor: 1137`, `status: pending`.
+- No lifecycle event after 1136 and no run created in the following two
+  minutes. Two consecutive tells now sit undrained, so this is not a one-off
+  race with a drainer that was mid-termination.
+
+### The activation mechanism, as observed
+
+- A pending owner instruction is consumed by a **resident drainer run** whose
+  prompt is "Process pending coagent update packets for privileged execution."
+  (`1ad1dc39-8fcc-48ff-8d30-61862ac9347f`, created 20:25:25Z).
+- The A2 and A3 tells were drained because that drainer was resident at the
+  time. It then **completed** at 20:27:38Z.
+- Nothing replaced it. `reconcilePersistentSuperActor` returns a resident run
+  when one exists and is otherwise reachable from the owner's
+  self-development start/retry path
+  (`reconcilePersistentSuperActorForOwnerStart`, which the CLI exposes only as
+  `self-dev mode get|set`, with effects OFF) and from boot rewarm, whose
+  `ResumeInterruptedPersistentSuperControlRun` reactivates only runs
+  **passivated** by a process restart — the drainer completed, so a reboot is
+  not its recovery either. `super_controller.go` states boot "is a recovery
+  event, never a scheduler tick".
+- Consequence: once the drainer completes, owner instructions strand until an
+  owner self-development start/retry or a product fix. That is the state the
+  roster is in, and it is why A4 and A5 produced nothing.
+
 ## What the arms establish
 
 1. **The frozen task and the overlay both resolve.** Preflight is green for
