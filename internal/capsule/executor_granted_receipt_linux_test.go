@@ -41,18 +41,20 @@ func TestResolveGrantedExecutionReceiptsBindsFinalSubjectNotPreEval(t *testing.T
 		grantedReceipts:   map[string]GrantedExecutionReceipt{},
 	}
 	handleDigest := computerevent.DigestBytes([]byte("handle-grant"))
+	preOccurrence := time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano)
+	midOccurrence := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano)
 	preEval := ExecutionReceipt{
 		AgentRunID: "run-grant", CapabilityHandleDigest: handleDigest, CapsuleID: caps.ID,
-		Command: "go_eval:src", ExitCode: 0, WorktreeDigest: "pre-eval-digest",
-		SourceTreeDigest: sourceDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Command: "go_eval:read", ExitCode: 0, WorktreeDigest: "pre-eval-digest",
+		SourceTreeDigest: sourceDigest, OccurredAt: preOccurrence,
 	}
 	preRef := persistTestExecutionReceipt(t, executor, preEval)
-	_, err = executor.ResolveGrantedExecutionReceipts(context.Background(), "run-grant", "handle-grant", []string{preRef})
-	if err == nil || !strings.Contains(err.Error(), "final subject") {
-		t.Fatalf("pre-eval worktree error = %v", err)
+	// A single earlier receipt cannot certify the frozen final subject.
+	if _, err = executor.ResolveGrantedExecutionReceipts(context.Background(), "run-grant", "handle-grant", []string{preRef}); err == nil || !strings.Contains(err.Error(), "final frozen subject") {
+		t.Fatalf("pre-eval-only error = %v", err)
 	}
-
-	if err := os.WriteFile(filepath.Join(subject, "README"), []byte("after\n"), 0o644); err != nil {
+	// A failing command is a recorded observation, not a binding failure.
+	if err := os.WriteFile(filepath.Join(subject, "MARKER"), []byte("carrier-check\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	finalDigest, err := digestCanonicalSubjectTree(context.Background(), subject)
@@ -62,19 +64,35 @@ func TestResolveGrantedExecutionReceiptsBindsFinalSubjectNotPreEval(t *testing.T
 	if finalDigest == sourceDigest {
 		t.Fatal("expected subject digest to change after write")
 	}
-	final := ExecutionReceipt{
+	mid := ExecutionReceipt{
 		AgentRunID: "run-grant", CapabilityHandleDigest: handleDigest, CapsuleID: caps.ID,
-		Command: "go_eval:src", ExitCode: 0, WorktreeDigest: finalDigest,
+		Command: "go_eval:write", ExitCode: 0, WorktreeDigest: finalDigest,
+		SourceTreeDigest: sourceDigest, OccurredAt: midOccurrence,
+	}
+	midRef := persistTestExecutionReceipt(t, executor, mid)
+	vet := ExecutionReceipt{
+		AgentRunID: "run-grant", CapabilityHandleDigest: handleDigest, CapsuleID: caps.ID,
+		Command: "go_eval:vet", ExitCode: 1, WorktreeDigest: finalDigest,
 		SourceTreeDigest: sourceDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
-	finalRef := persistTestExecutionReceipt(t, executor, final)
-	delete(executor.executionReceipts, finalRef)
-	granted, err := executor.ResolveGrantedExecutionReceipts(context.Background(), "run-grant", "handle-grant", []string{finalRef})
+	vetRef := persistTestExecutionReceipt(t, executor, vet)
+	granted, err := executor.ResolveGrantedExecutionReceipts(context.Background(), "run-grant", "handle-grant", []string{preRef, midRef, vetRef})
 	if err != nil {
-		t.Fatalf("final subject grant: %v", err)
+		t.Fatalf("multi-cell grant: %v", err)
 	}
-	if len(granted) != 1 || granted[0].ReceiptRef != finalRef || granted[0].GrantedReceiptRef == "" {
+	if len(granted) != 3 || granted[2].ReceiptRef != vetRef || granted[2].ExitCode != 1 {
 		t.Fatalf("granted receipts = %+v", granted)
+	}
+	// The chronologically latest receipt must bind the frozen subject: an
+	// out-of-order citation whose latest receipt predates the freeze refuses.
+	stale := ExecutionReceipt{
+		AgentRunID: "run-grant", CapabilityHandleDigest: handleDigest, CapsuleID: caps.ID,
+		Command: "go_eval:stale", ExitCode: 0, WorktreeDigest: finalDigest,
+		SourceTreeDigest: sourceDigest, OccurredAt: midOccurrence,
+	}
+	staleRef := persistTestExecutionReceipt(t, executor, stale)
+	if _, err = executor.ResolveGrantedExecutionReceipts(context.Background(), "run-grant", "handle-grant", []string{preRef, staleRef}); err == nil || !strings.Contains(err.Error(), "final frozen subject") {
+		t.Fatalf("stale-final error = %v", err)
 	}
 }
 

@@ -931,6 +931,7 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 		return nil, err
 	}
 	handleDigest := computerevent.DigestBytes([]byte(handle))
+	latestOccurrence, latestWorktreeDigest := "", ""
 	receipts := make([]ExecutionReceipt, 0, len(refs))
 	seen := make(map[string]struct{}, len(refs))
 	for _, ref := range refs {
@@ -939,10 +940,13 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 		}
 		receipt, openErr := e.OpenExecutionReceipt(ref)
 		if openErr != nil {
-			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject: %s: %w", ref, openErr)
+			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, and frozen source: %s: %w", ref, openErr)
 		}
-		if reason := grantedExecutionBindReason(receipt, agentRunID, handleDigest, caps.ID, worktreeDigest, caps.SourceSnapshotDigest); reason != "" {
-			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, frozen source, and final successful subject: %s", reason)
+		if reason := grantedExecutionBindReason(receipt, agentRunID, handleDigest, caps.ID, caps.SourceSnapshotDigest); reason != "" {
+			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, and frozen source: %s", reason)
+		}
+		if receipt.OccurredAt > latestOccurrence {
+			latestOccurrence, latestWorktreeDigest = receipt.OccurredAt, receipt.WorktreeDigest
 		}
 		granted := GrantedExecutionReceipt{Execution: receipt, AgentRunID: agentRunID, CapabilityHandleDigest: handleDigest,
 			CapsuleID: caps.ID, Frozen: true, SourceSubjectDigest: caps.SourceSnapshotDigest, FinalSubjectDigest: worktreeDigest}
@@ -974,6 +978,12 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 	}
 	if len(receipts) == 0 {
 		return nil, fmt.Errorf("capsule execution evidence is required")
+	}
+	// The frozen final subject is certified once, by the chronologically
+	// latest cited receipt: earlier receipts legitimately recorded earlier
+	// post-evaluation tree states.
+	if latestWorktreeDigest != worktreeDigest {
+		return nil, fmt.Errorf("capsule execution evidence does not bind the final frozen subject: latest receipt observed %s, frozen subject is %s", latestWorktreeDigest, worktreeDigest)
 	}
 	return receipts, nil
 }
