@@ -807,6 +807,12 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		result, err = rt.commitAssignedCoSuperReport(ctx, assignment, report)
 	}
 	if err != nil {
+		// Name the exact strand state on every failed terminal attempt: the
+		// saga's partial dispositions and the failing step were invisible in
+		// the journal for assignments 121ae9fe and e8592727, which blocked
+		// diagnosis for hours.
+		log.Printf("runtime: assignment %s terminal report attempt failed: disposition=%s capsule=%s version=%d err=%v",
+			assignment.AssignmentID, assignment.Disposition, assignment.CapsuleDisposition, assignment.LifecycleVersion, err)
 		// A failed terminal attempt strands the assignment on whichever
 		// pending fate disposition the saga already committed. Arm the fate
 		// watchdog so the continuation re-drives without depending on the
