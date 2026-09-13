@@ -424,8 +424,8 @@ func TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel(t *testing.T)
 	report := types.CoSuperAssignmentReport{
 		Result: types.CoSuperResultCompleted, Verdict: types.CoSuperVerdictNone, Summary: "resumable stranded work",
 		ObservedSubjectDigest: open.Binding.SubjectDigest,
-		Commands: []types.CoSuperRecordedCommand{{CommandID: "observed-command", CommandDigest: objectgraph.SHA256([]byte("command")), ExecutionRef: "receipt:execution"}},
-		Outputs:  []types.CoSuperRecordedOutput{{OutputID: "output", Kind: "evidence", Digest: objectgraph.SHA256([]byte("output")), Ref: "artifact:output"}},
+		Commands:              []types.CoSuperRecordedCommand{{CommandID: "observed-command", CommandDigest: objectgraph.SHA256([]byte("command")), ExecutionRef: "receipt:execution"}},
+		Outputs:               []types.CoSuperRecordedOutput{{OutputID: "output", Kind: "evidence", Digest: objectgraph.SHA256([]byte("output")), Ref: "artifact:output"}},
 	}
 	propositionDigest, digestErr := store.ComputeTerminalPropositionDigest(open.Binding.SubjectDigest,
 		report.Result, report.Verdict, report.Commands, report.Outputs, report.EvidenceRefs)
@@ -453,7 +453,7 @@ func TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel(t *testing.T)
 		CommandID: "command-frozen-" + assignmentID, OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
 		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 3,
 		Disposition: types.CoSuperCapsuleFrozen, IntentRef: "capsule-freeze-intent:" + propositionDigest,
-		AckRef:      "capsule-fate:sha256:" + propositionDigest,
+		AckRef: "capsule-fate:sha256:" + propositionDigest,
 	}
 	ack.CommandDigest, err = store.ComputeSetCoSuperCapsuleDispositionDigest(ack)
 	if err != nil {
@@ -484,5 +484,64 @@ func TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel(t *testing.T)
 	again, err := s.GetCoSuperAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
 	if err != nil || again.Disposition != types.CoSuperAssignmentBound || again.CapsuleDisposition != types.CoSuperCapsuleFrozen {
 		t.Fatalf("second reconcile changed the strand: %+v err=%v", again, err)
+	}
+}
+
+// TestAssignedCoSuperFatePendingSignature pins the strand predicate: a bound
+// assignment with a staged proposal on any pending fate disposition
+// (freeze_requested, frozen, revoke_requested) owes a continuation; terminal,
+// active, or proposal-less states do not.
+func TestAssignedCoSuperFatePendingSignature(t *testing.T) {
+	base := types.CoSuperAssignment{AssignmentID: "assignment-p", Disposition: types.CoSuperAssignmentBound,
+		Binding: types.CoSuperAssignmentBinding{Attempt: 1}}
+	withProposal := func(a types.CoSuperAssignment) types.CoSuperAssignment {
+		a.PendingProposal = &types.CoSuperPendingProposal{PropositionDigest: "sha256:prop"}
+		return a
+	}
+	if assignedCoSuperFatePending(withProposal(base)) {
+		t.Fatal("active capsule must not be pending")
+	}
+	for _, disposition := range []types.CoSuperCapsuleDisposition{
+		types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested,
+	} {
+		stranded := withProposal(base)
+		stranded.CapsuleDisposition = disposition
+		if !assignedCoSuperFatePending(stranded) {
+			t.Fatalf("disposition %s must be pending", disposition)
+		}
+	}
+	completed := withProposal(base)
+	completed.Disposition = types.CoSuperAssignmentCompleted
+	if assignedCoSuperFatePending(completed) {
+		t.Fatal("terminal disposition must not be pending")
+	}
+	bare := base
+	bare.CapsuleDisposition = types.CoSuperCapsuleFrozen
+	if assignedCoSuperFatePending(bare) {
+		t.Fatal("frozen without a proposal must not be pending (restart-cancel owns it)")
+	}
+}
+
+// TestAssignedCoSuperTerminalRevokeIntentRoundTrip pins the deterministic
+// revoke intent the terminal saga mints: a stranded revoke_requested strand
+// must recompute the exact intent so the same terminal report can re-enter
+// the saga (P5-review F3).
+func TestAssignedCoSuperTerminalRevokeIntentRoundTrip(t *testing.T) {
+	assignment := types.CoSuperAssignment{
+		AssignmentID: "assignment-9ec36ecb", Disposition: types.CoSuperAssignmentBound,
+		BoundRunID: "run:assignment-9ec36ecb",
+		Binding:    types.CoSuperAssignmentBinding{Attempt: 1, CapsuleID: "capsule-9ec36ecb"},
+	}
+	first := assignedCoSuperTerminalRevokeIntent(assignment)
+	if first == "" || !strings.HasPrefix(first, "capsule-revoke-intent:") {
+		t.Fatalf("intent = %q", first)
+	}
+	if again := assignedCoSuperTerminalRevokeIntent(assignment); again != first {
+		t.Fatalf("intent not deterministic: %q vs %q", again, first)
+	}
+	mutated := assignment
+	mutated.Binding.Attempt = 2
+	if mutatedIntent := assignedCoSuperTerminalRevokeIntent(mutated); mutatedIntent == first {
+		t.Fatal("attempt must be part of the intent identity")
 	}
 }

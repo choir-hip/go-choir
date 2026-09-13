@@ -416,8 +416,11 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 		case yaegikernel.IntentComplete:
 			// The fate commit runs detached so teardown cannot interrupt it;
 			// the completion envelope still mails to the requester after the
-			// fate lands.
-			fateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			// fate lands. The timeout covers a slow frozen-capsule revocation
+			// (cgroup teardown plus typed receipt persistence on an
+			// fsync-bound store); 30s stranded assignment-9ec36ecb
+			// mid-revocation, so the window is minutes, not seconds.
+			fateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Minute)
 			var terminal bool
 			terminal, err = r.commitCompleteIntent(fateCtx, in)
 			cancel()

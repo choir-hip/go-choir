@@ -34,6 +34,12 @@ const (
 	// underlying execution request stays pending and retryable — the scheduler
 	// may re-admit it later; expiry fails the assignment, never the work.
 	coSuperAssignmentDeadline = 6 * time.Hour
+	// assignedCoSuperFateWatchdogDelay is the fate-transition watchdog delay:
+	// after a committed disposition strands the terminal saga, the watchdog
+	// re-drives the continuation without waiting for a worker cell or a
+	// restart. Longer than an in-flight commit needs, shorter than the
+	// deadline backstop.
+	assignedCoSuperFateWatchdogDelay = 5 * time.Minute
 )
 
 type assignmentCapsuleRuntime interface {

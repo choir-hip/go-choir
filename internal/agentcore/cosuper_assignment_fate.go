@@ -410,7 +410,7 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 		// destroy the work evidence. The reducer authors the fate from the
 		// staged proposal instead — same intent identity, so the store
 		// replays instead of minting a second report.
-		if assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen && assignment.PendingProposal != nil {
+		if (assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested) && assignment.PendingProposal != nil {
 			if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
 				log.Printf("runtime: assignment %s stranded frozen proposal resume: %v", assignment.AssignmentID, resumeErr)
 			}
@@ -702,7 +702,8 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
 		}
 	case types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested, types.CoSuperCapsuleRevoked:
-		if assignment.CapsuleIntentRef != intent && !reportExists {
+		if assignment.CapsuleIntentRef != intent && !reportExists &&
+			assignment.CapsuleIntentRef != assignedCoSuperTerminalRevokeIntent(assignment) {
 			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
 		}
 	default:
@@ -753,8 +754,10 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 			}}
 		}
 	}
-
-	if assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen && !reportExists {
+	if (assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested) && !reportExists {
+		// A revoke_requested strand is the saga's own mid-flight state: the
+		// executor capsule is still physically frozen until the revoke
+		// effects run, so the receipt binding re-drives here.
 		handle, resolveErr := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 		if resolveErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("resolve frozen assignment capability: %w", resolveErr)
@@ -804,10 +807,87 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		result, err = rt.commitAssignedCoSuperReport(ctx, assignment, report)
 	}
 	if err != nil {
-		return result, err
+		// A failed terminal attempt strands the assignment on whichever
+		// pending fate disposition the saga already committed. Arm the fate
+		// watchdog so the continuation re-drives without depending on the
+		// worker's next cell (a frozen capsule refuses every operation) or
+		// on a restart.
+		rt.armAssignedCoSuperFateWatchdog(assignment)
+		return types.CoSuperAssignmentCommandResult{}, err
 	}
 	return result, nil
 }
+
+// assignedCoSuperTerminalRevokeIntent recomputes the revoke intent the
+// terminal saga itself mints in revokeAssignedCapsule for the fixed reason
+// "terminal assignment report recorded". A stranded revoke_requested strand
+// carries exactly this intent, which lets the same terminal report re-enter
+// the saga instead of conflicting with the saga's own mid-flight state.
+func assignedCoSuperTerminalRevokeIntent(assignment types.CoSuperAssignment) string {
+	return "capsule-revoke-intent:" + objectgraph.SHA256([]byte(strings.Join([]string{
+		assignment.AssignmentID, fmt.Sprint(assignment.Binding.Attempt), assignment.BoundRunID, assignment.Binding.CapsuleID,
+		"terminal assignment report recorded",
+	}, "\x00")))
+}
+
+// assignedCoSuperFatePending reports whether one assignment still owes a
+// continuation after a committed fate disposition: a nonterminal bound
+// assignment whose capsule moved past active with a staged pending proposal
+// has a terminal saga mid-flight that nobody else will finish.
+func assignedCoSuperFatePending(assignment types.CoSuperAssignment) bool {
+	if assignment.Disposition != types.CoSuperAssignmentBound || assignment.PendingProposal == nil {
+		return false
+	}
+	switch assignment.CapsuleDisposition {
+	case types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested:
+		return true
+	default:
+		return false
+	}
+}
+
+// armAssignedCoSuperFateWatchdog is the fate-transition watchdog: after a
+// committed disposition leaves pending fate work, a delayed re-drive confirms
+// the strand predicate and finishes the saga. If the in-flight commit landed
+// first the re-read resolves terminal or active and the watchdog no-ops; a
+// process death before firing is covered by the boot reconcile's resume
+// branch. Fire-and-forget: no lost timer can jam the one-live slot beyond
+// the deadline sweep backstop.
+func (rt *Runtime) armAssignedCoSuperFateWatchdog(assignment types.CoSuperAssignment) {
+	if rt == nil || !assignedCoSuperFatePending(assignment) {
+		return
+	}
+	assignmentID, attempt := assignment.AssignmentID, assignment.Binding.Attempt
+	ownerID, computerID := assignment.Binding.OwnerID, assignment.Binding.ComputerID
+	time.AfterFunc(assignedCoSuperFateWatchdogDelay, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := rt.resumeStrandedFateAssignmentIfPending(ctx, ownerID, computerID, assignmentID, attempt); err != nil {
+			log.Printf("runtime: assignment %s fate watchdog: %v", assignmentID, err)
+		}
+	})
+}
+
+// resumeStrandedFateAssignmentIfPending re-reads the assignment and finishes
+// the stranded terminal saga when the strand predicate still holds.
+func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) error {
+	assignment, err := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, assignmentID, attempt)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	if !assignedCoSuperFatePending(assignment) {
+		return nil
+	}
+	if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
+		return resumeErr
+	}
+	log.Printf("runtime: assignment %s fate watchdog re-drove stranded %s proposal", assignmentID, assignment.CapsuleDisposition)
+	return nil
+}
+
 func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentReport, error) {
 	refs := make([]string, 0, len(report.Commands))
 	for _, command := range report.Commands {
@@ -890,7 +970,12 @@ func (rt *Runtime) resumeStrandedFrozenAssignmentCommits(ctx context.Context) {
 		return
 	}
 	for _, assignment := range assignments {
-		if assignment.Disposition != types.CoSuperAssignmentBound || assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen || assignment.PendingProposal == nil {
+		if assignment.Disposition != types.CoSuperAssignmentBound || assignment.PendingProposal == nil {
+			continue
+		}
+		switch assignment.CapsuleDisposition {
+		case types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested:
+		default:
 			continue
 		}
 		if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
