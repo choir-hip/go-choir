@@ -227,6 +227,12 @@ func (rt *Runtime) activate(rec *types.RunRecord) {
 	if err := rt.dispatchActor(context.Background(), rec.OwnerID, rec.ComputerID, agentID, "initial_dispatch", rec.RunID, trajectoryID, ""); err != nil {
 		log.Printf("runtime: activate dispatch for run %s: %v", rec.RunID, err)
 	}
+	// Central arm point: a freshly minted pending persistent-Super run whose
+	// initial_dispatch is lost (the boot-window race) has no watchdog and no
+	// retry authority anywhere else; the fresh-mint watchdog re-drives it
+	// through a recovery occurrence. Non-Super and reactivated runs are
+	// filtered inside (the reactivation resume watchdog owns the latter).
+	rt.armFreshMintSuperResumeWatchdog(rec)
 }
 
 // ExecuteActivationSync runs executeActivation in the caller's goroutine. It

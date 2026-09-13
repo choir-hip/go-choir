@@ -409,6 +409,10 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 		if err := rt.persistentSuperResidentMatchesExact(&resident, exactUpdateID); err != nil {
 			return nil, err
 		}
+		// The live occurrence binding to a pending resident is the only
+		// observer a lost mint dispatch ever gets; arm the fresh-mint
+		// watchdog so the strand cannot self-seal behind this bind.
+		rt.armFreshMintSuperResumeWatchdog(&resident)
 		return &resident, nil
 	}
 	if resumed, ok, err := rt.reactivateRestartedPersistentSuperControlRun(ctx, ownerID, agentID); err != nil {
@@ -703,6 +707,105 @@ func (rt *Runtime) failExpiredReactivatedSuperResume(ctx context.Context, ownerI
 		return false, err
 	}
 	log.Printf("runtime: persistent-Super resume watchdog failed undispatched run=%s owner=%s agent=%s", rec.RunID, rec.OwnerID, rec.AgentID)
+	return true, nil
+}
+
+// freshMintSuperResumeStranded is the fresh-mint hang predicate: a persistent
+// Super run minted pending whose initial_dispatch never executed, still
+// pending past the dispatch deadline. The reactivation watchdog covers only
+// runs carrying the reactivation flag, so a fresh mint with a lost
+// boot-window dispatch has no watchdog and no retry authority and the strand
+// self-seals (2026-09-13 run 2454bdd4: minted 04:14:01Z during the boot
+// rewarm window, pending 45 minutes, no dispatch log and no inference). Zero
+// UpdatedAt counts as stranded: with no freshness signal the fail-closed
+// choice releases the slot.
+func freshMintSuperResumeStranded(rec *types.RunRecord, now time.Time) bool {
+	if rec == nil || !isPersistentSuperAgentRun(rec) {
+		return false
+	}
+	if rec.State != types.RunPending {
+		return false
+	}
+	if metadataBoolValue(rec.Metadata, "actor_reactivated_from_passivated") {
+		// The reactivation resume watchdog owns those runs.
+		return false
+	}
+	if rec.UpdatedAt.IsZero() {
+		return true
+	}
+	return now.Sub(rec.UpdatedAt) > persistentSuperResumeDispatchDeadline
+}
+
+// freshMintSuperResumeArming is the arm-time predicate: every freshly minted
+// pending persistent Super run gets one watchdog; the deadline check happens
+// again at fire time so an in-flight dispatch is never raced.
+func freshMintSuperResumeArming(rec *types.RunRecord) bool {
+	return rec != nil && isPersistentSuperAgentRun(rec) &&
+		rec.State == types.RunPending &&
+		!metadataBoolValue(rec.Metadata, "actor_reactivated_from_passivated")
+}
+
+// armFreshMintSuperResumeWatchdog bounds a freshly minted persistent Super
+// run. Fire-and-forget, mirroring the reactivation resume watchdog, but it
+// re-drives through a recovery occurrence instead of failing the run: a
+// fresh mint whose initial_dispatch was lost has no live trigger queued
+// behind it, so releasing the slot would strand the bound controls too. When
+// the deadline passes and the run is still pending, a recovery occurrence
+// re-drives it through the exact recovery branch; if the dispatch executed
+// first the recovery occurrence resolves terminal and no-ops. A process
+// death before firing is covered by boot passivation plus the rewarm.
+func (rt *Runtime) armFreshMintSuperResumeWatchdog(rec *types.RunRecord) {
+	if rt == nil || !freshMintSuperResumeArming(rec) {
+		return
+	}
+	delay := persistentSuperResumeDispatchDeadline
+	if !rec.UpdatedAt.IsZero() {
+		if remaining := persistentSuperResumeDispatchDeadline - time.Since(rec.UpdatedAt); remaining > 0 {
+			delay = remaining
+		} else {
+			delay = time.Second // already stranded: fire just off the current goroutine
+		}
+	}
+	time.AfterFunc(delay, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		redriven, err := rt.redriveStrandedFreshMintSuper(ctx, rec.OwnerID, rec.RunID)
+		if err != nil {
+			log.Printf("runtime: persistent-Super fresh-mint watchdog run %s: %v", rec.RunID, err)
+		} else if redriven {
+			log.Printf("runtime: persistent-Super fresh-mint watchdog re-drove stranded run=%s owner=%s", rec.RunID, rec.OwnerID)
+		}
+	})
+}
+
+// redriveStrandedFreshMintSuper re-drives one stranded fresh mint: re-read
+// the run, confirm the strand predicate still holds, and enqueue a recovery
+// occurrence bound to one of the run's still-pending delivered controls.
+// Returns true when a recovery occurrence was enqueued.
+func (rt *Runtime) redriveStrandedFreshMintSuper(ctx context.Context, ownerID, runID string) (bool, error) {
+	if rt == nil || rt.store == nil {
+		return false, fmt.Errorf("fresh-mint watchdog: store unavailable")
+	}
+	rec, err := rt.store.GetRunByOwner(ctx, ownerID, runID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !freshMintSuperResumeStranded(&rec, time.Now().UTC()) {
+		return false, nil
+	}
+	packets, err := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, &rec)
+	if err != nil {
+		return false, fmt.Errorf("fresh-mint watchdog list bound controls: %w", err)
+	}
+	if len(packets) == 0 {
+		return false, nil
+	}
+	if err := rt.enqueuePersistentSuperRecoveryOccurrence(ctx, &rec, packets); err != nil {
+		return false, fmt.Errorf("fresh-mint watchdog re-drive: %w", err)
+	}
 	return true, nil
 }
 
