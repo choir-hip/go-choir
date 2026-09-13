@@ -3,8 +3,9 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
+	"encoding/hex"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -167,6 +168,8 @@ func TestRosterCollectWritesTerminalReceipt(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
 		case strings.HasPrefix(r.URL.Path, "/api/runs/"):
 			json.NewEncoder(w).Encode(map[string]any{"run_id": "run-1", "disposition": "completed"})
+		case strings.HasPrefix(r.URL.Path, "/api/trajectories/") && strings.Contains(r.URL.Path, "capsule-evidence"):
+			json.NewEncoder(w).Encode(map[string]any{"assignment": map[string]any{"disposition": "completed", "capsule_disposition": "frozen"}})
 		case strings.HasPrefix(r.URL.Path, "/api/trajectories/"):
 			json.NewEncoder(w).Encode(map[string]any{})
 		case strings.HasPrefix(r.URL.Path, "/api/costs"):
@@ -254,5 +257,53 @@ func TestRosterReceiptFailsOnServedObjectiveDigestMismatch(t *testing.T) {
 	}
 	if mutated.Pass == nil || *mutated.Pass {
 		t.Fatalf("mutated objective pass = %v, want explicit false", mutated.Pass)
+	}
+}
+
+// TestRosterCollectKeepsPollingWhileFatePending proves the receipt cannot
+// declare done from a terminal run alone: a detached fate commit can strand
+// mid-saga (assignment-9ec36ecb stranded at revoke_requested while its run
+// completed), so the done gate reads the reducer-authoritative assignment
+// disposition.
+func TestRosterCollectKeepsPollingWhileFatePending(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/health/ready":
+			json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+		case strings.HasPrefix(r.URL.Path, "/api/runs/"):
+			json.NewEncoder(w).Encode(map[string]any{"run_id": "run-1", "disposition": "completed"})
+		case strings.HasPrefix(r.URL.Path, "/api/trajectories/") && strings.Contains(r.URL.Path, "capsule-evidence"):
+			json.NewEncoder(w).Encode(map[string]any{"assignment": map[string]any{"disposition": "bound", "capsule_disposition": "revoke_requested"}})
+		case strings.HasPrefix(r.URL.Path, "/api/trajectories/"):
+			json.NewEncoder(w).Encode(map[string]any{})
+		case strings.HasPrefix(r.URL.Path, "/api/costs"):
+			json.NewEncoder(w).Encode(map[string]any{})
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	artifact := filepath.Join(t.TempDir(), "receipt.json")
+	t.Setenv(hostEnvVar, srv.URL)
+	t.Setenv(apiKeyEnvVar, "choir_sk_test")
+	var stdout bytes.Buffer
+	code := runRoster([]string{"collect", "--request-id", "r1", "--overlay-id", "o1",
+		"--assignment", "a1", "--run", "run-1", "--trajectory", "t1",
+		"--task-sha256", strings.Repeat("b", 64), "--artifact", artifact,
+		"--collect-timeout", "300ms", "--poll-interval", "10ms"}, &stdout, io.Discard)
+	if code == 0 {
+		t.Fatalf("collect declared done on a terminal run with pending fate: %s", stdout.String())
+	}
+	raw, err := os.ReadFile(artifact)
+	if err != nil {
+		t.Fatalf("partial receipt not written: %v", err)
+	}
+	var receipt map[string]any
+	if err := json.Unmarshal(raw, &receipt); err != nil {
+		t.Fatalf("receipt not JSON: %v", err)
+	}
+	if !strings.Contains(fmt.Sprint(receipt["notes"]), "assignment fate pending") {
+		t.Fatalf("receipt notes = %v, want the fate-pending explanation", receipt["notes"])
 	}
 }

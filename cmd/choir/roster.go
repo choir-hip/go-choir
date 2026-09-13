@@ -425,7 +425,7 @@ func runRosterCollect(args []string, stdout, stderr io.Writer) int {
 		}
 		if time.Now().After(deadline) {
 			receipt.NeedsHumanClassify = true
-			receipt.Notes = "collect timeout before terminal disposition; receipt records partial evidence only"
+			receipt.Notes = strings.TrimSpace(receipt.Notes + "; collect timeout before terminal disposition; receipt records partial evidence only")
 			if err := rosterWriteArtifact(strings.TrimSpace(*artifact), receipt); err != nil {
 				fmt.Fprintf(stderr, "choir roster collect: %v\n", err)
 				return 1
@@ -507,10 +507,7 @@ func verifyRosterTaskText(receipt *rosterReceipt, runDoc map[string]any, pinnedS
 func rosterCollectTerminal(c *client, receipt *rosterReceipt, runID, trajectoryID, assignmentID string, attempt uint64) (*rosterReceipt, bool, error) {
 	var snapshot json.RawMessage
 	if err := c.do(http.MethodGet, "/api/trajectories/"+url.PathEscape(trajectoryID), nil, &snapshot); err == nil {
-		var doc map[string]any
-		if json.Unmarshal(snapshot, &doc) == nil {
-			receipt.RunIDs["trajectory"] = doc
-		}
+		receipt.RunIDs["trajectory"] = json.RawMessage(snapshot)
 	}
 	var evidence json.RawMessage
 	path := fmt.Sprintf("/api/trajectories/%s/capsule-evidence/%s?attempt=%d", url.PathEscape(trajectoryID), url.PathEscape(assignmentID), attempt)
@@ -518,6 +515,20 @@ func rosterCollectTerminal(c *client, receipt *rosterReceipt, runID, trajectoryI
 		var doc map[string]any
 		if json.Unmarshal(evidence, &doc) == nil {
 			receipt.RunIDs["capsule_evidence"] = doc
+			// Run-terminal is not fate-terminal: a detached fate commit can
+			// strand mid-saga (assignment-9ec36ecb stranded at
+			// revoke_requested while its run completed and the worker
+			// reported "settled"). The receipt's done gate reads the
+			// reducer-authoritative assignment disposition.
+			assignment, _ := doc["assignment"].(map[string]any)
+			assignmentDisposition := strings.ToLower(rosterFirstString(assignment, "disposition"))
+			capsuleDisposition := strings.ToLower(rosterFirstString(assignment, "capsule_disposition"))
+			fateTerminal := assignmentDisposition == "completed" || assignmentDisposition == "cancelled" || assignmentDisposition == "canceled"
+			if !fateTerminal {
+				receipt.Notes = fmt.Sprintf("run terminal but assignment fate pending: disposition %q, capsule %q; polling until the fate lands or the collect deadline",
+					assignmentDisposition, capsuleDisposition)
+				return receipt, false, nil
+			}
 		}
 	}
 	var costs json.RawMessage
