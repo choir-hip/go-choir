@@ -57,8 +57,8 @@ func TestVerifyModelCapabilitySchemaAndExplicitPayload(t *testing.T) {
 	}
 	output, err := tool.Func(verifierContext(), json.RawMessage(`{
 		"role":"verifier",
-		"provider":"fireworks",
-		"model":"accounts/fireworks/models/deepseek-v4-flash",
+		"provider":"opencode-go",
+		"model":"deepseek-v4.1-flash",
 		"prompt":"verify this text-only evidence"
 	}`))
 	if err != nil {
@@ -68,7 +68,7 @@ func TestVerifyModelCapabilitySchemaAndExplicitPayload(t *testing.T) {
 		t.Fatalf("provider calls = %d", provider.calls)
 	}
 	request := provider.request
-	if request.Provider != "fireworks" || request.Model != "accounts/fireworks/models/deepseek-v4-flash" || request.MaxTokens != 0 {
+	if request.Provider != "opencode-go" || request.Model != "deepseek-v4.1-flash" || request.MaxTokens != 0 {
 		t.Fatalf("provider request = %+v", request)
 	}
 	if request.System != "You are a Choir verifier. Answer only the verification prompt. Do not mutate state." || len(request.Messages) != 1 || !strings.Contains(string(request.Messages[0]), "verify this text-only evidence") {
@@ -106,22 +106,26 @@ func TestVerifyModelCapabilityRefusesImageWithoutMultimodalPolicy(t *testing.T) 
 	}
 }
 
-func TestVerifyModelCapabilityUsesDeterministicFixture(t *testing.T) {
+func TestVerifyModelCapabilityRefusesImageOnExplicitTextOnlyModel(t *testing.T) {
+	// The catalog no longer carries any funded multimodal model, so even an
+	// explicit provider/model payload must fail closed on image input.
 	provider := &capturingModelVerifyProvider{}
 	tool := NewVerifyModelCapabilityTool(NewManager(ManagerConfig{Provider: provider}))
-	output, err := tool.Func(verifierContext(), json.RawMessage(`{
+	_, err := tool.Func(verifierContext(), json.RawMessage(`{
 		"role":"verifier_multimodal",
 		"provider":"xiaomi",
 		"model":"mimo-v2.5",
 		"prompt":"describe the fixture",
 		"image_fixture":"red_pixel_png"
 	}`))
-	if err != nil {
-		t.Fatalf("verify: %v", err)
+	if err == nil {
+		t.Fatalf("expected the image input to refuse on a text-only catalog model")
 	}
-	message := string(provider.request.Messages[0])
-	if !strings.Contains(message, verifierRedPixelPNGBase64) || !strings.Contains(message, `"mime_type":"image/png"`) || !strings.Contains(output, `"image_input":true`) {
-		t.Fatalf("fixture message/result = %s / %s", message, output)
+	if !strings.Contains(err.Error(), "multimodal") {
+		t.Fatalf("refusal = %v, want a multimodal capability refusal", err)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("refused image must not reach the provider: calls=%d", provider.calls)
 	}
 }
 
