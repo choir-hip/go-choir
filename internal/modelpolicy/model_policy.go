@@ -29,21 +29,11 @@ const (
 
 	modelPolicyOverlayRelativeDir = "System/model-policy-overlays"
 
-	defaultDeepSeekProvider          = "deepseek"
-	defaultFireworksProvider         = "fireworks"
-	defaultXiaomiProvider            = "xiaomi"
-	defaultMimoTextModel             = "mimo-v2.5"
-	defaultMimoProModel              = "mimo-v2.5-pro"
-	defaultConductorModel            = "deepseek-v4-flash"
-	defaultSuperModel                = "deepseek-v4-pro"
-	defaultFlashForegroundReasoning  = "medium"
 	defaultChatGPTProvider           = "chatgpt"
 	defaultChatGPTMiniModel          = "gpt-5.6-luna"
 	defaultChatGPTForegroundModel    = "gpt-5.6-luna"
 	defaultTerminalFallbackModel     = "gpt-5.6-luna"
 	defaultTerminalFallbackReasoning = "low"
-	legacyFireworksFlashModel        = "accounts/fireworks/models/deepseek-v4-flash"
-	legacyFireworksProModel          = "accounts/fireworks/models/deepseek-v4-pro"
 )
 
 // ManagerConfig supplies the computer-owned policy path and the server-owned
@@ -211,10 +201,10 @@ func RuntimeConfigFallbackSelection(cfg provideriface.Config) provideriface.LLMS
 	model := strings.TrimSpace(cfg.LLMModel)
 	reasoning := strings.TrimSpace(cfg.LLMReasoningEffort)
 	if provider == "" {
-		provider = defaultXiaomiProvider
+		provider = defaultChatGPTProvider
 	}
 	if model == "" {
-		model = defaultMimoTextModel
+		model = defaultChatGPTMiniModel
 	}
 	return provideriface.LLMSelection{Provider: provider, Model: model, ReasoningEffort: reasoning, Source: "runtime_config"}
 }
@@ -229,8 +219,12 @@ func TerminalProviderFallbackSelection() provideriface.LLMSelection {
 	}
 }
 
-// ProviderPreconditionFallbackSelections returns ordered cross-provider
-// fallbacks for a selection that failed provider preconditions.
+// ProviderPreconditionFallbackSelections returns the terminal platform
+// fallback for a selection that failed provider preconditions. There is no
+// silent cross-provider substitution: the owner (2026-09-12, residue R9)
+// ratified that entitlement may only admit or refuse, and the unfunded
+// deepseek/xiaomi swap ladder is deleted. A failing selection recovers on the
+// terminal platform pair only, and every receipt names the source.
 func ProviderPreconditionFallbackSelections(selection provideriface.LLMSelection) []provideriface.LLMSelection {
 	terminalFallback := TerminalProviderFallbackSelection()
 	if strings.TrimSpace(selection.Model) == "" {
@@ -242,11 +236,7 @@ func ProviderPreconditionFallbackSelections(selection provideriface.LLMSelection
 		}
 		return nil
 	}
-	fallbacks := make([]provideriface.LLMSelection, 0, 3)
-	for _, candidate := range flashPreconditionFallbackSelections(selection) {
-		fallbacks = appendUniqueProviderModelFallback(fallbacks, candidate)
-	}
-	return appendProviderPreconditionPlatformFallback(fallbacks, selection, terminalFallback)
+	return appendProviderPreconditionPlatformFallback(nil, selection, terminalFallback)
 }
 
 func (m *Manager) providerConfig() provideriface.Config {
@@ -344,8 +334,8 @@ model = "gpt-5.6-luna"
 reasoning = "high"
 
 [roles.engineering]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+provider = "opencode-go"
+model = "deepseek-v4.1-flash"
 
 [roles.research]
 provider = "chatgpt"
@@ -363,13 +353,13 @@ model = "gpt-5.6-luna"
 reasoning = "low"
 
 [roles.verifier]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+provider = "chatgpt"
+model = "gpt-5.6-luna"
 requires = ["text", "tool_use"]
 
 [roles.verifier_multimodal]
-provider = "xiaomi"
-model = "mimo-v2.5"
+provider = "chatgpt"
+model = "gpt-5.6-luna"
 requires = ["image", "tool_use"]
 `
 }
@@ -384,13 +374,13 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 		Roles: map[string]provideriface.LLMSelection{
 			agentprofile.Conductor:  chatGPTMini,
 			agentprofile.Super:      chatGPTForeground,
-			agentprofile.CoSuper:    {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
+			agentprofile.CoSuper:    {Provider: "opencode-go", Model: "deepseek-v4.1-flash", Source: "platform_fallback"},
 			agentprofile.Researcher: chatGPTMini,
 			agentprofile.Texture:    chatGPTWire,
 			agentprofile.Processor:  chatGPTWire,
 			agentprofile.Reconciler: chatGPTWire,
-			VerifierRole:            {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
-			MultimodalVerifierRole:  {Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, Source: "platform_fallback"},
+			VerifierRole:            {Provider: defaultChatGPTProvider, Model: defaultTerminalFallbackModel, Source: "platform_fallback"},
+			MultimodalVerifierRole:  {Provider: defaultChatGPTProvider, Model: defaultTerminalFallbackModel, Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
 	}
@@ -627,37 +617,6 @@ func metadataString(metadata map[string]any, key string) string {
 	return ""
 }
 
-func flashPreconditionFallbackSelections(selection provideriface.LLMSelection) []provideriface.LLMSelection {
-	provider := strings.ToLower(strings.TrimSpace(selection.Provider))
-	model := strings.TrimSpace(selection.Model)
-	reasoning := strings.TrimSpace(selection.ReasoningEffort)
-	if reasoning == "" {
-		reasoning = defaultFlashForegroundReasoning
-	}
-	flashXiaomi := provideriface.LLMSelection{Provider: defaultXiaomiProvider, Model: defaultMimoTextModel, ReasoningEffort: reasoning, Source: "provider_precondition_fallback"}
-	flashDeepSeek := provideriface.LLMSelection{Provider: defaultDeepSeekProvider, Model: defaultConductorModel, ReasoningEffort: reasoning, Source: "provider_precondition_fallback"}
-	switch {
-	case provider == defaultFireworksProvider && model == legacyFireworksFlashModel:
-		return []provideriface.LLMSelection{flashXiaomi, flashDeepSeek}
-	case provider == defaultFireworksProvider && model == legacyFireworksProModel:
-		return []provideriface.LLMSelection{flashDeepSeek, flashXiaomi}
-	case provider == defaultDeepSeekProvider && (model == defaultConductorModel || model == defaultSuperModel):
-		return []provideriface.LLMSelection{flashXiaomi}
-	case provider == defaultXiaomiProvider && (model == defaultMimoTextModel || model == defaultMimoProModel):
-		return []provideriface.LLMSelection{flashDeepSeek}
-	default:
-		return nil
-	}
-}
-
-func appendUniqueProviderModelFallback(fallbacks []provideriface.LLMSelection, candidate provideriface.LLMSelection) []provideriface.LLMSelection {
-	for _, fallback := range fallbacks {
-		if sameProviderModelSelection(fallback, candidate) {
-			return fallbacks
-		}
-	}
-	return append(fallbacks, candidate)
-}
 
 func appendProviderPreconditionPlatformFallback(fallbacks []provideriface.LLMSelection, active, platformFallback provideriface.LLMSelection) []provideriface.LLMSelection {
 	provider := strings.TrimSpace(platformFallback.Provider)

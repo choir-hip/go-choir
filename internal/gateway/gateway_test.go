@@ -1504,40 +1504,6 @@ func TestMultiProvider_RoutesToFireworksByProviderField(t *testing.T) {
 	}
 }
 
-func TestMultiProvider_RoutesToFireworksByModel(t *testing.T) {
-	// VAL-LLM-005: Request with Fireworks model routes to Fireworks provider.
-	h, reg := setupMultiProviderHandler(t)
-
-	result, _ := reg.IssueCredential("autoputer-fw-model")
-
-	payload := ProviderRequest{
-		Model:     "accounts/fireworks/models/deepseek-v4-flash",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
-		MaxTokens: 100,
-	}
-	body, _ := json.Marshal(payload)
-
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+result.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp ProviderResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	if resp.ProviderName != "fireworks" {
-		t.Errorf("ProviderName = %q, want %q (routed by model)", resp.ProviderName, "fireworks")
-	}
-}
-
 func TestMultiProvider_RoutesToZAIByProviderField(t *testing.T) {
 	// VAL-LLM-006: Request with provider=zai routes to Z.AI provider.
 	h, reg := setupMultiProviderHandler(t)
@@ -2514,18 +2480,6 @@ func TestProviderRouting(t *testing.T) {
 		{
 			name:             "explicit_provider_fireworks",
 			provider:         "fireworks",
-			wantStatus:       http.StatusOK,
-			wantProviderName: "fireworks",
-		},
-		{
-			name:             "model_fireworks_exact_match",
-			model:            "accounts/fireworks/models/deepseek-v4-flash",
-			wantStatus:       http.StatusOK,
-			wantProviderName: "fireworks",
-		},
-		{
-			name:             "model_contains_fireworks",
-			model:            "accounts/fireworks/models/llama-v3-70b",
 			wantStatus:       http.StatusOK,
 			wantProviderName: "fireworks",
 		},

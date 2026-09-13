@@ -83,30 +83,26 @@ func TestVerifyModelCapabilitySchemaAndExplicitPayload(t *testing.T) {
 	}
 }
 
-func TestVerifyModelCapabilityUsesPolicySelections(t *testing.T) {
+func TestVerifyModelCapabilityRefusesImageWithoutMultimodalPolicy(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
 	manager := NewManager(ManagerConfig{
 		PolicyPath: filepath.Join(t.TempDir(), "System", "model-policy.toml"),
 		Provider:   provider,
 	})
 	tool := NewVerifyModelCapabilityTool(manager)
-	output, err := tool.Func(verifierContext(), json.RawMessage(`{
+	_, err := tool.Func(verifierContext(), json.RawMessage(`{
 		"role":"verifier_multimodal",
 		"prompt":"describe this screenshot",
 		"image_url":"https://example.com/screen.png"
 	}`))
-	if err != nil {
-		t.Fatalf("verify: %v", err)
+	if err == nil {
+		t.Fatalf("expected loud refusal: no funded multimodal model exists in the catalog")
 	}
-	if provider.request.Provider != "xiaomi" || provider.request.Model != "mimo-v2.5" {
-		t.Fatalf("provider request = %+v", provider.request)
+	if !strings.Contains(err.Error(), "multimodal") {
+		t.Fatalf("refusal = %v, want a multimodal capability refusal", err)
 	}
-	message := string(provider.request.Messages[0])
-	if !strings.Contains(message, `"type":"image"`) || !strings.Contains(message, `"kind":"url"`) {
-		t.Fatalf("multimodal message = %s", message)
-	}
-	if !strings.Contains(output, `"image_input":true`) || !strings.Contains(output, `"role":"verifier_multimodal"`) {
-		t.Fatalf("result = %s", output)
+	if provider.request.Provider != "" || provider.request.Model != "" {
+		t.Fatalf("refused role must not reach the provider: %+v", provider.request)
 	}
 }
 

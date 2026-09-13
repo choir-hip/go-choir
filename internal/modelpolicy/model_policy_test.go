@@ -58,8 +58,8 @@ func TestManagerCreatesDefaultCutoverPolicy(t *testing.T) {
 		agentprofile.Conductor: {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
 		agentprofile.Super:     {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "high"},
 		agentprofile.Texture:   {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
-		VerifierRole:           {Provider: "deepseek", Model: "deepseek-v4-flash", ReasoningEffort: "low"},
-		MultimodalVerifierRole: {Provider: "xiaomi", Model: "mimo-v2.5", ReasoningEffort: "low"},
+		VerifierRole:           {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
+		MultimodalVerifierRole: {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
 	} {
 		got := policy.Resolve(role)
 		if got.Provider != want.Provider || got.Model != want.Model || got.ReasoningEffort != want.ReasoningEffort {
@@ -174,10 +174,19 @@ func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	}
 }
 
-func TestProviderPreconditionFallbacksPreserveOrder(t *testing.T) {
-	fallbacks := ProviderPreconditionFallbackSelections(provideriface.LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash"})
-	if len(fallbacks) != 3 || fallbacks[0].Provider != "xiaomi" || fallbacks[1].Provider != "deepseek" || fallbacks[2].Provider != "chatgpt" || fallbacks[2].Model != "gpt-5.6-luna" {
-		t.Fatalf("fallbacks = %+v", fallbacks)
+func TestProviderPreconditionFallbacksTerminalOnly(t *testing.T) {
+	// No silent cross-provider substitution: a selection that fails provider
+	// preconditions recovers on the terminal platform pair only (residue R9).
+	fallbacks := ProviderPreconditionFallbackSelections(provideriface.LLMSelection{Provider: "opencode-go", Model: "deepseek-v4.1-flash"})
+	if len(fallbacks) != 1 || fallbacks[0].Provider != "chatgpt" || fallbacks[0].Model != "gpt-5.6-luna" {
+		t.Fatalf("fallbacks = %+v, want exactly the terminal platform fallback", fallbacks)
+	}
+	if fallbacks[0].Source != "provider_precondition_terminal_fallback" {
+		t.Fatalf("fallback source = %q", fallbacks[0].Source)
+	}
+	same := ProviderPreconditionFallbackSelections(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-5.6-luna"})
+	if len(same) != 0 {
+		t.Fatalf("terminal-equal selection must not fall back to itself: %+v", same)
 	}
 }
 

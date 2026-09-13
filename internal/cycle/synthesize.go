@@ -14,18 +14,8 @@ type Synthesizer struct {
 	Model    string
 }
 
-func NewSynthesizer() (*Synthesizer, error) {
-	// DeepSeek v4-flash is hosted on Fireworks AI in the go-choir environment
-	model := "accounts/fireworks/models/deepseek-v4-flash"
-	p, err := provider.NewFireworksProviderFromEnv(model)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize fireworks provider: %w", err)
-	}
-
-	return &Synthesizer{
-		Provider: p,
-		Model:    model,
-	}, nil
+func NewSynthesizer(provider provider.Provider, model string) *Synthesizer {
+	return &Synthesizer{Provider: provider, Model: model}
 }
 
 func (s *Synthesizer) Synthesize(ctx context.Context, clusters [][]sources.Item) (string, error) {

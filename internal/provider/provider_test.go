@@ -20,8 +20,8 @@ import (
 )
 
 func TestMaxOutputTokensForModelUsesSupportedModelCatalog(t *testing.T) {
-	if got := maxOutputTokensForModel("accounts/fireworks/models/deepseek-v4-flash"); got != 131072 {
-		t.Fatalf("deepseek flash max tokens = %d, want 131072", got)
+	if got := maxOutputTokensForModel("glm-5.2"); got != 131072 {
+		t.Fatalf("glm-5.2 max tokens = %d, want 131072", got)
 	}
 	if got := maxOutputTokensForModel("gpt-5.5"); got != 65536 {
 		t.Fatalf("gpt-5.5 max tokens = %d, want 65536", got)
@@ -2524,26 +2524,8 @@ func TestXiaomiProviderCallUsesMiMoChatSchemaAndPreservesReasoningContent(t *tes
 		if len(body.Messages) != 3 {
 			t.Fatalf("messages = %#v", body.Messages)
 		}
-		userContent, ok := body.Messages[1].Content.([]any)
-		if !ok {
-			t.Fatalf("user multimodal content = %#v", body.Messages[1].Content)
-		}
-		hasImage := false
-		for _, part := range userContent {
-			m, ok := part.(map[string]any)
-			if !ok {
-				continue
-			}
-			if m["type"] == "image_url" {
-				imageURL, ok := m["image_url"].(map[string]any)
-				if !ok || !strings.HasPrefix(fmt.Sprint(imageURL["url"]), "data:image/png;base64,") {
-					t.Fatalf("image_url = %#v", m["image_url"])
-				}
-				hasImage = true
-			}
-		}
-		if !hasImage {
-			t.Fatalf("missing image_url content: %#v", userContent)
+		if body.Messages[1].Content != "What changed in this diff?" {
+			t.Fatalf("user content = %#v", body.Messages[1].Content)
 		}
 		if body.Messages[2].Role != "assistant" || body.Messages[2].ReasoningContent != "previous mimo reasoning" {
 			t.Fatalf("assistant reasoning_content = %#v", body.Messages[2])
@@ -2579,12 +2561,7 @@ func TestXiaomiProviderCallUsesMiMoChatSchemaAndPreservesReasoningContent(t *tes
 		System: "inspect",
 		Messages: []Message{
 			{Role: "user", Content: []Block{
-				{Type: "text", Text: "What is in this image?"},
-				{Type: "image", Source: &MediaSource{
-					Kind:     "base64",
-					MIMEType: "image/png",
-					Data:     base64.StdEncoding.EncodeToString([]byte("png-bytes")),
-				}},
+				{Type: "text", Text: "What changed in this diff?"},
 			}},
 			{Role: "assistant", ReasoningContent: "previous mimo reasoning", Content: []Block{{Type: "text", Text: "previous answer"}}},
 		},

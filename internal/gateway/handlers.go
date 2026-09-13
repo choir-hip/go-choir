@@ -536,22 +536,10 @@ func (h *Handler) resolveFromMultiProvider(req ProviderRequest) (provider.Provid
 			}
 		}
 
-		// Fallback: heuristic model routing for known patterns.
-		if strings.Contains(req.Model, "fireworks") {
-			if p := h.providers.Get("fireworks"); p != nil {
-				return p, nil
-			}
-		}
-		if strings.HasPrefix(req.Model, "deepseek-") {
-			if p := h.providers.Get("deepseek"); p != nil {
-				return p, nil
-			}
-		}
-		if strings.HasPrefix(req.Model, "mimo-") {
-			if p := h.providers.Get("xiaomi"); p != nil {
-				return p, nil
-			}
-		}
+		// Fallback: heuristic model routing for known patterns. The unfunded
+		// deepseek/xiaomi/fireworks providers are deleted (owner ratification
+		// 2026-09-12, residue R9): an uncatalogued model must fail routing
+		// loudly instead of guessing an implicit authority.
 		if strings.HasPrefix(req.Model, "gpt-") || strings.HasPrefix(req.Model, "o") || strings.Contains(req.Model, "codex") {
 			if p := h.providers.Get("chatgpt"); p != nil {
 				return p, nil

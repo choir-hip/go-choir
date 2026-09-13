@@ -24,10 +24,6 @@ const (
 	runMetadataLLMReasoningEffort = "llm_reasoning_effort"
 	runMetadataLLMMaxTokens       = "llm_max_tokens"
 	runMetadataLLMPolicySource    = "llm_policy_source"
-
-	defaultDeepSeekProvider  = "deepseek"
-	defaultFireworksProvider = "fireworks"
-	defaultXiaomiProvider    = "xiaomi"
 )
 
 // MaxOutputTokensForSelection returns the model catalog maximum for the
@@ -51,7 +47,9 @@ func MaxInteractiveOutputTokensForSelection(sel LLMSelection, role string) int {
 	if sel.MaxTokens > 0 {
 		return sel.MaxTokens
 	}
-	if provider == defaultFireworksProvider || provider == defaultDeepSeekProvider || provider == defaultXiaomiProvider {
+	// OpenAI-compatible chat-completions providers behave best when ordinary
+	// agent loops omit the explicit generation budget.
+	if provider == "opencode-go" || provider == "opencode-zen" {
 		return 0
 	}
 	return MaxOutputTokensForSelection(sel)
