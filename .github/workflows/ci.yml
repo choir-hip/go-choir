@@ -589,6 +589,20 @@ jobs:
           before="${{ github.event.before }}"
           after="${{ github.sha }}"
 
+          # The deployed identity is the authoritative diff base: intermediate
+          # push heads between successful deploys must not shrink the delta
+          # (the staged runtime changes after failing runs must still deploy).
+          # Fail soft to the push event's parent when the health endpoint is
+          # unreachable or the commit does not resolve.
+          deployed="$(curl -fsS --max-time 10 https://choir.news/health 2>/dev/null | jq -r '.build.deployed_commit // empty' || true)"
+          if [[ "$deployed" =~ ^[0-9a-f]{40}$ ]] && [[ "$deployed" != "$after" ]]; then
+            if git cat-file -e "${deployed}^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$deployed" 2>/dev/null; then
+              if git cat-file -e "${deployed}^{commit}" 2>/dev/null; then
+                before="$deployed"
+                echo "Diff base: deployed staging identity $deployed"
+              fi
+            fi
+          fi
           if [[ -n "$before" && ! "$before" =~ ^0+$ ]]; then
             git fetch --no-tags --depth=1 origin "$before" || true
           fi
