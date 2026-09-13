@@ -1,5 +1,20 @@
 # Roster arm status — assignment-e8592727 on doc 040930e8
 
+> **CORRECTED 2026-09-13 (later same day).** This receipt was written before
+> the fifth and sixth strands of the activation-wake family were
+> reducer-confirmed. Its "recovered each cycle so far / no substrate repair
+> lever is pending" standing is **contradicted by the Definition's
+> `problems_discovered` ledger** (`terminal-saga-revocation-strand-2026-09-13`,
+> `frozen-capsule-cell-drive-strand-2026-09-13`): the +5m watchdog left no
+> journal evidence on the 121ae9fe or e8592727 strands, post-restart late-fate
+> resume failed because raw executor receipts do not survive the guest
+> restart, and the terminal-saga revocation step is NOT repaired. The
+> authoritative record is the Definition's problems ledger and the escalation
+> memo `docs/memo-activation-wake-authority-substrate-2026-09-13.md`; the
+> next step is the owner decision recorded in the Definition's `now` card —
+> not "close P5-review, run P6". Keep this file for its live observations
+> below; do not cite it for gate state.
+
 ## Current standing (observed live, 2026-09-13)
 
 The roster arm's mechanism proof **landed end-to-end**: the owner tell broke
