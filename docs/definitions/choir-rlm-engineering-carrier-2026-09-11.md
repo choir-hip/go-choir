@@ -323,6 +323,11 @@ now:
       surface: 'retained computer URL mobility during host deploys (vmctl reattach moved the guest from 10.200.8.2 to 10.200.9.2 around the a2676517 deploy restarts)'
       evidence: 'the guest''s computer_url changed from http://10.200.8.2:8085 to http://10.200.9.2:8085 during the deploy''s host service restarts (epoch stayed 915, runtime pid unchanged, health ready at the new URL) - one direct health probe to the stale address timed out while the runtime kept logging. Durable observation of the guest requires the vmctl-resolved route, never a cached computer_url.'
       repair: 'not repaired: URL mobility is vmctl-internal behavior; recorded so acceptance probes resolve the route at use time.'
+    - id: roster-receipt-terminal-2026-09-13
+      class: repaired
+      surface: roster arm A14 on doc 040930e8 (facts-corrected tell, receipt binding live)
+      evidence: 'assignment-9ec36ecb-a7d9-5d48-9b1a-ab524d51fa9b attempt 1 executed all three task cells through the funded overlay (served_provider opencode-go, served_model deepseek-v4.1-flash), staged choir.Complete with verdict none (implementation slot), and the terminal saga LANDED in-process: freeze_requested -> frozen -> revoke_requested (cursor 1211) -> terminal settled at 13:25:17Z - the first fully in-cell roster arm ever to reach terminal disposition. The worker receipt records the field count (GoEvalRequest: 5 fields - Source, Cwd, AllowedPackages, TimeoutMS, Inbox), a byte-verified marker file, and a go vet exit code 1 that is environmental (networkless capsule, cold module cache). roster collect wrote the terminal receipt with needs_human_classify=true (model-behavior classification is the P5-review panel''s adjudication): docs/evidence/choir-rlm-engineering-carrier-roster-receipt-2026-09-13.json.'
+      repair: 'repaired by the two substrate fixes this session: resumeStrandedFrozenAssignmentCommit (stranded-frozen fate recovery) and the granted-receipt binding repair (authenticity per receipt, final subject via the latest receipt). Six arm cycles were spent finding the two defects; the seventh landed the receipt.'
     - id: frozen-capsule-cell-drive-strand-2026-09-13
       class: discovered
       surface: frozen-capsule execution drive after the freeze disposition (the in-cell carrier's worker wake contract)
