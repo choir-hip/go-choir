@@ -335,6 +335,13 @@ type rosterReceipt struct {
 	NeedsHumanClassify bool           `json:"needs_human_classify"`
 }
 
+// rosterFailureTaskText names the second arm-invalidating failure: the bound
+// run's served objective is not the pinned frozen task text. An arm served
+// non-frozen task text is not roster-comparable (the P5-review F1 finding:
+// the receipt used to echo --task-sha256 without verifying it against the
+// served objective).
+const rosterFailureTaskText = "task_text_not_frozen"
+
 // rosterFailureBasePolicy names the arm-invalidating failure: the assignment
 // resolved its provider/model from the computer's base policy instead of the
 // arm's overlay, because the structured model_policy_overlay_id never reached
@@ -390,7 +397,7 @@ func runRosterCollect(args []string, stdout, stderr io.Writer) int {
 	}
 	for _, req := range []struct{ name, value string }{
 		{"request-id", *requestID}, {"overlay-id", *overlayID}, {"assignment", *assignmentID},
-		{"run", *runID}, {"trajectory", *trajectoryID}, {"artifact", *artifact},
+		{"run", *runID}, {"trajectory", *trajectoryID}, {"artifact", *artifact}, {"task-sha256", *taskSHA},
 	} {
 		if strings.TrimSpace(req.value) == "" {
 			fmt.Fprintf(stderr, "choir roster collect: --%s is required\n", req.name)
@@ -460,6 +467,10 @@ func rosterCollectOnce(c *client, requestID, overlayID, assignmentID string, att
 	if receipt.FailureMode == rosterFailureBasePolicy {
 		return receipt, true, nil
 	}
+	verifyRosterTaskText(receipt, runDoc, taskSHA)
+	if receipt.FailureMode == rosterFailureTaskText {
+		return receipt, true, nil
+	}
 	disposition := rosterFirstString(runDoc, "disposition", "state", "status")
 	switch strings.ToLower(disposition) {
 	case "completed", "failed", "cancelled", "canceled", "terminal":
@@ -468,6 +479,26 @@ func rosterCollectOnce(c *client, requestID, overlayID, assignmentID string, att
 		receipt.Notes = fmt.Sprintf("run disposition %q not terminal; polling", disposition)
 		return receipt, false, nil
 	}
+}
+
+// verifyRosterTaskText compares the bound run's served objective against the
+// pinned frozen task digest. A mismatch marks the receipt failed loudly, the
+// same fail-loud contract as a base-policy arm.
+func verifyRosterTaskText(receipt *rosterReceipt, runDoc map[string]any, pinnedSHA string) {
+	served := rosterFirstString(runDoc, "prompt")
+	if served == "" {
+		return
+	}
+	sum := sha256.Sum256([]byte(served))
+	if hex.EncodeToString(sum[:]) == strings.TrimSpace(pinnedSHA) {
+		return
+	}
+	failed := false
+	receipt.Pass = &failed
+	receipt.FailureMode = rosterFailureTaskText
+	receipt.NeedsHumanClassify = true
+	receipt.Notes = fmt.Sprintf("bound run served objective digest %x does not match the pinned frozen task %s: an arm served non-frozen task text is not roster-comparable",
+		sum, strings.TrimSpace(pinnedSHA))
 }
 
 // rosterCollectTerminal reads the terminal evidence bundle. Pass/fail

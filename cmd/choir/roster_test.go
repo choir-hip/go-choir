@@ -237,3 +237,22 @@ func TestRosterReceiptFailsWhenArmOverlayDidNotServe(t *testing.T) {
 		t.Fatalf("overlay-served arm pass = %v, want unset (human-adjudicated)", *overlay.Pass)
 	}
 }
+
+func TestRosterReceiptFailsOnServedObjectiveDigestMismatch(t *testing.T) {
+	served := "frozen task bytes"
+	sum := sha256.Sum256([]byte(served))
+	pinned := hex.EncodeToString(sum[:])
+	matched := &rosterReceipt{}
+	verifyRosterTaskText(matched, map[string]any{"prompt": served}, pinned)
+	if matched.FailureMode != "" {
+		t.Fatalf("matching served objective recorded failure %q", matched.FailureMode)
+	}
+	mutated := &rosterReceipt{}
+	verifyRosterTaskText(mutated, map[string]any{"prompt": served + "\n(4) rewritten step"}, pinned)
+	if mutated.FailureMode != rosterFailureTaskText {
+		t.Fatalf("mutated objective failure mode = %q, want %q", mutated.FailureMode, rosterFailureTaskText)
+	}
+	if mutated.Pass == nil || *mutated.Pass {
+		t.Fatalf("mutated objective pass = %v, want explicit false", mutated.Pass)
+	}
+}
