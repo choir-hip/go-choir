@@ -413,11 +413,16 @@ func (rt *Runtime) ensureSelfDevelopmentTextureCaller(ctx context.Context, owner
 	// The deterministic caller identity is the stable authority for this
 	// trajectory. Prefer it over any successor Texture activation so the Super
 	// work item's creator-run provenance stays bound to one identity across restarts.
+	//
+	// A stored record in any state is provenance, not residency: a lifecycle
+	// projection written without execution admission (state running) must never
+	// satisfy the join as a live caller, and a passivated caller must never be
+	// re-projected to running here — execution admission belongs to the real
+	// Texture revision run the wake reconciler mints (submitTextureAgentRevisionRun
+	// with its pending agent mutation). Return the stored record unchanged and
+	// let the wake path reconcile execution.
 	if stored, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, deterministicRunID); err == nil {
-		if stored.State.Active() {
-			return stored, nil
-		}
-		return rt.reactivateSelfDevelopmentTextureCaller(ctx, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID, stored)
+		return stored, nil
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return types.RunRecord{}, fmt.Errorf("load self-development Texture caller: %w", err)
 	}
@@ -446,55 +451,6 @@ func (rt *Runtime) ensureSelfDevelopmentTextureCaller(ctx context.Context, owner
 		return types.RunRecord{}, fmt.Errorf("project self-development Texture caller: %w", err)
 	}
 	loaded, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, deterministicRunID)
-	if err != nil {
-		return types.RunRecord{}, fmt.Errorf("reload self-development Texture caller: %w", err)
-	}
-	return loaded, nil
-}
-
-// reactivateSelfDevelopmentTextureCaller restores a passivated deterministic
-// caller after first releasing any successor run that owns the Texture agent
-// slot, so provenance stays bound to the original creator run.
-func (rt *Runtime) reactivateSelfDevelopmentTextureCaller(ctx context.Context, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID string, stored types.RunRecord) (types.RunRecord, error) {
-	agent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
-	if err != nil {
-		return types.RunRecord{}, fmt.Errorf("load self-development Texture agent: %w", err)
-	}
-	if successorID := strings.TrimSpace(agent.ActiveRunID); successorID != "" && successorID != stored.RunID {
-		successor, loadErr := rt.store.GetLifecycleRun(ctx, ownerID, computerID, successorID)
-		if loadErr != nil {
-			return types.RunRecord{}, fmt.Errorf("load self-development Texture successor: %w", loadErr)
-		}
-		if successor.State == types.RunPending || successor.State == types.RunRunning {
-			passivated := successor
-			passivated.State = types.RunPassivated
-			passivated.UpdatedAt = time.Now().UTC()
-			passivated.FinishedAt = nil
-			req := types.ReplaceLifecycleActivationRequest{
-				OwnerID: ownerID, ComputerID: computerID,
-				CommandID:    "lifecycle-passivate-texture-successor:" + successorID,
-				TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: passivated,
-			}
-			req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
-			if _, passivateErr := rt.store.ReplaceLifecycleActivation(ctx, req); passivateErr != nil {
-				return types.RunRecord{}, fmt.Errorf("passivate self-development Texture successor: %w", passivateErr)
-			}
-		}
-	}
-	run := stored
-	run.State = types.RunRunning
-	run.UpdatedAt = time.Now().UTC()
-	run.FinishedAt = nil
-	req := types.ReplaceLifecycleActivationRequest{
-		OwnerID: ownerID, ComputerID: computerID,
-		CommandID:    "project:selfdev-texture:" + stored.RunID + ":reactivate",
-		TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: run,
-	}
-	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
-	if _, err := rt.store.ReplaceLifecycleActivation(ctx, req); err != nil {
-		return types.RunRecord{}, fmt.Errorf("reactivate self-development Texture caller: %w", err)
-	}
-	loaded, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, stored.RunID)
 	if err != nil {
 		return types.RunRecord{}, fmt.Errorf("reload self-development Texture caller: %w", err)
 	}

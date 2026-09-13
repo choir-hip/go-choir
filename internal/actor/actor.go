@@ -231,7 +231,42 @@ func (rt *Runtime) Send(ctx context.Context, u Update) error {
 		return fmt.Errorf("actor send: append: %w", err)
 	}
 	if !appended {
-		return nil // resend: durable state unchanged, no redelivery
+		// A resend is a no-op only when the durable row is already processed.
+		// An existing unprocessed row still needs delivery: re-activating the
+		// agent replays the ordered backlog and reaches it. Returning without
+		// activation strands a cold agent's unprocessed row until a process
+		// restart (the silent one-shot wake loss).
+		backlog, backlogErr := rt.log.Unprocessed(ctx, u.ToAgentID)
+		if backlogErr == nil {
+			for _, pending := range backlog {
+				if pending.UpdateID != u.UpdateID {
+					continue
+				}
+				rt.mu.Lock()
+				if rt.closed {
+					rt.mu.Unlock()
+					return ErrClosed
+				}
+				r, ok := rt.resident[u.ToAgentID]
+				if !ok || r.evicted {
+					err := rt.activateLocked(u.ToAgentID)
+					rt.mu.Unlock()
+					return err
+				}
+				// Warm resident: the durable row already exists, so a channel
+				// copy is only a wake signal — the ordered backlog replay in
+				// the loop reaches the unprocessed head. If the mailbox is
+				// full the row remains durable and the drain's backlog query
+				// catches it.
+				select {
+				case r.mailbox <- u:
+				default:
+				}
+				rt.mu.Unlock()
+				return nil
+			}
+		}
+		return nil // processed resend: durable state unchanged, no redelivery
 	}
 
 	rt.mu.Lock()
@@ -571,6 +606,7 @@ func (rt *Runtime) processOne(ctx context.Context, r *residentActor, u Update, m
 	next, err := rt.handler.HandleUpdate(ctx, r.agentID, u, *memory)
 	if err != nil {
 		if errors.Is(err, ErrDeferUnprocessed) {
+			log.Printf("actor: deferred unprocessed update %s for %s", u.UpdateID, r.agentID)
 			return true
 		}
 		_ = sleepCtx(ctx, rt.opts.HandlerRetryBackoff)

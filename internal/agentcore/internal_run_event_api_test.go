@@ -172,3 +172,69 @@ func waitForTextureLifecycleEvent(t *testing.T, rt *Runtime, ownerID, runID stri
 	t.Fatalf("timed out waiting for Texture lifecycle event %q; run=%+v err=%v", kind, run, runErr)
 	return types.EventRecord{}
 }
+
+func TestHandleExecutionErrorDoesNotReTerminalizeStoredTerminalRun(t *testing.T) {
+	rt, _ := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	rec := types.RunRecord{
+		RunID:     "run-late-error-terminal",
+		OwnerID:   "user-late-error",
+		AgentID:   "coagent:late-error",
+		ChannelID: "chan-late-error",
+		State:     types.RunRunning,
+		Prompt:    "late error probe",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
+			"assignment_id":         "assignment-late-error",
+		},
+	}
+	if err := rt.Store().CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if err := rt.CancelRun(ctx, rec.RunID, rec.OwnerID); err != nil {
+		t.Fatalf("cancel run: %v", err)
+	}
+	stored, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
+	if err != nil {
+		t.Fatalf("load cancelled run: %v", err)
+	}
+	if stored.State != types.RunCancelled {
+		t.Fatalf("stored state = %s, want cancelled", stored.State)
+	}
+
+	// A stale in-memory record still claims running when the late execution
+	// error arrives; the stored terminal fate must win unchanged.
+	stale := rec
+	rt.handleExecutionError(context.Background(), &stale, errors.New("context canceled"))
+
+	after, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
+	if err != nil {
+		t.Fatalf("reload run: %v", err)
+	}
+	if after.State != types.RunCancelled {
+		t.Fatalf("state after late error = %s, want cancelled", after.State)
+	}
+	if after.Error != stored.Error || !after.UpdatedAt.Equal(stored.UpdatedAt) {
+		t.Fatalf("late error mutated terminal fate: error %q -> %q, updated %v -> %v", stored.Error, after.Error, stored.UpdatedAt, after.UpdatedAt)
+	}
+	if stale.State != types.RunCancelled {
+		t.Fatalf("in-memory record not adopted from stored fate: %s", stale.State)
+	}
+	events, err := rt.Store().ListEvents(ctx, rec.RunID, 100)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	cancels := 0
+	for _, ev := range events {
+		if ev.Kind == types.EventRunCancelled {
+			cancels++
+		}
+	}
+	if cancels != 1 {
+		t.Fatalf("EventRunCancelled count = %d, want exactly 1", cancels)
+	}
+}

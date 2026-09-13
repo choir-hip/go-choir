@@ -858,3 +858,75 @@ func TestDeferUnprocessedWaitsForExplicitWakeInsteadOfPolling(t *testing.T) {
 		t.Fatalf("deferred sweep polled more than once: attempts=%d", got)
 	}
 }
+
+func TestDuplicateSendActivatesColdActorForUnprocessedRow(t *testing.T) {
+	log := testLog(t)
+	ctx := context.Background()
+	var handled atomic.Int64
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		handled.Add(1)
+		return append(memory, []byte(u.Content+";")...), nil
+	}), Options{IdleTimeout: 50 * time.Millisecond})
+	defer rt.Stop()
+
+	// The row exists durably but was never delivered (a crashed or lost wake):
+	// the exact resend must wake the cold actor and process the backlog.
+	if _, err := log.Append(ctx, Update{UpdateID: "u-strand", ToAgentID: "a1", Content: "strand", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("seed unprocessed row: %v", err)
+	}
+	if err := rt.Send(ctx, Update{UpdateID: "u-strand", ToAgentID: "a1", Content: "strand", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("duplicate send: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool { return handled.Load() == 1 }, "unprocessed row handled after duplicate send")
+
+	// A duplicate whose durable row is already processed must not redeliver.
+	waitFor(t, 5*time.Second, func() bool { return processedCount(t, log, "a1")() == 0 }, "row marked processed")
+	if err := rt.Send(ctx, Update{UpdateID: "u-strand", ToAgentID: "a1", Content: "strand", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("processed resend: %v", err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if n := handled.Load(); n != 1 {
+		t.Fatalf("processed resend delivered again: handled=%d want 1", n)
+	}
+}
+
+func TestDeferredHeadBlocksBacklogUntilRetry(t *testing.T) {
+	log := testLog(t)
+	ctx := context.Background()
+	var deferFirst atomic.Bool
+	deferFirst.Store(true)
+	var handled atomic.Int64
+	rt := NewRuntime(log, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		if u.UpdateID == "head" && deferFirst.Load() {
+			return memory, ErrDeferUnprocessed
+		}
+		handled.Add(1)
+		return memory, nil
+	}), Options{IdleTimeout: 50 * time.Millisecond, HandlerRetryBackoff: 10 * time.Millisecond})
+	defer rt.Stop()
+
+	if err := rt.Send(ctx, Update{UpdateID: "head", ToAgentID: "a1", Content: "head", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("send head: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool { return processedCount(t, log, "a1")() == 1 }, "head deferred, unprocessed")
+
+	// A distinct later update must replay the ordered head first, never skip it.
+	if err := rt.Send(ctx, Update{UpdateID: "next", ToAgentID: "a1", Content: "next", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("send next: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool { return processedCount(t, log, "a1")() == 2 }, "head still blocks the queue")
+	if n := handled.Load(); n != 0 {
+		t.Fatalf("successor processed past a deferred head: handled=%d", n)
+	}
+
+	// Once the head's condition clears, one more wake drains the whole backlog
+	// in order: head first, then the distinct update.
+	deferFirst.Store(false)
+	if err := rt.Send(ctx, Update{UpdateID: "next", ToAgentID: "a1", Content: "next", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("re-wake send: %v", err)
+	}
+	waitFor(t, 5*time.Second, func() bool { return processedCount(t, log, "a1")() == 0 }, "backlog drained in order after retry")
+	if n := handled.Load(); n != 2 {
+		t.Fatalf("post-clear delivery count = %d, want head and successor both delivered", n)
+	}
+}

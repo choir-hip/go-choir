@@ -4470,6 +4470,14 @@ var durableMetadataKeys = []string{
 // critical store updates so that the run state is properly persisted even
 // during shutdown (VAL-CHOIR-009, VAL-CHOIR-010).
 func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecord, err error) {
+	// A stored terminal state always wins: a late execution error must not
+	// re-terminalize a run that already carries its fate (for example an
+	// owner-cancelled assignment whose tool loop then observes context
+	// cancellation). Mirrors persistActivationState.
+	if stored, loadErr := rt.getRunForComputer(context.Background(), rec.OwnerID, rec.RunID); loadErr == nil && stored.State.Terminal() {
+		*rec = stored
+		return
+	}
 	if retryableLifecycleRuntimeInjectionFailure(rec, err) {
 		rt.passivateRuntimeInjectionAppendFailure(rec, err)
 		return

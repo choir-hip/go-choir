@@ -14,7 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestSelfDevelopmentTextureCallerReactivatesDeterministicRun(t *testing.T) {
+func TestSelfDevelopmentTextureCallerStoredRecordIsProvenanceNotResidency(t *testing.T) {
 	ctx := context.Background()
 	runtime, productStore := testRuntime(t)
 	ownerID := "owner"
@@ -77,21 +77,27 @@ func TestSelfDevelopmentTextureCallerReactivatesDeterministicRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The caller must be reactivated (deterministic), not the successor.
+	// The stored caller is provenance, not residency: the join must return it
+	// unchanged without re-projecting it to running, and a resident successor
+	// that owns the agent slot must never be released to resurrect the caller.
+	// Execution admission belongs to the real revision run the wake reconciles.
 	got, err := runtime.ensureSelfDevelopmentTextureCaller(ctx, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.RunID != deterministicRunID || !got.State.Active() {
-		t.Fatalf("caller not reactivated: %+v want %s", got, deterministicRunID)
+	if got.RunID != deterministicRunID || got.State != types.RunPassivated {
+		t.Fatalf("caller record mutated: %+v want unchanged %s", got, deterministicRunID)
 	}
-	agent, err := productStore.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
-	if err != nil || agent.ActiveRunID != deterministicRunID {
-		t.Fatalf("agent active run after reactivation: %+v err=%v", agent, err)
+	after, err := productStore.GetLifecycleRun(ctx, ownerID, computerID, deterministicRunID)
+	if err != nil || after.State != types.RunPassivated {
+		t.Fatalf("stored caller re-projected: %+v err=%v", after, err)
+	}
+	if !after.UpdatedAt.Equal(passivated.UpdatedAt) {
+		t.Fatalf("stored caller UpdatedAt moved: %v -> %v", passivated.UpdatedAt, after.UpdatedAt)
 	}
 	successorStored, err := productStore.GetLifecycleRun(ctx, ownerID, computerID, "run-successor-texture")
-	if err != nil || successorStored.State != types.RunPassivated {
-		t.Fatalf("successor not released: %+v err=%v", successorStored, err)
+	if err != nil || successorStored.State != types.RunRunning {
+		t.Fatalf("resident successor released: %+v err=%v", successorStored, err)
 	}
 }
 
