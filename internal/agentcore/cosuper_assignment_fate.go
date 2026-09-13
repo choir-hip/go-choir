@@ -410,7 +410,7 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 		// destroy the work evidence. The reducer authors the fate from the
 		// staged proposal instead — same intent identity, so the store
 		// replays instead of minting a second report.
-		if (assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested) && assignment.PendingProposal != nil {
+		if assignedCoSuperFatePending(assignment) {
 			if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
 				log.Printf("runtime: assignment %s stranded frozen proposal resume: %v", assignment.AssignmentID, resumeErr)
 			}
@@ -839,7 +839,7 @@ func assignedCoSuperFatePending(assignment types.CoSuperAssignment) bool {
 		return false
 	}
 	switch assignment.CapsuleDisposition {
-	case types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested:
+	case types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested, types.CoSuperCapsuleRevoked:
 		return true
 	default:
 		return false
@@ -974,7 +974,7 @@ func (rt *Runtime) resumeStrandedFrozenAssignmentCommits(ctx context.Context) {
 			continue
 		}
 		switch assignment.CapsuleDisposition {
-		case types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested:
+		case types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested, types.CoSuperCapsuleRevoked:
 		default:
 			continue
 		}

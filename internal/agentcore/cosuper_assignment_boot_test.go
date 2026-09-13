@@ -503,6 +503,7 @@ func TestAssignedCoSuperFatePendingSignature(t *testing.T) {
 	}
 	for _, disposition := range []types.CoSuperCapsuleDisposition{
 		types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested,
+		types.CoSuperCapsuleRevoked,
 	} {
 		stranded := withProposal(base)
 		stranded.CapsuleDisposition = disposition
