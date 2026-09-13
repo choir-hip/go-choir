@@ -35,7 +35,7 @@
     "status": "degraded"
   },
   "needs_human_classify": true,
-  "notes": "terminal disposition observed; model-behavior classification is human-adjudicated (see P5-review)",
+  "notes": "QUARANTINED: terminal-saga stranded at revoke_requested (P5-review F3, reducer-confirmed); 'terminal disposition observed' is run-state, not reducer-authoritative. pending the substrate wake-authority repair and a re-driven arm.",
   "overlay_id": "p5-deepseek-v41-flash",
   "pass": null,
   "policy_source": "/mnt/persistent/files/System/model-policy-overlays/p5-deepseek-v41-flash.toml",
