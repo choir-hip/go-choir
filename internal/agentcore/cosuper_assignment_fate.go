@@ -403,6 +403,19 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 			}
 			continue
 		}
+		// A Complete reduce that failed mid-terminal-saga strands the
+		// assignment bound with a frozen capsule and a staged pending
+		// proposal: the worker cannot run another cell (the capsule is
+		// physically frozen) and the restart-cancel branch below would
+		// destroy the work evidence. The reducer authors the fate from the
+		// staged proposal instead — same intent identity, so the store
+		// replays instead of minting a second report.
+		if assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen && assignment.PendingProposal != nil {
+			if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
+				log.Printf("runtime: assignment %s stranded frozen proposal resume: %v", assignment.AssignmentID, resumeErr)
+			}
+			continue
+		}
 		usable := rt.assignedCoSuperCapsuleUsable(assignment)
 		if usable {
 			continue
@@ -831,6 +844,61 @@ func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperA
 		report.ExecutorReceiptRefs = append(report.ExecutorReceiptRefs, receipt.ReceiptRef)
 	}
 	return report, nil
+}
+
+// resumeStrandedFrozenAssignmentCommit finishes the terminal saga for one
+// assignment whose Complete reduce failed after the capsule froze: disposition
+// is still bound, the capsule is frozen, and the staged pending proposal holds
+// the report the worker authored. The worker cannot run another cell (a frozen
+// capsule refuses every operation at acquireOp), so the reducer authors the
+// fate from the stored proposal through the exact same report path a live
+// worker would drive — same intent identity, idempotent on replay.
+func (rt *Runtime) resumeStrandedFrozenAssignmentCommit(ctx context.Context, assignment types.CoSuperAssignment) error {
+	proposal := assignment.PendingProposal
+	if proposal == nil || strings.TrimSpace(assignment.BoundRunID) == "" {
+		return fmt.Errorf("stranded assignment %s has no resumable proposal", assignment.AssignmentID)
+	}
+	rec := &types.RunRecord{
+		RunID: assignment.BoundRunID, OwnerID: assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
+		AgentID: assignment.Binding.AssignedAgentID, ChannelID: assignment.Binding.AssignedAgentID,
+		Metadata: map[string]any{
+			"assignment_id": assignment.AssignmentID, "assignment_attempt": fmt.Sprint(assignment.Binding.Attempt),
+			"assigned_work_item_id": assignment.Binding.AssignedWorkItemID,
+		},
+	}
+	_, err := rt.recordAssignedCoSuperReport(ctx, rec, "resume:"+assignment.AssignmentID+":"+fmt.Sprint(assignment.Binding.Attempt), proposal.Report)
+	return err
+}
+
+// resumeStrandedFrozenAssignmentCommits sweeps every computer-wide assignment
+// for the stranded frozen-proposal signature and resumes its terminal commit.
+// It runs on the Super selection path (next to the deadline sweep) so a
+// mid-saga failure inside a running process recovers without a restart, and
+// the boot reconcile covers the restart window through
+// ReconcileCoSuperAssignmentsForTrajectory.
+func (rt *Runtime) resumeStrandedFrozenAssignmentCommits(ctx context.Context) {
+	if rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
+		return
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if computerID == "" {
+		return
+	}
+	assignments, err := rt.store.ListCoSuperAssignmentsForComputer(ctx, computerID)
+	if err != nil {
+		log.Printf("runtime: stranded frozen assignment sweep list: %v", err)
+		return
+	}
+	for _, assignment := range assignments {
+		if assignment.Disposition != types.CoSuperAssignmentBound || assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen || assignment.PendingProposal == nil {
+			continue
+		}
+		if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
+			log.Printf("runtime: assignment %s stranded frozen proposal resume: %v", assignment.AssignmentID, resumeErr)
+		} else {
+			log.Printf("runtime: assignment %s terminal fate resumed from stranded frozen proposal", assignment.AssignmentID)
+		}
+	}
 }
 
 func coSuperExecutionAttestationFromReceipt(assignment types.CoSuperAssignment, reportID string, command types.CoSuperRecordedCommand, receipt capsule.ExecutionReceipt) (types.CoSuperExecutionAttestation, error) {
