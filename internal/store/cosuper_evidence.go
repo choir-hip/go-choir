@@ -20,7 +20,6 @@ var (
 
 const (
 	CoSuperCapsuleEvidenceSchemaV1 = "choir.co_super_capsule_evidence/v1"
-	coSuperEvidenceMaxObjects      = 20000
 	coSuperEvidenceMaxReports      = 256
 	coSuperEvidenceMaxCandidates   = 256
 	coSuperEvidenceMaxExecutions   = 1024
@@ -223,9 +222,11 @@ func (s *Store) GetCoSuperCapsuleEvidence(ctx context.Context, ownerID, computer
 	if err != nil {
 		return CoSuperCapsuleEvidence{}, err
 	}
-	if len(objects) > coSuperEvidenceMaxObjects {
-		return CoSuperCapsuleEvidence{}, ErrCoSuperEvidenceTooLarge
-	}
+	// The projection bounds itself on the assignment's own closure (reports,
+	// candidates, executions, fate steps, encoded bytes) — never on the whole
+	// owner/computer object graph, whose size is unrelated to any single
+	// assignment. A global pre-join object-count bound here made the route
+	// permanently unavailable on long-lived computers (the 413 heresy).
 	byID := make(map[string]objectgraph.Object, len(objects))
 	for _, obj := range objects {
 		if obj.Tombstone {
