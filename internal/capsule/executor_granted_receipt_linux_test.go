@@ -87,8 +87,8 @@ func TestResolveGrantedExecutionReceiptsBindsFinalSubjectNotPreEval(t *testing.T
 	// out-of-order citation whose latest receipt predates the freeze refuses.
 	stale := ExecutionReceipt{
 		AgentRunID: "run-grant", CapabilityHandleDigest: handleDigest, CapsuleID: caps.ID,
-		Command: "go_eval:stale", ExitCode: 0, WorktreeDigest: finalDigest,
-		SourceTreeDigest: sourceDigest, OccurredAt: midOccurrence,
+		Command: "go_eval:stale", ExitCode: 0, WorktreeDigest: "pre-eval-digest",
+		SourceTreeDigest: sourceDigest, OccurredAt: time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
 	}
 	staleRef := persistTestExecutionReceipt(t, executor, stale)
 	if _, err = executor.ResolveGrantedExecutionReceipts(context.Background(), "run-grant", "handle-grant", []string{preRef, staleRef}); err == nil || !strings.Contains(err.Error(), "final frozen subject") {
