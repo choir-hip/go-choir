@@ -89,3 +89,29 @@ current tree. What remains unproven is the roster measurement and the deployment
 receipts that depend on it, so this audit does not move the mission toward
 completion; it removes the risk that a "completed" phase silently regressed
 while the roster was blocked.
+
+## Addendum: re-audit on HEAD `ea6199e6` (2026-09-13)
+
+Re-run of this audit's deterministic checks after the mission's substrate-repair
+commits (`caa171b6` through `def29358`) touched the settlement and capsule
+surfaces, to confirm the completed-phase claims still hold past them. Worktree
+clean at `ea6199e6`; all runs local on darwin, focused `-run` selectors only:
+
+| Check | Result |
+|---|---|
+| P2-invariant prompt tests (`TestCoSuperPromptSwitchesToSealedGoUnderRLM`, `TestRLMPromptOmitsRetiredToolNames`, `TestCoSuperPromptIsModelIndependent`) | PASS 3/3 |
+| P4-registry closed-set tests (7-test selector) | PASS 7/7 |
+| P3-parity `VerifierGate` tests | PASS |
+| P3-parity `Coagent` suite | package ok |
+| P5b actuator suite (`Actuator|HostSelectsRLM`) | package ok |
+| `CleanGoSource` non-test references | 0 |
+| `recordAssignedCoSuperReport` non-test occurrences | 2 (definition + reducer caller, unchanged) |
+| `record_assignment_result` non-test references | 1, a provenance comment only (`rlm_reduce.go:592`); no tool registration |
+| `TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel` | PASS (the caa171b6 ordering pin) |
+| Goldens + 9 fixture dirs | present, manifest `build_sha: 8f987d7f` |
+| `TestRLMReplayGoldens` on darwin | correctly absent (Linux build tag); deployed proof remains a Linux artifact |
+
+Everything this audit recorded as holding still holds at `ea6199e6`. The audit's
+consequence is unchanged: what remains unproven is the roster measurement (P5
+gate open, terminal-commit gap narrowed and recorded in the Definition) and the
+deployment receipts that depend on it.
