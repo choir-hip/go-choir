@@ -723,6 +723,12 @@ jobs:
             results_dir=/var/lib/go-choir/prebuild-results
             install -d -m 0755 "$results_dir"
 
+            # Move store GC off the deploy critical path: Node B sits near
+            # min-free, so auto-GC otherwise fires inside nix build/switch
+            # (observed ~100s mid-switch in run 34779534767). GC only collects
+            # unrooted paths; in-flight builds and profile generations are safe.
+            nix store gc || true
+
             prebuild_one() {
               local label="$1"
               local attr="$2"
