@@ -15,13 +15,12 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-# Bare-statement receives of fixture lifecycle channels in test files.
-# `case <-` and `x := <-` are excluded: select-case is bounded by the select's
-# timeout arm, and assignment receives are a different (rarer) shape reviewed
-# separately.
-hits="$(grep -rEn '^[[:space:]]*<-[a-zA-Z_][a-zA-Z0-9_]*\.(started|finished|release|done|completed)\b' \
-  --include='*_test.go' internal cmd 2>/dev/null | grep -v 'hang-guard:' || true)"
-
+# Receives of fixture lifecycle channels in test files.
+# Any receive of a fixture lifecycle channel in a test file, unless it sits in
+# a select case (bounded by the select's timeout arm) or carries an explicit
+# '// hang-guard: <reason>' marker for an intentional fixture-internal wait.
+hits="$(grep -rEn '<-[a-zA-Z_][a-zA-Z0-9_]*\.(started|finished|release|done|completed)\b' \
+  --include='*_test.go' internal cmd 2>/dev/null | grep -vE 'case[[:space:]]+<-|hang-guard:' || true)"
 if [[ -n "$hits" ]]; then
   echo "test-hang-guard FAIL: unbounded fixture-channel receives in tests:" >&2
   echo "$hits" >&2
