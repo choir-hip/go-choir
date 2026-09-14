@@ -1,7 +1,7 @@
 # Deploy Critical Path Serialization and Ungated CI Lanes
 
 Date: 2026-09-13 UTC
-Status: observed; repair not yet applied
+Status: repaired and verified on hosted runs (dispatch run 34803283760)
 Mutation class: red (deployment routing and CI check topology are protected surfaces)
 Classification: CI assurance substrate
 
