@@ -141,6 +141,10 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> host OS activation and immutable service-pointer synchronization"
       continue
       ;;
+    scripts/check-*.sh|scripts/lint|scripts/generate_*.py|scripts/m3_*|scripts/mail-*)
+      add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
+      continue
+      ;;
     docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*)
       add_explanation "$path -> ignored (docs/workflow/test artifact)"
       continue
@@ -318,6 +322,10 @@ for path in "${changed[@]}"; do
       mark_host_os
       mark_guest_boot_contract
       add_explanation "$path -> conservative Nix impact: host OS + canonical guest image"
+      ;;
+    scripts/guest-signer-*)
+      mark_guest_boot_contract
+      add_explanation "$path -> canonical guest image (builtins.readFile input of nix/autoputer-vm.nix)"
       ;;
     go.mod|go.sum)
       mark_host_service

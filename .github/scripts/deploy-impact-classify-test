@@ -191,4 +191,26 @@ assert_contains "$skill_runtime_output" "deploy_active_vm_refresh=true"
 assert_contains "$skill_runtime_output" "host_services=autoputer"
 assert_contains "$skill_runtime_output" "skills/definition/SKILL.md -> autoputer runtime skill package"
 
+tooling_scripts_output="$(
+  run_classifier \
+    "scripts/generate_carrier_narrative_pdf_2026_09_13.py" \
+    "scripts/check-heresies.sh" \
+    "scripts/lint" \
+    "scripts/mail-resend-setup" \
+    "scripts/m3_vmctl_refresh_probe.mjs" \
+    "docs/reports/some-report.md"
+)"
+assert_contains "$tooling_scripts_output" "deploy_needed=false"
+assert_contains "$tooling_scripts_output" "scripts/generate_carrier_narrative_pdf_2026_09_13.py -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
+assert_contains "$tooling_scripts_output" "scripts/check-heresies.sh -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
+assert_contains "$tooling_scripts_output" "scripts/mail-resend-setup -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
+assert_not_contains "$tooling_scripts_output" "unknown deployed path"
+
+guest_signer_output="$(run_classifier "scripts/guest-signer-state-migrate")"
+assert_contains "$guest_signer_output" "deploy_needed=true"
+assert_contains "$guest_signer_output" "deploy_host_os=true"
+assert_contains "$guest_signer_output" "deploy_vmctl_restart=true"
+assert_contains "$guest_signer_output" "deploy_active_vm_refresh=true"
+assert_contains "$guest_signer_output" "scripts/guest-signer-state-migrate -> canonical guest image (builtins.readFile input of nix/autoputer-vm.nix)"
+
 printf 'deploy-impact-classify-test: ok\n'
