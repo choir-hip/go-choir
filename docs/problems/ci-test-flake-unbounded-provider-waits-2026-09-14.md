@@ -1,7 +1,7 @@
 # CI Test Flake: Unbounded Provider-Channel Waits Race the Activation Deadline
 
 Date: 2026-09-14 UTC
-Status: observed; repair in progress
+Status: repaired and verified (runs 34832567532, 34833924053; guard probe-tested)
 Mutation class: yellow (test-only change + detector gate; no product behavior)
 Classification: CI assurance substrate
 
