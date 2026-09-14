@@ -425,7 +425,7 @@ func (m *blockingPlatformRecoverManager) RecoverVM(string, VMManagerConfig) (*VM
 	m.recoverCalls++
 	m.mu.Unlock()
 	m.startedOnce.Do(func() { close(m.started) })
-	<-m.release
+	<-m.release // hang-guard: fixture release; the test unblocks it
 	m.mu.Lock()
 	m.info = m.recovered
 	m.mu.Unlock()

@@ -210,7 +210,7 @@ func (m *blockingBootVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, er
 	m.boots = append(m.boots, cfg)
 	m.mu.Unlock()
 	m.startOnce.Do(func() { close(m.started) })
-	<-m.release
+	<-m.release // hang-guard: fixture release; the test unblocks it
 	return &VMInstanceInfo{HostURL: m.hostURL, Epoch: 1, Healthy: true, State: "running"}, nil
 }
 

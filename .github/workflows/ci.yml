@@ -344,6 +344,10 @@ jobs:
         shell: bash
         run: scripts/check-decode-roots.sh
 
+      - name: Run test hang guard
+        shell: bash
+        run: scripts/check-test-hang-guards.sh
+
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest

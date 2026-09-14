@@ -3529,7 +3529,11 @@ func TestComputeRecoveryDoesNotJoinDifferentStableComputerAuthority(t *testing.T
 		t.Fatalf("different stable-computer authority joined or ran: second=%v ran=%v", second, wrongRun.Load())
 	}
 	close(release)
-	<-first.done
+	select {
+	case <-first.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first recovery did not finish within 10s after release")
+	}
 }
 
 func TestComputeRecoveryWaiterSnapshotsOriginalOperation(t *testing.T) {
@@ -3537,7 +3541,11 @@ func TestComputeRecoveryWaiterSnapshotsOriginalOperation(t *testing.T) {
 	first := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "", "wake_current_computer", func(context.Context) computeRecoveryRunResult {
 		return computeRecoveryRunResult{Err: errors.New("first refresh failed")}
 	})
-	<-first.done
+	select {
+	case <-first.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first recovery did not finish within 10s")
+	}
 
 	releaseSecond := make(chan struct{})
 	second := tracker.startOrJoin("owner", vmctl.PrimaryDesktopID, "", "wake_current_computer", func(context.Context) computeRecoveryRunResult {
@@ -3546,7 +3554,11 @@ func TestComputeRecoveryWaiterSnapshotsOriginalOperation(t *testing.T) {
 	})
 	defer func() {
 		close(releaseSecond)
-		<-second.done
+		select {
+		case <-second.done:
+		case <-time.After(10 * time.Second):
+			t.Error("second recovery did not finish within 10s after release")
+		}
 	}()
 
 	recovery, _, _, recoveryErr, ok := tracker.snapshotOperation(first)

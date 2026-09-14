@@ -35,7 +35,7 @@ func (p *lateCompletionProvider) Execute(ctx context.Context, task *types.RunRec
 	_ = ctx
 	_ = emit
 	close(p.started)
-	<-p.release
+	<-p.release // hang-guard: fixture release; the test unblocks it via unblock()
 	task.Result = "late completion"
 	close(p.finished)
 	return nil
@@ -47,9 +47,25 @@ func (p *lateCompletionProvider) unblock() {
 	p.once.Do(func() { close(p.release) })
 }
 
+// waitProviderChan receives from a provider-controlled test channel with a
+// bound, reporting whether it closed in time. Execute may legitimately never
+// run — the run can terminalize (cancel, activation-budget deadline) before
+// the dispatch goroutine reaches it — so tests must never wait unboundedly on
+// channels that only Execute closes. Callers decide whether a timeout is a
+// failure (Execute was required) or a valid interleaving (Execute was skipped).
+func waitProviderChan(ch <-chan struct{}, timeout time.Duration) bool {
+	select {
+	case <-ch:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
 func waitForTerminalRun(t *testing.T, rt *Runtime, runID string) types.RunRecord {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	// 10s, not 2s: loaded -race runners can delay the dispatch goroutine well
+	// past 2s; the bound only affects failure latency, not the contract.
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		rec, err := rt.store.GetRun(context.Background(), runID)
 		if err == nil && rec.State.Terminal() {
@@ -72,7 +88,9 @@ func TestCancelResidentRunReleasesImmediatelyAndRejectsLateCompletion(t *testing
 	if err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	<-provider.started
+	if !waitProviderChan(provider.started, 10*time.Second) {
+		t.Fatal("provider Execute did not start within 10s")
+	}
 	if got := rt.RunningCount(); got != 1 {
 		t.Fatalf("running count before cancel = %d, want 1", got)
 	}
@@ -92,7 +110,9 @@ func TestCancelResidentRunReleasesImmediatelyAndRejectsLateCompletion(t *testing
 	}
 
 	provider.unblock()
-	<-provider.finished
+	if !waitProviderChan(provider.finished, 10*time.Second) {
+		t.Fatal("provider Execute did not finish within 10s after unblock")
+	}
 	rt.wg.Wait()
 	stored, err = rt.store.GetRun(context.Background(), rec.RunID)
 	if err != nil {
@@ -141,7 +161,11 @@ func TestActivationBudgetProgressDeadlineTerminalizesAndReleases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	<-provider.started
+	// The 25ms deadline can terminalize the run before the dispatch goroutine
+	// reaches Execute; persistActivationState then refuses the stale activation
+	// and Execute never runs. Both interleavings satisfy the contract, so the
+	// started wait is bounded and the late-completion check is conditional.
+	started := waitProviderChan(provider.started, 10*time.Second)
 	stored := waitForTerminalRun(t, rt, rec.RunID)
 	if stored.State != types.RunCancelled || stored.FinishedAt == nil {
 		t.Fatalf("progress deadline run = state %q finished_at %v", stored.State, stored.FinishedAt)
@@ -153,15 +177,19 @@ func TestActivationBudgetProgressDeadlineTerminalizesAndReleases(t *testing.T) {
 		t.Fatalf("running count after progress deadline = %d, want 0", got)
 	}
 
-	provider.unblock()
-	<-provider.finished
-	rt.wg.Wait()
-	stored, err = rt.store.GetRun(context.Background(), rec.RunID)
-	if err != nil {
-		t.Fatalf("get deadline run after late completion: %v", err)
-	}
-	if stored.State != types.RunCancelled {
-		t.Fatalf("deadline state after late completion = %q, want cancelled", stored.State)
+	if started {
+		provider.unblock()
+		if !waitProviderChan(provider.finished, 10*time.Second) {
+			t.Fatal("provider Execute did not finish within 10s after unblock")
+		}
+		rt.wg.Wait()
+		stored, err = rt.store.GetRun(context.Background(), rec.RunID)
+		if err != nil {
+			t.Fatalf("get deadline run after late completion: %v", err)
+		}
+		if stored.State != types.RunCancelled {
+			t.Fatalf("deadline state after late completion = %q, want cancelled", stored.State)
+		}
 	}
 }
 
