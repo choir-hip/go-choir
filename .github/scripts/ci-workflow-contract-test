@@ -108,4 +108,36 @@ fi
 
 require "$ci" 'needs: [plan, check]'
 
+prebuild_segment="$(sed -n '/^  prebuild-staging:/,/^  deploy-staging:/p' "$ci")"
+for pattern in \
+  'continue-on-error: true' \
+  'group: staging-prebuild-node-b' \
+  'needs: [plan, deploy-impact]' \
+  "needs.deploy-impact.outputs.deploy_needed == 'true'" \
+  'prebuild_repo=/opt/go-choir-prebuild' \
+  'results_dir=/var/lib/go-choir/prebuild-results' \
+  'git reset --hard "$DEPLOY_COMMIT"' \
+  'nix build "$attr" -o "$out"'; do
+  grep -Fq -- "$pattern" <<<"$prebuild_segment" || {
+    echo "prebuild contract missing: $pattern" >&2
+    exit 1
+  }
+done
+for pattern in \
+  'switch-to-configuration' \
+  'systemctl restart' \
+  'install_service_pointer' \
+  'install_frontend_pointer' \
+  'deploy-receipt' \
+  'vmctl/refresh'; do
+  if grep -Fq -- "$pattern" <<<"$prebuild_segment"; then
+    echo "prebuild must never activate or mutate deploy state: $pattern" >&2
+    exit 1
+  fi
+done
+if grep -Eq 'prebuild' <<<"$check_segment"; then
+  echo "check must not depend on the latency-hiding prebuild job" >&2
+  exit 1
+fi
+
 echo "ci-workflow-contract: all tests passed"

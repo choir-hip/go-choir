@@ -204,6 +204,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: plan
+    if: needs.plan.outputs.go == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -642,6 +643,143 @@ jobs:
           rolling: true
           visibility: public
           include-output-paths: true
+
+  prebuild-staging:
+    name: Prebuild Deploy Artifacts (Node B)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Latency-hiding only: nix build is pure and writes only to the Node B
+    # store. It never activates, so it must not gate check or deploy. A failed
+    # or cancelled prebuild leaves deploy-staging on the serialized build path.
+    continue-on-error: true
+    concurrency:
+      group: staging-prebuild-node-b
+      cancel-in-progress: true
+    needs: [plan, deploy-impact]
+    if: always() && github.ref == 'refs/heads/main' && needs.deploy-impact.outputs.deploy_needed == 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.OVH_DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.OVH_NODE_B_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<EOF
+          Host go-choir-node-b
+            HostName ${{ secrets.OVH_NODE_B_HOST }}
+            User root
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ServerAliveInterval 30
+            ServerAliveCountMax 6
+          EOF
+
+      - name: Prebuild selected Nix artifacts on Node B
+        env:
+          DEPLOY_COMMIT: ${{ github.sha }}
+          DEPLOY_FRONTEND: ${{ needs.deploy-impact.outputs.deploy_frontend }}
+          DEPLOY_HOST: ${{ needs.deploy-impact.outputs.deploy_host }}
+          DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
+          HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
+        run: |
+          remote_env=(
+            "DEPLOY_COMMIT=$DEPLOY_COMMIT"
+            "DEPLOY_FRONTEND=$DEPLOY_FRONTEND"
+            "DEPLOY_HOST=$DEPLOY_HOST"
+            "DEPLOY_HOST_OS=$DEPLOY_HOST_OS"
+            "HOST_SERVICES=$HOST_SERVICES"
+          )
+          printf -v remote_env_q '%q ' "${remote_env[@]}"
+          ssh go-choir-node-b \
+            "${remote_env_q}bash -s" <<'REMOTE_PREBUILD'
+            set -euo pipefail
+            export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
+
+            # Disjoint checkout: deploy-staging resets /opt/go-choir under its own
+            # concurrency group; this job must never race that working tree.
+            prebuild_repo=/opt/go-choir-prebuild
+            if [ ! -d "$prebuild_repo/.git" ]; then
+              git clone https://github.com/choir-hip/go-choir.git "$prebuild_repo"
+            fi
+            git config --global --add safe.directory "$prebuild_repo"
+            cd "$prebuild_repo"
+            git remote set-url origin https://github.com/choir-hip/go-choir.git
+            if [ "${#DEPLOY_COMMIT}" -ne 40 ] || [[ "$DEPLOY_COMMIT" == *[!0-9a-f]* ]]; then
+              echo "Invalid prebuild commit: ${DEPLOY_COMMIT}" >&2
+              exit 1
+            fi
+            git fetch --no-tags origin "$DEPLOY_COMMIT"
+            git reset --hard "$DEPLOY_COMMIT"
+            git clean -ffdx
+            if [ "$(git rev-parse HEAD)" != "$DEPLOY_COMMIT" ]; then
+              echo "Prebuild checkout does not match ${DEPLOY_COMMIT}" >&2
+              exit 1
+            fi
+
+            # Result symlinks live outside the checkout so git clean cannot
+            # remove the GC roots before deploy-staging re-registers its own.
+            results_dir=/var/lib/go-choir/prebuild-results
+            install -d -m 0755 "$results_dir"
+
+            prebuild_one() {
+              local label="$1"
+              local attr="$2"
+              local out="$3"
+              local log
+              log=$(mktemp)
+              local started
+              started=$(date +%s)
+              echo "    Prebuilding ${label}: ${attr}"
+              local status=0
+              /run/current-system/sw/bin/nix build "$attr" -o "$out" >"$log" 2>&1 || status=$?
+              cat "$log"
+              rm -f "$log"
+              if [ "$status" -ne 0 ]; then
+                echo "Prebuild failed for ${label} with status ${status}" >&2
+                exit "$status"
+              fi
+              echo "    ${label} prebuild complete in $(( $(date +%s) - started ))s"
+            }
+
+            service_pointer_deploy=false
+            if [ "${DEPLOY_HOST_OS}" != "true" ] && [ -n "${HOST_SERVICES}" ]; then
+              service_pointer_deploy=true
+            fi
+
+            prebuild_pids=()
+            prebuild_status=0
+            if [ "${DEPLOY_FRONTEND}" = "true" ]; then
+              prebuild_one "Frontend bundle" ".#frontend" "${results_dir}/frontend-result" &
+              prebuild_pids+=("$!")
+            fi
+            if [ "${service_pointer_deploy}" = "true" ]; then
+              IFS=',' read -ra service_roots <<< "${HOST_SERVICES}"
+              for service in "${service_roots[@]}"; do
+                [ -z "$service" ] && continue
+                prebuild_one "Host service ${service}" ".#${service}" "${results_dir}/service-${service}-result" &
+                prebuild_pids+=("$!")
+              done
+            elif [ "${DEPLOY_HOST}" = "true" ]; then
+              prebuild_one "Host NixOS closure" ".#nixosConfigurations.go-choir-b.config.system.build.toplevel" "${results_dir}/nixos-result" &
+              prebuild_pids+=("$!")
+            fi
+            for pid in "${prebuild_pids[@]}"; do
+              if ! wait "$pid"; then
+                prebuild_status=1
+              fi
+            done
+            if [ "${#prebuild_pids[@]}" -eq 0 ]; then
+              echo "    No deploy-selected Nix attributes to prebuild"
+            fi
+            exit "$prebuild_status"
+          REMOTE_PREBUILD
+
+      - name: Cleanup SSH
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
 
   deploy-staging:
     name: Deploy to Staging (Node B)
