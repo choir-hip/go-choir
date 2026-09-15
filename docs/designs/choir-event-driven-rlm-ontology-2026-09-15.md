@@ -1,7 +1,11 @@
 # Design: Event-Driven RLM Ontology
 
 **Date:** 2026-09-15
-**Status:** design document — not a Definition, not executable authority
+**Status:** design document — not a Definition, not executable authority.
+Amended after a 12-agent consensus review
+(`docs/reports/choir-event-driven-rlm-ontology-consensus-2026-09-15.md`):
+direction endorsed, several "only" claims revised. Amendments are marked
+*[panel]* inline; original text retained where the panel confirmed it.
 **Mutation class:** green (analysis; no runtime change)
 **Origin:** owner-directed orientation review after the engineering-carrier
 mission stalled at the P5 roster gate and the owner reported that the
@@ -65,18 +69,42 @@ state transition, every settlement is an event. There is no separate
 instruction queue, no control-binding merge, no assignment ledger, no slot
 table.
 
-### 2. A durable dispatch cursor is the only wake authority
+### 2. Durable dispatch is the only wake authority
 
-Per computer, one cursor: "events through N have been dispatched." Dispatching
-an event means activating the actor the event addresses. Crash → resume from
-the cursor. Event identities make re-dispatch idempotent. There is no
-scanner, no watchdog, no sweep, no drainer: **pending work is not discovered,
-it is delivered** — the event is the wake, and the cursor makes the wake
-durable.
+*[panel: the original text claimed one scalar cursor was sufficient. The
+panel showed that is a restatement, not a substrate — see F1/F2 in the
+review report. Revised claim below.]*
 
-This replaces the memo's "transition-minted recovery occurrences" with the
-smaller truth: the tape already contains the occurrences; what was missing is
-the cursor.
+Per computer, a durable **dispatch position** on the tape plus a
+transactional handoff: an event addressed to an actor produces a durable
+addressed-activation record, claimed under a lease/epoch, acknowledged on
+completion or made retryable. Crash → resume from the position. Event
+identities make re-dispatch recognizable; the handoff makes it
+idempotent. Per-actor ordering and progress are a mailbox projection —
+per-actor watermarks — so one stalled actor cannot head-of-line-block
+unrelated ones, and a permanently failing event is quarantined rather
+than silently skipped or allowed to stall the position.
+
+There is no scanner, no watchdog, no sweep, no drainer: **pending work is
+not discovered, it is delivered** — the event is the wake, and the
+durable handoff makes the wake survive the process.
+
+Two event producers are first-class substrate, not emergent behavior:
+
+- **Executor-owned observations.** The harness that owns the process
+  table emits `capsule_lost`, `execution_failed`, `provider_unavailable`,
+  and executor lease/heartbeat expiry. Silence is not an event; a wedged
+  or dead executor must still produce one.
+- **Durable timers.** Deadline obligations (owner-visible expiry,
+  supersession windows, retry delays) are legitimate semantic state; a
+  durable timer source mints the wake event when the deadline elapses.
+  Executor timeouts govern execution liveness; they do not define
+  semantic truth — but semantic deadlines exist and are events.
+
+This replaces the memo's "transition-minted recovery occurrences" with
+the smaller truth: the tape already contains the occurrences; what was
+missing is the durable dispatch position and the producers that keep it
+fed.
 
 ### 3. An activation is an RLM spawned by an event carrying a context
 
@@ -94,30 +122,62 @@ internal fan-out. A research desk 1000 agents wide is 1000 ordinary
 activations whose events are scoped to the research context. Management and
 engineering never learn it happened.
 
-### 4. Capabilities are the only difference between a desk and a sub-RLM
+### 4. Desks and sub-RLMs share one activation kernel; their differences are bindings
 
-Engineering's capsule verbs, research's search, texture's canonical write —
-all capability sets on the same actor type, attenuated at spawn. A sub-RLM
-receives a subset of its parent's authority, never more. "Assignment" as a
-separate object disappears: spawning an RLM with a capsule capability bound
-to a context *is* the assignment. The binding is the spawn.
+*[panel: "capabilities are the only difference" was too strong — see F3,
+F7. Revised claim below.]*
 
-Admission control becomes per-desk policy at the spawn boundary — engineering
+One actor type, one activation mechanism. A desk additionally carries
+durable bindings: stable identity, addressability, standing obligations,
+admission policy, budgets, reactivation semantics. A sub-RLM may be
+anonymous, caller-scoped, and disposable. The differences are declarative
+bindings on the same kernel — not separate role-specific loops, and not
+capabilities alone.
+
+Capabilities attenuate at spawn, with one correction: **exercise
+authority and delegation authority are distinct.** Management may grant
+an effects capability it is authorized to delegate but not to wield;
+otherwise it must ambiently hold every capability it might delegate.
+
+Spawn context carries grant *references* and data — never serialized
+capability handles or physical bindings. Trusted activation setup
+resolves current authority at spawn; handles do not survive revocation
+or rewarm (C6/I17). Capsule quotas and executor bindings are resolved by
+trusted spawn code from the context's claims, not embedded in it.
+
+"Assignment" as a separate object disappears: spawning an RLM with a
+capability binding resolved against a context *is* the assignment. The
+binding is recorded by the spawn event.
+
+Admission control is per-desk policy at the spawn boundary — engineering
 may admit one effects-capable sub-RLM at a time while research fans out a
-thousand — not a global invariant and not a slot ledger.
+thousand — but policy evaluation needs an atomic primitive: a
+conditional-append / compare-and-swap on the canonical appender, or a
+reservation projection with atomic claim. Model-level check-then-spawn
+races.
 
-### 5. Everything I called a ledger becomes a projection
+### 5. Work tracking is a typed event protocol plus projection
 
-"Open work" = spawn events without matching terminal events. "What is
-engineering doing" = filter by role and scope. Settlement state = the event
-sequence `spawned → … → settled|failed|cancelled`, derived, never stored
-twice. Work items, assignments, slots, obligations — all projections over
-spawn/settle event pairs.
+*[panel: "spawn minus terminal" is a liveness view, not a work schema —
+see F4. Revised claim below.]*
+
+Work obligations are a typed event protocol on the tape: stable
+`work_id`, `activation_id`, `attempt_id`, settlement rule,
+cancellation/supersession, terminal uniqueness. The current state of a
+piece of work is *derived* — a canonical, rebuildable projection — never
+stored twice and never independently writable.
+
+"Open work" = spawn events without matching terminal events is the base
+liveness view; the projection additionally distinguishes blocked vs
+runnable, failed vs abandoned, cancelled vs superseded, retry vs
+duplicate, partial vs terminal, compensation-pending vs ordinary
+failure. "What is engineering doing" = filter by role and scope.
 
 This kills the run-terminal-vs-fate-terminal divergence by construction:
 there is one stream, and a run finishing is just an event in it. A worker
-reading state reads the projection; the projection cannot disagree with the
-tape because it *is* the tape.
+reading state reads the projection; the projection is a function of the
+tape. (Deployed projections can lag or carry reducer bugs — they are
+rebuildable indexes, not a second authority.)
 
 ## The document is the control surface
 
@@ -156,17 +216,20 @@ Consequences:
 
 ## What gets deleted
 
+*[panel: each row now names the replacement invariant that must exist
+before the deletion is safe — see F5/F6 in the review report.]*
+
 | Current machinery | Replaced by |
 |---|---|
-| `co_super_slots` table + budget/sequencing enforcers | spawn-boundary admission policy |
-| `CoSuperAssignment` object + fate saga + watchdogs + resume sweeps | spawn event + capability binding + settlement events |
-| `lifecycle_control_bindings` delivery + drainer machinery | events addressed to management's context |
-| `/tell`, `/correct`, `QueueLifecycleOwnerInstruction` | revisions (prompt bar / doc edits) |
+| `co_super_slots` table + budget/sequencing enforcers | spawn-boundary admission policy evaluated through a conditional-append/CAS primitive on the canonical appender *[panel F6]* |
+| `CoSuperAssignment` object + fate saga + watchdogs + resume sweeps | event-sourced saga: spawn event + capability binding + typed legal-transition reducer + executor receipts *[panel F5 — the saga survives as events; only its bespoke continuation machinery is deleted]* |
+| `lifecycle_control_bindings` delivery + drainer machinery | events addressed to management's context, delivered by the durable dispatch handoff |
+| `/tell`, `/correct`, `QueueLifecycleOwnerInstruction` | revisions (prompt bar / doc edits); a revision commit atomically mints the addressed wake event — transport, not a second channel *[panel: gemini dissent resolved this way]* |
 | `roster.go` + overlay-id plumbing | `choir.Models()` + `choir.Call(model, …)` in a cell |
 | `actuator=tools` fallback (R8) | nothing — the carrier is the only path |
 | `super`/`cosuper` symbols, `super_controller.go`, `persistentSuperAgentID` | `management`/`engineering` as role strings; one actor type |
 | Wire `reconciler` role | the RLM-based newspaper system (separate work) |
-| assignment deadline sweep | executor timeouts emit `execution_failed` events; semantic state never times out |
+| assignment deadline sweep | durable timer events mint deadline wakes; executor timeouts emit `execution_failed`; semantic deadlines remain semantic *[panel F2]* |
 | `model_policy.toml` role→model routing | gateway catalog + entitlement |
 
 ## What is kept (the genuinely hard parts)
@@ -182,13 +245,39 @@ Consequences:
 
 ## Failure semantics
 
-External-world failures become events emitted by the harness that owns the
-process table: `capsule_lost`, `execution_failed`, `provider_unavailable`.
-Detection lives in the executor; semantics stay pure. A wedged capsule is an
-executor observation, not a semantic deadline — there are no semantic
-deadlines. If a sub-RLM dies mid-flight, its spawn event has no terminal
-partner; the parent context observes that through the projection and decides
-— retry, compensate, or fail — in code, not in a sweeps table.
+External-world failures become events emitted by the harness that owns
+the process table: `capsule_lost`, `execution_failed`,
+`provider_unavailable`. Detection lives in the executor — a first-class
+resident observer, not an emergent property. A wedged capsule is an
+executor observation that must still reach the tape; executor liveness
+timeouts are executor events, while semantic deadline obligations are
+durable state driven by timer events. If a sub-RLM dies mid-flight, its
+spawn event has no terminal partner; the parent context observes that
+through the projection and decides — retry, compensate, or fail — in
+code, not in a sweeps table.
+
+## Panel review (2026-09-15)
+
+A 12-agent convergent consensus panel reviewed this document
+(`docs/reports/choir-event-driven-rlm-ontology-consensus-2026-09-15.md`).
+Verdict: unanimous endorsement of the diagnosis and direction; unanimous
+rejection of the document as build-ready. The five nouns survive —
+events, activations, contexts, capabilities, projections — joined by two
+the panel forced back in: the **durable dispatch handoff** (§2) and
+**durable event producers** (§2, Failure semantics). The deletion table
+above now names each row's replacement invariant; the original
+"only"-claims it revises are marked inline.
+
+The panel's phasing recommendation (ling): (1) substrate — consolidate
+dispatch onto the tape, build the handoff and the executor/timer event
+producers; (2) reduction — distribute saga logic into event handlers,
+replace the slot table with the admission primitive, replace the
+assignment object with spawn event + durable binding record; (3)
+ontology — collapse role symbols, V3 vocabulary pass. Cutover also
+requires a seeded reconciliation pass: existing pending rows with no
+corresponding event must be minted their events or audited out, or the
+new substrate inherits stranded state while claiming the old classes
+deleted.
 
 ## What this resolves
 
@@ -205,15 +294,23 @@ partner; the parent context observes that through the projection and decides
 
 ## Open questions for review
 
-1. Does event-tape-plus-cursor fully replace the wake-authority substrate, or
-   is there a class of continuation it cannot express?
-2. Is "spawn carries context, task is just a field" the right primitive, or
-   does something real get lost when work-tracking is pure projection?
-3. Capability attenuation at spawn: is parent-subset sufficient, or are there
-   legitimate grants a sub-RLM needs that the parent never held?
-4. The prompt bar as revision-shaped intake: does V0-as-prompt satisfy
-   "docs are the control" or is a thin intake event still needed?
-5. What breaks when management stops being a resident drainer and becomes an
-   event-activated actor — latency, ordering, anything else?
-6. Migration path: is a V3 vocabulary pass over durable protocol names the
-   right cost, or should old names be accepted as permanent protocol literals?
+1. ~~Does event-tape-plus-cursor fully replace the wake-authority
+   substrate?~~ **Answered by panel:** not as stated — the durable
+   handoff and event producers are required additions (§2).
+2. ~~Is "spawn carries context, task is just a field" the right
+   primitive?~~ **Answered:** yes for cognition; accountable work
+   additionally needs the typed obligation protocol (§5).
+3. ~~Is parent-subset attenuation sufficient?~~ **Answered:** no —
+   exercise vs delegation authority are distinct (§4).
+4. The prompt bar as revision-shaped intake: resolved as revision commit
+   atomically minting the addressed wake event. Remaining sub-question:
+   does any owner input exist that is not revision-shaped (e.g. urgent
+   interrupt) and does it deserve an event-only path?
+5. What breaks when management stops being a resident drainer — the
+   panel named the list: cold-start latency, activation storms,
+   serialization of the management mailbox, loss of implicit FIFO,
+   events arriving during passivation. Each is a dispatch-handoff
+   property to specify, not a reason to keep residency.
+6. Migration path: the panel endorsed a phased cutover with seeded
+   reconciliation (Panel review). The V3 vocabulary pass stays an open
+   cost question within phase 3.
