@@ -1,8 +1,11 @@
 # Second Pass: The Minimal Version
 
 **Date:** 2026-09-15
-**Status:** analysis — candidate revision of the ontology design, under
-adversarial review
+**Status:** analysis — candidate revision of the ontology design.
+Amended to v2 after a second adversarial consensus round
+(`docs/reports/choir-rlm-ontology-minimal-consensus-2026-09-15.md`):
+the compression survived; several mechanisms gained panel-forced
+clauses, marked *[r2]* inline.
 **Mutation class:** green (analysis; no runtime change)
 **Predecessors:** `choir-event-driven-rlm-ontology-2026-09-15.md` and its
 consensus review `choir-event-driven-rlm-ontology-consensus-2026-09-15.md`.
@@ -25,26 +28,46 @@ memo works through all eight.
 
 ## The two moves that do most of the work
 
-**Move 1 — "delivered" means "in the state head."** Every actor already
-has a durable processed-position (its state head; today,
-`processed_at` in the actor log). Define delivery as the event appearing
-in the addressed actor's state head. Then pending deliveries = tape
-events addressed to actors minus incorporated events — a projection,
-not a ledger. The dispatcher is a small loop over that projection: fire
-an activation (idempotent by event id), retry until incorporated. The
-actor's state head IS the acknowledgement; the retry IS the lease. No
-inbox records, no epoch protocol, no separate watermark table.
+**Move 1 — "delivered" means "in the state head," committed atomically.**
+Every actor already has a durable processed-position (its state head;
+today, `processed_at` in the actor log). Define delivery as the event
+appearing in the addressed actor's state head. Then pending deliveries =
+tape events addressed to actors minus incorporated events — a
+projection, not a ledger. The dispatcher is a small loop over that
+projection: fire an activation, retry until incorporated. The actor's
+state head IS the acknowledgement; the retry IS the lease. No inbox
+records, no watermark table.
 
-**Move 2 — one live activation per actor.** A dispatch rule, not a
-lock: the dispatcher never runs two activations of the same actor;
-events arriving during an activation are incorporated by the next one.
-Every actor becomes a serial processor — the actor model, 1986. This
-dissolves concurrent-activation races, admission check-then-spawn races
-(policy evaluated inside a serial actor cannot race itself), per-actor
-ordering (tape order), and most of what the drainer's mutex did.
+*[r2: two clauses the panel forced. (a) **Fenced atomic commit** — an
+activation commits {emitted events + new state head} in ONE append,
+conditional on the head/epoch being what the activation started from.
+The per-actor conditional append is the lease/epoch, relocated into the
+head append — and it fixes today's real MarkProcessed-before-
+SaveSnapshot hazard as a side effect. Without it, a dispatcher restart
+double-activates and a mid-commit crash marks delivered what never
+persisted. (b) **Ordering** — set-parallelism across actors only;
+within an actor, tape order among eligible events. Retry accounting is
+itself tape events (`dispatch_attempted`/`delivery_failed`) so poison
+detection survives restart.]*
+
+**Move 2 — one live activation per actor, fenced.** A dispatch rule,
+not a lock: the dispatcher never runs two activations of the same
+actor; events arriving during an activation are incorporated by the
+next one. Every actor becomes a serial processor — the actor model,
+1986. This dissolves concurrent-activation races, admission
+check-then-spawn races (policy evaluated inside a serial actor cannot
+race itself), per-actor ordering (tape order), and most of what the
+drainer's mutex did.
+
+*[r2: the fence is the conditional head-append from Move 1 — a killed
+or stale activation's commit fails its epoch check, so preemption is
+safe. Interrupts (cancel/revoke) are addressed to the executor actor,
+which kills the activation — they do not queue behind the busy actor's
+stream. Synchronous sub-RLM calls return values inside the activation,
+not mailbox deliveries — otherwise a parent blocked awaiting its
+child's result deadlocks against its own serial rule.]*
 
 ## The eight findings, minimally resolved
-
 ### P1. Delivery/crash boundary → Moves 1 + 2
 
 Panel's version: addressed activation records, lease/epoch claims,
@@ -52,29 +75,45 @@ acks, per-actor watermarks, poison-event quarantine.
 
 Minimal: delivered = in state head; pending = projection; dispatcher
 retries until incorporated. Head-of-line blocking dissolves because
-pending deliveries are a *set* — the dispatcher retries event 5 while
-event 3 is still pending; there is no contiguous scalar to stall.
-Poison events: retry N times, then emit `delivery_failed` addressed to
-the event's sender — a policy decision, not a subsystem.
+pending deliveries are a set *across actors* — the dispatcher retries
+event 5 for actor B while event 3 for actor A is still pending. Poison
+events: retry N times (attempts recorded as tape events), then emit
+`delivery_failed` addressed to a named error-sink actor — a policy
+decision, not a subsystem.
 
-### P2. Silence and timers → one field: `not_before`
+*[r2: UNSOUND as originally written — see the fenced-commit and
+ordering clauses in Moves 1–2. With them, the panel's guarantee is
+preserved without an inbox table.]*
+
+### P2. Silence and timers → one field: `not_before`, fired by the dispatcher
 
 Panel's version: durable timer source, executor heartbeats/leases,
 deadline obligations.
 
-Minimal: a scheduled wake is an event that is not dispatch-eligible
-until a timestamp. One optional field covers every case:
+Minimal: a scheduled wake is an **unaddressed** event carrying
+`not_before` and its intended addressee. The dispatcher keeps a
+due-index (min-`not_before`), self-wakes at the next due time, and when
+one comes due **mints the addressed wake event at the then-head**. Due
+order = tape order; per-actor FIFO survives; there is no separate
+timer store — the timer wheel relocates into the dispatcher's
+next-wake computation.
 
-- deadline obligation → event with `not_before = deadline`, addressed
-  to the obligee;
-- executor starting external work → schedules its own suspicion event
-  ("if no report by T, wake the owner to inspect me") — the tape is the
-  watchdog; completing the work makes the suspicion event a no-op;
-- retry backoff → re-dispatch scheduled with `not_before = now + delay`.
+- deadline obligation → scheduled event; when due, the dispatcher mints
+  `deadline_fired` addressed to the **arbiter/executor actor** — never
+  to the obligee, which may be the wedged party;
+- executor starting external work → appends its own suspicion event
+  *before* starting (append-before-effect); completing the work makes
+  the fired suspicion a no-op;
+- retry backoff → the dispatcher schedules the re-dispatch with
+  `not_before = now + delay`.
 
-No timer subsystem: same tape, same dispatcher, eligibility check is
-`not_before <= now`. Executor death is covered because the suspicion
-event is already durable before the work starts.
+*[r2: the original text put `not_before` on addressed events and
+assumed the tape itself was the producer. Panel breaks: a field
+doesn't mint wakes on a quiet tape; a future event at a per-actor head
+blocks later eligible ones; a deadline addressed to the wedged obligee
+can never fire. The three clauses above are the fix — still no timer
+subsystem, but the dispatcher's due-index is admitted to be the
+relocated wheel.]*
 
 ### P3. Desk vs sub-RLM → one bit: persistence
 
@@ -88,42 +127,74 @@ Same kernel, same addressing, same event processing. Standing
 obligations, admission policy, and budgets are actor state plus code —
 not ontology.
 
-### P4. Work schema → two fields: `work_id`, `status`
+*[r2: mostly SOUND. One rule added: events addressed to a terminated
+actor fold as no-ops — otherwise a late cancel retries forever into a
+false `delivery_failed`. Obligation-liveness (a crashed sub-RLM with
+open work gets re-driven) is the work projection's job under P4, not
+the actor's.]*
+
+### P4. Work schema → `work_id`, `attempt_id`, `status`
 
 Panel's version: typed obligation protocol with work_id,
 activation_id, attempt_id, settlement rule, cancellation/supersession,
 terminal uniqueness.
 
-Minimal: spawn carries a spawner-chosen `work_id`; the terminal event
-carries a `status` enum. Blocked vs runnable, cancelled vs superseded,
-retry vs duplicate, partial vs terminal — all ordinary events in the
-work's stream; the projection folds the stream into current state.
-"Terminal uniqueness" = first terminal event wins; later ones are
-flagged by the projection. Policy, not machinery.
+Minimal: spawn carries a spawner-chosen `work_id` and an `attempt_id`
+(or its spawn-event ref); the terminal event carries a `status` enum.
+Blocked vs runnable, cancelled vs superseded, retry vs duplicate,
+partial vs terminal — all ordinary events in the work's stream; the
+projection folds the stream into current state.
 
-### P5. Fate saga → the steps stay, the coordination dissolves
+*[r2: UNSOUND as originally written — "first terminal wins" lets a
+stale attempt's late failure beat a live attempt's success. Forced
+clauses: `attempt_id` on work events; **only the latest attempt
+settles**; earlier terminals fold as late evidence; cancel intent
+takes precedence over in-flight success. Still no typed protocol —
+three fields and a fold rule.]*
+
+### P5. Fate saga → the steps stay, the continuer moves
 
 The saga is four physical executor operations: freeze the capsule →
 revoke its capability → destroy it → record the outcome. Those stay —
-they are syscalls, and were never the problem. What dissolves is the
-~1,074 lines of coordination: intents, acks, pending proposals,
-watchdogs, restart reconcilers. Each step becomes trigger-event →
-executor action → result-event; crash recovery is the generic dispatch
-retry, not bespoke machinery. "Legal-transition reducer" is the
-projection's fold function validating order — arguably unnecessary,
-since the executor acts on the next expected event in tape order.
+they are syscalls, and were never the problem.
 
-### P6. Admission → inside the serial actor (Move 2)
+*[r2: UNSOUND as originally written — the most code-grounded finding
+of the round. A frozen capsule refuses every operation, so the
+continuer cannot be the worker; `resumeStrandedFrozenAssignmentCommit`
+exists precisely for that. Revised minimal version:]*
+
+- Fate steps are events; the **continuer is the executor actor**,
+  driven from the work stream — never the frozen worker.
+- The terminal **proposal is staged before freeze** (an event), so a
+  post-freeze crash loses nothing.
+- The executor mints the terminal event only after the revoke ack;
+  cancel intent takes precedence over a late success report.
+- The "legal-transition reducer" is the work stream's **fold
+  function** — small, named, not optional. Pending work =
+  unincorporated events ∪ fold-declared continuations.
+- `CapsuleAbsent` receipts make destroy retryable.
+
+What still dies: watchdogs, resume sweeps, pending-proposal side
+tables, restart reconcilers — the continuation obligation is derivable
+from the stream, and the continuer is an ordinary actor.
+
+### P6. Admission → a capability on one serial actor
 
 Panel's version: conditional-append / CAS on the canonical appender, or
 a reservation projection with atomic claim.
 
-Minimal: "engineering admits ≤1 effects-capable sub-RLM" is evaluated
-by the engineering desk inside its own serial activation against its
-own projection. It cannot race. The slot table's real function — global
-arbitration — is only needed if a *cross-desk* admission invariant
-exists; none has been named. If one is named later, the admitting
-actor's serial processing is still the serialization point.
+*[r2: UNSOUND as originally written — parents X and Y can both check
+"0 live" and both mint spawn events; no serial point sees both. The
+computer-wide invariant is real (one live effects capsule). Revised
+minimal version:]*
+
+Admission is a **capability**: the exclusive grant "may mint
+effects-capable spawn" lives on exactly one actor (the engineering
+desk). Spawns requiring that capability are *requested from* the
+owner, whose serial fold is the arbitration point — the CAS relocated
+into the fold. Cross-desk invariants get one named arbiter actor each.
+Model-level check-then-spawn cannot race because the check and the
+mint are inside one serial incorporation.
 
 ### P7. Delegation vs exercise → one bit in the grant
 
@@ -131,25 +202,43 @@ Panel's version: distinct exercise and delegation authority.
 
 Minimal: a capability grant carries one flag — "may create capability
 X" vs "has capability X." Resolved by trusted spawn code. Correct and
-small; not machinery.
+small; not machinery. *[r2: SOUND, unanimously — the one finding no
+panelist broke.]*
 
-### P8. Migration → a script, not a subsystem
+### P8. Migration → a script inside a write fence
 
 Panel's version: phased cutover, seeded reconciliation.
 
 Keep as plan, not ontology: for each pending row in the old tables,
-mint its equivalent event. Phasing is a property of the mission plan.
+mint its equivalent event — with deterministic mint identity (re-run
+safe), `not_before` seeding for live deadlines, and a final audit.
+*[r2: the script is only correct inside a write fence — quiesce or
+dual-read the old writers, or rows committed between scan and cutover
+are stranded. Mission-plan phasing, not ontology — but a named
+correctness requirement.]*
 
-## Net accounting
+Added: `not_before`, `work_id`, `attempt_id`, `status`,
+`may_delegate`, `activation_epoch` fields; serial-per-actor dispatch
+rule; delivered = in-head definition; fenced atomic commit; the rules
+listed below.
 
-Added: `not_before` field, `work_id`/`status` fields, may-delegate bit,
-one dispatch rule (serial per actor), one definition (delivered = in
-state head).
+*[r2 — forced rules: latest-attempt-settles with cancel precedence;
+kill-not-queue interrupts; capability-bearing spawns go through the
+capability owner; sync sub-RLM calls return values; late events to
+terminated actors are no-ops; append-suspicion-before-effect;
+scheduled events are unaddressed and fired by the dispatcher's
+due-index.]*
 
-Removed: the panel's inbox/lease/ack protocol, timer subsystem, typed
-obligation protocol, CAS admission primitive, saga continuation
-machinery — and behind them the existing drainer, watchdogs, sweeps,
-slot table, assignment object, control bindings, `/tell`.
+Relocated, not deleted (small, named): dispatcher due-index (the timer
+wheel), work-stream fold (the legal-transition reducer),
+executor-as-fate-continuer (the watchdog), per-actor conditional
+head-append (the lease/CAS).
+
+Removed: the panel's inbox/lease/ack *tables*, timer *subsystem*, typed
+obligation *protocol*, CAS admission *primitive*, saga *coordinator* —
+and behind them the existing drainer, watchdogs, sweeps, slot table,
+assignment object, control bindings, `/tell`, roster, model_policy
+routing.
 
 ## Residual hard points (honest list)
 
@@ -157,17 +246,24 @@ slot table, assignment object, control bindings, `/tell`.
   before the result event commits → retry repeats the call. Resolution
   direction: effects go through trusted code (executor/gateway) which
   dedupes by request identity — consistent with capabilities being the
-  only effect path. The idempotency key needs specifying.
+  only effect path. The idempotency key needs specifying. *[r2: the
+  fenced commit shrinks this window to effects-in-flight but cannot
+  eliminate it — the external world doesn't participate in our
+  commits.]*
 - **Hot-actor starvation.** Serial-per-actor plus retry could starve a
   desk under event storm. Needs a coalescing/batching rule in the
   dispatcher.
 - **First timer for pre-cutover rows.** Seeded reconciliation must mint
   `not_before` events for existing deadlines or they never fire.
-- **`delivery_failed` ownership.** Who is woken when an event can't be
-  delivered — the sender? a computer error context? Policy decision,
-  currently unnamed.
+- **`delivery_failed` ownership.** Panel leaned to a named error-sink
+  actor rather than the sender (which may be a dead sub-RLM).
 - **Activation context durability.** The state head proves
   incorporation, not mid-activation progress. A long activation that
   dies restarts from its last committed state — acceptable if cells
   commit intermediate state as events, which they already must for
   rewarm (C6/I17).
+- **Dispatcher topology.** Single dispatcher per computer assumed;
+  multi-dispatcher failover needs the epoch durable and fenced — same
+  mechanism, stronger requirement. Whether the dispatcher is itself an
+  actor on the tape (its head = the dispatch position) or a thin
+  process loop is unresolved.
