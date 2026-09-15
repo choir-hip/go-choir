@@ -92,6 +92,22 @@ export const APP_REGISTRY = [
     theme: { surface: 'standard', shellDataAttr: 'data-email-window', contentClass: 'email-content' },
   },
   {
+    id: 'mail',
+    name: 'Mail',
+    icon: '📬',
+    description: 'Mail for your automatic computer — redesigned',
+    component: () => import('../MailApp.svelte'),
+    launcher: { desk: true, desktopIcon: true, mobileSwitcher: true, order: 35 },
+    window: {
+      singleton: true,
+      heavy: false,
+      desktop: { width: 1180, height: 740, minWidth: 720, minHeight: 500 },
+      compact: { width: 360, height: 560, minWidth: 340, minHeight: 520 },
+    },
+    auth: { preview: 'public-preview', requiresAuthFor: ['email_reply', 'email_compose', 'email_send'] },
+    theme: { surface: 'standard', shellDataAttr: 'data-mail-window', contentClass: 'mail-content' },
+  },
+  {
     id: 'compute-monitor',
     name: 'Compute Monitor',
     icon: '📊',
