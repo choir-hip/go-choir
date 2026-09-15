@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 100 GiB (calibrated 2026-08-26, see
-# docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md): the host's
-# irreducible occupancy (224G platform Dolt store, 89G sealed evidence
-# computer, 22G live platform computer) leaves ~116G free on a 476G disk; the
-# previous 120G floor assumed reclaimable headroom that no longer exists.
-# The NixOS closure + guest image build footprint is single-digit GiB.
-min_free_kib="${DEPLOY_MIN_FREE_KIB:-104857600}"
+# 90 GiB (recalibrated 2026-09-15): the 2026-08-26 floor of 100 GiB was set
+# when ~116 GiB was free (see
+# docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md); the host
+# has since grown to ~99 GiB free and the preflight began permanently
+# blocking deploys whose actual footprint (NixOS closure + guest images) is
+# single-digit GiB — and whose artifacts are typically already built by the
+# prebuild job. 90 GiB keeps ~30x headroom over observed build footprint.
+# The durable fix is host capacity, not a higher floor.
+min_free_kib="${DEPLOY_MIN_FREE_KIB:-94371840}"
 avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
 
 echo "==> Deploy disk preflight"
