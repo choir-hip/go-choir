@@ -63,9 +63,21 @@ drainer's mutex did.
 or stale activation's commit fails its epoch check, so preemption is
 safe. Interrupts (cancel/revoke) are addressed to the executor actor,
 which kills the activation — they do not queue behind the busy actor's
-stream. Synchronous sub-RLM calls return values inside the activation,
-not mailbox deliveries — otherwise a parent blocked awaiting its
-child's result deadlocks against its own serial rule.]*
+stream.]*
+
+*[owner correction, 2026-09-15: there are no synchronous sub-RLM calls.
+Sub-RLM calls are async casts only — spawn is admission, the result is
+a later message event, and the parent either continues other work or
+ends its activation and is re-woken by the reply. This matches the
+reference RLM harness: prime-agent's `rlm.spawn` "returns immediately
+after task admission... it never waits for or returns the child's
+answer"; results arrive only via `agent_message` events; the child
+registry survives kernel restart; and events arriving during a live
+activation are delivered as steering at turn boundaries, not queued
+for the next activation and not interrupting a running tool. The
+round-2 "self-deadlock" finding dissolves: no parent ever blocks
+awaiting a child. Model calls inside a cell remain synchronous —
+sync effects in-cell, async casts across actors.]*
 
 ## The eight findings, minimally resolved
 ### P1. Delivery/crash boundary → Moves 1 + 2
@@ -132,6 +144,13 @@ actor fold as no-ops — otherwise a late cancel retries forever into a
 false `delivery_failed`. Obligation-liveness (a crashed sub-RLM with
 open work gets re-driven) is the work projection's job under P4, not
 the actor's.]*
+
+*[owner correction: the calling convention is cast-only, matching
+prime-agent — `rlm.spawn` = admission event returning a handle,
+`agent_message` = result event, `list_subagents`/poll = projection
+read, turn ends while children run. A sub-RLM's "result" is a message
+event addressed to the spawner's context, which is also what makes it
+addressable: the messaging system is the return channel.]*
 
 ### P4. Work schema → `work_id`, `attempt_id`, `status`
 
