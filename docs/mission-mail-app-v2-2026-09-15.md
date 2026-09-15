@@ -89,17 +89,31 @@ Design decisions (cognitive-transform output):
 
 ## Run Checkpoint & Resumption State
 
-status: in_progress
-last checkpoint: problem documented, pre-implementation
-current artifact state: EmailApp unchanged; MailApp not yet created
-what shipped: nothing yet
-what was proven: problem inventory against screenshot + source
-unproven or partial claims: none yet
-belief-state changes: none
-remaining error field: entire implementation + verification
-highest-impact remaining uncertainty: whether container-width-driven layout
-  behaves inside the floating-window shell on real mobile Safari
-next executable probe: implement MailApp.svelte, build, harness screenshots
-suggested resume goal string: "finish Mail app v2: implement, verify, land"
-evidence artifact refs: owner screenshot 2026-09-15 (local screenshots dir)
-rollback refs: git revert of mission commits
+status: complete
+last checkpoint: deployed acceptance proof on choir.news
+current artifact state: `frontend/src/lib/MailApp.svelte` (new, ~3000 lines);
+  `registry.ts` gains `id: 'mail'` entry (order 35, 📬, `data-mail-window`);
+  EmailApp and `email` entry untouched; no backend changes
+what shipped: commit `940f46c1` — redesigned Mail app alongside Email app
+what was proven:
+- `vite build` clean; MailApp emitted as lazy chunk `MailApp-CVANtKrD.js`
+- Local harness (stubbed authenticated API): inbox/drafts/sent/quarantine,
+  filter, keyboard nav, reply→draft→send, approve-and-send toast, HTML/text
+  toggle, attachments, preview mode; desktop 1280 / medium 860 / mobile 390
+- Deployed: CI run `34947454790` green after one deploy retry (Node B disk
+  headroom flake, not code); activation receipt `service=frontend
+  commit=940f46c1`; `MailApp-CVANtKrD.js` served; signed-out desktop icon
+  opens Mail window with preview data on desktop and 390px viewports
+unproven or partial claims: authenticated path verified against stub API only;
+  real-mailbox proof needs a signed-in session
+belief-state changes: container-width layout works inside the floating-window
+  shell; medium layout (icon rail) engages correctly at narrow window widths
+remaining error field: real-mailbox authenticated acceptance; owner A/B
+  decision between `email` and `mail` apps
+highest-impact remaining uncertainty: none blocking; draft deep-link
+  (`?app=email&draft=`) approval URLs still target the old app by design
+next executable probe: owner compares both apps signed-in, picks keeper
+suggested resume goal string: "A/B email vs mail signed-in; remove loser"
+evidence artifact refs: /tmp/mailv2-*.png, /tmp/staging-mail-*.png,
+  owner screenshot 2026-09-15
+rollback refs: git revert 940f46c1 (registry + new file only)
