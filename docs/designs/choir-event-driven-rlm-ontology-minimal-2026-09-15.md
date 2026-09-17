@@ -262,6 +262,7 @@ routing.
 ## Residual hard points (honest list)
 
 - **Duplicate effects.** Actor dies after a provider call succeeds but
+
   before the result event commits → retry repeats the call. Resolution
   direction: effects go through trusted code (executor/gateway) which
   dedupes by request identity — consistent with capabilities being the
@@ -286,3 +287,44 @@ routing.
   mechanism, stronger requirement. Whether the dispatcher is itself an
   actor on the tape (its head = the dispatch position) or a thin
   process loop is unresolved.
+
+## Learning records (PICL)
+
+*[owner direction, 2026-09-17: the tape's second job is the learning
+substrate — Predictive In-Context Learning. A frozen model commits a
+prospective prediction before acquiring decision-relevant evidence,
+compares it with the observation, records discrepancy and revision,
+and retrieves the record later. Prospective commitment preserves the
+before-state that retrospective reflection destroys.]*
+
+The tape is the PICL substrate by construction — prediction-before-
+observation is just two events in order, and the append-only record is
+the frozen commitment chat-based systems have to engineer. What PICL
+adds is discipline and measure, not machinery:
+
+- **Prediction events.** A spawn or action may carry `expected` —
+  anticipated result/consequences + confidence. Every async cast is
+  then a PICL episode for free: the result event resolves it. A desk
+  fanning out 1000 sub-RLMs produces 1000 prediction-resolution pairs —
+  calibration data about its own decomposition quality. Model calls
+  likewise: `choir.Call` with an expected shape yields per-model
+  calibration — what model selection should learn from.
+- **The learning projection.** (prediction, observation, discrepancy,
+  revision, provenance) folded from the stream — same mechanism as
+  open-work, different fold. Retrieval ranks by expected corrective
+  value; context construction pulls the records in.
+- **Material-consequence predictions** formalize the mutation-class
+  ceremony: red/black actions require a committed `expected`
+  consequences record; the discrepancy is the auditable surface.
+  Green/yellow don't — PICL says strategically placed commitments,
+  not universal ones.
+- **A desk's persistence is its calibration history** — a better
+  answer to "why desks persist" than standing obligations.
+
+Risks the paper names that the design must not hide: anchoring
+(commitments defended instead of revised — the hidden-commitment
+variant is a context-construction choice, not a tape problem); trivial
+hedging (predictions scored on specificity, not presence); retrieval
+noise at scale. The mechanism is a hypothesis (H1–H6, falsifiable), so
+PICL records are additive events, never load-bearing for correctness.
+The tape doesn't need PICL; PICL needs the tape.
