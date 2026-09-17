@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Choir — The Automatic Computer</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0d0f12;
+    --bg2: #14171c;
+    --ink: #ece9e2;
+    --dim: #9a958a;
+    --faint: #5c584f;
+    --gold: #d4a24e;
+    --gold-dim: #8a6a33;
+    --line: #2a2e35;
+  }
+  body {
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .slide {
+    width: 1280px; height: 720px;
+    page-break-after: always;
+    position: relative;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 72px 96px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .slide:nth-child(even) { background: var(--bg2); }
+  .kicker {
+    font-size: 15px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--gold); font-weight: 600; margin-bottom: 28px;
+  }
+  h1 { font-size: 88px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.02; }
+  h2 { font-size: 52px; font-weight: 650; letter-spacing: -0.025em; line-height: 1.08; }
+  .sub { font-size: 26px; color: var(--dim); line-height: 1.45; margin-top: 28px; max-width: 900px; font-weight: 400; }
+  .body { font-size: 21px; color: var(--dim); line-height: 1.6; max-width: 940px; }
+  .body strong, .body b { color: var(--ink); font-weight: 600; }
+  .foot {
+    position: absolute; bottom: 36px; left: 96px; right: 96px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; color: var(--faint); letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .foot .num { color: var(--gold-dim); font-variant-numeric: tabular-nums; }
+  .rule { width: 64px; height: 3px; background: var(--gold); margin: 34px 0; }
+  ul.rows { list-style: none; margin-top: 8px; }
+  ul.rows li {
+    font-size: 21px; color: var(--dim); line-height: 1.5;
+    padding: 13px 0; border-bottom: 1px solid var(--line);
+    display: flex; gap: 18px; align-items: baseline;
+  }
+  ul.rows li:last-child { border-bottom: none; }
+  ul.rows li b { color: var(--ink); font-weight: 600; min-width: 0; }
+  ul.rows li .tick { color: var(--gold); font-size: 17px; flex: none; width: 22px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; margin-top: 40px; }
+  .card {
+    border: 1px solid var(--line); border-radius: 14px; padding: 30px 32px;
+    background: rgba(255,255,255,0.015);
+  }
+  .card .t { font-size: 14px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 14px; }
+  .card .d { font-size: 19px; color: var(--dim); line-height: 1.55; }
+  .card .d b { color: var(--ink); font-weight: 600; }
+  .bignum { font-size: 120px; font-weight: 700; color: var(--gold); letter-spacing: -0.04em; line-height: 1; }
+  .statrow { display: flex; gap: 72px; margin-top: 44px; }
+  .stat .v { font-size: 64px; font-weight: 700; color: var(--ink); letter-spacing: -0.03em; }
+  .stat .l { font-size: 15px; color: var(--faint); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 10px; }
+  .flow { display: flex; align-items: center; gap: 0; margin-top: 48px; }
+  .flow .step {
+    border: 1px solid var(--line); border-radius: 12px; padding: 22px 26px;
+    background: rgba(255,255,255,0.015); min-width: 0;
+  }
+  .flow .step .st { font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
+  .flow .step .sd { font-size: 17px; color: var(--dim); margin-top: 8px; line-height: 1.4; }
+  .flow .arr { color: var(--gold-dim); font-size: 26px; padding: 0 16px; flex: none; }
+  .tape {
+    margin-top: 48px; border: 1px solid var(--line); border-radius: 14px;
+    padding: 28px 32px; font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 16px; color: var(--dim); line-height: 1.9; background: #0a0c0f;
+  }
+  .tape .ev { color: var(--ink); }
+  .tape .gold { color: var(--gold); }
+  .quote { font-size: 34px; font-weight: 500; color: var(--ink); line-height: 1.4; max-width: 980px; letter-spacing: -0.01em; }
+  .quote .em { color: var(--gold); }
+  .title-slide { justify-content: center; }
+  .title-slide .word { font-size: 150px; font-weight: 750; letter-spacing: -0.045em; line-height: 0.95; }
+  .title-slide .word .o { color: var(--gold); }
+  .seam { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: linear-gradient(var(--gold), transparent 70%); opacity: 0.35; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 36px; }
+  .cols .col .h { font-size: 15px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 16px; }
+  .cols .col p { font-size: 19px; color: var(--dim); line-height: 1.6; }
+  .cols .col p b { color: var(--ink); }
+  .tag {
+    display: inline-block; border: 1px solid var(--gold-dim); color: var(--gold);
+    border-radius: 999px; padding: 5px 16px; font-size: 14px; letter-spacing: 0.12em;
+    text-transform: uppercase; font-weight: 600; margin-right: 10px; margin-top: 14px;
+  }
+  .tag.off { border-color: var(--line); color: var(--faint); }
+</style>
+</head>
+<body>
+
+<!-- 1 · TITLE -->
+<section class="slide title-slide">
+  <div class="kicker">September 2026 · open source · live on staging</div>
+  <div class="word">CHOIR<span class="o">.</span></div>
+  <div class="sub" style="font-size:34px; color:var(--ink); margin-top:36px; max-width:1000px;">
+    The automatic computer.
+  </div>
+  <div class="sub" style="max-width:880px;">
+    A persistent computer that works for you continuously — and develops
+    itself under your supervision.
+  </div>
+  <div class="foot"><span>choir.news</span><span class="num">01</span></div>
+</section>
+
+<!-- 2 · PROBLEM -->
+<section class="slide">
+  <div class="kicker">The problem</div>
+  <h2>Every AI product is a session.<br>Sessions forget.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    Models can already work for hours. Nothing lets a human
+    <b>supervise</b> hours of work — so agents ship as chats: stateless,
+    amnesiac, supervised action-by-action or not at all.
+    <br><br>
+    The frontier's bottleneck is no longer capability.
+    <b>It is supervision.</b>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">02</span></div>
+</section>
+
+<!-- 3 · THE IDEA -->
+<section class="slide">
+  <div class="kicker">The idea</div>
+  <h2>One tape. Everything else<br>is a projection.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    Every meaningful change is a typed event on an append-only log.
+    The tape is the authority; the desktop, the object graph, the mailbox,
+    the file store are deterministic folds over it.
+    <br><br>
+    Given the tape and the code version, the same computer reconstructs
+    anywhere. State is intentional — <b>every byte has a reason.</b>
+  </div>
+  <div class="tape">
+    <span class="ev">spawn</span>(engineering, work_id=w41, expected=<span class="gold">"tests pass"</span>)<br>
+    <span class="ev">agent_message</span>(w41 → engineering, result=<span class="gold">"2 failures"</span>)<br>
+    <span class="ev">learning_record_minted</span>(w41: predicted pass, observed fail → revise)
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">03</span></div>
+</section>
+
+<!-- 4 · THE MACHINE -->
+<section class="slide">
+  <div class="kicker">The machine</div>
+  <h2>Desks do the standing work.<br>Casts do the bounded work.</h2>
+  <div class="grid2">
+    <div class="card">
+      <div class="t">Desks — persistent actors</div>
+      <div class="d">Management, engineering, research. One live activation
+      each, fenced and serial. A desk persists because it is the
+      <b>learner</b> — its value is its calibration history.</div>
+    </div>
+    <div class="card">
+      <div class="t">Casts — async sub-RLMs</div>
+      <div class="d"><b>rlm.spawn</b> is an admission event, not a call.
+      The result arrives later as a message event. No parent ever blocks;
+      the tape carries the return channel.</div>
+    </div>
+    <div class="card">
+      <div class="t">Cells — in-cell carrier</div>
+      <div class="d">One Go REPL envelope per activation. Typed
+      <b>choir.*</b> functions stage intents; one reducer commits them.
+      No JSON tool tray, no output repair.</div>
+    </div>
+    <div class="card">
+      <div class="t">Delivery — state heads</div>
+      <div class="d">"Delivered" means "in the actor's state head,"
+      committed atomically. Pending work is a projection, not a ledger.
+      The retry is the lease.</div>
+    </div>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">04</span></div>
+</section>
+
+<!-- 5 · IT LEARNS -->
+<section class="slide">
+  <div class="kicker">Learning records — PICL</div>
+  <h2>Predict. Resolve. Revise.<br>The tape remembers the miss.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    Every cast can carry <b>expected</b> — a committed prediction the
+    result event resolves. Prediction, observation, discrepancy, revision:
+    a first-class record with provenance edges, folded onto the object
+    graph by an async Curator desk.
+    <br><br>
+    A desk's fan-out is calibration data about its own decomposition.
+    A model call with an expected shape is per-model calibration —
+    <b>what model selection should learn from.</b>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">05</span></div>
+</section>
+
+<!-- 6 · SUPERVISION -->
+<section class="slide">
+  <div class="kicker">Supervision, built in</div>
+  <h2>The human is the constitution,<br>not the approval queue.</h2>
+  <div class="grid2">
+    <div class="card">
+      <div class="t">Capabilities, not vibes</div>
+      <div class="d">Mechanically restricted grants. Delegation and
+      exercise are different bits. Irreversible effects demand stronger
+      evidence and durable receipts.</div>
+    </div>
+    <div class="card">
+      <div class="t">Correction is an ordinary write</div>
+      <div class="d">A rival proposal is forked; policy-governed consensus
+      selects a head; new evidence falsifies a settlement. No special
+      machinery — the tape does it.</div>
+    </div>
+    <div class="card">
+      <div class="t">Mutation classes</div>
+      <div class="d">Green to black. Red surfaces — canonical writes,
+      provider calls, run acceptance, deploys — carry full ceremony:
+      conjecture, evidence class, rollback path.</div>
+    </div>
+    <div class="card">
+      <div class="t">Effects OFF until proven</div>
+      <div class="d">Self-development effects stay off until the computer
+      makes one real change to itself — legibly, durably, on staging.
+      By design, not by delay.</div>
+    </div>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">06</span></div>
+</section>
+
+<!-- 7 · PROVEN -->
+<section class="slide">
+  <div class="kicker">Proven on staging — not slideware</div>
+  <h2>The substrate is paid for.</h2>
+  <ul class="rows" style="margin-top:36px;">
+    <li><span class="tick">✓</span><b>Whole-computer restore</b>&nbsp;— tape → live computer, six receipts, independently reviewed</li>
+    <li><span class="tick">✓</span><b>Encrypted file-CAS</b>&nbsp;— 4 MiB chunks, Merkle manifests, atomic boot hydration</li>
+    <li><span class="tick">✓</span><b>Key escrow</b>&nbsp;— 2-of-N quorum, WebAuthn PRF wrapping, deployed and proven</li>
+    <li><span class="tick">✓</span><b>Restart-surviving actors</b>&nbsp;— Yaegi Go activations in disposable capsules, continuity across forced death</li>
+    <li><span class="tick">✓</span><b>Settlement gate</b>&nbsp;— reducer-authored fate, supersede tuples, resumable sagas</li>
+    <li><span class="tick">✓</span><b>In-cell carrier</b>&nbsp;— mechanism proven end-to-end; five JSON tools deleted behind replay proofs</li>
+  </ul>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
+</section>
+
+<!-- 8 · WHERE WE ARE -->
+<section class="slide">
+  <div class="kicker">Where we are — honestly</div>
+  <h2>One decision from the roster proof.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    The engineering carrier is mid-flight: the mechanism chain is proven —
+    the first arm ever served by its own funded overlay ran three cells and
+    staged completion. The terminal receipt is quarantined on a six-strand
+    defect family in the wake substrate: <b>transitions that lose their
+    continuation.</b>
+    <br><br>
+    The fix is designed and escalated: mint a durable wake authority at
+    every transition, one consumer, run-terminal ≠ fate-terminal.
+    It is an owner decision, not an open problem.
+  </div>
+  <div class="statrow">
+    <div class="stat"><div class="v">3</div><div class="l">RLM missions settled</div></div>
+    <div class="stat"><div class="v">1/4</div><div class="l">roster models tallied</div></div>
+    <div class="stat"><div class="v">6</div><div class="l">strands, one root cause</div></div>
+    <div class="stat"><div class="v">0</div><div class="l">effects enabled — by design</div></div>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
+</section>
+
+<!-- 9 · THE PATH -->
+<section class="slide">
+  <div class="kicker">The path to beta</div>
+  <h2>Five moves, dependency-ordered.</h2>
+  <div class="flow">
+    <div class="step"><div class="st">B0 · Unblock</div><div class="sd">wake-authority repair → roster tally → carrier landing</div></div>
+    <div class="arr">→</div>
+    <div class="step"><div class="st">B1 · Cutover</div><div class="sd">one tape, serial actors, casts — the sprawl collapses</div></div>
+    <div class="arr">→</div>
+    <div class="step"><div class="st">B2 · The proof</div><div class="sd">the computer changes itself, legibly, durably</div></div>
+    <div class="arr">→</div>
+    <div class="step"><div class="st">B3 · Learning</div><div class="sd">PICL schema on — records from day one</div></div>
+    <div class="arr">→</div>
+    <div class="step"><div class="st">B4 · Beta</div><div class="sd">hardening, residues, real users</div></div>
+  </div>
+  <div class="body" style="margin-top:44px;">
+    Then the payoff: point the proven spine at the world.
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">09</span></div>
+</section>
+
+<!-- 10 · WORLD WIRE -->
+<section class="slide">
+  <div class="kicker">The payoff</div>
+  <h2>The World Wire —<br>the automatic newspaper.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    Once the computer demonstrably develops itself, the same spine runs
+    the news: sourcing, writing, verification, correction, publication —
+    around the clock, because the computer runs around the clock.
+    <br><br>
+    The world <b>as reported</b> — contested and plural, not a god's-eye
+    index. Verification and correction are the same settlement machinery
+    that made self-development legible, pointed at claims about the world.
+    <br><br>
+    Not a separate product. The first large application of a computer that
+    can be trusted to work unsupervised — <b>because its supervision was
+    built in from the tape up.</b>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">10</span></div>
+</section>
+
+<!-- 11 · WHY THIS WINS -->
+<section class="slide">
+  <div class="kicker">Why this wins</div>
+  <div class="quote">
+    Sample inefficiency is undirected learning, not architecture.
+    Signal density comes from a learner with <span class="em">standing
+    questions</span> and correction by <span class="em">genuinely
+    independent others</span> — and both have to be built into the
+    environment the intelligence runs in.
+  </div>
+  <div class="rule"></div>
+  <div class="body">
+    Choir is that environment. The tape is standing state. The harness is
+    owned. Plurality is architecturally available. Correction is an
+    ordinary write. Everyone else is building a better session;
+    <b>we are building the computer the sessions run on.</b>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">11</span></div>
+</section>
+
+<!-- 12 · CLOSE -->
+<section class="slide title-slide">
+  <div class="kicker">Join</div>
+  <h2>Build the automatic computer.<br>Read the newspaper it writes.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    Open source. Live on staging. The substrate is proven, the runtime is
+    one decision from its roster proof, and the learning substrate is one
+    schema away.
+  </div>
+  <div style="margin-top:36px;">
+    <span class="tag">github.com/choir-hip/go-choir</span>
+    <span class="tag">choir.news</span>
+    <span class="tag off">effects off · supervision on</span>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">12</span></div>
+</section>
+
+</body>
+</html>
