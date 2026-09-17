@@ -302,6 +302,11 @@ observation is just two events in order, and the append-only record is
 the frozen commitment chat-based systems have to engineer. What PICL
 adds is discipline and measure, not machinery:
 
+- **Retrieval runs over the object graph, not the tape.** Learning
+  records materialize as OG objects with provenance edges back to
+  their source events — queryable from the RLM REPL like any other
+  object. The tape stays the authority; the graph is the query
+  surface. (Owner correction, 2026-09-17.)
 - **Prediction events.** A spawn or action may carry `expected` —
   anticipated result/consequences + confidence. Every async cast is
   then a PICL episode for free: the result event resolves it. A desk
