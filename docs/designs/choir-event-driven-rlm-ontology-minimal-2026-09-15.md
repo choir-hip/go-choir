@@ -298,9 +298,17 @@ and retrieves the record later. Prospective commitment preserves the
 before-state that retrospective reflection destroys.]*
 
 The tape is the PICL substrate by construction — prediction-before-
-observation is just two events in order, and the append-only record is
-the frozen commitment chat-based systems have to engineer. What PICL
-adds is discipline and measure, not machinery:
+observation is two events in order, and the append-only record is the
+frozen commitment chat-based systems have to engineer. Two
+qualifications the consensus panel surfaced (2026-09-17): tape order
+proves P preceded O but not that the predictor hadn't already seen O
+through another actor or unrecorded context — the epistemic boundary
+lives in context construction, so a prediction is PICL-valid only if
+committed before its resolution is delivered to the predicting actor's
+stream; and a preserved prefix can be replayed outcome-blind to recover
+an equivalent prediction, so what online commitment uniquely adds is
+the sampled, staked record — not information-theoretic privilege. What
+PICL adds is discipline and measure, not machinery:
 
 - **Retrieval runs over the object graph, not the tape.** Learning
   records materialize as OG objects with provenance edges back to
@@ -309,15 +317,26 @@ adds is discipline and measure, not machinery:
   surface. (Owner correction, 2026-09-17.)
 - **Prediction events.** A spawn or action may carry `expected` —
   anticipated result/consequences + confidence. Every async cast is
-  then a PICL episode for free: the result event resolves it. A desk
-  fanning out 1000 sub-RLMs produces 1000 prediction-resolution pairs —
-  calibration data about its own decomposition quality. Model calls
+  then a PICL episode *frame* for free — the result event resolves it —
+  but the prediction itself is inference the design mandates nowhere;
+  a task description is not a stated expectation. A desk fanning out
+  1000 sub-RLMs produces 1000 prediction-resolution pairs — delegation-
+  calibration data (the parent's model of the child's competence, not
+  world modeling; the resolver is a different learner). Model calls
   likewise: `choir.Call` with an expected shape yields per-model
   calibration — what model selection should learn from.
-- **The learning projection.** (prediction, observation, discrepancy,
-  revision, provenance) folded from the stream — same mechanism as
-  open-work, different fold. Retrieval ranks by expected corrective
-  value; context construction pulls the records in.
+- **The learning projection is two-stage.** A deterministic fold pairs
+  `expected`-carrying events with their resolutions into unresolved
+  candidate pairs on the object graph — projections stay pure, no model
+  calls. An asynchronous Curator desk consumes candidate pairs off the
+  critical dispatch path, computes discrepancy/revision, and appends
+  `learning_record_minted` events. On result delivery, context
+  construction either reattaches `expected` or deliberately withholds
+  it — a stated policy, not an accident. Retrieval ranks by expected
+  corrective value; records are queryable via the REPL but never
+  auto-injected into cell context until the experimental program
+  justifies consumption. Records carry `actor_id` + `model_id`;
+  cross-actor retrieval is an experiment, not a default.
 - **Material-consequence predictions** formalize the mutation-class
   ceremony: red/black actions require a committed `expected`
   consequences record; the discrepancy is the auditable surface.
