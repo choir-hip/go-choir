@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Choir — The Automatic Radio</title>
+<title>Choir — Multiplayer AI</title>
 <style>
   @page { size: 1280px 720px; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -79,7 +79,7 @@
     text-transform: uppercase; font-weight: 600; margin-right: 10px; margin-top: 14px;
   }
   .tag.off { border-color: var(--line); color: var(--faint); }
-  .layers { margin-top: 40px; }
+  .layers { margin-top: 36px; }
   .layers .layer {
     display: flex; align-items: baseline; gap: 26px;
     padding: 13px 0; border-bottom: 1px solid var(--line);
@@ -88,6 +88,11 @@
   .layers .ln { font-size: 14px; color: var(--gold); letter-spacing: 0.2em; font-weight: 700; width: 150px; flex: none; text-transform: uppercase; }
   .layers .ld { font-size: 21px; color: var(--dim); line-height: 1.4; }
   .layers .ld b { color: var(--ink); font-weight: 600; }
+  .team { margin-top: 40px; }
+  .team .name { font-size: 40px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
+  .team .role { font-size: 16px; color: var(--gold); letter-spacing: 0.2em; text-transform: uppercase; font-weight: 600; margin-top: 10px; }
+  .team .bio { font-size: 21px; color: var(--dim); line-height: 1.6; max-width: 860px; margin-top: 22px; }
+  .team .links { margin-top: 26px; }
 </style>
 </head>
 <body>
@@ -97,12 +102,12 @@
   <svg class="corner-mark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z" fill="#d4a24e"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z" fill="#d4a24e"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z" fill="#d4a24e"/></svg>
   <div class="kicker">September 2026 · open source · live on staging</div>
   <div class="word">CHOIR</div>
-  <div class="sub" style="font-size:34px; color:var(--ink); margin-top:34px;">
-    The automatic radio.
+  <div class="sub" style="font-size:36px; color:var(--ink); margin-top:34px;">
+    Multiplayer AI.
   </div>
-  <div class="sub" style="max-width:880px;">
-    A voice layer for the world's information — built on the only
-    computer that is itself a system of agents.
+  <div class="sub" style="max-width:900px;">
+    A self-supervised multi-agent system for complex, long-horizon,
+    continuous work — proven by a newspaper, adopted through a radio.
   </div>
   <div class="foot"><span>choir.news</span><span class="num">01</span></div>
 </section>
@@ -123,7 +128,7 @@
       <b>is</b> the computer.</div>
     </div>
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">02</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">02</span></div>
 </section>
 
 <!-- 3 · THE STACK -->
@@ -138,11 +143,11 @@
   </div>
   <div class="layers" style="margin-top:28px;">
     <div class="layer"><div class="ln">Technology</div><div class="ld"><b>The automatic computer.</b> Open source, secure, auditable — orgs learn from their data.</div></div>
-    <div class="layer"><div class="ln">Strategy</div><div class="ld"><b>Build horizontal, sell <s style="color:var(--faint)">vertical</s> diagonal.</b> Code, legal, media cut across every endeavor — unlike true verticals (real estate, agriculture).</div></div>
+    <div class="layer"><div class="ln">Strategy</div><div class="ld"><b>Build horizontal, sell <s style="color:var(--faint)">vertical</s> diagonal.</b> Code, legal, media cut across every endeavor — unlike true verticals.</div></div>
     <div class="layer"><div class="ln">Platform</div><div class="ld"><b>The white-label media engine.</b></div></div>
-    <div class="layer"><div class="ln">Products</div><div class="ld"><b>The newspaper, the radio, the data products.</b></div></div>
+    <div class="layer"><div class="ln">Products</div><div class="ld"><b>The newspaper (proof), the radio (adoption), the data products.</b></div></div>
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">03</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">03</span></div>
 </section>
 
 <!-- 4 · PHASE 1 -->
@@ -151,10 +156,10 @@
   <h2>The automatic computer.</h2>
   <div class="rule"></div>
   <div class="body">
-    A persistent computer that works continuously and develops itself
-    under owner supervision. An <b>RLM</b> (recursive language model,
-    cf. Zhang et al., MIT) runs long-horizon work by spawning sub-agents
-    as async calls. Every change a typed event; every surface a
+    A persistent computer that works continuously and develops itself.
+    An <b>RLM</b> (recursive language model, cf. Zhang et al., MIT)
+    coordinates many communicating agents — persistent and ephemeral —
+    over long horizons. Every change a typed event; every surface a
     deterministic projection.
   </div>
   <div style="margin-top:34px;">
@@ -163,10 +168,27 @@
     <span class="tag">continuous</span>
     <span class="tag off">unownable by design</span>
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">04</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">04</span></div>
 </section>
 
-<!-- 5 · LEARNING LOOP -->
+<!-- 5 · SELF-SUPERVISION -->
+<section class="slide">
+  <div class="kicker">The supervision problem</div>
+  <h2>Chat breaks at this scale.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    Long-horizon, multi-agent work creates a complexity that breaks the
+    affordances of chat as UX — you can't supervise a continuously
+    running system through a scrollback.
+    <br><br>
+    The answer: <b>agents supervise agents</b>, and <b>documents show the
+    current work state</b>. The document is the control surface — and the
+    same surface the product is made of.
+  </div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">05</span></div>
+</section>
+
+<!-- 6 · LEARNING LOOP -->
 <section class="slide">
   <div class="kicker">Phase 1 · the learning loop</div>
   <h2>Own your own learning loop.</h2>
@@ -175,8 +197,8 @@
     <b>PICL</b> — predictive in-context learning. Before acting, an agent
     commits a prediction; after acting, the outcome resolves it. Every
     committed prediction becomes a provenance-linked record — improving
-    the <b>quality of outcomes</b> through learning, and
-    <b>safety</b> through logging.
+    the <b>quality of outcomes</b> through learning, and <b>safety</b>
+    through logging.
   </div>
   <div class="grid4">
     <div class="card"><div class="t">Security</div><div class="d">Encrypted storage, key escrow, owner-scoped.</div></div>
@@ -184,17 +206,18 @@
     <div class="card"><div class="t">Customizability</div><div class="d">Vibecode your own apps — multiagent workflows and APIs inside the autoputer.</div></div>
     <div class="card"><div class="t">Recovery</div><div class="d">If anything goes wrong you can always recover — your data is safe.</div></div>
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">05</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">06</span></div>
 </section>
 
-<!-- 6 · PHASE 2 -->
+<!-- 7 · PHASE 2 -->
 <section class="slide">
-  <div class="kicker">Phase 2 · the application</div>
+  <div class="kicker">Phase 2 · the proof point</div>
   <h2>The automatic newspaper.</h2>
   <div class="rule"></div>
   <div class="body">
-    A computer that updates its own code and works continuously is cool —
-    <b>what is it good for?</b> Tracking what is happening in the world.
+    The same document surface that supervises the system, published
+    outward. An article is a work-state document — sourced, written,
+    verified, corrected, published around the clock.
   </div>
   <div class="grid2">
     <div class="card">
@@ -208,36 +231,22 @@
       call for up-to-date information.</div>
     </div>
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">06</span></div>
-</section>
-
-<!-- 7 · PLATFORM -->
-<section class="slide">
-  <div class="kicker">Phase 2 · the platform</div>
-  <h2>Everyone's own newspaper.</h2>
-  <div class="rule"></div>
-  <div class="body">
-    White-label the wire: our curated public data plus your private
-    sources, producing data products for internal teams, paywalled
-    distribution, or public dissemination — or any combination.
+  <div class="body" style="margin-top:30px; font-size:20px;">
+    Then the platform: white-label the wire — our curated public data
+    plus your private sources → internal teams, paywalled distribution,
+    public dissemination — or any combination.
   </div>
-  <div style="margin-top:30px;">
-    <span class="tag">internal use</span>
-    <span class="tag">paywall</span>
-    <span class="tag">public</span>
-    <span class="tag off">choir.news aggregator</span>
-  </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">07</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">07</span></div>
 </section>
 
 <!-- 8 · PHASE 3 -->
 <section class="slide">
-  <div class="kicker">Phase 3 · the upshot</div>
+  <div class="kicker">Phase 3 · the adoption UX</div>
   <h2>The automatic radio.</h2>
   <div class="rule"></div>
   <div class="body">
-    A voice layer on the newspaper — a podcast player you can talk to.
-    An <b>AI DJ</b> mixes clips and full episodes with text-to-speech of
+    The same surface, in audio. A podcast player you can talk to. An
+    <b>AI DJ</b> mixes clips and full episodes with text-to-speech of
     public and private documents. Record your own takes; distribute
     internally or publicly.
   </div>
@@ -253,29 +262,36 @@
       projection of live state.</div>
     </div>
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">08</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">08</span></div>
 </section>
 
 <!-- 9 · MULTIPLAYER -->
 <section class="slide">
-  <div class="kicker">Phase 3 · inside an organization</div>
+  <div class="kicker">The deeper point</div>
   <div class="quote">
-    A meeting — or an asynchronous meeting — that is
-    <span class="em">simultaneously a prompt</span> to a multi-agent
-    system working continuously in the background.
+    Level 5 AI is full autonomy. <span class="em">Level 6</span> is many
+    humans influencing a fully autonomous system without taking it off
+    course.
   </div>
   <div class="rule"></div>
   <div class="body">
-    Teams talk; the station listens, mixes, and works. A new kind of
-    multiplayer AI.
+    AI not as a replacement for humans, but as leverage — a more
+    advanced form of computing. A meeting — or an asynchronous meeting —
+    that is simultaneously a prompt to a multi-agent system working
+    continuously in the background.
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">09</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">09</span></div>
 </section>
 
 <!-- 10 · BOX SCORE -->
 <section class="slide">
   <div class="kicker">The judgment layer</div>
-  <h2>The box score:<br>accountability with a memory.</h2>
+  <h2>Of course you keep score.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    A provenance-linked object graph already knows who said what — the
+    obvious next layer tracks whether they were right.
+  </div>
   <div class="grid2">
     <div class="card">
       <div class="t">A public track record</div>
@@ -288,7 +304,7 @@
       its own data product and API.</div>
     </div>
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">10</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">10</span></div>
 </section>
 
 <!-- 11 · PRIVACY ANSWER -->
@@ -312,7 +328,7 @@
     <b>box score</b>) → managed → consulting. PICL makes open source a
     community-driven gym.
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">11</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">11</span></div>
 </section>
 
 <!-- 12 · WHERE WE ARE -->
@@ -330,10 +346,30 @@
     <span class="tag">learning records design-complete</span>
     <span class="tag off">audio stack mostly open source</span>
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">12</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">12</span></div>
 </section>
 
-<!-- 13 · CLOSE -->
+<!-- 13 · TEAM -->
+<section class="slide">
+  <div class="kicker">Team</div>
+  <div class="team">
+    <div class="name">Yusef Mosiah Nathanson</div>
+    <div class="role">Founder</div>
+    <div class="bio">
+      Got into AI in 2015 as a professional poker player, when Noam
+      Brown's Claudico and the poker AIs started beating top players.
+      High-school dropout. Plus the open-source community.
+    </div>
+    <div class="links">
+      <span class="tag">github.com/yusefmosiah</span>
+      <span class="tag">linkedin.com/in/y-m-nathanson-a930311a7</span>
+      <span class="tag">mosiah.org</span>
+    </div>
+  </div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">13</span></div>
+</section>
+
+<!-- 14 · CLOSE -->
 <section class="slide title-slide">
   <svg class="corner-mark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z" fill="#d4a24e"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z" fill="#d4a24e"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z" fill="#d4a24e"/></svg>
   <div class="kicker">Join</div>
@@ -348,7 +384,7 @@
     <span class="tag">choir.news</span>
     <span class="tag off">the meeting is the prompt</span>
   </div>
-  <div class="foot"><span>choir — the automatic radio</span><span class="num">13</span></div>
+  <div class="foot"><span>choir — multiplayer ai</span><span class="num">14</span></div>
 </section>
 
 </body>
