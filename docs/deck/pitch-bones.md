@@ -13,7 +13,7 @@ the supervision interface and the product interface — same surface.
 ## 1 · Title
 
 CHOIR
-A computer made of agents.
+The automatic computer.
 A self-supervised multi-agent system for complex, long-horizon,
 continuous work — proven by a newspaper, adopted through a radio.
 
@@ -31,9 +31,11 @@ computer.
 
 General-purpose technology, sold as media.
 
-We build a general-purpose computer but market it as media — not a
-coding agent — for differential impact. All agents are coding agents;
-the dev market is crowded, segmented, and sticky.
+A general-purpose technology is a solution in search of a problem —
+Choir found its first in itself: a better way to do complex R&D and to
+communicate and consume ideas. We build the computer but market it as
+media, not a coding agent — the dev market is crowded, segmented, and
+sticky.
 
 - **Technology** — the automatic computer. Open source, secure,
   auditable — orgs learn from their data.

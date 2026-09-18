@@ -1,36 +1,51 @@
 # Choir
 
-**Early-stage, fast-moving, not a stable product yet.** Choir is a persistent
-computer where AI agents do durable, inspectable, rollback-safe work.
+**The automatic computer.**
 
-Most agent systems start over every time. Every conversation is a fresh session;
-what was believed, tried, accepted, and rolled back dies with the context
-window. Choir is built around a different object: a running computer that
-remembers. Work leaves versioned artifacts, provenance, accepted events, and
-rollback — not a transcript.
+A general-purpose technology is a solution in search of a problem. Choir is
+honest about that: it is a persistent computer made of agents — and the
+problem it found first is its own. A better way to do complex R&D, and a
+better way to communicate and consume ideas.
+
+Most agent systems start over every time. Every conversation is a fresh
+session; what was believed, tried, accepted, and rolled back dies with the
+context window. Choir is built around a different object: a running computer
+that remembers. Work leaves versioned artifacts, provenance, accepted events,
+and rollback — not a transcript.
 
 ```text
 Agents keep a computer, not a conversation.
 ```
 
-A human is the root of intention. Agents compound memory and execution; durable
-state changes require owner-legible evidence and approval. The deeper idea — why
-this architecture, what it optimizes — is in
-[the vision](docs/choir-vision.md).
+The bet: the agent market is chat-shaped, but chat can't supervise continuous
+multi-agent work. Choir's answer is a computer that develops itself — and a
+document surface that is both the supervision interface and the product.
+
+## What it is
+
+A persistent, self-supervised, multi-agent computer. An RLM (recursive
+language model) coordinates many communicating agents — persistent and
+ephemeral — over long horizons. Every change is a typed event; every surface
+is a deterministic projection. A human is the root of intention; durable
+state changes require owner-legible evidence and approval.
+
+The same computer, projected outward, is a media product: an automatic
+newspaper (the proof) and an automatic radio (the adoption UX). The
+provenance-linked record those produce — who said what, and whether they were
+right — is the data product.
 
 ## What you can do today
 
 - **Web desktop** — a persistent-computer control surface: durable writing and
   artifact editing (Texture), source windows, explicit web inspection (Web
-  Lens), files, and a zot-backed repair console.
+  Lens), files, and a repair console.
 - **Native macOS app** — a Wails wrapper around the same desktop (see
   `cmd/desktop/`).
 - **CLI** — headless control for agents and scripts with API-key auth
   (`cmd/choir`).
 
 All of these are projections of the persistent-computer substrate. Publishing,
-media, and the World Wire (an index of the world as reported — contested and
-plural) are downstream projections, not the root.
+media, and the record are downstream projections, not the root.
 
 ## Status
 
@@ -38,28 +53,10 @@ Early. Fast-moving. APIs change. Some surfaces are code-present rather than
 product-complete; if you want polished consumer software, you're early. If you
 want to help build the substrate, start here.
 
-## Try it
-
-Local development for frontend iteration, focused unit work, or reproducing a
-deployed transition:
-
-```sh
-cd frontend && pnpm install && cd ..
-nix develop -c ./start-services.sh   # runs the local service stack
-```
-
-Requirements: Go 1.25+, Node.js 22+, pnpm 10+, Nix. Details live in
-[docs/current-architecture.md](docs/current-architecture.md) and the
-`cmd/*` package configs.
-
-Local proof is not staging proof. Platform behavior is accepted against
-staging (`https://choir.news`); vmctl, guest isolation, credentials, promotion,
-rollback, and Choir-in-Choir behavior cannot be claimed from a local checkout.
-
 ## How it works, in one breath
 
 Human intent enters through the prompt bar. The conductor routes it to an
-appagent—Texture for documents, which owns the canonical artifact. When the
+appagent — Texture for documents, which owns the canonical artifact. When the
 artifact needs execution, Texture calls Super, whose protocol can coordinate
 CoSuper executors inside guest-local capsules. Risky or long-running effects
 freeze as exact proposals. An effect-specific policy evaluates a qualified
@@ -98,7 +95,26 @@ Signal density comes from a learner with standing questions and from correction
 by genuinely independent others — and both have to be built into the
 environment the intelligence runs in. The environment is the durable layer, not
 the model. Read the argument in
-[docs/signal-is-sparse-not-the-learner-2026-08-01.md](docs/signal-is-sparse-not-the-learner-2026-08-01.md).
+[docs/signal-is-sparse-not-the-learner-2026-08-01.md](docs/signal-is-sparse-not-the-learner-2026-08-01.md),
+and the deeper architecture in [the vision](docs/choir-vision.md).
+
+## Try it
+
+Local development for frontend iteration, focused unit work, or reproducing a
+deployed transition:
+
+```sh
+cd frontend && pnpm install && cd ..
+nix develop -c ./start-services.sh   # runs the local service stack
+```
+
+Requirements: Go 1.25+, Node.js 22+, pnpm 10+, Nix. Details live in
+[docs/current-architecture.md](docs/current-architecture.md) and the
+`cmd/*` package configs.
+
+Local proof is not staging proof. Platform behavior is accepted against
+staging (`https://choir.news`); vmctl, guest isolation, credentials, promotion,
+rollback, and Choir-in-Choir behavior cannot be claimed from a local checkout.
 
 ## Contributing
 

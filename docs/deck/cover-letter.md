@@ -23,7 +23,7 @@ multitenant, minimizing failure, good UX, safe recovery, no data loss —
 has been a huge undertaking, and it's most of the last nine months. I
 prototyped the always-on media product in June; integrating it showed
 me how much of the system needed refactoring. Until the new agent
-runtime and the learning system landed, the honest priority was
+runtime and the learning system land, my priority is
 prototype → production, not go-to-market.
 
 **What I'm asking.** I'm close to production-ready, but realistically
