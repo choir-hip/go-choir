@@ -113,6 +113,18 @@ test('deployed Mail app sends attachments through approval to inbound', async ({
   await mailApp.locator('[data-mail-compose-subject], input[placeholder*="subject" i]').first().fill(`attachment proof ${Date.now()}`);
   await compose.fill('attachment round-trip proof');
 
+  // Regression: the OS file dialog blurs then refocuses the window, which fires
+  // the app's focus/visibilitychange refresh. That background refresh must not
+  // close the compose panel (it used to drop the user back to the inbox and
+  // lose the attachment). Dispatch the same events the dialog triggers.
+  await page.evaluate(() => {
+    // Pin visibilityState so the handler's guard passes in headless runs too.
+    Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+    window.dispatchEvent(new Event('focus'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(compose).toBeVisible({ timeout: 5_000 });
+
   // Attach one client-uploaded file.
   const uploadBody = `client upload ${Date.now()}`;
   await mailApp.locator('[data-mail-attachment-input]').setInputFiles({

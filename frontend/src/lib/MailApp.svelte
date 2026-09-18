@@ -419,10 +419,12 @@
       error = '';
     }
     activeFolder = nextFolder;
-    detailPaneOpen = Boolean(options.openPane);
-    composeOpen = false;
-    replyOpen = false;
-    filter = '';
+    if (!options.background) {
+      detailPaneOpen = Boolean(options.openPane);
+      composeOpen = false;
+      replyOpen = false;
+      filter = '';
+    }
     if (options.persist !== false) emitAppState();
     try {
       if (nextFolder === 'drafts') {
@@ -464,6 +466,7 @@
           openPane: Boolean(options.openPane),
           persist: false,
           ownerMessageLoad: requestId,
+          background: options.background,
         });
       }
     } catch (err) {
@@ -538,6 +541,7 @@
         openPane: Boolean(options.openPane),
         persist: false,
         ownerMessageLoad: requestId,
+        background: options.background,
       });
     }
   }
@@ -592,9 +596,11 @@
     const ownerMessageLoad = options.ownerMessageLoad || 0;
     selectedId = id;
     detailLoading = true;
-    replyOpen = false;
-    composeOpen = false;
-    bodyViewMode = 'html';
+    if (!options.background) {
+      replyOpen = false;
+      composeOpen = false;
+      bodyViewMode = 'html';
+    }
     if (options.openPane) {
       detailPaneOpen = true;
     }
