@@ -102,14 +102,16 @@ documents. Record your own takes; distribute internally or publicly.
 
 ## 9 · Multiplayer
 
-Level 5 AI is full autonomy; level 6 is many humans influencing a fully
-autonomous system without taking it off course. AI not as a
-replacement for humans, but as leverage — a more advanced form of
-computing.
+The opportunity after autonomy is coordination.
 
-A meeting — or an asynchronous meeting — that is simultaneously a
-prompt to a multi-agent system working continuously in the background.
-Teams talk; the station listens, mixes, and works.
+Most AI systems are designed to reduce the amount of human
+intervention required. Choir increases the amount of human input that
+can be productively absorbed — a meeting becomes an input to a
+persistent multi-agent system already doing the work. Decisions update
+priorities; disagreements are preserved; commitments propagate.
+
+AI not as a replacement for humans, but as leverage — an organization
+with higher coordination bandwidth, not higher overhead.
 
 
 ## 10 · The box score
