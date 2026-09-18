@@ -82,7 +82,7 @@
   .layers { margin-top: 40px; }
   .layers .layer {
     display: flex; align-items: baseline; gap: 26px;
-    padding: 18px 0; border-bottom: 1px solid var(--line);
+    padding: 13px 0; border-bottom: 1px solid var(--line);
   }
   .layers .layer:last-child { border-bottom: none; }
   .layers .ln { font-size: 14px; color: var(--gold); letter-spacing: 0.2em; font-weight: 700; width: 150px; flex: none; text-transform: uppercase; }
@@ -129,9 +129,15 @@
 <!-- 3 · THE STACK -->
 <section class="slide">
   <div class="kicker">The stack</div>
-  <h2>Four layers, kept separate.</h2>
-  <div class="layers">
-    <div class="layer"><div class="ln">Technology</div><div class="ld"><b>The automatic computer.</b> Open source — the moat, not the market.</div></div>
+  <h2>General-purpose technology,<br>sold as media.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    We build a general-purpose computer but market it as media — not a
+    coding agent — for differential impact. All agents are coding
+    agents; the dev market is crowded, segmented, and sticky.
+  </div>
+  <div class="layers" style="margin-top:28px;">
+    <div class="layer"><div class="ln">Technology</div><div class="ld"><b>The automatic computer.</b> Open source, secure, auditable — orgs learn from their data.</div></div>
     <div class="layer"><div class="ln">Strategy</div><div class="ld"><b>Build horizontal, sell diagonal.</b> Media.</div></div>
     <div class="layer"><div class="ln">Platform</div><div class="ld"><b>The white-label media engine.</b></div></div>
     <div class="layer"><div class="ln">Products</div><div class="ld"><b>The newspaper, the radio, the data products.</b></div></div>
@@ -155,7 +161,7 @@
     <span class="tag">RLM</span>
     <span class="tag">provenance</span>
     <span class="tag">continuous</span>
-    <span class="tag off">the moat, not the market</span>
+    <span class="tag off">unownable by design</span>
   </div>
   <div class="foot"><span>choir — the automatic radio</span><span class="num">04</span></div>
 </section>
@@ -166,9 +172,12 @@
   <h2>Own your own learning loop.</h2>
   <div class="rule"></div>
   <div class="body">
-    <b>PICL</b> turns every committed prediction into a provenance-linked
-    record — <b>the record is the memory.</b> Auditable, portable, never
-    locked inside someone else's weights.
+    <b>PICL</b> — predictive in-context learning. Before acting, an agent
+    commits a prediction; after acting, the outcome resolves it. Every
+    committed prediction becomes a provenance-linked record — what was
+    expected, what happened, whether it held. <b>The record is the
+    memory:</b> learning without weight updates, and the same record is
+    the audit trail and the self-improvement signal.
   </div>
   <div class="grid4">
     <div class="card"><div class="t">Security</div><div class="d">Encrypted storage, key escrow, owner-scoped.</div></div>
