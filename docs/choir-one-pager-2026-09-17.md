@@ -13,11 +13,13 @@ the computer. That is phase one — the technology, not the product.
 ## Phase 1 — the automatic computer
 
 A persistent computer that works continuously and develops itself under
-owner supervision. Every meaningful change is a typed event on an
-append-only tape; every surface is a deterministic projection of it.
-Persistent desks do the standing work; ephemeral sub-RLMs spawn as async
-casts; committed predictions resolve into learning records. Proven on
-staging: whole-computer restore, encrypted file-CAS, key escrow,
+owner supervision. The architecture is a novel multi-agent system: an
+**RLM** (recursive language model, cf. Zhang et al., MIT) runs
+long-horizon work by spawning sub-agents as async calls, and **PICL**
+keeps learning weightless — committed predictions resolve into
+provenance-linked records instead of weight updates. Every change is a
+typed event; every surface is a deterministic projection. Proven on
+staging: whole-computer restore, encrypted file storage, key escrow,
 restart-surviving actors — all with deployed evidence.
 
 ## Phase 2 — the automatic newspaper
@@ -34,32 +36,41 @@ dissemination — or any combination.
 ## Phase 3 — the automatic radio
 
 The upshot of the whole stack. A voice layer on top of the newspaper — a
-more advanced podcast player you can talk to. An AI DJ traverses the
-live object graph and mixes clips and full-length episodes with
-text-to-speech of public and private documents. Users record their own
-takes with voice and distribute them — internally or publicly.
+more advanced podcast player you can talk to. An AI DJ mixes clips and
+full-length episodes with text-to-speech of public and private
+documents; users record their own takes with voice and distribute them —
+internally or publicly. Inside an organization it becomes a new kind of
+multiplayer AI: **a meeting — or an asynchronous meeting — that is
+simultaneously prompting a multi-agent system working continuously in
+the background.**
 
-Inside an organization it becomes a new kind of multiplayer AI: **a
-meeting — or an asynchronous meeting — that is simultaneously prompting
-a multi-agent system working continuously in the background.**
+## The privacy answer
 
-Underneath it all, a **box score**: every public statement becomes a
-forecast with a resolution contract; figures accumulate track records.
-It matures into the station's editorial judgment — airtime by track
-record — and stands alone as its own data product and API.
+The go-to-market motion asks organizations to operate on their
+proprietary IP — which means exposing private data to the AI platforms
+they use. Choir answers two ways: a **managed** deployment under
+zero-data-retention policies, or the **open-source OS** self-hosted —
+with or without our consulting — for maximum control. The offering spans
+the gamut: the hobbyist pays nothing; above hobbyist, the data products
+carry the subscription — the **global object graph** (a continuously
+updated OSINT index with provenance) and the **box score** (reputation
+statistics above it). PICL weightless learning is what makes the open
+source a community-driven gym: the community's use sharpens the shared
+system while every organization's data stays home.
 
 ## The strategy
 
 Build horizontal, sell diagonal. Media — like code and legal — cuts
-across every endeavor of life; unlike vertical software, every
-organization needs to know what is happening and to say what it knows.
-Own data products first, then the white-label platform.
+across every endeavor of life; every organization needs to know what is
+happening and to say what it knows. Own data products first, then the
+white-label platform.
 
 ## The ask
 
-The computer is proven on staging and mid-cutover to its final runtime.
-The newspaper is next; the radio is the payoff. We are looking for the
-people who want to build the computer that is the agents — and tune in
-to what it broadcasts.
+We are moving from prototype to production now — the prototype autoputer
+and autonews needed refactors for secure continuous operation, and the
+substrate is proven on staging. The newspaper is next; the radio is the
+payoff. We are looking for the people who want to build the computer
+that is the agents — and tune in to what it broadcasts.
 
 *github.com/choir-hip/go-choir · choir.news*

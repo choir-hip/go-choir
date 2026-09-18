@@ -52,6 +52,8 @@ separate here.
   open-source general-purpose technology. Neither valence implies
   business value. Its commercial role: the moat, and the open-source
   community that accelerates go-to-market for the data products.
+  Open source is not merely value-driven here — it is instrumental to
+  the go-to-market motion (see "The privacy answer" below).
 - **Strategy:** build horizontal, sell *diagonal*. Media — like code and
   legal — is a diagonal that cuts across every endeavor of life, unlike
   verticals such as real estate or agriculture. Media is the attractive
@@ -68,6 +70,51 @@ separate here.
   edition — then the white-label version sold to orgs (finance and other
   industries) that combine their private data with the Choir object
   graph.
+
+## The privacy answer
+
+Owner note, 2026-09-17: the go-to-market motion asks organizations to
+use Choir as a means of operating on *their proprietary intellectual
+property*. An organization doing asynchronous meetings and sense-making
+with public and private data must expose that private data to the AI
+platforms it uses. Whether it chooses cloud models (Claude, GPT) or
+open models on its own GPUs or an infrastructure partner's, the AI
+system — which harnesses many agents, often diverse agents from
+different providers, and determines data access for different human
+user roles with respect to agents — carries a data privacy and security
+question mark.
+
+Choir answers it two ways:
+
+1. **Managed** — we operate it, under zero-data-retention policies.
+2. **Open source** — the organization runs the Choir operating system
+   itself, with or without our consulting services, for maximum data
+   privacy and control.
+
+This is where PICL weightless learning becomes load-bearing for the
+business, not just the architecture. The open-source strategy is
+value-driven *and* a form of community-driven gym — the community's use
+sharpens the system — but it is crucially instrumental to go-to-market:
+it is the deployment answer for every organization that cannot send its
+proprietary data to someone else's cloud. The learning loop improves
+the shared system; the deployment model keeps the data home.
+
+And the offering spans the gamut. The hobbyist needn't buy anything —
+the OS is genuinely free. But at every level above hobbyist there is
+something to sell, and even a self-hosting organization that buys no
+consulting is offered two data products on top of the OS:
+
+- **The global object graph** — a continuously updated OSINT index with
+  provenance: the live, sourced record of what is happening that the
+  wire itself runs on.
+- **The box score** — reputation statistics above the graph: track
+  records for institutions, speakers, and figures, resolved
+  continuously.
+
+So the ladder runs: free hobbyist → self-hosted org + data products →
+managed under zero-data-retention → consulting. The deployment choice
+is about where *their* data lives; the data products are the
+subscription at every paid tier.
 
 ## The dependency chain
 
