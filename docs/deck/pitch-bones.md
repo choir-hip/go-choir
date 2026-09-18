@@ -96,9 +96,13 @@ sources; for agents, a skill/MCP for up-to-date information.
 
 ## 8 · Phase 3 — the automatic radio (the adoption UX)
 
-The same surface, in audio. A podcast player you can talk to. An AI DJ
-mixes clips and full episodes with text-to-speech of public and private
-documents. Record your own takes; distribute internally or publicly.
+The same surface, in audio — and doubly custom. An AI DJ learns from
+your usage and stays grounded in the provenance-linked record; you can
+interrupt it, talk to it, record your own takes.
+
+Interruptible (talk to it, steer it — not a one-way broadcast) and
+grounded (learns from usage but stays anchored to the verified record —
+personalization without losing the facts).
 
 ## 9 · Multiplayer
 
