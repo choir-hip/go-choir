@@ -2,10 +2,10 @@
 
 *One page. September 2026.*
 
-A general-purpose technology is a solution in search of a problem. Choir
-is honest about that: it is a persistent computer made of agents — and
-the problem it found first is its own. A better way to do complex R&D,
-and a better way to communicate and consume ideas.
+Choir is a general-purpose technology built to serve a real demand: a
+better way to do complex R&D, and to consume and communicate ideas. It
+is a persistent computer made of agents — not a chat-interfaced agent
+handed a computer, as most agent products are.
 
 ## The inversion
 
@@ -49,9 +49,11 @@ product is the record.
 The bet: the agent market is chat-shaped, but chat can't supervise
 continuous multi-agent work. The newspaper and radio are the
 demonstration and the data engine; the business is **the record** — a
-provenance-linked, machine-readable feed of what is happening — sold
-first to finance. The wedge is the **long tail** incumbents under-serve:
-non-English sources, podcasts, multimedia (e.g. silicon supply chains).
+provenance-linked, machine-readable feed of what is happening. The
+likely buyer is finance, or other data products that want a better
+source. The wedge is the **long tail** incumbents under-serve:
+non-English media, social content, and multimedia (podcasts, video) —
+less crowded, more marginal signal to existing data buyers.
 The edge is **provenance + the box score** — a track record of who was
 right that no incumbent sells. We don't position against coding or
 personal agents — that market is crowded, token-subsidized, and in an

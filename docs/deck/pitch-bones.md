@@ -31,11 +31,10 @@ computer.
 
 General-purpose technology, sold as media.
 
-A general-purpose technology is a solution in search of a problem —
-Choir found its first in itself: a better way to do complex R&D and to
-communicate and consume ideas. We build the computer but market it as
-media, not a coding agent — the dev market is crowded, segmented, and
-sticky.
+Choir is a general-purpose technology built to serve a real demand: a
+better way to do complex R&D and to consume and communicate ideas. We
+build the computer but market it as media, not a coding agent — the dev
+market is crowded, segmented, and sticky.
 
 - **Technology** — the automatic computer. Open source, secure,
   auditable — orgs learn from their data.

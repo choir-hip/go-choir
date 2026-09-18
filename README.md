@@ -2,10 +2,10 @@
 
 **The automatic computer.**
 
-A general-purpose technology is a solution in search of a problem. Choir is
-honest about that: it is a persistent computer made of agents — and the
-problem it found first is its own. A better way to do complex R&D, and a
-better way to communicate and consume ideas.
+Choir is a general-purpose technology built to serve a real demand: a
+better way to do complex R&D, and to consume and communicate ideas. It
+is a persistent computer made of agents — not a chat-interfaced agent
+handed a computer, as most agent products are.
 
 Most agent systems start over every time. Every conversation is a fresh
 session; what was believed, tried, accepted, and rolled back dies with the
@@ -17,9 +17,9 @@ and rollback — not a transcript.
 Agents keep a computer, not a conversation.
 ```
 
-The bet: the agent market is chat-shaped, but chat can't supervise continuous
-multi-agent work. Choir's answer is a computer that develops itself — and a
-document surface that is both the supervision interface and the product.
+Choir rests on divisive bets — against chat-shaped agents, against the
+agent-as-replacement-worker framing. They could be wrong; if they're
+right, the computer is the product.
 
 ## What it is
 
