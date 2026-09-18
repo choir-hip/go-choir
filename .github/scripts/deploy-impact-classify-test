@@ -96,8 +96,11 @@ desktop_shared_frontend_output="$(
 )"
 assert_contains "$desktop_shared_frontend_output" "deploy_needed=true"
 assert_contains "$desktop_shared_frontend_output" "deploy_frontend=true"
-assert_contains "$desktop_shared_frontend_output" "deploy_host=false"
-assert_contains "$desktop_shared_frontend_output" "deploy_host_service=false"
+# The guest computer surface embeds the frontend in the canonical guest image,
+# so a frontend change must rebuild the image and refresh active computers.
+assert_contains "$desktop_shared_frontend_output" "deploy_host=true"
+assert_contains "$desktop_shared_frontend_output" "deploy_host_os=true"
+assert_contains "$desktop_shared_frontend_output" "deploy_active_vm_refresh=true"
 assert_contains "$desktop_shared_frontend_output" "frontend/src/lib/auth.js -> frontend bundle"
 assert_not_contains "$desktop_shared_frontend_output" "conservative Go impact"
 
