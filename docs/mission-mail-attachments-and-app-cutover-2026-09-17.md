@@ -255,3 +255,41 @@ Resend send, MailApp compose attachment UI (client upload + attach from
 autoputer Files), delete EmailApp and cut the `email` app id to MailApp,
 deploy and prove the attachment round-trip on staging including the
 guest frontend refresh."
+
+## Completion evidence (2026-09-18)
+
+**Status: complete.** All acceptance criteria met on staging.
+
+- **Pushed commits:** `142ae362` (orange: maild attachments + EmailApp
+  cutover + MailApp compose UI), `90c6c0e2` (yellow: deploy-impact-classify-test
+  updated for the frontend→guest-image contract).
+- **CI:** run 35368060620 — all gates green; Deploy to Staging succeeded after
+  a node-b disk-headroom reclaim (deleted `platform-dump.sql` 11 GB,
+  `rebuild-scratch-near-head-20260909` 15 GB, old NixOS generations 897-898;
+  kept 899+900 for rollback; freed to 96 GiB ≥ 90 GiB floor).
+- **Deploy identity:** staging `/health` build.commit =
+  `90c6c0e2617447f05c73cfe24294e411465d41cd`; served bundle `index-CoaQHCKe.js`.
+- **Guest refresh:** `choir computer refresh` on
+  `computer-03335285269bdba4f94377e56879f9e6` → realization_epoch 925→927,
+  state active. Guest surface serves `index-CoaQHCKe.js` and
+  `MailApp-BuNR3jj7.js` (HTTP 200); no `EmailApp-*.js` chunk.
+- **API round-trip (root owner, zero mocks):** uploaded `client-upload.txt` +
+  `report.pdf` via `POST /api/email/attachments` (staged, sha256 recorded);
+  created draft binding both `attachment_ids` (version-hash covers
+  attachments); `POST /api/email/drafts/{id}/send` with version_hash → Resend
+  `provider_message_id 01a0b573-…`, attachments `sent`; webhook delivered
+  inbound `resend-message-9e1ff5f5b716344c324075d10dee2e19` to quarantine
+  (public policy) with `has_attachments: true` and both attachment rows.
+- **Browser round-trip:** `frontend/tests/mail-attachments-deployed.spec.js`
+  passed on `https://choir.news` (29.6s): fresh passkey account → host-side
+  trusted plus-code alias → Mail app compose → attach one client-uploaded file
+  + one autoputer-FS file → approve → send → inbound attachment metadata.
+- **Acceptance level:** deployed staging round-trip, real Resend provider +
+  real SES inbound, no mocks.
+- **Heresy delta:** `repaired` — dead `email` app removed; "attachments are
+  display-only" gap closed.
+- **Rollback:** git revert of `142ae362` + `90c6c0e2` + redeploy; staged
+  attachment files and new schema columns are additive.
+- **Residual risks:** inbound attachments land quarantined under the public
+  policy (by design); alias provisioning for fresh accounts is host-side only
+  (no self-serve route) — test fixture uses `maildctl`.
