@@ -81,7 +81,11 @@
   .quote .dim { color: var(--dim); }
   .title-slide { justify-content: center; }
   .title-slide .word { font-size: 150px; font-weight: 750; letter-spacing: -0.045em; line-height: 0.95; }
-  .title-slide .word .o { color: var(--gold); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 40px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 40px; }
+  .grid4 .card { padding: 20px 22px; }
+  .grid4 .card .d { font-size: 15px; }
+  .tetramark { display: block; }
   .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 44px; }
   .vs .side { border: 1px solid var(--line); border-radius: 14px; padding: 30px 32px; }
   .vs .side.them { opacity: 0.65; }
@@ -101,6 +105,8 @@
     display: flex; align-items: baseline; gap: 22px; margin-top: 10px;
   }
   .phase .pn { font-size: 15px; color: var(--gold); letter-spacing: 0.2em; font-weight: 700; }
+  .title-slide .brand { display: flex; align-items: center; gap: 34px; }
+  .title-slide .brand .tetramark { width: 118px; height: 118px; flex: none; }
 </style>
 </head>
 <body>
@@ -108,7 +114,10 @@
 <!-- 1 · TITLE -->
 <section class="slide title-slide">
   <div class="kicker">September 2026 · open source · live on staging</div>
-  <div class="word">CHOIR<span class="o">.</span></div>
+  <div class="brand">
+    <svg class="tetramark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z" fill="#d4a24e"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z" fill="#d4a24e"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z" fill="#d4a24e"/></svg>
+    <div class="word">CHOIR<span class="o">.</span></div>
+  </div>
   <div class="sub" style="font-size:34px; color:var(--ink); margin-top:36px; max-width:1000px;">
     The automatic radio.
   </div>
@@ -167,18 +176,27 @@
   </div>
   <div class="foot"><span>choir — the automatic radio</span><span class="num">03</span></div>
 </section>
-<!-- 4 · PROVEN -->
+<!-- 4 · PICL -->
 <section class="slide">
-  <div class="kicker">Phase 1 · proven on staging</div>
-  <h2>The substrate is paid for.</h2>
-  <ul class="rows" style="margin-top:36px;">
-    <li><span class="tick">✓</span><b>Whole-computer restore</b>&nbsp;— full state rebuilt from the event record, independently reviewed</li>
-    <li><span class="tick">✓</span><b>Encrypted file storage</b>&nbsp;— content-addressed chunks, Merkle manifests, atomic boot hydration</li>
-    <li><span class="tick">✓</span><b>Key escrow</b>&nbsp;— 2-of-N quorum, WebAuthn PRF wrapping, deployed and proven</li>
-    <li><span class="tick">✓</span><b>Restart-surviving actors</b>&nbsp;— Go activations in disposable capsules</li>
-    <li><span class="tick">✓</span><b>Self-development loop</b>&nbsp;— mechanism proven end-to-end; roster proof one owner decision away</li>
-    <li><span class="tick">✓</span><b>Learning records</b>&nbsp;— PICL schema design-complete; instrumentation ≈ free</li>
-  </ul>
+  <div class="kicker">Phase 1 · the learning loop</div>
+  <h2>Own your own learning loop.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    <b>PICL</b> turns every committed prediction into a provenance-linked
+    record — what was expected, what happened, whether it held. Learning
+    without weight updates: <b>the record is the memory.</b>
+    <br><br>
+    For an organization, the learning loop is yours. Your agents'
+    predictions, resolutions, and track records live in your event
+    record — auditable, portable, never locked inside someone else's
+    weights.
+  </div>
+  <div class="grid4" style="margin-top:38px;">
+    <div class="card"><div class="t">Security</div><div class="d">Encrypted storage, key escrow, owner-scoped everything.</div></div>
+    <div class="card"><div class="t">Auditability</div><div class="d">Every change a typed event; full provenance by construction.</div></div>
+    <div class="card"><div class="t">Recovery</div><div class="d">Whole-computer restore from the event record — proven on staging.</div></div>
+    <div class="card"><div class="t">Customizability</div><div class="d">Open source, self-hostable, your models — cloud or your own GPUs.</div></div>
+  </div>
   <div class="foot"><span>choir — the automatic radio</span><span class="num">04</span></div>
 </section>
 
@@ -367,10 +385,11 @@
     path exists; the radio needs the wire's object graph plus
     open-source audio plumbing.
   </div>
-  <div class="statrow">
-    <div class="stat"><div class="v">6</div><div class="l">substrate missions settled</div></div>
-    <div class="stat"><div class="v">1</div><div class="l">decision to roster proof</div></div>
-    <div class="stat"><div class="v">80%</div><div class="l">audio stack is open source</div></div>
+  <div style="margin-top:36px;">
+    <span class="tag">substrate proven on staging</span>
+    <span class="tag">RLM runtime mid-cutover</span>
+    <span class="tag">learning records design-complete</span>
+    <span class="tag off">audio stack mostly open source</span>
   </div>
   <div class="foot"><span>choir — the automatic radio</span><span class="num">12</span></div>
 </section>
@@ -378,7 +397,10 @@
 <!-- 13 · CLOSE -->
 <section class="slide title-slide">
   <div class="kicker">Join</div>
-  <h2>Build the computer<br>that is the agents.<br>Tune in to what it says.</h2>
+  <div class="brand" style="margin-bottom:30px;">
+    <svg class="tetramark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="width:84px;height:84px;"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z" fill="#d4a24e"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z" fill="#d4a24e"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z" fill="#d4a24e"/></svg>
+    <h2>Build the computer<br>that is the agents.<br>Tune in to what it says.</h2>
+  </div>
   <div class="rule"></div>
   <div class="body">
     Open source. Live on staging. Phase one is landing; the newspaper is
