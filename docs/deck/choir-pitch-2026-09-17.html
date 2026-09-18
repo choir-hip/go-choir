@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Choir — The Automatic Computer</title>
+<title>Choir — The Automatic Radio</title>
 <style>
   @page { size: 1280px 720px; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -50,56 +50,57 @@
   .rule { width: 64px; height: 3px; background: var(--gold); margin: 34px 0; }
   ul.rows { list-style: none; margin-top: 8px; }
   ul.rows li {
-    font-size: 21px; color: var(--dim); line-height: 1.5;
-    padding: 13px 0; border-bottom: 1px solid var(--line);
+    font-size: 20px; color: var(--dim); line-height: 1.5;
+    padding: 12px 0; border-bottom: 1px solid var(--line);
     display: flex; gap: 18px; align-items: baseline;
   }
   ul.rows li:last-child { border-bottom: none; }
   ul.rows li b { color: var(--ink); font-weight: 600; min-width: 0; }
   ul.rows li .tick { color: var(--gold); font-size: 17px; flex: none; width: 22px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; margin-top: 40px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 40px; }
   .card {
-    border: 1px solid var(--line); border-radius: 14px; padding: 30px 32px;
+    border: 1px solid var(--line); border-radius: 14px; padding: 28px 30px;
     background: rgba(255,255,255,0.015);
   }
-  .card .t { font-size: 14px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 14px; }
-  .card .d { font-size: 19px; color: var(--dim); line-height: 1.55; }
+  .card .t { font-size: 14px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 12px; }
+  .card .d { font-size: 18px; color: var(--dim); line-height: 1.55; }
   .card .d b { color: var(--ink); font-weight: 600; }
-  .bignum { font-size: 120px; font-weight: 700; color: var(--gold); letter-spacing: -0.04em; line-height: 1; }
   .statrow { display: flex; gap: 72px; margin-top: 44px; }
   .stat .v { font-size: 64px; font-weight: 700; color: var(--ink); letter-spacing: -0.03em; }
   .stat .l { font-size: 15px; color: var(--faint); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 10px; }
-  .flow { display: flex; align-items: center; gap: 0; margin-top: 48px; }
+  .flow { display: flex; align-items: stretch; gap: 0; margin-top: 44px; }
   .flow .step {
-    border: 1px solid var(--line); border-radius: 12px; padding: 22px 26px;
-    background: rgba(255,255,255,0.015); min-width: 0;
+    border: 1px solid var(--line); border-radius: 12px; padding: 24px 26px;
+    background: rgba(255,255,255,0.015); flex: 1;
   }
   .flow .step .st { font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
-  .flow .step .sd { font-size: 17px; color: var(--dim); margin-top: 8px; line-height: 1.4; }
-  .flow .arr { color: var(--gold-dim); font-size: 26px; padding: 0 16px; flex: none; }
-  .tape {
-    margin-top: 48px; border: 1px solid var(--line); border-radius: 14px;
-    padding: 28px 32px; font-family: "SF Mono", ui-monospace, Menlo, monospace;
-    font-size: 16px; color: var(--dim); line-height: 1.9; background: #0a0c0f;
-  }
-  .tape .ev { color: var(--ink); }
-  .tape .gold { color: var(--gold); }
-  .quote { font-size: 34px; font-weight: 500; color: var(--ink); line-height: 1.4; max-width: 980px; letter-spacing: -0.01em; }
+  .flow .step .sd { font-size: 17px; color: var(--dim); margin-top: 10px; line-height: 1.45; }
+  .flow .arr { color: var(--gold-dim); font-size: 26px; padding: 0 14px; align-self: center; flex: none; }
+  .quote { font-size: 36px; font-weight: 500; color: var(--ink); line-height: 1.38; max-width: 1020px; letter-spacing: -0.01em; }
   .quote .em { color: var(--gold); }
+  .quote .dim { color: var(--dim); }
   .title-slide { justify-content: center; }
   .title-slide .word { font-size: 150px; font-weight: 750; letter-spacing: -0.045em; line-height: 0.95; }
   .title-slide .word .o { color: var(--gold); }
-  .seam { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: linear-gradient(var(--gold), transparent 70%); opacity: 0.35; }
-  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 36px; }
-  .cols .col .h { font-size: 15px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); font-weight: 600; margin-bottom: 16px; }
-  .cols .col p { font-size: 19px; color: var(--dim); line-height: 1.6; }
-  .cols .col p b { color: var(--ink); }
+  .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 44px; }
+  .vs .side { border: 1px solid var(--line); border-radius: 14px; padding: 30px 32px; }
+  .vs .side.them { opacity: 0.65; }
+  .vs .side.us { border-color: var(--gold-dim); background: rgba(212,162,78,0.04); }
+  .vs .side .h { font-size: 14px; letter-spacing: 0.22em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; }
+  .vs .side.them .h { color: var(--faint); }
+  .vs .side.us .h { color: var(--gold); }
+  .vs .side .d { font-size: 20px; color: var(--dim); line-height: 1.55; }
+  .vs .side.us .d { color: var(--ink); }
   .tag {
     display: inline-block; border: 1px solid var(--gold-dim); color: var(--gold);
     border-radius: 999px; padding: 5px 16px; font-size: 14px; letter-spacing: 0.12em;
     text-transform: uppercase; font-weight: 600; margin-right: 10px; margin-top: 14px;
   }
   .tag.off { border-color: var(--line); color: var(--faint); }
+  .phase {
+    display: flex; align-items: baseline; gap: 22px; margin-top: 10px;
+  }
+  .phase .pn { font-size: 15px; color: var(--gold); letter-spacing: 0.2em; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -109,267 +110,247 @@
   <div class="kicker">September 2026 · open source · live on staging</div>
   <div class="word">CHOIR<span class="o">.</span></div>
   <div class="sub" style="font-size:34px; color:var(--ink); margin-top:36px; max-width:1000px;">
-    The automatic computer.
+    The automatic radio.
   </div>
   <div class="sub" style="max-width:880px;">
-    A persistent computer that works for you continuously — and develops
-    itself under your supervision.
+    A voice layer for the world's information — built on the only
+    computer that is itself a system of agents.
   </div>
   <div class="foot"><span>choir.news</span><span class="num">01</span></div>
 </section>
 
-<!-- 2 · PROBLEM -->
+<!-- 2 · THE INVERSION -->
 <section class="slide">
-  <div class="kicker">The problem</div>
-  <h2>Every AI product is a session.<br>Sessions forget.</h2>
+  <div class="kicker">The inversion</div>
+  <h2>Every agent gets a computer<br>and a chat thread.</h2>
+  <div class="vs">
+    <div class="side them">
+      <div class="h">The industry</div>
+      <div class="d">An agent <b>has</b> a computer it uses. The computer is
+      the agent's fundamental tool; the chat thread is its interface to
+      you. Sessions start, work, and forget.</div>
+    </div>
+    <div class="side us">
+      <div class="h">Choir</div>
+      <div class="d">The multi-agent system <b>is</b> the computer.
+      Persistent, self-developing, supervised by construction. AI framed
+      not as replacing a worker — but as replacing the computer.</div>
+    </div>
+  </div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">02</span></div>
+</section>
+
+<!-- 3 · PHASE 1 -->
+<section class="slide">
+  <div class="kicker">Phase 1 · the technology</div>
+  <h2>The automatic computer.</h2>
   <div class="rule"></div>
   <div class="body">
-    Models can already work for hours. Nothing lets a human
-    <b>supervise</b> hours of work — so agents ship as chats: stateless,
-    amnesiac, supervised action-by-action or not at all.
+    A persistent computer that works continuously and develops itself
+    under owner supervision. Every meaningful change is a typed event on
+    an append-only tape; every surface is a deterministic projection of
+    it. Persistent <b>desks</b> do the standing work; ephemeral sub-RLMs
+    spawn as async <b>casts</b>; committed predictions resolve into
+    <b>learning records</b>.
     <br><br>
-    The frontier's bottleneck is no longer capability.
-    <b>It is supervision.</b>
-  </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">02</span></div>
-</section>
-
-<!-- 3 · THE IDEA -->
-<section class="slide">
-  <div class="kicker">The idea</div>
-  <h2>One tape. Everything else<br>is a projection.</h2>
-  <div class="rule"></div>
-  <div class="body">
-    Every meaningful change is a typed event on an append-only log.
-    The tape is the authority; the desktop, the object graph, the mailbox,
-    the file store are deterministic folds over it.
-    <br><br>
-    Given the tape and the code version, the same computer reconstructs
-    anywhere. State is intentional — <b>every byte has a reason.</b>
-  </div>
-  <div class="tape">
-    <span class="ev">spawn</span>(engineering, work_id=w41, expected=<span class="gold">"tests pass"</span>)<br>
-    <span class="ev">agent_message</span>(w41 → engineering, result=<span class="gold">"2 failures"</span>)<br>
-    <span class="ev">learning_record_minted</span>(w41: predicted pass, observed fail → revise)
-  </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">03</span></div>
-</section>
-
-<!-- 4 · THE MACHINE -->
-<section class="slide">
-  <div class="kicker">The machine</div>
-  <h2>Desks do the standing work.<br>Casts do the bounded work.</h2>
-  <div class="grid2">
-    <div class="card">
-      <div class="t">Desks — persistent actors</div>
-      <div class="d">Management, engineering, research. One live activation
-      each, fenced and serial. A desk persists because it is the
-      <b>learner</b> — its value is its calibration history.</div>
-    </div>
-    <div class="card">
-      <div class="t">Casts — async sub-RLMs</div>
-      <div class="d"><b>rlm.spawn</b> is an admission event, not a call.
-      The result arrives later as a message event. No parent ever blocks;
-      the tape carries the return channel.</div>
-    </div>
-    <div class="card">
-      <div class="t">Cells — in-cell carrier</div>
-      <div class="d">One Go REPL envelope per activation. Typed
-      <b>choir.*</b> functions stage intents; one reducer commits them.
-      No JSON tool tray, no output repair.</div>
-    </div>
-    <div class="card">
-      <div class="t">Delivery — state heads</div>
-      <div class="d">"Delivered" means "in the actor's state head,"
-      committed atomically. Pending work is a projection, not a ledger.
-      The retry is the lease.</div>
-    </div>
-  </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">04</span></div>
-</section>
-
-<!-- 5 · IT LEARNS -->
-<section class="slide">
-  <div class="kicker">Learning records — PICL</div>
-  <h2>Predict. Resolve. Revise.<br>The tape remembers the miss.</h2>
-  <div class="rule"></div>
-  <div class="body">
-    Every cast can carry <b>expected</b> — a committed prediction the
-    result event resolves. Prediction, observation, discrepancy, revision:
-    a first-class record with provenance edges, folded onto the object
-    graph by an async Curator desk.
-    <br><br>
-    A desk's fan-out is calibration data about its own decomposition.
-    A model call with an expected shape is per-model calibration —
-    <b>what model selection should learn from.</b>
-  </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">05</span></div>
-</section>
-
-<!-- 6 · SUPERVISION -->
-<section class="slide">
-  <div class="kicker">Supervision, built in</div>
-  <h2>The human is the constitution,<br>not the approval queue.</h2>
-  <div class="grid2">
-    <div class="card">
-      <div class="t">Capabilities, not vibes</div>
-      <div class="d">Mechanically restricted grants. Delegation and
-      exercise are different bits. Irreversible effects demand stronger
-      evidence and durable receipts.</div>
-    </div>
-    <div class="card">
-      <div class="t">Correction is an ordinary write</div>
-      <div class="d">A rival proposal is forked; policy-governed consensus
-      selects a head; new evidence falsifies a settlement. No special
-      machinery — the tape does it.</div>
-    </div>
-    <div class="card">
-      <div class="t">Mutation classes</div>
-      <div class="d">Green to black. Red surfaces — canonical writes,
-      provider calls, run acceptance, deploys — carry full ceremony:
-      conjecture, evidence class, rollback path.</div>
-    </div>
-    <div class="card">
-      <div class="t">Effects OFF until proven</div>
-      <div class="d">Self-development effects stay off until the computer
-      makes one real change to itself — legibly, durably, on staging.
-      By design, not by delay.</div>
-    </div>
-  </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">06</span></div>
-</section>
-
-<!-- 7 · PROVEN -->
-<section class="slide">
-  <div class="kicker">Proven on staging — not slideware</div>
-  <h2>The substrate is paid for.</h2>
-  <ul class="rows" style="margin-top:36px;">
-    <li><span class="tick">✓</span><b>Whole-computer restore</b>&nbsp;— tape → live computer, six receipts, independently reviewed</li>
-    <li><span class="tick">✓</span><b>Encrypted file-CAS</b>&nbsp;— 4 MiB chunks, Merkle manifests, atomic boot hydration</li>
-    <li><span class="tick">✓</span><b>Key escrow</b>&nbsp;— 2-of-N quorum, WebAuthn PRF wrapping, deployed and proven</li>
-    <li><span class="tick">✓</span><b>Restart-surviving actors</b>&nbsp;— Yaegi Go activations in disposable capsules, continuity across forced death</li>
-    <li><span class="tick">✓</span><b>Settlement gate</b>&nbsp;— reducer-authored fate, supersede tuples, resumable sagas</li>
-    <li><span class="tick">✓</span><b>In-cell carrier</b>&nbsp;— mechanism proven end-to-end; five JSON tools deleted behind replay proofs</li>
-  </ul>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
-</section>
-
-<!-- 8 · WHERE WE ARE -->
-<section class="slide">
-  <div class="kicker">Where we are — honestly</div>
-  <h2>One decision from the roster proof.</h2>
-  <div class="rule"></div>
-  <div class="body">
-    The engineering carrier is mid-flight: the mechanism chain is proven —
-    the first arm ever served by its own funded overlay ran three cells and
-    staged completion. The terminal receipt is quarantined on a six-strand
-    defect family in the wake substrate: <b>transitions that lose their
-    continuation.</b>
-    <br><br>
-    The fix is designed and escalated: mint a durable wake authority at
-    every transition, one consumer, run-terminal ≠ fate-terminal.
-    It is an owner decision, not an open problem.
+    Phase one is the technology, not the product — the moat everything
+    else runs on.
   </div>
   <div class="statrow">
-    <div class="stat"><div class="v">3</div><div class="l">RLM missions settled</div></div>
-    <div class="stat"><div class="v">1/4</div><div class="l">roster models tallied</div></div>
-    <div class="stat"><div class="v">6</div><div class="l">strands, one root cause</div></div>
-    <div class="stat"><div class="v">0</div><div class="l">effects enabled — by design</div></div>
+    <div class="stat"><div class="v">1</div><div class="l">canonical tape</div></div>
+    <div class="stat"><div class="v">3</div><div class="l">canonical desks</div></div>
+    <div class="stat"><div class="v">0</div><div class="l">effects on — by design</div></div>
   </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">03</span></div>
 </section>
 
-<!-- 9 · THE PATH -->
+<!-- 4 · PROVEN -->
 <section class="slide">
-  <div class="kicker">The path to beta</div>
-  <h2>Five moves, dependency-ordered.</h2>
-  <div class="flow">
-    <div class="step"><div class="st">B0 · Unblock</div><div class="sd">wake-authority repair → roster tally → carrier landing</div></div>
-    <div class="arr">→</div>
-    <div class="step"><div class="st">B1 · Cutover</div><div class="sd">one tape, serial actors, casts — the sprawl collapses</div></div>
-    <div class="arr">→</div>
-    <div class="step"><div class="st">B2 · The proof</div><div class="sd">the computer changes itself, legibly, durably</div></div>
-    <div class="arr">→</div>
-    <div class="step"><div class="st">B3 · Learning</div><div class="sd">PICL schema on — records from day one</div></div>
-    <div class="arr">→</div>
-    <div class="step"><div class="st">B4 · Beta</div><div class="sd">hardening, residues, real users</div></div>
-  </div>
-  <div class="body" style="margin-top:44px;">
-    Then the payoff: point the proven spine at the world.
-  </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">09</span></div>
+  <div class="kicker">Phase 1 · proven on staging</div>
+  <h2>The substrate is paid for.</h2>
+  <ul class="rows" style="margin-top:36px;">
+    <li><span class="tick">✓</span><b>Whole-computer restore</b>&nbsp;— tape → live computer, independently reviewed</li>
+    <li><span class="tick">✓</span><b>Encrypted file-CAS</b>&nbsp;— 4 MiB chunks, Merkle manifests, atomic boot hydration</li>
+    <li><span class="tick">✓</span><b>Key escrow</b>&nbsp;— 2-of-N quorum, WebAuthn PRF wrapping, deployed and proven</li>
+    <li><span class="tick">✓</span><b>Restart-surviving actors</b>&nbsp;— Go activations in disposable capsules</li>
+    <li><span class="tick">✓</span><b>In-cell carrier</b>&nbsp;— mechanism proven end-to-end; roster proof one owner decision away</li>
+    <li><span class="tick">✓</span><b>Learning records</b>&nbsp;— PICL schema design-complete; instrumentation ≈ free</li>
+  </ul>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">04</span></div>
 </section>
 
-<!-- 10 · THE CHAIN -->
+<!-- 5 · PHASE 2 -->
 <section class="slide">
-  <div class="kicker">The payoff — one dependency chain</div>
-  <h2>Autoputer → autonews → autoradio.</h2>
-  <div class="flow" style="margin-top:40px;">
-    <div class="step"><div class="st">Autoputer</div><div class="sd">The automatic computer<br>that earns trust first.</div></div>
-    <div class="arr">→</div>
-    <div class="step"><div class="st">Autonews</div><div class="sd">The World Wire: structured,<br>provenance-linked reporting.</div></div>
-    <div class="arr">→</div>
-    <div class="step"><div class="st">Autoradio</div><div class="sd">The wire's voice projection —<br>not a third product.</div></div>
+  <div class="kicker">Phase 2 · the application</div>
+  <h2>The automatic newspaper.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    A computer that updates its own code and works continuously is cool —
+    <b>what is it good for?</b> Tracking what is happening in the world.
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <div class="t">For people — the news UI</div>
+      <div class="d">A standard news interface. An article is just another
+      document in the computer — sourced, written, verified, corrected,
+      published around the clock.</div>
+    </div>
+    <div class="card">
+      <div class="t">For agents — the API</div>
+      <div class="d">A skill, MCP, or API that other agents — Claude Code,
+      ChatGPT — call to get up-to-date information. The wire is a data
+      product, not just a website.</div>
+    </div>
+  </div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">05</span></div>
+</section>
+
+<!-- 6 · PHASE 2 PLATFORM -->
+<section class="slide">
+  <div class="kicker">Phase 2 · the platform</div>
+  <h2>Everyone's own newspaper.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    Anyone white-labels the wire: our curated public data plus their own
+    private sources, producing data products for
+    <b>internal teams</b>, <b>paywalled distribution</b>, or
+    <b>public dissemination</b> — or any combination.
+    <br><br>
+    Media is a <b>diagonal</b>, not a vertical: like code and legal, it
+    cuts across every endeavor of life. Every organization needs to know
+    what is happening — and to say what it knows.
+  </div>
+  <div style="margin-top:30px;">
+    <span class="tag">internal use</span>
+    <span class="tag">paywall</span>
+    <span class="tag">public</span>
+    <span class="tag off">choir.news aggregator</span>
+  </div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">06</span></div>
+</section>
+
+<!-- 7 · PHASE 3 -->
+<section class="slide">
+  <div class="kicker">Phase 3 · the upshot</div>
+  <h2>The automatic radio.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    A voice layer on top of the newspaper — a more advanced podcast
+    player you can talk to.
+    <br><br>
+    An <b>AI DJ</b> traverses the live object graph and builds the queue:
+    clips and full-length podcast episodes play natively; public and
+    private documents are read aloud. Users record their own takes with
+    voice and distribute them — internally or publicly.
+  </div>
+  <div class="grid2" style="margin-top:36px;">
+    <div class="card">
+      <div class="t">Not a chatbot</div>
+      <div class="d">Broadcast, not request-response. The DJ is a desk —
+      persistent, calibrating, mixing live sources on a schedule.</div>
+    </div>
+    <div class="card">
+      <div class="t">Not a podcast tool</div>
+      <div class="d">A continuous station with a programming director —
+      "what's on now" is a projection of live state, not a generated file.</div>
+    </div>
+  </div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">07</span></div>
+</section>
+
+<!-- 8 · MULTIPLAYER -->
+<section class="slide">
+  <div class="kicker">Phase 3 · inside an organization</div>
+  <div class="quote">
+    A meeting — or an asynchronous meeting — that is
+    <span class="em">simultaneously a prompt</span> to a multi-agent
+    system working continuously in the background.
   </div>
   <div class="rule"></div>
   <div class="body">
-    The newspaper launches <b>as a station</b>. An AI DJ desk traverses the
-    live object graph to build a queue: podcasts and clips play natively,
-    text is read via TTS, and human takes are mixed in.
-    <br><br>
-    The DJ is one addressable desk — internally one agent or a thousand.
-    It reads the object graph; the tape records what it queued, played,
-    mixed, or superseded. <b>Content flows OG → queue → output.</b>
+    Teams talk; the station listens, mixes, and works. Human takes
+    supersede the AI's segments — correction as an ordinary write, in
+    audio. This is a new kind of multiplayer AI: the org's own radio
+    station, staffed by agents that never sleep.
   </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">10</span></div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">08</span></div>
 </section>
 
-<!-- 11 · BOX SCORE -->
+<!-- 9 · BOX SCORE -->
 <section class="slide">
   <div class="kicker">The judgment layer</div>
   <h2>The box score:<br>accountability with a memory.</h2>
-  <div class="grid2" style="margin-top:34px;">
+  <div class="grid2">
     <div class="card">
       <div class="t">A public track record</div>
       <div class="d">Every public statement becomes a forecast with a
       resolution contract. Institutions, speakers, and figures accumulate
-      a provenance-linked record of what they said — and whether they were right.</div>
+      a provenance-linked record of what they said — and whether they
+      were right.</div>
     </div>
     <div class="card">
-      <div class="t">PICL, consumer-facing</div>
-      <div class="d">The ledger is impossible for a wrapper: it needs the
-      tape's durable record and continuous resolution. It is its own data
-      product and API, not merely a news feature.</div>
+      <div class="t">Airtime by track record</div>
+      <div class="d">It matures underneath the wire, then becomes the
+      station's editorial judgment — and stands alone as its own data
+      product and API.</div>
     </div>
   </div>
-  <div class="body" style="margin-top:32px;">
-    It matures underneath the wire. Autoradio starts with recency, topics,
-    and preferences; as resolutions accumulate, the box score becomes the
-    editorial judgment layer: <b>airtime by track record.</b>
-  </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">11</span></div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">09</span></div>
 </section>
 
-<!-- 12 · PLATFORM -->
-<section class="slide title-slide">
-  <div class="kicker">The platform endgame</div>
-  <h2>Build horizontal.<br>Sell diagonal.</h2>
+<!-- 10 · THE CHAIN -->
+<section class="slide">
+  <div class="kicker">One stack, three phases</div>
+  <h2>Each phase funds the next.</h2>
+  <div class="flow">
+    <div class="step"><div class="st">1 · Autoputer</div><div class="sd">the agent system that is the computer — open source, proven substrate</div></div>
+    <div class="arr">→</div>
+    <div class="step"><div class="st">2 · Autonews</div><div class="sd">the automatic newspaper — own editions first, then white-label platform</div></div>
+    <div class="arr">→</div>
+    <div class="step"><div class="st">3 · Autoradio</div><div class="sd">the voice layer — consumer product and org multiplayer</div></div>
+  </div>
+  <div class="body" style="margin-top:44px;">
+    Build horizontal, sell diagonal. The computer earns trust; the
+    newspaper earns readers; the radio earns the market.
+  </div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">10</span></div>
+</section>
+
+<!-- 11 · WHERE WE ARE -->
+<section class="slide">
+  <div class="kicker">Where we are — honestly</div>
+  <h2>Phase 1 lands this quarter.</h2>
   <div class="rule"></div>
   <div class="body">
-    Media cuts across every endeavor. Choir first owns the data products:
-    the automatic newspaper, its AI edition, and its station. Then it
-    white-labels the proven engine to organizations.
-    <br><br>
-    Every organization combines private data with the Choir object graph
-    to produce its own automatic newspaper and station — exposed in the
-    tools, agents, and surfaces where work already happens.
+    The substrate is proven on staging with deployed evidence. The RLM
+    runtime is mid-cutover — mechanism proven, one owner decision from
+    the roster proof. Learning records are design-complete. The wire's
+    ingestion and publication path exists; the radio needs the wire's
+    object graph plus open-source audio plumbing.
+  </div>
+  <div class="statrow">
+    <div class="stat"><div class="v">6</div><div class="l">substrate missions settled</div></div>
+    <div class="stat"><div class="v">1</div><div class="l">decision to roster proof</div></div>
+    <div class="stat"><div class="v">80%</div><div class="l">audio stack is open source</div></div>
+  </div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">11</span></div>
+</section>
+
+<!-- 12 · CLOSE -->
+<section class="slide title-slide">
+  <div class="kicker">Join</div>
+  <h2>Build the computer<br>that is the agents.<br>Tune in to what it says.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    Open source. Live on staging. Phase one is landing; the newspaper is
+    next; the radio is the payoff.
   </div>
   <div style="margin-top:36px;">
-    <span class="tag">own data products first</span>
-    <span class="tag">private + public data</span>
-    <span class="tag">platform producers</span>
+    <span class="tag">github.com/choir-hip/go-choir</span>
+    <span class="tag">choir.news</span>
+    <span class="tag off">the meeting is the prompt</span>
   </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">12</span></div>
+  <div class="foot"><span>choir — the automatic radio</span><span class="num">12</span></div>
 </section>
 
 </body>

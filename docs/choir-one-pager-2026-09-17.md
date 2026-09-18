@@ -1,81 +1,65 @@
-# Choir — The Automatic Computer
-
+# Choir — The Automatic Radio
 
 *One page. September 2026.*
 
-## The idea
+## The inversion
 
-Every AI product today is a session. You open it, it works, you close it,
-it forgets. Choir is the opposite: **a persistent computer that works for
-you continuously and develops itself under your supervision.** It has a
-stable identity, a canonical history, and the ability to change its own
-code, state, and way of working — inside rules you grant.
+The industry is clustered on one idea: an agent *has* a computer it
+uses — the computer is the agent's fundamental tool, and the chat thread
+is its interface to you. Choir inverts it: **the multi-agent system is
+the computer.** AI framed not as replacing a worker, but as replacing
+the computer. That is phase one — the technology, not the product.
 
-Not a chatbot. Not an agent harness. A computer that is still there
-tomorrow, whose history is its state, and whose every change is a typed
-transaction on an audit log you can replay, fork, and restore.
+## Phase 1 — the automatic computer
 
-## Why now
+A persistent computer that works continuously and develops itself under
+owner supervision. Every meaningful change is a typed event on an
+append-only tape; every surface is a deterministic projection of it.
+Persistent desks do the standing work; ephemeral sub-RLMs spawn as async
+casts; committed predictions resolve into learning records. Proven on
+staging: whole-computer restore, encrypted file-CAS, key escrow,
+restart-surviving actors — all with deployed evidence.
 
-The frontier's bottleneck is no longer model capability — it is
-**supervision**. Models can already do hours of work; nothing lets a human
-supervise hours of work. Choir is the architecture supervision lives in:
-the human is the constitutional root of intention, not a per-action
-approval gate, and correction is an ordinary write — a rival proposal is
-forked, a policy-governed consensus selects a head, new evidence falsifies
-a settlement.
+## Phase 2 — the automatic newspaper
 
-## How it works
+The application that proves what the computer is good for: tracking what
+is happening in the world. Two interfaces — a standard news UI (an
+article is just another document in the computer), and an API/skill/MCP
+that other agents — Claude Code, ChatGPT — use to get up-to-date
+information. Then the platform: anyone white-labels it, combining our
+curated public data with their own private sources to produce data
+products for internal teams, paywalled distribution, or public
+dissemination — or any combination.
 
-- **One tape.** Every meaningful change is a typed event on an append-only
-  log. Given the tape and the code version, the same computer reconstructs
-  anywhere.
-- **Desks and casts.** A desk is an encapsulation boundary: one actor to
-  the world, internally one agent or a thousand. Desks do standing work;
-  ephemeral sub-RLMs spawn as async casts — admission is an event, the
-  result a later message.
-- **Learning records.** Every cast can carry an `expected` — a committed
-  prediction its result resolves. Prediction–observation–discrepancy–
-  revision becomes a provenance-linked calibration history.
-- **Supervision by construction.** Capabilities are mechanically
-  restricted; mutation classes govern ceremony; irreversible effects
-  demand stronger evidence and durable receipts.
+## Phase 3 — the automatic radio
 
-## Where we are
+The upshot of the whole stack. A voice layer on top of the newspaper — a
+more advanced podcast player you can talk to. An AI DJ traverses the
+live object graph and mixes clips and full-length episodes with
+text-to-speech of public and private documents. Users record their own
+takes with voice and distribute them — internally or publicly.
 
-The durable substrate is proven on staging: whole-computer restore,
-encrypted file-CAS, key escrow, restart-surviving trajectories — all with
-deployed evidence. The RLM runtime is mid-cutover: the engineering desk's
-in-cell carrier is mechanism-proven, with one owner decision standing
-between here and the roster tally. PICL learning records are
-design-complete and cost ~zero to instrument. Next proof: the computer
-makes one real change to itself — proposed, settled under a granted rule,
-legibly corrected, durable across restart.
+Inside an organization it becomes a new kind of multiplayer AI: **a
+meeting — or an asynchronous meeting — that is simultaneously prompting
+a multi-agent system working continuously in the background.**
 
-## The payoff
+Underneath it all, a **box score**: every public statement becomes a
+forecast with a resolution contract; figures accumulate track records.
+It matures into the station's editorial judgment — airtime by track
+record — and stands alone as its own data product and API.
 
-Build horizontal, sell diagonal. Media — like code and legal — cuts across
-every endeavor; unlike vertical software, it helps each organization know
-what is happening and say what it knows. The chain is **autoputer →
-autonews → autoradio**: the World Wire can launch as a station, its
-object graph given a voice, not a third product.
+## The strategy
 
-An AI DJ desk traverses the live object graph to build a queue: podcasts
-and clips play natively, text is read via TTS, and human takes are mixed
-in. The tape is the backwards-looking audit of what it queued and played;
-the DJ never plays the tape.
+Build horizontal, sell diagonal. Media — like code and legal — cuts
+across every endeavor of life; unlike vertical software, every
+organization needs to know what is happening and to say what it knows.
+Own data products first, then the white-label platform.
 
 ## The ask
 
-Own data products first: an AI-focused automatic newspaper — launchable as
-a station — then white-label it to organizations combining private data
-with Choir's public graph. Underneath, PICL becomes a consumer-facing
-**box score**: a provenance-linked ledger of public statements and
-figures, resolved into track records. It matures from a simple station
-programmer into editorial judgment: airtime by track record.
-
-The platform endgame lets others build automatic newspapers, newsletters,
-and data products on their private and public data. We are looking for the
-people who want to build the automatic computer — and the media it enables.
+The computer is proven on staging and mid-cutover to its final runtime.
+The newspaper is next; the radio is the payoff. We are looking for the
+people who want to build the computer that is the agents — and tune in
+to what it broadcasts.
 
 *github.com/choir-hip/go-choir · choir.news*

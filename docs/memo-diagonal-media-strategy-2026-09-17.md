@@ -6,6 +6,41 @@ doc remains apex. This memo carries the business layer the repo has not
 had: what the technology is *for* commercially.
 **Mutation class:** green (documentation only)
 
+## The three phases
+
+Owner framing, 2026-09-17: the product story is three phases, and the
+automatic computer is not the product — it is phase one, the technology.
+
+**Phase 1 — the automatic computer.** A different take on what an AI
+system should be. The industry is clustered on one idea: an agent *has*
+a computer it uses — the computer is the agent's fundamental tool, and
+the chat thread is the agent's interface to the user. Choir inverts it:
+the multi-agent system *is* the computer. AI framed not as replacing a
+worker, but as replacing the computer.
+
+**Phase 2 — the automatic newspaper.** The application that proves the
+computer's value. A computer that updates its own code and works
+continuously is cool — but what is it good for? Tracking what is
+happening in the world. Two interfaces: a standard news UI (a news
+article is just another document in the computer interface), and an
+API/skill/MCP that other agents — Claude Code, ChatGPT — use to get
+up-to-date information. Then the platform: anyone white-labels it,
+combining our curated public data with their own private sources to
+produce data products for internal teams, paywalled distribution, or
+public dissemination — or any combination.
+
+**Phase 3 — the automatic radio.** The upshot of the whole stack. A
+voice layer on top of the newspaper: a more advanced podcast player you
+can talk to. An AI DJ mixes clips and full-length podcast episodes with
+text-to-speech of public and private documents; users record their own
+takes with voice and distribute them to their audience — internal to an
+organization or public. In the organization-internal form it creates a
+new kind of multiplayer AI: teams work together in a meeting — or an
+asynchronous meeting — that is simultaneously prompting a multi-agent
+system working continuously in the background.
+
+
+
 ## The four layers
 
 **Technology, strategy, platform, product** — separate things, kept
