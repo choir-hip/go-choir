@@ -94,6 +94,8 @@
   .team .role { font-size: 16px; color: var(--gold); letter-spacing: 0.2em; text-transform: uppercase; font-weight: 600; margin-top: 10px; }
   .team .bio { font-size: 21px; color: var(--dim); line-height: 1.6; max-width: 860px; margin-top: 22px; }
   .team .links { margin-top: 26px; }
+  .team-wrap { display: flex; align-items: center; gap: 64px; margin-top: 20px; }
+  .team-photo { width: 330px; height: 382px; object-fit: cover; border-radius: 16px; border: 1px solid var(--line); flex: none; }
 </style>
 </head>
 <body>
@@ -358,19 +360,23 @@
 <!-- 13 · TEAM -->
 <section class="slide">
   <div class="kicker">Team</div>
-  <div class="team">
-    <div class="name">Yusef Mosiah Nathanson</div>
-    <div class="role">Founder</div>
-    <div class="bio">
-      Got into AI in 2015 as a professional poker player, when Noam
-      Brown's Claudico and the poker AIs started beating top players.
-      High-school dropout. Plus the open-source community.
+  <div class="team-wrap">
+    <div class="team" style="margin-top:0; flex:1;">
+      <div class="name">Yusef Mosiah Nathanson</div>
+      <div class="role">Founder</div>
+      <div class="bio">
+        Self-taught software and AI engineer — came to AI in 2015 from
+        professional poker, when Noam Brown's Claudico and the poker AIs
+        started beating top players. Building Choir in the open with a
+        growing community of contributors.
+      </div>
+      <div class="links">
+        <a class="tag" href="https://github.com/yusefmosiah" style="text-decoration:none;">github.com/yusefmosiah</a>
+        <a class="tag" href="https://www.linkedin.com/in/y-m-nathanson-a930311a7/" style="text-decoration:none;">linkedin.com/in/y-m-nathanson</a>
+        <a class="tag" href="https://mosiah.org" style="text-decoration:none;">mosiah.org</a>
+      </div>
     </div>
-    <div class="links">
-      <a class="tag" href="https://github.com/yusefmosiah" style="text-decoration:none;">github.com/yusefmosiah</a>
-      <a class="tag" href="https://www.linkedin.com/in/y-m-nathanson-a930311a7/" style="text-decoration:none;">linkedin.com/in/y-m-nathanson</a>
-      <a class="tag" href="https://mosiah.org" style="text-decoration:none;">mosiah.org</a>
-    </div>
+    <img class="team-photo" src="Yusef_photo.jpeg" alt="Yusef Mosiah Nathanson">
   </div>
   <div class="foot"><span>choir — multiplayer ai</span><span class="num">13</span></div>
 </section>

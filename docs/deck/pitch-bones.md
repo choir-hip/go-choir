@@ -144,10 +144,10 @@ refactors for secure continuous operation — that work is landing.
 
 ## 13 · Team
 
-**Yusef Mosiah Nathanson** — founder. Got into AI in 2015 as a
-professional poker player, when Noam Brown's Claudico and the poker AIs
-started beating top players. High-school dropout. Plus the open-source
-community.
+**Yusef Mosiah Nathanson** — founder. Self-taught software and AI
+engineer — came to AI in 2015 from professional poker, when Noam
+Brown's Claudico and the poker AIs started beating top players.
+Building Choir in the open with a growing community of contributors.
 github.com/yusefmosiah · linkedin.com/in/y-m-nathanson · mosiah.org
 
 ## 14 · Close
