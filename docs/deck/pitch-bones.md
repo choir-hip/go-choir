@@ -13,7 +13,7 @@ the supervision interface and the product interface — same surface.
 ## 1 · Title
 
 CHOIR
-Multiplayer AI.
+A computer made of agents.
 A self-supervised multi-agent system for complex, long-horizon,
 continuous work — proven by a newspaper, adopted through a radio.
 
@@ -90,7 +90,7 @@ outward. An article is a work-state document — sourced, written,
 verified, corrected, published around the clock.
 
 Three interfaces: for people, the article is a document on the
-computer; for orgs, API access to the object graph — a curated,
+computer; for orgs, API access to the record — a curated,
 provenance-linked record of what is happening, plus your private
 sources; for agents, a skill/MCP for up-to-date information.
 
@@ -104,26 +104,24 @@ Interruptible (talk to it, steer it — not a one-way broadcast) and
 grounded (learns from usage but stays anchored to the verified record —
 personalization without losing the facts).
 
-## 9 · Multiplayer
+## 9 · The longer arc
 
 The opportunity after autonomy is coordination.
 
-Most AI systems are designed to reduce the amount of human
-intervention required. Choir increases the amount of human input that
-can be productively absorbed — a meeting becomes an input to a
-persistent multi-agent system already doing the work. Decisions update
-priorities; disagreements are preserved; commitments propagate.
+Most AI reduces the human input required. The deeper direction is a
+system that absorbs more of it productively — people steering a
+persistent multi-agent computer, not being replaced by it. Latent for
+now; the near-term product is the record.
 
-AI not as a replacement for humans, but as leverage — an organization
-with higher coordination bandwidth, not higher overhead.
 
 
 ## 10 · The box score
 
 Of course you keep score.
 
-A provenance-linked object graph already knows who said what — the
-obvious next layer tracks whether they were right. Public and private:
+A provenance-linked record already knows who said what — the next
+layer tracks whether they were right. A track record no incumbent
+sells. Public and private:
 the public system tracks the discourse; the private system tracks
 internal decision contributions. Every statement becomes a forecast
 with a resolution contract; figures accumulate track records. Matures
@@ -134,28 +132,32 @@ API.
 
 Your data stays home. Managed under zero-data-retention, or self-hosted
 open source ± consulting. The gamut: hobbyist free → data products
-(API access to the object graph, the box score) → managed →
+(API access to the record, the box score) → managed →
 consulting. PICL makes open source a community-driven gym.
 
 ## 12 · The market
 
 Everyone sells the agent. We sell the record.
 The bet — the agent market is chat-shaped, but chat can't supervise
-continuous multi-agent work. The industry is already moving to
-harnesses, execution graphs, and on-the-loop oversight. We bet the
-interface was never the product.
+continuous multi-agent work. The newspaper and radio are the
+demonstration and the data engine; the business is the record, sold
+first to finance.
 Not our market: coding & personal agents — crowded, token-subsidized,
 in an ROI correction. We don't position against them.
-The wedge — finance: buy-side is unbundling the terminal and drowning
-in "LLM-washed" alt-data. Provenance and machine-readability are now
-hard requirements — exactly the object graph.
-Then: media/PR, the intel community — and existing data-product
-sellers as buyers and channel, not just competitors.
+The wedge — long-tail data: finance buys data. We cover the long tail
+incumbents under-serve — non-English sources, podcasts, multimedia
+(e.g. silicon supply chains) — provenance-linked and machine-readable.
+Less crowded.
+The edge: provenance + the box score — a track record of who was right
+that no incumbent sells. Then media/PR, intel, and data sellers as
+channel.
 
 ## 13 · Where we are
 
-Prototype to production. The prototype autoputer and autonews needed
-refactors for secure continuous operation — that work is landing.
+Prototype to production. The prototype computer and news product
+needed refactors for secure continuous operation — that work is
+landing. Production-ready soon; the record then needs a few weeks
+running live to be good enough to sell.
 
 ## 14 · Team
 
