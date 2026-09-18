@@ -1,142 +1,168 @@
 # Design: platform-dolt storage normalization — 2026-09-18
 
 Class: green (problem documentation + design; no runtime change). Owner asked
-for a durable fix for the platform-dolt storage leak. This is the design surface
-for triage; implementation is a separate orange/red mission.
+for a durable fix for the platform-dolt storage leak. Revised after an agentic
+consensus panel (6 models) unanimously returned **RETHINK** on the first draft —
+the draft re-fought a battle the repo already lost. This version carries the
+corrected root cause.
 
 ## Invariant (owner-stated)
 
-The system must keep a **secure, auditable, immutable event log**, plus
-**snapshots from which an autoputer's current state can be recovered after
-corruption**. Everything else is negotiable.
+A **secure, auditable, immutable event log**, plus **snapshots from which an
+autoputer's current state can be recovered after corruption**. Everything else
+is negotiable.
 
-## Diagnosis (measured 2026-09-18)
+## Root cause (corrected — was mis-diagnosed in v1)
 
-The platform store (`/var/lib/go-choir/platform-dolt/platform`, a `dolt
-sql-server`) grew to ~224 GB before a manual `dolt dump` + reimport today
-compacted it to 9.2 GB (`dump-20260918`, 20 GB SQL). Byte share of the dump:
+**The leak is per-mutation `CALL DOLT_COMMIT`, not missing GC.**
 
-| Table | Size | Nature |
-| --- | --- | --- |
-| `og_objects` | 12.6 GB | object graph — mutable, high-churn, bulk |
-| `items` | 2.3 GB | corpus (GDELT/RSS `body`, `raw_json`, `reader_snapshot`) |
-| `og_edges` | 1.8 GB | object graph |
-| `ingestion_events` | 0.9 GB | corpus |
-| `fetches` | 0.9 GB | corpus |
-| `computer_event_append_receipts` | 0.39 GB | **canonical event log** |
-| `computer_lifecycle_receipts` | 0.03 GB | canonical |
+`internal/platform/store.go`, `internal/cycle/storage.go`,
+`internal/platform/objectgraph_store.go`, and ~49 other call sites (52 total
+`DOLT_COMMIT`/`commitDolt` references across `internal/platform`, `internal/cycle`,
+`internal/store`) commit every mutation to the Dolt commit graph. The 2026-08-26
+receipt (`docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md`)
+measured **6,903,253 commits**; Dolt GC — shallow *or* `--full` — collects only
+*unreachable* chunks, and every commit on `main` is reachable from HEAD. So the
+entire commit graph (months of superseded `og_objects` longblob bodies + event
+receipts) is uncollectible by any GC. Auto-GC was already running correctly
+throughout (78 shallow GCs, every ~45 min).
 
-Two compounding causes:
+This is the **second** recurrence: squashed to ~2 commits on 2026-08-26, the
+store re-grew to ~224G and was squashed again today (2026-09-18, `dump-20260918`,
+20G SQL → 9.2G live). `dolt_log` is already back to **39,540 commits** ~1 day
+post-squash. The per-mutation commit behavior is unchanged, so it will re-grow
+again.
 
-1. **No GC on the platform store.** `DOLT_GC()` is wired only for the guest's
-   *embedded* store (`internal/store/dolt_maintenance.go`, `MaybeRunDoltGC` /
-   `StartPeriodicDoltGC`). The platform `dolt sql-server` has no scheduled GC, so
-   the noms journal accumulates every written chunk forever. The 224 GB was
-   ~215 GB of uncollected garbage over ~9 GB live — the same failure as the
-   guest's documented 9.8 GB-journal-for-0.5 GB-live receipt (2026-09-03).
-2. **Bulk mutable data shares the canonical store.** The auditable event log
-   (~0.4 GB, must be immutable + retained) is co-located with ~19 GB of
-   high-churn corpus/object-graph data that does not need Dolt versioning. Dolt
-   versions every revision of `og_*`/`items`/`fetches`, so the churn multiplies
-   the journal and forces GC/retention policy to be sized for bulk data, not the
-   log.
+**Corollary the panel proved:** "schedule `DOLT_GC()`" (v1 Move 1) is the
+known-wrong hypothesis — it was the 11/12 majority opinion on 2026-08-26,
+falsified by the dissent's `dolt_log` measurement before execution. And
+"watermark-bounded GC" is **not expressible**: Dolt GC reachability is over the
+commit graph; `computer_replay_watermarks` is a mutable application row, not a
+GC root.
 
-## Durable fix — two moves
+## What the log actually is (category correction)
 
-### Move 1: scheduled platform GC (stops the leak now)
+The audit/recovery path is **not** Dolt versioning. It is:
 
-Run `CALL DOLT_GC()` against the platform sql-server on a schedule, with the
-same milestone/disposition discipline the guest already uses.
+- the append-only SQL table `computer_event_append_receipts` (the event rows,
+  `UNIQUE (computer_id, sequence)`), plus
+- the filesystem CAS at `/var/lib/go-choir/platform-artifacts` (event payloads
+  via `PayloadCommitment` → `computer-event-payload`, checkpoint artifacts via
+  `checkpoint_artifact_ref`).
 
-- Mechanism: a systemd timer (or a `vmctl`/corpusd maintenance hook) that runs
-  `dolt sql -q "CALL DOLT_GC()"` (or `dolt gc` against the data dir while the
-  server holds it — prefer the SQL call so it coordinates with the live server).
-- Trigger: journal-size milestone + a periodic floor (e.g. GC when
-  `noms/vvvv…` journal > N GiB, or every T hours whichever first). Reuse the
-  `doltGCPlan` thresholds concept; write a `.choir-dolt-gc-disposition.json`
-  beside the store so skips are observable (per the 2026-09-03 receipt).
-- Safety: `DOLT_GC()` on a live server needs the GC to see the working set;
-  confirm the platform server version supports online GC, else run it during a
-  brief read-only window. Keep the last-K commits reachable so the auditable
-  history is not truncated below the recovery watermark.
-### Move 2: split into two Dolt stores by churn/retention profile
+Dolt commits on the event tables are a storage-engine side effect, not the log.
+Guest Texture history already weaned off `dolt_history_*`/`AS OF` onto the
+indexed parent chain (`internal/store/texture.go`). So: **keep-all the SQL event
+table + `platform-artifacts` pins; bound only the Dolt commit graph.**
 
-The object graph is *not* bulk-non-versioned data: `og_objects` already carries
-`version_id`, `content_hash`, `superseded_by`, `tombstone` — it is a versioned
-object model, and much of its content is versioned Texture documents. So the
-split is **two Dolt stores with independent GC/retention**, not "Dolt vs
-non-versioned". The win is isolating the canonical log's journal from corpus
-churn and tuning each store's retention to its purpose.
+## What Store B actually is (authority correction)
 
-- **Store A — canonical event store** (Dolt, keep-all or watermark-bounded GC):
-  the `computer_event_*`, `computer_lifecycle_*`, `computer_checkpoint*`,
-  `computer_replay_watermarks`, `computer_version_*`, `computer_key_*`,
-  `computer_route_*`, `consent_records`, `control_key_history`, receipt and
-  rollback-ref tables. This is the auditable log + recovery metadata. Low churn,
-  small (~0.4 GB today). Versioning here *is* the audit feature; retain
-  history, GC only below the recovery watermark.
-- **Store B — object-graph/corpus store** (Dolt, aggressive scheduled GC +
-  bounded history depth): `og_objects`, `og_edges`, `items`, `fetches`,
-  `ingestion_events`, `cycle_events`, `cycles`, `processor_requests`,
+`og_*`/`items`/`fetches`/`platform_texture_revisions` are **not** derived or
+rebuildable from the event log. `og_objects` holds platform Texture documents
+(World Wire / publication truth); `items`/`fetches` are GDELT/RSS observations
+that are re-fetchable in name only (sources rotate). The ontology already puts
+world-wire state **outside** user-computer restore. Treat Store B as its own
+source of truth with its own backup identity — not disposable corpus.
+
+## Durable fix — three moves (revised)
+
+### Move 1 — stop per-mutation `DOLT_COMMIT` (the actual leak fix)
+
+Coalesce the ~52 per-mutation commit sites behind **one debounced snapshot
+committer**: batch mutations in ordinary SQL transactions, and `DOLT_COMMIT` on
+a cadence (e.g. every N seconds / M mutations / on checkpoint), not per write.
+This is the owner-directed fix already recorded in the 2026-08-26 receipt
+("post-overhauls the platform moves to regular snapshotting instead of unbounded
+per-event commit history").
+
+- Gate first: re-measure `dolt_log` on Node B (currently 39,540 and climbing).
+- The event log's immutability does not depend on per-write Dolt commits — the
+  SQL rows are the log. Batched commits still give periodic addressable
+  snapshots; they just stop the 6.9M-commit explosion.
+- Keep server auto-GC on; it can now actually collect unreachable chunks because
+  the reachable set stops exploding.
+- Extend the existing `go-choir-platform-dolt-history-audit` timer
+  (`nix/node-b.nix`) to alert on commit-*rate* and `dolt_log` growth SLO, not
+  only the 50 GiB oldgen floor — it fired on size but the recurrence is
+  commit-count-driven.
+
+### Move 2 — split by authority into two stores (blast-radius + independent retention)
+
+Only after Move 1. Split by **authority**, not "versioned vs not":
+
+- **Store A — canonical event/control store** (Dolt): `computer_event_*`,
+  `computer_lifecycle_*`, `computer_checkpoints`, `computer_replay_watermarks`,
+  `computer_version_*`, `computer_key_*`, `computer_route_*`, `consent_records`,
+  `control_key_history`, receipt/rollback-ref tables. Keep-all the SQL rows +
+  artifact pins; bound only the commit graph via Move 1 batching + periodic
+  squash.
+- **Store B — world-wire/corpus store** (Dolt or a conventional engine):
+  `og_*`, `items`, `fetches`, `ingestion_events`, `cycle_*`, `processor_requests`,
   `provenance_*`, `publication_*`, `platform_texture_revisions`, `artifact_*`.
-  High churn (~19 GB today). Keep Dolt versioning (Texture docs need history),
-  but retain only the history depth the product actually queries — e.g. GC to
-  the last N commits / last T days rather than keep-all — so its journal stays
-  bounded independently of Store A.
+  Its own source of truth, its own backup identity, its own commit cadence.
+  `og_objects` already does application-level versioning (`version_id`,
+  `content_hash`, `superseded_by`, `tombstone`) — Dolt versioning on top is
+  double-versioning for zero read benefit; keep Dolt only if `AS OF`/diff/merge
+  is a demonstrated product query, else a conventional engine is cheaper.
+- **Separate sql-server process** for Store B (own systemd unit): two DBs on one
+  server share process/OOM/crash domain and do not give independent GC memory
+  isolation. A GC-OOM on Store B must not take the canonical log down.
 
-Normalization within Store B (the "use less disk + easier to query" ask): the
-`items`/`og_objects` payload columns (`body`, `raw_json`, `reader_snapshot`,
-object `body` blobs) should be **content-addressed** — store the blob once in a
-`blobs(digest, bytes)` table and reference it by digest, exactly as
-`computerevent` already does for event payloads (`PayloadCommitment` → CAS
-pin). Dedup removes the repeated GDELT/RSS bodies and object copies; the digest
-keeps integrity; versioned rows then carry a small digest pointer instead of a
-fat payload, so each revision is cheap. Queries hit small index rows, not fat
-payload rows.
+### Move 3 — content-address fat payloads into `platform-artifacts` (not a Dolt `blobs` table)
+
+Move `items.body`/`raw_json`/`reader_snapshot` and `og_objects.body` bytes into
+the existing filesystem CAS (`/var/lib/go-choir/platform-artifacts`), keeping
+only `content_hash` digest + byte size in SQL. Do **not** put blobs in a Dolt
+`blobs` table — that keeps fat bytes on the versioned chunk store and re-creates
+the OOM-on-scan risk (27.3G OOM on 2026-08-26). Dedup is a bonus; the real win
+is small versioned rows and keeping bulk bytes off the chunk engine.
+
+## Migration path (offline dump-and-split — never dual-write)
+
+The writers are two local daemons (`go-choir-sourcecycled`, `go-choir-corpusd`);
+no zero-downtime cluster constraint. Dual-write across two DBs without
+distributed transactions risks divergence — use a fenced cutover instead:
+
+1. Quiesce `go-choir-sourcecycled` + `go-choir-corpusd` (systemd stop).
+2. **Offline** `dolt dump` (never full-scan via the SQL server — it OOM-killed
+   at 27.3G on 2026-08-26). Split the dump: canonical tables → Store A,
+   corpus/OG → Store B.
+3. Init Store A fresh from the canonical dump (single root commit); init Store B
+   from the corpus dump.
+4. Update DSNs in service configs; restart.
+5. Keep `dump-20260918` as the rollback ref until the split is verified.
 
 ## Recovery invariant preserved
 
-- Store A keeps the full event log + `computer_checkpoints` +
-  `computer_replay_watermarks` → an autoputer can be rebuilt by replaying events
-  from the last checkpoint (the existing restore path).
-- Moving `og_*`/corpus to Store B does not break recovery: those are derived
-  projections/corpus, not the event source of truth. If a consumer needs them
-  for replay, regenerate from the canonical log or keep a mirror.
-- GC on **both** stores must never collect chunks reachable from the recovery
-  watermark — bound Store A GC to `computer_replay_watermarks` so the log is
-  never truncated below the last recoverable head. Store B's watermark is its
-  own (its history is not the recovery path).
-
-## Migration path
-
-1. Land Move 1 (scheduled GC) first — stops the leak immediately, low risk.
-2. Stand up Store B (second `dolt sql-server` or a second database on the same
-   server with its own GC schedule). Backfill `og_*`/`items`/`fetches` from the
-   dump; dual-write during cutover; switch readers; then drop the bulk tables
-   from Store A and `DOLT_GC()` to reclaim.
-3. Content-address the payload columns in Store B as part of the move (new
-   `blobs` table + digest columns; backfill digests; drop fat columns).
+- Store A keeps the full SQL event log + `computer_checkpoints` +
+  `computer_replay_watermarks` + `platform-artifacts` pins → autoputer rebuild
+  by replay-from-checkpoint (existing restore path).
+- Store B is world-wire/corpus truth, restored from its own backup — not part of
+  user-computer recovery (per the ontology).
+- Event-log truncation, if ever wanted, is a separate explicit protocol
+  (verified checkpoint + artifact bundle + external anchor + rollback window +
+  recovery rehearsal) — never a GC setting.
 
 ## Open questions for triage
 
-- Does any consumer read `og_*`/`items` *through* Store A's Dolt history
-  (time-travel queries across the split boundary)? If yes, they need a
-  versioned mirror or a snapshot table before the split.
-- How much Store B history does the product actually query (Texture doc
-  revision depth)? That sets Store B's GC bound.
-- Platform `dolt sql-server` version — confirm online `DOLT_GC()` support, or
-  plan a maintenance window.
-- Retention policy for Store A: keep-all (audit) vs. watermark-bounded GC.
-  Owner decision.
-
+- **Blocking pre-migration:** inventory every `og_*`/`platform_texture_revisions`
+  consumer; classify each table derived-rebuildable / mirror-able /
+  source-of-truth; set Store B retention per class. Do not backfill until done.
+- Does any consumer read `og_*`/`items` via Dolt `AS OF`/time-travel? (Believed
+  no — Texture uses the parent chain — but confirm before choosing Store B's
+  engine.)
+- Commit-batching cadence: how much event latency is acceptable between a write
+  and its addressable Dolt snapshot? (Checkpoint cadence is the natural bound.)
+- Backup manifest: Store A head + Store B head + `platform-artifacts` roots +
+  key version need one coordinated identity; add restore drills.
 
 ## References
 
-- Guest GC precedent: `internal/store/dolt_maintenance.go` (`MaybeRunDoltGC`,
-  `StartPeriodicDoltGC`, `.choir-dolt-gc-disposition.json`).
-- Journal-growth receipt: `dolt_maintenance.go` comment, 9.8 GB journal / 0.5 GB
-  live, 2026-09-03.
-- Event payload CAS precedent: `internal/computerevent/appender.go`
-  (`PayloadCommitment`, `PinNonPrivatePayload`).
-- Prior disk-pressure receipt: `docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md`.
-- Storage retention mission: `docs/archive/mission-node-b-storage-retention-v0.md`.
+- **Root-cause receipt (authoritative):** `docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md`
+- Commit sites: `internal/platform/store.go`, `internal/cycle/storage.go`,
+  `internal/platform/objectgraph_store.go` (+ ~49 more `DOLT_COMMIT`/`commitDolt`)
+- History-audit timer: `nix/node-b.nix` (`go-choir-platform-dolt-history-audit`)
+- Guest GC precedent (embedded store only): `internal/store/dolt_maintenance.go`
+- Event payload CAS: `internal/computerevent/appender.go` (`PayloadCommitment`)
+- Texture parent-chain history: `internal/store/texture.go`
+- Consensus panel outputs: `.agentic-consensus/agentic-consensus-20260918-191939/`
