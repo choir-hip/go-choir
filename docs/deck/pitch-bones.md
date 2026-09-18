@@ -53,13 +53,14 @@ Own your own learning loop.
 
 PICL — predictive in-context learning. Before acting, an agent commits
 a prediction; after acting, the outcome resolves it. Every committed
-prediction becomes a provenance-linked record — what was expected, what
-happened, whether it held. The record is the memory: learning without
-weight updates, and the same record is the audit trail and the
-self-improvement signal.
+prediction becomes a provenance-linked record — improving the quality
+of outcomes through learning, and safety through logging.
 
-Four abstractions: **Security** · **Auditability** · **Recovery** ·
-**Customizability**.
+Four abstractions: **Security** · **Auditability** · **Customizability**
+(vibecode your own apps — multiagent workflows and APIs inside the
+autoputer) · **Recovery** (if anything goes wrong you can always
+recover — your data is safe).
+
 
 ## 6 · Phase 2 — the automatic newspaper
 
