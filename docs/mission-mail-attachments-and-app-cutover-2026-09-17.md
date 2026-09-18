@@ -293,3 +293,42 @@ guest frontend refresh."
 - **Residual risks:** inbound attachments land quarantined under the public
   policy (by design); alias provisioning for fresh accounts is host-side only
   (no self-serve route) — test fixture uses `maildctl`.
+
+## Follow-up fix (2026-09-18): compose closed by file-picker focus refresh
+
+**Bug (user-reported):** clicking Upload in compose opened the OS file dialog;
+on close the app dropped back to the inbox and the attachment never attached.
+
+**Root cause:** the native file picker blurs then refocuses the window, firing
+`handleVisibilityOrFocus` → `loadMessages(background)`. `loadMessages`
+unconditionally reset `composeOpen`/`replyOpen`/`filter`/`detailPaneOpen`, so
+the background refresh destroyed the compose view before the file staged.
+
+**Fix (`c592331b`):** view-state resets in `loadMessages` and `loadDetail` now
+run only on explicit (non-background) loads; `background` is threaded into
+`loadDetail` so its compose/reply resets are guarded too. Deployed spec gained
+a regression check that dispatches the same `focus`/`visibilitychange` events
+and asserts compose survives.
+
+**Verified:** `mail-attachments-deployed.spec.js` passed on choir.news against
+the new bundle (21.1s) — fresh account → new VM on the current guest image →
+compose → focus-refresh survives → 2 attachments → approve → send → inbound.
+
+## Infrastructure findings during deploy (2026-09-18)
+
+1. **platform-dolt history re-growth (the storage leak).** The canonical store
+   re-grew 4.5G → 239G in 23 days after the Aug-26 squash: `DOLT_COMMIT('-Am')`
+   on every mutation → 7,430,515 commits → oldgen `.darc` archives 81+77+73G.
+   Live data is only ~8-11G (og_objects 6.05M, og_edges 3.03M, items 1.71M,
+   fetches 2.36M — the RSS/news ingestion corpus). Re-ran the squash runbook:
+   dump (20G) → reimport → `DOLT_COMMIT` → offline `dolt gc` → **239G → 8.3G**,
+   all live counts verified. The per-mutation commit behavior is unchanged, so
+   it will re-grow — needs the substrate fix (batch/checkpoint commits).
+2. **nix `min-free` auto-GC deletes in-flight build deps.** Node-b `nix.conf`
+   has `min-free=120G`/`max-free=180G`; with free < 120G, auto-GC fires inside
+   `nix build` and deletes *unrooted* build deps → "not a valid path" → the
+   deploy looped. The ci.yml comment "in-flight builds are safe" is wrong —
+   deps stay unrooted until the result link lands. The deploy disk-preflight
+   floor (90G) is *below* `min-free` (120G), so auto-GC is guaranteed mid-build.
+   Freed disk above `min-free` (via the squash) → build completed → deploy ok.
+   Durable fix: preflight floor must exceed `min-free`, or pin build deps.
