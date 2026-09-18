@@ -156,4 +156,6 @@ Your computer, made of agents.
 Tune in to what it says.
 Open source. Live on staging. Phase one is landing; the newspaper is
 next; the radio is the payoff.
+The ask: your read — on the business and on this pitch. Where does it
+break? What would you push on?
 github.com/choir-hip/go-choir · choir.news
