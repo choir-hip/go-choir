@@ -90,10 +90,9 @@ outward. An article is a work-state document — sourced, written,
 verified, corrected, published around the clock.
 
 Three interfaces: for people, the article is a document on the
-computer; for agents, a skill/MCP for up-to-date information; for orgs,
-API access to the object graph — our curated public data plus your
-private sources → internal teams, paywalled distribution, public
-dissemination — or any combination.
+computer; for orgs, API access to the object graph — a curated,
+provenance-linked record of what is happening, plus your private
+sources; for agents, a skill/MCP for up-to-date information.
 
 ## 8 · Phase 3 — the automatic radio (the adoption UX)
 
