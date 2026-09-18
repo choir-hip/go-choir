@@ -28,20 +28,18 @@ a settlement.
 ## How it works
 
 - **One tape.** Every meaningful change is a typed event on an append-only
-  log. Every surface — desktop, object graph, mailbox, file store — is a
-  deterministic projection. Given the tape and the code version, the same
-  computer reconstructs anywhere.
-- **Desks and casts.** Persistent actors (desks) do the standing work;
+  log. Given the tape and the code version, the same computer reconstructs
+  anywhere.
+- **Desks and casts.** A desk is an encapsulation boundary: one actor to
+  the world, internally one agent or a thousand. Desks do standing work;
   ephemeral sub-RLMs spawn as async casts — admission is an event, the
-  result a later message. One live activation per actor, fenced.
+  result a later message.
 - **Learning records.** Every cast can carry an `expected` — a committed
-  prediction the result resolves. Prediction–observation–discrepancy–
-  revision becomes a first-class, provenance-linked record: the
-  computer's calibration history.
-- **Supervision by construction.** Capabilities mechanically restricted;
-  mutation classes govern ceremony; irreversible effects demand stronger
-  evidence and durable receipts. Effects stay OFF until the
-  self-development proof lands.
+  prediction its result resolves. Prediction–observation–discrepancy–
+  revision becomes a provenance-linked calibration history.
+- **Supervision by construction.** Capabilities are mechanically
+  restricted; mutation classes govern ceremony; irreversible effects
+  demand stronger evidence and durable receipts.
 
 ## Where we are
 
@@ -56,18 +54,28 @@ legibly corrected, durable across restart.
 
 ## The payoff
 
-Once the computer demonstrably develops itself, the same spine runs the
-news: sourcing, writing, verification, correction, publication — around
-the clock. **The World Wire** is the automatic newspaper: the world as
-reported, contested and plural, not a god's-eye index. Not a separate
-product — the first large application of a computer that can be trusted
-to work unsupervised, because its supervision was built in from the tape up.
+Build horizontal, sell diagonal. Media — like code and legal — cuts across
+every endeavor; unlike vertical software, it helps each organization know
+what is happening and say what it knows. The chain is **autoputer →
+autonews → autoradio**: the World Wire can launch as a station, its
+object graph given a voice, not a third product.
+
+An AI DJ desk traverses the live object graph to build a queue: podcasts
+and clips play natively, text is read via TTS, and human takes are mixed
+in. The tape is the backwards-looking audit of what it queued and played;
+the DJ never plays the tape.
 
 ## The ask
 
-Choir is open source and live on staging. The substrate is proven; the
-runtime is one decision from its roster proof; the learning substrate is
-one schema away. We are looking for the people who want to build the
-automatic computer — and read the newspaper it writes.
+Own data products first: an AI-focused automatic newspaper — launchable as
+a station — then white-label it to organizations combining private data
+with Choir's public graph. Underneath, PICL becomes a consumer-facing
+**box score**: a provenance-linked ledger of public statements and
+figures, resolved into track records. It matures from a simple station
+programmer into editorial judgment: airtime by track record.
+
+The platform endgame lets others build automatic newspapers, newsletters,
+and data products on their private and public data. We are looking for the
+people who want to build the automatic computer — and the media it enables.
 
 *github.com/choir-hip/go-choir · choir.news*

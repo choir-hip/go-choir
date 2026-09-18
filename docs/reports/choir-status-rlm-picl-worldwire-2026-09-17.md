@@ -165,6 +165,7 @@ state). What does not: durable per-source scheduling, edition-Texture
 Wire app, subscription/newsletter proof, any Wire PICL implementation.
 Autopaper is tabled with no active Definition. Correct state: waiting for
 the self-development proof.
+The business framing now lives in `docs/memo-diagonal-media-strategy-2026-09-17.md`: autoradio is the wire's second surface, the box score its judgment layer, and the platform endgame enables organizations to build automatic newspapers on private and public data.
 
 ## 3. What ships for beta — dependency-ordered
 
@@ -291,4 +292,5 @@ activation-wake family is the only cluster blocking the critical path.
 `docs/heresy-detectors.md` · `docs/standing-questions.md` ·
 `docs/supervision-protocol.md` ·
 `docs/memo-autopaper-world-wire-generalization-codesign-2026-08-09.md` ·
+`docs/memo-diagonal-media-strategy-2026-09-17.md` ·
 `docs/reports/choir-rlm-engineering-carrier-narrative-report-2026-09-13.md`
