@@ -152,7 +152,8 @@ github.com/yusefmosiah · linkedin.com/in/y-m-nathanson · mosiah.org
 
 ## 14 · Close
 
-Build the computer that is the agents. Tune in to what it says.
+Your computer, made of agents.
+Tune in to what it says.
 Open source. Live on staging. Phase one is landing; the newspaper is
 next; the radio is the payoff.
 github.com/choir-hip/go-choir · choir.news
