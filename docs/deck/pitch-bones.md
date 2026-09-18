@@ -137,12 +137,27 @@ open source ± consulting. The gamut: hobbyist free → data products
 (API access to the object graph, the box score) → managed →
 consulting. PICL makes open source a community-driven gym.
 
-## 12 · Where we are
+## 12 · The market
+
+Everyone sells the agent. We sell the record.
+The bet — the agent market is chat-shaped, but chat can't supervise
+continuous multi-agent work. The industry is already moving to
+harnesses, execution graphs, and on-the-loop oversight. We bet the
+interface was never the product.
+Not our market: coding & personal agents — crowded, token-subsidized,
+in an ROI correction. We don't position against them.
+The wedge — finance: buy-side is unbundling the terminal and drowning
+in "LLM-washed" alt-data. Provenance and machine-readability are now
+hard requirements — exactly the object graph.
+Then: media/PR, the intel community — and existing data-product
+sellers as buyers and channel, not just competitors.
+
+## 13 · Where we are
 
 Prototype to production. The prototype autoputer and autonews needed
 refactors for secure continuous operation — that work is landing.
 
-## 13 · Team
+## 14 · Team
 
 **Yusef Mosiah Nathanson** — founder. Self-taught software and AI
 engineer — came to AI in 2015 from professional poker, when Noam
@@ -150,7 +165,7 @@ Brown's Claudico and the poker AIs started beating top players.
 Building Choir in the open, aggressively using many agents.
 github.com/yusefmosiah · linkedin.com/in/y-m-nathanson · mosiah.org
 
-## 14 · Close
+## 15 · Close
 
 Your computer, made of agents.
 Tune in to what it says.
