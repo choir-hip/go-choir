@@ -148,8 +148,7 @@ refactors for secure continuous operation — that work is landing.
 professional poker player, when Noam Brown's Claudico and the poker AIs
 started beating top players. High-school dropout. Plus the open-source
 community.
-github.com/yusefmosiah · linkedin.com/in/y-m-nathanson-a930311a7 ·
-mosiah.org
+github.com/yusefmosiah · linkedin.com/in/y-m-nathanson · mosiah.org
 
 ## 14 · Close
 
