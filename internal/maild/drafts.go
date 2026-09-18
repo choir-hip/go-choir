@@ -37,6 +37,8 @@ type createDraftRequest struct {
 	ReplyToMessageID string   `json:"reply_to_message_id,omitempty"`
 	SourceKind       string   `json:"source_kind,omitempty"`
 	SourceRef        string   `json:"source_ref,omitempty"`
+	// AttachmentIDs binds staged outbound attachments to this draft.
+	AttachmentIDs    []string `json:"attachment_ids,omitempty"`
 }
 
 type draftResponse struct {
@@ -54,6 +56,7 @@ type draftResponse struct {
 	ReplyToMessageID  string   `json:"reply_to_message_id,omitempty"`
 	SourceKind        string   `json:"source_kind,omitempty"`
 	SourceRef         string   `json:"source_ref,omitempty"`
+	Attachments       []EmailAttachmentMeta `json:"attachments,omitempty"`
 	SentMessageID     string   `json:"sent_message_id,omitempty"`
 	ProviderMessageID string   `json:"provider_message_id,omitempty"`
 	CreatedAt         string   `json:"created_at"`
@@ -300,8 +303,27 @@ func buildDraftApprovalEmailBody(draft EmailDraft, reviewURL string) string {
 		toLine = "(no recipients)"
 	}
 	bodyPreview := approvalEmailDraftBodyPreview(draft.TextBody)
-	return fmt.Sprintf("Choir email draft needs approval.\n\nFrom: %s\nTo: %s\nSubject: %s\n\nDraft message:\n%s\n\nOpen in Choir to review and send:\n%s\n\nOr reply to this email with one of:\napprove\nreject\nedit: <requested change>\n\nOpening the link does not send the draft.",
-		draft.FromAddress, toLine, draft.Subject, bodyPreview, reviewURL)
+	attachmentLine := ""
+	if refs := loadDraftAttachmentRefs(draft); len(refs) > 0 {
+		names := make([]string, 0, len(refs))
+		for _, ref := range refs {
+			names = append(names, fmt.Sprintf("%s (%s)", ref.Filename, formatAttachmentSize(ref.SizeBytes)))
+		}
+		attachmentLine = "\nAttachments: " + strings.Join(names, ", ") + "\n"
+	}
+	return fmt.Sprintf("Choir email draft needs approval.\n\nFrom: %s\nTo: %s\nSubject: %s\n%s\nDraft message:\n%s\n\nOpen in Choir to review and send:\n%s\n\nOr reply to this email with one of:\napprove\nreject\nedit: <requested change>\n\nOpening the link does not send the draft.",
+		draft.FromAddress, toLine, draft.Subject, attachmentLine, bodyPreview, reviewURL)
+}
+
+func formatAttachmentSize(b int64) string {
+	switch {
+	case b >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(b)/float64(1<<20))
+	case b >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(b)/float64(1<<10))
+	default:
+		return fmt.Sprintf("%d B", b)
+	}
 }
 
 func approvalEmailDraftBodyPreview(body string) string {
@@ -344,6 +366,14 @@ func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versi
 	if err != nil {
 		return sendDraftResponse{}, err
 	}
+	// Re-read bound bytes and verify each sha256 against the hash-bound ref so
+	// a staged file tampered after approval fails the version boundary.
+	attRefs := loadDraftAttachmentRefs(draft)
+	encoded, err := h.store.verifyAndEncodeDraftAttachments(ownerID, attRefs)
+	if err != nil {
+		return sendDraftResponse{}, fmt.Errorf("attachment verification failed: %w", err)
+	}
+	payload.Attachments = encoded
 	sendReq.TextBody = payload.Text
 	sendReq.HTMLBody = payload.HTML
 	payload.Headers["X-Choir-Maild"] = "v0-approved-draft-send"
@@ -359,6 +389,9 @@ func (h *Handler) sendApprovedDraft(ctx context.Context, ownerID, draftID, versi
 	msg, err := h.store.StoreOutboundMessage(ctx, ownerID, alias, sent.ID, sendReq)
 	if err != nil {
 		return sendDraftResponse{}, fmt.Errorf("store sent: %w", err)
+	}
+	if err := h.store.markDraftAttachmentsSent(ctx, ownerID, draftID, msg.ID, attRefs); err != nil {
+		return sendDraftResponse{}, fmt.Errorf("mark attachments sent: %w", err)
 	}
 	updated, err := h.store.MarkDraftSent(ctx, ownerID, draftID, msg.ID, sent.ID)
 	if err != nil {
@@ -505,6 +538,16 @@ func (s *Store) CreateDraft(ctx context.Context, ownerID string, alias EmailAlia
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
+	// Bind staged attachments before computing the version hash so the hash
+	// covers the exact id+sha256 set the owner approved.
+	refs, err := s.bindDraftAttachments(ctx, ownerID, draft.ID, in.AttachmentIDs, s.draftAttachmentMaxBytes())
+	if err != nil {
+		return EmailDraft{}, err
+	}
+	if len(refs) > 0 {
+		attJSON, _ := json.Marshal(refs)
+		draft.AttachmentsJSON = string(attJSON)
+	}
 	draft.VersionHash = draftVersionHash(draft)
 	db, err := s.mailboxForOwner(ownerID)
 	if err != nil {
@@ -513,12 +556,12 @@ func (s *Store) CreateDraft(ctx context.Context, ownerID string, alias EmailAlia
 	_, err = db.ExecContext(ctx, `INSERT INTO email_drafts (
 		id, owner_id, from_alias_id, from_address, to_json, cc_json, bcc_json,
 		subject, text_body, html_body, reply_to_message_id, source_kind, source_ref,
-		status, version, version_hash, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		status, version, version_hash, attachments_json, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		draft.ID, draft.OwnerID, draft.FromAliasID, draft.FromAddress, draft.ToJSON, draft.CcJSON, draft.BccJSON,
 		draft.Subject, nullString(draft.TextBody), nullString(draft.HTMLBody), nullString(draft.ReplyToMessageID),
 		nullString(draft.SourceKind), nullString(draft.SourceRef), draft.Status, draft.Version, draft.VersionHash,
-		draft.CreatedAt, draft.UpdatedAt)
+		nullString(draft.AttachmentsJSON), draft.CreatedAt, draft.UpdatedAt)
 	if err != nil {
 		return EmailDraft{}, fmt.Errorf("insert draft: %w", err)
 	}
@@ -862,7 +905,8 @@ func draftSelectSQL() string {
 	return `SELECT id, owner_id, from_alias_id, from_address, to_json, cc_json, bcc_json,
 		subject, coalesce(text_body, ''), coalesce(html_body, ''), coalesce(reply_to_message_id, ''),
 		coalesce(source_kind, ''), coalesce(source_ref, ''), status, version, version_hash,
-		coalesce(sent_message_id, ''), coalesce(provider_message_id, ''), created_at, updated_at
+		coalesce(sent_message_id, ''), coalesce(provider_message_id, ''), coalesce(attachments_json, ''),
+		created_at, updated_at
 		FROM email_drafts`
 }
 
@@ -872,7 +916,7 @@ func scanDraft(row interface{ Scan(...any) error }) (EmailDraft, error) {
 		&draft.ID, &draft.OwnerID, &draft.FromAliasID, &draft.FromAddress, &draft.ToJSON, &draft.CcJSON, &draft.BccJSON,
 		&draft.Subject, &draft.TextBody, &draft.HTMLBody, &draft.ReplyToMessageID, &draft.SourceKind, &draft.SourceRef,
 		&draft.Status, &draft.Version, &draft.VersionHash, &draft.SentMessageID, &draft.ProviderMessageID,
-		&draft.CreatedAt, &draft.UpdatedAt,
+		&draft.AttachmentsJSON, &draft.CreatedAt, &draft.UpdatedAt,
 	)
 	if err != nil {
 		return EmailDraft{}, err
@@ -896,11 +940,28 @@ func summarizeDraft(draft EmailDraft) draftResponse {
 		ReplyToMessageID:  draft.ReplyToMessageID,
 		SourceKind:        draft.SourceKind,
 		SourceRef:         draft.SourceRef,
+		Attachments:       draftAttachmentMetas(draft),
 		SentMessageID:     draft.SentMessageID,
 		ProviderMessageID: draft.ProviderMessageID,
 		CreatedAt:         draft.CreatedAt,
 		UpdatedAt:         draft.UpdatedAt,
 	}
+}
+
+// draftAttachmentMetas projects the bound attachment refs into the API shape.
+func draftAttachmentMetas(draft EmailDraft) []EmailAttachmentMeta {
+	refs := loadDraftAttachmentRefs(draft)
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]EmailAttachmentMeta, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, EmailAttachmentMeta{
+			ID: ref.ID, Filename: ref.Filename, ContentType: ref.ContentType,
+			SizeBytes: ref.SizeBytes, SHA256: ref.SHA256, Status: draft.Status,
+		})
+	}
+	return out
 }
 
 func (d EmailDraft) toSendRequest() sendEmailRequest {
@@ -937,6 +998,7 @@ func draftVersionHash(draft EmailDraft) string {
 		"reply_to_message_id": draft.ReplyToMessageID,
 		"source_kind":         draft.SourceKind,
 		"source_ref":          draft.SourceRef,
+		"attachments":         loadDraftAttachmentRefs(draft),
 		"version":             draft.Version,
 	})
 	sum := sha256.Sum256(payload)

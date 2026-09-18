@@ -159,7 +159,15 @@ for path in "${changed[@]}"; do
   case "$path" in
     frontend/src/*|frontend/package.json|frontend/package-lock.json|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html|frontend/public/*)
       mark_frontend
-      add_explanation "$path -> frontend bundle"
+      # The guest computer surface bakes the frontend into the autoputer
+      # package inside the canonical guest image (nix/autoputer-vm.nix
+      # CHOIR_BASELINE_RELEASE_ROOT). A frontend change must therefore rebuild
+      # the guest image and refresh active computers, or guests keep serving
+      # the prior bundle. This is the only working path to update a guest
+      # frontend today (updater.Apply/ImportBaseline are unreachable for
+      # constructed computers with an existing or absent current release).
+      mark_guest_boot_contract
+      add_explanation "$path -> frontend bundle + canonical guest image (guest surface embeds frontend) + active VM refresh"
       ;;
     cmd/vmctl/*|internal/vmmanager/*)
       add_host_service "vmctl"
@@ -339,7 +347,11 @@ for path in "${changed[@]}"; do
       ;;
     frontend/*)
       mark_frontend
-      add_explanation "$path -> conservative frontend impact"
+      # Guest surface embeds the frontend in the canonical guest image; see the
+      # frontend/src/* case above. Any frontend change must rebuild the guest
+      # image and refresh active computers.
+      mark_guest_boot_contract
+      add_explanation "$path -> conservative frontend impact + canonical guest image + active VM refresh"
       ;;
     *)
       mark_host_os

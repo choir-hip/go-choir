@@ -19,7 +19,7 @@ async function registerAndLoadDesktop(page, email) {
 
 async function openEmail(page) {
   await page.locator('[data-desktop-icon-id="email"]').dblclick();
-  const emailApp = page.locator('[data-email-app]').last();
+  const emailApp = page.locator('[data-mail-app]').last();
   await expect(emailApp).toBeVisible({ timeout: 10000 });
   return emailApp;
 }
@@ -75,10 +75,114 @@ test('email bootstrap performs one aliases request and one mailbox request', asy
   });
 
   const emailApp = await openEmail(page);
-  await expect(emailApp).toContainText('No messages');
+  await expect(emailApp).toContainText('Nothing in Inbox');
 
   await expect.poll(() => requests.filter((entry) => entry === 'GET /api/email/aliases').length).toBe(1);
-  await expect.poll(() => requests.filter((entry) => entry === 'GET /api/email/messages?folder=inbox').length).toBe(1);
+  await expect.poll(() => requests.filter((entry) => entry === 'GET /api/email/messages?folder=inbox&limit=100').length).toBe(1);
+});
+
+test('Mail stages client and Files attachments, binds them to a draft, and downloads outbound bytes', async ({
+  page,
+  authenticator,
+}) => {
+  const email = uniqueEmail();
+  await registerAndLoadDesktop(page, email);
+
+  const attachmentRequests = [];
+  let draftPayload = null;
+  let draft = null;
+  const staged = [];
+
+  await page.route('**/api/files**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/files') {
+      await route.fulfill({ json: [{ name: 'from-autoputer.txt', type: 'file', size: 16 }] });
+      return;
+    }
+    if (url.pathname === '/api/files/from-autoputer.txt') {
+      await route.fulfill({ body: 'from autoputer fs', contentType: 'text/plain' });
+      return;
+    }
+    await route.fulfill({ status: 404, body: 'file not found' });
+  });
+
+  await page.route('**/api/email/**', async (route) => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    if (url.pathname === '/api/email/aliases') {
+      await route.fulfill({ json: { aliases: [{ address: 'owner@example.com' }] } });
+      return;
+    }
+    if (url.pathname === '/api/email/messages') {
+      await route.fulfill({ json: { messages: [], total: 0, unread: 0 } });
+      return;
+    }
+    if (url.pathname === '/api/email/attachments' && method === 'POST') {
+      const id = `attachment-${staged.length + 1}`;
+      const attachment = {
+        id,
+        filename: route.request().headerValue('x-choir-filename'),
+        content_type: route.request().headerValue('content-type'),
+        size_bytes: route.request().postDataBuffer()?.length || 0,
+        sha256: `hash-${id}`,
+      };
+      staged.push(attachment);
+      attachmentRequests.push(`${method} ${url.pathname}`);
+      await route.fulfill({ status: 201, json: attachment });
+      return;
+    }
+    if (url.pathname.startsWith('/api/email/attachments/') && method === 'GET') {
+      attachmentRequests.push(`${method} ${url.pathname}`);
+      await route.fulfill({ body: 'outbound attachment', contentType: 'text/plain' });
+      return;
+    }
+    if (url.pathname === '/api/email/drafts' && method === 'POST') {
+      draftPayload = route.request().postDataJSON();
+      draft = {
+        id: 'draft-with-attachments',
+        status: 'draft_pending_owner_approval',
+        from_address: 'owner@example.com',
+        to_addresses: draftPayload.to_addresses,
+        subject: draftPayload.subject,
+        text_body: draftPayload.text_body,
+        attachments: staged.map((attachment) => ({ ...attachment, status: 'bound' })),
+      };
+      await route.fulfill({ json: draft });
+      return;
+    }
+    if (url.pathname === '/api/email/drafts' && method === 'GET') {
+      await route.fulfill({ json: { drafts: draft ? [draft] : [] } });
+      return;
+    }
+    if (url.pathname === '/api/email/drafts/draft-with-attachments') {
+      await route.fulfill({ json: draft });
+      return;
+    }
+    await route.fulfill({ status: 404, json: { error: 'unexpected email route' } });
+  });
+
+  const mailApp = await openEmail(page);
+  await mailApp.locator('[data-mail-compose]').first().click();
+  await mailApp.locator('[data-mail-attachment-input]').setInputFiles({
+    name: 'from-client.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('from client upload'),
+  });
+  await expect(mailApp.locator('[data-mail-staged-attachment="attachment-1"]')).toContainText('from-client.txt');
+
+  await mailApp.locator('[data-mail-attachment-from-files]').click();
+  await mailApp.locator('[data-mail-file-picker-entry="from-autoputer.txt"]').click();
+  await expect(mailApp.locator('[data-mail-staged-attachment="attachment-2"]')).toContainText('from-autoputer.txt');
+
+  await mailApp.locator('[data-mail-compose-to]').fill('recipient@example.com');
+  await mailApp.locator('[data-mail-compose-subject]').fill('Attachment contract');
+  await mailApp.locator('[data-mail-compose-body]').fill('Review both files.');
+  await mailApp.locator('[data-mail-compose-save]').click();
+
+  await expect.poll(() => draftPayload?.attachment_ids).toEqual(['attachment-1', 'attachment-2']);
+  await expect(mailApp.locator('[data-mail-attachment-download="attachment-1"]')).toBeVisible();
+  await mailApp.locator('[data-mail-attachment-download="attachment-1"]').click();
+  await expect.poll(() => attachmentRequests).toContain('GET /api/email/attachments/attachment-1');
 });
 
 test('stale slower mailbox response cannot overwrite newer folder state', async ({
@@ -120,14 +224,14 @@ test('stale slower mailbox response cannot overwrite newer folder state', async 
   const emailApp = await openEmail(page);
   await expect.poll(() => Boolean(heldInboxRoute)).toBe(true);
 
-  await emailApp.locator('[data-email-folder="sent"]').click();
-  await expect(emailApp.locator('[data-email-folder="sent"]')).toHaveClass(/active/);
+  await emailApp.locator('[data-mail-folder="sent"]').click();
+  await expect(emailApp.locator('[data-mail-folder="sent"]')).toHaveClass(/mail-selected/);
   await expect(emailApp).toContainText('Sent current message');
 
   await heldInboxRoute.fulfill({ json: { messages: [inboxMessage] } });
   await page.waitForTimeout(500);
 
-  await expect(emailApp.locator('[data-email-folder="sent"]')).toHaveClass(/active/);
+  await expect(emailApp.locator('[data-mail-folder="sent"]')).toHaveClass(/mail-selected/);
   await expect(emailApp).toContainText('Sent current message');
   await expect(emailApp).not.toContainText('Inbox stale message');
 });
@@ -184,10 +288,10 @@ test('email inbox displays truthful counts and sandboxes html reading pane', asy
 
   const emailApp = await openEmail(page);
   // Verify truthful server total and unread counts in list header
-  await expect(emailApp.locator('.list-header p')).toContainText('142 messages · 3 unread');
+  await expect(emailApp.locator('.mail-listhead-count')).toContainText('142 messages · 3 unread');
 
   // Verify reading pane sandboxed iframe
-  const iframe = emailApp.locator('iframe.body-html-iframe');
+  const iframe = emailApp.locator('iframe.mail-body-iframe');
   await expect(iframe).toBeVisible();
   await expect(iframe).toHaveAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
   await expect(iframe).not.toHaveAttribute('autoputer', /allow-same-origin/);
@@ -233,7 +337,7 @@ test('background refresh prepends newer messages preserving descending sort orde
   });
 
   const emailApp = await openEmail(page);
-  await expect(emailApp.locator('.row-subject')).toHaveText(['Old Message']);
+  await expect(emailApp.locator('.mail-row-subject')).toHaveText(['Old Message']);
 
   // Simulate window visibility event triggering background refresh
   await page.evaluate(() => {
@@ -241,7 +345,7 @@ test('background refresh prepends newer messages preserving descending sort orde
   });
 
   // Verify newer message is prepended to the top, preserving descending order
-  await expect(emailApp.locator('.row-subject')).toHaveText(['New Message Arrived', 'Old Message']);
+  await expect(emailApp.locator('.mail-row-subject')).toHaveText(['New Message Arrived', 'Old Message']);
   expect(pageErrors).toEqual([]);
 });
 
@@ -306,15 +410,15 @@ test('opening unread email marks it read and decrements unread count', async ({
   await expect.poll(() => readEndpointCalled).toBe(true);
 
   // The unread dot should disappear from the message row
-  const row = emailApp.locator('[data-email-message-id="inbox-unread"]');
-  await expect(row).not.toHaveClass(/unread/);
-  await expect(row.locator('.unread-dot')).toHaveCount(0);
+  const row = emailApp.locator('[data-mail-row="inbox-unread"]');
+  await expect(row).not.toHaveClass(/mail-unread/);
+  await expect(row.locator('.mail-unread-dot')).toHaveCount(0);
 
   // Header should update to 0 unread (so "1 messages" without "unread")
-  await expect(emailApp.locator('.list-header p')).toHaveText('1 messages');
+  await expect(emailApp.locator('.mail-listhead-count')).toHaveText('1 messages');
 
   // Reading pane footer toggle button should say "Mark unread"
-  const toggleBtn = emailApp.locator('[data-email-read-toggle]');
+  const toggleBtn = emailApp.locator('[data-mail-read-toggle]');
   await expect(toggleBtn).toHaveText('Mark unread');
 
   // Click "Mark unread"
@@ -322,9 +426,9 @@ test('opening unread email marks it read and decrements unread count', async ({
   await expect.poll(() => unreadEndpointCalled).toBe(true);
 
   // Unread dot re-appears, row has class unread, and count increments
-  await expect(row).toHaveClass(/unread/);
-  await expect(row.locator('.unread-dot')).toBeVisible();
-  await expect(emailApp.locator('.list-header p')).toContainText('1 unread');
+  await expect(row).toHaveClass(/mail-unread/);
+  await expect(row.locator('.mail-unread-dot')).toBeVisible();
+  await expect(emailApp.locator('.mail-listhead-count')).toContainText('1 unread');
   await expect(toggleBtn).toHaveText('Mark read');
 
   expect(pageErrors).toEqual([]);

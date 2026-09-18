@@ -224,13 +224,30 @@ refresh path.
 
 ## Run Checkpoint & Resumption State
 
-status: drafted — not yet executed
-current artifact state: two registered mail apps (`email`→EmailApp,
-`mail`→MailApp); no outbound attachment support anywhere; guest frontend
-pinned to pre-MailApp bundle
-next executable probe: implement `POST /api/email/attachments` + draft
-binding + resend payload, then the MailApp compose UI, then the registry
-cutover, then deployed round-trip proof
+status: implemented — pending deploy + staging proof
+current artifact state: backend attachment surface implemented
+(`POST/GET/DELETE /api/email/attachments`, draft `attachment_ids` binding,
+version-hash coverage, Resend `attachments` payload, staged→bound→sent
+lifecycle, lazy 24h GC); frontend cutover done (`email`→MailApp, EmailApp
+deleted, tests updated); deploy-impact classifier fixed so `frontend/*`
+triggers the canonical guest image rebuild + active-VM refresh (the guest
+surface embeds the frontend in the autoputer package inside the guest image —
+previously frontend changes never reached guests).
+
+Corrections to the problem statement's item 5: the retained computer
+(`computer-03335285269bdba4f94377e56879f9e6`) currently has **no `current`
+symlink** in its updater root, so its surface already falls back to the boot
+image's baseline frontend and already serves the MailApp bundle — it is not
+pinned to a pre-MailApp bundle. On the next boot after the image rebuild,
+`ensureServingBaseline` imports the new image's frontend as `current`.
+`choir computer refresh` (owner-scoped product path) reboots it onto the new
+image; CI's active-VM refresh deliberately skips `constructed-computer-version`
+computers, so the retained computer needs the manual refresh.
+
+next executable probe: commit → push → CI deploy (host OS + guest image +
+maild + frontend) → `choir computer refresh` the retained computer → staging
+round-trip proof (compose in Mail app, attach client-uploaded + autoputer-FS
+files, approve, send to 000@choir.news, verify inbound attachment metadata).
 suggested resume goal string: "Execute
 docs/mission-mail-attachments-and-app-cutover-2026-09-17.md as a
 MissionGradient mission: maild attachment staging + draft binding +

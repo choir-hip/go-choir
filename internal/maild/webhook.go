@@ -45,6 +45,9 @@ type resendWebhookEvent struct {
 
 // NewHandler creates a maild HTTP handler.
 func NewHandler(cfg *Config, store *Store) *Handler {
+	if store != nil && cfg != nil {
+		store.SetDraftAttachmentMaxBytes(cfg.DraftAttachmentMaxBytes)
+	}
 	return &Handler{cfg: cfg, store: store, resend: newResendClient(cfg, http.DefaultClient)}
 }
 
@@ -55,6 +58,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/api/email/aliases", h.HandleAliases)
 	s.HandleFunc("/api/email/drafts", h.HandleDrafts)
 	s.HandleFunc("/api/email/drafts/", h.HandleDrafts)
+	s.HandleFunc("/api/email/attachments", h.HandleAttachments)
+	s.HandleFunc("/api/email/attachments/", h.HandleAttachments)
 	s.HandleFunc("/api/email/messages", h.HandleMessages)
 	s.HandleFunc("/api/email/messages/", h.HandleMessages)
 	s.HandleFunc("/api/notifications/completion-email", h.HandleCompletionEmail)

@@ -35,6 +35,10 @@ type Config struct {
 	WebhookMaxBytes  int64
 	APIMaxBytes      int64
 	ProviderMaxBytes int64
+	// AttachmentMaxBytes caps a single uploaded attachment (default 15 MiB).
+	AttachmentMaxBytes int64
+	// DraftAttachmentMaxBytes caps total attachment bytes per draft (25 MiB).
+	DraftAttachmentMaxBytes int64
 	WebhookClockSkew time.Duration
 }
 
@@ -54,6 +58,8 @@ func LoadConfig() (*Config, error) {
 		WebhookMaxBytes:  int64EnvOr("MAILD_WEBHOOK_MAX_BYTES", DefaultWebhookMaxBody),
 		APIMaxBytes:      int64EnvOr("MAILD_API_MAX_BYTES", DefaultAPIMaxBody),
 		ProviderMaxBytes: int64EnvOr("MAILD_PROVIDER_MAX_BYTES", DefaultProviderMaxBody),
+		AttachmentMaxBytes:     int64EnvOr("MAILD_ATTACHMENT_MAX_BYTES", DefaultAttachmentMaxBytes),
+		DraftAttachmentMaxBytes: int64EnvOr("MAILD_DRAFT_ATTACHMENT_MAX_BYTES", DefaultDraftAttachmentMaxBytes),
 		WebhookClockSkew: 5 * time.Minute,
 	}
 	if err := cfg.validate(); err != nil {
@@ -103,6 +109,7 @@ func (c *Config) EnsureDirs() error {
 		c.StorageRoot,
 		filepath.Join(c.StorageRoot, "raw"),
 		filepath.Join(c.StorageRoot, "attachments", "quarantine"),
+		filepath.Join(c.StorageRoot, "attachments", "outbound"),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o700); err != nil {

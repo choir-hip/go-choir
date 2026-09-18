@@ -31,6 +31,23 @@ type Store struct {
 	mu          sync.Mutex
 	mailboxes   map[string]*sql.DB
 	storageRoot string
+	// draftAttachMaxBytes caps total attachment bytes per draft.
+	draftAttachMaxBytes int64
+}
+
+// draftAttachmentMaxBytes returns the configured per-draft cap.
+func (s *Store) draftAttachmentMaxBytes() int64 {
+	if s != nil && s.draftAttachMaxBytes > 0 {
+		return s.draftAttachMaxBytes
+	}
+	return DefaultDraftAttachmentMaxBytes
+}
+
+// SetDraftAttachmentMaxBytes configures the per-draft attachment byte cap.
+func (s *Store) SetDraftAttachmentMaxBytes(v int64) {
+	if s != nil {
+		s.draftAttachMaxBytes = v
+	}
 }
 
 // EmailAlias is a resolved local-part alias.
@@ -166,6 +183,9 @@ type EmailDraft struct {
 	VersionHash       string
 	SentMessageID     string
 	ProviderMessageID string
+	// AttachmentsJSON is the hash-bound outbound attachment set (JSON array of
+	// {id, filename, content_type, size_bytes, sha256}); covered by VersionHash.
+	AttachmentsJSON   string
 	CreatedAt         string
 	UpdatedAt         string
 }
@@ -771,7 +791,51 @@ func ensureMailboxSchema(db *sql.DB) error {
 	if err := repairSentDraftApprovalTokens(db); err != nil {
 		return err
 	}
-	return repairRejectedDrafts(db)
+	if err := repairRejectedDrafts(db); err != nil {
+		return err
+	}
+	return ensureAttachmentColumns(db)
+}
+
+// ensureAttachmentColumns adds outbound-attachment columns to existing mailbox
+// databases. New columns are additive; CREATE TABLE already covers fresh DBs.
+func ensureAttachmentColumns(db *sql.DB) error {
+	for _, col := range []struct{ table, name, ddl string }{
+		{"email_attachments", "direction", "ALTER TABLE email_attachments ADD COLUMN direction text not null default 'inbound'"},
+		{"email_attachments", "draft_id", "ALTER TABLE email_attachments ADD COLUMN draft_id text"},
+		{"email_attachments", "sha256", "ALTER TABLE email_attachments ADD COLUMN sha256 text"},
+		{"email_drafts", "attachments_json", "ALTER TABLE email_drafts ADD COLUMN attachments_json text"},
+	} {
+		exists, err := columnExists(db, col.table, col.name)
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		if _, err := db.Exec(col.ddl); err != nil {
+			return fmt.Errorf("add %s.%s: %w", col.table, col.name, err)
+		}
+	}
+	return nil
+}
+
+func columnExists(db *sql.DB, table, name string) (bool, error) {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return false, fmt.Errorf("inspect %s columns: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var col string
+		if err := rows.Scan(&col); err != nil {
+			return false, err
+		}
+		if col == name {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 func repairSentDraftApprovalTokens(db *sql.DB) error {

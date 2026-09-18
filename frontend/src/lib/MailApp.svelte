@@ -41,6 +41,14 @@
   let composeSubject = '';
   let composeBody = '';
   let sending = false;
+  let stagedAttachments = [];
+  let attachmentInput: HTMLInputElement | null = null;
+  let attachmentBusy = false;
+  let fromFilesOpen = false;
+  let fromFilesPath = [];
+  let fromFilesEntries = [];
+  let fromFilesLoading = false;
+  let fromFilesError = '';
   let filter = '';
   let bodyViewMode = 'html';
   let detailPaneOpen = Boolean(appContext?.detailPaneOpen);
@@ -92,7 +100,7 @@
     }
     if (composeOpen) {
       if (event.key === 'Escape') {
-        composeOpen = false;
+        void discardCompose();
         event.preventDefault();
       }
       return;
@@ -653,7 +661,7 @@
 
   function requireAuth(kind) {
     if (authenticated) return false;
-    dispatch('authrequired', { kind, appId: 'mail', appName: 'Mail' });
+    dispatch('authrequired', { kind, appId: 'email', appName: 'Mail' });
     return true;
   }
 
@@ -705,6 +713,7 @@
           to_addresses: composeRecipients,
           subject: composeSubject.trim(),
           text_body: composeBody.trim(),
+          attachment_ids: stagedAttachments.map((attachment) => attachment.id),
         }),
       });
       if (!res.ok) {
@@ -716,6 +725,7 @@
       composeSubject = '';
       composeBody = '';
       composeOpen = false;
+      stagedAttachments = [];
       showNotice('Saved to Drafts — review and approve to send');
       await loadMessages('drafts', { selectedId: draft.id, openPane: true, persist: false });
       await loadDetail(draft.id, { openPane: true });
@@ -777,6 +787,176 @@
     }
   }
 
+  async function responseError(res, fallback) {
+    const text = await res.text().catch(() => '');
+    if (!text) return fallback;
+    try {
+      const data = JSON.parse(text);
+      if (typeof data?.error === 'string' && data.error) return data.error;
+      if (typeof data?.message === 'string' && data.message) return data.message;
+    } catch (_err) {
+      // A plain-text API response is already the most useful error.
+    }
+    return text;
+  }
+
+  async function stageAttachment(file) {
+    if (!file || requireAuth('email_compose')) return false;
+    attachmentBusy = true;
+    try {
+      const res = await fetchMailWithTimeout('/api/email/attachments', {
+        method: 'POST',
+        headers: {
+          'X-Choir-Filename': file.name,
+          'Content-Type': file.type || 'application/octet-stream',
+        },
+        body: file,
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        showNotice(await responseError(res, 'Could not upload attachment'), 'error');
+        return false;
+      }
+      const attachment = await res.json();
+      stagedAttachments = [...stagedAttachments, attachment];
+      return true;
+    } catch (err) {
+      handleError(err);
+      return false;
+    } finally {
+      attachmentBusy = false;
+    }
+  }
+
+  async function handleClientAttachments(event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = Array.from(input.files || []);
+    input.value = '';
+    for (const file of files) {
+      await stageAttachment(file);
+    }
+  }
+
+  function filesAPIPath(path = []) {
+    return path.length
+      ? `/api/files/${path.map(encodeURIComponent).join('/')}`
+      : '/api/files';
+  }
+
+  async function loadFilesForAttachment(path = []) {
+    if (requireAuth('email_compose')) return;
+    fromFilesLoading = true;
+    fromFilesError = '';
+    try {
+      const res = await fetchMailWithTimeout(filesAPIPath(path));
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        fromFilesError = await responseError(res, 'Could not load files');
+        return;
+      }
+      const data = await res.json();
+      fromFilesPath = path;
+      fromFilesEntries = (Array.isArray(data) ? data : []).sort((left, right) => {
+        if (left.type === 'directory' && right.type !== 'directory') return -1;
+        if (left.type !== 'directory' && right.type === 'directory') return 1;
+        return String(left.name || '').localeCompare(String(right.name || ''));
+      });
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        handleError(err);
+      } else {
+        fromFilesError = err?.message || 'Could not load files';
+      }
+    } finally {
+      fromFilesLoading = false;
+    }
+  }
+
+  async function openFilesPicker() {
+    fromFilesOpen = true;
+    await loadFilesForAttachment(fromFilesPath);
+  }
+
+  async function attachFromFiles(entry) {
+    const path = [...fromFilesPath, entry.name];
+    attachmentBusy = true;
+    fromFilesError = '';
+    try {
+      const res = await fetchMailWithTimeout(filesAPIPath(path));
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        fromFilesError = await responseError(res, 'Could not read file');
+        return;
+      }
+      const bytes = await res.blob();
+      const file = new File([bytes], entry.name, {
+        type: bytes.type || entry.content_type || 'application/octet-stream',
+      });
+      attachmentBusy = false;
+      if (await stageAttachment(file)) fromFilesOpen = false;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        handleError(err);
+      } else {
+        fromFilesError = err?.message || 'Could not read file';
+      }
+    } finally {
+      attachmentBusy = false;
+    }
+  }
+
+  async function removeStagedAttachment(attachment) {
+    attachmentBusy = true;
+    try {
+      const res = await fetchMailWithTimeout(`/api/email/attachments/${encodeURIComponent(attachment.id)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        showNotice(await responseError(res, 'Could not remove attachment'), 'error');
+        return;
+      }
+      stagedAttachments = stagedAttachments.filter((item) => item.id !== attachment.id);
+    } catch (err) {
+      handleError(err);
+    } finally {
+      attachmentBusy = false;
+    }
+  }
+
+  async function discardCompose() {
+    if (attachmentBusy) return;
+    for (const attachment of [...stagedAttachments]) {
+      await removeStagedAttachment(attachment);
+    }
+    if (stagedAttachments.length) return;
+    composeOpen = false;
+    fromFilesOpen = false;
+  }
+
+  async function downloadAttachment(attachment) {
+    try {
+      const res = await fetchMailWithTimeout(`/api/email/attachments/${encodeURIComponent(attachment.id)}`);
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        showNotice(await responseError(res, 'Could not download attachment'), 'error');
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = attachment.filename || 'attachment';
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  function canDownloadAttachment() {
+    return detail?.message?.direction === 'draft' || detail?.message?.direction === 'outbound';
+  }
+
   function openCompose() {
     if (requireAuth('email_compose')) return;
     composeOpen = true;
@@ -784,6 +964,10 @@
     detailPaneOpen = true;
     notice = '';
     error = '';
+    stagedAttachments = [];
+    fromFilesOpen = false;
+    fromFilesPath = [];
+    fromFilesEntries = [];
     scheduleAppStateEmit();
   }
 
@@ -868,7 +1052,7 @@
       created_at: draft.updated_at || draft.created_at,
       sent_at: '',
       received_at: '',
-      has_attachments: false,
+      has_attachments: Boolean(draft.attachments?.length),
       draft,
     };
   }
@@ -885,7 +1069,7 @@
         cc: (draft.cc_addresses || []).map((address) => ({ address })),
         bcc: (draft.bcc_addresses || []).map((address) => ({ address })),
       },
-      attachments: [],
+      attachments: draft.attachments || [],
     };
   }
 
@@ -1083,14 +1267,15 @@
     close: '<path d="M18 6 6 18M6 6l12 12"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
     warn: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/>',
-    mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+    envelope: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
     eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
     send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
     info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+    download: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
   };
 
   function icon(name, size = 16) {
-    const path = ICONS[name] || ICONS.mail;
+    const path = ICONS[name] || ICONS.envelope;
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
   }
 
@@ -1211,7 +1396,7 @@
 >
   <aside class="mail-side" aria-label="Mailboxes">
     <div class="mail-brand">
-      <span class="mail-brand-icon">{@html icon('mail', 18)}</span>
+      <span class="mail-brand-icon">{@html icon('envelope', 18)}</span>
       <div class="mail-brand-text">
         <span class="mail-brand-name">Mail</span>
         <span class="mail-brand-address" title={displayAddress}>{displayAddress}</span>
@@ -1420,7 +1605,7 @@
               <h2>New message</h2>
               <span class="mail-compose-from">From {displayAddress}</span>
             </div>
-            <button type="button" class="mail-icon-btn" title="Discard draft" aria-label="Close composer" on:click={() => (composeOpen = false)}>
+            <button type="button" class="mail-icon-btn" title="Discard draft" aria-label="Close composer" disabled={attachmentBusy} on:click={() => void discardCompose()}>
               {@html icon('close', 15)}
             </button>
           </header>
@@ -1437,13 +1622,97 @@
               <span>Message</span>
               <textarea bind:value={composeBody} placeholder="Write your message…" data-mail-compose-body></textarea>
             </label>
+            <div class="mail-compose-attachments" data-mail-attachment-strip>
+              <div class="mail-compose-attachments-head">
+                <span>Attachments</span>
+                <div class="mail-attachment-actions">
+                  <input
+                    class="mail-attachment-input"
+                    bind:this={attachmentInput}
+                    type="file"
+                    multiple
+                    on:change={handleClientAttachments}
+                    data-mail-attachment-input
+                  />
+                  <button type="button" class="mail-btn-ghost" disabled={attachmentBusy} on:click={() => attachmentInput?.click()} data-mail-attachment-upload>
+                    Upload
+                  </button>
+                  <button type="button" class="mail-btn-ghost" disabled={attachmentBusy} on:click={() => void openFilesPicker()} data-mail-attachment-from-files>
+                    From Files
+                  </button>
+                </div>
+              </div>
+              {#if stagedAttachments.length}
+                <div class="mail-staged-attachments">
+                  {#each stagedAttachments as attachment (attachment.id)}
+                    <div class="mail-staged-attachment" data-mail-staged-attachment={attachment.id}>
+                      <span class="mail-attach-icon">{@html icon(attachmentIconName(attachment), 16)}</span>
+                      <span class="mail-staged-attachment-name" title={attachment.filename}>{attachment.filename}</span>
+                      <span class="mail-staged-attachment-size">{formatFileSize(attachment.size_bytes)}</span>
+                      <button
+                        type="button"
+                        class="mail-staged-attachment-remove"
+                        aria-label="Remove {attachment.filename}"
+                        disabled={attachmentBusy}
+                        on:click={() => void removeStagedAttachment(attachment)}
+                        data-mail-attachment-remove={attachment.id}
+                      >{@html icon('close', 13)}</button>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <span class="mail-compose-note">Files are added to this draft for your approval.</span>
+              {/if}
+              {#if attachmentBusy}
+                <span class="mail-compose-note">Working with attachment…</span>
+              {/if}
+              {#if fromFilesOpen}
+                <div class="mail-files-picker" data-mail-files-picker>
+                  <div class="mail-files-picker-head">
+                    <strong>Files</strong>
+                    <span>/{fromFilesPath.join('/')}</span>
+                    <button type="button" class="mail-icon-btn" aria-label="Close file picker" on:click={() => (fromFilesOpen = false)}>
+                      {@html icon('close', 14)}
+                    </button>
+                  </div>
+                  {#if fromFilesPath.length}
+                    <button type="button" class="mail-btn-ghost" on:click={() => void loadFilesForAttachment(fromFilesPath.slice(0, -1))}>Up</button>
+                  {/if}
+                  {#if fromFilesError}
+                    <div class="mail-error" role="alert">{fromFilesError}</div>
+                  {:else if fromFilesLoading}
+                    <span class="mail-compose-note">Loading files…</span>
+                  {:else if !fromFilesEntries.length}
+                    <span class="mail-compose-note">This folder is empty.</span>
+                  {:else}
+                    <div class="mail-files-picker-list">
+                      {#each fromFilesEntries as entry}
+                        <button
+                          type="button"
+                          class="mail-files-picker-entry"
+                          disabled={attachmentBusy}
+                          on:click={() => entry.type === 'directory'
+                            ? void loadFilesForAttachment([...fromFilesPath, entry.name])
+                            : void attachFromFiles(entry)}
+                          data-mail-file-picker-entry={entry.name}
+                        >
+                          {@html icon(entry.type === 'directory' ? 'inbox' : attachmentIconName(entry), 15)}
+                          <span>{entry.name}</span>
+                          {#if entry.type !== 'directory'}<small>{formatFileSize(entry.size)}</small>{/if}
+                        </button>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
           </div>
           <footer class="mail-compose-foot">
             <span class="mail-compose-note">New mail is saved to Drafts and sends after your approval.</span>
             <button
               type="button"
               class="mail-btn-primary"
-              disabled={sending || !activeAddress || !composeRecipients.length || !composeBody.trim()}
+              disabled={sending || attachmentBusy || !activeAddress || !composeRecipients.length || !composeBody.trim()}
               on:click={sendCompose}
               data-mail-compose-save
             >
@@ -1459,7 +1728,7 @@
         </div>
       {:else if !detail?.message}
         <div class="mail-empty mail-empty-reader">
-          <span class="mail-empty-icon">{@html icon('mail', 30)}</span>
+          <span class="mail-empty-icon">{@html icon('envelope', 30)}</span>
           <strong>Select a message to read</strong>
           <span>Nothing is sent without your approval.</span>
         </div>
@@ -1578,6 +1847,11 @@
                       {/if}
                     </span>
                   </div>
+                  {#if canDownloadAttachment()}
+                    <button type="button" class="mail-attach-action" on:click={() => void downloadAttachment(attachment)} data-mail-attachment-download={attachment.id}>
+                      <span>Download</span>
+                    </button>
+                  {/if}
                   {#if isCalendarAttachment(attachment)}
                     <button type="button" class="mail-attach-action" on:click={() => handleAddToCalendar(attachment)}>
                       {@html icon('calendar', 13)}
@@ -1610,6 +1884,7 @@
             </dl>
           </details>
         </div>
+
 
         {#if replyOpen && !isDraftView}
           <div class="mail-reply" data-mail-reply-box>
@@ -2983,6 +3258,143 @@
 
   .mail-compact .mail-attach {
     flex-wrap: wrap;
+  }
+
+  .mail-compose-attachments {
+    display: grid;
+    gap: 9px;
+    padding: 12px;
+    border: 1px solid var(--choir-border);
+    border-radius: 12px;
+    background: var(--choir-surface-card);
+  }
+
+  .mail-compose-attachments-head,
+  .mail-attachment-actions,
+  .mail-staged-attachment,
+  .mail-files-picker-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mail-compose-attachments-head {
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--choir-text-muted);
+  }
+
+  .mail-attachment-input {
+    display: none;
+  }
+
+  .mail-staged-attachments,
+  .mail-files-picker-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .mail-staged-attachment {
+    min-width: 0;
+    padding: 7px 8px;
+    border-radius: 9px;
+    background: var(--choir-surface-control);
+  }
+
+  .mail-staged-attachment .mail-attach-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+  }
+
+  .mail-staged-attachment-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--choir-text-primary);
+  }
+
+  .mail-staged-attachment-size {
+    flex: none;
+    font-size: 11px;
+    color: var(--choir-text-muted);
+  }
+
+  .mail-staged-attachment-remove {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 7px;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--choir-text-muted) !important;
+    cursor: pointer;
+  }
+
+  .mail-staged-attachment-remove:hover:not(:disabled) {
+    background: var(--choir-state-hover) !important;
+    color: var(--choir-status-danger) !important;
+  }
+
+  .mail-files-picker {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--choir-surface-control);
+  }
+
+  .mail-files-picker-head strong {
+    color: var(--choir-text-primary);
+    font-size: 12px;
+  }
+
+  .mail-files-picker-head > span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--choir-text-muted);
+  }
+
+  .mail-files-picker-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 7px 8px;
+    border-radius: 8px;
+    background: var(--choir-surface-card) !important;
+    color: var(--choir-text-primary) !important;
+    box-shadow: none !important;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .mail-files-picker-entry:hover:not(:disabled) {
+    background: var(--choir-state-hover) !important;
+  }
+
+  .mail-files-picker-entry > span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mail-files-picker-entry small {
+    flex: none;
+    color: var(--choir-text-muted);
   }
 
   @media (prefers-reduced-motion: reduce) {

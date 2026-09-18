@@ -53,16 +53,25 @@ type resendAttachmentMeta struct {
 	Size               int64  `json:"size"`
 }
 
+// resendAttachment is one base64-encoded outbound attachment in the Resend
+// send payload.
+type resendAttachment struct {
+	Filename    string `json:"filename"`
+	Content     string `json:"content"`
+	ContentType string `json:"content_type,omitempty"`
+}
+
 type resendSendRequest struct {
-	From    string         `json:"from"`
-	To      []string       `json:"to"`
-	Cc      []string       `json:"cc,omitempty"`
-	Bcc     []string       `json:"bcc,omitempty"`
-	ReplyTo []string       `json:"reply_to,omitempty"`
-	Subject string         `json:"subject"`
-	Text    string         `json:"text,omitempty"`
-	HTML    string         `json:"html,omitempty"`
-	Headers map[string]any `json:"headers,omitempty"`
+	From        string             `json:"from"`
+	To          []string           `json:"to"`
+	Cc          []string           `json:"cc,omitempty"`
+	Bcc         []string           `json:"bcc,omitempty"`
+	ReplyTo     []string           `json:"reply_to,omitempty"`
+	Subject     string             `json:"subject"`
+	Text        string             `json:"text,omitempty"`
+	HTML        string             `json:"html,omitempty"`
+	Headers     map[string]any     `json:"headers,omitempty"`
+	Attachments []resendAttachment `json:"attachments,omitempty"`
 }
 
 type resendSendResponse struct {

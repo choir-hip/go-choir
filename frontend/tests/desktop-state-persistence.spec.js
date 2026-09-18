@@ -138,7 +138,7 @@ test('stale bare email URL intent does not override restored desktop state', asy
   await page.waitForTimeout(1500);
 
   await expect(page.locator('[data-texture-app]').last()).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('[data-email-app]')).toHaveCount(0);
+  await expect(page.locator('[data-mail-app]')).toHaveCount(0);
   await expect(page).not.toHaveURL(/app=email/);
 });
 
@@ -190,11 +190,11 @@ test('email app view state persists through universal app context after reload',
 
   await openApp(page, 'email');
 
-  const emailApp = page.locator('[data-email-app]').last();
+  const emailApp = page.locator('[data-mail-app]').last();
   await expect(emailApp).toBeVisible({ timeout: 10000 });
 
-  await emailApp.locator('[data-email-folder="sent"]').click();
-  await expect(emailApp.locator('[data-email-folder="sent"]')).toHaveClass(/active/);
+  await emailApp.locator('[data-mail-folder="sent"]').click();
+  await expect(emailApp.locator('[data-mail-folder="sent"]')).toHaveClass(/mail-selected/);
 
   await expect.poll(async () => page.evaluate(async () => {
     const res = await fetch('/api/desktop/state', { credentials: 'include' });
@@ -210,9 +210,9 @@ test('email app view state persists through universal app context after reload',
     timeout: 120000,
   });
 
-  const restoredEmail = page.locator('[data-email-app]').last();
+  const restoredEmail = page.locator('[data-mail-app]').last();
   await expect(restoredEmail).toBeVisible({ timeout: 10000 });
-  await expect(restoredEmail.locator('[data-email-folder="sent"]')).toHaveClass(/active/);
+  await expect(restoredEmail.locator('[data-mail-folder="sent"]')).toHaveClass(/mail-selected/);
 });
 
 test('window shell keeps opaque backing under alpha app themes', async ({
@@ -332,9 +332,8 @@ test('restored overlapping active window is opaque and paint isolated before foc
     const trace = document.querySelector('[data-window][data-window-id="restore-trace-overlap"]');
     const content = email.querySelector('[data-window-content]');
     const appHost = email.querySelector('[data-app-host]');
-    const emailApp = email.querySelector('[data-email-app]');
-    const messageDetail = email.querySelector('.message-detail');
-    const mobileMailbar = email.querySelector('.mobile-mailbar');
+    const emailApp = email.querySelector('[data-mail-app]');
+    const messageDetail = email.querySelector('.mail-reader');
     const emailRect = email.getBoundingClientRect();
     const sample = document.elementFromPoint(
       Math.min(emailRect.right - 24, emailRect.left + 180),
@@ -353,7 +352,6 @@ test('restored overlapping active window is opaque and paint isolated before foc
       appHostAlpha: alphaFor(appHost),
       appHostIsolation: getComputedStyle(appHost).isolation,
       messageDetailAlpha: messageDetail ? alphaFor(messageDetail) : alphaFor(emailApp || appHost),
-      mobileMailbarAlpha: mobileMailbar ? alphaFor(mobileMailbar) : 1,
       hitWindowId: sample?.closest?.('[data-window]')?.getAttribute('data-window-id') || '',
     };
   });
@@ -371,7 +369,6 @@ test('restored overlapping active window is opaque and paint isolated before foc
     appHostAlpha: 1,
     appHostIsolation: 'isolate',
     messageDetailAlpha: 1,
-    mobileMailbarAlpha: 1,
     hitWindowId: 'restore-email-overlap',
   });
 });

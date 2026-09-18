@@ -254,12 +254,12 @@
         kind: 'app_launch',
         source: 'url',
         appId: 'email',
-        appName: 'Email',
-        icon: '✉️',
+        appName: 'Mail',
+        icon: '📬',
         appContext: {
           draftId,
           approvalToken,
-          windowTitle: 'Email',
+          windowTitle: 'Mail',
         },
       };
     }
