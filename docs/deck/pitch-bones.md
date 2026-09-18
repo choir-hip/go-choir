@@ -30,8 +30,10 @@ coding agent — for differential impact. All agents are coding agents;
 the dev market is crowded, segmented, and sticky.
 
 - **Technology** — the automatic computer. Open source, secure,
-  auditable — orgs learn from their data.
-- **Strategy** — build horizontal, sell diagonal. Media.
+- **Strategy** — build horizontal, sell ~~vertical~~ diagonal. Code,
+  legal, media cut across every endeavor — unlike true verticals (real
+  estate, agriculture).
+
 - **Platform** — the white-label media engine.
 - **Products** — the newspaper, the radio, the data products.
 
