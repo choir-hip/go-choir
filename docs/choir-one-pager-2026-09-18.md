@@ -1,6 +1,11 @@
-# Choir — The Automatic Radio
+# Choir — The Automatic Computer
 
 *One page. September 2026.*
+
+A general-purpose technology is a solution in search of a problem. Choir
+is honest about that: it is a persistent computer made of agents — and
+the problem it found first is its own. A better way to do complex R&D,
+and a better way to communicate and consume ideas.
 
 ## The inversion
 
@@ -13,12 +18,11 @@ the computer. That is phase one — the technology, not the product.
 ## Phase 1 — the automatic computer
 
 A persistent computer that works continuously and develops itself under
-owner supervision. The architecture is a novel multi-agent system: an
-**RLM** (recursive language model, cf. Zhang et al., MIT) runs
-long-horizon work by spawning sub-agents as async calls, and **PICL**
-keeps learning weightless — committed predictions resolve into
-provenance-linked records instead of weight updates. Every change is a
-typed event; every surface is a deterministic projection. Proven on
+owner supervision. An **RLM** (recursive language model, cf. Zhang et
+al., MIT) runs long-horizon work by spawning sub-agents as async calls,
+and **PICL** keeps learning weightless — committed predictions resolve
+into provenance-linked records instead of weight updates. Every change
+is a typed event; every surface is a deterministic projection. Proven on
 staging: whole-computer restore, encrypted file storage, key escrow,
 restart-surviving actors — all with deployed evidence.
 
@@ -29,48 +33,49 @@ is happening in the world. Two interfaces — a standard news UI (an
 article is just another document in the computer), and an API/skill/MCP
 that other agents — Claude Code, ChatGPT — use to get up-to-date
 information. Then the platform: anyone white-labels it, combining our
-curated public data with their own private sources to produce data
-products for internal teams, paywalled distribution, or public
-dissemination — or any combination.
+curated public data with their own private sources.
 
 ## Phase 3 — the automatic radio
 
-The upshot of the whole stack. A voice layer on top of the newspaper — a
-more advanced podcast player you can talk to. An AI DJ mixes clips and
-full-length episodes with text-to-speech of public and private
-documents; users record their own takes with voice and distribute them —
-internally or publicly. Inside an organization it becomes a new kind of
-multiplayer AI: **a meeting — or an asynchronous meeting — that is
-simultaneously prompting a multi-agent system working continuously in
-the background.**
+The same surface, in audio — and doubly custom. An AI DJ learns from
+your usage and stays grounded in the provenance-linked record; you can
+interrupt it, talk to it, record your own takes. The deeper direction —
+a meeting that is simultaneously prompting a multi-agent system working
+continuously in the background — is latent for now; the near-term
+product is the record.
+
+## The market
+
+The bet: the agent market is chat-shaped, but chat can't supervise
+continuous multi-agent work. The newspaper and radio are the
+demonstration and the data engine; the business is **the record** — a
+provenance-linked, machine-readable feed of what is happening — sold
+first to finance. The wedge is the **long tail** incumbents under-serve:
+non-English sources, podcasts, multimedia (e.g. silicon supply chains).
+The edge is **provenance + the box score** — a track record of who was
+right that no incumbent sells. We don't position against coding or
+personal agents — that market is crowded, token-subsidized, and in an
+ROI correction.
 
 ## The privacy answer
 
-The go-to-market motion asks organizations to operate on their
-proprietary IP — which means exposing private data to the AI platforms
-they use. Choir answers two ways: a **managed** deployment under
-zero-data-retention policies, or the **open-source OS** self-hosted —
-with or without our consulting — for maximum control. The offering spans
-the gamut: the hobbyist pays nothing; above hobbyist, the data products
-carry the subscription — the **global object graph** (a continuously
-updated OSINT index with provenance) and the **box score** (reputation
-statistics above it). PICL weightless learning is what makes the open
+The go-to-market asks organizations to operate on their proprietary IP —
+which means exposing private data to the AI platforms they use. Choir
+answers two ways: a **managed** deployment under zero-data-retention
+policies, or the **open-source OS** self-hosted — with or without our
+consulting. The offering spans the gamut: the hobbyist pays nothing;
+above hobbyist, the data products carry the subscription — **the
+record** and **the box score**. PICL weightless learning makes the open
 source a community-driven gym: the community's use sharpens the shared
 system while every organization's data stays home.
 
-## The strategy
+## Where we are — and the ask
 
-Build horizontal, sell diagonal. Media — like code and legal — cuts
-across every endeavor of life; every organization needs to know what is
-happening and to say what it knows. Own data products first, then the
-white-label platform.
-
-## The ask
-
-We are moving from prototype to production now — the prototype autoputer
-and autonews needed refactors for secure continuous operation, and the
-substrate is proven on staging. The newspaper is next; the radio is the
-payoff. We are looking for the people who want to build the computer
-that is the agents — and tune in to what it broadcasts.
+Prototype to production. The prototype computer and news product needed
+refactors for secure continuous operation — that work is landing.
+Production-ready soon; the record then needs a few weeks running live to
+be good enough to sell. We're not raising yet — we're asking whether the
+go-to-market is right before we do. The read we want most: the wedge,
+the media-shaped go-to-market, and where to start selling to funds.
 
 *github.com/choir-hip/go-choir · choir.news*
