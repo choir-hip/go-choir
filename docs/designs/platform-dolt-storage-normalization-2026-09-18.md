@@ -59,65 +59,76 @@ same milestone/disposition discipline the guest already uses.
   confirm the platform server version supports online GC, else run it during a
   brief read-only window. Keep the last-K commits reachable so the auditable
   history is not truncated below the recovery watermark.
+### Move 2: split into two Dolt stores by churn/retention profile
 
-This alone bounds the journal; it does not shrink live data.
+The object graph is *not* bulk-non-versioned data: `og_objects` already carries
+`version_id`, `content_hash`, `superseded_by`, `tombstone` — it is a versioned
+object model, and much of its content is versioned Texture documents. So the
+split is **two Dolt stores with independent GC/retention**, not "Dolt vs
+non-versioned". The win is isolating the canonical log's journal from corpus
+churn and tuning each store's retention to its purpose.
 
-### Move 2: separate bulk data from the canonical store (shrinks live data + makes the log queryable)
-
-Split the platform store into two physical stores with different retention:
-
-- **Canonical event store** (immutable, versioned, retained): the
-  `computer_event_*`, `computer_lifecycle_*`, `computer_checkpoint*`,
+- **Store A — canonical event store** (Dolt, keep-all or watermark-bounded GC):
+  the `computer_event_*`, `computer_lifecycle_*`, `computer_checkpoint*`,
   `computer_replay_watermarks`, `computer_version_*`, `computer_key_*`,
   `computer_route_*`, `consent_records`, `control_key_history`, receipt and
-  rollback-ref tables. This is the auditable log + recovery metadata. Keep it in
-  Dolt (versioning is the audit feature) with scheduled GC bounded to the
-  recovery watermark.
-- **Bulk/corpus store** (mutable, non-versioned or shallow-versioned):
-  `og_objects`, `og_edges`, `items`, `fetches`, `ingestion_events`,
-  `cycle_events`, `cycles`, `processor_requests`, `provenance_*`,
-  `publication_*`, `platform_texture_revisions`, `artifact_*`. Move to a plain
-  SQLite/Postgres store (or a Dolt store with aggressive GC + no long-term
-  history requirement). These are derived/rebuildable or high-churn; they do not
-  need immutable history.
+  rollback-ref tables. This is the auditable log + recovery metadata. Low churn,
+  small (~0.4 GB today). Versioning here *is* the audit feature; retain
+  history, GC only below the recovery watermark.
+- **Store B — object-graph/corpus store** (Dolt, aggressive scheduled GC +
+  bounded history depth): `og_objects`, `og_edges`, `items`, `fetches`,
+  `ingestion_events`, `cycle_events`, `cycles`, `processor_requests`,
+  `provenance_*`, `publication_*`, `platform_texture_revisions`, `artifact_*`.
+  High churn (~19 GB today). Keep Dolt versioning (Texture docs need history),
+  but retain only the history depth the product actually queries — e.g. GC to
+  the last N commits / last T days rather than keep-all — so its journal stays
+  bounded independently of Store A.
 
-Normalization within the bulk store (the "use less disk + easier to query"
-ask): the `items`/`og_objects` payload columns (`body`, `raw_json`,
-`reader_snapshot`, object blobs) should be **content-addressed** — store the
-blob once in a `blobs(digest, bytes)` table and reference it by digest, exactly
-as `computerevent` already does for event payloads (`PayloadCommitment` → CAS
+Normalization within Store B (the "use less disk + easier to query" ask): the
+`items`/`og_objects` payload columns (`body`, `raw_json`, `reader_snapshot`,
+object `body` blobs) should be **content-addressed** — store the blob once in a
+`blobs(digest, bytes)` table and reference it by digest, exactly as
+`computerevent` already does for event payloads (`PayloadCommitment` → CAS
 pin). Dedup removes the repeated GDELT/RSS bodies and object copies; the digest
-keeps integrity. Queries then hit small index rows, not fat payload rows.
+keeps integrity; versioned rows then carry a small digest pointer instead of a
+fat payload, so each revision is cheap. Queries hit small index rows, not fat
+payload rows.
 
 ## Recovery invariant preserved
 
-- The canonical store keeps the full event log + `computer_checkpoints` +
+- Store A keeps the full event log + `computer_checkpoints` +
   `computer_replay_watermarks` → an autoputer can be rebuilt by replaying events
   from the last checkpoint (the existing restore path).
-- Moving `og_*`/corpus out does not break recovery: those are derived
+- Moving `og_*`/corpus to Store B does not break recovery: those are derived
   projections/corpus, not the event source of truth. If a consumer needs them
-  for replay, regenerate from the canonical log or keep a non-versioned mirror.
-- GC must never collect chunks reachable from the recovery watermark — bound GC
-  to `computer_replay_watermarks` so the log is never truncated below the last
-  recoverable head.
+  for replay, regenerate from the canonical log or keep a mirror.
+- GC on **both** stores must never collect chunks reachable from the recovery
+  watermark — bound Store A GC to `computer_replay_watermarks` so the log is
+  never truncated below the last recoverable head. Store B's watermark is its
+  own (its history is not the recovery path).
 
 ## Migration path
 
 1. Land Move 1 (scheduled GC) first — stops the leak immediately, low risk.
-2. Add the bulk store alongside; dual-write or backfill `og_*`/`items`/`fetches`
-   from the dump; cut readers over; then drop the bulk tables from the canonical
-   store and `DOLT_GC()` to reclaim.
-3. Content-address the payload columns in the bulk store as part of the move.
+2. Stand up Store B (second `dolt sql-server` or a second database on the same
+   server with its own GC schedule). Backfill `og_*`/`items`/`fetches` from the
+   dump; dual-write during cutover; switch readers; then drop the bulk tables
+   from Store A and `DOLT_GC()` to reclaim.
+3. Content-address the payload columns in Store B as part of the move (new
+   `blobs` table + digest columns; backfill digests; drop fat columns).
 
 ## Open questions for triage
 
-- Does any consumer read `og_*`/`items` *through* the canonical store's Dolt
-  history (time-travel queries)? If yes, they need a versioned mirror or a
-  snapshot table before the split.
+- Does any consumer read `og_*`/`items` *through* Store A's Dolt history
+  (time-travel queries across the split boundary)? If yes, they need a
+  versioned mirror or a snapshot table before the split.
+- How much Store B history does the product actually query (Texture doc
+  revision depth)? That sets Store B's GC bound.
 - Platform `dolt sql-server` version — confirm online `DOLT_GC()` support, or
   plan a maintenance window.
-- Retention policy for the canonical log: keep-all (audit) vs. watermark-bounded
-  GC. Owner decision.
+- Retention policy for Store A: keep-all (audit) vs. watermark-bounded GC.
+  Owner decision.
+
 
 ## References
 
