@@ -13,18 +13,24 @@ that is itself a system of agents.
 
 ## 2 · The inversion
 
-The industry frames AI as replacing the worker — an agent has a
-computer it uses, and a chat thread is its interface to you.
+AI that replaces the worker — or AI that replaces the computer.
+
+The industry: AI replaces the worker. An agent has a computer it uses;
+a chat thread is its interface to you.
 
 Choir: AI replaces the computer. The multi-agent system *is* the
 computer.
 
-## 3 · The stack (index)
+## 3 · The stack
 
-Four layers, kept separate:
+General-purpose technology, sold as media.
 
-- **Technology** — the automatic computer. Open source; the moat, not
-  the market.
+We build a general-purpose computer but market it as media — not a
+coding agent — for differential impact. All agents are coding agents;
+the dev market is crowded, segmented, and sticky.
+
+- **Technology** — the automatic computer. Open source, secure,
+  auditable — orgs learn from their data.
 - **Strategy** — build horizontal, sell diagonal. Media.
 - **Platform** — the white-label media engine.
 - **Products** — the newspaper, the radio, the data products.
@@ -36,11 +42,19 @@ owner supervision. An RLM (recursive language model, cf. Zhang et al.,
 MIT) runs long-horizon work by spawning sub-agents as async calls.
 Every change a typed event; every surface a deterministic projection.
 
+Open source because unownable by design — orgs won't accept a
+proprietary layer between them and their private IP and learning.
+
 ## 5 · The learning loop (PICL)
 
-Own your own learning loop. PICL turns every committed prediction into
-a provenance-linked record — the record is the memory. Auditable,
-portable, never locked inside someone else's weights.
+Own your own learning loop.
+
+PICL — predictive in-context learning. Before acting, an agent commits
+a prediction; after acting, the outcome resolves it. Every committed
+prediction becomes a provenance-linked record — what was expected, what
+happened, whether it held. The record is the memory: learning without
+weight updates, and the same record is the audit trail and the
+self-improvement signal.
 
 Four abstractions: **Security** · **Auditability** · **Recovery** ·
 **Customizability**.
@@ -51,14 +65,14 @@ A computer that updates its own code and works continuously is cool —
 what is it good for? Tracking what is happening in the world.
 
 Two interfaces: a standard news UI (an article is just another
-document), and an API/skill/MCP other agents call for up-to-date
-information.
+document), and an API/skill/MCP other agents — Claude Code, ChatGPT —
+call for up-to-date information.
 
 ## 7 · Phase 2 — the platform
 
-Everyone's own newspaper. White-label: our curated public data plus
-your private sources → internal teams, paywalled distribution, public
-dissemination — or any combination.
+Everyone's own newspaper. White-label the wire: our curated public data
+plus your private sources → internal teams, paywalled distribution,
+public dissemination — or any combination.
 
 ## 8 · Phase 3 — the automatic radio
 
@@ -67,16 +81,23 @@ AI DJ mixes clips and full episodes with text-to-speech of public and
 private documents. Record your own takes; distribute internally or
 publicly.
 
+Not a chatbot (broadcast, not request-response). Not a podcast tool (a
+continuous station — "what's on now" is a projection of live state).
+
 ## 9 · Multiplayer
 
 A meeting — or an asynchronous meeting — that is simultaneously a
 prompt to a multi-agent system working continuously in the background.
 
+Teams talk; the station listens, mixes, and works. A new kind of
+multiplayer AI.
+
 ## 10 · The box score
 
 Accountability with a memory. Every public statement becomes a forecast
 with a resolution contract; figures accumulate track records. Matures
-into the station's editorial judgment — and its own data product.
+into the station's editorial judgment — and its own data product and
+API.
 
 ## 11 · The privacy answer
 
@@ -93,4 +114,6 @@ refactors for secure continuous operation — that work is landing.
 ## 13 · Close
 
 Build the computer that is the agents. Tune in to what it says.
+Open source. Live on staging. Phase one is landing; the newspaper is
+next; the radio is the payoff.
 github.com/choir-hip/go-choir · choir.news
