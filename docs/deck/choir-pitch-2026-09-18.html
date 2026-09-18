@@ -49,6 +49,7 @@
   .foot .num { color: var(--gold-dim); font-variant-numeric: tabular-nums; }
   .rule { width: 64px; height: 3px; background: var(--gold); margin: 32px 0; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 44px; margin-top: 40px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 40px; }
   .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 40px; }
   .grid4 .card { padding: 20px 22px; }
   .grid4 .card .d { font-size: 15px; }
@@ -198,7 +199,7 @@
     commits a prediction; after acting, the outcome resolves it. Every
     committed prediction becomes a provenance-linked record — improving
     the <b>quality of outcomes</b> through learning, and <b>safety</b>
-    through logging.
+    through logging and monitoring.
   </div>
   <div class="grid4">
     <div class="card"><div class="t">Security</div><div class="d">Encrypted storage, key escrow, owner-scoped.</div></div>
@@ -219,22 +220,22 @@
     outward. An article is a work-state document — sourced, written,
     verified, corrected, published around the clock.
   </div>
-  <div class="grid2">
+  <div class="grid3" style="margin-top:36px;">
     <div class="card">
       <div class="t">For people</div>
-      <div class="d">A standard news UI — an article is just another
-      document in the computer.</div>
+      <div class="d">The article is a document on the computer — read,
+      check, correct.</div>
     </div>
     <div class="card">
       <div class="t">For agents</div>
-      <div class="d">An API/skill/MCP other agents — Claude Code, ChatGPT —
+      <div class="d">A skill/MCP other agents — Claude Code, ChatGPT —
       call for up-to-date information.</div>
     </div>
-  </div>
-  <div class="body" style="margin-top:30px; font-size:20px;">
-    Then the platform: white-label the wire — our curated public data
-    plus your private sources → internal teams, paywalled distribution,
-    public dissemination — or any combination.
+    <div class="card">
+      <div class="t">For orgs</div>
+      <div class="d">API access to the object graph — our public data
+      plus your private sources.</div>
+    </div>
   </div>
   <div class="foot"><span>choir — multiplayer ai</span><span class="num">07</span></div>
 </section>
@@ -285,7 +286,7 @@
 
 <!-- 10 · BOX SCORE -->
 <section class="slide">
-  <div class="kicker">The judgment layer</div>
+  <div class="kicker">The box score</div>
   <h2>Of course you keep score.</h2>
   <div class="rule"></div>
   <div class="body">
@@ -294,15 +295,20 @@
   </div>
   <div class="grid2">
     <div class="card">
-      <div class="t">A public track record</div>
-      <div class="d">Every public statement becomes a forecast with a
-      resolution contract; figures accumulate track records.</div>
+      <div class="t">Public</div>
+      <div class="d">The public system tracks the discourse — every
+      statement a forecast with a resolution contract; figures
+      accumulate track records.</div>
     </div>
     <div class="card">
-      <div class="t">Airtime by track record</div>
-      <div class="d">Matures into the station's editorial judgment — and
-      its own data product and API.</div>
+      <div class="t">Private</div>
+      <div class="d">The private system tracks internal decision
+      contributions — who moved the work, and whether it held.</div>
     </div>
+  </div>
+  <div class="body" style="margin-top:28px; font-size:20px;">
+    Matures into the station's editorial judgment — and its own data
+    product and API.
   </div>
   <div class="foot"><span>choir — multiplayer ai</span><span class="num">10</span></div>
 </section>
@@ -324,8 +330,8 @@
     </div>
   </div>
   <div class="body" style="margin-top:34px; font-size:20px;">
-    The gamut: hobbyist free → data products (<b>global object graph</b>,
-    <b>box score</b>) → managed → consulting. PICL makes open source a
+    The gamut: hobbyist free → data products (<b>API access to the object graph</b>,
+    <b>the box score</b>) → managed → consulting. PICL makes open source a
     community-driven gym.
   </div>
   <div class="foot"><span>choir — multiplayer ai</span><span class="num">11</span></div>

@@ -75,7 +75,8 @@ Own your own learning loop.
 PICL — predictive in-context learning. Before acting, an agent commits
 a prediction; after acting, the outcome resolves it. Every committed
 prediction becomes a provenance-linked record — improving the quality
-of outcomes through learning, and safety through logging.
+of outcomes through learning, and safety through logging and
+monitoring.
 
 Four abstractions: **Security** · **Auditability** · **Customizability**
 (vibecode your own apps — multiagent workflows and APIs inside the
@@ -88,9 +89,9 @@ The same document surface that supervises the system, published
 outward. An article is a work-state document — sourced, written,
 verified, corrected, published around the clock.
 
-Two interfaces: a standard news UI, and an API/skill/MCP other agents —
-Claude Code, ChatGPT — call for up-to-date information. Then the
-platform: white-label the wire — our curated public data plus your
+Three interfaces: for people, the article is a document on the
+computer; for agents, a skill/MCP for up-to-date information; for orgs,
+API access to the object graph — our curated public data plus your
 private sources → internal teams, paywalled distribution, public
 dissemination — or any combination.
 
@@ -119,17 +120,19 @@ with higher coordination bandwidth, not higher overhead.
 Of course you keep score.
 
 A provenance-linked object graph already knows who said what — the
-obvious next layer tracks whether they were right. Every public
-statement becomes a forecast with a resolution contract; figures
-accumulate track records. Matures into the station's editorial
-judgment — and its own data product and API.
+obvious next layer tracks whether they were right. Public and private:
+the public system tracks the discourse; the private system tracks
+internal decision contributions. Every statement becomes a forecast
+with a resolution contract; figures accumulate track records. Matures
+into the station's editorial judgment — and its own data product and
+API.
 
 ## 11 · The privacy answer
 
 Your data stays home. Managed under zero-data-retention, or self-hosted
 open source ± consulting. The gamut: hobbyist free → data products
-(global object graph, box score) → managed → consulting. PICL makes
-open source a community-driven gym.
+(API access to the object graph, the box score) → managed →
+consulting. PICL makes open source a community-driven gym.
 
 ## 12 · Where we are
 
