@@ -494,7 +494,11 @@ in
     serviceConfig = commonServiceHardening // {
       ExecStartPre = corpusDoltInit;
       ExecStart = "${pkgs.dolt}/bin/dolt sql-server --host 127.0.0.1 --port 13307";
-      WorkingDirectory = corpusDoltDBDir;
+      # WorkingDirectory is the parent dir (StateDirectory-created): systemd
+      # chdirs before ExecStartPre runs, so pointing at corpusDoltDBDir would
+      # fail on first boot before the init script creates it. dolt sql-server
+      # serves the `corpus` repo under cwd either way.
+      WorkingDirectory = corpusDoltDir;
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/corpus-dolt";
