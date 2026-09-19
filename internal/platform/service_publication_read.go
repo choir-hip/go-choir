@@ -442,7 +442,7 @@ func (s *Service) graphProvenanceSummary(ctx context.Context, og *ObjectGraphSto
 	// These are edges TO the version, so we need to query by to_id.
 	// Since our ObjectGraphStore doesn't have a ListEdgesTo method,
 	// we query og_edges directly.
-	rows, err := og.store.db.QueryContext(ctx,
+	rows, err := og.store.corpus().QueryContext(ctx,
 		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
 		 FROM og_edges WHERE to_id = ? AND tombstone = FALSE ORDER BY created_at`, versionID)
 	if err != nil {
@@ -593,7 +593,7 @@ func (s *Service) SearchPublished(ctx context.Context, query string) (*Retrieval
 
 		// Get route via routes_to edge (find route objects pointing to this publication).
 		// Since routes point TO publications, we need to query edges by to_id.
-		routeRows, err := og.store.db.QueryContext(ctx,
+		routeRows, err := og.store.corpus().QueryContext(ctx,
 			`SELECT from_id FROM og_edges WHERE to_id = ? AND kind = 'routes_to' AND tombstone = FALSE LIMIT 1`,
 			pubObj.CanonicalID)
 		if err != nil {

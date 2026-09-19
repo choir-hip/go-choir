@@ -15,9 +15,18 @@ import (
 type Store struct {
 	db        *sql.DB
 	committer *doltbatch.Committer
+	// corpusDB serves Store B (world-wire/corpus) tables: og_*, platform
+	// texture mirrors, and the publication/provenance/artifact domain. It is
+	// the same pool as db until the authority split deploys a separate
+	// corpus DSN; corpus() returns whichever is configured.
+	corpusDB        *sql.DB
+	corpusCommitter *doltbatch.Committer
 }
 
-const schemaDDL = `
+// corpusSchemaDDL holds Store B (world-wire/corpus) tables. They bootstrap
+// into the corpus database (corpusDB), which is a separate sql-server after
+// the authority split.
+const corpusSchemaDDL = `
 CREATE TABLE IF NOT EXISTS platform_subjects (
 	subject_id VARCHAR(255) PRIMARY KEY,
 	subject_kind VARCHAR(64) NOT NULL,
@@ -368,6 +377,11 @@ CREATE TABLE IF NOT EXISTS og_edges (
 );
 CREATE INDEX IF NOT EXISTS idx_og_edges_from ON og_edges(from_id);
 CREATE INDEX IF NOT EXISTS idx_og_edges_to ON og_edges(to_id);
+`
+
+// schemaDDL holds Store A (canonical event/control) tables that bootstrap
+// into the primary database.
+const schemaDDL = `
 CREATE TABLE IF NOT EXISTS computer_key_escrows (
 	computer_id VARCHAR(255) NOT NULL,
 	protector VARCHAR(64) NOT NULL,
@@ -407,7 +421,10 @@ CREATE TABLE IF NOT EXISTS computer_key_escrow_transparency (
 
 `
 
-func OpenStore(dsn string) (*Store, error) {
+// OpenStore opens the platform store. dsn is the canonical event/control
+// database (Store A); corpusDSN is the world-wire/corpus database (Store B).
+// An empty corpusDSN shares the Store A pool — the pre-split topology.
+func OpenStore(dsn, corpusDSN string) (*Store, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("platform store: open mysql: %w", err)
@@ -417,16 +434,36 @@ func OpenStore(dsn string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("platform store: ping mysql: %w", err)
 	}
+	var corpusDB *sql.DB
+	if strings.TrimSpace(corpusDSN) != "" && strings.TrimSpace(corpusDSN) != strings.TrimSpace(dsn) {
+		corpusDB, err = sql.Open("mysql", corpusDSN)
+		if err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("platform store: open corpus mysql: %w", err)
+		}
+		configureDB(corpusDB)
+		if err := corpusDB.Ping(); err != nil {
+			_ = corpusDB.Close()
+			_ = db.Close()
+			return nil, fmt.Errorf("platform store: ping corpus mysql: %w", err)
+		}
+	}
 	s := NewStore(db)
+	if corpusDB != nil {
+		s.corpusDB = corpusDB
+		s.corpusCommitter = doltbatch.New(corpusDB, "platform-corpus", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))
+	}
 	if err := s.Bootstrap(context.Background()); err != nil {
-		_ = db.Close()
+		_ = s.Close()
 		return nil, err
 	}
 	return s, nil
 }
+
 func NewStore(db *sql.DB) *Store {
 	configureDB(db)
-	return &Store{db: db, committer: doltbatch.New(db, "platform", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))}
+	committer := doltbatch.New(db, "platform", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))
+	return &Store{db: db, committer: committer, corpusDB: db, corpusCommitter: committer}
 }
 
 func configureDB(db *sql.DB) {
@@ -442,7 +479,11 @@ func (s *Store) Close() error {
 	if s == nil || s.db == nil {
 		return nil
 	}
-	// Flush pending snapshot state before closing the pool.
+	// Flush pending snapshot state before closing the pools.
+	if s.corpusDB != nil && s.corpusDB != s.db {
+		_ = s.corpusCommitter.Close(context.Background())
+		_ = s.corpusDB.Close()
+	}
 	_ = s.committer.Close(context.Background())
 	return s.db.Close()
 }
@@ -451,7 +492,30 @@ func (s *Store) Ping(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("platform store: nil database")
 	}
-	return s.db.PingContext(ctx)
+	if err := s.db.PingContext(ctx); err != nil {
+		return err
+	}
+	if s.corpusDB != nil && s.corpusDB != s.db {
+		return s.corpusDB.PingContext(ctx)
+	}
+	return nil
+}
+
+// corpus returns the pool serving Store B tables. It equals s.db until a
+// separate corpus DSN is configured.
+func (s *Store) corpus() *sql.DB {
+	if s.corpusDB != nil {
+		return s.corpusDB
+	}
+	return s.db
+}
+
+// markCorpusDirty records a Store B mutation for its snapshot committer.
+func (s *Store) markCorpusDirty(message string) {
+	if s == nil || s.corpusCommitter == nil {
+		return
+	}
+	s.corpusCommitter.Mark(message)
 }
 
 func (s *Store) Bootstrap(ctx context.Context) error {
@@ -466,6 +530,9 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, fileCASSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap file CAS schema: %w", err)
+	}
+	if _, err := s.corpus().ExecContext(ctx, corpusSchemaDDL); err != nil {
+		return fmt.Errorf("platform store: bootstrap corpus schema: %w", err)
 	}
 	if err := s.ensurePlatformTextureRevisionColumn(ctx, "body_doc", "ALTER TABLE platform_texture_revisions ADD COLUMN body_doc LONGTEXT NOT NULL DEFAULT '' AFTER content"); err != nil {
 		return fmt.Errorf("platform store: bootstrap body_doc migration: %w", err)
@@ -506,7 +573,7 @@ func (s *Store) ensurePlatformTextureRevisionColumn(ctx context.Context, name, d
 	if name != "body_doc" && name != "source_entities" {
 		return fmt.Errorf("unsupported platform texture revision column %q", name)
 	}
-	rows, err := s.db.QueryContext(ctx, "SHOW COLUMNS FROM platform_texture_revisions LIKE '"+name+"'")
+	rows, err := s.corpus().QueryContext(ctx, "SHOW COLUMNS FROM platform_texture_revisions LIKE '"+name+"'")
 	if err != nil {
 		return err
 	}
@@ -517,7 +584,7 @@ func (s *Store) ensurePlatformTextureRevisionColumn(ctx context.Context, name, d
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, ddl)
+	_, err = s.corpus().ExecContext(ctx, ddl)
 	return err
 }
 
@@ -545,7 +612,7 @@ func (s *Store) commitBoundary(ctx context.Context, message string) error {
 
 func (s *Store) UpsertTextureDocument(ctx context.Context, docID, ownerID, title string) error {
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.corpus().ExecContext(ctx,
 		`INSERT INTO platform_texture_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE title=VALUES(title), updated_at=VALUES(updated_at)`,
 		docID, ownerID, title, now, now)
 	return err
@@ -562,7 +629,7 @@ func (s *Store) UpsertTextureRevision(ctx context.Context, rev PlatformTextureRe
 	if rev.Metadata == nil {
 		rev.Metadata = json.RawMessage("{}")
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.corpus().ExecContext(ctx,
 		`INSERT INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, body_doc, source_entities, citations, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE content=VALUES(content), body_doc=VALUES(body_doc), source_entities=VALUES(source_entities), citations=VALUES(citations), metadata=VALUES(metadata)`,
 		rev.RevisionID, rev.DocID, rev.OwnerID, rev.ParentRevisionID, rev.AuthorKind, rev.AuthorLabel, rev.Content, string(rev.BodyDoc), string(rev.SourceEntities), string(rev.Citations), string(rev.Metadata), rev.CreatedAt)
 	return err
@@ -570,7 +637,7 @@ func (s *Store) UpsertTextureRevision(ctx context.Context, rev PlatformTextureRe
 
 func (s *Store) GetTextureDocument(ctx context.Context, docID string) (*PlatformTextureDocument, error) {
 	var doc PlatformTextureDocument
-	err := s.db.QueryRowContext(ctx,
+	err := s.corpus().QueryRowContext(ctx,
 		`SELECT d.doc_id, d.owner_id, d.title, COALESCE((SELECT r.revision_id FROM platform_texture_revisions r WHERE r.doc_id = d.doc_id ORDER BY r.created_at DESC, r.revision_id DESC LIMIT 1), '') FROM platform_texture_documents d WHERE d.doc_id = ?`, docID).Scan(&doc.DocID, &doc.OwnerID, &doc.Title, &doc.CurrentRevisionID)
 	if err != nil {
 		return nil, err
@@ -579,7 +646,7 @@ func (s *Store) GetTextureDocument(ctx context.Context, docID string) (*Platform
 }
 
 func (s *Store) ListTextureRevisions(ctx context.Context, docID string) ([]PlatformTextureRevision, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.corpus().QueryContext(ctx,
 		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, body_doc, source_entities, citations, metadata, created_at FROM platform_texture_revisions WHERE doc_id = ? ORDER BY created_at ASC`, docID)
 	if err != nil {
 		return nil, err
@@ -604,7 +671,7 @@ func (s *Store) ListTextureRevisions(ctx context.Context, docID string) ([]Platf
 func (s *Store) GetTextureRevision(ctx context.Context, revisionID string) (*PlatformTextureRevision, error) {
 	var rev PlatformTextureRevision
 	var bodyDocStr, sourceEntitiesStr, citationsStr, metadataStr string
-	err := s.db.QueryRowContext(ctx,
+	err := s.corpus().QueryRowContext(ctx,
 		`SELECT revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, body_doc, source_entities, citations, metadata, created_at FROM platform_texture_revisions WHERE revision_id = ?`, revisionID).Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.ParentRevisionID, &rev.AuthorKind, &rev.AuthorLabel, &rev.Content, &bodyDocStr, &sourceEntitiesStr, &citationsStr, &metadataStr, &rev.CreatedAt)
 	if err != nil {
 		return nil, err

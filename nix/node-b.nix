@@ -28,12 +28,25 @@ let
   mailDir = "/var/lib/go-choir/mail";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
+  corpusDoltDir = "/var/lib/go-choir/corpus-dolt";
+  corpusDoltDBDir = "${corpusDoltDir}/corpus";
   platformArtifactsDir = "/var/lib/go-choir/platform-artifacts";
   platformDoltInit = pkgs.writeShellScript "platform-dolt-init" ''
     set -euo pipefail
     export HOME="${platformDoltDir}"
     install -d -m 0750 "${platformDoltDir}" "${platformDoltDBDir}"
     cd "${platformDoltDBDir}"
+    ${pkgs.dolt}/bin/dolt config --global --add user.name "Choir Platform" >/dev/null 2>&1 || true
+    ${pkgs.dolt}/bin/dolt config --global --add user.email "platform@choir.news" >/dev/null 2>&1 || true
+    if [ ! -d .dolt ]; then
+      ${pkgs.dolt}/bin/dolt init
+    fi
+  '';
+  corpusDoltInit = pkgs.writeShellScript "corpus-dolt-init" ''
+    set -euo pipefail
+    export HOME="${corpusDoltDir}"
+    install -d -m 0750 "${corpusDoltDir}" "${corpusDoltDBDir}"
+    cd "${corpusDoltDBDir}"
     ${pkgs.dolt}/bin/dolt config --global --add user.name "Choir Platform" >/dev/null 2>&1 || true
     ${pkgs.dolt}/bin/dolt config --global --add user.email "platform@choir.news" >/dev/null 2>&1 || true
     if [ ! -d .dolt ]; then
@@ -97,38 +110,47 @@ let
     # history-2026-08-26.md. This audit fails loudly (nonzero exit ->
     # failed unit -> monitoring) when history regrows past the squash
     # thresholds, so the squash runbook runs before the disk refills.
-    dbdir="${platformDoltDBDir}"
-    commits=$(cd "$dbdir" && HOME="${platformDoltDir}" dolt sql -q "SELECT COUNT(*) FROM dolt_log" 2>/dev/null | grep -oE '[0-9]+' | head -1 || echo 0)
-    oldgen_kib=$(du -sk "$dbdir/.dolt/noms/oldgen" 2>/dev/null | cut -f1 || echo 0)
-    noms_kib=$(du -sk "$dbdir/.dolt/noms" 2>/dev/null | cut -f1 || echo 0)
-    echo "platform-dolt history audit: dolt_log commits=''${commits} oldgen=''${oldgen_kib}KiB noms=''${noms_kib}KiB"
-    max_commits="''${GO_CHOIR_DOLT_MAX_COMMITS:-1000000}"
-    max_oldgen_kib="''${GO_CHOIR_DOLT_MAX_OLDGEN_KIB:-52428800}"
-    # Commit-rate SLO (2026-09-19, Move 1): per-mutation DOLT_COMMIT was
-    # replaced by the debounced snapshot committer, so dolt_log should grow
-    # by at most a few thousand commits between daily audit runs (two
-    # daemons x ~45s debounce + checkpoint boundaries). A larger delta means
-    # per-mutation commits regressed — fail before the size floors matter.
-    max_commit_delta="''${GO_CHOIR_DOLT_MAX_COMMIT_DELTA:-10000}"
-    state_file="${platformDoltDir}/history-audit-last-count"
-    prev_commits=0
-    if [ -f "$state_file" ]; then
-      prev_commits=$(cat "$state_file" 2>/dev/null || echo 0)
-    fi
-    echo "''${commits:-0}" > "$state_file.tmp" && mv "$state_file.tmp" "$state_file"
-    commit_delta=$(( ''${commits:-0} - ''${prev_commits:-0} ))
-    if [ "''${prev_commits:-0}" -gt 0 ] && [ "$commit_delta" -gt "$max_commit_delta" ]; then
-      echo "platform-dolt history audit FAILED: dolt_log grew $commit_delta commits since last audit (> $max_commit_delta); per-mutation DOLT_COMMIT regressed — check the debounced snapshot committer (internal/doltbatch)" >&2
-      exit 1
-    fi
-    if [ "''${commits:-0}" -gt "$max_commits" ]; then
-      echo "platform-dolt history audit FAILED: $commits commits > $max_commits; run the history-squash runbook (docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md)" >&2
-      exit 1
-    fi
-    if [ "''${oldgen_kib:-0}" -gt "$max_oldgen_kib" ]; then
-      echo "platform-dolt history audit FAILED: oldgen ''${oldgen_kib}KiB > ''${max_oldgen_kib}KiB; run the history-squash runbook" >&2
-      exit 1
-    fi
+    # Audit both stores: platform (Store A, canonical event/control) and
+    # corpus (Store B, world-wire). The corpus repo is absent until the
+    # authority split deploys it; missing dirs are skipped, not failures.
+    for spec in "platform:${platformDoltDBDir}:${platformDoltDir}" "corpus:${corpusDoltDBDir}:${corpusDoltDir}"; do
+      name="''${spec%%:*}"
+      rest="''${spec#*:}"
+      dbdir="''${rest%%:*}"
+      home="''${rest#*:}"
+      [ -d "$dbdir/.dolt" ] || { echo "$name-dolt history audit: skipped (no repo at $dbdir)"; continue; }
+      commits=$(cd "$dbdir" && HOME="$home" dolt sql -q "SELECT COUNT(*) FROM dolt_log" 2>/dev/null | grep -oE '[0-9]+' | head -1 || echo 0)
+      oldgen_kib=$(du -sk "$dbdir/.dolt/noms/oldgen" 2>/dev/null | cut -f1 || echo 0)
+      noms_kib=$(du -sk "$dbdir/.dolt/noms" 2>/dev/null | cut -f1 || echo 0)
+      echo "$name-dolt history audit: dolt_log commits=''${commits} oldgen=''${oldgen_kib}KiB noms=''${noms_kib}KiB"
+      max_commits="''${GO_CHOIR_DOLT_MAX_COMMITS:-1000000}"
+      max_oldgen_kib="''${GO_CHOIR_DOLT_MAX_OLDGEN_KIB:-52428800}"
+      # Commit-rate SLO (2026-09-19, Move 1): per-mutation DOLT_COMMIT was
+      # replaced by the debounced snapshot committer, so dolt_log should grow
+      # by at most a few thousand commits between daily audit runs (two
+      # daemons x ~45s debounce + checkpoint boundaries). A larger delta means
+      # per-mutation commits regressed — fail before the size floors matter.
+      max_commit_delta="''${GO_CHOIR_DOLT_MAX_COMMIT_DELTA:-10000}"
+      state_file="$home/history-audit-last-count"
+      prev_commits=0
+      if [ -f "$state_file" ]; then
+        prev_commits=$(cat "$state_file" 2>/dev/null || echo 0)
+      fi
+      echo "''${commits:-0}" > "$state_file.tmp" && mv "$state_file.tmp" "$state_file"
+      commit_delta=$(( ''${commits:-0} - ''${prev_commits:-0} ))
+      if [ "''${prev_commits:-0}" -gt 0 ] && [ "$commit_delta" -gt "$max_commit_delta" ]; then
+        echo "$name-dolt history audit FAILED: dolt_log grew $commit_delta commits since last audit (> $max_commit_delta); per-mutation DOLT_COMMIT regressed — check the debounced snapshot committer (internal/doltbatch)" >&2
+        exit 1
+      fi
+      if [ "''${commits:-0}" -gt "$max_commits" ]; then
+        echo "$name-dolt history audit FAILED: $commits commits > $max_commits; run the history-squash runbook (docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md)" >&2
+        exit 1
+      fi
+      if [ "''${oldgen_kib:-0}" -gt "$max_oldgen_kib" ]; then
+        echo "$name-dolt history audit FAILED: oldgen ''${oldgen_kib}KiB > ''${max_oldgen_kib}KiB; run the history-squash runbook" >&2
+        exit 1
+      fi
+    done
   '';
 
   # Common systemd service hardening options applied to all go-choir
@@ -459,11 +481,35 @@ in
     };
   };
 
+  # Store B: world-wire/corpus Dolt sql-server. Separate process from the
+  # canonical event/control store (Store A, port 13306) so a corpus GC-OOM or
+  # bulk scan cannot take the canonical log down — the blast-radius isolation
+  # is the point of the split (docs/designs/
+  # platform-dolt-storage-normalization-2026-09-18.md).
+  systemd.services.go-choir-corpus-dolt = {
+    description = "go-choir Corpus Dolt SQL Server (Store B)";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = commonServiceHardening // {
+      ExecStartPre = corpusDoltInit;
+      ExecStart = "${pkgs.dolt}/bin/dolt sql-server --host 127.0.0.1 --port 13307";
+      WorkingDirectory = corpusDoltDBDir;
+      Restart = "on-failure";
+      RestartSec = 3;
+      StateDirectory = "go-choir/corpus-dolt";
+      ReadWritePaths = [ corpusDoltDir ];
+      Environment = [
+        "HOME=${corpusDoltDir}"
+      ];
+    };
+  };
+
   systemd.services.go-choir-corpusd = {
     description = "go-choir Platform Service";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-platform-dolt.service" ];
-    wants = [ "network-online.target" ];
+    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpus-dolt.service" ];
+    wants = [ "network-online.target" "go-choir-corpus-dolt.service" ];
     requires = [ "go-choir-platform-dolt.service" ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "corpusd" goChoirPackages.corpusd}";
@@ -475,7 +521,14 @@ in
       # file outside git (same trust class as gateway credentials):
       # CHOIR_KEY_ESCROW_OPERATORS="name:token,..." — the unwrap gate stays
       # closed (503) while the file or entries are absent.
-      EnvironmentFile = "-/var/lib/go-choir/secrets/corpusd-escrow-operators.env";
+      EnvironmentFile = [
+        "-/var/lib/go-choir/secrets/corpusd-escrow-operators.env"
+        # Store B DSN flip: written by the authority-split cutover runbook
+        # (docs/runbooks/platform-dolt-authority-split-2026-09-18.md). Absent
+        # until the corpus store is populated; corpusd then shares the
+        # Store A pool for corpus tables.
+        "-/var/lib/go-choir/corpus-dsn.env"
+      ];
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "CORPUSD_PORT=8086"
@@ -499,6 +552,9 @@ in
       ReadWritePaths = [ sourceServiceDir ];
       EnvironmentFile = [
         "-/var/lib/go-choir/deploy.env"
+        # Store B DSN flip (same file corpusd reads): the cutover runbook
+        # writes SOURCECYCLED_DOLT_DSN here once the corpus store is live.
+        "-/var/lib/go-choir/corpus-dsn.env"
       ];
       # Shared captures publish through the host proxy to corpusd; user VMs are never the durable target.
       Environment = [

@@ -28,7 +28,7 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
 	}
-	_, err := o.store.db.ExecContext(ctx, `INSERT INTO og_objects
+	_, err := o.store.corpus().ExecContext(ctx, `INSERT INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
@@ -49,7 +49,7 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: put object: %w", err)
 	}
-	o.store.markDirty("objectgraph put object " + obj.CanonicalID)
+	o.store.markCorpusDirty("objectgraph put object " + obj.CanonicalID)
 	return nil
 }
 
@@ -57,7 +57,7 @@ func (o *ObjectGraphStore) GetObject(ctx context.Context, id string) (objectgrap
 	if o == nil || o.store == nil || o.store.db == nil {
 		return objectgraph.Object{}, fmt.Errorf("platform objectgraph: nil store")
 	}
-	return scanObjectGraphObject(o.store.db.QueryRowContext(ctx,
+	return scanObjectGraphObject(o.store.corpus().QueryRowContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
 }
 
@@ -65,7 +65,7 @@ func (o *ObjectGraphStore) DeleteObject(ctx context.Context, id string) error {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
 	}
-	_, err := o.store.db.ExecContext(ctx, `DELETE FROM og_objects WHERE canonical_id = ?`, id)
+	_, err := o.store.corpus().ExecContext(ctx, `DELETE FROM og_objects WHERE canonical_id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: delete object: %w", err)
 	}
@@ -96,7 +96,7 @@ func (o *ObjectGraphStore) ListObjects(ctx context.Context, filter objectgraph.L
 	}
 	query += ` ORDER BY updated_at DESC LIMIT ?`
 	args = append(args, objectgraph.NormalizedLimit(filter.Limit))
-	rows, err := o.store.db.QueryContext(ctx, query, args...)
+	rows, err := o.store.corpus().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("platform objectgraph: list objects: %w", err)
 	}
@@ -119,7 +119,7 @@ func (o *ObjectGraphStore) PutEdge(ctx context.Context, edge objectgraph.Edge) e
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
 	}
-	_, err := o.store.db.ExecContext(ctx, `INSERT INTO og_edges
+	_, err := o.store.corpus().ExecContext(ctx, `INSERT INTO og_edges
 		(edge_id, from_id, to_id, kind, metadata, created_at, tombstone)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
@@ -133,7 +133,7 @@ func (o *ObjectGraphStore) PutEdge(ctx context.Context, edge objectgraph.Edge) e
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: put edge: %w", err)
 	}
-	o.store.markDirty("objectgraph put edge " + edge.EdgeID)
+	o.store.markCorpusDirty("objectgraph put edge " + edge.EdgeID)
 	return nil
 }
 
@@ -161,7 +161,7 @@ func (o *ObjectGraphStore) ListEdges(ctx context.Context, filter objectgraph.Edg
 	}
 	query += ` ORDER BY created_at LIMIT ?`
 	args = append(args, objectgraph.NormalizedLimit(filter.Limit))
-	rows, err := o.store.db.QueryContext(ctx, query, args...)
+	rows, err := o.store.corpus().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("platform objectgraph: list edges: %w", err)
 	}
@@ -192,7 +192,7 @@ func (o *ObjectGraphStore) GetObjectByMetadata(ctx context.Context, kind, jsonPa
 	if o == nil || o.store == nil || o.store.db == nil {
 		return objectgraph.Object{}, fmt.Errorf("platform objectgraph: nil store")
 	}
-	return scanObjectGraphObject(o.store.db.QueryRowContext(ctx,
+	return scanObjectGraphObject(o.store.corpus().QueryRowContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
 		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?
@@ -205,7 +205,7 @@ func (o *ObjectGraphStore) ListObjectsByMetadata(ctx context.Context, kind, json
 	if o == nil || o.store == nil || o.store.db == nil {
 		return nil, fmt.Errorf("platform objectgraph: nil store")
 	}
-	rows, err := o.store.db.QueryContext(ctx,
+	rows, err := o.store.corpus().QueryContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
 		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?
@@ -231,7 +231,7 @@ func (o *ObjectGraphStore) GetEdge(ctx context.Context, fromID string, kind obje
 	if o == nil || o.store == nil || o.store.db == nil {
 		return objectgraph.Edge{}, fmt.Errorf("platform objectgraph: nil store")
 	}
-	return scanObjectGraphEdge(o.store.db.QueryRowContext(ctx,
+	return scanObjectGraphEdge(o.store.corpus().QueryRowContext(ctx,
 		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
 		 FROM og_edges WHERE from_id = ? AND kind = ? AND tombstone = FALSE
 		 LIMIT 1`, fromID, string(kind)))
@@ -242,7 +242,7 @@ func (o *ObjectGraphStore) ListEdgesFrom(ctx context.Context, fromID string) ([]
 	if o == nil || o.store == nil || o.store.db == nil {
 		return nil, fmt.Errorf("platform objectgraph: nil store")
 	}
-	rows, err := o.store.db.QueryContext(ctx,
+	rows, err := o.store.corpus().QueryContext(ctx,
 		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
 		 FROM og_edges WHERE from_id = ? AND tombstone = FALSE ORDER BY created_at`, fromID)
 	if err != nil {
@@ -265,7 +265,7 @@ func (o *ObjectGraphStore) ListEdgesByKind(ctx context.Context, fromID string, k
 	if o == nil || o.store == nil || o.store.db == nil {
 		return nil, fmt.Errorf("platform objectgraph: nil store")
 	}
-	rows, err := o.store.db.QueryContext(ctx,
+	rows, err := o.store.corpus().QueryContext(ctx,
 		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
 		 FROM og_edges WHERE from_id = ? AND kind = ? AND tombstone = FALSE ORDER BY created_at`,
 		fromID, string(kind))
@@ -290,7 +290,7 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
 	}
-	tx, err := o.store.db.BeginTx(ctx, nil)
+	tx, err := o.store.corpus().BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: begin batch tx: %w", err)
 	}
@@ -338,7 +338,7 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("platform objectgraph: batch commit: %w", err)
 	}
-	o.store.markDirty(fmt.Sprintf("objectgraph batch: %d objects, %d edges", len(batch.Objects), len(batch.Edges)))
+	o.store.markCorpusDirty(fmt.Sprintf("objectgraph batch: %d objects, %d edges", len(batch.Objects), len(batch.Edges)))
 	return nil
 }
 

@@ -15,6 +15,7 @@ const (
 type Config struct {
 	Port                  string
 	DoltDSN               string
+	CorpusDoltDSN         string
 	ArtifactsRoot         string
 	SigningKeyPath        string
 	KeyEscrowKeyPath      string
@@ -25,6 +26,7 @@ func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:                  envOr("CORPUSD_PORT", DefaultPort),
 		DoltDSN:               envOr("CORPUSD_DOLT_DSN", DefaultDoltDSN),
+		CorpusDoltDSN:         os.Getenv("CORPUSD_CORPUS_DOLT_DSN"),
 		ArtifactsRoot:         envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
 		SigningKeyPath:        envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
 		KeyEscrowKeyPath:      envOr("CHOIR_KEY_ESCROW_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "key-escrow-key")),

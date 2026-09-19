@@ -116,7 +116,7 @@ func (s *Service) SyncTextureDocument(ctx context.Context, req SyncTextureDocume
 		}
 	}
 
-	s.store.markDirty("sync texture document " + req.DocID + " with " + fmt.Sprintf("%d", len(req.Revisions)) + " revisions")
+	s.store.markCorpusDirty("sync texture document " + req.DocID + " with " + fmt.Sprintf("%d", len(req.Revisions)) + " revisions")
 
 	return &SyncTextureDocumentResponse{
 		DocID:         req.DocID,

@@ -22,7 +22,7 @@ func main() {
 	var store *platform.Store
 	var storeErr error
 	for attempt := 1; attempt <= 20; attempt++ {
-		store, storeErr = platform.OpenStore(cfg.DoltDSN)
+		store, storeErr = platform.OpenStore(cfg.DoltDSN, cfg.CorpusDoltDSN)
 		if storeErr == nil {
 			break
 		}
