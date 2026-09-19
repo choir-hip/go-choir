@@ -143,18 +143,66 @@ distributed transactions risks divergence — use a fenced cutover instead:
   (verified checkpoint + artifact bundle + external anchor + rollback window +
   recovery rehearsal) — never a GC setting.
 
+## Resolved decisions (consensus round 2, 5 models — codex, gpt56-sol, gemini38, glm53, grok46)
+
+**Store B topology: separate `dolt sql-server` process** (own systemd unit, own
+port). Per-DB noms dirs isolate storage but not the process — one heap, one
+OOM/crash domain. A Store-B GC-OOM or 27G-style scan on a shared server kills
+Store A; blast-radius isolation is the point of the split. No cross-DB queries
+exist (grep: zero `other_db.table` refs, no event→corpus joins), so the
+second-process cost is pure ops surface, not capability loss.
+
+**Store B engine: keep Dolt short-term; gate the engine swap on a query audit.**
+No production `AS OF`/`dolt_history_*` reads on `og_*`/corpus exist (Texture
+history uses the indexed parent chain, `internal/store/texture.go`). Keep Dolt
+for the split — the dump-and-split is MySQL-dialect compatible; a Postgres port
+means rewriting `JSON_UNQUOTE`/`ON DUPLICATE KEY UPDATE` across every consumer
+and is not on the invariant's critical path. Bound Store B history with Move 1
+batching + a squash-to-HEAD timer (squash when `dolt_log` > ~10k or weekly).
+Re-evaluate Postgres after a 2-week general-log audit; write the gate down with
+a condition, not folklore.
+
+**Commit cadence: event-driven on checkpoint/watermark advance + a 30–60s
+debounce fallback.** Recovery is replay-based; a Dolt snapshot is only useful
+aligned to a recovery boundary, so commits between checkpoints buy nothing.
+Port the guest's dirty-gated checkpoint pattern (`internal/store/store.go`).
+**Gate (data-loss-adjacent):** run a kill-9 crash drill on staging to prove
+Dolt 2.1.9 working-set durability before relying on it — SQL `COMMIT` persists
+the working set, `DOLT_COMMIT` is only an addressable snapshot, but that must
+be verified on the deployed version, not assumed.
+
+**Table classification — `og_objects`/`og_edges` split by `object_kind`, not
+wholesale.** `replay_eligibility.go` classifies `og_*` as ReplayEventProjection
+and `lifecycle.go`/`run_acceptance.go` read computer-scoped kinds (`choir.run`,
+`choir.agent`, `choir.event`, desktop projections) during normal operation and
+restore. **Computer-scoped kinds → Store A** (recovery-adjacent); corpus kinds
+(texture docs, publications, provenance, attestations) → Store B (world-wire
+SoT). A table-level `og_*`→B move silently puts run/agent state behind Store
+B's failure domain before the replay-rebuild path is proven. The dump splitter
+must filter `og_*` by `computer_id`/kind, not table name. Recovery-adjacent →
+Store A: `rollback_refs`, `computer_file_roots`, `verifier_attestations`
+(checkpoint-gating). Everything else → Store B as source-of-truth (not derived).
+
+**Backup identity: one signed backup-generation manifest** binding Store A head
++ Store B head + CAS root-set digest + key version, published **last** after all
+components verify. Ordering: quiesce writers + pause CAS GC → snapshot both DBs
+→ enumerate + pin the CAS closure from those snapshots → copy/hash-verify →
+sign manifest. Writes are CAS-first-then-SQL, so DB-snapshot-then-CAS is the
+non-dangling order (enforce the window < file-CAS GC grace). Restore drill:
+CAS first, then B, then A; verify every DB ref resolves to a hash-valid CAS
+object; replay `(watermark, head]` on sampled computers to a matching state
+commitment. **The atomic publication rule:** content is durable, hashed, and
+pinned before any authoritative DB reference or watermark is acknowledged.
+
 ## Open questions for triage
 
-- **Blocking pre-migration:** inventory every `og_*`/`platform_texture_revisions`
-  consumer; classify each table derived-rebuildable / mirror-able /
-  source-of-truth; set Store B retention per class. Do not backfill until done.
-- Does any consumer read `og_*`/`items` via Dolt `AS OF`/time-travel? (Believed
-  no — Texture uses the parent chain — but confirm before choosing Store B's
-  engine.)
-- Commit-batching cadence: how much event latency is acceptable between a write
-  and its addressable Dolt snapshot? (Checkpoint cadence is the natural bound.)
-- Backup manifest: Store A head + Store B head + `platform-artifacts` roots +
-  key version need one coordinated identity; add restore drills.
+- **Blocking pre-migration:** the `og_*` per-kind consumer inventory (which
+  `object_kind`s are computer-scoped vs corpus) — this decides the dump-split
+  filter and is the correctness linchpin.
+- Store B engine gate: run the 2-week general-log audit post-split; decide
+  Dolt-vs-Postgres on evidence.
+- Dolt 2.1.9 working-set crash durability: staging kill-9 drill before relying
+  on batched commits.
 
 ## References
 
