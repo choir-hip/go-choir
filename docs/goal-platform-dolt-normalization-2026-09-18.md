@@ -206,6 +206,64 @@ receipts:
     proves: dump-split table filter enumerated; corrects design doc's
       Store-A placement of verifier_attestations/consent_records/rollback_refs
       (all publication-domain by live target_kind census).
+  - id: move1-batching-deployed
+    at: 2026-09-19
+    kind: staging_proof
+    what: >-
+      doltbatch.Committer (45s debounce, CommitNow on checkpoint/watermark/
+      file-root boundaries) deployed at 0be14e7f; corpusd + sourcecycled
+      migrated. Store A dolt_log: 25,244 commits 00:00-04:00 (pre-deploy
+      per-mutation tail) -> 1 commit 04:00-04:20 post-flip. Store B: 29
+      commits over import + backfill load.
+    proves: per-mutation DOLT_COMMIT eliminated; dolt_log flat under load.
+  - id: move2-authority-split
+    at: 2026-09-19
+    kind: staging_proof
+    what: >-
+      Two sql-servers live: platform (13306, Store A) + corpus (13307,
+      Store B). corpusd carries CORPUSD_CORPUS_DOLT_DSN=13307/corpus;
+      sourcecycled SOURCECYCLED_DOLT_DSN=13307/corpus. Event/checkpoint/
+      replay paths verified on s.db (Store A); og_*/items on corpus().
+      Cutover: fenced dump 20.8G -> split (21 A tables / 39 B tables) ->
+      offline import -> DSN flip via /var/lib/go-choir/corpus-dsn.env.
+      Deploy mid-cutover (1cf4080b, 03:01) restarted writers before the
+      flip, landing ~53min of world-wire writes in Store A; delta-synced
+      51,835 rows A->B via scripts/og-delta-sync; B now ahead of A
+      (converged). corpus-dolt WorkingDirectory fix c40f2355 (chdir
+      precedes ExecStartPre).
+    proves: authority split live; blast-radius isolation achieved; the
+      deploy-during-cutover hazard is documented + repaired.
+  - id: move3-cas-externalization
+    at: 2026-09-19
+    kind: staging_proof
+    what: >-
+      og_objects.body externalized to platform-artifacts CAS at >=1KiB:
+      body_ref/body_size columns, PutObject/PutBatch write sha256/og/
+      <hash>.bin, reads hydrate. Live: 668 body_ref rows, CAS file hash
+      == ref name == sha256(body), size matches body_size. Backfill
+      (scripts/og-body-backfill) externalizing existing rows, guarded on
+      body_ref='' AND content_hash so concurrent writers win.
+      DEVIATION from design: items.body/raw_json/reader_snapshot stay
+      inline — raw_json is empty and reader_snapshot is a TINYINT flag on
+      the live store (design premise stale), and items.body feeds the live
+      lower(i.body) LIKE search in cycle.Storage.SearchItems; externalizing
+      breaks search recall without a search-path redesign. og_objects.body
+      (6.0G, the dominant fat payload) is externalized; items.body (1.34G)
+      deferred to a search-path redesign.
+    proves: dominant fat payload off the chunk store; CAS refs resolve;
+      deviation documented with live evidence.
+  - id: restore-drill-post-split
+    at: 2026-09-19
+    kind: staging_proof
+    what: >-
+      Store A event chain for computer-03335285269bdba4f94377e56879f9e6:
+      161,464 contiguous events (seq 1..161464, no gaps), digests valid,
+      watermark at 148431 -> replay range (148431,161464] intact on Store A.
+      Event artifact ref resolves through CAS
+      (sha256/computer-event/<digest>). computer_checkpoints +
+      computer_replay_watermarks on Store A.
+    proves: replay-from-checkpoint recovery invariant preserved post-split;
+      autoputer rebuild path intact.
 
 
 weak_measures:
