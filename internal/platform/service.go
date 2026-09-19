@@ -116,9 +116,7 @@ func (s *Service) SyncTextureDocument(ctx context.Context, req SyncTextureDocume
 		}
 	}
 
-	if err := s.store.commitDolt(ctx, "sync texture document "+req.DocID+" with "+fmt.Sprintf("%d", len(req.Revisions))+" revisions"); err != nil {
-		return nil, err
-	}
+	s.store.markDirty("sync texture document " + req.DocID + " with " + fmt.Sprintf("%d", len(req.Revisions)) + " revisions")
 
 	return &SyncTextureDocumentResponse{
 		DocID:         req.DocID,

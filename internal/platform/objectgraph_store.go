@@ -49,9 +49,7 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: put object: %w", err)
 	}
-	if err := o.store.commitDolt(ctx, "objectgraph put object "+obj.CanonicalID); err != nil {
-		return fmt.Errorf("platform objectgraph: put object commit: %w", err)
-	}
+	o.store.markDirty("objectgraph put object " + obj.CanonicalID)
 	return nil
 }
 
@@ -135,9 +133,7 @@ func (o *ObjectGraphStore) PutEdge(ctx context.Context, edge objectgraph.Edge) e
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: put edge: %w", err)
 	}
-	if err := o.store.commitDolt(ctx, "objectgraph put edge "+edge.EdgeID); err != nil {
-		return fmt.Errorf("platform objectgraph: put edge commit: %w", err)
-	}
+	o.store.markDirty("objectgraph put edge " + edge.EdgeID)
 	return nil
 }
 
@@ -342,9 +338,7 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("platform objectgraph: batch commit: %w", err)
 	}
-	if err := o.store.commitDolt(ctx, fmt.Sprintf("objectgraph batch: %d objects, %d edges", len(batch.Objects), len(batch.Edges))); err != nil {
-		return fmt.Errorf("platform objectgraph: batch dolt commit: %w", err)
-	}
+	o.store.markDirty(fmt.Sprintf("objectgraph batch: %d objects, %d edges", len(batch.Objects), len(batch.Edges)))
 	return nil
 }
 

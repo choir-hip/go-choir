@@ -423,5 +423,6 @@ func (s *Service) insertCredentialLifecycleReceipt(ctx context.Context, computer
 	if err != nil {
 		return fmt.Errorf("credential envelope: persist lifecycle receipt: %w", err)
 	}
-	return s.store.commitDolt(ctx, action+" for "+computerID)
+	s.store.markDirty(action + " for " + computerID)
+	return nil
 }

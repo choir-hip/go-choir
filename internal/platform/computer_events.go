@@ -277,9 +277,7 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	if err := tx.Commit(); err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: commit: %w", err)
 	}
-	if err := c.store.commitDolt(ctx, "append computer event "+request.EventDigest); err != nil {
-		return computerevent.Receipt{}, err
-	}
+	c.store.markDirty("append computer event " + request.EventDigest)
 	return receipt, nil
 }
 

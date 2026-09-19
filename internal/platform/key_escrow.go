@@ -53,7 +53,8 @@ func (s *Store) UpsertKeyEscrow(ctx context.Context, computerID, protector strin
 		computerID, protector, string(wrappedJSON), keyDigest, now, now); err != nil {
 		return fmt.Errorf("key escrow: upsert: %w", err)
 	}
-	return s.commitDolt(ctx, "upsert key escrow "+computerID+"/"+protector)
+	s.markDirty("upsert key escrow " + computerID + "/" + protector)
+	return nil
 }
 
 func (s *Store) GetKeyEscrow(ctx context.Context, computerID, protector string) (wrappedJSON []byte, keyDigest string, err error) {
@@ -115,9 +116,7 @@ func (s *Store) CreateKeyUnwrapRequest(ctx context.Context, computerID, requeste
 		}
 		return KeyUnwrapRequest{}, fmt.Errorf("key escrow: create unwrap request: %w", err)
 	}
-	if err := s.commitDolt(ctx, "create key unwrap request "+request.RequestID); err != nil {
-		return KeyUnwrapRequest{}, err
-	}
+	s.markDirty("create key unwrap request " + request.RequestID)
 	return request, nil
 }
 
@@ -164,9 +163,7 @@ func (s *Store) ApproveKeyUnwrapRequest(ctx context.Context, requestID, approver
 	if err := tx.Commit(); err != nil {
 		return KeyUnwrapRequest{}, fmt.Errorf("key escrow: commit approval: %w", err)
 	}
-	if err := s.commitDolt(ctx, "approve key unwrap request "+requestID); err != nil {
-		return KeyUnwrapRequest{}, err
-	}
+	s.markDirty("approve key unwrap request " + requestID)
 	return request, nil
 }
 
@@ -219,7 +216,8 @@ func (s *Store) MarkKeyUnwrapRevealed(ctx context.Context, requestID string) err
 		}
 		return ErrKeyUnwrapNotApproved
 	}
-	return s.commitDolt(ctx, "reveal key unwrap request "+requestID)
+	s.markDirty("reveal key unwrap request " + requestID)
+	return nil
 }
 
 func (s *Store) AppendKeyEscrowTransparency(ctx context.Context, payloadJSON []byte) (seq int64, entryHash string, err error) {
@@ -260,9 +258,7 @@ func (s *Store) AppendKeyEscrowTransparency(ctx context.Context, payloadJSON []b
 	if err := tx.Commit(); err != nil {
 		return 0, "", fmt.Errorf("key escrow: commit transparency: %w", err)
 	}
-	if err := s.commitDolt(ctx, fmt.Sprintf("append key escrow transparency %d", seq)); err != nil {
-		return 0, "", err
-	}
+	s.markDirty(fmt.Sprintf("append key escrow transparency %d", seq))
 	return seq, entryHash, nil
 }
 

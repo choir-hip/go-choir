@@ -168,7 +168,7 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	if err := tx.Commit(); err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
 	}
-	if err := a.cas.store.commitDolt(ctx, "publish computer checkpoint "+checkpoint.Digest); err != nil {
+	if err := a.cas.store.commitBoundary(ctx, "publish computer checkpoint "+checkpoint.Digest); err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
 	}
 	return response, nil
@@ -316,7 +316,7 @@ func (a *CheckpointAuthority) PublishRouteProjection(ctx context.Context, reques
 	if err != nil {
 		return selfdevprotocol.RouteProjectionResponse{}, err
 	}
-	if err := a.cas.store.commitDolt(ctx, "publish route projection certificate "+certificateDigest); err != nil {
+	if err := a.cas.store.commitBoundary(ctx, "publish route projection certificate "+certificateDigest); err != nil {
 		return selfdevprotocol.RouteProjectionResponse{}, err
 	}
 	return selfdevprotocol.RouteProjectionResponse{Certificate: certificate, Receipt: receipt}, nil

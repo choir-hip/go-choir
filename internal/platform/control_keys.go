@@ -81,7 +81,8 @@ func (s *Store) insertControlKey(ctx context.Context, key ControlKey) error {
 	if err != nil {
 		return fmt.Errorf("control key history: insert: %w", err)
 	}
-	return s.commitDolt(ctx, "insert control key "+key.SignerDomain+"/"+key.KeyID)
+	s.markDirty("insert control key " + key.SignerDomain + "/" + key.KeyID)
+	return nil
 }
 
 func (s *Store) activateControlKey(ctx context.Context, domain, computerID, keyID string, sequence uint64, at time.Time) error {
@@ -95,7 +96,8 @@ func (s *Store) activateControlKey(ctx context.Context, domain, computerID, keyI
 	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
 		return fmt.Errorf("control key history: activation CAS failed")
 	}
-	return s.commitDolt(ctx, "activate control key "+domain+"/"+keyID)
+	s.markDirty("activate control key " + domain + "/" + keyID)
+	return nil
 }
 
 func (s *Store) revokeControlKey(ctx context.Context, domain, computerID, keyID, replacementKeyID string, firstInvalidSequence uint64, firstInvalidTime time.Time) error {
@@ -109,7 +111,8 @@ func (s *Store) revokeControlKey(ctx context.Context, domain, computerID, keyID,
 	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
 		return fmt.Errorf("control key history: revocation CAS failed")
 	}
-	return s.commitDolt(ctx, "revoke control key "+domain+"/"+keyID)
+	s.markDirty("revoke control key " + domain + "/" + keyID)
+	return nil
 }
 
 func (s *Store) ControlKey(ctx context.Context, domain, computerID, keyID string) (ControlKey, error) {

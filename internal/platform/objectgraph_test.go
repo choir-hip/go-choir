@@ -205,9 +205,8 @@ func TestObjectGraphStore_IdempotentEdgeUpsert(t *testing.T) {
 		t.Fatalf("PutEdge first: %v", err)
 	}
 
-	// Second PutEdge with identical values — must not fail with "nothing to
-	// commit". Dolt returns an error on DOLT_COMMIT when the working set has
-	// no changes; commitDolt must tolerate this for idempotent retries.
+	// Second PutEdge with identical values — must not fail. The snapshot
+	// committer tolerates "nothing to commit" for idempotent retries.
 	_, err = ogService.PutEdge(ctx, capture.CanonicalID, source.CanonicalID, "captured_from", map[string]any{
 		"relation": "test",
 	})

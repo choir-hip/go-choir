@@ -9,11 +9,13 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/yusefmosiah/go-choir/internal/doltbatch"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
 
 type Storage struct {
-	DB *sql.DB
+	DB        *sql.DB
+	committer *doltbatch.Committer
 }
 
 // NewStorage opens a cycle storage database using a MySQL/Dolt DSN.
@@ -31,7 +33,7 @@ func NewStorage(dsn string) (*Storage, error) {
 		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
 
-	return &Storage{DB: db}, nil
+	return &Storage{DB: db, committer: doltbatch.New(db, "cycle", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))}, nil
 }
 
 // NewStorageFromDB wraps an already-opened *sql.DB (used by tests with the
@@ -40,26 +42,19 @@ func NewStorageFromDB(db *sql.DB) (*Storage, error) {
 	if err := createTables(db); err != nil {
 		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
-	return &Storage{DB: db}, nil
+	return &Storage{DB: db, committer: doltbatch.New(db, "cycle", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))}, nil
 }
 
-// commitDolt commits the current working set to the Dolt repository. "Nothing
-// to commit" (e.g. an idempotent upsert that did not change any row values) is
-// treated as success because the data is already in the desired state.
-func (s *Storage) commitDolt(ctx context.Context, message string) error {
-	if s == nil || s.DB == nil {
-		return fmt.Errorf("cycle storage: nil database")
+// markDirty records a mutation for the debounced snapshot committer. SQL
+// COMMIT already made the write durable; the DOLT_COMMIT snapshot is
+// bookkeeping that no longer runs per mutation (the per-mutation commits
+// grew the platform store to 6.9M commits / 218G of uncollectible history —
+// see docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md).
+func (s *Storage) markDirty(message string) {
+	if s == nil || s.committer == nil {
+		return
 	}
-	if message == "" {
-		message = "sourcecycled change"
-	}
-	if _, err := s.DB.ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message); err != nil {
-		if strings.Contains(err.Error(), "nothing to commit") {
-			return nil
-		}
-		return fmt.Errorf("cycle storage: dolt commit: %w", err)
-	}
-	return nil
+	s.committer.Mark(message)
 }
 
 func createTables(db *sql.DB) error {
@@ -333,6 +328,8 @@ func (s *Storage) Close() error {
 	if s == nil || s.DB == nil {
 		return nil
 	}
+	// Flush pending snapshot state before closing the pool.
+	_ = s.committer.Close(context.Background())
 	return s.DB.Close()
 }
 
@@ -390,7 +387,8 @@ func (s *Storage) SaveSources(registry *sources.Registry) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.commitDolt(context.Background(), "save sources")
+	s.markDirty("save sources")
+	return nil
 }
 
 // ApplySourcePollState overlays durable poll cursors from storage onto the in-memory registry.
@@ -465,7 +463,8 @@ func (s *Storage) SaveSourcePollState(registry *sources.Registry) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.commitDolt(context.Background(), "save source poll state")
+	s.markDirty("save source poll state")
+	return nil
 }
 
 func (s *Storage) SaveFetches(fetches []sources.FetchRecord) error {
@@ -508,7 +507,8 @@ func (s *Storage) SaveCycleFetches(cycleID string, fetches []sources.FetchRecord
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.commitDolt(context.Background(), "save cycle fetches")
+	s.markDirty("save cycle fetches")
+	return nil
 }
 
 func (s *Storage) SaveItems(items []sources.Item) error {
@@ -552,7 +552,8 @@ func (s *Storage) SaveItems(items []sources.Item) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.commitDolt(context.Background(), "save items")
+	s.markDirty("save items")
+	return nil
 }
 
 func (s *Storage) SaveIssue(content string, itemIDs []string, model string, tokens int) error {
@@ -571,7 +572,8 @@ func (s *Storage) SaveIssueManifest(content string, itemIDs []string, citationMa
 	if err != nil {
 		return err
 	}
-	return s.commitDolt(context.Background(), "save issue manifest")
+	s.markDirty("save issue manifest")
+	return nil
 }
 
 func (s *Storage) StartCycle(ctx context.Context) (string, error) {
@@ -581,7 +583,8 @@ func (s *Storage) StartCycle(ctx context.Context) (string, error) {
 	if err != nil {
 		return cycleID, err
 	}
-	return cycleID, s.commitDolt(ctx, "start cycle")
+	s.markDirty("start cycle")
+	return cycleID, nil
 }
 
 func (s *Storage) FinishCycle(ctx context.Context, cycleID, status string, itemCount, fetchCount int, cycleErr error) error {
@@ -597,7 +600,8 @@ func (s *Storage) FinishCycle(ctx context.Context, cycleID, status string, itemC
 	if err != nil {
 		return err
 	}
-	return s.commitDolt(ctx, "finish cycle")
+	s.markDirty("finish cycle")
+	return nil
 }
 
 func (s *Storage) RecordCycleEvent(ctx context.Context, cycleID, sourceID, kind, message string, metadata map[string]any) error {
@@ -608,7 +612,8 @@ func (s *Storage) RecordCycleEvent(ctx context.Context, cycleID, sourceID, kind,
 	if err != nil {
 		return err
 	}
-	return s.commitDolt(ctx, "record cycle event")
+	s.markDirty("record cycle event")
+	return nil
 }
 
 func (s *Storage) ListCycleEvents(ctx context.Context, cycleID string, limit int) ([]CycleEvent, error) {
@@ -675,7 +680,8 @@ func (s *Storage) SaveIngestionEvents(ctx context.Context, events []IngestionEve
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.commitDolt(ctx, "save ingestion events")
+	s.markDirty("save ingestion events")
+	return nil
 }
 
 func (s *Storage) CountIngestionEvents(ctx context.Context) (int, error) {
@@ -778,7 +784,8 @@ func (s *Storage) SaveProcessorRequests(ctx context.Context, requests []Processo
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.commitDolt(ctx, "save processor requests")
+	s.markDirty("save processor requests")
+	return nil
 }
 
 func (s *Storage) UpdateProcessorRequestRuntimeRun(ctx context.Context, requestID, status, runtimeRunID string) error {
@@ -790,7 +797,8 @@ func (s *Storage) UpdateProcessorRequestRuntimeRun(ctx context.Context, requestI
 	if err != nil {
 		return fmt.Errorf("update processor request status: %w", err)
 	}
-	return s.commitDolt(ctx, "update processor request runtime run")
+	s.markDirty("update processor request runtime run")
+	return nil
 }
 
 func (s *Storage) UpdateProcessorRequestRuntimeStatus(ctx context.Context, requestID, runtimeStatus, runtimeRunID string) error {
@@ -802,7 +810,8 @@ func (s *Storage) UpdateProcessorRequestRuntimeStatus(ctx context.Context, reque
 	if err != nil {
 		return fmt.Errorf("update processor request runtime status: %w", err)
 	}
-	return s.commitDolt(ctx, "update processor request runtime status")
+	s.markDirty("update processor request runtime status")
+	return nil
 }
 
 func (s *Storage) UpdateProcessorRequestVerdictStatus(ctx context.Context, requestID, status string) error {
@@ -814,7 +823,8 @@ func (s *Storage) UpdateProcessorRequestVerdictStatus(ctx context.Context, reque
 	if err != nil {
 		return fmt.Errorf("update processor request verdict status: %w", err)
 	}
-	return s.commitDolt(ctx, "update processor request verdict status")
+	s.markDirty("update processor request verdict status")
+	return nil
 }
 
 func (s *Storage) SupersedeQueuedProcessorRequests(ctx context.Context, replacements []ProcessorRequest) (int, error) {
@@ -846,9 +856,7 @@ func (s *Storage) SupersedeQueuedProcessorRequests(ctx context.Context, replacem
 		total += int(affected)
 	}
 	if total > 0 {
-		if err := s.commitDolt(ctx, "supersede queued processor requests"); err != nil {
-			return total, err
-		}
+		s.markDirty("supersede queued processor requests")
 	}
 	return total, nil
 }
@@ -897,7 +905,8 @@ func (s *Storage) SaveReconcilerRequests(ctx context.Context, requests []Reconci
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.commitDolt(ctx, "save reconciler requests")
+	s.markDirty("save reconciler requests")
+	return nil
 }
 
 func (s *Storage) UpdateReconcilerRequestStatus(ctx context.Context, requestID, status string) error {
@@ -914,14 +923,16 @@ func (s *Storage) UpdateReconcilerRequestRuntimeRun(ctx context.Context, request
 		if err != nil {
 			return fmt.Errorf("update reconciler request status: %w", err)
 		}
-		return s.commitDolt(ctx, "update reconciler request status")
+		s.markDirty("update reconciler request status")
+		return nil
 	}
 	_, err := s.DB.ExecContext(ctx, `UPDATE reconciler_requests SET status = ?, runtime_run_id = ?, updated_at = ? WHERE request_id = ?`,
 		strings.TrimSpace(status), strings.TrimSpace(runtimeRunID), time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(requestID))
 	if err != nil {
 		return fmt.Errorf("update reconciler request status: %w", err)
 	}
-	return s.commitDolt(ctx, "update reconciler request status")
+	s.markDirty("update reconciler request status")
+	return nil
 }
 
 func (s *Storage) SupersedeQueuedReconcilersWithSupersededProcessors(ctx context.Context) (int, error) {
@@ -1076,7 +1087,8 @@ func (s *Storage) ResetProcessorRequestSubmission(ctx context.Context, requestID
 	if err != nil {
 		return err
 	}
-	return s.commitDolt(ctx, "reset processor request submission")
+	s.markDirty("reset processor request submission")
+	return nil
 }
 
 // ResetStaleSubmittedProcessorRequests recovers runtime-capacity state after a
@@ -1103,9 +1115,7 @@ func (s *Storage) ResetStaleSubmittedProcessorRequests(ctx context.Context, cuto
 		return 0, err
 	}
 	if affected > 0 {
-		if err := s.commitDolt(ctx, "reset stale submitted processor requests"); err != nil {
-			return 0, err
-		}
+		s.markDirty("reset stale submitted processor requests")
 	}
 	return int(affected), nil
 }

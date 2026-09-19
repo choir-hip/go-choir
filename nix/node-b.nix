@@ -104,6 +104,23 @@ let
     echo "platform-dolt history audit: dolt_log commits=''${commits} oldgen=''${oldgen_kib}KiB noms=''${noms_kib}KiB"
     max_commits="''${GO_CHOIR_DOLT_MAX_COMMITS:-1000000}"
     max_oldgen_kib="''${GO_CHOIR_DOLT_MAX_OLDGEN_KIB:-52428800}"
+    # Commit-rate SLO (2026-09-19, Move 1): per-mutation DOLT_COMMIT was
+    # replaced by the debounced snapshot committer, so dolt_log should grow
+    # by at most a few thousand commits between daily audit runs (two
+    # daemons x ~45s debounce + checkpoint boundaries). A larger delta means
+    # per-mutation commits regressed — fail before the size floors matter.
+    max_commit_delta="''${GO_CHOIR_DOLT_MAX_COMMIT_DELTA:-10000}"
+    state_file="${platformDoltDir}/history-audit-last-count"
+    prev_commits=0
+    if [ -f "$state_file" ]; then
+      prev_commits=$(cat "$state_file" 2>/dev/null || echo 0)
+    fi
+    echo "''${commits:-0}" > "$state_file.tmp" && mv "$state_file.tmp" "$state_file"
+    commit_delta=$(( ''${commits:-0} - ''${prev_commits:-0} ))
+    if [ "''${prev_commits:-0}" -gt 0 ] && [ "$commit_delta" -gt "$max_commit_delta" ]; then
+      echo "platform-dolt history audit FAILED: dolt_log grew $commit_delta commits since last audit (> $max_commit_delta); per-mutation DOLT_COMMIT regressed — check the debounced snapshot committer (internal/doltbatch)" >&2
+      exit 1
+    fi
     if [ "''${commits:-0}" -gt "$max_commits" ]; then
       echo "platform-dolt history audit FAILED: $commits commits > $max_commits; run the history-squash runbook (docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md)" >&2
       exit 1

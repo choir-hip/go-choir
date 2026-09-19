@@ -95,8 +95,8 @@ boundaries:
 now:
   status: working
   slice: >-
-    Move 0 — blocking pre-migration: og_* per-kind consumer inventory +
-    Dolt 2.1.9 working-set durability drill. Both gate Move 1/2.
+    Move 1 — commit batching: coalesce ~52 per-mutation DOLT_COMMIT sites
+    behind one debounced snapshot committer. Move 0 gates passed 2026-09-19.
   source_ref: main@de9ed92d
   deploy_identity: c592331b1f9318de013a54faaa162b6735e40342
   candidate:
@@ -115,8 +115,12 @@ now:
     edge: missing_oracle
     delta_o: run the drill on the deployed 2.1.9 binary, not docs
     scope_if_supported: batched commits are safe; the unaddressable window <= replay window
-    status: proposed
-    evidence_refs: []
+    status: supported
+    evidence_refs:
+      - >-
+        Node B scratch dolt sql-server 2.1.9 drill 2026-09-19 — COMMIT'd and
+        autocommitted rows survived kill -9 + restart; in-flight uncommitted
+        row was lost (expected); dolt_log stayed at 1 (init commit only).
   decision:
     what: three-move sequence — Move 1 commit batching, Move 2 authority split, Move 3 CAS payloads
     kind: architecture
@@ -126,22 +130,83 @@ now:
   belief:
     believed_state: >-
       Root cause is per-mutation DOLT_COMMIT (52 sites) accumulating reachable
-      history; dolt_log already 39.5K ~1 day post-squash and climbing.
+      history; dolt_log 66,793 on 2026-09-19 (~27K/day growth, up from 39,540
+      baseline). Move 0 inventory: platform og_objects has ZERO computer-scoped
+      rows (computer_id='' on all 6.07M rows; all kinds publication-domain).
+      Design doc's "computer-scoped kinds → Store A" concern is moot for the
+      platform store — guest og_* lives in the guest embedded Dolt, rebuilt
+      from the event log on restore. Dump splitter still filters by
+      computer_id/kind as a safety net since the HTTPStore path can carry
+      computer_id. Correction to design doc: verifier_attestations,
+      consent_records, rollback_refs are publication-domain (publication_version
+      / public_route targets only) → Store B, not Store A.
     main_uncertainty: >-
-      Which og_objects/og_edges object_kinds are computer-scoped (Store A) vs
-      corpus (Store B) — decides the dump-split filter.
+      None blocking Move 1. Store B engine gate (Dolt vs Postgres) deferred to
+      post-split 2-week query audit per design.
     next_observation: >-
-      The og_* per-kind consumer inventory result + the kill-9 durability drill
-      result.
+      dolt_log growth rate after Move 1 deploy — must go flat under load.
   blocker_or_risk: >-
-    Move 1 safety unproven until the durability drill; Move 2 correctness
-    unproven until the og_* classification. Both are Move 0 gates.
+    Move 0 gates passed. Move 1 risk: a mutation path that relied on
+    DOLT_COMMIT for cross-connection visibility (unlikely — SQL COMMIT
+    suffices) or for AS OF reads (none exist on platform tables).
   next_action: >-
-    Enumerate og_objects/og_edges object_kind values and classify each
-    computer-scoped vs corpus; run the staging kill-9 working-set durability
-    drill.
+    Map all 52 DOLT_COMMIT/commitDolt call sites; implement the debounced
+    snapshot committer (checkpoint/watermark event-driven + 30-60s fallback);
+    migrate call sites.
 
-receipts: []
+receipts:
+  - id: move0-og-inventory
+    at: 2026-09-19
+    kind: deployed_observation
+    what: >-
+      og_objects object_kind census on Node B platform store: 6,067,518 rows,
+      100% computer_id=''. Kinds: choir.source_entity 3,032,123;
+      choir.web_capture 3,032,117; ~209 each of publication/provenance/
+      consent/attestation/route/artifact kinds; choir.provenance_agent 1;
+      choir.publication_policy 1; choir.publication_transclusion 1;
+      choir.subject 1. og_edges: all kinds publication-domain
+      (captured_from 3,032,112 dominates). No choir.run/choir.agent/choir.event
+      rows — those live in guest embedded Dolt.
+    proves: dump-split filter can be table-level for og_* with a
+      computer_id/kind safety net; no computer-scoped rows exist to protect.
+  - id: move0-durability-drill
+    at: 2026-09-19
+    kind: staging_proof
+    what: >-
+      Scratch dolt sql-server 2.1.9 on Node B (/tmp/dolt-durability-drill):
+      INSERT+COMMIT and autocommit INSERT without DOLT_COMMIT, kill -9,
+      restart — both rows present; in-flight uncommitted INSERT lost;
+      dolt_log=1 (init commit only, no working-set commits created).
+    proves: Dolt 2.1.9 working-set durability — batched commits lose no
+      acknowledged writes; unaddressable window is the uncommitted
+      transaction, <= replay window.
+  - id: move0-table-classification
+    at: 2026-09-19
+    kind: deployed_observation
+    what: >-
+      Store A (canonical event/control): computer_event_append_receipts,
+      computer_event_heads, computer_lifecycle_operations,
+      computer_lifecycle_receipts, computer_checkpoints,
+      computer_replay_watermarks, computer_file_roots, computer_key_escrows,
+      computer_key_escrow_transparency, computer_key_unwrap_approvals,
+      computer_key_unwrap_requests, computer_route_projection_certificates,
+      computer_self_development_modes, computer_version_artifact_programs,
+      computer_version_code_closures, computer_version_route_authority_config,
+      computer_version_route_authority_modes,
+      computer_version_route_authorization_evidence,
+      computer_version_route_slots, computer_version_route_transition_receipts,
+      control_key_history. Store B (world-wire/corpus): everything else
+      including og_objects, og_edges, items, fetches, ingestion_events,
+      cycle_events, cycles, sources, issues, processor_requests,
+      reconciler_requests, proposal_delivery_records, artifact_blobs,
+      artifact_manifests, citation_edges, consent_records, public_routes,
+      publication_*, platform_subjects, platform_texture_*,
+      platform_vtext_*, provenance_*, retrieval_*, review_records,
+      rollback_refs, verifier_attestations.
+    proves: dump-split table filter enumerated; corrects design doc's
+      Store-A placement of verifier_attestations/consent_records/rollback_refs
+      (all publication-domain by live target_kind census).
+
 
 weak_measures:
   - name: dolt_log_commits

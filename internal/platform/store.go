@@ -9,10 +9,12 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/yusefmosiah/go-choir/internal/doltbatch"
 )
 
 type Store struct {
-	db *sql.DB
+	db        *sql.DB
+	committer *doltbatch.Committer
 }
 
 const schemaDDL = `
@@ -422,10 +424,9 @@ func OpenStore(dsn string) (*Store, error) {
 	}
 	return s, nil
 }
-
 func NewStore(db *sql.DB) *Store {
 	configureDB(db)
-	return &Store{db: db}
+	return &Store{db: db, committer: doltbatch.New(db, "platform", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))}
 }
 
 func configureDB(db *sql.DB) {
@@ -441,6 +442,8 @@ func (s *Store) Close() error {
 	if s == nil || s.db == nil {
 		return nil
 	}
+	// Flush pending snapshot state before closing the pool.
+	_ = s.committer.Close(context.Background())
 	return s.db.Close()
 }
 
@@ -518,24 +521,26 @@ func (s *Store) ensurePlatformTextureRevisionColumn(ctx context.Context, name, d
 	return err
 }
 
-func (s *Store) commitDolt(ctx context.Context, message string) error {
-	if s == nil || s.db == nil {
+// markDirty records a mutation for the debounced snapshot committer. SQL
+// COMMIT already made the write durable; the DOLT_COMMIT snapshot is
+// bookkeeping that no longer runs per mutation (the per-mutation commits
+// grew the store to 6.9M commits / 218G of uncollectible history — see
+// docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md).
+func (s *Store) markDirty(message string) {
+	if s == nil || s.committer == nil {
+		return
+	}
+	s.committer.Mark(message)
+}
+
+// commitBoundary synchronously snapshots the working set at a recovery
+// boundary (checkpoint publish, replay watermark record). Errors propagate
+// to the caller as before.
+func (s *Store) commitBoundary(ctx context.Context, message string) error {
+	if s == nil || s.committer == nil {
 		return fmt.Errorf("platform store: nil database")
 	}
-	if message == "" {
-		message = "platform change"
-	}
-	if _, err := s.db.ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message); err != nil {
-		// Dolt returns "nothing to commit" when the working set has no changes
-		// relative to the current commit (e.g. an idempotent upsert that did
-		// not alter any row values). This is not a failure — the data is
-		// already in the desired state — so treat it as success.
-		if strings.Contains(err.Error(), "nothing to commit") {
-			return nil
-		}
-		return fmt.Errorf("platform store: dolt commit: %w", err)
-	}
-	return nil
+	return s.committer.CommitNow(ctx, message)
 }
 
 func (s *Store) UpsertTextureDocument(ctx context.Context, docID, ownerID, title string) error {

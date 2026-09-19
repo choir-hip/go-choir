@@ -44,7 +44,7 @@ func (s *Store) RecordFileRoot(ctx context.Context, computerID, root, manifestRe
 	if _, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO computer_file_roots (computer_id,root,manifest_ref,head_sequence,created_at) VALUES (?,?,?,?,?)`, computerID, root, manifestRef, headSequence, time.Now().UTC()); err != nil {
 		return fmt.Errorf("file cas: record root: %w", err)
 	}
-	return s.commitDolt(ctx, "record file root "+computerID+"/"+root)
+	return s.commitBoundary(ctx, "record file root "+computerID+"/"+root)
 }
 
 func (s *Store) LatestFileRoots(ctx context.Context, computerID string, limit int) ([]FileRootRecord, error) {
@@ -77,7 +77,7 @@ func (s *Store) RecordReplayWatermark(ctx context.Context, computerID string, se
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE base_ref=IF(VALUES(watermark_sequence)>watermark_sequence,VALUES(base_ref),base_ref), updated_at=IF(VALUES(watermark_sequence)>watermark_sequence,VALUES(updated_at),updated_at), watermark_sequence=IF(VALUES(watermark_sequence)>watermark_sequence,VALUES(watermark_sequence),watermark_sequence)`, computerID, seq, baseRef, time.Now().UTC()); err != nil {
 		return fmt.Errorf("file cas: record replay watermark: %w", err)
 	}
-	return s.commitDolt(ctx, "record replay watermark "+computerID)
+	return s.commitBoundary(ctx, "record replay watermark "+computerID)
 }
 
 func (s *Store) ReplayWatermark(ctx context.Context, computerID string) (seq int64, baseRef string, err error) {
