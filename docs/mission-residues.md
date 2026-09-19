@@ -68,6 +68,25 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   Revisit: mission 6 (management as host-side activation) carries the activation rewrite;
   close the remainder at the post-11 residue pass with the profile tests proving the surface is
   gone.
+- **R11 — `items.body` CAS externalization deferred to world-wire search
+  redesign (owner direction 2026-09-19).** The platform-dolt normalization
+  mission externalized `og_objects.body` (6.0G) to `platform-artifacts` CAS
+  but left `items.body` (1.34G, ~780B mean, 5 rows >64KB on Store B) inline.
+  The design premise that `items.body`/`raw_json`/`reader_snapshot` were fat
+  payloads is falsified on the live store (`raw_json`=0 bytes,
+  `reader_snapshot` is a TINYINT flag). Externalizing `items.body` breaks
+  `cycle.Storage.SearchItems`' `lower(i.body) LIKE` recall — the search path
+  behind `/internal/source-service/search` → the `source_search` agent tool
+  (researcher role) and the objectgraph backfill. The search redesign
+  (decoupling search from storage: FTS table, external index, or a
+  CAS-hydrating search path) is world-wire product work, not storage
+  normalization. Agentic-consensus panel 2026-09-19 (9/9 verdict A):
+  `.agentic-consensus/agentic-consensus-20260919-010500/`. Source:
+  `docs/goal-platform-dolt-normalization-2026-09-18.md` receipt
+  `move3-cas-externalization` + amended acceptance. Revisit: when world-wire
+  search is designed; the residual is bounded by a Store B growth SLO
+  (monitor `items` table bytes + oldgen; reopen if growth threatens Store B
+  capacity).
 
 ## Closed
 
