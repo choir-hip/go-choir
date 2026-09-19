@@ -15,7 +15,7 @@ a file delete + restart. Never dual-write.
 - `corpusd` and `sourcecycled` running the build that accepts
   `CORPUSD_CORPUS_DOLT_DSN` / `SOURCECYCLED_DOLT_DSN` and tolerates the
   absent `corpus-dsn.env` (they share the Store A pool until the flip).
-- `scripts/dolt-dump-split.go` copied to Node B (`/root/dolt-dump-split.go`).
+- `scripts/dolt-dump-split/main.go` copied to Node B (`/root/dolt-dump-split.go`); stdlib-only, runs as `go run /root/dolt-dump-split.go` with no module.
 - Low-traffic window: world-wire + event APIs go dark for the dump/import
   duration (~1–1.5 h at current sizes).
 
@@ -41,7 +41,7 @@ HOME=/var/lib/go-choir/platform-dolt dolt dump -fn /root/platform-dump-$(date +%
 # ~20G, tens of minutes. KEEP THIS FILE — it is the rollback artifact.
 
 # 3. Split the dump by authority.
-cd /root && go run dolt-dump-split.go store-a.sql store-b.sql \
+cd /root && go run /root/dolt-dump-split.go store-a.sql store-b.sql \
   < platform-dump-$(date +%Y%m%d).sql
 # The splitter aborts on any table in neither set — do not bypass that.
 

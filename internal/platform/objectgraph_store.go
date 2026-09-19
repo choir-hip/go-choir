@@ -2,9 +2,14 @@ package platform
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
@@ -24,13 +29,78 @@ func NewObjectGraphStore(s *Store) *ObjectGraphStore {
 	return &ObjectGraphStore{store: s}
 }
 
+// ogBodyExternalizeMinBytes is the size threshold above which og_objects
+// bodies move out of the versioned chunk store into the platform-artifacts
+// filesystem CAS (Move 3, docs/designs/
+// platform-dolt-storage-normalization-2026-09-18.md). 1 KiB keeps ~55% of
+// rows inline (cheap list paths) while moving ~73% of body bytes off the
+// chunk engine.
+const ogBodyExternalizeMinBytes = 1024
+
+// externalizeBody writes a large body to the CAS and returns the storage
+// ref; small bodies or a missing CAS root return "" (stay inline).
+func (o *ObjectGraphStore) externalizeBody(body []byte) (string, error) {
+	if len(body) < ogBodyExternalizeMinBytes || o.store.artifactsRoot == "" {
+		return "", nil
+	}
+	sum := sha256.Sum256(body)
+	ref := filepath.Join("sha256", "og", hex.EncodeToString(sum[:])+".bin")
+	path := filepath.Join(o.store.artifactsRoot, ref)
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return "", fmt.Errorf("platform objectgraph: cas dir: %w", err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		return ref, nil // content-addressed: already present
+	}
+	tmp := path + ".tmp-" + shortID(id("ogbody"))
+	if err := os.WriteFile(tmp, body, 0o640); err != nil {
+		return "", fmt.Errorf("platform objectgraph: cas write: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("platform objectgraph: cas install: %w", err)
+	}
+	return ref, nil
+}
+
+// hydrateBody loads a CAS-externalized body back into the object. Inline
+// bodies (empty body_ref) are untouched.
+func (o *ObjectGraphStore) hydrateBody(obj *objectgraph.Object, bodyRef string) error {
+	if bodyRef == "" {
+		return nil
+	}
+	if o.store.artifactsRoot == "" {
+		return fmt.Errorf("platform objectgraph: body ref %q present but artifacts root not configured", bodyRef)
+	}
+	cleaned := filepath.Clean(strings.TrimLeft(bodyRef, string(filepath.Separator)))
+	path := filepath.Join(o.store.artifactsRoot, cleaned)
+	rel, err := filepath.Rel(o.store.artifactsRoot, path)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return fmt.Errorf("platform objectgraph: invalid body ref %q", bodyRef)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("platform objectgraph: read body ref %q: %w", bodyRef, err)
+	}
+	obj.Body = data
+	return nil
+}
+
 func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object) error {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
 	}
-	_, err := o.store.corpus().ExecContext(ctx, `INSERT INTO og_objects
-		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	bodyRef, err := o.externalizeBody(obj.Body)
+	if err != nil {
+		return err
+	}
+	inlineBody := obj.Body
+	if bodyRef != "" {
+		inlineBody = nil
+	}
+	_, err = o.store.corpus().ExecContext(ctx, `INSERT INTO og_objects
+		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			object_kind = VALUES(object_kind),
 			owner_id = VALUES(owner_id),
@@ -38,12 +108,14 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 			version_id = VALUES(version_id),
 			content_hash = VALUES(content_hash),
 			body = VALUES(body),
+			body_ref = VALUES(body_ref),
+			body_size = VALUES(body_size),
 			metadata = VALUES(metadata),
 			updated_at = VALUES(updated_at),
 			tombstone = VALUES(tombstone),
 			superseded_by = VALUES(superseded_by)`,
 		obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
-		obj.VersionID, obj.ContentHash, obj.Body, string(obj.Metadata),
+		obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
 		obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
 		obj.SupersededBy)
 	if err != nil {
@@ -57,8 +129,15 @@ func (o *ObjectGraphStore) GetObject(ctx context.Context, id string) (objectgrap
 	if o == nil || o.store == nil || o.store.db == nil {
 		return objectgraph.Object{}, fmt.Errorf("platform objectgraph: nil store")
 	}
-	return scanObjectGraphObject(o.store.corpus().QueryRowContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
+	obj, bodyRef, err := scanObjectGraphObject(o.store.corpus().QueryRowContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	if err := o.hydrateBody(&obj, bodyRef); err != nil {
+		return objectgraph.Object{}, err
+	}
+	return obj, nil
 }
 
 func (o *ObjectGraphStore) DeleteObject(ctx context.Context, id string) error {
@@ -76,7 +155,7 @@ func (o *ObjectGraphStore) ListObjects(ctx context.Context, filter objectgraph.L
 	if o == nil || o.store == nil || o.store.db == nil {
 		return nil, fmt.Errorf("platform objectgraph: nil store")
 	}
-	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE 1=1`
+	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE 1=1`
 	var args []any
 	if filter.Kind != "" {
 		query += ` AND object_kind = ?`
@@ -103,8 +182,11 @@ func (o *ObjectGraphStore) ListObjects(ctx context.Context, filter objectgraph.L
 	defer rows.Close()
 	var out []objectgraph.Object
 	for rows.Next() {
-		obj, err := scanObjectGraphObject(rows)
+		obj, bodyRef, err := scanObjectGraphObject(rows)
 		if err != nil {
+			return nil, err
+		}
+		if err := o.hydrateBody(&obj, bodyRef); err != nil {
 			return nil, err
 		}
 		out = append(out, obj)
@@ -192,11 +274,18 @@ func (o *ObjectGraphStore) GetObjectByMetadata(ctx context.Context, kind, jsonPa
 	if o == nil || o.store == nil || o.store.db == nil {
 		return objectgraph.Object{}, fmt.Errorf("platform objectgraph: nil store")
 	}
-	return scanObjectGraphObject(o.store.corpus().QueryRowContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+	obj, bodyRef, err := scanObjectGraphObject(o.store.corpus().QueryRowContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
 		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?
 		 LIMIT 1`, kind, jsonPath, value))
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	if err := o.hydrateBody(&obj, bodyRef); err != nil {
+		return objectgraph.Object{}, err
+	}
+	return obj, nil
 }
 
 // ListObjectsByMetadata finds objects by kind + a metadata JSON path
@@ -206,7 +295,7 @@ func (o *ObjectGraphStore) ListObjectsByMetadata(ctx context.Context, kind, json
 		return nil, fmt.Errorf("platform objectgraph: nil store")
 	}
 	rows, err := o.store.corpus().QueryContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
 		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?
 		 ORDER BY updated_at DESC LIMIT ?`,
@@ -217,8 +306,11 @@ func (o *ObjectGraphStore) ListObjectsByMetadata(ctx context.Context, kind, json
 	defer rows.Close()
 	var out []objectgraph.Object
 	for rows.Next() {
-		obj, err := scanObjectGraphObject(rows)
+		obj, bodyRef, err := scanObjectGraphObject(rows)
 		if err != nil {
+			return nil, err
+		}
+		if err := o.hydrateBody(&obj, bodyRef); err != nil {
 			return nil, err
 		}
 		out = append(out, obj)
@@ -297,9 +389,17 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 	defer func() { _ = tx.Rollback() }()
 
 	for _, obj := range batch.Objects {
+		bodyRef, err := o.externalizeBody(obj.Body)
+		if err != nil {
+			return fmt.Errorf("platform objectgraph: batch externalize %s: %w", obj.CanonicalID, err)
+		}
+		inlineBody := obj.Body
+		if bodyRef != "" {
+			inlineBody = nil
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO og_objects
-			(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				object_kind = VALUES(object_kind),
 				owner_id = VALUES(owner_id),
@@ -307,12 +407,14 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 				version_id = VALUES(version_id),
 				content_hash = VALUES(content_hash),
 				body = VALUES(body),
+				body_ref = VALUES(body_ref),
+				body_size = VALUES(body_size),
 				metadata = VALUES(metadata),
 				updated_at = VALUES(updated_at),
 				tombstone = VALUES(tombstone),
 				superseded_by = VALUES(superseded_by)`,
 			obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
-			obj.VersionID, obj.ContentHash, obj.Body, string(obj.Metadata),
+			obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
 			obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
 			obj.SupersededBy); err != nil {
 			return fmt.Errorf("platform objectgraph: batch put object %s: %w", obj.CanonicalID, err)
@@ -352,23 +454,24 @@ type ogRowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanObjectGraphObject(row ogRowScanner) (objectgraph.Object, error) {
+func scanObjectGraphObject(row ogRowScanner) (objectgraph.Object, string, error) {
 	var obj objectgraph.Object
-	var metadata string
+	var metadata, bodyRef string
+	var bodySize int64
 	if err := row.Scan(
 		&obj.CanonicalID, &obj.ObjectKind, &obj.OwnerID, &obj.ComputerID,
-		&obj.VersionID, &obj.ContentHash, &obj.Body, &metadata,
+		&obj.VersionID, &obj.ContentHash, &obj.Body, &bodyRef, &bodySize, &metadata,
 		&obj.CreatedAt, &obj.UpdatedAt, &obj.Tombstone, &obj.SupersededBy,
 	); err != nil {
 		if err == sql.ErrNoRows {
-			return objectgraph.Object{}, objectgraph.ErrNotFound
+			return objectgraph.Object{}, "", objectgraph.ErrNotFound
 		}
-		return objectgraph.Object{}, fmt.Errorf("platform objectgraph: scan object: %w", err)
+		return objectgraph.Object{}, "", fmt.Errorf("platform objectgraph: scan object: %w", err)
 	}
 	obj.Metadata = json.RawMessage(metadata)
 	obj.CreatedAt = obj.CreatedAt.UTC()
 	obj.UpdatedAt = obj.UpdatedAt.UTC()
-	return obj, nil
+	return obj, bodyRef, nil
 }
 
 func scanObjectGraphEdge(row ogRowScanner) (objectgraph.Edge, error) {

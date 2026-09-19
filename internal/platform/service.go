@@ -54,6 +54,7 @@ func NewService(store *Store, artifactsRoot, signingKeyPath string) *Service {
 		store:         store,
 		artifactsRoot: filepath.Clean(artifactsRoot),
 	}
+	store.SetArtifactsRoot(artifactsRoot)
 	if signingKeyPath != "" {
 		if key, err := LoadOrCreateSigningKey(signingKeyPath); err == nil {
 			svc.signingKey = key

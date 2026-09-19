@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -13,14 +14,27 @@ import (
 )
 
 type Store struct {
-	db        *sql.DB
+	db *sql.DB
 	committer *doltbatch.Committer
 	// corpusDB serves Store B (world-wire/corpus) tables: og_*, platform
 	// texture mirrors, and the publication/provenance/artifact domain. It is
 	// the same pool as db until the authority split deploys a separate
 	// corpus DSN; corpus() returns whichever is configured.
-	corpusDB        *sql.DB
+	corpusDB *sql.DB
 	corpusCommitter *doltbatch.Committer
+	// artifactsRoot is the filesystem CAS root for externalized og_objects
+	// bodies (Move 3). Empty disables externalization — bodies stay inline.
+	artifactsRoot string
+}
+
+// SetArtifactsRoot configures the filesystem CAS root used to externalize
+// og_objects bodies. Called by NewService; tests that never set it keep
+// bodies inline.
+func (s *Store) SetArtifactsRoot(root string) {
+	if s == nil {
+		return
+	}
+	s.artifactsRoot = filepath.Clean(root)
 }
 
 // corpusSchemaDDL holds Store B (world-wire/corpus) tables. They bootstrap
@@ -357,6 +371,8 @@ CREATE TABLE IF NOT EXISTS og_objects (
 	version_id    VARCHAR(255) NOT NULL DEFAULT '',
 	content_hash  VARCHAR(128) NOT NULL,
 	body          LONGBLOB,
+	body_ref      VARCHAR(512) NOT NULL DEFAULT '',
+	body_size     BIGINT NOT NULL DEFAULT 0,
 	metadata      LONGTEXT NOT NULL,
 	created_at    DATETIME NOT NULL,
 	updated_at    DATETIME NOT NULL,
@@ -540,6 +556,12 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if err := s.ensurePlatformTextureRevisionColumn(ctx, "source_entities", "ALTER TABLE platform_texture_revisions ADD COLUMN source_entities LONGTEXT NOT NULL DEFAULT '' AFTER body_doc"); err != nil {
 		return fmt.Errorf("platform store: bootstrap source_entities migration: %w", err)
 	}
+	if err := s.ensureCorpusColumn(ctx, "og_objects", "body_ref", "ALTER TABLE og_objects ADD COLUMN body_ref VARCHAR(512) NOT NULL DEFAULT '' AFTER body"); err != nil {
+		return fmt.Errorf("platform store: bootstrap og body_ref migration: %w", err)
+	}
+	if err := s.ensureCorpusColumn(ctx, "og_objects", "body_size", "ALTER TABLE og_objects ADD COLUMN body_size BIGINT NOT NULL DEFAULT 0 AFTER body_ref"); err != nil {
+		return fmt.Errorf("platform store: bootstrap og body_size migration: %w", err)
+	}
 	if err := s.ensureColumn(ctx, "computer_self_development_modes", "expected_pending_transition_ref", "ALTER TABLE computer_self_development_modes ADD COLUMN expected_pending_transition_ref VARCHAR(255) NULL AFTER expected_effective_event_head"); err != nil {
 		return fmt.Errorf("platform store: bootstrap self-development pending transition migration: %w", err)
 	}
@@ -574,6 +596,31 @@ func (s *Store) ensurePlatformTextureRevisionColumn(ctx context.Context, name, d
 		return fmt.Errorf("unsupported platform texture revision column %q", name)
 	}
 	rows, err := s.corpus().QueryContext(ctx, "SHOW COLUMNS FROM platform_texture_revisions LIKE '"+name+"'")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return rows.Err()
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.corpus().ExecContext(ctx, ddl)
+	return err
+}
+
+// ensureCorpusColumn applies an idempotent column migration on the corpus
+// (Store B) pool. Same identifier rules as ensureColumn.
+func (s *Store) ensureCorpusColumn(ctx context.Context, table, name, ddl string) error {
+	for _, value := range []string{table, name} {
+		if value == "" || strings.IndexFunc(value, func(r rune) bool {
+			return r != '_' && (r < 'a' || r > 'z')
+		}) >= 0 {
+			return fmt.Errorf("unsupported schema identifier %q", value)
+		}
+	}
+	rows, err := s.corpus().QueryContext(ctx, "SHOW COLUMNS FROM "+table+" LIKE '"+name+"'")
 	if err != nil {
 		return err
 	}
