@@ -41,8 +41,14 @@ finish:
     - action: restore drill — install base_ref snapshot, replay (watermark, head], compare state commitment
       proves: autoputer recovery invariant preserved across the split
       evidence_class: staging/deployed proof
-    - action: items.body / og_objects.body resolve via content_hash into platform-artifacts
-      proves: fat payloads externalized to CAS
+    - action: fat payloads resolve via content_hash into platform-artifacts CAS
+      proves: dominant fat payload (og_objects.body, 6.0G) externalized to CAS;
+        items.body (1.34G, ~780B mean, 5 rows >64KB) is an intentional residual
+        — not a fat payload on the live store (raw_json=0, reader_snapshot is a
+        flag) and feeds the live lower(body) LIKE search; externalizing it needs
+        a search-path redesign, a separate mission. Amended 2026-09-19 after
+        agentic-consensus panel (7/7 verdict A) — original named items.body
+        under a falsified fat-payload premise.
       evidence_class: deployed observation
   rollback: >-
     dump-20260918 (20G SQL, pre-split full dump) is the rollback ref; per-move
@@ -141,18 +147,21 @@ now:
       rows in background (~5h, unattended).
     main_uncertainty: >-
       items.body externalization needs a search-path redesign (the LIKE
-      query can't reach CAS). Store B engine gate (Dolt vs Postgres)
-      deferred to post-split 2-week query audit per design.
+      query can't reach CAS) — a separate mission. Store B engine gate
+      (Dolt vs Postgres) deferred to post-split 2-week query audit.
     next_observation: >-
       oldgen growth rate over the next week — must stay bounded now that
-      dolt_log is flat. Backfill completion (~5h) then a final CAS row count.
+      dolt_log is flat. Backfill completion then a final CAS row count.
   blocker_or_risk: >-
-    None blocking. Residual: items.body stays inline (1.34G) pending
-    search-path redesign; Store A oldgen 19G is pre-split accumulation,
-    bounded now that commits are batched.
+    None blocking. Residual: items.body stays inline (1.34G, ~780B mean)
+    pending a search-path redesign — a separate mission. Store A oldgen
+    19G is pre-split accumulation, bounded now that commits are batched.
+    Store B growth SLO: monitor items table bytes + oldgen; reopen if
+    items.body growth threatens Store B capacity.
   next_action: >-
     Monitor backfill completion; run the 2-week Store B query audit;
-    design items.body externalization around the search path.
+    file a successor search-path-redesign mission for items.body
+    externalization when measured Store B growth warrants it.
 receipts:
   - id: move0-og-inventory
     at: 2026-09-19
