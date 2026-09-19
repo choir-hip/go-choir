@@ -129,31 +129,30 @@ now:
     owner_ratification_ref: owner direction 2026-09-18
   belief:
     believed_state: >-
-      Root cause is per-mutation DOLT_COMMIT (52 sites) accumulating reachable
-      history; dolt_log 66,793 on 2026-09-19 (~27K/day growth, up from 39,540
-      baseline). Move 0 inventory: platform og_objects has ZERO computer-scoped
-      rows (computer_id='' on all 6.07M rows; all kinds publication-domain).
-      Design doc's "computer-scoped kinds → Store A" concern is moot for the
-      platform store — guest og_* lives in the guest embedded Dolt, rebuilt
-      from the event log on restore. Dump splitter still filters by
-      computer_id/kind as a safety net since the HTTPStore path can carry
-      computer_id. Correction to design doc: verifier_attestations,
-      consent_records, rollback_refs are publication-domain (publication_version
-      / public_route targets only) → Store B, not Store A.
+      All three moves landed on staging 2026-09-19. Store A (platform, 13306)
+      holds the canonical event/control surface; Store B (corpus, 13307) holds
+      world-wire/corpus. dolt_log flat under load on both (A: ~1 commit/45s
+      debounce window; B: ~1.2/min under backfill). og_objects.body >=1KiB
+      externalized to platform-artifacts CAS (body_ref/body_size); items.body
+      deferred — raw_json empty + reader_snapshot is a flag on the live store,
+      and items.body feeds the live lower(body) LIKE search. Event chain
+      161,464 contiguous events + watermark 148431 + CAS-resolvable artifact
+      refs verified on Store A. Backfill externalizing existing og_objects
+      rows in background (~5h, unattended).
     main_uncertainty: >-
-      None blocking Move 1. Store B engine gate (Dolt vs Postgres) deferred to
-      post-split 2-week query audit per design.
+      items.body externalization needs a search-path redesign (the LIKE
+      query can't reach CAS). Store B engine gate (Dolt vs Postgres)
+      deferred to post-split 2-week query audit per design.
     next_observation: >-
-      dolt_log growth rate after Move 1 deploy — must go flat under load.
+      oldgen growth rate over the next week — must stay bounded now that
+      dolt_log is flat. Backfill completion (~5h) then a final CAS row count.
   blocker_or_risk: >-
-    Move 0 gates passed. Move 1 risk: a mutation path that relied on
-    DOLT_COMMIT for cross-connection visibility (unlikely — SQL COMMIT
-    suffices) or for AS OF reads (none exist on platform tables).
+    None blocking. Residual: items.body stays inline (1.34G) pending
+    search-path redesign; Store A oldgen 19G is pre-split accumulation,
+    bounded now that commits are batched.
   next_action: >-
-    Map all 52 DOLT_COMMIT/commitDolt call sites; implement the debounced
-    snapshot committer (checkpoint/watermark event-driven + 30-60s fallback);
-    migrate call sites.
-
+    Monitor backfill completion; run the 2-week Store B query audit;
+    design items.body externalization around the search path.
 receipts:
   - id: move0-og-inventory
     at: 2026-09-19
