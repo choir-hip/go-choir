@@ -97,6 +97,7 @@
   .shots .med img { height:210px; }
   .shots figcaption .chip { margin-left:0; margin-right:8px; }
   .shots figcaption { max-width:340px; }
+  .placeholder { border:1px dashed var(--faint); border-radius:12px; padding:34px 28px; margin-top:30px; font-size:18px; color:var(--faint); letter-spacing:0.06em; text-align:center; }
 </style>
 </head>
 <body>
@@ -104,12 +105,9 @@
 <section class="slide title-slide">
   <svg class="corner-mark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z" fill="#d4a94e"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z" fill="#d4a94e"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z" fill="#d4a94e"/></svg>
   <div class="kicker">September 2026 · open source</div>
-  <div class="word">CHOIR</div>
-  <div class="sub" style="font-size:40px; color:var(--ink); margin-top:34px;">
-    The automatic computer.
-  </div>
-  <div class="sub" style="max-width:900px;">
-    How do humans supervise work at agentic scale?
+  <h1 style="font-size:64px; max-width:1000px; line-height:1.1;">How do humans supervise work at agentic scale?</h1>
+  <div class="sub" style="font-size:40px; color:var(--ink); margin-top:44px;">
+    CHOIR — the automatic computer.
   </div>
   <div class="foot"><span><a href="https://choir.news" style="color:inherit; text-decoration:none;">choir.news</a></span><span class="num">01</span></div>
 </section>
@@ -139,7 +137,6 @@
     steers what happens next.
   </div>
   <ul class="pts">
-    <li>Editing is steering, not commenting.</li>
     <li>Models and agents are swappable. The state is yours.</li>
   </ul>
   <div class="keyline">Language is for intent. <span class="em">The document is for steering.</span></div>
@@ -148,14 +145,15 @@
 
 <!-- 4 · THE PRODUCTS -->
 <section class="slide">
-  <div class="kicker">The products</div>
+  <div class="kicker">The product</div>
   <h2>One surface.<br>Everything runs on it.</h2>
   <div class="rule"></div>
-  <div class="grid2x2">
-    <div class="card"><div class="t">Texture <span class="chip">on staging</span></div><div class="d">The surface. Work as a versioned, editable document.</div></div>
-    <div class="card"><div class="t">Mail <span class="chip">on staging</span></div><div class="d">Agency. An email agent that acts — send gated by owner approval.</div></div>
-    <div class="card"><div class="t">Automatic Newspaper <span class="chip">in refactor</span></div><div class="d">Scale. Every story a Texture doc — sources, conflicts, provenance.</div></div>
-    <div class="card"><div class="t">Automatic Radio <span class="chip">in development</span></div><div class="d">Attention. A voice layer over Texture — listen, interrupt, contribute.</div></div>
+  <div class="grid2">
+    <div class="card"><div class="t">Texture <span class="chip">on staging</span></div><div class="d">The surface — work as a versioned, editable document.</div></div>
+    <div class="card"><div class="t">Mail <span class="chip">on staging</span></div><div class="d">Proof agents can act under supervision — send gated by owner approval.</div></div>
+  </div>
+  <div class="body" style="margin-top:34px; font-size:20px;">
+    What the surface enables next:&nbsp; Automatic Newspaper <span class="chip">in refactor</span> &nbsp;·&nbsp; Automatic Radio <span class="chip">in development</span>
   </div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">04</span></div>
 </section>
@@ -165,18 +163,32 @@
   <div class="kicker">Proof</div>
   <h2>It runs — and shows its work.</h2>
   <div class="rule"></div>
-  <div class="shots">
-    <figure class="med"><img src="shot-texture.png" alt="Texture research"><figcaption><span class="chip">staging</span>Texture — supervised research doc with cited sources.</figcaption></figure>
-    <figure class="tall"><img src="shot-worldwire.png" alt="World Wire"><figcaption><span class="chip">in refactor</span>Automatic Newspaper — provenance-linked record. Demoed June.</figcaption></figure>
-    <figure class="med"><img src="shot-mail.png" alt="Mail app"><figcaption><span class="chip">staging</span>Mail — email agent; send gated by owner approval.</figcaption></figure>
+  <div class="flow">
+    <div class="node">Agent updates the document</div><div class="arr">→</div>
+    <div class="node">Human edits a line</div><div class="arr">→</div>
+    <div class="node">The next step changes</div>
   </div>
-  <div class="body" style="margin-top:14px; font-size:18px;">
-    The prototype updates its own code. Today: staging. Next: production, then repeat use.
+  <div class="placeholder">[SCREENSHOT NEEDED — end-to-end steering sequence, readable at presentation size]</div>
+  <div class="body" style="margin-top:18px; font-size:18px;">
+    [DOGFOODING METRIC] &nbsp;·&nbsp; Today: staging. Next: production, then repeat use.
   </div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">05</span></div>
 </section>
 
-<!-- 6 · MARKET -->
+<!-- 6 · WHY THIS IS HARD -->
+<section class="slide">
+  <div class="kicker">Why this is hard</div>
+  <h2>Three things have to be true.</h2>
+  <div class="rule"></div>
+  <ul class="pts">
+    <li>Orchestration as code — agents coordinate through code, not chat.</li>
+    <li>Capability-scoped agents — each agent can only use the modules it's granted.</li>
+    <li>Precommitment records — agents record what they expect before consequential actions, so work can be audited against it.</li>
+  </ul>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">06</span></div>
+</section>
+
+<!-- 7 · MARKET -->
 <section class="slide">
   <div class="kicker">Market</div>
   <h2>Start with people who already<br>supervise agents.</h2>
@@ -184,10 +196,11 @@
   <div class="grid3">
     <div class="card"><div class="t">Beachhead</div><div class="d">Heavy agent users — researchers, analysts, founders — who hit the supervision wall daily.</div></div>
     <div class="card"><div class="t">Expansion</div><div class="d">Teams that need shared, inspectable work state.</div></div>
-    <div class="card"><div class="t">Long term</div><div class="d">Every computer a queryable agent API — a network of user-owned computers.</div></div>
+    <div class="card"><div class="t">Long term</div><div class="d">A network of user-owned computers.</div></div>
   </div>
+  <div class="body" style="margin-top:26px; font-size:18px; color:var(--faint);">Beachhead size: [MARKET SIZE]</div>
   <div class="keyline">Millions already pay for AI. <span class="em">The heaviest users hit the wall first.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">06</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
 </section>
 
 <!-- 7 · BUSINESS MODEL -->
@@ -200,11 +213,11 @@
     <div class="card"><div class="t">Managed</div><div class="d">Hosted Choir — reliability without operations.</div></div>
     <div class="card"><div class="t">Premium</div><div class="d">Pro research, Radio, APIs, teams — products on your state, never a claim on it.</div></div>
   </div>
-  <div class="keyline">Your computer should not <span class="em">belong to your model provider.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
+  <div class="keyline">Your computer should not <span class="em">belong to your model provider.</span><br><span style="font-size:22px; color:var(--dim); font-weight:400;">As intelligence gets cheaper, owned work history compounds.</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
 </section>
 
-<!-- 8 · POSITIONING -->
+<!-- 9 · POSITIONING -->
 <section class="slide">
   <div class="kicker">Positioning</div>
   <h2>Personal agents are here.<br>They need somewhere to work.</h2>
@@ -214,25 +227,11 @@
     <div class="card"><div class="t">The gap</div><div class="d">Every agent's work lives in its vendor's silo. Nothing the human owns.</div></div>
     <div class="card"><div class="t">Choir</div><div class="d">The workbench any agent can use — API, MCP, skill. State the user owns.</div></div>
   </div>
-  <div class="keyline">Agents come and go. <span class="em">The workbench stays yours.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
-</section>
-
-<!-- 9 · INCREASING RETURNS -->
-<section class="slide">
-  <div class="kicker">Increasing returns</div>
-  <h2>More computers,<br>a smarter network.</h2>
-  <div class="rule"></div>
-  <div class="body">
-    More user computers → more published content → a smarter, more
-    diverse network for everyone — regardless of model.
+  <div class="body" style="margin-top:24px; font-size:19px;">
+    Why won't model vendors build this? Your state must work across
+    whichever agents and models you choose — theirs can't.
   </div>
-  <ul class="pts">
-    <li>Models get cheaper and better — Choir benefits, not pays.</li>
-    <li>Public news state accumulates; users grow; teams run internal deployments.</li>
-    <li>Private computers become monetizable, queryable agent APIs — with guardrails that keep PII private.</li>
-  </ul>
-  <div class="keyline">As intelligence gets cheaper, <span class="em">owned work history compounds.</span></div>
+  <div class="keyline" style="font-size:26px; margin-top:16px;">Agents come and go. <span class="em">The workbench stays yours.</span></div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">09</span></div>
 </section>
 
@@ -244,7 +243,7 @@
       <div class="name">Yusef Mosiah Nathanson</div>
       <div class="role">Founder</div>
       <div class="bio">
-        A living turning conflicting signals into verified decisions —
+        Made a living turning conflicting signals into verified decisions —
         professional poker, then AI since 2015. Years of work across
         agent systems, interfaces, provenance, and media converged into
         Choir. I built the computer I needed to supervise my own agents.
@@ -266,9 +265,9 @@
   <div class="rule"></div>
   <div class="body">
     This meeting is to explore a relationship and get your read.
-    Funding would accelerate production launch and distribution — the
-    honest state is early: pre-traction, pre-production. The work
-    continues either way.
+    Funding — [AMOUNT] for [WHAT IT BUYS / RUNWAY] — would accelerate
+    production launch and distribution. The honest state is early:
+    pre-traction, pre-production. The work continues either way.
   </div>
   <div class="keyline">Milestone: <span class="em">production launch — then evidence of repeat use.</span></div>
   <div style="margin-top:26px;">
