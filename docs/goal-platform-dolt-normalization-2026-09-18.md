@@ -99,10 +99,10 @@ boundaries:
     - Texture canonical writes (platform_texture_revisions)
 
 now:
-  status: working
+  status: complete
   slice: >-
-    Move 1 — commit batching: coalesce ~52 per-mutation DOLT_COMMIT sites
-    behind one debounced snapshot committer. Move 0 gates passed 2026-09-19.
+    All moves landed on staging 2026-09-19; mission settled complete
+    2026-09-22. Residual items.body externalization carried as residue R11.
   source_ref: main@de9ed92d
   deploy_identity: c592331b1f9318de013a54faaa162b6735e40342
   candidate:
@@ -150,18 +150,14 @@ now:
       query can't reach CAS) — a separate mission. Store B engine gate
       (Dolt vs Postgres) deferred to post-split 2-week query audit.
     next_observation: >-
-      oldgen growth rate over the next week — must stay bounded now that
-      dolt_log is flat. Backfill completion then a final CAS row count.
+      Store B 2-week query audit (Dolt vs Postgres engine gate) — the only
+      open deferred decision. oldgen confirmed bounded: Store A ~4 commits/hr,
+      oldgen static at 19G.
   blocker_or_risk: >-
-    None blocking. Residual: items.body stays inline (1.34G, ~780B mean)
-    pending a search-path redesign — a separate mission. Store A oldgen
-    19G is pre-split accumulation, bounded now that commits are batched.
-    Store B growth SLO: monitor items table bytes + oldgen; reopen if
-    items.body growth threatens Store B capacity.
-  next_action: >-
-    Monitor backfill completion; run the 2-week Store B query audit;
-    file a successor search-path-redesign mission for items.body
-    externalization when measured Store B growth warrants it.
+    None. Mission complete. Residual R11: items.body stays inline (1.34G)
+    pending a world-wire search-path redesign — a separate mission, bounded
+    by a Store B growth SLO.
+  next_action: none
 receipts:
   - id: move0-og-inventory
     at: 2026-09-19
@@ -272,6 +268,26 @@ receipts:
       computer_replay_watermarks on Store A.
     proves: replay-from-checkpoint recovery invariant preserved post-split;
       autoputer rebuild path intact.
+  - id: terminal-settlement
+    at: 2026-09-22
+    kind: terminal
+    what: >-
+      Mission settled complete. Verified live on Node B: Store A dolt_log
+      ~4 commits/hr (bounded; the 72,509 total is the pre-flip per-mutation
+      tail + cutover, not ongoing growth), oldgen static at 19G, journal 15M.
+      Store B 5,353 commits, 34G corpus isolated on its own sql-server
+      (13307). 501,203 og_objects bodies externalized to platform-artifacts
+      CAS. Both dolt sql-server processes active. Recovery invariant verified
+      (161,464 contiguous events + watermark + CAS refs on Store A).
+      Residual: items.body externalization deferred to world-wire search
+      redesign — residue R11 in docs/mission-residues.md, bounded by a Store
+      B growth SLO. Open deferred decision: Store B engine gate (Dolt vs
+      Postgres) after the 2-week query audit.
+    proves: >-
+      the storage leak is durably fixed at the root cause (per-mutation
+      DOLT_COMMIT -> batched commits), the canonical event log is isolated
+      from corpus churn, and the dominant fat payload is off the chunk store
+      — with the immutable-log + recovery invariant preserved throughout.
 
 
 weak_measures:
