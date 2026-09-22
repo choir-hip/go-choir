@@ -98,6 +98,10 @@
   .shots figcaption .chip { margin-left:0; margin-right:8px; }
   .shots figcaption { max-width:340px; }
   .placeholder { border:1px dashed var(--faint); border-radius:12px; padding:34px 28px; margin-top:30px; font-size:18px; color:var(--faint); letter-spacing:0.06em; text-align:center; }
+  .prod-wrap { display:flex; gap:48px; margin-top:36px; align-items:flex-start; }
+  .prod-text { flex:1; min-width:0; }
+  .prod-shot { width:430px; border-radius:12px; border:1px solid var(--line); }
+  .shots .big img { height:300px; width:auto; }
 </style>
 </head>
 <body>
@@ -143,56 +147,40 @@
   <div class="foot"><span>choir — the automatic computer</span><span class="num">03</span></div>
 </section>
 
-<!-- 4 · THE PRODUCTS -->
+<!-- 4 · THE PRODUCT -->
 <section class="slide">
   <div class="kicker">The product</div>
-  <h2>One surface.<br>Everything runs on it.</h2>
+  <h2>Familiar desktop and document UX.<br>Automated.</h2>
   <div class="rule"></div>
-  <div class="grid2">
-    <div class="card"><div class="t">Texture <span class="chip">on staging</span></div><div class="d">The surface — work as a versioned, editable document.</div></div>
-    <div class="card"><div class="t">Mail <span class="chip">on staging</span></div><div class="d">Proof agents can act under supervision — send gated by owner approval.</div></div>
-  </div>
-  <div class="body" style="margin-top:34px; font-size:20px;">
-    What the surface enables next:&nbsp; Automatic Newspaper <span class="chip">in refactor</span> &nbsp;·&nbsp; Automatic Radio <span class="chip">in development</span>
+  <div class="prod-wrap">
+    <div class="prod-text">
+      <div class="card"><div class="t">Texture <span class="chip">on staging</span></div><div class="d">The surface — work as a versioned, editable document.</div></div>
+      <div class="card" style="margin-top:20px;"><div class="t">Mail <span class="chip">on staging</span></div><div class="d">Proof agents can act under supervision — send gated by owner approval.</div></div>
+      <div class="body" style="margin-top:20px; font-size:17px;">
+        Next: Newspaper <span class="chip">in refactor</span> · Radio <span class="chip">in development</span>
+      </div>
+    </div>
+    <img class="prod-shot" src="shot-texture.png" alt="Texture — the supervised document">
   </div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">04</span></div>
 </section>
 
-<!-- 5 · PROOF -->
+<!-- 5 · CURRENT STATUS -->
 <section class="slide">
-  <div class="kicker">Proof</div>
-  <h2>It runs — and shows its work.</h2>
+  <div class="kicker">Current status</div>
+  <h2>Live on staging.<br>Honest about what's next.</h2>
   <div class="rule"></div>
-  <div class="flow">
-    <div class="node">Agent updates the document</div><div class="arr">→</div>
-    <div class="node">Human edits a line</div><div class="arr">→</div>
-    <div class="node">The next step changes</div>
-  </div>
   <div class="shots" style="margin-top:26px;">
-    <figure class="med"><img src="shot-texture.png" alt="Texture research"><figcaption><span class="chip">staging</span>Texture — the supervised document.</figcaption></figure>
-    <figure class="tall"><img src="shot-worldwire.png" alt="World Wire"><figcaption><span class="chip">in refactor</span>Automatic Newspaper — demoed June.</figcaption></figure>
-    <figure class="med"><img src="shot-mail.png" alt="Mail app"><figcaption><span class="chip">staging</span>Mail — send gated by owner approval.</figcaption></figure>
+    <figure class="big"><img src="shot-mail.png" alt="Mail app"><figcaption><span class="chip">staging</span>Mail — email agent; send gated by owner approval.</figcaption></figure>
+    <figure class="big"><img src="shot-worldwire.png" alt="World Wire"><figcaption><span class="chip">in refactor</span>Automatic Newspaper — prototype → production.</figcaption></figure>
   </div>
-  <div class="body" style="margin-top:14px; font-size:18px;">
-    Today: staging. Next: production, then repeat use.
+  <div class="body" style="margin-top:22px; font-size:19px;">
+    Today: staging. Next: production launch, then evidence of repeat use.
   </div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">05</span></div>
 </section>
 
-<!-- 6 · WHY THIS IS HARD -->
-<section class="slide">
-  <div class="kicker">Why this is hard</div>
-  <h2>Three things have to be true.</h2>
-  <div class="rule"></div>
-  <ul class="pts">
-    <li>Orchestration as code — agents coordinate through code, not chat.</li>
-    <li>Capability-scoped agents — each agent can only use the modules it's granted.</li>
-    <li>Precommitment records — agents record what they expect before consequential actions, so work can be audited against it.</li>
-  </ul>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">06</span></div>
-</section>
-
-<!-- 7 · MARKET -->
+<!-- 6 · MARKET -->
 <section class="slide">
   <div class="kicker">Market</div>
   <h2>Start with people who already<br>supervise agents.</h2>
@@ -203,7 +191,7 @@
     <div class="card"><div class="t">Long term</div><div class="d">A network of user-owned computers.</div></div>
   </div>
   <div class="keyline">Millions already pay for AI. <span class="em">The heaviest users hit the wall first.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">06</span></div>
 </section>
 
 <!-- 7 · BUSINESS MODEL -->
@@ -217,10 +205,10 @@
     <div class="card"><div class="t">Premium</div><div class="d">Pro research, Radio, APIs, teams — products on your state, never a claim on it.</div></div>
   </div>
   <div class="keyline">Your computer should not <span class="em">belong to your model provider.</span><br><span style="font-size:22px; color:var(--dim); font-weight:400;">As intelligence gets cheaper, owned work history compounds.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
 </section>
 
-<!-- 9 · POSITIONING -->
+<!-- 8 · POSITIONING -->
 <section class="slide">
   <div class="kicker">Positioning</div>
   <h2>Personal agents are here.<br>They need somewhere to work.</h2>
@@ -235,10 +223,10 @@
     whichever agents and models you choose — theirs can't.
   </div>
   <div class="keyline" style="font-size:26px; margin-top:16px;">Agents come and go. <span class="em">The workbench stays yours.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">09</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
 </section>
 
-<!-- 10 · WHY ME -->
+<!-- 9 · WHY ME -->
 <section class="slide">
   <div class="kicker">Why me</div>
   <div class="team-wrap">
@@ -258,10 +246,10 @@
     </div>
     <img class="team-photo" src="Yusef_photo.jpeg" alt="Yusef Mosiah Nathanson">
   </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">10</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">09</span></div>
 </section>
 
-<!-- 11 · ASK -->
+<!-- 10 · ASK -->
 <section class="slide">
   <div class="kicker">The ask</div>
   <h2>Building the system<br>that needs to exist.</h2>
@@ -277,7 +265,7 @@
     <a class="tag" href="https://choir.news">choir.news</a>
     <a class="tag" href="https://github.com/choir-hip/go-choir">github.com/choir-hip/go-choir</a>
   </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">11</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">10</span></div>
 </section>
 </body>
 </html>
