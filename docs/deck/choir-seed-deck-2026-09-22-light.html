@@ -90,21 +90,27 @@
   .shots .tall img { height:430px; }
   .shots .med img { height:300px; }
   .shots figcaption { font-size:14px; color:var(--faint); margin-top:10px; line-height:1.4; max-width:300px; }
+
+  .chip { display:inline-block; border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--faint); font-weight:600; vertical-align:middle; margin-left:8px; }
+  .grid2x2 { display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:34px; }
+  .shots .tall img { height:330px; }
+  .shots .med img { height:230px; }
+  .shots figcaption .chip { margin-left:0; margin-right:8px; }
+  .shots figcaption { max-width:340px; }
 </style>
 </head>
 <body>
-
 <!-- 1 · COVER -->
 <section class="slide title-slide">
   <svg class="corner-mark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z" fill="#0d1628"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z" fill="#0d1628"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z" fill="#0d1628"/></svg>
-  <div class="kicker">September 2026 · open source · live on staging</div>
+  <div class="kicker">September 2026 · open source</div>
   <div class="word">CHOIR</div>
   <div class="sub" style="font-size:40px; color:var(--ink); margin-top:34px;">
     The automatic computer.
   </div>
   <div class="sub" style="max-width:900px;">
-    A persistent place where agents, tools, notes, sources, and
-    decisions work together.
+    How do humans supervise work at agentic scale? A persistent computer
+    where versioned, human-editable state is the control plane.
   </div>
   <div class="foot"><span><a href="https://choir.news" style="color:inherit; text-decoration:none;">choir.news</a></span><span class="num">01</span></div>
 </section>
@@ -112,131 +118,95 @@
 <!-- 2 · PROBLEM -->
 <section class="slide">
   <div class="kicker">Problem</div>
-  <h2>AI can work for hours.<br>The work gets trapped in chat.</h2>
+  <h2>Agentic work has outgrown<br>the supervisory interface.</h2>
   <div class="rule"></div>
   <div class="body">
-    Long-running work produces sources, tasks, decisions, and changes.
-    A transcript is a poor place to manage that.
+    AI is moving past one human chatting with one agent — toward
+    long-running asynchronous work, many agents, and eventually many
+    humans and agents together. <b>Chat does not scale as the
+    supervisory interface.</b>
   </div>
   <ul class="pts">
-    <li>People wake up to answers they <b>cannot inspect</b>.</li>
-    <li>Agents <b>repeat work</b> because project memory is weak.</li>
-    <li>Teams cannot easily <b>trust, share, or revise</b> the result.</li>
+    <li>Computation now runs <b>faster and longer</b> than a human can watch.</li>
+    <li>People wake up to answers they <b>cannot inspect</b> — and reconstruct eight-hour runs from transcripts.</li>
+    <li>Agents repeat work; teams cannot <b>trust, share, or revise</b> the result.</li>
   </ul>
-  <div class="keyline">A chat thread is <span class="em">not a workbench.</span></div>
+  <div class="keyline">A chat thread is not a workbench. <span class="em">The bottleneck is supervision.</span></div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">02</span></div>
 </section>
 
 <!-- 3 · SOLUTION -->
 <section class="slide">
   <div class="kicker">Solution</div>
-  <h2>Choir gives agents a shared workbench.</h2>
+  <h2>Versioned, human-editable state<br>is the control plane.</h2>
   <div class="rule"></div>
   <div class="body">
-    The durable object is the work itself — not the assistant, not the
-    chat history.
+    Agents continuously update the current state of the work. Humans
+    inspect that state and edit it directly. <b>An edit creates a new
+    version — and changes what the system does next.</b>
   </div>
   <div class="flow">
-    <div class="node">Human</div><div class="arr">→</div>
-    <div class="node">Shared work state</div><div class="arr">→</div>
-    <div class="node">Agents + tools</div><div class="arr">→</div>
-    <div class="node">World</div>
+    <div class="node">Agents update</div><div class="arr">→</div>
+    <div class="node">Versioned work state</div><div class="arr">→</div>
+    <div class="node">Human inspects &amp; edits</div><div class="arr">→</div>
+    <div class="node">System steers</div>
   </div>
   <ul class="pts">
-    <li>Agents come and go. <b>Work persists.</b></li>
-    <li>Models can be swapped. <b>State remains yours.</b></li>
-    <li>The interface shows <b>what changed</b>, not just what was said.</li>
+    <li>Not a document — a <b>human-legible rendering of authoritative system state</b>.</li>
+    <li>Editing it is a <b>control action</b>, not a comment.</li>
+    <li>Models and agents are swappable. <b>The state — and its history — is yours.</b></li>
   </ul>
+  <div class="keyline">Language is for intent. <span class="em">The state is for control.</span></div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">03</span></div>
 </section>
 
-<!-- 4 · WHY NOW -->
+<!-- 4 · CONSEQUENCES -->
 <section class="slide">
-  <div class="kicker">Why now</div>
-  <h2>The model is no longer<br>the whole system.</h2>
+  <div class="kicker">The products</div>
+  <h2>One control plane.<br>Four demonstrations.</h2>
   <div class="rule"></div>
-  <div class="body">
-    Better setup unlocks more value from the same models. The next jump
-    is not only smarter models — it is better ways to organize work.
-  </div>
-  <div class="stat">
-    <div><div class="n">23%</div><div class="l">baseline legal-diligence score</div></div>
-    <div><div class="n">62%</div><div class="l">with a better agent setup</div></div>
-    <div><div class="n">2.7×</div><div class="l">same task, better work design</div></div>
+  <div class="grid2x2">
+    <div class="card"><div class="t">Texture <span class="chip">in refactor</span></div><div class="d"><b>The interface.</b> The work itself becomes the supervisory surface — a research document with cited sources that a human reads and edits directly.</div></div>
+    <div class="card"><div class="t">Mail <span class="chip">on staging</span></div><div class="d"><b>Agency.</b> An email agent with its own address that acts in the world — sending is gated by owner approval.</div></div>
+    <div class="card"><div class="t">Automatic Newspaper <span class="chip">on staging</span></div><div class="d"><b>Scale.</b> Thousands of sources, conflicting claims, provenance, revision. The reader consumes the current state, not the agent activity.</div></div>
+    <div class="card"><div class="t">Automatic Radio <span class="chip">in development</span></div><div class="d"><b>Attention.</b> Listen, interrupt, contribute judgment — contributions become durable state other agents and people can use.</div></div>
   </div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">04</span></div>
 </section>
 
-<!-- 5 · PRODUCT -->
+<!-- 5 · PROOF -->
 <section class="slide">
-  <div class="kicker">Product</div>
-  <h2>One place for notes, sources,<br>agents, and decisions.</h2>
+  <div class="kicker">Proof</div>
+  <h2>It runs — and shows its work.</h2>
   <div class="rule"></div>
-  <div class="grid3">
-    <div class="card"><div class="t">Sources</div><div class="d">Documents, links, transcripts, files, and feeds stay attached to the work.</div></div>
-    <div class="card"><div class="t">Decisions</div><div class="d">The system records what changed, why, and what still needs a human.</div></div>
-    <div class="card"><div class="t">Actions</div><div class="d">Agents continue work, ask for approvals, and leave confirmations.</div></div>
+  <div class="shots">
+    <figure class="tall"><img src="shot-worldwire.png" alt="World Wire"><figcaption><span class="chip">staging</span>Automatic Newspaper — live, provenance-linked record of what is happening. Demoed June.</figcaption></figure>
+    <figure class="med"><img src="shot-texture.png" alt="Texture research"><figcaption><span class="chip">in refactor</span>Texture — supervised research doc with cited sources. Back next week.</figcaption></figure>
+    <figure class="med"><img src="shot-mail.png" alt="Mail app"><figcaption><span class="chip">staging</span>Mail — email agent with its own address; send gated by owner approval.</figcaption></figure>
   </div>
-  <div class="keyline">Language is for intent. <span class="em">The workspace is for control.</span></div>
+  <div class="body" style="margin-top:14px; font-size:18px;">
+    The prototype computer updates its own code and generates apps on
+    demand. <b>Today: staging. Next: production launch, then evidence of
+    repeat use.</b>
+  </div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">05</span></div>
 </section>
 
-<!-- 6 · PROOF / FIRST PRODUCT -->
+<!-- 6 · MARKET -->
 <section class="slide">
-  <div class="kicker">Proof</div>
-  <h2>The Automatic Newspaper<br>proves the computer works.</h2>
+  <div class="kicker">Market</div>
+  <h2>Start with people who already<br>supervise agents.</h2>
   <div class="rule"></div>
-  <div class="body">
-    News is a hard workload: sources change, claims conflict, and facts
-    must stay traceable. The article is a view of the current record —
-    every claim points back to evidence.
+  <div class="grid3">
+    <div class="card"><div class="t">Beachhead</div><div class="d"><b>Heavy agent users</b> — researchers, analysts, founders — who already pay for AI and hit the supervision wall daily.</div></div>
+    <div class="card"><div class="t">Expansion</div><div class="d">Teams that need shared, inspectable work state: provenance, approvals, AI-assisted publishing.</div></div>
+    <div class="card"><div class="t">Long term</div><div class="d">A network of user-owned computers that can query and cite each other.</div></div>
   </div>
-  <div class="flow">
-    <div class="node">Live sources</div><div class="arr">→</div>
-    <div class="node">Research record</div><div class="arr">→</div>
-    <div class="node">Article</div><div class="arr">→</div>
-    <div class="node">Updates</div>
-  </div>
-  <div class="body" style="margin-top:26px; font-size:20px;">
-    The same work state becomes an article, an audio stream, an API, or
-    an agent's context — the <b>Automatic Radio</b> distributes it.
-  </div>
+  <div class="keyline">Millions already pay for AI. <span class="em">The heaviest users hit the supervision wall first.</span></div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">06</span></div>
 </section>
 
-<!-- 7 · BUILT / TRACTION -->
-<section class="slide">
-  <div class="kicker">Built</div>
-  <h2>It runs.</h2>
-  <div class="rule"></div>
-  <div class="shots">
-    <figure class="tall"><img src="shot-worldwire.png" alt="World Wire"><figcaption>Prototype of the Automatic Newspaper — a live, provenance-linked record of what is happening.</figcaption></figure>
-    <figure class="med"><img src="shot-texture.png" alt="Texture research"><figcaption>Texture — a supervised research document with cited sources.</figcaption></figure>
-    <figure class="med"><img src="shot-mail.png" alt="Mail app"><figcaption>Mail — an email agent with its own address; send is gated by owner approval.</figcaption></figure>
-  </div>
-  <div class="body" style="margin-top:24px; font-size:19px;">
-    The prototype computer updates its own code and generates apps on
-    demand; the newspaper was first demoed in June. Both are mid-refactor
-    to production — landing now.
-  </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
-</section>
-
-<!-- 8 · MARKET -->
-<section class="slide">
-  <div class="kicker">Market</div>
-  <h2>Start with people who already<br>pay for better thinking.</h2>
-  <div class="rule"></div>
-  <div class="grid3">
-    <div class="card"><div class="t">Beachhead</div><div class="d">Researchers, analysts, founders, writers, investors — high recurring information load.</div></div>
-    <div class="card"><div class="t">Expansion</div><div class="d">Teams that need shared research memory, provenance, and AI-assisted publishing.</div></div>
-    <div class="card"><div class="t">Long term</div><div class="d">A network of user-owned computers that can query and cite each other.</div></div>
-  </div>
-  <div class="keyline">Wedge: Newspaper + Radio. <span class="em">Platform: the computer.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
-</section>
-
-<!-- 9 · BUSINESS MODEL -->
+<!-- 7 · BUSINESS MODEL -->
 <section class="slide">
   <div class="kicker">Business model</div>
   <h2>Open runtime. Paid convenience.</h2>
@@ -248,27 +218,33 @@
   <div class="grid3">
     <div class="card"><div class="t">Open source</div><div class="d">Self-hostable core runtime — trust, portability, developer adoption.</div></div>
     <div class="card"><div class="t">Managed</div><div class="d">Hosted Choir for people and teams that want reliability without operations.</div></div>
-    <div class="card"><div class="t">Premium</div><div class="d">Pro research, Radio, APIs, team features, and data products.</div></div>
+    <div class="card"><div class="t">Premium</div><div class="d">Pro research, Radio, APIs, team features — products on your state, never a claim on it.</div></div>
   </div>
   <div class="keyline">Your computer should not <span class="em">belong to your model provider.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">09</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
 </section>
 
-<!-- 10 · COMPETITION -->
+<!-- 8 · COMPETITION + MOAT -->
 <section class="slide">
   <div class="kicker">Competition</div>
-  <h2>Personal agents are interfaces.<br>Choir is where the work lives.</h2>
+  <h2>Others own the conversation.<br>Choir owns the work state.</h2>
   <div class="rule"></div>
   <div class="grid3">
-    <div class="card"><div class="t">Personal agents</div><div class="d">Own the conversation with the user.</div></div>
-    <div class="card"><div class="t">SaaS tools</div><div class="d">Own narrow business records.</div></div>
-    <div class="card"><div class="t">Choir</div><div class="d"><b>Owns your work state</b> — agents and models compete to help inside it.</div></div>
+    <div class="card"><div class="t">Chat assistants</div><div class="d">ChatGPT, Claude, Notion AI own the conversation — supervision ends at the transcript.</div></div>
+    <div class="card"><div class="t">Agent tools</div><div class="d">Cursor, Devin, agent frameworks own the loop — state stays inside their silo.</div></div>
+    <div class="card"><div class="t">Choir</div><div class="d"><b>Owns the work state</b> — versioned, human-editable, model-agnostic. Agents compete to help inside it.</div></div>
   </div>
-  <div class="keyline">Personal agents make the assistant persistent.<br><span class="em">Choir makes the work persistent.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">10</span></div>
+  <div class="flow" style="margin-top:30px;">
+    <div class="node">Use</div><div class="arr">→</div>
+    <div class="node">Better memory</div><div class="arr">→</div>
+    <div class="node">Better work</div><div class="arr">→</div>
+    <div class="node">More use</div>
+  </div>
+  <div class="keyline" style="font-size:26px; margin-top:26px;">As intelligence gets cheaper, owned work history compounds. <span class="em">Don't own intelligence — own the system that compounds.</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
 </section>
 
-<!-- 11 · TEAM / WHY YOU -->
+<!-- 9 · WHY ME -->
 <section class="slide">
   <div class="kicker">Why me</div>
   <div class="team-wrap">
@@ -276,11 +252,12 @@
       <div class="name">Yusef Mosiah Nathanson</div>
       <div class="role">Founder</div>
       <div class="bio">
-        I built the system I wanted to use — existing agents didn't match
-        how I think, research, build, and publish. Years of independent
-        work across agent systems, interfaces, provenance, media, and AI
-        economics converged into Choir. Self-taught software and AI
-        engineer; came to AI in 2015 from professional poker.
+        I've made a living turning conflicting signals into verified
+        decisions — professional poker, then AI since 2015. Choir is that
+        discipline as software: years of independent work across agent
+        systems, interfaces, provenance, media, and AI economics,
+        converged into one system. I built the computer I needed to
+        supervise my own agents.
       </div>
       <div class="links">
         <a class="tag" href="https://github.com/yusefmosiah">github.com/yusefmosiah</a>
@@ -289,50 +266,26 @@
     </div>
     <img class="team-photo" src="Yusef_photo.jpeg" alt="Yusef Mosiah Nathanson">
   </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">11</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">09</span></div>
 </section>
 
-<!-- 12 · INCREASING RETURNS (the curveball) -->
-<section class="slide">
-  <div class="kicker">The curveball</div>
-  <h2>As intelligence gets cheaper,<br>owned work history gets more valuable.</h2>
-  <div class="rule"></div>
-  <div class="body">
-    The winning layer is the one that compounds from use. Each user's
-    computer learns from their work, corrections, and history — and the
-    network adds more sources, judgments, and useful connections.
-  </div>
-  <div class="flow">
-    <div class="node">Use</div><div class="arr">→</div>
-    <div class="node">Better memory</div><div class="arr">→</div>
-    <div class="node">Better work</div><div class="arr">→</div>
-    <div class="node">More use</div>
-  </div>
-  <div class="keyline">Don't own intelligence. <span class="em">Own a system that compounds as intelligence gets cheaper.</span></div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">12</span></div>
-</section>
-
-<!-- 13 · ASK -->
+<!-- 10 · ASK -->
 <section class="slide">
   <div class="kicker">The ask</div>
-  <h2>What would make this credible?</h2>
+  <h2>Help prove supervision<br>is the bottleneck.</h2>
   <div class="rule"></div>
-  <div class="body">
-    The goal is the shortest proof path, not to over-explain.
-  </div>
   <ul class="pts">
-    <li><b>Strategic advisors</b> who understand AI products, media, and fundraising.</li>
-    <li><b>Early power users</b> for the Automatic Newspaper and Radio.</li>
-    <li><b>Pilots or introductions</b> where persistent AI work is already painful.</li>
-    <li><b>Capital</b> where it accelerates production launch and distribution.</li>
+    <li><b>Pressure-test the thesis</b> — is supervising agentic work the wedge that lands?</li>
+    <li><b>Introductions to 5–10 design partners</b> — people running long agentic workloads who feel the transcript pain.</li>
+    <li><b>Early power users</b> for the Automatic Newspaper and Radio at production launch.</li>
+    <li><b>Capital conversations</b> welcome once repeat use is evidenced.</li>
   </ul>
-  <div class="keyline">Current milestone: <span class="em">production launch, then evidence of repeat use.</span></div>
-  <div style="margin-top:30px;">
+  <div class="keyline">Current milestone: <span class="em">production launch — then evidence of repeat use.</span></div>
+  <div style="margin-top:26px;">
     <a class="tag" href="https://choir.news">choir.news</a>
     <a class="tag" href="https://github.com/choir-hip/go-choir">github.com/choir-hip/go-choir</a>
   </div>
-  <div class="foot"><span>choir — the automatic computer</span><span class="num">13</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">10</span></div>
 </section>
-
 </body>
 </html>
