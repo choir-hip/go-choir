@@ -63,22 +63,6 @@ nodes:
       - AGENTS.md
       - docs/README.md
       - cmd/doccheck/main.go
-  - id: choir-product-completion-2026-07-10
-    title: Choir Product Completion (superseded source)
-    path: docs/definitions/choir-product-completion-2026-07-10.md
-    ledger: ''
-    status: superseded
-    kind: product_completion
-    entrypoint: false
-    depends_on:
-      - choir-autoputer-completion-2026-07-14
-    enables: []
-    sources:
-      - docs/definitions/choir-autoputer-completion-2026-07-14.md
-      - docs/choir-doctrine.md
-      - AGENTS.md
-      - docs/computer-ontology.md
-      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
   - id: choir-seam-repair-2026-07-10
     title: Choir Contradiction and Seam Repair
     path: docs/definitions/choir-seam-repair-2026-07-10.md
@@ -86,82 +70,13 @@ nodes:
     status: settled
     kind: product_completion
     entrypoint: false
-    depends_on:
-      - choir-product-completion-2026-07-10
+    depends_on: []
     enables: []
     sources:
       - docs/choir-doctrine.md
       - AGENTS.md
-      - docs/definitions/choir-product-completion-2026-07-10.md
       - docs/agent-product-doctrine.md
       - docs/computer-ontology.md
-  - id: choir-autopaper-activation-2026-07-10
-    title: Choir Autopaper Source-to-Edition Activation and Stability
-    path: docs/definitions/choir-autopaper-activation-2026-07-10.md
-    ledger: ''
-    status: superseded
-    kind: product_completion
-    entrypoint: false
-    depends_on:
-      - choir-product-completion-2026-07-10
-      - choir-seam-repair-2026-07-10
-    enables: []
-    note: >-
-      Topology superseded by choir-wire-store-conformance-2026-07-11 after the
-      2026-07-11 post-mortem (attempt report) showed it contradicted D-WIRE.
-      Its evidence ledger remains valid history.
-  - id: choir-autoputer-completion-suite-2026-07-11
-    title: Choir Autoputer Completion Suite (superseded evidence)
-    path: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
-    ledger: ''
-    status: superseded
-    kind: docs_truth
-    entrypoint: false
-    depends_on:
-      - choir-autoputer-completion-2026-07-14
-    enables: []
-    note: >-
-      Superseded after S3's transport-before-domain topology was compile-falsified.
-      Completed B0-S2 and landed S3 receipts are imported by the successor.
-    sources:
-      - docs/definitions/choir-autoputer-completion-2026-07-14.md
-      - docs/choir-doctrine.md
-      - AGENTS.md
-  - id: choir-autoputer-completion-2026-07-13
-    title: Choir Autoputer Completion (superseded evidence)
-    path: docs/definitions/choir-autoputer-completion-2026-07-13.md
-    ledger: ''
-    status: superseded
-    kind: spine
-    entrypoint: false
-    depends_on:
-      - choir-autoputer-completion-2026-07-14
-    enables: []
-    note: >-
-      Superseded by the reconciled 2026-07-14 Definition. Retained as a
-      discovery tombstone for its historical receipts and evidence pointers.
-    sources:
-      - docs/definitions/choir-autoputer-completion-2026-07-14.md
-      - docs/ACTIVE.md
-  - id: choir-autoputer-completion-2026-07-14
-    title: Choir Autoputer Completion — superseded evidence
-    path: docs/definitions/choir-autoputer-completion-2026-07-14.md
-    ledger: ''
-    status: superseded
-    kind: spine
-    entrypoint: false
-    execution_mode: subordinate_only
-    depends_on:
-      - choir-audited-autoputer-construction-2026-07-15
-    enables: []
-    note: >-
-      Superseded after deployed evidence showed that production still treats
-      durable_legacy_opaque data.img as the computer. Historical runtime,
-      lifecycle, and product-path receipts remain citable; do not execute.
-    sources:
-      - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
-      - docs/ACTIVE.md
-      - AGENTS.md
   - id: choir-audited-autoputer-construction-2026-07-15
     title: Make the Autoputer Real — Audited Computer Construction
     path: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
@@ -337,32 +252,11 @@ nodes:
     depends_on:
       - choir-coherent-computer-convergence-2026-07-21
       - choir-tape-recovery-2026-08-13
-    enables: [choir-supervised-self-development-candidate-proof-2026-08-20]
+    enables: []
     note: >-
-      Superseded 2026-08-20 by compact Definition v2: choir-supervised-self-development-candidate-proof-2026-08-20.
+      Superseded 2026-08-20 by compact Definition v2 (candidate-proof, retired to Git history 2026-09-22).
     sources:
-      - docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md
       - docs/ACTIVE.md
-  - id: choir-supervised-self-development-candidate-proof-2026-08-20
-    title: Supervised Self-Development Candidate Proof
-    path: docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md
-    ledger: ''
-    status: superseded
-    kind: spine
-    entrypoint: false
-    execution_mode: superseded_non_executable
-    depends_on:
-      - choir-coherent-computer-convergence-2026-07-21
-      - choir-tape-recovery-2026-08-13
-    enables:
-      - choir-scheduling-and-candidate-proof-2026-08-21
-    note: >-
-      Superseded 2026-08-21 by choir-scheduling-and-candidate-proof-2026-08-21,
-      which carries forward the candidate A proof on the ratified scheduling
-      contract; this Definition's finish.acceptance is inherited unchanged by
-      the successor.
-    sources:
-      - docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md
   - id: choir-substrate-cleanup-and-cutover-2026-08-25
     title: Substrate Cleanup and Cutover
     path: docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
@@ -584,9 +478,9 @@ nodes:
     path: docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md
     ledger: ''
     status: settled
-    kind: operational_recovery
+    kind: subordinate_contract
     entrypoint: false
-    execution_mode: superseded_incomplete_mission_evidence
+    execution_mode: superseded_non_executable
     depends_on:
       - choir-tape-recovery-2026-08-13
     enables:
@@ -810,121 +704,6 @@ nodes:
       - docs/standing-questions.md
       - docs/ACTIVE.md
       - AGENTS.md
-  - id: choir-run-truth-suite-2026-07-11
-    title: Choir Run-Truth Suite (superseded foliation record)
-    path: docs/definitions/choir-run-truth-suite-2026-07-11.md
-    ledger: ''
-    status: superseded
-    kind: docs_truth
-    entrypoint: false
-    depends_on:
-      - choir-autoputer-completion-2026-07-14
-    enables: []
-    sources:
-      - docs/ACTIVE.md
-      - docs/standing-questions.md
-      - AGENTS.md
-      - docs/choir-doctrine.md
-  - id: choir-run-deploy-unblock-2026-07-11
-    title: Choir Run Deploy Unblock
-    path: docs/definitions/choir-run-deploy-unblock-2026-07-11.md
-    ledger: ''
-    status: settled
-    kind: product_completion
-    entrypoint: false
-    depends_on: []
-    enables: []
-    sources:
-      - docs/definitions/choir-run-truth-suite-2026-07-11.md
-      - docs/ACTIVE.md
-      - docs/standing-questions.md
-      - AGENTS.md
-      - docs/choir-doctrine.md
-  - id: choir-wire-store-conformance-2026-07-11
-    title: Universal Wire D-WIRE Conformance and Legacy Migration Deletion
-    path: docs/definitions/choir-wire-store-conformance-2026-07-11.md
-    ledger: ''
-    status: settled
-    kind: product_completion
-    entrypoint: false
-    depends_on: []
-    enables: []
-    note: >-
-      End-to-end World Wire article/lineage production is tabled until after the
-      actor RLM rewrite, so the processor pipeline inherits code-based
-      orchestration instead of the old workflow structure. The authority-cutover
-      and legacy-migration receipts remain settled; the source-to-article product
-      path is explicitly deferred, not a live capability claim.
-  - id: choir-autoputer-cli-operability-2026-07-11
-    title: Autoputer External-CLI Operability Before Choir-in-Choir
-    path: docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
-    ledger: ''
-    status: superseded
-    kind: product_completion
-    entrypoint: false
-    execution_mode: subordinate_only
-    note: >-
-      Historical external-CLI contract. Its self-development/capsule topology is
-      unauthorized until the audited-construction Definition completes and an
-      owner-authorized successor exists.
-    depends_on: []
-    enables: []
-    sources:
-      - docs/definitions/choir-wire-store-conformance-2026-07-11.md
-      - docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
-      - docs/standing-questions.md
-      - docs/definitions/choir-product-completion-2026-07-10.md
-      - docs/definitions/choir-seam-repair-2026-07-10.md
-      - docs/choir-doctrine.md
-      - AGENTS.md
-      - docs/computer-ontology.md
-      - docs/agent-product-doctrine.md
-      - docs/runtime-invariants.md
-      - docs/texture-agentic-invariants-2026-06-13.md
-      - docs/source-external-data-publication.md
-  - id: choir-run-lifecycle-and-completion-authority-2026-07-11
-    title: Choir Run Lifecycle and Completion Authority
-    path: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
-    ledger: ''
-    status: superseded
-    kind: product_completion
-    entrypoint: false
-    execution_mode: subordinate_only
-    note: >-
-      Historical lifecycle contract and receipts imported by the superseded
-      2026-07-14 Definition. It has no independent execution authority.
-    depends_on: []
-    enables: []
-    sources:
-      - docs/definitions/choir-run-truth-suite-2026-07-11.md
-      - docs/definitions/choir-run-deploy-unblock-2026-07-11.md
-      - docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
-      - docs/definitions/choir-wire-store-conformance-2026-07-11.md
-      - docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
-      - docs/standing-questions.md
-      - docs/choir-doctrine.md
-      - AGENTS.md
-      - docs/runtime-invariants.md
-  - id: choir-vocabulary-cutover-2026-07-11
-    title: Choir Vocabulary Cutover
-    path: docs/definitions/choir-vocabulary-cutover-2026-07-11.md
-    ledger: ''
-    status: superseded
-    kind: product_completion
-    entrypoint: false
-    execution_mode: subordinate_only
-    note: >-
-      Historical vocabulary contract. Current ontology is owned by doctrine; the
-      completed audited-construction Definition is retained as evidence.
-    depends_on: []
-    enables: []
-    sources:
-      - docs/definitions/choir-run-truth-suite-2026-07-11.md
-      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
-      - docs/choir-doctrine.md
-      - AGENTS.md
-      - docs/standing-questions.md
-
   - id: choir-rlm-engineering-carrier-2026-09-11
     title: RLM Engineering Carrier
     path: docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md

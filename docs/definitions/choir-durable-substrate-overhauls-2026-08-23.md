@@ -104,6 +104,7 @@ phases:
       - "Build recovery cells with per-cell restore budgets and weighted fair scheduling."
 
 now:
+  status: settled
   slice: "Durable Substrate Overhauls IMPLEMENTED & TESTED across all four tracks: (1) Track K Key Escrow & Wrap Hierarchy (complete & proven on staging, docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md); (2) Track F File-CAS Commit Protocol & Replay Watermarks (encrypted 4MiB chunk CAS, deterministic Merkle manifests, tape citations, sync barrier, referential GC, fail-open atomic-staged boot hydration, ProjectionBase pre-reconstruct materializer, incremental O(delta) restore cycle proven); (3) Track M Mail MTA Spool & Guest Maildir on CAS (fsync'd host spool queue, async LMTP drain worker with exponential backoff, standard Unix Maildir in persistent storage with Message-ID dedup, checkpoint-bound spool purge); (4) Assurance & Scale (self-describing recovery capsules with cryptographic witnesses, automated restore drill runner measuring RTO/RPO SLOs, background blob integrity scrubber)."
   reconciliation:
     observed_at: "2026-08-26T17:30:00Z"
@@ -130,7 +131,7 @@ now:
     - "docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md"
     - "docs/reports/choir-durable-substrate-overhauls-progress-and-station-report-2026-08-26.md"
   blocker_or_risk: "None blocking. CI pipeline in flight for deployed staging verification."
-  next_action: "Monitor CI and staging deployment of Track F/M/Assurance substrate commits."
+  next_action: "None. Settled; all four tracks landed and deployed-proven. This file is settled evidence, not an executable mission."
 receipts:
   - id: track-k-keys-acceptance
     boundary: track-keys-proof

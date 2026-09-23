@@ -20,7 +20,7 @@ the computer. That is phase one — the technology, not the product.
 A persistent computer that works continuously and develops itself under
 owner supervision. An **RLM** (recursive language model, cf. Zhang et
 al., MIT) runs long-horizon work by spawning sub-agents as async calls,
-and **PICL** keeps learning weightless — committed predictions resolve
+and **precommitment records** keep learning weightless — committed predictions resolve
 into provenance-linked records instead of weight updates. Every change
 is a typed event; every surface is a deterministic projection. Proven on
 staging: whole-computer restore, encrypted file storage, key escrow,
@@ -67,7 +67,7 @@ answers two ways: a **managed** deployment under zero-data-retention
 policies, or the **open-source OS** self-hosted — with or without our
 consulting. The offering spans the gamut: the hobbyist pays nothing;
 above hobbyist, the data products carry the subscription — **the
-record** and **the box score**. PICL weightless learning makes the open
+record** and **the box score**. Precommitment records make the open
 source a community-driven gym: the community's use sharpens the shared
 system while every organization's data stays home.
 

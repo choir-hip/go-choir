@@ -69,11 +69,11 @@ the product is made of. What an agent writes, a human or another agent
 reads, checks, and corrects.
 
 
-## 6 · The learning loop (PICL)
+## 6 · The learning loop (precommitment records)
 
 Own your own learning loop.
 
-PICL — predictive in-context learning. Before acting, an agent commits
+Precommitment records. Before acting, an agent commits
 a prediction; after acting, the outcome resolves it. Every committed
 prediction becomes a provenance-linked record — improving the quality
 of outcomes through learning, and safety through logging and
@@ -134,7 +134,7 @@ API.
 Your data stays home. Managed under zero-data-retention, or self-hosted
 open source ± consulting. The gamut: hobbyist free → data products
 (API access to the record, the box score) → managed →
-consulting. PICL makes open source a community-driven gym.
+consulting. Precommitment records make open source a community-driven gym.
 
 ## 12 · The market
 

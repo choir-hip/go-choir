@@ -1,10 +1,13 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-24. Every claim is marked **Live**, **Target**, or
-**Retired**. The owner-ratified
+**Last updated:** 2026-07-24. **Stale as of 2026-09-22** — this memo predates
+the RLM carrier cutover and the precommitment-records direction; read it as a
+substrate reference, not the current mission state. The sole working
+entrypoint is the
+[RLM Engineering Carrier](definitions/choir-rlm-engineering-carrier-2026-09-11.md)
+(see `ACTIVE.md`). The owner-ratified
 [durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
-completed deployed acceptance and is historical evidence authority. No
-top-level product Definition is currently executable. The superseded
+completed deployed acceptance and is historical evidence authority. The superseded
 [self-development Definition](definitions/choir-cli-self-development-2026-07-16.md),
 completed audited-construction Definition, and OG/Dolt subordinate D-ROUTE,
 detector, and deletion contracts remain evidence.

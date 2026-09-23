@@ -47,9 +47,10 @@ Read the relevant contract before touching its protected surface.
 - `semantic-registry.md` is a compact derived map; domain contracts govern only
   their stated scope and cannot override doctrine.
 - `NOW.md` is retired; it routes deployment-health questions to direct observation and work-state questions to `ACTIVE.md`.
-- `ACTIVE.md` is the curated work view. A promoted working Definition is the
-  sole current authority root; completed Definitions remain evidence.
-- `mission-graph.yaml` is discovery metadata. Definitions own their state; the
+- `ACTIVE.md` is the curated work view. A promoted working goal file is the
+  sole current authority root; completed goals remain evidence. The mission
+  roadmap is `world-wire-mission-stack-2026-09-22.md`.
+- `mission-graph.yaml` is discovery metadata. Goal files own their state; the
   graph and Git history are not executable authority.
 - `archive/` is searchable historical material, never current doctrine,
   executable mission authority, or part of the default packet. Verify retained

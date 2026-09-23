@@ -24,6 +24,38 @@ documents:
     witnesses: [docs/signal-is-sparse-not-the-learner-2026-08-01.md, docs/choir-vision.md]
     refresh_triggers: [product_vision_change, doctrine_change]
 
+  - path: docs/Precommitment Records Theory and Implications.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: mechanism_theory, authority: support, lifecycle: living}
+    witnesses: [docs/Precommitment Records Theory and Implications.md, docs/Precommitment Records — Engineering Memo.md, docs/choir-vision.md]
+    refresh_triggers: [product_vision_change, doctrine_change]
+
+  - path: docs/Precommitment Records — Engineering Memo.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: mechanism_spec, authority: support, lifecycle: living}
+    witnesses: [docs/Precommitment Records — Engineering Memo.md, docs/Precommitment Records Theory and Implications.md, docs/world-wire-mission-stack-2026-09-22.md]
+    refresh_triggers: [product_vision_change, doctrine_change]
+
+  - path: docs/world-wire-mission-stack-2026-09-22.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: roadmap, authority: support, lifecycle: living}
+    witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/reports/choir-rlm-missions-overview-2026-09-09.md]
+    refresh_triggers: [product_vision_change, doctrine_change]
+
+  - path: docs/reorientation-docs-overhaul-2026-09-22.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: overhaul_plan, authority: support, lifecycle: living}
+    witnesses: [docs/reorientation-docs-overhaul-2026-09-22.md, docs/world-wire-mission-stack-2026-09-22.md, docs/ACTIVE.md]
+    refresh_triggers: [doctrine_change]
+
   - path: AGENTS.md
     claim_scope: current
     is_root: [authority, entry]
@@ -69,7 +101,7 @@ documents:
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: active_work_navigation, authority: derived_support, lifecycle: living}
-    witnesses: [docs/mission-graph.yaml, docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/definitions/choir-seam-repair-2026-07-10.md]
+    witnesses: [docs/mission-graph.yaml, docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/definitions/choir-seam-repair-2026-07-10.md]
     refresh_triggers: [active_definition_change, mission_graph_change]
 
   - path: docs/current-architecture.md
@@ -224,79 +256,28 @@ documents:
     witnesses: [docs/definitions/documentation-authority-reduction-2026-07-09.md, docs/mission-graph.yaml, cmd/doccheck/main.go]
     refresh_triggers: [documentation_index_change, doccheck_rule_change]
 
-  - path: docs/definitions/choir-product-completion-2026-07-10.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
-    witnesses: [docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
-
   - path: docs/definitions/choir-seam-repair-2026-07-10.md
     claim_scope: current
     is_root: []
     is_evidence: false
     annotations: {doc_role: definition, authority: mission, lifecycle: settled}
-    witnesses: [docs/definitions/choir-seam-repair-2026-07-10.md, docs/definitions/choir-product-completion-2026-07-10.md, docs/mission-graph.yaml]
+    witnesses: [docs/definitions/choir-seam-repair-2026-07-10.md, docs/mission-graph.yaml]
     refresh_triggers: [mission_state_change, deployment_identity_change, promotion_route_change]
-
-  - path: docs/definitions/choir-autopaper-activation-2026-07-10.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
-    witnesses: [docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md, docs/definitions/choir-wire-store-conformance-2026-07-11.md]
-    refresh_triggers: []
-
-  - path: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: post_mortem, authority: evidence_scoped, lifecycle: retained}
-    witnesses: [docs/definitions/choir-autopaper-activation-2026-07-10.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md]
-    refresh_triggers: []
 
   - path: docs/standing-questions.md
     claim_scope: current
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: agent_preflight, authority: derived_support, lifecycle: living}
-    witnesses: [AGENTS.md, docs/choir-doctrine.md, docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md]
+    witnesses: [AGENTS.md, docs/choir-doctrine.md]
     refresh_triggers: [doctrine_change, mission_failure_postmortem, operating_contract_change]
-
-  - path: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
-    witnesses: [docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
-
-  - path: docs/definitions/choir-autoputer-completion-2026-07-13.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
-    superseded_by: [docs/definitions/choir-autoputer-completion-2026-07-14.md]
-    witnesses: [docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
-
-  - path: docs/definitions/choir-autoputer-completion-2026-07-14.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
-    supersedes: [docs/definitions/choir-autoputer-completion-2026-07-13.md]
-    superseded_by: [docs/definitions/choir-audited-autoputer-construction-2026-07-15.md]
-    witnesses: [docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
 
   - path: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
     claim_scope: historical
     is_root: []
     is_evidence: true
     annotations: {doc_role: definition, authority: completed_mission_evidence, lifecycle: complete, entrypoint: false}
-    supersedes: [docs/definitions/choir-autoputer-completion-2026-07-14.md]
+    supersedes: []
     witnesses: [docs/evidence/audited-construction-terminal-receipt-2026-07-17.md, docs/evidence/g5-post-cutover-accepted-review-2026-07-17.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: []
 
@@ -348,8 +329,8 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded, entrypoint: false}
-    superseded_by: [docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md]
-    witnesses: [docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    superseded_by: []
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: []
 
   - path: docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
@@ -576,61 +557,12 @@ documents:
     refresh_triggers: [audited_constructor_acceptance, predecessor_completion, node_b_baseline, owner_slo_ratification, registry_promotion]
 
 
-  - path: docs/definitions/choir-wire-store-conformance-2026-07-11.md
-    claim_scope: current
-    is_root: []
-    is_evidence: false
-    annotations: {doc_role: definition, authority: subordinate_mission_contract, lifecycle: settled}
-    witnesses: [docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/computer-ontology.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: [mission_state_change, wire_store_change, corpusd_change, sourcecycled_change]
-
-  - path: docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
-    superseded_by: [docs/definitions/choir-audited-autoputer-construction-2026-07-15.md]
-    witnesses: [docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
-
-  - path: docs/definitions/choir-run-truth-suite-2026-07-11.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
-    witnesses: [docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
-
-  - path: docs/definitions/choir-run-deploy-unblock-2026-07-11.md
-    claim_scope: current
-    is_root: []
-    is_evidence: false
-    annotations: {doc_role: definition, authority: subordinate_mission_contract, lifecycle: settled}
-    witnesses: [docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/definitions/choir-run-truth-suite-2026-07-11.md, docs/ACTIVE.md, docs/mission-graph.yaml]
-    refresh_triggers: [mission_state_change, run_lifecycle_change, staging_deploy]
-
-  - path: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
-    witnesses: [docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
-
-  - path: docs/definitions/choir-vocabulary-cutover-2026-07-11.md
-    claim_scope: historical
-    is_root: []
-    is_evidence: true
-    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
-    witnesses: [docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
-
   - path: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md
     claim_scope: historical
     is_root: []
     is_evidence: true
     annotations: {doc_role: consensus_evidence, authority: adjudicated_external_review, lifecycle: append_only}
-    witnesses: [docs/definitions/choir-autoputer-completion-suite-2026-07-11.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, consensus_checkpoint]
 
   - path: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
@@ -751,5 +683,5 @@ documents:
     annotations: {doc_role: evidence, authority: deployed_acceptance_evidence, lifecycle: append_only, entrypoint: false}
     superseded_by: []
     depends_on: []
-    witnesses: [docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md, docs/ACTIVE.md]
+    witnesses: [docs/ACTIVE.md]
     refresh_triggers: []

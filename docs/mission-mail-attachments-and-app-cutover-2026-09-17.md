@@ -199,8 +199,8 @@ the old app hidden-but-present; proof from local harness only.
 - Guest proof: authenticated desktop on the retained computer serves the
   new MailApp chunk (serving_join / frontend version evidence), and the
   old `email` app is absent from the registry everywhere.
-- Mission report: `docs/mission-report-mail-attachments-2026-09-17.md`
-  + PDF in iCloud mission reports.
+- Mission report: the Run Checkpoint & Resumption State section below is the
+  completion report (no separate report file was produced).
 
 ## Forbidden shortcuts
 

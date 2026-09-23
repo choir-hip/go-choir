@@ -1,13 +1,13 @@
 ---
 name: cognitive-transform-portfolio
-description: Use when an agent is stuck, shallow, over-literal, audience-misaligned, cargo-culting a slogan/framework, or needs route-changing lenses before implementation, verification, writing, strategy, or MissionGradient work. Select 2-5 cognitive transforms that change the next probe, route, scope, verifier, or stopping condition.
+description: Use when an agent is stuck, shallow, over-literal, audience-misaligned, cargo-culting a slogan/framework, or needs route-changing lenses before implementation, verification, writing, strategy, or throughline mission work. Select 2-5 cognitive transforms that change the next probe, route, scope, verifier, or stopping condition.
 version: 1.0.0
 author: Hermes Agent
 license: MIT
 metadata:
   hermes:
-    tags: [cognitive-transforms, reasoning, writing, strategy, mission-gradient, audience-translation]
-    related_skills: [mission-gradient]
+    tags: [cognitive-transforms, reasoning, writing, strategy, throughline, audience-translation]
+    related_skills: [throughline]
 ---
 
 # Cognitive Transform Portfolio

@@ -128,8 +128,8 @@ finish:
       class: registry update
 
 now:
-  status: resumed_owner_directed
-  slice: "Owner directed resumption 2026-08-28 after account-recovery acceptance and closure of the held-computer boot outage. Candidate A artifacts remain preserved; effects remain fenced OFF."
+  status: superseded
+  slice: "Superseded into the 2026-09-02 RLM sequence (choir-supervised-self-development-on-rlm-2026-09-02 and successors). This file is historical evidence, not an executable mission; the resumed_owner_directed state below is the 2026-08-28 record of the last live decision, retained for provenance."
   question: "Answered 2026-08-28: owner direction 'get back on track' resumes candidate proof on the retained computer after the substrate repair landed."
   reconciliation:
     observed_at: "2026-08-28T16:30:00Z"
@@ -154,7 +154,7 @@ now:
     - "docs/reports/choir-whole-system-status-retrospective-2026-08-28.md"
     - "docs/evidence/root-cause-clustering-objectgraph-body-scan-2026-08-28.md"
   blocker_or_risk: "Residual same-substrate scans remain outside this repair (run-family ogListAllByMetadata, mailbox backlog paging, sweepPassivatedSpawnedCoagentWork) and could re-enter the boot death loop on corpus growth; nine undelivered CoSuper cancel producer reports from the 08-19 storm still need a fresh CoSuper binding to consume. Pre-A checkpoint 99949fe2 is the fence; effects OFF."
-  next_action: "Bind a fresh CoSuper assignment on computer-03335285269bdba4f94377e56879f9e6, author candidate change A inside the guest capsule with the pre-declared foundation defect, freeze five capsule-bound bundle refs, run qualified consensus under reversible-selfdev-v1, promote, verify live play, falsify with B, and restore to checkpoint 99949fe2. Effects remain OFF."
+  next_action: "None. Superseded; no action runs under this Definition. The candidate-proof arc continues under the RLM successor definitions."
 ---
 
 

@@ -34,8 +34,8 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   Mission 2 proves vocabulary only; the five overlay JSON tools and four
   legacy capsule operations plus replay-returns-original-receipts belong to
   the Engineering-proof successor mission: overlay JSON tools record_assignment_result, update_coagent, commit_transaction, inspect_self_development_bundle, record_self_development_verification; legacy capsule operations capsule_exec, capsule_list_dir, capsule_read_file, capsule_write_file; eval primitive capsule_go_eval in neither retirement list (counts verifiable via TestAssignedCoSuperBuilderIsExactClosedSet).
-  Drafted as `docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md` (not yet chartered).
-  Revisit: when that mission charters.
+  Chartered as `docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md` — the sole working entrypoint (ACTIVE.md).
+  Revisit: when the carrier mission completes the retirement.
 - **R8 — `actuator=tools` deletion deferred until every desk crosses (open).** The Engineering
   carrier keeps the `actuator=tools` registry branch alive but unused: no RLM proof may depend on
   it and no rollback path may target it. The owner (2026-09-11) set the deletion bar at the

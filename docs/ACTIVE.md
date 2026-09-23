@@ -2,6 +2,8 @@
 
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
+The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
+the mission format is throughline (`skills/throughline/SKILL.md`).
 
 ## Working Definition — RLM Engineering Carrier
 
@@ -180,9 +182,9 @@ to reopen it.
 [`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
 is superseded historical evidence. Its policy, email, and restore reasoning remain
 citable historical evidence; it is not an executable entrypoint. The tape-recovery Definition
-owns restore substrate receipts. Active execution lives solely in
-[`definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`](definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md)
-(activated 2026-09-03 following Definition 1 terminal receipt; Definition 1 is completed evidence, not an entrypoint).
+owns restore substrate receipts; it too is settled evidence, not an entrypoint. Active execution lives solely in
+[`definitions/choir-rlm-engineering-carrier-2026-09-11.md`](definitions/choir-rlm-engineering-carrier-2026-09-11.md)
+(the sole working entrypoint; the session-interpreter cutover it names is superseded).
 
 The scope-disjoint
 [`choir-instruction-substrate-prune-2026-08-11.md`](definitions/choir-instruction-substrate-prune-2026-08-11.md)
@@ -215,17 +217,17 @@ plus the disposed Mission 0 direct-key ceremony at
 recovery bypass, SSH, or weaker authorization is admissible).
 They are historical evidence, not rollback or live schedule; effects remain OFF.
 The active executable slice and `next_action` live solely in
-[`definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`](definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md).
+[`definitions/choir-rlm-engineering-carrier-2026-09-11.md`](definitions/choir-rlm-engineering-carrier-2026-09-11.md).
 The tape-recovery restore proof is paid (complete 2026-08-15).
-Completed Definitions are historical evidence, not executable entrypoints; full
-claims and receipts remain in their source files and `mission-graph.yaml`:
-`choir-tape-recovery-2026-08-13.md` (whole-computer restore substrate);
-`choir-coherent-computer-convergence-2026-07-21.md` (durable-work kernel);
-`choir-cli-self-development-2026-07-16.md` (incomplete construction);
-`choir-audited-autoputer-construction-2026-07-15.md` (audited construction and
-D-ROUTE); `choir-autoputer-completion-2026-07-14.md` and
-`choir-autoputer-completion-2026-07-13.md` (runtime evidence); and
-`og-dolt-heresy-completion-2026-07-08.md` (settled storage/D-ROUTE/H031).
+Completed Definitions are historical evidence, not executable entrypoints;
+receipts remain in `mission-graph.yaml` and Git history. Retained settled
+receipts: `choir-tape-recovery-2026-08-13.md` (whole-computer restore
+substrate); `choir-coherent-computer-convergence-2026-07-21.md` (durable-work
+kernel); `choir-audited-autoputer-construction-2026-07-15.md` (audited
+construction and D-ROUTE); `og-dolt-heresy-completion-2026-07-08.md` (settled
+storage/D-ROUTE/H031); `choir-cli-self-development-2026-07-16.md` (incomplete
+construction). Retired to Git history 2026-09-22: the autoputer-completion,
+run-suite, wire-store, vocabulary, and autopaper definitions.
 None is executable unless explicitly promoted in the current registry.
 
 ## Superseded — Scheduling Contract and Candidate Proof
@@ -250,11 +252,10 @@ credentials, candidate VMs, or promotion without separate owner ratification.
 ## Supporting Maintenance
 
 Supporting maintenance Definitions retain their evidence and status:
-`choir-seam-repair-2026-07-10.md`, `choir-autopaper-activation-2026-07-10.md`,
-`choir-autoputer-completion-suite-2026-07-11.md`,
-`choir-run-truth-suite-2026-07-11.md`, and
+`choir-seam-repair-2026-07-10.md` and
 `documentation-authority-reduction-2026-07-09.md`. They are settled,
-superseded, or historical as stated by their source Definitions, not entrypoints.
+superseded, or historical as stated by their source Definitions, not
+entrypoints.
 
 RLM restore-zero completed 2026-09-09 and is historical evidence, not an
 entrypoint. RLM versioned rename completed 2026-09-11 (deployed commit `e3396329`) and is

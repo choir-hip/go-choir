@@ -78,10 +78,11 @@ on every deploy, triggering 4,900-item cold re-fetches.)*
 **9. Could an agent do this without SSH?**
 Every diagnosis, lifecycle action, and acceptance proof should be reachable
 through the product API / choir CLI under a scoped key. SSH-shaped operations
-are platform break-glass, not product paths. See the Introspection Contract
-in `docs/definitions/choir-autoputer-cli-operability-2026-07-11.md` for the
-safe limit (authority-scoped, receipts-not-shells, substrate-neutral
-diagnostics).
+are platform break-glass, not product paths. The Introspection Contract
+(retired with the cli-operability Definition 2026-09-22, in Git history):
+authority-scoped keys, receipts-not-shells, substrate-neutral diagnostics —
+an operator or co-super reaches every diagnosis, lifecycle action, and
+acceptance proof through the API/CLI.
 *(Caught: twelve attempts diagnosed entirely via journalctl/systemctl on
 Node B — a surface neither external agent operators nor co-supers will have.)*
 

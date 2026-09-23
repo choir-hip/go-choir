@@ -24,11 +24,18 @@ ready to execute.
 Product architecture rules live in [docs/agent-product-doctrine.md](docs/agent-product-doctrine.md)
 (authority boundaries, harness minimalism, Texture control plane, runtime
 configuration, product-path verification, run acceptance). Long-running mission
-rules live in [skills/definition/SKILL.md](skills/definition/SKILL.md)
-(Definition: executable mission authority for `/goal <doc>.md` runs, with
-definition graph, invariants, conjectures, evidence classes, and completion
-semantics). `skills/parallax/SKILL.md` is legacy reference; its former companion
-document is available only in Git history. For multi-agent review
+rules live in [skills/throughline/SKILL.md](skills/throughline/SKILL.md)
+(throughline: the current executable `/goal <doc>.md` mission format — goal
+file, value criterion, realism axis, typed conjecture, current-state card).
+[skills/definition/SKILL.md](skills/definition/SKILL.md) is the goal-file
+contract the existing corpus is written in; throughline is the authoring
+discipline layered on the same `/goal` artifact. `skills/mission-gradient` and
+`skills/parallax` are retired generations of the lineage (mission-gradient →
+parallax → throughline), removed 2026-09-22 and retained in Git history. The
+mission roadmap from here to World Wire live is
+[docs/world-wire-mission-stack-2026-09-22.md](docs/world-wire-mission-stack-2026-09-22.md);
+the product mechanism is precommitment records
+(`docs/Precommitment Records — Engineering Memo.md`). For multi-agent review
 panels used at definition or phase gates, see
 [skills/agentic-consensus/SKILL.md](skills/agentic-consensus/SKILL.md). Load those
 on demand.

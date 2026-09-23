@@ -1,6 +1,9 @@
 # Platform OS And App State
 
-**Status:** canonical platform-level state ledger
+**Status:** canonical platform-level state ledger — **stale as of 2026-09-22**;
+predates the RLM carrier cutover and precommitment-records direction. Read as
+a substrate reference; current mission state lives in `ACTIVE.md` and the
+[RLM Engineering Carrier](definitions/choir-rlm-engineering-carrier-2026-09-11.md).
 **Last updated:** 2026-07-24
 **Changelog:** Recorded deployed generic durable-work acceptance and completion
 of the convergence Definition. Historical design material remains in Git
@@ -8,7 +11,7 @@ history; rejected-branch deletions are not silently claimed as canonical-main
 state.
 **Baseline checked:** deployed commit `4ffcae3a`; signed host/guest identity,
 restart reconstruction, settlement/cancellation, and desktop/headless lifecycle
-conformance passed. No product Definition is currently executable.
+conformance passed.
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,

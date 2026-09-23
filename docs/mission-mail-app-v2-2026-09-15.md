@@ -112,8 +112,9 @@ remaining error field: real-mailbox authenticated acceptance; owner A/B
   decision between `email` and `mail` apps
 highest-impact remaining uncertainty: none blocking; draft deep-link
   (`?app=email&draft=`) approval URLs still target the old app by design
-next executable probe: owner compares both apps signed-in, picks keeper
-suggested resume goal string: "A/B email vs mail signed-in; remove loser"
+next executable probe: none — superseded. The owner picked Mail as keeper and
+  EmailApp was deleted under `docs/mission-mail-attachments-and-app-cutover-2026-09-17.md`;
+  this file is historical evidence of the A/B build, not a live mission.
 evidence artifact refs: /tmp/mailv2-*.png, /tmp/staging-mail-*.png,
   owner screenshot 2026-09-15
 rollback refs: git revert 940f46c1 (registry + new file only)

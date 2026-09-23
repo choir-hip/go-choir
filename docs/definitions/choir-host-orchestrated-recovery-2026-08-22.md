@@ -99,8 +99,8 @@ phases:
       - "Implement proxy/BIOS integration: owner-authorized fallback for inactive computer (recover_current only, no checkpoint passthrough) and Desktop.svelte one-shot cold-recover after :8085 refusal with recovery.status."
       - "Tests: rewind-refusal, multitenant isolation, lease/head-movement/re-verify, crash-resume, rollback-on-verification-failure."
 now:
-  status: working
-  slice: "Trusted-guest single-key copy wired locally; awaiting push/CI/deploy and owner staging proof."
+  status: superseded
+  slice: "Superseded by the durable-substrate recovery path (choir-durable-substrate-recovery-2026-08-23 and successors). This file is historical evidence, not an executable mission; the working/implementation state below is the 2026-08-22 record of the last live decision, retained for provenance."
   question: "Will the host-emulated trusted-guest copy plus final-head verifier make recover_current boot-fresh without host ext4 mount?"
   reconciliation:
     observed_at: "2026-08-22T21:00:00Z"
@@ -129,4 +129,4 @@ now:
     - "docs/evidence/effects-red-recovery-trusted-guest-copy-authority-2026-08-22.md"
     - "docs/evidence/effects-red-recovery-trusted-guest-copy-fix-2026-08-22.md"
   blocker_or_risk: "Trusted-guest copier is wired (TrustedGuestCopier via debugfs/plain, StateDir, headReader, verifier). Local unit, quarantine/staging, proxy isolation, lease, and frontend build pass. Remaining is push/CI/deploy and owner product-path recovery proof on 0333528; quarantine retention and mode-0400 are verified locally, staging proof will confirm replay equivalence."
-  next_action: "Commit, push, wait CI, verify Node B deploy, then run owner cookie/BIOS cold-recover on 0333528 and collect recovery.status, quarantine, rewind-refusal, lease, and isolation receipts."
+  next_action: "None. Superseded; no action runs under this Definition. Recovery authority moved to the durable-substrate recovery successor."
