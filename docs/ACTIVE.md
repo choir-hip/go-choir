@@ -24,6 +24,17 @@ scope — engineering desk on the in-cell carrier, R7/R9 deletions, canonical
 run acceptance — becomes M2 in the ordered mission list, dependent on M1's
 document channel. Its P0 freeze artifact is retained as evidence.
 
+## Draft Successors — Not Executable (ordered mission list)
+
+Draft `/goal` files for the missions after M1, authored 2026-09-22. Blocked
+hypotheses, not schedules or implementation authority; each promotes only
+after its predecessor's terminal receipt:
+
+- **M2** [`choir-sub-rlm-document-channel-draft-2026-09-22.md`](definitions/choir-sub-rlm-document-channel-draft-2026-09-22.md) — carrier landing ≡ self-dev phase 1; blocked on M1.
+- **M3** [`choir-ontology-kernel-draft-2026-09-22.md`](definitions/choir-ontology-kernel-draft-2026-09-22.md) — derivable-continuation kernel, deletes wrong-path (b)–(e); blocked on M1/M2.
+- **M4** [`choir-desk-crossings-super-retirement-draft-2026-09-22.md`](definitions/choir-desk-crossings-super-retirement-draft-2026-09-22.md) — desk crossings + R8/R10; blocked on M3.
+- **M5** [`choir-precommitment-record-ledger-draft-2026-09-22.md`](definitions/choir-precommitment-record-ledger-draft-2026-09-22.md) — record type + OG ledger (2a); blocked on M3 for runtime.
+
 ## Completed Definition — Private Programmable Go Actor Kernel
 
 [`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)

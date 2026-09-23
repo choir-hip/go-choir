@@ -753,3 +753,84 @@ nodes:
       - docs/choir-doctrine.md
       - AGENTS.md
       - docs/standing-questions.md
+  - id: choir-sub-rlm-document-channel-draft-2026-09-22
+    title: Sub-RLM Document Channel / Carrier Landing (M2, draft)
+    path: docs/definitions/choir-sub-rlm-document-channel-draft-2026-09-22.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-texture-owner-input-cutover-2026-09-22
+    enables: []
+    note: >-
+      Draft successor — M2 of the ordered mission list. Carrier landing and
+      self-dev capability phase 1 as one mission (1c ≡ 3a): harness drives a
+      real task via choir CLI as a sub-RLM cast on the document channel;
+      engineering desk on in-cell carrier; R7/R9 deletions. Blocked on M1.
+      Not executable until promoted.
+    sources:
+      - docs/world-wire-mission-stack-2026-09-22.md
+      - docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md
+  - id: choir-ontology-kernel-draft-2026-09-22
+    title: Ontology Kernel (M3, draft)
+    path: docs/definitions/choir-ontology-kernel-draft-2026-09-22.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-sub-rlm-document-channel-draft-2026-09-22
+    enables: []
+    note: >-
+      Draft successor — M3 of the ordered mission list. The ratified ontology
+      cutover kernel: derivable continuations, fenced atomic commit,
+      serial-per-actor, dispatcher as sole consumer, write-fenced migration;
+      deletes wrong-path sub-classes (b)-(e). Blocked on M1/M2. Not
+      executable until promoted.
+    sources:
+      - docs/world-wire-mission-stack-2026-09-22.md
+      - docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
+      - docs/problems/root-cause-wrong-path-cluster-2026-09-22.md
+  - id: choir-desk-crossings-super-retirement-draft-2026-09-22
+    title: Desk Crossings + Super/actuator=tools Retirement (M4, draft)
+    path: docs/definitions/choir-desk-crossings-super-retirement-draft-2026-09-22.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-ontology-kernel-draft-2026-09-22
+    enables: []
+    note: >-
+      Draft successor — M4 of the ordered mission list. Texture, research,
+      and management desks cross to the common carrier; actuator=tools (R8)
+      and Super substrate (R10) deleted once nothing consumes them. Blocked
+      on M3. Not executable until promoted.
+    sources:
+      - docs/world-wire-mission-stack-2026-09-22.md
+      - docs/problems/root-cause-wrong-path-cluster-2026-09-22.md
+  - id: choir-precommitment-record-ledger-draft-2026-09-22
+    title: Precommitment Record Type + OG Ledger (M5, draft)
+    path: docs/definitions/choir-precommitment-record-ledger-draft-2026-09-22.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-ontology-kernel-draft-2026-09-22
+    enables: []
+    note: >-
+      Draft successor — M5 of the ordered mission list (stack 2a). The
+      precommitment record as an OG object with provenance edges;
+      deterministic pairing; Curator minting; Markdown ledger + doccheck
+      regex retire. Blocked on M3 for runtime; schema drafting may overlap.
+      Not executable until promoted.
+    sources:
+      - docs/world-wire-mission-stack-2026-09-22.md
+      - docs/Precommitment Records — Engineering Memo.md
+      - docs/Precommitment Records Theory and Implications.md
