@@ -155,7 +155,7 @@ boundaries:
     - Run acceptance (no change to acceptance semantics in this mission).
 
 now:
-  status: landed
+  status: contested — landed, consensus SEND BACK on acceptance proof
   slice: M1 — owner input is a document revision; wrong-path ingress deleted
   source_ref: main@6d9b3e97
   deploy_identity: staging https://choir.news (proxy/vmctl OK)
@@ -281,6 +281,36 @@ receipts:
     evidence_refs:
       - https://choir.news/health (build.commit=b994a0fb)
       - gh run 35819171822 (CI success)
+  - at: '2026-09-23'
+    kind: consensus_review
+    summary: >-
+      Agentic consensus panel reviewed the landed candidate (diff
+      a4cef7cf..7e085197, deployed build b994a0fb) before completion
+      acceptance. Verdict: SEND BACK (3 of 4 usable votes — claude, codex,
+      omp-gpt56-sol; glm-5.3-flash ACCEPT). Confirmed gap: the deployed
+      acceptance spec's head-binding assertion
+      `expect(headIDs).toContain(meta.current_revision_id)` accepts ANY
+      revision of the document, including the create-time initial revision
+      R0 — the spec's own comment admits the create-wake and /revise
+      occurrence coalesce. It proves "a desk run exists bound to some head
+      with request_intent=apply_owner_revision," not "the desk observed the
+      owner's R1." Panel also verified: pending derivation sound
+      (TextureTurnConsumedHead invariant holds across advancing/non-advancing/
+      stale-head turns), LOI channel grep-clean, scope stayed inside M1.
+      Required closure: tighten the spec to assert
+      meta.current_revision_id === ownerRevisionID (or a tape/turn receipt
+      naming ownerRevisionID) and rerun on staging; if the run stays bound
+      to R0, that is itself a finding (a live run not picking up a newer
+      owner head). Residual risks carried to M2: consume-once failure
+      semantics (a failed turn permanently consumes the owner head — live on
+      staging now via the chatgpt refresh-token gap); restore may re-pend an
+      old consumed owner revision; create counts as an owner edit.
+    evidence_refs:
+      - .agentic-consensus/agentic-consensus-20260923-060047/ (prompt.md,
+        manifest.tsv, claude.out, codex.out, omp-gpt56-sol.out,
+        omp-glm53-flash.out)
+      - frontend/tests/texture-owner-revision-deployed.spec.js:77-80
+      - internal/store/texture_owner_revision.go:9-53
 ---
 
 ## What this mission is
@@ -338,3 +368,4 @@ This mission supersedes `choir-rlm-engineering-carrier-2026-09-11` as the sole
 working entrypoint. The carrier's remaining scope (engineering desk on in-cell
 carrier, R7/R9, canonical run acceptance) is M2 — it depends on this mission's
 document channel existing.
+
