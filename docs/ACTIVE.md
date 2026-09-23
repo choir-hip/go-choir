@@ -5,16 +5,16 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Working Definition — Texture Owner Input Cutover (M1)
+## Landed Definition — Texture Owner Input Cutover (M1)
 
 [`definitions/choir-texture-owner-input-cutover-2026-09-22.md`](definitions/choir-texture-owner-input-cutover-2026-09-22.md)
-is the sole working entrypoint, authored 2026-09-22 as M1 of the ordered
-mission list (consensus, `world-wire-mission-stack-2026-09-22.md`). Owner input
-to a lifecycle-bound Texture document becomes a canonical document revision
-event; the `tell`/`correct`/`roster`/`LifecycleOwnerInstruction` side channel
-is deleted in the same move. Red class: canonical input/event authority.
-Executable with
-`/goal docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md`.
+**landed 2026-09-23** (deployed commit `098726b0`, CI run 35819171822 green,
+deployed acceptance spec
+`frontend/tests/texture-owner-revision-deployed.spec.js` passing on
+https://choir.news). Owner input to a lifecycle-bound Texture document is a
+canonical document revision event; the `tell`/`correct`/`roster`/
+`LifecycleOwnerInstruction` side channel is deleted. M2 is the next ordered
+mission.
 
 ## Superseded Definition — RLM Engineering Carrier
 
