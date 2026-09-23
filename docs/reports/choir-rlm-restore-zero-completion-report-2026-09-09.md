@@ -1,5 +1,8 @@
 # Choir Engineering Report: RLM Restore-Zero Substrate Architecture, Incident Diagnosis, and Deployed Recovery Proof
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 **Date**: September 9, 2026  
 **Author**: Choir Platform Engineering  
 **Status**: Settled, Implemented, Deployed, and Verified on Staging (`https://choir.news`)  

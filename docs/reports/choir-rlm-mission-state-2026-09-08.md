@@ -1,5 +1,8 @@
 # Choir RLM Mission State — September 8, 2026
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 Status: research complete through round-one consensus; round two queued with Fable. No code changed. Class: green (docs only).
 
 ## Freeze confirmation

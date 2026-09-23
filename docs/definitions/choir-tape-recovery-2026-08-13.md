@@ -148,7 +148,7 @@ now:
     consequence: "Red mutation on checkpoint authority (protected surface): full ceremony — conjecture delta, protected surfaces, admissible evidence class, rollback path, heresy delta (discovered: none new; introduced: none; repaired: publication-path sequencing circularity) recorded here. Rollback: git revert of the mission commits restores bind-only checkpoint. Security review obligation recorded for post-mission. serving_join is paid: a second existing interactive computer (a@b.com) served a divergent SPA after vmctl resolve. Independent review ACCEPT 2026-08-15."
   evidence_refs: [docs/evidence/tape-recovery-serving-join-independent-review-2026-08-15.md, docs/evidence/tape-recovery-serving-join-2026-08-15.json, docs/evidence/tape-recovery-secondary-bootstrap-incident-2026-08-15.json, docs/evidence/tape-recovery-capability-renewal-pass-2026-08-15.json, docs/evidence/tape-recovery-owner-restore-2026-08-14.json, docs/ACTIVE.md, docs/mission-graph.yaml]
   blocker_or_risk: "None for this Definition. Owner-recovery publication still carries the guest-attested witness trust split for the post-mission security review. No owner restage-frontend verb. Effects remain OFF until the effects Definition's decision-policy gates pass."
-  next_action: "Invoke /goal docs/definitions/choir-supervised-self-development-effects-2026-08-11.md for the decision-policy envelope. Do not rematerialize. Do not invent choir computer create. Do not enable effects."
+  next_action: "None. Completed; the effects Definition is superseded. Do not rematerialize. Do not invent choir computer create. Do not enable effects."
 
 receipts:
   - id: tape-recovery-serving-join-independent-review-2026-08-15

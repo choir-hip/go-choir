@@ -635,10 +635,12 @@ Orchestration](memo-persistent-rlm-actors-2026-08-09.md) and [Live and
 Retrospective Evals for the RLM
 Computer](memo-live-retrospective-evals-2026-08-09.md).
 
-The historical [Autopaper activation Definition](definitions/choir-autopaper-activation-2026-07-10.md)
-and its [attempt report](definitions/choir-autopaper-activation-attempt-report-2026-07-11.md)
-remain evidence of what not to reactivate: a long serial pipeline with unstable
-substrate dependencies and duplicated lifecycle semantics. The archived
+The historical Autopaper activation Definition
+(`choir-autopaper-activation-2026-07-10`, retired to Git history) and its
+attempt report (`choir-autopaper-activation-attempt-report-2026-07-11`, also
+retired) remain evidence of what not to reactivate: a long serial pipeline
+with unstable substrate dependencies and duplicated lifecycle semantics. The
+archived
 Texture/transclusion vision contributes the perspective and generative-style
 insights only; its superseded product framing and topology are not restored.
 

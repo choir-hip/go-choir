@@ -65,7 +65,7 @@ Phases, not a flat list — the phases are ordered, the missions inside a phase
 may overlap. Every mission is a throughline goal file.
 
 ```text
-Phase 0  Docs overhaul (in flight, green, not a dependency)
+Phase 0  Docs overhaul (landed, green, not a dependency)
 Phase 1  Finish the RLM substrate
 Phase 2  Precommitment records: the mechanism
 Phase 3  Self-development, proven for real
@@ -74,14 +74,19 @@ Phase 5  The World Wire
 (box score: after the wire runs in production — out of this stack)
 ```
 
-### Phase 0 — Docs overhaul (in flight)
+### Phase 0 — Docs overhaul (landed)
 
-Phase A–D of `reorientation-docs-overhaul-2026-09-22.md`. Landed 2026-09-22:
-zombie authority killed, ~14 superseded definitions retired, PICL renamed,
-manifest/graph/ACTIVE repaired, throughline settled as the format. Remaining:
-deeper reorientation of `computer-ontology.md` and the 2026-07-24 architecture
-memos (currently banner-marked stale). Not a gate, but every mission is
-cheaper with honest docs.
+Phase A–D of `reorientation-docs-overhaul-2026-09-22.md`, plus a second
+consistency sweep. Landed 2026-09-22: zombie authority killed, ~14 superseded
+definitions retired, PICL renamed, manifest/graph/ACTIVE repaired, throughline
+settled as the format, the authority layer re-aligned (doctrine, product-
+doctrine, ontology, standing-questions), remaining zombie `next_action`s and
+deleted-file refs across definitions tombstoned, and ~30 dated
+reports/reviews/designs bannered as stale evidence. Remaining: deeper
+reorientation of `computer-ontology.md` internals and the 2026-07-24
+architecture memos (banner-marked stale), HTML-deck re-render, legal-doc
+refresh, and ~20 dated problem receipts needing closure banners. Not a gate,
+but every mission is cheaper with honest docs.
 
 ### Phase 1 — Finish the RLM substrate
 

@@ -231,7 +231,7 @@ now:
     - docs/reports/choir-family-a-and-yaegi-rlm-architecture-spec-2026-08-18.md
     - frontend/tests/genesis-settings-staging.spec.js
   blocker_or_risk: none
-  next_action: "Proceed with live self-development operations and operator candidate authoring on verified staging substrate."
+  next_action: "None. Completed; the carrier is the current sole working entrypoint and self-development is sequenced by the revised roadmap."
 receipts:
   - id: rlm-kernel-doctrine-definition-opening
     boundary: define

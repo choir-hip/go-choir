@@ -180,7 +180,7 @@ now:
     - "docs/evidence/fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md"
     - "docs/evidence/recovery-complete-2026-08-24.md"
   blocker_or_risk: "None remaining for pre-flight. Track F overhaul owns the permanent ProjectionBase Merkle watermark architecture."
-  next_action: "Complete pre-flight mission and invoke /goal docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md."
+  next_action: "None. Completed; the overhauls settled."
 
 receipts:
   - id: preflight-liveness-restored-0333528

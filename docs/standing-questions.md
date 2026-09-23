@@ -1,8 +1,10 @@
 # Standing Questions — Agent Pre-Flight Entry Point
 
-**Read this before authoring or executing any mission Definition.** It is an
-entry point, not a doctrine source: it inherits `AGENTS.md` and
-`docs/choir-doctrine.md`. Each question below caught a real, expensive failure
+**Read this before authoring or executing any mission goal file.** New
+missions use the throughline format (`skills/throughline/SKILL.md`); existing
+Definition-format goal files remain valid. It is an entry point, not a
+doctrine source: it inherits `AGENTS.md` and `docs/choir-doctrine.md`. Each
+question below caught a real, expensive failure
 in this repository; the parenthetical names the receipt. Ask every question
 that applies before your first code or doc mutation. A mission that cannot
 answer these is not ready to execute.

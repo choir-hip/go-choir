@@ -12,7 +12,7 @@ load-bearing; its checkpoint cannot authorize new product mutations.
 1. Current doctrine and any future separately promoted Definition for execution.
 2. The completed audited-construction Definition and this Definition as settled evidence.
 3. `AGENTS.md` and `docs/choir-doctrine.md`.
-4. `docs/definitions/choir-product-completion-2026-07-10.md` as superseded
+4. `docs/definitions/choir-product-completion-2026-07-10.md (retired to Git history)` as superseded
    source evidence.
 5. `docs/agent-product-doctrine.md`.
 6. `docs/computer-ontology.md`.
@@ -256,7 +256,7 @@ status: settled
 source: observed; Phase E doc refresh 2026-07-10
 term: Product completion Definition matches the code
 definition: >-
-  docs/definitions/choir-product-completion-2026-07-10.md is updated so that
+  docs/definitions/choir-product-completion-2026-07-10.md (retired to Git history) is updated so that
   every PC node status, variant count, and contradiction claim matches the
   post-repair state. In particular:
 
@@ -273,7 +273,7 @@ non_definition:
   - Declaring a node settled before the code evidence exists.
   - Adding new PC nodes beyond the current scope.
 observables:
-  - A diff of docs/definitions/choir-product-completion-2026-07-10.md that
+  - A diff of docs/definitions/choir-product-completion-2026-07-10.md (retired to Git history) that
     updates only statuses, counts, and evidence references (PC-0 settled,
     PC-4 testing, PC-6 paths = 1, PC-7 no SyncService registration, PC-5
     deletion map updated).
@@ -416,7 +416,7 @@ These must remain true across every phase:
 - `internal/autoputer` is the sole authority for autoputer source-lineage commit.
 - `internal/base` and `internal/computerversion` concrete substrate files are
   the future Base authority; `internal/desktop` SyncEngine is not.
-- `docs/definitions/choir-product-completion-2026-07-10.md` is the sole
+- `docs/definitions/choir-product-completion-2026-07-10.md (retired to Git history)` is the sole
   authority for the product completion state; this mission only repairs its
   stale fields.
 
@@ -548,7 +548,7 @@ shift(node)       # change observer, vocabulary, or prover
 ### Phase E — Product completion Definition refresh (green)
 
 - Run doccheck / the docs truth checker.
-- Update `docs/definitions/choir-product-completion-2026-07-10.md`:
+- Update `docs/definitions/choir-product-completion-2026-07-10.md (retired to Git history)`:
   - PC-0 to `testing` with a pointer to the service-scoped receipt evidence.
   - PC-4 to `testing` and correct the frame from OG-dependency to active route
     writer with a fixed format.
@@ -618,7 +618,7 @@ evidence_ledger:
   - claim: product completion Definition statuses and variant counts match post-repair code.
     definition_node: definition_doc_state_refresh
     evidence_class: observed file + formal-check
-    source: docs/definitions/choir-product-completion-2026-07-10.md;
+    source: docs/definitions/choir-product-completion-2026-07-10.md (retired to Git history);
       docs/doc-authority-manifest.yaml; docs/mission-graph.yaml; docs/ACTIVE.md
     command_or_observation: >-
       PC-0 settled (service-scoped identity proven by staging evidence);
@@ -689,7 +689,7 @@ The mission is complete when all of the following are true with named evidence:
    identity env vars.
 4. The dead code surfaces are deleted, `go build ./...` passes, and no test
    treats the deleted code as authority.
-5. `docs/definitions/choir-product-completion-2026-07-10.md` reflects the
+5. `docs/definitions/choir-product-completion-2026-07-10.md (retired to Git history)` reflects the
    resolved state and passes the docs truth checker.
 6. Agentic-consensus gates were run before every red mutation and the final
    staging acceptance proof is recorded.

@@ -1,5 +1,8 @@
 # Effects Alias Authority Boundary - Progress Report
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 **Report date:** 2026-08-18
 **Scope:** `computer-03335285269bdba4f94377e56879f9e6`, operation `selfdev-b090bcd72d300fed17cb3f5a142f8595`
 **Authority:** `docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`

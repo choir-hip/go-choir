@@ -1,7 +1,10 @@
 # Mission Report: Mail app v2 (redesigned email UI)
 
 Date: 2026-09-15 UTC
-Status: complete — deployed and verified on staging
+Status: complete — deployed and verified on staging. **Historical A/B report:**
+the "existing app remains untouched" claim is superseded — EmailApp was later
+deleted and the `email` app id cut to MailApp
+(`docs/mission-mail-attachments-and-app-cutover-2026-09-17.md`).
 Mutation class: orange (new runtime surface; no protected surfaces, no backend changes)
 Problem/approach doc: docs/mission-mail-app-v2-2026-09-15.md
 

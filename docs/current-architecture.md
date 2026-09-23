@@ -639,17 +639,16 @@ The complete bidirectional product loop is not currently accepted live
 behavior. Texture's production registry can spawn Researcher but lacks the
 `update_coagent` tool its prompt names for follow-up, and its delegate policy
 does not currently connect it to the persistent Super. Effects also remain OFF,
-and no current Definition authorizes capsule/self-development effects. The
-next product missions must prove, in order: (Mission A) multiple Texture
-revision-and-redirection cycles over one live trajectory with one live CoSuper
-assignment per computer — computer-scoped arrival ordinals, FIFO among
-non-expired requests, request expiry and assignment deadlines, retryable
-admission refusal — including the Texture → Super → scoped CoSuper → Super →
-Texture path; then (Mission B) parallel Textures/trajectories with N concurrent
-assignments under an admission-ledger overcommit factor — a release-gate
-requirement. Neither mission invents a generic supervision service, findings
-reducer, observer hierarchy, or second causal tape. See
-[supervision-protocol.md](supervision-protocol.md) for the bounded contract.
+and no current goal file authorizes capsule/self-development effects. The
+self-development gate is sequenced by the revised roadmap
+(`world-wire-mission-stack-2026-09-22.md`, Phase 3) after the carrier and
+precommitment records. The bounded supervision contract it must satisfy —
+computer-scoped arrival ordinals, FIFO among non-expired requests, request
+expiry and assignment deadlines, retryable admission refusal, the
+Texture → Super → scoped CoSuper → Super → Texture path, and N concurrent
+assignments under an admission-ledger overcommit factor — is in
+[supervision-protocol.md](supervision-protocol.md); the old "Mission A/B"
+labels are contract vocabulary, not the current mission sequence.
 
 ## Computer Model
 

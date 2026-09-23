@@ -239,7 +239,7 @@ now:
     constraints: [disposable replay workspace, live DoltStateExtractor comparison, exact diff and digest, no event append, no current-state mutation, no general replay API]
     consequence: "The probe was deployed and exercised before state recreation; its exact not_equivalent diff remains retained as evidence for the effects mission."
   blocker_or_risk: "None for this Definition. The retained pre-drop probe evidence is accepted, the staging state recreation and renamed product acceptance are observed, CI and staging deployment are green, and temporary recovery modes are absent."
-  next_action: "Resume the supervised self-development effects Definition against final autoputer/computer names; do not reintroduce compatibility or probe-only runtime modes."
+  next_action: "None. Completed; the effects Definition is superseded and the carrier is the current sole working entrypoint."
 
 receipts:
   - id: rename-manifest-2026-08-11

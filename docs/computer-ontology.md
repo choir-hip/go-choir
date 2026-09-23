@@ -71,11 +71,11 @@ different merge laws.
 | --- | --- | --- |
 | Persistent user computer and VM lifecycle | **Live** | A long-lived computer is identified by stable ComputerID; a realization is replaceable machine state. Existing lifecycle/status remain projections and actuators. |
 | Worker/background and candidate VM mutation | **Retired authority; canonical residue unclaimed** | Generic delegated agents are durable runs/trajectories. The rejected candidate's deletion is not canonical-main state; no current Definition authorizes cleanup or effects. |
-| `internal/computerversion` constructor/verifier | **Live audited construction substrate** | `ComputerVersion = (CodeRef, ArtifactProgramRef)` is the **code/artifact identity** published at an event head — not by itself a complete restore address. Full restore completeness (event head + content witness + VM-local projection) is the active Definition's deliverable; do not treat the code tuple alone as "put the computer back." |
-| Computer event authority | **Live effects-OFF substrate until the active Definition's rehearsal/decision-policy/restore gates pass** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery remain the separate semantic-event authority. The completed durable-work acceptance exercised no effects. The active Definition turns effects on through effect-specific multiagent consensus and audited actuators—not as a global ON flip and not only for reversible effects. |
-| Capsules | **Implemented source candidate; effect proof pending** | Guest-local namespaces, cgroup, seccomp, Landlock, capability broker, transaction tape, and fail-closed admission require the active owner-ratified effect mission and deployed acceptance. |
+| `internal/computerversion` constructor/verifier | **Live audited construction substrate** | `ComputerVersion = (CodeRef, ArtifactProgramRef)` is the **code/artifact identity** published at an event head — not by itself a complete restore address. Full restore completeness (event head + content witness + VM-local projection) is carried by the carrier/ontology work; do not treat the code tuple alone as "put the computer back." |
+| Computer event authority | **Live effects-OFF substrate; self-development gate sequenced by the revised roadmap** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery remain the separate semantic-event authority. The completed durable-work acceptance exercised no effects. Effects turn on through effect-specific multiagent consensus and audited actuators—not as a global ON flip and not only for reversible effects—under the Phase-3 self-development program, not a live Definition. |
+| Capsules | **Implemented source candidate; effect proof pending** | Guest-local namespaces, cgroup, seccomp, Landlock, capability broker, transaction tape, and fail-closed admission require the self-development gate (revised roadmap Phase 3) and deployed acceptance. |
 | Features adoption and activation | **Retired authority; canonical residue unclaimed** | AppChangePackage/AppAdoption/lineage records are not self-development authority or product fallback. Rejected-branch deletion is not a landed claim. |
-| Self-development acceptance/materialization | **Active Definition in flight** | Executable authority is `docs/definitions/choir-supervised-self-development-effects-2026-08-11.md` (effect-specific consensus, complete checkpointing, acceptance-fenced restore, and irreversible-consequence receipts). Do not resume CTS or the historical self-dev roadmap as the schedule. |
+| Self-development acceptance/materialization | **Gate sequenced by revised roadmap; no live Definition** | The effect-policy shape (effect-specific consensus, complete checkpointing, acceptance-fenced restore, irreversible-consequence receipts) is design evidence from the superseded `docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`. Current authority is the carrier (blocked on owner decision) then precommitment records then the Phase-3 self-development program. Do not resume CTS or the historical self-dev roadmap as the schedule. |
 
 Do not collapse a code-present substrate into a live product claim. A worker
 VM, forked desktop, AppChangePackage, capsule, frozen effect bundle,
@@ -105,7 +105,7 @@ handle by itself. vmctl may project the checkpoint into the serving route throug
 its sole route-slot CAS, but the route is not computer identity or event
 authority.
 
-**Restore-set boundary (normative during and after the active effects Definition):**
+**Restore-set boundary (normative for the self-development gate):**
 a user-computer restore addresses an event head and restores the release pointer
 plus VM-local embedded state. Shared platform/world-wire Dolt and cycle/
 sourcecycled state are OUT (restoring them would rewind other computers or

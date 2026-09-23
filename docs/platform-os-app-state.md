@@ -662,5 +662,5 @@ The highest-gradient UX gaps are:
 8. Capsule proposal review, verification, and scoped acceptance should become
    contextual product surfaces without exposing VM or route identity.
 9. Self-development status, evidence, decision, and rollback should gain
-   contextual owner UI only after the public CLI/API loop passes deployed G3;
+   contextual owner UI under the revised roadmap's self-development phase;
    no deleted package/adoption or candidate-machine surface may be revived.

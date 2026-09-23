@@ -94,9 +94,12 @@ serves context packs (learning), procedural fidelity (alignment), and audit —
 and it is what the human supervises: the commitment ledger, not the transcript.
 See `docs/Precommitment Records — Engineering Memo.md`.
 
-The proof target is a self-development candidate accepted on staging: the
-computer makes one real change to its own working state, under granted rules,
-with the whole story legible on the tape and durable across a restart.
+The proof target is a self-development program on staging: the computer makes
+real changes to its own working state, under granted rules, with the whole
+story legible on the tape and durable across restarts. One bounded episode is
+the minimum proof target; the gate is a program whose depth is set by the
+revised roadmap (`world-wire-mission-stack-2026-09-22.md`, Phase 3), not a
+single candidate.
 
 ## The World Wire — the downstream payoff
 
@@ -134,9 +137,9 @@ computer's; there is no wire before the computer.
 Implementation flows downstream from this vision, in this order:
 
 1. **Supervised self-development, proven.** Restore the automatic computer's
-   resident liveness on the existing lifecycle authority, then prove one
-   bounded correction loop: a candidate change proposed, settled under a
-   granted rule, and legibly corrected — durable across restart, on staging.
+   resident liveness on the existing lifecycle authority, then prove the
+   self-development program: candidate changes proposed, settled under granted
+   rules, and legibly corrected — durable across restart, on staging.
 2. **Deletion of displaced machinery.** As the proven slice displaces
    duplicated publication and liveness paths, delete them. Cleanup follows
    proof; it does not lead it.

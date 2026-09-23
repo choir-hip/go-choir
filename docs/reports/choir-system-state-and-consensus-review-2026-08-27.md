@@ -1,5 +1,8 @@
 # Choir Whole-System State, Architecture & Agentic Consensus Review
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 **Date:** 2026-08-27  
 **Review Type:** Agentic Consensus (Convergent Whole-System Review)  
 **Panelists:** OpenAI Codex (GPT-5.6 Sol), Cursor Agent, Google Gemini 3.7 Flash, Opencode, Devin (SWE-1.6), Muse-Spark 1.2, HY3  

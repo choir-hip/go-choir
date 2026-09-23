@@ -1,5 +1,8 @@
 # Choir RLM Architecture Cutover: Autonomous Run Progress & Current State Report
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 **Date**: September 6, 2026  
 **Subject**: Comprehensive analysis of the autonomous cutover run under Grok 4.6 on mission `docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`, incorporating Four Iterative Agentic Consensus Panels (8 models: Claude Opus, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, Gemini 3.8 Flash, Grok 4.6 High, Cursor Agent, OpenCode), Live Sealed Option B Execution on Staging Epoch 888, and Substrate Heresy Diagnosis  
 **Current Git HEAD**: `dc179263` (`main`)  

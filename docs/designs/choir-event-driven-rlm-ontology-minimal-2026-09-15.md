@@ -1,5 +1,11 @@
 # Second Pass: The Minimal Version
 
+> **Unratified design — not a Definition, not executable authority.** Candidate
+> revision under owner review; the ontology cutover decision is open (see
+> `docs/current-situation-2026-09-22.md`, open question 2). PICL below is the
+> pre-rename name for precommitment records. *Stale as of 2026-09-22.*
+
+
 **Date:** 2026-09-15
 **Status:** analysis — candidate revision of the ontology design.
 Amended to v2 after a second adversarial consensus round

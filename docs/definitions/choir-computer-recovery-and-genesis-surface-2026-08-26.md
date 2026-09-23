@@ -150,7 +150,7 @@ now:
     - internal/updater/updater_test.go
     - internal/agentcore/selfdev_surface_boot_test.go
     - frontend/tests/genesis-settings-staging.spec.js
-  next_action: "Resume Private Go Actor Kernel (Yaegi) live sealed CoSuper activation proof on the validated staging substrate."
+  next_action: "None. Completed; the kernel proof is done and the carrier is the current sole working entrypoint."
 
 receipts:
   - id: problem-documented-2026-08-26

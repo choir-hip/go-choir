@@ -20,7 +20,7 @@ Three inputs converged on 2026-09-22:
 1. **Precommitment records** (the renamed PICL — renamed for a 2023 paper
    collision) is the maturation of the conjecture-ledger lineage:
    `CLAIM/TEST/EDGE/ΔO/SCOPE` in mission-gradient → parallax's conjecture
-   circuit → throughline's goal-file format → Definition v2. The two Sep-22
+   circuit → Definition v2's goal-file format → **throughline** (current).
    docs (`Precommitment Records Theory and Implications.md`,
    `Precommitment Records — Engineering Memo.md`) are the current canonical
    statement: one mechanism serving context packs (learning), procedural
@@ -30,9 +30,9 @@ Three inputs converged on 2026-09-22:
    loop, §10 the box score, §12 "everyone sells the agent, we sell the
    record." The supervision workbench's substance is the commitment ledger.
 3. **The docs have sprawled**: 604 `.md` files, 45 definitions, 3 generations
-   of ledger skills live in-tree, and the PICL→precommitment rename is
-   half-applied. Retrieval pollution is a settled failure mode here
-   (documentation-authority-reduction K6).
+   of ledger skills live in-tree, and the PICL→precommitment rename was
+   half-applied (now completed — see Phase B). Retrieval pollution is a
+   settled failure mode here (documentation-authority-reduction K6).
 
 ## Inventory findings (six-scout survey, 2026-09-22)
 
@@ -42,7 +42,8 @@ Intended: `docs/choir-doctrine.md` (apex) → `AGENTS.md` (operating contract) �
 promoted Definition (sole executable authority) → `ACTIVE.md` (curated view) →
 `mission-graph.yaml` (discovery metadata) → evidence/reports (non-authority).
 
-Actual drift — **live-authority defects**, highest priority:
+Actual drift — **live-authority defects** (pre-execution findings; all eight
+repaired by Phase A — see status at top):
 
 | Defect | Location | Problem |
 |---|---|---|
@@ -66,14 +67,12 @@ conjecture circuit, variants, ΔV, observer shifts) → `throughline` (compiles
 both into executable `/goal` files) → `definition` v2 (the promoted authority
 per AGENTS.md).
 
-- `mission-gradient`, `parallax`: superseded at the skill layer. Parallax is
-  already declared legacy in AGENTS.md. → archive/remove from live skills.
-- `throughline`: live but unregistered successor-format; its
-  executable-authority wording competes with Definition v2. → keep, with an
-  explicit relationship clause (throughline = authoring format reference;
-  definition = promoted operational authority), or fold into definition.
-- `definition`, `cognitive-transform-portfolio`, `agentic-consensus`,
-  `choir-cli`: keep.
+- `mission-gradient`, `parallax`, `definition`: superseded at the skill layer —
+  **deprecated, kept for reference** (owner correction: not deleted).
+- `throughline`: the current `/goal` authoring format. Existing
+  Definition-format goal files remain valid/executable; throughline is the
+  authoring discipline layered on the same `/goal` artifact.
+- `cognitive-transform-portfolio`, `agentic-consensus`, `choir-cli`: keep.
 
 ### PICL / precommitment corpus
 
@@ -88,10 +87,10 @@ per AGENTS.md).
 | `memo-diagonal-media-strategy-2026-09-17.md` | 09-17 | PICL | Owner strategy direction (record/box-score/diagonal GTM) |
 | `memo-predictive-icrl-delta-2026-09-10.md` | 09-10 | (pre-PICR) | Adjacent predecessor: objective resolution, provenance, episode schema |
 | `rlms-ontology-brief-2026-09-10.md` | 09-10 | — | Forecast/Observation/Adjudication/Assessment distinctions |
-| `choir-one-pager-2026-09-18.md` | 09-18 | PICL | **Rename pass needed** (customer-facing) |
-| `deck/pitch-bones-vision.md` + 2 HTML decks | 09-18 | PICL | **Rename pass + re-render** |
+| `choir-one-pager-2026-09-18.md` | 09-18 | precommitment | **Renamed** (was PICL) |
+| `deck/pitch-bones-vision.md` | 09-18 | precommitment | **Source renamed**; the two 09-18 HTML renders still say PICL → re-render or retire in favor of the 09-22 seed deck |
 
-Neither Sep-22 doc is registered in `docs/doc-authority-manifest.yaml`.
+Both Sep-22 docs are now registered in `docs/doc-authority-manifest.yaml`.
 
 ### Code-side reality (grounds the mechanism)
 
@@ -161,11 +160,12 @@ slice claims, R7 residue, four zombie definitions → superseded tombstones,
 mail-app-v2 next step, broken report link, stale architecture claims,
 mission-graph hygiene. Small, surgical, unblocks honest retrieval.
 
-**Phase B — rename pass (PICL → precommitment records).**
+**Phase B — rename pass (PICL → precommitment records).** *Completed.*
 Customer-facing only: `choir-one-pager-2026-09-18.md`,
-`deck/pitch-bones-vision.md`, re-render both HTML decks. Historical
-PICL-named files stay as dated records. Register the two Sep-22 docs in
-`doc-authority-manifest.yaml`.
+`deck/pitch-bones-vision.md` renamed. The two 09-18 HTML renders still say
+PICL — re-render from the renamed source or retire in favor of the 09-22 seed
+deck. Historical PICL-named files stay as dated records. Both Sep-22 docs
+registered in `doc-authority-manifest.yaml`.
 
 **Phase C — prune per K3/K4/K6 (delete, git retains).**
 - Definitions: keep-as-authority = carrier only. Keep-as-evidence (rewrite to

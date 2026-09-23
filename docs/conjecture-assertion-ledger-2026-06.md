@@ -1,10 +1,11 @@
 # Conjecture / Assertion Ledger — June 2026
 
-**Status:** canonical epistemic state. Assertions with receipts, invariant
-candidates awaiting promotion, and open hyperthesis edges. Updating this
-ledger is part of mission stopping conditions (MissionGradient v2.0.0).
-An assertion whose premise dies reverts to a conjecture — edit it here,
-visibly, rather than letting it rot into heresy.
+**Status:** historical ancestor — the Markdown ancestor of the precommitment
+records mechanism (see `Precommitment Records Theory and Implications.md` and
+`Precommitment Records — Engineering Memo.md`). This is **not** the live
+canonical ledger and is no longer updated; it is retained as the design
+lineage. Assertions with receipts, invariant candidates awaiting promotion,
+and open hyperthesis edges are recorded here as of June 2026.
 
 Format: a claim's scope is the domain its evidence covers; receipts are named
 artifacts. The superseded theory source remains available in Git history.

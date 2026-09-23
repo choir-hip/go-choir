@@ -1,5 +1,8 @@
 # Consensus Panel Synthesis: Architecture Review v2
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 Date: 2026-08-21
 Panel: 8 models (codex, devin, cursor, opencode, gpt-5.6-sol, gpt-5.6-luna, gemini-3.7, grok-4.6); deepseek failed
 Source: .agentic-consensus/architecture-review-v2-20260821/panel/

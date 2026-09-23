@@ -1,5 +1,8 @@
 # Texture System Sensemaking Review - 2026-08-18
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 **Boundary:** architecture sensemaking only. No runtime implementation, staging
 mutation, replay reclassification, checkpoint, restore, retry, promotion, or
 effect authorization.

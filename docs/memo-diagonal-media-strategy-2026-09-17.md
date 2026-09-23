@@ -119,7 +119,7 @@ subscription at every paid tier.
 ## The dependency chain
 
 ```text
-autoputer  (the automatic computer — exists, mid-cutover)
+computer  (the automatic computer — exists, mid-cutover)
   → autonews  (the automatic newspaper — the World Wire)
     → autoradio  (the voice projection — a projection OF autonews)
 ```

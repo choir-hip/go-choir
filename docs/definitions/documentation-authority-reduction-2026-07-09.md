@@ -37,16 +37,18 @@ history, this correction governs.
 
 ## Harness Invocation Semantics
 
+> **Settled / non-executable.** This file is a completed historical record of
+> the 2026-07 documentation-authority reduction. It is **not** a live `/goal`
+> and must not be invoked. Current mission authority is the carrier
+> (`choir-rlm-engineering-carrier-2026-09-11`) under the revised roadmap; new
+> missions use the throughline format. The K-series findings below remain
+> valid doctrine input; the executable framing is retained only as history.
+
+Original (historical) invocation text:
+
 ```text
 /goal docs/definitions/documentation-authority-reduction-2026-07-09.md
 ```
-
-Read this document as executable semantic authority for the documentation
-reduction. Execute the safe, green/yellow work until the live reading system and
-retrieval-reduction evidence is verified. The owner has explicitly directed
-mass deletion of historical material that pollutes retrieval. Do not treat
-moving a file to `docs/archive/` as a solution: the worktree, not the archive
-directory, is the retrieval boundary.
 
 ## Source Authority Order
 

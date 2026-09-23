@@ -170,7 +170,7 @@ now:
     - "go run ./cmd/doccheck --mode=live: passed; 10 content documents plus router"
     - "go test ./cmd/doccheck && go run ./cmd/doccheck --mode=full: passed in the source-bearing landing before final doc-only receipt correction"
   blocker_or_risk: "The prep mission's remaining risk is ordinary maintenance: the effects mission still requires its own runtime and staging evidence. This mission did not touch product behavior or the effects Definition's design."
-  next_action: "Start the effects Definition; do not re-open the retired beads store or re-run this prep mission."
+  next_action: "None. Completed; the effects Definition is superseded and the carrier is the current sole working entrypoint."
 
 receipts:
   - id: beads-triage-2026-08-11

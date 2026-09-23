@@ -1,5 +1,8 @@
 # Choir Mission Overview & Priorities — 2026-08-29
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 *Prepared for the owner after a 10-hour pause. Prose-first, zoomed out: where the
 product stands, what happened while you were away, what is actually blocking
 self-development, and the order in which to spend the next working sessions.*

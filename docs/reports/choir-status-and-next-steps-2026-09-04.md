@@ -1,5 +1,8 @@
 # Choir Engineering Status Report — September 4, 2026
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 **Subject**: Architecture, Verification, and Rollout Plan for the Recursive Language Model (RLM) Session Interpreter  
 **Status**: Target Architecture Rev 3 Prepared for Owner Review  
 **Staging Environment**: Retained Computer `computer-03335285269bdba4f94377e56879f9e6` (Boot Epoch 879, Commit `8c410a0d`)  

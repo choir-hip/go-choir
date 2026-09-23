@@ -1,5 +1,8 @@
 # Design: platform-dolt storage normalization — 2026-09-18
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 Class: green (problem documentation + design; no runtime change). Owner asked
 for a durable fix for the platform-dolt storage leak. Revised after an agentic
 consensus panel (6 models) unanimously returned **RETHINK** on the first draft —

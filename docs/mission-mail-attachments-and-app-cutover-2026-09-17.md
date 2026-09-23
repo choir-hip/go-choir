@@ -248,13 +248,13 @@ next executable probe: commit → push → CI deploy (host OS + guest image +
 maild + frontend) → `choir computer refresh` the retained computer → staging
 round-trip proof (compose in Mail app, attach client-uploaded + autoputer-FS
 files, approve, send to 000@choir.news, verify inbound attachment metadata).
-suggested resume goal string: "Execute
-docs/mission-mail-attachments-and-app-cutover-2026-09-17.md as a
-MissionGradient mission: maild attachment staging + draft binding +
-Resend send, MailApp compose attachment UI (client upload + attach from
-autoputer Files), delete EmailApp and cut the `email` app id to MailApp,
-deploy and prove the attachment round-trip on staging including the
-guest frontend refresh."
+suggested resume goal string (historical — mission complete; MissionGradient
+is deprecated, new missions use throughline): "Execute
+docs/mission-mail-attachments-and-app-cutover-2026-09-17.md as a /goal
+mission: maild attachment staging + draft binding + Resend send, MailApp
+compose attachment UI (client upload + attach from computer Files), delete
+EmailApp and cut the `email` app id to MailApp, deploy and prove the
+attachment round-trip on staging including the guest frontend refresh."
 
 ## Completion evidence (2026-09-18)
 

@@ -3,8 +3,10 @@
 This file carries product architecture rules for agents working on Choir. It is
 loaded on demand when a mission touches authority boundaries, harness behavior,
 Texture, runtime configuration, product-path verification, or run acceptance.
-Long-running missions execute as Definition documents (`/goal <doc>.md`); see
-[skills/definition/SKILL.md](../skills/definition/SKILL.md). The
+Long-running missions execute as `/goal <doc>.md` goal files. New missions are
+authored with [skills/throughline/SKILL.md](../skills/throughline/SKILL.md);
+the older `skills/definition/SKILL.md` format remains valid for the existing
+goal-file corpus but is deprecated for new authoring. The
 [durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
 completed on 2026-07-24 and is historical product-evidence authority. The
 current executable product mission is named only by `docs/ACTIVE.md`; this file
@@ -84,10 +86,10 @@ changes only after verified guest materialization.
   acknowledge or substitute for the event.
 - **ComputerVersion code identity:** `(CodeRef, ArtifactProgramRef)` names the
   code/artifact published at an event head. It is not computer identity, not
-  promotion authority, and — alone — not a complete restore address. The active
-  effects Definition adds event-head addressing plus a VM-local content witness
-  for restore completeness; promote that fuller checkpoint binding to settled
-  doctrine only after deployed restore proof.
+  promotion authority, and — alone — not a complete restore address. The
+  fuller event-head addressing plus VM-local content witness for restore
+  completeness is carried by the carrier/ontology work; promote that fuller
+  checkpoint binding to settled doctrine only after deployed restore proof.
 - **Per-computer frontend:** the UI that renders a computer is that computer's
   surface (`C15`/`I25`). User-authored frontend changes are scoped by
   `ComputerID` and take the same capsule-accept-materialize path as other
@@ -336,10 +338,11 @@ The verifier must observe product/control evidence. It must not manually seed su
 
 ## Run Acceptance Records
 
-For long-running Definition mission proof (`/goal <doc>.md`), the mission's own
-evidence ledger and completion semantics in `skills/definition/SKILL.md` govern
-what counts as settled. `RunAcceptanceRecord` is a historical evidence
-projection for older runs; it is not self-development authority.
+For long-running mission proof (`/goal <doc>.md`), the mission's own evidence
+ledger and completion semantics govern what counts as settled — throughline
+for new files, the Definition format for the existing corpus.
+`RunAcceptanceRecord` is a historical evidence projection for older runs; it
+is not self-development authority.
 
 The completed convergence Definition's terminal receipt records exact
 source/deploy/host/guest identity; artifact, subject/activation, obligation,
@@ -351,9 +354,12 @@ self-development effects OFF as a **pre-gate resting state**.
 Do not claim deployed self-development from the superseded CTS Definition,
 rejected Round 72 candidate, AppChangePackage/AppAdoption, RunAcceptance,
 worker/candidate VM, local tests, a verifier statement, checkpoint publication,
-or route transition. The owner-ratified path is
-`docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`:
-effects turn on only through effect-specific multiagent consensus policies and
+or route transition. The self-development gate is now carried by the revised
+roadmap (`docs/world-wire-mission-stack-2026-09-22.md`, Phase 3) after the
+carrier and precommitment records; the superseded effects Definition
+(`docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`)
+is historical evidence for the effect-policy shape, not the live path.
+Effects turn on only through effect-specific multiagent consensus policies and
 audited actuators, not as a global ON boolean. Reversible effects gain a restore
 path; irreversible effects require stronger policy, evidence, and consequence
 receipts but do not categorically require a human decision. Human participation

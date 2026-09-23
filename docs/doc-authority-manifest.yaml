@@ -112,18 +112,18 @@ documents:
     refresh_triggers: [active_definition_change, mission_graph_change]
 
   - path: docs/current-architecture.md
-    claim_scope: current
+    claim_scope: mixed
     is_root: []
     is_evidence: false
-    annotations: {doc_role: current_state, authority: support, lifecycle: living}
+    annotations: {doc_role: substrate_reference, authority: support, lifecycle: stale_bannered}
     witnesses: [docs/current-architecture.md, cmd, internal, frontend]
     refresh_triggers: [runtime_architecture_change, frontend_app_change]
 
   - path: docs/platform-os-app-state.md
-    claim_scope: current
+    claim_scope: mixed
     is_root: []
     is_evidence: false
-    annotations: {doc_role: current_state, authority: support, lifecycle: living}
+    annotations: {doc_role: substrate_reference, authority: support, lifecycle: stale_bannered}
     witnesses: [docs/platform-os-app-state.md, frontend, internal, cmd]
     refresh_triggers: [app_registry_change, desktop_shell_change]
 
@@ -160,12 +160,12 @@ documents:
     refresh_triggers: [source_system_change, publication_contract_change]
 
   - path: docs/conjecture-assertion-ledger-2026-06.md
-    claim_scope: current
+    claim_scope: historical
     is_root: []
-    is_evidence: false
-    annotations: {doc_role: assertion_register, authority: canonical_assertion_register, lifecycle: living}
-    witnesses: [docs/conjecture-assertion-ledger-2026-06.md, docs/choir-doctrine.md]
-    refresh_triggers: [assertion_change, doctrine_change]
+    is_evidence: true
+    annotations: {doc_role: assertion_register_ancestor, authority: historical_ancestor, lifecycle: frozen}
+    witnesses: [docs/conjecture-assertion-ledger-2026-06.md, "docs/Precommitment Records Theory and Implications.md", "docs/Precommitment Records — Engineering Memo.md"]
+    refresh_triggers: []
 
   - path: docs/heresy-detectors.md
     claim_scope: mixed

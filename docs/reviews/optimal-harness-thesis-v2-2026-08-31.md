@@ -1,5 +1,8 @@
 # The Optimal Harness Thesis, v2
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 *Self-contained edition. 2026-08-31. Supersedes v1
 (`optimal-harness-thesis-2026-08-31.md`) after an ontology-creep audit.
 Written for a reader who has never heard of Choir: every term is defined in

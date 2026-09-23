@@ -266,18 +266,19 @@ These do not satisfy the invariant:
 
 ## Sequencing
 
-The active executable `/goal` remains
-`choir-supervised-self-development-effects-2026-08-11`. Its candidate stays
-API-only. Its restore proof stays VM-local + guest release until a successor
-owns the serving envelope. Effects remain OFF until that Definition's own
-gates pass.
+As of 2026-08-13 the active executable `/goal` was
+`choir-supervised-self-development-effects-2026-08-11` (now superseded; the
+carrier is the sole working entrypoint, blocked on owner decision). Its
+candidate stayed API-only; its restore proof stayed VM-local + guest release.
+Effects remain OFF until the self-development gate (revised roadmap Phase 3)
+passes.
 
 Do **not** implement frontend-in-release as a local patch on the current
 mission. The Caddy hop is host-global. Expanding this candidate would either
 weaken the OUT claim without a serving proof, or smuggle a second deploy path
 into restore.
 
-A later owner-ratified Definition owns:
+A later owner-ratified goal file owns:
 
 - control-plane vs computer-surface split in Caddy/proxy
 - capsule SPA recipe and release layout
@@ -288,8 +289,8 @@ A later owner-ratified Definition owns:
 - deletion or quarantine of `install_frontend_pointer` as a computer-surface
   path
 
-That Definition is sequenced after, or beside with disjoint surfaces from, the
-effects proof. It is not concurrently the private-Go actor kernel.
+That goal file is sequenced after, or beside with disjoint surfaces from, the
+self-development gate. It is not concurrently the private-Go actor kernel.
 
 ## Current Non-Claims
 
@@ -301,8 +302,7 @@ This memo does not claim that:
 - TLS, auth, NixOS, proxy, or vmctl themselves enter the restore set;
 - frontend staging is a second canonical event writer;
 - irreversible UI-adjacent effects require a human seat;
-- the current effects Definition's API-only candidate is wrong for its own
-  serving topology;
+- the effects-era API-only candidate was wrong for its own serving topology;
 - recording `VITE_CHOIR_BUILD_SHA` is a serving join.
 
 ## Relationship To Doctrine
@@ -314,8 +314,9 @@ the evidence packet for the serving envelope. Implementation questions (which
 of the three hops, exact schemas, resource limits) stay in the successor
 Definition and cannot overrule doctrine.
 
-The active effects Definition's `finish.completion_cutover.frontend-ownership`
-item is decided: computer-surface frontend is per-computer, not platform
+The effects-era `finish.completion_cutover.frontend-ownership` decision
+stands: computer-surface frontend is per-computer, not platform
 control-plane. Opening the successor and proving the serving join remain
-cutover/successor work. Until that proof, do not teach "the whole computer
-was put back" while the UI remains `frontend-current`.
+cutover/successor work under the revised roadmap. Until that proof, do not
+teach "the whole computer was put back" while the UI remains
+`frontend-current`.

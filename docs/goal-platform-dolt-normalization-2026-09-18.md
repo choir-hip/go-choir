@@ -20,13 +20,13 @@ finish:
     DOLT_COMMIT is replaced by batched commits, the canonical event log is
     isolated from world-wire/corpus churn into its own store, and fat payloads
     are content-addressed into platform-artifacts — while the immutable
-    auditable event log and autoputer recovery are preserved throughout.
+    auditable event log and computer recovery are preserved throughout.
   artifact: >-
     A running platform where (a) dolt_log stays flat under load (batched
     commits), (b) the canonical event store and the world-wire/corpus store run
     as separate sql-server processes with independent retention, and (c)
     items/og_objects fat payloads resolve through platform-artifacts CAS
-    digests — verified by a restore drill proving an autoputer rebuilds from
+    digests — verified by a restore drill proving a computer rebuilds from
     checkpoint + event tail.
   acceptance:
     - action: dolt_log count on Node B after a load window post-Move-1
@@ -39,7 +39,7 @@ finish:
       proves: authority split landed with process isolation
       evidence_class: deployed observation
     - action: restore drill — install base_ref snapshot, replay (watermark, head], compare state commitment
-      proves: autoputer recovery invariant preserved across the split
+      proves: computer recovery invariant preserved across the split
       evidence_class: staging/deployed proof
     - action: fat payloads resolve via content_hash into platform-artifacts CAS
       proves: dominant fat payload (og_objects.body, 6.0G) externalized to CAS;
@@ -85,7 +85,7 @@ boundaries:
     - docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md
   must_preserve:
     - immutable auditable event log (computer_event_append_receipts rows + CAS pins)
-    - autoputer recovery via watermark base_ref snapshot + event tail replay
+    - computer recovery via watermark base_ref snapshot + event tail replay
     - computer-scoped og_* kinds readable during restore (Store A authority)
     - world-wire/corpus as its own source of truth (Store B backup identity)
   excluded:
@@ -267,7 +267,7 @@ receipts:
       (sha256/computer-event/<digest>). computer_checkpoints +
       computer_replay_watermarks on Store A.
     proves: replay-from-checkpoint recovery invariant preserved post-split;
-      autoputer rebuild path intact.
+      computer rebuild path intact.
   - id: terminal-settlement
     at: 2026-09-22
     kind: terminal

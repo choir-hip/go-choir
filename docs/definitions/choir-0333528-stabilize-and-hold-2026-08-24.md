@@ -119,7 +119,7 @@ now:
     - docs/reports/choir-system-orientation-and-station-report-2026-08-25.md
     - docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
   blocker_or_risk: "None blocking settlement; computer-0333528... permanently sealed; live execution moves to cleanup mission."
-  next_action: "Execute docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md."
+  next_action: "None. Settled and sealed; the cleanup completed."
 receipts:
   - id: define-stabilize-hold
     boundary: define

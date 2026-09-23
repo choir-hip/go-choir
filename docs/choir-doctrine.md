@@ -27,7 +27,11 @@ Primary support docs:
 - [computer-ontology.md](computer-ontology.md)
 - [memo-per-computer-frontend-2026-08-13.md](memo-per-computer-frontend-2026-08-13.md)
   — computer-surface frontend is per-computer; host SPA is non-conformance.
-- [conjecture-assertion-ledger-2026-06.md](conjecture-assertion-ledger-2026-06.md)
+- [Precommitment Records Theory and Implications.md](Precommitment%20Records%20Theory%20and%20Implications.md)
+  and [Precommitment Records — Engineering Memo.md](Precommitment%20Records%20%E2%80%94%20Engineering%20Memo.md)
+  — the product learning mechanism. The Markdown
+  [conjecture-assertion-ledger-2026-06.md](conjecture-assertion-ledger-2026-06.md)
+  is their historical ancestor, not the live ledger.
 - [why-texture-2026-06-15.md](why-texture-2026-06-15.md)
 - [texture-agentic-invariants-2026-06-13.md](texture-agentic-invariants-2026-06-13.md)
 - [runtime-invariants.md](runtime-invariants.md)
@@ -35,8 +39,9 @@ Primary support docs:
 - [heresy-detectors.md](heresy-detectors.md) — executable detector manifest.
 
 Reading order for architecture or behavior work: this document; AGENTS.md for
-operating procedure; the relevant domain invariant doc; the current mission
-paradoc; historical reviews and proof artifacts as evidence only.
+operating procedure; the relevant domain invariant doc; the current goal file
+(throughline format for new missions); historical reviews and proof artifacts
+as evidence only.
 
 Supersession rule: when this document conflicts with a support doc, this document
 wins unless the support doc is a newer explicitly promoted doctrine update.
@@ -759,23 +764,26 @@ effects OFF as the **pre-gate resting state**. That is the substrate the product
 path builds on. The M-gates from earlier doctrine revisions are superseded by
 that convergence and by this product path.
 
-The active effects Definition
-(`choir-supervised-self-development-effects-2026-08-11`) does **not** flip a
-global effects-ON boolean. After its rehearsal, decision-policy, and restore
-gates pass, authority is effect-relative: every effect class runs only through
-its predeclared multiagent consensus policy and audited actuator. Reversible
-computer-local effects may use a lighter qualified quorum because restore can
-bound the excursion. Irreversible external or shared effects remain inside the
-autonomy window but require stronger ex ante evidence, narrower subject
-binding, durable consequence receipts, and recovery by compensation or a new
-forward action rather than fictional rewind. A human is one possible
-policy-selected seat, never a universal approval gate. Restore remains
-acceptance-fenced and scoped (VM-local + release IN; platform/cycle OUT).
-Computer-surface frontend is IN by `C15`/`I25`; the host-global SPA is current
-non-conformance, closed by a successor serving envelope, not by treating the UI
-as platform software. Until that Definition closes with
-deployed proof, do not teach "effects remain OFF forever" as the destination —
-teach it as the gate before policy-governed effects.
+Self-development effects do **not** flip a global effects-ON boolean. The
+effect-policy shape — rehearsed, decision-policy-gated, restore-fenced — is
+carried forward from the (now superseded) effects Definition
+`choir-supervised-self-development-effects-2026-08-11` as design evidence:
+every effect class runs only through its predeclared multiagent consensus
+policy and audited actuator. Reversible computer-local effects may use a
+lighter qualified quorum because restore can bound the excursion. Irreversible
+external or shared effects remain inside the autonomy window but require
+stronger ex ante evidence, narrower subject binding, durable consequence
+receipts, and recovery by compensation or a new forward action rather than
+fictional rewind. A human is one possible policy-selected seat, never a
+universal approval gate. Restore remains acceptance-fenced and scoped
+(VM-local + release IN; platform/cycle OUT). Computer-surface frontend is IN
+by `C15`/`I25`; the host-global SPA is current non-conformance, closed by a
+successor serving envelope, not by treating the UI as platform software. The
+self-development gate itself is now sequenced by the revised roadmap
+(`world-wire-mission-stack-2026-09-22.md`, Phase 3) after the carrier and
+precommitment records — until it passes with deployed proof, do not teach
+"effects remain OFF forever" as the destination; teach it as the gate before
+policy-governed effects.
 
 Product order follows the vision (choir-vision.md):
 

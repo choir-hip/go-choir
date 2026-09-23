@@ -273,8 +273,8 @@ nodes:
       Completed 2026-08-26. Guest closure cleaned and deployed (a12532d2,
       staging c3314c59): single immutable store binary, standard Dolt GC,
       refresh_runtime dance deleted. Boot-proven on staging via product-path
-      resume of a hibernated test computer. Overhauls promoted to active
-      entrypoint.
+      resume of a hibernated test computer. Substrate landed; the carrier is
+      the sole working entrypoint.
     sources:
       - docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
       - docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md
@@ -610,16 +610,16 @@ nodes:
     status: settled
     kind: spine
     entrypoint: false
-    execution_mode: mission_orchestrator
+    execution_mode: completed_non_executable
     depends_on:
       - choir-durable-substrate-overhauls-2026-08-23
     enables:
       - choir-scheduling-and-candidate-proof-2026-08-21
     note: >-
-      Active executable /goal as of 2026-08-26. Promoted after completion of
-      Durable Substrate Overhauls. Establishes private programmable Go activations via
-      a process-per-activation Yaegi sidecar inside disposable guest-local capsules with
-      unified Bash/Go broker routing, opaque handles, durable continuity across forced
+      Completed 2026-08-26; settled, non-executable. Established private
+      programmable Go activations via a process-per-activation Yaegi sidecar
+      inside disposable guest-local capsules with unified Bash/Go broker
+      routing, opaque handles, durable continuity across forced
     sources:
       - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
       - docs/memo-persistent-rlm-actors-2026-08-09.md

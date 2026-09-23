@@ -38,7 +38,12 @@ executable.
   exists yet — the current "ledger" is Markdown + a doccheck regex.
 - **Docs overhauled 2026-09-22:** zombie authority killed, ~14 superseded
   definitions retired to Git history, PICL renamed on customer-facing docs,
-  manifest/graph/ACTIVE repaired. 604→~590 live docs.
+  manifest/graph/ACTIVE repaired. A second consistency sweep (5-scout fanout)
+  then re-aligned the authority layer (doctrine, product-doctrine, ontology,
+  standing-questions now say throughline + precommitment records, not the
+  superseded effects Definition), tombstoned remaining zombie `next_action`s
+  and deleted-file refs across definitions, and bannered ~30 dated
+  reports/reviews/designs as stale evidence. 604→~590 live docs.
 
 ## Open questions (what needs your call)
 
@@ -97,6 +102,8 @@ is a **separate, newer artifact** — different framing (supervision workbench,
 "the work itself is the interface"), and it doesn't mention the learning
 loop. The bones are stale relative to the current pitch; they need updating
 to match, or the seed deck becomes the canonical pitch and the bones retire.
+The two 09-18 HTML renders still say PICL — re-render from the renamed source
+or retire them.
 
 ### 6. Engineering-memo open decisions
 
@@ -117,6 +124,16 @@ all block the first implementation's defaults.
 - **R9** deepseek/xiaomi provider heresy — carrier deletion completes it.
 - **R10** Super substrate retirement — the ontology cutover (M3) carries it.
 - **R11** `items.body` CAS externalization — world-wire search redesign.
+
+### 8. Follow-ups not yet done
+
+- **Legal docs** (`docs/legal/terms-of-service.md`, `privacy-policy.md`):
+  product/storage descriptions predate Texture, Mail/attachments, and
+  precommitment records — refresh before any external use.
+- **HTML decks** (above) — re-render or retire.
+- **~20 dated problem receipts** (`docs/problems/`, mostly 2026-08-28 boot
+  cluster): several read as open but were superseded by later repairs —
+  closure banners still needed.
 
 ## The docs map (post-overhaul)
 

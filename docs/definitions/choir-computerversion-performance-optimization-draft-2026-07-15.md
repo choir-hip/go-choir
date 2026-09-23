@@ -22,7 +22,7 @@ start:
       owner: owner-and-current-session
       touch: read_only
       paths_or_digest: "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md"
-      recovery: "Preserve in place; it is the active predecessor Definition and remains the sole /goal entrypoint."
+      recovery: "Preserve in place; it is the completed predecessor Definition (historical evidence), not a live entrypoint."
     - path: /Users/wiz/go-choir
       status: dirty
       class: unknown
@@ -38,7 +38,7 @@ start:
       disposition: paused
       evidence_ref: none
   observed_artifact:
-    - claim: "The audited-construction predecessor is still working and has not produced the deployed constructor, disk-backend, reconstruction, or fleet-cutover receipts this draft must benchmark."
+    - claim: "The audited-construction predecessor completed; this draft benchmarks its deployed constructor, disk-backend, reconstruction, and fleet-cutover receipts."
       evidence_ref: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
     - claim: "The current vmmanager creates a 32 GiB logical raw sparse data.img with os.Truncate plus mkfs.ext4, grows old images with resize2fs, and has a userspace copySparseFile path that reads the logical image in 1 MiB chunks."
       evidence_ref: "internal/vmmanager/manager.go:67-71,639-670,1869-1981"
@@ -221,7 +221,7 @@ now:
     source_ref: main/origin@d82f6322135d5fdd5da2d2152bb55cbf5f24e5da
     deploy_identity: unknown
     authority_identities:
-      - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#working
+      - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#completed
       - doctrine:docs/computer-ontology.md@d82f6322135d5fdd5da2d2152bb55cbf5f24e5da
       - doctrine:docs/agent-product-doctrine.md@d82f6322135d5fdd5da2d2152bb55cbf5f24e5da
       - mission_graph:docs/mission-graph.yaml@d82f6322135d5fdd5da2d2152bb55cbf5f24e5da

@@ -1,4 +1,7 @@
 # Choir 24-Hour Platform Arc & Critical Architecture Review
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 ## Comprehensive Technical Progress, Substrate Discoveries & Multi-Agent Consensus Report
 **Date:** 2026-08-20 (Covering 2026-08-19 00:00 — 2026-08-20 04:00 UTC)  
 **Parent Definition:** `docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`  

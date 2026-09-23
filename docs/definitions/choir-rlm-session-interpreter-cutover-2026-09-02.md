@@ -153,7 +153,7 @@ now:
     - "cmd/capsule-broker/main.go"
     - "internal/yaegikernel/eval.go"
   blocker_or_risk: none
-  next_action: "None. Execute successor /goal docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md."
+  next_action: "None. Superseded; the successor target-architecture-cutover is a blocked non-executable remainder holder. Current authority is the carrier."
 
 receipts:
   - id: rlm-cutover-baseline-2026-09-02

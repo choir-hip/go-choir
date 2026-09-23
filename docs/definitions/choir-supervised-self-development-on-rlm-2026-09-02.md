@@ -121,7 +121,7 @@ now:
     deploy_identity: "staging https://choir.news; computer-03335285269bdba4f94377e56879f9e6 active epoch 831"
     authority_identities:
       - "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
-      - "docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md"
+      - "docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md (retired to Git history)"
       - "docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md"
       - "docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md"
     policy_resolution_ref: not_applicable
@@ -136,7 +136,7 @@ now:
     digest: none
     scope: [internal/solitaire]
   decision:
-    selected: "Inherit candidate A solitaire acceptance criteria from choir-supervised-self-development-candidate-proof-2026-08-20.md, updated to execute strictly via RLM session cells on computer-03335285269bdba4f94377e56879f9e6 with pre-A checkpoint 99949fe2."
+    selected: "Inherit candidate A solitaire acceptance criteria from choir-supervised-self-development-candidate-proof-2026-08-20.md (retired to Git history), updated to execute strictly via RLM session cells on computer-03335285269bdba4f94377e56879f9e6 with pre-A checkpoint 99949fe2."
     kind: architecture
     status: settled
     source: owner
@@ -146,9 +146,9 @@ now:
     consequence: "Candidate A execution is strictly gated behind Definition 1 and Definition 2."
   evidence_refs:
     - "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
-    - "docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md"
-  blocker_or_risk: "Strict serialization: Gated behind successful deployed acceptance of Definition 1 (substrate) and Definition 2 (RLM cutover)."
-  next_action: "Remain paused until Definition 1 and Definition 2 achieve complete deployed acceptance on staging."
+    - "docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md (retired to Git history)"
+  blocker_or_risk: "Blocked: this candidate is parked. The substrate/cutover Definitions it was gated behind completed; current authority is the carrier (blocked on owner decision) and the revised roadmap's self-development phase."
+  next_action: "None. Parked; any future self-development candidate work is re-scoped under the revised roadmap, not this file."
 
 receipts:
   - id: selfdev-rlm-baseline-2026-09-02
@@ -156,7 +156,7 @@ receipts:
     commit_or_artifact: "main@a52ef06d"
     proof_refs:
       - "docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md"
-      - "docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md"
+      - "docs/definitions/choir-supervised-self-development-candidate-proof-2026-08-20.md (retired to Git history)"
     rollback_ref: "checkpoint 99949fe2 remains the immutable pre-A fence"
     disposition: "accepted as Definition 3 governing candidate A self-development on RLM; successor to candidate-proof-2026-08-20; paused pending Def 1 and Def 2"
     problem_ref: not_applicable

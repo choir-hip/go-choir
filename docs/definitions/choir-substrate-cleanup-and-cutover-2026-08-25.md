@@ -134,7 +134,7 @@ now:
     - docs/evidence/effects-red-b14-ancestor-restore-2026-08-25.md
     - docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md
   blocker_or_risk: "None for this Definition. Residual: Node B host disk 76% full; the 100 GiB preflight floor is calibrated, not solved - disk expansion (owner decision) and product-path lifecycle for sealed computer state remain overhauls-scale work."
-  next_action: "Execute docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md (Track K first) via /goal."
+  next_action: "None. Completed; the overhauls settled and the carrier is the current sole working entrypoint."
 
 receipts:
   - id: define-substrate-cleanup

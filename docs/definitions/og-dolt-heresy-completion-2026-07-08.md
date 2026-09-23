@@ -75,7 +75,7 @@ sequence, mutation permission, or completion authority.
 **Non-purpose:**
 
 - Runtime business-logic extraction receipts remain historical evidence under
-  `docs/definitions/choir-autoputer-completion-2026-07-14.md`. This Definition
+  `docs/definitions/choir-autoputer-completion-2026-07-14.md (retired to Git history)`. This Definition
   now supplies subordinate D-ROUTE, detector, and deletion contracts to the
   audited-construction mission; it is not a competing `/goal` spine.
 - Not the grip/RL research program; that retired narrative remains in Git

@@ -1,5 +1,8 @@
 # Choir RLM Substrate Repairs and G1 Producer — September 5, 2026
 
+> **Stale as of 2026-09-22.** Dated evidence — not current authority. The carrier (`choir-rlm-engineering-carrier-2026-09-11`) is the sole working entrypoint, blocked on owner decision; the revised roadmap is `docs/world-wire-mission-stack-2026-09-22.md`; precommitment records (renamed from PICL) is the mechanism; throughline is the `/goal` format.
+
+
 **Subject**: Close the named substrate defects, land the constrained G1 actuator producer, and restore Option B proof readiness  
 **Status**: Code on `main` at `7574d899`; Node B serving that SHA; remaining gate is owner-scoped `actuator=rlm`  
 **Staging**: Retained computer `computer-03335285269bdba4f94377e56879f9e6` (epoch 879, effects OFF, pre-A fence `99949fe2` untouched)  
