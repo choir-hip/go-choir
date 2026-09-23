@@ -102,6 +102,7 @@ The carrier program is mid-flight and blocked. This phase completes it.
 - **1b — Wake authority: minted continuations** *(folded into 1d)*. The
   transition-minted recovery-occurrence repair is subsumed by the ontology
   cutover's derivable-continuation model — pending deliveries are a
+  projection, the dispatcher is the one consumer. Not a separate mission.
 - **1c — Carrier landing.** Prove the sub-RLM call on the real harness (a
   cast on the document channel, not `texture tell`), then P6: engineering desk
   fully on the in-cell carrier, five overlay tools + four legacy capsule ops deleted (R7),
@@ -127,6 +128,7 @@ The carrier program is mid-flight and blocked. This phase completes it.
 - **1e — Remaining desk crossings** *(migration targets of 1d)*. Texture,
   research, and management desks cross to the carrier as the cutover's
   migration targets — the work the old stack serialized as M4–M6.
+
 
 ### Phase 2 — Precommitment records: the mechanism
 
@@ -231,6 +233,117 @@ Only after the computer demonstrably develops itself (Phase 3 gate).
   pointed at the world's commitments — the moat — but it is downstream of a
   live wire, not a pre-wire mission.
 - **Platform phase** — white-label newspapers on private+public data.
+
+## The ordered mission list (consensus 2026-09-22)
+
+Synthesized from a 9-agent convergent panel
+(`.agentic-consensus/agentic-consensus-20260922-230607/`). Each mission is one
+executable `/goal` throughline file. `→` = hard dependency; `⇢` = recommended
+order, not forced.
+
+```text
+M1  Owner input is a document revision        [cleanup = subclass (a) cutover]
+M2  Sub-RLM call on the document channel      [1c ≡ 3a — same mission]
+M3  Ontology kernel                           [1d remainder: wakes/sweeps/dual/non-event]
+M4  Remaining desks cross                     [1e + R8 + R10]
+M5  Record type + ledger                      [2a]
+M6  precommit Yaegi surface                   [2b]
+M7  Skip the harness                          [3b]
+M8  Context packs + learning-claims gate      [2c]
+M9a Platform→computer update push             [3d-i]
+M9b Computer→computer code publish            [3d-ii]
+M10 choir → microVMs via yaegi                [3c]
+M11 Self-dev proof on records                 [3e — the wire gate]
+M12 Supervision workbench                     [4a]
+M13 Beta hardening                            [4b]
+M14 Wire observation plane                    [5a]
+M15 Editorial + publication transaction       [5b]
+M16 World Wire live                           [5c]
+```
+
+**The spine:** M1 → M2 → M3 → (M4 ∥ M5) → M7 → M11 → M14 → M15 → M16.
+After M3 the roadmap is not a single chain: M4, M5, M9a are parallel; M7 ∥ M6
+is the main overlap; M8 ∥ M9 is the next.
+
+**Not missions:** 1a (closed — the evidence floor is M2), 1b (folded into M3),
+Phase 0 remainder, box score, `install_frontend_pointer` (platform-shell
+deploy contract, separate migration), vmctl/sourcecycled (deferred), a "goal
+selector" (dissolved into corrective-value retrieval).
+
+### M1 — the first mission (cleanup)
+
+"Cleanup" is **not** delete-only and **not** the full ~44-instance cutover.
+It is the subclass-(a) vertical slice: owner input becomes a document
+revision event, and the wrong-path ingress is deleted *in the same move*.
+
+**Delete:** `cmd/choir/roster.go` + test; `choir roster` + `texture
+tell|correct` CLI verbs (`main.go`); `/tell` + `/correct` endpoints
+(`texture_owner_instruction.go`); `LifecycleOwnerInstruction` type/store
+(`types/owner_instruction.go`, `store/lifecycle_owner_instruction.go`); the
+`/revise`→`/tell` forwarder (`texture_agent_revision.go:117-121`); the
+self-dev synthetic tell (`selfdev_texture_join.go`); the unbound `/revise`
+legacy mailbox; dead overlay names after a caller census.
+
+**Replace with:** owner (and harness) writes a document revision — the
+revision *is* the event. No owner-intent payload, no new wake table.
+Constraint: do not invent a tell-shaped "revision-wake" object M3 would
+delete.
+
+**First probe inside M1:** whether owner keystrokes already persist as
+document revisions and `tell` is only an extra wake. If yes, M1 is "stop the
+extra wake, delete the channel." If no, persist the diff as the revision
+event first, then delete.
+
+**Not in M1:** overlay tools (M2/R7), `actuator=tools`/Super (M4),
+process-local wakes/sweeps (M3), `install_frontend_pointer`, vmctl,
+sourcecycled.
+
+**Acceptance:** on staging, a bound Texture doc — owner edit → new revision
+on the tape → desk observes the head; `choir roster`/`choir texture tell`
+absent; no new `lifecycle_owner_instruction` rows. Mutation class **red**
+(canonical input/event authority).
+
+**Dissent recorded:** claude/codex/devin argued for a leaf-only first mission
+(delete roster + CLI verbs, keep LOI for M2). Rejected: roster-only deletion
+produces no product capability and leaves `/tell` as the live heresy; LOI is
+safe to delete *because* the replacement lands in the same mission. The
+roster-only deletion is a valid first *commit* inside M1, not a standalone
+`/goal`.
+
+### Forced vs judgment
+
+**Forced:** M1 before M2 (no document channel → M2 is another tell-shaped
+fake); replacement before deleting live ingress; M3 before M4 (R8/R10 stay
+until desks cross); M3 before M7 (derivable continuations); M5 → M6 → M8;
+M9b before M10; M11 before M14–M16 (wire gate); M14 → M15 → M16.
+
+**Judgment:** M2 before M3 (carrier proof is live-process only; M3 owns
+restart durability — do not claim it in M2's acceptance); M3/M4 split (one
+goal file with desk-crossing slices is the alternative); M7 ∥ M6/M8 (3b
+doesn't need records; 3e does); M9 after M7 (don't build publish before
+there's a self-developed change to publish); M10 not required for M11 (proof
+depth is open); M13 after M12 (don't steal the compounding path).
+
+### Risks the panel named
+
+- **M1 dual-path:** document event + leftover `scheduleTextureWorkerWake`
+  recreates tell. M1 acceptance forbids the side table.
+- **M2-before-M3 is a fake island:** a live-process sub-RLM call that dies on
+  restart. M2's proof is live-process only; M3 owns restart.
+- **M1 is secretly 1d:** if "the revision wakes the desk" needs the fenced
+  dispatcher, stop and re-scope — M1 only admits the revision as an event the
+  existing Texture actor already reads.
+- **M3 stalls, everything queues.** The hedge is M2 already compounding on
+  the live process — only 3b+ is blocked.
+- **M5-before-M11 may be wrong:** if the proof should exist before
+  instrumentation, invert M5/M6/M8 past M7. Cost: M11 doesn't generate scored
+  records; you retrofit.
+- **Unbound `/revise` mailbox** (`texture_agent_revision.go:234-309`) is
+  leftover subclass (a) — include in M1 or explicitly defer to M3 with a
+  named exception.
+- **Existing carrier Definition** (`choir-rlm-engineering-carrier-2026-09-11.md`)
+  still marked `entrypoint: true` — supersede it when M1 is authored, or
+  authority splits (standing Q5).
 
 1. **The carrier decision** (1a) — re-scoped 2026-09-22: roster re-run on the
    real harness; only the evidence floor remains open.
