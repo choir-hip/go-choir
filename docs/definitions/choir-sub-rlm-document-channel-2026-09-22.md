@@ -132,9 +132,9 @@ boundaries:
 
 now:
   status: working
-  slice: charter — reconcile carrier substrate against the landed document
-    channel; first probe is the cast path
-  source_ref: main@f2d67e4b
+  slice: implementation landed locally — document-bound engineering desk,
+    revision-opens-assignment cast, R7/R9 deletions; staging drive next
+  source_ref: main@e7d11e59 + working tree (uncommitted)
   deploy_identity: staging https://choir.news build.commit=3b780ed2
   candidate:
     id: none
@@ -168,33 +168,73 @@ now:
   decision:
     what: >-
       M2 is the carrier landing and self-dev capability phase 1 as one
-      mission (1c ≡ 3a). Not two missions.
+      mission (1c ≡ 3a). Not two missions. Charter 2026-09-23 settled the
+      cast mechanism: a lifecycle document binds to the engineering desk
+      (`engineering:{docID}` agent, profile engineering); every owner-authored
+      revision on that document is one cast — the commit dispatches a
+      document-channel occurrence whose consumer opens the assignment
+      directly (capsule spawn + bound run on the document trajectory,
+      ChannelID = the document channel, objective = the revision's
+      owner_prompt/content). The revision event IS the admission; the
+      assignment's completion report lands on the same trajectory as
+      canonical evidence. assign_co_super is deleted (the document channel
+      replaces the Super-mediated opener); self-dev operation assignment
+      opens reroute through the same document-channel cast; verification
+      opens host-side on implementation completion when a selfdev operation
+      is bound. update_coagent stays registered for the four non-engineering
+      desks (M4 owns their crossing); the acceptance grep's "live
+      references" is read as references on desks where the named tool is
+      absent — engineering prompts name none of the retired names.
     kind: architecture
     status: settled
     evidence_ref: docs/world-wire-mission-stack-2026-09-22.md
     owner_ratification_ref: owner direction 2026-09-22
   belief:
     believed_state: >-
-      M1 landed: the document channel carries owner input as a canonical
-      revision event and the desk observes the head (turn-consumption receipt
-      on staging). The carrier mechanism is proven; the cast path on the
-      document channel is the remaining work.
+      Implementation landed locally. The document-bound engineering desk is
+      live: `desk=engineering` on lifecycle-documents create binds an
+      `engineering:{docID}` desk agent (profile/role engineering, channel =
+      the document); StartLifecycle, QueueLifecycleUpdate, and
+      requireLifecycleAssignedAgent admit the engineering profile; every
+      owner-authored revision dispatches a document-channel occurrence whose
+      consumer (actor handler, test dispatch, boot scan) opens the
+      assignment directly via `ReconcileEngineeringRevisionCast` /
+      `ReconcileEngineeringDesk` — deterministic assignment identity keyed
+      on the admitting revision, spawn/bind/activate saga resumed on
+      stranded opens, verification chained host-side on implementation
+      completion when a selfdev operation is frozen. Self-dev start commits
+      the engineering doc + directive revision (no mediating Super run).
+      R7: the four capsule ops and assign_co_super are deleted; the
+      assigned-CoSuper registry is exactly `capsule_go_eval`; engineering
+      and management prompts name none of the retired tools.
+      R9: deepseek/xiaomi providers, AnthropicCompatProvider, the ChatGPT
+      terminal fallback and toolloop retry branch are deleted; nix defaults
+      moved to chatgpt/gpt-5.6-luna; gateway refuses uncatalogued models.
+      Acceptance: `super_direction_opened` reads the committed assignment on
+      document trajectories; `capsule_effect_frozen` only fails when a
+      selfdev operation is bound. `choir texture revise` + `--desk` flag
+      added. All package suites green (agentcore 226s, actorruntime,
+      textureowner, store pending).
     main_uncertainty: >-
-      Whether the pre-cutover runtime can carry the cast's continuation far
-      enough for a live-process proof, or whether M2 collapses into M3.
+      Whether staging's deployed runtime carries a real model call for the
+      assigned engineering run — provider auth (chatgpt) was a pre-existing
+      gap; the cast proof may be activation-only.
     next_observation: >-
-      Whether a `choir` CLI document edit produces a cast the engineering
-      desk consumes — the first executable probe.
+      Push → CI → staging deploy → `choir texture create --desk engineering`
+      → `choir texture revise` → observe the cast and result on canonical
+      evidence.
   blocker_or_risk: >-
     Fake-island risk: a live-process proof that dies on restart — acceptance
     must not claim durability M3 hasn't delivered. Provider auth on staging
     (chatgpt) was a pre-existing gap; confirm a real model call completes or
-    the cast proof is activation-only.
+    the cast proof is activation-only. Self-dev reroute is code-level only:
+    operations may be unreachable with effects OFF on staging — the deployed
+    proof is the document-edit path, not an operation.
   next_action: >-
-    Charter: reconcile the carrier substrate (castStagedIntent, session
-    worker, staged choir.* intents) against the landed document channel;
-    name the first executable probe — a `choir` CLI document edit that
-    produces a sub-RLM cast.
+    Commit, push, monitor CI + staging deploy, verify deployed commit
+    identity, then drive the acceptance probe: create an engineering-bound
+    document via `choir` CLI, revise it with a real task, observe the
+    assignment open and the result on canonical evidence.
 
 receipts: []
 ---

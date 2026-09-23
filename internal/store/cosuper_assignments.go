@@ -46,8 +46,11 @@ type coSuperAuthorityObjects struct {
 	parentAgent   objectgraph.Object
 	parentRun     objectgraph.Object
 	parentWork    objectgraph.Object
-	assignedAgent objectgraph.Object
-	assignedWork  objectgraph.Object
+	// parentRevision carries the owner-authored revision that is the parent
+	// authority for document-driven bindings (ParentRunID == "").
+	parentRevision objectgraph.Object
+	assignedAgent  objectgraph.Object
+	assignedWork   objectgraph.Object
 }
 
 type coSuperRunClaim struct {
@@ -595,6 +598,9 @@ func (s *Store) requireCoSuperParentAuthority(ctx context.Context, binding types
 	if err := binding.Validate(); err != nil {
 		return coSuperAuthorityObjects{}, fmt.Errorf("%w: %v", ErrCoSuperAssignmentInvalid, err)
 	}
+	if binding.ParentRunID == "" {
+		return s.requireCoSuperDocumentParentAuthority(ctx, binding, false)
+	}
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, binding.OwnerID, binding.ComputerID, binding.TrajectoryID)
 	if err != nil {
 		return coSuperAuthorityObjects{}, err
@@ -653,6 +659,9 @@ func (s *Store) requireCoSuperHistoricalParentAuthority(ctx context.Context, bin
 	if err := binding.Validate(); err != nil {
 		return coSuperAuthorityObjects{}, fmt.Errorf("%w: %v", ErrCoSuperAssignmentInvalid, err)
 	}
+	if binding.ParentRunID == "" {
+		return s.requireCoSuperDocumentParentAuthority(ctx, binding, true)
+	}
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, binding.OwnerID, binding.ComputerID, binding.TrajectoryID)
 	if err != nil {
 		return coSuperAuthorityObjects{}, err
@@ -700,6 +709,94 @@ func (s *Store) requireCoSuperHistoricalParentAuthority(ctx context.Context, bin
 	return coSuperAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj, parentRun: parentRunObj, parentWork: parentWorkObj}, nil
 }
 
+// requireCoSuperDocumentParentAuthority authenticates a document-driven
+// assignment open: the parent authority is the engineering desk agent bound to
+// the lifecycle document plus the owner-authored revision that carried the
+// cast. There is no parent run; binding.ParentControlID names the revision.
+// historical=true relaxes trajectory/work state for late reports.
+func (s *Store) requireCoSuperDocumentParentAuthority(ctx context.Context, binding types.CoSuperAssignmentBinding, historical bool) (coSuperAuthorityObjects, error) {
+	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, binding.OwnerID, binding.ComputerID, binding.TrajectoryID)
+	if err != nil {
+		return coSuperAuthorityObjects{}, err
+	}
+	if trajectory.OwnerID != binding.OwnerID || trajectory.ComputerID != binding.ComputerID || trajectory.TrajectoryID != binding.TrajectoryID {
+		return coSuperAuthorityObjects{}, ErrCoSuperAssignmentInvalid
+	}
+	if !historical && trajectory.Status != types.TrajectoryLive {
+		return coSuperAuthorityObjects{}, ErrCoSuperAssignmentInvalid
+	}
+	if historical && trajectory.Status != types.TrajectoryLive && trajectory.Status != types.TrajectorySettled && trajectory.Status != types.TrajectoryCancelled {
+		return coSuperAuthorityObjects{}, ErrCoSuperAssignmentInvalid
+	}
+	parentAgentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, binding.OwnerID, binding.ComputerID, binding.ParentAgentID)
+	if err != nil {
+		return coSuperAuthorityObjects{}, err
+	}
+	parentAgent, err := decodeLifecycleObject[types.AgentRecord](parentAgentObj)
+	if err != nil {
+		return coSuperAuthorityObjects{}, err
+	}
+	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
+	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID ||
+		parentAgent.AgentID != binding.ParentAgentID || parentAgent.Profile != agentprofile.CoSuper ||
+		parentAgent.Role != agentprofile.CoSuper || parentAgent.LifecycleVersion <= 0 ||
+		docID == "" || parentAgent.AgentID != agentprofile.CoSuper+":"+docID || parentAgent.ChannelID != docID {
+		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: exact engineering desk parent unavailable: %w", ErrCoSuperAssignmentInvalid)
+	}
+	var parentControlObj objectgraph.Object
+	if binding.SourceCandidateID != "" {
+		// Verification assignment: the parent control is the candidate record —
+		// the durable receipt of the completed implementation it verifies.
+		candidateObj, candErr := s.lifecycleGraph().GetObject(ctx, binding.ParentControlID)
+		if candErr != nil {
+			return coSuperAuthorityObjects{}, candErr
+		}
+		candidate, decodeErr := decodeLifecycleObject[types.CoSuperSubjectCandidate](candidateObj)
+		if decodeErr != nil {
+			return coSuperAuthorityObjects{}, decodeErr
+		}
+		if candidate.CandidateID != binding.ParentControlID || candidate.CandidateID != binding.SourceCandidateID ||
+			candidate.OwnerID != binding.OwnerID || candidate.ComputerID != binding.ComputerID ||
+			candidate.TrajectoryID != binding.TrajectoryID {
+			return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent candidate is outside exact trajectory authority: %w", ErrCoSuperAssignmentInvalid)
+		}
+		parentControlObj = candidateObj
+	} else {
+		revisionObj, revErr := s.lifecycleGetObject(ctx, ogKindTexRev, binding.OwnerID, binding.ComputerID, binding.ParentControlID)
+		if revErr != nil {
+			return coSuperAuthorityObjects{}, revErr
+		}
+		revision, decodeErr := decodeLifecycleObject[types.Revision](revisionObj)
+		if decodeErr != nil {
+			return coSuperAuthorityObjects{}, decodeErr
+		}
+		if revision.RevisionID != binding.ParentControlID || revision.OwnerID != binding.OwnerID ||
+			revision.ComputerID != binding.ComputerID || revision.TrajectoryID != binding.TrajectoryID ||
+			revision.DocID != docID || revision.AuthorKind != types.AuthorUser {
+			return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent revision is not an owner-authored revision on the bound document: %w", ErrCoSuperAssignmentInvalid)
+		}
+		parentControlObj = revisionObj
+	}
+	parentWorkObj, parentWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.ParentWorkItemID)
+	if err != nil {
+		return coSuperAuthorityObjects{}, err
+	}
+	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID ||
+		parentWork.TrajectoryID != binding.TrajectoryID || parentWork.AssignedAgentID != binding.ParentAgentID ||
+		parentWork.AuthorityProfile != agentprofile.CoSuper {
+		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent engineering desk work mismatch: %w", ErrCoSuperAssignmentInvalid)
+	}
+	if !historical && parentWork.Status != types.WorkItemOpen {
+		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: parent engineering desk work mismatch: %w", ErrCoSuperAssignmentInvalid)
+	}
+	if historical && parentWork.Status != types.WorkItemOpen && parentWork.Status != types.WorkItemCompleted &&
+		parentWork.Status != types.WorkItemCancelled && parentWork.Status != types.WorkItemRefused {
+		return coSuperAuthorityObjects{}, fmt.Errorf("co-super assignment: historical parent work binding mismatch: %w", ErrCoSuperAssignmentInvalid)
+	}
+	return coSuperAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj,
+		parentRevision: parentControlObj, parentWork: parentWorkObj}, nil
+}
+
 func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding types.CoSuperAssignmentBinding) (coSuperAuthorityObjects, error) {
 	authority, err := s.requireCoSuperParentAuthority(ctx, binding)
 	if err != nil {
@@ -735,10 +832,17 @@ func (s *Store) requireCoSuperAssignmentAuthority(ctx context.Context, binding t
 }
 
 func coSuperParentAuthorityConditions(authority coSuperAuthorityObjects) []objectgraph.ObjectCondition {
-	return []objectgraph.ObjectCondition{
-		coSuperObjectCondition(authority.parentAgent), coSuperObjectCondition(authority.parentRun),
+	conditions := []objectgraph.ObjectCondition{
+		coSuperObjectCondition(authority.parentAgent),
 		coSuperObjectCondition(authority.parentWork),
 	}
+	if authority.parentRun.CanonicalID != "" {
+		conditions = append(conditions, coSuperObjectCondition(authority.parentRun))
+	}
+	if authority.parentRevision.CanonicalID != "" {
+		conditions = append(conditions, coSuperObjectCondition(authority.parentRevision))
+	}
+	return conditions
 }
 
 func coSuperAuthorityConditions(authority coSuperAuthorityObjects) []objectgraph.ObjectCondition {
@@ -991,8 +1095,20 @@ func (s *Store) OpenCoSuperAssignment(ctx context.Context, req types.OpenCoSuper
 		kind objectgraph.EdgeKind
 	}{
 		{authority.trajectory, ogEdgeAssignmentTrajectory}, {authority.parentAgent, ogEdgeAssignmentParent},
-		{authority.parentRun, ogEdgeAssignmentParentRun}, {authority.parentWork, ogEdgeAssignmentParentWork},
+		{authority.parentWork, ogEdgeAssignmentParentWork},
 		{agentObj, ogEdgeAssignmentAgent}, {workObj, ogEdgeAssignmentWork},
+	}
+	if authority.parentRun.CanonicalID != "" {
+		targets = append(targets, struct {
+			obj  objectgraph.Object
+			kind objectgraph.EdgeKind
+		}{authority.parentRun, ogEdgeAssignmentParentRun})
+	}
+	if authority.parentRevision.CanonicalID != "" {
+		targets = append(targets, struct {
+			obj  objectgraph.Object
+			kind objectgraph.EdgeKind
+		}{authority.parentRevision, ogEdgeAssignmentParentRun})
 	}
 	edges := make([]objectgraph.Edge, 0, len(targets))
 	for _, target := range targets {
@@ -1093,6 +1209,13 @@ func (s *Store) getCoSuperAssignmentObject(ctx context.Context, ownerID, compute
 func (s *Store) GetCoSuperAssignment(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) (types.CoSuperAssignment, error) {
 	_, assignment, err := s.getCoSuperAssignmentObject(ctx, ownerID, computerID, assignmentID, attempt)
 	return assignment, err
+}
+
+func coSuperParentProfileForBinding(binding types.CoSuperAssignmentBinding) string {
+	if profile, _, ok := strings.Cut(binding.ParentAgentID, ":"); ok {
+		return profile
+	}
+	return ""
 }
 
 // ListCoSuperAssignmentsForComputer returns every non-tombstoned CoSuper
@@ -1199,7 +1322,7 @@ func validateCoSuperAssignmentRun(assignment types.CoSuperAssignment, assignedAg
 		run.RequestedByRunID != assignment.Binding.ParentRunID || !run.CreatedAt.IsZero() || !run.UpdatedAt.IsZero() ||
 		run.FinishedAt != nil || run.Result != "" || run.Error != "" ||
 		metadataExactString(run.Metadata, "requested_by_agent_id") != assignment.Binding.ParentAgentID ||
-		metadataExactString(run.Metadata, "requested_by_profile") != agentprofile.Super ||
+		metadataExactString(run.Metadata, "requested_by_profile") != coSuperParentProfileForBinding(assignment.Binding) ||
 		metadataExactString(run.Metadata, "assignment_id") != assignment.AssignmentID ||
 		metadataExactUint64(run.Metadata, "assignment_attempt") != assignment.Binding.Attempt ||
 		metadataExactString(run.Metadata, "assignment_kind") != string(assignment.Binding.Kind) ||

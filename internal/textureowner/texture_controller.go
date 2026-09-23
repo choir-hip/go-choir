@@ -19,7 +19,7 @@ import (
 // trigger. The actor mailbox dedupes on the encoded occurrence identity, and
 // the boot scan re-derives the same wake from the document head, so a crash
 // between commit and dispatch loses nothing.
-func (rt *Handler) dispatchTextureRevisionWake(ownerID, computerID, trajectoryID string, revision types.Revision, requestID string, lifecycleVersion int64, events []types.LifecycleEvent) {
+func (rt *Handler) dispatchTextureRevisionWake(ownerID, computerID, trajectoryID string, revision types.Revision, requestID string, lifecycleVersion int64, events []types.LifecycleEvent, deskProfile string) {
 	if rt == nil || rt.Core == nil {
 		return
 	}
@@ -30,19 +30,42 @@ func (rt *Handler) dispatchTextureRevisionWake(ownerID, computerID, trajectoryID
 			reducerSeq = event.ReducerSeq
 		}
 	}
-	occurrence, err := agentcore.TextureDocumentRevisionOccurrence(revision, requestID, lifecycleVersion, reducerSeq)
+	occurrence, err := agentcore.DocumentRevisionOccurrence(revision, deskProfile, requestID, lifecycleVersion, reducerSeq)
 	if err != nil {
-		log.Printf("runtime: build texture revision wake for doc %s: %v", revision.DocID, err)
+		log.Printf("runtime: build document revision wake for doc %s: %v", revision.DocID, err)
 		return
 	}
 	content, err := agentcore.EncodeTextureActorOccurrence(occurrence)
 	if err != nil {
-		log.Printf("runtime: encode texture revision wake for doc %s: %v", revision.DocID, err)
+		log.Printf("runtime: encode document revision wake for doc %s: %v", revision.DocID, err)
 		return
 	}
 	if err := rt.Core.DispatchActor(context.Background(), ownerID, computerID, occurrence.TargetAgentID, "coagent_result", content, trajectoryID, "owner:"+ownerID); err != nil {
-		log.Printf("runtime: dispatch texture revision wake for doc %s: %v", revision.DocID, err)
+		log.Printf("runtime: dispatch document revision wake for doc %s: %v", revision.DocID, err)
 	}
+}
+
+// lifecycleDocDeskProfile derives the bound desk profile for one lifecycle
+// document from its open desk work item. Returns "" when the document has no
+// bound desk (unbound or non-desk trajectory).
+func (rt *Handler) lifecycleDocDeskProfile(ctx context.Context, ownerID string, doc types.Document) string {
+	if rt == nil || rt.Store == nil || strings.TrimSpace(doc.TrajectoryID) == "" {
+		return ""
+	}
+	snapshot, err := rt.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
+	if err != nil {
+		return ""
+	}
+	for _, work := range snapshot.WorkItems {
+		if work.Status != types.WorkItemOpen {
+			continue
+		}
+		profile := strings.TrimSpace(work.AuthorityProfile)
+		if (profile == agentprofile.Texture || profile == agentprofile.CoSuper) && work.AssignedAgentID == profile+":"+doc.DocID {
+			return profile
+		}
+	}
+	return ""
 }
 
 // Start reconciles durable Texture documents after the generic core has
@@ -67,6 +90,20 @@ func (rt *Handler) Start(ctx context.Context) error {
 	textureSubjects := make([]types.AgentRecord, 0)
 	for _, subject := range subjects {
 		subjectProfile, _ := agentprofile.Canonical(subject.Profile)
+		if subjectProfile == agentprofile.CoSuper && subject.LifecycleVersion > 0 && subject.ChannelID != subject.AgentID {
+			// Engineering desk: the desk agent's channel is the bound document,
+			// not its own mailbox — that discriminates it from assigned agents
+			// (engineering:{assignmentID}, channel = own mailbox). Reconcile
+			// the pending cast directly; the desk agent never runs.
+			docID := strings.TrimSpace(strings.TrimPrefix(subject.AgentID, agentprofile.CoSuper+":"))
+			if docID == "" || docID != strings.TrimSpace(subject.ChannelID) {
+				continue
+			}
+			if _, reconcileErr := rt.Core.ReconcileEngineeringDesk(ctx, subject.OwnerID, docID); reconcileErr != nil {
+				log.Printf("textureowner: boot engineering desk reconcile %s: %v", subject.AgentID, reconcileErr)
+			}
+			continue
+		}
 		if subjectProfile != agentprofile.Texture {
 			continue
 		}
@@ -995,6 +1032,7 @@ func revisionOccurrenceScopeMatches(o agentcore.TextureActorOccurrence, revision
 		o.TrajectoryID == strings.TrimSpace(revision.TrajectoryID) && o.DocumentID == strings.TrimSpace(revision.DocID) &&
 		o.HeadRevisionID == strings.TrimSpace(revision.RevisionID)
 }
+
 // retryable in the actor log.
 func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, computerID, agentID, content string) (agentcore.TextureActorOccurrence, TextureActorOccurrenceState, error) {
 	var zero agentcore.TextureActorOccurrence

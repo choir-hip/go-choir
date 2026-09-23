@@ -16,7 +16,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -235,71 +234,6 @@ func lifecycleActivationKeys(ownerID, computerID, trajectoryID, agentID, buildCo
 	return logicalKey, failedKey, versions, nil
 }
 
-
-// resumeSelfDevelopmentSuperForPendingRevision starts a fresh persistent
-// Super bound to the operation whose Texture owner revision is pending. The
-// Super prompt directs it to reconcile the operation; the Texture actor
-// consumes the owner head through its own tool loop in parallel.
-func (rt *Runtime) resumeSelfDevelopmentSuperForPendingRevision(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
-	computerID := strings.TrimSpace(rt.TextureComputerID())
-	superAgentID := persistentSuperAgentID(ownerID)
-	if agentID != superAgentID {
-		return nil, nil
-	}
-	// Never mint a competing Super: an active resident run owns the slot, and
-	// reconcile returns the resident through the earlier branch. If this check
-	// raced a just-activated run, the run-count guard below still holds.
-	if active, found, activeErr := rt.activeRunByAgent(ctx, ownerID, superAgentID); activeErr == nil && found {
-		return &active, nil
-	}
-	latest, err := rt.store.GetLatestRunByAgent(ctx, ownerID, superAgentID)
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		return nil, err
-	}
-	var operationID string
-	if latest.RunID != "" {
-		operationID = strings.TrimSpace(firstNonEmpty(
-			metadataStringValue(latest.Metadata, "self_development_operation_id"),
-			metadataStringValue(latest.Metadata, "self_development_unbound_operation_id"),
-		))
-	}
-	if operationID == "" {
-		operations, listErr := rt.selfDevelopmentRewakeOperations(ctx, ownerID, computerID, &latest)
-		if listErr != nil || len(operations) == 0 {
-			return nil, nil
-		}
-		operationID = operations[0].OperationID
-	}
-	// An operation that already resolves to a run is owned by that run's
-	// activation or the API start path (selfdevStartMu). Instruction resume
-	// only fills the no-run gap.
-	if runs, runErr := rt.store.ListRunsBySelfDevelopmentOperation(ctx, ownerID, operationID, 2); runErr == nil && len(runs) > 0 {
-		return nil, nil
-	}
-	prompt := rt.selfDevelopmentRewakePrompt(ctx, ownerID, selfdev.Operation{OperationID: operationID})
-	_, _, textureTrajectoryID, _, _, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operationID)
-	metadata := map[string]any{
-		runMetadataAgentProfile:         agentprofile.Super,
-		runMetadataAgentRole:            agentprofile.Super,
-		runMetadataAgentID:              agentID,
-		"request_source":                "lifecycle_texture_control",
-		"self_development_operation_id": operationID,
-		"assignment_trajectory_id":      textureTrajectoryID,
-	}
-	rec, createErr := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
-	if createErr != nil {
-		return nil, createErr
-	}
-	rec.TrajectoryID = ""
-	delete(rec.Metadata, runMetadataTrajectoryID)
-	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-		rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
-		return nil, fmt.Errorf("preserve non-lifecycle persistent-Super run: %w", err)
-	}
-	rt.activate(rec)
-	return rec, nil
-}
-
 // reconcilePersistentSuperActor is the durable controller boundary for the
 // user's privileged execution actor. update_coagent can append addressed work
 // for the persistent super, but only this runtime controller starts or reuses
@@ -310,20 +244,7 @@ func (rt *Runtime) resumeSelfDevelopmentSuperForPendingRevision(ctx context.Cont
 func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	rt.superReconcileMu.Lock()
 	defer rt.superReconcileMu.Unlock()
-	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, false, "")
-}
-
-// reconcilePersistentSuperActorForOwnerStart is the wake path for the owner's
-// explicit self-development start/retry action. The owner action is a live
-// trigger; when the Texture turn that consumes the just-committed owner
-// revision has not committed its execution_request yet, this path fills
-// the no-run gap from that pending revision. It is reachable ONLY from
-// startSelfDevelopmentPersistentSuper — never from boot rewarm, the boot
-// work-item sweep, terminal continuation, or generic coagent wake reconcile.
-func (rt *Runtime) reconcilePersistentSuperActorForOwnerStart(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
-	rt.superReconcileMu.Lock()
-	defer rt.superReconcileMu.Unlock()
-	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, true, "")
+	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, "")
 }
 
 // ResumeInterruptedPersistentSuperControlRun is the dedicated structurally isolated
@@ -363,7 +284,7 @@ func (rt *Runtime) resumeInterruptedPersistentSuperControlRunLocked(ctx context.
 	return nil, false, nil
 }
 
-func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string, allowInstructionResume bool, exactUpdateID string) (*types.RunRecord, error) {
+func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string, exactUpdateID string) (*types.RunRecord, error) {
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
 	}
@@ -417,12 +338,6 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	}
 	lifecycleControls := len(updates) > 0
 	if !lifecycleControls {
-		if allowInstructionResume {
-			// Owner-start live trigger: the owner revision committed by this
-			// start action wakes Super when the Texture turn has not yet
-			// committed its execution_request. Resume only fills the no-run gap.
-			return rt.resumeSelfDevelopmentSuperForPendingRevision(ctx, ownerID, agentID)
-		}
 		updates, err = rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
 		if err != nil {
 			return nil, err
@@ -1070,11 +985,6 @@ func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *t
 		}
 	}
 	// Terminal events wake Texture, never select backlog.
-	if rec.State.Terminal() {
-		if rewakeErr := rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, rec.OwnerID); rewakeErr != nil {
-			log.Printf("runtime: self-development Texture rewake after terminal Super %s: %v", rec.RunID, rewakeErr)
-		}
-	}
 }
 
 func isPersistentSuperInboxRun(rec *types.RunRecord) bool {
@@ -2113,7 +2023,6 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 	return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 }
 
-
 // lifecycleOwnerRevisionTurnForRun injects the pending owner-authored head
 // revision into the Texture run's context. The owner revision is the desk's
 // input: the run consumes it by committing a texture turn against that head.
@@ -2789,7 +2698,7 @@ func (rt *Runtime) ResolvePersistentSuperLiveOccurrence(ctx context.Context, own
 	if !found {
 		return nil, true, nil
 	}
-	rec, err := rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, false, matched.UpdateID)
+	rec, err := rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, matched.UpdateID)
 	if err != nil {
 		return nil, false, err
 	}

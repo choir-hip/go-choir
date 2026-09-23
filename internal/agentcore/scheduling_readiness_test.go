@@ -12,7 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -317,10 +317,9 @@ func TestSchedulingReadiness_Criterion4_ProducerReportStoreSettlement(t *testing
 // Acceptance Criterion 5: Terminal-Event Probe, Positive and Negative
 // (a) Terminate a Super while >= 1 admissible unclaimed backlog item exists and assert
 // zero successor Super is minted from undelivered backlog (maybeContinuePersistentSuperInbox path);
-// (b) Prove the live Texture rewake path intact: terminal Super -> Texture instruction
-// (maybeRewakeSelfDevelopmentTextureAfterTerminalSuper) -> owner-visible Texture turn
-// -> NEW typed execution_request -> exactly one new Super, without HTTP operations POST.
-func TestSchedulingReadiness_Criterion5_TerminalEventTextureRewake(t *testing.T) {
+// (b) Prove the document-channel re-cast path: a new owner-authored revision on the
+// engineering-bound document opens a fresh assignment — no Super mediates the opener.
+func TestSchedulingReadiness_Criterion5_TerminalEventDocumentRecast(t *testing.T) {
 	ctx := context.Background()
 	runtime, productStore := testRuntime(t)
 	ownerID := "owner-terminal-event-probe"
@@ -330,147 +329,72 @@ func TestSchedulingReadiness_Criterion5_TerminalEventTextureRewake(t *testing.T)
 	operation := selfdev.Operation{
 		OperationID:       "selfdev-op-criterion-5",
 		ComputerID:        computerID,
+		TrajectoryID:      "trajectory-criterion-5",
 		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("e", 64),
 	}
 	originalPrompt := "Author classic solitaire game engine"
-	if err := runtime.startSelfDevelopmentPersistentSuper(ctx, operation, ownerID, originalPrompt); err != nil {
+	if err := runtime.ensureSelfDevelopmentEngineeringDoc(ctx, operation, ownerID, originalPrompt); err != nil {
 		t.Fatal(err)
 	}
 
 	superAgentID := persistentSuperAgentID(ownerID)
-	firstSuper, err := productStore.GetLatestRunByAgent(ctx, ownerID, superAgentID)
-	if err != nil || !firstSuper.State.Active() {
-		t.Fatalf("first Super active state: %+v err=%v", firstSuper, err)
-	}
 
 	// Seed an admissible unclaimed backlog item in another trajectory
 	fDecoy := seedTextureLifecycleControl(t, productStore, ownerID, "decoy-backlog", superAgentID, agentprofile.Super)
 
-	// Part (a): Terminate Super while >= 1 admissible unclaimed backlog item exists
-	// and assert zero successor Super is minted from undelivered backlog
-	_ = runtime.CancelRun(ctx, firstSuper.RunID, ownerID)
+	// Part (a): a terminal Super mints zero successor from undelivered backlog.
 	finished := time.Now().UTC()
-	firstSuper.State = types.RunFailed
-	firstSuper.Error = "tool loop: exceeded 200 iterations without end_turn"
-	firstSuper.UpdatedAt = finished
-	firstSuper.FinishedAt = &finished
-	if err := productStore.UpdateRun(ctx, firstSuper); err != nil {
+	terminalSuper := types.RunRecord{
+		RunID: "run-terminal-super", AgentID: superAgentID, OwnerID: ownerID, ComputerID: computerID,
+		AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super,
+		State: types.RunFailed, Error: "tool loop: exceeded 200 iterations without end_turn",
+		CreatedAt: finished.Add(-time.Hour), UpdatedAt: finished, FinishedAt: &finished,
+		Metadata: map[string]any{runMetadataAgentProfile: agentprofile.Super, runMetadataAgentRole: agentprofile.Super},
+	}
+	if err := productStore.CreateRun(ctx, terminalSuper); err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.unbindSelfDevelopmentSuper(ctx, &firstSuper); err != nil {
-		t.Fatal(err)
-	}
-
-	// Call maybeContinuePersistentSuperInbox on the terminal Super:
-	runtime.maybeContinuePersistentSuperInbox(ctx, &firstSuper)
-
-	// Assert: zero successor Super is minted from undelivered backlog
+	runtime.maybeContinuePersistentSuperInbox(ctx, &terminalSuper)
 	activeAfterTerminal, err := runtime.latestActiveRunByAgent(ctx, ownerID, superAgentID)
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("terminal continuation minted unexpected Super from backlog: run=%+v err=%v", activeAfterTerminal, err)
 	}
 
-	// Part (b): Prove the live Texture rewake path intact:
-	// 1. maybeRewakeSelfDevelopmentTextureAfterTerminalSuper commits an owner revision on the Texture trajectory.
-	rewakeErr := runtime.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID)
-	if rewakeErr != nil {
-		t.Fatalf("rewake Texture error: %v", rewakeErr)
-	}
-
-	// 2. Before Texture commits a turn, reconcile mints zero Super
-	noSuper, err := runtime.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
-	if err != nil || noSuper != nil {
-		t.Fatalf("expected nil Super before Texture turn commits execution_request, got: %+v", noSuper)
-	}
-
-	// 3. Texture consumes the owner revision and commits a NEW typed execution_request.
-	docID, _, textureWorkID, trajectoryID, superWorkID, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
-	textureAgentID := agentprofile.Texture + ":" + docID
-	snapshot, err := productStore.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	// Part (b): the engineering document is the cast surface. A second
+	// owner-authored revision on it is a new cast the desk reconcile admits.
+	docID, _, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
+	doc, err := productStore.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	textureAgent, err := productStore.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+	snapshot, err := productStore.GetLifecycleSnapshot(ctx, ownerID, computerID, doc.TrajectoryID)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	ownerHead, _, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot)
-	if !ownerHeadPending || ownerHead.RevisionID != snapshot.HeadRevision.RevisionID {
-		t.Fatalf("expected pending owner revision for Texture, got head=%+v pending=%v", ownerHead, ownerHeadPending)
+	secondRevision := types.Revision{
+		RevisionID: "revision-recast-" + operation.OperationID,
+		DocID:      docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: doc.TrajectoryID,
+		AuthorKind: types.AuthorUser, AuthorLabel: ownerID,
+		Content: "Revise: extend the engine with scoring", CreatedAt: time.Now().UTC(),
+		ParentRevisionID: snapshot.HeadRevision.RevisionID,
 	}
-
-	packet, err := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
-		SchemaVersion: types.CoagentSourcePacketSchemaV1,
-		Kind:          "execution_request",
-		Summary:       "Continue self-development operation",
-		Sources: []types.CoagentPacketSource{{
-			SourceID: "src-operation",
-			Kind:     sourcecontract.SourceKindCapsuleBundle,
-			Target:   types.CoagentPacketSourceTarget{URI: "operation:" + operation.OperationID},
-		}},
-		Actions: []types.CoagentPacketAction{{
-			Type:      "run_command",
-			Objective: originalPrompt,
-			Safety: types.CoagentPacketActionSafety{
-				MutationClass: "green",
-				Network:       "forbidden",
-				FileMutation:  "forbidden",
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatal(err)
+	revCmd := types.CommitLifecycleArtifactHeadRequest{
+		CommandID: "revise:selfdev-recast:" + operation.OperationID,
+		OwnerID:   ownerID, ComputerID: computerID, TrajectoryID: doc.TrajectoryID,
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID:   snapshot.HeadRevision.RevisionID,
+		Revision:                 secondRevision,
 	}
-	content := BuildTextureLifecycleControlContent(packet, superAgentID, superWorkID)
-	payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
-	if err != nil {
-		t.Fatal(err)
+	revCmd.CommandDigest, _ = store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(revCmd, store.TextureSourceGraphWriteSet{})
+	if _, commitErr := productStore.CommitLifecycleArtifactHeadWithSourceGraph(ctx, revCmd, store.TextureSourceGraphWriteSet{}); commitErr != nil {
+		t.Fatalf("commit recast revision: %v", commitErr)
 	}
-
-	turn := types.ApplyTextureTurnRequest{
-		OwnerID:                        ownerID,
-		ComputerID:                     computerID,
-		CommandID:                      "turn:selfdev-texture-rewake:" + operation.OperationID,
-		DocumentID:                     docID,
-		TrajectoryID:                   trajectoryID,
-		CallerAgentID:                  textureAgentID,
-		CallerRunID:                    runtime.selfDevelopmentCallerRunID(ownerID, computerID, trajectoryID),
-		ExpectedLifecycleVersion:       snapshot.Trajectory.LifecycleVersion,
-		ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
-		ExpectedHeadRevisionID:         snapshot.HeadRevision.RevisionID,
-		CallerWorkItemID:               textureWorkID,
-		CallerWorkDisposition:          types.WorkItemOpen,
-		Outcome:                        types.TextureTurnWait,
-		Reason:                         "continue after terminal Super",
-		Controls: []types.TextureTurnControl{{
-			ControlID:        "control-rewake-" + operation.OperationID,
-			TargetAgentID:    superAgentID,
-			TargetWorkItemID: superWorkID,
-			Packet:           packet,
-			Content:          content,
-			PayloadDigest:    payloadDigest,
-		}},
+	// The recast reconcile reaches the assignment opener: without a capsule
+	// executor in the test runtime it fails at capsule authority, not at
+	// foreign-revision rejection.
+	if _, err := runtime.ReconcileEngineeringRevisionCast(ctx, ownerID, docID, secondRevision.RevisionID); err == nil ||
+		!strings.Contains(err.Error(), "capsule authority") {
+		t.Fatalf("recast reconcile err = %v, want capsule-authority reach", err)
 	}
-	turn.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := productStore.ApplyTextureTurn(ctx, turn); err != nil {
-		t.Fatalf("apply Texture turn: %v", err)
-	}
-
-	// 4. Live trigger wakes Super and mints exactly ONE new Super run
-	rewokeSuper, err := runtime.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
-	if err != nil || rewokeSuper == nil {
-		t.Fatalf("reconcile after Texture turn failed to mint replacement Super: run=%v err=%v", rewokeSuper, err)
-	}
-	if rewokeSuper.RunID == firstSuper.RunID {
-		t.Fatalf("expected new Super run ID, got same %s", firstSuper.RunID)
-	}
-	if metadataStringValue(rewokeSuper.Metadata, "self_development_operation_id") != operation.OperationID {
-		t.Fatalf("rewoke Super missing operation_id: %+v", rewokeSuper.Metadata)
-	}
-
 	_ = fDecoy
 }

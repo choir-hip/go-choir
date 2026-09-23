@@ -16,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
 // textureOwnerOccurrenceIdentity derives the deterministic request/occurrence
 // identities for one owner-scoped lifecycle command from its client request id.
 // The prefixes are stable: they key durable replay receipts, so they must not
@@ -30,6 +31,9 @@ type textureLifecycleCreateRequest struct {
 	ClientRequestID string `json:"client_request_id"`
 	Title           string `json:"title"`
 	InitialContent  string `json:"initial_content"`
+	// Desk selects the bound desk: "texture" (default) or "engineering". An
+	// engineering-bound document's owner revisions are sub-RLM casts.
+	Desk string `json:"desk,omitempty"`
 }
 
 type textureLifecycleCreateResponse struct {
@@ -77,16 +81,24 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":revision:v0")).String()
 	workID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":work:initial")).String()
 	trajectoryID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":trajectory")).String()
-	agentID := "texture:" + docID
+	deskProfile := strings.TrimSpace(input.Desk)
+	if deskProfile == "" {
+		deskProfile = agentprofile.Texture
+	}
+	if deskProfile != agentprofile.Texture && deskProfile != agentprofile.CoSuper {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "desk must be texture or engineering"})
+		return
+	}
+	agentID := deskProfile + ":" + docID
 	now := time.Now().UTC()
 	start := types.StartLifecycleRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "start:" + occurrenceID, TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
 		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
-		InitialWork:     types.WorkItemRecord{WorkItemID: workID, Objective: input.InitialContent, AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture},
+		InitialWork:     types.WorkItemRecord{WorkItemID: workID, Objective: input.InitialContent, AssignedAgentID: agentID, AuthorityProfile: deskProfile},
 		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: input.Title, CreatedAt: now, UpdatedAt: now},
 		InitialRevision: types.Revision{RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: input.InitialContent, CreatedAt: now},
-		Agent:           types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+		Agent:           types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, Profile: deskProfile, Role: deskProfile, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
 	result, err := h.Store.StartLifecycle(r.Context(), start)
@@ -100,7 +112,14 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if !result.Replay {
-		if _, wakeErr := h.ReconcileAgentWake(r.Context(), ownerID, docID); wakeErr != nil { /* durable start remains pending */
+		if deskProfile == agentprofile.CoSuper {
+			// Engineering desk: dispatch the revision occurrence; the mailbox
+			// consumer opens the assignment asynchronously. A synchronous
+			// reconcile here would hold the HTTP request across a 90s spawn.
+			if result.Revision != nil {
+				h.dispatchTextureRevisionWake(ownerID, computerID, trajectoryID, *result.Revision, requestID, result.Trajectory.LifecycleVersion, result.Events, deskProfile)
+			}
+		} else if _, wakeErr := h.ReconcileAgentWake(r.Context(), ownerID, docID); wakeErr != nil { /* durable start remains pending */
 		}
 	}
 	writeAPIJSON(w, http.StatusCreated, textureLifecycleCreateResponse{Schema: "choir.texture_create.v1", RequestID: requestID, DocID: docID, RevisionID: revisionID, TrajectoryID: trajectoryID, TargetAgentID: agentID, TargetWorkItemID: workID, Cursor: result.Trajectory.ReducerSeq, Replay: result.Replay})

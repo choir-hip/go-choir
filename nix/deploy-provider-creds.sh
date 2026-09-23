@@ -98,9 +98,8 @@ if [ -f "$SETTINGS" ]; then
       continue
     fi
 
-    # The deepseek, xiaomi and fireworks providers are deleted (owner
-    # ratification 2026-09-12, residue R9): their credentials are no longer
-    # deployed and their keys in provider settings are ignored.
+    # Ignore unrecognized provider settings; only supported credential paths
+    # below are deployed to the gateway.
     # Detect Bedrock keys (baseUrl contains bedrock or provider mentions bedrock)
     if echo "$BASE_URL" | grep -q "bedrock" || echo "$PROVIDER" | grep -qi "bedrock"; then
       if ! printf '%s\n' "${ENVS[@]}" | grep -q "^AWS_BEARER_TOKEN_BEDROCK="; then

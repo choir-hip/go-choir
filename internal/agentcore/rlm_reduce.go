@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
+	"log"
 	"strings"
 	"time"
 )
@@ -631,6 +632,16 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	}
 	if !cmdResult.Replay && cmdResult.Update != nil {
 		rt.wakeUpdatedCoagent(ctx, *cmdResult.Update)
+	}
+	if result != types.CoSuperResultPartial && cmdResult.Assignment.Disposition == types.CoSuperAssignmentCompleted &&
+		cmdResult.Assignment.Binding.Kind == types.CoSuperAssignmentImplementation {
+		// Verification chaining is host-side: a completed implementation on a
+		// document-bound trajectory opens the verification assignment when the
+		// bound self-development operation is frozen.
+		if _, recErr := rt.ReconcileEngineeringDeskForTrajectory(ctx, cmdResult.Assignment.Binding.OwnerID,
+			cmdResult.Assignment.Binding.TrajectoryID); recErr != nil {
+			log.Printf("runtime: engineering desk verification reconcile after %s: %v", cmdResult.Assignment.AssignmentID, recErr)
+		}
 	}
 	return result != types.CoSuperResultPartial, nil
 }

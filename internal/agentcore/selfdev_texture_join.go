@@ -3,7 +3,6 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -26,20 +24,23 @@ func selfDevelopmentOperationIDFromPacketSources(sources []types.CoagentPacketSo
 	return ""
 }
 
-func selfDevelopmentTextureJoinIDs(ownerID, computerID, operationID string) (docID, revisionID, textureWorkID, trajectoryID, superWorkID, controlID string) {
+func selfDevelopmentTextureJoinIDs(ownerID, computerID, operationID string) (docID, revisionID, workID string) {
 	key := strings.Join([]string{"choir:texture:self-development", ownerID, computerID, operationID}, ":")
 	docID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":document")).String()
 	revisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":revision:v0")).String()
-	textureWorkID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":work:texture")).String()
-	trajectoryID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":trajectory")).String()
-	superWorkID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":work:super")).String()
-	controlID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":control:opener")).String()
-	return docID, revisionID, textureWorkID, trajectoryID, superWorkID, controlID
+	workID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":work:engineering")).String()
+	return docID, revisionID, workID
 }
 
-func (rt *Runtime) startSelfDevelopmentPersistentSuper(ctx context.Context, operation selfdev.Operation, ownerID, prompt string) error {
+// ensureSelfDevelopmentEngineeringDoc creates the engineering-bound lifecycle
+// document for one self-development operation and commits the directive
+// revision that is the operation's cast. The document's lifecycle trajectory
+// IS the operation's trajectory, so the operation store resolves it by
+// trajectory. The revision occurrence opens the implementation assignment on
+// the document channel — no Super run mediates the opener.
+func (rt *Runtime) ensureSelfDevelopmentEngineeringDoc(ctx context.Context, operation selfdev.Operation, ownerID, prompt string) error {
 	if rt == nil || rt.store == nil {
-		return fmt.Errorf("start self-development run: persistent Super authority unavailable")
+		return fmt.Errorf("start self-development run: store authority unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
 	computerID := strings.TrimSpace(rt.TextureComputerID())
@@ -49,238 +50,52 @@ func (rt *Runtime) startSelfDevelopmentPersistentSuper(ctx context.Context, oper
 	if strings.TrimSpace(operation.ComputerID) != computerID {
 		return fmt.Errorf("start self-development run: operation computer does not match this runtime")
 	}
-	if _, err := rt.EnsurePersistentSuperAgent(ctx, ownerID); err != nil {
-		return fmt.Errorf("start self-development run: %w", err)
+	trajectoryID := strings.TrimSpace(operation.TrajectoryID)
+	if trajectoryID == "" {
+		return fmt.Errorf("start self-development run: operation lacks trajectory binding")
 	}
-	if err := rt.ensureSelfDevelopmentTextureJoin(ctx, operation, ownerID, prompt); err != nil {
-		return err
+	docID, revisionID, workID := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
+	deskAgentID := engineeringDeskAgentID(docID)
+	directive := strings.TrimSpace(prompt)
+	if directive == "" {
+		directive = selfDevelopmentRewakeFallbackPrompt
 	}
-	superAgentID := persistentSuperAgentID(ownerID)
-	rec, err := rt.reconcilePersistentSuperActorForOwnerStart(ctx, ownerID, superAgentID)
-	if err != nil {
-		return fmt.Errorf("start self-development run: %w", err)
-	}
-	if rec == nil {
-		if existing, found, lookupErr := rt.activeRunByAgent(ctx, ownerID, superAgentID); lookupErr != nil {
-			return fmt.Errorf("start self-development run: %w", lookupErr)
-		} else if found {
-			rec = &existing
-		} else if existing, lookupErr := rt.latestActiveRunByAgent(ctx, ownerID, superAgentID); lookupErr == nil {
-			copy := existing
-			rec = &copy
-		} else {
-			return fmt.Errorf("start self-development run: Texture control did not wake persistent Super")
-		}
-	}
-	if _, err := rt.EnsurePersistentSuperAgent(ctx, ownerID); err != nil {
-		return fmt.Errorf("start self-development run: restore persistent Super agent: %w", err)
-	}
-	if err := rt.bindSelfDevelopmentOperationToPersistentSuper(ctx, rec, operation); err != nil {
-		return err
-	}
-	if strings.TrimSpace(metadataStringValue(rec.Metadata, "assignment_trajectory_id")) == "" {
-		return fmt.Errorf("start self-development run: persistent Super still lacks Texture trajectory binding")
-	}
-	return nil
-}
-
-func (rt *Runtime) bindSelfDevelopmentOperationToPersistentSuper(ctx context.Context, rec *types.RunRecord, operation selfdev.Operation) error {
-	if rec == nil {
-		return fmt.Errorf("start self-development run: persistent Super unavailable")
-	}
-	rec.Metadata = cloneMetadata(rec.Metadata)
-	if rec.Metadata == nil {
-		rec.Metadata = map[string]any{}
-	}
-	rec.RequestedByRunID = ""
-	delete(rec.Metadata, "requested_by_run_id")
-	rec.Metadata["self_development_operation_id"] = operation.OperationID
-	rec.Metadata["self_development_computer_id"] = operation.ComputerID
-	if strings.TrimSpace(operation.PromptArtifactRef) != "" {
-		rec.Metadata["self_development_prompt_artifact_ref"] = operation.PromptArtifactRef
-	}
-	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-		return fmt.Errorf("bind self-development operation to persistent Super: %w", err)
-	}
-	return nil
-}
-
-func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operation selfdev.Operation, ownerID, prompt string) error {
-	computerID := strings.TrimSpace(rt.TextureComputerID())
-	docID, revisionID, textureWorkID, trajectoryID, superWorkID, openerControlID := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
-	textureAgentID := agentprofile.Texture + ":" + docID
-	superAgentID := persistentSuperAgentID(ownerID)
 	now := time.Now().UTC()
-	joinMeta, _ := json.Marshal(map[string]any{"self_development_operation_id": operation.OperationID})
-	start := types.StartLifecycleRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "start:selfdev-texture:" + operation.OperationID,
-		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
-		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
-		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
-		InitialWork:    types.WorkItemRecord{WorkItemID: textureWorkID, Objective: "Supervise self-development on this computer.", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
-		InitialDocument: types.Document{
-			DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
-			Title: "Self-development supervision", CreatedAt: now, UpdatedAt: now,
-		},
-		InitialRevision: types.Revision{
-			RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
-			AuthorKind: types.AuthorUser, AuthorLabel: ownerID,
-			Content: "Supervise self-development on this computer.", Metadata: joinMeta, CreatedAt: now,
-		},
-		Agent: types.AgentRecord{
-			AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID,
-			Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now,
-		},
-	}
-	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
-	if _, err := rt.store.StartLifecycle(ctx, start); err != nil {
-		return fmt.Errorf("start self-development Texture lifecycle: %w", err)
-	}
-	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
-		return fmt.Errorf("load self-development Texture lifecycle: %w", err)
-	}
-	if _, err := rt.ensureSelfDevelopmentTextureCaller(ctx, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID); err != nil {
-		return err
-	}
-	wakeToken := ""
-	if latest, latestErr := rt.store.GetLatestRunByAgent(ctx, ownerID, superAgentID); latestErr == nil {
-		if isPersistentSuperAgentRun(&latest) && selfDevelopmentSuperRunTerminal(latest.State) {
-			wakeToken = strings.TrimSpace(latest.RunID)
-		}
-	} else if !errors.Is(latestErr, store.ErrNotFound) {
-		return fmt.Errorf("load latest persistent Super: %w", latestErr)
-	}
-	pending, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, superAgentID)
-	if err != nil {
-		return fmt.Errorf("load pending Super controls: %w", err)
-	}
-	if wakeToken == "" {
-		if existing := selfDevelopmentOpenSuperWork(snapshot, superAgentID); existing != nil {
-			return nil
-		}
-		for _, update := range pending {
-			if update.Direction == types.LifecyclePacketDirectionControl &&
-				selfDevelopmentOperationIDFromPacketSources(update.Packet.Sources) == operation.OperationID &&
-				persistentSuperExecutableUpdate(update) {
-				return nil
-			}
-		}
-		// First-time start: the deterministic caller run IS the Texture agent's
-		// activation for this trajectory. Its opener turn (work + first typed
-		// execution_request) is committed by ApplyTextureTurn under the Texture
-		// agent's own authority — the same reducer path a resident Texture
-		// actor's tool-loop turn uses. This is the one direct runtime commit that
-		// remains: it creates the supervision subject itself, before any
-		// resident Texture run exists to commit turns.
-		packet, packetErr := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
-			SchemaVersion: types.CoagentSourcePacketSchemaV1,
-			Kind:          "execution_request",
-			Summary:       "Author, freeze, and propose the bound self-development operation.",
-			Sources: []types.CoagentPacketSource{{
-				SourceID: "src-operation",
-				Kind:     sourcecontract.SourceKindCapsuleBundle,
-				Target:   types.CoagentPacketSourceTarget{URI: "operation:" + operation.OperationID},
-			}},
-			Actions: []types.CoagentPacketAction{{
-				Type:      "run_command",
-				Objective: strings.TrimSpace(prompt),
-				Safety: types.CoagentPacketActionSafety{
-					MutationClass: "green",
-					Network:       "forbidden",
-					FileMutation:  "forbidden",
-				},
-			}},
-		})
-		if packetErr != nil {
-			return fmt.Errorf("prepare self-development Super execution_request: %w", packetErr)
-		}
-		content := BuildTextureLifecycleControlContent(packet, superAgentID, superWorkID)
-		payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
-		if digestErr != nil {
-			return fmt.Errorf("digest self-development Super control: %w", digestErr)
-		}
-		textureAgent, agentErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
-		if agentErr != nil {
-			return fmt.Errorf("load self-development Texture agent: %w", agentErr)
-		}
-		freshSnapshot, snapErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-		if snapErr != nil {
-			return fmt.Errorf("reload self-development Texture lifecycle: %w", snapErr)
-		}
-		turn := types.ApplyTextureTurnRequest{
-			OwnerID: ownerID, ComputerID: computerID, CommandID: "turn:selfdev-texture:" + operation.OperationID,
-			DocumentID: docID, TrajectoryID: trajectoryID,
-			CallerAgentID: textureAgentID, CallerRunID: rt.selfDevelopmentCallerRunID(ownerID, computerID, trajectoryID),
-			ExpectedLifecycleVersion: freshSnapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
-			ExpectedHeadRevisionID: freshSnapshot.HeadRevision.RevisionID, CallerWorkItemID: textureWorkID,
-			CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "wait after self-development Super control",
-			Controls: []types.TextureTurnControl{{
-				ControlID: openerControlID, TargetAgentID: superAgentID, TargetWorkItemID: superWorkID,
-				OpenWork: &types.WorkItemRecord{
-					WorkItemID: superWorkID, Objective: strings.TrimSpace(prompt),
-					AuthorityProfile: agentprofile.Super, Status: types.WorkItemOpen, AssignedAgentID: superAgentID,
-				},
-				Packet: packet, Content: content, PayloadDigest: payloadDigest,
-			}},
-		}
-		turn.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turn)
-		if err != nil {
-			return fmt.Errorf("digest self-development Texture turn: %w", err)
-		}
-		if _, err := rt.store.ApplyTextureTurn(ctx, turn); err != nil {
-			return fmt.Errorf("apply self-development Texture Super opener: %w", err)
-		}
-		return nil
-	}
-
-	// Rewake after a terminal Super: commit one owner-authored revision carrying
-	// the rewake directive on the document head, then wake the genuine Texture
-	// agent with the revision occurrence. The agent's own tool-loop turn
-	// consumes the owner head and commits its own outcome (wait/revision/block)
-	// through applyTextureLifecycleTurn.
-	controlID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
-		"choir:texture:self-development", ownerID, computerID, operation.OperationID, "rewake", wakeToken,
-	}, ":"))).String()
-	requestID := "owner-request-selfdev-rewake-" + controlID
-	rewakeRevisionID := "owner-revision-selfdev-rewake-" + controlID
-	directive := strings.TrimSpace(prompt) + "\n\nSelf-development operation " + operation.OperationID +
-		" requires supervision: open or continue exactly one implementation CoSuper assignment with assign_co_super."
-	rewakeMeta, _ := json.Marshal(map[string]any{
+	joinMeta, _ := json.Marshal(map[string]any{
 		"input_origin":                  "user_prompt",
 		"owner_prompt":                  directive,
 		"self_development_operation_id": operation.OperationID,
 	})
-	head := snapshot.HeadRevision
-	commit := types.CommitLifecycleArtifactHeadRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "owner-revise:selfdev-rewake:" + controlID,
-		TrajectoryID: trajectoryID,
-		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
-		ExpectedHeadRevisionID:   head.RevisionID,
-		Revision: types.Revision{
-			RevisionID: rewakeRevisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start:selfdev-engineering:" + operation.OperationID,
+		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
+		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:    types.WorkItemRecord{WorkItemID: workID, Objective: directive, AssignedAgentID: deskAgentID, AuthorityProfile: agentprofile.CoSuper},
+		InitialDocument: types.Document{
+			DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+			Title: "Self-development operation " + operation.OperationID, CreatedAt: now, UpdatedAt: now,
+		},
+		InitialRevision: types.Revision{
+			RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
 			AuthorKind: types.AuthorUser, AuthorLabel: ownerID,
-			Content: head.Content, BodyDoc: head.BodyDoc, SourceEntities: head.SourceEntities, Citations: head.Citations,
-			Metadata: rewakeMeta, ParentRevisionID: head.RevisionID,
+			Content: directive, Metadata: joinMeta, CreatedAt: now,
+		},
+		Agent: types.AgentRecord{
+			AgentID: deskAgentID, OwnerID: ownerID, ComputerID: computerID,
+			Profile: agentprofile.CoSuper, Role: agentprofile.CoSuper, ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 		},
 	}
-	commitDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(commit, store.TextureSourceGraphWriteSet{})
-	if digestErr != nil {
-		return fmt.Errorf("digest self-development Texture owner revision: %w", digestErr)
-	}
-	commit.CommandDigest = commitDigest
-	result, err := rt.store.CommitLifecycleArtifactHeadWithSourceGraph(ctx, commit, store.TextureSourceGraphWriteSet{})
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	result, err := rt.store.StartLifecycle(ctx, start)
 	if err != nil {
-		if errors.Is(err, store.ErrLifecycleCommandConflict) {
-			return nil // this rewake occurrence is already durably committed.
-		}
-		return fmt.Errorf("commit self-development Texture owner revision: %w", err)
+		return fmt.Errorf("start self-development engineering lifecycle: %w", err)
 	}
-	if result.Replay || result.Revision == nil {
-		return nil
+	if result.Revision == nil {
+		return fmt.Errorf("start self-development engineering lifecycle: revision unavailable")
 	}
 	if !rt.DispatchActorActive() {
-		return fmt.Errorf("self-development Texture owner revision committed but actor dispatch unavailable")
+		return fmt.Errorf("self-development engineering document committed but actor dispatch unavailable")
 	}
 	reducerSeq := int64(0)
 	for _, event := range result.Events {
@@ -289,200 +104,20 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 			reducerSeq = event.ReducerSeq
 		}
 	}
-	occurrence, occErr := TextureDocumentRevisionOccurrence(*result.Revision, requestID, result.Trajectory.LifecycleVersion, reducerSeq)
+	requestID := "owner-request-selfdev-" + operation.OperationID
+	occurrence, occErr := DocumentRevisionOccurrence(*result.Revision, agentprofile.CoSuper, requestID, result.Trajectory.LifecycleVersion, reducerSeq)
 	if occErr != nil {
-		return fmt.Errorf("build self-development Texture revision occurrence: %w", occErr)
+		return fmt.Errorf("build self-development engineering revision occurrence: %w", occErr)
 	}
 	content, encErr := EncodeTextureActorOccurrence(occurrence)
 	if encErr != nil {
-		return fmt.Errorf("encode self-development Texture revision occurrence: %w", encErr)
+		return fmt.Errorf("encode self-development engineering revision occurrence: %w", encErr)
 	}
-	if err := rt.DispatchActor(ctx, ownerID, computerID, textureAgentID, "coagent_result",
+	if err := rt.DispatchActor(ctx, ownerID, computerID, deskAgentID, "coagent_result",
 		content, trajectoryID, "owner:"+ownerID); err != nil {
-		return fmt.Errorf("wake self-development Texture actor for owner revision: %w", err)
+		return fmt.Errorf("wake self-development engineering desk for owner revision: %w", err)
 	}
 	return nil
 }
 
 const selfDevelopmentRewakeFallbackPrompt = "Author, freeze, and propose the bound self-development operation."
-
-// selfDevelopmentCallerRunID derives the stable deterministic Texture caller
-// run identity for one self-development trajectory.
-func (rt *Runtime) selfDevelopmentCallerRunID(ownerID, computerID, trajectoryID string) string {
-	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
-		"choir:texture:self-development", ownerID, computerID, trajectoryID, "texture-run",
-	}, ":"))).String()
-}
-
-// maybeRewakeSelfDevelopmentTextureAfterTerminalSuper mints turn:selfdev-texture-rewake
-// when the latest persistent Super is terminal and a self-development operation is
-// still executing without a bundle. This is the proven assign_co_super path.
-// It is not HTTP Super-start: callers still reconcile/wake the actor locally.
-func (rt *Runtime) maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx context.Context, ownerID string) error {
-	if rt == nil || rt.store == nil {
-		return nil
-	}
-	ownerID = strings.TrimSpace(ownerID)
-	computerID := strings.TrimSpace(rt.TextureComputerID())
-	if ownerID == "" || computerID == "" {
-		return nil
-	}
-	superAgentID := persistentSuperAgentID(ownerID)
-	latest, err := rt.store.GetLatestRunByAgent(ctx, ownerID, superAgentID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil
-		}
-		return fmt.Errorf("load latest persistent Super for Texture rewake: %w", err)
-	}
-	if !isPersistentSuperAgentRun(&latest) || !selfDevelopmentSuperRunTerminal(latest.State) {
-		return nil
-	}
-	if latest.State == types.RunBlocked {
-		return nil
-	}
-	operations, err := rt.selfDevelopmentRewakeOperations(ctx, ownerID, computerID, &latest)
-	if err != nil {
-		return err
-	}
-	for _, operation := range operations {
-		// Rewake only applies to an operation that already had a terminal Super run.
-		// A brand-new operation (len(runs) == 0) receives its opener from startSelfDevelopmentPersistentSuper.
-		runs, listErr := rt.store.ListRunsBySelfDevelopmentOperation(ctx, ownerID, operation.OperationID, 2)
-		if listErr != nil {
-			continue
-		}
-		if len(runs) == 0 {
-			// Check if latest run had this operation as unbound
-			unboundID := metadataStringValue(latest.Metadata, "self_development_unbound_operation_id")
-			if unboundID != operation.OperationID {
-				// Allow rewake for stalled production operation after omit-reports
-				// 200-loop (f515dd0f) where latest is a reportContinuation without
-				// operation_id. Only for the known stalled operation to avoid
-				// widening rewake for tests.
-				if operation.OperationID != "selfdev-ccf0f1ec0e851750f253fe5f5ed97974" {
-					continue
-				}
-				if !isPersistentSuperAgentRun(&latest) || !selfDevelopmentSuperRunTerminal(latest.State) || latest.State == types.RunBlocked {
-					continue
-				}
-			}
-		} else if !selfDevelopmentSuperRunTerminal(runs[0].State) {
-			continue
-		}
-		prompt := rt.selfDevelopmentRewakePrompt(ctx, ownerID, operation)
-		if err := rt.ensureSelfDevelopmentTextureJoin(ctx, operation, ownerID, prompt); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (rt *Runtime) selfDevelopmentRewakeOperations(ctx context.Context, ownerID, computerID string, latest *types.RunRecord) ([]selfdev.Operation, error) {
-	if rt.selfdevOperations != nil {
-		operations, err := rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.StateExecuting)
-		if err != nil {
-			return nil, fmt.Errorf("list executing self-development operations: %w", err)
-		}
-		out := make([]selfdev.Operation, 0, len(operations))
-		for _, operation := range operations {
-			if strings.TrimSpace(operation.BundleDigest) == "" {
-				out = append(out, operation)
-			}
-		}
-		if len(out) > 0 {
-			return out, nil
-		}
-	}
-	if latest != nil {
-		operationID := strings.TrimSpace(firstNonEmpty(
-			metadataStringValue(latest.Metadata, "self_development_operation_id"),
-			metadataStringValue(latest.Metadata, "self_development_unbound_operation_id"),
-		))
-		if operationID != "" {
-			return []selfdev.Operation{{OperationID: operationID, ComputerID: computerID}}, nil
-		}
-	}
-	return nil, nil
-}
-
-func (rt *Runtime) selfDevelopmentRewakePrompt(ctx context.Context, ownerID string, operation selfdev.Operation) string {
-	runs, err := rt.store.ListRunsBySelfDevelopmentOperation(ctx, ownerID, operation.OperationID, 8)
-	if err == nil {
-		for _, run := range runs {
-			prompt := strings.TrimSpace(run.Prompt)
-			if prompt == "" || prompt == persistentSuperCoagentInboxPrompt || prompt == persistentSuperCoSuperCancelContinuationPrompt {
-				continue
-			}
-			return prompt
-		}
-	}
-	return selfDevelopmentRewakeFallbackPrompt
-}
-
-func selfDevelopmentOpenSuperWork(snapshot types.LifecycleSnapshot, superAgentID string) *types.WorkItemRecord {
-	var found *types.WorkItemRecord
-	for i := range snapshot.WorkItems {
-		work := snapshot.WorkItems[i]
-		if work.Status == types.WorkItemOpen && work.AssignedAgentID == superAgentID && work.AuthorityProfile == agentprofile.Super {
-			if found != nil {
-				return found
-			}
-			copy := work
-			found = &copy
-		}
-	}
-	return found
-}
-
-func (rt *Runtime) ensureSelfDevelopmentTextureCaller(ctx context.Context, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID string) (types.RunRecord, error) {
-	deterministicRunID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
-		"choir:texture:self-development", ownerID, computerID, trajectoryID, "texture-run",
-	}, ":"))).String()
-
-	// The deterministic caller identity is the stable authority for this
-	// trajectory. Prefer it over any successor Texture activation so the Super
-	// work item's creator-run provenance stays bound to one identity across restarts.
-	//
-	// A stored record in any state is provenance, not residency: a lifecycle
-	// projection written without execution admission (state running) must never
-	// satisfy the join as a live caller, and a passivated caller must never be
-	// re-projected to running here — execution admission belongs to the real
-	// Texture revision run the wake reconciler mints (submitTextureAgentRevisionRun
-	// with its pending agent mutation). Return the stored record unchanged and
-	// let the wake path reconcile execution.
-	if stored, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, deterministicRunID); err == nil {
-		return stored, nil
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return types.RunRecord{}, fmt.Errorf("load self-development Texture caller: %w", err)
-	}
-
-	// First-time activation: project the deterministic caller run.
-	now := time.Now().UTC()
-	caller := types.RunRecord{
-		RunID: deterministicRunID, OwnerID: ownerID, ComputerID: computerID, AgentID: textureAgentID,
-		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID,
-		TrajectoryID: trajectoryID, State: types.RunRunning,
-		Prompt: "Supervise self-development on this computer.",
-		Metadata: map[string]any{
-			"lifecycle_work_item_id": textureWorkID,
-			"work_item_ids":          []string{textureWorkID},
-			runMetadataAgentProfile:  agentprofile.Texture,
-			runMetadataAgentRole:     agentprofile.Texture,
-		},
-		CreatedAt: now, UpdatedAt: now,
-	}
-	project := types.ReplaceLifecycleActivationRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "project:selfdev-texture:" + deterministicRunID,
-		TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: caller,
-	}
-	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
-	if _, err := rt.store.ReplaceLifecycleActivation(ctx, project); err != nil {
-		return types.RunRecord{}, fmt.Errorf("project self-development Texture caller: %w", err)
-	}
-	loaded, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, deterministicRunID)
-	if err != nil {
-		return types.RunRecord{}, fmt.Errorf("reload self-development Texture caller: %w", err)
-	}
-	return loaded, nil
-}

@@ -618,15 +618,18 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 		return types.LifecycleResult{}, err
 	}
 	docID := strings.TrimSpace(req.InitialDocument.DocID)
-	expectedAgentID := "texture:" + docID
+	deskProfile := strings.TrimSpace(req.Agent.Profile)
+	if deskProfile != "texture" && deskProfile != agentprofile.CoSuper {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: durable subject profile must be texture or engineering: %w", ErrLifecycleInvalidTransition)
+	}
+	expectedAgentID := deskProfile + ":" + docID
 	if req.InitialWork.WorkItemID == "" || docID == "" || strings.TrimSpace(req.InitialRevision.RevisionID) == "" {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: initial doc_id, revision_id, and work_item_id are required")
 	}
 	if strings.TrimSpace(req.Agent.AgentID) != expectedAgentID ||
-		strings.TrimSpace(req.Agent.Profile) != "texture" ||
-		strings.TrimSpace(req.Agent.Role) != "texture" ||
+		strings.TrimSpace(req.Agent.Role) != deskProfile ||
 		strings.TrimSpace(req.Agent.ChannelID) != docID {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: durable subject must be texture:%s with Texture profile/role and document channel: %w", docID, ErrLifecycleInvalidTransition)
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: durable subject must be %s with matching profile/role and document channel: %w", expectedAgentID, ErrLifecycleInvalidTransition)
 	}
 	if assigned := strings.TrimSpace(req.InitialWork.AssignedAgentID); assigned != "" && assigned != expectedAgentID {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: initial work assignment must target %s: %w", expectedAgentID, ErrLifecycleInvalidTransition)
@@ -679,7 +682,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: agent profile and role must match: %w", ErrLifecycleInvalidTransition)
 	}
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", agentprofile.Researcher, "processor", "reconciler":
+	case "texture", agentprofile.CoSuper, agentprofile.Researcher, "processor", "reconciler":
 	default:
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: effects-capable agent profile is not admissible: %w", ErrLifecycleInvalidTransition)
 	}
@@ -1775,14 +1778,14 @@ func (s *Store) requireLifecycleAssignedAgent(ctx context.Context, ownerID, comp
 		return types.AgentRecord{}, err
 	}
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", agentprofile.Researcher, "processor", "reconciler":
+	case "texture", agentprofile.CoSuper, agentprofile.Researcher, "processor", "reconciler":
 	default:
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
 	if strings.TrimSpace(agent.Role) != strings.TrimSpace(agent.Profile) {
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
-	if strings.HasPrefix(agentID, "texture:") && agent.LifecycleVersion <= 0 {
+	if (strings.HasPrefix(agentID, "texture:") || strings.HasPrefix(agentID, agentprofile.CoSuper+":")) && agent.LifecycleVersion <= 0 {
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
 	return agent, nil
@@ -1836,11 +1839,11 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 	var resultAgent *types.AgentRecord
 	if errors.Is(agentErr, ErrNotFound) {
 		switch strings.TrimSpace(work.AuthorityProfile) {
-		case agentprofile.Researcher, "processor", "reconciler":
+		case agentprofile.CoSuper, agentprofile.Researcher, "processor", "reconciler":
 		default:
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent profile: %w", ErrLifecycleInvalidTransition)
 		}
-		if strings.HasPrefix(work.AssignedAgentID, "texture:") {
+		if strings.HasPrefix(work.AssignedAgentID, "texture:") || strings.HasPrefix(work.AssignedAgentID, agentprofile.CoSuper+":") {
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent: %w", ErrLifecycleInvalidTransition)
 		}
 	} else if agentErr != nil {
@@ -2578,7 +2581,8 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	// trajectory, actor, run, or work projections.
 	lateEvidenceOnly := trajectory.Status != types.TrajectoryLive
 	documentID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
-	if documentID == "" || req.TargetAgentID != "texture:"+documentID || strings.TrimSpace(req.ChannelID) != documentID {
+	if documentID == "" || strings.TrimSpace(req.ChannelID) != documentID ||
+		(req.TargetAgentID != "texture:"+documentID && req.TargetAgentID != agentprofile.CoSuper+":"+documentID) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	documentObj, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, documentID)
@@ -2601,7 +2605,8 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		return types.LifecycleResult{}, err
 	}
 	if agent.AgentID != req.TargetAgentID || agent.OwnerID != ownerID || agent.ComputerID != computerID ||
-		agent.LifecycleVersion <= 0 || agent.Profile != "texture" || agent.Role != "texture" || strings.TrimSpace(agent.ChannelID) != documentID {
+		agent.LifecycleVersion <= 0 || agent.Profile != agent.Role || strings.TrimSpace(agent.ChannelID) != documentID ||
+		(agent.Profile != "texture" && agent.Profile != agentprofile.CoSuper) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	var producerRunObj objectgraph.Object

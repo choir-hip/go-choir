@@ -2,8 +2,6 @@ package agentcore
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,15 +55,6 @@ type assignmentCapsuleRuntime interface {
 	PersistRevocationReceipt(string, string, string, string) (capsule.CapsuleRevocationReceipt, error)
 }
 
-type StartAssignedCoSuperRequest struct {
-	Objective            string
-	Kind                 types.CoSuperAssignmentKind
-	CandidateID          string
-	ParentWorkItemID     string
-	ToolCallID           string
-	ModelPolicyOverlayID string
-}
-
 type AssignedCoSuperStart struct {
 	Assignment types.CoSuperAssignment
 	Run        types.RunRecord
@@ -108,83 +97,101 @@ func overlayIDNamedInObjective(objective string) string {
 	}
 }
 
-func deterministicAssignmentIdentity(parent types.RunRecord, req StartAssignedCoSuperRequest) string {
+// deterministicDocumentAssignmentIdentity derives the assignment identity for
+// one document-driven cast. The revision is the admission: the same revision
+// always names the same assignment, so occurrence redelivery and boot scans
+// replay rather than mint duplicates.
+func deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID string, kind types.CoSuperAssignmentKind, candidateID string) string {
 	seed := strings.Join([]string{
-		"choir:co-super-assignment:v2", parent.RunID, strings.TrimSpace(req.ToolCallID),
+		"choir:co-super-assignment:v3", ownerID, computerID, trajectoryID, revisionID, string(kind), candidateID,
 	}, "\x00")
 	return "assignment-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
 }
 
-func opaqueAssignmentCapability() (string, error) {
-	var raw [32]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
-	return "assignment-cap-" + hex.EncodeToString(raw[:]), nil
+// deterministicDocumentAssignmentCapability derives the opaque capability for a
+// document-driven assignment. Determinism is required for resume: an open but
+// unbound assignment must re-derive the exact capability its binding digest
+// committed, or the bind receipt can never be replayed after a crash between
+// open and bind.
+func deterministicDocumentAssignmentCapability(assignmentID string, attempt uint64) string {
+	return "assignment-cap-" + strings.TrimPrefix(objectgraph.SHA256([]byte(assignmentID+"\x00cap\x00"+fmt.Sprint(attempt))), "sha256:")
 }
 
-func (rt *Runtime) startAssignedCoSuper(ctx context.Context, parentRunID, ownerID string, req StartAssignedCoSuperRequest) (AssignedCoSuperStart, error) {
-	if rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
-		return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper capsule authority unavailable")
-	}
-	parent, err := rt.getRunForComputer(ctx, ownerID, parentRunID)
-	if err != nil {
-		return AssignedCoSuperStart{}, err
-	}
-	return rt.startAssignedCoSuperForParent(ctx, parent, req)
+// OpenDocumentAssignmentRequest is the document-channel cast: one owner-authored
+// revision on an engineering-bound lifecycle document opens one assignment.
+type OpenDocumentAssignmentRequest struct {
+	Objective            string
+	Kind                 types.CoSuperAssignmentKind
+	CandidateID          string
+	RevisionID           string
+	ModelPolicyOverlayID string
 }
 
-func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent types.RunRecord, req StartAssignedCoSuperRequest) (AssignedCoSuperStart, error) {
-	req.Objective, req.CandidateID = strings.TrimSpace(req.Objective), strings.TrimSpace(req.CandidateID)
-	if req.Objective == "" || strings.TrimSpace(req.ParentWorkItemID) == "" || strings.TrimSpace(req.ToolCallID) == "" ||
+// startAssignedCoSuperForDocument opens one assignment whose parent authority is
+// the engineering desk agent bound to the document plus the owner-authored
+// revision that carried the cast. It replaces the retired Super-mediated
+// assign_co_super opener: the revision event IS the admission.
+func (rt *Runtime) startAssignedCoSuperForDocument(ctx context.Context, doc types.Document, revision types.Revision, req OpenDocumentAssignmentRequest) (AssignedCoSuperStart, error) {
+	req.Objective, req.CandidateID, req.RevisionID = strings.TrimSpace(req.Objective), strings.TrimSpace(req.CandidateID), strings.TrimSpace(req.RevisionID)
+	if req.Objective == "" || req.RevisionID == "" ||
 		(req.Kind != types.CoSuperAssignmentImplementation && req.Kind != types.CoSuperAssignmentVerification) {
-		return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper requires objective, kind, parent work, and authenticated tool-call identity")
+		return AssignedCoSuperStart{}, fmt.Errorf("document assignment requires objective, kind, and the admitting revision")
 	}
 	if (req.Kind == types.CoSuperAssignmentVerification) != (req.CandidateID != "") {
 		return AssignedCoSuperStart{}, fmt.Errorf("verification requires one exact candidate_id and implementation forbids it")
 	}
-	// Fail closed on a prose-only overlay reference: the assignment path
-	// resolves provider/model ONLY from the structured ModelPolicyOverlayID
-	// field, so an objective naming model_policy_overlay_id=X with the field
-	// empty would silently serve the base policy (P5-roster: two live runs
-	// served the wrong provider while management carried the id as prose).
-	// The error text names the exact fix so the caller retries correctly.
 	if strings.TrimSpace(req.ModelPolicyOverlayID) == "" {
 		if named := overlayIDNamedInObjective(req.Objective); named != "" {
-			return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper objective names model_policy_overlay_id=%s but the structured field is empty: pass it as model_policy_overlay_id (prose names select nothing; the base policy would silently serve instead)", named)
+			return AssignedCoSuperStart{}, fmt.Errorf("document assignment objective names model_policy_overlay_id=%s but the structured field is empty: pass it as model_policy_overlay_id (prose names select nothing; the base policy would silently serve instead)", named)
 		}
 	}
-	ownerID, computerID := strings.TrimSpace(parent.OwnerID), strings.TrimSpace(parent.ComputerID)
-	parentProfile, _ := agentprofile.Canonical(parent.AgentProfile)
-	parentRole, _ := agentprofile.Canonical(parent.AgentRole)
-	if ownerID == "" || computerID == "" || parent.AgentID != persistentSuperAgentID(ownerID) ||
-		parentProfile != agentprofile.Super || parentRole != agentprofile.Super ||
-		parent.TrajectoryID != "" || !persistentSuperRunStateAllowedRuntime(parent.State) {
-		return AssignedCoSuperStart{}, fmt.Errorf("only the exact non-lifecycle persistent Super may open assigned CoSuper work")
+	if rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
+		return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper capsule authority unavailable")
 	}
-	trajectoryID := metadataStringValue(parent.Metadata, "assignment_trajectory_id")
-	parentWorkID := strings.TrimSpace(req.ParentWorkItemID)
-	if trajectoryID == "" {
-		return AssignedCoSuperStart{}, fmt.Errorf("persistent Super run lacks exact lifecycle trajectory binding")
+	ownerID, computerID := strings.TrimSpace(doc.OwnerID), strings.TrimSpace(doc.ComputerID)
+	trajectoryID, docID := strings.TrimSpace(doc.TrajectoryID), strings.TrimSpace(doc.DocID)
+	if ownerID == "" || computerID == "" || trajectoryID == "" || docID == "" ||
+		revision.RevisionID != req.RevisionID || revision.DocID != docID || revision.TrajectoryID != trajectoryID ||
+		revision.AuthorKind != types.AuthorUser {
+		return AssignedCoSuperStart{}, fmt.Errorf("document assignment requires an owner-authored revision on the bound document")
 	}
-	attempt := uint64(1) // one authenticated tool call is one runtime-derived attempt
-	assignmentID := deterministicAssignmentIdentity(parent, req)
+	parentAgentID := agentprofile.CoSuper + ":" + docID
+	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return AssignedCoSuperStart{}, fmt.Errorf("derive assignment scope: %w", err)
+	}
+	if snapshot.Trajectory.Status != types.TrajectoryLive {
+		return AssignedCoSuperStart{}, fmt.Errorf("document assignment requires a live trajectory")
+	}
+	parentWorkID := ""
+	var parentWork *types.WorkItemRecord
+	for i := range snapshot.WorkItems {
+		work := snapshot.WorkItems[i]
+		if work.Status == types.WorkItemOpen && work.AssignedAgentID == parentAgentID && work.AuthorityProfile == agentprofile.CoSuper {
+			if parentWorkID != "" {
+				return AssignedCoSuperStart{}, fmt.Errorf("document trajectory has multiple open engineering desk work items")
+			}
+			parentWorkID = work.WorkItemID
+			copy := work
+			parentWork = &copy
+		}
+	}
+	if parentWork == nil {
+		return AssignedCoSuperStart{}, fmt.Errorf("document trajectory has no open engineering desk work item")
+	}
+	attempt := uint64(1)
+	assignmentID := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, req.RevisionID, req.Kind, req.CandidateID)
 	requestDigestParts := []string{
-		"choir:co-super-request:v1", req.Objective, string(req.Kind), req.CandidateID, parentWorkID,
+		"choir:co-super-request:v2", req.Objective, string(req.Kind), req.CandidateID, parentWorkID, req.RevisionID,
 	}
 	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
-		// The overlay participates in replay/conflict identity only when
-		// supplied, so digests for pre-overlay requests stay stable.
 		requestDigestParts = append(requestDigestParts, overlay)
 	}
 	requestDigest := objectgraph.SHA256([]byte(strings.Join(requestDigestParts, "\x00")))
-	// Replay is resolved before reading mutable current source/work projections.
-	// The authenticated provider call identity is the authority; changed semantic
-	// arguments conflict under that same identity.
 	if existing, getErr := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, assignmentID, attempt); getErr == nil {
-		if existing.Binding.ParentRunID != parent.RunID || existing.Binding.ParentWorkItemID != parentWorkID ||
-			existing.Binding.Kind != req.Kind || existing.Binding.RequestDigest != requestDigest ||
-			existing.Binding.SourceCandidateID != req.CandidateID {
+		if existing.Binding.ParentAgentID != parentAgentID || existing.Binding.ParentControlID != req.RevisionID ||
+			existing.Binding.ParentWorkItemID != parentWorkID || existing.Binding.Kind != req.Kind ||
+			existing.Binding.RequestDigest != requestDigest || existing.Binding.SourceCandidateID != req.CandidateID {
 			return AssignedCoSuperStart{}, store.ErrCoSuperAssignmentCommandConflict
 		}
 		if existing.Disposition == types.CoSuperAssignmentBound || existing.Disposition.Terminal() {
@@ -194,54 +201,29 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			}
 			return AssignedCoSuperStart{Assignment: existing, Run: run, Replay: true}, nil
 		}
-		return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper opener was durably committed but not bound; reconcile attempt before retry")
+		// Open but unbound: the durable open committed and the spawn/bind saga
+		// stranded (process crash or transient failure). The deterministic
+		// capability re-derives exactly, so resume the saga rather than fail.
+		return rt.resumeAssignedCoSuperForDocument(ctx, existing, req)
 	} else if !errors.Is(getErr, store.ErrNotFound) {
 		return AssignedCoSuperStart{}, getErr
 	}
-	// One live assignment capsule at a time: before durably opening a new
-	// assignment, reclaim every prior assignment capsule that is not already
-	// revoked. Each 1-GiB capsule holds admission budget; without reclaim the
-	// third spawn exceeds the ~3-GiB VM budget (effects-red-capsule-memory-
-	// budget-exhaustion-2026-08-21). Reclaim rides the existing revoke fate
-	// path so store dispositions and executor accounting stay authoritative.
-	if err := rt.reclaimSupersededAssignmentCapsules(ctx, parent, assignmentID); err != nil {
+	if err := rt.reclaimSupersededAssignmentCapsules(ctx, types.RunRecord{OwnerID: ownerID, ComputerID: computerID}, assignmentID); err != nil {
 		return AssignedCoSuperStart{}, fmt.Errorf("reclaim superseded assignment capsules: %w", err)
 	}
-	parentControlID := runtimePersistentSuperControlID(parent.Metadata, trajectoryID, parentWorkID)
-	if parentControlID == "" {
-		return AssignedCoSuperStart{}, fmt.Errorf("persistent Super run lacks exact lifecycle control binding for selected work")
+	parentControlID := req.RevisionID
+	if req.Kind == types.CoSuperAssignmentVerification {
+		// The verification assignment's parent control is the candidate record:
+		// the durable receipt of the completed implementation it verifies.
+		parentControlID = req.CandidateID
 	}
 	parentDecisionID := "decision:" + objectgraph.SHA256([]byte(strings.Join([]string{
-		"choir:co-super-decision:v2", ownerID, computerID, parent.RunID, trajectoryID, parentWorkID, parentControlID, strings.TrimSpace(req.ToolCallID),
+		"choir:co-super-decision:v3", ownerID, computerID, parentAgentID, trajectoryID, parentWorkID, parentControlID, req.RevisionID,
 	}, "\x00")))
-	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
-		return AssignedCoSuperStart{}, fmt.Errorf("derive assignment scope: %w", err)
-	}
-	var deliveredControl *types.CoagentSourcePacket
-	var parentWork *types.WorkItemRecord
-	for i := range snapshot.Updates {
-		if snapshot.Updates[i].UpdateID == parentControlID && snapshot.Updates[i].TargetWorkItemID == parentWorkID &&
-			snapshot.Updates[i].DeliveredToRunID == parent.RunID && snapshot.Updates[i].DeliveredAt != nil {
-			copy := snapshot.Updates[i]
-			deliveredControl = &copy
-			break
-		}
-	}
-	for i := range snapshot.WorkItems {
-		if snapshot.WorkItems[i].WorkItemID == parentWorkID && snapshot.WorkItems[i].AssignedAgentID == parent.AgentID {
-			copy := snapshot.WorkItems[i]
-			parentWork = &copy
-			break
-		}
-	}
-	if deliveredControl == nil || parentWork == nil {
-		return AssignedCoSuperStart{}, fmt.Errorf("derive assignment scope: exact delivered control/work join unavailable")
-	}
 	scopeBytes, err := json.Marshal(struct {
-		Control types.CoagentSourcePacket `json:"control"`
-		Work    types.WorkItemRecord      `json:"work"`
-	}{*deliveredControl, *parentWork})
+		Revision types.Revision       `json:"revision"`
+		Work     types.WorkItemRecord `json:"work"`
+	}{revision, *parentWork})
 	if err != nil {
 		return AssignedCoSuperStart{}, err
 	}
@@ -254,7 +236,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		}
 		implementation, loadErr := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, candidate.AssignmentID, candidate.Attempt)
 		if loadErr != nil || implementation.Binding.Kind != types.CoSuperAssignmentImplementation ||
-			implementation.Binding.ParentAgentID != parent.AgentID || implementation.Binding.ParentWorkItemID != parentWorkID ||
+			implementation.Binding.ParentAgentID != parentAgentID || implementation.Binding.ParentWorkItemID != parentWorkID ||
 			implementation.Binding.TrajectoryID != trajectoryID || implementation.Disposition != types.CoSuperAssignmentCompleted {
 			return AssignedCoSuperStart{}, fmt.Errorf("verification candidate is not an exact completed implementation artifact")
 		}
@@ -271,30 +253,24 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 			return AssignedCoSuperStart{}, fmt.Errorf("verification candidate artifact digest mismatch")
 		}
 	}
-
-	agentID := agentprofile.CoSuper + ":" + assignmentID
-	workID := "work:" + assignmentID
-	runID := "run:" + assignmentID
-	capsuleID := "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-")
-	opaque, err := opaqueAssignmentCapability()
-	if err != nil {
-		return AssignedCoSuperStart{}, err
-	}
+	opaque := deterministicDocumentAssignmentCapability(assignmentID, attempt)
 	binding := types.CoSuperAssignmentBinding{
 		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
-		ParentAgentID: parent.AgentID, ParentRunID: parent.RunID, ParentDecisionID: parentDecisionID,
+		ParentAgentID: parentAgentID, ParentRunID: "", ParentDecisionID: parentDecisionID,
 		ParentControlID: parentControlID, ParentWorkItemID: parentWorkID,
-		AssignedWorkItemID: workID, AssignedAgentID: agentID, Kind: req.Kind, Attempt: attempt,
+		AssignedWorkItemID: "work:" + assignmentID, AssignedAgentID: agentprofile.CoSuper + ":" + assignmentID,
+		Kind: req.Kind, Attempt: attempt,
 		ScopeDigest: scopeDigest, RequestDigest: requestDigest, CapabilityDigest: store.DigestCoSuperOpaqueCapability(opaque),
 		ExecutionHandleDigest: objectgraph.SHA256([]byte(opaque)), SubjectDigest: subjectDigest,
 		SourceArtifactRef: preflight.ArtifactRef, SourceCandidateID: req.CandidateID,
-		Writable: true, CapsuleID: capsuleID, NetworkMode: types.CoSuperCapsuleNetworkForbidden,
+		Writable: true, CapsuleID: "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-"),
+		NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
 		FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
 	}
 	open := types.OpenCoSuperAssignmentRequest{
 		CommandID: "co-super-open:" + assignmentID + fmt.Sprintf(":%d", attempt), AssignmentID: assignmentID, Binding: binding,
-		AssignedAgent: types.AgentRecord{AgentID: agentID},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: workID, AssignedAgentID: agentID, Objective: req.Objective},
+		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: req.Objective},
 	}
 	open.CommandDigest, err = store.ComputeOpenCoSuperAssignmentDigest(open)
 	if err != nil {
@@ -304,6 +280,36 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	if err != nil {
 		return AssignedCoSuperStart{}, err
 	}
+	return rt.spawnBindActivateAssignment(ctx, opened.Assignment, preflight, opaque, req)
+}
+
+// resumeAssignedCoSuperForDocument re-drives the spawn/bind saga for an
+// assignment whose durable open committed but whose bind never landed. The
+// deterministic capability re-derives the exact digest the binding committed.
+func (rt *Runtime) resumeAssignedCoSuperForDocument(ctx context.Context, assignment types.CoSuperAssignment, req OpenDocumentAssignmentRequest) (AssignedCoSuperStart, error) {
+	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, assignment.Binding.SourceArtifactRef)
+	if err != nil {
+		return AssignedCoSuperStart{}, fmt.Errorf("preflight immutable assignment subject: %w", err)
+	}
+	if preflight.ArtifactRef != assignment.Binding.SourceArtifactRef ||
+		"sha256:"+strings.TrimPrefix(preflight.SubjectDigest, "sha256:") != assignment.Binding.SubjectDigest {
+		return AssignedCoSuperStart{}, fmt.Errorf("resumed assignment subject drifted from the committed binding")
+	}
+	opaque := deterministicDocumentAssignmentCapability(assignment.AssignmentID, assignment.Binding.Attempt)
+	if store.DigestCoSuperOpaqueCapability(opaque) != assignment.Binding.CapabilityDigest {
+		return AssignedCoSuperStart{}, fmt.Errorf("resumed assignment capability does not match the committed binding")
+	}
+	return rt.spawnBindActivateAssignment(ctx, assignment, preflight, opaque, req)
+}
+
+// spawnBindActivateAssignment is the shared post-open saga: spawn the capsule,
+// mint the capability, bind the run, wake the actor. Every failure path cancels
+// the durable open so a stranded assignment never blocks a later cast.
+func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment types.CoSuperAssignment, preflight capsule.SourcePreflight, opaque string, req OpenDocumentAssignmentRequest) (AssignedCoSuperStart, error) {
+	binding := assignment.Binding
+	ownerID, computerID, trajectoryID := binding.OwnerID, binding.ComputerID, binding.TrajectoryID
+	assignmentID, attempt := assignment.AssignmentID, binding.Attempt
+	agentID, workID, runID, capsuleID := binding.AssignedAgentID, binding.AssignedWorkItemID, "run:"+assignmentID, binding.CapsuleID
 	cancelOpen := func(cause error) error {
 		current, loadErr := rt.store.GetCoSuperAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
 		if loadErr == nil && !current.Disposition.Terminal() {
@@ -347,9 +353,21 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		spec.VerifierBundleDir = bundleDir
 		spec.VerifierBinding = string(bindingJSON)
 	}
-	created, err := rt.capsuleExecutor.Spawn(spawnCtx, spec)
-	if err != nil {
-		return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("spawn assigned capsule after durable open: %w", err))
+	var created *capsule.Capsule
+	if rt.capsuleExecutor.HasCapsule(capsuleID) {
+		// Resume after a crash between spawn and bind: the capsule already
+		// exists; verify it is still active rather than respawning.
+		diagnostics, diagErr := rt.capsuleExecutor.InspectCapsuleRaw(capsuleID)
+		if diagErr != nil || diagnostics == nil {
+			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("resumed assignment capsule is not inspectable: %v", diagErr))
+		}
+		created = &capsule.Capsule{ID: capsuleID, State: capsule.StateActive}
+	} else {
+		var spawnErr error
+		created, spawnErr = rt.capsuleExecutor.Spawn(spawnCtx, spec)
+		if spawnErr != nil {
+			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("spawn assigned capsule after durable open: %w", spawnErr))
+		}
 	}
 	cleanupCapsule := func(cause error) error {
 		current, loadErr := rt.store.GetCoSuperAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
@@ -435,19 +453,19 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 		SpawnedAt: spawnedAt, GrantedAt: grantedAt,
 	}
 	run := types.RunRecord{
-		RunID: runID, AgentID: agentID, ChannelID: agentID, RequestedByRunID: parent.RunID, TrajectoryID: trajectoryID,
+		RunID: runID, AgentID: agentID, ChannelID: agentID, RequestedByRunID: "", TrajectoryID: trajectoryID,
 		AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, OwnerID: ownerID, ComputerID: computerID,
 		State: types.RunPending, Prompt: req.Objective,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper, runMetadataAgentID: agentID,
 			runMetadataTrajectoryID: trajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID,
-			"requested_by_agent_id": parent.AgentID, "requested_by_profile": agentprofile.Super,
+			"requested_by_agent_id": binding.ParentAgentID, "requested_by_profile": agentprofile.CoSuper,
 			"assignment_id": assignmentID, "assignment_attempt": attempt, "assignment_kind": string(req.Kind),
 			runMetadataCoSuperSlot:  slot,
 			"assigned_work_item_id": workID, "capsule_id": capsuleID,
-			"parent_decision_id": parentDecisionID, "parent_control_id": parentControlID,
-			"parent_work_item_id": parentWorkID, "scope_digest": scopeDigest, "request_digest": requestDigest,
-			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest, "subject_digest": subjectDigest,
+			"parent_decision_id": binding.ParentDecisionID, "parent_control_id": binding.ParentControlID,
+			"parent_work_item_id": binding.ParentWorkItemID, "scope_digest": binding.ScopeDigest, "request_digest": binding.RequestDigest,
+			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest, "subject_digest": binding.SubjectDigest,
 			"source_artifact_ref": preflight.ArtifactRef, "source_candidate_id": req.CandidateID,
 		},
 	}
@@ -465,7 +483,7 @@ func (rt *Runtime) startAssignedCoSuperForParent(ctx context.Context, parent typ
 	}
 	bind := types.BindCoSuperAssignmentRequest{
 		CommandID: "co-super-bind:" + assignmentID + fmt.Sprintf(":%d", attempt), OwnerID: ownerID, ComputerID: computerID,
-		AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: opened.Assignment.LifecycleVersion,
+		AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: assignment.LifecycleVersion,
 		RunID: runID, Run: run, OpaqueCapability: opaque, CapsuleID: capsuleID, GrantPolicyAttestation: grantAttestation,
 	}
 	bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind)

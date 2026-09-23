@@ -10,10 +10,10 @@ import (
 )
 
 // TestCapsuleGoEvalToolDispatchesToExecutorGoEval verifies that the
-// capsule_go_eval tool's Func routes through toolCtx.Executor.GoEval (the same
-// single-broker path as capsule_exec). On non-linux hosts the stub executor's
-// GoEval returns an error, so this test asserts the tool reaches
-// Executor.GoEval rather than short-circuiting or dispatching elsewhere.
+// capsule_go_eval tool's Func routes through toolCtx.Executor.GoEval. On
+// non-linux hosts the stub executor's GoEval returns an error, so this test
+// asserts the tool reaches Executor.GoEval rather than short-circuiting or
+// dispatching elsewhere.
 func TestCapsuleGoEvalToolDispatchesToExecutorGoEval(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping dispatch test in short mode")

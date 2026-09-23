@@ -19,8 +19,8 @@ func testCoSuperRun() *types.RunRecord {
 
 // TestCoSuperPromptSwitchesToSealedGoUnderRLM proves the model-facing schema
 // cutover: under actuator=rlm the CoSuper prompt teaches capsule_go_eval plus
-// the choir package and retracts the JSON file/exec tools; under tools the
-// legacy prompt is byte-identical.
+// the choir package; under tools the fallback exposes only one-shot Go eval
+// and no in-cell carrier.
 func TestCoSuperPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
 	rt := &Runtime{}
 	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
@@ -33,8 +33,10 @@ func TestCoSuperPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
 			t.Errorf("RLM prompt missing %q", want)
 		}
 	}
-	if strings.Contains(rlmPrompt, "The tool catalog is the complete authority: capsule_exec") {
-		t.Error("RLM prompt still carries the legacy JSON tool catalog")
+	for _, retired := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir"} {
+		if strings.Contains(rlmPrompt, retired) {
+			t.Errorf("RLM prompt still presents retired JSON tool %q", retired)
+		}
 	}
 
 	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorTools)
@@ -42,15 +44,15 @@ func TestCoSuperPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(toolsPrompt, "The tool catalog is the complete authority: capsule_exec") {
-		t.Error("tools prompt lost the legacy catalog")
+	if !strings.Contains(toolsPrompt, "The tools-actuator fallback exposes exactly one JSON tool: capsule_go_eval.") {
+		t.Error("tools prompt does not describe the eval-only catalog")
 	}
 	if strings.Contains(toolsPrompt, "choir.Spawn") {
 		t.Error("tools prompt leaks RLM orchestration surface")
 	}
-	// The tools-actuator fallback desk is capsule effects only: none of the
-	// five retired overlay names may be presented as reachable.
-	for _, retired := range []string{"update_coagent", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "record_assignment_result"} {
+	// The tools-actuator fallback is eval-only: none of the retired JSON
+	// tool names may be presented as reachable.
+	for _, retired := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "update_coagent", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "record_assignment_result"} {
 		if strings.Contains(toolsPrompt, retired) {
 			t.Errorf("tools prompt still names retired tool %q as reachable", retired)
 		}
@@ -67,7 +69,7 @@ func TestRLMPromptOmitsRetiredToolNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, retired := range []string{"update_coagent", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "record_assignment_result"} {
+	for _, retired := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "update_coagent", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "record_assignment_result"} {
 		if strings.Contains(rlmPrompt, retired) {
 			t.Errorf("RLM prompt still names retired tool %q", retired)
 		}

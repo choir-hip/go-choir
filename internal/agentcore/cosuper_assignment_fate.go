@@ -144,8 +144,10 @@ func (rt *Runtime) cancelAssignedCoSuper(ctx context.Context, parent types.RunRe
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
-	if assignment.Binding.ParentRunID != parent.RunID || assignment.Binding.ParentAgentID != parent.AgentID ||
-		parent.AgentID != persistentSuperAgentID(parent.OwnerID) {
+	if assignment.Binding.ParentRunID != parent.RunID || assignment.Binding.ParentAgentID != parent.AgentID {
+		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires the exact recorded parent")
+	}
+	if parent.RunID != "" && parent.AgentID != persistentSuperAgentID(parent.OwnerID) {
 		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires exact persistent Super parent")
 	}
 	cancel := types.CancelCoSuperAssignmentRequest{
@@ -204,9 +206,6 @@ func (rt *Runtime) persistSystemCoSuperCancellation(ctx context.Context, assignm
 		result, cancelErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
 		if cancelErr == nil {
 			if !result.Replay && result.Update != nil {
-				if rewakeErr := rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, current.Binding.OwnerID); rewakeErr != nil {
-					log.Printf("runtime: self-development Texture rewake after CoSuper cancel: %v", rewakeErr)
-				}
 				rt.wakeUpdatedCoagent(ctx, *result.Update)
 			}
 			return result, nil
@@ -516,7 +515,6 @@ func (rt *Runtime) enforceCoSuperAssignmentDeadlines(ctx context.Context) {
 		if !result.Replay {
 			log.Printf("runtime: assignment %s failed closed at deadline (attempt %d); request stays pending",
 				assignment.AssignmentID, assignment.Binding.Attempt)
-			rt.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, assignment.Binding.OwnerID)
 		}
 	}
 }

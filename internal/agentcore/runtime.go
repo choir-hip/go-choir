@@ -3374,27 +3374,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 	}
 	maxOutputTokens := provideriface.MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
-	terminalFallback := modelpolicy.TerminalProviderFallbackSelection()
-	preconditionFallbacks := modelpolicy.ProviderPreconditionFallbackSelections(llmConfig)
-	if emit != nil {
-		payload, _ := json.Marshal(map[string]any{
-			"phase":                      "tool_loop_fallbacks_configured",
-			"llm_provider":               llmConfig.Provider,
-			"llm_model":                  llmConfig.Model,
-			"terminal_fallback_provider": terminalFallback.Provider,
-			"terminal_fallback_model":    terminalFallback.Model,
-			"fallback_count":             len(preconditionFallbacks),
-			"fallbacks":                  preconditionFallbacks,
-		})
-		emit(types.EventRunProgress, "tool_loop_fallbacks_configured", payload)
-	}
 
 	toolLoopOptions := []toolregistry.ToolLoopOption{
 		toolregistry.WithToolLoopMemoryHooks(memory.hooks()),
 		toolregistry.WithToolLoopLLMConfig(llmConfig),
 		toolregistry.WithToolLoopConversationID(rec.RunID),
-
-		toolregistry.WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
 	if assignedCoSuperOverlay {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolResult("capsule_go_eval", func(output string) bool {

@@ -23,10 +23,6 @@ import (
 const rlmReplayFixtureVersion = 1
 
 const (
-	rlmReplayCapsuleExec        = "capsule_exec"
-	rlmReplayCapsuleReadFile    = "capsule_read_file"
-	rlmReplayCapsuleWriteFile   = "capsule_write_file"
-	rlmReplayCapsuleListDir     = "capsule_list_dir"
 	rlmReplayCommitTransaction  = "commit_transaction"
 	rlmReplayInspectBundle      = "inspect_self_development_bundle"
 	rlmReplayRecordVerification = "record_self_development_verification"
@@ -35,9 +31,8 @@ const (
 )
 
 var rlmReplayOperations = map[string]struct{}{
-	rlmReplayCapsuleExec: {}, rlmReplayCapsuleReadFile: {}, rlmReplayCapsuleWriteFile: {},
-	rlmReplayCapsuleListDir: {}, rlmReplayCommitTransaction: {}, rlmReplayInspectBundle: {},
-	rlmReplayRecordVerification: {}, rlmReplayAssignmentResult: {}, rlmReplayUpdateCoagent: {},
+	rlmReplayCommitTransaction: {}, rlmReplayInspectBundle: {}, rlmReplayRecordVerification: {},
+	rlmReplayAssignmentResult: {}, rlmReplayUpdateCoagent: {},
 }
 
 // rlmReplayFixture is the versioned capture envelope. ExpectedReceipt contains
@@ -60,10 +55,10 @@ type rlmReplayCanonicalReceipt struct {
 	SHA256 string
 }
 
-// rlmReplayProofMode records the P4 claim boundary. Rows 1-4 are R8
-// conformance rows and therefore live-only; rows 5-7 remain recorded-fixture
-// proofs until effects-off golden capture is decided; rows 8-9 require live
-// durable-store resolution as their deletion proof.
+// rlmReplayProofMode records the P4 claim boundary. The remaining rows are
+// in-cell carrier operations: effect rows remain recorded-fixture proofs
+// until effects-off golden capture is decided; durable-store rows require
+// live resolution as their deletion proof.
 type rlmReplayProofMode string
 
 const (
@@ -72,10 +67,6 @@ const (
 )
 
 var rlmReplayProofPlan = map[string]rlmReplayProofMode{
-	rlmReplayCapsuleExec:        rlmReplayLiveCapture,
-	rlmReplayCapsuleReadFile:    rlmReplayLiveCapture,
-	rlmReplayCapsuleWriteFile:   rlmReplayLiveCapture,
-	rlmReplayCapsuleListDir:     rlmReplayLiveCapture,
 	rlmReplayCommitTransaction:  rlmReplayRecordedFixture,
 	rlmReplayInspectBundle:      rlmReplayRecordedFixture,
 	rlmReplayRecordVerification: rlmReplayRecordedFixture,
@@ -101,14 +92,6 @@ func canonicalRLMReplayReceipt(operation string, receipt any, exclusions []strin
 // fails loudly instead of passing vacuously on both sides.
 func rlmReplayP0Fields(operation string) []string {
 	switch operation {
-	case rlmReplayCapsuleExec:
-		return []string{"command", "cwd", "exit_code", "stdout_sha256", "stderr_sha256"}
-	case rlmReplayCapsuleReadFile:
-		return []string{"path", "content_sha256"}
-	case rlmReplayCapsuleWriteFile:
-		return []string{"path", "content_sha256", "bytes_written"}
-	case rlmReplayCapsuleListDir:
-		return []string{"path", "entries"}
 	case rlmReplayCommitTransaction:
 		return []string{"operation_id", "trajectory_id", "base_event_head", "content_digest", "change_count", "classifier_version", "classifier_digest", "groups", "state"}
 	case rlmReplayInspectBundle:
@@ -218,15 +201,6 @@ func canonicalRLMReplayInput(operation string, request any) (rlmReplayCanonicalR
 	}
 	var fields []string
 	switch operation {
-	case rlmReplayCapsuleExec:
-		fields = []string{"command", "args", "cwd"}
-	case rlmReplayCapsuleReadFile, rlmReplayCapsuleListDir:
-		fields = []string{"path"}
-	case rlmReplayCapsuleWriteFile:
-		fields = []string{"path", "content_sha256"}
-		if content, ok := input["content"].(string); ok {
-			input["content_sha256"] = computerevent.DigestBytes([]byte(content))
-		}
 	case rlmReplayCommitTransaction:
 		fields = []string{"build_recipe_ref", "test_receipts", "dependency_toolchain_refs"}
 	case rlmReplayInspectBundle:
@@ -536,9 +510,9 @@ func readRLMReplayGolden(operation, captureBuildSHA string) (rlmReplayFixture, e
 
 func TestRLMReplayFixtureRoundTrip(t *testing.T) {
 	fixture := rlmReplayFixture{
-		FixtureVersion: rlmReplayFixtureVersion, Operation: rlmReplayCapsuleReadFile, SemanticIdentity: "read:one",
-		Request: json.RawMessage(`{"path":"/workspace/a"}`), Environment: json.RawMessage(`{"computer_id":"test"}`),
-		ExpectedReceipt: json.RawMessage(`{"content_sha256":"abc","path":"/workspace/a"}`), ExclusionsApplied: []string{"broker_receipt_id"},
+		FixtureVersion: rlmReplayFixtureVersion, Operation: rlmReplayCommitTransaction, SemanticIdentity: "freeze:one",
+		Request: json.RawMessage(`{"build_recipe_ref":"go build ./..."}`), Environment: json.RawMessage(`{"computer_id":"test"}`),
+		ExpectedReceipt: json.RawMessage(`{"content_digest":"abc","operation_id":"operation-1"}`), ExclusionsApplied: []string{"broker_receipt_id"},
 		CapturedAt: time.Date(2026, 9, 11, 0, 0, 0, 0, time.UTC), CaptureBuildSHA: "73815790",
 	}
 	raw, err := json.Marshal(fixture)
@@ -580,14 +554,14 @@ func TestRLMReplayCanonicalizerStableDigest(t *testing.T) {
 func TestRLMReplaySemanticIdentityConflictPrecedesDispatch(t *testing.T) {
 	identities := &rlmReplayIdentityJournal{}
 	dispatches := &rlmReplayDispatchJournal{}
-	if replay, err := identities.claim(rlmReplayCapsuleWriteFile, "write:one", map[string]any{"path": "a", "content": "one"}); err != nil || replay {
+	if replay, err := identities.claim(rlmReplayCommitTransaction, "freeze:one", map[string]any{"build_recipe_ref": "go build ./..."}); err != nil || replay {
 		t.Fatalf("first identity claim replay=%t err=%v", replay, err)
 	}
-	dispatches.record("write:one")
-	if _, err := identities.claim(rlmReplayCapsuleWriteFile, "write:one", map[string]any{"path": "a", "content": "two"}); !errors.Is(err, errRLMReplayIdentityConflict) {
+	dispatches.record("freeze:one")
+	if _, err := identities.claim(rlmReplayCommitTransaction, "freeze:one", map[string]any{"build_recipe_ref": "go test ./..."}); !errors.Is(err, errRLMReplayIdentityConflict) {
 		t.Fatalf("changed request error = %v, want conflict", err)
 	}
-	if got := dispatches.attemptsFor("write:one"); got != 1 {
+	if got := dispatches.attemptsFor("freeze:one"); got != 1 {
 		t.Fatalf("conflict dispatched %d times, want 1", got)
 	}
 }
@@ -595,16 +569,16 @@ func TestRLMReplaySemanticIdentityConflictPrecedesDispatch(t *testing.T) {
 func TestRLMReplayStateMutatingReadFixture(t *testing.T) {
 	state := "before"
 	fixture := &rlmReplayStateMutatingRead{identities: &rlmReplayIdentityJournal{}}
-	first, replay, err := fixture.observe(rlmReplayCapsuleReadFile, "read:one", map[string]any{"path": "a"}, func() (string, error) { return state, nil })
+	first, replay, err := fixture.observe(rlmReplayCommitTransaction, "freeze:one", map[string]any{"build_recipe_ref": "go build ./..."}, func() (string, error) { return state, nil })
 	if err != nil || replay || first != "before" {
 		t.Fatalf("first read = %q replay=%t err=%v", first, replay, err)
 	}
 	state = "after"
-	same, replay, err := fixture.observe(rlmReplayCapsuleReadFile, "read:one", map[string]any{"path": "a"}, func() (string, error) { return state, nil })
+	same, replay, err := fixture.observe(rlmReplayCommitTransaction, "freeze:one", map[string]any{"build_recipe_ref": "go build ./..."}, func() (string, error) { return state, nil })
 	if err != nil || !replay || same != "before" {
 		t.Fatalf("same identity read = %q replay=%t err=%v", same, replay, err)
 	}
-	fresh, replay, err := fixture.observe(rlmReplayCapsuleReadFile, "read:two", map[string]any{"path": "a"}, func() (string, error) { return state, nil })
+	fresh, replay, err := fixture.observe(rlmReplayCommitTransaction, "freeze:two", map[string]any{"build_recipe_ref": "go build ./..."}, func() (string, error) { return state, nil })
 	if err != nil || replay || fresh != "after" {
 		t.Fatalf("new identity read = %q replay=%t err=%v", fresh, replay, err)
 	}

@@ -131,24 +131,32 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "document head changed; reload the latest version before revising"})
 		return
 	}
-	targetAgentID := currentTextureAgentID(doc.DocID)
+	targetProfile := ""
 	targetWorkItemID := ""
 	for _, work := range snapshot.WorkItems {
-		if work.Status == types.WorkItemOpen && work.AssignedAgentID == targetAgentID && work.AuthorityProfile == agentprofile.Texture {
-			if targetWorkItemID != "" {
-				writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open Texture target work items"})
-				return
-			}
-			targetWorkItemID = work.WorkItemID
+		if work.Status != types.WorkItemOpen {
+			continue
 		}
+		profile := strings.TrimSpace(work.AuthorityProfile)
+		if profile != agentprofile.Texture && profile != agentprofile.CoSuper {
+			continue
+		}
+		if work.AssignedAgentID != profile+":"+doc.DocID {
+			continue
+		}
+		if targetWorkItemID != "" {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open desk target work items"})
+			return
+		}
+		targetProfile, targetWorkItemID = profile, work.WorkItemID
 	}
 	if targetWorkItemID == "" {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has no open Texture target work item"})
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has no open desk target work item"})
 		return
 	}
 	metadata := mergeTextureRevisionMetadata(nil, map[string]any{
-		"input_origin":            textureInputOriginUserPrompt,
-		"owner_prompt":            content,
+		"input_origin":              textureInputOriginUserPrompt,
+		"owner_prompt":              content,
 		textureMetadataPromptUnixTS: time.Now().UTC().Unix(),
 	})
 	metadata = carryForwardDurableTextureMetadata(metadata, head.Metadata)
@@ -171,8 +179,8 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 	requestID, _ := textureOwnerOccurrenceIdentity(ownerID, doc.ComputerID, doc.DocID, clientRequestID)
 	command := types.CommitLifecycleArtifactHeadRequest{
 		OwnerID: ownerID, ComputerID: doc.ComputerID,
-		CommandID:              "owner-revise:" + clientRequestID,
-		TrajectoryID:           doc.TrajectoryID,
+		CommandID:                "owner-revise:" + clientRequestID,
+		TrajectoryID:             doc.TrajectoryID,
 		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
 		ExpectedHeadRevisionID:   expectedHead,
 		Revision:                 rev,
@@ -201,7 +209,7 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 	if !result.Replay {
 		h.recordTextureAudit(r.Context(), "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
 		h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
-		h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Trajectory.LifecycleVersion, result.Events)
+		h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Trajectory.LifecycleVersion, result.Events, targetProfile)
 	}
 	writeAPIJSON(w, http.StatusAccepted, textureOwnerRevisionResponse{
 		Schema:     textureOwnerRevisionSchemaV1,
@@ -288,7 +296,6 @@ func (h *Handler) reconcilePendingMutationFromDocumentHead(ctx context.Context, 
 	}
 	return true, nil
 }
-
 
 func textureRevisionMatchesDocument(revision types.Revision, doc types.Document, ownerID string) bool {
 	return strings.TrimSpace(revision.RevisionID) == strings.TrimSpace(doc.CurrentRevisionID) &&

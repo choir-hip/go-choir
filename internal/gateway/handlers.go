@@ -35,8 +35,8 @@ type gatewayHealthResponse struct {
 // to the upstream provider (VAL-GATEWAY-004).
 type ProviderRequest struct {
 	// Provider is the requested provider ("chatgpt", "bedrock", "zai",
-	// "deepseek", "xiaomi", "fireworks", "opencode-go", or "opencode-zen").
-	// If empty, the gateway requires model-based routing.
+	// "fireworks", "opencode-go", or "opencode-zen"). If empty, the gateway
+	// requires model-based routing.
 	Provider string `json:"provider,omitempty"`
 
 	// Model is an optional model override.
@@ -536,10 +536,8 @@ func (h *Handler) resolveFromMultiProvider(req ProviderRequest) (provider.Provid
 			}
 		}
 
-		// Fallback: heuristic model routing for known patterns. The unfunded
-		// deepseek/xiaomi/fireworks providers are deleted (owner ratification
-		// 2026-09-12, residue R9): an uncatalogued model must fail routing
-		// loudly instead of guessing an implicit authority.
+		// Uncatalogued models must fail routing loudly instead of guessing an
+		// implicit provider authority.
 		if strings.HasPrefix(req.Model, "gpt-") || strings.HasPrefix(req.Model, "o") || strings.Contains(req.Model, "codex") {
 			if p := h.providers.Get("chatgpt"); p != nil {
 				return p, nil

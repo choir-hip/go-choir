@@ -70,13 +70,12 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 	return nil
 }
 
-// RegisterCapsuleLocalTools installs only execution and report effects scoped
-// to an already-bound capsule. Freeze/verify/report are in-cell affordances
-// staged through choir functions and authored by the reducer; no JSON tool
-// installs them.
+// RegisterCapsuleLocalTools installs the sole JSON escape hatch scoped to an
+// already-bound capsule. All engineering effects are in-cell affordances
+// staged through choir functions and authored by the reducer.
 func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	for _, tool := range []toolregistry.Tool{
-		newCapsuleExecTool(), newCapsuleGoEvalTool(rt), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(),
+		newCapsuleGoEvalTool(rt),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -84,8 +83,6 @@ func RegisterCapsuleLocalTools(registry *toolregistry.ToolRegistry, rt *Runtime)
 	}
 	return nil
 }
-
-
 
 func requireCapsuleRole(ctx context.Context, role capsule.AgentRole) (*CapsuleToolCtx, error) {
 	value := capsuleCtxFromCtx(ctx)
@@ -224,7 +221,6 @@ func newListCapsulesTool() toolregistry.Tool {
 		},
 	}
 }
-
 
 // freezeCapsuleEffectBundle classifies and freezes the capsule diff as a
 // complete verifier-ready effect bundle draft. It is the shared body of the
@@ -576,45 +572,16 @@ func newInspectCapsuleTool() toolregistry.Tool {
 	}
 }
 
-func newCapsuleExecTool() toolregistry.Tool {
-	type args struct {
-		Command   string   `json:"command"`
-		Args      []string `json:"args"`
-		Cwd       string   `json:"cwd"`
-		TimeoutMS int      `json:"timeout_ms"`
-	}
-	return toolregistry.Tool{
-		Name: "capsule_exec", Description: "Execute a command inside the assigned isolated capsule.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"command": map[string]any{"type": "string"}, "args": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "cwd": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer"},
-		}, []string{"command"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleMutationRole(ctx)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			result, err := toolCtx.Executor.Exec(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, capsule.ExecRequest{Command: input.Command, Args: input.Args, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS})
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(result)
-		},
-	}
-}
-
 // newCapsuleGoEvalTool evaluates model-authored Go source inside the assigned
-// capsule through the same broker as capsule_exec. It is CoSuper-only for now:
-// the Researcher Go-only profile requires a Researcher capsule-context
-// injection path in runtime.go that is a separate wiring slice. The tool uses
+// capsule through the broker. It is CoSuper-only for now: the Researcher
+// Go-only profile requires a Researcher capsule-context injection path in
+// runtime.go that is a separate wiring slice. The tool uses
 // requireCurrentAssignedCapsule, which revalidates the durable assignment,
 // cancellation intent, work-item, run-state, and capsule fate immediately
-// before execution (the same gate as capsule_exec). The package allowlist is
-// resolved server-side by the broker from the verified capability role; the
-// model never supplies allowed_packages.
+// before evaluation. The package allowlist is resolved server-side by the
+// broker from the verified capability role; the model never supplies
+// allowed_packages.
+
 func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		Source    string `json:"source"`
@@ -661,81 +628,6 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				result.VerifyResult = reduction.verifyResult
 			}
 			return toolregistry.ResultJSON(result)
-		},
-	}
-}
-
-func newCapsuleReadFileTool() toolregistry.Tool {
-	type args struct {
-		Path string `json:"path"`
-	}
-	return toolregistry.Tool{Name: "capsule_read_file", Description: "Read a file inside the assigned capsule.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{"path": map[string]any{"type": "string"}}, []string{"path"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCurrentAssignedCapsule(ctx)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			content, err := toolCtx.Executor.ReadFile(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, input.Path)
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(map[string]any{"path": input.Path, "content": content})
-		},
-	}
-}
-
-func newCapsuleWriteFileTool() toolregistry.Tool {
-	type args struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
-		Mode    uint32 `json:"mode"`
-	}
-	return toolregistry.Tool{Name: "capsule_write_file", Description: "Write a file inside the assigned capsule.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "mode": map[string]any{"type": "integer"},
-		}, []string{"path", "content"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleMutationRole(ctx)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			if err := toolCtx.Executor.WriteFile(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, input.Path, []byte(input.Content), input.Mode); err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(map[string]any{"path": input.Path, "written": true})
-		},
-	}
-}
-
-func newCapsuleListDirTool() toolregistry.Tool {
-	type args struct {
-		Path string `json:"path"`
-	}
-	return toolregistry.Tool{Name: "capsule_list_dir", Description: "List a directory inside the assigned capsule.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{"path": map[string]any{"type": "string"}}, []string{"path"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCurrentAssignedCapsule(ctx)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			entries, err := toolCtx.Executor.ListDir(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, input.Path)
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(map[string]any{"path": input.Path, "entries": entries})
 		},
 	}
 }

@@ -31,17 +31,17 @@ func TestHandleTexturePromptEvalPinsOverlayAcrossTextureRoute(t *testing.T) {
 	}
 	if err := os.WriteFile(policyPath, []byte(`
 [defaults]
-fallback_provider = "deepseek"
-fallback_model = "deepseek-v4-flash"
+fallback_provider = "chatgpt"
+fallback_model = "gpt-5.6-luna"
 
 [roles.texture]
-provider = "xiaomi"
-model = "mimo-v2.5"
+provider = "chatgpt"
+model = "gpt-5.6-luna"
 reasoning = "medium"
 
 [roles.research]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+provider = "chatgpt"
+model = "gpt-5.6-luna"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}

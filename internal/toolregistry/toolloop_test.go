@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -1174,31 +1173,6 @@ func (p *exactToolChoicePreconditionThenToolProvider) CallWithTools(ctx context.
 	}, nil
 }
 
-type providerPreconditionThenToolProvider struct {
-	provideriface.Provider
-	failuresBeforeSuccess int32
-	calls                 int32
-	requests              []provideriface.ToolLoopRequest
-}
-
-func (p *providerPreconditionThenToolProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
-	p.requests = append(p.requests, req)
-	call := atomic.AddInt32(&p.calls, 1)
-	if call <= p.failuresBeforeSuccess {
-		return nil, fmt.Errorf("gateway call failed: fireworks: status 412 Precondition Failed (sanitized)")
-	}
-	return &provideriface.ToolLoopResponse{
-		StopReason: "tool_use",
-		ToolCalls: []types.ToolCall{{
-			ID:        "call-edit",
-			Name:      "patch_texture",
-			Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"mission checkpoint"}`),
-		}},
-		Usage: provideriface.TokenUsage{InputTokens: 9, OutputTokens: 3},
-		Model: req.Model,
-	}, nil
-}
-
 type providerErrorsThenToolProvider struct {
 	provideriface.Provider
 	errors   []error
@@ -1296,277 +1270,19 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 	}
 }
 
-type deepSeekToolChoicePreconditionThenToolProvider struct {
-	provideriface.Provider
-	choices []string
-	calls   int32
-}
-
-func (p *deepSeekToolChoicePreconditionThenToolProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
-	p.choices = append(p.choices, req.ToolChoice)
-	call := atomic.AddInt32(&p.calls, 1)
-	if call == 1 {
-		return nil, fmt.Errorf("provider deepseek call failed: deepseek: Thinking mode does not support this tool_choice")
-	}
-	return &provideriface.ToolLoopResponse{
-		StopReason: "tool_use",
-		ToolCalls: []types.ToolCall{{
-			ID:        "call-edit",
-			Name:      "patch_texture",
-			Arguments: json.RawMessage(`{"content":"ok"}`),
-		}},
-		Usage: provideriface.TokenUsage{InputTokens: 11, OutputTokens: 5},
-		Model: req.Model,
-	}, nil
-}
-
-func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError(t *testing.T) {
-	provider := &deepSeekToolChoicePreconditionThenToolProvider{}
-	registry := NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name:        "patch_texture",
-		Description: "Edit the Texture document.",
-		Parameters:  map[string]any{"type": "object"},
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"ok","revision_id":"rev-1"}`, nil
-		},
-	}); err != nil {
-		t.Fatalf("register patch_texture: %v", err)
-	}
-	var retrySeen bool
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		if kind == types.EventRunRetry && phase == "provider_tool_choice" {
-			retrySeen = true
-			var decoded map[string]any
-			if err := json.Unmarshal(payload, &decoded); err != nil {
-				t.Fatalf("decode retry payload: %v", err)
-			}
-			if decoded["tool_choice"] != "function:patch_texture" || decoded["retry_tool_choice"] != "required" {
-				t.Fatalf("retry payload = %+v", decoded)
-			}
-		}
-	}
-
-	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write"}]}`)},
-		"You are a Texture appagent.",
-		0,
-		emit,
-		nil,
-		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"))
-	if err != nil {
-		t.Fatalf("run tool loop: %v", err)
-	}
-	if len(provider.choices) != 2 || provider.choices[0] != "function:patch_texture" || provider.choices[1] != "required" {
-		t.Fatalf("tool choices = %#v, want exact then required", provider.choices)
-	}
-	if !retrySeen {
-		t.Fatal("missing provider_tool_choice retry event")
-	}
-}
-
-func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *testing.T) {
-	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 2}
-	registry := NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name:        "patch_texture",
-		Description: "Edit the Texture document.",
-		Parameters:  map[string]any{"type": "object"},
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"ok","revision_id":"rev-1"}`, nil
-		},
-	}); err != nil {
-		t.Fatalf("register patch_texture: %v", err)
-	}
-	if err := registry.Register(Tool{
-		Name:        "request_super_execution",
-		Description: "Ask Super to execute follow-on platform work.",
-		Parameters:  map[string]any{"type": "object"},
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"requested"}`, nil
-		},
-	}); err != nil {
-		t.Fatalf("register request_super_execution: %v", err)
-	}
-	var modelFallbackSeen bool
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		if kind == types.EventRunRetry && phase == "provider_model_fallback" {
-			modelFallbackSeen = true
-			var decoded map[string]any
-			if err := json.Unmarshal(payload, &decoded); err != nil {
-				t.Fatalf("decode fallback payload: %v", err)
-			}
-			if decoded["from_model"] != "accounts/fireworks/models/deepseek-v4-flash" ||
-				decoded["to_model"] != "accounts/fireworks/models/deepseek-v4-pro" {
-				t.Fatalf("fallback payload = %+v", decoded)
-			}
-		}
-	}
-
-	text, usage, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
-		"You are a Texture appagent.",
-		0,
-		emit,
-		nil,
-		WithToolLoopLLMConfig(provideriface.LLMSelection{
-			Provider:        "fireworks",
-			Model:           "accounts/fireworks/models/deepseek-v4-flash",
-			ReasoningEffort: "medium",
-		}),
-		WithProviderPreconditionFallbacks(provideriface.LLMSelection{
-			Provider:        "fireworks",
-			Model:           "accounts/fireworks/models/deepseek-v4-pro",
-			ReasoningEffort: "medium",
-			Source:          "test_fallback",
-		}),
-		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"))
-	if err != nil {
-		t.Fatalf("run tool loop: %v", err)
-	}
-	if text != "" {
-		t.Fatalf("text = %q, want empty terminal tool result", text)
-	}
-	if usage.InputTokens != 9 || usage.OutputTokens != 3 {
-		t.Fatalf("usage = %+v", usage)
-	}
-	if got := atomic.LoadInt32(&provider.calls); got != 3 {
-		t.Fatalf("provider calls = %d, want 3", got)
-	}
-	if !modelFallbackSeen {
-		t.Fatal("missing provider_model_fallback retry event")
-	}
-	if len(provider.requests) != 3 {
-		t.Fatalf("requests = %d, want 3", len(provider.requests))
-	}
-	wantChoices := []string{"function:patch_texture", "required", "required"}
-	wantModels := []string{
-		"accounts/fireworks/models/deepseek-v4-flash",
-		"accounts/fireworks/models/deepseek-v4-flash",
-		"accounts/fireworks/models/deepseek-v4-pro",
-	}
-	for i, req := range provider.requests {
-		if req.ToolChoice != wantChoices[i] || req.Model != wantModels[i] {
-			t.Fatalf("request %d choice/model = %q/%q, want %q/%q", i, req.ToolChoice, req.Model, wantChoices[i], wantModels[i])
-		}
-		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "patch_texture" {
-			t.Fatalf("request %d tool definitions = %+v, want only patch_texture", i, req.ToolDefinitions)
-		}
-	}
-}
-
-func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
-	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 3}
-	registry := NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name:        "patch_texture",
-		Description: "Edit the Texture document.",
-		Parameters:  map[string]any{"type": "object"},
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"ok","revision_id":"rev-1"}`, nil
-		},
-	}); err != nil {
-		t.Fatalf("register patch_texture: %v", err)
-	}
-	var fallbackModels []string
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		if kind != types.EventRunRetry || phase != "provider_model_fallback" {
-			return
-		}
-		var decoded map[string]any
-		if err := json.Unmarshal(payload, &decoded); err != nil {
-			t.Fatalf("decode fallback payload: %v", err)
-		}
-		fallbackModels = append(fallbackModels, fmt.Sprintf("%s/%s", decoded["to_provider"], decoded["to_model"]))
-	}
-
-	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
-		"You are a Texture appagent.",
-		0,
-		emit,
-		nil,
-		WithToolLoopLLMConfig(provideriface.LLMSelection{
-			Provider:        "fireworks",
-			Model:           "accounts/fireworks/models/deepseek-v4-flash",
-			ReasoningEffort: "medium",
-		}),
-		WithProviderPreconditionFallbacks(
-			provideriface.LLMSelection{
-				Provider:        "fireworks",
-				Model:           "accounts/fireworks/models/deepseek-v4-pro",
-				ReasoningEffort: "medium",
-				Source:          "test_fireworks_fallback",
-			},
-			provideriface.LLMSelection{
-				Provider:        "chatgpt",
-				Model:           "gpt-5.5",
-				ReasoningEffort: "low",
-				Source:          "test_platform_fallback",
-			},
-		),
-		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"))
-	if err != nil {
-		t.Fatalf("run tool loop: %v", err)
-	}
-	if got := atomic.LoadInt32(&provider.calls); got != 4 {
-		t.Fatalf("provider calls = %d, want 4", got)
-	}
-	wantFallbacks := []string{
-		"fireworks/accounts/fireworks/models/deepseek-v4-pro",
-		"chatgpt/gpt-5.5",
-	}
-	if !reflect.DeepEqual(fallbackModels, wantFallbacks) {
-		t.Fatalf("fallback models = %+v, want %+v", fallbackModels, wantFallbacks)
-	}
-	wantChoices := []string{"function:patch_texture", "required", "required", "required"}
-	wantModels := []string{
-		"accounts/fireworks/models/deepseek-v4-flash",
-		"accounts/fireworks/models/deepseek-v4-flash",
-		"accounts/fireworks/models/deepseek-v4-pro",
-		"gpt-5.5",
-	}
-	for i, req := range provider.requests {
-		if req.ToolChoice != wantChoices[i] || req.Model != wantModels[i] {
-			t.Fatalf("request %d choice/model = %q/%q, want %q/%q", i, req.ToolChoice, req.Model, wantChoices[i], wantModels[i])
-		}
-		if len(req.ToolDefinitions) != 1 || req.ToolDefinitions[0].Name != "patch_texture" {
-			t.Fatalf("request %d tool definitions = %+v, want only patch_texture", i, req.ToolDefinitions)
-		}
-	}
-}
-
-func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
+func TestRunToolLoopRefusesProviderAvailabilityFallback(t *testing.T) {
 	provider := &providerErrorsThenToolProvider{errors: []error{
 		fmt.Errorf("gateway call failed: fireworks: status 412 Precondition Failed (sanitized)"),
-		fmt.Errorf("gateway call failed: deepseek: status 402 Payment Required (sanitized)"),
 	}}
 	registry := NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name:        "patch_texture",
-		Description: "Edit the Texture document.",
-		Parameters:  map[string]any{"type": "object"},
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"ok","revision_id":"rev-1"}`, nil
-		},
-	}); err != nil {
-		t.Fatalf("register patch_texture: %v", err)
-	}
-	var fallbackReasons []string
-	var fallbackModels []string
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		if kind != types.EventRunRetry || phase != "provider_model_fallback" {
-			return
+	var fallbackSeen bool
+	emit := func(kind types.EventKind, phase string, _ json.RawMessage) {
+		if kind == types.EventRunRetry && phase == "provider_model_fallback" {
+			fallbackSeen = true
 		}
-		var decoded map[string]any
-		if err := json.Unmarshal(payload, &decoded); err != nil {
-			t.Fatalf("decode fallback payload: %v", err)
-		}
-		fallbackReasons = append(fallbackReasons, fmt.Sprint(decoded["reason"]))
-		fallbackModels = append(fallbackModels, fmt.Sprintf("%s/%s", decoded["to_provider"], decoded["to_model"]))
 	}
 
-	text, usage, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"run the wire proof"}]}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"run the wire proof"}]}`)},
 		"You are Super.",
 		0,
 		emit,
@@ -1575,119 +1291,18 @@ func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
 			Provider:        "fireworks",
 			Model:           "accounts/fireworks/models/deepseek-v4-pro",
 			ReasoningEffort: "medium",
-		}),
-		WithProviderPreconditionFallbacks(
-			provideriface.LLMSelection{
-				Provider:        "deepseek",
-				Model:           "deepseek-v4-pro",
-				ReasoningEffort: "medium",
-				Source:          "test_deepseek_fallback",
-			},
-			provideriface.LLMSelection{
-				Provider:        "chatgpt",
-				Model:           "gpt-5.5",
-				ReasoningEffort: "medium",
-				Source:          "test_platform_fallback",
-			},
-		),
-		WithTerminalToolSuccesses("patch_texture"))
-	if err != nil {
-		t.Fatalf("run tool loop: %v", err)
+		}))
+	if err == nil || !strings.Contains(err.Error(), "fireworks: status 412 Precondition Failed") {
+		t.Fatalf("run tool loop error = %v, want first provider failure", err)
 	}
-	if text != "" {
-		t.Fatalf("text = %q, want empty terminal tool result", text)
+	if got := atomic.LoadInt32(&provider.calls); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
 	}
-	if usage.InputTokens != 12 || usage.OutputTokens != 4 {
-		t.Fatalf("usage = %+v", usage)
+	if len(provider.requests) != 1 || provider.requests[0].Provider != "fireworks" || provider.requests[0].Model != "accounts/fireworks/models/deepseek-v4-pro" {
+		t.Fatalf("requests = %+v, want only the configured provider/model", provider.requests)
 	}
-	if got := atomic.LoadInt32(&provider.calls); got != 3 {
-		t.Fatalf("provider calls = %d, want 3", got)
-	}
-	if !reflect.DeepEqual(fallbackReasons, []string{"provider_precondition_fallback", "provider_availability_fallback"}) {
-		t.Fatalf("fallback reasons = %+v", fallbackReasons)
-	}
-	if !reflect.DeepEqual(fallbackModels, []string{"deepseek/deepseek-v4-pro", "chatgpt/gpt-5.5"}) {
-		t.Fatalf("fallback models = %+v", fallbackModels)
-	}
-	if len(provider.requests) != 3 {
-		t.Fatalf("requests = %d, want 3", len(provider.requests))
-	}
-	wantModels := []string{
-		"accounts/fireworks/models/deepseek-v4-pro",
-		"deepseek-v4-pro",
-		"gpt-5.5",
-	}
-	for i, req := range provider.requests {
-		if req.ToolChoice != "" {
-			t.Fatalf("request %d tool choice = %q, want empty", i, req.ToolChoice)
-		}
-		if req.Model != wantModels[i] {
-			t.Fatalf("request %d model = %q, want %q", i, req.Model, wantModels[i])
-		}
-	}
-}
-
-func TestRunToolLoopTriesProviderPreconditionFallbackWithoutToolChoice(t *testing.T) {
-	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 1}
-	registry := NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name:        "patch_texture",
-		Description: "Edit the Texture document.",
-		Parameters:  map[string]any{"type": "object"},
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"ok","revision_id":"rev-1"}`, nil
-		},
-	}); err != nil {
-		t.Fatalf("register patch_texture: %v", err)
-	}
-	var fallbackModels []string
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		if kind != types.EventRunRetry || phase != "provider_model_fallback" {
-			return
-		}
-		var decoded map[string]any
-		if err := json.Unmarshal(payload, &decoded); err != nil {
-			t.Fatalf("decode fallback payload: %v", err)
-		}
-		fallbackModels = append(fallbackModels, fmt.Sprintf("%s/%s", decoded["to_provider"], decoded["to_model"]))
-	}
-
-	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"lease a worker"}]}`)},
-		"You are Super.",
-		0,
-		emit,
-		nil,
-		WithToolLoopLLMConfig(provideriface.LLMSelection{
-			Provider:        "fireworks",
-			Model:           "accounts/fireworks/models/deepseek-v4-pro",
-			ReasoningEffort: "medium",
-		}),
-		WithProviderPreconditionFallbacks(provideriface.LLMSelection{
-			Provider:        "deepseek",
-			Model:           "deepseek-v4-pro",
-			ReasoningEffort: "medium",
-			Source:          "test_deepseek_fallback",
-		}),
-		WithTerminalToolSuccesses("patch_texture"))
-	if err != nil {
-		t.Fatalf("run tool loop: %v", err)
-	}
-	if got := atomic.LoadInt32(&provider.calls); got != 2 {
-		t.Fatalf("provider calls = %d, want 2", got)
-	}
-	if !reflect.DeepEqual(fallbackModels, []string{"deepseek/deepseek-v4-pro"}) {
-		t.Fatalf("fallback models = %+v", fallbackModels)
-	}
-	if len(provider.requests) != 2 {
-		t.Fatalf("requests = %d, want 2", len(provider.requests))
-	}
-	for i, req := range provider.requests {
-		if req.ToolChoice != "" {
-			t.Fatalf("request %d tool choice = %q, want empty", i, req.ToolChoice)
-		}
-	}
-	if provider.requests[1].Provider != "deepseek" || provider.requests[1].Model != "deepseek-v4-pro" {
-		t.Fatalf("fallback request provider/model = %q/%q", provider.requests[1].Provider, provider.requests[1].Model)
+	if fallbackSeen {
+		t.Fatal("provider_model_fallback retry must not be emitted")
 	}
 }
 

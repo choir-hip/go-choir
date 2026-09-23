@@ -16,14 +16,11 @@ import (
 )
 
 // RegisterAssignedCoSuperTools adds only the exact persistent-Super assignment
-// path. Generic lifecycle Super activation remains refused in StartCoagentRun.
+// cancellation path. The assign_co_super opener is deleted: document-channel
+// casts open assignments directly. Generic lifecycle Super activation remains
+// refused in StartCoagentRun.
 func RegisterAssignedCoSuperTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
-	for _, tool := range []toolregistry.Tool{newAssignCoSuperTool(rt), newCancelAssignedCoSuperTool(rt)} {
-		if err := registry.Register(tool); err != nil {
-			return err
-		}
-	}
-	return nil
+	return registry.Register(newCancelAssignedCoSuperTool(rt))
 }
 
 func RegisterPersistentSuperReportTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
@@ -37,51 +34,6 @@ func requirePersistentSuperExecution(ctx context.Context) (*types.RunRecord, err
 		return nil, fmt.Errorf("assigned CoSuper tools require the exact non-lifecycle persistent Super")
 	}
 	return rec, nil
-}
-
-func newAssignCoSuperTool(rt *Runtime) toolregistry.Tool {
-	type args struct {
-		Objective            string                      `json:"objective"`
-		Kind                 types.CoSuperAssignmentKind `json:"kind"`
-		ParentWorkItemID     string                      `json:"parent_work_item_id"`
-		CandidateID          string                      `json:"candidate_id,omitempty"`
-		ModelPolicyOverlayID string                      `json:"model_policy_overlay_id,omitempty"`
-	}
-	return toolregistry.Tool{
-		Name: "assign_co_super", Description: "Open one exact durable assignment and, only after its bind receipt commits, wake a writable networkless capsule CoSuper.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"objective":               map[string]any{"type": "string"},
-			"kind":                    map[string]any{"type": "string", "enum": []string{"implementation", "verification"}},
-			"parent_work_item_id":     map[string]any{"type": "string"},
-			"candidate_id":            map[string]any{"type": "string", "description": "Required only for verification; exact candidate returned by a completed implementation assignment."},
-			"model_policy_overlay_id": map[string]any{"type": "string", "description": "Optional owner-visible model policy overlay id from System/model-policy-overlays/<id>.toml; selects the assigned run's provider/model."},
-		}, []string{"objective", "kind", "parent_work_item_id"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			parent, err := requirePersistentSuperExecution(ctx)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			execution := toolregistry.ExecutionContextFrom(ctx)
-			started, err := rt.startAssignedCoSuper(ctx, parent.RunID, parent.OwnerID, StartAssignedCoSuperRequest{
-				Objective: input.Objective, Kind: input.Kind, CandidateID: input.CandidateID,
-				ParentWorkItemID: input.ParentWorkItemID, ToolCallID: execution.ToolCallID,
-				ModelPolicyOverlayID: input.ModelPolicyOverlayID,
-			})
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(map[string]any{
-				"assignment_id": started.Assignment.AssignmentID, "attempt": started.Assignment.Binding.Attempt,
-				"assigned_work_item_id": started.Assignment.Binding.AssignedWorkItemID,
-				"loop_id":               started.Run.RunID, "kind": started.Assignment.Binding.Kind,
-				"disposition": started.Assignment.Disposition, "replay": started.Replay,
-			})
-		},
-	}
 }
 
 func newCancelAssignedCoSuperTool(rt *Runtime) toolregistry.Tool {

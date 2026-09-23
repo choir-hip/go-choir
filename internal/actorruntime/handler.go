@@ -269,6 +269,36 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		log.Printf("actorruntime: persistent Super live occurrence bound run=%s", rec.RunID)
 		return nil, nil
 	}
+	if strings.HasPrefix(agentID, agentprofile.CoSuper+":") {
+		// Engineering desk occurrence: the document-channel cast. The desk
+		// agent never runs; the occurrence's revision opens the assignment
+		// directly and the assignment's own activation executes the work.
+		// Non-occurrence content (worker updates to assigned engineering
+		// agents) falls through to the generic resume path.
+		occurrence, occurrenceErr := agentcore.DecodeTextureActorOccurrence(u.Content)
+		if occurrenceErr == nil && occurrence.Kind == agentcore.TextureActorOccurrenceDocumentRevision {
+			if occurrence.TargetAgentID != agentID || occurrence.OwnerID != ownerID || occurrence.ComputerID != computerID {
+				return nil, nil // durable malformed/foreign engineering occurrence
+			}
+			if strings.TrimSpace(u.TrajectoryID) != "" && strings.TrimSpace(u.TrajectoryID) != occurrence.TrajectoryID {
+				return nil, nil // durable foreign trajectory envelope
+			}
+			if strings.TrimSpace(u.FromAgentID) != "" && strings.TrimSpace(u.FromAgentID) != "owner:"+occurrence.OwnerID {
+				return nil, nil // durable foreign source envelope
+			}
+			docID := strings.TrimSpace(strings.TrimPrefix(agentID, agentprofile.CoSuper+":"))
+			if docID == "" || docID != occurrence.DocumentID {
+				return nil, nil
+			}
+			if _, reconcileErr := h.rt.ReconcileEngineeringRevisionCast(ctx, ownerID, docID, occurrence.HeadRevisionID); reconcileErr != nil {
+				if errors.Is(reconcileErr, store.ErrNotFound) {
+					return nil, nil // durable foreign document/revision envelope
+				}
+				return nil, fmt.Errorf("%w: actorruntime: reconcile engineering revision cast: %v", actor.ErrDeferUnprocessed, reconcileErr)
+			}
+			return nil, nil
+		}
+	}
 	if strings.HasPrefix(agentID, agentprofile.Texture+":") {
 		if h.textureOwner == nil {
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))

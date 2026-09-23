@@ -82,7 +82,7 @@ type CoSuperAssignmentBinding struct {
 func (b CoSuperAssignmentBinding) Validate() error {
 	for name, value := range map[string]string{
 		"owner_id": b.OwnerID, "computer_id": b.ComputerID, "trajectory_id": b.TrajectoryID,
-		"parent_agent_id": b.ParentAgentID, "parent_loop_id": b.ParentRunID,
+		"parent_agent_id":    b.ParentAgentID,
 		"parent_decision_id": b.ParentDecisionID, "parent_control_id": b.ParentControlID,
 		"parent_work_item_id": b.ParentWorkItemID, "assigned_work_item_id": b.AssignedWorkItemID,
 		"assigned_agent_id": b.AssignedAgentID,
@@ -94,7 +94,14 @@ func (b CoSuperAssignmentBinding) Validate() error {
 	if !strings.HasPrefix(b.ParentDecisionID, "decision:sha256:") || !ValidSHA256Digest(strings.TrimPrefix(b.ParentDecisionID, "decision:")) {
 		return fmt.Errorf("co-super assignment: parent_decision_id must be runtime-derived")
 	}
-	if b.ParentAgentID != agentprofile.Super+":"+b.OwnerID {
+	if b.ParentRunID == "" {
+		// Document-parent binding: the owner-authored revision on the bound
+		// document is the parent authority; there is no parent run. The parent
+		// agent is the engineering desk agent bound to that document.
+		if !strings.HasPrefix(b.ParentAgentID, agentprofile.CoSuper+":") {
+			return fmt.Errorf("co-super assignment: document-parent binding requires an engineering desk parent agent")
+		}
+	} else if b.ParentAgentID != agentprofile.Super+":"+b.OwnerID {
 		return fmt.Errorf("co-super assignment: parent_agent_id must be exact persistent management:<owner>")
 	}
 	if b.AssignedAgentID == b.ParentAgentID || b.AssignedWorkItemID == b.ParentWorkItemID {

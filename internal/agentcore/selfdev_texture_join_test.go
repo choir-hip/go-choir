@@ -2,259 +2,109 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestSelfDevelopmentTextureCallerStoredRecordIsProvenanceNotResidency(t *testing.T) {
+// The self-development join is an engineering-bound lifecycle document: the
+// operation's directive commits as the initial owner-authored revision, and
+// the revision occurrence is the cast the engineering desk consumes.
+func TestSelfDevelopmentEngineeringDocJoinCommitsDirectiveRevision(t *testing.T) {
 	ctx := context.Background()
 	runtime, productStore := testRuntime(t)
-	ownerID := "owner"
-	computerID := "computer-selfdev-caller-reactivate"
+	ownerID := "owner-selfdev-join"
+	computerID := "computer-selfdev-join"
 	runtime.cfg.ComputerID = computerID
 	operation := selfdev.Operation{
-		OperationID:       "selfdev-caller-reactivate",
+		OperationID:       "selfdev-op-join-test",
 		ComputerID:        computerID,
-		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("b", 64),
+		TrajectoryID:      "trajectory-selfdev-join",
+		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
 	}
-	if err := runtime.startSelfDevelopmentPersistentSuper(ctx, operation, ownerID, "caller"); err != nil {
-		t.Fatal(err)
-	}
-	docID, _, textureWorkID, trajectoryID, _, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
-	textureAgentID := agentprofile.Texture + ":" + docID
-	deterministicRunID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
-		"choir:texture:self-development", ownerID, computerID, trajectoryID, "texture-run",
-	}, ":"))).String()
-
-	caller, err := productStore.GetLifecycleRun(ctx, ownerID, computerID, deterministicRunID)
-	if err != nil || !caller.State.Active() {
-		t.Fatalf("deterministic caller after start: %+v err=%v", caller, err)
-	}
-
-	// Simulate boot passivation of the deterministic caller.
-	passivated := caller
-	passivated.State = types.RunPassivated
-	passivated.UpdatedAt = time.Now().UTC()
-	passivated.FinishedAt = nil
-	passivateReq := types.ReplaceLifecycleActivationRequest{
-		OwnerID: ownerID, ComputerID: computerID,
-		CommandID:    "lifecycle-passivate-caller-test:" + deterministicRunID,
-		TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: passivated,
-	}
-	passivateReq.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(passivateReq)
-	if _, err := productStore.ReplaceLifecycleActivation(ctx, passivateReq); err != nil {
+	directive := "Author classic solitaire game engine"
+	if err := runtime.ensureSelfDevelopmentEngineeringDoc(ctx, operation, ownerID, directive); err != nil {
 		t.Fatal(err)
 	}
 
-	// A successor Texture activation then owns the agent slot.
-	successor := types.RunRecord{
-		RunID: "run-successor-texture", AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID,
-		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, ChannelID: docID,
-		TrajectoryID: trajectoryID, State: types.RunRunning,
-		Prompt: "Supervise self-development on this computer.",
-		Metadata: map[string]any{
-			"lifecycle_work_item_id": textureWorkID,
-			"work_item_ids":          []string{textureWorkID},
-			runMetadataAgentProfile:  agentprofile.Texture,
-			runMetadataAgentRole:     agentprofile.Texture,
-		},
-		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
-	}
-	successorReq := types.ReplaceLifecycleActivationRequest{
-		OwnerID: ownerID, ComputerID: computerID,
-		CommandID: "project-successor-test", TrajectoryID: trajectoryID, AgentID: textureAgentID, Run: successor,
-	}
-	successorReq.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(successorReq)
-	if _, err := productStore.ReplaceLifecycleActivation(ctx, successorReq); err != nil {
-		t.Fatal(err)
-	}
+	docID, revisionID, workID := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
+	deskAgentID := engineeringDeskAgentID(docID)
 
-	// The stored caller is provenance, not residency: the join must return it
-	// unchanged without re-projecting it to running, and a resident successor
-	// that owns the agent slot must never be released to resurrect the caller.
-	// Execution admission belongs to the real revision run the wake reconciles.
-	got, err := runtime.ensureSelfDevelopmentTextureCaller(ctx, ownerID, computerID, trajectoryID, textureAgentID, textureWorkID, docID)
+	doc, err := productStore.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	if err != nil {
+		t.Fatalf("engineering document missing: %v", err)
+	}
+	if doc.TrajectoryID != operation.TrajectoryID {
+		t.Fatalf("document trajectory %q != operation trajectory %q", doc.TrajectoryID, operation.TrajectoryID)
+	}
+	snapshot, err := productStore.GetLifecycleSnapshot(ctx, ownerID, computerID, operation.TrajectoryID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.RunID != deterministicRunID || got.State != types.RunPassivated {
-		t.Fatalf("caller record mutated: %+v want unchanged %s", got, deterministicRunID)
+	head := snapshot.HeadRevision
+	if head.RevisionID != revisionID || head.AuthorKind != types.AuthorUser {
+		t.Fatalf("head revision is not the committed owner directive: %+v", head)
 	}
-	after, err := productStore.GetLifecycleRun(ctx, ownerID, computerID, deterministicRunID)
-	if err != nil || after.State != types.RunPassivated {
-		t.Fatalf("stored caller re-projected: %+v err=%v", after, err)
+	if head.Content != directive {
+		t.Fatalf("directive revision content %q != %q", head.Content, directive)
 	}
-	if !after.UpdatedAt.Equal(passivated.UpdatedAt) {
-		t.Fatalf("stored caller UpdatedAt moved: %v -> %v", passivated.UpdatedAt, after.UpdatedAt)
+	meta := map[string]any{}
+	if err := json.Unmarshal(head.Metadata, &meta); err != nil {
+		t.Fatal(err)
 	}
-	successorStored, err := productStore.GetLifecycleRun(ctx, ownerID, computerID, "run-successor-texture")
-	if err != nil || successorStored.State != types.RunRunning {
-		t.Fatalf("resident successor released: %+v err=%v", successorStored, err)
+	if meta["owner_prompt"] != directive || meta["self_development_operation_id"] != operation.OperationID {
+		t.Fatalf("directive revision metadata missing owner_prompt/operation join: %#v", meta)
+	}
+	var deskWork *types.WorkItemRecord
+	for i := range snapshot.WorkItems {
+		if snapshot.WorkItems[i].WorkItemID == workID {
+			copy := snapshot.WorkItems[i]
+			deskWork = &copy
+		}
+	}
+	if deskWork == nil || deskWork.AssignedAgentID != deskAgentID || deskWork.AuthorityProfile != agentprofile.CoSuper {
+		t.Fatalf("engineering desk work item missing or misbound: %+v", deskWork)
+	}
+	agent, err := productStore.GetAgentByScope(ctx, ownerID, computerID, deskAgentID)
+	if err != nil || agent.Profile != agentprofile.CoSuper || agent.ChannelID != docID {
+		t.Fatalf("engineering desk agent missing or misbound: %+v err=%v", agent, err)
 	}
 }
 
-func TestPersistentSuperReconcileMintsTextureRewakeAfterTerminalSelfDevelopmentSuper(t *testing.T) {
+// The join is idempotent: a replayed start replays the committed lifecycle
+// rather than minting a second document or revision.
+func TestSelfDevelopmentEngineeringDocJoinReplaysCommittedStart(t *testing.T) {
 	ctx := context.Background()
 	runtime, productStore := testRuntime(t)
-	ownerID := "owner-selfdev-rewake"
-	computerID := "computer-selfdev-rewake"
+	ownerID := "owner-selfdev-replay"
+	computerID := "computer-selfdev-replay"
 	runtime.cfg.ComputerID = computerID
 	operation := selfdev.Operation{
-		OperationID:       "selfdev-op-rewake-test",
+		OperationID:       "selfdev-op-replay-test",
 		ComputerID:        computerID,
-		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
+		TrajectoryID:      "trajectory-selfdev-replay",
+		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("d", 64),
 	}
-	originalPrompt := "Author classic solitaire game engine"
-	if err := runtime.startSelfDevelopmentPersistentSuper(ctx, operation, ownerID, originalPrompt); err != nil {
+	if err := runtime.ensureSelfDevelopmentEngineeringDoc(ctx, operation, ownerID, "first directive"); err != nil {
 		t.Fatal(err)
 	}
-
-	superAgentID := persistentSuperAgentID(ownerID)
-	firstSuper, err := productStore.GetLatestRunByAgent(ctx, ownerID, superAgentID)
-	if err != nil || !firstSuper.State.Active() {
-		t.Fatalf("first Super active state: %+v err=%v", firstSuper, err)
+	if err := runtime.ensureSelfDevelopmentEngineeringDoc(ctx, operation, ownerID, "first directive"); err != nil {
+		t.Fatalf("replayed join failed: %v", err)
 	}
-	if metadataStringValue(firstSuper.Metadata, "self_development_operation_id") != operation.OperationID {
-		t.Fatalf("first Super missing operation_id: %+v", firstSuper.Metadata)
-	}
-
-	// Simulate first Super failure (e.g. 200 iterations or CoSuper cancel).
-	_ = runtime.CancelRun(ctx, firstSuper.RunID, ownerID)
-	finished := time.Now().UTC()
-	firstSuper.State = types.RunFailed
-	firstSuper.Error = "tool loop: exceeded 200 iterations without end_turn"
-	firstSuper.UpdatedAt = finished
-	firstSuper.FinishedAt = &finished
-	if err := productStore.UpdateRun(ctx, firstSuper); err != nil {
-		t.Fatal(err)
-	}
-	if err := runtime.unbindSelfDevelopmentSuper(ctx, &firstSuper); err != nil {
-		t.Fatal(err)
-	}
-
-	// Terminal event wakes Texture with an owner revision on the trajectory, never mints Super directly.
-	rewakeErr := runtime.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID)
-	if rewakeErr != nil {
-		t.Fatalf("rewake Texture error: %v", rewakeErr)
-	}
-	// Before Texture turn commits a new execution_request, reconcile mints ZERO Super:
-	noSuper, err := runtime.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
+	docID, revisionID, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
+	snapshot, err := productStore.GetLifecycleSnapshot(ctx, ownerID, computerID, operation.TrajectoryID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if noSuper != nil {
-		t.Fatalf("expected nil Super before Texture turn commits execution_request, got: %+v", noSuper)
+	if snapshot.HeadRevision.RevisionID != revisionID {
+		t.Fatalf("replayed join advanced the head: %+v", snapshot.HeadRevision)
 	}
-
-	// Texture turn commits a NEW typed execution_request in response to the instruction:
-	docID, _, textureWorkID, trajectoryID, superWorkID, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
-	textureAgentID := agentprofile.Texture + ":" + docID
-	snapshot, err := productStore.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	textureAgent, err := productStore.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	packet, err := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
-		SchemaVersion: types.CoagentSourcePacketSchemaV1,
-		Kind:          "execution_request",
-		Summary:       "Continue self-development operation",
-		Sources: []types.CoagentPacketSource{{
-			SourceID: "src-operation",
-			Kind:     sourcecontract.SourceKindCapsuleBundle,
-			Target:   types.CoagentPacketSourceTarget{URI: "operation:" + operation.OperationID},
-		}},
-		Actions: []types.CoagentPacketAction{{
-			Type:      "run_command",
-			Objective: originalPrompt,
-			Safety: types.CoagentPacketActionSafety{
-				MutationClass: "green",
-				Network:       "forbidden",
-				FileMutation:  "forbidden",
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	content := BuildTextureLifecycleControlContent(packet, superAgentID, superWorkID)
-	payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ownerHead, _, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot)
-	if !ownerHeadPending || ownerHead.RevisionID != snapshot.HeadRevision.RevisionID {
-		t.Fatalf("expected pending owner revision for Texture, got head=%+v pending=%v", ownerHead, ownerHeadPending)
-	}
-	turn := types.ApplyTextureTurnRequest{
-		OwnerID:                        ownerID,
-		ComputerID:                     computerID,
-		CommandID:                      "turn:selfdev-texture-rewake:" + operation.OperationID,
-		DocumentID:                     docID,
-		TrajectoryID:                   trajectoryID,
-		CallerAgentID:                  textureAgentID,
-		CallerRunID:                    runtime.selfDevelopmentCallerRunID(ownerID, computerID, trajectoryID),
-		ExpectedLifecycleVersion:       snapshot.Trajectory.LifecycleVersion,
-		ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
-		ExpectedHeadRevisionID:         snapshot.HeadRevision.RevisionID,
-		CallerWorkItemID:               textureWorkID,
-		CallerWorkDisposition:          types.WorkItemOpen,
-		Outcome:                        types.TextureTurnWait,
-		Reason:                         "continue after terminal Super",
-		Controls: []types.TextureTurnControl{{
-			ControlID:        "control-rewake-" + operation.OperationID,
-			TargetAgentID:    superAgentID,
-			TargetWorkItemID: superWorkID,
-			Packet:           packet,
-			Content:          content,
-			PayloadDigest:    payloadDigest,
-		}},
-	}
-	turn.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := productStore.ApplyTextureTurn(ctx, turn); err != nil {
-		t.Fatal(err)
-	}
-
-	// Now the live trigger wakes Super and mints exactly one replacement Super:
-	rewokeSuper, err := runtime.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
-	if err != nil {
-		t.Fatalf("reconcile after terminal Super: %v", err)
-	}
-	if rewokeSuper == nil {
-		t.Fatal("expected replacement Super from Texture rewake, got nil")
-	}
-	if rewokeSuper.RunID == firstSuper.RunID {
-		t.Fatalf("expected new Super run, got same run %s", firstSuper.RunID)
-	}
-	if metadataStringValue(rewokeSuper.Metadata, "request_source") != "lifecycle_texture_control" {
-		t.Fatalf("rewoke Super request_source=%q", metadataStringValue(rewokeSuper.Metadata, "request_source"))
-	}
-	if metadataStringValue(rewokeSuper.Metadata, "self_development_operation_id") != operation.OperationID {
-		t.Fatalf("rewoke Super missing operation_id: %+v", rewokeSuper.Metadata)
-	}
-	if len(metadataStringSlice(rewokeSuper.Metadata[runMetadataProducerReportIDs])) > 0 {
-		t.Fatalf("rewoke Super should not carry producer_report_ids: %+v", rewokeSuper.Metadata)
-	}
-
-	// Calling reconcile again while the rewoke Super is active returns the resident run immediately.
-	resident, err := runtime.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resident.RunID != rewokeSuper.RunID {
-		t.Fatalf("resident run %s != rewoke run %s", resident.RunID, rewokeSuper.RunID)
+	doc, err := productStore.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	if err != nil || doc.CurrentRevisionID != revisionID {
+		t.Fatalf("replayed join mutated the document: %+v err=%v", doc, err)
 	}
 }

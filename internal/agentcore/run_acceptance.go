@@ -171,6 +171,21 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		builder.addCheckpoint("super_direction_opened", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
 			"command_id": payloadString(item.output, "command_id"), "receipt_kind": "apply_texture_turn",
 		})
+	} else if rt != nil && rt.store != nil {
+		// Document-channel cast: the engineering desk's direction opener is
+		// the committed assignment the owner revision admitted, not an
+		// apply_texture_turn tool result.
+		if assignments, listErr := rt.store.ListCoSuperAssignments(ctx, root.OwnerID, runsComputerID(trajectoryRuns), trajectoryIDFromRuns(trajectoryRuns)); listErr == nil {
+			for _, assignment := range assignments {
+				if assignment.Disposition == types.CoSuperAssignmentBound || assignment.Disposition.Terminal() {
+					builder.addCheckpoint("super_direction_opened", "passed", assignment.CreatedAt, 0, nil, map[string]any{
+						"assignment_id": assignment.AssignmentID, "receipt_kind": "cosuper_assignment",
+						"disposition": assignment.Disposition,
+					})
+					break
+				}
+			}
+		}
 	}
 
 	addAcceptanceDurableAgentCapsuleCheckpoints(ctx, rt, &builder, trajectoryRuns, events)
@@ -635,8 +650,7 @@ func addAcceptanceDurableAgentCapsuleCheckpoints(ctx context.Context, rt *Runtim
 	}
 	// Freeze/verify evidence is canonical operation state, not tool names:
 	// the reducer commits the selfdev operation transition, and acceptance
-	// reads the operation row. A completed implementation run without a
-	// frozen bundle fails loudly.
+	// reads the operation row.
 	var operation *selfdev.Operation
 	if rt != nil && rt.selfdevOperations != nil {
 		if op, err := rt.selfdevOperations.GetByTrajectory(ctx, runsComputerID(runs), trajectoryIDFromRuns(runs)); err == nil {
@@ -648,12 +662,14 @@ func addAcceptanceDurableAgentCapsuleCheckpoints(ctx context.Context, rt *Runtim
 	// awaiting_approval, accepted, applied, failed, rolled_back, degraded)
 	// preserves the freeze fact while the digest is bound. A verify-fail
 	// trajectory keeps its frozen bundle; the checkpoint must not misreport
-	// that history as absence.
+	// that history as absence. Freeze evidence is only expected when a
+	// self-development operation is bound to this trajectory; a
+	// document-channel task without an operation has no bundle to freeze.
 	if operation != nil && operation.BundleDigest != "" {
 		builder.addCheckpoint("capsule_effect_frozen", "passed", time.Time{}, 0, nil, map[string]any{
 			"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest, "state": operation.State,
 		})
-	} else if implRun != nil {
+	} else if operation != nil && implRun != nil {
 		builder.addCheckpoint("capsule_effect_frozen", "failed", time.Time{}, 0, nil, map[string]any{
 			"detail": "completed implementation run without a frozen self-development bundle",
 		})

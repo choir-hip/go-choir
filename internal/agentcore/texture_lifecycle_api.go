@@ -245,8 +245,8 @@ func (rt *Runtime) LatestTextureActorToolLoopBudgetSpend(ctx context.Context, ow
 const TextureActorOccurrenceVersion = "choir:texture-actor-occurrence:v1"
 
 const (
-	TextureActorOccurrenceProducerReport    = "producer_report"
-	TextureActorOccurrenceDocumentRevision  = "document_revision"
+	TextureActorOccurrenceProducerReport   = "producer_report"
+	TextureActorOccurrenceDocumentRevision = "document_revision"
 )
 
 // TextureActorOccurrence is an authenticated pointer to exactly one canonical
@@ -406,24 +406,32 @@ func TextureProducerReportOccurrence(update types.CoagentSourcePacket) (TextureA
 	return o, nil
 }
 
-// TextureDocumentRevisionOccurrence is the owner-input wake: the canonical
+// DocumentRevisionOccurrence is the owner-input wake: the canonical
 // owner-authored revision that advanced the document head is itself the
-// trigger. HeadRevisionID carries the revision identity; RequestID carries the
+// trigger. deskProfile selects the bound desk agent (texture or engineering).
+// HeadRevisionID carries the revision identity; RequestID carries the
 // committing command's request identity when known (empty for boot-derived
 // wakes and legacy content resolution).
-func TextureDocumentRevisionOccurrence(revision types.Revision, requestID string, lifecycleVersion, reducerSeq int64) (TextureActorOccurrence, error) {
+func DocumentRevisionOccurrence(revision types.Revision, deskProfile, requestID string, lifecycleVersion, reducerSeq int64) (TextureActorOccurrence, error) {
 	o := TextureActorOccurrence{
 		Version: TextureActorOccurrenceVersion, Kind: TextureActorOccurrenceDocumentRevision,
 		OwnerID: revision.OwnerID, ComputerID: revision.ComputerID, TrajectoryID: revision.TrajectoryID,
-		DocumentID: revision.DocID, TargetAgentID: "texture:" + strings.TrimSpace(revision.DocID),
+		DocumentID: revision.DocID, TargetAgentID: strings.TrimSpace(deskProfile) + ":" + strings.TrimSpace(revision.DocID),
 		RequestID: strings.TrimSpace(requestID), HeadRevisionID: strings.TrimSpace(revision.RevisionID),
 		LifecycleVersion: lifecycleVersion, ReducerSeq: reducerSeq,
 	}
 	if revision.AuthorKind != types.AuthorUser || o.HeadRevisionID == "" ||
-		o.OwnerID == "" || o.ComputerID == "" || o.TrajectoryID == "" || o.DocumentID == "" {
-		return TextureActorOccurrence{}, fmt.Errorf("texture document revision occurrence: incomplete canonical owner revision")
+		o.OwnerID == "" || o.ComputerID == "" || o.TrajectoryID == "" || o.DocumentID == "" ||
+		(deskProfile != agentprofile.Texture && deskProfile != agentprofile.CoSuper) {
+		return TextureActorOccurrence{}, fmt.Errorf("document revision occurrence: incomplete canonical owner revision")
 	}
 	return o, nil
+}
+
+// TextureDocumentRevisionOccurrence is the texture-desk variant of
+// DocumentRevisionOccurrence.
+func TextureDocumentRevisionOccurrence(revision types.Revision, requestID string, lifecycleVersion, reducerSeq int64) (TextureActorOccurrence, error) {
+	return DocumentRevisionOccurrence(revision, agentprofile.Texture, requestID, lifecycleVersion, reducerSeq)
 }
 
 // TextureRecoveryOccurrence advances actor-log identity using only canonical

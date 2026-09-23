@@ -3,11 +3,13 @@ package agentcore
 import (
 	"context"
 	"fmt"
+	"slices"
+	"testing"
+
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"testing"
 )
 
 type fixedAssignmentHandleResolver struct{ runID, capsuleID, handle string }
@@ -54,14 +56,12 @@ func TestAssignedCoSuperToolOverlayIsExactRunOnly(t *testing.T) {
 	if resolved != opaque {
 		t.Fatal("handle mismatch")
 	}
-	for _, n := range []string{"capsule_exec", "capsule_go_eval", "capsule_read_file", "capsule_write_file", "capsule_list_dir"} {
-		if _, ok := overlay.Lookup(n); !ok {
-			t.Errorf("missing %s", n)
-		}
+	if got, want := registryToolNames(overlay), []string{"capsule_go_eval"}; !slices.Equal(got, want) {
+		t.Errorf("assigned overlay tools = %v, want exact %v", got, want)
 	}
-	for _, n := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "append_computer_event", "materialize_self_development", "create_checkpoint", "propose_effect", "finalize_effect", "update_coagent", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "record_assignment_result"} {
+	for _, n := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "read_file", "glob", "grep", "save_evidence", "verify_model_capability", "append_computer_event", "materialize_self_development", "create_checkpoint", "propose_effect", "finalize_effect", "update_coagent", "commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "record_assignment_result"} {
 		if _, ok := overlay.Lookup(n); ok {
-			t.Errorf("host tool %s", n)
+			t.Errorf("forbidden tool %s", n)
 		}
 	}
 }

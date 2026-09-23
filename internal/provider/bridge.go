@@ -73,18 +73,6 @@ func (b *BridgeProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 			"Direct autoputer mode using Fireworks credentials in the autoputer process.",
 			"Fireworks is selected only when runtime config explicitly selects it.",
 		}
-	case *DeepSeekProvider:
-		policy.DefaultModel = inner.modelID
-		policy.Notes = []string{
-			"Direct autoputer mode using DeepSeek credentials in the autoputer process.",
-			"DeepSeek is selected only when runtime config explicitly selects it.",
-		}
-	case *XiaomiProvider:
-		policy.DefaultModel = inner.modelID
-		policy.Notes = []string{
-			"Direct autoputer mode using Xiaomi MiMo credentials in the autoputer process.",
-			"Xiaomi is selected only when runtime config explicitly selects it.",
-		}
 	case *ChatGPTProvider:
 		policy.DefaultModel = inner.modelID
 		policy.Notes = []string{

@@ -29,11 +29,9 @@ const (
 
 	modelPolicyOverlayRelativeDir = "System/model-policy-overlays"
 
-	defaultChatGPTProvider           = "chatgpt"
-	defaultChatGPTMiniModel          = "gpt-5.6-luna"
-	defaultChatGPTForegroundModel    = "gpt-5.6-luna"
-	defaultTerminalFallbackModel     = "gpt-5.6-luna"
-	defaultTerminalFallbackReasoning = "low"
+	defaultChatGPTProvider        = "chatgpt"
+	defaultChatGPTMiniModel       = "gpt-5.6-luna"
+	defaultChatGPTForegroundModel = "gpt-5.6-luna"
 )
 
 // ManagerConfig supplies the computer-owned policy path and the server-owned
@@ -209,34 +207,11 @@ func RuntimeConfigFallbackSelection(cfg provideriface.Config) provideriface.LLMS
 	return provideriface.LLMSelection{Provider: provider, Model: model, ReasoningEffort: reasoning, Source: "runtime_config"}
 }
 
-// TerminalProviderFallbackSelection returns the terminal provider fallback.
-func TerminalProviderFallbackSelection() provideriface.LLMSelection {
-	return provideriface.LLMSelection{
-		Provider:        defaultChatGPTProvider,
-		Model:           defaultTerminalFallbackModel,
-		ReasoningEffort: defaultTerminalFallbackReasoning,
-		Source:          "provider_precondition_terminal_fallback",
-	}
-}
-
-// ProviderPreconditionFallbackSelections returns the terminal platform
-// fallback for a selection that failed provider preconditions. There is no
-// silent cross-provider substitution: the owner (2026-09-12, residue R9)
-// ratified that entitlement may only admit or refuse, and the unfunded
-// deepseek/xiaomi swap ladder is deleted. A failing selection recovers on the
-// terminal platform pair only, and every receipt names the source.
-func ProviderPreconditionFallbackSelections(selection provideriface.LLMSelection) []provideriface.LLMSelection {
-	terminalFallback := TerminalProviderFallbackSelection()
-	if strings.TrimSpace(selection.Model) == "" {
-		// Even without a known primary model, provide the terminal platform
-		// fallback so that provider-availability errors (e.g. 402) from the
-		// gateway default selection can still recover.
-		if strings.TrimSpace(terminalFallback.Provider) != "" && strings.TrimSpace(terminalFallback.Model) != "" {
-			return []provideriface.LLMSelection{terminalFallback}
-		}
-		return nil
-	}
-	return appendProviderPreconditionPlatformFallback(nil, selection, terminalFallback)
+// ProviderPreconditionFallbackSelections deliberately returns no alternate
+// selection. A provider/model precondition failure must surface from the
+// originally selected provider rather than silently changing authority.
+func ProviderPreconditionFallbackSelections(_ provideriface.LLMSelection) []provideriface.LLMSelection {
+	return nil
 }
 
 func (m *Manager) providerConfig() provideriface.Config {
@@ -379,8 +354,8 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 			agentprofile.Texture:    chatGPTWire,
 			agentprofile.Processor:  chatGPTWire,
 			agentprofile.Reconciler: chatGPTWire,
-			VerifierRole:            {Provider: defaultChatGPTProvider, Model: defaultTerminalFallbackModel, Source: "platform_fallback"},
-			MultimodalVerifierRole:  {Provider: defaultChatGPTProvider, Model: defaultTerminalFallbackModel, Source: "platform_fallback"},
+			VerifierRole:            chatGPTMini,
+			MultimodalVerifierRole:  chatGPTMini,
 		},
 		Source: "platform_fallback",
 	}
@@ -615,31 +590,4 @@ func metadataString(metadata map[string]any, key string) string {
 		return strings.TrimSpace(stringer.String())
 	}
 	return ""
-}
-
-
-func appendProviderPreconditionPlatformFallback(fallbacks []provideriface.LLMSelection, active, platformFallback provideriface.LLMSelection) []provideriface.LLMSelection {
-	provider := strings.TrimSpace(platformFallback.Provider)
-	model := strings.TrimSpace(platformFallback.Model)
-	if provider == "" || model == "" {
-		return fallbacks
-	}
-	source := strings.TrimSpace(platformFallback.Source)
-	if source == "" {
-		source = "provider_precondition_platform_fallback"
-	}
-	candidate := provideriface.LLMSelection{Provider: provider, Model: model, ReasoningEffort: strings.TrimSpace(platformFallback.ReasoningEffort), MaxTokens: platformFallback.MaxTokens, Source: source}
-	if sameProviderModelSelection(active, candidate) {
-		return fallbacks
-	}
-	for _, fallback := range fallbacks {
-		if sameProviderModelSelection(fallback, candidate) {
-			return fallbacks
-		}
-	}
-	return append(fallbacks, candidate)
-}
-
-func sameProviderModelSelection(a, b provideriface.LLMSelection) bool {
-	return strings.TrimSpace(a.Provider) == strings.TrimSpace(b.Provider) && strings.TrimSpace(a.Model) == strings.TrimSpace(b.Model)
 }

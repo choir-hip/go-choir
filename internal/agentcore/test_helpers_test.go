@@ -371,6 +371,19 @@ func setTestDispatch(rt *Runtime, s *store.Store) {
 		case "coagent_result":
 			// Synchronous: the boot sweep needs the reconcile to
 			// complete before the test checks the result.
+			if strings.HasPrefix(toAgentID, agentprofile.CoSuper+":") {
+				// Engineering desk occurrence: decode the revision cast and
+				// open the assignment directly, mirroring the actor handler.
+				// Non-occurrence content falls through to the generic wake.
+				if occurrence, occErr := DecodeTextureActorOccurrence(content); occErr == nil &&
+					occurrence.Kind == TextureActorOccurrenceDocumentRevision {
+					docID := strings.TrimSpace(strings.TrimPrefix(toAgentID, agentprofile.CoSuper+":"))
+					if _, err := rt.ReconcileEngineeringRevisionCast(ctx, ownerID, docID, occurrence.HeadRevisionID); err != nil {
+						log.Printf("test dispatch: reconcile engineering cast for %s: %v", toAgentID, err)
+					}
+					return nil
+				}
+			}
 			agent, err := s.GetAgentByScope(ctx, ownerID, computerID, toAgentID)
 			if err != nil {
 				return nil // agent not found — nothing to wake

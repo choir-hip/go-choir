@@ -5,7 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
-	"fmt"
+
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"net/http"
 	"net/http/httptest"
@@ -23,7 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -620,9 +620,11 @@ func TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode(t *testing
 	if err != nil || !found || operation.PromptArtifactRef != started.OutputArtifactRefs[0] || operation.State != selfdev.StateExecuting {
 		t.Fatalf("recovered operation=%+v found=%v err=%v", operation, found, err)
 	}
-	runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operation.OperationID, 2)
-	if err != nil || len(runs) != 1 {
-		t.Fatalf("recovered operation runs=%d err=%v", len(runs), err)
+	// The recovered operation's cast is the engineering-bound document, not a
+	// mediating run.
+	docID, _, _ := selfDevelopmentTextureJoinIDs("owner", computerID, operation.OperationID)
+	if _, err := productStore.GetLifecycleDocument(ctx, "owner", computerID, docID); err != nil {
+		t.Fatalf("recovered operation engineering document missing: %v", err)
 	}
 }
 func TestConcurrentExactRetriesRepairOneRequestedOperationRun(t *testing.T) {
@@ -673,22 +675,24 @@ func TestConcurrentExactRetriesRepairOneRequestedOperationRun(t *testing.T) {
 	if err != nil || operation.State != selfdev.StateExecuting {
 		t.Fatalf("repaired operation=%+v err=%v", operation, err)
 	}
-	runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2)
-	if err != nil || len(runs) != 1 {
-		t.Fatalf("operation-bound runs=%d err=%v", len(runs), err)
+	// The repaired operation's cast is the engineering-bound document: one
+	// deterministic doc, one directive head revision, no mediating run.
+	docID, revisionID, _ := selfDevelopmentTextureJoinIDs("owner", computerID, operationID)
+	doc, err := productStore.GetLifecycleDocument(ctx, "owner", computerID, docID)
+	if err != nil || doc.CurrentRevisionID != revisionID {
+		t.Fatalf("repaired operation engineering document: %+v err=%v", doc, err)
 	}
-	if runs[0].AgentID != persistentSuperAgentID("owner") || runs[0].TrajectoryID != "" ||
-		metadataStringValue(runs[0].Metadata, runMetadataTrajectoryID) != "" {
-		t.Fatalf("self-development Super was not the non-lifecycle persistent Super: %+v", runs[0])
+	if runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2); err != nil || len(runs) != 0 {
+		t.Fatalf("repaired operation minted a mediating run: %+v err=%v", runs, err)
 	}
 }
 
-func TestSelfDevelopmentStartRevivesTerminalPersistentSuper(t *testing.T) {
+func TestSelfDevelopmentStartCommitsEngineeringDocCast(t *testing.T) {
 	ctx := context.Background()
 	runtime, productStore := testRuntime(t)
-	computerID := "computer-selfdev-revive"
-	idempotencyKey := "selfdev-revive"
-	prompt := "revive persistent Super"
+	computerID := "computer-selfdev-doc-cast"
+	idempotencyKey := "selfdev-doc-cast"
+	prompt := "author a solitaire engine"
 	runtime.cfg.ComputerID = computerID
 	operations, err := selfdev.NewStore(productStore, productStore)
 	if err != nil {
@@ -699,26 +703,10 @@ func TestSelfDevelopmentStartRevivesTerminalPersistentSuper(t *testing.T) {
 	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey))
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	operationID := "selfdev-" + identityDigest[:32]
+	trajectoryID := "trajectory-" + identityDigest[32:]
 	if _, err := productStore.DB().ExecContext(ctx, `INSERT INTO self_development_operations (operation_id,computer_id,idempotency_key,request_commitment,trajectory_id,base_head,prompt_artifact_ref,verifier_refs_json,desired_head,effective_head,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'[]',?,?,?, ?,?)`,
-		operationID, computerID, idempotencyKey, requestCommitment, "trajectory-"+identityDigest[32:], strings.Repeat("a", 64),
+		operationID, computerID, idempotencyKey, requestCommitment, trajectoryID, strings.Repeat("a", 64),
 		"artifact:sha256:"+strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("c", 64), selfdev.StateExecuting, now, now); err != nil {
-		t.Fatal(err)
-	}
-	rec, err := runtime.createRunWithMetadata(ctx, prompt, "owner", map[string]any{
-		runMetadataAgentProfile:         agentprofile.Super,
-		runMetadataAgentRole:            agentprofile.Super,
-		"request_source":                "self_development_operation",
-		"self_development_operation_id": operationID,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec.State = types.RunCompleted
-	rec.Result = "blocked"
-	rec.TrajectoryID = "trajectory-" + identityDigest[32:]
-	rec.Metadata = cloneMetadata(rec.Metadata)
-	rec.Metadata[runMetadataTrajectoryID] = rec.TrajectoryID
-	if err := productStore.UpdateRun(ctx, *rec); err != nil {
 		t.Fatal(err)
 	}
 	handler := &APIHandler{rt: runtime}
@@ -729,227 +717,47 @@ func TestSelfDevelopmentStartRevivesTerminalPersistentSuper(t *testing.T) {
 	retryResponse := httptest.NewRecorder()
 	handler.HandleComputersRouter(retryResponse, retry)
 	if retryResponse.Code != http.StatusOK {
-		t.Fatalf("revive retry status=%d body=%s", retryResponse.Code, retryResponse.Body.String())
+		t.Fatalf("start status=%d body=%s", retryResponse.Code, retryResponse.Body.String())
 	}
-	revived, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2)
-	if err != nil || len(revived) != 1 {
-		t.Fatalf("revived Super runs=%d err=%v", len(revived), err)
+	// The cast is the engineering-bound document: deterministic doc/revision
+	// identity, the directive committed as the owner-authored head revision,
+	// and the desk agent bound to the document channel.
+	docID, revisionID, workID := selfDevelopmentTextureJoinIDs("owner", computerID, operationID)
+	deskAgentID := engineeringDeskAgentID(docID)
+	doc, err := productStore.GetLifecycleDocument(ctx, "owner", computerID, docID)
+	if err != nil || doc.TrajectoryID != trajectoryID {
+		t.Fatalf("engineering document missing or misbound: %+v err=%v", doc, err)
 	}
-	if revived[0].RunID == rec.RunID || revived[0].TrajectoryID != "" || metadataStringValue(revived[0].Metadata, runMetadataTrajectoryID) != "" {
-		t.Fatalf("fresh Super was not started after unbinding terminal Super: old=%s new=%+v", rec.RunID, revived[0])
-	}
-	if _, err := requirePersistentSuperExecution(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&revived[0]))); err != nil {
-		t.Fatalf("fresh Super failed persistent Super gate: %v rec=%+v", err, revived[0])
-	}
-	if metadataStringValue(revived[0].Metadata, "assignment_trajectory_id") == "" ||
-		metadataStringValue(revived[0].Metadata, "request_source") != "lifecycle_texture_control" ||
-		strings.TrimSpace(revived[0].RequestedByRunID) != "" {
-		t.Fatalf("fresh Super lacked Texture control join: %+v requested_by_run_id=%q", revived[0].Metadata, revived[0].RequestedByRunID)
-	}
-	old, err := productStore.GetRunByOwner(ctx, "owner", rec.RunID)
+	snapshot, err := productStore.GetLifecycleSnapshot(ctx, "owner", computerID, trajectoryID)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if metadataStringValue(old.Metadata, "self_development_operation_id") != "" {
-		t.Fatalf("terminal Super stayed bound to the operation: %+v", old.Metadata)
-	}
-}
-
-func TestSelfDevelopmentStartRevivesPassivatedPersistentSuper(t *testing.T) {
-	ctx := context.Background()
-	runtime, productStore := testRuntime(t)
-	computerID := "computer-selfdev-revive-passivated"
-	idempotencyKey := "selfdev-revive-passivated"
-	prompt := "revive passivated persistent Super"
-	runtime.cfg.ComputerID = computerID
-	operations, err := selfdev.NewStore(productStore, productStore)
-	if err != nil {
-		t.Fatal(err)
-	}
-	runtime.selfdevOperations = operations
-	requestCommitment := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey + "\x00" + computerevent.DigestBytes([]byte(prompt))))
-	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey))
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	operationID := "selfdev-" + identityDigest[:32]
-	if _, err := productStore.DB().ExecContext(ctx, `INSERT INTO self_development_operations (operation_id,computer_id,idempotency_key,request_commitment,trajectory_id,base_head,prompt_artifact_ref,verifier_refs_json,desired_head,effective_head,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'[]',?,?,?, ?,?)`,
-		operationID, computerID, idempotencyKey, requestCommitment, "trajectory-"+identityDigest[32:], strings.Repeat("a", 64),
-		"artifact:sha256:"+strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("c", 64), selfdev.StateExecuting, now, now); err != nil {
-		t.Fatal(err)
-	}
-	rec, err := runtime.createRunWithMetadata(ctx, prompt, "owner", map[string]any{
-		runMetadataAgentProfile:         agentprofile.Super,
-		runMetadataAgentRole:            agentprofile.Super,
-		"request_source":                "self_development_operation",
-		"self_development_operation_id": operationID,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec.State = types.RunPassivated
-	rec.Result = ""
-	rec.Metadata = cloneMetadata(rec.Metadata)
-	rec.Metadata["passivated_reason"] = "runtime_restarted"
-	if err := productStore.UpdateRun(ctx, *rec); err != nil {
-		t.Fatal(err)
-	}
-	handler := &APIHandler{rt: runtime}
-	body, _ := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: idempotencyKey, Prompt: prompt})
-	retry := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
-	retry.Header.Set("X-Authenticated-User", "owner")
-	retry.Header.Set("X-Authenticated-Computer", computerID)
-	retryResponse := httptest.NewRecorder()
-	handler.HandleComputersRouter(retryResponse, retry)
-	if retryResponse.Code != http.StatusOK {
-		t.Fatalf("passivated revive retry status=%d body=%s", retryResponse.Code, retryResponse.Body.String())
-	}
-	revived, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2)
-	if err != nil || len(revived) != 1 {
-		t.Fatalf("revived Super runs=%d err=%v", len(revived), err)
-	}
-	if revived[0].RunID == rec.RunID {
-		t.Fatalf("passivated Super was not unbound and replaced: run=%s", rec.RunID)
-	}
-	old, err := productStore.GetRunByOwner(ctx, "owner", rec.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if metadataStringValue(old.Metadata, "self_development_operation_id") != "" {
-		t.Fatalf("passivated Super stayed bound to the operation: %+v", old.Metadata)
-	}
-	if metadataStringValue(old.Metadata, "self_development_unbound_operation_id") != operationID {
-		t.Fatalf("passivated Super unbind did not preserve unbound operation id: %+v", old.Metadata)
-	}
-}
-
-func TestSelfDevelopmentPersistentSuperPassesAssignCoSuperGate(t *testing.T) {
-	ctx := context.Background()
-	runtime, productStore := testRuntime(t)
-	operation := selfdev.Operation{
-		OperationID:       "selfdev-gate",
-		ComputerID:        "computer-selfdev-gate",
-		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("b", 64),
-	}
-	runtime.cfg.ComputerID = operation.ComputerID
-	if err := runtime.startSelfDevelopmentPersistentSuper(ctx, operation, "owner", "gate"); err != nil {
-		t.Fatal(err)
-	}
-	runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operation.OperationID, 2)
-	if err != nil || len(runs) != 1 {
-		t.Fatalf("started Super runs=%d err=%v", len(runs), err)
-	}
-	if _, err := requirePersistentSuperExecution(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&runs[0]))); err != nil {
-		t.Fatalf("self-development Super failed persistent Super gate: %v rec=%+v", err, runs[0])
-	}
-	superAgent, err := productStore.GetAgentByScope(ctx, "owner", operation.ComputerID, persistentSuperAgentID("owner"))
-	if err != nil || superAgent.ChannelID != superAgent.AgentID || superAgent.LifecycleVersion != 0 {
-		t.Fatalf("persistent Super agent lost non-lifecycle identity: %+v err=%v", superAgent, err)
-	}
-	if metadataStringValue(runs[0].Metadata, "assignment_trajectory_id") == "" ||
-		metadataStringValue(runs[0].Metadata, "request_source") != "lifecycle_texture_control" ||
-		strings.TrimSpace(runs[0].RequestedByRunID) != "" ||
-		metadataStringValue(runs[0].Metadata, "requested_by_run_id") != "" {
-		t.Fatalf("self-development Super lacked Texture control join: %+v requested_by_run_id=%q", runs[0].Metadata, runs[0].RequestedByRunID)
-	}
-	pending, err := runtime.listPendingLifecyclePacketsDeliveredToRun(ctx, &runs[0])
-	if err != nil || len(pending) == 0 {
-		t.Fatalf("Texture Super delivered controls=%d err=%v", len(pending), err)
-	}
-	injected, err := runtime.coagentUpdateTurnInjectorWithInitialPhase(&runs[0], coagentPacketDeliveryThread)(false)
-	if err != nil || len(injected) == 0 {
-		t.Fatalf("Texture Super inject turns=%d err=%v", len(injected), err)
-	}
-	runs[0].UpdatedAt = time.Now().UTC()
-	if err := productStore.UpdateRun(ctx, runs[0]); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := runtime.coagentUpdateTurnInjectorWithInitialPhase(&runs[0], coagentPacketDeliveryThread)(false); err != nil {
-		t.Fatalf("Texture Super inject after UpdateRun: %v", err)
-	}
-	_, _, _, trajectoryID, _, _ := selfDevelopmentTextureJoinIDs("owner", operation.ComputerID, operation.OperationID)
-	snapshot, err := productStore.GetLifecycleSnapshot(ctx, "owner", operation.ComputerID, trajectoryID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	foundOperationSource := false
-	for _, update := range snapshot.Updates {
-		if update.Direction == types.LifecyclePacketDirectionControl &&
-			selfDevelopmentOperationIDFromPacketSources(update.Packet.Sources) == operation.OperationID {
-			foundOperationSource = true
-			break
-		}
-	}
-	if !foundOperationSource {
-		t.Fatalf("Texture Super control did not cite operation in packet.sources: %+v", snapshot.Updates)
 	}
 	head := snapshot.HeadRevision
-	meta := map[string]any{}
-	if len(head.Metadata) > 0 {
-		if err := json.Unmarshal(head.Metadata, &meta); err != nil {
-			t.Fatal(err)
+	if head.RevisionID != revisionID || head.AuthorKind != types.AuthorUser || head.Content != prompt {
+		t.Fatalf("directive revision is not the owner-authored head: %+v", head)
+	}
+	var deskWork *types.WorkItemRecord
+	for i := range snapshot.WorkItems {
+		if snapshot.WorkItems[i].WorkItemID == workID {
+			copy := snapshot.WorkItems[i]
+			deskWork = &copy
 		}
 	}
-	if fmt.Sprint(meta["self_development_operation_id"]) != operation.OperationID {
-		t.Fatalf("revision metadata missing compact operation join: %#v", meta)
+	if deskWork == nil || deskWork.AssignedAgentID != deskAgentID || deskWork.AuthorityProfile != agentprofile.CoSuper {
+		t.Fatalf("engineering desk work item missing or misbound: %+v", deskWork)
 	}
-	if _, ok := meta["texture_available_source_entities"]; ok {
-		t.Fatalf("source entities leaked into revision metadata: %#v", meta)
-	}
-	if strings.Contains(head.Content, operation.OperationID) {
-		t.Fatalf("operation identity leaked into revision prose: %q", head.Content)
+	// No Super run mediates the opener: the document channel is the cast.
+	if runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2); err != nil || len(runs) != 0 {
+		t.Fatalf("self-development start minted a mediating run: %+v err=%v", runs, err)
 	}
 }
 
-func TestSelfDevelopmentTextureJoinRewakesTerminalPersistentSuper(t *testing.T) {
+func TestSelfDevelopmentExecutingRetryReplaysEngineeringDoc(t *testing.T) {
 	ctx := context.Background()
 	runtime, productStore := testRuntime(t)
-	operation := selfdev.Operation{
-		OperationID:       "selfdev-rewake",
-		ComputerID:        "computer-selfdev-rewake",
-		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("b", 64),
-	}
-	runtime.cfg.ComputerID = operation.ComputerID
-	if err := runtime.startSelfDevelopmentPersistentSuper(ctx, operation, "owner", "rewake"); err != nil {
-		t.Fatal(err)
-	}
-	first, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operation.OperationID, 2)
-	if err != nil || len(first) != 1 {
-		t.Fatalf("first Super runs=%d err=%v", len(first), err)
-	}
-	_ = runtime.CancelRun(ctx, first[0].RunID, "owner")
-	first[0].State = types.RunFailed
-	first[0].Error = "tool loop inject turns after tools: list pending update_coagent turns: record not found"
-	first[0].UpdatedAt = time.Now().UTC()
-	if err := productStore.UpdateRun(ctx, first[0]); err != nil {
-		t.Fatal(err)
-	}
-	if err := runtime.unbindSelfDevelopmentSuper(ctx, &first[0]); err != nil {
-		t.Fatal(err)
-	}
-	if err := runtime.startSelfDevelopmentPersistentSuper(ctx, operation, "owner", "rewake"); err != nil {
-		t.Fatalf("Texture rewake after terminal Super: %v", err)
-	}
-	second, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operation.OperationID, 2)
-	if err != nil || len(second) != 1 {
-		t.Fatalf("rewake Super runs=%d err=%v", len(second), err)
-	}
-	if second[0].RunID == first[0].RunID {
-		t.Fatalf("Texture rewake reused terminal Super %s", first[0].RunID)
-	}
-	if metadataStringValue(second[0].Metadata, "assignment_trajectory_id") == "" ||
-		metadataStringValue(second[0].Metadata, "request_source") != "lifecycle_texture_control" {
-		t.Fatalf("rewake Super lacked Texture control join: %+v", second[0].Metadata)
-	}
-	if _, err := requirePersistentSuperExecution(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&second[0]))); err != nil {
-		t.Fatalf("rewake Super failed persistent Super gate: %v rec=%+v", err, second[0])
-	}
-}
-
-func TestSelfDevelopmentExecutingRetryStartsWhenUnbound(t *testing.T) {
-	ctx := context.Background()
-	runtime, productStore := testRuntime(t)
-	computerID := "computer-selfdev-unbound-retry"
-	idempotencyKey := "selfdev-unbound-retry"
-	prompt := "start unbound executing Super"
+	computerID := "computer-selfdev-doc-replay"
+	idempotencyKey := "selfdev-doc-replay"
+	prompt := "replay the engineering doc cast"
 	runtime.cfg.ComputerID = computerID
 	operations, err := selfdev.NewStore(productStore, productStore)
 	if err != nil {
@@ -960,28 +768,37 @@ func TestSelfDevelopmentExecutingRetryStartsWhenUnbound(t *testing.T) {
 	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey))
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	operationID := "selfdev-" + identityDigest[:32]
+	trajectoryID := "trajectory-" + identityDigest[32:]
 	if _, err := productStore.DB().ExecContext(ctx, `INSERT INTO self_development_operations (operation_id,computer_id,idempotency_key,request_commitment,trajectory_id,base_head,prompt_artifact_ref,verifier_refs_json,desired_head,effective_head,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'[]',?,?,?, ?,?)`,
-		operationID, computerID, idempotencyKey, requestCommitment, "trajectory-"+identityDigest[32:], strings.Repeat("a", 64),
+		operationID, computerID, idempotencyKey, requestCommitment, trajectoryID, strings.Repeat("a", 64),
 		"artifact:sha256:"+strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("c", 64), selfdev.StateExecuting, now, now); err != nil {
 		t.Fatal(err)
 	}
 	handler := &APIHandler{rt: runtime}
 	body, _ := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: idempotencyKey, Prompt: prompt})
-	retry := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
-	retry.Header.Set("X-Authenticated-User", "owner")
-	retry.Header.Set("X-Authenticated-Computer", computerID)
-	retryResponse := httptest.NewRecorder()
-	handler.HandleComputersRouter(retryResponse, retry)
-	if retryResponse.Code != http.StatusOK {
-		t.Fatalf("unbound executing retry status=%d body=%s", retryResponse.Code, retryResponse.Body.String())
+	for attempt := 0; attempt < 2; attempt++ {
+		retry := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
+		retry.Header.Set("X-Authenticated-User", "owner")
+		retry.Header.Set("X-Authenticated-Computer", computerID)
+		retryResponse := httptest.NewRecorder()
+		handler.HandleComputersRouter(retryResponse, retry)
+		if retryResponse.Code != http.StatusOK {
+			t.Fatalf("retry %d status=%d body=%s", attempt, retryResponse.Code, retryResponse.Body.String())
+		}
 	}
-	started, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2)
-	if err != nil || len(started) != 1 {
-		t.Fatalf("unbound executing Super runs=%d err=%v", len(started), err)
+	// The replayed start replays the committed lifecycle: one document, one
+	// head revision, no second cast.
+	docID, revisionID, _ := selfDevelopmentTextureJoinIDs("owner", computerID, operationID)
+	doc, err := productStore.GetLifecycleDocument(ctx, "owner", computerID, docID)
+	if err != nil || doc.CurrentRevisionID != revisionID {
+		t.Fatalf("replayed start mutated the engineering document: %+v err=%v", doc, err)
 	}
-	if metadataStringValue(started[0].Metadata, "assignment_trajectory_id") == "" ||
-		metadataStringValue(started[0].Metadata, "request_source") != "lifecycle_texture_control" {
-		t.Fatalf("unbound executing Super lacked Texture control join: %+v", started[0].Metadata)
+	snapshot, err := productStore.GetLifecycleSnapshot(ctx, "owner", computerID, trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.HeadRevision.RevisionID != revisionID {
+		t.Fatalf("replayed start advanced the head: %+v", snapshot.HeadRevision)
 	}
 }
 

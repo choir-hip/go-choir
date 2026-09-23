@@ -127,29 +127,29 @@ func TestManagerAppliesSafeOverlayAndRejectsUnsafeOrExpiredOverlay(t *testing.T)
 	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(overlayDir, "mimo-eval.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(overlayDir, "safe-eval.toml"), []byte(`
 [overlay]
 expires_at = "2099-01-01T00:00:00Z"
 
 [roles.research]
-provider = "xiaomi"
-model = "mimo-v2.5"
+provider = "chatgpt"
+model = "gpt-5.6-luna"
 reasoning = "medium"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	selection, err := manager.Resolve(context.Background(), "owner", agentprofile.Researcher, "mimo-eval")
+	selection, err := manager.Resolve(context.Background(), "owner", agentprofile.Researcher, "safe-eval")
 	if err != nil {
 		t.Fatalf("resolve overlay: %v", err)
 	}
-	if selection.Provider != "xiaomi" || selection.Model != "mimo-v2.5" || selection.ReasoningEffort != "medium" || !strings.HasSuffix(selection.Source, "mimo-eval.toml") {
+	if selection.Provider != "chatgpt" || selection.Model != "gpt-5.6-luna" || selection.ReasoningEffort != "medium" || !strings.HasSuffix(selection.Source, "safe-eval.toml") {
 		t.Fatalf("overlay selection = %+v", selection)
 	}
 	if _, err := manager.Resolve(context.Background(), "owner", agentprofile.Researcher, "../escape"); err == nil || !strings.Contains(err.Error(), "not allowed") {
 		t.Fatalf("unsafe overlay error = %v", err)
 	}
 	expiredAt := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
-	if err := os.WriteFile(filepath.Join(overlayDir, "expired.toml"), []byte("[overlay]\nexpires_at = \""+expiredAt+"\"\n\n[roles.research]\nprovider = \"xiaomi\"\nmodel = \"mimo-v2.5\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(overlayDir, "expired.toml"), []byte("[overlay]\nexpires_at = \""+expiredAt+"\"\n\n[roles.research]\nprovider = \"chatgpt\"\nmodel = \"gpt-5.6-luna\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	fallback, err := manager.Resolve(context.Background(), "owner", agentprofile.Researcher, "expired")
@@ -174,31 +174,14 @@ func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	}
 }
 
-func TestProviderPreconditionFallbacksTerminalOnly(t *testing.T) {
-	// No silent cross-provider substitution: a selection that fails provider
-	// preconditions recovers on the terminal platform pair only (residue R9).
-	fallbacks := ProviderPreconditionFallbackSelections(provideriface.LLMSelection{Provider: "opencode-go", Model: "deepseek-v4.1-flash"})
-	if len(fallbacks) != 1 || fallbacks[0].Provider != "chatgpt" || fallbacks[0].Model != "gpt-5.6-luna" {
-		t.Fatalf("fallbacks = %+v, want exactly the terminal platform fallback", fallbacks)
-	}
-	if fallbacks[0].Source != "provider_precondition_terminal_fallback" {
-		t.Fatalf("fallback source = %q", fallbacks[0].Source)
-	}
-	same := ProviderPreconditionFallbackSelections(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-5.6-luna"})
-	if len(same) != 0 {
-		t.Fatalf("terminal-equal selection must not fall back to itself: %+v", same)
-	}
-}
-
-func TestProviderPreconditionFallbacksReturnTerminalWhenModelEmpty(t *testing.T) {
-	fallbacks := ProviderPreconditionFallbackSelections(provideriface.LLMSelection{})
-	if len(fallbacks) != 1 {
-		t.Fatalf("expected 1 terminal fallback for empty selection, got %d: %+v", len(fallbacks), fallbacks)
-	}
-	if fallbacks[0].Provider != "chatgpt" || fallbacks[0].Model != "gpt-5.6-luna" {
-		t.Fatalf("terminal fallback = %+v", fallbacks[0])
-	}
-	if fallbacks[0].Source != "provider_precondition_terminal_fallback" {
-		t.Fatalf("terminal fallback source = %q", fallbacks[0].Source)
+func TestProviderPreconditionFallbacksRefuseAlternativeSelections(t *testing.T) {
+	for _, selection := range []provideriface.LLMSelection{
+		{Provider: "opencode-go", Model: "deepseek-v4.1-flash"},
+		{Provider: "chatgpt", Model: "gpt-5.6-luna"},
+		{},
+	} {
+		if fallbacks := ProviderPreconditionFallbackSelections(selection); len(fallbacks) != 0 {
+			t.Fatalf("fallbacks for %+v = %+v, want none", selection, fallbacks)
+		}
 	}
 }

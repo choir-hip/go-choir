@@ -91,10 +91,9 @@ type ToolLoopBudget struct {
 }
 
 type toolLoopOptions struct {
-	memoryHooks                   ToolLoopMemoryHooks
-	llmConfig                     provideriface.LLMSelection
-	providerPreconditionFallbacks []provideriface.LLMSelection
-	conversationID                string
+	memoryHooks    ToolLoopMemoryHooks
+	llmConfig      provideriface.LLMSelection
+	conversationID string
 
 	initialToolChoice   string
 	terminalTools       map[string]bool
@@ -149,16 +148,6 @@ func WithToolLoopLLMConfig(config provideriface.LLMSelection) ToolLoopOption {
 func WithToolLoopConversationID(conversationID string) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.conversationID = strings.TrimSpace(conversationID)
-	}
-}
-
-// WithProviderPreconditionFallbacks configures alternate model selections for
-// provider request-shape precondition or provider-availability failures. The
-// tool loop only uses these after preserving the same tool obligation on the
-// original selection first.
-func WithProviderPreconditionFallbacks(fallbacks ...provideriface.LLMSelection) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		opts.providerPreconditionFallbacks = append([]provideriface.LLMSelection(nil), fallbacks...)
 	}
 }
 
@@ -315,7 +304,6 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	relaxInitialExactToolChoice := false
 	initialToolChoiceAttempts := 0
 	activeLLMConfig := options.llmConfig
-	preconditionFallbackIndex := 0
 	var requiredNextTool *pendingRequiredTool
 	var maxTokenContinuationAttempts int
 	var completionGuardAttempts int
@@ -457,28 +445,26 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		if emit != nil {
 			lastUserText := extractLastUserMessage(messages)
 			preCallPayload, _ := json.Marshal(map[string]any{
-				"iteration":                            i + 1,
-				"phase":                                "provider_call_started",
-				"messages":                             len(messages),
-				"tools":                                len(req.ToolDefinitions),
-				"tool_names":                           toolDefinitionNames(req.ToolDefinitions),
-				"system_chars":                         len(systemPrompt),
-				"system_sha256":                        toolOutputSHA256Hex(systemPrompt),
-				"system_preview":                       truncatePromptSnippet(systemPrompt, 2000),
-				"last_user_chars":                      len(lastUserText),
-				"last_user_sha256":                     toolOutputSHA256Hex(lastUserText),
-				"last_user_text":                       truncatePromptSnippet(lastUserText, 4000),
-				"message_roles":                        toolLoopMessageRoles(messages),
-				"max_tokens":                           req.MaxTokens,
-				"max_tokens_requested":                 req.MaxTokens > 0,
-				"llm_provider":                         activeLLMConfig.Provider,
-				"llm_model":                            activeLLMConfig.Model,
-				"llm_reasoning_effort":                 activeLLMConfig.ReasoningEffort,
-				"tool_choice":                          req.ToolChoice,
-				"model_policy":                         "run_metadata",
-				"provider_precondition_fallback_count": len(options.providerPreconditionFallbacks),
-				"provider_precondition_fallback_index": preconditionFallbackIndex,
-				"tool_loop_budget":                     toolLoopBudgetPayload(options.budget),
+				"iteration":            i + 1,
+				"phase":                "provider_call_started",
+				"messages":             len(messages),
+				"tools":                len(req.ToolDefinitions),
+				"tool_names":           toolDefinitionNames(req.ToolDefinitions),
+				"system_chars":         len(systemPrompt),
+				"system_sha256":        toolOutputSHA256Hex(systemPrompt),
+				"system_preview":       truncatePromptSnippet(systemPrompt, 2000),
+				"last_user_chars":      len(lastUserText),
+				"last_user_sha256":     toolOutputSHA256Hex(lastUserText),
+				"last_user_text":       truncatePromptSnippet(lastUserText, 4000),
+				"message_roles":        toolLoopMessageRoles(messages),
+				"max_tokens":           req.MaxTokens,
+				"max_tokens_requested": req.MaxTokens > 0,
+				"llm_provider":         activeLLMConfig.Provider,
+				"llm_model":            activeLLMConfig.Model,
+				"llm_reasoning_effort": activeLLMConfig.ReasoningEffort,
+				"tool_choice":          req.ToolChoice,
+				"model_policy":         "run_metadata",
+				"tool_loop_budget":     toolLoopBudgetPayload(options.budget),
 			})
 			emit(types.EventRunProgress, "provider_call", preCallPayload)
 		}
@@ -544,31 +530,6 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					emit(types.EventRunRetry, "provider_tool_choice", payload)
 				}
 				continue
-			}
-			if isProviderModelFallbackError(err) && preconditionFallbackIndex < len(options.providerPreconditionFallbacks) {
-				next := options.providerPreconditionFallbacks[preconditionFallbackIndex]
-				preconditionFallbackIndex++
-				if !sameLLMSelection(activeLLMConfig, next) && strings.TrimSpace(next.Provider) != "" && strings.TrimSpace(next.Model) != "" {
-					activeLLMConfig = next
-					forceInitialToolChoiceRetry = strings.TrimSpace(req.ToolChoice) != ""
-					if emit != nil {
-						payload, _ := json.Marshal(map[string]any{
-							"reason":          providerModelFallbackReason(err),
-							"tool_choice":     req.ToolChoice,
-							"from_provider":   req.Provider,
-							"from_model":      req.Model,
-							"to_provider":     next.Provider,
-							"to_model":        next.Model,
-							"to_reasoning":    next.ReasoningEffort,
-							"fallback_index":  preconditionFallbackIndex - 1,
-							"fallback_count":  len(options.providerPreconditionFallbacks),
-							"provider_error":  err.Error(),
-							"fallback_source": next.Source,
-						})
-						emit(types.EventRunRetry, "provider_model_fallback", payload)
-					}
-					continue
-				}
 			}
 			return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, err)
 		}
@@ -1259,33 +1220,6 @@ func isProviderPreconditionError(err error) bool {
 	return strings.Contains(text, "412") ||
 		strings.Contains(text, "precondition failed") ||
 		strings.Contains(text, "thinking mode does not support this tool_choice")
-}
-
-func isProviderAvailabilityError(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "402") ||
-		strings.Contains(text, "payment required")
-}
-
-func isProviderModelFallbackError(err error) bool {
-	return isProviderPreconditionError(err) || isProviderAvailabilityError(err)
-}
-
-func providerModelFallbackReason(err error) string {
-	if isProviderAvailabilityError(err) {
-		return "provider_availability_fallback"
-	}
-	return "provider_precondition_fallback"
-}
-
-func sameLLMSelection(a, b provideriface.LLMSelection) bool {
-	return strings.TrimSpace(a.Provider) == strings.TrimSpace(b.Provider) &&
-		strings.TrimSpace(a.Model) == strings.TrimSpace(b.Model) &&
-		strings.TrimSpace(a.ReasoningEffort) == strings.TrimSpace(b.ReasoningEffort) &&
-		a.MaxTokens == b.MaxTokens
 }
 
 func toolDefinitionsMatchingName(defs []provideriface.ToolDefinition, name string) []provideriface.ToolDefinition {

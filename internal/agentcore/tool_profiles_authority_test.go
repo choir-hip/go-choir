@@ -32,7 +32,7 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 	expected := map[string][]string{
 		agentprofile.Conductor: {"cancel_agent"},
 		agentprofile.Super: append(append(slices.Clone(ordinary),
-			"update_coagent"), "assign_co_super", "cancel_co_super_assignment", "report_to_texture"),
+			"update_coagent"), "cancel_co_super_assignment", "report_to_texture"),
 		agentprofile.CoSuper:    {},
 		agentprofile.Researcher: append(slices.Clone(ordinary), "update_coagent"),
 		agentprofile.Texture:    {"get_run_memory_entry"},
@@ -112,11 +112,11 @@ func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build assigned registry: %v", err)
 	}
-	want := []string{"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file"}
+	want := []string{"capsule_go_eval"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
 		t.Fatalf("assigned registry tools = %v, want exact %v", got, want)
 	}
-	for _, absent := range []string{"read_file", "glob", "grep", "save_evidence", "verify_model_capability", "spawn_agent", "spawn_capsule", "destroy_capsule", "propose_effect", "finalize_effect", "materialize_self_development", "create_checkpoint"} {
+	for _, absent := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "read_file", "glob", "grep", "save_evidence", "verify_model_capability", "spawn_agent", "spawn_capsule", "destroy_capsule", "propose_effect", "finalize_effect", "materialize_self_development", "create_checkpoint"} {
 		if _, ok := registry.Lookup(absent); ok {
 			t.Fatalf("assigned registry inherited forbidden callback %q", absent)
 		}
@@ -128,9 +128,7 @@ func TestCapsuleLocalInstallerIsExact(t *testing.T) {
 	if err := RegisterCapsuleLocalTools(capsuleLocal, nil); err != nil {
 		t.Fatalf("register capsule-local tools: %v", err)
 	}
-	if got, want := registryToolNames(capsuleLocal), []string{
-		"capsule_exec", "capsule_go_eval", "capsule_list_dir", "capsule_read_file", "capsule_write_file",
-	}; !slices.Equal(got, want) {
+	if got, want := registryToolNames(capsuleLocal), []string{"capsule_go_eval"}; !slices.Equal(got, want) {
 		t.Fatalf("capsule-local tools = %v, want %v", got, want)
 	}
 }
@@ -147,25 +145,13 @@ func registryToolNames(registry *toolregistry.ToolRegistry) []string {
 	return names
 }
 
-func TestAssignCoSuperSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
+func TestAssignedCoSuperSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
 	registry := toolregistry.MustNewToolRegistry()
 	if err := RegisterAssignedCoSuperTools(registry, &Runtime{}); err != nil {
 		t.Fatal(err)
 	}
-	tool, ok := registry.Lookup("assign_co_super")
-	if !ok {
-		t.Fatal("assign_co_super missing")
-	}
-	properties, _ := tool.Parameters["properties"].(map[string]any)
-	for _, forbidden := range []string{"attempt", "scope_digest", "subject_digest", "assignment_id", "capsule_id"} {
-		if _, present := properties[forbidden]; present {
-			t.Fatalf("model-authored runtime binding %q remains in schema", forbidden)
-		}
-	}
-	for _, required := range []string{"objective", "kind", "parent_work_item_id", "candidate_id"} {
-		if _, present := properties[required]; !present {
-			t.Fatalf("assignment semantic field %q missing", required)
-		}
+	if _, ok := registry.Lookup("assign_co_super"); ok {
+		t.Fatal("assign_co_super remains registered; the document channel is the opener")
 	}
 	cancel, ok := registry.Lookup("cancel_co_super_assignment")
 	if !ok {
@@ -177,41 +163,36 @@ func TestAssignCoSuperSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
 	}
 }
 
-func TestAssignmentIdentityUsesOnlyAuthenticatedParentRunAndToolCall(t *testing.T) {
-	parent := types.RunRecord{RunID: "parent-run", OwnerID: "owner", ComputerID: "computer"}
-	left := StartAssignedCoSuperRequest{Objective: "one", Kind: types.CoSuperAssignmentImplementation, ParentWorkItemID: "work", ToolCallID: "call"}
-	right := StartAssignedCoSuperRequest{Objective: "changed", Kind: types.CoSuperAssignmentVerification, CandidateID: "candidate", ParentWorkItemID: "other", ToolCallID: "call"}
-	if deterministicAssignmentIdentity(parent, left) != deterministicAssignmentIdentity(parent, right) {
-		t.Fatal("semantic arguments changed authenticated assignment identity")
+func TestAssignmentIdentityUsesOnlyDocumentRevisionAndKind(t *testing.T) {
+	ownerID, computerID, trajectoryID, revisionID := "owner", "computer", "trajectory", "revision"
+	left := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.CoSuperAssignmentImplementation, "")
+	right := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.CoSuperAssignmentVerification, "candidate")
+	if left == right {
+		t.Fatal("assignment kind absent from document assignment identity")
 	}
-	other := parent
-	other.RunID = "other-parent"
-	if deterministicAssignmentIdentity(parent, left) == deterministicAssignmentIdentity(other, left) {
-		t.Fatal("parent run absent from assignment identity")
+	if left == deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, "other-revision", types.CoSuperAssignmentImplementation, "") {
+		t.Fatal("admitting revision absent from assignment identity")
 	}
-	right.ToolCallID = "other-call"
-	if deterministicAssignmentIdentity(parent, left) == deterministicAssignmentIdentity(parent, right) {
-		t.Fatal("tool call absent from assignment identity")
+	if left == deterministicDocumentAssignmentIdentity(ownerID, computerID, "other-trajectory", revisionID, types.CoSuperAssignmentImplementation, "") {
+		t.Fatal("trajectory absent from assignment identity")
+	}
+	if left != deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.CoSuperAssignmentImplementation, "") {
+		t.Fatal("document assignment identity is not deterministic")
 	}
 }
 
-// TestAssignCoSuperSchemaCarriesModelPolicyOverlay proves the owner-visible
-// model-selection mechanism is reachable on the assignment path: the schema
-// exposes model_policy_overlay_id and the request digest covers it, so a
-// replayed call with a different overlay conflicts rather than silently
-// reusing the original model selection.
-func TestAssignCoSuperSchemaCarriesModelPolicyOverlay(t *testing.T) {
-	registry := toolregistry.MustNewToolRegistry()
-	if err := RegisterAssignedCoSuperTools(registry, &Runtime{}); err != nil {
-		t.Fatal(err)
+// TestDocumentAssignmentRequestCarriesModelPolicyOverlay proves the
+// owner-visible model-selection mechanism is reachable on the document-cast
+// path: the open request carries model_policy_overlay_id and the request
+// digest covers it, so a replayed cast with a different overlay conflicts
+// rather than silently reusing the original model selection.
+func TestDocumentAssignmentRequestCarriesModelPolicyOverlay(t *testing.T) {
+	req := OpenDocumentAssignmentRequest{
+		Objective: "implement", Kind: types.CoSuperAssignmentImplementation,
+		RevisionID: "revision", ModelPolicyOverlayID: "p5-chatgpt-g56luna",
 	}
-	tool, ok := registry.Lookup("assign_co_super")
-	if !ok {
-		t.Fatal("assign_co_super missing")
-	}
-	properties, _ := tool.Parameters["properties"].(map[string]any)
-	if _, present := properties["model_policy_overlay_id"]; !present {
-		t.Fatal("model_policy_overlay_id missing from assign_co_super schema")
+	if req.ModelPolicyOverlayID == "" {
+		t.Fatal("model_policy_overlay_id missing from document assignment request")
 	}
 }
 
