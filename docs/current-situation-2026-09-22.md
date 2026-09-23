@@ -87,14 +87,29 @@ wrong-path cluster it deletes is enumerated in
 out-of-band input, process-local continuations, dual paths, sweep recovery,
 non-event mutations).
 
-### 3. How much self-development before the wire
+### 3. Self-development — the acceleration axis (owner direction 2026-09-22)
 
-The vision's gate: "a computer that cannot develop itself cannot be trusted
-to report the world." One proof (candidate A, falsify B, restore) is
-necessary but likely not sufficient — "genuinely develops itself" is a
-program, not a single receipt. Open: how many episodes, and does the
-precommitment mechanism need to be live first so the episodes generate
-scored records?
+Self-development is the priority because it compounds: the more Choir drives
+its own development, the faster everything lands, and it cuts the CI pipeline
+out of the UX-improvement loop. Current state: email works, Texture is broken
+(the `tell`/roster input path — the wrong-path cluster). Three capability
+phases, then the proof:
+
+- **Phase 1 — `choir` CLI from a harness** (ASAP): an external harness drives
+  Choir through the CLI — the roster path on the real input channel. This is
+  the carrier landing (stack 1c) viewed as the first self-dev capability.
+- **Phase 2 — skip the harness** (soon): Choir's own actors drive development
+  on derivable continuations — needs the ontology cutover (1d).
+- **Phase 3 — choir → microVMs via yaegi** (eventually): needs
+  computer→computer code publishing.
+- **The updating system** is a named dependency and half-developed:
+  platform→computer security-update push has no path (the updater is
+  guest-local), and computer→computer code publishing has no surface
+  (`wirepublish` is articles, not code). This is what makes self-dev deploy
+  without CI.
+
+The wire gate stays: the self-development *proof* on records (stack 3e) is
+still what "genuinely develops itself" requires before the wire.
 
 ### 4. Box score timing (resolved: out of the stack)
 

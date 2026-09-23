@@ -149,25 +149,46 @@ doesn't strand pending states).
   the only admissible evidence of learning — or falsifies the conjecture
   cheaply while records still pay as audit.
 
-### Phase 3 — Self-development, proven for real
+### Phase 3 — Self-development: the acceleration axis
 
-The vision's gate: "a computer that cannot develop itself cannot be trusted
-to report the world." This is a **program, not one proof** — the depth is an
-open question.
+Owner direction 2026-09-22: self-development is the priority because it
+compounds — the more Choir drives its own development, the faster everything
+else lands, and it cuts the CI pipeline out of the UX-improvement loop.
+Current state: email works, Texture is broken (the `tell`/roster input path —
+see `docs/problems/root-cause-wrong-path-cluster-2026-09-22.md`). Three
+capability phases, then the proof:
 
-- **3a — The self-development proof on records.** The queued Definition
-  rewritten as throughline: candidate A authored via RLM cells, every
+- **3a — Capability phase 1: `choir` CLI from a harness.** An external harness
+  (this OMP session) drives Choir through the `choir` CLI — the roster path on
+  the real input channel. This **is** the carrier landing (1c) viewed as the
+  first self-dev capability: same work, near-term payoff. Blocked on the
+  input-path fix (tell → document event). Proves: a harness drives a real
+  Choir development task end-to-end.
+- **3b — Capability phase 2: skip the harness.** Choir's own actors drive
+  development with no external harness process — the self-dev operation
+  substrate (`api_self_development.go`, `selfdev/operations.go`, the
+  materializer) running on derivable continuations. Needs the ontology
+  cutover (1d) so continuations survive restart. Proves: a self-dev operation
+  runs to a materialized change with no external driver.
+- **3c — Capability phase 3: choir → microVMs via yaegi.** Choir calls out to
+  other microVMs through the yaegi capsule substrate. Needs computer→computer
+  code publishing (3d). Proves: one computer delegates a bounded task to
+  another.
+- **3d — The updating system** *(dependency; half-developed)*. Two surfaces:
+  (i) **platform→computer security-update push** — `internal/updater` is
+  guest-local today (apply/baseline/pinned/journal/restore-prior); no platform
+  push path exists; (ii) **computer→computer code publishing** — no surface
+  exists (`wirepublish` is article publishing, not code). This is what makes
+  self-dev actually deploy: a self-developed change has to reach computers
+  without CI.
+- **3e — The self-development proof on records** *(the wire gate)*. The queued
+  Definition as throughline: candidate A authored via RLM cells, every
   material action carrying `expected`, qualified consensus under
   `reversible-selfdev-v1`, promotion, live-play verification, falsification
-  with B, restore to `99949fe2`. Proves: one real self-change, legibly and
-  durably — and the receipts are the first scored commitment records of a
-  real self-development episode.
-- **3b — The self-development program.** **Uncertain depth.** "Genuinely
-  develops itself" likely means more than one episode: repeated bounded
-  self-changes across desks, the computer correcting itself within policy,
-  the commitment ledger accumulating a track record of its own development.
-  Open: how many episodes, and what evidence satisfies the vision's gate
-  before the wire starts.
+  with B, restore to `99949fe2`. The capability phases make this cheap to run;
+  the proof is what the vision's gate requires — one real self-change, legibly
+  and durably, receipts as the first scored commitment records of a real
+  self-development episode.
 
 ### Phase 4 — Production hardening + first users
 
@@ -212,11 +233,12 @@ Only after the computer demonstrably develops itself (Phase 3 gate).
    real harness; only the evidence floor remains open.
 2. **The ontology cutover** (1d) — **ratified 2026-09-22.** It subsumes the
    desk crossings and retires R8/R10 plus the tell/roster path in one move.
-3. **Self-development depth** (3b) — how many episodes satisfy "genuinely
-   develops itself"? If more than one, Phase 3 is longer and the wire is
-   later.
+3. **Self-development proof depth** (3e) — the capability phases are decided
+   (CLI-from-harness → no-harness → microVMs); the open question is what
+   evidence satisfies "genuinely develops itself" for the wire gate. If more
+   than one episode, Phase 3 is longer and the wire is later.
 4. **Does the mechanism precede the self-development proof?** This stack
-   says yes (Phase 2 before 3a) so the proof generates scored records. The
+   says yes (Phase 2 before 3e) so the proof generates scored records. The
    alternative — prove self-development first, then instrument — inverts 2
    and 3.
 5. **Where does goal selection live?** The old stack ended at "native goals."
