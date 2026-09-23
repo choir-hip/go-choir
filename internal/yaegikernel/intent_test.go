@@ -21,7 +21,7 @@ func TestTrayStagesWithoutBlocking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tray.Complete(CompleteCompleted, "ok", "done", []string{"ref-1"}, nil); err != nil {
+	if err := tray.Complete(CompleteCompleted, "none", "done", []string{"ref-1"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
@@ -54,7 +54,7 @@ func TestTrayQuotas(t *testing.T) {
 		t.Fatal("oversize body must be rejected")
 	}
 	var twice Tray
-	if err := twice.Complete(CompleteCompleted, "v", "s", nil, nil); err != nil {
+	if err := twice.Complete(CompleteCompleted, "none", "s", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := twice.Complete(CompleteFailed, "v", "s", nil, nil); err == nil {

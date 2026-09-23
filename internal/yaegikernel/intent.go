@@ -128,6 +128,17 @@ func (t *Tray) Complete(result, verdict, summary string, evidenceRefs, execution
 	default:
 		return fmt.Errorf("tray: complete result %q not in {completed, failed, blocked, partial}", result)
 	}
+	// The verdict is a typed enum, not free text: implementation assignments
+	// carry "none"; only the verifier slot issues pass/fail/abstain. A
+	// non-enum verdict (e.g. summary prose passed positionally) is rejected
+	// here so the model sees the error in-cell and can retry — the store's
+	// ValidateAgainst would otherwise strand the terminal saga after
+	// freeze+revoke with no recovery path.
+	switch verdict {
+	case "", "none", "pass", "fail", "abstain":
+	default:
+		return fmt.Errorf("tray: complete verdict %q not in {none, pass, fail, abstain}; implementation assignments use \"none\"", verdict)
+	}
 	for _, in := range t.intents {
 		if in.Kind == IntentComplete {
 			return fmt.Errorf("tray: at most one complete per cell")

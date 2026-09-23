@@ -27,37 +27,27 @@ The terminal `choir.Complete` saga then stranded:
 
 ## Root cause
 
-`RecordCoSuperAssignmentReport` (internal/store/cosuper_assignments.go) and
-`CancelCoSuperAssignment` unconditionally decode
-`parentAuthority.parentRun` as a `types.RunRecord` to build the return
-packet. For document-parented bindings (`binding.ParentRunID == ""`),
-`requireCoSuperDocumentParentAuthority` returns `parentRun` unset — a zero
-`objectgraph.Object` with nil `Body`. `decodeLifecycleObject` fails with
-`unexpected end of JSON input`.
+**Primary:** the model passed its summary prose as the `verdict` argument
+to `choir.Complete(result, verdict, summary, …)` — a positional-argument
+confusion. `Tray.Complete` validated `result` but not `verdict`, so free
+text staged fine. The saga committed freeze+revoke, then
+`RecordCoSuperAssignmentReport` → `ValidateAgainst` rejected the non-`none`
+verdict on an implementation assignment — after the capsule was already
+revoked. Every retry (in-flight loop, fate watchdog, stranded-frozen sweep,
+restart reconcile) replays the same staged proposal and fails identically.
+The staged proposal's `verdict` field confirms: it carries the model's
+full summary text, not a typed verdict.
 
-The failure lands *after* the saga already committed freeze + revoke
-dispositions, so every retry — the in-flight retry loop, the fate watchdog,
-the stranded-frozen sweep, the restart reconcile — re-enters at the same
-post-revoke step and fails identically. The assignment is bound+revoked
-forever; no report, no completion event, no verification chaining.
-
-This path was never exercised before: M1's deployed acceptance used
-Super-run parents (`assign_co_super` from a persistent Super run), where
-`parentRun` is always set. The document channel is the first
-document-parented assignment flow.
-
-## Secondary defect (same strand)
-
-`recordAssignedCoSuperReportOnce` computes
-`lateFate = … || CapsuleDisposition == Revoked` without excluding the saga's
-own staged `PendingProposal`. A resume after a post-revoke strand is routed
-through `bindLateAssignmentExecutionReceipts`, which requires every raw
-receipt's `SourceTreeDigest == Binding.SubjectDigest` — false for any
-multi-command report (each command's source tree is the prior command's
-result). Even when it succeeds, the store marks the report `Late`, which is
-evidence-only and never completes the assignment. The store layer already
-excludes the saga's own proposal via `pendingMatches`; the runtime gate did
-not.
+**Secondary (same strand, found during diagnosis):**
+`RecordCoSuperAssignmentReport` and `CancelCoSuperAssignment` decoded
+`parentAuthority.parentRun` unconditionally; document-parented bindings
+(`binding.ParentRunID == ""`) carry no parent run, so the return-packet
+build would have failed on `unexpected end of JSON input` had the verdict
+been valid. And `recordAssignedCoSuperReportOnce` treated
+`CapsuleDisposition == Revoked` as late fate even when the staged
+`PendingProposal` matched — routing resumes through a binder whose
+per-command `SourceTreeDigest == SubjectDigest` check is impossible for
+multi-command reports.
 
 ## Resolution
 
@@ -68,6 +58,9 @@ not.
   resume; `bindLateAssignmentExecutionReceipts` drops the per-command
   `SourceTreeDigest == SubjectDigest` check (only the first command's
   source tree equals the binding subject).
+- verdict-validation commit — `Tray.Complete` rejects a non-enum verdict
+  in-cell (model sees the error and retries); `commitCompleteIntent`
+  fail-fasts on a typed-but-wrong verdict before the saga stages.
 
 ## Evidence
 

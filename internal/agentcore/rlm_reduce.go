@@ -611,6 +611,16 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	if result == types.CoSuperResultCompleted && verdict == types.CoSuperVerdictPass && len(executionRefs) == 0 {
 		return false, fmt.Errorf("reduce: terminal completed pass requires at least one valid execution_ref")
 	}
+	// Fail fast on a verdict the assignment kind cannot carry: an
+	// implementation assignment accepts only verdict "none" (verification
+	// verdicts belong to the verifier slot). Rejecting here returns the
+	// error to the cell so the model can retry with a corrected verdict in
+	// the same run — the store's ValidateAgainst would otherwise strand the
+	// saga after freeze+revoke with no in-cell recovery path.
+	if kind := metadataStringValue(r.rec.Metadata, "assignment_kind"); kind == string(types.CoSuperAssignmentImplementation) &&
+		verdict != "" && verdict != types.CoSuperVerdictNone {
+		return false, fmt.Errorf("reduce: implementation assignment cannot issue verdict %q; use verdict=\"none\"", verdict)
+	}
 	receipts, err := r.toolCtx.Executor.ResolveExecutionReceipts(executionRefs)
 	if err != nil {
 		return false, err
