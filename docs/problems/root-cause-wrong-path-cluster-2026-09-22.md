@@ -109,23 +109,33 @@ calls that mutate durable state without a canonical event — ~13 sites across
 `selfdev/operations.go` (SQL fallback), `wire_publication.go`. All subsumed:
 the transition becomes an event payload; the reducer projects it.
 
-## What is NOT subsumed (needs a real decision, not just deletion)
+## What is NOT subsumed (owner-corrected 2026-09-22)
 
-1. **Tell payload semantics.** `/tell` carries arbitrary directive text;
-   `/revisions` doesn't preserve it. Need a typed owner-intent payload on the
-   canonical document event before the side channel can be deleted.
-2. **Roster migration.** `roster.go` must move to in-cell sub-RLM casts before
-   the tell path dies, or live roster input is stranded.
-3. **`actuator=tools` / Super substrate.** Deletion is blocked until the
-   management and research desks cross — these are the cutover's migration
-   targets, not pre-cutover deletions.
-4. **`install_frontend_pointer`.** The host-global SPA is the platform-shell
-   deploy contract, not the computer surface — a separate migration (immutable
-   platform-shell artifact), not part of the tape cutover.
-5. **vmctl sweeper / sourcecycled ticker.** Possible authority-boundary
-   exceptions — host control plane and source daemon may legitimately live
-   outside the Choir tape. Decide explicitly rather than silently treating
-   them as defects.
+1. ~~Tell payload semantics~~ — **retracted.** A revision is just a diff of
+   the current document version; `tell` is a hallucination. There is no
+   owner-intent payload to preserve — the owner edit *is* the revision event.
+   Confirmed in source: `/revise` on a lifecycle-bound doc already forwards to
+   `/tell` (`texture_agent_revision.go:117-121`), so the lifecycle path treats
+   them as the same thing. The fix is to delete the tell channel, not to
+   carry its payload onto the canonical event.
+2. ~~Roster migration~~ — **corrected.** Roster shouldn't be a concept at
+   all; it's just a sub-RLM call. Not "migrate `roster.go` to in-cell casts"
+   but "delete roster — the function is a sub-RLM call in a cell."
+3. `actuator=tools` + Super substrate — **confirmed.** Deletion is blocked
+   until the management and research desks cross; these are the cutover's
+   migration targets, not pre-cutover deletions.
+4. `install_frontend_pointer` — **clarified.** CI atomically swaps
+   `/var/www/go-choir/frontend-current` on the host (`ci.yml:1162-1186`); the
+   proxy serves it as `PlatformShellRoot` — the unauthenticated platform
+   shell (login/landing SPA). Authenticated computer UI is served per-computer
+   through the proxy, not from it. It's host-global mutable state outside any
+   computer's tape — a dual path, but a platform-shell deploy contract, not a
+   per-computer surface. Separate migration (immutable platform-shell
+   artifact), not part of the tape cutover.
+5. vmctl sweeper / sourcecycled ticker — **deferred, not exceptions.**
+   `sourcecycled` is pre-RLM world-wire code; it will be reengineered
+   post-RLM, not patched now. The vmctl sweeper's consequences are unknown —
+   defer rather than decide blind. Neither blocks the cutover.
 
 ## The deletion rule
 

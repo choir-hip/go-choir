@@ -95,16 +95,16 @@ The carrier program is mid-flight and blocked. This phase completes it.
 - **1a — The carrier decision (owner).** Re-scoped 2026-09-22: the roster was
   run on a makeshift `texture tell` driver (`cmd/choir/roster.go`), not the
   in-cell carrier, and `tell` itself is a bug — Texture is document-driven.
-  What remains is only the roster-evidence floor: re-scope it to roster arms
-  driven as in-cell sub-RLM casts on the document channel. The substrate half
-  (the wake defect) is carried by 1d.
+  What remains is only the evidence floor — and owner correction 2026-09-22
+  sharpens it: roster isn't a concept, it's a sub-RLM call. The capability is
+  a sub-RLM cast on the document channel driving a task; the roster driver is
+  deleted, not migrated. The substrate half (the wake defect) is carried by 1d.
 - **1b — Wake authority: minted continuations** *(folded into 1d)*. The
   transition-minted recovery-occurrence repair is subsumed by the ontology
   cutover's derivable-continuation model — pending deliveries are a
-  projection, the dispatcher is the one consumer. Not a separate mission.
-- **1c — Carrier landing.** Finish the roster on the real harness (in-cell
-  sub-RLM casts, not `texture tell`), then P6: engineering desk fully on the
-  in-cell carrier, five overlay tools + four legacy capsule ops deleted (R7),
+- **1c — Carrier landing.** Prove the sub-RLM call on the real harness (a
+  cast on the document channel, not `texture tell`), then P6: engineering desk
+  fully on the in-cell carrier, five overlay tools + four legacy capsule ops deleted (R7),
   run acceptance on canonical evidence, R9 provider-heresy deletion. Proves:
   a desk lives entirely on the carrier — the desk the `precommit` module
   ships through.
@@ -118,9 +118,12 @@ The carrier program is mid-flight and blocked. This phase completes it.
   the wake family's structural death. Scope: deletes the wrong-path cluster
   enumerated in `docs/problems/root-cause-wrong-path-cluster-2026-09-22.md`
   (~44 instances across out-of-band input, process-local continuations, dual
-  paths, sweep recovery, non-event mutations); five exceptions need real
-  decisions (tell payload semantics, roster migration, actuator=tools/Super
-  blocked on desk crossings, frontend pointer, vmctl/sourcecycled boundary).
+  paths, sweep recovery, non-event mutations). Owner-corrected 2026-09-22:
+  `tell` is a hallucination (a revision is just a diff — no payload to
+  preserve) and roster isn't a concept (it's a sub-RLM call — delete, not
+  migrate); `actuator=tools`/Super stay blocked on desk crossings;
+  `install_frontend_pointer` is the platform-shell deploy contract (separate
+  migration); vmctl/sourcecycled deferred (post-RLM reengineer / unknown).
 - **1e — Remaining desk crossings** *(migration targets of 1d)*. Texture,
   research, and management desks cross to the carrier as the cutover's
   migration targets — the work the old stack serialized as M4–M6.

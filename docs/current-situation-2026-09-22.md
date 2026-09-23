@@ -68,10 +68,12 @@ this:**
   `LifecycleOwnerInstruction` path are a second input channel that bypasses
   the tape — to be deleted, and the roster driver with it.
 
-What remains of the original decision is only the roster-evidence floor:
-re-scope it to roster arms driven as in-cell sub-RLM casts on the document
-channel, not the tell wrapper. The substrate half (the wake defect) is now
-carried by the ontology cutover below.
+What remains of the original decision is only the evidence floor — and owner
+correction 2026-09-22 sharpens it: **roster isn't a concept at all; it's just
+a sub-RLM call.** Not "re-run the roster on the real harness" but "a sub-RLM
+cast on the document channel drives a task; the roster driver is deleted, not
+migrated." The substrate half (the wake defect) is carried by the ontology
+cutover below.
 
 ### 2. The ontology cutover — **ratified 2026-09-22**
 
