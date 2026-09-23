@@ -608,18 +608,20 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	verdict := types.CoSuperAssignmentVerdict(strings.TrimSpace(in.Verdict))
 	evidenceRefs := sortedUniqueStrings(in.EvidenceRefs)
 	executionRefs := trimNonEmptyStrings(in.ExecutionRefs)
-	if result == types.CoSuperResultCompleted && verdict == types.CoSuperVerdictPass && len(executionRefs) == 0 {
-		return false, fmt.Errorf("reduce: terminal completed pass requires at least one valid execution_ref")
-	}
 	// An implementation assignment cannot issue a verification verdict; the
 	// store requires "none". Coerce rather than reject: the verdict is
 	// meaningless for implementation, and a reduce error here poisons the
 	// capsule mid-run with no in-cell recovery path. The tray already
 	// rejects non-enum verdicts at staging, so only typed-but-wrong values
-	// (pass/fail/abstain) reach this point.
+	// (pass/fail/abstain) or empty reach this point. This must run before
+	// the execution-ref check below: a completed+pass implementation report
+	// with no refs would otherwise hit that check first and strand.
 	if kind := metadataStringValue(r.rec.Metadata, "assignment_kind"); kind == string(types.CoSuperAssignmentImplementation) &&
-		verdict != "" && verdict != types.CoSuperVerdictNone {
+		verdict != types.CoSuperVerdictNone {
 		verdict = types.CoSuperVerdictNone
+	}
+	if result == types.CoSuperResultCompleted && verdict == types.CoSuperVerdictPass && len(executionRefs) == 0 {
+		return false, fmt.Errorf("reduce: terminal completed pass requires at least one valid execution_ref")
 	}
 	receipts, err := r.toolCtx.Executor.ResolveExecutionReceipts(executionRefs)
 	if err != nil {
