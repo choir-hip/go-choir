@@ -3,8 +3,11 @@ import { test, expect } from './helpers/fixtures.js';
 // M1 deployed acceptance: owner input is a canonical document revision event.
 // - POST /api/texture/documents/{id}/revise on a lifecycle-bound document
 //   commits an AuthorUser revision on the canonical path (no /tell forward).
-// - The Texture actor's turn is caused by the document revision event (the
-//   desk produces an appagent-authored revision after the owner head).
+// - The Texture actor's turn is caused by THAT revision: the document event
+//   tape must show a texture_turn_committed event whose parent_revision_id is
+//   the owner's revision — the desk consumed the owner head. (A run's
+//   current_revision_id cannot be the proof: it tracks the run's own
+//   committed head, which is always a desk-authored revision.)
 // - POST /tell and /correct return 404.
 
 async function api(page, method, path, body) {
@@ -20,8 +23,9 @@ async function api(page, method, path, body) {
   }, { method, path, body });
 }
 
+test.describe.configure({ timeout: 300_000 });
+
 test('M1 owner input is a document revision event on staging', async ({ desktopSession }) => {
-  test.setTimeout(300_000);
   const { page } = desktopSession;
   const suffix = `${Date.now()}`;
 
@@ -56,29 +60,39 @@ test('M1 owner input is a document revision event on staging', async ({ desktopS
   expect(ownerRev.metadata?.input_origin).toBe('user_prompt');
   expect(ownerRev.metadata?.owner_prompt).toContain('three short paragraphs');
 
-  // 4. The desk observes the head: the document_revision occurrence drives an
-  //    actor turn. The run record binds the owner head as its current
-  //    revision — activation is the proof (provider auth on staging is a
-  //    separate gap, so we assert the run, not a completed appagent revision).
-  let deskRunID = '';
-  const deadline = Date.now() + 120_000;
+  // 4. The desk observes THE OWNER'S head: the event tape must record a
+  //    texture_turn_committed event whose parent_revision_id is exactly
+  //    ownerRevisionID — the turn consumed the owner revision as its input
+  //    head. This is the tape receipt that the desk picked up the owner edit;
+  //    the create wake and the /revise occurrence coalesce into one pending
+  //    turn, so the run record alone does not prove it.
+  let turnEvent = null;
+  const deadline = Date.now() + 240_000;
   while (Date.now() < deadline) {
-    const doc = await api(page, 'GET', `/api/texture/documents/${docID}`);
-    deskRunID = doc.body?.agent_revision_run_id || '';
-    if (deskRunID) break;
-    await page.waitForTimeout(3000);
+    const events = await api(page, 'GET', `/api/texture/documents/${docID}/events?limit=100`);
+    const list = Array.isArray(events.body?.events) ? events.body.events : [];
+    turnEvent = list.find((e) =>
+      e.kind === 'texture_turn_committed' &&
+      e.parent_revision_id === ownerRevisionID);
+    if (turnEvent) break;
+    await page.waitForTimeout(5000);
   }
-  expect(deskRunID, 'no desk run was created from the owner revision').toBeTruthy();
-  const run = await api(page, 'GET', `/api/runs/${deskRunID}`);
-  expect(run.status, JSON.stringify(run.body)).toBe(200);
-  const meta = run.body?.metadata || {};
-  expect(meta.doc_id).toBe(docID);
-  expect(meta.request_intent).toBe('apply_owner_revision');
-  // The run binds a real head of this doc: the create's initial revision wake
-  // and the /revise occurrence coalesce into one pending desk turn.
-  const headIDs = list.map((r) => r.revision_id);
-  expect(headIDs).toContain(meta.current_revision_id);
-  // 5. Deleted ingress returns 404 on the deployed surface.
+  expect(
+    turnEvent,
+    'no texture_turn_committed event consumed the owner revision as its ' +
+    'parent head — the desk turn did not pick up the owner edit',
+  ).toBeTruthy();
+
+  // 5. No owner-instruction channel rows fired: the event tape carries no
+  //    instruction-kind events for this document.
+  const finalEvents = await api(page, 'GET', `/api/texture/documents/${docID}/events?limit=100`);
+  const finalList = Array.isArray(finalEvents.body?.events) ? finalEvents.body.events : [];
+  const instructionEvents = finalList.filter((e) =>
+    String(e.kind || '').includes('instruction'));
+  expect(instructionEvents, JSON.stringify(instructionEvents)).toHaveLength(0);
+
+
+  // 6. Deleted ingress returns 404 on the deployed surface.
   for (const verb of ['tell', 'correct']) {
     const res = await api(page, 'POST', `/api/texture/documents/${docID}/${verb}`, { content: 'x' });
     expect(res.status, `${verb} should be deleted`).toBe(404);
