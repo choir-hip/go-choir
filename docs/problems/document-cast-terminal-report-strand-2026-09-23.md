@@ -58,9 +58,12 @@ multi-command reports.
   resume; `bindLateAssignmentExecutionReceipts` drops the per-command
   `SourceTreeDigest == SubjectDigest` check (only the first command's
   source tree equals the binding subject).
-- verdict-validation commit — `Tray.Complete` rejects a non-enum verdict
-  in-cell (model sees the error and retries); `commitCompleteIntent`
-  fail-fasts on a typed-but-wrong verdict before the saga stages.
+- `1107c7df` — `Tray.Complete` rejects a non-enum verdict in-cell (model
+  sees the error and retries).
+- `ad7b5194` — `commitCompleteIntent` coerces a typed-but-wrong verdict
+  (pass/fail/abstain on implementation) to `none` rather than rejecting:
+  a reduce error poisons the capsule mid-run with no in-cell recovery, so
+  coercion is the only safe response at that layer.
 
 ## Evidence
 
