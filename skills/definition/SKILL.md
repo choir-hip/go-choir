@@ -10,6 +10,11 @@ description: >-
 
 # Definition v2: Goal Files
 
+> **Deprecated 2026-09-22.** Do not author new goal files with this skill —
+> use `skills/throughline/SKILL.md`. Existing `/goal` files written in this
+> format remain valid and executable; throughline is the authoring discipline
+> layered on the same `/goal` artifact.
+
 Definition makes `/goal <file>.md` a run command for a real outcome.
 
 A goal file says, in order: what exists now, what will exist when the work is

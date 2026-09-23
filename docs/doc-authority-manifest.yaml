@@ -54,7 +54,14 @@ documents:
     is_evidence: false
     annotations: {doc_role: overhaul_plan, authority: support, lifecycle: living}
     witnesses: [docs/reorientation-docs-overhaul-2026-09-22.md, docs/world-wire-mission-stack-2026-09-22.md, docs/ACTIVE.md]
-    refresh_triggers: [doctrine_change]
+
+  - path: docs/current-situation-2026-09-22.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: situation_brief, authority: support, lifecycle: living}
+    witnesses: [docs/current-situation-2026-09-22.md, docs/world-wire-mission-stack-2026-09-22.md, docs/ACTIVE.md]
+    refresh_triggers: [doctrine_change, product_vision_change]
 
   - path: AGENTS.md
     claim_scope: current

@@ -1,0 +1,805 @@
+---
+name: mission-gradient
+description: Compile ambitious long-running Codex /goal work into an invariant-preserving optimization landscape instead of a procedural checklist. Use when preparing overnight or multi-hour coding/research/ops missions, especially when the user wants "homotopy not ladder", mission-gradient control, conjecture-led supervision, hyperthesis-edge tracking, agentic root-cause investigation, cognitive search-space reframing before stopping, belief-state tracking, quality-sensitive work, dense verification, anti-Goodhart constraints, rollback policy, staging/deployed proof, or self-development through production-like pathways.
+version: 2.0.0
+author: Hermes Agent
+license: MIT
+metadata:
+  hermes:
+    tags: [mission-gradient, long-running-agents, verification, homotopy, control]
+    related_skills: [cognitive-transform-portfolio]
+---
+
+# MissionGradient
+
+> **Deprecated 2026-09-22.** First generation of the conjecture-ledger lineage
+> (mission-gradient → parallax → throughline). Kept for reference; do not use
+> for new `/goal` files — use `skills/throughline/SKILL.md`.
+
+Use MissionGradient to convert a long-running agent mission into a navigable optimization landscape.
+
+The output is not a normal plan. It is a goal geometry: real artifact, invariants, value criterion, quality gradient, homotopy parameters, conjecture ledger (the typed belief state), receding-horizon control, dense feedback, evidence ledger, mission report, anti-Goodhart constraints, rollback policy, learning side-channel, escalation rules, and stopping condition.
+
+Since v2.0.0 the supervisory object is the **conjecture trajectory**: what the mission currently believes, how it would know, what its tests cannot see, and what it may claim afterward. The superseded theory sources remain in Git history. The compact frame: an observer is a proof system; its hyperthesis is its incompleteness; a claim's authority is the reach of its evidence — including this one.
+
+## Execution Kernel
+
+MissionGradient exists to keep long-running agents oriented.
+
+Use it to:
+
+- preserve the real artifact topology;
+- maintain an explicit belief state as a conjecture ledger;
+- name every load-bearing claim's hyperthesis edge (what the current
+  observer cannot see) and scope (the domain the evidence actually covers);
+- act by short receding-horizon control intervals;
+- investigate blockers to root cause before treating them as stopping conditions;
+- transform the cognitive search space when the current route stalls;
+- improve quality after first correctness;
+- collect evidence without checklist theater;
+- keep a legible mission report current while the run unfolds;
+- preserve rollback and promotion discipline;
+- stop or escalate on invariant-level surprises.
+
+Do not:
+
+- create fake stages or fake APIs;
+- create fake work, placeholder implementations, parallel mock systems, or code
+  detritus that future agents will imitate as precedent;
+- optimize a checklist instead of the artifact;
+- treat code existence as behavioral proof;
+- hide uncertainty;
+- assert past the reach of the evidence (selling existential evidence —
+  "tests pass", "one run worked" — as a universal claim);
+- let a worker verify its own work: agent output is a candidate proof,
+  never a theorem, until an independent checker accepts it;
+- turn an actionable blocker into a final answer while authorized probes remain;
+- write a next mission instead of executing the next safe probe when it is inside the current authority boundary;
+- keep working after the mission identity has changed;
+- claim completion without named evidence.
+
+MissionGradient guides the trajectory. The evidence ledger records what was proven. The mission report explains the trajectory in owner-readable form. Promotion changes reality. Do not confuse these layers.
+
+## Agentic Problem Solving Default
+
+MissionGradient is not a graceful-bailout format. A precise blocker is valuable only after the agent has investigated the failure surface and changed search strategy at least once.
+
+When a blocker appears:
+
+1. Classify it as tactical, target-level, invariant-level, or external.
+2. If it is tactical and the next probe or fix is inside current authority, execute the next receding-horizon loop: inspect evidence, form a root-cause hypothesis, instrument or patch the implicated layer, verify, and update belief state.
+3. If it is target-level but the invariant is intact, update the mission document or goal parameterization and continue.
+4. If it is invariant-level or external, stop or escalate with exact evidence and the smallest safe next probe.
+
+Before stopping on any nontrivial blocker, apply 2-5 route-changing cognitive transforms. Use the cognitive-transform-portfolio skill when available. The transforms must change the next probe, implementation route, verifier, scope, evidence plan, or stopping condition. Decorative reframing does not count.
+
+Default bias: if the final report can name an executable next objective inside the mission's authority boundary, the mission should usually run that objective instead of ending. Stop only when continuing would violate an invariant, cross an authorization boundary, become unsafe/destructive, or repeat already-falsified probes without new evidence.
+
+## Completion, Checkpoints, And Resumption
+
+MissionGradient should encourage full completion without encouraging false completion.
+
+A checkpoint is not completion.
+
+Use explicit mission statuses:
+
+- `complete`: the mission stopping condition is satisfied with named evidence.
+- `checkpoint_incomplete`: useful uphill progress landed, but the stopping condition is not satisfied. This is a resumable handoff state, not success.
+- `blocked_incomplete`: a named blocker prevents progress after root-cause probes and cognitive transforms. This must include the smallest safe next probe or the external authority required to continue.
+- `superseded`: target-level or invariant-level learning changed the mission identity enough that continuing the original mission would optimize the wrong artifact.
+
+Do not phrase `checkpoint_incomplete` as "completed", "done", "passed", "goal achieved", or "mission achieved". Say plainly: "Mission incomplete; checkpoint landed."
+
+Checkpointing exists to preserve learning and enable continuation. It is not a lower bar for success.
+
+The default action when a mission has not satisfied its stopping condition is to continue, redirect, or delegate the next safe executable probe. Stop at an incomplete checkpoint only when continuing would:
+
+- exceed the authorized time, budget, or context boundary;
+- require human or operator authority;
+- violate an invariant;
+- become unsafe or destructive;
+- wait on external systems with no useful parallel work;
+- repeat already-falsified probes without new evidence.
+
+For orchestration, a `checkpoint_incomplete` result from a worker, vsuper, or cosuper is a control signal, not terminal success. The supervising agent should usually:
+
+- redirect the same agent with the next executable probe;
+- spawn a new agent with a narrower continuation objective;
+- reparameterize the mission if target-level learning changed the route;
+- escalate only if the blocker is invariant-level, external, or unsafe.
+
+## Written Artifacts
+
+Long-running MissionGradient work needs three durable written surfaces:
+
+- the mission document: the control object, invariants, belief state, frontier,
+  checkpoint/resumption state, and stopping condition;
+- the evidence ledger: claims and proof, with artifact refs;
+- the mission report: a human-readable narrative of what happened, what changed,
+  what was proven, what remains uncertain, and what should happen next.
+
+Create or name the report file near mission start, usually:
+
+```text
+docs/mission-report-<short-mission-name>-<YYYY-MM-DD>.md
+```
+
+Update the report throughout the run, not only at the end. At minimum, update
+it after:
+
+- the initial substrate/belief-state inspection;
+- any docs-first problem checkpoint;
+- each behavior-changing commit or promotion;
+- each deployed/product-path proof;
+- each target-level route change;
+- each incomplete checkpoint, blocker, or completion decision.
+
+Keep the report legible. It should be readable without replaying Trace or chat.
+Do not dump logs into it. Link or name bulky evidence artifacts, traces,
+screenshots, PDFs, command outputs, and run ids.
+
+The report should normally include:
+
+```text
+mission goal and artifact
+invariants preserved or violated
+timeline of major decisions
+what shipped
+CI/deploy/product-path evidence
+model/provider/tooling evidence when relevant
+problem checkpoints and root causes
+what was proven vs merely attempted
+residual risks
+rollback refs
+next mission or next executable probe
+```
+
+At the end of the mission, create a PDF version of the report and save it under
+the owner's iCloud Drive mission reports directory:
+
+```text
+~/Library/Mobile Documents/com~apple~CloudDocs/mission reports/
+```
+
+Create the directory if needed. Prefer the `make-pdf` skill when available; if
+not available, use the project's established Markdown-to-PDF route. The PDF is
+a final owner-facing artifact. Keep the Markdown report in the repo unless the
+user explicitly asks otherwise.
+
+Before final response after any broad MissionGradient run, update the mission document unless the user explicitly says not to. Keep the update concise and resumable. Do not turn the mission document into a chat log; put bulky logs, screenshots, traces, and transcripts in a dated evidence artifact and link them.
+
+The mission document should contain or update a `Run Checkpoint & Resumption State` section:
+
+```text
+status: complete | checkpoint_incomplete | blocked_incomplete | superseded
+last checkpoint:
+current artifact state:
+what shipped:
+what was proven:
+unproven or partial claims:
+belief-state changes:
+remaining error field:
+highest-impact remaining uncertainty:
+next executable probe:
+suggested resume goal string:
+evidence artifact refs:
+rollback refs:
+```
+
+Update canonical architecture or platform-state docs only when the run changes current operating rules, product ontology, deployed platform behavior, or durable architecture. Tactical run details belong in the mission doc, evidence artifact, tests, or Trace, not in canonical docs by default.
+
+## Thesis: Homotopy, Not Ladder
+
+Long-running agents degrade when given discontinuous objectives: checklists, fake stages, disposable mocks, or "MVP then real thing" ladders. These create local proxy rewards and encourage reward hacking.
+
+Use homotopy, not ladder.
+
+Define one real system parameterized from low to high resolution. Simplify by reducing resolution while preserving topology: same production interface family, state transitions, authority boundaries, event semantics, trace semantics, and verifier meaning.
+
+A simplification that cannot continuously deform into the full system is a different object, not a useful rung.
+
+A low-resolution version is valid only if it is a projection of the real system. A fake island is not progress.
+
+This is the core anti-detritus rule. The model's trained instinct is often to
+make a small fake thing that looks like progress: a mock route, a stub service,
+a demo panel, a seed artifact, a permissive test, or a separate data structure
+that bypasses the real object. Those shortcuts waste time twice: first by not
+proving the target behavior, then by becoming in-context precedent that future
+agents copy. MissionGradient exists to keep simplification continuous with the
+real system, not to make fake islands more elaborate.
+
+## Value Criterion
+
+A goal says what is wanted. A value criterion says how to decide whether the artifact is getting closer.
+
+Do not write only:
+
+```text
+Build the multiagent orchestration layer.
+```
+
+Prefer:
+
+```text
+Minimize trace divergence from the intended event graph while preserving scheduler/provider boundaries, eliminating bypass surfaces, bounding retries, and maintaining reproducible rollback after every transformation.
+```
+
+A value criterion makes the goal searchable. It defines loss.
+
+Hard invariants are not soft preferences. Do not optimize over the trust boundary. Optimize inside it.
+
+## Quality Gradient
+
+Do not optimize only for task completion. Optimize for durable artifact quality.
+
+Before implementation, define the expected quality level:
+
+- `minimal`: smallest safe proof of concept;
+- `solid`: production-shaped, tested, readable, rollback-safe;
+- `excellent`: simple, integrated, documented, observable, and unlikely to create follow-up cleanup work.
+
+For long-running missions, default to `solid` unless explicitly told otherwise.
+
+A rushed patch is not success if it creates hidden future work, parallel systems, vague names, weak tests, brittle assumptions, unclear ownership, or cleanup obligations that should have been handled during the run.
+
+After the first working version, perform one quality pass:
+
+- simplify;
+- remove duplicate pathways;
+- improve names;
+- strengthen tests/verifiers;
+- check logs/traces;
+- update relevant docs;
+- state residual risks.
+
+Do not polish cosmetics before behavioral correctness. Do not stop at behavioral correctness when the mission asked for a durable artifact.
+
+## Conjecture Ledger (The Typed Belief State)
+
+Maintain the belief state as a ledger of conjectures, not prose. Every
+load-bearing belief becomes a conjecture:
+
+```text
+CONJECTURE = (CLAIM, TEST, HYPERTHESIS_EDGE, DELTA_O, SCOPE)
+
+CLAIM             what might be true
+TEST              how the current observer would know
+HYPERTHESIS_EDGE  how the claim could survive falsely without detection
+DELTA_O           the smallest observer upgrade that would shrink the edge
+SCOPE             the domain over which the claim may be asserted if the test passes
+```
+
+Conjecture statuses: `proposed | active | testing | supported | weakened |
+falsified | superseded | promoted_to_assertion`. An assertion is a supported
+conjecture with receipts (evidence refs) and an explicit scope; assertions
+carry `invalidation_triggers` — when a premise dies (base moved, verifier
+superseded), the assertion reverts to a conjecture, visibly.
+
+The hyperthesis edge names which of four incompleteness classes blocks the
+observer, because each class has a different fix:
+
+```text
+independence    the mission's assumptions don't bear on it  -> adopt a new evidence source, explicitly
+resource        a proof exists but exceeds the budget       -> more budget, or a smaller claim
+missing_oracle  no instrumentation/permission/tool sees it  -> the usual observer upgrade
+frame_lock      the refutation can't be stated in the
+                mission's current vocabulary                -> extend the vocabulary; this is the
+                                                               dangerous class (evidence gets
+                                                               reinterpreted to fit the expressible)
+```
+
+Anti-decoration gate: a conjecture record is useful only if it changes the
+next discriminator, probe, verifier, action route, assertion scope, or
+stopping condition. Filling fields without changed behavior is conjecture
+paperwork — the named failure mode of this format. If the ledger is not
+changing decisions, say so in the report.
+
+Do not treat a plausible explanation as known state. If the next action
+depends on an uncertain conjecture, probe before mutating. If the ledger
+becomes stale, contradictory, or unsupported, update it before continuing.
+Silent state confusion is a major long-run failure mode.
+
+## Claims, Proof, and Scope
+
+A claim is never bare `phi`; it is `for all x in D: phi(x)` for an explicit
+domain D — the domain the evidence actually covers. The two cardinal sins:
+
+- **Overclaiming**: asserting beyond the proven domain. "Tests pass,
+  therefore the code is correct" sells existential evidence (some executions
+  behaved) as a universal claim (all executions behave).
+- **Heresy**: keeping an assertion in circulation after its proof died —
+  docs, prompts, or UI copy stating something the retained evidence no
+  longer supports.
+
+Each evidence class is a proof system with a characteristic reach. Scope
+claims to the class that produced them:
+
+```text
+model checking (TLC)    universal over the MODEL; transfers to code only via conformance
+code-level proof        universal over the code proven, nothing more
+property-based tests    probabilistic, over the stated distribution
+example tests           existential: exactly the executions run
+verifier contract       the predicate checked, on the artifact checked
+human review            the reviewer's attention and competence
+```
+
+Untrusted provers, trusted checkers: the agent doing the work is the
+untrusted prover. Its output — code, a claim, "done" — is a candidate proof
+until a checker (test, contract, TLC run, independent verifier, owner)
+accepts it. A proof checked by its own prover is not checked.
+
+## Receding-Horizon Control
+
+Do not rely on a long static plan.
+
+Operate in short control intervals:
+
+1. choose the next move under the mission gradient;
+2. predict what evidence should change;
+3. act within a bounded mutation radius;
+4. observe actual evidence;
+5. update the conjecture ledger;
+6. continue, narrow, branch, rollback, or stop.
+
+Conjecture rules per interval:
+
+- **Before mutation**: state the active conjecture; name its hyperthesis
+  edge; define what evidence would update it; choose the smallest safe
+  substrate (direct probe, capsule, candidate world, verifier, or human
+  decision).
+- **Before verification**: state the assertion scope if verification
+  passes; name what the verifier cannot see; state whether an observer
+  upgrade is required before promotion.
+- **Before stopping**: list supported, weakened, falsified, superseded, and
+  still-open conjectures; state remaining hyperthesis edges; name the next
+  highest-information action. Do not call a checkpoint a completion.
+
+If observations are surprising, shrink scope and increase instrumentation.
+
+A clean stop with a precise blocker is better than continued work under a
+broken premise only after root-cause probes and cognitive search-space
+transforms have been attempted or explicitly blocked.
+
+## Evidence Ledger
+
+The evidence ledger records what was actually proven.
+
+For each nontrivial claim, record:
+
+- claim, with its scope (the domain the evidence covers);
+- evidence class (model check / proof / property test / example test /
+  contract / human observation) — the claim must not outrun the class;
+- evidence source;
+- command or observation;
+- artifact path;
+- result;
+- uncertainty or caveat (the hyperthesis edge this evidence leaves open);
+- whether this supports promotion, and at which scope.
+
+Do not report behavior as verified unless the evidence was produced by an executed command, captured trace, deployed endpoint, screenshot, log, durable artifact, or explicitly named manual observation.
+
+Do not confuse a filled ledger with success. Success requires the artifact to move uphill under the mission gradient.
+
+## Unknown Learning Without Drift
+
+Long missions should discover unknown unknowns without letting curiosity destroy the goal. Separate target from invariant.
+
+A target is the current local expression of what matters. An invariant is the deeper identity that should survive learning.
+
+When a run discovers surprising information, classify it:
+
+- Tactical learning: changes the route, implementation detail, or next experiment. Fold it into the run.
+- Target-level learning: changes the local target or suggests a better parameterization. Create a branch, update the mission document, or propose a reparameterization.
+- Invariant-level learning: challenges the identity, trust boundary, safety property, or proof semantics. Stop and escalate before changing the invariant.
+
+This prevents two failure modes:
+
+- Pure goal optimization misses evidence that the goal was wrong.
+- Pure curiosity wandering keeps changing islands and destroys forward motion.
+
+Learning is allowed to deform the target, but the system must preserve identity under deformation. This is homotopy, not ladder.
+
+## Mathematical Form
+
+Frame the mission as:
+
+```text
+Find artifact state s in S that minimizes L(s) subject to I(s) = true.
+```
+
+`I(s)` contains hard invariants. These define the admissible state space. They are not optional penalties.
+
+For soft tradeoffs inside the admissible space, use a multi-term functional:
+
+```text
+J(s, lambda) = Q(s, lambda) - alpha B(s) - beta R(s) - gamma U(s) - delta G(s)
+```
+
+where:
+
+- `Q` is target quality at resolution `lambda`;
+- `B` penalizes bypasses and proxy wins;
+- `R` penalizes regressions against existing behavior;
+- `U` penalizes unexplained or unobserved state;
+- `G` penalizes Goodharting the verifier.
+
+`lambda` is the homotopy coordinate. At `lambda = 0`, the system is low-resolution but real. At `lambda = 1`, it is production-complex.
+
+The optimization target is:
+
+```text
+for lambda increasing continuously, improve J while preserving I.
+```
+
+The agent should select the next refinement from the error field:
+
+- Which invariant is unstable?
+- Which interface leaks?
+- Which trace diverges?
+- Which verifier can be made denser?
+- Which complexity parameter can increase without breaking topology?
+- Which quality weakness creates the most future cleanup work?
+
+Do not hand the agent named fake stages that become local reward targets.
+
+## MissionGradient Output Template
+
+When using this skill, produce a mission document with these sections.
+
+### Requirements Contract
+
+If the mission has, needs, or implies a separate spec/requirements document,
+name it near the top of the mission as the requirements contract. Use a direct
+repo-relative path when possible.
+
+The mission document controls trajectory, belief state, evidence, rollback, and
+stopping conditions. The requirements contract controls the product/architecture
+invariants and acceptance semantics. Do not duplicate a full spec into the
+mission and let the two drift. Summarize only the invariants needed for mission
+control, then link to the contract for the full requirements.
+
+If no separate spec exists for a broad behavior-changing mission, either create
+one first or explicitly state why the mission document itself is the
+requirements contract.
+
+### Real Artifact
+
+Name the production artifact being optimized. Avoid vague verbs like "fix", "improve", or "build" unless the artifact is concrete.
+
+### Invariants
+
+List topology-preserving properties that must remain true across simplification and refinement.
+
+Cover:
+
+- production API and trust boundaries;
+- state ownership and persistence;
+- event/trace causality;
+- actor authority boundaries;
+- execution locality and deployment boundary;
+- rollback and recovery;
+- security and anti-bypass surfaces.
+
+### Value Criterion
+
+Define what "better" means as divergence reduction under invariant preservation. Include explicit penalties for bypasses, regressions, hidden state, and Goodharting.
+
+### Quality Gradient
+
+Define the expected quality level: `minimal`, `solid`, or `excellent`.
+
+For long-running work, default to `solid` unless the mission explicitly asks for a minimal probe or excellent polish.
+
+State what would count as rushed/substandard work in this mission.
+
+### Homotopy Parameters
+
+Name continuous realism axes. Examples:
+
+- number of users, agents, VMs, files, apps, sources, or trajectories;
+- latency, retries, failures, and concurrency;
+- provider and external dependency realism;
+- input entropy and content-type coverage;
+- unit proof -> integration proof -> deployed proof;
+- read-only proof -> mutable proof with rollback;
+- single worker -> parallel workers.
+
+### Conjecture Ledger
+
+Seed the ledger with the mission's driving conjectures — the claims whose
+truth or falsity decides the mission. For each:
+
+```text
+id:
+claim:
+test:
+hyperthesis_edge:
+  blind_spot:
+  boundary_type: independence | resource | missing_oracle | frame_lock
+  bound:
+observer_upgrade:
+scope_if_supported:
+falsifier:           # the observation that would kill this claim fastest
+status: proposed
+```
+
+Also state the conventional belief model (current artifact state, evidence
+for it, highest-impact uncertainty, next observation that would reduce it).
+Update this section whenever a conjecture changes status — and record what
+the status change changed about the mission's next action. A ledger that
+never changes the route is decorative.
+
+### Investigation & Cognitive Reframing
+
+Define how the mission handles blockers without premature bailout.
+
+Include:
+
+- the root-cause investigation loop to run before stopping;
+- what diagnostics, logs, traces, tests, or instrumentation can be used;
+- which blockers are tactical and should trigger another autonomous probe;
+- which blockers are invariant-level or external and require escalation;
+- 2-5 cognitive transforms to apply before declaring a hard blocker;
+- how those transforms change the next probe, verifier, scope, or stopping condition.
+
+The mission should say explicitly: if a blocker defines an executable next
+probe inside the current authority boundary, run that probe instead of ending.
+
+### Receding-Horizon Control
+
+Define the control interval size and mutation radius.
+
+State how the agent should choose the next move, observe results, update belief, and decide whether to continue, narrow, branch, rollback, or stop.
+
+### Dense Feedback Channels
+
+List feedback that reveals local error, not just pass/fail status.
+
+Include tests, traces, logs, health checks, event assertions, artifact checks, deployed e2e checks, and manual QA only where automation cannot yet observe the behavior.
+
+### Evidence Ledger
+
+Define the evidence format for nontrivial claims.
+
+At minimum:
+
+```text
+claim
+evidence source
+command or observation
+artifact path
+result
+uncertainty/caveat
+promotion relevance
+```
+
+### Mission Report
+
+Define how the owner-readable report will be maintained.
+
+At minimum:
+
+```text
+markdown report path:
+pdf report path in iCloud:
+update cadence:
+expected audience:
+evidence artifact linking policy:
+```
+
+The report is not a raw evidence dump. It should explain the trajectory,
+decisions, shipped changes, proof, residual risks, and next mission in a form a
+human can read after waking up or after a long handoff.
+
+### Run Checkpoint & Resumption State
+
+Define how the mission document should be updated during or after execution.
+
+At minimum, include:
+
+- mission status: `complete`, `checkpoint_incomplete`, `blocked_incomplete`, or `superseded`;
+- last checkpoint and current artifact state;
+- what shipped and what was proven;
+- unproven or partial claims;
+- belief-state changes and remaining error field;
+- highest-impact remaining uncertainty;
+- next executable probe;
+- suggested resume goal string;
+- evidence artifact references;
+- rollback references.
+
+This section must distinguish checkpoint evidence from mission completion. A useful checkpoint is not a pass unless the stopping condition is satisfied.
+
+### Forbidden Shortcuts
+
+List topology-changing shortcuts that would falsely improve the metric. Be direct.
+
+Common examples:
+
+- fake APIs that bypass the product path;
+- browser-public internal orchestration routes;
+- local edits when the proof requires deployed work;
+- test-only persistence;
+- manually seeded success artifacts;
+- mocks that are not projections of the production interface family;
+- permissive assertions that hide causality gaps;
+- UI copy or summaries that launder failures into success.
+
+### Rollback Policy
+
+Define how the mission preserves reversibility. Include git, deploy, state, VM, database, route, and artifact rollback where relevant.
+
+For missions that mutate canonical/user-facing state, decompose the safety
+claim into:
+protocol-safe (machine-checked) AND instance-compliant (record check) AND
+contracts-passed (bounded, scoped) AND revertible-within-window AND
+residual-accepted-by-owner. Reversibility substitutes for unprovable
+correctness only while the rollback window is open; irreversible effects are
+a different claim class and must be flagged before, not after.
+
+### Learning Side-Channel
+
+Classify surprises:
+
+- Tactical learning: apply directly.
+- Target-level learning: update the mission doc or propose reparameterization.
+- Invariant-level learning: stop and escalate before changing the invariant.
+
+State which project artifacts receive learnings: mission doc notes, tests, architecture docs, issue tracker, trace annotations, or final report. Do not hide strategic discoveries inside transient chat narration.
+
+### Stopping Condition
+
+Completion requires proof, not effort:
+
+- invariants verified or explicitly deferred with rationale;
+- root-cause investigation and cognitive reframing attempted before any hard
+  blocker stop;
+- no executable safe probe remains inside the current authority boundary, unless
+  success proof has already been reached;
+- no known topology-changing shortcut in the proof path;
+- quality level satisfied or residual quality debt stated;
+- deployed proof when deployment is part of the target;
+- artifacts/traces/screenshots/logs named in final report;
+- mission report updated, and PDF saved to the owner's iCloud mission reports
+  directory for broad MissionGradient runs;
+- residual risks stated plainly;
+- rollback target exists when state was mutated;
+- evidence ledger supports the promotion recommendation;
+- the conjecture ledger is settled: every driving conjecture is supported
+  (with scoped receipts), falsified, superseded, or explicitly left open
+  with a named hyperthesis edge and next discriminator;
+- no claim in the report outruns its evidence class.
+
+If the stopping condition is satisfied, report `complete`.
+
+If useful progress landed but the stopping condition is not satisfied, report `checkpoint_incomplete`. Do not present this as success. Update the mission document so the next agent can resume from the real frontier.
+
+If a blocker remains after root-cause probes and cognitive transforms, report `blocked_incomplete` with exact evidence, required authority if any, rollback state, and the smallest safe next probe.
+
+If the mission identity changed, report `superseded` and explain the target-level or invariant-level learning that made the original mission the wrong object.
+
+Do not say "goal achieved" as a bare status. Say what was proven, under which invariants, with which residual risks, and whether the mission is complete or only checkpointed.
+
+## Checklist Policy
+
+Checklists are allowed only as instruments. They must not become the objective.
+
+For each checklist item, tie it to:
+
+- an invariant;
+- a value criterion term;
+- a verifier;
+- a rollback/safety condition when relevant;
+- a quality expectation when relevant.
+
+Mark an item complete only when the verifier proves the behavior. Do not mark code existence as behavioral proof.
+
+## `/goal` Usage
+
+Every MissionGradient mission document must include a short `/goal` string.
+The `/goal` is not optional: it is the executable handle that transfers the
+mission geometry into a long-running agent run.
+
+Short `/goal` shape:
+
+```text
+Use MissionGradient. Complete docs/<mission-gradient-doc>.md by optimizing the real artifact under its invariants, conjecture-ledger updates, investigation loop, cognitive reframing, quality gradient, and verification criteria. Before each mutation state the active conjecture and its hyperthesis edge; scope every claim to its evidence class; never let a worker verify its own work. Preserve topology, avoid forbidden shortcuts, maintain an evidence ledger, execute safe next probes instead of stopping on tactical blockers, and stop/escalate only on success, invariant-level surprises, external authority boundaries, or hard blockers after root-cause probes.
+```
+
+For long-running work, append:
+
+```text
+If the stopping condition is not reached, do not call the mission complete. Land and report only a checkpoint_incomplete or blocked_incomplete state, update the mission doc with a resumable checkpoint, and continue/redirect/delegate any safe executable next probe inside current authority before stopping.
+```
+
+## Review Questions
+
+Before handing the mission to `/goal`, answer:
+
+- What is the real artifact?
+- What are the driving conjectures, and what is each one's fastest falsifier?
+- For each driving conjecture: what can the current observer not see
+  (hyperthesis edge), and which incompleteness class is it?
+- What is the strongest claim the planned evidence class can actually
+  support, and is the mission promising more than that anywhere?
+- Which invariants define identity of the artifact?
+- What quality level is expected?
+- What is the current belief state and what is uncertain?
+- What observable feedback tells the agent where error remains?
+- What root-cause probes should run before a blocker can be accepted?
+- Which cognitive transforms could change the next probe, verifier, or scope?
+- What would a reward-hacking implementation do?
+- Which simplifications preserve topology, and which create fake islands?
+- What local work is allowed, and what must happen in production-like infrastructure?
+- What evidence would convince a skeptical reviewer that the system works?
+- What discoveries require escalation rather than silent adaptation?
+- What is the rollback target if the promoted state is bad?
+- What distinguishes full completion from a checkpoint in this mission?
+- If only a checkpoint lands, what exact section of the mission doc will make resumption cheap and honest?
+
+## Addendum: Scientific Rationale
+
+Treat the model as a fixed neural network capable of inference-time adaptation over context, not as a symbolic employee executing a recipe.
+
+The outer weights are constant during ordinary inference. But context induces hidden states, attention patterns, task representations, and action probabilities. In practice, the model can update an implicit task model over activations and context.
+
+Prompt design should target that layer. Give the model objective geometry, error structure, invariants, and dense feedback.
+
+Do not overclaim the mechanism. The point is not that every frontier model
+literally runs vanilla gradient descent during every natural-language task. The
+point is operational: fixed transformer weights can implement task adaptation
+over context, so prompts for long-running agents should behave less like
+recipes and more like a training/evaluation environment with coherent local
+error signals.
+
+### Context Programming Model
+
+A prompt is input to a differentiable program.
+
+Let the model be fixed:
+
+```text
+M_theta
+```
+
+Outer weights theta do not change during ordinary inference. But context `C` induces a policy over actions:
+
+```text
+pi_theta(a | C)
+```
+
+For long-running agents, `C` is not only the initial prompt. It includes artifact state, prior tool outputs, compiler errors, tests, traces, diffs, logs, verifier results, belief-state updates, evidence ledgers, and the agent's own intermediate artifacts.
+
+The harness constructs the next context:
+
+```text
+C_{t+1} = Phi(C_t, s_t, a_t, o_t, e_t)
+```
+
+where:
+
+- `s_t` is current artifact state;
+- `a_t` is the agent action;
+- `o_t` is observed environment response;
+- `e_t` is evaluative feedback.
+
+Bad feedback says:
+
+```text
+Step 3 complete.
+```
+
+Good feedback says:
+
+```text
+The state-machine invariant was violated here; the event trace diverged from expected causal order at edge 17; this API path bypasses orchestration; the test passed only because the provider was replaced by a fake path not used in production.
+```
+
+Good feedback exposes local error structure and turns the run into inference-time learning.
+
+Operational takeaway:
+
+- the outer weights are constant during inference;
+- the context induces hidden states, attention patterns, task representations, and action probabilities;
+- those fixed weights can implement inner learning dynamics over activations and context;
+- the model is not updating theta; it is updating an implicit task model in activations.

@@ -1,18 +1,19 @@
 # The Mission Stack: From Here to World Wire Live
 
-Date: 2026-09-22
-Status: **proposed roadmap, awaiting owner ratification.** Supersedes the
+Date: 2026-09-22 (revised same-day after owner review)
+Status: **proposed roadmap, under owner review — not ratified.** Supersedes the
 ordering rationale of
-[`reports/choir-rlm-missions-overview-2026-09-09.md`](reports/choir-rlm-missions-overview-2026-09-09.md)
-(the 11-mission stack), which ended at "native goals" and never reached a
-product. Mission state still lives in `ACTIVE.md` + `mission-graph.yaml`;
-this document supplies the corrected scope and ordering.
-Format: every mission below is authored as a **throughline** `/goal` file
-(`skills/throughline/SKILL.md`) — the current mission format.
+[`reports/choir-rlm-missions-overview-2026-09-09.md`](reports/choir-rlm-missions-overview-2026-09-09.md).
+Mission state lives in `ACTIVE.md` + `mission-graph.yaml`; this document
+supplies the corrected scope and ordering. The owner's situation brief is
+[`current-situation-2026-09-22.md`](current-situation-2026-09-22.md).
+Format: every mission is authored as a **throughline** `/goal` file
+(`skills/throughline/SKILL.md`).
 Provenance: synthesized from a 13-agent divergent consensus panel
-(`.agentic-consensus/agentic-consensus-20260922-202933/`, 8 substantive
-returns) plus the Sep-22 precommitment-records docs and the repo survey in
-[`reorientation-docs-overhaul-2026-09-22.md`](reorientation-docs-overhaul-2026-09-22.md).
+(`.agentic-consensus/agentic-consensus-20260922-202933/`), then revised against
+owner feedback: the box score is out of scope (it follows weeks of production
+wire), and the pre-wire phase was under-scoped — more RLM and self-development
+work remains than the first draft showed.
 
 ## The correction in one paragraph
 
@@ -20,266 +21,224 @@ The 11-mission stack was a **harness program**: it built a trustworthy event
 log and stopped at a goal selector, with no users, no wire, no record. The
 corrected stack treats the commitment ledger as what the substrate is *for* —
 **precommitment records are the product mechanism**, and the World Wire is
-that ledger made public. The stack is ordered substrate → mechanism →
-product → wire, ending at the running record with real users.
+that ledger made public. But the path there is longer than a substrate→
+mechanism→product compression suggests: the RLM program is unfinished, the
+self-development gate is a program not a single proof, and the wire does not
+start until the computer genuinely develops itself.
 
 ## The load-bearing insight (panel consensus)
 
 **An unresolved precommitment is a durable wake obligation — the same object
 as the carrier's stranded-continuation bug.** A record that commits a
 prediction must be resolved later; that resolution is a continuation. The
-carrier's "activation-wake family" defect (a lifecycle transition happens but
-no durable wake/retry authority is minted) is the same substrate gap the
-records mechanism needs closed. This collapses two missions into one
-substrate repair and reframes the carrier's pending owner decision: the wake
-repair is not a detour for a roster tally, it is the prototype for open
-commitments and for the wire's impact-propagation (a new source version
-waking the standing beliefs it bears on).
+carrier's "activation-wake family" defect is the same substrate gap the
+records mechanism needs closed. This reframes the carrier's owner decision:
+the wake repair is the prototype for open commitments and for the wire's
+impact-propagation.
 
 ## What the old stack got wrong (panel consensus)
 
 - **It ended at machinery.** "Native goals" was the endpoint; production
-  publication, API, box score, radio, real users, repeat use were absent.
-- **Shadow evals (old M9) were mislocated.** A late measurement program that
-  can't promote anything is a cathedral beside the deployment logs.
-  Precommitment records make every production run a scored episode —
-  deployment logs *are* the evaluation.
-- **Four serialized desk crossings (old M3–M6) over-weighted ceremony.** The
-  minimal ontology subsumes research/management crossings in one collapse.
-- **Prompt-bar diet (old M7) and continuation census (old M8) were mid-stack
-  gates.** The census is the ontology migration's input; the diet is a
-  product-latency repair at the workbench/beta boundary.
+  publication, API, real users, repeat use were absent.
+- **Shadow evals (old M9) were mislocated.** Precommitment records make every
+  production run a scored episode — deployment logs *are* the evaluation.
 - **It treated precommitment records as a side track.** The mechanism lands
-  immediately after the substrate can hold it, and the self-development proof
-  runs *on* it.
-- **No docs-hygiene track.** 604 files, three ledger-skill generations,
-  zombie executables — retrieval pollution corrupts every mission's `start`
-  receipt.
+  before the self-development proof, so the proof generates scored records.
+- **No docs-hygiene track.** Retrieval pollution corrupts every mission's
+  `start` receipt.
 
-## The stack
+## What the first draft of THIS stack got wrong (owner review)
+
+- **Box score was in scope.** It is not a pre-wire mission; it follows weeks
+  of production wire accumulating resolutions. Removed.
+- **The pre-wire phase was compressed.** M1–M3 implied the substrate was
+  nearly done. It is not: the carrier is blocked, the ontology cutover is
+  unratified, the remaining desk crossings are real work, and the
+  self-development gate is a program, not one proof.
+- **Uncertain steps were presented as settled.** The ontology cutover, the
+  desk-crossing strategy, and the depth of the self-development program are
+  open questions, not decided sequence.
+
+## The stack (revised)
+
+Phases, not a flat list — the phases are ordered, the missions inside a phase
+may overlap. Every mission is a throughline goal file.
 
 ```text
-M0  Docs overhaul (parallel green track — in flight, not a dependency)
-M1  Wake authority: minted continuations          [red substrate]
-M2  Carrier landing                                [red substrate]
-M3  Ontology cutover                               [red substrate]
-M4  Precommitment records: the ledger in product   [orange mechanism]
-M5  Self-development proof on records              [red proof]
-M6  Context packs + the learning-claims gate       [orange mechanism]
-M7  Supervision workbench                          [orange product]
-M8  Beta hardening + first users                   [orange product]
-M9  Wire observation plane                         [orange wire]
-M10 Editorial pipeline + publication transaction   [red wire]
-M11 Box score                                      [orange wire]
-M12 World Wire live                                [the north star]
+Phase 0  Docs overhaul (in flight, green, not a dependency)
+Phase 1  Finish the RLM substrate
+Phase 2  Precommitment records: the mechanism
+Phase 3  Self-development, proven for real
+Phase 4  Production hardening + first users
+Phase 5  The World Wire
+(box score: after the wire runs in production — out of this stack)
 ```
 
-### M0 — Docs overhaul (parallel green track)
+### Phase 0 — Docs overhaul (in flight)
 
-Phase A–D of `reorientation-docs-overhaul-2026-09-22.md`: kill zombie
-executables, PICL→precommitment rename, K3/K4/K6 prune, reorient standing
-docs to this stack. Proves: retrieval no longer steers agents to superseded
-topology. Gates nothing, but every mission below is cheaper with honest docs.
-Residue: ~20 definitions deleted into git history; throughline settled as the
-mission format in AGENTS.md.
+Phase A–D of `reorientation-docs-overhaul-2026-09-22.md`. Landed 2026-09-22:
+zombie authority killed, ~14 superseded definitions retired, PICL renamed,
+manifest/graph/ACTIVE repaired, throughline settled as the format. Remaining:
+deeper reorientation of `computer-ontology.md` and the 2026-07-24 architecture
+memos (currently banner-marked stale). Not a gate, but every mission is
+cheaper with honest docs.
 
-### M1 — Wake authority: minted continuations
+### Phase 1 — Finish the RLM substrate
 
-Scope: transition-minted recovery occurrences at every pending lifecycle
-state, one consumer (boot reconcile + selection sweep), run-terminal ≠
-fate-terminal, idempotent revocation resume — per the 09-13 memo, killing the
-six-strand defect *class*. Proves: a pending state mints its own continuation
-authority; sweeps consume occurrences instead of enumerating signatures.
-Gates: carrier roster unblocks; **also the prototype for open commitments** —
-an unresolved precommitment is a pending state that must mint its resolver.
-Residue: the general "pending → minted continuation" primitive the records
-mechanism (M4) and wire impact-propagation (M9) both reuse.
-`better_means`: minimize stranded execution strands per 1,000 transitions
-while preserving zero-reentrancy invariants. `goodharting_would_be`: sweeping
-dead strands via cron and calling them "resumed."
+The carrier program is mid-flight and blocked. This phase completes it.
 
-### M2 — Carrier landing
+- **1a — The carrier decision (owner).** Resolve the pending decision:
+  (a) charter the wake-authority repair, (b) amend the roster floor, or
+  (c) settle `blocked_incomplete`. The panel leaned (a)+(b): repair the defect
+  class (it is the minted-continuation primitive records and the wire both
+  need), re-scope the roster tally to repaired channels + served arms.
+  **Open — your call.**
+- **1b — Wake authority: minted continuations** *(if 1a = a, or chartered
+  independently)*. Transition-minted recovery occurrences at every pending
+  lifecycle state; one consumer; run-terminal ≠ fate-terminal. Kills the
+  six-strand defect class. Proves: a pending state mints its own continuation.
+  Residue: the "pending → minted continuation" primitive that open
+  commitments (Phase 2) and wire impact-propagation (Phase 5) reuse.
+- **1c — Carrier landing.** Finish the roster on the repaired substrate, then
+  P6: engineering desk fully on the in-cell carrier, five overlay tools +
+  four legacy capsule ops deleted (R7), run acceptance on canonical evidence,
+  R9 provider-heresy deletion. Proves: a desk lives entirely on the carrier —
+  the desk the `precommit` module ships through.
+- **1d — Ontology cutover** *(unratified — the largest single step, see open
+  questions)*. Implement the minimal event-driven design: delivered = in
+  state head, fenced atomic commit, serial-per-actor, cast-only sub-RLMs,
+  migration inside a write fence; management and research cross;
+  `actuator=tools` deleted (R8), Super substrate retired (R10). Proves:
+  delivery and continuation are *derivable* — the wake family's structural
+  death. **Uncertain step:** if not ratified, the remaining desk crossings
+  (Texture, research, management) proceed as separate missions on the
+  repaired-but-old ontology, and R8/R10 stay open.
+- **1e — Remaining desk crossings** *(only if 1d is not ratified, or as the
+  cutover's migration targets)*. Texture, research, and management desks
+  cross to the carrier — the work the old stack serialized as M4–M6. The
+  panel argued the ontology cutover subsumes them; that is a conjecture, not
+  a settled fact.
 
-Scope: finish the roster on the repaired substrate (re-scoped tally —
-repaired channels plus live arms, not resurrection of channels the ontology
-cutover deletes), then P6: engineering desk fully on the in-cell carrier,
-five overlay tools + four legacy capsule ops deleted (R7), run acceptance on
-canonical evidence. Proves: a desk lives entirely on the carrier — the desk
-the `precommit` module ships through. Gates: `choir.*` in-cell symbol surface
-(where `Commit`/`Resolve` land), the replay-harness evidence pattern every
-later mission reuses. Residue: R9 provider-heresy deletion.
+### Phase 2 — Precommitment records: the mechanism
 
-### M3 — Ontology cutover
+The product capability. Lands once the substrate can hold it (a carrier that
+doesn't strand pending states).
 
-Scope: implement the minimal event-driven design — delivered = in state head,
-fenced atomic commit {events + head}, serial-per-actor, `not_before` +
-dispatcher due-index, `work_id`/`attempt_id`/`status` fold, capability
-admission on one arbiter actor, cast-only sub-RLMs, migration script inside a
-write fence; management and research cross; `actuator=tools` deleted (R8),
-Super substrate retired (R10). Proves: delivery and continuation are
-*derivable*, not maintained — the wake family's structural death, which M1
-approximated in the old ontology. Gates: everything downstream; the wire
-needs cast-only actors at scale, and the event schema is being rewritten
-anyway — `expected` on `rlm.spawn` and red/black actions rides the rewrite
-(the last cheap moment to add a field before another vocabulary migration).
+- **2a — The record type + ledger.** The eight schema decisions: `expected`
+  linkage + `resolves`/`prediction_ref`, epistemic-boundary invariant,
+  deterministic pairing projection onto the OG, async Curator desk minting
+  `learning_record_minted`, result-wake policy, REPL-queryable records with
+  auto-inject OFF, actor/model scoping. The record is an OG object with
+  provenance edges — never a third store. The Markdown conjecture ledger +
+  doccheck regex retire.
+- **2b — The agent-facing surface.** The `precommit` Yaegi module
+  (`Commit`/`Resolve` via `ChoirExports`), the `Scorer` interface (self-score
+  default; second-LLM and Jev as config), typed question sets, specificity
+  scoring. Proves: commit → observe → score → revise → persist → retrieve
+  runs end-to-end on the real tape; agents cannot edit committed records.
+- **2c — Context packs + the learning-claims gate.** Aggregate records per
+  model+task; build packs by corrective value; run the sealed pre-state
+  replay control (does temporal commitment beat outcome-blind replay?); flip
+  retrieval ON only if the evidence supports it. Proves: **behavior change** —
+  the only admissible evidence of learning — or falsifies the conjecture
+  cheaply while records still pay as audit.
 
-### M4 — Precommitment records: the ledger in product
+### Phase 3 — Self-development, proven for real
 
-Scope: the eight schema decisions — `expected` linkage +
-`resolves`/`prediction_ref`, epistemic-boundary invariant, deterministic
-pairing projection onto the OG, async Curator desk minting
-`learning_record_minted`, result-wake policy, REPL-queryable records with
-auto-inject OFF, actor/model scoping — plus the `precommit` Yaegi module
-(`Commit`/`Resolve` via `ChoirExports`), the `Scorer` interface (self-score
-default; second-LLM and Jev as config), typed question sets, specificity
-scoring. Proves: commit → observe → score → revise → persist → retrieve runs
-end-to-end on the real tape; replay reproduces the pairing fold
-deterministically; agents cannot edit committed records. Gates: context
-packs, procedural fidelity, the box score's schema. Residue: the Markdown
-conjecture ledger + doccheck regex retire — the record type is an OG object
-with provenance edges, never a third store.
+The vision's gate: "a computer that cannot develop itself cannot be trusted
+to report the world." This is a **program, not one proof** — the depth is an
+open question.
 
-### M5 — Self-development proof on records
+- **3a — The self-development proof on records.** The queued Definition
+  rewritten as throughline: candidate A authored via RLM cells, every
+  material action carrying `expected`, qualified consensus under
+  `reversible-selfdev-v1`, promotion, live-play verification, falsification
+  with B, restore to `99949fe2`. Proves: one real self-change, legibly and
+  durably — and the receipts are the first scored commitment records of a
+  real self-development episode.
+- **3b — The self-development program.** **Uncertain depth.** "Genuinely
+  develops itself" likely means more than one episode: repeated bounded
+  self-changes across desks, the computer correcting itself within policy,
+  the commitment ledger accumulating a track record of its own development.
+  Open: how many episodes, and what evidence satisfies the vision's gate
+  before the wire starts.
 
-Scope: the queued self-development Definition rewritten as throughline —
-candidate A authored via RLM cells, every material action carrying
-`expected`, qualified consensus under `reversible-selfdev-v1`, promotion,
-live-play verification, falsification with B, restore to `99949fe2`. Proves:
-the computer makes one real change to itself, legibly and durably — *and the
-proof's receipts are the first scored commitment records of a real
-self-development episode*: say-do gaps, consequence coverage, procedural
-fidelity measured on an actual autonomous change. Gates: effects ON
-(bounded); the vision's gate for the wire. Residue: first real corpus for
-context packs; procedural-fidelity baseline per desk.
+### Phase 4 — Production hardening + first users
 
-### M6 — Context packs + the learning-claims gate
+- **4a — Supervision workbench.** Texture + Mail + Newspaper finished as one
+  surface where the commitment ledger is what humans supervise — open
+  commitments, say-do gaps, materiality coverage, incident reconstruction.
+  Proves: a human supervises continuous work at the level of commitments.
+- **4b — Beta hardening.** R2 watermark cadence, R1 scoped fault-injection,
+  continuation-census residue, problem-doc burndown, heresy-detector CI,
+  no-SSH operability, auth/session renewal under load. Proves: production
+  users on the computer, repeat use measured.
 
-Scope: aggregate M4–M5 records per model+task; build first packs by
-corrective value; run the sealed pre-state replay control the 09-17 panel
-demanded (does temporal commitment beat outcome-blind replay of the same
-prefix?); flip retrieval ON for pack consumers only if the evidence supports
-it; Brier/calibration/disagreement curves per desk. Proves: **behavior
-change** — the only admissible evidence of learning (remove a record → its
-effect goes; restore → it returns) — or falsifies the learning conjecture
-cheaply while records still pay as audit. Gates: any learning claim in
-pitch/product; model-selection routing that learns from `choir.Call`
-expectations. Residue: calibrated scorer table.
+### Phase 5 — The World Wire
 
-### M7 — Supervision workbench
+Only after the computer demonstrably develops itself (Phase 3 gate).
 
-Scope: Texture + Mail + Newspaper finished as one surface where **the
-commitment ledger is what humans supervise** — open commitments, say-do gaps,
-materiality coverage, incident reconstruction from nested records; the
-internal ancestor of the box score. Proves: a human can supervise continuous
-work at the level of commitments, not transcripts. Gates: beta users; the
-wire's editorial supervision reuses these seats. Residue: prompt-bar diet
-lands here, where its latency is a product bug.
+- **5a — Wire observation plane.** Source observation modules, immutable
+  source versions, `ReportedClaim`/corroboration/contradiction objects on the
+  OG, impact propagation (a new source version wakes the standing beliefs it
+  bears on — the Phase-1 minted-continuation primitive generalized to
+  epistemics). Proves: the computer observes the world continuously on the
+  same substrate.
+- **5b — Editorial pipeline + publication transaction.** Attention policy,
+  investigation trajectories, editorial multisupervision, the typed
+  publication/correction transaction binding one exact Texture head +
+  provenance manifest + decision receipt, and a public projection that serves
+  without fate-sharing with the live computer. Proves: one bounded edition
+  publishes continuously; correction is an ordinary forward write.
+- **5c — World Wire live.** API/MCP access for orgs, autoradio as the second
+  surface, repeat-use evidence on the running record. Proves: the north star.
 
-### M8 — Beta hardening + first users
+### After the wire (out of this stack)
 
-Scope: R2 watermark cadence, R1 scoped fault-injection control,
-continuation-census residue, problem-doc burndown, heresy-detector CI wiring,
-no-SSH operability contract, auth/session renewal under load. Proves:
-production users on the computer, repeat use measured. Gates: wire-live
-claims need a computer that survives real usage; distribution evidence
-starts here. Residue: ops runbooks; the honest incident log that is itself a
-records corpus.
+- **Box score** — public statements → forecast objects with resolution
+  contracts; track records. Starts only after the wire has run in production
+  for a few weeks and accumulated resolutions. It is precommitment records
+  pointed at the world's commitments — the moat — but it is downstream of a
+  live wire, not a pre-wire mission.
+- **Platform phase** — white-label newspapers on private+public data.
 
-### M9 — Wire observation plane
+## Open questions that could reorder this stack
 
-Scope: source observation modules (sourcecycled narrowed to capture-only),
-immutable source versions, `ReportedClaim`/corroboration/contradiction
-objects on the OG, and **impact propagation: a new source version wakes the
-standing beliefs it bears on** — the M1 minted-continuation primitive
-generalized from lifecycle to epistemics. Proves: the computer observes the
-world continuously on the same substrate — no second scheduler, no
-news-specific loop. Gates: anything the wire publishes; the box score's raw
-material. Residue: backpressure policy; tainted-source handling.
+These are the steps where a wrong guess means re-orienting again. Named so
+the owner can settle them before execution, not mid-flight.
 
-### M10 — Editorial pipeline + publication transaction
-
-Scope: attention policy, investigation trajectories, editorial
-multisupervision seats (cognitive *and* evidentiary independence), the typed
-publication/correction transaction to corpusd binding one exact Texture head
-+ provenance manifest + decision receipt, and a public projection that serves
-without fate-sharing with the live computer (standing question 7 — the
-failure the old wire already shipped once). Proves: one bounded edition
-publishes continuously; correction is an ordinary forward write with visible
-lineage. Gates: public exposure — effectively irreversible, the
-highest-policy mission in the stack. Residue: edition = immutable attention
-snapshot.
-
-### M11 — Box score
-
-Scope: public statements → forecast objects with resolution contracts; the
-track-record ledger; resolution sweeps; per-figure/per-institution scores —
-**precommitment records applied to the world's commitments**, consumer-facing.
-Proves: the moat claim — a provenance-linked resolvable record a wrapper
-cannot build. Gates: the "sell the record" pitch becomes a product; airtime/
-attention allocated by track record. Residue: the cold-start clock started at
-M9 (shadow accumulation from first observation); disagreement sampling for
-audit.
-
-### M12 — World Wire live
-
-Scope: API/MCP access for orgs, autoradio as the second surface (DJ desk +
-open-source audio), repeat-use evidence on the running record. Proves: the
-north star — the record running in production with real users, the
-commitment ledger underneath, the box score accumulating. Gates: the platform
-phase (white-label newspapers on private+public data). Residue: whether the
-wire's usage feeds records that improve the computer — the flywheel the whole
-stack bet on.
-
-## The carrier decision, folded
-
-The pending owner decision resolves as **(a) charter the wake-authority
-repair + (b) amend the roster scope**, combined:
-
-- The repair is correct regardless of roster outcome: it kills the defect
-  class, and the minted-continuation primitive is what M4 (open commitments)
-  and M9 (impact propagation) both need. Not "another sweep for the roster" —
-  the obligation mechanism the rest of the stack stands on.
-- The roster tally is re-scoped, not honored literally: resurrecting channels
-  the ontology cutover deletes is ceremony. Evidence floor: repaired channels
-  + served arms + the stranded-saga receipt closed.
-- If the owner instead picks (c) `blocked_incomplete`: the stack degrades to
-  the ontology-first inversion — M3 becomes the wake fix and `precommit`
-  ships via `ChoirExports` on the partial carrier. The plan survives all
-  three outcomes; only the evidence floor changes.
-
-## Divergent alternatives the panel raised (kept visible, not chosen)
-
-- **Wire-as-gym inversion** (grok, sol): the newspaper's public oracle is the
-  best training domain; invert the vision order. Rejected: violates
-  owner-doctrine "no wire before the computer"; a public garbage record with
-  a box score of confident wrongness is the failure mode.
-- **Box-score-first wedge** (sol, grok): sell the track record before the
-  newsroom. Rejected as the *first* mission — it becomes a forecasting
-  platform beside Choir — but absorbed: M11's box score is the same mechanism
-  pointed at public claims.
-- **Dogfood/gym-first** (claude, cursor): throughline's own ledger becomes
-  the first record stream. Absorbed: M0+M4 make the mission format emit
-  records; the self-development proof (M5) is the dogfood episode.
-- **Parent+children homotopy** (grok, cursor): one "World Wire live" goal
-  with parallel children instead of a serial stack. Rejected as the registry
-  topology (three spines violates the zero-or-one-entrypoint rule) but
-  absorbed as the realism axis: each mission's `realism_axis` runs
-  private→public, unscored→scored.
-- **Ontology-first** (devin option 2): skip M1; the minimal ontology *is* the
-  wake repair done right. Kept as the fallback if the owner picks (c) — see
-  the carrier fold above.
+1. **The carrier decision** (1a) — gates Phase 1. The panel leaned (a)+(b).
+2. **The ontology cutover** (1d) — ratified or not? If yes, it subsumes the
+   desk crossings and retires R8/R10 in one move; if no, Phase 1 grows the
+   separate desk crossings (1e) and the wake repair is a patch on the old
+   ontology. Largest sequencing fork.
+3. **Self-development depth** (3b) — how many episodes satisfy "genuinely
+   develops itself"? If more than one, Phase 3 is longer and the wire is
+   later.
+4. **Does the mechanism precede the self-development proof?** This stack
+   says yes (Phase 2 before 3a) so the proof generates scored records. The
+   alternative — prove self-development first, then instrument — inverts 2
+   and 3.
+5. **Where does goal selection live?** The old stack ended at "native goals."
+   This stack dissolves the selector into the mechanism (corrective-value
+   retrieval over the commitment ledger). If that's wrong, a selection
+   mission belongs in Phase 3–4.
+6. **Desk-crossing strategy** — subsumed by the ontology cutover (conjecture)
+   or separate missions (the old stack's weight)? Depends on open question 2.
 
 ## Risks that could make this plan wrong
 
-- **Context packs may not improve behavior** — the ablation (M6) is the gate;
-  records still pay as audit if it fails.
+- **Context packs may not improve behavior** — the Phase-2 ablation is the
+  gate; records still pay as audit if it fails.
 - **Resolution scarcity** — newspaper outcomes are slow/ambiguous; the loop
-  may not close at a useful rate. Mitigation: M4–M6 use fast engineering
+  may not close at a useful rate. Mitigation: Phase 2 uses fast engineering
   outcomes first.
 - **Score leakage** — feeding scores into context recreates reward hacking;
-  the epistemic-boundary invariant (M4) is the control.
-- **Ontology cutover is the single largest deletion** — if M3 stalls, the
-  mechanism and product layers queue behind it. The M1 repair is the
-  de-risking hedge.
-- **Owner bandwidth** — the carrier decision plus the docs overhaul are both
-  open; if both stay open, the stack stalls at M1.
+  the epistemic-boundary invariant is the control.
+- **Ontology cutover is the single largest deletion** — if it stalls, the
+  mechanism and product layers queue behind it. The Phase-1 wake repair is
+  the hedge.
+- **The self-development gate is underspecified** — "genuinely develops
+  itself" has no acceptance test yet; Phase 3 could be one mission or five.
+- **Owner bandwidth** — the carrier decision plus the remaining open
+  questions are the bottleneck; if they stay open, the stack stalls at 1a.

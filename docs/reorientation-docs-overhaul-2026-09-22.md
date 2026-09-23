@@ -4,10 +4,14 @@ Date: 2026-09-22
 Mutation class: **green** (docs-only survey and plan; the prune it proposes is
 also green — no runtime behavior).
 Status: **executed 2026-09-22** — Phases A–C landed (zombie authority killed,
-PICL→precommitment rename, ~14 superseded definitions + 2 dead skills retired
-to Git history, manifest/graph/ACTIVE repaired). Phase D (reorient standing
-docs) is the remaining owner-facing step. The corrected roadmap is
-[`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md).
+PICL→precommitment rename, ~14 superseded definitions retired to Git history,
+manifest/graph/ACTIVE repaired). Skill generations mission-gradient, parallax,
+and definition are **deprecated, kept for reference** (not deleted — owner
+correction); throughline is the current `/goal` format. Phase D (reorient
+standing docs) landed. The corrected roadmap is
+[`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md)
+(under owner review); the owner's situation brief is
+[`current-situation-2026-09-22.md`](current-situation-2026-09-22.md).
 
 ## Why now
 
