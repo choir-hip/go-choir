@@ -178,20 +178,22 @@ now:
       the revision event emission (texture.go:1309): does the revision exist
       independently of the instruction, and does the Texture actor's turn
       already consume the document head?
-    edge: missing_oracle — the revision exists but the actor's wake is still
-      keyed to the instruction occurrence, not the head. If so, M1 grows a
-      small adapter (revision event → existing occurrence mechanism), not the
-      full dispatcher.
+    edge: missing_oracle — CONFIRMED 2026-09-22. The revision exists
+      independently (OwnerCorrection block is an add-on inside the commit),
+      but no backend subscriber converts LifecycleArtifactHeadAdvanced into an
+      actor wake. M1 grows the small adapter: a revision-keyed
+      TextureActorOccurrence kind dispatched by the commit caller.
     delta_o: >-
       Trace one owner edit end-to-end on staging: does the desk activate from
       the revision alone when the instruction wake is removed?
     scope_if_supported: >-
       M1 deletes the LOI channel without a new wake table; the desk's
       activation derives from the document head.
-    status: proposed
+    status: supported
     evidence_refs:
       - internal/store/lifecycle.go:3262-3383
       - internal/textureowner/texture.go:1309
+      - internal/textureowner/texture_controller.go (occurrence machinery)
   decision:
     what: >-
       M1 is the subclass-(a) input-path cutover: replacement and deletion in
@@ -205,29 +207,36 @@ now:
       hallucination; roster is a sub-RLM call; start with cleanup)
   belief:
     believed_state: >-
-      The canonical revision already exists; the LOI is the extra wake. The
-      deletion surface is ~28 files. The mission is red-class (canonical
-      input/event authority).
+      Design settled 2026-09-22. Owner edit commits an AuthorUser revision
+      (direct edit: new content; /revise: head content carried forward with
+      input_origin=user_prompt + owner_prompt metadata). The commit caller
+      dispatches a new TextureActorOccurrence kind "document_revision" keyed
+      to HeadRevisionID. Pending = doc.CurrentRevisionID==R &&
+      R.AuthorKind==user && no texture_turn_committed event with
+      ArtifactRefs[1]==R (consume marker derived from the event tape; no new
+      table). ApplyTextureTurn drops the OwnerInstructions binding; the head
+      CAS is the fence. Injection renders the head revision's owner_prompt.
+      Self-dev rewake commits a synthetic owner revision. Unbound /revise
+      mailbox DELETED (named decision: same wrong-path class; unbound docs
+      get explicit 409).
     main_uncertainty: >-
-      Whether the Texture actor's activation can derive from the document head
-      alone, or whether the current occurrence mechanism still needs the
-      instruction object as its input. If the latter, M1 grows a small
-      revision→occurrence adapter.
+      Whether any non-obvious consumer reads LifecycleResult.OwnerInstruction
+      or the owner_instruction_queued event (frontend observation projections,
+      CLI). Census says none load-bearing; build will confirm.
     next_observation: >-
-      Trace one owner edit on staging with the instruction wake removed: does
-      the desk activate from the revision?
+      go build ./... plus focused tests; then staging trace of one owner edit.
   blocker_or_risk: >-
     M1 dual-path risk: if the revision event coexists with a leftover
     scheduleTextureWorkerWake, tell is recreated. Acceptance forbids the side
-    table. Also: the unbound /revise mailbox (texture_agent_revision.go:234-309)
-    is leftover subclass (a) — include or explicitly defer.
+    table. Resolved: unbound /revise mailbox deleted in this mission (named
+    exception consumed, not deferred).
   next_action: >-
-    Author the deletion/cutover diff: (1) remove /revise→/tell forward, make
-    /revise commit the owner revision on the canonical path; (2) delete
-    /tell,/correct endpoints, LifecycleOwnerInstruction type/store, roster.go,
-    CLI verbs; (3) rewire self-dev synthetic tell and Super pending-instruction
-    reads to the revision event; (4) delete dead overlay names after caller
-    census; (5) repair all citers.
+    Implement the cutover: (1) /revise commits owner revision + dispatches
+    document_revision occurrence; (2) delete /tell,/correct, LOI type/store,
+    roster.go, CLI verbs, OwnerCorrection, OwnerInstructions binding,
+    ogKindOwnerInstruction; (3) rewire boot scan, reconcile, injection,
+    self-dev rewake, adapter/handler to the revision occurrence; (4) repair
+    all citers and tests.
 
 receipts: []
 ---
