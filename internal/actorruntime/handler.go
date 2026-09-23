@@ -285,7 +285,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		}
 		if strings.TrimSpace(u.FromAgentID) != "" {
 			expectedSource := occurrence.ProducerAgentID
-			if occurrence.Kind == agentcore.TextureActorOccurrenceOwnerInstruction {
+			if occurrence.Kind == agentcore.TextureActorOccurrenceDocumentRevision {
 				expectedSource = "owner:" + occurrence.OwnerID
 			}
 			if strings.TrimSpace(u.FromAgentID) != expectedSource {

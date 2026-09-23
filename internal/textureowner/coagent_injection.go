@@ -10,10 +10,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-const (
-	textureOwnerInstructionIDsMetadata = "texture_owner_instruction_ids"
-	textureOwnerRequestIDsMetadata     = "texture_owner_request_ids"
-)
 
 func (h *Handler) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.InjectUserTurnsFunc {
 	if h == nil || h.Core == nil {

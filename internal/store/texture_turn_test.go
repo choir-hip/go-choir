@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -328,49 +327,6 @@ func TestApplyTextureTurnPersistentSuperOpenerIsAtomic(t *testing.T) {
 	}
 }
 
-func TestApplyTextureTurnEveryOutcomeRequiresCompleteOrderedSameHeadOwnerInstructions(t *testing.T) {
-	for _, outcome := range []types.TextureTurnOutcome{types.TextureTurnRevision, types.TextureTurnNoSemanticChange, types.TextureTurnWait, types.TextureTurnBlock} {
-		t.Run(string(outcome), func(t *testing.T) {
-			s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
-			ctx := context.Background()
-			req := textureTurnBaseRequest(t, s, start, caller, outcome)
-			req.CommandID = "texture-turn-owner-completeness-" + string(outcome)
-			if outcome == types.TextureTurnRevision {
-				req.Revision = types.Revision{RevisionID: "revision-owner-completeness", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Texture"}
-			}
-
-			// The turn was shaped before a same-head owner occurrence arrived. Refresh
-			// only the ordinary lifecycle CAS version to prove the independent exact-set
-			// precondition refuses the late occurrence for every semantic outcome.
-			queued := ownerInstructionRequest(t, s, start, "late-"+string(outcome), "late same-head owner instruction")
-			if _, err := s.QueueLifecycleOwnerInstruction(ctx, queued); err != nil {
-				t.Fatal(err)
-			}
-			trajectory, err := s.GetLifecycleTrajectory(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			req.ExpectedLifecycleVersion = trajectory.LifecycleVersion
-			setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
-			before, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
-			if _, err := s.ApplyTextureTurn(ctx, req); !errors.Is(err, ErrConcurrentStateChange) {
-				t.Fatalf("incomplete %s owner set error = %v, want concurrent-state refusal", outcome, err)
-			}
-			after, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
-			if after.SnapshotCursor != before.SnapshotCursor || after.HeadRevision.RevisionID != before.HeadRevision.RevisionID {
-				t.Fatalf("incomplete %s owner set mutated atomically guarded state: before=%+v after=%+v", outcome, before, after)
-			}
-
-			if outcome != types.TextureTurnRevision {
-				req.OwnerInstructions = []types.TextureTurnOwnerInstruction{{InstructionID: queued.InstructionID, RequestID: queued.RequestID}}
-				setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
-				if _, err := s.ApplyTextureTurn(ctx, req); err != nil {
-					t.Fatalf("complete %s owner set: %v", outcome, err)
-				}
-			}
-		})
-	}
-}
 
 func TestApplyTextureTurnNonRevisionOutcomesDispositionInboundWithoutFakeRevision(t *testing.T) {
 	for _, outcome := range []types.TextureTurnOutcome{types.TextureTurnNoSemanticChange, types.TextureTurnWait, types.TextureTurnBlock} {
@@ -654,29 +610,3 @@ func TestApplyTextureTurnCallerWorkConsequenceAtomicReplayAndRefusal(t *testing.
 	})
 }
 
-func TestApplyTextureTurnConsumesComplete101OwnerOccurrenceSet(t *testing.T) {
-	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
-	ctx := context.Background()
-	bindings := make([]types.TextureTurnOwnerInstruction, 0, 101)
-	for i := 0; i < 101; i++ {
-		queued := ownerInstructionRequest(t, s, start, fmt.Sprintf("bulk-%03d", i), fmt.Sprintf("owner tell %03d", i))
-		if _, err := s.QueueLifecycleOwnerInstruction(ctx, queued); err != nil {
-			t.Fatal(err)
-		}
-		bindings = append(bindings, types.TextureTurnOwnerInstruction{InstructionID: queued.InstructionID, RequestID: queued.RequestID})
-	}
-	complete, err := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID, caller.AgentID, start.InitialRevision.RevisionID)
-	if err != nil || len(complete) != 101 {
-		t.Fatalf("complete owner set=%d err=%v", len(complete), err)
-	}
-	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
-	req.CommandID, req.Reason, req.OwnerInstructions = "texture-turn-owner-101", "consume full unbounded occurrence set", bindings
-	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
-	if _, err := s.ApplyTextureTurn(ctx, req); err != nil {
-		t.Fatalf("apply 101 owner tells: %v", err)
-	}
-	remaining, err := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID, caller.AgentID, start.InitialRevision.RevisionID)
-	if err != nil || len(remaining) != 0 {
-		t.Fatalf("remaining owner occurrences=%d err=%v", len(remaining), err)
-	}
-}

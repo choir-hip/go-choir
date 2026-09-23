@@ -107,7 +107,6 @@ var ogIdentityFormulas = []ogIdentityFormula{
 	{kind: "choir.lifecycle_command", fields: []string{"command_id"}, scoped: true},
 	{kind: "choir.lifecycle_cancel_intent", fields: []string{"trajectory_id"}, scoped: true},
 	{kind: "choir.lifecycle_sequence", fields: []string{"trajectory_id"}, scoped: true},
-	{kind: "choir.owner_instruction", fields: []string{"trajectory_id", "instruction_id"}, scoped: true},
 	{kind: "choir.inbox_delivery", fields: []string{"delivery_id"}},
 	{kind: "choir.run_memory_entry", fields: []string{"entry_id"}},
 	{kind: "choir.run_acceptance", fields: []string{"acceptance_id"}},

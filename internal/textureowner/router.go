@@ -50,7 +50,9 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 		case strings.HasSuffix(rest, "/source-open"):
 			h.HandleTextureSourceOpen(w, r)
 		case strings.HasSuffix(rest, "/tell"), strings.HasSuffix(rest, "/correct"):
-			h.HandleTextureOwnerInstruction(w, r)
+			// The owner-instruction side channel is deleted; owner input is a
+			// canonical document revision (POST /revisions or /revise).
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "texture endpoint not found"})
 		case strings.HasSuffix(rest, "/revise"):
 			h.HandleTextureAgentRevision(w, r)
 		case strings.HasSuffix(rest, "/compare"):

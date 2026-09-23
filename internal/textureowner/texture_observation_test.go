@@ -568,7 +568,7 @@ func TestTextureObservationNoChangeTransitionsNeverReprojectOldVersion(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, kind := range []types.LifecycleEventKind{types.LifecycleTextureTurnCommitted, types.LifecycleControlDelivered, types.LifecycleOwnerInstructionQueued} {
+	for _, kind := range []types.LifecycleEventKind{types.LifecycleTextureTurnCommitted, types.LifecycleControlDelivered} {
 		event, err := handler.projectTextureLifecycleEvent(t.Context(), doc, types.LifecycleEvent{
 			EventID: "transition-" + string(kind), Kind: kind, ReducerSeq: 50, CommandID: "no-change",
 			CommandDigest: "sha256:no-change", TrajectoryID: start.TrajectoryID,

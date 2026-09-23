@@ -1265,20 +1265,14 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has no open Texture target work item"})
 			return
 		}
-		requestID, instructionID := textureOwnerOccurrenceIdentity(ownerID, doc.ComputerID, doc.DocID, strings.TrimSpace(req.IdempotencyKey))
+		requestID, _ := textureOwnerOccurrenceIdentity(ownerID, doc.ComputerID, doc.DocID, strings.TrimSpace(req.IdempotencyKey))
 		command := types.CommitLifecycleArtifactHeadRequest{
 			OwnerID: ownerID, ComputerID: doc.ComputerID,
 			CommandID:    "public-head:" + strings.TrimSpace(req.IdempotencyKey),
 			TrajectoryID: doc.TrajectoryID, ExpectedLifecycleVersion: req.ExpectedLifecycleVersion,
 			ExpectedHeadRevisionID: parentID, Unbound: snapshot.Trajectory.Status != types.TrajectoryLive, Revision: rev,
 		}
-		if !command.Unbound {
-			command.OwnerCorrection = &types.CommitLifecycleOwnerCorrection{
-				RequestID: requestID, InstructionID: instructionID, TargetAgentID: targetAgentID, TargetWorkItemID: targetWorkItemID,
-				Content: "Owner directly advanced the canonical Texture head to revision " + revisionID + "; reconcile supervised work from this exact correction.",
-			}
-		}
-		graph, graphErr := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities}, &types.RunRecord{RunID: instructionID, OwnerID: ownerID, ComputerID: doc.ComputerID})
+		graph, graphErr := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities}, &types.RunRecord{RunID: requestID, OwnerID: ownerID, ComputerID: doc.ComputerID})
 		if graphErr != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle revision source graph"})
 			return
@@ -1307,8 +1301,8 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 		if !result.Replay {
 			h.recordTextureAudit(r.Context(), "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
 			h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
-			if result.OwnerInstruction != nil {
-				h.scheduleTextureWorkerWake(ownerID, doc.DocID, result.OwnerInstruction.InstructionID)
+			if !command.Unbound {
+				h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Trajectory.LifecycleVersion, result.Events)
 			}
 		}
 		writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), *result.Revision))

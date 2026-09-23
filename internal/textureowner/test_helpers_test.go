@@ -126,3 +126,33 @@ func textureRequest(t *testing.T, method, path string, body any) *http.Request {
 	req.Header.Set("X-Authenticated-User", "user-1")
 	return req
 }
+
+func installSynchronousTextureOwnerWake(t *testing.T, core *agentcore.Runtime, handler *Handler) {
+	t.Helper()
+	core.SetDispatchActor(func(ctx context.Context, ownerID, _ string, toAgentID, kind, _ string, _ string, _ string) error {
+		if kind != "coagent_result" || !strings.HasPrefix(toAgentID, "texture:") {
+			return nil
+		}
+		_, err := handler.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(toAgentID, "texture:"))
+		return err
+	})
+}
+
+func postOwnerInstruction(t *testing.T, handler *Handler, path, owner, requestID, content, head string) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(map[string]string{
+		"client_request_id":         requestID,
+		"prompt":                    content,
+		"expected_head_revision_id": head,
+	})
+	if err != nil {
+		t.Fatalf("marshal owner revision request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
+	if owner != "" {
+		req.Header.Set("X-Authenticated-User", owner)
+	}
+	response := httptest.NewRecorder()
+	handler.HandleTextureRouter(response, req)
+	return response
+}

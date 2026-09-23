@@ -528,7 +528,7 @@ func (s *Store) replayLifecycleCommand(ctx context.Context, ownerID, computerID,
 		receipt.StoredResult = nil
 		return types.LifecycleResult{
 			Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema,
-			WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update, OwnerInstruction: stored.OwnerInstruction,
+			WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update,
 			Events: stored.Events, Replay: true, Document: stored.Document, Revision: stored.Revision,
 			TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems,
 		}, true, nil
@@ -1643,7 +1643,7 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	}
 	storedReceipt.StoredResult = &types.LifecycleStoredResult{
 		Trajectory: result.Trajectory, Schema: result.Schema, WorkItem: result.WorkItem,
-		Agent: result.Agent, Update: result.Update, OwnerInstruction: result.OwnerInstruction, Events: result.Events,
+		Agent: result.Agent, Update: result.Update, Events: result.Events,
 		Document: result.Document, Revision: result.Revision, TextureTurn: result.TextureTurn,
 		Controls: result.Controls, TargetWorkItems: result.TargetWorkItems,
 	}
@@ -3133,25 +3133,15 @@ func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, 
 	req.OwnerID, req.ComputerID = ownerID, computerID
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
 	req.TrajectoryID, req.ExpectedHeadRevisionID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.ExpectedHeadRevisionID)
-	if req.OwnerCorrection != nil {
-		correction := *req.OwnerCorrection
-		correction.RequestID, correction.InstructionID = strings.TrimSpace(correction.RequestID), strings.TrimSpace(correction.InstructionID)
-		correction.TargetAgentID, correction.TargetWorkItemID = strings.TrimSpace(correction.TargetAgentID), strings.TrimSpace(correction.TargetWorkItemID)
-		correction.Content = strings.TrimSpace(correction.Content)
-		req.OwnerCorrection = &correction
-	}
 	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
 		return types.LifecycleResult{}, err
 	}
 	if req.ExpectedLifecycleVersion <= 0 || req.ExpectedHeadRevisionID == "" {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle commit head: expected lifecycle version and head are required")
 	}
-	if req.OwnerCorrection != nil && (req.Unbound || req.OwnerCorrection.RequestID == "" || req.OwnerCorrection.InstructionID == "" || req.OwnerCorrection.TargetAgentID == "" || req.OwnerCorrection.TargetWorkItemID == "" || req.OwnerCorrection.Content == "") {
-		return types.LifecycleResult{}, fmt.Errorf("lifecycle commit head: live owner correction requires complete occurrence and Texture work binding")
-	}
 	var computedDigest string
 	var digestErr error
-	if req.OwnerCorrection == nil && len(sourceGraph.SourceEntities) == 0 && len(sourceGraph.SourceRefs) == 0 {
+	if len(sourceGraph.SourceEntities) == 0 && len(sourceGraph.SourceRefs) == 0 {
 		computedDigest, digestErr = ComputeCommitLifecycleArtifactHeadDigest(req)
 		if digestErr == nil && strings.TrimSpace(req.CommandDigest) != computedDigest {
 			// The explicit WithSourceGraph entry point has its own joined digest
@@ -3259,92 +3249,6 @@ func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, 
 		CommandID: req.CommandID, CommandDigest: req.CommandDigest,
 		ArtifactRefs: []string{docID, revision.RevisionID}, CreatedAt: now,
 	}}
-	var ownerInstruction *types.LifecycleOwnerInstruction
-	if req.OwnerCorrection != nil {
-		if revision.AuthorKind != types.AuthorUser {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		correction := req.OwnerCorrection
-		if correction.TargetAgentID != "texture:"+docID {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		agentObj, agent, agentErr := s.textureTurnAgentObject(ctx, ownerID, computerID, correction.TargetAgentID)
-		if agentErr != nil {
-			return types.LifecycleResult{}, agentErr
-		}
-		workObj, work, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, correction.TargetWorkItemID)
-		if workErr != nil {
-			return types.LifecycleResult{}, workErr
-		}
-		if agent.Profile != agentprofile.Texture || agent.Role != agentprofile.Texture || agent.ChannelID != docID ||
-			work.Status != types.WorkItemOpen || work.TrajectoryID != req.TrajectoryID || work.AssignedAgentID != correction.TargetAgentID || work.AuthorityProfile != agentprofile.Texture {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-
-		// A direct canonical edit supersedes the old head, not the owner's
-		// already-queued intent. Rebase the complete ordered old-head occurrence
-		// set to the new head in this same CAS batch, then append the edit's own
-		// correction occurrence. ReducerSeq is intentionally preserved so every
-		// pre-edit tell keeps its original order ahead of the new correction.
-		pendingOldHead, pendingErr := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, req.TrajectoryID, correction.TargetAgentID, req.ExpectedHeadRevisionID)
-		if pendingErr != nil {
-			return types.LifecycleResult{}, pendingErr
-		}
-		for _, oldInstruction := range pendingOldHead {
-			if oldInstruction.InstructionID == correction.InstructionID {
-				return types.LifecycleResult{}, ErrLifecycleCommandConflict
-			}
-			oldObj, storedInstruction, loadErr := s.lifecycleOwnerInstructionObject(ctx, ownerID, computerID, req.TrajectoryID, oldInstruction.InstructionID)
-			if loadErr != nil {
-				return types.LifecycleResult{}, loadErr
-			}
-			if storedInstruction.Status != types.LifecycleOwnerInstructionPending ||
-				storedInstruction.HeadRevisionID != req.ExpectedHeadRevisionID ||
-				storedInstruction.TargetAgentID != correction.TargetAgentID ||
-				storedInstruction.DocumentID != docID || storedInstruction.TrajectoryID != req.TrajectoryID {
-				return types.LifecycleResult{}, ErrConcurrentStateChange
-			}
-			storedInstruction.HeadRevisionID = revision.RevisionID
-			storedInstruction.TargetWorkItemID = correction.TargetWorkItemID
-			storedInstruction.LifecycleVersion++
-			updatedOld, buildErr := lifecycleObject(ogKindOwnerInstruction, ownerID, computerID,
-				req.TrajectoryID+"\x00"+storedInstruction.InstructionID, storedInstruction,
-				lifecycleMetadata("instruction_id", storedInstruction.InstructionID, computerID, req.TrajectoryID, storedInstruction.ReducerSeq), oldObj.CreatedAt, now)
-			if buildErr != nil {
-				return types.LifecycleResult{}, buildErr
-			}
-			conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: oldObj.CanonicalID, Exists: true, ExpectedContentHash: oldObj.ContentHash})
-			objects = append(objects, updatedOld)
-		}
-
-		seq++
-		instruction := types.LifecycleOwnerInstruction{
-			Schema: types.LifecycleOwnerInstructionSchemaV1, InstructionID: correction.InstructionID, RequestID: correction.RequestID,
-			OwnerID: ownerID, ComputerID: computerID, DocumentID: docID, TrajectoryID: req.TrajectoryID,
-			TargetAgentID: correction.TargetAgentID, TargetWorkItemID: correction.TargetWorkItemID, HeadRevisionID: revision.RevisionID,
-			Kind: types.LifecycleOwnerCorrect, Content: correction.Content, Status: types.LifecycleOwnerInstructionPending,
-			LifecycleVersion: 1, ReducerSeq: seq, CreatedAt: now,
-		}
-		instructionKey := req.TrajectoryID + "\x00" + instruction.InstructionID
-		instructionObj, buildErr := lifecycleObject(ogKindOwnerInstruction, ownerID, computerID, instructionKey, instruction,
-			lifecycleMetadata("instruction_id", instruction.InstructionID, computerID, req.TrajectoryID, seq), now, now)
-		if buildErr != nil {
-			return types.LifecycleResult{}, buildErr
-		}
-		conditions = append(conditions,
-			objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash},
-			objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
-			objectgraph.ObjectCondition{CanonicalID: instructionObj.CanonicalID},
-		)
-		objects = append(objects, instructionObj)
-		events = append(events, types.LifecycleEvent{
-			EventID: req.CommandID + ":2", OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
-			WorkItemID: correction.TargetWorkItemID, Kind: types.LifecycleOwnerInstructionQueued,
-			ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq, CommandID: req.CommandID,
-			CommandDigest: req.CommandDigest, RequestID: correction.RequestID, ArtifactRefs: []string{instructionObj.CanonicalID}, CreatedAt: now,
-		})
-		ownerInstruction = &instruction
-	}
 	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = seq, trajectory.LifecycleVersion+1, now
 	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory,
 		lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
@@ -3377,7 +3281,7 @@ func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, 
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &revision, OwnerInstruction: ownerInstruction, Events: events}
+	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &revision, Events: events}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result,
 		objectgraph.Edge{EdgeID: documentEdgeID, FromID: revisionObj.CanonicalID, ToID: documentUpdated.CanonicalID, Kind: ogEdgeDocRevision, Metadata: edgeMetadata, CreatedAt: now},
 		objectgraph.Edge{EdgeID: parentEdgeID, FromID: revisionObj.CanonicalID, ToID: headObj.CanonicalID, Kind: ogEdgeRevParent, Metadata: edgeMetadata, CreatedAt: now},

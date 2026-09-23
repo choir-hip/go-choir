@@ -405,40 +405,15 @@ func TestTextureCreateStableJSON(t *testing.T) {
 	}
 }
 
-func TestTextureTellAndCorrectUseClientOccurrenceAndExactHead(t *testing.T) {
-	posts := 0
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			if r.URL.Path != "/api/texture/documents/doc-owner" {
-				t.Errorf("GET path=%s", r.URL.Path)
-			}
-			_, _ = io.WriteString(w, `{"doc_id":"doc-owner","current_revision_id":"rev-current"}`)
-			return
-		}
-		posts++
-		if r.Method != http.MethodPost || (r.URL.Path != "/api/texture/documents/doc-owner/tell" && r.URL.Path != "/api/texture/documents/doc-owner/correct") {
-			t.Errorf("POST=%s %s", r.Method, r.URL.Path)
-		}
-		var body map[string]string
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body["expected_head_revision_id"] != "rev-current" || body["client_request_id"] == "" || body["content"] != "same prose" {
-			t.Errorf("body=%v", body)
-		}
-		_, _ = io.WriteString(w, `{"schema":"choir.texture_owner_instruction.v1","instruction_id":"instruction-`+body["client_request_id"]+`","request_id":"runtime-`+body["client_request_id"]+`","status":"pending"}`)
-	}))
-	defer stub.Close()
+func TestTextureTellAndCorrectAreUnknownSubcommands(t *testing.T) {
 	for _, args := range [][]string{
-		{"texture", "tell", "--host=" + stub.URL, "--request-id=occurrence-one", "doc-owner", "same", "prose"},
-		{"texture", "tell", "--host=" + stub.URL, "--request-id=occurrence-two", "doc-owner", "same", "prose"},
-		{"texture", "correct", "--host=" + stub.URL, "--request-id=occurrence-three", "--expected-head=rev-current", "doc-owner", "same", "prose"},
+		{"texture", "tell", "doc-owner", "same", "prose"},
+		{"texture", "correct", "doc-owner", "same", "prose"},
 	} {
 		var out, errOut bytes.Buffer
-		if code := run(args, &out, &errOut); code != 0 || !strings.Contains(out.String(), "choir.texture_owner_instruction.v1") {
+		if code := run(args, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "unknown subcommand") {
 			t.Fatalf("args=%v code=%d out=%s err=%s", args, code, out.String(), errOut.String())
 		}
-	}
-	if posts != 3 {
-		t.Fatalf("posts=%d", posts)
 	}
 }
 

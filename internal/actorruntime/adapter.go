@@ -270,7 +270,7 @@ func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, compute
 			return "", "", "", fmt.Errorf("actorruntime: Texture occurrence trajectory mismatch")
 		}
 		source := occurrence.ProducerAgentID
-		if occurrence.Kind == agentcore.TextureActorOccurrenceOwnerInstruction {
+		if occurrence.Kind == agentcore.TextureActorOccurrenceDocumentRevision {
 			source = "owner:" + occurrence.OwnerID
 		}
 		if strings.TrimSpace(fromAgentID) != "" && strings.TrimSpace(fromAgentID) != source {
@@ -329,14 +329,14 @@ func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, compute
 		return encoded, o.TrajectoryID, o.ProducerAgentID, nil
 	}
 
-	// Pre-repair owner wakes carried only instruction_id and no authenticated
-	// trajectory/source. Resolve the exact document-bound instruction.
+	// Pre-repair owner wakes carried only the revision id and no authenticated
+	// trajectory/source. Resolve the exact document-bound owner revision.
 	docID := strings.TrimPrefix(strings.TrimSpace(toAgentID), agentprofile.Texture+":")
 	doc, docErr := a.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 	if docErr == nil && strings.TrimSpace(doc.TrajectoryID) != "" {
-		instruction, instructionErr := a.store.GetLifecycleOwnerInstruction(ctx, ownerID, computerID, doc.TrajectoryID, strings.TrimSpace(content))
-		if instructionErr == nil && instruction.Status == types.LifecycleOwnerInstructionPending && instruction.TargetAgentID == toAgentID {
-			o, occurrenceErr := agentcore.TextureOwnerInstructionOccurrence(instruction)
+		revision, revErr := a.store.GetLifecycleRevision(ctx, ownerID, computerID, strings.TrimSpace(content))
+		if revErr == nil && revision.AuthorKind == types.AuthorUser && revision.DocID == docID {
+			o, occurrenceErr := agentcore.TextureDocumentRevisionOccurrence(revision, "", 0, 0)
 			if occurrenceErr != nil {
 				return "", "", "", occurrenceErr
 			}

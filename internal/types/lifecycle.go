@@ -26,7 +26,6 @@ const (
 	LifecycleApplyTextureTurn             LifecycleCommandKind = "apply_texture_turn"
 	LifecycleBindControlDelivery          LifecycleCommandKind = "bind_control_delivery"
 	LifecycleFailControlActivation        LifecycleCommandKind = "fail_control_activation"
-	LifecycleQueueOwnerInstruction        LifecycleCommandKind = "queue_owner_instruction"
 	LifecycleOpenCoSuperAssignment        LifecycleCommandKind = "open_co_super_assignment"
 	LifecycleBindCoSuperAssignment        LifecycleCommandKind = "bind_co_super_assignment"
 	LifecycleRecordCoSuperAssignment      LifecycleCommandKind = "record_co_super_assignment"
@@ -58,7 +57,6 @@ const (
 	LifecycleControlQueued                   LifecycleEventKind = "control_queued"
 	LifecycleControlDelivered                LifecycleEventKind = "control_delivered"
 	LifecycleControlActivationFailed         LifecycleEventKind = "control_activation_failed"
-	LifecycleOwnerInstructionQueued          LifecycleEventKind = "owner_instruction_queued"
 	LifecycleCoSuperAssignmentOpened         LifecycleEventKind = "co_super_assignment_opened"
 	LifecycleCoSuperAssignmentBound          LifecycleEventKind = "co_super_assignment_bound"
 	LifecycleCoSuperAssignmentReported       LifecycleEventKind = "co_super_assignment_reported"
@@ -179,7 +177,6 @@ type ApplyTextureTurnRequest struct {
 	TrajectoryID                   string                          `json:"trajectory_id"`
 	CallerAgentID                  string                          `json:"caller_agent_id"`
 	CallerRunID                    string                          `json:"caller_run_id"`
-	OwnerInstructions              []TextureTurnOwnerInstruction   `json:"owner_instructions,omitempty"`
 	ExpectedLifecycleVersion       int64                           `json:"expected_lifecycle_version"`
 	ExpectedCallerLifecycleVersion int64                           `json:"expected_caller_lifecycle_version"`
 	ExpectedHeadRevisionID         string                          `json:"expected_head_revision_id"`
@@ -204,7 +201,6 @@ type TextureTurnRecord struct {
 	TargetWorkItemIDs     []string           `json:"target_work_item_ids,omitempty"`
 	CallerWorkItemID      string             `json:"caller_work_item_id"`
 	CallerWorkDisposition WorkItemStatus     `json:"caller_work_disposition"`
-	OwnerInstructionIDs   []string           `json:"owner_instruction_ids,omitempty"`
 	CausalRequestIDs      []string           `json:"causal_request_ids,omitempty"`
 	Reason                string             `json:"reason,omitempty"`
 }
@@ -379,29 +375,20 @@ type SettleLifecycleProducerReportsRequest struct {
 	// run (storm-era residue bound to stale interrupted runs). The caller binds
 	// the protection: ExcludeDeliveredToRunID refuses settlement of reports
 	// delivered to a named run (e.g. one still executing).
-	IncludeDeliveredStale    bool   `json:"include_delivered_stale,omitempty"`
-	ExcludeDeliveredToRunID  string `json:"exclude_delivered_to_run_id,omitempty"`
-}
-
-type CommitLifecycleOwnerCorrection struct {
-	RequestID        string `json:"request_id"`
-	InstructionID    string `json:"instruction_id"`
-	TargetAgentID    string `json:"target_agent_id"`
-	TargetWorkItemID string `json:"target_work_item_id"`
-	Content          string `json:"content"`
+	IncludeDeliveredStale   bool   `json:"include_delivered_stale,omitempty"`
+	ExcludeDeliveredToRunID string `json:"exclude_delivered_to_run_id,omitempty"`
 }
 
 type CommitLifecycleArtifactHeadRequest struct {
-	OwnerID                  string                          `json:"owner_id"`
-	ComputerID               string                          `json:"computer_id"`
-	CommandID                string                          `json:"command_id"`
-	CommandDigest            string                          `json:"command_digest"`
-	TrajectoryID             string                          `json:"trajectory_id"`
-	ExpectedLifecycleVersion int64                           `json:"expected_lifecycle_version"`
-	ExpectedHeadRevisionID   string                          `json:"expected_head_revision_id"`
-	Unbound                  bool                            `json:"unbound,omitempty"`
-	Revision                 Revision                        `json:"revision"`
-	OwnerCorrection          *CommitLifecycleOwnerCorrection `json:"owner_correction,omitempty"`
+	OwnerID                  string   `json:"owner_id"`
+	ComputerID               string   `json:"computer_id"`
+	CommandID                string   `json:"command_id"`
+	CommandDigest            string   `json:"command_digest"`
+	TrajectoryID             string   `json:"trajectory_id"`
+	ExpectedLifecycleVersion int64    `json:"expected_lifecycle_version"`
+	ExpectedHeadRevisionID   string   `json:"expected_head_revision_id"`
+	Unbound                  bool     `json:"unbound,omitempty"`
+	Revision                 Revision `json:"revision"`
 }
 
 type ArchiveLifecycleArtifactRequest struct {
@@ -416,18 +403,17 @@ type ArchiveLifecycleArtifactRequest struct {
 }
 
 type LifecycleStoredResult struct {
-	Trajectory       TrajectoryRecord           `json:"trajectory"`
-	Schema           string                     `json:"schema,omitempty"`
-	WorkItem         *WorkItemRecord            `json:"work_item,omitempty"`
-	Agent            *AgentRecord               `json:"agent,omitempty"`
-	Update           *CoagentSourcePacket       `json:"update,omitempty"`
-	OwnerInstruction *LifecycleOwnerInstruction `json:"owner_instruction,omitempty"`
-	Events           []LifecycleEvent           `json:"events"`
-	Document         *Document                  `json:"document,omitempty"`
-	Revision         *Revision                  `json:"revision,omitempty"`
-	TextureTurn      *TextureTurnRecord         `json:"texture_turn,omitempty"`
-	Controls         []CoagentSourcePacket      `json:"controls,omitempty"`
-	TargetWorkItems  []WorkItemRecord           `json:"target_work_items,omitempty"`
+	Trajectory      TrajectoryRecord      `json:"trajectory"`
+	Schema          string                `json:"schema,omitempty"`
+	WorkItem        *WorkItemRecord       `json:"work_item,omitempty"`
+	Agent           *AgentRecord          `json:"agent,omitempty"`
+	Update          *CoagentSourcePacket  `json:"update,omitempty"`
+	Events          []LifecycleEvent      `json:"events"`
+	Document        *Document             `json:"document,omitempty"`
+	Revision        *Revision             `json:"revision,omitempty"`
+	TextureTurn     *TextureTurnRecord    `json:"texture_turn,omitempty"`
+	Controls        []CoagentSourcePacket `json:"controls,omitempty"`
+	TargetWorkItems []WorkItemRecord      `json:"target_work_items,omitempty"`
 }
 
 type LifecycleCommandReceipt struct {
@@ -473,20 +459,19 @@ type LifecycleEvent struct {
 }
 
 type LifecycleResult struct {
-	Receipt          LifecycleCommandReceipt    `json:"receipt"`
-	Trajectory       TrajectoryRecord           `json:"trajectory"`
-	Schema           string                     `json:"schema,omitempty"`
-	WorkItem         *WorkItemRecord            `json:"work_item,omitempty"`
-	Agent            *AgentRecord               `json:"agent,omitempty"`
-	Update           *CoagentSourcePacket       `json:"update,omitempty"`
-	OwnerInstruction *LifecycleOwnerInstruction `json:"owner_instruction,omitempty"`
-	Events           []LifecycleEvent           `json:"events"`
-	Replay           bool                       `json:"replay"`
-	Document         *Document                  `json:"document,omitempty"`
-	Revision         *Revision                  `json:"revision,omitempty"`
-	TextureTurn      *TextureTurnRecord         `json:"texture_turn,omitempty"`
-	Controls         []CoagentSourcePacket      `json:"controls,omitempty"`
-	TargetWorkItems  []WorkItemRecord           `json:"target_work_items,omitempty"`
+	Receipt         LifecycleCommandReceipt `json:"receipt"`
+	Trajectory      TrajectoryRecord        `json:"trajectory"`
+	Schema          string                  `json:"schema,omitempty"`
+	WorkItem        *WorkItemRecord         `json:"work_item,omitempty"`
+	Agent           *AgentRecord            `json:"agent,omitempty"`
+	Update          *CoagentSourcePacket    `json:"update,omitempty"`
+	Events          []LifecycleEvent        `json:"events"`
+	Replay          bool                    `json:"replay"`
+	Document        *Document               `json:"document,omitempty"`
+	Revision        *Revision               `json:"revision,omitempty"`
+	TextureTurn     *TextureTurnRecord      `json:"texture_turn,omitempty"`
+	Controls        []CoagentSourcePacket   `json:"controls,omitempty"`
+	TargetWorkItems []WorkItemRecord        `json:"target_work_items,omitempty"`
 }
 
 type LifecycleActivationProjection struct {

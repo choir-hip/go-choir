@@ -234,42 +234,72 @@ func (rt *Runtime) ensureSelfDevelopmentTextureJoin(ctx context.Context, operati
 		return nil
 	}
 
-	// Rewake after a terminal Super: the runtime never commits a Texture turn
-	// directly here. Queue one occurrence-keyed owner instruction on the
-	// Texture trajectory and wake the genuine Texture agent; the agent's own
-	// tool-loop turn consumes the instruction and commits its own outcome
-	// (wait/revision/block) through applyTextureLifecycleTurn.
+	// Rewake after a terminal Super: commit one owner-authored revision carrying
+	// the rewake directive on the document head, then wake the genuine Texture
+	// agent with the revision occurrence. The agent's own tool-loop turn
+	// consumes the owner head and commits its own outcome (wait/revision/block)
+	// through applyTextureLifecycleTurn.
 	controlID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
 		"choir:texture:self-development", ownerID, computerID, operation.OperationID, "rewake", wakeToken,
 	}, ":"))).String()
 	requestID := "owner-request-selfdev-rewake-" + controlID
-	instructionID := "owner-instruction-selfdev-rewake-" + controlID
-	instructionContent := strings.TrimSpace(prompt) + "\n\nSelf-development operation " + operation.OperationID +
+	rewakeRevisionID := "owner-revision-selfdev-rewake-" + controlID
+	directive := strings.TrimSpace(prompt) + "\n\nSelf-development operation " + operation.OperationID +
 		" requires supervision: open or continue exactly one implementation CoSuper assignment with assign_co_super."
-	instructionReq := types.QueueLifecycleOwnerInstructionRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue:" + instructionID,
-		RequestID: requestID, InstructionID: instructionID, DocumentID: docID, TrajectoryID: trajectoryID,
-		TargetAgentID: textureAgentID, TargetWorkItemID: textureWorkID,
+	rewakeMeta, _ := json.Marshal(map[string]any{
+		"input_origin":                  "user_prompt",
+		"owner_prompt":                  directive,
+		"self_development_operation_id": operation.OperationID,
+	})
+	head := snapshot.HeadRevision
+	commit := types.CommitLifecycleArtifactHeadRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "owner-revise:selfdev-rewake:" + controlID,
+		TrajectoryID: trajectoryID,
 		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
-		ExpectedHeadRevisionID:   snapshot.HeadRevision.RevisionID,
-		Kind:                     types.LifecycleOwnerTell, Content: instructionContent,
+		ExpectedHeadRevisionID:   head.RevisionID,
+		Revision: types.Revision{
+			RevisionID: rewakeRevisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+			AuthorKind: types.AuthorUser, AuthorLabel: ownerID,
+			Content: head.Content, BodyDoc: head.BodyDoc, SourceEntities: head.SourceEntities, Citations: head.Citations,
+			Metadata: rewakeMeta, ParentRevisionID: head.RevisionID,
+		},
 	}
-	instructionReq.CommandDigest, err = store.ComputeQueueLifecycleOwnerInstructionDigest(instructionReq)
+	commitDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(commit, store.TextureSourceGraphWriteSet{})
+	if digestErr != nil {
+		return fmt.Errorf("digest self-development Texture owner revision: %w", digestErr)
+	}
+	commit.CommandDigest = commitDigest
+	result, err := rt.store.CommitLifecycleArtifactHeadWithSourceGraph(ctx, commit, store.TextureSourceGraphWriteSet{})
 	if err != nil {
-		return fmt.Errorf("digest self-development Texture owner instruction: %w", err)
-	}
-	if _, err := rt.store.QueueLifecycleOwnerInstruction(ctx, instructionReq); err != nil {
 		if errors.Is(err, store.ErrLifecycleCommandConflict) {
-			return nil // this rewake occurrence is already durably queued.
+			return nil // this rewake occurrence is already durably committed.
 		}
-		return fmt.Errorf("queue self-development Texture owner instruction: %w", err)
+		return fmt.Errorf("commit self-development Texture owner revision: %w", err)
+	}
+	if result.Replay || result.Revision == nil {
+		return nil
 	}
 	if !rt.DispatchActorActive() {
-		return fmt.Errorf("self-development Texture owner instruction queued but actor dispatch unavailable")
+		return fmt.Errorf("self-development Texture owner revision committed but actor dispatch unavailable")
+	}
+	reducerSeq := int64(0)
+	for _, event := range result.Events {
+		if event.Kind == types.LifecycleArtifactHeadAdvanced &&
+			len(event.ArtifactRefs) >= 2 && strings.TrimSpace(event.ArtifactRefs[1]) == result.Revision.RevisionID {
+			reducerSeq = event.ReducerSeq
+		}
+	}
+	occurrence, occErr := TextureDocumentRevisionOccurrence(*result.Revision, requestID, result.Trajectory.LifecycleVersion, reducerSeq)
+	if occErr != nil {
+		return fmt.Errorf("build self-development Texture revision occurrence: %w", occErr)
+	}
+	content, encErr := EncodeTextureActorOccurrence(occurrence)
+	if encErr != nil {
+		return fmt.Errorf("encode self-development Texture revision occurrence: %w", encErr)
 	}
 	if err := rt.DispatchActor(ctx, ownerID, computerID, textureAgentID, "coagent_result",
-		instructionID, trajectoryID, "owner:"+ownerID); err != nil {
-		return fmt.Errorf("wake self-development Texture actor for owner instruction: %w", err)
+		content, trajectoryID, "owner:"+ownerID); err != nil {
+		return fmt.Errorf("wake self-development Texture actor for owner revision: %w", err)
 	}
 	return nil
 }

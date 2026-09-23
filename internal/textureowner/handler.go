@@ -48,8 +48,7 @@ type Handler struct {
 	ModelPolicy *modelpolicy.Manager
 	Provider    provideriface.Provider
 
-	wakeTextureControl   func(context.Context, types.CoagentSourcePacket)
-	wakeOwnerInstruction func(context.Context, string, string, string) error
+	wakeTextureControl func(context.Context, types.CoagentSourcePacket)
 	textureEditMu        sync.Mutex
 	textureWakeLocksMu   sync.Mutex
 	textureWakeLocks     map[string]*textureWakeLock
@@ -94,26 +93,6 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		ModelPolicy:        core.TextureModelPolicy(),
 		Provider:           core.TextureProvider(),
 		wakeTextureControl: core.WakeUpdatedCoagent,
-		wakeOwnerInstruction: func(ctx context.Context, ownerID, docID, instructionID string) error {
-			computerID := core.TextureComputerID()
-			doc, err := core.Store().GetLifecycleDocument(ctx, ownerID, computerID, docID)
-			if err != nil {
-				return fmt.Errorf("load owner instruction document: %w", err)
-			}
-			instruction, err := core.Store().GetLifecycleOwnerInstruction(ctx, ownerID, computerID, doc.TrajectoryID, instructionID)
-			if err != nil {
-				return fmt.Errorf("load owner instruction occurrence: %w", err)
-			}
-			occurrence, err := agentcore.TextureOwnerInstructionOccurrence(instruction)
-			if err != nil {
-				return err
-			}
-			content, err := agentcore.EncodeTextureActorOccurrence(occurrence)
-			if err != nil {
-				return err
-			}
-			return core.DispatchActor(ctx, ownerID, computerID, currentTextureAgentID(docID), "coagent_result", content, doc.TrajectoryID, "owner:"+ownerID)
-		},
 	}
 }
 

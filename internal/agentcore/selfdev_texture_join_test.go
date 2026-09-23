@@ -140,7 +140,7 @@ func TestPersistentSuperReconcileMintsTextureRewakeAfterTerminalSelfDevelopmentS
 		t.Fatal(err)
 	}
 
-	// Terminal event wakes Texture (queues owner instruction on Texture trajectory), never mints Super directly.
+	// Terminal event wakes Texture with an owner revision on the trajectory, never mints Super directly.
 	rewakeErr := runtime.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID)
 	if rewakeErr != nil {
 		t.Fatalf("rewake Texture error: %v", rewakeErr)
@@ -192,16 +192,9 @@ func TestPersistentSuperReconcileMintsTextureRewakeAfterTerminalSelfDevelopmentS
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedInstructions, err := productStore.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, trajectoryID, textureAgentID, snapshot.HeadRevision.RevisionID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var ownerInstructions []types.TextureTurnOwnerInstruction
-	for _, inst := range expectedInstructions {
-		ownerInstructions = append(ownerInstructions, types.TextureTurnOwnerInstruction{
-			InstructionID: inst.InstructionID,
-			RequestID:     inst.RequestID,
-		})
+	ownerHead, _, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot)
+	if !ownerHeadPending || ownerHead.RevisionID != snapshot.HeadRevision.RevisionID {
+		t.Fatalf("expected pending owner revision for Texture, got head=%+v pending=%v", ownerHead, ownerHeadPending)
 	}
 	turn := types.ApplyTextureTurnRequest{
 		OwnerID:                        ownerID,
@@ -226,7 +219,6 @@ func TestPersistentSuperReconcileMintsTextureRewakeAfterTerminalSelfDevelopmentS
 			Content:          content,
 			PayloadDigest:    payloadDigest,
 		}},
-		OwnerInstructions: ownerInstructions,
 	}
 	turn.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turn)
 	if err != nil {

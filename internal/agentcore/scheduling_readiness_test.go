@@ -371,7 +371,7 @@ func TestSchedulingReadiness_Criterion5_TerminalEventTextureRewake(t *testing.T)
 	}
 
 	// Part (b): Prove the live Texture rewake path intact:
-	// 1. maybeRewakeSelfDevelopmentTextureAfterTerminalSuper queues instruction on Texture trajectory
+	// 1. maybeRewakeSelfDevelopmentTextureAfterTerminalSuper commits an owner revision on the Texture trajectory.
 	rewakeErr := runtime.maybeRewakeSelfDevelopmentTextureAfterTerminalSuper(ctx, ownerID)
 	if rewakeErr != nil {
 		t.Fatalf("rewake Texture error: %v", rewakeErr)
@@ -383,7 +383,7 @@ func TestSchedulingReadiness_Criterion5_TerminalEventTextureRewake(t *testing.T)
 		t.Fatalf("expected nil Super before Texture turn commits execution_request, got: %+v", noSuper)
 	}
 
-	// 3. Texture turn consumes the instruction and commits a NEW typed execution_request
+	// 3. Texture consumes the owner revision and commits a NEW typed execution_request.
 	docID, _, textureWorkID, trajectoryID, superWorkID, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
 	textureAgentID := agentprofile.Texture + ":" + docID
 	snapshot, err := productStore.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
@@ -395,16 +395,9 @@ func TestSchedulingReadiness_Criterion5_TerminalEventTextureRewake(t *testing.T)
 		t.Fatal(err)
 	}
 
-	expectedInstructions, err := productStore.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, trajectoryID, textureAgentID, snapshot.HeadRevision.RevisionID)
-	if err != nil || len(expectedInstructions) == 0 {
-		t.Fatalf("expected pending owner instructions for Texture, got %v, err=%v", expectedInstructions, err)
-	}
-	var ownerInstructions []types.TextureTurnOwnerInstruction
-	for _, inst := range expectedInstructions {
-		ownerInstructions = append(ownerInstructions, types.TextureTurnOwnerInstruction{
-			InstructionID: inst.InstructionID,
-			RequestID:     inst.RequestID,
-		})
+	ownerHead, _, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot)
+	if !ownerHeadPending || ownerHead.RevisionID != snapshot.HeadRevision.RevisionID {
+		t.Fatalf("expected pending owner revision for Texture, got head=%+v pending=%v", ownerHead, ownerHeadPending)
 	}
 
 	packet, err := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
@@ -458,7 +451,6 @@ func TestSchedulingReadiness_Criterion5_TerminalEventTextureRewake(t *testing.T)
 			Content:          content,
 			PayloadDigest:    payloadDigest,
 		}},
-		OwnerInstructions: ownerInstructions,
 	}
 	turn.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turn)
 	if err != nil {

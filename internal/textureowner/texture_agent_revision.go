@@ -1,13 +1,10 @@
 package textureowner
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"sort"
@@ -28,9 +25,9 @@ var errTextureLifecycleOpenWorkUnavailable = fmt.Errorf("Texture lifecycle open 
 
 // textureAgentRevisionRequest is the JSON payload for
 // POST /api/texture/documents/{id}/revise.
-// Submitting a natural-language revision request from within an open document
-// creates a new canonical revision attributable to the appagent
-// (VAL-ETEXT-003).
+// On a lifecycle-bound document the owner's directive commits as a canonical
+// owner-authored revision carrying forward the current head content; the
+// document revision event is the desk's input (VAL-ETEXT-003).
 type textureAgentRevisionRequest struct {
 	Intent                 string                `json:"intent,omitempty"`
 	Prompt                 string                `json:"prompt,omitempty"`
@@ -96,74 +93,136 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if strings.TrimSpace(doc.TrajectoryID) != "" {
-		snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
-		if snapshotErr != nil || snapshot.Trajectory.Status != types.TrajectoryLive {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable lifecycle state is unavailable or terminal"})
-			return
-		}
-		content := strings.TrimSpace(firstNonEmpty(req.Prompt, req.Intent))
-		if content == "" {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "prompt or intent is required"})
-			return
-		}
-		clientRequestID := strings.TrimSpace(firstNonEmpty(req.ClientRequestID, r.Header.Get("Idempotency-Key")))
-		if clientRequestID == "" {
-			clientRequestID = uuid.NewString()
-		}
-		expectedHead := strings.TrimSpace(req.ExpectedHeadRevisionID)
-		if expectedHead == "" {
-			expectedHead = snapshot.Document.CurrentRevisionID
-		}
-		payload, _ := json.Marshal(textureOwnerInstructionRequest{ClientRequestID: clientRequestID, Content: content, ExpectedHeadRevisionID: expectedHead})
-		forward := r.Clone(r.Context())
-		forward.URL.Path = strings.TrimSuffix(r.URL.Path, "/revise") + "/tell"
-		forward.Body = io.NopCloser(bytes.NewReader(payload))
-		h.HandleTextureOwnerInstruction(w, forward)
+		h.handleLifecycleOwnerRevision(w, r, doc, ownerID, req)
 		return
 	}
+	// Unbound documents have no lifecycle authority: there is no canonical
+	// revision event to carry owner input, and the legacy worker-mailbox path
+	// was deleted with the owner-instruction channel.
+	writeAPIJSON(w, http.StatusConflict, apiError{Error: "document is not lifecycle-bound; owner revisions require a lifecycle Texture document"})
+}
 
-	// Check for an existing pending agent mutation on this document.
-	// If one exists, return the existing run ID instead of creating a new
-	// mutation. This prevents duplicate canonical revisions when
-	// renewal/retry occurs mid-mutation (VAL-CROSS-122).
-	existing, err := h.pendingAgentMutationByDoc(r.Context(), ownerID, doc.ComputerID, docID)
-	if err != nil {
-		log.Printf("texture api: check pending mutation: %v", err)
-	} else if existing != nil {
-		// A Texture actor is already resident (running or parked) for this
-		// document. Deliver the owner's new request to that actor as an
-		// addressed update and wake it, instead of silently dropping the prompt.
-		// This preserves the "no lost foreground updates" invariant now that a
-		// long-running actor is pending for most of its life. The same run ID is
-		// returned because the owner's request is handled by the resident actor,
-		// not a new run.
-		if err := h.deliverOwnerRevisionToTextureActor(r.Context(), doc, ownerID, req); err != nil {
-			log.Printf("texture api: deliver owner revision to resident texture actor %s: %v", existing.RunID, err)
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "a revision is already in progress for this document; please retry shortly"})
-			return
+// handleLifecycleOwnerRevision commits the owner's /revise directive as a
+// canonical owner-authored revision on the document head and dispatches the
+// revision occurrence that activates the Texture desk. The revision carries
+// the head content forward unchanged; the directive lives in revision
+// metadata (input_origin=user_prompt, owner_prompt).
+func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Request, doc types.Document, ownerID string, req textureAgentRevisionRequest) {
+	snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
+	if snapshotErr != nil || snapshot.Trajectory.Status != types.TrajectoryLive {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable lifecycle state is unavailable or terminal"})
+		return
+	}
+	content := strings.TrimSpace(firstNonEmpty(req.Prompt, req.Intent))
+	if content == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "prompt or intent is required"})
+		return
+	}
+	clientRequestID := strings.TrimSpace(firstNonEmpty(req.ClientRequestID, r.Header.Get("Idempotency-Key")))
+	if clientRequestID == "" {
+		clientRequestID = uuid.NewString()
+	}
+	expectedHead := strings.TrimSpace(req.ExpectedHeadRevisionID)
+	if expectedHead == "" {
+		expectedHead = snapshot.Document.CurrentRevisionID
+	}
+	head := snapshot.HeadRevision
+	if head.RevisionID != expectedHead {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "document head changed; reload the latest version before revising"})
+		return
+	}
+	targetAgentID := currentTextureAgentID(doc.DocID)
+	targetWorkItemID := ""
+	for _, work := range snapshot.WorkItems {
+		if work.Status == types.WorkItemOpen && work.AssignedAgentID == targetAgentID && work.AuthorityProfile == agentprofile.Texture {
+			if targetWorkItemID != "" {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open Texture target work items"})
+				return
+			}
+			targetWorkItemID = work.WorkItemID
 		}
-		writeAPIJSON(w, http.StatusAccepted, textureAgentRevisionResponse{
-			RunID:     existing.RunID,
-			DocID:     docID,
-			State:     types.RunPending,
-			CreatedAt: existing.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		})
+	}
+	if targetWorkItemID == "" {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has no open Texture target work item"})
 		return
 	}
-
-	rec, err := h.submitTextureAgentRevisionRun(r.Context(), doc, ownerID, req, 0)
-	if err != nil {
-		log.Printf("texture api: submit agent revision run: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit agent revision"})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusAccepted, textureAgentRevisionResponse{
-		RunID:     rec.RunID,
-		DocID:     docID,
-		State:     rec.State,
-		CreatedAt: rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+	metadata := mergeTextureRevisionMetadata(nil, map[string]any{
+		"input_origin":            textureInputOriginUserPrompt,
+		"owner_prompt":            content,
+		textureMetadataPromptUnixTS: time.Now().UTC().Unix(),
 	})
+	metadata = carryForwardDurableTextureMetadata(metadata, head.Metadata)
+	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{ownerID, doc.ComputerID, doc.TrajectoryID, clientRequestID}, "\x00"))).String()
+	rev := types.Revision{
+		RevisionID:       revisionID,
+		DocID:            doc.DocID,
+		OwnerID:          ownerID,
+		ComputerID:       doc.ComputerID,
+		TrajectoryID:     doc.TrajectoryID,
+		AuthorKind:       types.AuthorUser,
+		AuthorLabel:      ownerID,
+		Content:          head.Content,
+		BodyDoc:          head.BodyDoc,
+		SourceEntities:   head.SourceEntities,
+		Citations:        head.Citations,
+		Metadata:         metadata,
+		ParentRevisionID: expectedHead,
+	}
+	requestID, _ := textureOwnerOccurrenceIdentity(ownerID, doc.ComputerID, doc.DocID, clientRequestID)
+	command := types.CommitLifecycleArtifactHeadRequest{
+		OwnerID: ownerID, ComputerID: doc.ComputerID,
+		CommandID:              "owner-revise:" + clientRequestID,
+		TrajectoryID:           doc.TrajectoryID,
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID:   expectedHead,
+		Revision:                 rev,
+	}
+	commandDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(command, store.TextureSourceGraphWriteSet{})
+	if digestErr != nil {
+		log.Printf("texture api: digest owner revision command: %v", digestErr)
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle revision payload"})
+		return
+	}
+	command.CommandDigest = commandDigest
+	result, commitErr := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(r.Context(), command, store.TextureSourceGraphWriteSet{})
+	if commitErr != nil {
+		if errors.Is(commitErr, store.ErrConcurrentStateChange) || errors.Is(commitErr, store.ErrLifecycleCommandConflict) || errors.Is(commitErr, store.ErrLifecycleInvalidTransition) {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: commitErr.Error()})
+		} else {
+			log.Printf("texture api: commit owner revision: %v", commitErr)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to commit owner revision"})
+		}
+		return
+	}
+	if result.Revision == nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "lifecycle revision result unavailable"})
+		return
+	}
+	if !result.Replay {
+		h.recordTextureAudit(r.Context(), "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
+		h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
+		h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Trajectory.LifecycleVersion, result.Events)
+	}
+	writeAPIJSON(w, http.StatusAccepted, textureOwnerRevisionResponse{
+		Schema:     textureOwnerRevisionSchemaV1,
+		DocID:      doc.DocID,
+		RevisionID: result.Revision.RevisionID,
+		RequestID:  requestID,
+		Replay:     result.Replay,
+	})
+}
+
+const textureOwnerRevisionSchemaV1 = "choir.texture_owner_revision.v1"
+
+// textureOwnerRevisionResponse is the /revise response on a lifecycle-bound
+// document: the committed owner revision is the durable receipt and the desk
+// follows the document revision event stream.
+type textureOwnerRevisionResponse struct {
+	Schema     string `json:"schema"`
+	DocID      string `json:"doc_id"`
+	RevisionID string `json:"revision_id"`
+	RequestID  string `json:"request_id"`
+	Replay     bool   `json:"replay"`
 }
 
 func (h *Handler) pendingAgentMutationByDoc(ctx context.Context, ownerID, computerID, docID string) (*store.AgentMutation, error) {
@@ -230,84 +289,6 @@ func (h *Handler) reconcilePendingMutationFromDocumentHead(ctx context.Context, 
 	return true, nil
 }
 
-func stableOwnerRevisionUpdateID(ownerID, docID, intent, prompt string) string {
-	sum := sha256.Sum256([]byte(strings.Join([]string{ownerID, docID, intent, prompt}, "\x00")))
-	return "owner-rev-" + hex.EncodeToString(sum[:])[:20]
-}
-
-// deliverOwnerRevisionToTextureActor delivers an owner-originated revision
-// request to the document's resident Texture actor as an addressed coagent
-// update, then signals the actor so a parked run wakes. It reuses the same
-// pending-update substrate that researcher/super deliveries use, so the warm
-// injector folds the owner instruction into the running actor's context and it
-// produces a new canonical revision. This is the foreground-update path for a
-// long-running, mostly-parked Texture actor; without it a new /revise during a
-// pending actor would be silently dropped.
-func (rt *Handler) deliverOwnerRevisionToTextureActor(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest) error {
-	if rt == nil || rt.Store == nil {
-		return fmt.Errorf("runtime store unavailable")
-	}
-	targetAgentID := currentTextureAgentID(doc.DocID)
-	if strings.TrimSpace(targetAgentID) == "" {
-		return fmt.Errorf("texture agent id unavailable for doc %s", doc.DocID)
-	}
-	intent := strings.TrimSpace(req.Intent)
-	prompt := strings.TrimSpace(req.Prompt)
-	summary := "Owner revision request"
-	if intent != "" {
-		summary = "Owner revision request: " + intent
-	}
-	var notes []string
-	if prompt != "" {
-		notes = append(notes, prompt)
-	}
-	update := types.CoagentSourcePacket{
-		// Deterministic update id keyed on the request content so a renewal/retry
-		// of the same owner request dedupes (DispatchWorkerUpdate is idempotent by
-		// owner_id+update_id, preserving VAL-CROSS-122) while a genuinely new
-		// owner instruction is delivered as a distinct packet.
-		UpdateID:      stableOwnerRevisionUpdateID(ownerID, doc.DocID, intent, prompt),
-		OwnerID:       ownerID,
-		AgentID:       targetAgentID,
-		TargetAgentID: targetAgentID,
-		ChannelID:     doc.DocID,
-		Role:          "owner",
-		Packet: types.CoagentSourcePacketPayload{
-			SchemaVersion: types.CoagentSourcePacketSchemaV1,
-			Kind:          "decision_request",
-			Summary:       summary,
-			Actions: []types.CoagentPacketAction{{
-				Type:      "revise_texture",
-				Objective: summary,
-				Inputs:    map[string]any{"intent": intent, "prompt": prompt},
-				Safety: types.CoagentPacketActionSafety{
-					MutationClass: "orange",
-					FileMutation:  "allowed",
-				},
-			}},
-			Notes: notes,
-		},
-		CreatedAt: time.Now().UTC(),
-	}
-	update.Content = buildTextureLifecycleUpdateMessage(update)
-	message := &types.ChannelMessage{
-		ChannelID: doc.DocID,
-		From:      "owner",
-		ToAgentID: targetAgentID,
-		Role:      update.Role,
-		Content:   update.Content,
-		Timestamp: update.CreatedAt,
-	}
-	stored, created, err := rt.Store.DispatchWorkerUpdate(ctx, update, message)
-	if err != nil {
-		return fmt.Errorf("dispatch owner revision update: %w", err)
-	}
-	if created {
-		rt.Core.EmitChannelMessageEvent(ctx, *message, ownerID)
-		rt.Core.WakeUpdatedCoagent(ctx, stored)
-	}
-	return nil
-}
 
 func textureRevisionMatchesDocument(revision types.Revision, doc types.Document, ownerID string) bool {
 	return strings.TrimSpace(revision.RevisionID) == strings.TrimSpace(doc.CurrentRevisionID) &&
@@ -581,6 +562,10 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	if seedPrompt := metadataString(metadata, "seed_prompt"); seedPrompt != "" {
 		b.WriteString("\n\nOriginal user request:\n")
 		b.WriteString(seedPrompt)
+	}
+	if ownerPrompt := metadataString(metadata, "owner_prompt"); ownerPrompt != "" {
+		b.WriteString("\n\nOwner directive for this revision:\n")
+		b.WriteString(ownerPrompt)
 	}
 	if promptUnixTS := metadataIntValue(metadata, textureMetadataPromptUnixTS); promptUnixTS > 0 {
 		referenceTime := time.Unix(int64(promptUnixTS), 0).UTC()

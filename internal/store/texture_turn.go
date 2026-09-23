@@ -43,11 +43,6 @@ func normalizeTextureTurnDigestRequest(req types.ApplyTextureTurnRequest) (types
 	// command identity. Exact retry after the first commit reconstructs current
 	// versions and must still find the original receipt by stable digest.
 	req.ExpectedLifecycleVersion, req.ExpectedCallerLifecycleVersion = 0, 0
-	req.OwnerInstructions = append([]types.TextureTurnOwnerInstruction(nil), req.OwnerInstructions...)
-	for i := range req.OwnerInstructions {
-		req.OwnerInstructions[i].InstructionID = strings.TrimSpace(req.OwnerInstructions[i].InstructionID)
-		req.OwnerInstructions[i].RequestID = strings.TrimSpace(req.OwnerInstructions[i].RequestID)
-	}
 	req.ExpectedHeadRevisionID = strings.TrimSpace(req.ExpectedHeadRevisionID)
 	req.CallerWorkItemID = strings.TrimSpace(req.CallerWorkItemID)
 	req.CallerWorkDisposition = types.WorkItemStatus(strings.TrimSpace(string(req.CallerWorkDisposition)))
@@ -356,56 +351,6 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		callerWork.AuthorityProfile != agentprofile.Texture {
 		return types.LifecycleResult{}, ErrConcurrentStateChange
 	}
-	type ownerInstructionBinding struct {
-		object     objectgraph.Object
-		workObject objectgraph.Object
-		record     types.LifecycleOwnerInstruction
-	}
-	ownerInstructions := make([]ownerInstructionBinding, 0, len(req.OwnerInstructions))
-	causalRequestIDs := make([]string, 0, len(req.OwnerInstructions))
-	ownerInstructionIDs := make([]string, 0, len(req.OwnerInstructions))
-	seenInstructions := make(map[string]bool, len(req.OwnerInstructions))
-	for _, binding := range req.OwnerInstructions {
-		if binding.InstructionID == "" || binding.RequestID == "" || seenInstructions[binding.InstructionID] {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		seenInstructions[binding.InstructionID] = true
-		instructionObj, instruction, instructionErr := s.lifecycleOwnerInstructionObject(ctx, ownerID, computerID, req.TrajectoryID, binding.InstructionID)
-		if instructionErr != nil {
-			return types.LifecycleResult{}, instructionErr
-		}
-		instructionWorkObj, instructionWork, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, instruction.TargetWorkItemID)
-		if workErr != nil {
-			return types.LifecycleResult{}, workErr
-		}
-		if instruction.Status != types.LifecycleOwnerInstructionPending || instruction.RequestID != binding.RequestID ||
-			instruction.DocumentID != req.DocumentID || instruction.TrajectoryID != req.TrajectoryID ||
-			instruction.TargetAgentID != req.CallerAgentID || instruction.HeadRevisionID != req.ExpectedHeadRevisionID ||
-			instructionWork.OwnerID != ownerID || instructionWork.ComputerID != computerID ||
-			instructionWork.Status != types.WorkItemOpen || instructionWork.TrajectoryID != req.TrajectoryID ||
-			instructionWork.AssignedAgentID != req.CallerAgentID {
-			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-		}
-		ownerInstructions = append(ownerInstructions, ownerInstructionBinding{object: instructionObj, workObject: instructionWorkObj, record: instruction})
-		ownerInstructionIDs = append(ownerInstructionIDs, instruction.InstructionID)
-		causalRequestIDs = append(causalRequestIDs, instruction.RequestID)
-	}
-	// Every outcome consumes one exact ordered same-head owner occurrence set.
-	// Runtime construction and reducer completeness share the same unbounded
-	// reader; the store lock makes this list plus the subsequent object CAS one
-	// atomic precondition even when more than one API page of tells is pending.
-	expected, pendingErr := s.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, req.TrajectoryID, req.CallerAgentID, req.ExpectedHeadRevisionID)
-	if pendingErr != nil {
-		return types.LifecycleResult{}, pendingErr
-	}
-	if len(expected) != len(req.OwnerInstructions) {
-		return types.LifecycleResult{}, ErrConcurrentStateChange
-	}
-	for i := range expected {
-		if expected[i].InstructionID != req.OwnerInstructions[i].InstructionID || expected[i].RequestID != req.OwnerInstructions[i].RequestID {
-			return types.LifecycleResult{}, ErrConcurrentStateChange
-		}
-	}
 	now := time.Now().UTC()
 	conditions := []objectgraph.ObjectCondition{
 		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
@@ -414,21 +359,6 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		{CanonicalID: callerAgentObj.CanonicalID, Exists: true, ExpectedContentHash: callerAgentObj.ContentHash},
 		{CanonicalID: callerRunObj.CanonicalID, Exists: true, ExpectedContentHash: callerRunObj.ContentHash},
 		{CanonicalID: callerWorkObj.CanonicalID, Exists: true, ExpectedContentHash: callerWorkObj.ContentHash},
-	}
-	seenOwnerConditions := make(map[string]bool, len(conditions)+len(ownerInstructions)*2)
-	for _, condition := range conditions {
-		seenOwnerConditions[condition.CanonicalID] = true
-	}
-	for _, binding := range ownerInstructions {
-		for _, condition := range []objectgraph.ObjectCondition{
-			{CanonicalID: binding.object.CanonicalID, Exists: true, ExpectedContentHash: binding.object.ContentHash},
-			{CanonicalID: binding.workObject.CanonicalID, Exists: true, ExpectedContentHash: binding.workObject.ContentHash},
-		} {
-			if !seenOwnerConditions[condition.CanonicalID] {
-				conditions = append(conditions, condition)
-				seenOwnerConditions[condition.CanonicalID] = true
-			}
-		}
 	}
 	objects := make([]objectgraph.Object, 0)
 	edges := make([]objectgraph.Edge, 0)
@@ -440,10 +370,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1), OwnerID: ownerID, ComputerID: computerID,
 			TrajectoryID: req.TrajectoryID, WorkItemID: workItemID, UpdateID: updateID, Kind: kind,
 			ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq, CommandID: req.CommandID,
-			CommandDigest: req.CommandDigest, RequestIDs: append([]string(nil), causalRequestIDs...), ArtifactRefs: refs, Reason: reason, CreatedAt: now,
-		}
-		if len(causalRequestIDs) == 1 {
-			event.RequestID = causalRequestIDs[0]
+			CommandDigest: req.CommandDigest, ArtifactRefs: refs, Reason: reason, CreatedAt: now,
 		}
 		events = append(events, event)
 		return nil
@@ -509,20 +436,6 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	}
 	if err := appendEvent(types.LifecycleTextureTurnCommitted, "", "", artifactRefs, req.Reason); err != nil {
 		return types.LifecycleResult{}, err
-	}
-	for i := range ownerInstructions {
-		binding := &ownerInstructions[i]
-		binding.record.Status = types.LifecycleOwnerInstructionConsumed
-		binding.record.LifecycleVersion++
-		binding.record.ReducerSeq = seq
-		binding.record.ConsumedAt = &now
-		key := binding.record.TrajectoryID + "\x00" + binding.record.InstructionID
-		updated, buildErr := lifecycleObject(ogKindOwnerInstruction, ownerID, computerID, key, binding.record,
-			lifecycleMetadata("instruction_id", binding.record.InstructionID, computerID, req.TrajectoryID, seq), binding.object.CreatedAt, now)
-		if buildErr != nil {
-			return types.LifecycleResult{}, buildErr
-		}
-		objects = append(objects, updated)
 	}
 
 	// The caller Texture assignment is a separate obligation, never a synthetic
@@ -872,7 +785,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		Outcome: req.Outcome, PriorHeadRevisionID: req.ExpectedHeadRevisionID, HeadRevisionID: resultDocument.CurrentRevisionID,
 		InboundUpdateIDs: inboundIDs, ControlUpdateIDs: controlIDs, TargetWorkItemIDs: targetWorkIDs,
 		CallerWorkItemID: callerWork.WorkItemID, CallerWorkDisposition: req.CallerWorkDisposition,
-		OwnerInstructionIDs: ownerInstructionIDs, CausalRequestIDs: causalRequestIDs, Reason: req.Reason,
+		Reason: req.Reason,
 	}
 	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID,
 		req.CommandDigest, types.LifecycleApplyTextureTurn, seq, eventObjs)

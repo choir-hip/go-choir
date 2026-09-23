@@ -235,45 +235,12 @@ func lifecycleActivationKeys(ownerID, computerID, trajectoryID, agentID, buildCo
 	return logicalKey, failedKey, versions, nil
 }
 
-// pendingSelfDevelopmentTextureInstruction reports whether any self-development
-// supervision trajectory for this owner carries a pending Texture owner
-// instruction (the genuine-authoring rewake queued by
-// ensureSelfDevelopmentTextureJoin after a terminal Super).
-func (rt *Runtime) pendingSelfDevelopmentTextureInstruction(ctx context.Context, ownerID string) (bool, error) {
-	computerID := strings.TrimSpace(rt.TextureComputerID())
-	superAgentID := persistentSuperAgentID(ownerID)
-	latest, err := rt.store.GetLatestRunByAgent(ctx, ownerID, superAgentID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	if !isPersistentSuperAgentRun(&latest) || !selfDevelopmentSuperRunTerminal(latest.State) {
-		return false, nil
-	}
-	operations, err := rt.selfDevelopmentRewakeOperations(ctx, ownerID, computerID, &latest)
-	if err != nil {
-		return false, err
-	}
-	for _, operation := range operations {
-		docID, _, _, trajectoryID, _, _ := selfDevelopmentTextureJoinIDs(ownerID, computerID, operation.OperationID)
-		instructions, instrErr := rt.store.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, trajectoryID, agentprofile.Texture+":"+docID, "")
-		if instrErr != nil {
-			continue
-		}
-		if len(instructions) > 0 {
-			return true, nil
-		}
-	}
-	return false, nil
-}
 
-// resumeSelfDevelopmentSuperForPendingInstruction starts a fresh persistent
-// Super bound to the operation whose Texture instruction is pending. The Super
-// prompt directs it to reconcile the operation; the Texture actor consumes the
-// instruction through its own tool loop in parallel.
-func (rt *Runtime) resumeSelfDevelopmentSuperForPendingInstruction(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
+// resumeSelfDevelopmentSuperForPendingRevision starts a fresh persistent
+// Super bound to the operation whose Texture owner revision is pending. The
+// Super prompt directs it to reconcile the operation; the Texture actor
+// consumes the owner head through its own tool loop in parallel.
+func (rt *Runtime) resumeSelfDevelopmentSuperForPendingRevision(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	superAgentID := persistentSuperAgentID(ownerID)
 	if agentID != superAgentID {
@@ -348,9 +315,9 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 
 // reconcilePersistentSuperActorForOwnerStart is the wake path for the owner's
 // explicit self-development start/retry action. The owner action is a live
-// trigger; when the Texture turn that consumes the just-queued owner
-// instruction has not committed its execution_request yet, this path fills
-// the no-run gap from that pending instruction. It is reachable ONLY from
+// trigger; when the Texture turn that consumes the just-committed owner
+// revision has not committed its execution_request yet, this path fills
+// the no-run gap from that pending revision. It is reachable ONLY from
 // startSelfDevelopmentPersistentSuper — never from boot rewarm, the boot
 // work-item sweep, terminal continuation, or generic coagent wake reconcile.
 func (rt *Runtime) reconcilePersistentSuperActorForOwnerStart(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
@@ -451,10 +418,10 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	lifecycleControls := len(updates) > 0
 	if !lifecycleControls {
 		if allowInstructionResume {
-			// Owner-start live trigger: the owner instruction queued by this
+			// Owner-start live trigger: the owner revision committed by this
 			// start action wakes Super when the Texture turn has not yet
 			// committed its execution_request. Resume only fills the no-run gap.
-			return rt.resumeSelfDevelopmentSuperForPendingInstruction(ctx, ownerID, agentID)
+			return rt.resumeSelfDevelopmentSuperForPendingRevision(ctx, ownerID, agentID)
 		}
 		updates, err = rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
 		if err != nil {
@@ -2146,12 +2113,11 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 	return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 }
 
-const (
-	textureOwnerInstructionIDsMetadataRuntime = "texture_owner_instruction_ids"
-	textureOwnerRequestIDsMetadataRuntime     = "texture_owner_request_ids"
-)
 
-func (rt *Runtime) lifecycleOwnerInstructionTurnsForRun(ctx context.Context, rec *types.RunRecord, phase string, seen map[string]bool) ([]json.RawMessage, []string, error) {
+// lifecycleOwnerRevisionTurnForRun injects the pending owner-authored head
+// revision into the Texture run's context. The owner revision is the desk's
+// input: the run consumes it by committing a texture turn against that head.
+func (rt *Runtime) lifecycleOwnerRevisionTurnForRun(ctx context.Context, rec *types.RunRecord, phase string, seen map[string]bool) ([]json.RawMessage, []string, error) {
 	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Texture {
 		return nil, nil, nil
 	}
@@ -2162,54 +2128,48 @@ func (rt *Runtime) lifecycleOwnerInstructionTurnsForRun(ctx context.Context, rec
 	}
 	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
 	if err != nil || snapshot.Document.DocID != docID || snapshot.Document.TrajectoryID != trajectoryID {
-		return nil, nil, fmt.Errorf("owner instruction lifecycle scope is unavailable")
+		return nil, nil, fmt.Errorf("owner revision lifecycle scope is unavailable")
 	}
-	instructions, err := rt.store.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, computerID, trajectoryID, agentID, snapshot.Document.CurrentRevisionID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if rec.Metadata == nil {
-		rec.Metadata = map[string]any{}
-	}
-	rec.Metadata[textureOwnerInstructionIDsMetadataRuntime] = []string{}
-	rec.Metadata[textureOwnerRequestIDsMetadataRuntime] = []string{}
-	if len(instructions) == 0 {
+	head, _, pending := store.PendingTextureOwnerRevision(snapshot)
+	if !pending {
 		return nil, nil, nil
 	}
-	openWork := map[string]bool{}
+	openWork := false
 	for _, work := range snapshot.WorkItems {
 		if work.Status == types.WorkItemOpen && work.OwnerID == ownerID && work.ComputerID == computerID && work.TrajectoryID == trajectoryID && work.AssignedAgentID == agentID {
-			openWork[work.WorkItemID] = true
+			openWork = true
 		}
 	}
-	instructionIDs, requestIDs := make([]string, 0, len(instructions)), make([]string, 0, len(instructions))
-	for _, instruction := range instructions {
-		if instruction.Schema != types.LifecycleOwnerInstructionSchemaV1 || instruction.DocumentID != docID || instruction.TrajectoryID != trajectoryID || instruction.TargetAgentID != agentID || !openWork[instruction.TargetWorkItemID] {
-			return nil, nil, fmt.Errorf("owner instruction %q fails exact run/work binding", instruction.InstructionID)
-		}
-		instructionIDs, requestIDs = append(instructionIDs, instruction.InstructionID), append(requestIDs, instruction.RequestID)
+	if !openWork {
+		return nil, nil, fmt.Errorf("owner revision %q has no open Texture work item", head.RevisionID)
 	}
-	rec.Metadata[textureOwnerInstructionIDsMetadataRuntime], rec.Metadata[textureOwnerRequestIDsMetadataRuntime] = instructionIDs, requestIDs
-	fresh := make([]types.LifecycleOwnerInstruction, 0, len(instructions))
-	freshIDs := make([]string, 0, len(instructions))
-	for _, instruction := range instructions {
-		if !seen[instruction.InstructionID] {
-			fresh = append(fresh, instruction)
-			freshIDs = append(freshIDs, instruction.InstructionID)
-		}
-	}
-	if len(fresh) == 0 {
+	if seen[head.RevisionID] {
 		return nil, nil, nil
 	}
-	payload, err := json.Marshal(map[string]any{"schema": lifecycleInjectionEnvelopeSchemaV1, "packet_type": "owner_instruction", "owner_id": ownerID, "computer_id": computerID, "target_run_id": rec.RunID, "delivery_phase": phase, "document_id": docID, "trajectory_id": trajectoryID, "target_agent_id": agentID, "instructions": fresh})
+	revision := map[string]any{
+		"revision_id":        head.RevisionID,
+		"doc_id":             head.DocID,
+		"trajectory_id":      head.TrajectoryID,
+		"author_kind":        string(head.AuthorKind),
+		"author_label":       head.AuthorLabel,
+		"parent_revision_id": head.ParentRevisionID,
+		"created_at":         head.CreatedAt,
+	}
+	if len(head.Metadata) > 0 {
+		var meta map[string]any
+		if json.Unmarshal(head.Metadata, &meta) == nil && len(meta) > 0 {
+			revision["metadata"] = meta
+		}
+	}
+	payload, err := json.Marshal(map[string]any{"schema": lifecycleInjectionEnvelopeSchemaV1, "packet_type": "owner_revision", "owner_id": ownerID, "computer_id": computerID, "target_run_id": rec.RunID, "delivery_phase": phase, "document_id": docID, "trajectory_id": trajectoryID, "target_agent_id": agentID, "revisions": []map[string]any{revision}})
 	if err != nil {
 		return nil, nil, err
 	}
-	message, err := json.Marshal(map[string]any{"role": "user", "content": []map[string]string{{"type": "text", "text": "Choir authenticated owner instruction packet.\n\n" + string(payload)}}})
+	message, err := json.Marshal(map[string]any{"role": "user", "content": []map[string]string{{"type": "text", "text": "Choir authenticated owner revision packet.\n\n" + string(payload)}}})
 	if err != nil {
 		return nil, nil, err
 	}
-	return []json.RawMessage{message}, freshIDs, nil
+	return []json.RawMessage{message}, []string{head.RevisionID}, nil
 }
 
 func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.RunMemoryEntry) (map[string]bool, map[string]bool) {
@@ -2224,8 +2184,8 @@ func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.Ru
 		for _, text := range runMemoryUserMessageTexts(entry.Message) {
 			packetType := ""
 			switch {
-			case strings.HasPrefix(text, "Choir authenticated owner instruction packet.\n\n"):
-				packetType = "owner_instruction"
+			case strings.HasPrefix(text, "Choir authenticated owner revision packet.\n\n"):
+				packetType = "owner_revision"
 			default:
 				for _, phase := range []string{coagentPacketDeliveryMid, coagentPacketDeliveryFinal, coagentPacketDeliveryCold, coagentPacketDeliveryThread} {
 					if strings.HasPrefix(text, coagentUpdatePacketPreamble(phase)+"\n\n") {
@@ -2249,9 +2209,9 @@ func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.Ru
 				Updates       []struct {
 					UpdateID string `json:"update_id"`
 				} `json:"updates"`
-				Instructions []struct {
-					InstructionID string `json:"instruction_id"`
-				} `json:"instructions"`
+				Revisions []struct {
+					RevisionID string `json:"revision_id"`
+				} `json:"revisions"`
 			}
 			expectedTrajectory := lifecycleControlTrajectoryForRun(rec)
 			if json.Unmarshal([]byte(text[start:]), &envelope) != nil {
@@ -2276,9 +2236,9 @@ func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.Ru
 						updates[id] = true
 					}
 				}
-			case "owner_instruction":
-				for _, instruction := range envelope.Instructions {
-					if id := strings.TrimSpace(instruction.InstructionID); id != "" {
+			case "owner_revision":
+				for _, revision := range envelope.Revisions {
+					if id := strings.TrimSpace(revision.RevisionID); id != "" {
 						owners[id] = true
 					}
 				}
@@ -2334,19 +2294,19 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		if err != nil {
 			return nil, fmt.Errorf("derive delivered lifecycle occurrences from run memory: %w", err)
 		}
-		seenUpdates, seenOwnerInstructions := lifecycleInjectionIDsFromRunMemory(rec, entries)
+		seenUpdates, seenOwnerRevisions := lifecycleInjectionIDsFromRunMemory(rec, entries)
 		phase := coagentPacketDeliveryMid
 		if finalCheckpoint {
 			phase = coagentPacketDeliveryFinal
-		} else if initialPhase != "" && len(seenUpdates) == 0 && len(seenOwnerInstructions) == 0 {
+		} else if initialPhase != "" && len(seenUpdates) == 0 && len(seenOwnerRevisions) == 0 {
 			// The first phase is durable-memory-derived rather than process-local:
 			// an append failure retries the identical cold/thread projection, while
 			// later arrivals after a successful append are mid-activation turns.
 			phase = initialPhase
 		}
-		ownerMessages, _, err := rt.lifecycleOwnerInstructionTurnsForRun(context.Background(), rec, phase, seenOwnerInstructions)
+		ownerMessages, _, err := rt.lifecycleOwnerRevisionTurnForRun(context.Background(), rec, phase, seenOwnerRevisions)
 		if err != nil {
-			return nil, fmt.Errorf("list pending owner instruction turns: %w", err)
+			return nil, fmt.Errorf("list pending owner revision turns: %w", err)
 		}
 		updates, err := rt.pendingCoagentUpdatesForRun(context.Background(), rec, ownerID, agentID, 100)
 		if err != nil {
@@ -2388,7 +2348,7 @@ func shouldAppendInitialCoagentMailboxTurns(rec *types.RunRecord) bool {
 	if agentProfileForRun(rec) != agentprofile.Texture {
 		return false
 	}
-	if metadataStringValue(rec.Metadata, "request_intent") == "apply_owner_instruction" {
+	if metadataStringValue(rec.Metadata, "request_intent") == "apply_owner_revision" {
 		return true
 	}
 	if requestSource == "update_coagent" {

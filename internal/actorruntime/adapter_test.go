@@ -1913,26 +1913,24 @@ func TestTextureCanonicalOccurrenceIdentitiesIncludeExactStoreScope(t *testing.T
 		}
 	}
 
-	instruction := types.LifecycleOwnerInstruction{
-		Schema: types.LifecycleOwnerInstructionSchemaV1, InstructionID: "instruction-a", RequestID: "request-a",
-		OwnerID: "owner-a", ComputerID: "computer-a", DocumentID: "doc-a", TrajectoryID: "trajectory-a",
-		TargetAgentID: "texture:doc-a", TargetWorkItemID: "texture-work-a", HeadRevisionID: "revision-a",
-		Kind: types.LifecycleOwnerCorrect, Status: types.LifecycleOwnerInstructionPending, LifecycleVersion: 3, ReducerSeq: 17,
+	ownerRevision := types.Revision{
+		RevisionID: "revision-a", DocID: "doc-a", OwnerID: "owner-a", ComputerID: "computer-a", TrajectoryID: "trajectory-a",
+		AuthorKind: types.AuthorUser, AuthorLabel: "owner-a",
 	}
-	ownerOccurrence, err := agentcore.TextureOwnerInstructionOccurrence(instruction)
+	documentRevisionOccurrence, err := agentcore.TextureDocumentRevisionOccurrence(ownerRevision, "request-a", 3, 17)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ownerEncoded, err := agentcore.EncodeTextureActorOccurrence(ownerOccurrence)
+	ownerEncoded, err := agentcore.EncodeTextureActorOccurrence(documentRevisionOccurrence)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ownerEncoded == encoded {
-		t.Fatal("producer and owner occurrence domains collided")
+		t.Fatal("producer and document revision occurrence domains collided")
 	}
 	ownerDecoded, err := agentcore.DecodeTextureActorOccurrence(ownerEncoded)
-	if err != nil || ownerDecoded != ownerOccurrence {
-		t.Fatalf("owner occurrence round trip=%+v err=%v", ownerDecoded, err)
+	if err != nil || ownerDecoded != documentRevisionOccurrence {
+		t.Fatalf("document revision occurrence round trip=%+v err=%v", ownerDecoded, err)
 	}
 
 	recovery := agentcore.TextureRecoveryOccurrence(base, "run-a", "tail-a", "revision-a", "sleeping:13:revision-a")
@@ -1948,7 +1946,7 @@ func TestTextureCanonicalOccurrenceIdentitiesIncludeExactStoreScope(t *testing.T
 	}
 }
 
-func TestAdapterSQLitePersistsExactTextureReportAndOwnerInstructionOccurrencesBeforeBoot(t *testing.T) {
+func TestAdapterSQLitePersistsExactTextureReportAndDocumentRevisionOccurrencesBeforeBoot(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "canonical-texture-occurrences.db")
@@ -1979,27 +1977,33 @@ func TestAdapterSQLitePersistsExactTextureReportAndOwnerInstructionOccurrencesBe
 	if err != nil {
 		t.Fatal(err)
 	}
-	instructionReq := types.QueueLifecycleOwnerInstructionRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-owner-occurrence", RequestID: "request-occurrence",
-		InstructionID: "instruction-occurrence", DocumentID: docID, TrajectoryID: queued.TrajectoryID,
-		TargetAgentID: "texture:" + docID, TargetWorkItemID: "work:" + docID,
-		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
-		Kind: types.LifecycleOwnerCorrect, Content: "exact correction",
+	ownerRevision := types.Revision{
+		RevisionID: "revision-owner-occurrence", DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: queued.TrajectoryID,
+		AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: snapshot.HeadRevision.Content,
+		Metadata: json.RawMessage(`{"input_origin":"user_prompt","owner_prompt":"exact correction"}`),
 	}
-	instructionReq.CommandDigest, _ = store.ComputeQueueLifecycleOwnerInstructionDigest(instructionReq)
-	instructionResult, err := s.QueueLifecycleOwnerInstruction(ctx, instructionReq)
+	ownerCommit := types.CommitLifecycleArtifactHeadRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "commit-owner-occurrence", TrajectoryID: queued.TrajectoryID,
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID,
+		Revision: ownerRevision,
+	}
+	ownerCommit.CommandDigest, err = store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(ownerCommit, store.TextureSourceGraphWriteSet{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	instructionOccurrence, err := agentcore.TextureOwnerInstructionOccurrence(*instructionResult.OwnerInstruction)
+	ownerResult, err := s.CommitLifecycleArtifactHeadWithSourceGraph(ctx, ownerCommit, store.TextureSourceGraphWriteSet{})
+	if err != nil || ownerResult.Revision == nil {
+		t.Fatalf("commit owner revision: result=%+v err=%v", ownerResult, err)
+	}
+	documentRevisionOccurrence, err := agentcore.TextureDocumentRevisionOccurrence(*ownerResult.Revision, "request-occurrence", ownerResult.Trajectory.LifecycleVersion, ownerResult.Events[0].ReducerSeq)
 	if err != nil {
 		t.Fatal(err)
 	}
-	instructionContent, err := agentcore.EncodeTextureActorOccurrence(instructionOccurrence)
+	ownerContent, err := agentcore.EncodeTextureActorOccurrence(documentRevisionOccurrence)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := adapter.Runtime.DispatchActor(ctx, ownerID, computerID, "texture:"+docID, "coagent_result", instructionContent, queued.TrajectoryID, "owner:"+ownerID); err != nil {
+	if err := adapter.Runtime.DispatchActor(ctx, ownerID, computerID, "texture:"+docID, "coagent_result", ownerContent, queued.TrajectoryID, "owner:"+ownerID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2022,12 +2026,12 @@ func TestAdapterSQLitePersistsExactTextureReportAndOwnerInstructionOccurrencesBe
 		if o.Kind == agentcore.TextureActorOccurrenceProducerReport && update.FromAgentID != stored.AgentID {
 			t.Fatalf("producer source=%q", update.FromAgentID)
 		}
-		if o.Kind == agentcore.TextureActorOccurrenceOwnerInstruction && update.FromAgentID != "owner:"+ownerID {
+		if o.Kind == agentcore.TextureActorOccurrenceDocumentRevision && update.FromAgentID != "owner:"+ownerID {
 			t.Fatalf("owner source=%q", update.FromAgentID)
 		}
 		seen[o.Kind] = true
 	}
-	if !seen[agentcore.TextureActorOccurrenceProducerReport] || !seen[agentcore.TextureActorOccurrenceOwnerInstruction] {
+	if !seen[agentcore.TextureActorOccurrenceProducerReport] || !seen[agentcore.TextureActorOccurrenceDocumentRevision] {
 		t.Fatalf("canonical kinds=%v", seen)
 	}
 }
@@ -2089,6 +2093,7 @@ func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatc
 		t.Fatal(err)
 	}
 	var normal, recovery int
+	kinds := map[string]int{}
 	for _, update := range backlog {
 		if update.Kind == "initial_dispatch" {
 			t.Fatalf("boot recovery duplicated initial dispatch: %+v", backlog)
@@ -2099,6 +2104,7 @@ func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatc
 		}
 		if o.RecoveryRunID == "" {
 			normal++
+			kinds[o.Kind]++
 		} else {
 			recovery++
 			if o.RecoveryRunID != run.RunID || o.RecoveryHeadID != "revision:"+docID || o.RecoveryTailID == "" || !strings.HasPrefix(o.RecoveryMutation, "sleeping:") {
@@ -2106,8 +2112,11 @@ func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatc
 			}
 		}
 	}
-	if normal != 1 || recovery != 0 {
-		t.Fatalf("fresh canonical base must execute before recovery normal=%d recovery=%d backlog=%+v", normal, recovery, backlog)
+	// The seeded document's initial AuthorUser revision is itself a pending
+	// owner input, so boot dispatches one document_revision occurrence beside
+	// the producer report.
+	if normal != 2 || recovery != 0 || kinds[agentcore.TextureActorOccurrenceProducerReport] != 1 || kinds[agentcore.TextureActorOccurrenceDocumentRevision] != 1 {
+		t.Fatalf("fresh canonical base must execute before recovery normal=%d recovery=%d kinds=%v backlog=%+v", normal, recovery, kinds, backlog)
 	}
 	projected, err := s.GetLifecycleRun(ctx, ownerID, computerID, run.RunID)
 	if err != nil || projected.State != types.RunPending {
@@ -2144,6 +2153,9 @@ func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatc
 		}
 		if o.RecoveryRunID == "" {
 			normal++
+			if o.Kind != agentcore.TextureActorOccurrenceDocumentRevision {
+				t.Fatalf("unexpected unprocessed occurrence=%+v", o)
+			}
 		} else {
 			recovery++
 			if o.RecoveryRunID != run.RunID || o.RecoveryHeadID != "revision:"+docID || o.RecoveryTailID == "" || !strings.HasPrefix(o.RecoveryMutation, "sleeping:") {
@@ -2151,7 +2163,9 @@ func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatc
 			}
 		}
 	}
-	if normal != 0 || recovery != 1 {
+	// The owner-revision occurrence was never processed, so it remains pending
+	// in the mailbox; the processed producer base yields exactly one recovery.
+	if normal != 1 || recovery != 1 {
 		t.Fatalf("processed canonical base recovery normal=%d recovery=%d backlog=%+v", normal, recovery, backlog)
 	}
 }
@@ -2595,7 +2609,7 @@ func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.
 	}
 }
 
-func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMutation(t *testing.T) {
+func TestAdapterSQLiteStartAcknowledgesCancelledTextureDocumentRevisionOccurrenceWithoutMutation(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "cancelled-texture-owner-occurrence.db")
@@ -2672,23 +2686,28 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMut
 	if _, err := s.ReplaceLifecycleActivation(ctx, clearProducer); err != nil {
 		t.Fatalf("complete producer run: %v", err)
 	}
-	beforeInstruction, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	beforeOwnerRevision, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	instructionReq := types.QueueLifecycleOwnerInstructionRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-terminal-texture-instruction", RequestID: "request-terminal-texture-instruction",
-		InstructionID: "instruction-terminal-texture-boot", DocumentID: docID, TrajectoryID: trajectoryID,
-		TargetAgentID: textureAgentID, TargetWorkItemID: workID,
-		ExpectedLifecycleVersion: beforeInstruction.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: started.Revision.RevisionID,
-		Kind: types.LifecycleOwnerCorrect, Content: "retain this pending correction after cancellation",
+	ownerCommit := types.CommitLifecycleArtifactHeadRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "commit-terminal-texture-owner-revision", TrajectoryID: trajectoryID,
+		ExpectedLifecycleVersion: beforeOwnerRevision.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: beforeOwnerRevision.HeadRevision.RevisionID,
+		Revision: types.Revision{
+			RevisionID: "revision-terminal-texture-owner", DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+			AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: beforeOwnerRevision.HeadRevision.Content,
+			Metadata: json.RawMessage(`{"input_origin":"user_prompt","owner_prompt":"retain this pending correction after cancellation"}`),
+		},
 	}
-	instructionReq.CommandDigest, _ = store.ComputeQueueLifecycleOwnerInstructionDigest(instructionReq)
-	queued, err := s.QueueLifecycleOwnerInstruction(ctx, instructionReq)
-	if err != nil || queued.OwnerInstruction == nil {
-		t.Fatalf("queue owner instruction: result=%+v err=%v", queued, err)
+	ownerCommit.CommandDigest, err = store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(ownerCommit, store.TextureSourceGraphWriteSet{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	occurrence, err := agentcore.TextureOwnerInstructionOccurrence(*queued.OwnerInstruction)
+	ownerResult, err := s.CommitLifecycleArtifactHeadWithSourceGraph(ctx, ownerCommit, store.TextureSourceGraphWriteSet{})
+	if err != nil || ownerResult.Revision == nil {
+		t.Fatalf("commit owner revision: result=%+v err=%v", ownerResult, err)
+	}
+	occurrence, err := agentcore.TextureDocumentRevisionOccurrence(*ownerResult.Revision, "request-terminal-texture-owner-revision", ownerResult.Trajectory.LifecycleVersion, ownerResult.Events[0].ReducerSeq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2705,7 +2724,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMut
 		t.Fatal(err)
 	}
 	if err := adapter.Runtime.DispatchActor(ctx, ownerID, computerID, textureAgentID, "coagent_result", content, trajectoryID, "owner:"+ownerID); err != nil {
-		t.Fatalf("persist pre-crash owner occurrence: %v", err)
+		t.Fatalf("persist pre-crash document revision occurrence: %v", err)
 	}
 	mailboxID := scopedActorMailboxID(ownerID, computerID, textureAgentID)
 	updateID := actorDispatchUpdateID(ownerID, computerID, textureAgentID, "coagent_result", content, trajectoryID, "owner:"+ownerID)
@@ -2801,10 +2820,12 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMut
 		if err := current.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates WHERE update_id = ? AND to_agent_id = ? AND content = ? AND processed_at IS NOT NULL`, updateID, mailboxID, content).Scan(&rows); err != nil || rows != 1 {
 			t.Fatalf("%s durable processed actor rows=%d err=%v", stage, rows, err)
 		}
-		instruction, instructionErr := s.GetLifecycleOwnerInstruction(ctx, ownerID, computerID, trajectoryID, instructionReq.InstructionID)
-		pending, pendingErr := s.ListPendingLifecycleOwnerInstructions(ctx, ownerID, computerID, trajectoryID, textureAgentID, 10)
-		if instructionErr != nil || pendingErr != nil || instruction.Status != types.LifecycleOwnerInstructionPending || len(pending) != 1 || pending[0].InstructionID != instructionReq.InstructionID {
-			t.Fatalf("%s retained instruction=%+v pending=%+v instruction_err=%v pending_err=%v", stage, instruction, pending, instructionErr, pendingErr)
+		snapshot, snapshotErr := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+		if snapshotErr != nil {
+			t.Fatalf("%s get terminal snapshot: %v", stage, snapshotErr)
+		}
+		if ownerHead, _, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot); ownerHeadPending {
+			t.Fatalf("%s cancelled trajectory retained pending owner revision=%+v", stage, ownerHead)
 		}
 		cancelledUpdate, updateErr := s.GetLifecycleUpdate(ctx, ownerID, computerID, trajectoryID, textureAgentID, producerAgentID, producerQueue.ProducerUpdateID)
 		if updateErr != nil || cancelledUpdate.Disposition != terminalUpdate.Disposition || cancelledUpdate.DispositionRef != terminalUpdate.DispositionRef ||
@@ -2818,7 +2839,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureOwnerOccurrenceWithoutMut
 				t.Fatalf("%s derived terminal candidate %s: run=%+v mutation=%+v run_err=%v mutation_err=%v", stage, runID, candidate, mutation, runErr, mutationErr)
 			}
 		}
-		snapshot, snapshotErr := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+		snapshot, snapshotErr = s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
 		runs, runsErr := s.ListLifecycleRunsByChannel(ctx, ownerID, computerID, docID, 0)
 		revisions, revisionsErr := s.ListRevisionsByScope(ctx, docID, ownerID, computerID, 100)
 		var mutations int

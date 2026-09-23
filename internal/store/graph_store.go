@@ -28,7 +28,6 @@ const (
 	ogKindLifecycleCancelIntent = objectgraph.ObjectKind("choir.lifecycle_cancel_intent")
 	ogKindLifecycleSeq          = objectgraph.ObjectKind("choir.lifecycle_sequence")
 	ogKindSchedulerSeq          = objectgraph.ObjectKind("choir.scheduler_sequence")
-	ogKindOwnerInstruction      = objectgraph.ObjectKind("choir.owner_instruction")
 	ogKindInboxDeliv            = objectgraph.ObjectKind("choir.inbox_delivery")
 	ogKindRunMemory             = objectgraph.ObjectKind("choir.run_memory_entry")
 	ogKindRunAccept             = objectgraph.ObjectKind("choir.run_acceptance")

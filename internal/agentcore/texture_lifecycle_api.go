@@ -238,14 +238,15 @@ func (rt *Runtime) LatestTextureActorToolLoopBudgetSpend(ctx context.Context, ow
 }
 
 // TextureActorOccurrenceVersion is the canonical mailbox identity format for
-// Store-owned Texture producer reports and owner instructions. The encoded
-// form is a versioned, length-prefixed tuple rather than an authored delimiter
-// string, so every field participates injectively in actor-log deduplication.
+// Store-owned Texture producer reports and owner-authored document revisions.
+// The encoded form is a versioned, length-prefixed tuple rather than an
+// authored delimiter string, so every field participates injectively in
+// actor-log deduplication.
 const TextureActorOccurrenceVersion = "choir:texture-actor-occurrence:v1"
 
 const (
-	TextureActorOccurrenceProducerReport   = "producer_report"
-	TextureActorOccurrenceOwnerInstruction = "owner_instruction"
+	TextureActorOccurrenceProducerReport    = "producer_report"
+	TextureActorOccurrenceDocumentRevision  = "document_revision"
 )
 
 // TextureActorOccurrence is an authenticated pointer to exactly one canonical
@@ -405,16 +406,22 @@ func TextureProducerReportOccurrence(update types.CoagentSourcePacket) (TextureA
 	return o, nil
 }
 
-func TextureOwnerInstructionOccurrence(instruction types.LifecycleOwnerInstruction) (TextureActorOccurrence, error) {
+// TextureDocumentRevisionOccurrence is the owner-input wake: the canonical
+// owner-authored revision that advanced the document head is itself the
+// trigger. HeadRevisionID carries the revision identity; RequestID carries the
+// committing command's request identity when known (empty for boot-derived
+// wakes and legacy content resolution).
+func TextureDocumentRevisionOccurrence(revision types.Revision, requestID string, lifecycleVersion, reducerSeq int64) (TextureActorOccurrence, error) {
 	o := TextureActorOccurrence{
-		Version: TextureActorOccurrenceVersion, Kind: TextureActorOccurrenceOwnerInstruction,
-		OwnerID: instruction.OwnerID, ComputerID: instruction.ComputerID, TrajectoryID: instruction.TrajectoryID,
-		DocumentID: instruction.DocumentID, TargetAgentID: instruction.TargetAgentID, TargetWorkItemID: instruction.TargetWorkItemID,
-		InstructionID: instruction.InstructionID, RequestID: instruction.RequestID, HeadRevisionID: instruction.HeadRevisionID,
-		InstructionKind: string(instruction.Kind), LifecycleVersion: instruction.LifecycleVersion, ReducerSeq: instruction.ReducerSeq,
+		Version: TextureActorOccurrenceVersion, Kind: TextureActorOccurrenceDocumentRevision,
+		OwnerID: revision.OwnerID, ComputerID: revision.ComputerID, TrajectoryID: revision.TrajectoryID,
+		DocumentID: revision.DocID, TargetAgentID: "texture:" + strings.TrimSpace(revision.DocID),
+		RequestID: strings.TrimSpace(requestID), HeadRevisionID: strings.TrimSpace(revision.RevisionID),
+		LifecycleVersion: lifecycleVersion, ReducerSeq: reducerSeq,
 	}
-	if instruction.Status != types.LifecycleOwnerInstructionPending || o.InstructionID == "" || o.RequestID == "" || o.HeadRevisionID == "" {
-		return TextureActorOccurrence{}, fmt.Errorf("texture owner occurrence: incomplete canonical pending instruction")
+	if revision.AuthorKind != types.AuthorUser || o.HeadRevisionID == "" ||
+		o.OwnerID == "" || o.ComputerID == "" || o.TrajectoryID == "" || o.DocumentID == "" {
+		return TextureActorOccurrence{}, fmt.Errorf("texture document revision occurrence: incomplete canonical owner revision")
 	}
 	return o, nil
 }

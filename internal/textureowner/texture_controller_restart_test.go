@@ -3,6 +3,7 @@ package textureowner
 import (
 	"context"
 	"errors"
+	"net/http"
 	"path/filepath"
 	"testing"
 	"time"
@@ -256,28 +257,30 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 	t.Fatalf("computer A pending mutation suppressed computer B restart wake: %+v", runs)
 }
 
-func TestTextureOwnerStartSkipsRetainedCancelledInstructionWithoutNewActivation(t *testing.T) {
+func TestTextureOwnerRevisionRejectsTerminalLifecycleWithoutDispatch(t *testing.T) {
 	core, handler := testAPISetup(t)
-	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	start := startObservationLifecycle(t, core.Store())
-	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
-	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
-	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "terminal-boot", "retain terminal instruction", start.InitialRevision.RevisionID)
-	if queued.Code != 202 {
-		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
-	}
+	var dispatches int
+	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		dispatches++
+		return nil
+	})
 	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cancel := types.CancelLifecycleRequest{
-		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "cancel-terminal-texture-boot",
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "cancel-terminal-texture-owner-revision",
 		TrajectoryID: start.TrajectoryID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
-		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: "terminal boot regression",
+		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: "terminal revision regression",
 	}
 	cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
 	if _, err := core.Store().CancelLifecycleTrajectory(t.Context(), cancel); err != nil {
 		t.Fatal(err)
+	}
+	response := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/revise", start.OwnerID, "terminal-owner-revision", "must not revive terminal lifecycle", snapshot.HeadRevision.RevisionID)
+	if response.Code != http.StatusConflict || dispatches != 0 {
+		t.Fatalf("terminal owner revision status=%d dispatches=%d body=%s", response.Code, dispatches, response.Body.String())
 	}
 	if err := handler.Start(t.Context()); err != nil {
 		t.Fatalf("terminal Texture boot reconciliation failed: %v", err)
@@ -291,31 +294,22 @@ func TestTextureOwnerStartSkipsRetainedCancelledInstructionWithoutNewActivation(
 			t.Fatalf("terminal boot created Texture run: %+v", run)
 		}
 	}
-	pending, err := core.Store().ListPendingLifecycleOwnerInstructions(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, start.Agent.AgentID, 10)
-	if err != nil || len(pending) != 1 || pending[0].Content != "retain terminal instruction" {
-		t.Fatalf("retained pending instruction=%+v err=%v", pending, err)
-	}
-	terminal, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
-	if err != nil || terminal.Trajectory.Status != types.TrajectoryCancelled || terminal.WorkItems[0].Status != types.WorkItemCancelled {
-		t.Fatalf("terminal evidence=%+v err=%v", terminal, err)
-	}
 }
 
-func TestTextureOwnerWakeSkipsLiveTrajectoryWithCancellationIntent(t *testing.T) {
+func TestTextureOwnerRevisionRejectsCancellationIntentWithoutDispatch(t *testing.T) {
 	core, handler := testAPISetup(t)
 	start := startObservationLifecycle(t, core.Store())
-	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
-	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
-	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "prepared-cancel", "do not outrun cancellation", start.InitialRevision.RevisionID)
-	if queued.Code != 202 {
-		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
-	}
+	var dispatches int
+	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		dispatches++
+		return nil
+	})
 	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cancel := types.CancelLifecycleRequest{
-		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "prepare-terminal-texture-boot",
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "prepare-terminal-texture-owner-revision",
 		TrajectoryID: start.TrajectoryID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
 		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: "prepared cancellation",
 	}
@@ -323,18 +317,13 @@ func TestTextureOwnerWakeSkipsLiveTrajectoryWithCancellationIntent(t *testing.T)
 	if _, err := core.Store().PrepareLifecycleCancellation(t.Context(), cancel); err != nil {
 		t.Fatal(err)
 	}
+	response := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/revise", start.OwnerID, "prepared-cancel", "do not outrun cancellation", snapshot.HeadRevision.RevisionID)
+	if response.Code != http.StatusConflict || dispatches != 0 {
+		t.Fatalf("prepared cancellation owner revision status=%d dispatches=%d body=%s", response.Code, dispatches, response.Body.String())
+	}
 	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
 	if err != nil || run != nil {
 		t.Fatalf("prepared cancellation wake run=%+v err=%v", run, err)
-	}
-	runs, err := core.Store().ListLifecycleRunsByOwner(t.Context(), start.OwnerID, start.ComputerID, 20)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, candidate := range runs {
-		if candidate.AgentID == start.Agent.AgentID {
-			t.Fatalf("prepared cancellation created Texture run: %+v", candidate)
-		}
 	}
 }
 
@@ -387,15 +376,14 @@ func TestTextureLifecycleActivationClassificationRejectsUnknownStatusAndIntentFa
 	}
 }
 
-func TestTextureOwnerWakeKeepsMissingOpenWorkFatalWhileTrajectoryIsLive(t *testing.T) {
+func TestTextureOwnerRevisionRejectsMissingOpenWorkWithoutDispatch(t *testing.T) {
 	core, handler := testAPISetup(t)
 	start := startObservationLifecycle(t, core.Store())
-	handler.wakeOwnerInstruction = func(context.Context, string, string, string) error { return nil }
-	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/tell"
-	queued := postOwnerInstruction(t, handler, path, start.OwnerID, "live-missing-work", "must not invent live work", start.InitialRevision.RevisionID)
-	if queued.Code != 202 {
-		t.Fatalf("queue status=%d body=%s", queued.Code, queued.Body.String())
-	}
+	var dispatches int
+	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		dispatches++
+		return nil
+	})
 	refuse := types.RefuseLifecycleWorkRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "refuse-live-texture-work",
 		TrajectoryID: start.TrajectoryID, WorkItemID: start.InitialWork.WorkItemID, ActingAgentID: start.Agent.AgentID,
@@ -405,8 +393,12 @@ func TestTextureOwnerWakeKeepsMissingOpenWorkFatalWhileTrajectoryIsLive(t *testi
 	if _, err := core.Store().RefuseLifecycleWork(t.Context(), refuse); err != nil {
 		t.Fatal(err)
 	}
+	response := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/revise", start.OwnerID, "live-missing-work", "must not invent live work", start.InitialRevision.RevisionID)
+	if response.Code != http.StatusConflict || dispatches != 0 {
+		t.Fatalf("missing-work owner revision status=%d dispatches=%d body=%s", response.Code, dispatches, response.Body.String())
+	}
 	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
-	if err == nil || run != nil || !errors.Is(err, errTextureLifecycleOpenWorkUnavailable) {
+	if err != nil || run != nil {
 		t.Fatalf("live no-work wake run=%+v err=%v", run, err)
 	}
 }

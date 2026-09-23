@@ -14,19 +14,34 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// scheduleTextureWorkerWake sends an actor message to the Texture agent for
-// the given doc. The actor mailbox replaces the old debounce timer system —
-// the handler processes the message when the actor activates, and the tool
-// loop's park-resume handles coalescing naturally.
-func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, instructionID string) {
-	ownerID = strings.TrimSpace(ownerID)
-	docID = strings.TrimSpace(docID)
-	instructionID = strings.TrimSpace(instructionID)
-	if ownerID == "" || docID == "" || instructionID == "" || rt == nil || rt.wakeOwnerInstruction == nil {
+// dispatchTextureRevisionWake sends the owner-input occurrence to the Texture
+// agent for the given doc: the committed owner-authored revision is the
+// trigger. The actor mailbox dedupes on the encoded occurrence identity, and
+// the boot scan re-derives the same wake from the document head, so a crash
+// between commit and dispatch loses nothing.
+func (rt *Handler) dispatchTextureRevisionWake(ownerID, computerID, trajectoryID string, revision types.Revision, requestID string, lifecycleVersion int64, events []types.LifecycleEvent) {
+	if rt == nil || rt.Core == nil {
 		return
 	}
-	if err := rt.wakeOwnerInstruction(context.Background(), ownerID, docID, instructionID); err != nil {
-		log.Printf("runtime: schedule texture owner-instruction wake for doc %s: %v", docID, err)
+	reducerSeq := int64(0)
+	for _, event := range events {
+		if event.Kind == types.LifecycleArtifactHeadAdvanced &&
+			len(event.ArtifactRefs) >= 2 && strings.TrimSpace(event.ArtifactRefs[1]) == revision.RevisionID {
+			reducerSeq = event.ReducerSeq
+		}
+	}
+	occurrence, err := agentcore.TextureDocumentRevisionOccurrence(revision, requestID, lifecycleVersion, reducerSeq)
+	if err != nil {
+		log.Printf("runtime: build texture revision wake for doc %s: %v", revision.DocID, err)
+		return
+	}
+	content, err := agentcore.EncodeTextureActorOccurrence(occurrence)
+	if err != nil {
+		log.Printf("runtime: encode texture revision wake for doc %s: %v", revision.DocID, err)
+		return
+	}
+	if err := rt.Core.DispatchActor(context.Background(), ownerID, computerID, occurrence.TargetAgentID, "coagent_result", content, trajectoryID, "owner:"+ownerID); err != nil {
+		log.Printf("runtime: dispatch texture revision wake for doc %s: %v", revision.DocID, err)
 	}
 }
 
@@ -68,10 +83,11 @@ func (rt *Handler) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("list boot Texture reports %s: %w", subject.AgentID, err)
 		}
-		instructions, err := rt.Store.ListPendingLifecycleOwnerInstructionsForHead(ctx, subject.OwnerID, subject.ComputerID, doc.TrajectoryID, subject.AgentID, "")
-		if err != nil {
-			return fmt.Errorf("list boot Texture instructions %s: %w", subject.AgentID, err)
+		snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, subject.OwnerID, subject.ComputerID, doc.TrajectoryID)
+		if snapshotErr != nil {
+			return fmt.Errorf("load boot Texture snapshot %s: %w", subject.AgentID, snapshotErr)
 		}
+		ownerHead, ownerHeadSeq, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot)
 
 		var runID, tailID, mutationIdentity string
 		candidateRunID := ""
@@ -216,13 +232,13 @@ func (rt *Handler) Start(ctx context.Context) error {
 				return fmt.Errorf("dispatch boot Texture report occurrence: %w", err)
 			}
 		}
-		for _, instruction := range instructions {
-			base, err := agentcore.TextureOwnerInstructionOccurrence(instruction)
+		if ownerHeadPending {
+			base, err := agentcore.TextureDocumentRevisionOccurrence(ownerHead, "", snapshot.Trajectory.LifecycleVersion, ownerHeadSeq)
 			if err != nil {
-				return fmt.Errorf("build boot Texture owner occurrence: %w", err)
+				return fmt.Errorf("build boot Texture revision occurrence: %w", err)
 			}
 			if err := dispatch(base, "owner:"+base.OwnerID); err != nil {
-				return fmt.Errorf("dispatch boot Texture owner occurrence: %w", err)
+				return fmt.Errorf("dispatch boot Texture revision occurrence: %w", err)
 			}
 		}
 		if activationEligible {
@@ -688,16 +704,13 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 	if err != nil {
 		return nil, fmt.Errorf("list pending lifecycle Texture updates: %w", err)
 	}
-	instructions, err := rt.Store.ListPendingLifecycleOwnerInstructionsForHead(ctx, ownerID, doc.ComputerID, doc.TrajectoryID, textureAgentID, "")
-	if err != nil {
-		return nil, fmt.Errorf("list pending lifecycle owner instructions: %w", err)
+	snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
+	if snapshotErr != nil {
+		return nil, fmt.Errorf("load lifecycle Texture snapshot: %w", snapshotErr)
 	}
+	_, ownerHeadSeq, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot)
 	initialWorkWake := false
-	if len(updates) == 0 && len(instructions) == 0 {
-		snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
-		if snapshotErr != nil {
-			return nil, fmt.Errorf("load initial lifecycle Texture work: %w", snapshotErr)
-		}
+	if len(updates) == 0 && !ownerHeadPending {
 		for _, work := range snapshot.WorkItems {
 			if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID {
 				initialWorkWake = true
@@ -724,17 +737,15 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 			scheduledSeq = update.MessageSeq
 		}
 	}
-	for _, instruction := range instructions {
-		if instruction.ReducerSeq > scheduledSeq {
-			scheduledSeq = instruction.ReducerSeq
-		}
+	if ownerHeadSeq > scheduledSeq {
+		scheduledSeq = ownerHeadSeq
 	}
 	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq); err != nil {
 		return nil, err
 	} else if reactivated {
 		return rec, nil
 	}
-	if len(updates) == 0 && len(instructions) == 0 && !initialWorkWake {
+	if len(updates) == 0 && !ownerHeadPending && !initialWorkWake {
 		return nil, nil
 	}
 	pendingCleanupCtx := context.WithoutCancel(ctx)
@@ -754,8 +765,8 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		if initialWorkWake {
 			return "initial_owner_work"
 		}
-		if len(instructions) > 0 {
-			return "apply_owner_instruction"
+		if ownerHeadPending {
+			return "apply_owner_revision"
 		}
 		return ""
 	}(), "integrate_execution_findings")
@@ -978,23 +989,12 @@ func producerOccurrenceMatches(o agentcore.TextureActorOccurrence, update types.
 	return producerOccurrenceScopeMatches(o, update) && o.LifecycleVersion == update.LifecycleVersion && o.ReducerSeq == update.ReducerSeq
 }
 
-func ownerOccurrenceScopeMatches(o agentcore.TextureActorOccurrence, instruction types.LifecycleOwnerInstruction) bool {
-	return o.Version == agentcore.TextureActorOccurrenceVersion && o.Kind == agentcore.TextureActorOccurrenceOwnerInstruction &&
-		o.OwnerID == strings.TrimSpace(instruction.OwnerID) && o.ComputerID == strings.TrimSpace(instruction.ComputerID) &&
-		o.TrajectoryID == strings.TrimSpace(instruction.TrajectoryID) && o.DocumentID == strings.TrimSpace(instruction.DocumentID) &&
-		o.TargetAgentID == strings.TrimSpace(instruction.TargetAgentID) && o.TargetWorkItemID == strings.TrimSpace(instruction.TargetWorkItemID) &&
-		o.InstructionID == strings.TrimSpace(instruction.InstructionID) && o.RequestID == strings.TrimSpace(instruction.RequestID) &&
-		o.HeadRevisionID == strings.TrimSpace(instruction.HeadRevisionID) && o.InstructionKind == strings.TrimSpace(string(instruction.Kind))
+func revisionOccurrenceScopeMatches(o agentcore.TextureActorOccurrence, revision types.Revision) bool {
+	return o.Version == agentcore.TextureActorOccurrenceVersion && o.Kind == agentcore.TextureActorOccurrenceDocumentRevision &&
+		o.OwnerID == strings.TrimSpace(revision.OwnerID) && o.ComputerID == strings.TrimSpace(revision.ComputerID) &&
+		o.TrajectoryID == strings.TrimSpace(revision.TrajectoryID) && o.DocumentID == strings.TrimSpace(revision.DocID) &&
+		o.HeadRevisionID == strings.TrimSpace(revision.RevisionID)
 }
-
-func ownerOccurrenceMatches(o agentcore.TextureActorOccurrence, instruction types.LifecycleOwnerInstruction) bool {
-	return ownerOccurrenceScopeMatches(o, instruction) && o.LifecycleVersion == instruction.LifecycleVersion && o.ReducerSeq == instruction.ReducerSeq
-}
-
-// ResolveTextureActorOccurrence reloads the exact Store trigger and joins it to
-// live trajectory, head, Texture subject, open work, run, and mutation
-// authority. A disposed/cancelled/late occurrence is a typed zero-provider
-// terminal result; malformed or foreign identities are errors and stay
 // retryable in the actor log.
 func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, computerID, agentID, content string) (agentcore.TextureActorOccurrence, TextureActorOccurrenceState, error) {
 	var zero agentcore.TextureActorOccurrence
@@ -1022,11 +1022,9 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		}
 		if o.Kind == "" {
 			docID := docIDFromTextureAgentID(agentID)
-			doc, docErr := rt.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
-			if docErr == nil {
-				instruction, instructionErr := rt.Store.GetLifecycleOwnerInstruction(ctx, ownerID, computerID, doc.TrajectoryID, strings.TrimSpace(content))
-				if instructionErr == nil {
-					o, err = agentcore.TextureOwnerInstructionOccurrence(instruction)
+			if _, docErr := rt.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID); docErr == nil {
+				if revision, revErr := rt.Store.GetLifecycleRevision(ctx, ownerID, computerID, strings.TrimSpace(content)); revErr == nil {
+					o, err = agentcore.TextureDocumentRevisionOccurrence(revision, "", 0, 0)
 				}
 			}
 		}
@@ -1101,18 +1099,18 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		}
 		producerBindingID = strings.TrimSpace(canonical.ControlBindingID)
 		pending = canonical.Disposition == types.UpdatePending
-	case agentcore.TextureActorOccurrenceOwnerInstruction:
-		canonical, getErr := rt.Store.GetLifecycleOwnerInstruction(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID, o.InstructionID)
+	case agentcore.TextureActorOccurrenceDocumentRevision:
+		canonical, getErr := rt.Store.GetLifecycleRevision(ctx, o.OwnerID, o.ComputerID, o.HeadRevisionID)
 		if getErr != nil {
 			if errors.Is(getErr, store.ErrNotFound) {
-				return zero, "", invalidTextureOccurrence("exact Texture owner occurrence is missing")
+				return zero, "", invalidTextureOccurrence("exact Texture owner revision occurrence is missing")
 			}
-			return zero, "", fmt.Errorf("load exact Texture owner occurrence: %w", getErr)
+			return zero, "", fmt.Errorf("load exact Texture owner revision occurrence: %w", getErr)
 		}
-		if !ownerOccurrenceMatches(o, canonical) {
-			return zero, "", invalidTextureOccurrence("Texture owner occurrence canonical identity mismatch")
+		if !revisionOccurrenceScopeMatches(o, canonical) {
+			return zero, "", invalidTextureOccurrence("Texture owner revision occurrence canonical identity mismatch")
 		}
-		pending = canonical.Status == types.LifecycleOwnerInstructionPending
+		pending = true
 	default:
 		return zero, "", invalidTextureOccurrence("unsupported Texture occurrence kind %q", o.Kind)
 	}
@@ -1153,7 +1151,8 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 			return zero, "", invalidTextureOccurrence("Texture producer control binding authority mismatch")
 		}
 	}
-	if o.Kind == agentcore.TextureActorOccurrenceOwnerInstruction && doc.CurrentRevisionID != o.HeadRevisionID {
+	if o.Kind == agentcore.TextureActorOccurrenceDocumentRevision &&
+		(doc.CurrentRevisionID != o.HeadRevisionID || store.TextureTurnConsumedHead(snapshot.Events, o.HeadRevisionID)) {
 		return o, TextureActorOccurrenceTerminal, nil
 	}
 	agent, err := rt.Store.GetAgentByScope(ctx, o.OwnerID, o.ComputerID, o.TargetAgentID)
@@ -1288,15 +1287,15 @@ func (rt *Handler) TextureActorOccurrencePostcondition(ctx context.Context, o ag
 			return TextureActorOccurrencePending, nil
 		}
 		return TextureActorOccurrenceTerminal, nil
-	case agentcore.TextureActorOccurrenceOwnerInstruction:
-		canonical, err := rt.Store.GetLifecycleOwnerInstruction(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID, o.InstructionID)
+	case agentcore.TextureActorOccurrenceDocumentRevision:
+		canonical, err := rt.Store.GetLifecycleRevision(ctx, o.OwnerID, o.ComputerID, o.HeadRevisionID)
 		if err != nil {
 			return "", err
 		}
-		if !ownerOccurrenceScopeMatches(o, canonical) || canonical.LifecycleVersion <= o.LifecycleVersion || canonical.ReducerSeq <= o.ReducerSeq {
-			return "", fmt.Errorf("Texture owner occurrence changed immutable identity or did not advance atomically")
+		if !revisionOccurrenceScopeMatches(o, canonical) {
+			return "", fmt.Errorf("Texture owner revision occurrence changed immutable identity")
 		}
-		if canonical.Status == types.LifecycleOwnerInstructionPending {
+		if snapshot.Document.CurrentRevisionID == o.HeadRevisionID && !store.TextureTurnConsumedHead(snapshot.Events, o.HeadRevisionID) {
 			return TextureActorOccurrencePending, nil
 		}
 		return TextureActorOccurrenceTerminal, nil

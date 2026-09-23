@@ -231,14 +231,34 @@ now:
     table. Resolved: unbound /revise mailbox deleted in this mission (named
     exception consumed, not deferred).
   next_action: >-
-    Implement the cutover: (1) /revise commits owner revision + dispatches
-    document_revision occurrence; (2) delete /tell,/correct, LOI type/store,
-    roster.go, CLI verbs, OwnerCorrection, OwnerInstructions binding,
-    ogKindOwnerInstruction; (3) rewire boot scan, reconcile, injection,
-    self-dev rewake, adapter/handler to the revision occurrence; (4) repair
-    all citers and tests.
+    Landing loop: commit + push, monitor CI, verify staging deploy identity,
+    run deployed acceptance (revise→revision event, /tell+/correct 404,
+    roster/tell/correct unknown command, no LOI rows).
 
-receipts: []
+receipts:
+  - at: '2026-09-23'
+    kind: implementation
+    summary: >-
+      Cutover implemented. /revise on a bound doc commits an AuthorUser
+      revision (head content carried forward, input_origin=user_prompt +
+      owner_prompt metadata) and dispatches a document_revision
+      TextureActorOccurrence keyed to HeadRevisionID; unbound /revise → 409.
+      /tell and /correct → 404; choir texture tell|correct and choir roster →
+      unknown command. Deleted: LOI type/store/digest, OwnerCorrection commit
+      block, ApplyTextureTurnRequest.OwnerInstructions binding,
+      ogKindOwnerInstruction, roster.go, texture_owner_instruction.go,
+      scheduleTextureWorkerWake, wakeOwnerInstruction, unbound /revise
+      mailbox. New: store.PendingTextureOwnerRevision +
+      TextureTurnConsumedHead (pending = live trajectory && head AuthorUser &&
+      head==CurrentRevisionID && no non-advancing turn consumed it);
+      agentcore.TextureDocumentRevisionOccurrence; boot scan, reconcile,
+      injection (owner_revision packet), self-dev rewake, adapter/handler all
+      derive from the owner head. Net -2995 lines across 34 files.
+    evidence_refs:
+      - internal/textureowner/texture_agent_revision.go (handleLifecycleOwnerRevision)
+      - internal/textureowner/texture_controller.go (dispatchTextureRevisionWake, Resolve, Postcondition)
+      - internal/store/texture_owner_revision.go (PendingTextureOwnerRevision)
+      - internal/agentcore/texture_lifecycle_api.go (TextureDocumentRevisionOccurrence)
 ---
 
 ## What this mission is
