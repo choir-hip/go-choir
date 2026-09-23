@@ -86,6 +86,14 @@ enforce each consensus decision. This is the load-bearing spine of the vision �
 the thing to make real first — and it is deliberately stated as a consequence
 of the vision, not as the vision itself.
 
+The learning mechanism is **precommitment records**: before a step with a
+verifiable outcome, the computer commits a typed prediction (hypothesis,
+assumptions, alternatives, probabilities); the outcome resolves and scores it;
+the accumulated log is the computer's evolving world model. One mechanism
+serves context packs (learning), procedural fidelity (alignment), and audit —
+and it is what the human supervises: the commitment ledger, not the transcript.
+See `docs/Precommitment Records — Engineering Memo.md`.
+
 The proof target is a self-development candidate accepted on staging: the
 computer makes one real change to its own working state, under granted rules,
 with the whole story legible on the tape and durable across a restart.
@@ -136,8 +144,10 @@ Implementation flows downstream from this vision, in this order:
    point the same settlement spine at reporting, verification, and continuous
    publication — the automatic newspaper.
 
-Each step is a Definition with its own pre-flight, evidence class, and landing
-loop. The vision does not sequence itself; it sets the order in which
+Each step is a throughline goal file with its own pre-flight, evidence class,
+and landing loop. The ordered mission stack from here to World Wire live is
+[`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md).
+The vision does not sequence itself; it sets the order in which
 candidate missions are worth writing.
 
 ## Why This Vision Is Right

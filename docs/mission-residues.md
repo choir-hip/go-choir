@@ -65,9 +65,10 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   The carrier mission keeps what it chartered (assignment-fate saga, `update_coagent` parity,
   `actuator=tools` to R8); the full substrate retirement is stack-level. Source: owner statement
   2026-09-12, recorded in receipt engineering-carrier-completion-route-2026-09-12.
-  Revisit: mission 6 (management as host-side activation) carries the activation rewrite;
-  close the remainder at the post-11 residue pass with the profile tests proving the surface is
-  gone.
+  Revisit: the ontology cutover (M3 in `docs/world-wire-mission-stack-2026-09-22.md`)
+  carries the activation rewrite and the `actuator=tools` deletion; close the
+  remainder at the post-cutover residue pass with the profile tests proving the
+  surface is gone.
 - **R11 — `items.body` CAS externalization deferred to world-wire search
   redesign (owner direction 2026-09-19).** The platform-dolt normalization
   mission externalized `og_objects.body` (6.0G) to `platform-artifacts` CAS

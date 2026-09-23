@@ -1,7 +1,11 @@
 # The Eleven Missions: From Restore to Self-Direction
 
 Restore-zero through native goals: what each mission is, why it sits where it sits, and what done
-means. Awaiting owner approval before missions 1-4 are drafted.
+means. **Superseded 2026-09-22** by
+[`../world-wire-mission-stack-2026-09-22.md`](../world-wire-mission-stack-2026-09-22.md)
+— this stack ended at "native goals" and never reached a product; the corrected
+stack treats precommitment records as the product mechanism and ends at World
+Wire live. Retained as the historical record of the substrate-program ordering.
 
 Provenance: Markdown rendering of `choir-rlm-missions-overview-2026-09-09.pdf` (iCloud Choir
 Reports, 2026-09-09). Research record, not mission authority. Mission state lives in

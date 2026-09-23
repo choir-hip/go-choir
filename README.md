@@ -32,7 +32,10 @@ state changes require owner-legible evidence and approval.
 The same computer, projected outward, is a media product: an automatic
 newspaper (the proof) and an automatic radio (the adoption UX). The
 provenance-linked record those produce — who said what, and whether they were
-right — is the data product.
+right — is the data product. The learning mechanism underneath is
+**precommitment records**: agents commit typed predictions before acting, the
+outcome resolves and scores them, and the accumulated log is the computer's
+world model — the thing humans supervise and the moat that compounds.
 
 ## What you can do today
 
