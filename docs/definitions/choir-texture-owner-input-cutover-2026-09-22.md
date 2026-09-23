@@ -138,8 +138,8 @@ boundaries:
       is the input; no new side-table or wake object is invented.
     - The unbound /revise legacy mailbox path is either deleted in this mission
       or explicitly deferred to M3 with a named exception.
-    - `run start` prompt-bar ingress is NOT touched — it is a canonical durable
-      lifecycle-start path, not a wrong-path instance.
+    - '`run start` prompt-bar ingress is NOT touched — it is a canonical durable
+      lifecycle-start path, not a wrong-path instance.'
     - Mail ingestion, webhook, and draft paths are untouched.
   excluded:
     - Overlay tool deletions (M2/R7 scope).
@@ -155,7 +155,7 @@ boundaries:
     - Run acceptance (no change to acceptance semantics in this mission).
 
 now:
-  status: working
+  status: landed
   slice: M1 — owner input is a document revision; wrong-path ingress deleted
   source_ref: main@6d9b3e97
   deploy_identity: staging https://choir.news (proxy/vmctl OK)
@@ -181,7 +181,7 @@ now:
     edge: missing_oracle — CONFIRMED 2026-09-22. The revision exists
       independently (OwnerCorrection block is an add-on inside the commit),
       but no backend subscriber converts LifecycleArtifactHeadAdvanced into an
-      actor wake. M1 grows the small adapter: a revision-keyed
+      actor wake. M1 grows the small adapter — a revision-keyed
       TextureActorOccurrence kind dispatched by the commit caller.
     delta_o: >-
       Trace one owner edit end-to-end on staging: does the desk activate from
@@ -231,9 +231,8 @@ now:
     table. Resolved: unbound /revise mailbox deleted in this mission (named
     exception consumed, not deferred).
   next_action: >-
-    Landing loop: commit + push, monitor CI, verify staging deploy identity,
-    run deployed acceptance (revise→revision event, /tell+/correct 404,
-    roster/tell/correct unknown command, no LOI rows).
+    Mission landed. M2 (engineering desk on in-cell carrier, R7/R9, canonical
+    run acceptance) is the next ordered mission.
 
 receipts:
   - at: '2026-09-23'
@@ -259,6 +258,29 @@ receipts:
       - internal/textureowner/texture_controller.go (dispatchTextureRevisionWake, Resolve, Postcondition)
       - internal/store/texture_owner_revision.go (PendingTextureOwnerRevision)
       - internal/agentcore/texture_lifecycle_api.go (TextureDocumentRevisionOccurrence)
+  - at: '2026-09-23'
+    kind: landing
+    summary: >-
+      Pushed 53f0ffcb + 902e8d78 + b994a0fb + 098726b0 to origin/main. CI run
+      35819171822 green; staging deploy verified at commit 098726b0 via
+      /health build.commit. Deployed acceptance spec
+      frontend/tests/texture-owner-revision-deployed.spec.js PASSED on
+      https://choir.news: lifecycle-documents create 201, /revise 202 with an
+      AuthorUser revision carrying input_origin=user_prompt + owner_prompt
+      metadata, desk run bound to the doc head with
+      request_intent=apply_owner_revision (activation proven; the run's model
+      call fails on a pre-existing staging chatgpt refresh-token gap, not the
+      cutover), /tell and /correct 404, choir roster|texture tell|texture
+      correct unknown command. No LOI rows possible: type, store, table
+      writes, and scheduleTextureWorkerWake are deleted (grep-clean).
+      Discovered gaps (pre-existing, not introduced): test-user computer was
+      pre-genesis (repaired via bootstrap-chain); texture audit append fails
+      on "lifecycle receipt join unavailable"; chatgpt provider auth broken
+      on staging.
+    evidence_refs:
+      - frontend/tests/texture-owner-revision-deployed.spec.js
+      - https://choir.news/health (build.commit=098726b0)
+      - gh run 35819171822 (CI success)
 ---
 
 ## What this mission is
