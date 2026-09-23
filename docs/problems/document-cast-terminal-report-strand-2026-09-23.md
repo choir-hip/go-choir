@@ -59,6 +59,16 @@ evidence-only and never completes the assignment. The store layer already
 excludes the saga's own proposal via `pendingMatches`; the runtime gate did
 not.
 
+## Resolution
+
+- `eaaacfaf` — `coSuperParentReturnTarget` resolves the return-packet
+  parent run/channel from the binding; `lateFate` excludes the saga's own
+  pending proposal.
+- `aa835d12` — the revoked strand binds durable raw execution receipts on
+  resume; `bindLateAssignmentExecutionReceipts` drops the per-command
+  `SourceTreeDigest == SubjectDigest` check (only the first command's
+  source tree equals the binding subject).
+
 ## Evidence
 
 - Trajectory `a006d048-3946-51fa-a345-af5183b2ae7a` on staging: events 1–7
