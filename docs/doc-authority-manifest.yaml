@@ -412,25 +412,26 @@ documents:
   - path: docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md
     claim_scope: current
     is_root: [authority]
-    is_evidence: false
-    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: working, entrypoint: true}
+    is_evidence: true
+    annotations: {doc_role: definition, authority: landed_mission_evidence, lifecycle: landed, entrypoint: false}
     supersedes: [docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md]
     witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/problems/root-cause-wrong-path-cluster-2026-09-22.md, docs/current-situation-2026-09-22.md, docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md, docs/standing-questions.md]
-    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
-  - path: docs/definitions/choir-sub-rlm-document-channel-draft-2026-09-22.md
+    refresh_triggers: []
+  - path: docs/definitions/choir-sub-rlm-document-channel-2026-09-22.md
     claim_scope: current
-    is_root: []
+    is_root: [authority]
     is_evidence: false
-    annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: blocked, entrypoint: false}
+    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: working, entrypoint: true}
+    supersedes: [docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md]
     depends_on: [docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md]
     witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: [predecessor_completion, registry_promotion]
+    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
   - path: docs/definitions/choir-ontology-kernel-draft-2026-09-22.md
     claim_scope: current
     is_root: []
     is_evidence: false
     annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: blocked, entrypoint: false}
-    depends_on: [docs/definitions/choir-sub-rlm-document-channel-draft-2026-09-22.md]
+    depends_on: [docs/definitions/choir-sub-rlm-document-channel-2026-09-22.md]
     witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md, docs/problems/root-cause-wrong-path-cluster-2026-09-22.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [predecessor_completion, registry_promotion]
   - path: docs/definitions/choir-desk-crossings-super-retirement-draft-2026-09-22.md

@@ -17,7 +17,7 @@ start:
       touch: read_only
       recovery: reconcile at charter
   predecessor:
-    mission: choir-sub-rlm-document-channel-draft-2026-09-22
+    mission: choir-sub-rlm-document-channel-2026-09-22
     disposition: >-
       recommended predecessor — the carrier proof (M2) freezes the contract
       this kernel must carry. Not a hard dependency: the kernel can be built

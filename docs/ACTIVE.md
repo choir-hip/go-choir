@@ -5,16 +5,26 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
+## Working Definition — Sub-RLM Document Channel / Carrier Landing (M2)
+
+[`definitions/choir-sub-rlm-document-channel-2026-09-22.md`](definitions/choir-sub-rlm-document-channel-2026-09-22.md)
+is the sole working entrypoint, promoted 2026-09-23 on M1's landed terminal
+receipt. An external harness drives a real Choir development task through
+the `choir` CLI as a sub-RLM cast on the document channel M1 landed; the
+engineering desk runs on the in-cell carrier; R7/R9 deletions land. Run with
+`/goal docs/definitions/choir-sub-rlm-document-channel-2026-09-22.md`.
+
 ## Landed Definition — Texture Owner Input Cutover (M1)
 
 [`definitions/choir-texture-owner-input-cutover-2026-09-22.md`](definitions/choir-texture-owner-input-cutover-2026-09-22.md)
-**landed 2026-09-23** (deployed commit `b994a0fb`, CI run 35819171822 green,
-deployed acceptance spec
-`frontend/tests/texture-owner-revision-deployed.spec.js` passing on
-https://choir.news). Owner input to a lifecycle-bound Texture document is a
+**landed 2026-09-23** (deployed commit `3b780ed2`, CI green, deployed
+acceptance spec `frontend/tests/texture-owner-revision-deployed.spec.js`
+passing on https://choir.news with a turn-consumption receipt binding the
+owner revision). Owner input to a lifecycle-bound Texture document is a
 canonical document revision event; the `tell`/`correct`/`roster`/
-`LifecycleOwnerInstruction` side channel is deleted. M2 is the next ordered
-mission.
+`LifecycleOwnerInstruction` side channel is deleted. Consensus review sent
+the first acceptance back (spec bound any head, not the owner's); the
+tightened spec closed it.
 
 ## Superseded Definition — RLM Engineering Carrier
 
@@ -30,8 +40,7 @@ Draft `/goal` files for the missions after M1, authored 2026-09-22. Blocked
 hypotheses, not schedules or implementation authority; each promotes only
 after its predecessor's terminal receipt:
 
-- **M2** [`choir-sub-rlm-document-channel-draft-2026-09-22.md`](definitions/choir-sub-rlm-document-channel-draft-2026-09-22.md) — carrier landing ≡ self-dev phase 1; blocked on M1.
-- **M3** [`choir-ontology-kernel-draft-2026-09-22.md`](definitions/choir-ontology-kernel-draft-2026-09-22.md) — derivable-continuation kernel, deletes wrong-path (b)–(e); blocked on M1/M2.
+- **M3** [`choir-ontology-kernel-draft-2026-09-22.md`](definitions/choir-ontology-kernel-draft-2026-09-22.md) — derivable-continuation kernel, deletes wrong-path (b)–(e); blocked on M2.
 - **M4** [`choir-desk-crossings-super-retirement-draft-2026-09-22.md`](definitions/choir-desk-crossings-super-retirement-draft-2026-09-22.md) — desk crossings + R8/R10; blocked on M3.
 - **M5** [`choir-precommitment-record-ledger-draft-2026-09-22.md`](definitions/choir-precommitment-record-ledger-draft-2026-09-22.md) — record type + OG ledger (2a); blocked on M3 for runtime.
 
@@ -202,8 +211,8 @@ to reopen it.
 is superseded historical evidence. Its policy, email, and restore reasoning remain
 citable historical evidence; it is not an executable entrypoint. The tape-recovery Definition
 owns restore substrate receipts; it too is settled evidence, not an entrypoint. Active execution lives solely in
-[`definitions/choir-texture-owner-input-cutover-2026-09-22.md`](definitions/choir-texture-owner-input-cutover-2026-09-22.md)
-(the sole working entrypoint; the engineering-carrier definition it supersedes is retained as evidence).
+[`definitions/choir-sub-rlm-document-channel-2026-09-22.md`](definitions/choir-sub-rlm-document-channel-2026-09-22.md)
+(the sole working entrypoint; the M1 owner-input cutover it succeeds is landed evidence).
 
 The scope-disjoint
 [`choir-instruction-substrate-prune-2026-08-11.md`](definitions/choir-instruction-substrate-prune-2026-08-11.md)
@@ -236,7 +245,7 @@ plus the disposed Mission 0 direct-key ceremony at
 recovery bypass, SSH, or weaker authorization is admissible).
 They are historical evidence, not rollback or live schedule; effects remain OFF.
 The active executable slice and `next_action` live solely in
-[`definitions/choir-texture-owner-input-cutover-2026-09-22.md`](definitions/choir-texture-owner-input-cutover-2026-09-22.md).
+[`definitions/choir-sub-rlm-document-channel-2026-09-22.md`](definitions/choir-sub-rlm-document-channel-2026-09-22.md).
 The tape-recovery restore proof is paid (complete 2026-08-15).
 Completed Definitions are historical evidence, not executable entrypoints;
 receipts remain in `mission-graph.yaml` and Git history. Retained settled
@@ -278,9 +287,9 @@ entrypoints.
 
 RLM restore-zero completed 2026-09-09 and is historical evidence, not an
 entrypoint. RLM versioned rename completed 2026-09-11 (deployed commit `e3396329`) and is
-non-entrypoint evidence. The Texture Owner Input Cutover (M1)
-(`definitions/choir-texture-owner-input-cutover-2026-09-22.md`) holds the sole
-working entrypoint; the engineering-carrier definition is superseded.
+non-entrypoint evidence. The Sub-RLM Document Channel / Carrier Landing (M2)
+(`definitions/choir-sub-rlm-document-channel-2026-09-22.md`) holds the sole
+working entrypoint; the M1 owner-input cutover is landed evidence.
 ## Unowned External Work
 
 No Definition owns runtime dissolution, broader Wire work, external capsules,

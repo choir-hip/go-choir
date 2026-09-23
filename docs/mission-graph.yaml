@@ -732,9 +732,9 @@ nodes:
     title: Texture Owner Input Cutover (M1)
     path: docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md
     ledger: ''
-    status: working
+    status: landed
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: []
     enables: []
@@ -753,23 +753,23 @@ nodes:
       - docs/choir-doctrine.md
       - AGENTS.md
       - docs/standing-questions.md
-  - id: choir-sub-rlm-document-channel-draft-2026-09-22
-    title: Sub-RLM Document Channel / Carrier Landing (M2, draft)
-    path: docs/definitions/choir-sub-rlm-document-channel-draft-2026-09-22.md
+  - id: choir-sub-rlm-document-channel-2026-09-22
+    title: Sub-RLM Document Channel / Carrier Landing (M2)
+    path: docs/definitions/choir-sub-rlm-document-channel-2026-09-22.md
     ledger: ''
-    status: blocked
+    status: working
     kind: spine
-    entrypoint: false
+    entrypoint: true
     execution_mode: mission_orchestrator
     depends_on:
       - choir-texture-owner-input-cutover-2026-09-22
     enables: []
     note: >-
-      Draft successor — M2 of the ordered mission list. Carrier landing and
-      self-dev capability phase 1 as one mission (1c ≡ 3a): harness drives a
-      real task via choir CLI as a sub-RLM cast on the document channel;
-      engineering desk on in-cell carrier; R7/R9 deletions. Blocked on M1.
-      Not executable until promoted.
+      M2 of the ordered mission list. Carrier landing and self-dev
+      capability phase 1 as one mission (1c ≡ 3a): harness drives a real
+      task via choir CLI as a sub-RLM cast on the document channel;
+      engineering desk on in-cell carrier; R7/R9 deletions. Promoted to sole
+      working entrypoint 2026-09-23 on M1's landed terminal receipt.
     sources:
       - docs/world-wire-mission-stack-2026-09-22.md
       - docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md
@@ -782,7 +782,7 @@ nodes:
     entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
-      - choir-sub-rlm-document-channel-draft-2026-09-22
+      - choir-sub-rlm-document-channel-2026-09-22
     enables: []
     note: >-
       Draft successor — M3 of the ordered mission list. The ratified ontology

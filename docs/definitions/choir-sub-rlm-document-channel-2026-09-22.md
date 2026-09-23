@@ -1,25 +1,25 @@
 ---
 definition_version: 3
-definition_id: choir-sub-rlm-document-channel-draft-2026-09-22
+definition_id: choir-sub-rlm-document-channel-2026-09-22
 execution_mode: mission_orchestrator
-draft: true
 
 start:
-  captured_at: '2026-09-22T23:45:00Z'
+  captured_at: '2026-09-23T11:00:00Z'
   source:
-    canonical_ref: main@a4cef7cf
-    deploy_identity: unknown — capture at execution time
+    canonical_ref: main@f2d67e4b
+    deploy_identity: staging https://choir.news build.commit=3b780ed2
   worktrees:
     - path: /Users/wiz/go-choir
-      status: unknown
-      class: unknown
-      owner: unknown
-      touch: read_only
-      recovery: reconcile at charter
+      status: clean
+      class: source
+      owner: this session
+      touch: read_write
+      recovery: git
   predecessor:
     mission: choir-texture-owner-input-cutover-2026-09-22
-    disposition: required — M1's document channel must exist before this
-      mission's cast can run on it. Do not start until M1 lands.
+    disposition: satisfied — M1 landed 2026-09-23 (deployed build 3b780ed2,
+      consensus SEND BACK closed by turn-consumption receipt). The document
+      channel exists; this mission may start.
     evidence_ref: docs/world-wire-mission-stack-2026-09-22.md (M2)
   observed_artifact:
     - claim: 'The engineering-desk carrier proved its mechanism (A9 first
@@ -131,10 +131,11 @@ boundaries:
     - Provider routing (R9 deletion).
 
 now:
-  status: blocked_incomplete
-  slice: draft — awaiting M1 completion
-  source_ref: main@a4cef7cf
-  deploy_identity: unknown
+  status: working
+  slice: charter — reconcile carrier substrate against the landed document
+    channel; first probe is the cast path
+  source_ref: main@f2d67e4b
+  deploy_identity: staging https://choir.news build.commit=3b780ed2
   candidate:
     id: none
     state: none
@@ -160,8 +161,10 @@ now:
     scope_if_supported: >-
       Self-dev capability phase 1 is real: a harness drives Choir development
       through the product path.
-    status: proposed
-    evidence_refs: []
+    status: active
+    evidence_refs:
+      - internal/agentcore/rlm_reduce.go (castStagedIntent)
+      - cmd/capsule-broker/session_worker.go
   decision:
     what: >-
       M2 is the carrier landing and self-dev capability phase 1 as one
@@ -172,19 +175,26 @@ now:
     owner_ratification_ref: owner direction 2026-09-22
   belief:
     believed_state: >-
-      The carrier mechanism is proven; the input channel is the blocker. Once
-      M1 lands the document channel, the cast path is the remaining work.
+      M1 landed: the document channel carries owner input as a canonical
+      revision event and the desk observes the head (turn-consumption receipt
+      on staging). The carrier mechanism is proven; the cast path on the
+      document channel is the remaining work.
     main_uncertainty: >-
       Whether the pre-cutover runtime can carry the cast's continuation far
       enough for a live-process proof, or whether M2 collapses into M3.
     next_observation: >-
-      M1's deployed acceptance: does the document revision event reach the
-      desk cleanly enough to build a cast on?
+      Whether a `choir` CLI document edit produces a cast the engineering
+      desk consumes — the first executable probe.
   blocker_or_risk: >-
-    Blocked on M1. Fake-island risk: a live-process proof that dies on
-    restart — acceptance must not claim durability M3 hasn't delivered.
+    Fake-island risk: a live-process proof that dies on restart — acceptance
+    must not claim durability M3 hasn't delivered. Provider auth on staging
+    (chatgpt) was a pre-existing gap; confirm a real model call completes or
+    the cast proof is activation-only.
   next_action: >-
-    Wait for M1 terminal receipt; then reconcile start state and charter.
+    Charter: reconcile the carrier substrate (castStagedIntent, session
+    worker, staged choir.* intents) against the landed document channel;
+    name the first executable probe — a `choir` CLI document edit that
+    produces a sub-RLM cast.
 
 receipts: []
 ---
@@ -204,7 +214,8 @@ legacy capsule ops deleted (R7), run acceptance on canonical evidence, R9
 provider-heresy deletion. That scope lands here, on the document channel M1
 builds.
 
-## Draft status
+## Status
 
-This is a draft successor — blocked on M1, not executable. It becomes the
-working entrypoint only on promotion after M1's terminal receipt.
+Promoted to the sole working entrypoint 2026-09-23 on M1's landed terminal
+receipt. Executable with `/goal
+docs/definitions/choir-sub-rlm-document-channel-2026-09-22.md`.
