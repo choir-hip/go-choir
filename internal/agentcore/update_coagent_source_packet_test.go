@@ -856,7 +856,16 @@ func TestLifecycleRunInjectorReadsComputerScopedPendingUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inject lifecycle update: %v", err)
 	}
-	if len(messages) != 1 || !strings.Contains(string(messages[0]), "scoped lifecycle content") {
+	// The seeded document's initial AuthorUser revision is a pending owner
+	// input, so the owner_revision packet is injected ahead of the lifecycle
+	// update.
+	var sawLifecycleUpdate bool
+	for _, message := range messages {
+		if strings.Contains(string(message), "scoped lifecycle content") {
+			sawLifecycleUpdate = true
+		}
+	}
+	if !sawLifecycleUpdate {
 		t.Fatalf("lifecycle update messages = %s", messages)
 	}
 }
