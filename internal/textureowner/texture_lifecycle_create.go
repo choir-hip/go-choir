@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -93,6 +94,7 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		if errors.Is(err, store.ErrLifecycleCommandConflict) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "create occurrence conflicts with its durable receipt"})
 		} else {
+			log.Printf("texture api: lifecycle Texture create rejected: %v", err)
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "lifecycle Texture create rejected"})
 		}
 		return
