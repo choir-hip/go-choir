@@ -262,8 +262,9 @@ receipts:
     kind: landing
     summary: >-
       Pushed 53f0ffcb + 902e8d78 + b994a0fb + 098726b0 to origin/main. CI run
-      35819171822 green; staging deploy verified at commit 098726b0 via
-      /health build.commit. Deployed acceptance spec
+      35819171822 green; staging deploy verified at commit b994a0fb via
+      /health build.commit (098726b0 and later are docs/test-only commits
+      that do not trigger a deploy). Deployed acceptance spec
       frontend/tests/texture-owner-revision-deployed.spec.js PASSED on
       https://choir.news: lifecycle-documents create 201, /revise 202 with an
       AuthorUser revision carrying input_origin=user_prompt + owner_prompt
@@ -278,8 +279,7 @@ receipts:
       on "lifecycle receipt join unavailable"; chatgpt provider auth broken
       on staging.
     evidence_refs:
-      - frontend/tests/texture-owner-revision-deployed.spec.js
-      - https://choir.news/health (build.commit=098726b0)
+      - https://choir.news/health (build.commit=b994a0fb)
       - gh run 35819171822 (CI success)
 ---
 

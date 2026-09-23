@@ -8,7 +8,7 @@ the mission format is throughline (`skills/throughline/SKILL.md`).
 ## Landed Definition — Texture Owner Input Cutover (M1)
 
 [`definitions/choir-texture-owner-input-cutover-2026-09-22.md`](definitions/choir-texture-owner-input-cutover-2026-09-22.md)
-**landed 2026-09-23** (deployed commit `098726b0`, CI run 35819171822 green,
+**landed 2026-09-23** (deployed commit `b994a0fb`, CI run 35819171822 green,
 deployed acceptance spec
 `frontend/tests/texture-owner-revision-deployed.spec.js` passing on
 https://choir.news). Owner input to a lifecycle-bound Texture document is a
