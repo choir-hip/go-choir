@@ -115,7 +115,12 @@ The carrier program is mid-flight and blocked. This phase completes it.
   substrate retired (R10), and the `tell`/`correct`/`LifecycleOwnerInstruction`
   out-of-band path plus `cmd/choir/roster.go` deleted — owner input becomes a
   document edit event. Proves: delivery and continuation are *derivable* —
-  the wake family's structural death.
+  the wake family's structural death. Scope: deletes the wrong-path cluster
+  enumerated in `docs/problems/root-cause-wrong-path-cluster-2026-09-22.md`
+  (~44 instances across out-of-band input, process-local continuations, dual
+  paths, sweep recovery, non-event mutations); five exceptions need real
+  decisions (tell payload semantics, roster migration, actuator=tools/Super
+  blocked on desk crossings, frontend pointer, vmctl/sourcecycled boundary).
 - **1e — Remaining desk crossings** *(migration targets of 1d)*. Texture,
   research, and management desks cross to the carrier as the cutover's
   migration targets — the work the old stack serialized as M4–M6.

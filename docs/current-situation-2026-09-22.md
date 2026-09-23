@@ -81,7 +81,11 @@ in state head, fenced atomic commit, serial-per-actor, cast-only sub-RLMs).
 It subsumes the remaining desk crossings and retires the Super substrate
 (R10), `actuator=tools` (R8), and the `tell`/`roster` out-of-band path in one
 move — the structural death of the wake family. The standalone wake repair
-is folded into it; the desk crossings become migration targets.
+is folded into it; the desk crossings become migration targets. The full
+wrong-path cluster it deletes is enumerated in
+`docs/problems/root-cause-wrong-path-cluster-2026-09-22.md` (~44 instances:
+out-of-band input, process-local continuations, dual paths, sweep recovery,
+non-event mutations).
 
 ### 3. How much self-development before the wire
 
