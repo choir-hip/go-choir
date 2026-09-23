@@ -7,10 +7,8 @@ description: >-
   realism axis, a typed conjecture, and a compact current-state card. Compiles
   MissionGradient's value/homotopy discipline and Parallax's conjecture/shift
   discipline into one goal-file format that can be run with `/goal path.md`.
-metadata:
-  hermes:
-    tags: [definition, goal-file, conjecture-learning, homotopy, long-running-agents]
-    related_skills: [cognitive-transform-portfolio, agentic-consensus]
+tags: [definition, goal-file, conjecture-learning, homotopy, long-running-agents]
+related_skills: [cognitive-transform-portfolio, agentic-consensus]
 ---
 
 # Throughline: Goal Files

@@ -1,10 +1,8 @@
 ---
 name: parallax
 description: "Run a mission as a conjecture circuit: the mission document claims that completing an artifact/spec/objective will actually advance a deeper goal, then tests and constructs that claim through observer shifts, descending a declared variant measured in decided conjectures under an explicit budget. Each pass produces a strong, clear, definitive statement about the system. Use for any nontrivial /goal mission where the route is uncertain, the evidence may mislead, or the work must hand off cleanly."
-metadata:
-  hermes:
-    tags: [parallax, conjecture-learning, proof-search, long-running-agents]
-    related_skills: [cognitive-transform-portfolio]
+tags: [parallax, conjecture-learning, proof-search, long-running-agents]
+related_skills: [cognitive-transform-portfolio]
 ---
 
 # Parallax

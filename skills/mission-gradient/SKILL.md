@@ -4,10 +4,8 @@ description: Compile ambitious long-running Codex /goal work into an invariant-p
 version: 2.0.0
 author: Hermes Agent
 license: MIT
-metadata:
-  hermes:
-    tags: [mission-gradient, long-running-agents, verification, homotopy, control]
-    related_skills: [cognitive-transform-portfolio]
+tags: [mission-gradient, long-running-agents, verification, homotopy, control]
+related_skills: [cognitive-transform-portfolio]
 ---
 
 # MissionGradient
