@@ -59,6 +59,12 @@ finish:
         only the RLM/session route.
       proves: one runtime, no dual path
       evidence_class: deployed proof
+    - action: >-
+        Agentic consensus panel reviews the landed candidate (frozen diff
+        identity + deployed evidence) before `goal.complete`; a SEND BACK
+        verdict blocks completion until the named gap is closed.
+      proves: independent review gates acceptance, not just self-report
+      evidence_class: consensus review
   rollback: >-
     git revert + redeploy. Desk crossings are per-desk; a failed crossing
     reverts that desk, not the kernel.
@@ -71,6 +77,7 @@ finish:
       - deploy
       - environment_identity
       - deployed_acceptance
+      - consensus_review
 
 value:
   better_means: >-

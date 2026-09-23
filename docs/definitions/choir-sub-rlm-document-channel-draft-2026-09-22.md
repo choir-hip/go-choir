@@ -67,6 +67,12 @@ finish:
         receipts, revision refs), not tool-name checkpoints.
       proves: acceptance is off tool names
       evidence_class: deployed proof
+    - action: >-
+        Agentic consensus panel reviews the landed candidate (frozen diff
+        identity + deployed evidence) before `goal.complete`; a SEND BACK
+        verdict blocks completion until the named gap is closed.
+      proves: independent review gates acceptance, not just self-report
+      evidence_class: consensus review
   rollback: >-
     git revert + redeploy. The carrier path is additive to the desk; revert
     restores the prior tool surface.
@@ -79,6 +85,7 @@ finish:
       - deploy
       - environment_identity
       - deployed_acceptance
+      - consensus_review
 
 value:
   better_means: >-
