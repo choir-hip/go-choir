@@ -131,11 +131,15 @@ boundaries:
     - Provider routing (R9 deletion).
 
 now:
-  status: working
-  slice: implementation landed locally — document-bound engineering desk,
-    revision-opens-assignment cast, R7/R9 deletions; staging drive next
-  source_ref: main@98c6d96e (pushed; CI in flight)
-  deploy_identity: staging https://choir.news build.commit=3b780ed2
+  status: landed
+  slice: >-
+    Deployed proof complete: document-channel cast → assignment → run →
+    terminal report → disposition completed, all on canonical evidence.
+    Trajectory ad04eaba-53e9-5c5c-9116-f8c18ae6dce5 on staging. Terminal-
+    report strand fixed (verdict validation + coercion); see
+    docs/problems/document-cast-terminal-report-strand-2026-09-23.md.
+  source_ref: main@4de7fdf9 (pushed; deployed)
+  deploy_identity: staging https://choir.news build.commit=4de7fdf9
   candidate:
     id: none
     state: none
