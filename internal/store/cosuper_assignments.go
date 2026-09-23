@@ -1528,7 +1528,7 @@ func coSuperReportPacketPayload(report types.CoSuperAssignmentReport, cancellati
 	return packet, report.Summary
 }
 
-func buildCoSuperReturnPacket(now time.Time, seq int64, assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport, parentRun types.RunRecord, cancellation bool) (types.CoagentSourcePacket, objectgraph.Object, error) {
+func buildCoSuperReturnPacket(now time.Time, seq int64, assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport, parentRun types.RunRecord, parentChannelID string, cancellation bool) (types.CoagentSourcePacket, objectgraph.Object, error) {
 	packetPayload, content := coSuperReportPacketPayload(report, cancellation)
 	payloadDigest, err := ComputeLifecycleUpdatePayloadDigest(packetPayload, content)
 	if err != nil {
@@ -1545,7 +1545,7 @@ func buildCoSuperReturnPacket(now time.Time, seq int64, assignment types.CoSuper
 		UpdateID: updateID, ProducerUpdateID: report.ReportID,
 		OwnerID: assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AgentID: assignment.Binding.AssignedAgentID, TargetAgentID: assignment.Binding.ParentAgentID,
-		ChannelID: strings.TrimSpace(parentRun.ChannelID), MessageSeq: seq, TrajectoryID: assignment.Binding.TrajectoryID,
+		ChannelID: strings.TrimSpace(parentChannelID), MessageSeq: seq, TrajectoryID: assignment.Binding.TrajectoryID,
 		Direction: types.LifecyclePacketDirectionProducerReport, ControlBindingID: assignment.Binding.ParentControlID,
 		ProducerWorkItemID: assignment.Binding.AssignedWorkItemID, TargetWorkItemID: assignment.Binding.ParentWorkItemID,
 		WorkItemID: assignment.Binding.AssignedWorkItemID, Role: agentprofile.CoSuper, SourceRunID: assignment.BoundRunID,
@@ -1558,6 +1558,27 @@ func buildCoSuperReturnPacket(now time.Time, seq int64, assignment types.CoSuper
 	meta["producer_update_id"], meta["target_agent_id"] = update.ProducerUpdateID, update.TargetAgentID
 	obj, err := lifecycleObject(ogKindWorkerUpdate, update.OwnerID, update.ComputerID, key, update, meta, now, now)
 	return update, obj, err
+}
+
+// coSuperParentReturnTarget resolves the return-packet parent run and channel
+// for one assignment binding. Run-parented bindings decode the bound parent
+// run; document-parented bindings (ParentRunID == "") have no parent run —
+// the engineering desk agent's channel (the bound document) is the return
+// target, and the packet stays undelivered until a desk activation consumes
+// it.
+func coSuperParentReturnTarget(parentAuthority coSuperAuthorityObjects, binding types.CoSuperAssignmentBinding) (types.RunRecord, string, error) {
+	if strings.TrimSpace(binding.ParentRunID) != "" {
+		parentRun, err := decodeLifecycleObject[types.RunRecord](parentAuthority.parentRun)
+		if err != nil {
+			return types.RunRecord{}, "", err
+		}
+		return parentRun, parentRun.ChannelID, nil
+	}
+	parentAgent, err := decodeLifecycleObject[types.AgentRecord](parentAuthority.parentAgent)
+	if err != nil {
+		return types.RunRecord{}, "", err
+	}
+	return types.RunRecord{}, parentAgent.ChannelID, nil
 }
 
 func coSuperTerminalRunState(disposition types.CoSuperAssignmentDisposition) types.RunState {
@@ -1961,11 +1982,11 @@ func (s *Store) RecordCoSuperAssignmentReport(ctx context.Context, req types.Rec
 	objects := []objectgraph.Object{updatedAssignmentObj, reportObj}
 	var update *types.CoagentSourcePacket
 	if !report.Late {
-		parentRun, decodeErr := decodeLifecycleObject[types.RunRecord](parentAuthority.parentRun)
+		parentRun, parentChannelID, decodeErr := coSuperParentReturnTarget(parentAuthority, assignment.Binding)
 		if decodeErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, decodeErr
 		}
-		created, updateObj, updateErr := buildCoSuperReturnPacket(now, transition.seq, assignment, report, parentRun, false)
+		created, updateObj, updateErr := buildCoSuperReturnPacket(now, transition.seq, assignment, report, parentRun, parentChannelID, false)
 		if updateErr != nil {
 			return types.CoSuperAssignmentCommandResult{}, updateErr
 		}
@@ -2083,11 +2104,11 @@ func (s *Store) CancelCoSuperAssignment(ctx context.Context, req types.CancelCoS
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}
-	parentRun, decodeErr := decodeLifecycleObject[types.RunRecord](parentAuthority.parentRun)
+	parentRun, parentChannelID, decodeErr := coSuperParentReturnTarget(parentAuthority, assignment.Binding)
 	if decodeErr != nil {
 		return types.CoSuperAssignmentCommandResult{}, decodeErr
 	}
-	update, updateObj, err := buildCoSuperReturnPacket(now, transition.seq, assignment, report, parentRun, true)
+	update, updateObj, err := buildCoSuperReturnPacket(now, transition.seq, assignment, report, parentRun, parentChannelID, true)
 	if err != nil {
 		return types.CoSuperAssignmentCommandResult{}, err
 	}

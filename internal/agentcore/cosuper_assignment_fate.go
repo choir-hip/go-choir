@@ -598,7 +598,14 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	} else if !errors.Is(intentErr, store.ErrNotFound) {
 		return types.CoSuperAssignmentCommandResult{}, intentErr
 	}
-	lateFate := cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked
+	// The saga's own mid-flight dispositions are not late fate: a staged
+	// pending proposal whose proposition digest matches this report is the
+	// same terminal commit resuming after a strand, and must re-enter the
+	// freeze/revoke path instead of degrading to late evidence. This mirrors
+	// the store's pendingMatches exclusion in RecordCoSuperAssignmentReport.
+	pendingMatches := assignment.PendingProposal != nil && assignment.PendingProposal.PropositionDigest == propositionDigest &&
+		!cancellationIntended && !assignment.Disposition.Terminal()
+	lateFate := (cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked) && !pendingMatches
 	storedReport, reportErr := rt.store.GetCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, report.ReportID)
 	reportExists := reportErr == nil
 	if reportErr != nil && !errors.Is(reportErr, store.ErrNotFound) {
