@@ -52,32 +52,36 @@ lives and what it changes.
 
 ### 1. The carrier decision (the immediate one)
 
-The engineering-desk carrier proved its mechanism but the roster receipt is
-quarantined: six strands in the "activation-wake family" share one substrate
-cause — a lifecycle transition happens but no durable wake/retry authority is
-minted, so work strands until an unrelated sweep/restart/owner action.
-Options (from `docs/memo-activation-wake-authority-substrate-2026-09-13.md`):
+The engineering-desk carrier proved its mechanism (A9 first overlay-served
+arm; A14 executed task cells and staged `choir.Complete`) but the roster
+receipt is quarantined. **Two corrections landed 2026-09-22 that re-scope
+this:**
 
-- **(a)** Charter the wake-authority substrate repair — transition-minted
-  recovery occurrences, one consumer, run-terminal = fate-terminal.
-- **(b)** Amend the roster scope/evidence floor to match reachable state.
-- **(c)** Settle `blocked_incomplete`, charter the repair as a successor.
+- **The roster was run on a makeshift harness, not the RLM carrier.**
+  `cmd/choir/roster.go` drives arms via `texture tell` — an out-of-band
+  owner-instruction message — not the desk's native sub-RLM spawn path. The
+  1-of-4 tally measured a tell→desk-translation→drainer-residency chain, not
+  the carrier. The roster must be re-run on the real harness.
+- **`texture tell` is a bug, not a feature.** Texture is document-driven:
+  owner input is an edit to the document (an event on the trajectory the
+  desk reads), not an out-of-band message. `tell`/`correct` and the whole
+  `LifecycleOwnerInstruction` path are a second input channel that bypasses
+  the tape — to be deleted, and the roster driver with it.
 
-Why it matters beyond the roster: an unresolved precommitment is *also* a
-pending state that must mint its resolver. The wake repair is the prototype
-for open commitments (records) and for the wire's impact-propagation. The
-panel leaned (a)+(b): repair the defect class, re-scope the roster tally.
+What remains of the original decision is only the roster-evidence floor:
+re-scope it to roster arms driven as in-cell sub-RLM casts on the document
+channel, not the tell wrapper. The substrate half (the wake defect) is now
+carried by the ontology cutover below.
 
-### 2. The ontology cutover (unratified, largest single step)
+### 2. The ontology cutover — **ratified 2026-09-22**
 
-`docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md` proposes
-collapsing delivery/continuation into derivable state (delivered = in state
-head, fenced atomic commit, serial-per-actor, cast-only sub-RLMs). It would
-subsume the remaining desk crossings and retire the Super substrate (R10) and
-`actuator=tools` (R8) in one move. **It is a design, not a ratified mission.**
-If ratified, it's the structural death of the wake family. If not, the desk
-crossings stay as separate missions and the wake repair is a patch on the old
-ontology. This is the biggest sequencing fork.
+`docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md` is
+**ratified**: collapse delivery/continuation into derivable state (delivered =
+in state head, fenced atomic commit, serial-per-actor, cast-only sub-RLMs).
+It subsumes the remaining desk crossings and retires the Super substrate
+(R10), `actuator=tools` (R8), and the `tell`/`roster` out-of-band path in one
+move — the structural death of the wake family. The standalone wake repair
+is folded into it; the desk crossings become migration targets.
 
 ### 3. How much self-development before the wire
 

@@ -92,37 +92,33 @@ but every mission is cheaper with honest docs.
 
 The carrier program is mid-flight and blocked. This phase completes it.
 
-- **1a — The carrier decision (owner).** Resolve the pending decision:
-  (a) charter the wake-authority repair, (b) amend the roster floor, or
-  (c) settle `blocked_incomplete`. The panel leaned (a)+(b): repair the defect
-  class (it is the minted-continuation primitive records and the wire both
-  need), re-scope the roster tally to repaired channels + served arms.
-  **Open — your call.**
-- **1b — Wake authority: minted continuations** *(if 1a = a, or chartered
-  independently)*. Transition-minted recovery occurrences at every pending
-  lifecycle state; one consumer; run-terminal ≠ fate-terminal. Kills the
-  six-strand defect class. Proves: a pending state mints its own continuation.
-  Residue: the "pending → minted continuation" primitive that open
-  commitments (Phase 2) and wire impact-propagation (Phase 5) reuse.
-- **1c — Carrier landing.** Finish the roster on the repaired substrate, then
-  P6: engineering desk fully on the in-cell carrier, five overlay tools +
-  four legacy capsule ops deleted (R7), run acceptance on canonical evidence,
-  R9 provider-heresy deletion. Proves: a desk lives entirely on the carrier —
-  the desk the `precommit` module ships through.
-- **1d — Ontology cutover** *(unratified — the largest single step, see open
-  questions)*. Implement the minimal event-driven design: delivered = in
-  state head, fenced atomic commit, serial-per-actor, cast-only sub-RLMs,
-  migration inside a write fence; management and research cross;
-  `actuator=tools` deleted (R8), Super substrate retired (R10). Proves:
-  delivery and continuation are *derivable* — the wake family's structural
-  death. **Uncertain step:** if not ratified, the remaining desk crossings
-  (Texture, research, management) proceed as separate missions on the
-  repaired-but-old ontology, and R8/R10 stay open.
-- **1e — Remaining desk crossings** *(only if 1d is not ratified, or as the
-  cutover's migration targets)*. Texture, research, and management desks
-  cross to the carrier — the work the old stack serialized as M4–M6. The
-  panel argued the ontology cutover subsumes them; that is a conjecture, not
-  a settled fact.
+- **1a — The carrier decision (owner).** Re-scoped 2026-09-22: the roster was
+  run on a makeshift `texture tell` driver (`cmd/choir/roster.go`), not the
+  in-cell carrier, and `tell` itself is a bug — Texture is document-driven.
+  What remains is only the roster-evidence floor: re-scope it to roster arms
+  driven as in-cell sub-RLM casts on the document channel. The substrate half
+  (the wake defect) is carried by 1d.
+- **1b — Wake authority: minted continuations** *(folded into 1d)*. The
+  transition-minted recovery-occurrence repair is subsumed by the ontology
+  cutover's derivable-continuation model — pending deliveries are a
+  projection, the dispatcher is the one consumer. Not a separate mission.
+- **1c — Carrier landing.** Finish the roster on the real harness (in-cell
+  sub-RLM casts, not `texture tell`), then P6: engineering desk fully on the
+  in-cell carrier, five overlay tools + four legacy capsule ops deleted (R7),
+  run acceptance on canonical evidence, R9 provider-heresy deletion. Proves:
+  a desk lives entirely on the carrier — the desk the `precommit` module
+  ships through.
+- **1d — Ontology cutover** *(ratified 2026-09-22)*. Implement the minimal
+  event-driven design: delivered = in state head, fenced atomic commit,
+  serial-per-actor, cast-only sub-RLMs, migration inside a write fence;
+  management and research cross; `actuator=tools` deleted (R8), Super
+  substrate retired (R10), and the `tell`/`correct`/`LifecycleOwnerInstruction`
+  out-of-band path plus `cmd/choir/roster.go` deleted — owner input becomes a
+  document edit event. Proves: delivery and continuation are *derivable* —
+  the wake family's structural death.
+- **1e — Remaining desk crossings** *(migration targets of 1d)*. Texture,
+  research, and management desks cross to the carrier as the cutover's
+  migration targets — the work the old stack serialized as M4–M6.
 
 ### Phase 2 — Precommitment records: the mechanism
 
@@ -207,16 +203,10 @@ Only after the computer demonstrably develops itself (Phase 3 gate).
   live wire, not a pre-wire mission.
 - **Platform phase** — white-label newspapers on private+public data.
 
-## Open questions that could reorder this stack
-
-These are the steps where a wrong guess means re-orienting again. Named so
-the owner can settle them before execution, not mid-flight.
-
-1. **The carrier decision** (1a) — gates Phase 1. The panel leaned (a)+(b).
-2. **The ontology cutover** (1d) — ratified or not? If yes, it subsumes the
-   desk crossings and retires R8/R10 in one move; if no, Phase 1 grows the
-   separate desk crossings (1e) and the wake repair is a patch on the old
-   ontology. Largest sequencing fork.
+1. **The carrier decision** (1a) — re-scoped 2026-09-22: roster re-run on the
+   real harness; only the evidence floor remains open.
+2. **The ontology cutover** (1d) — **ratified 2026-09-22.** It subsumes the
+   desk crossings and retires R8/R10 plus the tell/roster path in one move.
 3. **Self-development depth** (3b) — how many episodes satisfy "genuinely
    develops itself"? If more than one, Phase 3 is longer and the wire is
    later.
@@ -228,8 +218,8 @@ the owner can settle them before execution, not mid-flight.
    This stack dissolves the selector into the mechanism (corrective-value
    retrieval over the commitment ledger). If that's wrong, a selection
    mission belongs in Phase 3–4.
-6. **Desk-crossing strategy** — subsumed by the ontology cutover (conjecture)
-   or separate missions (the old stack's weight)? Depends on open question 2.
+6. **Desk-crossing strategy** — resolved by the ratified cutover: the desk
+   crossings are its migration targets, not separate missions.
 
 ## Risks that could make this plan wrong
 
