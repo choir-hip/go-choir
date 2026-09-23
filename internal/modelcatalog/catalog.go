@@ -143,6 +143,12 @@ func SupportedModels() []ModelInfo {
 		},
 
 		{
+			ID:              "gpt-6-luna",
+			DisplayName:     "GPT-6 Luna",
+			Provider:        "chatgpt",
+			MaxOutputTokens: 65536,
+		},
+		{
 			ID:              "gpt-5.6-luna",
 			DisplayName:     "GPT-5.6 Luna",
 			Provider:        "chatgpt",

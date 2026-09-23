@@ -6,7 +6,7 @@ usage() {
 agentic-consensus-runner.sh --prompt TEXT | --prompt-file FILE [options]
 
 Runs one prompt across an agentic consensus panel and writes one output file per agent.
-Default panel: codex, devin, claude, cursor, opencode, omp-gpt56-sol, omp-gpt56-luna, omp-gemini38, omp-cursor-grok46, omp-muse-spark, omp-nemotron-3-ultra, omp-glm53-flash, omp-ling.
+Default panel: codex, devin, claude, cursor, opencode, omp-gpt6-sol, omp-gpt6-luna, omp-gemini38, omp-cursor-grok46, omp-muse-spark, omp-nemotron-3-ultra, omp-glm53-flash, omp-ling.
 External CLIs use their configured default model unless a --*-model override is passed.
 
 Required input:
@@ -26,7 +26,7 @@ Thinking mode:
 
 Panel selection:
   --include LIST                Comma-separated agent ids to run.
-                                Default: codex,devin,claude,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-ling
+                                Default: codex,devin,claude,cursor,opencode,omp-gpt6-sol,omp-gpt6-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-ling
   --exclude LIST                Comma-separated agent ids to skip.
   --list-agents                 Print supported agent ids and exit.
 
@@ -37,18 +37,18 @@ Model overrides, optional:
                                  fable is request-only.
   --cursor-model MODEL          Pass --model MODEL to Cursor agent.
   --opencode-model MODEL        Pass -m MODEL to opencode run.
-  --omp-gpt56-sol-model MODEL   Default: openai-codex/gpt-5.6-sol.
-  --omp-gpt56-terra-model MODEL Default: openai-codex/gpt-5.6-terra.
-  --omp-gpt56-luna-model MODEL  Default: openai-codex/gpt-5.6-luna.
+  --omp-gpt6-sol-model MODEL   Default: openai-codex/gpt-6-sol.
+  --omp-gpt6-terra-model MODEL Default: openai-codex/gpt-6-terra.
+  --omp-gpt6-luna-model MODEL  Default: openai-codex/gpt-6-luna.
   --omp-gemini-model MODEL      Default: google-antigravity/gemini-3.8-flash.
   --omp-cursor-grok-model MODEL Default: cursor/cursor-grok-4.6-high.
   --omp-muse-spark-model MODEL       Default: opencode-zen/muse-spark-1.3-contributor-free.
   --omp-nemotron-3-ultra-model MODEL Default: opencode-zen/nemotron-3-ultra-free.
   --omp-glm53-flash-model MODEL      Default: opencode-go/glm-5.3-flash.
   --omp-ling-model MODEL              Default: opencode-zen/ling-3.0-flash-fin-free.
-  --omp-gpt56-sol-thinking LEVEL    Default: medium.
-  --omp-gpt56-terra-thinking LEVEL   Default: xhigh.
-  --omp-gpt56-luna-thinking LEVEL    Default: max.
+  --omp-gpt6-sol-thinking LEVEL    Default: medium.
+  --omp-gpt6-terra-thinking LEVEL   Default: xhigh.
+  --omp-gpt6-luna-thinking LEVEL    Default: max.
   --omp-gemini-thinking LEVEL   Default: high.
   --omp-cursor-grok-thinking LEVEL   Default: high.
   --omp-muse-spark-thinking LEVEL       Default: high.
@@ -74,8 +74,8 @@ Output:
 USAGE
 }
 
-DEFAULT_INCLUDE="codex,devin,claude,cursor,opencode,omp-gpt56-sol,omp-gpt56-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-ling"
-SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt56-sol omp-gpt56-terra omp-gpt56-luna omp-gemini38 omp-cursor-grok46 omp-muse-spark omp-nemotron-3-ultra omp-glm53-flash omp-ling)
+DEFAULT_INCLUDE="codex,devin,claude,cursor,opencode,omp-gpt6-sol,omp-gpt6-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-ling"
+SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt6-sol omp-gpt6-terra omp-gpt6-luna omp-gemini38 omp-cursor-grok46 omp-muse-spark omp-nemotron-3-ultra omp-glm53-flash omp-ling)
 
 PROMPT=""
 PROMPT_FILE=""
@@ -97,18 +97,18 @@ DEVIN_MODEL=""
 CLAUDE_MODEL="opus"
 CURSOR_MODEL=""
 OPENCODE_MODEL=""
-OMP_GPT56_SOL_MODEL="openai-codex/gpt-5.6-sol"
-OMP_GPT56_TERRA_MODEL="openai-codex/gpt-5.6-terra"
-OMP_GPT56_LUNA_MODEL="openai-codex/gpt-5.6-luna"
+OMP_GPT6_SOL_MODEL="openai-codex/gpt-6-sol"
+OMP_GPT6_TERRA_MODEL="openai-codex/gpt-6-terra"
+OMP_GPT6_LUNA_MODEL="openai-codex/gpt-6-luna"
 OMP_GEMINI_MODEL="google-antigravity/gemini-3.8-flash"
 OMP_CURSOR_GROK_MODEL="cursor/cursor-grok-4.6-high"
 OMP_MUSE_SPARK_MODEL="opencode-zen/muse-spark-1.3-contributor-free"
 OMP_NEMOTRON_3_ULTRA_MODEL="opencode-zen/nemotron-3-ultra-free"
 OMP_GLM53_FLASH_MODEL="opencode-go/glm-5.3-flash"
 OMP_LING_MODEL="opencode-zen/ling-3.0-flash-fin-free"
-OMP_GPT56_SOL_THINKING="medium"
-OMP_GPT56_TERRA_THINKING="xhigh"
-OMP_GPT56_LUNA_THINKING="max"
+OMP_GPT6_SOL_THINKING="medium"
+OMP_GPT6_TERRA_THINKING="xhigh"
+OMP_GPT6_LUNA_THINKING="max"
 OMP_GEMINI_THINKING="high"
 OMP_CURSOR_GROK_THINKING="high"
 OMP_MUSE_SPARK_THINKING="high"
@@ -151,15 +151,15 @@ while [[ $# -gt 0 ]]; do
     --opencode-model)
       [[ $# -ge 2 ]] || { echo "--opencode-model requires a value" >&2; exit 2; }
       OPENCODE_MODEL="$2"; shift 2 ;;
-    --omp-gpt56-sol-model)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt56-sol-model requires a value" >&2; exit 2; }
-      OMP_GPT56_SOL_MODEL="$2"; shift 2 ;;
-    --omp-gpt56-terra-model)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt56-terra-model requires a value" >&2; exit 2; }
-      OMP_GPT56_TERRA_MODEL="$2"; shift 2 ;;
-    --omp-gpt56-luna-model)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt56-luna-model requires a value" >&2; exit 2; }
-      OMP_GPT56_LUNA_MODEL="$2"; shift 2 ;;
+    --omp-gpt6-sol-model)
+      [[ $# -ge 2 ]] || { echo "--omp-gpt6-sol-model requires a value" >&2; exit 2; }
+      OMP_GPT6_SOL_MODEL="$2"; shift 2 ;;
+    --omp-gpt6-terra-model)
+      [[ $# -ge 2 ]] || { echo "--omp-gpt6-terra-model requires a value" >&2; exit 2; }
+      OMP_GPT6_TERRA_MODEL="$2"; shift 2 ;;
+    --omp-gpt6-luna-model)
+      [[ $# -ge 2 ]] || { echo "--omp-gpt6-luna-model requires a value" >&2; exit 2; }
+      OMP_GPT6_LUNA_MODEL="$2"; shift 2 ;;
     --omp-gemini-model)
       [[ $# -ge 2 ]] || { echo "--omp-gemini-model requires a value" >&2; exit 2; }
       OMP_GEMINI_MODEL="$2"; shift 2 ;;
@@ -178,15 +178,15 @@ while [[ $# -gt 0 ]]; do
     --omp-ling-model)
       [[ $# -ge 2 ]] || { echo "--omp-ling-model requires a value" >&2; exit 2; }
       OMP_LING_MODEL="$2"; shift 2 ;;
-    --omp-gpt56-sol-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt56-sol-thinking requires a value" >&2; exit 2; }
-      OMP_GPT56_SOL_THINKING="$2"; shift 2 ;;
-    --omp-gpt56-terra-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt56-terra-thinking requires a value" >&2; exit 2; }
-      OMP_GPT56_TERRA_THINKING="$2"; shift 2 ;;
-    --omp-gpt56-luna-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt56-luna-thinking requires a value" >&2; exit 2; }
-      OMP_GPT56_LUNA_THINKING="$2"; shift 2 ;;
+    --omp-gpt6-sol-thinking)
+      [[ $# -ge 2 ]] || { echo "--omp-gpt6-sol-thinking requires a value" >&2; exit 2; }
+      OMP_GPT6_SOL_THINKING="$2"; shift 2 ;;
+    --omp-gpt6-terra-thinking)
+      [[ $# -ge 2 ]] || { echo "--omp-gpt6-terra-thinking requires a value" >&2; exit 2; }
+      OMP_GPT6_TERRA_THINKING="$2"; shift 2 ;;
+    --omp-gpt6-luna-thinking)
+      [[ $# -ge 2 ]] || { echo "--omp-gpt6-luna-thinking requires a value" >&2; exit 2; }
+      OMP_GPT6_LUNA_THINKING="$2"; shift 2 ;;
     --omp-gemini-thinking)
       [[ $# -ge 2 ]] || { echo "--omp-gemini-thinking requires a value" >&2; exit 2; }
       OMP_GEMINI_THINKING="$2"; shift 2 ;;
@@ -351,16 +351,16 @@ build_cmd() {
       CMD=(opencode run --dir "$CWD")
       [[ -n "$OPENCODE_MODEL" ]] && CMD+=(-m "$OPENCODE_MODEL")
       CMD+=("$AGENT_PROMPT") ;;
-    omp-gpt56-sol)
-      CMD=(omp -p --mode text --model "$OMP_GPT56_SOL_MODEL" --thinking "$OMP_GPT56_SOL_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
+    omp-gpt6-sol)
+      CMD=(omp -p --mode text --model "$OMP_GPT6_SOL_MODEL" --thinking "$OMP_GPT6_SOL_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$AGENT_PROMPT") ;;
-    omp-gpt56-terra)
-      CMD=(omp -p --mode text --model "$OMP_GPT56_TERRA_MODEL" --thinking "$OMP_GPT56_TERRA_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
+    omp-gpt6-terra)
+      CMD=(omp -p --mode text --model "$OMP_GPT6_TERRA_MODEL" --thinking "$OMP_GPT6_TERRA_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$AGENT_PROMPT") ;;
-    omp-gpt56-luna)
-      CMD=(omp -p --mode text --model "$OMP_GPT56_LUNA_MODEL" --thinking "$OMP_GPT56_LUNA_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
+    omp-gpt6-luna)
+      CMD=(omp -p --mode text --model "$OMP_GPT6_LUNA_MODEL" --thinking "$OMP_GPT6_LUNA_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$AGENT_PROMPT") ;;
     omp-gemini38)

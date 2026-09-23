@@ -809,7 +809,7 @@ in
         "SERVER_WRITE_TIMEOUT=10m30s"
         "GATEWAY_PORT=8084"
         "GATEWAY_IDENTITY_STORE_PATH=/var/lib/go-choir/gateway-identities.json"
-        "GATEWAY_CHATGPT_MODELS=gpt-5.5,gpt-5.4,gpt-5.4-mini"
+        "GATEWAY_CHATGPT_MODELS=gpt-6-luna,gpt-5.5,gpt-5.4,gpt-5.4-mini"
         "GATEWAY_CHATGPT_REASONING_EFFORT=low"
         # Tokens are currently issued at autoputer/VM bootstrap and not
         # proactively rotated. Use a longer TTL in staging to avoid

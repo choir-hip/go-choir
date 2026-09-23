@@ -24,8 +24,8 @@ The default panel is:
 3. `claude` CLI pinned to `opus` (`--model opus`).
 4. Cursor `agent` CLI with its configured default model.
 5. `opencode` CLI with its configured default model.
-6. OMP `openai-codex/gpt-5.6-sol` with `--thinking medium`.
-7. OMP `openai-codex/gpt-5.6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-5.6 tier (weak long-context recall).
+6. OMP `openai-codex/gpt-6-sol` with `--thinking medium`.
+7. OMP `openai-codex/gpt-6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-6 tier (weak long-context recall).
 8. OMP `google-antigravity/gemini-3.8-flash` with `--thinking high`.
 9. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
 10. OMP `opencode-zen/muse-spark-1.3-contributor-free` with `--thinking high`.
@@ -37,21 +37,21 @@ The default panel is:
 
 External CLIs intentionally use their default model unless the user asks for a model override. OMP entries are pinned because they are the stable built-in comparison anchors.
 
-### GPT-5.6 tier ladder
+### GPT-6 tier ladder
 
-The three GPT-5.6 tiers are separate models on the same generation, priced per tier:
+The three GPT-6 tiers are separate models on the same generation, priced per tier:
 
 | id | model | default thinking | role |
 | --- | --- | --- | --- |
-| `omp-gpt56-sol` | `openai-codex/gpt-5.6-sol` | `medium` | flagship; hardest reasoning |
-| `omp-gpt56-terra` | `openai-codex/gpt-5.6-terra` | `xhigh` | balanced; GPT-5.5-class at lower cost |
-| `omp-gpt56-luna` | `openai-codex/gpt-5.6-luna` | `max` | fastest/cheapest; weak long-context recall |
+| `omp-gpt6-sol` | `openai-codex/gpt-6-sol` | `medium` | flagship; hardest reasoning |
+| `omp-gpt6-terra` | `openai-codex/gpt-6-terra` | `xhigh` | balanced; GPT-5.5-class at lower cost |
+| `omp-gpt6-luna` | `openai-codex/gpt-6-luna` | `max` | fastest/cheapest; weak long-context recall |
 
-Sol is the strongest, Terra is the everyday workhorse, Luna is the cost champion. Sol and Luna are in the default panel; add Terra for the full GPT-5.6 sub-panel on the hardest problems:
+Sol is the strongest, Terra is the everyday workhorse, Luna is the cost champion. Sol and Luna are in the default panel; add Terra for the full GPT-6 sub-panel on the hardest problems:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
-  --include omp-gpt56-sol,omp-gpt56-terra,omp-gpt56-luna \
+  --include omp-gpt6-sol,omp-gpt6-terra,omp-gpt6-luna \
   --prompt-file .agentic-consensus/prompt.md
 ```
 
@@ -63,9 +63,9 @@ devin
 claude
 cursor
 opencode
-omp-gpt56-sol
-omp-gpt56-terra
-omp-gpt56-luna
+omp-gpt6-sol
+omp-gpt6-terra
+omp-gpt6-luna
 omp-gemini38
 omp-cursor-grok46
 omp-muse-spark
@@ -229,7 +229,7 @@ omp -p --model MODEL --thinking LEVEL --no-session "PROMPT"
 Runner contracts:
 
 ```bash
-omp -p --mode text --model openai-codex/gpt-5.6-sol --thinking medium --no-session "$PROMPT"
+omp -p --mode text --model openai-codex/gpt-6-sol --thinking medium --no-session "$PROMPT"
 omp -p --mode text --model google-antigravity/gemini-3.8-flash --thinking high --no-session "$PROMPT"
 omp -p --mode text --model cursor/cursor-grok-4.6-high --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-zen/muse-spark-1.3-contributor-free --thinking high --no-session "$PROMPT"
@@ -244,12 +244,12 @@ cannot block on an invisible approval prompt or run without a deadline.
 Optional overrides:
 
 ```bash
---omp-gpt56-sol-model MODEL
---omp-gpt56-sol-thinking LEVEL
---omp-gpt56-terra-model MODEL
---omp-gpt56-terra-thinking LEVEL
---omp-gpt56-luna-model MODEL
---omp-gpt56-luna-thinking LEVEL
+--omp-gpt6-sol-model MODEL
+--omp-gpt6-sol-thinking LEVEL
+--omp-gpt6-terra-model MODEL
+--omp-gpt6-terra-thinking LEVEL
+--omp-gpt6-luna-model MODEL
+--omp-gpt6-luna-thinking LEVEL
 --omp-gemini-model MODEL
 --omp-gemini-thinking LEVEL
 --omp-cursor-grok-model MODEL
@@ -269,7 +269,7 @@ Notes:
 
 - Do not use `--no-tools` for OMP if the OMP agent needs to see skills; OMP only lists skills when the `read` tool is available.
 - Use `--no-tools-omp` for pure opinion prompts where tool use would be wasteful.
-- Model IDs are `provider/model` exactly as `omp models` lists them (e.g. `openai-codex/gpt-5.6-sol`, `opencode-zen/muse-spark-1.3-contributor-free`).
+- Model IDs are `provider/model` exactly as `omp models` lists them (e.g. `openai-codex/gpt-6-sol`, `opencode-zen/muse-spark-1.3-contributor-free`).
 
 ## Runner Usage
 
@@ -310,7 +310,7 @@ Run a subset:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
-  --include codex,claude,opencode,omp-gpt56-sol \
+  --include codex,claude,opencode,omp-gpt6-sol \
   --prompt-file .agentic-consensus/prompt.md
 ```
 

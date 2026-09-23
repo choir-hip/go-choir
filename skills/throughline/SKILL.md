@@ -276,6 +276,24 @@ outcome (`accept`, `repair`, `reject`, or `escalate`), not a vote and not its
 own commit. A reproducible minority blocker outweighs an unsupported majority
 pass.
 
+**Consensus is a completion gate.** Before a behavior-changing mission may
+settle `complete`, run the agentic-consensus panel on the frozen landed
+candidate (diff identity + deployed evidence). The gate is not advisory:
+
+- **Approve** → record the `consensus_review` receipt and settle.
+- **Send back / does not approve** → completion is blocked. Close the named
+  gap (tighten the proof, repair the defect, or accept-and-name the edge),
+  re-freeze the new candidate identity, and re-run the panel. Iterate until
+  the panel approves or a named edge is explicitly accepted — never settle
+  `complete` on a rejected candidate, and never re-run the same frozen
+  identity hoping for a different verdict.
+- A convergent suggestion that is not a blocker is still adjudicated: adopt
+  it, defer it with a named successor, or reject it with a reason. Do not
+  silently drop panel findings.
+
+The panel reviews evidence; it does not create it. A SEND BACK that names a
+real gap is a finding about the proof or the artifact, not a failed vote.
+
 Reliability needs independence, not agent count. Vary the relevant failure
 surfaces: model family/version, context or memory lineage, tool/search source,
 and reviewer obligation (builder, falsifier, verifier).
@@ -319,7 +337,7 @@ Do not:
 - turn an actionable blocker into a final answer while authorized probes remain;
 - grind a fixed position after two zero-moves (the forcing rule);
 - grind repeated obstacles without reconsidering the bridge conjecture;
-- write process paperwork as progress;
+- let a weak measure advance `complete`;
 - default to the smallest honest step when a bigger bounded move decides more;
 - build a cathedral — a parallel elaborate structure beside the real object.
 
@@ -338,3 +356,6 @@ A goal file conforms when it:
 - forces a shift after two zero-moves;
 - records closed boundaries in `receipts`, not as a running log;
 - never lets a weak measure advance `complete`.
+- never settles `complete` on a candidate the consensus panel sent back —
+  the gate iterates (close the gap, re-freeze, re-run) until approval or an
+  explicitly accepted edge.

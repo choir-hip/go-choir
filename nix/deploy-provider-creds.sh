@@ -132,7 +132,7 @@ fi
 
 if [ -f "$CODEX_AUTH" ]; then
   ENVS+=("CHATGPT_AUTH_PATH=${REMOTE_CODEX_AUTH}")
-  ENVS+=("GATEWAY_CHATGPT_MODELS=gpt-5.5,gpt-5.4,gpt-5.4-mini")
+  ENVS+=("GATEWAY_CHATGPT_MODELS=gpt-6-luna,gpt-5.5,gpt-5.4,gpt-5.4-mini")
   ENVS+=("GATEWAY_CHATGPT_REASONING_EFFORT=low")
 else
   echo "warning: $CODEX_AUTH not found; ChatGPT provider auth will not be deployed" >&2
