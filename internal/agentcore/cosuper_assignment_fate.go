@@ -786,6 +786,27 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 			}
 			report.CandidateArtifactRef = candidate.ArtifactRef
 		}
+		// Persist the receipt-bound report into the staged proposal so a
+		// post-revoke resume (watchdog, sweep, restart reconcile) commits the
+		// same evidence without re-resolving executor state that no longer
+		// exists. The proposal digest is unchanged — receipts are derived
+		// evidence, not submitted claims.
+		if assignment.PendingProposal != nil && assignment.PendingProposal.PropositionDigest == propositionDigest {
+			proposalReport := report
+			proposalReport.ObservedSubjectDigest = assignment.PendingProposal.Report.ObservedSubjectDigest
+			assignment.PendingProposal.Report = proposalReport
+		}
+	}
+	// A revoked strand still owes the receipt binding: the live saga binds
+	// granted receipts while the capsule is frozen, but a resume after revoke
+	// finds the capability and frozen state gone. The raw execution receipts
+	// are durable artifacts — resolve them and carry the refs forward so the
+	// commit sees the same evidence the freeze certified.
+	if assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked && !reportExists && len(report.ExecutorReceiptRefs) != len(report.Commands) {
+		report, err = rt.bindLateAssignmentExecutionReceipts(assignment, report)
+		if err != nil {
+			return types.CoSuperAssignmentCommandResult{}, err
+		}
 	}
 
 	var result types.CoSuperAssignmentCommandResult
@@ -923,9 +944,13 @@ func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperA
 	}
 	seen := map[string]bool{}
 	for i, receipt := range receipts {
+		// SourceTreeDigest is the tree before this command ran — only the
+		// first command's equals the binding subject; later commands' source
+		// trees are prior commands' results. The freeze already certified the
+		// final subject; here we authenticate run/capsule/handle/command
+		// binding, not per-command source equality.
 		if receipt.ReceiptRef != refs[i] || receipt.AgentRunID != assignment.BoundRunID || receipt.CapsuleID != assignment.Binding.CapsuleID ||
 			"sha256:"+receipt.CapabilityHandleDigest != assignment.Binding.ExecutionHandleDigest ||
-			"sha256:"+strings.TrimPrefix(receipt.SourceTreeDigest, "sha256:") != assignment.Binding.SubjectDigest ||
 			objectgraph.SHA256([]byte(receipt.Command)) != report.Commands[i].CommandDigest || seen[receipt.ReceiptRef] {
 			return report, fmt.Errorf("late assignment raw execution evidence does not authenticate exact receipt/run/handle/capsule/source")
 		}
