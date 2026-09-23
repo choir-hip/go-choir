@@ -155,7 +155,7 @@ boundaries:
     - Run acceptance (no change to acceptance semantics in this mission).
 
 now:
-  status: contested — landed, consensus SEND BACK on acceptance proof
+  status: landed — consensus SEND BACK closed; deployed acceptance re-proven
   slice: M1 — owner input is a document revision; wrong-path ingress deleted
   source_ref: main@6d9b3e97
   deploy_identity: staging https://choir.news (proxy/vmctl OK)
@@ -311,6 +311,34 @@ receipts:
         omp-glm53-flash.out)
       - frontend/tests/texture-owner-revision-deployed.spec.js:77-80
       - internal/store/texture_owner_revision.go:9-53
+  - at: '2026-09-23'
+    kind: acceptance_closure
+    summary: >-
+      SEND BACK closed. The panel's required closure allowed "a tape/turn
+      receipt naming ownerRevisionID" as an alternative to
+      current_revision_id === ownerRevisionID. Investigation showed the
+      run-binding closure is unreachable by design: a run's
+      current_revision_id tracks the run's own committed head (always a
+      desk-authored revision), and the create-wake + /revise occurrence
+      coalesce into one pending turn served by the existing run. The
+      correct deployed proof is the event tape: a texture_turn_committed
+      event whose parent_revision_id is the owner revision — the desk
+      consumed the owner head. Spec rewritten to poll
+      /api/texture/documents/{id}/events for that receipt plus a
+      no-instruction-kind-events assertion (LOI absence at the deployed
+      surface). PASSED on https://choir.news twice (34.1s, 29.1s):
+      create 201, /revise 202 AuthorUser revision with
+      input_origin=user_prompt + owner_prompt, texture_turn_committed
+      parent=owner revision observed, zero instruction-kind events,
+      /tell and /correct 404. Committed 3b780ed2, pushed to origin/main.
+      Note: staging provider auth works on a fresh computer — the earlier
+      "run bound to R0 forever" observation was the coalesced run failing
+      its model call on the pre-genesis test computer, not a cutover bug.
+    evidence_refs:
+      - frontend/tests/texture-owner-revision-deployed.spec.js
+      - commit 3b780ed2
+      - https://choir.news/api/texture/documents/5810513b-aa7d-5f36-98a8-b49fae6f3186/events
+        (texture_turn_committed parent_revision_id=d8e064f4 observed live)
 ---
 
 ## What this mission is
