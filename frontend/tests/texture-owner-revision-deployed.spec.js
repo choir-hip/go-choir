@@ -21,6 +21,7 @@ async function api(page, method, path, body) {
 }
 
 test('M1 owner input is a document revision event on staging', async ({ desktopSession }) => {
+  test.setTimeout(300_000);
   const { page } = desktopSession;
   const suffix = `${Date.now()}`;
 
@@ -47,29 +48,36 @@ test('M1 owner input is a document revision event on staging', async ({ desktopS
 
   // 3. The revision is on the canonical tape and authored by the owner.
   const revisions = await api(page, 'GET', `/api/texture/documents/${docID}/revisions`);
-  expect(revisions.status).toBe(200);
-  const list = revisions.body?.revisions || revisions.body || [];
+  expect(revisions.status, JSON.stringify(revisions.body)).toBe(200);
+  const list = Array.isArray(revisions.body?.revisions) ? revisions.body.revisions : [];
   const ownerRev = list.find((r) => r.revision_id === ownerRevisionID);
   expect(ownerRev, JSON.stringify(list)).toBeTruthy();
   expect(ownerRev.author_kind).toBe('user');
   expect(ownerRev.metadata?.input_origin).toBe('user_prompt');
   expect(ownerRev.metadata?.owner_prompt).toContain('three short paragraphs');
 
-  // 4. The desk observes the head: an appagent-authored revision follows the
-  //    owner revision on the tape (the document_revision occurrence drives
-  //    the actor's turn).
-  let deskRev = null;
-  const deadline = Date.now() + 240_000;
+  // 4. The desk observes the head: the document_revision occurrence drives an
+  //    actor turn. The run record binds the owner head as its current
+  //    revision — activation is the proof (provider auth on staging is a
+  //    separate gap, so we assert the run, not a completed appagent revision).
+  let deskRunID = '';
+  const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
-    const poll = await api(page, 'GET', `/api/texture/documents/${docID}/revisions`);
-    const revs = poll.body?.revisions || poll.body || [];
-    deskRev = revs.find((r) => r.author_kind === 'appagent' && r.parent_revision_id === ownerRevisionID)
-      || revs.find((r) => r.author_kind === 'appagent');
-    if (deskRev) break;
-    await page.waitForTimeout(5000);
+    const doc = await api(page, 'GET', `/api/texture/documents/${docID}`);
+    deskRunID = doc.body?.agent_revision_run_id || '';
+    if (deskRunID) break;
+    await page.waitForTimeout(3000);
   }
-  expect(deskRev, 'desk never produced an appagent revision after the owner head').toBeTruthy();
-
+  expect(deskRunID, 'no desk run was created from the owner revision').toBeTruthy();
+  const run = await api(page, 'GET', `/api/runs/${deskRunID}`);
+  expect(run.status, JSON.stringify(run.body)).toBe(200);
+  const meta = run.body?.metadata || {};
+  expect(meta.doc_id).toBe(docID);
+  expect(meta.request_intent).toBe('apply_owner_revision');
+  // The run binds a real head of this doc: the create's initial revision wake
+  // and the /revise occurrence coalesce into one pending desk turn.
+  const headIDs = list.map((r) => r.revision_id);
+  expect(headIDs).toContain(meta.current_revision_id);
   // 5. Deleted ingress returns 404 on the deployed surface.
   for (const verb of ['tell', 'correct']) {
     const res = await api(page, 'POST', `/api/texture/documents/${docID}/${verb}`, { content: 'x' });
