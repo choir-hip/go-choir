@@ -403,10 +403,19 @@ documents:
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
   - path: docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md
     claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded, entrypoint: false}
+    superseded_by: [docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md]
+    witnesses: [docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md, docs/reports/choir-rlm-mission-three-review-2026-09-11.md, docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md, docs/reports/choir-opencode-provider-research-2026-09-10.md, docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md, docs/mission-residues.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md]
+    refresh_triggers: []
+  - path: docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md
+    claim_scope: current
     is_root: [authority]
     is_evidence: false
     annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: working, entrypoint: true}
-    witnesses: [docs/reports/choir-rlm-mission-three-review-2026-09-11.md, docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md, docs/reports/choir-opencode-provider-research-2026-09-10.md, docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md, docs/mission-residues.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md]
+    supersedes: [docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md]
+    witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/problems/root-cause-wrong-path-cluster-2026-09-22.md, docs/current-situation-2026-09-22.md, docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md, docs/standing-questions.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
 
   - path: docs/reports/choir-rlm-mission-three-review-2026-09-11.md

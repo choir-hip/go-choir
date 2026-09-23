@@ -708,23 +708,48 @@ nodes:
     title: RLM Engineering Carrier
     path: docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md
     ledger: ''
-    status: working
+    status: superseded
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
       - choir-rlm-versioned-rename-2026-09-09
     enables: []
     note: >-
-      Chartered 2026-09-11 as the sole working entrypoint. First slice is P0-define, a code-free
-      freeze artifact. Moves the engineering desk fully onto the in-cell carrier: one JSON
-      envelope, five overlay names deleted behind replay proofs, reducer-authored assignment fate,
-      acceptance off tool names, one model-independent prompt, and OpenCode Go/Zen provider setup
-      as phase 1.
+      Superseded 2026-09-22 by choir-texture-owner-input-cutover-2026-09-22
+      (M1). Its remaining scope — engineering desk on the in-cell carrier,
+      R7/R9 deletions, canonical run acceptance — becomes M2 in the ordered
+      mission list, dependent on M1's document channel. Chartered 2026-09-11;
+      P0 freeze artifact retained as evidence.
     sources:
       - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
       - docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md
       - docs/reports/choir-opencode-provider-research-2026-09-10.md
+      - docs/choir-doctrine.md
+      - AGENTS.md
+      - docs/standing-questions.md
+  - id: choir-texture-owner-input-cutover-2026-09-22
+    title: Texture Owner Input Cutover (M1)
+    path: docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: []
+    note: >-
+      M1 of the ordered mission list (consensus 2026-09-22). Owner input to a
+      lifecycle-bound Texture document becomes a canonical document revision
+      event; the tell/correct/roster/LifecycleOwnerInstruction side channel is
+      deleted in the same move. Red class: canonical input/event authority.
+      Supersedes the engineering-carrier definition as sole working entrypoint;
+      the carrier's remaining scope becomes M2.
+    sources:
+      - docs/world-wire-mission-stack-2026-09-22.md
+      - docs/problems/root-cause-wrong-path-cluster-2026-09-22.md
+      - docs/current-situation-2026-09-22.md
+      - docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
       - docs/choir-doctrine.md
       - AGENTS.md
       - docs/standing-questions.md

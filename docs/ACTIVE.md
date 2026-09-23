@@ -5,16 +5,24 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Working Definition — RLM Engineering Carrier
+## Working Definition — Texture Owner Input Cutover (M1)
+
+[`definitions/choir-texture-owner-input-cutover-2026-09-22.md`](definitions/choir-texture-owner-input-cutover-2026-09-22.md)
+is the sole working entrypoint, authored 2026-09-22 as M1 of the ordered
+mission list (consensus, `world-wire-mission-stack-2026-09-22.md`). Owner input
+to a lifecycle-bound Texture document becomes a canonical document revision
+event; the `tell`/`correct`/`roster`/`LifecycleOwnerInstruction` side channel
+is deleted in the same move. Red class: canonical input/event authority.
+Executable with
+`/goal docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md`.
+
+## Superseded Definition — RLM Engineering Carrier
 
 [`definitions/choir-rlm-engineering-carrier-2026-09-11.md`](definitions/choir-rlm-engineering-carrier-2026-09-11.md)
-is the sole working entrypoint, chartered 2026-09-11 by owner statement. It moves the engineering
-desk fully onto the in-cell carrier: `capsule_go_eval` becomes the desk's only JSON tool, the five
-overlay JSON tool names are deleted behind per-operation replay proofs, the reducer authors the
-assignment fate, run acceptance stops keying on tool names, the OpenCode Go and Zen providers are
-wired as phase 1, and one prompt serves the expected roster with no output repair. Current slice:
-P0-define, a code-free freeze artifact. Executable with
-`/goal docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md`.
+is **superseded** by the M1 owner-input cutover (2026-09-22). Its remaining
+scope — engineering desk on the in-cell carrier, R7/R9 deletions, canonical
+run acceptance — becomes M2 in the ordered mission list, dependent on M1's
+document channel. Its P0 freeze artifact is retained as evidence.
 
 ## Completed Definition — Private Programmable Go Actor Kernel
 
@@ -183,8 +191,8 @@ to reopen it.
 is superseded historical evidence. Its policy, email, and restore reasoning remain
 citable historical evidence; it is not an executable entrypoint. The tape-recovery Definition
 owns restore substrate receipts; it too is settled evidence, not an entrypoint. Active execution lives solely in
-[`definitions/choir-rlm-engineering-carrier-2026-09-11.md`](definitions/choir-rlm-engineering-carrier-2026-09-11.md)
-(the sole working entrypoint; the session-interpreter cutover it names is superseded).
+[`definitions/choir-texture-owner-input-cutover-2026-09-22.md`](definitions/choir-texture-owner-input-cutover-2026-09-22.md)
+(the sole working entrypoint; the engineering-carrier definition it supersedes is retained as evidence).
 
 The scope-disjoint
 [`choir-instruction-substrate-prune-2026-08-11.md`](definitions/choir-instruction-substrate-prune-2026-08-11.md)
@@ -217,7 +225,7 @@ plus the disposed Mission 0 direct-key ceremony at
 recovery bypass, SSH, or weaker authorization is admissible).
 They are historical evidence, not rollback or live schedule; effects remain OFF.
 The active executable slice and `next_action` live solely in
-[`definitions/choir-rlm-engineering-carrier-2026-09-11.md`](definitions/choir-rlm-engineering-carrier-2026-09-11.md).
+[`definitions/choir-texture-owner-input-cutover-2026-09-22.md`](definitions/choir-texture-owner-input-cutover-2026-09-22.md).
 The tape-recovery restore proof is paid (complete 2026-08-15).
 Completed Definitions are historical evidence, not executable entrypoints;
 receipts remain in `mission-graph.yaml` and Git history. Retained settled
@@ -259,9 +267,9 @@ entrypoints.
 
 RLM restore-zero completed 2026-09-09 and is historical evidence, not an
 entrypoint. RLM versioned rename completed 2026-09-11 (deployed commit `e3396329`) and is
-non-entrypoint evidence. The RLM Engineering Carrier
-(`definitions/choir-rlm-engineering-carrier-2026-09-11.md`) is chartered and holds the sole working
-entrypoint.
+non-entrypoint evidence. The Texture Owner Input Cutover (M1)
+(`definitions/choir-texture-owner-input-cutover-2026-09-22.md`) holds the sole
+working entrypoint; the engineering-carrier definition is superseded.
 ## Unowned External Work
 
 No Definition owns runtime dissolution, broader Wire work, external capsules,
