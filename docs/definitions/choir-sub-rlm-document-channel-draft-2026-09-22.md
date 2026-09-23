@@ -120,8 +120,8 @@ boundaries:
     - The five overlay tools and four legacy capsule ops are deleted only
       after the in-cell replacements are proven.
   excluded:
-    - Ontology cutover internals (M3): fenced atomic commit, dispatcher,
-      due-index, sweeps deletion.
+    - "Ontology cutover internals (M3): fenced atomic commit, dispatcher,
+      due-index, sweeps deletion."
     - Desk crossings beyond engineering (M4).
     - Records mechanism (M5+).
     - Updating system (M9).

@@ -18,10 +18,11 @@ start:
       recovery: reconcile at charter
   predecessor:
     mission: choir-sub-rlm-document-channel-draft-2026-09-22
-    disposition: recommended predecessor — the carrier proof (M2) freezes the
-      contract this kernel must carry. Not a hard dependency: the kernel can
-      be built against the ratified design directly, but landing it after M2
-      reduces the risk of building a substrate for an unverified target.
+    disposition: >-
+      recommended predecessor — the carrier proof (M2) freezes the contract
+      this kernel must carry. Not a hard dependency: the kernel can be built
+      against the ratified design directly, but landing it after M2 reduces
+      the risk of building a substrate for an unverified target.
     evidence_ref: docs/world-wire-mission-stack-2026-09-22.md (M3)
   observed_artifact:
     - claim: 'The wrong-path cluster is ~44 instances across five sub-classes:
