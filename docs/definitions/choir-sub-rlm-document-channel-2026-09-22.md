@@ -134,7 +134,7 @@ now:
   status: working
   slice: implementation landed locally — document-bound engineering desk,
     revision-opens-assignment cast, R7/R9 deletions; staging drive next
-  source_ref: main@e7d11e59 + working tree (uncommitted)
+  source_ref: main@98c6d96e (pushed; CI in flight)
   deploy_identity: staging https://choir.news build.commit=3b780ed2
   candidate:
     id: none
