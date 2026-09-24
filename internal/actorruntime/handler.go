@@ -88,12 +88,64 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleCoagentResult(ctx, u, memory)
 	case "channel_message":
 		return h.handleChannelMessage(ctx, u, memory)
+	case "activation_budget_deadline":
+		return h.handleActivationBudgetDeadline(ctx, u, memory)
+	case "assigned_engineering_fate_deadline":
+		return h.handleAssignedEngineeringFateDeadline(ctx, u, memory)
+	case "fresh_mint_management_resume_deadline":
+		return h.handleFreshMintManagementResumeDeadline(ctx, u, memory)
+	case "reactivated_management_resume_deadline":
+		return h.handleReactivatedManagementResumeDeadline(ctx, u, memory)
 	case "cancel":
 		return h.handleCancel(ctx, u, memory)
 	default:
 		log.Printf("actorruntime: handler: unknown update kind %q for agent %s", u.Kind, agentID)
 		return memory, nil // leave memory unchanged; update marked processed
 	}
+}
+
+func (h *actorHandler) handleActivationBudgetDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve activation budget deadline scope: %w", err)
+	}
+	if err := h.rt.HandleActivationBudgetDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("actorruntime: activation budget deadline: %w", err)
+	}
+	return memory, nil
+}
+
+func (h *actorHandler) handleAssignedEngineeringFateDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve assigned Engineering fate deadline scope: %w", err)
+	}
+	if err := h.rt.HandleAssignedEngineeringFateDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("actorruntime: assigned Engineering fate deadline: %w", err)
+	}
+	return memory, nil
+}
+
+func (h *actorHandler) handleFreshMintManagementResumeDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve fresh-mint Management deadline scope: %w", err)
+	}
+	if err := h.rt.HandleFreshMintManagementResumeDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("actorruntime: fresh-mint Management deadline: %w", err)
+	}
+	return memory, nil
+}
+
+func (h *actorHandler) handleReactivatedManagementResumeDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve reactivated Management deadline scope: %w", err)
+	}
+	if err := h.rt.HandleReactivatedManagementResumeDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("actorruntime: reactivated Management deadline: %w", err)
+	}
+	return memory, nil
 }
 
 // handleChannelMessage resumes a parked recipient against the durable channel

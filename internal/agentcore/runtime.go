@@ -118,6 +118,9 @@ type Runtime struct {
 	// it calls this function. If nil, activate() panics — there is no
 	// fallback path. The actor runtime is the only execution substrate.
 	dispatchActor func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error
+	// scheduleActor durably appends a deferred actor occurrence. It is bound
+	// only in kernel mode, where NotBefore is interpreted by the dispatcher.
+	scheduleActor func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
 
 	desktopState             *desktopstate.Handler
 	content                  *contentowner.Service
@@ -211,6 +214,12 @@ func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, ownerID, comput
 	rt.dispatchActor = fn
 }
 
+// SetScheduleActor sets the kernel-only hook for durable not-before events.
+// The adapter owns the actor tape and binds this alongside dispatchActor.
+func (rt *Runtime) SetScheduleActor(fn func(context.Context, string, string, string, string, string, string, string, time.Time) error) {
+	rt.scheduleActor = fn
+}
+
 // DispatchActorActive reports whether the actor dispatch hook is set.
 func (rt *Runtime) DispatchActorActive() bool {
 	return rt.dispatchActor != nil
@@ -266,6 +275,10 @@ func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunReco
 	// WaitGroup.Wait has already begun.
 	rt.wg.Add(1)
 	rt.runningMu.Unlock()
+	if deadline, ok := runCtx.Deadline(); ok {
+		rt.scheduleContinuation(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID,
+			activationBudgetDeadlineUpdateKind, rec.RunID, metadataStringValue(rec.Metadata, runMetadataTrajectoryID), "", deadline)
+	}
 	stopProgressDeadline := context.AfterFunc(runCtx, func() {
 		if !errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 			return

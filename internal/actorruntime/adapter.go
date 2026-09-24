@@ -227,6 +227,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	// sends an actor message and rt.wakeUpdatedCoagent(...) sends an
 	// actor message. No fallback path exists.
 	rt.SetCheckedDispatchActor(a.dispatch)
+	rt.SetScheduleActor(a.schedule)
 
 	return a
 }
@@ -366,6 +367,19 @@ func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, compute
 // dispatch is the function hook that the runtime core calls to send actor
 // messages. It is set via rt.SetCheckedDispatchActor(a.dispatch).
 func (a *Adapter) dispatch(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+	return a.dispatchAt(ctx, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID, time.Time{})
+}
+
+// schedule appends a durable deferred update. Runtime calls it only in kernel
+// mode, where actor.Runtime.Send hands delivery to the dispatcher due-index.
+func (a *Adapter) schedule(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error {
+	if notBefore.IsZero() {
+		return fmt.Errorf("actorruntime: schedule requires not_before")
+	}
+	return a.dispatchAt(ctx, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID, notBefore.UTC())
+}
+
+func (a *Adapter) dispatchAt(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error {
 	ownerID, computerID, toAgentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(toAgentID)
 	if ownerID == "" || computerID == "" || toAgentID == "" {
 		return fmt.Errorf("actorruntime: dispatch: owner_id, computer_id, and to_agent_id are required")
@@ -387,6 +401,7 @@ func (a *Adapter) dispatch(ctx context.Context, ownerID, computerID, toAgentID, 
 		Content:      content,
 		TrajectoryID: trajectoryID,
 		CreatedAt:    time.Now().UTC(),
+		NotBefore:    notBefore,
 	}
 	a.dispatchMu.Lock()
 	if !a.dispatchReady {

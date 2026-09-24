@@ -895,6 +895,14 @@ func (rt *Runtime) armAssignedEngineeringFateWatchdog(assignment types.Engineeri
 	}
 	assignmentID, attempt := assignment.AssignmentID, assignment.Binding.Attempt
 	ownerID, computerID := assignment.Binding.OwnerID, assignment.Binding.ComputerID
+	deadline := time.Now().UTC().Add(assignedEngineeringFateWatchdogDelay)
+	content, err := encodeAssignedEngineeringFateDeadline(assignmentID, attempt)
+	if err != nil {
+		log.Printf("runtime: encode assignment %s fate deadline: %v", assignmentID, err)
+	} else {
+		rt.scheduleContinuation(context.Background(), ownerID, computerID, assignment.Binding.ParentAgentID,
+			assignedEngineeringFateDeadlineUpdateKind, content, assignment.Binding.TrajectoryID, "", deadline)
+	}
 	time.AfterFunc(assignedEngineeringFateWatchdogDelay, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
