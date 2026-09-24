@@ -3506,7 +3506,8 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	// Transition to running.
 	rec.State = types.RunRunning
 	rec.UpdatedAt = now
-	persisted, err := rt.persistActivationState(ctx, rec)
+	persisted, err := rt.persistActivationStateAndEmit(ctx, rec, types.EventRunStarted, events.CauseTaskLifecycle,
+		json.RawMessage(`{}`))
 	if err != nil {
 		log.Printf("runtime: update run %s to running: %v", rec.RunID, err)
 		rt.handleExecutionError(ctx, rec, fmt.Errorf("update run state: %w", err))
@@ -3515,9 +3516,6 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	if !persisted {
 		return
 	}
-
-	rt.emitEvent(ctx, rec, types.EventRunStarted, events.CauseTaskLifecycle,
-		json.RawMessage(`{}`))
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
 		cause := events.CauseProviderProgress
@@ -3807,7 +3805,11 @@ func (rt *Runtime) passivateRuntimeInjectionAppendFailure(rec *types.RunRecord, 
 	rec.Metadata["passivated_reason"] = runtimeInjectionAppendFailurePassivationReason
 	rec.Metadata["actor_sleep_state"] = "retryable_runtime_failure"
 	rec.Metadata["runtime_injection_append_error"] = appendErr.Error()
-	persisted, err := rt.persistActivationState(context.Background(), rec)
+	payload, _ := json.Marshal(map[string]string{
+		"reason": runtimeInjectionAppendFailurePassivationReason,
+		"error":  appendErr.Error(),
+	})
+	persisted, err := rt.persistActivationStateAndEmit(context.Background(), rec, types.EventRunPassivated, events.CauseSupervisorRecovery, payload)
 	if err != nil {
 		// Never fall through to terminal failure. If durable passivation itself is
 		// unavailable, boot recovery still sees the stored pending/running exact
@@ -3818,11 +3820,6 @@ func (rt *Runtime) passivateRuntimeInjectionAppendFailure(rec *types.RunRecord, 
 	if !persisted {
 		return
 	}
-	payload, _ := json.Marshal(map[string]string{
-		"reason": runtimeInjectionAppendFailurePassivationReason,
-		"error":  appendErr.Error(),
-	})
-	rt.emitEvent(context.Background(), rec, types.EventRunPassivated, events.CauseSupervisorRecovery, payload)
 	log.Printf("runtime: passivated exact lifecycle run %s after runtime injection append failure", rec.RunID)
 }
 
@@ -3856,14 +3853,6 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 	rec.Metadata["actor_sleep_state"] = "idle"
 	rec.Metadata["actor_sleep_at"] = now.Format(time.RFC3339Nano)
 
-	persisted, err := rt.persistActivationState(context.Background(), rec)
-	if err != nil {
-		log.Printf("runtime: passivate idle run %s: %v", rec.RunID, err)
-		return
-	}
-	if !persisted {
-		return
-	}
 	payload := map[string]any{
 		"reason":        reason,
 		"result_length": len(text),
@@ -3882,7 +3871,16 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 		}
 	}
 	payloadJSON, _ := json.Marshal(payload)
-	rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseTaskLifecycle, payloadJSON)
+	// Fold the passivated event into the same batch as the state write for
+	// lifecycle-bound runs; the bus publish happens post-commit inside.
+	persisted, err := rt.persistActivationStateAndEmit(ctx, rec, types.EventRunPassivated, events.CauseTaskLifecycle, payloadJSON)
+	if err != nil {
+		log.Printf("runtime: passivate idle run %s: %v", rec.RunID, err)
+		return
+	}
+	if !persisted {
+		return
+	}
 	if shouldLogWireLifecycle(rec) {
 		log.Printf("runtime: passivated idle %s reason=%s", wireLifecycleSummary(rec), reason)
 	}
@@ -4804,15 +4802,14 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	// Use background context for persistence so that cancelled-run state
 	// transitions are persisted even when the run context is cancelled.
 	persistCtx := context.Background()
-	persisted, updateErr := rt.persistActivationState(persistCtx, rec)
+	errPayload, _ := json.Marshal(map[string]string{"error": err.Error()})
+	persisted, updateErr := rt.persistActivationStateAndEmit(persistCtx, rec, kind, cause, errPayload)
 	if updateErr != nil {
 		log.Printf("runtime: update run %s to %s: %v", rec.RunID, state, updateErr)
 	}
 	if !persisted {
 		return
 	}
-	errPayload, _ := json.Marshal(map[string]string{"error": err.Error()})
-	rt.emitEvent(persistCtx, rec, kind, cause, errPayload)
 	if bindErr := rt.bindTerminalRunOutcome(persistCtx, rec, true); bindErr != nil {
 		log.Printf("runtime: bind terminal outcome for run %s: %v", rec.RunID, bindErr)
 	}
