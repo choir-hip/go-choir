@@ -271,9 +271,23 @@ same-state reactivation is idempotent (`709b9792`). **Write-fence cutover
 DONE:** `MigrateActorWakeOutbox` mints deterministic outbox wakes for
 pre-fold pending rows inside `SetKernelMode` (`19b459a9`), and
 `WithKernelMode` is live in `autoputer/run.go` (`709b9792`). Still
-remaining: the dead-sweep deletion + test cutover (the sweeps' tests exercise
-the old recovery path and must be re-pointed at the projector); the cluster
+remaining: the dead-sweep deletion + test cutover; the cluster
 recount to zero; staging verification; a second consensus review.
+
+**Dead-sweep deletion is NOT mechanical (2026-09-24 finding):** the boot
+sweeps (`rewarmInterruptedLifecycleActivations`,
+`rewarmInterruptedPersistentManagementActors`,
+`reactivateRetryableLifecycleInjectionRuns`, `sweepOpenWorkItemActors`,
+`sweepPassivatedSpawnedCoagentWork`, `sweepPendingUpdateActors`) are uncalled
+in prod, but they are not pure re-dispatch — they emit *distinct recovery
+occurrences* (`enqueueLifecycleResearchAdmissionRecoveryOccurrence`,
+`ResumeInterruptedPersistentManagementControlRun`) for runs whose one-shot
+`initial_dispatch` actor row is already processed. The projector's event
+replay is a no-op on an already-processed row, so it cannot recover those
+runs. Recount-to-zero therefore requires the projector (or a boot-time
+recovery-occurrence minter inside `SetKernelMode`'s write fence) to cover
+the already-processed-dispatch case before the sweeps can be deleted —
+verified on staging, not assumed.
 
 **Cutover landed (2026-09-24):** `WithKernelMode` is unconditional
 (`08bcf65a`) - `actor.NewKernelRuntime` is the only delivery authority, the
