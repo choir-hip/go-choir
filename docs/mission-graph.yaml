@@ -825,13 +825,13 @@ nodes:
       docs/desk-rlm-rectification-plan-2026-09-23.md.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
-  - id: choir-strand2-freeze-order-patch-draft-2026-09-23
-    title: Strand-2 Freeze-Order Patch (R0, draft)
-    path: docs/definitions/choir-strand2-freeze-order-patch-draft-2026-09-23.md
+  - id: choir-strand2-freeze-order-patch-2026-09-23
+    title: Strand-2 Freeze-Order Patch (R0)
+    path: docs/definitions/choir-strand2-freeze-order-patch-2026-09-23.md
     ledger: ''
-    status: blocked
+    status: working
     kind: spine
-    entrypoint: false
+    entrypoint: true
     execution_mode: mission_orchestrator
     depends_on: []
     enables: []

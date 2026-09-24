@@ -1,14 +1,13 @@
 ---
 definition_version: 3
-definition_id: choir-strand2-freeze-order-patch-draft-2026-09-23
+definition_id: choir-strand2-freeze-order-patch-2026-09-23
 execution_mode: mission_orchestrator
-draft: true
 
 start:
-  captured_at: '2026-09-23T21:00:00Z'
+  captured_at: '2026-09-23T22:30:00Z'
   source:
-    canonical_ref: main@b0adf6f7
-    deploy_identity: staging https://choir.news build.commit=4de7fdf9
+    canonical_ref: main@6f064940
+    deploy_identity: staging https://choir.news build.commit=c8811ff8
   worktrees:
     - path: /Users/wiz/go-choir
       status: unknown
@@ -121,10 +120,10 @@ boundaries:
     - prompt overlay assembly (internal/runtimeprompts)
 
 now:
-  status: blocked_incomplete
+  status: working
   slice: freeze-order patch
-  source_ref: main@b0adf6f7
-  deploy_identity: staging https://choir.news build.commit=4de7fdf9
+  source_ref: main@6f064940
+  deploy_identity: staging https://choir.news build.commit=c8811ff8
   candidate:
     id: none
     state: none
