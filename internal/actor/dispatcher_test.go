@@ -164,3 +164,51 @@ func TestDispatcherDeliversViaProjection(t *testing.T) {
 		t.Fatalf("event not incorporated: exists=%v processed=%v err=%v", exists, processed, err)
 	}
 }
+
+// Kernel mode: Runtime.Send appends and signals the dispatcher — the
+// projection is the delivery authority, no Go channel, no Sweep. A restart
+// (new runtime over the same log) resumes the pending delivery from the
+// tape.
+func TestKernelRuntimeDeliversAndResumes(t *testing.T) {
+	l := openKernelLog(t)
+	ctx := context.Background()
+
+	var handled int32
+	h := HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		atomic.AddInt32(&handled, 1)
+		return memory, nil
+	})
+
+	rt := NewKernelRuntime(l, l, h, Options{}, DispatcherOptions{PollInterval: 20 * time.Millisecond})
+	rt.StartKernel(ctx)
+
+	if err := rt.Send(ctx, mkUpdate("k1", "agent-k")); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for atomic.LoadInt32(&handled) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if atomic.LoadInt32(&handled) == 0 {
+		t.Fatal("kernel runtime did not deliver via projection")
+	}
+	rt.Stop()
+
+	// Restart-resume: append a second event while stopped, then a fresh
+	// kernel runtime over the same log must deliver it from the tape — no
+	// Sweep, no channel.
+	if _, err := l.Append(ctx, mkUpdate("k2", "agent-k")); err != nil {
+		t.Fatalf("append k2: %v", err)
+	}
+	rt2 := NewKernelRuntime(l, l, h, Options{}, DispatcherOptions{PollInterval: 20 * time.Millisecond})
+	rt2.StartKernel(ctx)
+	defer rt2.Stop()
+
+	deadline = time.Now().Add(3 * time.Second)
+	for atomic.LoadInt32(&handled) < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if atomic.LoadInt32(&handled) < 2 {
+		t.Fatalf("restart did not resume pending delivery: handled=%d", handled)
+	}
+}

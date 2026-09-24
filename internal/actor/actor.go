@@ -139,6 +139,13 @@ type Runtime struct {
 	handler Handler
 	opts    Options
 
+	// kernel, when non-nil, makes the dispatcher the sole delivery
+	// authority: Send appends to the log and signals the dispatcher's
+	// pending projection instead of the Go-channel mailbox, and Sweep is a
+	// no-op (the projection is the recovery rule). The channel/activation
+	// path is bypassed — there is exactly one delivery authority.
+	kernel *Dispatcher
+
 	mu       sync.Mutex
 	resident map[string]*residentActor
 	closed   bool
@@ -203,6 +210,30 @@ func NewRuntime(log Log, handler Handler, opts Options) *Runtime {
 	}
 }
 
+// NewKernelRuntime constructs a runtime whose delivery authority is the
+// dispatcher's tape-derived pending projection, not the Go-channel mailbox.
+// klog must be the same durable log as log (the kernel needs the projection
+// and fenced-commit surface). The dispatcher runs until Stop/Drain.
+//
+// In kernel mode there is exactly one delivery authority: Send appends and
+// signals the projection; the channel/activation path and Sweep are
+// bypassed. This is the ontology-kernel cutover point.
+func NewKernelRuntime(log Log, klog KernelLog, handler Handler, opts Options, dopts DispatcherOptions) *Runtime {
+	rt := NewRuntime(log, handler, opts)
+	rt.kernel = NewDispatcher(klog, handler, dopts)
+	return rt
+}
+
+// StartKernel launches the dispatcher loop. It is the kernel-mode
+// counterpart to Sweep: the pending projection is the recovery rule, so no
+// separate boot scan is needed. Call once after NewKernelRuntime.
+func (rt *Runtime) StartKernel(ctx context.Context) {
+	if rt.kernel == nil {
+		return
+	}
+	go rt.kernel.Run(ctx)
+}
+
 // Send durably appends the update, then delivers it: into the recipient's
 // Go-channel mailbox if warm (steering), by activating it if cold. A resend
 // of an already-logged UpdateID is a no-op. Ledger effects keyed to specific
@@ -233,6 +264,13 @@ func (rt *Runtime) Send(ctx context.Context, u Update) error {
 	appended, err := rt.log.Append(ctx, u)
 	if err != nil {
 		return fmt.Errorf("actor send: append: %w", err)
+	}
+	if rt.kernel != nil {
+		// Kernel mode: the dispatcher's pending projection is the delivery
+		// authority. The append IS the delivery — signal the projection and
+		// return. No channel, no activation, no residency check.
+		rt.kernel.Notify()
+		return nil
 	}
 	if !appended {
 		// A resend is a no-op only when the durable row is already processed.
@@ -327,8 +365,12 @@ func (rt *Runtime) Send(ctx context.Context, u Update) error {
 }
 
 // Sweep activates every agent with unprocessed backlog. It is the boot
-// recovery rule and the post-eviction re-wake rule in one.
+// recovery rule and the post-eviction re-wake rule in one. In kernel mode
+// it is a no-op: the dispatcher's pending projection is the recovery rule.
 func (rt *Runtime) Sweep(ctx context.Context) error {
+	if rt.kernel != nil {
+		return nil
+	}
 	agents, err := rt.log.AgentsWithBacklog(ctx)
 	if err != nil {
 		return fmt.Errorf("actor sweep: %w", err)
@@ -393,6 +435,9 @@ func (rt *Runtime) Resident(agentID string) bool {
 // Stop evicts all actors and waits for their goroutines to exit. Durable
 // state is untouched; a new runtime over the same log recovers via Sweep.
 func (rt *Runtime) Stop() {
+	if rt.kernel != nil {
+		rt.kernel.Stop()
+	}
 	rt.mu.Lock()
 	rt.closed = true
 	for _, r := range rt.resident {
@@ -416,6 +461,9 @@ func (rt *Runtime) Stop() {
 func (rt *Runtime) Drain(timeout time.Duration) {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
+	}
+	if rt.kernel != nil {
+		rt.kernel.Stop()
 	}
 	rt.mu.Lock()
 	rt.closed = true
