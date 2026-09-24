@@ -5,15 +5,16 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Working Definition — Strand-2 Freeze-Order Patch (R0)
+## Archived Receipt — Strand-2 Freeze-Order Patch (R0)
 
 [`definitions/choir-strand2-freeze-order-patch-2026-09-23.md`](definitions/choir-strand2-freeze-order-patch-2026-09-23.md)
-is the sole working entrypoint, promoted 2026-09-23. The adjudicated
-strand-2 fix: freeze validates selfdev authority before any executor
-effect; the prompt's Freeze mandate gates behind selfdev-operation
-presence; Quiesce/WithoutCancel/watchdog coverage closes the wedge class.
-Independent of the desk rebuild. Run with
-`/goal docs/definitions/choir-strand2-freeze-order-patch-2026-09-23.md`.
+**landed 2026-09-24** (deployed commit `64468db2`, CI green). The
+freeze-before-validate wedge class is closed: a refused `choir.Freeze` on a
+document trajectory leaves the executor Active (a `capsule_go_eval` probe
+executes after the refusal) and `choir.Complete` lands the fate saga to
+`revoked`. A separate capsule-teardown defect (cgroup not empty on
+`ForceDestroy`) surfaced during acceptance and is fixed in the same deploy.
+This is an archived receipt, not a working entrypoint.
 
 The remaining desk-RLM rectification sequence (R1–R5 drafts + the K
 ontology kernel) is governed by the
@@ -58,7 +59,7 @@ implementation authority; each promotes only after its predecessor's
 terminal receipt. The 2026-09-22 M4/M5 drafts are superseded by this
 sequence; the M3 ontology-kernel draft stands as mission K.
 
-- **R0** promoted to the working entrypoint above — [`choir-strand2-freeze-order-patch-2026-09-23.md`](definitions/choir-strand2-freeze-order-patch-2026-09-23.md).
+- **R0** landed 2026-09-24 (archived receipt above) — [`choir-strand2-freeze-order-patch-2026-09-23.md`](definitions/choir-strand2-freeze-order-patch-2026-09-23.md).
 - **R1** [`choir-desk-vocabulary-docs-cutover-draft-2026-09-23.md`](definitions/choir-desk-vocabulary-docs-cutover-draft-2026-09-23.md) — live-vocabulary stratum: Go identifiers, prompts, docs, AGENTS.md, mission-stack rewrite.
 - **K** [`choir-ontology-kernel-draft-2026-09-22.md`](definitions/choir-ontology-kernel-draft-2026-09-22.md) — derivable-continuation kernel (unchanged M3 draft); gates R3.
 - **R2** [`choir-commitment-ledger-desk-carrier-draft-2026-09-23.md`](definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md) — commitment ledger (OG object) + yaegi carrier to all desks + semantic-act verbs + delegated-cast admission + update_coagent migration.
