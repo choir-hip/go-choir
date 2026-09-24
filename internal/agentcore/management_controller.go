@@ -652,18 +652,10 @@ func (rt *Runtime) armFreshMintManagementResumeWatchdog(rec *types.RunRecord) {
 		}
 	}
 	deadline := time.Now().UTC().Add(delay)
+	// The durable not_before wake is the continuation authority under kernel
+	// mode; the dispatcher fires HandleFreshMintManagementResumeDeadline.
 	rt.scheduleContinuation(context.Background(), rec.OwnerID, rec.ComputerID, rec.AgentID,
 		freshMintManagementDeadlineUpdateKind, rec.RunID, lifecycleControlTrajectoryForRun(rec), "", deadline)
-	time.AfterFunc(delay, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		redriven, err := rt.redriveStrandedFreshMintManagement(ctx, rec.OwnerID, rec.RunID)
-		if err != nil {
-			log.Printf("runtime: persistent-Management fresh-mint watchdog run %s: %v", rec.RunID, err)
-		} else if redriven {
-			log.Printf("runtime: persistent-Management fresh-mint watchdog re-drove stranded run=%s owner=%s", rec.RunID, rec.OwnerID)
-		}
-	})
 }
 
 // redriveStrandedFreshMintSuper re-drives one stranded fresh mint: re-read
@@ -714,11 +706,6 @@ func (rt *Runtime) armReactivatedManagementResumeWatchdog(ownerID, runID string,
 	deadline := time.Now().UTC().Add(delay)
 	rt.scheduleContinuation(context.Background(), ownerID, rt.TextureComputerID(), persistentManagementAgentID(ownerID),
 		reactivatedManagementDeadlineUpdateKind, runID, "", "", deadline)
-	time.AfterFunc(delay, func() {
-		if _, err := rt.failExpiredReactivatedManagementResume(context.Background(), ownerID, runID, time.Now().UTC()); err != nil {
-			log.Printf("runtime: persistent-Management resume watchdog run %s: %v", runID, err)
-		}
-	})
 }
 
 // rewarmReactivatedManagementResumeWatchdogs bounds reactivations that survived a
