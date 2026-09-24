@@ -106,6 +106,20 @@ scans that rewarm passivated runs / reactivate actors are deleted; the wakes
 they would have minted are already on the delivery tape (minted by the fold
 when the lifecycle event landed). `StartKernel` replaces `Sweep`.
 
+**The fold is an outbox, not a scan (panel- and scout-confirmed
+2026-09-24).** Canonical lifecycle packets/events commit in embedded-Dolt
+`PutBatchConditional` batches; `actor_updates` lives in a separate SQLite
+file (`<store>-actor.db`). No cross-DB transaction exists, so "mint the wake
+in the event-append transaction" is physically impossible. The correct fold:
+each canonical transition that commits a `choir.worker_update` packet with a
+`TargetAgentID` also commits a `choir.actor_wake_outbox` object in the SAME
+`PutBatchConditional` (zero append→outbox crash window). The projector drains
+unprojected outbox objects (metadata-indexed query, not a full scan), mints
+the `actor_updates` row idempotently (deterministic `update_id`), then marks
+the outbox object projected. At-least-once via `ON CONFLICT DO NOTHING`; the
+projector is pure — it never calls `bindLifecycleControlsToRun` (resident
+binding stays in the activation handler's `injectUserTurns` re-entry).
+
 ### (e) Non-event mutations — direct `UpdateRun`/`UpdateWorkItem`/`UpdateTrajectory`/`PutBatchConditional`
 
 Replacement: an event-backed reducer command (`QueueLifecycle*` or a new
