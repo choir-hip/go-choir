@@ -1,0 +1,260 @@
+---
+definition_version: 3
+definition_id: choir-commitment-ledger-desk-carrier-draft-2026-09-23
+execution_mode: mission_orchestrator
+draft: true
+
+start:
+  captured_at: '2026-09-23T21:00:00Z'
+  source:
+    canonical_ref: main@b0adf6f7
+    deploy_identity: staging https://choir.news build.commit=4de7fdf9
+  worktrees:
+    - path: /Users/wiz/go-choir
+      status: unknown
+      class: unknown
+      owner: unknown
+      touch: read_only
+      recovery: reconcile at charter
+  predecessor:
+    mission: choir-ontology-kernel-draft-2026-09-22
+    disposition: >-
+      partial dependency — the commitment ledger schema and the yaegi
+      carrier generalization do not need the kernel; desk wakes do. R2 may
+      start in parallel with K but must not claim live-desk acceptance
+      before K lands.
+    evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md
+  observed_artifact:
+    - claim: >-
+        The yaegi carrier serves only engineering (capsule_go_eval sole
+        tool); the choir package surface is fixed, not per-desk; the
+        read-only research scope cannot message (choir.go:40-60,117-145).
+      claim_scope: current
+      evidence_ref: internal/yaegikernel/choir.go
+    - claim: >-
+        update_coagent's packet machinery is load-bearing across ~60 files:
+        texture evidence ingestion, revision metadata (worker_updates_*),
+        actor park/resume, Super delivery, terminal child-outcome fallback,
+        replay goldens. The tool registration is retired for engineering;
+        the packet contract is not.
+      claim_scope: current
+      evidence_ref: internal/agentcore/tools_worker_update.go
+    - claim: >-
+        Delegated cast has no admission authority: the document-cast API
+        requires an AuthorUser revision; assignment identity and parent
+        control derive from it (cosuper_assignment_runtime.go:134-183).
+        choir.Spawn is a staged spawn_request envelope, not admission;
+        choir.Assign is a synchronous broker path — a third delegation
+        shape.
+      claim_scope: current
+      evidence_ref: internal/agentcore/cosuper_assignment_runtime.go
+
+finish:
+  deliver: >-
+    One agent substrate: every desk runs yaegi Go cells in a subprocess
+    with a desk-specific choir module set; inter-desk communication is a
+    semantic-act verb surface where claims are commitments on an OG ledger
+    that resolve and score.
+  artifact: >-
+    (a) The commitment record type: an OG object with provenance edges
+    (never a third store), carrying the memo's full schema — frozen
+    prediction, observation, scorer identity, discrepancy class,
+    specificity; scalar scores are derived views. (b) The yaegi carrier
+    generalized: per-desk module sets, desk cells in a killable subprocess
+    with restricted stdlib exports (not in-process), research desk gets
+    message authority (read-only world access ≠ read-only messaging).
+    (c) The semantic-act verbs: choir.Cast (delegation — new admission
+    authority for desk-authored casts), choir.Report (typed claim +
+    evidence assertion, names its resolver), choir.Ask, choir.Precommit,
+    choir.Resolve, choir.Cancel/Withdraw, choir.Escalate, choir.Note (raw,
+    unscored). choir.Outcome folds into Report; choir.Assign deleted or
+    folded into Cast; choir.Message demoted to Note. Complete/Freeze/Verify
+    stay engineering effect verbs. (d) update_coagent migrated for the four
+    desks — the packet schema survives as Report's body; texture's
+    worker_updates_* metadata path migrated; processor/reconciler keep the
+    tool until their phase (explicit boundary). (e) The execution_request
+    packet kind gets a verb or an explicit death (D13).
+  acceptance:
+    - action: >-
+        A management desk cell stages choir.Cast(engineering, objective);
+        the reducer opens an engineering assignment under the new delegated
+        admission authority (not an owner revision); the assignment binds
+        and the cast records a commitment on the OG ledger.
+      proves: delegated cast works end-to-end on canonical evidence
+      evidence_class: local test + deployed proof
+    - action: >-
+        A research desk cell stages choir.Report with evidence refs; the
+        report lands as a typed act that asserts OG evidence nodes and
+        resolves on the named resolver's acceptance.
+      proves: the semantic-act surface carries evidence, not just transport
+      evidence_class: local test
+    - action: >-
+        A desk cell staging choir.Precommit records a frozen prediction
+        with resolver and deadline; resolution writes the outcome and
+        accrues to the desk's score; the score never enters the acting
+        agent's context.
+      proves: the commitment ledger is live and the epistemic boundary holds
+      evidence_class: local test
+    - action: >-
+        The four desks' registries contain zero tool-loop tools; every
+        agent-to-agent act is a staged choir verb; update_coagent is absent
+        from management/engineering/research/texture registries and present
+        only in processor/reconciler.
+      proves: one carrier, one comm substrate for the four desks
+      evidence_class: local test
+  rollback: git revert + redeploy; the ledger is additive (new OG kinds),
+    the carrier is a new path alongside the old until cutover.
+  landing:
+    required: true
+    environment: staging
+    required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
+
+value:
+  better_means: >-
+    Minimize the number of agent-communication substrates (currently two
+    non-uniform channels + a third sync path) to one semantic-act surface,
+    while preserving every consumer the packet machinery feeds.
+  goodharting_would_be: >-
+    A verb surface that wraps update_coagent packets without the commitment
+    semantics — transport renamed, not semantics built. Or a ledger that
+    records acts but never resolves them (a write-only scoreboard).
+
+homotopy:
+  realism_axis: >-
+    Substrate coverage: from engineering-only yaegi cells (current) through
+    four desks on cells with the verb surface (this mission) to all actors
+    on cells (world-wire phase adds processor/reconciler or deletes them).
+    The low rung is the same carrier with fewer desks — same interfaces,
+    same semantics.
+
+boundaries:
+  mutation_class: red
+  authority_sources:
+    - docs/desk-rlm-rectification-plan-2026-09-23.md
+    - docs/Precommitment Records — Engineering Memo.md
+    - docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
+    - AGENTS.md
+  must_preserve:
+    - the capsule boundary for engineering mutation
+    - the assignment fate saga as host machinery
+    - texture's evidence pipeline continuity during the update_coagent
+      migration (worker_updates_* metadata must not break mid-flight)
+    - the epistemic boundary: scores never enter the acting agent's context
+    - processor/reconciler on the tool loop until their phase
+  excluded:
+    - live desk actors waking on revisions (R3 — needs K's derivable wakes)
+    - texture writing doc revisions from the ledger (R3)
+    - score surfacing and context packs (R4)
+    - durable vocabulary rename (R5)
+    - the strand-2 patch (R0 — lands first, independently)
+  protected_surfaces:
+    - canonical event appends and the reducer commit path
+    - the assignment admission authority (new delegated-cast contract)
+    - the capsule executor boundary
+    - texture canonical writes (AuthorAppAgent authority unchanged)
+    - the object graph (new kinds; no third store)
+
+now:
+  status: blocked_incomplete
+  slice: commitment ledger + carrier + verbs
+  source_ref: main@b0adf6f7
+  deploy_identity: staging https://choir.news build.commit=4de7fdf9
+  candidate:
+    id: none
+    state: none
+    ref: none
+    base: none
+    digest: none
+    scope: []
+  conjecture:
+    id: r2-semantic-act-substrate
+    claim: >-
+      One semantic-act verb surface over a commitment ledger can replace
+      update_coagent + raw choir.Message for the four desks without losing
+      any consumer the packet machinery feeds, and the delegated-cast
+      admission authority can open engineering assignments without an
+      owner-authored revision.
+    test: >-
+      The acceptance probes: delegated cast opens an assignment; Report
+      asserts evidence; Precommit resolves and scores; the four desks have
+      zero tool-loop tools.
+    edge: missing_oracle — the update_coagent consumer census may be
+      incomplete; a consumer discovered mid-migration extends the scope.
+    delta_o: >-
+      A full consumer inventory before any deletion: every file referencing
+      CoagentSourcePacket, worker_updates, or the packet kinds, classified
+      as migrate/keep/delete.
+    scope_if_supported: >-
+      The four desks run one substrate; processor/reconciler remain the
+      only tool-loop survivors with an explicit deletion boundary.
+    status: active
+    evidence_refs:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - internal/agentcore/tools_worker_update.go
+  decision:
+    what: >-
+      Commitment record = OG object with provenance edges (never a third
+      store — Phase 2a rule, D12 settled). Desk cells in subprocess with
+      restricted stdlib (D2 corrected). Delegated cast = new admission
+      authority with its own identity scheme (not the v3 seed). Report
+      names its resolver; resolver never the claimant for engineering
+      claims (D7). Full memo schema for records, scalar views derived (D8).
+    kind: architecture
+    status: proposal
+    evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md
+    owner_ratification_ref: pending — plan under owner review
+  belief:
+    believed_state: >-
+      The carrier generalization is mechanical; the delegated-cast
+      admission authority and the update_coagent consumer migration are
+      the hard parts.
+    main_uncertainty: >-
+      The full update_coagent consumer inventory — texture's evidence
+      pipeline depth may exceed the ~60-file estimate.
+    next_observation: >-
+      The consumer census result; the delegated-cast admission contract's
+      first test.
+  blocker_or_risk: >-
+    K (ontology kernel) gates the live-desk half; the ledger + carrier +
+    verbs half may proceed in parallel.
+  next_action: promote after plan ratification; begin with the consumer
+    census and the commitment record schema
+
+receipts: []
+---
+
+## The verb surface (adjudicated)
+
+```go
+// Operational acts — tracked, not scored.
+choir.Cast(desk, objective, spec)   -> Handle   // delegated admission
+choir.Ask(to, question)             -> Handle   // query; resolves on answer
+choir.Note(to, body)                -> Receipt  // raw transport, unscored
+choir.Cancel(handle) / Withdraw     -> Receipt  // retract a commitment
+choir.Escalate(to, issue)           -> Receipt  // to management or owner
+
+// Epistemic acts — claims that resolve and score.
+choir.Precommit(statement, resolve) -> Handle   // frozen prediction
+choir.Report(to, claim, evidence)   -> Receipt  // evidence assertion
+choir.Resolve(handle, outcome)      -> Receipt  // the resolver's act
+choir.Reply(to, answer)             -> Receipt  // Ask's counterpart
+
+// Engineering effect verbs — unchanged.
+choir.Complete(...)  choir.Freeze(...)  choir.Verify(...)  choir.InspectBundle()
+```
+
+## Hard requirements carried from the consensus review
+
+- The commitment record is an OG object with provenance edges — never a
+  third store.
+- The reducer commit must become atomic for staged acts (currently
+  sequential, `rlm_reduce.go:405-475`) or carry explicit partial-commit
+  recovery — a half-committed cast is the strand-2 shape.
+- The delegated-cast identity scheme must not reuse
+  `choir:co-super-assignment:v3` without a version bump + replay story.
+- Management's cast surface implements the one-live-assignment admission
+  ledger (doctrine: one live engineering assignment per computer).
+- Research desk: read-only world access is separate from message
+  authority — the current read-only scope can't message at all.
+- The `execution_request` packet kind (privileged control) needs a verb
+  or an explicit death (D13).

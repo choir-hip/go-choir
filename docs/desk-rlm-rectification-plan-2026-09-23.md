@@ -1,7 +1,8 @@
 # Desk-RLM Rectification Plan
 
 **Date:** 2026-09-23 (v3 — adjudicated against a 9-agent consensus review,
-`.agentic-consensus/agentic-consensus-20260923-201519`)
+`.agentic-consensus/agentic-consensus-20260923-201519`; D1 and D4 ratified
+by owner same-day)
 **Status:** proposed — under owner review, **not ratified**. Nothing here is
 executable authority until the owner signs off; it then rewrites the mission
 stack (`docs/world-wire-mission-stack-2026-09-22.md`) and amends
@@ -309,17 +310,19 @@ it's independent but red.
 
 ## 7. Open decisions (owner) — post-consensus
 
-- **D1 — Management liveness:** one per computer. Consensus agrees
-  (doctrine: one Super per computer). Note: current persistent ID is
-  `management:{ownerID}` — resolve owner-vs-computer scoping.
+- **D1 — Management liveness: RATIFIED 2026-09-23.** One persistent
+  `management` desk per computer (doctrine: one Super per computer).
+  Residual: current persistent ID is `management:{ownerID}` — the
+  owner-vs-computer scoping migration lands in R1/R5.
 - **D2 — Capsule binding:** **corrected** — desk cells run in a killable
   subprocess with restricted stdlib (not in-process); engineering mutation
   stays capsule-bound; research needs network/memory caps.
 - **D3 — Texture desk scope:** per-doc. Consensus agrees; sole-writer
   arbitration is per canonical document (CAS on doc head).
-- **D4 — processor/reconciler:** keep on tool-loop until world wire;
-  `update_coagent` survives until they migrate — deletion boundary must be
-  explicit in R2.
+- **D4 — processor/reconciler: RATIFIED 2026-09-23.** Deferred — they stay
+  on the tool-loop until world wire (likely deleted there; core system
+  first). `update_coagent` survives until they migrate — the deletion
+  boundary must be explicit in R2.
 - **D5/D6 — conductor, email:** deferred.
 - **D7 — Report resolution:** the act names its resolver, but admission
   policy authorizes it; recipient-acceptance and independent-verification

@@ -236,10 +236,16 @@ Only after the computer demonstrably develops itself (Phase 3 gate).
 
 ## The ordered mission list (consensus 2026-09-22)
 
+> **Superseded in part 2026-09-23.** The M2-tail…M8 region is replaced by
+> the desk-RLM rectification sequence
+> ([`desk-rlm-rectification-plan-2026-09-23.md`](desk-rlm-rectification-plan-2026-09-23.md),
+> proposed under owner review): R0 strand-2 patch → R1 vocabulary/docs →
+> K ontology kernel (the M3 draft stands) → R2 commitment ledger + carrier
+> + verbs → R3 live desks + supervision loop → R4 scores/surfacing/packs →
+> R5 durable vocabulary. M7, M9a/b, M10, M11 (self-dev path) and M12–M16
+> (world wire) are unchanged and follow R4. M4/M5 drafts are superseded.
+
 Synthesized from a 9-agent convergent panel
-(`.agentic-consensus/agentic-consensus-20260922-230607/`). Each mission is one
-executable `/goal` throughline file. `→` = hard dependency; `⇢` = recommended
-order, not forced.
 
 ```text
 M1  Owner input is a document revision        [cleanup = subclass (a) cutover]

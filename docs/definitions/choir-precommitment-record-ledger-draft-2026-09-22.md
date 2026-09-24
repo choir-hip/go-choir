@@ -3,6 +3,8 @@ definition_version: 3
 definition_id: choir-precommitment-record-ledger-draft-2026-09-22
 execution_mode: mission_orchestrator
 draft: true
+superseded: true
+superseded_by: docs/desk-rlm-rectification-plan-2026-09-23.md
 
 start:
   captured_at: '2026-09-22T23:45:00Z'
@@ -164,6 +166,8 @@ now:
 
 receipts: []
 ---
+
+> **SUPERSEDED 2026-09-23** — Superseded 2026-09-23 by the desk-RLM rectification sequence (docs/desk-rlm-rectification-plan-2026-09-23.md): the commitment record + OG ledger is pulled forward into R2 (choir-commitment-ledger-desk-carrier-draft-2026-09-23). Non-executable; retained as a tombstone.
 
 ## What this mission is
 

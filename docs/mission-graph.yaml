@@ -798,24 +798,72 @@ nodes:
     title: Desk Crossings + Super/actuator=tools Retirement (M4, draft)
     path: docs/definitions/choir-desk-crossings-super-retirement-draft-2026-09-22.md
     ledger: ''
+    status: superseded
+    kind: spine
+    entrypoint: false
+    execution_mode: superseded_non_executable
+    depends_on: []
+    enables: []
+    note: >-
+      Superseded 2026-09-23 by the desk-RLM rectification sequence: its
+      desk-crossing scope is absorbed into R2 (carrier + verbs) and R3
+      (live desks); see docs/desk-rlm-rectification-plan-2026-09-23.md.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+  - id: choir-precommitment-record-ledger-draft-2026-09-22
+    title: Precommitment Record Type + OG Ledger (M5, draft)
+    path: docs/definitions/choir-precommitment-record-ledger-draft-2026-09-22.md
+    ledger: ''
+    status: superseded
+    kind: spine
+    entrypoint: false
+    execution_mode: superseded_non_executable
+    depends_on: []
+    enables: []
+    note: >-
+      Superseded 2026-09-23 by the desk-RLM rectification sequence: the
+      commitment record + OG ledger is pulled forward into R2
+      (choir-commitment-ledger-desk-carrier-draft-2026-09-23); see
+      docs/desk-rlm-rectification-plan-2026-09-23.md.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+  - id: choir-strand2-freeze-order-patch-draft-2026-09-23
+    title: Strand-2 Freeze-Order Patch (R0, draft)
+    path: docs/definitions/choir-strand2-freeze-order-patch-draft-2026-09-23.md
+    ledger: ''
     status: blocked
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
-    depends_on:
-      - choir-ontology-kernel-draft-2026-09-22
+    depends_on: []
     enables: []
     note: >-
-      Draft successor — M4 of the ordered mission list. Texture, research,
-      and management desks cross to the common carrier; actuator=tools (R8)
-      and Super substrate (R10) deleted once nothing consumes them. Blocked
-      on M3. Not executable until promoted.
+      R0 of the rectification sequence — the adjudicated strand-2 fix:
+      freeze validates selfdev authority before any executor effect;
+      prompt gate; Quiesce/WithoutCancel/watchdog coverage. Independent
+      of the desk rebuild; promotable immediately.
     sources:
-      - docs/world-wire-mission-stack-2026-09-22.md
-      - docs/problems/root-cause-wrong-path-cluster-2026-09-22.md
-  - id: choir-precommitment-record-ledger-draft-2026-09-22
-    title: Precommitment Record Type + OG Ledger (M5, draft)
-    path: docs/definitions/choir-precommitment-record-ledger-draft-2026-09-22.md
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/problems/document-cast-stray-complete-settlement-2026-09-23.md
+  - id: choir-desk-vocabulary-docs-cutover-draft-2026-09-23
+    title: Desk Vocabulary + Docs Cutover (R1, draft)
+    path: docs/definitions/choir-desk-vocabulary-docs-cutover-draft-2026-09-23.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: []
+    note: >-
+      R1 of the rectification sequence — live-vocabulary stratum only:
+      Go identifiers, prompts, CLI, frontend, doctrine docs, AGENTS.md,
+      mission-stack rewrite. Durable strings are R5's scope.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+  - id: choir-commitment-ledger-desk-carrier-draft-2026-09-23
+    title: Commitment Ledger + Desk Carrier + Verbs (R2, draft)
+    path: docs/definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md
     ledger: ''
     status: blocked
     kind: spine
@@ -823,14 +871,75 @@ nodes:
     execution_mode: mission_orchestrator
     depends_on:
       - choir-ontology-kernel-draft-2026-09-22
+    enables:
+      - choir-live-desks-supervision-loop-draft-2026-09-23
+    note: >-
+      R2 of the rectification sequence — the commitment record (OG object,
+      never a third store), the yaegi carrier generalized to all desks
+      (subprocess, restricted stdlib), the semantic-act verb surface,
+      delegated-cast admission authority, update_coagent migration for the
+      four desks. Partial dependency on K: ledger+carrier may parallel;
+      desk wakes need the kernel.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/Precommitment Records — Engineering Memo.md
+  - id: choir-live-desks-supervision-loop-draft-2026-09-23
+    title: Live Desks + Supervision Loop (R3, draft)
+    path: docs/definitions/choir-live-desks-supervision-loop-draft-2026-09-23.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-ontology-kernel-draft-2026-09-22
+      - choir-commitment-ledger-desk-carrier-draft-2026-09-23
+    enables:
+      - choir-commitment-scores-surfacing-draft-2026-09-23
+    note: >-
+      R3 of the rectification sequence — desks become live root RLMs on
+      derivable wakes; management casts engineering; texture writes
+      AuthorAppAgent revisions from the ledger under editorial discretion;
+      super_controller replaced; fate sweeps move to the kernel timer.
+      The product-point mission: owner sees a live-updating doc.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/texture-live-supervision-architecture.md
+      - docs/why-texture-2026-06-15.md
+  - id: choir-commitment-scores-surfacing-draft-2026-09-23
+    title: Commitment Scores + Surfacing + Context Packs (R4, draft)
+    path: docs/definitions/choir-commitment-scores-surfacing-draft-2026-09-23.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-live-desks-supervision-loop-draft-2026-09-23
     enables: []
     note: >-
-      Draft successor — M5 of the ordered mission list (stack 2a). The
-      precommitment record as an OG object with provenance edges;
-      deterministic pairing; Curator minting; Markdown ledger + doccheck
-      regex retire. Blocked on M3 for runtime; schema drafting may overlap.
-      Not executable until promoted.
+      R4 of the rectification sequence — score accrual (full memo schema,
+      derived scalar views), the materiality projection, ledger-derived
+      context packs, the learning-claims gate (epistemic boundary).
+      Subsumes old M6/M8.
     sources:
-      - docs/world-wire-mission-stack-2026-09-22.md
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
       - docs/Precommitment Records — Engineering Memo.md
-      - docs/Precommitment Records Theory and Implications.md
+  - id: choir-durable-vocabulary-migration-draft-2026-09-23
+    title: Durable Vocabulary Migration (R5, draft)
+    path: docs/definitions/choir-durable-vocabulary-migration-draft-2026-09-23.md
+    ledger: ''
+    status: blocked
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-desk-vocabulary-docs-cutover-draft-2026-09-23
+    enables: []
+    note: >-
+      R5 of the rectification sequence — durable vocabulary stratum:
+      event kinds, OG kinds, SQL tables, schema strings, JSON fields,
+      replay goldens, V1→V2 profile normalization. Per-family migrate or
+      frozen-decode; identity seeds likely permanent. Deferrable; red.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md

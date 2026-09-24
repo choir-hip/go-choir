@@ -3,6 +3,8 @@ definition_version: 3
 definition_id: choir-desk-crossings-super-retirement-draft-2026-09-22
 execution_mode: mission_orchestrator
 draft: true
+superseded: true
+superseded_by: docs/desk-rlm-rectification-plan-2026-09-23.md
 
 start:
   captured_at: '2026-09-22T23:45:00Z'
@@ -176,6 +178,8 @@ now:
 
 receipts: []
 ---
+
+> **SUPERSEDED 2026-09-23** — Superseded 2026-09-23 by the desk-RLM rectification sequence (docs/desk-rlm-rectification-plan-2026-09-23.md): desk-crossing scope absorbed into R2 (carrier + verbs) and R3 (live desks). Non-executable; retained as a tombstone.
 
 ## What this mission is
 

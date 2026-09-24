@@ -34,15 +34,22 @@ scope — engineering desk on the in-cell carrier, R7/R9 deletions, canonical
 run acceptance — becomes M2 in the ordered mission list, dependent on M1's
 document channel. Its P0 freeze artifact is retained as evidence.
 
-## Draft Successors — Not Executable (ordered mission list)
+## Draft Successors — Not Executable (desk-RLM rectification sequence)
 
-Draft `/goal` files for the missions after M1, authored 2026-09-22. Blocked
-hypotheses, not schedules or implementation authority; each promotes only
-after its predecessor's terminal receipt:
+Draft `/goal` files authored 2026-09-23 under
+[`desk-rlm-rectification-plan-2026-09-23.md`](desk-rlm-rectification-plan-2026-09-23.md)
+(proposed, under owner review). Blocked hypotheses, not schedules or
+implementation authority; each promotes only after its predecessor's
+terminal receipt. The 2026-09-22 M4/M5 drafts are superseded by this
+sequence; the M3 ontology-kernel draft stands as mission K.
 
-- **M3** [`choir-ontology-kernel-draft-2026-09-22.md`](definitions/choir-ontology-kernel-draft-2026-09-22.md) — derivable-continuation kernel, deletes wrong-path (b)–(e); blocked on M2.
-- **M4** [`choir-desk-crossings-super-retirement-draft-2026-09-22.md`](definitions/choir-desk-crossings-super-retirement-draft-2026-09-22.md) — desk crossings + R8/R10; blocked on M3.
-- **M5** [`choir-precommitment-record-ledger-draft-2026-09-22.md`](definitions/choir-precommitment-record-ledger-draft-2026-09-22.md) — record type + OG ledger (2a); blocked on M3 for runtime.
+- **R0** [`choir-strand2-freeze-order-patch-draft-2026-09-23.md`](definitions/choir-strand2-freeze-order-patch-draft-2026-09-23.md) — adjudicated strand-2 fix (freeze validates before executor effect; prompt gate; Quiesce/watchdog/WithoutCancel). Independent; promotable immediately.
+- **R1** [`choir-desk-vocabulary-docs-cutover-draft-2026-09-23.md`](definitions/choir-desk-vocabulary-docs-cutover-draft-2026-09-23.md) — live-vocabulary stratum: Go identifiers, prompts, docs, AGENTS.md, mission-stack rewrite.
+- **K** [`choir-ontology-kernel-draft-2026-09-22.md`](definitions/choir-ontology-kernel-draft-2026-09-22.md) — derivable-continuation kernel (unchanged M3 draft); gates R3.
+- **R2** [`choir-commitment-ledger-desk-carrier-draft-2026-09-23.md`](definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md) — commitment ledger (OG object) + yaegi carrier to all desks + semantic-act verbs + delegated-cast admission + update_coagent migration.
+- **R3** [`choir-live-desks-supervision-loop-draft-2026-09-23.md`](definitions/choir-live-desks-supervision-loop-draft-2026-09-23.md) — live desk actors; management→engineering cast; texture writes doc revisions; super_controller replaced. The product-point mission.
+- **R4** [`choir-commitment-scores-surfacing-draft-2026-09-23.md`](definitions/choir-commitment-scores-surfacing-draft-2026-09-23.md) — scores, materiality projection, context packs, learning-claims gate.
+- **R5** [`choir-durable-vocabulary-migration-draft-2026-09-23.md`](definitions/choir-durable-vocabulary-migration-draft-2026-09-23.md) — durable vocabulary stratum (event kinds, OG kinds, SQL, seeds, goldens); deferrable; red.
 
 ## Completed Definition — Private Programmable Go Actor Kernel
 
