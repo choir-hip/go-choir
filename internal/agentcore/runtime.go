@@ -645,24 +645,13 @@ func (rt *Runtime) Start(ctx context.Context) {
 	bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
-	var terminalOutcomeTargets map[string]bool
-	bootPhase("reconcile_terminal_run_outcomes", func() { terminalOutcomeTargets = rt.reconcileTerminalRunOutcomes(ctx) })
-	if rt.kernelMode {
-		// Kernel mode: the projector is the continuous store→actor fold and
-		// MigrateActorWakeOutbox (run in SetKernelMode) already minted durable
-		// wakes for every pending obligation. The boot-time rewarm/sweep scans
-		// that re-mint actor wakes are subsumed - interrupted activations
-		// re-fire from their unprocessed triggering event (G2/G6 non-gap).
-		rt.startProjector(ctx)
-	} else {
-		bootPhase("rewarm_lifecycle_activations", func() { rt.rewarmInterruptedLifecycleActivations(ctx) })
-		bootPhase("rewarm_persistent_management", func() { rt.rewarmInterruptedPersistentManagementActors(ctx) })
-		bootPhase("sweep_passivated_spawned_work", func() { rt.sweepPassivatedSpawnedCoagentWork(ctx) })
-		// Reconcile canonical lifecycle work/control joins before the generic actor
-		// update sweep can acknowledge a durable occurrence around an unbound run.
-		bootPhase("sweep_open_work_item_actors", func() { rt.sweepOpenWorkItemActors(ctx) })
-		bootPhase("sweep_pending_update_actors", func() { rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets) })
-	}
+	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
+	// The projector is the continuous store→actor fold and
+	// MigrateActorWakeOutbox (run in SetKernelMode) already minted durable
+	// wakes for every pending obligation. The boot-time rewarm/sweep scans
+	// that re-mint actor wakes are deleted - interrupted activations re-fire
+	// from their unprocessed triggering event (G2/G6 non-gap).
+	rt.startProjector(ctx)
 	// Best-effort: ensure the production Qdrant collection exists so the
 	// semantic dedup pass on ingestion has a target. Runs asynchronously so
 	// a slow or unreachable Qdrant cannot block runtime startup; the dedup
