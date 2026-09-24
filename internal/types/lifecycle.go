@@ -33,6 +33,7 @@ const (
 	LifecycleSetEngineeringCapsuleDisposition LifecycleCommandKind = "set_co_super_capsule_disposition"
 	LifecycleSettleProducerReports            LifecycleCommandKind = "settle_producer_reports"
 	LifecycleTerminalizeRun                   LifecycleCommandKind = "terminalize_run"
+	LifecycleReactivateRun                    LifecycleCommandKind = "reactivate_run"
 )
 
 type LifecycleEventKind string
@@ -64,6 +65,7 @@ const (
 	LifecycleEngineeringAssignmentCancelled   LifecycleEventKind = "co_super_assignment_cancelled"
 	LifecycleEngineeringCapsuleDispositionSet LifecycleEventKind = "co_super_capsule_disposition_set"
 	LifecycleRunTerminalized                  LifecycleEventKind = "run_terminalized"
+	LifecycleRunReactivated                   LifecycleEventKind = "run_reactivated"
 )
 
 type StartLifecycleRequest struct {
@@ -313,6 +315,24 @@ type TerminalizeRunRequest struct {
 	Reason string `json:"reason,omitempty"`
 	// Result is the terminal result payload for completed runs.
 	Result string `json:"result,omitempty"`
+}
+
+// ReactivateRunRequest is the canonical command that moves a passivated or
+// interrupted run back to RunPending/RunRunning and records the transition
+// event in the same atomic batch. MetadataPatch merges into the run's
+// metadata (reactivation markers, request source) without replacing it.
+type ReactivateRunRequest struct {
+	OwnerID       string `json:"owner_id"`
+	ComputerID    string `json:"computer_id"`
+	CommandID     string `json:"command_id"`
+	CommandDigest string `json:"command_digest"`
+	TrajectoryID  string `json:"trajectory_id"`
+	AgentID       string `json:"agent_id"`
+	RunID         string `json:"run_id"`
+	// TargetState is RunPending or RunRunning.
+	TargetState RunState `json:"target_state"`
+	// MetadataPatch merges into the run's metadata.
+	MetadataPatch map[string]any `json:"metadata_patch,omitempty"`
 }
 
 type RecordLifecycleRefsRequest struct {

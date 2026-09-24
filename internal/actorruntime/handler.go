@@ -264,7 +264,14 @@ func (h *actorHandler) handleChannelMessage(ctx context.Context, u actor.Update,
 		rec.Result = ""
 		rec.FinishedAt = nil
 		rec.UpdatedAt = time.Now().UTC()
-		if err := h.rt.Store().UpdateRun(ctx, rec); err != nil {
+		// Lifecycle-bound runs reactivate through the canonical reducer
+		// command so the state change and run_reactivated event commit
+		// atomically; non-lifecycle runs keep the bare UpdateRun path.
+		if err := h.rt.ReactivateRunCanonical(ctx, &rec, types.RunPending, map[string]any{
+			"actor_reactivate_existing_memory":    true,
+			"actor_reactivated_from_passivated":   true,
+			"request_source":                      "channel_message",
+		}); err != nil {
 			return nil, fmt.Errorf("actorruntime: reactivate run %s from channel_message: %w", rs.RunID, err)
 		}
 		if err := h.rt.ExecuteActivationSyncChecked(ctx, &rec); err != nil {
@@ -577,7 +584,17 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		rec.Result = ""
 		rec.FinishedAt = nil
 		rec.UpdatedAt = time.Now().UTC()
-		if err := h.rt.Store().UpdateRun(ctx, rec); err != nil {
+		patch := map[string]any{
+			"actor_reactivate_existing_memory":  true,
+			"actor_reactivated_from_passivated": true,
+		}
+		if !lifecycleControlResearch {
+			patch["request_source"] = "update_coagent"
+		}
+		// Lifecycle-bound runs reactivate through the canonical reducer
+		// command so the state change and run_reactivated event commit
+		// atomically; non-lifecycle runs keep the bare UpdateRun path.
+		if err := h.rt.ReactivateRunCanonical(ctx, &rec, types.RunPending, patch); err != nil {
 			return nil, fmt.Errorf("actorruntime: reactivate run %s: %w", rs.RunID, err)
 		}
 		if err := h.rt.ExecuteActivationSyncChecked(ctx, &rec); err != nil {

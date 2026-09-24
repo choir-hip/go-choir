@@ -211,6 +211,68 @@ func TestTerminalizeRunCommitsStateAndEventAtomically(t *testing.T) {
 	}
 }
 
+func TestReactivateRunCommitsStateAndEventAtomically(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	// Project a passivated run so reactivation has a non-terminal source.
+	run := lifecycleRunFixture(start, "run-reactivate-1", types.RunPassivated)
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "project-reactivate:" + start.TrajectoryID,
+		TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: run,
+	}
+	project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project activation: %v", err)
+	}
+
+	react := types.ReactivateRunRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "reactivate-run:run-reactivate-1", TrajectoryID: start.TrajectoryID,
+		AgentID: start.Agent.AgentID, RunID: run.RunID,
+		TargetState:   types.RunPending,
+		MetadataPatch: map[string]any{"actor_reactivated_from_passivated": true},
+	}
+	react.CommandDigest, _ = ComputeReactivateRunDigest(react)
+	result, err := s.ReactivateRun(ctx, react)
+	if err != nil {
+		t.Fatalf("reactivate run: %v", err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Kind != types.LifecycleRunReactivated {
+		t.Fatalf("expected one run_reactivated event, got %+v", result.Events)
+	}
+	got, err := s.GetLifecycleRun(ctx, start.OwnerID, start.ComputerID, run.RunID)
+	if err != nil {
+		t.Fatalf("get reactivated run: %v", err)
+	}
+	if got.State != types.RunPending || got.FinishedAt != nil {
+		t.Fatalf("run not reactivated: %+v", got)
+	}
+	if got.Metadata["actor_reactivated_from_passivated"] != true {
+		t.Fatalf("metadata patch not applied: %+v", got.Metadata)
+	}
+	// Terminal runs cannot be reactivated.
+	term := types.TerminalizeRunRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "terminalize-run:run-reactivate-1", TrajectoryID: start.TrajectoryID,
+		AgentID: start.Agent.AgentID, RunID: run.RunID,
+		TerminalState: types.RunCompleted,
+	}
+	term.CommandDigest, _ = ComputeTerminalizeRunDigest(term)
+	if _, err := s.TerminalizeRun(ctx, term); err != nil {
+		t.Fatalf("terminalize for reactivation rejection: %v", err)
+	}
+	react.CommandID = "reactivate-run:run-reactivate-1:again"
+	react.CommandDigest, _ = ComputeReactivateRunDigest(react)
+	if _, err := s.ReactivateRun(ctx, react); !errors.Is(err, ErrLifecycleInvalidTransition) {
+		t.Fatalf("reactivate terminal run: got %v, want ErrLifecycleInvalidTransition", err)
+	}
+}
+
 func TestStartLifecyclePreparesStructuredRevision(t *testing.T) {
 	t.Run("derives readable content and preserves replay hash", func(t *testing.T) {
 		s := openTestStore(t)

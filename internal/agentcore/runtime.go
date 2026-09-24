@@ -1577,6 +1577,39 @@ func (rt *Runtime) terminalizeRunCanonical(ctx context.Context, rec *types.RunRe
 	return err
 }
 
+// ReactivateRunCanonical persists a run's reactivation (passivated or
+// interrupted -> pending/running) through the canonical ReactivateRun
+// reducer command when the run is lifecycle-bound, so the state change and
+// the canonical run_reactivated event commit in one atomic batch. Runs
+// without a lifecycle trajectory fall back to the bare UpdateRun write.
+// metadataPatch merges reactivation markers into the run's metadata.
+func (rt *Runtime) ReactivateRunCanonical(ctx context.Context, rec *types.RunRecord, targetState types.RunState, metadataPatch map[string]any) error {
+	trajectoryID := strings.TrimSpace(trajectoryIDForRun(rec))
+	if trajectoryID == "" || rec.OwnerID == "" || rec.ComputerID == "" {
+		return rt.store.UpdateRun(ctx, *rec)
+	}
+	if _, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, trajectoryID); err != nil {
+		return rt.store.UpdateRun(ctx, *rec)
+	}
+	req := types.ReactivateRunRequest{
+		OwnerID:       rec.OwnerID,
+		ComputerID:    rec.ComputerID,
+		CommandID:     "reactivate-run:" + rec.RunID + ":" + rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		TrajectoryID:  trajectoryID,
+		AgentID:       rec.AgentID,
+		RunID:         rec.RunID,
+		TargetState:   targetState,
+		MetadataPatch: metadataPatch,
+	}
+	digest, err := store.ComputeReactivateRunDigest(req)
+	if err != nil {
+		return err
+	}
+	req.CommandDigest = digest
+	_, err = rt.store.ReactivateRun(ctx, req)
+	return err
+}
+
 // persistActivationState serializes activation writes with cancellation and
 // progress-deadline terminalization. A stored terminal state always wins.
 func (rt *Runtime) persistActivationState(ctx context.Context, rec *types.RunRecord) (bool, error) {
