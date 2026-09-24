@@ -1919,7 +1919,7 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	if trajectoryID := strings.TrimSpace(storedReceipt.TrajectoryID); trajectoryID != "" && commandID != "" {
 		if intentObj, intentErr := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, ownerID, computerID, trajectoryID); intentErr == nil {
 			intent, decodeErr := decodeLifecycleObject[types.LifecycleCancellationIntent](intentObj)
-			allowedFate := storedReceipt.Kind == types.LifecycleSetEngineeringCapsuleDisposition || storedReceipt.Kind == types.LifecycleCancelEngineeringAssignment || storedReceipt.Kind == types.LifecycleRecordEngineeringAssignment
+			allowedFate := storedReceipt.Kind == types.LifecycleSetEngineeringCapsuleDisposition || storedReceipt.Kind == types.LifecycleCancelEngineeringAssignment || storedReceipt.Kind == types.LifecycleRecordEngineeringAssignment || storedReceipt.Kind == types.LifecycleTerminalizeRun || storedReceipt.Kind == types.LifecycleReactivateRun
 			lateEvidence := false
 			for _, event := range result.Events {
 				if event.Kind == types.LifecycleUpdateLate {
@@ -4533,7 +4533,8 @@ func (s *Store) TerminalizeRun(ctx context.Context, req types.TerminalizeRunRequ
 		run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	if run.State.Terminal() && run.State != req.TerminalState {
+	if run.State.Terminal() && run.State != req.TerminalState &&
+		!(trajectory.Status == types.TrajectoryCancelled && req.TerminalState == types.RunCancelled) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	now := time.Now().UTC()
