@@ -51,6 +51,10 @@ type Update struct {
 	Content      string
 	TrajectoryID string
 	CreatedAt    time.Time
+	// NotBefore, when set on an unaddressed scheduled event, defers the
+	// dispatcher's minting of the addressed wake until that time. Zero means
+	// immediately eligible.
+	NotBefore time.Time
 }
 
 // Log is the durable side of the protocol. Implementations must make Append

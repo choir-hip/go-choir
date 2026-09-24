@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -24,17 +25,35 @@ CREATE TABLE IF NOT EXISTS actor_updates (
   content       TEXT NOT NULL DEFAULT '',
   trajectory_id TEXT NOT NULL DEFAULT '',
   created_at    TIMESTAMP NOT NULL,
-  processed_at  TIMESTAMP
+  processed_at  TIMESTAMP,
+  not_before    TIMESTAMP,
+  epoch         INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_actor_updates_backlog
   ON actor_updates(to_agent_id, created_at) WHERE processed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_actor_updates_due
+  ON actor_updates(not_before) WHERE processed_at IS NULL AND not_before IS NOT NULL;
 CREATE TABLE IF NOT EXISTS actor_snapshots (
   agent_id   TEXT PRIMARY KEY,
   memory     BLOB,
   updated_at TIMESTAMP NOT NULL
+);
+CREATE TABLE IF NOT EXISTS actor_heads (
+  agent_id TEXT PRIMARY KEY,
+  epoch    INTEGER NOT NULL DEFAULT 0,
+  head     TEXT NOT NULL DEFAULT ''
 );`
 	if _, err := db.Exec(schema); err != nil {
 		return nil, fmt.Errorf("actor log schema: %w", err)
+	}
+	// Migrate pre-kernel rows: add not_before/epoch columns if absent.
+	for _, col := range []string{
+		`ALTER TABLE actor_updates ADD COLUMN not_before TIMESTAMP`,
+		`ALTER TABLE actor_updates ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if _, err := db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return nil, fmt.Errorf("actor log migrate %q: %w", col, err)
+		}
 	}
 	return &SQLiteLog{db: db}, nil
 }
@@ -82,6 +101,154 @@ UPDATE actor_updates SET processed_at = ?
 WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`,
 		time.Now().UTC(), updateID, agentID)
 	return err
+}
+
+// ErrEpochConflict is returned by Commit when the actor's durable epoch has
+// advanced past the epoch the activation started from — a stale or preempted
+// activation may not commit.
+var ErrEpochConflict = fmt.Errorf("actor: epoch conflict on fenced commit")
+
+// Commit is the fenced atomic commit (ontology Move 1): an activation's
+// emitted events and its new state head land in ONE transaction, conditional
+// on the actor's epoch still being expectEpoch. The conditional head-append
+// is the lease/epoch relocated into the commit — a killed or stale
+// activation's commit fails its epoch check, so preemption is safe.
+//
+// emitted are the updates this activation produced (appended idempotently).
+// incorporated are the update IDs this activation folded into its state head
+// (marked processed). Both happen atomically with the epoch bump.
+func (l *SQLiteLog) Commit(ctx context.Context, agentID string, expectEpoch int64, emitted []Update, incorporated []string) (newEpoch int64, err error) {
+	tx, err := l.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// Fence: read-and-check the actor's epoch inside the transaction.
+	var cur int64
+	var head string
+	row := tx.QueryRowContext(ctx, `SELECT epoch, head FROM actor_heads WHERE agent_id = ?`, agentID)
+	switch scanErr := row.Scan(&cur, &head); {
+	case scanErr == sql.ErrNoRows:
+		cur = 0
+	case scanErr != nil:
+		return 0, scanErr
+	}
+	if cur != expectEpoch {
+		return 0, ErrEpochConflict
+	}
+	newEpoch = cur + 1
+
+	// Append emitted events (idempotent on update_id).
+	for _, u := range emitted {
+		var nb interface{}
+		if !u.NotBefore.IsZero() {
+			nb = u.NotBefore.UTC()
+		}
+		if _, err = tx.ExecContext(ctx, `
+INSERT INTO actor_updates (update_id, to_agent_id, from_agent_id, kind, content, trajectory_id, created_at, not_before, epoch)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(update_id) DO NOTHING`,
+			u.UpdateID, u.ToAgentID, u.FromAgentID, u.Kind, u.Content, u.TrajectoryID, u.CreatedAt.UTC(), nb, newEpoch); err != nil {
+			return 0, err
+		}
+	}
+
+	// Mark incorporated events processed (the state head advance).
+	now := time.Now().UTC()
+	for _, id := range incorporated {
+		if _, err = tx.ExecContext(ctx, `
+UPDATE actor_updates SET processed_at = ? WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`,
+			now, id, agentID); err != nil {
+			return 0, err
+		}
+	}
+
+	// Advance the actor head: new epoch + latest incorporated id as head.
+	newHead := head
+	if len(incorporated) > 0 {
+		newHead = incorporated[len(incorporated)-1]
+	}
+	if _, err = tx.ExecContext(ctx, `
+INSERT INTO actor_heads (agent_id, epoch, head) VALUES (?, ?, ?)
+ON CONFLICT(agent_id) DO UPDATE SET epoch = excluded.epoch, head = excluded.head`,
+		agentID, newEpoch, newHead); err != nil {
+		return 0, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+	return newEpoch, nil
+}
+
+// Epoch returns the actor's current durable epoch (0 if unseen).
+func (l *SQLiteLog) Epoch(ctx context.Context, agentID string) (int64, error) {
+	var epoch int64
+	err := l.db.QueryRowContext(ctx, `SELECT epoch FROM actor_heads WHERE agent_id = ?`, agentID).Scan(&epoch)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return epoch, nil
+}
+
+// PendingAgents returns the dispatcher's tape-derived pending projection:
+// agents with at least one unprocessed update that is due (not_before absent
+// or elapsed). This is the ONLY scan the kernel permits — the dispatcher's
+// internal projection, never an independent trigger.
+func (l *SQLiteLog) PendingAgents(ctx context.Context, now time.Time) ([]string, error) {
+	rows, err := l.db.QueryContext(ctx, `
+SELECT DISTINCT to_agent_id FROM actor_updates
+WHERE processed_at IS NULL AND (not_before IS NULL OR not_before <= ?)`, now.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// NextDue returns the earliest not_before among unprocessed scheduled events,
+// for the dispatcher's due-index self-wake. Returns false when none is due
+// in the future.
+func (l *SQLiteLog) NextDue(ctx context.Context, now time.Time) (time.Time, bool, error) {
+	var raw sql.NullString
+	err := l.db.QueryRowContext(ctx, `
+SELECT MIN(not_before) FROM actor_updates
+WHERE processed_at IS NULL AND not_before IS NOT NULL AND not_before > ?`, now.UTC()).Scan(&raw)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if !raw.Valid || raw.String == "" {
+		return time.Time{}, false, nil
+	}
+	// not_before is stored via time.Time.String() ("2006-01-02 15:04:05.999
+	// -0700 MST"); MIN() returns the literal string. Parse that layout, then
+	// RFC3339 as a fallback.
+	for _, layout := range []string{
+		"2006-01-02 15:04:05.999999999 -0700 MST",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		time.RFC3339Nano,
+	} {
+		if t, perr := time.Parse(layout, raw.String); perr == nil {
+			return t, true, nil
+		}
+	}
+	return time.Time{}, false, fmt.Errorf("parse not_before %q", raw.String)
 }
 
 // UpdateStatus reports whether an exact actor occurrence exists and whether it

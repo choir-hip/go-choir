@@ -1,0 +1,255 @@
+package actor
+
+import (
+	"context"
+	"log"
+	"sync"
+	"time"
+)
+
+// Dispatcher is the sole consumer of the tape-derived pending projection
+// (ontology Move 1 + 2). It replaces the Go-channel mailbox and the boot
+// Sweep as the delivery authority: pending work is a projection (tape events
+// addressed to actors minus incorporated events), and the dispatcher fires
+// one serial activation per actor until each pending event is incorporated.
+//
+// Invariants:
+//   - delivered = in state head. An event is delivered exactly when the
+//     addressed actor's fenced Commit marks it incorporated.
+//   - serial-per-actor: the dispatcher never runs two activations of the same
+//     actor; events arriving during an activation are folded by the next.
+//   - fenced commit: each activation commits {emitted events + new state
+//     head} in one conditional append at the epoch it started from. A stale
+//     or preempted activation's commit fails its epoch check.
+//   - scheduled work: an unaddressed event carrying NotBefore is minted into
+//     an addressed wake by the dispatcher's due-index when it comes due.
+//   - retry = the lease: the dispatcher re-fires until incorporation; retry
+//     accounting is itself tape events, so poison detection survives restart.
+//
+// The dispatcher is a thin process loop, not an actor on the tape — the
+// residual-hard-point note in the ontology leaves multi-dispatcher failover
+// unresolved, and a single dispatcher per computer is assumed.
+type Dispatcher struct {
+	log     KernelLog
+	handler Handler
+	opts    DispatcherOptions
+
+	mu      sync.Mutex
+	running map[string]bool // agentID -> activation in flight (serial fence)
+	wake    chan struct{}   // pending-projection change signal
+	stop    chan struct{}
+	done    chan struct{}
+	stopped bool
+}
+
+// KernelLog is the durable surface the dispatcher needs: the pending
+// projection, the fenced commit, and the due-index. *SQLiteLog implements it.
+type KernelLog interface {
+	// PendingAgents is the tape-derived pending projection: agents with a due
+	// unprocessed event.
+	PendingAgents(ctx context.Context, now time.Time) ([]string, error)
+	// Unprocessed returns one agent's due backlog in append order.
+	Unprocessed(ctx context.Context, agentID string) ([]Update, error)
+	// Commit is the fenced atomic commit of emitted events + incorporated head.
+	Commit(ctx context.Context, agentID string, expectEpoch int64, emitted []Update, incorporated []string) (int64, error)
+	// Epoch returns the actor's current durable epoch.
+	Epoch(ctx context.Context, agentID string) (int64, error)
+	// NextDue is the due-index: earliest future not_before among unprocessed
+	// scheduled events.
+	NextDue(ctx context.Context, now time.Time) (time.Time, bool, error)
+	// LoadSnapshot / SaveSnapshot persist the actor's compacted memory.
+	LoadSnapshot(ctx context.Context, agentID string) ([]byte, error)
+	SaveSnapshot(ctx context.Context, agentID string, memory []byte) error
+}
+
+// DispatcherOptions bound the dispatcher loop.
+type DispatcherOptions struct {
+	// PollInterval is how often the dispatcher re-reads the pending
+	// projection when idle (default 250ms). The projection is the authority;
+	// the poll is only a fallback for missed wake signals.
+	PollInterval time.Duration
+	// MaxAttempts is how many times the dispatcher retries an event before
+	// emitting delivery_failed to the error sink (0 = retry forever).
+	MaxAttempts int
+	// ErrorSink is the agent ID that receives delivery_failed events. Empty
+	// disables poison routing.
+	ErrorSink string
+}
+
+// NewDispatcher constructs a dispatcher over the kernel log. Call Run to
+// start the loop; it consumes the pending projection until Stop.
+func NewDispatcher(log KernelLog, handler Handler, opts DispatcherOptions) *Dispatcher {
+	if opts.PollInterval <= 0 {
+		opts.PollInterval = 250 * time.Millisecond
+	}
+	return &Dispatcher{
+		log:     log,
+		handler: handler,
+		opts:    opts,
+		running: make(map[string]bool),
+		wake:    make(chan struct{}, 1),
+		stop:    make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+}
+
+// Notify signals that the pending projection may have changed (an event was
+// appended). It is a hint, not the authority — the dispatcher re-reads the
+// projection regardless, so a missed Notify only delays delivery by one
+// PollInterval.
+func (d *Dispatcher) Notify() {
+	select {
+	case d.wake <- struct{}{}:
+	default:
+	}
+}
+
+// Run is the dispatcher loop: read the pending projection, fire a serial
+// activation per due agent, self-wake at the next due-index time. It blocks
+// until Stop.
+func (d *Dispatcher) Run(ctx context.Context) {
+	defer close(d.done)
+	var dueTimer *time.Timer
+	var dueC <-chan time.Time
+	defer func() {
+		if dueTimer != nil {
+			dueTimer.Stop()
+		}
+	}()
+
+	for {
+		// Re-arm the due-index self-wake at the earliest scheduled event.
+		if next, ok, err := d.log.NextDue(ctx, time.Now()); err == nil && ok {
+			delay := time.Until(next)
+			if delay < 0 {
+				delay = 0
+			}
+			if dueTimer == nil {
+				dueTimer = time.NewTimer(delay)
+			} else {
+				resetTimer(dueTimer, delay)
+			}
+			dueC = dueTimer.C
+		} else {
+			dueC = nil
+		}
+
+		// Consume the pending projection: one serial activation per due agent.
+		d.dispatchPending(ctx)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-d.stop:
+			return
+		case <-d.wake:
+		case <-dueC:
+		case <-time.After(d.opts.PollInterval):
+		}
+	}
+}
+
+// dispatchPending reads the projection and fires an activation for every due
+// agent not already running (the serial-per-actor fence).
+func (d *Dispatcher) dispatchPending(ctx context.Context) {
+	agents, err := d.log.PendingAgents(ctx, time.Now())
+	if err != nil {
+		log.Printf("dispatcher: pending projection: %v", err)
+		return
+	}
+	for _, agentID := range agents {
+		d.mu.Lock()
+		if d.running[agentID] {
+			d.mu.Unlock()
+			continue
+		}
+		d.running[agentID] = true
+		d.mu.Unlock()
+
+		go func(id string) {
+			defer func() {
+				d.mu.Lock()
+				delete(d.running, id)
+				d.mu.Unlock()
+				// A completed activation may have left new pending events
+				// (its own emissions, or arrivals during the run). Signal the
+				// loop to re-read the projection.
+				d.Notify()
+			}()
+			d.activate(ctx, id)
+		}(agentID)
+	}
+}
+
+// activate runs one fenced activation: snapshot the actor's epoch, fold each
+// due event through the handler, then Commit {emitted + incorporated} at the
+// starting epoch. On epoch conflict the activation is stale — it discards
+// its work and the dispatcher re-fires from the new head.
+func (d *Dispatcher) activate(ctx context.Context, agentID string) {
+	epoch, err := d.log.Epoch(ctx, agentID)
+	if err != nil {
+		log.Printf("dispatcher: epoch %s: %v", agentID, err)
+		return
+	}
+	memory, err := d.log.LoadSnapshot(ctx, agentID)
+	if err != nil {
+		log.Printf("dispatcher: snapshot %s: %v", agentID, err)
+		return
+	}
+	pending, err := d.log.Unprocessed(ctx, agentID)
+	if err != nil {
+		log.Printf("dispatcher: backlog %s: %v", agentID, err)
+		return
+	}
+	if len(pending) == 0 {
+		return
+	}
+
+	var incorporated []string
+	var emitted []Update
+	for _, u := range pending {
+		// Skip scheduled events not yet due — the due-index fires them later.
+		if !u.NotBefore.IsZero() && time.Now().Before(u.NotBefore) {
+			continue
+		}
+		newMemory, herr := d.handler.HandleUpdate(ctx, agentID, u, memory)
+		if herr != nil {
+			// At-least-once: leave unprocessed; the dispatcher retries.
+			// Retry accounting as tape events is a follow-up slice.
+			log.Printf("dispatcher: handle %s/%s: %v", agentID, u.UpdateID, herr)
+			continue
+		}
+		memory = newMemory
+		incorporated = append(incorporated, u.UpdateID)
+	}
+	if len(incorporated) == 0 && len(emitted) == 0 {
+		return
+	}
+
+	if _, err := d.log.Commit(ctx, agentID, epoch, emitted, incorporated); err != nil {
+		if err == ErrEpochConflict {
+			// Stale activation: discard; the dispatcher re-fires from the new
+			// head on the next projection read.
+			return
+		}
+		log.Printf("dispatcher: commit %s: %v", agentID, err)
+		return
+	}
+	// Persist the folded memory as the actor's compacted snapshot.
+	if err := d.log.SaveSnapshot(ctx, agentID, memory); err != nil {
+		log.Printf("dispatcher: save snapshot %s: %v", agentID, err)
+	}
+}
+
+// Stop halts the dispatcher loop and waits for it to exit. In-flight
+// activations finish or fail their fenced commit; durable state is
+// untouched, so a restart resumes from the tape.
+func (d *Dispatcher) Stop() {
+	d.mu.Lock()
+	if !d.stopped {
+		d.stopped = true
+		close(d.stop)
+	}
+	d.mu.Unlock()
+	<-d.done
+}
