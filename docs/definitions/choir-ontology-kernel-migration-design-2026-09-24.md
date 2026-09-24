@@ -172,14 +172,18 @@ obligation-bearing object in `commitLifecycleTransition`, not just
 `worker_update`. Sub-class (b) watchdogs migrated to durable `not_before`
 events (`f18cd4bf`). Cutover wake-gap analysis
 (`docs/problems/kernel-cutover-wake-gap-analysis-2026-09-24.md`) found 11
-missing wake edges; **G1/G3/G5/G8/G10 closed** (work item, initial work,
-owner revision, cancellation intent, assignment deadline). **Still open:**
-G2 passivation rewarm, G6 texture reactivation, G9 pre-watchdog fate, G11
-self-dev materializer (all direct writes outside `commitLifecycleTransition`
-or non-lifecycle state — need per-gap design). G4/G7 fold into R3's
-dual-path cutover (legacy `DispatchWorkerUpdate`/`CreateWorkItem` deleted,
-not given new outbox kinds). Then: the write-fence cutover; the cluster
-recount to zero; staging verification; a second consensus review.
+candidate edges; **6 closed** (G1/G3/G5/G8/G9/G10), **G2/G6 reclassified as
+non-gaps** (interrupted activations re-fire from the unprocessed triggering
+event — `handleInitialDispatch` accepts `RunPending`/`RunRunning`), **G4/G7
+fold into R3** (legacy `DispatchWorkerUpdate`/`CreateWorkItem` deleted, not
+given outbox kinds), **G11 pending an authority decision** (self-dev
+materializer — possible boundary exception like sourcecycled/vmctl). The
+wake-edge set is complete for the in-scope cluster. Still remaining:
+sub-class (e) — route the ~13 direct `Update*` mutations through
+event-backed reducer commands (purity; the continuation-bearing ones are
+already covered); sub-class (c) dual paths → R3; the write-fence cutover;
+the cluster recount to zero; staging verification; a second consensus
+review.
 
 ## Boundary exceptions (unchanged)
 
