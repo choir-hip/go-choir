@@ -2793,6 +2793,15 @@ func (rt *Runtime) SetKernelMode() {
 	rt.kernelMode = true
 	if rt.store != nil {
 		rt.store.SetKernelMode()
+		// Write fence: mint durable actor-wake outbox objects for every
+		// obligation-bearing canonical object that predates the outbox fold,
+		// so the projector delivers pre-cutover pending rows from the tape.
+		// Idempotent - deterministic wake keys make re-entry a no-op.
+		if minted, err := rt.store.MigrateActorWakeOutbox(context.Background()); err != nil {
+			log.Printf("runtime: actor wake outbox migration: %v", err)
+		} else if minted > 0 {
+			log.Printf("runtime: actor wake outbox migration minted %d pending wakes", minted)
+		}
 	}
 }
 

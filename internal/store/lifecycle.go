@@ -758,6 +758,51 @@ func (s *Store) MarkActorWakeProjected(ctx context.Context, canonicalID string) 
 	return nil
 }
 
+// MigrateActorWakeOutbox mints the durable actor-wake outbox objects for every
+// obligation-bearing canonical object that predates the outbox fold. It runs
+// inside the write fence at kernel cutover: each obligation (pending
+// worker_update, open work item, cancel intent, engineering assignment,
+// owner-authored revision) derives a deterministic wake keyed
+// "wake:<source-canonical-id>[:<source-id>]", so re-running is a no-op. The
+// projector then drains them onto the delivery tape. Returns the number of
+// outbox objects minted.
+func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
+	if s.ogStore == nil {
+		return 0, fmt.Errorf("migrate actor wake outbox: object graph not initialized")
+	}
+	kinds := []objectgraph.ObjectKind{
+		ogKindWorkerUpdate, ogKindWorkItem, ogKindLifecycleCancelIntent,
+		ogKindEngineeringAssignment, ogKindTexRev,
+	}
+	minted := 0
+	for _, kind := range kinds {
+		objects, err := s.ogListAllObjectsByKind(ctx, kind)
+		if err != nil {
+			return minted, fmt.Errorf("migrate actor wake outbox: list %s: %w", kind, err)
+		}
+		for _, obj := range objects {
+			_, outbox, err := actorWakeOutboxFromObject(obj, s.actorWakeResolverObjects(ctx, obj, objects))
+			if err != nil {
+				return minted, fmt.Errorf("migrate actor wake outbox: derive %s %s: %w", kind, obj.CanonicalID, err)
+			}
+			if outbox.CanonicalID == "" {
+				continue
+			}
+			// Not-exists condition makes re-minting idempotent: a wake already
+			// folded by a live commit or a prior migration run is skipped.
+			condition := objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID, Exists: false}
+			if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{outbox}}); err != nil {
+				if errors.Is(err, objectgraph.ErrConflict) {
+					continue // already minted
+				}
+				return minted, fmt.Errorf("migrate actor wake outbox: mint %s: %w", outbox.CanonicalID, err)
+			}
+			minted++
+		}
+	}
+	return minted, nil
+}
+
 func (s *Store) lifecycleGraph() objectgraph.Store {
 	if s.ogReadStore != nil {
 		return s.ogReadStore

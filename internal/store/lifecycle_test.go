@@ -325,6 +325,72 @@ func TestUpdateRunWithEventFoldsEventIntoProjectionBatch(t *testing.T) {
 	}
 }
 
+func TestMigrateActorWakeOutboxMintsPendingWakes(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	// Write a pending lifecycle worker_update directly, simulating a row that
+	// predates the outbox fold (no wake minted at commit).
+	update := types.CoagentSourcePacket{
+		UpdateID: "update-migrate-1", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		AgentID: "producer-1", TargetAgentID: start.Agent.AgentID,
+		ChannelID: start.Agent.ChannelID, TrajectoryID: start.TrajectoryID,
+		Role: "research", LifecycleVersion: 1, Disposition: types.UpdatePending,
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "findings", Summary: "result",
+		},
+		Content: "findings", CreatedAt: time.Now().UTC(),
+	}
+	updateCanon, err := lifecycleCanonicalID(ogKindWorkerUpdate, start.OwnerID, start.ComputerID, update.UpdateID)
+	if err != nil {
+		t.Fatalf("update canonical id: %v", err)
+	}
+	updateObj, err := lifecycleObject(ogKindWorkerUpdate, start.OwnerID, start.ComputerID, update.UpdateID, update,
+		lifecycleMetadata("update_id", update.UpdateID, start.ComputerID, start.TrajectoryID, 1), update.CreatedAt, update.CreatedAt)
+	if err != nil {
+		t.Fatalf("build update object: %v", err)
+	}
+	updateObj.CanonicalID = updateCanon
+	if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{
+		{CanonicalID: updateObj.CanonicalID, Exists: false},
+	}, objectgraph.Batch{Objects: []objectgraph.Object{updateObj}}); err != nil {
+		t.Fatalf("write pending update: %v", err)
+	}
+
+	// Migrate: mints wakes for the pending update + the open work item.
+	minted, err := s.MigrateActorWakeOutbox(ctx)
+	if err != nil {
+		t.Fatalf("migrate actor wake outbox: %v", err)
+	}
+	if minted == 0 {
+		t.Fatal("migration minted no wakes for pending rows")
+	}
+	after, err := s.ListUnprojectedActorWakes(ctx)
+	if err != nil {
+		t.Fatalf("list wakes after: %v", err)
+	}
+	foundUpdate := false
+	for _, w := range after {
+		if w.SourceUpdateID == update.UpdateID && w.TargetAgentID == start.Agent.AgentID {
+			foundUpdate = true
+		}
+	}
+	if !foundUpdate {
+		t.Fatalf("pending update wake not minted: %+v", after)
+	}
+	// Idempotent: a second run mints nothing new.
+	again, err := s.MigrateActorWakeOutbox(ctx)
+	if err != nil {
+		t.Fatalf("second migration: %v", err)
+	}
+	if again != 0 {
+		t.Fatalf("second migration minted %d wakes, want 0 (idempotent)", again)
+	}
+}
+
 func TestStartLifecyclePreparesStructuredRevision(t *testing.T) {
 	t.Run("derives readable content and preserves replay hash", func(t *testing.T) {
 		s := openTestStore(t)
