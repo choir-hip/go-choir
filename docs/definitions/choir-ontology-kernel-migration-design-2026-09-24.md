@@ -140,6 +140,43 @@ is not atomic with a canonical event. Three shapes found:
   self-dev operation states) — need per-site reducer commands or a
   boundary-exception ruling.
 
+**Consensus decision (2026-09-24, claude+gemini38; codex+gpt6-sol
+rate-limited):** hybrid — typed reducer commands (B) + a fail-closed
+kernel-mode guard + narrow binding-gap fixes (C); NOT a substrate-level
+generic `run_state_changed` event (A). A generic event gives the outbox
+fold nothing to derive wakes from and leaves the superseded write path
+alive.
+
+**Deeper gap confirmed:** `projectLifecycleRun` (lifecycle.go:2328) is a
+*projection*, not a reducer — it commits `runObj`+`agentObj` via
+`PutBatchConditional` but emits no `choir.lifecycle_event`, no command
+receipt, no outbox row. So `persistLifecycleRun`→`UpdateRun` is
+non-event-emitting even for lifecycle-bound runs. The (e) fix is not just
+the OG fallback: run state transitions need real reducer commands.
+
+**Landed (494df986):** `Store.kernelMode` flag + `SetKernelMode`/`KernelMode`
++ `UpdateRunOG` fail-closed guard — in kernel mode a bare OG write that
+changes `RunState` returns `ErrLifecycleAuthorityRequired`; metadata-only
+updates still pass. `Runtime.SetKernelMode` propagates to the store. Guard
+is inert until `WithKernelMode` goes live (only `actorruntime/adapter.go`
+calls it). Test: `TestUpdateRunKernelModeRejectsBareStateTransition`.
+
+**Remaining (e) work — typed commands (not yet built):**
+- `TerminalizeRun` — run terminal + `LifecycleRunTerminal` event +
+  worker-update delivery marks + bound work-item resolution in one batch
+  (subsumes `terminalizeRun`, `UpdateRunAndMarkWorkerUpdatesDelivered`,
+  `completeSuccessfulRunWorkItems`). Needs new event kinds
+  (`run_terminalized`, `run_reactivated`) — none exist today.
+- `ReactivateRun` — explicit re-drive to `RunRunning`/`RunPending` +
+  `LifecycleRunReactivated` event (boot sweeps are deleted, not this).
+- `PatchRunMetadata` — metadata-only, no state change, no event.
+- Migrate `UpdateWorkItemStatus`/`UpdateTrajectoryStatus` callers to the
+  existing `ResolveLifecycleWork`/`SettleLifecycleWork`/
+  `CancelLifecycleTrajectory`/`SettleTrajectoryAuthority` commands — zero
+  new commands needed there.
+- After callers migrate: extend the fail-closed guard to
+  `UpdateWorkItemStatusOG`/`UpdateTrajectoryStatusOG`.
+
 ### (c) Dual paths — legacy JSON capsule ops, `DispatchWorkerUpdate`, `report_to_texture`
 
 Replacement: the single canonical path (staged cell intent + reducer event).
