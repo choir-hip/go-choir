@@ -379,3 +379,12 @@ it's independent but red.
   memo's full record schema (frozen prediction, observation, scorer
   identity, discrepancy class, specificity), not a scalar.
 - The assignment/fate saga as host machinery.
+
+## 10. Deferred: world-wire redesign
+
+M12–M16 (supervision workbench, beta hardening, wire observation plane,
+editorial + publication transaction, World Wire live) need redesign on the
+desk-RLM substrate: the wire roles (`processor`, `reconciler`, possibly
+`email`, `conductor`) RLM-ify or delete, and the wire becomes
+precommitment-records-native. Explicitly deferred — do not design now;
+recorded so the stack doesn't read as settled.
