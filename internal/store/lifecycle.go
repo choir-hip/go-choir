@@ -2065,8 +2065,10 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 					seenObjects[outbox.CanonicalID] = struct{}{}
 				} else if !bytes.Equal(existing.Body, outbox.Body) {
 					// Body (not metadata timestamps) carries the obligation; a
-					// pending wake whose body changed is a real conflict.
-					return types.LifecycleResult{}, fmt.Errorf("lifecycle: actor wake outbox %s content drift", outbox.CanonicalID)
+					// pending wake whose body changed means the source was
+					// concurrently transitioned by a different command — the
+					// canonical concurrent-state-change signal.
+					return types.LifecycleResult{}, ErrConcurrentStateChange
 				}
 			}
 		}
