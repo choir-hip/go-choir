@@ -391,6 +391,23 @@ func setTestDispatch(rt *Runtime, s *store.Store) {
 			if _, err := rt.ReconcileCoagentWake(ctx, agent.OwnerID, toAgentID); err != nil {
 				log.Printf("test dispatch: reconcile coagent wake for %s: %v", toAgentID, err)
 			}
+		case "lifecycle_work_assigned":
+			// Synchronous: mirror actorruntime handleLifecycleWorkAssigned so the
+			// projector-delivered wake reconciles the work item into a run.
+			var payload struct {
+				WorkItemID   string `json:"work_item_id"`
+				TrajectoryID string `json:"trajectory_id"`
+			}
+			if json.Unmarshal([]byte(content), &payload) != nil {
+				return nil
+			}
+			if err := rt.ReconcileLifecycleWorkAssignment(ctx, ownerID, computerID, toAgentID, payload.TrajectoryID, payload.WorkItemID); err != nil {
+				log.Printf("test dispatch: reconcile lifecycle work assignment for %s: %v", toAgentID, err)
+			}
+		case "lifecycle_cancellation":
+			if err := rt.HandleLifecycleCancellationWake(ctx, ownerID, computerID, toAgentID, trajectoryID); err != nil {
+				log.Printf("test dispatch: lifecycle cancellation for %s: %v", toAgentID, err)
+			}
 		}
 		return nil
 	})

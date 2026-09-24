@@ -2574,13 +2574,19 @@ func (rt *Runtime) ReconcileLifecycleWorkAssignment(ctx context.Context, ownerID
 		return rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, work.OwnerID, work.ComputerID, work.TrajectoryID)
 	case agentprofile.Research:
 		updates, updateErr := rt.store.ListAllPendingLifecycleUpdates(ctx, work.OwnerID, work.ComputerID, work.AssignedAgentID)
-		if updateErr != nil || len(updates) == 0 {
+		if updateErr != nil {
 			return updateErr
 		}
-		_, reconcileErr := rt.reconcileUpdatedCoagentActor(ctx, work.OwnerID, work.AssignedAgentID)
-		if errors.Is(reconcileErr, ErrDurablyTerminalLifecycleControlActivation) {
-			return nil
+		if len(updates) > 0 {
+			_, reconcileErr := rt.reconcileUpdatedCoagentActor(ctx, work.OwnerID, work.AssignedAgentID)
+			if errors.Is(reconcileErr, ErrDurablyTerminalLifecycleControlActivation) {
+				return nil
+			}
+			return reconcileErr
 		}
+		// A spawned Research work item carries no pending control - the open
+		// work item itself is the obligation, so bind an actor for it.
+		_, reconcileErr := rt.reconcileAssignedWorkItemActor(ctx, []types.WorkItemRecord{work})
 		return reconcileErr
 	default:
 		_, reconcileErr := rt.reconcileAssignedWorkItemActor(ctx, []types.WorkItemRecord{work})
