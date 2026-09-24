@@ -71,7 +71,7 @@ func seedTextureLifecycleControl(t *testing.T, s *store.Store, ownerID, suffix, 
 	}
 	workID := "target-work-" + suffix
 	controlPacket := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "typed payload " + suffix}
-	if targetProfile == agentprofile.Super {
+	if targetProfile == agentprofile.Management {
 		controlPacket.Kind = "execution_request"
 		controlPacket.Actions = []types.CoagentPacketAction{{Type: "run_command", Objective: "inspect " + suffix, Safety: types.CoagentPacketActionSafety{MutationClass: "green", Network: "forbidden", FileMutation: "forbidden"}}}
 	} else {
@@ -80,7 +80,7 @@ func seedTextureLifecycleControl(t *testing.T, s *store.Store, ownerID, suffix, 
 		if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
 			t.Fatal(err)
 		}
-		targetRun := types.RunRecord{RunID: "researcher-control-run-" + suffix, OwnerID: ownerID, ComputerID: computerID, AgentID: targetAgentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": workID, "work_item_ids": []string{workID}}, CreatedAt: now, UpdatedAt: now}
+		targetRun := types.RunRecord{RunID: "researcher-control-run-" + suffix, OwnerID: ownerID, ComputerID: computerID, AgentID: targetAgentID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunRunning, Metadata: map[string]any{"lifecycle_work_item_id": workID, "work_item_ids": []string{workID}}, CreatedAt: now, UpdatedAt: now}
 		projectTarget := types.ReplaceLifecycleActivationRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "project-researcher-control-" + suffix, TrajectoryID: trajectoryID, AgentID: targetAgentID, Run: targetRun}
 		projectTarget.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(projectTarget)
 		if _, err := s.ReplaceLifecycleActivation(ctx, projectTarget); err != nil {
@@ -98,8 +98,8 @@ func seedTextureLifecycleControl(t *testing.T, s *store.Store, ownerID, suffix, 
 		CallerWorkItemID: start.InitialWork.WorkItemID, CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "wait after control",
 		Controls: []types.TextureTurnControl{{ControlID: "control-" + suffix, TargetAgentID: targetAgentID, TargetWorkItemID: workID, Packet: controlPacket, Content: content, PayloadDigest: payloadDigest}},
 	}
-	if targetProfile == agentprofile.Super {
-		turn.Controls[0].OpenWork = &types.WorkItemRecord{WorkItemID: workID, Objective: "execute " + suffix, AuthorityProfile: agentprofile.Super, AssignedAgentID: targetAgentID}
+	if targetProfile == agentprofile.Management {
+		turn.Controls[0].OpenWork = &types.WorkItemRecord{WorkItemID: workID, Objective: "execute " + suffix, AuthorityProfile: agentprofile.Management, AssignedAgentID: targetAgentID}
 	}
 	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
 	result, err := s.ApplyTextureTurn(ctx, turn)
@@ -107,16 +107,16 @@ func seedTextureLifecycleControl(t *testing.T, s *store.Store, ownerID, suffix, 
 		t.Fatal(err)
 	}
 	fixture := lifecycleControlFixture{trajectoryID: trajectoryID, workID: workID, control: result.Controls[0]}
-	if targetProfile == agentprofile.Researcher {
+	if targetProfile == agentprofile.Research {
 		fixture.run, _ = s.GetLifecycleRun(ctx, ownerID, computerID, "researcher-control-run-"+suffix)
 	}
 	return fixture
 }
 
-func bindResearcherControlFixture(t *testing.T, rt *Runtime, s *store.Store, ownerID, suffix string) lifecycleControlFixture {
+func bindResearchControlFixture(t *testing.T, rt *Runtime, s *store.Store, ownerID, suffix string) lifecycleControlFixture {
 	t.Helper()
-	target := agentprofile.Researcher + ":control-" + suffix
-	fixture := seedTextureLifecycleControl(t, s, ownerID, suffix, target, agentprofile.Researcher)
+	target := agentprofile.Research + ":control-" + suffix
+	fixture := seedTextureLifecycleControl(t, s, ownerID, suffix, target, agentprofile.Research)
 	work, err := s.GetLifecycleWorkItem(context.Background(), ownerID, fixture.run.ComputerID, fixture.workID)
 	if err != nil {
 		t.Fatal(err)
@@ -157,7 +157,7 @@ func TestLifecycleControlActorOccurrenceContentResistsDelimiterCollision(t *test
 
 func TestBoundLifecycleControlWarmAndColdInjectionExactlyOnce(t *testing.T) {
 	rt, s := testRuntime(t)
-	fixture := bindResearcherControlFixture(t, rt, s, "owner-control-injection", "warm")
+	fixture := bindResearchControlFixture(t, rt, s, "owner-control-injection", "warm")
 	inject := rt.coagentUpdateTurnInjectorWithInitialPhase(&fixture.run, coagentPacketDeliveryCold)
 	first, err := inject(false)
 	if err != nil || len(first) != 1 || !strings.Contains(string(first[0]), fixture.control.Content) || !strings.Contains(string(first[0]), "evidence_update") {
@@ -169,7 +169,7 @@ func TestBoundLifecycleControlWarmAndColdInjectionExactlyOnce(t *testing.T) {
 		t.Fatalf("warm duplicate injection=%s err=%v", second, err)
 	}
 
-	cold := bindResearcherControlFixture(t, rt, s, "owner-control-injection", "cold")
+	cold := bindResearchControlFixture(t, rt, s, "owner-control-injection", "cold")
 	messages, err := rt.prependInitialCoagentUpdatePackets(context.Background(), &cold.run, []json.RawMessage{json.RawMessage(`{"role":"user","content":"base"}`)})
 	if err != nil || len(messages) != 2 || !strings.Contains(string(messages[0]), cold.control.Content) {
 		t.Fatalf("cold exact injection=%s err=%v", messages, err)
@@ -181,10 +181,10 @@ func TestBoundLifecycleControlWarmAndColdInjectionExactlyOnce(t *testing.T) {
 	}
 }
 
-func TestLifecycleResearcherProducerReportAuthorityUsesExactControlFingerprint(t *testing.T) {
+func TestLifecycleResearchProducerReportAuthorityUsesExactControlFingerprint(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
-	fixture := seedAtomicResearcherControl(t, s, "producer-report-authority")
+	fixture := seedAtomicResearchControl(t, s, "producer-report-authority")
 	rec, err := rt.ReconcileCoagentWake(t.Context(), fixture.ownerID, fixture.agentID)
 	if err != nil || rec == nil {
 		t.Fatalf("reconcile exact source run=%+v err=%v", rec, err)
@@ -208,7 +208,7 @@ func TestLifecycleResearcherProducerReportAuthorityUsesExactControlFingerprint(t
 
 func TestExactRunLifecycleInjectionIncludesOccurrence101AndPreservesPriorBindings(t *testing.T) {
 	rt, s := testRuntime(t)
-	fixture := bindResearcherControlFixture(t, rt, s, "owner-101", "occurrence-101")
+	fixture := bindResearchControlFixture(t, rt, s, "owner-101", "occurrence-101")
 	snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, fixture.trajectoryID)
 	if err != nil {
 		t.Fatal(err)
@@ -286,7 +286,7 @@ func TestExactRunLifecycleInjectionIncludesOccurrence101AndPreservesPriorBinding
 	}
 }
 
-func TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *testing.T) {
+func TestPersistentManagementLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *testing.T) {
 	rt, s := testRuntime(t)
 	var dispatches []string
 	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
@@ -294,13 +294,13 @@ func TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *
 		return nil
 	})
 	ownerID := "owner-super-two-trajectories"
-	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(context.Background(), ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	one := seedTextureLifecycleControl(t, s, ownerID, "super-a", superAgent.AgentID, agentprofile.Super)
-	two := seedTextureLifecycleControl(t, s, ownerID, "super-b", superAgent.AgentID, agentprofile.Super)
-	pending, err := rt.listPendingPersistentSuperLifecycleControls(context.Background(), ownerID, "autoputer-test", superAgent.AgentID, 10)
+	one := seedTextureLifecycleControl(t, s, ownerID, "super-a", managementAgent.AgentID, agentprofile.Management)
+	two := seedTextureLifecycleControl(t, s, ownerID, "super-b", managementAgent.AgentID, agentprofile.Management)
+	pending, err := rt.listPendingPersistentManagementLifecycleControls(context.Background(), ownerID, "autoputer-test", managementAgent.AgentID, 10)
 	if err != nil || len(pending) != 2 {
 		t.Fatalf("pending trajectories=%+v err=%v", pending, err)
 	}
@@ -309,30 +309,30 @@ func TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *
 	if secondTrajectory == firstTrajectory {
 		secondTrajectory = two.trajectoryID
 	}
-	firstRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	firstRun, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || firstRun == nil || lifecycleControlTrajectoryForRun(firstRun) != firstTrajectory {
-		t.Fatalf("first persistent Super run=%+v err=%v", firstRun, err)
+		t.Fatalf("first persistent Management run=%+v err=%v", firstRun, err)
 	}
-	injected, err := rt.pendingCoagentUpdatesForRun(context.Background(), firstRun, ownerID, superAgent.AgentID, 10)
+	injected, err := rt.pendingCoagentUpdatesForRun(context.Background(), firstRun, ownerID, managementAgent.AgentID, 10)
 	if err != nil || len(injected) != 1 || injected[0].TrajectoryID != firstTrajectory || injected[0].DeliveredToRunID != firstRun.RunID {
 		t.Fatalf("first run mixed trajectory payload=%+v err=%v", injected, err)
 	}
 	// Boot passivates the interrupted non-lifecycle run, then deterministically
 	// reactivates that exact delivered-to run before considering trajectory B.
 	rt.Start(context.Background())
-	bootRun, err := rt.latestActiveRunByAgent(context.Background(), ownerID, superAgent.AgentID)
+	bootRun, err := rt.latestActiveRunByAgent(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || bootRun.RunID != firstRun.RunID || lifecycleControlTrajectoryForRun(&bootRun) != firstTrajectory {
 		t.Fatalf("boot exact-run reconciliation=%+v err=%v", bootRun, err)
 	}
 	foundRecovery := false
 	for _, dispatch := range dispatches {
-		if strings.HasPrefix(dispatch, "coagent_result:"+PersistentSuperRecoveryPrefix) {
+		if strings.HasPrefix(dispatch, "coagent_result:"+PersistentManagementRecoveryPrefix) {
 			foundRecovery = true
 			break
 		}
 	}
 	if !foundRecovery {
-		t.Fatalf("boot did not enqueue exact persistent Super recovery occurrence: %v", dispatches)
+		t.Fatalf("boot did not enqueue exact persistent Management recovery occurrence: %v", dispatches)
 	}
 	bootInject := rt.coagentUpdateTurnInjectorWithInitialPhase(&bootRun, coagentPacketDeliveryCold)
 	firstBootPayload, err := bootInject(false)
@@ -351,33 +351,33 @@ func TestPersistentSuperLifecycleControlsStayTrajectoryIsolatedThenReconcile(t *
 	if err := s.UpdateRun(context.Background(), bootRun); err != nil {
 		t.Fatal(err)
 	}
-	rt.maybeContinuePersistentSuperInbox(context.Background(), &bootRun)
+	rt.maybeContinuePersistentManagementInbox(context.Background(), &bootRun)
 	// Terminal/passivation events wake Texture, never select backlog:
-	if _, err := rt.latestActiveRunByAgent(context.Background(), ownerID, superAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("passivation inbox continuation minted unexpected Super from backlog: err=%v", err)
+	if _, err := rt.latestActiveRunByAgent(context.Background(), ownerID, managementAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("passivation inbox continuation minted unexpected Management from backlog: err=%v", err)
 	}
 	// The next live trigger drains the pending backlog in FIFO order:
-	secondRun, err := rt.ReconcileCoagentWake(context.Background(), ownerID, superAgent.AgentID)
+	secondRun, err := rt.ReconcileCoagentWake(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || secondRun == nil || secondRun.RunID == firstRun.RunID || lifecycleControlTrajectoryForRun(secondRun) != secondTrajectory {
 		t.Fatalf("second trajectory reconciliation=%+v err=%v dispatches=%v", secondRun, err, dispatches)
 	}
-	secondPayload, err := rt.pendingCoagentUpdatesForRun(context.Background(), secondRun, ownerID, superAgent.AgentID, 10)
+	secondPayload, err := rt.pendingCoagentUpdatesForRun(context.Background(), secondRun, ownerID, managementAgent.AgentID, 10)
 	if err != nil || len(secondPayload) != 1 || secondPayload[0].TrajectoryID != secondTrajectory {
 		t.Fatalf("second run payload=%+v err=%v", secondPayload, err)
 	}
 }
 
-func TestPersistentSuperLiveOccurrenceBindsExactControlNotFIFO(t *testing.T) {
+func TestPersistentManagementLiveOccurrenceBindsExactControlNotFIFO(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	ownerID := "owner-super-live-exact"
-	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(context.Background(), ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	one := seedTextureLifecycleControl(t, s, ownerID, "live-a", superAgent.AgentID, agentprofile.Super)
-	two := seedTextureLifecycleControl(t, s, ownerID, "live-b", superAgent.AgentID, agentprofile.Super)
-	pending, err := rt.listPendingPersistentSuperLifecycleControls(context.Background(), ownerID, "autoputer-test", superAgent.AgentID, 10)
+	one := seedTextureLifecycleControl(t, s, ownerID, "live-a", managementAgent.AgentID, agentprofile.Management)
+	two := seedTextureLifecycleControl(t, s, ownerID, "live-b", managementAgent.AgentID, agentprofile.Management)
+	pending, err := rt.listPendingPersistentManagementLifecycleControls(context.Background(), ownerID, "autoputer-test", managementAgent.AgentID, 10)
 	if err != nil || len(pending) != 2 {
 		t.Fatalf("pending=%+v err=%v", pending, err)
 	}
@@ -387,38 +387,38 @@ func TestPersistentSuperLiveOccurrenceBindsExactControlNotFIFO(t *testing.T) {
 		later = one.control
 	}
 	if later.UpdateID == fifoFirst {
-		t.Fatal("could not select a non-FIFO pending Super control")
+		t.Fatal("could not select a non-FIFO pending Management control")
 	}
 	content := LifecycleControlActorOccurrenceContent(later)
-	rec, terminal, err := rt.ResolvePersistentSuperLiveOccurrence(context.Background(), ownerID, "autoputer-test", superAgent.AgentID, content, later.TrajectoryID, later.AgentID)
+	rec, terminal, err := rt.ResolvePersistentManagementLiveOccurrence(context.Background(), ownerID, "autoputer-test", managementAgent.AgentID, content, later.TrajectoryID, later.AgentID)
 	if err != nil || terminal || rec == nil {
 		t.Fatalf("live occurrence=%+v terminal=%t err=%v", rec, terminal, err)
 	}
 	if lifecycleControlTrajectoryForRun(rec) != later.TrajectoryID {
 		t.Fatalf("bound trajectory=%q want %q fifo=%q", lifecycleControlTrajectoryForRun(rec), later.TrajectoryID, pending[0].TrajectoryID)
 	}
-	injected, err := rt.pendingCoagentUpdatesForRun(context.Background(), rec, ownerID, superAgent.AgentID, 10)
+	injected, err := rt.pendingCoagentUpdatesForRun(context.Background(), rec, ownerID, managementAgent.AgentID, 10)
 	if err != nil || len(injected) != 1 || injected[0].UpdateID != later.UpdateID {
 		t.Fatalf("live payload=%+v err=%v want %s", injected, err, later.UpdateID)
 	}
 
-	third := seedTextureLifecycleControl(t, s, ownerID, "live-c", superAgent.AgentID, agentprofile.Super)
+	third := seedTextureLifecycleControl(t, s, ownerID, "live-c", managementAgent.AgentID, agentprofile.Management)
 	laterContent := LifecycleControlActorOccurrenceContent(third.control)
-	_, _, occupiedErr := rt.ResolvePersistentSuperLiveOccurrence(context.Background(), ownerID, "autoputer-test", superAgent.AgentID, laterContent, third.control.TrajectoryID, third.control.AgentID)
+	_, _, occupiedErr := rt.ResolvePersistentManagementLiveOccurrence(context.Background(), ownerID, "autoputer-test", managementAgent.AgentID, laterContent, third.control.TrajectoryID, third.control.AgentID)
 	if !errors.Is(occupiedErr, ErrActivationOccurrenceMustRemainUnprocessed) {
 		t.Fatalf("occupied slot err=%v", occupiedErr)
 	}
 }
 
-func TestPersistentSuperRestartUsesDistinctRecoveryOccurrence(t *testing.T) {
+func TestPersistentManagementRestartUsesDistinctRecoveryOccurrence(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "owner-super-recovery-occurrence"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-recovery-occurrence", superAgent.AgentID, agentprofile.Super)
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-recovery-occurrence", managementAgent.AgentID, agentprofile.Management)
 	type dispatch struct {
 		kind, content, trajectoryID, fromAgentID string
 	}
@@ -427,9 +427,9 @@ func TestPersistentSuperRestartUsesDistinctRecoveryOccurrence(t *testing.T) {
 		dispatches = append(dispatches, dispatch{kind: kind, content: content, trajectoryID: trajectoryID, fromAgentID: fromAgentID})
 		return nil
 	})
-	first, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	first, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
 	if err != nil || first == nil {
-		t.Fatalf("initial Super reconciliation=%+v err=%v", first, err)
+		t.Fatalf("initial Management reconciliation=%+v err=%v", first, err)
 	}
 	if len(dispatches) != 1 || dispatches[0].kind != "initial_dispatch" {
 		t.Fatalf("initial dispatches=%+v", dispatches)
@@ -442,38 +442,38 @@ func TestPersistentSuperRestartUsesDistinctRecoveryOccurrence(t *testing.T) {
 	if err := s.UpdateRun(ctx, *first); err != nil {
 		t.Fatal(err)
 	}
-	recovered, ok, err := rt.reactivateRestartedPersistentSuperControlRun(ctx, ownerID, superAgent.AgentID)
+	recovered, ok, err := rt.reactivateRestartedPersistentManagementControlRun(ctx, ownerID, managementAgent.AgentID)
 	if err != nil || !ok || recovered == nil || recovered.RunID != first.RunID || recovered.State != types.RunPending {
-		t.Fatalf("recovered Super=%+v ok=%t err=%v", recovered, ok, err)
+		t.Fatalf("recovered Management=%+v ok=%t err=%v", recovered, ok, err)
 	}
 	if len(dispatches) != 1 || dispatches[0].kind != "coagent_result" ||
-		!strings.HasPrefix(dispatches[0].content, PersistentSuperRecoveryPrefix) ||
+		!strings.HasPrefix(dispatches[0].content, PersistentManagementRecoveryPrefix) ||
 		dispatches[0].trajectoryID != fixture.trajectoryID || dispatches[0].fromAgentID != fixture.control.AgentID {
 		t.Fatalf("recovery dispatches=%+v", dispatches)
 	}
-	occurrence, err := DecodePersistentSuperRecovery(dispatches[0].content)
+	occurrence, err := DecodePersistentManagementRecovery(dispatches[0].content)
 	if err != nil || occurrence.RunID != first.RunID || len(occurrence.Controls) != 1 ||
 		occurrence.Controls[0].UpdateID != fixture.control.UpdateID {
 		t.Fatalf("recovery occurrence=%+v err=%v", occurrence, err)
 	}
-	resolved, terminal, err := rt.ResolvePersistentSuperRecovery(ctx, ownerID, rt.TextureComputerID(), superAgent.AgentID,
+	resolved, terminal, err := rt.ResolvePersistentManagementRecovery(ctx, ownerID, rt.TextureComputerID(), managementAgent.AgentID,
 		dispatches[0].content, dispatches[0].trajectoryID, dispatches[0].fromAgentID)
 	if err != nil || terminal || resolved == nil || resolved.RunID != first.RunID {
 		t.Fatalf("resolved recovery=%+v terminal=%t err=%v", resolved, terminal, err)
 	}
 }
 
-func TestPersistentSuperReconcilesOtherTrajectoryAfterTerminalRun(t *testing.T) {
+func TestPersistentManagementReconcilesOtherTrajectoryAfterTerminalRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	ownerID := "owner-super-terminal-trajectories"
-	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(context.Background(), ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	one := seedTextureLifecycleControl(t, s, ownerID, "terminal-a", superAgent.AgentID, agentprofile.Super)
-	two := seedTextureLifecycleControl(t, s, ownerID, "terminal-b", superAgent.AgentID, agentprofile.Super)
-	first, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	one := seedTextureLifecycleControl(t, s, ownerID, "terminal-a", managementAgent.AgentID, agentprofile.Management)
+	two := seedTextureLifecycleControl(t, s, ownerID, "terminal-b", managementAgent.AgentID, agentprofile.Management)
+	first, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || first == nil {
 		t.Fatalf("first terminal fixture run=%+v err=%v", first, err)
 	}
@@ -487,17 +487,17 @@ func TestPersistentSuperReconcilesOtherTrajectoryAfterTerminalRun(t *testing.T) 
 	if err := s.UpdateRun(context.Background(), *first); err != nil {
 		t.Fatal(err)
 	}
-	rt.maybeContinuePersistentSuperInbox(context.Background(), first)
+	rt.maybeContinuePersistentManagementInbox(context.Background(), first)
 	// Terminal events wake Texture, never select backlog:
-	if _, err := rt.latestActiveRunByAgent(context.Background(), ownerID, superAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("terminal inbox continuation minted unexpected Super from backlog: err=%v", err)
+	if _, err := rt.latestActiveRunByAgent(context.Background(), ownerID, managementAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("terminal inbox continuation minted unexpected Management from backlog: err=%v", err)
 	}
 	// The next live trigger drains the pending backlog in FIFO order:
-	second, err := rt.ReconcileCoagentWake(context.Background(), ownerID, superAgent.AgentID)
+	second, err := rt.ReconcileCoagentWake(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || second == nil || second.RunID == first.RunID || lifecycleControlTrajectoryForRun(second) != secondTrajectory {
 		t.Fatalf("live trigger reconciliation=%+v err=%v", second, err)
 	}
-	payload, err := rt.pendingCoagentUpdatesForRun(context.Background(), second, ownerID, superAgent.AgentID, 10)
+	payload, err := rt.pendingCoagentUpdatesForRun(context.Background(), second, ownerID, managementAgent.AgentID, 10)
 	if err != nil || len(payload) != 1 || payload[0].TrajectoryID != secondTrajectory || payload[0].TrajectoryID == firstTrajectory {
 		t.Fatalf("terminal continuation payload=%+v err=%v", payload, err)
 	}
@@ -505,7 +505,7 @@ func TestPersistentSuperReconcilesOtherTrajectoryAfterTerminalRun(t *testing.T) 
 
 func TestLifecycleInjectionRestartDerivesSeenFromDurableMemoryAndRejectsSpoof(t *testing.T) {
 	rt, s := testRuntime(t)
-	fixture := bindResearcherControlFixture(t, rt, s, "owner-memory-gap", "memory-gap")
+	fixture := bindResearchControlFixture(t, rt, s, "owner-memory-gap", "memory-gap")
 	first := rt.coagentUpdateTurnInjectorWithInitialPhase(&fixture.run, coagentPacketDeliveryCold)
 	messages, err := first(false)
 	if err != nil || len(messages) != 1 {
@@ -533,12 +533,12 @@ func TestLifecycleInjectionRestartDerivesSeenFromDurableMemoryAndRejectsSpoof(t 
 	}
 }
 
-func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResearcherRun(t *testing.T) {
+func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResearchRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	fixture := bindResearcherControlFixture(t, rt, s, "owner-append-failure", "append-failure")
+	fixture := bindResearchControlFixture(t, rt, s, "owner-append-failure", "append-failure")
 	fixture.run.Metadata = cloneMetadata(fixture.run.Metadata)
 	fixture.run.Metadata["request_source"] = "lifecycle_texture_control"
 	if err := s.UpdateRun(context.Background(), fixture.run); err != nil {
@@ -627,10 +627,10 @@ func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResear
 	if err != nil {
 		t.Fatal(err)
 	}
-	if recovered.RunID != failed.RunID || recovered.AgentID != failed.AgentID || recovered.AgentProfile != agentprofile.Researcher ||
-		recovered.AgentRole != agentprofile.Researcher || recovered.TrajectoryID != failed.TrajectoryID || recovered.State != types.RunPending ||
+	if recovered.RunID != failed.RunID || recovered.AgentID != failed.AgentID || recovered.AgentProfile != agentprofile.Research ||
+		recovered.AgentRole != agentprofile.Research || recovered.TrajectoryID != failed.TrajectoryID || recovered.State != types.RunPending ||
 		!metadataBoolValue(recovered.Metadata, "actor_reactivate_existing_memory") {
-		t.Fatalf("restart did not reactivate exact Researcher run: %+v", recovered)
+		t.Fatalf("restart did not reactivate exact Research run: %+v", recovered)
 	}
 	bindingsAfter, err := json.Marshal(recovered.Metadata["lifecycle_control_bindings"])
 	if err != nil || string(bindingsAfter) != string(bindingsBefore) {
@@ -648,7 +648,7 @@ func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResear
 	if err != nil || trajectoryAfterRestart.Status != types.TrajectoryLive {
 		t.Fatalf("restart changed live trajectory=%+v err=%v", trajectoryAfterRestart, err)
 	}
-	if len(dispatches) != 1 || !strings.Contains(dispatches[0], failed.AgentID+"|coagent_result|"+LifecycleResearcherAdmissionRecoveryPrefix) {
+	if len(dispatches) != 1 || !strings.Contains(dispatches[0], failed.AgentID+"|coagent_result|"+LifecycleResearchAdmissionRecoveryPrefix) {
 		t.Fatalf("restart dispatches=%v, want one structured exact-run recovery occurrence", dispatches)
 	}
 
@@ -665,14 +665,14 @@ func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResear
 		}
 	}
 	if len(targetRuns) != 1 || targetRuns[0].RunID != failed.RunID {
-		t.Fatalf("restart created or rebound another Researcher run: %+v", targetRuns)
+		t.Fatalf("restart created or rebound another Research run: %+v", targetRuns)
 	}
 	retried, err := restarted.coagentUpdateTurnInjectorWithInitialPhase(&recovered, coagentPacketDeliveryCold)(false)
 	if err != nil || len(retried) != 1 || !strings.Contains(string(retried[0]), fixture.control.UpdateID) {
 		t.Fatalf("same-run retry payload=%s err=%v", retried, err)
 	}
 }
-func TestPersistentSuperReportToTextureCanonicalReplayWakeAndInjection(t *testing.T) {
+func TestPersistentManagementReportToTextureCanonicalReplayWakeAndInjection(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatal(err)
@@ -683,14 +683,14 @@ func TestPersistentSuperReportToTextureCanonicalReplayWakeAndInjection(t *testin
 		return nil
 	})
 	ownerID := "owner-super-report-texture"
-	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(context.Background(), ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-report", superAgent.AgentID, agentprofile.Super)
-	parent, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-report", managementAgent.AgentID, agentprofile.Management)
+	parent, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || parent == nil {
-		t.Fatalf("reconcile persistent Super = %+v err=%v", parent, err)
+		t.Fatalf("reconcile persistent Management = %+v err=%v", parent, err)
 	}
 	inject := rt.coagentUpdateTurnInjectorWithInitialPhase(parent, coagentPacketDeliveryCold)
 	authorityMessages, err := inject(false)
@@ -701,23 +701,23 @@ func TestPersistentSuperReportToTextureCanonicalReplayWakeAndInjection(t *testin
 	dispatches = nil
 	raw := json.RawMessage(`{"kind":"execution_result","summary":"inspected assignment progress","claims":[],"sources":[],"actions":[],"questions":[],"notes":["evidence:progress"],"work_disposition":"open"}`)
 	ctx := toolContextForTestCall(parent, "provider-call-report-texture")
-	first, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", raw)
+	first, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", raw)
 	if err != nil || !strings.Contains(first, `"replay":false`) {
 		t.Fatalf("first report = %s err=%v", first, err)
 	}
 	if len(dispatches) != 1 || !strings.HasPrefix(dispatches[0], "coagent_result:sha256:") {
 		t.Fatalf("post-commit wakes = %+v", dispatches)
 	}
-	second, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", raw)
+	second, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", raw)
 	if err != nil || !strings.Contains(second, `"replay":true`) || len(dispatches) != 1 {
 		t.Fatalf("report replay = %s err=%v wakes=%+v", second, err, dispatches)
 	}
 	unknown := json.RawMessage(`{"kind":"execution_result","summary":"bad","claims":[],"sources":[],"actions":[],"questions":[],"notes":["x"],"work_disposition":"open","target_agent_id":"texture:forged"}`)
-	if _, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolContextForTestCall(parent, "provider-call-report-unknown"), "report_to_texture", unknown); err == nil || !strings.Contains(err.Error(), "unknown field") {
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolContextForTestCall(parent, "provider-call-report-unknown"), "report_to_texture", unknown); err == nil || !strings.Contains(err.Error(), "unknown field") {
 		t.Fatalf("unknown authority field = %v", err)
 	}
 	forged := json.RawMessage(`{"kind":"proposal","summary":"bad authority","claims":[],"sources":[],"actions":[{"type":"inspect_file","objective":"inspect","inputs":{"nested":{"workItemID":"forged"}}}],"questions":[],"notes":[],"work_disposition":"open"}`)
-	if _, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolContextForTestCall(parent, "provider-call-report-forged"), "report_to_texture", forged); err == nil || !strings.Contains(err.Error(), "cannot author lifecycle authority") {
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolContextForTestCall(parent, "provider-call-report-forged"), "report_to_texture", forged); err == nil || !strings.Contains(err.Error(), "cannot author lifecycle authority") {
 		t.Fatalf("nested authority input = %v", err)
 	}
 	updates, err := s.ListPendingLifecycleUpdates(context.Background(), ownerID, "autoputer-test", fixture.control.AgentID, 10)
@@ -739,18 +739,18 @@ func TestPersistentSuperReportToTextureCanonicalReplayWakeAndInjection(t *testin
 	}
 }
 
-func TestPersistentSuperReportRequiresCompleteAuthenticated101DeliveryAndDispositionsAtomically(t *testing.T) {
+func TestPersistentManagementReportRequiresCompleteAuthenticated101DeliveryAndDispositionsAtomically(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	ownerID := "owner-super-report-101"
-	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(context.Background(), ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-report-101", superAgent.AgentID, agentprofile.Super)
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-report-101", managementAgent.AgentID, agentprofile.Management)
 	snapshot, err := s.GetLifecycleSnapshot(context.Background(), ownerID, "autoputer-test", fixture.trajectoryID)
 	if err != nil {
 		t.Fatal(err)
@@ -775,7 +775,7 @@ func TestPersistentSuperReportRequiresCompleteAuthenticated101DeliveryAndDisposi
 		if err != nil {
 			t.Fatal(err)
 		}
-		controls = append(controls, types.TextureTurnControl{ControlID: fmt.Sprintf("super-bulk-control-%03d", i), TargetAgentID: superAgent.AgentID, TargetWorkItemID: fixture.workID, Packet: packet, Content: content, PayloadDigest: digest})
+		controls = append(controls, types.TextureTurnControl{ControlID: fmt.Sprintf("super-bulk-control-%03d", i), TargetAgentID: managementAgent.AgentID, TargetWorkItemID: fixture.workID, Packet: packet, Content: content, PayloadDigest: digest})
 	}
 	turnReq := types.ApplyTextureTurnRequest{OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "turn-super-controls-2-101", DocumentID: snapshot.Document.DocID, TrajectoryID: fixture.trajectoryID, CallerAgentID: textureAgentID, CallerRunID: textureAgent.ActiveRunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: callerWorkID, CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "queue all super directions", Controls: controls}
 	turnReq.CommandDigest, err = store.ComputeApplyTextureTurnDigest(turnReq)
@@ -785,7 +785,7 @@ func TestPersistentSuperReportRequiresCompleteAuthenticated101DeliveryAndDisposi
 	if _, err := s.ApplyTextureTurn(context.Background(), turnReq); err != nil {
 		t.Fatal(err)
 	}
-	parent, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	parent, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || parent == nil {
 		t.Fatalf("reconcile 101 control run=%+v err=%v", parent, err)
 	}
@@ -799,7 +799,7 @@ func TestPersistentSuperReportRequiresCompleteAuthenticated101DeliveryAndDisposi
 	}
 	appendAuthenticatedInjectionForTest(t, s, *parent, partialMessages[0])
 	raw := json.RawMessage(`{"kind":"execution_result","summary":"complete 101 directions","claims":[],"sources":[],"actions":[],"questions":[],"notes":["complete"],"work_disposition":"open"}`)
-	partialResult, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolContextForTestCall(parent, "report-partial-101"), "report_to_texture", raw)
+	partialResult, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolContextForTestCall(parent, "report-partial-101"), "report_to_texture", raw)
 	if err != nil {
 		t.Fatalf("partial durable delivery report: %v", err)
 	}
@@ -824,7 +824,7 @@ func TestPersistentSuperReportRequiresCompleteAuthenticated101DeliveryAndDisposi
 		t.Fatalf("remaining occurrence 101=%s err=%v", remaining, err)
 	}
 	appendAuthenticatedInjectionForTest(t, s, *parent, remaining[0])
-	completeResult, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolContextForTestCall(parent, "report-complete-101"), "report_to_texture", raw)
+	completeResult, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolContextForTestCall(parent, "report-complete-101"), "report_to_texture", raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -841,11 +841,11 @@ func TestPersistentSuperReportRequiresCompleteAuthenticated101DeliveryAndDisposi
 		}
 	}
 	if pending, err := s.ListAllPendingLifecycleUpdates(context.Background(), ownerID, "autoputer-test", parent.AgentID); err != nil || len(pending) != 0 {
-		t.Fatalf("pending Super delivery after report=%d err=%v", len(pending), err)
+		t.Fatalf("pending Management delivery after report=%d err=%v", len(pending), err)
 	}
 }
 
-func TestPersistentSuperReportAfterCancellationIsHistoricalLateEvidenceOnly(t *testing.T) {
+func TestPersistentManagementReportAfterCancellationIsHistoricalLateEvidenceOnly(t *testing.T) {
 	for _, oldRunState := range []types.RunState{types.RunCancelled, types.RunPassivated} {
 		t.Run(string(oldRunState), func(t *testing.T) {
 			rt, s := testRuntime(t)
@@ -858,14 +858,14 @@ func TestPersistentSuperReportAfterCancellationIsHistoricalLateEvidenceOnly(t *t
 				return nil
 			})
 			ownerID := "owner-super-late-" + string(oldRunState)
-			superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+			managementAgent, err := rt.EnsurePersistentManagementAgent(context.Background(), ownerID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			fixture := seedTextureLifecycleControl(t, s, ownerID, "late-"+string(oldRunState), superAgent.AgentID, agentprofile.Super)
-			parent, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+			fixture := seedTextureLifecycleControl(t, s, ownerID, "late-"+string(oldRunState), managementAgent.AgentID, agentprofile.Management)
+			parent, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgent.AgentID)
 			if err != nil || parent == nil {
-				t.Fatalf("reconcile persistent Super = %+v err=%v", parent, err)
+				t.Fatalf("reconcile persistent Management = %+v err=%v", parent, err)
 			}
 			inject := rt.coagentUpdateTurnInjectorWithInitialPhase(parent, coagentPacketDeliveryCold)
 			authorityMessages, injectErr := inject(false)
@@ -901,7 +901,7 @@ func TestPersistentSuperReportAfterCancellationIsHistoricalLateEvidenceOnly(t *t
 			dispatches = nil
 			raw := json.RawMessage(`{"kind":"execution_result","summary":"real delayed result after cancellation","claims":[],"sources":[],"actions":[],"questions":[],"notes":["historical evidence only"],"work_disposition":"completed"}`)
 			ctx := toolContextForTestCall(parent, "provider-call-late-"+string(oldRunState))
-			first, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", raw)
+			first, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", raw)
 			if err != nil {
 				t.Fatalf("late report = %s err=%v", first, err)
 			}
@@ -933,12 +933,12 @@ func TestPersistentSuperReportAfterCancellationIsHistoricalLateEvidenceOnly(t *t
 			if err != nil || stored.Disposition != types.UpdateLate || stored.DeliveredAt != nil || stored.DeliveredToRunID != "" {
 				t.Fatalf("stored late evidence=%+v err=%v", stored, err)
 			}
-			replay, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", raw)
+			replay, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", raw)
 			if err != nil || !strings.Contains(replay, `"replay":true`) || len(dispatches) != 0 {
 				t.Fatalf("late replay=%s err=%v wakes=%v", replay, err, dispatches)
 			}
 			conflict := json.RawMessage(`{"kind":"execution_result","summary":"changed delayed result","claims":[],"sources":[],"actions":[],"questions":[],"notes":["historical evidence only"],"work_disposition":"completed"}`)
-			if _, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(ctx, "report_to_texture", conflict); err == nil || !strings.Contains(err.Error(), "conflict") {
+			if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", conflict); err == nil || !strings.Contains(err.Error(), "conflict") {
 				t.Fatalf("changed late replay did not conflict: %v", err)
 			}
 		})
@@ -959,13 +959,13 @@ func TestSelectLifecycleControlActivationRejectsProducerReports(t *testing.T) {
 	}
 }
 
-type atomicResearcherControlFixture struct {
+type atomicResearchControlFixture struct {
 	ownerID, computerID, trajectoryID, docID string
 	agentID, workID                          string
 	control                                  types.CoagentSourcePacket
 }
 
-func seedAtomicResearcherControl(t *testing.T, s *store.Store, suffix string) atomicResearcherControlFixture {
+func seedAtomicResearchControl(t *testing.T, s *store.Store, suffix string) atomicResearchControlFixture {
 	t.Helper()
 	ctx := context.Background()
 	ownerID, computerID := "owner-atomic-"+suffix, "autoputer-test"
@@ -1002,15 +1002,15 @@ func seedAtomicResearcherControl(t *testing.T, s *store.Store, suffix string) at
 		CallerAgentID: textureAgentID, CallerRunID: caller.RunID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: textureAgent.LifecycleVersion,
 		ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, CallerWorkItemID: start.InitialWork.WorkItemID, CallerWorkDisposition: types.WorkItemOpen, Outcome: types.TextureTurnWait, Reason: "wait",
 		Controls: []types.TextureTurnControl{{ControlID: "control-atomic-" + suffix, TargetAgentID: agentID, TargetWorkItemID: workID, Packet: packet, Content: content, PayloadDigest: payloadDigest,
-			OpenAgent: &types.AgentRecord{AgentID: agentID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID},
-			OpenWork:  &types.WorkItemRecord{WorkItemID: workID, Objective: "research exact gap", AuthorityProfile: agentprofile.Researcher, AssignedAgentID: agentID}}},
+			OpenAgent: &types.AgentRecord{AgentID: agentID, Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: docID},
+			OpenWork:  &types.WorkItemRecord{WorkItemID: workID, Objective: "research exact gap", AuthorityProfile: agentprofile.Research, AssignedAgentID: agentID}}},
 	}
 	turn.CommandDigest, _ = store.ComputeApplyTextureTurnDigest(turn)
 	result, err := s.ApplyTextureTurn(ctx, turn)
 	if err != nil || len(result.Controls) != 1 {
 		t.Fatalf("atomic turn = %+v, %v", result, err)
 	}
-	return atomicResearcherControlFixture{ownerID: ownerID, computerID: computerID, trajectoryID: trajectoryID, docID: docID, agentID: agentID, workID: workID, control: result.Controls[0]}
+	return atomicResearchControlFixture{ownerID: ownerID, computerID: computerID, trajectoryID: trajectoryID, docID: docID, agentID: agentID, workID: workID, control: result.Controls[0]}
 }
 
 func TestLifecycleActivationKeysSeparateLogicalJoinFromBuildAndCanonicalAttempt(t *testing.T) {
@@ -1036,9 +1036,9 @@ func TestLifecycleActivationKeysSeparateLogicalJoinFromBuildAndCanonicalAttempt(
 	}
 }
 
-func TestAtomicResearcherOpenColdWakeHydratesExactLifecycleWorkAndReplaysOneRun(t *testing.T) {
+func TestAtomicResearchOpenColdWakeHydratesExactLifecycleWorkAndReplaysOneRun(t *testing.T) {
 	rt, s := testRuntime(t)
-	fixture := seedAtomicResearcherControl(t, s, "cold-wake")
+	fixture := seedAtomicResearchControl(t, s, "cold-wake")
 	legacy, err := s.ListWorkItemsByTrajectory(context.Background(), fixture.ownerID, fixture.trajectoryID, true)
 	if err != nil {
 		t.Fatal(err)
@@ -1111,14 +1111,14 @@ func TestAtomicResearcherOpenColdWakeHydratesExactLifecycleWorkAndReplaysOneRun(
 
 func TestLifecycleControlDurableFailedAttemptSuppressesSameBuildReplay(t *testing.T) {
 	rt, s := testRuntime(t)
-	fixture := seedAtomicResearcherControl(t, s, "failed-replay")
+	fixture := seedAtomicResearchControl(t, s, "failed-replay")
 	work, _ := s.GetLifecycleWorkItem(context.Background(), fixture.ownerID, fixture.computerID, fixture.workID)
 	logical, failed, versions, err := lifecycleActivationKeys(fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, buildinfo.Commit, []types.CoagentSourcePacket{fixture.control}, map[string]types.WorkItemRecord{fixture.workID: work})
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	pending := types.RunRecord{RunID: "failed-fingerprint-run", OwnerID: fixture.ownerID, ComputerID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "persisted run missing exact work binding", CreatedAt: now, UpdatedAt: now,
+	pending := types.RunRecord{RunID: "failed-fingerprint-run", OwnerID: fixture.ownerID, ComputerID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "persisted run missing exact work binding", CreatedAt: now, UpdatedAt: now,
 		Metadata: stampLifecycleActivationMetadata(map[string]any{"request_source": "lifecycle_texture_control", runMetadataTrajectoryID: fixture.trajectoryID}, logical, failed, buildinfo.Commit, versions)}
 	if err := s.CreateRun(context.Background(), pending); err != nil {
 		t.Fatal(err)
@@ -1176,7 +1176,7 @@ func TestLifecycleControlDurableFailedAttemptSuppressesSameBuildReplay(t *testin
 
 func TestLifecycleControlTerminalPersistenceFailureRemainsRetryable(t *testing.T) {
 	rt, s := testRuntime(t)
-	fixture := seedAtomicResearcherControl(t, s, "terminal-persist-failure")
+	fixture := seedAtomicResearchControl(t, s, "terminal-persist-failure")
 	work, err := s.GetLifecycleWorkItem(context.Background(), fixture.ownerID, fixture.computerID, fixture.workID)
 	if err != nil {
 		t.Fatal(err)
@@ -1186,7 +1186,7 @@ func TestLifecycleControlTerminalPersistenceFailureRemainsRetryable(t *testing.T
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	missing := types.RunRecord{RunID: "not-persisted-fingerprint-run", OwnerID: fixture.ownerID, ComputerID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "retryable missing run", CreatedAt: now, UpdatedAt: now,
+	missing := types.RunRecord{RunID: "not-persisted-fingerprint-run", OwnerID: fixture.ownerID, ComputerID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "retryable missing run", CreatedAt: now, UpdatedAt: now,
 		Metadata: stampLifecycleActivationMetadata(map[string]any{"request_source": "lifecycle_texture_control", runMetadataTrajectoryID: fixture.trajectoryID, "work_item_ids": []string{fixture.workID}}, logical, failed, buildinfo.Commit, versions)}
 	transient := rt.terminalizeFingerprintedLifecycleControlRun(context.Background(), &missing, []types.CoagentSourcePacket{fixture.control}, store.ErrConcurrentStateChange)
 	if !errors.Is(transient, store.ErrConcurrentStateChange) || errors.Is(transient, ErrDurablyTerminalLifecycleControlActivation) || missing.State != types.RunPending {
@@ -1204,7 +1204,7 @@ func TestLifecycleControlTerminalPersistenceFailureRemainsRetryable(t *testing.T
 
 func TestLifecycleControlActiveLogicalActivationRebindsSameRunAcrossBuilds(t *testing.T) {
 	rt, s := testRuntime(t)
-	fixture := seedAtomicResearcherControl(t, s, "cross-build")
+	fixture := seedAtomicResearchControl(t, s, "cross-build")
 	work, err := s.GetLifecycleWorkItem(context.Background(), fixture.ownerID, fixture.computerID, fixture.workID)
 	if err != nil {
 		t.Fatal(err)
@@ -1214,7 +1214,7 @@ func TestLifecycleControlActiveLogicalActivationRebindsSameRunAcrossBuilds(t *te
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	pending := types.RunRecord{RunID: "cross-build-logical-run", OwnerID: fixture.ownerID, ComputerID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "pending old build", CreatedAt: now, UpdatedAt: now,
+	pending := types.RunRecord{RunID: "cross-build-logical-run", OwnerID: fixture.ownerID, ComputerID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "pending old build", CreatedAt: now, UpdatedAt: now,
 		Metadata: stampLifecycleActivationMetadata(map[string]any{"request_source": "lifecycle_texture_control", runMetadataTrajectoryID: fixture.trajectoryID, "work_item_ids": []string{fixture.workID}}, logical, oldFailed, "old-build", versions)}
 	if err := s.CreateRun(context.Background(), pending); err != nil {
 		t.Fatal(err)
@@ -1247,7 +1247,7 @@ func TestLifecycleControlActiveLogicalActivationRebindsSameRunAcrossBuilds(t *te
 
 func TestLifecycleControlCancellationWinsBetweenHydrationAndBind(t *testing.T) {
 	rt, s := testRuntime(t)
-	fixture := seedAtomicResearcherControl(t, s, "cancel-bind-race")
+	fixture := seedAtomicResearchControl(t, s, "cancel-bind-race")
 	work, err := s.GetLifecycleWorkItem(context.Background(), fixture.ownerID, fixture.computerID, fixture.workID)
 	if err != nil {
 		t.Fatal(err)
@@ -1257,7 +1257,7 @@ func TestLifecycleControlCancellationWinsBetweenHydrationAndBind(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	pending := types.RunRecord{RunID: "cancel-bind-race-run", OwnerID: fixture.ownerID, ComputerID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "cancel race", CreatedAt: now, UpdatedAt: now,
+	pending := types.RunRecord{RunID: "cancel-bind-race-run", OwnerID: fixture.ownerID, ComputerID: fixture.computerID, AgentID: fixture.agentID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, ChannelID: fixture.docID, TrajectoryID: fixture.trajectoryID, State: types.RunPending, Prompt: "cancel race", CreatedAt: now, UpdatedAt: now,
 		Metadata: stampLifecycleActivationMetadata(map[string]any{"request_source": "lifecycle_texture_control", runMetadataTrajectoryID: fixture.trajectoryID, "work_item_ids": []string{fixture.workID}}, logical, failed, buildinfo.Commit, versions)}
 	if err := s.CreateRun(context.Background(), pending); err != nil {
 		t.Fatal(err)
@@ -1290,7 +1290,7 @@ func TestLifecycleControlCancellationWinsBetweenHydrationAndBind(t *testing.T) {
 
 func TestConcurrentLifecycleControlReconcileConvergesOnOneRunAndDelivery(t *testing.T) {
 	rt, s := testRuntime(t)
-	fixture := seedAtomicResearcherControl(t, s, "concurrent-reconcile")
+	fixture := seedAtomicResearchControl(t, s, "concurrent-reconcile")
 	var dispatchMu sync.Mutex
 	var dispatches []string
 	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
@@ -1347,42 +1347,42 @@ func TestConcurrentLifecycleControlReconcileConvergesOnOneRunAndDelivery(t *test
 func TestHydrateLifecycleControlWorkItemsRejectsAuthorityMismatchesBeforeRun(t *testing.T) {
 	tests := []struct {
 		name   string
-		mutate func(*testing.T, *store.Store, atomicResearcherControlFixture, []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket)
+		mutate func(*testing.T, *store.Store, atomicResearchControlFixture, []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket)
 	}{
-		{name: "wrong_owner", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "wrong_owner", mutate: func(_ *testing.T, _ *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			return f.ownerID + "-wrong", f.computerID, f.agentID, u
 		}},
-		{name: "wrong_computer", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "wrong_computer", mutate: func(_ *testing.T, _ *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			return f.ownerID, f.computerID + "-wrong", f.agentID, u
 		}},
-		{name: "wrong_trajectory", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "wrong_trajectory", mutate: func(_ *testing.T, _ *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			u[0].TrajectoryID += "-wrong"
 			return f.ownerID, f.computerID, f.agentID, u
 		}},
-		{name: "wrong_agent", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "wrong_agent", mutate: func(_ *testing.T, _ *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			u[0].TargetAgentID += "-wrong"
 			return f.ownerID, f.computerID, f.agentID, u
 		}},
-		{name: "duplicate_update_id", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "duplicate_update_id", mutate: func(_ *testing.T, _ *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			return f.ownerID, f.computerID, f.agentID, append(u, u[0])
 		}},
-		{name: "delivered_control", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "delivered_control", mutate: func(_ *testing.T, _ *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			now := time.Now().UTC()
 			u[0].DeliveredAt = &now
 			u[0].DeliveredToRunID = "other"
 			return f.ownerID, f.computerID, f.agentID, u
 		}},
-		{name: "wrong_control_version", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "wrong_control_version", mutate: func(_ *testing.T, _ *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			u[0].LifecycleVersion++
 			return f.ownerID, f.computerID, f.agentID, u
 		}},
-		{name: "mixed_trajectory", mutate: func(_ *testing.T, _ *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "mixed_trajectory", mutate: func(_ *testing.T, _ *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			other := u[0]
 			other.UpdateID += "-other"
 			other.TrajectoryID += "-other"
 			return f.ownerID, f.computerID, f.agentID, append(u, other)
 		}},
-		{name: "closed_work", mutate: func(t *testing.T, s *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "closed_work", mutate: func(t *testing.T, s *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			req := types.SettleLifecycleWorkRequest{OwnerID: f.ownerID, ComputerID: f.computerID, CommandID: "settle-before-hydrate", TrajectoryID: f.trajectoryID, WorkItemID: f.workID, ActingAgentID: f.agentID, ResultRef: "evidence://closed"}
 			req.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(req)
 			if _, err := s.SettleLifecycleWork(context.Background(), req); err != nil {
@@ -1390,10 +1390,10 @@ func TestHydrateLifecycleControlWorkItemsRejectsAuthorityMismatchesBeforeRun(t *
 			}
 			return f.ownerID, f.computerID, f.agentID, u
 		}},
-		{name: "reassigned_work", mutate: func(t *testing.T, s *store.Store, f atomicResearcherControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
+		{name: "reassigned_work", mutate: func(t *testing.T, s *store.Store, f atomicResearchControlFixture, u []types.CoagentSourcePacket) (string, string, string, []types.CoagentSourcePacket) {
 			now := time.Now().UTC()
 			replacement := f.agentID + "-replacement"
-			if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: replacement, OwnerID: f.ownerID, ComputerID: f.computerID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: f.docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+			if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: replacement, OwnerID: f.ownerID, ComputerID: f.computerID, Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: f.docID, CreatedAt: now, UpdatedAt: now}); err != nil {
 				t.Fatal(err)
 			}
 			work, err := s.GetLifecycleWorkItem(context.Background(), f.ownerID, f.computerID, f.workID)
@@ -1412,7 +1412,7 @@ func TestHydrateLifecycleControlWorkItemsRejectsAuthorityMismatchesBeforeRun(t *
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rt, s := testRuntime(t)
-			fixture := seedAtomicResearcherControl(t, s, "negative-"+strings.ReplaceAll(tt.name, "_", "-"))
+			fixture := seedAtomicResearchControl(t, s, "negative-"+strings.ReplaceAll(tt.name, "_", "-"))
 			ownerID, computerID, agentID, updates := tt.mutate(t, s, fixture, []types.CoagentSourcePacket{fixture.control})
 			if _, _, _, err := rt.hydrateLifecycleControlWorkItems(context.Background(), ownerID, computerID, agentID, updates); err == nil {
 				t.Fatal("authority mismatch hydrated")
@@ -1430,10 +1430,10 @@ func TestHydrateLifecycleControlWorkItemsRejectsAuthorityMismatchesBeforeRun(t *
 	}
 }
 
-func TestFingerprintBoundResearcherRunAcceptsLaterControlWithoutSecondRun(t *testing.T) {
+func TestFingerprintBoundResearchRunAcceptsLaterControlWithoutSecondRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	const suffix = "later-control"
-	fixture := seedAtomicResearcherControl(t, s, suffix)
+	fixture := seedAtomicResearchControl(t, s, suffix)
 	var dispatchKinds []string
 	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, _ string, _, _ string) error {
 		dispatchKinds = append(dispatchKinds, kind)
@@ -1509,11 +1509,11 @@ func TestFingerprintBoundResearcherRunAcceptsLaterControlWithoutSecondRun(t *tes
 		}
 	}
 	if count != 1 {
-		t.Fatalf("Researcher run count=%d runs=%+v", count, runs)
+		t.Fatalf("Research run count=%d runs=%+v", count, runs)
 	}
 }
 
-func commitLaterControlForResidentTest(t *testing.T, s *store.Store, fixture atomicResearcherControlFixture, suffix, controlID string) types.CoagentSourcePacket {
+func commitLaterControlForResidentTest(t *testing.T, s *store.Store, fixture atomicResearchControlFixture, suffix, controlID string) types.CoagentSourcePacket {
 	t.Helper()
 	snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID)
 	if err != nil {
@@ -1542,7 +1542,7 @@ func commitLaterControlForResidentTest(t *testing.T, s *store.Store, fixture ato
 func TestFingerprintResidentRestartReconcileBindsControlCommittedBeforeWake(t *testing.T) {
 	rt, s := testRuntime(t)
 	const suffix = "restart-later-control"
-	fixture := seedAtomicResearcherControl(t, s, suffix)
+	fixture := seedAtomicResearchControl(t, s, suffix)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
 	if err != nil || initial == nil {
@@ -1576,14 +1576,14 @@ func TestFingerprintResidentRestartReconcileBindsControlCommittedBeforeWake(t *t
 		}
 	}
 	if count != 1 {
-		t.Fatalf("Researcher runs=%+v", runs)
+		t.Fatalf("Research runs=%+v", runs)
 	}
 }
 
 func TestFingerprintResidentLaterControlTransientAppendRetriesSameRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	const suffix = "retry-later-control"
-	fixture := seedAtomicResearcherControl(t, s, suffix)
+	fixture := seedAtomicResearchControl(t, s, suffix)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
 	if err != nil || initial == nil {
@@ -1619,14 +1619,14 @@ func TestFingerprintResidentLaterControlTransientAppendRetriesSameRun(t *testing
 		}
 	}
 	if count != 1 {
-		t.Fatalf("Researcher runs=%+v", runs)
+		t.Fatalf("Research runs=%+v", runs)
 	}
 }
 
 func TestReconcileParkedLifecycleCoagentWakeTransientThenRetry(t *testing.T) {
 	rt, s := testRuntime(t)
 	const suffix = "parked-retry"
-	fixture := seedAtomicResearcherControl(t, s, suffix)
+	fixture := seedAtomicResearchControl(t, s, suffix)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
 	if err != nil || rec == nil {
@@ -1665,7 +1665,7 @@ func TestReconcileParkedLifecycleCoagentWakeTransientThenRetry(t *testing.T) {
 func TestReconcileParkedLifecycleCoagentWakeRecoversCrashAfterReactivation(t *testing.T) {
 	rt, s := testRuntime(t)
 	const suffix = "parked-reactivation-crash"
-	fixture := seedAtomicResearcherControl(t, s, suffix)
+	fixture := seedAtomicResearchControl(t, s, suffix)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
 	if err != nil || rec == nil {
@@ -1699,7 +1699,7 @@ func TestReconcileParkedLifecycleCoagentWakeRecoversCrashAfterReactivation(t *te
 func TestReconcileParkedLifecycleCoagentWakeReactivatesBlockedExactRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	const suffix = "parked-blocked"
-	fixture := seedAtomicResearcherControl(t, s, suffix)
+	fixture := seedAtomicResearchControl(t, s, suffix)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
 	if err != nil || rec == nil {
@@ -1727,7 +1727,7 @@ func TestLifecycleControlCanonicalAuthoritySurvivesStaleRunWriter(t *testing.T) 
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	const suffix = "stale-authority"
-	fixture := seedAtomicResearcherControl(t, s, suffix)
+	fixture := seedAtomicResearchControl(t, s, suffix)
 	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
 	if err != nil || initial == nil {
 		t.Fatalf("initial=%+v err=%v", initial, err)
@@ -1819,7 +1819,7 @@ func TestLifecycleControlCanonicalAuthoritySurvivesStaleRunWriter(t *testing.T) 
 func TestGenericReconcileFailsClosedUntilExactParkedMemoryRecovery(t *testing.T) {
 	rt, s := testRuntime(t)
 	const suffix = "boot-exact-memory"
-	fixture := seedAtomicResearcherControl(t, s, suffix)
+	fixture := seedAtomicResearchControl(t, s, suffix)
 	var dispatched []string
 	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
 		dispatched = append(dispatched, kind+":"+content)
@@ -1882,7 +1882,7 @@ func TestGenericReconcileFailsClosedUntilExactParkedMemoryRecovery(t *testing.T)
 func TestStartReenqueuesCanonicalOccurrencesAfterBindBeforeSendCrash(t *testing.T) {
 	rt, s := testRuntime(t)
 	const suffix = "bind-before-send-crash"
-	fixture := seedAtomicResearcherControl(t, s, suffix)
+	fixture := seedAtomicResearchControl(t, s, suffix)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
 	if err != nil || initial == nil {
@@ -1907,16 +1907,16 @@ func TestStartReenqueuesCanonicalOccurrencesAfterBindBeforeSendCrash(t *testing.
 	t.Fatalf("boot did not recover bound occurrence %s from %+v", want, dispatched)
 }
 
-func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testing.T) {
+func TestPersistentManagementRewakeReceivesPendingEngineeringCancellationReports(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	ownerID := "owner-super-cancel-rewake"
-	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(context.Background(), ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-cancel-rewake", superAgent.AgentID, agentprofile.Super)
-	firstRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-cancel-rewake", managementAgent.AgentID, agentprofile.Management)
+	firstRun, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || firstRun == nil {
 		t.Fatalf("first run=%+v err=%v", firstRun, err)
 	}
@@ -1926,30 +1926,30 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 	assignedAgentID := "engineering:" + assignmentID
 	assignedWorkID := "work:" + assignmentID
 	capability := "opaque-test-capability"
-	openReq := types.OpenCoSuperAssignmentRequest{
+	openReq := types.OpenEngineeringAssignmentRequest{
 		CommandID: "open-" + assignmentID, AssignmentID: assignmentID,
-		Binding: types.CoSuperAssignmentBinding{
+		Binding: types.EngineeringAssignmentBinding{
 			OwnerID: ownerID, ComputerID: rt.TextureComputerID(), TrajectoryID: fixture.trajectoryID,
-			ParentAgentID: superAgent.AgentID, ParentRunID: firstRun.RunID,
+			ParentAgentID: managementAgent.AgentID, ParentRunID: firstRun.RunID,
 			ParentDecisionID: "decision:sha256:" + strings.Repeat("a", 64), ParentControlID: fixture.control.UpdateID,
 			ParentWorkItemID: fixture.workID, AssignedWorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID,
-			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
 			ScopeDigest: "sha256:" + strings.Repeat("1", 64), RequestDigest: "sha256:" + strings.Repeat("2", 64),
-			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: "sha256:" + strings.Repeat("3", 64),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: "sha256:" + strings.Repeat("3", 64),
 			SubjectDigest:     "sha256:" + strings.Repeat("4", 64),
 			SourceArtifactRef: "capsule-source-git:commit:sha256:" + strings.Repeat("4", 64), Writable: true, CapsuleID: "capsule-" + assignmentID,
-			NetworkMode: types.CoSuperCapsuleNetworkForbidden, FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+			NetworkMode: types.EngineeringCapsuleNetworkForbidden, FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 		},
 		AssignedAgent: types.AgentRecord{AgentID: assignedAgentID},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID, Objective: "implement feature"},
 	}
-	openReq.CommandDigest, _ = store.ComputeOpenCoSuperAssignmentDigest(openReq)
-	ag, _ := s.GetAgentByScope(context.Background(), ownerID, rt.TextureComputerID(), superAgent.AgentID)
-	ag.ChannelID = superAgent.AgentID
+	openReq.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(openReq)
+	ag, _ := s.GetAgentByScope(context.Background(), ownerID, rt.TextureComputerID(), managementAgent.AgentID)
+	ag.ChannelID = managementAgent.AgentID
 	if err := s.UpsertAgent(context.Background(), ag); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.OpenCoSuperAssignment(context.Background(), openReq); err != nil {
+	if _, err := s.OpenEngineeringAssignment(context.Background(), openReq); err != nil {
 		t.Fatal(err)
 	}
 	assignedRunID := "run:" + assignmentID
@@ -1969,14 +1969,14 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 			"subject_digest": openReq.Binding.SubjectDigest, "source_artifact_ref": openReq.Binding.SourceArtifactRef,
 		},
 	}
-	bindReq := types.BindCoSuperAssignmentRequest{
+	bindReq := types.BindEngineeringAssignmentRequest{
 		CommandID: "bind-" + assignmentID, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
 		RunID: assignedRunID, Run: assignedRun,
 		OpaqueCapability: capability, CapsuleID: openReq.Binding.CapsuleID,
 	}
-	bindReq.CommandDigest, _ = store.ComputeBindCoSuperAssignmentDigest(bindReq)
-	bound, err := s.BindCoSuperAssignment(context.Background(), bindReq)
+	bindReq.CommandDigest, _ = store.ComputeBindEngineeringAssignmentDigest(bindReq)
+	bound, err := s.BindEngineeringAssignment(context.Background(), bindReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1989,33 +1989,33 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 	}
 
 	// Revoke the capsule first
-	revoke := types.SetCoSuperCapsuleDispositionRequest{
+	revoke := types.SetEngineeringCapsuleDispositionRequest{
 		CommandID: "revoke-intent", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: bound.Assignment.LifecycleVersion,
-		Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:" + assignmentID,
+		Disposition: types.EngineeringCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:" + assignmentID,
 	}
-	revoke.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(revoke)
-	revRequested, err := s.SetCoSuperCapsuleDisposition(context.Background(), revoke)
+	revoke.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(revoke)
+	revRequested, err := s.SetEngineeringCapsuleDisposition(context.Background(), revoke)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ack := revoke
 	ack.CommandID, ack.ExpectedLifecycleVersion, ack.Disposition, ack.AckRef =
-		"revoke-ack", revRequested.Assignment.LifecycleVersion, types.CoSuperCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("a", 64)
-	ack.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(ack)
-	revAcked, err := s.SetCoSuperCapsuleDisposition(context.Background(), ack)
+		"revoke-ack", revRequested.Assignment.LifecycleVersion, types.EngineeringCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("a", 64)
+	ack.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(ack)
+	revAcked, err := s.SetEngineeringCapsuleDisposition(context.Background(), ack)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Cancel the assignment after the first parent run is terminal (restart reconcile)
-	cancel := types.CancelCoSuperAssignmentRequest{
+	cancel := types.CancelEngineeringAssignmentRequest{
 		CommandID: "restart-cancel", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		AssignmentID: assignmentID, Attempt: 1,
 		ExpectedLifecycleVersion: revAcked.Assignment.LifecycleVersion, Reason: "restart revoked absent capsule",
 	}
-	cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-	cancelled, err := s.CancelCoSuperAssignment(context.Background(), cancel)
+	cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+	cancelled, err := s.CancelEngineeringAssignment(context.Background(), cancel)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2023,7 +2023,7 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 		t.Fatalf("cancel update should be pending delivery to parent mailbox: %+v", cancelled.Update)
 	}
 
-	// Commit a second control in the same trajectory to rewake Super
+	// Commit a second control in the same trajectory to rewake Management
 	controlPacket, err := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request",
 		Summary: "Author, freeze, and propose the bound self-development operation.",
@@ -2048,7 +2048,7 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 		CallerWorkItemID:               "texture-work-super-cancel-rewake", CallerWorkDisposition: types.WorkItemOpen,
 		Outcome: types.TextureTurnWait, Reason: "wait after control",
 		Controls: []types.TextureTurnControl{{
-			ControlID: "control-rewake-after-cancel", TargetAgentID: superAgent.AgentID, TargetWorkItemID: fixture.workID,
+			ControlID: "control-rewake-after-cancel", TargetAgentID: managementAgent.AgentID, TargetWorkItemID: fixture.workID,
 			Packet: controlPacket, Content: content, PayloadDigest: payloadDigest,
 		}},
 	}
@@ -2057,13 +2057,13 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 		t.Fatal(err)
 	}
 
-	secondRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	secondRun, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || secondRun == nil {
 		t.Fatalf("second run=%+v err=%v", secondRun, err)
 	}
 
-	// Verify that the second Super run receives both the Texture control and the CoSuper cancellation report
-	updates, err := rt.pendingCoagentUpdatesForRun(context.Background(), secondRun, ownerID, superAgent.AgentID, 10)
+	// Verify that the second Management run receives both the Texture control and the Engineering cancellation report
+	updates, err := rt.pendingCoagentUpdatesForRun(context.Background(), secondRun, ownerID, managementAgent.AgentID, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2097,14 +2097,14 @@ func TestPersistentSuperRewakeReceivesPendingCoSuperCancellationReports(t *testi
 	}
 }
 
-func seedCancelledCoSuperReport(t *testing.T, rt *Runtime, s *store.Store, ownerID, suffix string) (*types.RunRecord, types.CoagentSourcePacket, string) {
+func seedCancelledEngineeringReport(t *testing.T, rt *Runtime, s *store.Store, ownerID, suffix string) (*types.RunRecord, types.CoagentSourcePacket, string) {
 	t.Helper()
-	superAgent, err := rt.EnsurePersistentSuperAgent(context.Background(), ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(context.Background(), ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture := seedTextureLifecycleControl(t, s, ownerID, suffix, superAgent.AgentID, agentprofile.Super)
-	firstRun, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgent.AgentID)
+	fixture := seedTextureLifecycleControl(t, s, ownerID, suffix, managementAgent.AgentID, agentprofile.Management)
+	firstRun, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgent.AgentID)
 	if err != nil || firstRun == nil {
 		t.Fatalf("first run=%+v err=%v", firstRun, err)
 	}
@@ -2114,30 +2114,30 @@ func seedCancelledCoSuperReport(t *testing.T, rt *Runtime, s *store.Store, owner
 	assignedWorkID := "work:" + assignmentID
 	capability := "opaque-test-capability-" + suffix
 	char := string(suffix[len(suffix)-1])
-	openReq := types.OpenCoSuperAssignmentRequest{
+	openReq := types.OpenEngineeringAssignmentRequest{
 		CommandID: "open-" + assignmentID, AssignmentID: assignmentID,
-		Binding: types.CoSuperAssignmentBinding{
+		Binding: types.EngineeringAssignmentBinding{
 			OwnerID: ownerID, ComputerID: rt.TextureComputerID(), TrajectoryID: fixture.trajectoryID,
-			ParentAgentID: superAgent.AgentID, ParentRunID: firstRun.RunID,
+			ParentAgentID: managementAgent.AgentID, ParentRunID: firstRun.RunID,
 			ParentDecisionID: "decision:sha256:" + strings.Repeat(char, 64), ParentControlID: fixture.control.UpdateID,
 			ParentWorkItemID: fixture.workID, AssignedWorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID,
-			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
 			ScopeDigest: "sha256:" + strings.Repeat(char, 64), RequestDigest: "sha256:" + strings.Repeat(char, 64),
-			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: "sha256:" + strings.Repeat(char, 64),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: "sha256:" + strings.Repeat(char, 64),
 			SubjectDigest:     "sha256:" + strings.Repeat(char, 64),
 			SourceArtifactRef: "capsule-source-git:commit:sha256:" + strings.Repeat(char, 64), Writable: true, CapsuleID: "capsule-" + assignmentID,
-			NetworkMode: types.CoSuperCapsuleNetworkForbidden, FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+			NetworkMode: types.EngineeringCapsuleNetworkForbidden, FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 		},
 		AssignedAgent: types.AgentRecord{AgentID: assignedAgentID},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID, Objective: "implement feature"},
 	}
-	openReq.CommandDigest, _ = store.ComputeOpenCoSuperAssignmentDigest(openReq)
-	ag, _ := s.GetAgentByScope(context.Background(), ownerID, rt.TextureComputerID(), superAgent.AgentID)
-	ag.ChannelID = superAgent.AgentID
+	openReq.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(openReq)
+	ag, _ := s.GetAgentByScope(context.Background(), ownerID, rt.TextureComputerID(), managementAgent.AgentID)
+	ag.ChannelID = managementAgent.AgentID
 	if err := s.UpsertAgent(context.Background(), ag); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.OpenCoSuperAssignment(context.Background(), openReq); err != nil {
+	if _, err := s.OpenEngineeringAssignment(context.Background(), openReq); err != nil {
 		t.Fatal(err)
 	}
 	assignedRunID := "run:" + assignmentID
@@ -2157,14 +2157,14 @@ func seedCancelledCoSuperReport(t *testing.T, rt *Runtime, s *store.Store, owner
 			"subject_digest": openReq.Binding.SubjectDigest, "source_artifact_ref": openReq.Binding.SourceArtifactRef,
 		},
 	}
-	bindReq := types.BindCoSuperAssignmentRequest{
+	bindReq := types.BindEngineeringAssignmentRequest{
 		CommandID: "bind-" + assignmentID, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
 		RunID: assignedRunID, Run: assignedRun,
 		OpaqueCapability: capability, CapsuleID: openReq.Binding.CapsuleID,
 	}
-	bindReq.CommandDigest, _ = store.ComputeBindCoSuperAssignmentDigest(bindReq)
-	bound, err := s.BindCoSuperAssignment(context.Background(), bindReq)
+	bindReq.CommandDigest, _ = store.ComputeBindEngineeringAssignmentDigest(bindReq)
+	bound, err := s.BindEngineeringAssignment(context.Background(), bindReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2175,26 +2175,26 @@ func seedCancelledCoSuperReport(t *testing.T, rt *Runtime, s *store.Store, owner
 		t.Fatal(err)
 	}
 
-	revoke := types.SetCoSuperCapsuleDispositionRequest{
+	revoke := types.SetEngineeringCapsuleDispositionRequest{
 		CommandID: "revoke-intent-" + suffix, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
 		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: bound.Assignment.LifecycleVersion,
-		Disposition: types.CoSuperCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:" + assignmentID,
+		Disposition: types.EngineeringCapsuleRevokeRequested, IntentRef: "capsule-revoke-intent:" + assignmentID,
 	}
-	revoke.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(revoke)
-	revRequested, err := s.SetCoSuperCapsuleDisposition(context.Background(), revoke)
+	revoke.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(revoke)
+	revRequested, err := s.SetEngineeringCapsuleDisposition(context.Background(), revoke)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ack := revoke
 	ack.CommandID, ack.ExpectedLifecycleVersion, ack.Disposition, ack.AckRef =
-		"revoke-ack-"+suffix, revRequested.Assignment.LifecycleVersion, types.CoSuperCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("a", 64)
-	ack.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(ack)
-	revAcked, err := s.SetCoSuperCapsuleDisposition(context.Background(), ack)
+		"revoke-ack-"+suffix, revRequested.Assignment.LifecycleVersion, types.EngineeringCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("a", 64)
+	ack.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(ack)
+	revAcked, err := s.SetEngineeringCapsuleDisposition(context.Background(), ack)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cancelled, err := rt.persistSystemCoSuperCancellation(context.Background(), revAcked.Assignment, "tool loop: exceeded 200 iterations without end_turn")
+	cancelled, err := rt.persistSystemEngineeringCancellation(context.Background(), revAcked.Assignment, "tool loop: exceeded 200 iterations without end_turn")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2204,21 +2204,21 @@ func seedCancelledCoSuperReport(t *testing.T, rt *Runtime, s *store.Store, owner
 	return firstRun, *cancelled.Update, fixture.trajectoryID
 }
 
-func TestPersistentSuperCoSuperCancellationDoesNotMintSuperFromReportAndSettles(t *testing.T) {
+func TestPersistentManagementEngineeringCancellationDoesNotMintManagementFromReportAndSettles(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	ownerID := "owner-super-system-cancel-continue"
-	_, cancelReport, trajectoryID := seedCancelledCoSuperReport(t, rt, s, ownerID, "system-cancel-continue")
-	superAgentID := persistentSuperAgentID(ownerID)
+	_, cancelReport, trajectoryID := seedCancelledEngineeringReport(t, rt, s, ownerID, "system-cancel-continue")
+	managementAgentID := persistentManagementAgentID(ownerID)
 
-	// Ontological repair: system cancellation does NOT wake Super directly, and
-	// reconcile never selects the cancel producer report as a Super wake source.
-	continuationSuper, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgentID)
+	// Ontological repair: system cancellation does NOT wake Management directly, and
+	// reconcile never selects the cancel producer report as a Management wake source.
+	continuationManagement, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgentID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if continuationSuper != nil {
-		t.Fatalf("reconcile minted unexpected Super from cancel producer report: %+v", continuationSuper)
+	if continuationManagement != nil {
+		t.Fatalf("reconcile minted unexpected Management from cancel producer report: %+v", continuationManagement)
 	}
 
 	// Enumerate pending producer reports via dedicated method
@@ -2260,7 +2260,7 @@ func TestPersistentSuperCoSuperCancellationDoesNotMintSuperFromReportAndSettles(
 		t.Fatalf("expected 0 pending producer reports after settlement, got %d", len(pendingAfter))
 	}
 
-	allPendingAfter, err := s.ListAllPendingLifecycleUpdates(context.Background(), ownerID, rt.TextureComputerID(), superAgentID)
+	allPendingAfter, err := s.ListAllPendingLifecycleUpdates(context.Background(), ownerID, rt.TextureComputerID(), managementAgentID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2270,20 +2270,20 @@ func TestPersistentSuperCoSuperCancellationDoesNotMintSuperFromReportAndSettles(
 		}
 	}
 
-	// Assert: boot or reconcile after settlement mints zero Super runs
-	afterSettleSuper, err := rt.reconcilePersistentSuperActor(context.Background(), ownerID, superAgentID)
-	if err != nil || afterSettleSuper != nil {
-		t.Fatalf("reconcile after settlement minted unexpected Super=%+v err=%v", afterSettleSuper, err)
+	// Assert: boot or reconcile after settlement mints zero Management runs
+	afterSettleManagement, err := rt.reconcilePersistentManagementActor(context.Background(), ownerID, managementAgentID)
+	if err != nil || afterSettleManagement != nil {
+		t.Fatalf("reconcile after settlement minted unexpected Management=%+v err=%v", afterSettleManagement, err)
 	}
 }
 
-func TestPersistentSuperProducerReportSettlementCASAndIdempotency(t *testing.T) {
+func TestPersistentManagementProducerReportSettlementCASAndIdempotency(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	ownerID := "owner-super-settle-cas"
 
-	_, rep1, traj1 := seedCancelledCoSuperReport(t, rt, s, ownerID, "settle-cas-1")
-	_, rep2, _ := seedCancelledCoSuperReport(t, rt, s, ownerID, "settle-cas-2")
+	_, rep1, traj1 := seedCancelledEngineeringReport(t, rt, s, ownerID, "settle-cas-1")
+	_, rep2, _ := seedCancelledEngineeringReport(t, rt, s, ownerID, "settle-cas-2")
 
 	// Enumerate
 	pending, err := rt.ListPendingProducerReports(context.Background(), ownerID, rt.TextureComputerID(), rep1.AgentID)
@@ -2346,11 +2346,11 @@ func TestPersistentSuperProducerReportSettlementCASAndIdempotency(t *testing.T) 
 	}
 }
 
-func TestPersistentSuperRewarmSkipsInvalidTransitionControlRun(t *testing.T) {
+func TestPersistentManagementRewarmSkipsInvalidTransitionControlRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "owner-super-skip-invalid"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2360,7 +2360,7 @@ func TestPersistentSuperRewarmSkipsInvalidTransitionControlRun(t *testing.T) {
 	now := time.Now().UTC()
 	tombstone := types.RunRecord{
 		RunID: "super-tombstone-invalid-transition", OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
-		AgentID: superAgent.AgentID, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super,
+		AgentID: managementAgent.AgentID, AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management,
 		TrajectoryID: "stale-super-trajectory", State: types.RunPassivated, CreatedAt: now, UpdatedAt: now,
 		Metadata: map[string]any{
 			"request_source":    "lifecycle_texture_control",
@@ -2370,18 +2370,18 @@ func TestPersistentSuperRewarmSkipsInvalidTransitionControlRun(t *testing.T) {
 	if err := s.CreateRun(ctx, tombstone); err != nil {
 		t.Fatal(err)
 	}
-	_ = seedTextureLifecycleControl(t, s, ownerID, "super-skip-invalid", superAgent.AgentID, agentprofile.Super)
-	rec, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	_ = seedTextureLifecycleControl(t, s, ownerID, "super-skip-invalid", managementAgent.AgentID, agentprofile.Management)
+	rec, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
 	if err != nil || rec == nil || rec.RunID == tombstone.RunID {
-		t.Fatalf("healthy Super should mint past tombstone run=%+v err=%v", rec, err)
+		t.Fatalf("healthy Management should mint past tombstone run=%+v err=%v", rec, err)
 	}
 }
 
-func TestBootWorkItemSweepSkipsPersistentSuper(t *testing.T) {
+func TestBootWorkItemSweepSkipsPersistentManagement(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "owner-super-sweep-once"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2389,16 +2389,16 @@ func TestBootWorkItemSweepSkipsPersistentSuper(t *testing.T) {
 		return nil
 	})
 	for _, suffix := range []string{"sweep-a", "sweep-b", "sweep-c"} {
-		_ = seedTextureLifecycleControl(t, s, ownerID, suffix, superAgent.AgentID, agentprofile.Super)
+		_ = seedTextureLifecycleControl(t, s, ownerID, suffix, managementAgent.AgentID, agentprofile.Management)
 	}
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	rt.sweepOpenWorkItemActors(ctx)
-	if !strings.Contains(buf.String(), "boot work-item sweep skipping persistent Super") {
-		t.Fatalf("expected boot work-item sweep to skip persistent Super, got:\n%s", buf.String())
+	if !strings.Contains(buf.String(), "boot work-item sweep skipping persistent Management") {
+		t.Fatalf("expected boot work-item sweep to skip persistent Management, got:\n%s", buf.String())
 	}
-	if _, err := rt.latestActiveRunByAgent(ctx, ownerID, superAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("boot work-item sweep minted unexpected Super run: err=%v", err)
+	if _, err := rt.latestActiveRunByAgent(ctx, ownerID, managementAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("boot work-item sweep minted unexpected Management run: err=%v", err)
 	}
 }

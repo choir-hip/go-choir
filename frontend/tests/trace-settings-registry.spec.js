@@ -91,7 +91,7 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   const expectedApps = [
     ['files', 'Files', '📁'],
     ['browser', 'Web Lens', '🌐'],
-    ['super-console', 'Super Console', '⌘'],
+    ['super-console', 'Engineering Console', '⌘'],
     ['settings', 'Settings', '⚙️'],
     ['texture', 'Texture', '📝'],
   ];

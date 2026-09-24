@@ -81,8 +81,8 @@ type MigrationReport struct {
 
 // OGProvEntry retains one migrated og_objects row's inverse record.
 type OGProvEntry struct {
-	OldCanonicalID string            `json:"old_canonical_id"`
-	NewCanonicalID string            `json:"new_canonical_id"`
+	OldCanonicalID string `json:"old_canonical_id"`
+	NewCanonicalID string `json:"new_canonical_id"`
 	// Fields maps a JSON path ("metadata.agent_id", "body.binding.role")
 	// to the leaf's exact pre-migration value.
 	Fields map[string]string `json:"fields"`
@@ -123,7 +123,7 @@ func migrateIDForward(id string) (string, bool) {
 			return id, false
 		}
 	}
-	// Longest-token-first: "-super-" is a substring of "-co-super-", so a
+	// Longest-token-first: "-super-" is a substring of "-Engineering-", so a
 	// shorter infix must never match before a longer one containing it.
 	for _, pair := range [][2]string{
 		{"-co-super-", "-engineering-"}, {"-cosuper-", "-engineering-"},
@@ -736,7 +736,6 @@ func (s *Store) VerifyServingVocabularyV2(ctx context.Context, progress func()) 
 	}
 	return vocabmigrate.VerifyServingVocabulary(vocabmigrate.VocabularyV2, fields...)
 }
-
 
 // MigrateAndFenceServingVocabulary is the cutover transition: plan the
 // forward migration, persist the merged provenance report BEFORE any row

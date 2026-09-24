@@ -74,7 +74,7 @@ type ReductionReceipt struct {
 }
 
 // spawnRoleAllowed enforces role-bounded fan-out: research desks cannot mint
-// engineering authority. Super may spawn any role; CoSuper may spawn
+// engineering authority. Management may spawn any role; Engineering may spawn
 // researchers and peers; researchers may only fan out to researchers.
 func spawnRoleAllowed(spawnerRole, childRole string) bool {
 	spawner := strings.ToLower(strings.TrimSpace(spawnerRole))
@@ -490,7 +490,7 @@ func (r *rlmCallReduction) isAssignedDesk() bool {
 // commitFreezeIntent reduces a staged Freeze intent through the same freeze
 // body the commit_transaction tool runs; the capsule handle is the bound
 // handle, never model input. The mutation-role gate is the same predicate
-// the JSON tool enforces: an exact bound writable CoSuper assignment.
+// the JSON tool enforces: an exact bound writable Engineering assignment.
 func (r *rlmCallReduction) commitFreezeIntent(ctx context.Context, in yaegikernel.StagedIntent) (map[string]any, error) {
 	if r.rec == nil || r.toolCtx == nil || r.toolCtx.Executor == nil {
 		return nil, fmt.Errorf("reduce: freeze intent without assignment authority")
@@ -576,7 +576,7 @@ func (r *rlmCallReduction) commitMessageIntent(ctx context.Context, in yaegikern
 		Role: authority.callerProfile, SourceRunID: authority.callerRun.RunID,
 		Packet: packet, CreatedAt: time.Now().UTC(),
 	}
-	if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Super {
+	if authority.callerProfile == agentprofile.Engineering && authority.targetProfile == agentprofile.Management {
 		update.Direction = types.LifecyclePacketDirectionProducerReport
 	}
 	update.UpdateID = deriveWorkerUpdateID(update)
@@ -619,8 +619,8 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	if summary == "" {
 		return false, fmt.Errorf("reduce: complete intent summary is required")
 	}
-	result := types.CoSuperAssignmentResultKind(strings.TrimSpace(in.Result))
-	verdict := types.CoSuperAssignmentVerdict(strings.TrimSpace(in.Verdict))
+	result := types.EngineeringAssignmentResultKind(strings.TrimSpace(in.Result))
+	verdict := types.EngineeringAssignmentVerdict(strings.TrimSpace(in.Verdict))
 	evidenceRefs := sortedUniqueStrings(in.EvidenceRefs)
 	executionRefs := trimNonEmptyStrings(in.ExecutionRefs)
 	// An implementation assignment cannot issue a verification verdict; the
@@ -631,18 +631,18 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	// (pass/fail/abstain) or empty reach this point. This must run before
 	// the execution-ref check below: a completed+pass implementation report
 	// with no refs would otherwise hit that check first and strand.
-	if kind := metadataStringValue(r.rec.Metadata, "assignment_kind"); kind == string(types.CoSuperAssignmentImplementation) &&
-		verdict != types.CoSuperVerdictNone {
-		verdict = types.CoSuperVerdictNone
+	if kind := metadataStringValue(r.rec.Metadata, "assignment_kind"); kind == string(types.EngineeringAssignmentImplementation) &&
+		verdict != types.EngineeringVerdictNone {
+		verdict = types.EngineeringVerdictNone
 	}
-	if result == types.CoSuperResultCompleted && verdict == types.CoSuperVerdictPass && len(executionRefs) == 0 {
+	if result == types.EngineeringResultCompleted && verdict == types.EngineeringVerdictPass && len(executionRefs) == 0 {
 		return false, fmt.Errorf("reduce: terminal completed pass requires at least one valid execution_ref")
 	}
 	receipts, err := r.toolCtx.Executor.ResolveExecutionReceipts(executionRefs)
 	if err != nil {
 		return false, err
 	}
-	report := types.CoSuperAssignmentReport{Result: result, Verdict: verdict, Summary: summary,
+	report := types.EngineeringAssignmentReport{Result: result, Verdict: verdict, Summary: summary,
 		EvidenceRefs: evidenceRefs, Commands: recordedCommandsFromReceipts(receipts), Outputs: recordedOutputsFromReceipts(receipts)}
 	// Content-derived identity: a replayed cell (same intent content) replays
 	// the same report instead of minting a second one.
@@ -653,15 +653,15 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	if rt == nil {
 		return false, fmt.Errorf("reduce: complete intent without runtime")
 	}
-	cmdResult, err := rt.recordAssignedCoSuperReport(ctx, r.rec, intentIdentity, report)
+	cmdResult, err := rt.recordAssignedEngineeringReport(ctx, r.rec, intentIdentity, report)
 	if err != nil {
 		return false, err
 	}
 	if !cmdResult.Replay && cmdResult.Update != nil {
 		rt.wakeUpdatedCoagent(ctx, *cmdResult.Update)
 	}
-	if result != types.CoSuperResultPartial && cmdResult.Assignment.Disposition == types.CoSuperAssignmentCompleted &&
-		cmdResult.Assignment.Binding.Kind == types.CoSuperAssignmentImplementation {
+	if result != types.EngineeringResultPartial && cmdResult.Assignment.Disposition == types.EngineeringAssignmentCompleted &&
+		cmdResult.Assignment.Binding.Kind == types.EngineeringAssignmentImplementation {
 		// Verification chaining is host-side: a completed implementation on a
 		// document-bound trajectory opens the verification assignment when the
 		// bound self-development operation is frozen.
@@ -670,7 +670,7 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 			log.Printf("runtime: engineering desk verification reconcile after %s: %v", cmdResult.Assignment.AssignmentID, recErr)
 		}
 	}
-	return result != types.CoSuperResultPartial, nil
+	return result != types.EngineeringResultPartial, nil
 }
 
 func (r *rlmCallReduction) rt() *Runtime {

@@ -2214,7 +2214,7 @@ func TestLifecycleActiveRunIDIsReducerOwnedAcrossOtherAgentWriters(t *testing.T)
 		}
 		stored, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, agentID)
 		if err != nil || stored.ActiveRunID != run.RunID || stored.LifecycleVersion <= 0 {
-			t.Fatalf("lifecycle Researcher projection = %+v, %v; want active run %q and positive version", stored, err, run.RunID)
+			t.Fatalf("lifecycle Research projection = %+v, %v; want active run %q and positive version", stored, err, run.RunID)
 		}
 		terminal := activate
 		terminal.CommandID = "command-active-run-authority-terminal"
@@ -2632,12 +2632,12 @@ func TestStartLifecycleRejectsCallerSuppliedRevisionHashMismatch(t *testing.T) {
 func TestLifecycleRejectsEffectsCapableSubjectAndAssignment(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	superStart := lifecycleStartFixture()
-	superStart.Agent.AgentID = "management:forbidden"
-	superStart.Agent.Profile, superStart.Agent.Role = "management", "management"
-	superStart.InitialWork.AssignedAgentID = superStart.Agent.AgentID
-	superStart.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(superStart)
-	if _, err := s.StartLifecycle(ctx, superStart); !errors.Is(err, ErrLifecycleInvalidTransition) {
+	managementStart := lifecycleStartFixture()
+	managementStart.Agent.AgentID = "management:forbidden"
+	managementStart.Agent.Profile, managementStart.Agent.Role = "management", "management"
+	managementStart.InitialWork.AssignedAgentID = managementStart.Agent.AgentID
+	managementStart.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(managementStart)
+	if _, err := s.StartLifecycle(ctx, managementStart); !errors.Is(err, ErrLifecycleInvalidTransition) {
 		t.Fatalf("effects-capable lifecycle start error = %v, want ErrLifecycleInvalidTransition", err)
 	}
 
@@ -3467,7 +3467,7 @@ func TestLifecycleWorkAndUpdatesDoNotCrossComputerScope(t *testing.T) {
 	}
 }
 
-func TestDispatchWorkerUpdateAllowsAssignedCoSuperPersistentSuperReport(t *testing.T) {
+func TestDispatchWorkerUpdateAllowsAssignedEngineeringPersistentManagementReport(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	start := lifecycleStartFixture()
@@ -3488,9 +3488,9 @@ func TestDispatchWorkerUpdateAllowsAssignedCoSuperPersistentSuperReport(t *testi
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update",
-			Summary:       "assigned CoSuper report through worker mailbox",
+			Summary:       "assigned Engineering report through worker mailbox",
 		},
-		Content:   "assigned CoSuper report through worker mailbox",
+		Content:   "assigned Engineering report through worker mailbox",
 		CreatedAt: now,
 	}
 	msg := &types.ChannelMessage{
@@ -3499,7 +3499,7 @@ func TestDispatchWorkerUpdateAllowsAssignedCoSuperPersistentSuperReport(t *testi
 	}
 	stored, created, err := s.DispatchWorkerUpdate(ctx, update, msg)
 	if err != nil || !created {
-		t.Fatalf("assigned CoSuper Super report dispatch: created=%v err=%v", created, err)
+		t.Fatalf("assigned Engineering Management report dispatch: created=%v err=%v", created, err)
 	}
 	if stored.Direction != types.LifecyclePacketDirectionProducerReport || stored.TargetAgentID != "management:"+start.OwnerID {
 		t.Fatalf("stored report = %+v", stored)
@@ -3508,10 +3508,10 @@ func TestDispatchWorkerUpdateAllowsAssignedCoSuperPersistentSuperReport(t *testi
 	blocked := update
 	blocked.UpdateID = "update-cosuper-unsigned"
 	blocked.Direction = ""
-	blocked.Content = "unsigned CoSuper packet"
+	blocked.Content = "unsigned Engineering packet"
 	msg.Content = blocked.Content
 	if _, _, err := s.DispatchWorkerUpdate(ctx, blocked, msg); !errors.Is(err, ErrLifecycleAuthorityRequired) {
-		t.Fatalf("unsigned CoSuper mailbox dispatch error = %v, want ErrLifecycleAuthorityRequired", err)
+		t.Fatalf("unsigned Engineering mailbox dispatch error = %v, want ErrLifecycleAuthorityRequired", err)
 	}
 }
 

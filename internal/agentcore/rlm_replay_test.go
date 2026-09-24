@@ -460,7 +460,7 @@ func rlmReplayForceRewarm(ctx context.Context, rt *Runtime) error {
 		return errRLMReplayBreakGlassRewarm
 	}
 	rt.rewarmInterruptedLifecycleActivations(ctx)
-	rt.rewarmInterruptedPersistentSuperActors(ctx)
+	rt.rewarmInterruptedPersistentManagementActors(ctx)
 	return nil
 }
 

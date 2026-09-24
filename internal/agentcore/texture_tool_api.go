@@ -43,10 +43,10 @@ func (rt *Runtime) RecordTextureEmailDraftRequest(ctx context.Context, parent *t
 	})
 }
 
-// ReconcilePersistentSuperActor starts or wakes the concrete persistent-super
+// ReconcilePersistentManagementActor starts or wakes the concrete persistent-super
 // lifecycle after Texture has durably dispatched a privileged request.
-func (rt *Runtime) ReconcilePersistentSuperActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
-	return rt.reconcilePersistentSuperActor(ctx, ownerID, agentID)
+func (rt *Runtime) ReconcilePersistentManagementActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
+	return rt.reconcilePersistentManagementActor(ctx, ownerID, agentID)
 }
 
 // EmitChannelMessageEvent publishes a newly-created durable channel message.

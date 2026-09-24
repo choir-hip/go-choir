@@ -528,8 +528,8 @@ func (a *Adapter) recoverParkedLifecycleMailboxSnapshots(ctx context.Context) er
 		snapProfile, _ := agentprofile.Canonical(rec.AgentProfile)
 		snapRole, _ := agentprofile.Canonical(rec.AgentRole)
 		if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID ||
-			snapProfile != agentprofile.Researcher ||
-			snapRole != agentprofile.Researcher ||
+			snapProfile != agentprofile.Research ||
+			snapRole != agentprofile.Research ||
 			strings.TrimSpace(metadataString(rec.Metadata, "request_source")) != "lifecycle_texture_control" ||
 			(rec.State != types.RunPassivated && rec.State != types.RunBlocked) {
 			continue

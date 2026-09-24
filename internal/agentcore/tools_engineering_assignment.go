@@ -15,28 +15,28 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// RegisterAssignedCoSuperTools adds only the exact persistent-Super assignment
+// RegisterAssignedEngineeringTools adds only the exact persistent-Management assignment
 // cancellation path. The assign_co_super opener is deleted: document-channel
-// casts open assignments directly. Generic lifecycle Super activation remains
+// casts open assignments directly. Generic lifecycle Management activation remains
 // refused in StartCoagentRun.
-func RegisterAssignedCoSuperTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
-	return registry.Register(newCancelAssignedCoSuperTool(rt))
+func RegisterAssignedEngineeringTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
+	return registry.Register(newCancelAssignedEngineeringTool(rt))
 }
 
-func RegisterPersistentSuperReportTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
-	return registry.Register(newReportPersistentSuperToTextureTool(rt))
+func RegisterPersistentManagementReportTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
+	return registry.Register(newReportPersistentManagementToTextureTool(rt))
 }
 
-func requirePersistentSuperExecution(ctx context.Context) (*types.RunRecord, error) {
+func requirePersistentManagementExecution(ctx context.Context) (*types.RunRecord, error) {
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	rec := execution.RunRecord
-	if rec == nil || rec.AgentID != persistentSuperAgentID(rec.OwnerID) || rec.AgentProfile != agentprofile.Super || rec.AgentRole != agentprofile.Super || rec.TrajectoryID != "" {
-		return nil, fmt.Errorf("assigned CoSuper tools require the exact non-lifecycle persistent Super")
+	if rec == nil || rec.AgentID != persistentManagementAgentID(rec.OwnerID) || rec.AgentProfile != agentprofile.Management || rec.AgentRole != agentprofile.Management || rec.TrajectoryID != "" {
+		return nil, fmt.Errorf("assigned Engineering tools require the exact non-lifecycle persistent Management")
 	}
 	return rec, nil
 }
 
-func newCancelAssignedCoSuperTool(rt *Runtime) toolregistry.Tool {
+func newCancelAssignedEngineeringTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		AssignmentID string `json:"assignment_id"`
 		Reason       string `json:"reason"`
@@ -47,7 +47,7 @@ func newCancelAssignedCoSuperTool(rt *Runtime) toolregistry.Tool {
 			"assignment_id": map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"},
 		}, []string{"assignment_id", "reason"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			parent, err := requirePersistentSuperExecution(ctx)
+			parent, err := requirePersistentManagementExecution(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -55,7 +55,7 @@ func newCancelAssignedCoSuperTool(rt *Runtime) toolregistry.Tool {
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return "", err
 			}
-			result, err := rt.cancelAssignedCoSuper(ctx, *parent, strings.TrimSpace(input.AssignmentID), 1, input.Reason)
+			result, err := rt.cancelAssignedEngineering(ctx, *parent, strings.TrimSpace(input.AssignmentID), 1, input.Reason)
 			if err != nil {
 				return "", err
 			}
@@ -116,7 +116,7 @@ func rejectReportAuthorityInputs(actions []types.CoagentPacketAction) error {
 	return nil
 }
 
-func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
+func newReportPersistentManagementToTextureTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		Kind            string                      `json:"kind"`
 		Summary         string                      `json:"summary"`
@@ -129,7 +129,7 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 	}
 	return toolregistry.Tool{
 		Name:        "report_to_texture",
-		Description: "Report typed progress, evidence, a blocker, or a terminal result from this exact persistent-Super control run back to its lifecycle Texture owner. Runtime derives all agent/run/trajectory/work identities.",
+		Description: "Report typed progress, evidence, a blocker, or a terminal result from this exact persistent-Management control run back to its lifecycle Texture owner. Runtime derives all agent/run/trajectory/work identities.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"kind":             map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_result", "blocker", "question", "proposal", "decision_request"}},
 			"summary":          map[string]any{"type": "string"},
@@ -141,7 +141,7 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 			"work_disposition": map[string]any{"type": "string", "enum": []string{"open", "completed"}},
 		}, []string{"kind", "summary", "claims", "sources", "actions", "questions", "notes", "work_disposition"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			parent, err := requirePersistentSuperExecution(ctx)
+			parent, err := requirePersistentManagementExecution(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -271,11 +271,11 @@ func newReportPersistentSuperToTextureTool(rt *Runtime) toolregistry.Tool {
 				ControlBindingID: control.UpdateID, TargetWorkItemID: targetWorkID,
 				ConsumedDeliveryUpdateIDs: consumedForReport,
 				ProducerUpdateID:          producerUpdateID, UpdateID: "result:" + occurrence,
-				ChannelID: control.ChannelID, Role: agentprofile.Super, SourceRunID: parent.RunID,
+				ChannelID: control.ChannelID, Role: agentprofile.Management, SourceRunID: parent.RunID,
 				Packet: packet, Content: content, WorkDisposition: input.WorkDisposition,
 				WorkItemID: control.TargetWorkItemID, PayloadDigest: payloadDigest,
 			}
-			req.CommandDigest, err = store.ComputeQueuePersistentSuperReportDigest(req)
+			req.CommandDigest, err = store.ComputeQueuePersistentManagementReportDigest(req)
 			if err != nil {
 				return "", err
 			}

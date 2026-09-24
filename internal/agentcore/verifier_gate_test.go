@@ -17,7 +17,7 @@ import (
 func TestVerifierGateRejectsNonVerifierSlot(t *testing.T) {
 	for _, slot := range []string{"", "implementation", "researcher"} {
 		rec := &types.RunRecord{
-			RunID: "run-gate", Metadata: map[string]any{runMetadataCoSuperSlot: slot},
+			RunID: "run-gate", Metadata: map[string]any{runMetadataEngineeringSlot: slot},
 		}
 		if _, err := recordSelfDevelopmentVerification(context.Background(), &CapsuleToolCtx{}, rec, "op", "sha256:abc", "pass", []string{"ref"}); err == nil {
 			t.Errorf("recordSelfDevelopmentVerification accepted slot %q", slot)
@@ -31,7 +31,7 @@ func TestVerifierGateRejectsNonVerifierSlot(t *testing.T) {
 // refusal.
 func TestVerifierGateReachesBindingCheck(t *testing.T) {
 	rec := &types.RunRecord{
-		RunID: "run-gate", Metadata: map[string]any{runMetadataCoSuperSlot: "verifier"},
+		RunID: "run-gate", Metadata: map[string]any{runMetadataEngineeringSlot: "verifier"},
 	}
 	_, err := recordSelfDevelopmentVerification(context.Background(), &CapsuleToolCtx{}, rec, "op", "sha256:abc", "pass", []string{"ref"})
 	if err == nil {

@@ -53,7 +53,7 @@ func TestNewGameDealInvariants(t *testing.T) {
 
 func TestDrawStockAndRecycle(t *testing.T) {
 	game := NewGame("owner-1", "computer-1", 42)
-	
+
 	// Draw all 24 cards from stock to waste
 	for i := 0; i < 24; i++ {
 		_, err := game.ApplyMove(MoveRequest{Type: MoveDrawStock})

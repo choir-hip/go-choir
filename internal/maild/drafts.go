@@ -38,29 +38,29 @@ type createDraftRequest struct {
 	SourceKind       string   `json:"source_kind,omitempty"`
 	SourceRef        string   `json:"source_ref,omitempty"`
 	// AttachmentIDs binds staged outbound attachments to this draft.
-	AttachmentIDs    []string `json:"attachment_ids,omitempty"`
+	AttachmentIDs []string `json:"attachment_ids,omitempty"`
 }
 
 type draftResponse struct {
-	ID                string   `json:"id"`
-	Status            string   `json:"status"`
-	Version           int      `json:"version"`
-	VersionHash       string   `json:"version_hash"`
-	FromAddress       string   `json:"from_address"`
-	ToAddresses       []string `json:"to_addresses"`
-	CcAddresses       []string `json:"cc_addresses,omitempty"`
-	BccAddresses      []string `json:"bcc_addresses,omitempty"`
-	Subject           string   `json:"subject"`
-	TextBody          string   `json:"text_body,omitempty"`
-	HTMLBody          string   `json:"html_body,omitempty"`
-	ReplyToMessageID  string   `json:"reply_to_message_id,omitempty"`
-	SourceKind        string   `json:"source_kind,omitempty"`
-	SourceRef         string   `json:"source_ref,omitempty"`
+	ID                string                `json:"id"`
+	Status            string                `json:"status"`
+	Version           int                   `json:"version"`
+	VersionHash       string                `json:"version_hash"`
+	FromAddress       string                `json:"from_address"`
+	ToAddresses       []string              `json:"to_addresses"`
+	CcAddresses       []string              `json:"cc_addresses,omitempty"`
+	BccAddresses      []string              `json:"bcc_addresses,omitempty"`
+	Subject           string                `json:"subject"`
+	TextBody          string                `json:"text_body,omitempty"`
+	HTMLBody          string                `json:"html_body,omitempty"`
+	ReplyToMessageID  string                `json:"reply_to_message_id,omitempty"`
+	SourceKind        string                `json:"source_kind,omitempty"`
+	SourceRef         string                `json:"source_ref,omitempty"`
 	Attachments       []EmailAttachmentMeta `json:"attachments,omitempty"`
-	SentMessageID     string   `json:"sent_message_id,omitempty"`
-	ProviderMessageID string   `json:"provider_message_id,omitempty"`
-	CreatedAt         string   `json:"created_at"`
-	UpdatedAt         string   `json:"updated_at"`
+	SentMessageID     string                `json:"sent_message_id,omitempty"`
+	ProviderMessageID string                `json:"provider_message_id,omitempty"`
+	CreatedAt         string                `json:"created_at"`
+	UpdatedAt         string                `json:"updated_at"`
 }
 
 type draftListResponse struct {

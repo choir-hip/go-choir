@@ -10,14 +10,14 @@ import (
 )
 
 // Capability is an Ed25519-signed token minted by guest-core authority.
-// The co-super never sees the raw capsule ID — it gets an opaque handle.
+// The Engineering never sees the raw capsule ID — it gets an opaque handle.
 type Capability struct {
 	CapabilityID   string    `json:"capability_id"`   // stable unique ID (used in revocation + session binding)
 	Handle         string    `json:"handle"`          // opaque handle, e.g. "build-a" (agent-facing)
 	CapsuleID      string    `json:"capsule_id"`      // real capsule UUID, or "" for wildcard (researcher)
 	AgentRunID     string    `json:"agent_run_id"`    // which agent run this cap is for
 	AgentRole      AgentRole `json:"agent_role"`      // determines verb set
-	Slot           string    `json:"slot,omitempty"`  // co-super slot (implementation|verifier) from the verified assignment kind; bounds the in-cell choir surface
+	Slot           string    `json:"slot,omitempty"`  // Engineering slot (implementation|verifier) from the verified assignment kind; bounds the in-cell choir surface
 	TargetCapsule  string    `json:"target_capsule"`  // capsule ID, or "*" for all (researcher)
 	Verbs          VerbSet   `json:"verbs"`           // role-defined verb set
 	ExternalAccess []string  `json:"external_access"` // e.g. ["dolt:write", "message:send"] for researcher

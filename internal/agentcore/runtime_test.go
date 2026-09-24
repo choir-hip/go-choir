@@ -413,12 +413,12 @@ func TestSystemPromptForTextureDefaultsToResearch(t *testing.T) {
 		t.Fatalf("texture system prompt should include coordination channel, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "guest-local capsule") ||
-		!strings.Contains(prompt, "scoped CoSuper roles") {
+		!strings.Contains(prompt, "scoped Engineering roles") {
 		t.Fatalf("texture system prompt should preserve capsule execution topology, got %q", prompt)
 	}
 }
 
-func TestSystemPromptForLifecycleTextureRoutesResearcherThroughAtomicTurnControl(t *testing.T) {
+func TestSystemPromptForLifecycleTextureRoutesResearchThroughAtomicTurnControl(t *testing.T) {
 	t.Parallel()
 	rt := testPromptRuntime(t)
 	rec := &types.RunRecord{
@@ -437,7 +437,7 @@ func TestSystemPromptForLifecycleTextureRoutesResearcherThroughAtomicTurnControl
 	}
 }
 
-func TestSystemPromptForSuperEnforcesCapsuleDevelopment(t *testing.T) {
+func TestSystemPromptForManagementEnforcesCapsuleDevelopment(t *testing.T) {
 	t.Parallel()
 	rt := testPromptRuntime(t)
 
@@ -446,7 +446,7 @@ func TestSystemPromptForSuperEnforcesCapsuleDevelopment(t *testing.T) {
 		AgentID:      "agent-super-user-alice",
 		ChannelID:    "doc-capsule",
 		OwnerID:      "user-alice",
-		AgentProfile: agentprofile.Super,
+		AgentProfile: agentprofile.Management,
 		Prompt:       "Implement and verify a Choir change.",
 	}
 
@@ -455,10 +455,10 @@ func TestSystemPromptForSuperEnforcesCapsuleDevelopment(t *testing.T) {
 		t.Fatalf("systemPromptForRun: %v", err)
 	}
 	for _, want := range []string{
-		"Super is the orchestration and decision-proposal role",
+		"Management is the orchestration and decision-proposal role",
 		"guest-local capsules",
 		"no direct shell",
-		"implementation CoSuper",
+		"implementation Engineering",
 		"slot=\"implementation\"",
 		"slot=\"verifier\"",
 		"public self-development API",
@@ -469,7 +469,7 @@ func TestSystemPromptForSuperEnforcesCapsuleDevelopment(t *testing.T) {
 	}
 }
 
-func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
+func TestSystemPromptForResearchForcesEarlyHandoff(t *testing.T) {
 	t.Parallel()
 	rt := testPromptRuntime(t)
 
@@ -478,7 +478,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 		AgentID:      "research:doc-1:1",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
-		AgentProfile: agentprofile.Researcher,
+		AgentProfile: agentprofile.Research,
 		Prompt:       "Find the latest Anthropic model release notes and summarize what matters for the doc.",
 	}
 
@@ -682,7 +682,7 @@ func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
 		AgentID:      "management:user-alice",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
-		AgentProfile: agentprofile.Super,
+		AgentProfile: agentprofile.Management,
 		Prompt:       "run a capsule-scoped implementation",
 	}
 

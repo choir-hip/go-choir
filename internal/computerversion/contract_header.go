@@ -10,10 +10,10 @@ import (
 // embed this struct so that Kind, Version, Boundary, and Scope are always
 // present and validated through a single helper.
 type ContractHeader struct {
-	Kind    string          `json:"kind"`
-	Version ComputerVersion `json:"version"`
-	Boundary string         `json:"boundary"`
-	Scope   string          `json:"scope"`
+	Kind     string          `json:"kind"`
+	Version  ComputerVersion `json:"version"`
+	Boundary string          `json:"boundary"`
+	Scope    string          `json:"scope"`
 }
 
 // ValidateContractHeader checks that a contract header has a non-empty Kind,
@@ -59,23 +59,23 @@ type NegativeClaims struct {
 	NoMutation                   bool `json:"no_mutation"`
 
 	// Protected-surface claims: these must always be false.
-	DeploymentExecuted           bool `json:"deployment_executed"`
-	StagingHealthClaimed         bool `json:"staging_health_claimed"`
-	DeployedRouteIdentityClaimed bool `json:"deployed_route_identity_claimed"`
-	RuntimeBehaviorChanged       bool `json:"runtime_behavior_changed"`
-	DeployedRouteRegistered      bool `json:"deployed_route_registered"`
-	ProductionAuthTouched        bool `json:"production_auth_touched"`
-	PromotionClaimed             bool `json:"promotion_claimed"`
-	PromotionExecuted            bool `json:"promotion_executed"`
-	PackagePublished             bool `json:"package_published"`
-	VMLifecycleTouched           bool `json:"vm_lifecycle_touched"`
-	FirecrackerBootClaimed       bool `json:"firecracker_boot_claimed"`
-	RunAcceptanceRecordTouched   bool `json:"run_acceptance_record_touched"`
-	PackagePublicationClaimed    bool `json:"package_publication_claimed"`
-	StagingClaimed               bool `json:"staging_claimed"`
-	FullSubstrateClaimed         bool `json:"full_substrate_claimed"`
+	DeploymentExecuted             bool `json:"deployment_executed"`
+	StagingHealthClaimed           bool `json:"staging_health_claimed"`
+	DeployedRouteIdentityClaimed   bool `json:"deployed_route_identity_claimed"`
+	RuntimeBehaviorChanged         bool `json:"runtime_behavior_changed"`
+	DeployedRouteRegistered        bool `json:"deployed_route_registered"`
+	ProductionAuthTouched          bool `json:"production_auth_touched"`
+	PromotionClaimed               bool `json:"promotion_claimed"`
+	PromotionExecuted              bool `json:"promotion_executed"`
+	PackagePublished               bool `json:"package_published"`
+	VMLifecycleTouched             bool `json:"vm_lifecycle_touched"`
+	FirecrackerBootClaimed         bool `json:"firecracker_boot_claimed"`
+	RunAcceptanceRecordTouched     bool `json:"run_acceptance_record_touched"`
+	PackagePublicationClaimed      bool `json:"package_publication_claimed"`
+	StagingClaimed                 bool `json:"staging_claimed"`
+	FullSubstrateClaimed           bool `json:"full_substrate_claimed"`
 	FullSubstrateIndependenceClaim bool `json:"full_substrate_independence_claim"`
-	CompletionClaimed            bool `json:"completion_claimed"`
+	CompletionClaimed              bool `json:"completion_claimed"`
 }
 
 // HasProtectedSurfaceClaim returns true if any protected-surface claim flag

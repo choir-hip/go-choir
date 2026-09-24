@@ -69,7 +69,7 @@ func (m *Manager) verifyModelCapability(ctx context.Context, input verifyModelCa
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	role := NormalizeRole(firstNonEmpty(input.Role, execution.Role))
 	if role == "" {
-		role = agentprofile.Super
+		role = agentprofile.Management
 	}
 	selection, policySource, err := m.resolveToolModelSelection(ctx, execution.OwnerID, role, input)
 	if err != nil {

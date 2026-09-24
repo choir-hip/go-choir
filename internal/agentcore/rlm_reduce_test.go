@@ -41,12 +41,12 @@ func TestCommitFreezeIntentRejectsDocumentTrajectoryBeforeExecutorEffect(t *test
 		RunID: "run-document-freeze", OwnerID: "user-alice", ComputerID: "autoputer-test", TrajectoryID: "document-trajectory",
 		Metadata: map[string]any{
 			"assignment_id": "assignment-document-freeze", "assignment_attempt": 1,
-			"assignment_kind": string(types.CoSuperAssignmentImplementation),
+			"assignment_kind": string(types.EngineeringAssignmentImplementation),
 		},
 	}
 	toolCtx := &CapsuleToolCtx{
 		Executor: new(capsule.Executor), AgentRunID: rec.RunID, ComputerID: rec.ComputerID,
-		Role: capsule.RoleCoSuper, CapsuleHandle: "bound-handle", OperationStore: rt.selfdevOperations,
+		Role: capsule.RoleEngineering, CapsuleHandle: "bound-handle", OperationStore: rt.selfdevOperations,
 		ValidateCurrentObligation: func(context.Context) error { return nil },
 	}
 	ctx := WithCapsuleCtx(context.Background(), toolCtx)
@@ -186,10 +186,10 @@ func TestReduceEnforcesTrustBoundary(t *testing.T) {
 			t.Errorf("%s: cursor moved on rejected tray", name)
 		}
 	}
-	// Researcher-to-researcher fan-out is legitimate.
-	researcher := testReductionScope()
-	researcher.FromRole = "research"
-	receipt, err := ReduceCellIntents(ctx, rt, researcher, []yaegikernel.StagedIntent{
+	// Research-to-researcher fan-out is legitimate.
+	research := testReductionScope()
+	research.FromRole = "research"
+	receipt, err := ReduceCellIntents(ctx, rt, research, []yaegikernel.StagedIntent{
 		{LocalID: "a", Kind: yaegikernel.IntentSpawn, Role: "research", Objective: "survey"},
 	}, true)
 	if err != nil || !receipt.Committed {

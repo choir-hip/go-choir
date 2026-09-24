@@ -15,8 +15,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func coSuperFateRequest(assignment types.CoSuperAssignment, disposition types.CoSuperCapsuleDisposition, intentRef, ackRef string) types.SetCoSuperCapsuleDispositionRequest {
-	req := types.SetCoSuperCapsuleDispositionRequest{
+func engineeringFateRequest(assignment types.EngineeringAssignment, disposition types.EngineeringCapsuleDisposition, intentRef, ackRef string) types.SetEngineeringCapsuleDispositionRequest {
+	req := types.SetEngineeringCapsuleDispositionRequest{
 		CommandID: fmt.Sprintf("co-super-capsule:%s:%d:%s", assignment.AssignmentID, assignment.Binding.Attempt, disposition),
 		OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
@@ -24,14 +24,14 @@ func coSuperFateRequest(assignment types.CoSuperAssignment, disposition types.Co
 		IntentRef: intentRef, AckRef: ackRef,
 	}
 	if assignment.GrantPolicyAttestation != nil || len(assignment.CapsuleFateHistory) > 0 {
-		req.FateStep = &types.CoSuperCapsuleFateStep{}
+		req.FateStep = &types.EngineeringCapsuleFateStep{}
 	}
-	req.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(req)
+	req.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(req)
 	return req
 }
 
-func coSuperFateAckRequest(assignment types.CoSuperAssignment, disposition types.CoSuperCapsuleDisposition, intentRef, ackRef, sourceDigest, finalDigest, occurredAt string, capsuleAbsent bool) (types.SetCoSuperCapsuleDispositionRequest, error) {
-	req := coSuperFateRequest(assignment, disposition, intentRef, ackRef)
+func engineeringFateAckRequest(assignment types.EngineeringAssignment, disposition types.EngineeringCapsuleDisposition, intentRef, ackRef, sourceDigest, finalDigest, occurredAt string, capsuleAbsent bool) (types.SetEngineeringCapsuleDispositionRequest, error) {
+	req := engineeringFateRequest(assignment, disposition, intentRef, ackRef)
 	if req.FateStep == nil {
 		return req, nil
 	}
@@ -42,11 +42,11 @@ func coSuperFateAckRequest(assignment types.CoSuperAssignment, disposition types
 	if occurredAt != "" {
 		parsed, err := time.Parse(time.RFC3339Nano, occurredAt)
 		if err != nil {
-			return types.SetCoSuperCapsuleDispositionRequest{}, fmt.Errorf("assignment command receipt occurred_at is invalid")
+			return types.SetEngineeringCapsuleDispositionRequest{}, fmt.Errorf("assignment command receipt occurred_at is invalid")
 		}
 		req.FateStep.OccurredAt = parsed.UTC()
 	}
-	req.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(req)
+	req.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(req)
 	return req, nil
 }
 
@@ -63,16 +63,16 @@ func (rt *Runtime) assignedCapsule() assignmentCapsuleRuntime {
 	return rt.capsuleExecutor
 }
 
-func assignedCoSuperRun(rec *types.RunRecord) bool {
+func assignedEngineeringRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
 	profile := agentProfileForRun(rec)
-	return profile == agentprofile.CoSuper &&
+	return profile == agentprofile.Engineering &&
 		metadataStringValue(rec.Metadata, "assignment_id") != ""
 }
 
-func (rt *Runtime) assignedCoSuperCapsuleUsable(assignment types.CoSuperAssignment) bool {
+func (rt *Runtime) assignedEngineeringCapsuleUsable(assignment types.EngineeringAssignment) bool {
 	exec := rt.assignedCapsule()
 	if exec == nil || strings.TrimSpace(assignment.BoundRunID) == "" || strings.TrimSpace(assignment.Binding.CapsuleID) == "" {
 		return false
@@ -83,23 +83,23 @@ func (rt *Runtime) assignedCoSuperCapsuleUsable(assignment types.CoSuperAssignme
 		diagnostics != nil && diagnostics.ID == assignment.Binding.CapsuleID && diagnostics.State == capsule.StateActive
 }
 
-func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.CoSuperAssignment, reason string) (types.CoSuperAssignment, error) {
+func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.EngineeringAssignment, reason string) (types.EngineeringAssignment, error) {
 	exec := rt.assignedCapsule()
 	if exec == nil {
 		return assignment, fmt.Errorf("assigned capsule executor unavailable")
 	}
 	intentRef := assignment.CapsuleIntentRef
-	if assignment.CapsuleDisposition != types.CoSuperCapsuleRevokeRequested && assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+	if assignment.CapsuleDisposition != types.EngineeringCapsuleRevokeRequested && assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 		intentRef = "capsule-revoke-intent:" + objectgraph.SHA256([]byte(strings.Join([]string{
 			assignment.AssignmentID, fmt.Sprint(assignment.Binding.Attempt), assignment.BoundRunID, assignment.Binding.CapsuleID, reason,
 		}, "\x00")))
-		requested, err := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleRevokeRequested, intentRef, ""))
+		requested, err := rt.store.SetEngineeringCapsuleDisposition(ctx, engineeringFateRequest(assignment, types.EngineeringCapsuleRevokeRequested, intentRef, ""))
 		if err != nil {
 			return assignment, err
 		}
 		assignment = requested.Assignment
 	}
-	if assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked {
+	if assignment.CapsuleDisposition == types.EngineeringCapsuleRevoked {
 		return assignment, nil
 	}
 	ackRunID := assignment.BoundRunID
@@ -128,108 +128,108 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.C
 		return assignment, fmt.Errorf("persist exact structured capsule revoke acknowledgement: %w", receiptErr)
 	}
 	ackRef := revocationReceipt.ReceiptRef
-	fateAck, fateAckErr := coSuperFateAckRequest(assignment, types.CoSuperCapsuleRevoked, intentRef, ackRef, "", "", revocationReceipt.OccurredAt, revocationReceipt.CapsuleAbsent)
+	fateAck, fateAckErr := engineeringFateAckRequest(assignment, types.EngineeringCapsuleRevoked, intentRef, ackRef, "", "", revocationReceipt.OccurredAt, revocationReceipt.CapsuleAbsent)
 	if fateAckErr != nil {
 		return assignment, fmt.Errorf("invalid revoke receipt occurred_at: %w", fateAckErr)
 	}
-	acked, err := rt.store.SetCoSuperCapsuleDisposition(ctx, fateAck)
+	acked, err := rt.store.SetEngineeringCapsuleDisposition(ctx, fateAck)
 	if err != nil {
 		return assignment, err
 	}
 	return acked.Assignment, nil
 }
 
-func (rt *Runtime) cancelAssignedCoSuper(ctx context.Context, parent types.RunRecord, assignmentID string, attempt uint64, reason string) (types.CoSuperAssignmentCommandResult, error) {
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, parent.OwnerID, parent.ComputerID, strings.TrimSpace(assignmentID), attempt)
+func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.RunRecord, assignmentID string, attempt uint64, reason string) (types.EngineeringAssignmentCommandResult, error) {
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, parent.OwnerID, parent.ComputerID, strings.TrimSpace(assignmentID), attempt)
 	if err != nil {
-		return types.CoSuperAssignmentCommandResult{}, err
+		return types.EngineeringAssignmentCommandResult{}, err
 	}
 	if assignment.Binding.ParentRunID != parent.RunID || assignment.Binding.ParentAgentID != parent.AgentID {
-		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires the exact recorded parent")
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires the exact recorded parent")
 	}
-	if parent.RunID != "" && parent.AgentID != persistentSuperAgentID(parent.OwnerID) {
-		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires exact persistent Super parent")
+	if parent.RunID != "" && parent.AgentID != persistentManagementAgentID(parent.OwnerID) {
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires exact persistent Management parent")
 	}
-	cancel := types.CancelCoSuperAssignmentRequest{
+	cancel := types.CancelEngineeringAssignmentRequest{
 		CommandID: fmt.Sprintf("co-super-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
 		OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 		ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: strings.TrimSpace(reason),
 	}
 	if cancel.Reason == "" {
-		cancel.Reason = "persistent Super cancelled assignment"
+		cancel.Reason = "persistent Management cancelled assignment"
 	}
-	cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
+	cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 	if assignment.Disposition.Terminal() {
 		// Exact cancellation replay/conflict is receipt-authoritative even after
 		// terminal projection; never bypass it with an in-memory early return.
-		replayed, replayErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
+		replayed, replayErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
 		if replayErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, replayErr
+			return types.EngineeringAssignmentCommandResult{}, replayErr
 		}
 		return replayed, nil
 	}
 	if assignment.BoundRunID != "" {
 		assignment, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
 		if err != nil {
-			return types.CoSuperAssignmentCommandResult{}, err
+			return types.EngineeringAssignmentCommandResult{}, err
 		}
 	}
 	cancel.ExpectedLifecycleVersion = assignment.LifecycleVersion
-	cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-	cancelled, err := rt.store.CancelCoSuperAssignment(ctx, cancel)
+	cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+	cancelled, err := rt.store.CancelEngineeringAssignment(ctx, cancel)
 	if err != nil {
-		return types.CoSuperAssignmentCommandResult{}, err
+		return types.EngineeringAssignmentCommandResult{}, err
 	}
 	return cancelled, nil
 }
 
-func (rt *Runtime) persistSystemCoSuperCancellation(ctx context.Context, assignment types.CoSuperAssignment, reason string) (types.CoSuperAssignmentCommandResult, error) {
+func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, assignment types.EngineeringAssignment, reason string) (types.EngineeringAssignmentCommandResult, error) {
 	for attempt := 0; attempt < 4; attempt++ {
-		current, err := rt.store.GetCoSuperAssignment(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt)
+		current, err := rt.store.GetEngineeringAssignment(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt)
 		if err != nil {
-			return types.CoSuperAssignmentCommandResult{}, err
+			return types.EngineeringAssignmentCommandResult{}, err
 		}
 		if current.Disposition.Terminal() {
-			return types.CoSuperAssignmentCommandResult{Assignment: current, Replay: true}, nil
+			return types.EngineeringAssignmentCommandResult{Assignment: current, Replay: true}, nil
 		}
-		if current.CapsuleDisposition != types.CoSuperCapsuleRevoked {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("system assignment cancellation requires durable revoke acknowledgement")
+		if current.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("system assignment cancellation requires durable revoke acknowledgement")
 		}
-		cancel := types.CancelCoSuperAssignmentRequest{CommandID: fmt.Sprintf("co-super-system-cancel:%s:%d", current.AssignmentID, current.Binding.Attempt),
+		cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("co-super-system-cancel:%s:%d", current.AssignmentID, current.Binding.Attempt),
 			OwnerID: current.Binding.OwnerID, ComputerID: current.Binding.ComputerID, AssignmentID: current.AssignmentID, Attempt: current.Binding.Attempt,
 			ExpectedLifecycleVersion: current.LifecycleVersion, Reason: strings.TrimSpace(reason)}
 		if cancel.Reason == "" {
 			cancel.Reason = "system cancelled assignment fate"
 		}
-		cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-		result, cancelErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
+		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+		result, cancelErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
 		if cancelErr == nil {
 			if !result.Replay && result.Update != nil {
 				rt.wakeUpdatedCoagent(ctx, *result.Update)
 			}
 			return result, nil
 		}
-		if !errors.Is(cancelErr, store.ErrCoSuperAssignmentInvalid) && !errors.Is(cancelErr, store.ErrConcurrentStateChange) {
-			return types.CoSuperAssignmentCommandResult{}, cancelErr
+		if !errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid) && !errors.Is(cancelErr, store.ErrConcurrentStateChange) {
+			return types.EngineeringAssignmentCommandResult{}, cancelErr
 		}
 	}
-	return types.CoSuperAssignmentCommandResult{}, store.ErrConcurrentStateChange
+	return types.EngineeringAssignmentCommandResult{}, store.ErrConcurrentStateChange
 }
 
-func (rt *Runtime) prepareCoSuperTrajectoryCancellation(ctx context.Context, ownerID, computerID, trajectoryID, reason string) ([]types.CoSuperAssignment, error) {
+func (rt *Runtime) prepareEngineeringTrajectoryCancellation(ctx context.Context, ownerID, computerID, trajectoryID, reason string) ([]types.EngineeringAssignment, error) {
 	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil || strings.TrimSpace(computerID) == "" {
 		return nil, nil
 	}
-	assignments, err := rt.store.ListCoSuperAssignments(ctx, ownerID, computerID, trajectoryID)
+	assignments, err := rt.store.ListEngineeringAssignments(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		return nil, err
 	}
-	prepared := make([]types.CoSuperAssignment, 0, len(assignments))
+	prepared := make([]types.EngineeringAssignment, 0, len(assignments))
 	for _, assignment := range assignments {
 		// Terminal assignment outcome does not by itself prove executor fate;
 		// cancellation closes every non-revoked capsule before trajectory fate.
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 			assignment, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
 			if err != nil {
 				return prepared, err
@@ -240,11 +240,11 @@ func (rt *Runtime) prepareCoSuperTrajectoryCancellation(ctx context.Context, own
 	return prepared, nil
 }
 
-func (rt *Runtime) finishCoSuperTrajectoryCancellation(ctx context.Context, ownerID, computerID, trajectoryID, reason string) error {
+func (rt *Runtime) finishEngineeringTrajectoryCancellation(ctx context.Context, ownerID, computerID, trajectoryID, reason string) error {
 	if rt == nil || rt.store == nil || strings.TrimSpace(computerID) == "" {
 		return nil
 	}
-	assignments, err := rt.store.ListCoSuperAssignments(ctx, ownerID, computerID, trajectoryID)
+	assignments, err := rt.store.ListEngineeringAssignments(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		return err
 	}
@@ -252,23 +252,23 @@ func (rt *Runtime) finishCoSuperTrajectoryCancellation(ctx context.Context, owne
 		if assignment.Disposition.Terminal() {
 			continue
 		}
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 			return fmt.Errorf("assignment %s cancellation missing durable executor revoke acknowledgement", assignment.AssignmentID)
 		}
-		if _, err := rt.persistSystemCoSuperCancellation(ctx, assignment, reason); err != nil {
+		if _, err := rt.persistSystemEngineeringCancellation(ctx, assignment, reason); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (rt *Runtime) cancelBoundCoSuperRun(ctx context.Context, rec types.RunRecord, reason string) (bool, error) {
+func (rt *Runtime) cancelBoundEngineeringRun(ctx context.Context, rec types.RunRecord, reason string) (bool, error) {
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
 	if assignmentID == "" || attempt == 0 {
 		return false, nil
 	}
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
 	if err != nil {
 		return true, err
 	}
@@ -276,7 +276,7 @@ func (rt *Runtime) cancelBoundCoSuperRun(ctx context.Context, rec types.RunRecor
 		return true, fmt.Errorf("cancel run assignment binding mismatch")
 	}
 	if assignment.Disposition.Terminal() {
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 			_, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
 		}
 		return true, err
@@ -285,21 +285,21 @@ func (rt *Runtime) cancelBoundCoSuperRun(ctx context.Context, rec types.RunRecor
 	if err != nil {
 		return true, err
 	}
-	_, err = rt.persistSystemCoSuperCancellation(ctx, assignment, reason)
+	_, err = rt.persistSystemEngineeringCancellation(ctx, assignment, reason)
 	return true, err
 }
 
-// ReconcileCoSuperAssignmentsForTrajectory closes restart gaps without a
+// ReconcileEngineeringAssignmentsForTrajectory closes restart gaps without a
 // poller. It is called from existing actor/runtime reconstruction for the exact
 // lifecycle trajectory: an absent executor capsule is first recorded as a
 // durable revoke intent, then acknowledged absent, then cancelled. No wake or
 // attempt reopen follows.
-func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string) error {
+func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string) error {
 	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
 		return nil
 	}
 	exec := rt.assignedCapsule()
-	assignments, err := rt.store.ListCoSuperAssignments(ctx, ownerID, computerID, trajectoryID)
+	assignments, err := rt.store.ListEngineeringAssignments(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		return err
 	}
@@ -314,7 +314,7 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 				return resumeErr
 			}
 			if result.Trajectory.Status == types.TrajectoryCancelled {
-				if finishErr := rt.finishCoSuperTrajectoryCancellation(ctx, ownerID, computerID, trajectoryID, intent.Reason); finishErr != nil {
+				if finishErr := rt.finishEngineeringTrajectoryCancellation(ctx, ownerID, computerID, trajectoryID, intent.Reason); finishErr != nil {
 					return finishErr
 				}
 				return nil
@@ -327,9 +327,9 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 		if assignment.Disposition.Terminal() {
 			// Unbound means the capsule was never bound (spawn failed before
 			// bind), so there is nothing to revoke. Attempting to revoke it
-			// fails the SetCoSuperCapsuleDisposition guard (BoundRunID empty
+			// fails the SetEngineeringCapsuleDisposition guard (BoundRunID empty
 			// on a non-open assignment) and aborts the whole trajectory.
-			if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked && assignment.CapsuleDisposition != types.CoSuperCapsuleUnbound {
+			if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked && assignment.CapsuleDisposition != types.EngineeringCapsuleUnbound {
 				if _, fateErr := rt.revokeAssignedCapsule(ctx, assignment, "restart terminal assignment fate reconciliation"); fateErr != nil {
 					return fateErr
 				}
@@ -337,29 +337,29 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 			continue
 		}
 		if trajectory.Status != types.TrajectoryLive {
-			if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+			if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 				assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "restart terminal trajectory fate reconciliation")
 				if err != nil {
 					return err
 				}
 			}
-			if _, cancelErr := rt.persistSystemCoSuperCancellation(ctx, assignment, "restart completed terminal trajectory assignment fate"); cancelErr != nil {
+			if _, cancelErr := rt.persistSystemEngineeringCancellation(ctx, assignment, "restart completed terminal trajectory assignment fate"); cancelErr != nil {
 				return cancelErr
 			}
 			continue
 		}
 		if assignment.BoundRunID == "" {
 			intent := "capsule-revoke-intent:" + objectgraph.SHA256([]byte(assignment.AssignmentID+"\x00restart-pre-bind"))
-			if assignment.CapsuleDisposition == types.CoSuperCapsuleUnbound {
-				requested, fateErr := rt.store.SetCoSuperCapsuleDisposition(ctx, coSuperFateRequest(assignment, types.CoSuperCapsuleRevokeRequested, intent, ""))
+			if assignment.CapsuleDisposition == types.EngineeringCapsuleUnbound {
+				requested, fateErr := rt.store.SetEngineeringCapsuleDisposition(ctx, engineeringFateRequest(assignment, types.EngineeringCapsuleRevokeRequested, intent, ""))
 				if fateErr != nil {
 					return fateErr
 				}
 				assignment = requested.Assignment
 			}
-			if assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested {
+			if assignment.CapsuleDisposition == types.EngineeringCapsuleRevokeRequested {
 				if assignment.CapsuleIntentRef != intent {
-					return store.ErrCoSuperAssignmentCommandConflict
+					return store.ErrEngineeringAssignmentCommandConflict
 				}
 				if exec.HasCapsule(assignment.Binding.CapsuleID) {
 					if destroyErr := exec.ForceDestroy(ctx, assignment.Binding.CapsuleID); destroyErr != nil {
@@ -374,26 +374,26 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 				if receiptErr != nil {
 					return receiptErr
 				}
-				fateAck, fateAckErr := coSuperFateAckRequest(assignment, types.CoSuperCapsuleRevoked, intent, receipt.ReceiptRef, "", "", receipt.OccurredAt, receipt.CapsuleAbsent)
+				fateAck, fateAckErr := engineeringFateAckRequest(assignment, types.EngineeringCapsuleRevoked, intent, receipt.ReceiptRef, "", "", receipt.OccurredAt, receipt.CapsuleAbsent)
 				if fateAckErr != nil {
 					return fmt.Errorf("invalid revoke receipt occurred_at: %w", fateAckErr)
 				}
-				acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(ctx, fateAck)
+				acked, fateErr := rt.store.SetEngineeringCapsuleDisposition(ctx, fateAck)
 				if fateErr != nil {
 					return fateErr
 				}
 				assignment = acked.Assignment
 			}
-			if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+			if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 				return fmt.Errorf("restart open assignment has ambiguous capsule fate %s", assignment.CapsuleDisposition)
 			}
-			cancel := types.CancelCoSuperAssignmentRequest{
+			cancel := types.CancelEngineeringAssignmentRequest{
 				CommandID: fmt.Sprintf("co-super-restart-open-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
 				OwnerID:   ownerID, ComputerID: computerID, AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 				ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: "restart acknowledged absent pre-bind assignment capsule",
 			}
-			cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-			cancelled, cancelErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
+			cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+			cancelled, cancelErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
 			if cancelErr != nil {
 				return cancelErr
 			}
@@ -409,13 +409,13 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 		// destroy the work evidence. The reducer authors the fate from the
 		// staged proposal instead — same intent identity, so the store
 		// replays instead of minting a second report.
-		if assignedCoSuperFatePending(assignment) {
+		if assignedEngineeringFatePending(assignment) {
 			if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
 				log.Printf("runtime: assignment %s stranded frozen proposal resume: %v", assignment.AssignmentID, resumeErr)
 			}
 			continue
 		}
-		usable := rt.assignedCoSuperCapsuleUsable(assignment)
+		usable := rt.assignedEngineeringCapsuleUsable(assignment)
 		if usable {
 			continue
 		}
@@ -423,13 +423,13 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 		if err != nil {
 			return err
 		}
-		cancel := types.CancelCoSuperAssignmentRequest{
+		cancel := types.CancelEngineeringAssignmentRequest{
 			CommandID: fmt.Sprintf("co-super-restart-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
 			OwnerID:   ownerID, ComputerID: computerID, AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 			ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: "restart revoked absent assignment capsule",
 		}
-		cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-		cancelled, cancelErr := rt.store.CancelCoSuperAssignment(ctx, cancel)
+		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+		cancelled, cancelErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
 		if cancelErr != nil {
 			return cancelErr
 		}
@@ -440,12 +440,12 @@ func (rt *Runtime) ReconcileCoSuperAssignmentsForTrajectory(ctx context.Context,
 	return nil
 }
 
-// reconcileCoSuperAssignmentCapsulesAfterRestart closes restart gaps for every
-// durable CoSuper assignment in the computer, independent of the run-state
+// reconcileEngineeringAssignmentCapsulesAfterRestart closes restart gaps for every
+// durable Engineering assignment in the computer, independent of the run-state
 // metadata index that assignments bound before it was introduced may lack. It
 // delegates to the per-trajectory reconciler so revoke, cancel, and run
 // terminalization share one authority path.
-func (rt *Runtime) reconcileCoSuperAssignmentCapsulesAfterRestart(ctx context.Context) {
+func (rt *Runtime) reconcileEngineeringAssignmentCapsulesAfterRestart(ctx context.Context) {
 	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
 		return
 	}
@@ -453,9 +453,9 @@ func (rt *Runtime) reconcileCoSuperAssignmentCapsulesAfterRestart(ctx context.Co
 	if computerID == "" {
 		return
 	}
-	assignments, err := rt.store.ListCoSuperAssignmentsForComputer(ctx, computerID)
+	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
 	if err != nil {
-		log.Printf("runtime: boot CoSuper assignment capsule sweep: %v", err)
+		log.Printf("runtime: boot Engineering assignment capsule sweep: %v", err)
 		return
 	}
 	seen := make(map[string]struct{})
@@ -468,21 +468,21 @@ func (rt *Runtime) reconcileCoSuperAssignmentCapsulesAfterRestart(ctx context.Co
 			continue
 		}
 		seen[key] = struct{}{}
-		if err := rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID); err != nil {
-			log.Printf("runtime: boot CoSuper assignment capsule sweep trajectory %s: %v", assignment.Binding.TrajectoryID, err)
+		if err := rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID); err != nil {
+			log.Printf("runtime: boot Engineering assignment capsule sweep trajectory %s: %v", assignment.Binding.TrajectoryID, err)
 		}
 	}
 }
 
-// enforceCoSuperAssignmentDeadlines fails closed on bound assignments that
-// outlive coSuperAssignmentDeadline without reaching a terminal disposition
+// enforceEngineeringAssignmentDeadlines fails closed on bound assignments that
+// outlive coManagementAssignmentDeadline without reaching a terminal disposition
 // (I26 scheduling contract). Deadline expiry cancels the assignment through
-// the same fate path a Super-initiated cancel uses — capsule revoke receipt,
+// the same fate path a Management-initiated cancel uses — capsule revoke receipt,
 // durable cancel, run terminalization — so the one-live-slot invariant is
 // never held hostage by a wedged capsule. The underlying execution request is
 // untouched: it stays pending in the Texture trajectory and remains retryable
 // by a later admission cycle.
-func (rt *Runtime) enforceCoSuperAssignmentDeadlines(ctx context.Context) {
+func (rt *Runtime) enforceEngineeringAssignmentDeadlines(ctx context.Context) {
 	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
 		return
 	}
@@ -490,7 +490,7 @@ func (rt *Runtime) enforceCoSuperAssignmentDeadlines(ctx context.Context) {
 	if computerID == "" {
 		return
 	}
-	assignments, err := rt.store.ListCoSuperAssignmentsForComputer(ctx, computerID)
+	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
 	if err != nil {
 		log.Printf("runtime: assignment deadline sweep list: %v", err)
 		return
@@ -499,15 +499,15 @@ func (rt *Runtime) enforceCoSuperAssignmentDeadlines(ctx context.Context) {
 		if assignment.Disposition.Terminal() || assignment.BoundRunID == "" || assignment.CreatedAt.IsZero() {
 			continue
 		}
-		if time.Since(assignment.CreatedAt) < coSuperAssignmentDeadline {
+		if time.Since(assignment.CreatedAt) < engineeringAssignmentDeadline {
 			continue
 		}
 		parent := types.RunRecord{
 			RunID: assignment.Binding.ParentRunID, OwnerID: assignment.Binding.OwnerID,
 			ComputerID: assignment.Binding.ComputerID, AgentID: assignment.Binding.ParentAgentID,
 		}
-		result, cancelErr := rt.cancelAssignedCoSuper(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
-			fmt.Sprintf("assignment deadline expired after %s; request remains pending and retryable", coSuperAssignmentDeadline))
+		result, cancelErr := rt.cancelAssignedEngineering(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
+			fmt.Sprintf("assignment deadline expired after %s; request remains pending and retryable", engineeringAssignmentDeadline))
 		if cancelErr != nil {
 			log.Printf("runtime: assignment %s deadline cancellation: %v", assignment.AssignmentID, cancelErr)
 			continue
@@ -519,16 +519,16 @@ func (rt *Runtime) enforceCoSuperAssignmentDeadlines(ctx context.Context) {
 	}
 }
 
-func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
+func (rt *Runtime) recordAssignedEngineeringReport(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.EngineeringAssignmentReport) (types.EngineeringAssignmentCommandResult, error) {
 	var lastErr error
 	for attempt := 0; attempt < 4; attempt++ {
-		result, err := rt.recordAssignedCoSuperReportOnce(ctx, rec, toolCallID, report)
+		result, err := rt.recordAssignedEngineeringReportOnce(ctx, rec, toolCallID, report)
 		if err == nil {
 			return result, nil
 		}
 		lastErr = err
-		if !errors.Is(err, store.ErrCoSuperAssignmentInvalid) && !errors.Is(err, store.ErrConcurrentStateChange) {
-			return types.CoSuperAssignmentCommandResult{}, err
+		if !errors.Is(err, store.ErrEngineeringAssignmentInvalid) && !errors.Is(err, store.ErrConcurrentStateChange) {
+			return types.EngineeringAssignmentCommandResult{}, err
 		}
 		// A cancellation/report race may invalidate the live freeze CAS or
 		// advance assignment fate after late authority was read. Reload the
@@ -536,34 +536,34 @@ func (rt *Runtime) recordAssignedCoSuperReport(ctx context.Context, rec *types.R
 		// has won. The next attempt is forced through the evidence-only path.
 		assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 		assignmentAttempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
-		current, loadErr := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, assignmentAttempt)
+		current, loadErr := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, assignmentAttempt)
 		if loadErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, loadErr
+			return types.EngineeringAssignmentCommandResult{}, loadErr
 		}
 		_, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.ComputerID, current.Binding.TrajectoryID)
 		cancellationWon := intentErr == nil
 		if intentErr != nil && !errors.Is(intentErr, store.ErrNotFound) {
-			return types.CoSuperAssignmentCommandResult{}, intentErr
+			return types.EngineeringAssignmentCommandResult{}, intentErr
 		}
-		if !cancellationWon && !current.Disposition.Terminal() && current.CapsuleDisposition != types.CoSuperCapsuleRevokeRequested && current.CapsuleDisposition != types.CoSuperCapsuleRevoked {
-			return types.CoSuperAssignmentCommandResult{}, err
+		if !cancellationWon && !current.Disposition.Terminal() && current.CapsuleDisposition != types.EngineeringCapsuleRevokeRequested && current.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+			return types.EngineeringAssignmentCommandResult{}, err
 		}
 	}
-	return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("retain assignment report after cancellation race: %w", lastErr)
+	return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("retain assignment report after cancellation race: %w", lastErr)
 }
 
-func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
+func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.EngineeringAssignmentReport) (types.EngineeringAssignmentCommandResult, error) {
 	if rec == nil || rt.capsuleExecutor == nil || strings.TrimSpace(toolCallID) == "" {
-		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("assigned CoSuper report authority unavailable")
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("assigned Engineering report authority unavailable")
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
 	if err != nil {
-		return types.CoSuperAssignmentCommandResult{}, err
+		return types.EngineeringAssignmentCommandResult{}, err
 	}
 	if assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedAgentID != rec.AgentID {
-		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("report run is not the exact bound assignment")
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("report run is not the exact bound assignment")
 	}
 	// v1 terminal identity (settlement gate item 3): the proposition digest
 	// covers the submitted claims with the pinned pre-execution belief.
@@ -573,7 +573,7 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	// and never rewrite the digest. Cancellation-wins is a reducer disposition
 	// recorded by the store; the submitted packet is never rewritten here.
 	report.ObservedSubjectDigest = assignment.Binding.SubjectDigest
-	terminal := report.Result != types.CoSuperResultPartial
+	terminal := report.Result != types.EngineeringResultPartial
 	propositionDigest := ""
 	if terminal {
 		var propErr error
@@ -582,7 +582,7 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 			report.Result, report.Verdict,
 			report.Commands, report.Outputs, report.EvidenceRefs)
 		if propErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, propErr
+			return types.EngineeringAssignmentCommandResult{}, propErr
 		}
 		report.ReportID = store.TerminalReportID(assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignmentID, attempt, propositionDigest)
 		report.PropositionDigest = propositionDigest
@@ -596,20 +596,20 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.TrajectoryID); intentErr == nil {
 		cancellationIntended = true
 	} else if !errors.Is(intentErr, store.ErrNotFound) {
-		return types.CoSuperAssignmentCommandResult{}, intentErr
+		return types.EngineeringAssignmentCommandResult{}, intentErr
 	}
 	// The saga's own mid-flight dispositions are not late fate: a staged
 	// pending proposal whose proposition digest matches this report is the
 	// same terminal commit resuming after a strand, and must re-enter the
 	// freeze/revoke path instead of degrading to late evidence. This mirrors
-	// the store's pendingMatches exclusion in RecordCoSuperAssignmentReport.
+	// the store's pendingMatches exclusion in RecordEngineeringAssignmentReport.
 	pendingMatches := assignment.PendingProposal != nil && assignment.PendingProposal.PropositionDigest == propositionDigest &&
 		!cancellationIntended && !assignment.Disposition.Terminal()
-	lateFate := (cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested || assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked) && !pendingMatches
-	storedReport, reportErr := rt.store.GetCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, report.ReportID)
+	lateFate := (cancellationIntended || assignment.Disposition.Terminal() || assignment.CapsuleDisposition == types.EngineeringCapsuleRevokeRequested || assignment.CapsuleDisposition == types.EngineeringCapsuleRevoked) && !pendingMatches
+	storedReport, reportErr := rt.store.GetEngineeringAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, report.ReportID)
 	reportExists := reportErr == nil
 	if reportErr != nil && !errors.Is(reportErr, store.ErrNotFound) {
-		return types.CoSuperAssignmentCommandResult{}, reportErr
+		return types.EngineeringAssignmentCommandResult{}, reportErr
 	}
 	if reportExists {
 		// The derived ReportID already binds the digest; a stored row with a
@@ -624,11 +624,11 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 				storedReport.Result, storedReport.Verdict,
 				storedReport.Commands, storedReport.Outputs, storedReport.EvidenceRefs)
 			if recomputeErr != nil {
-				return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
+				return types.EngineeringAssignmentCommandResult{}, store.ErrEngineeringAssignmentCommandConflict
 			}
 		}
 		if storedDigest != propositionDigest {
-			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
+			return types.EngineeringAssignmentCommandResult{}, store.ErrEngineeringAssignmentCommandConflict
 		}
 		report = storedReport
 	}
@@ -639,18 +639,18 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		// never competes for terminal truth.
 		matchID, matchCommandID, conflictID, scanErr := rt.store.SlotTerminalReport(ctx, assignment, propositionDigest)
 		if scanErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, scanErr
+			return types.EngineeringAssignmentCommandResult{}, scanErr
 		}
 		if matchID != "" {
-			return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
+			return rt.store.ReplayRecordedEngineeringAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
 				assignment.AssignmentID, assignment.Binding.Attempt, matchID, matchCommandID)
 		}
 		if conflictID != "" && !lateFate {
-			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
+			return types.EngineeringAssignmentCommandResult{}, store.ErrEngineeringAssignmentCommandConflict
 		}
 	}
 	if !terminal && reportExists {
-		return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
+		return rt.store.ReplayRecordedEngineeringAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
 			assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "co-super-report:"+assignment.AssignmentID+":"+report.ReportID)
 	}
 
@@ -660,65 +660,65 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	// capsule effect can reopen/revise the cancelled assignment.
 	if lateFate {
 		if reportExists {
-			if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+			if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 				assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
 				if err != nil {
-					return types.CoSuperAssignmentCommandResult{}, err
+					return types.EngineeringAssignmentCommandResult{}, err
 				}
 			}
-			return rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
+			return rt.store.ReplayRecordedEngineeringAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
 				assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "co-super-report:"+assignment.AssignmentID+":"+report.ReportID)
 		}
 		report, err = rt.bindLateAssignmentExecutionReceipts(assignment, report)
 		if err != nil {
-			return types.CoSuperAssignmentCommandResult{}, err
+			return types.EngineeringAssignmentCommandResult{}, err
 		}
-		return rt.commitAssignedCoSuperReport(ctx, assignment, report)
+		return rt.commitAssignedEngineeringReport(ctx, assignment, report)
 	}
 	if !terminal {
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleActive || assignment.Disposition.Terminal() {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial report requires active nonterminal assignment")
+		if assignment.CapsuleDisposition != types.EngineeringCapsuleActive || assignment.Disposition.Terminal() {
+			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("partial report requires active nonterminal assignment")
 		}
-		return rt.commitAssignedCoSuperReport(ctx, assignment, report)
+		return rt.commitAssignedEngineeringReport(ctx, assignment, report)
 	}
 
 	intent := "capsule-freeze-intent:" + propositionDigest
 	switch assignment.CapsuleDisposition {
-	case types.CoSuperCapsuleActive:
+	case types.EngineeringCapsuleActive:
 		if reportExists {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("stored terminal report cannot precede freeze intent")
+			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("stored terminal report cannot precede freeze intent")
 		}
-		proposal := &types.CoSuperPendingProposal{
+		proposal := &types.EngineeringPendingProposal{
 			PropositionDigest: propositionDigest,
 			Report:            report,
 			FreezeIntentRef:   intent,
 			CreatedAt:         time.Now().UTC(),
 		}
-		freezeReq := coSuperFateRequest(assignment, types.CoSuperCapsuleFreezeRequested, intent, "")
+		freezeReq := engineeringFateRequest(assignment, types.EngineeringCapsuleFreezeRequested, intent, "")
 		freezeReq.PendingProposal = proposal
-		freezeReq.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(freezeReq)
-		requested, err := rt.store.SetCoSuperCapsuleDisposition(ctx, freezeReq)
+		freezeReq.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(freezeReq)
+		requested, err := rt.store.SetEngineeringCapsuleDisposition(ctx, freezeReq)
 		if err != nil {
-			return types.CoSuperAssignmentCommandResult{}, err
+			return types.EngineeringAssignmentCommandResult{}, err
 		}
 		assignment = requested.Assignment
-	case types.CoSuperCapsuleFreezeRequested:
+	case types.EngineeringCapsuleFreezeRequested:
 		if assignment.CapsuleIntentRef != intent {
-			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
+			return types.EngineeringAssignmentCommandResult{}, store.ErrEngineeringAssignmentCommandConflict
 		}
-	case types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested, types.CoSuperCapsuleRevoked:
+	case types.EngineeringCapsuleFrozen, types.EngineeringCapsuleRevokeRequested, types.EngineeringCapsuleRevoked:
 		if assignment.CapsuleIntentRef != intent && !reportExists &&
-			assignment.CapsuleIntentRef != assignedCoSuperTerminalRevokeIntent(assignment) {
-			return types.CoSuperAssignmentCommandResult{}, store.ErrCoSuperAssignmentCommandConflict
+			assignment.CapsuleIntentRef != assignedEngineeringTerminalRevokeIntent(assignment) {
+			return types.EngineeringAssignmentCommandResult{}, store.ErrEngineeringAssignmentCommandConflict
 		}
 	default:
-		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report cannot resume capsule disposition %s", assignment.CapsuleDisposition)
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("terminal report cannot resume capsule disposition %s", assignment.CapsuleDisposition)
 	}
 
-	if assignment.CapsuleDisposition == types.CoSuperCapsuleFreezeRequested {
-		freezeFailure := func(err error) (types.CoSuperAssignmentCommandResult, error) {
-			rt.armAssignedCoSuperFateWatchdog(assignment)
-			return types.CoSuperAssignmentCommandResult{}, err
+	if assignment.CapsuleDisposition == types.EngineeringCapsuleFreezeRequested {
+		freezeFailure := func(err error) (types.EngineeringAssignmentCommandResult, error) {
+			rt.armAssignedEngineeringFateWatchdog(assignment)
+			return types.EngineeringAssignmentCommandResult{}, err
 		}
 		handle, err := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 		if err != nil {
@@ -741,52 +741,52 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 			return freezeFailure(fmt.Errorf("durable typed executor freeze receipt unavailable: %w", receiptErr))
 		}
 		ack := freezeReceipt.ReceiptRef
-		fateAck, fateAckErr := coSuperFateAckRequest(assignment, types.CoSuperCapsuleFrozen, intent, ack, "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:"), "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:"), freezeReceipt.OccurredAt, false)
+		fateAck, fateAckErr := engineeringFateAckRequest(assignment, types.EngineeringCapsuleFrozen, intent, ack, "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:"), "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:"), freezeReceipt.OccurredAt, false)
 		if fateAckErr != nil {
 			return freezeFailure(fmt.Errorf("invalid freeze receipt occurred_at: %w", fateAckErr))
 		}
 		if assignment.PendingProposal != nil {
 			fateAck.PendingProposal = assignment.PendingProposal
-			fateAck.CommandDigest, _ = store.ComputeSetCoSuperCapsuleDispositionDigest(fateAck)
+			fateAck.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(fateAck)
 		}
-		frozen, err := rt.store.SetCoSuperCapsuleDisposition(ctx, fateAck)
+		frozen, err := rt.store.SetEngineeringCapsuleDisposition(ctx, fateAck)
 		if err != nil {
 			return freezeFailure(err)
 		}
 		assignment = frozen.Assignment
 		if frozenDigest != assignment.Binding.SubjectDigest {
 			report.ObservedSubjectDigest = frozenDigest
-			report.Mutations = []types.CoSuperRecordedMutation{{
+			report.Mutations = []types.EngineeringRecordedMutation{{
 				MutationID: "assignment-overlay:" + objectgraph.SHA256([]byte(ack)), Kind: "assignment_overlay",
 				BeforeDigest: assignment.Binding.SubjectDigest, AfterDigest: frozenDigest,
 				EvidenceRef: "capsule-diff:" + objectgraph.SHA256([]byte(ack)), SubjectBytesChanged: true,
 			}}
 		}
 	}
-	if (assignment.CapsuleDisposition == types.CoSuperCapsuleFrozen || assignment.CapsuleDisposition == types.CoSuperCapsuleRevokeRequested) && !reportExists {
+	if (assignment.CapsuleDisposition == types.EngineeringCapsuleFrozen || assignment.CapsuleDisposition == types.EngineeringCapsuleRevokeRequested) && !reportExists {
 		// A revoke_requested strand is the saga's own mid-flight state: the
 		// executor capsule is still physically frozen until the revoke
 		// effects run, so the receipt binding re-drives here.
 		handle, resolveErr := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 		if resolveErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("resolve frozen assignment capability: %w", resolveErr)
+			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("resolve frozen assignment capability: %w", resolveErr)
 		}
 		frozenDigest, digestErr := rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
 		if digestErr != nil || !types.ValidSHA256Digest(frozenDigest) {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("already-frozen assignment digest unavailable: %w", digestErr)
+			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("already-frozen assignment digest unavailable: %w", digestErr)
 		}
 		report, resolveErr = rt.bindFrozenAssignmentExecutionReceipts(ctx, assignment, handle, report)
 		if resolveErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, resolveErr
+			return types.EngineeringAssignmentCommandResult{}, resolveErr
 		}
 		if frozenDigest != assignment.Binding.SubjectDigest && len(report.Mutations) == 0 {
 			report.ObservedSubjectDigest = frozenDigest
-			report.Mutations = []types.CoSuperRecordedMutation{{MutationID: "assignment-subject:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), Kind: "workspace_platform_complete_tree", BeforeDigest: assignment.Binding.SubjectDigest, AfterDigest: frozenDigest, EvidenceRef: "capsule-diff:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), SubjectBytesChanged: true}}
+			report.Mutations = []types.EngineeringRecordedMutation{{MutationID: "assignment-subject:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), Kind: "workspace_platform_complete_tree", BeforeDigest: assignment.Binding.SubjectDigest, AfterDigest: frozenDigest, EvidenceRef: "capsule-diff:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), SubjectBytesChanged: true}}
 		}
 		if frozenDigest != assignment.Binding.SubjectDigest {
 			candidate, candidateErr := rt.capsuleExecutor.PersistGrantedCandidate(ctx, rec.RunID, handle)
 			if candidateErr != nil || "sha256:"+strings.TrimPrefix(candidate.SubjectDigest, "sha256:") != frozenDigest {
-				return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("persist reconstructable content-addressed candidate: %w", candidateErr)
+				return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("persist reconstructable content-addressed candidate: %w", candidateErr)
 			}
 			report.CandidateArtifactRef = candidate.ArtifactRef
 		}
@@ -806,35 +806,35 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	// finds the capability and frozen state gone. The raw execution receipts
 	// are durable artifacts — resolve them and carry the refs forward so the
 	// commit sees the same evidence the freeze certified.
-	if assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked && !reportExists && len(report.ExecutorReceiptRefs) != len(report.Commands) {
+	if assignment.CapsuleDisposition == types.EngineeringCapsuleRevoked && !reportExists && len(report.ExecutorReceiptRefs) != len(report.Commands) {
 		report, err = rt.bindLateAssignmentExecutionReceipts(assignment, report)
 		if err != nil {
-			return types.CoSuperAssignmentCommandResult{}, err
+			return types.EngineeringAssignmentCommandResult{}, err
 		}
 	}
 
-	var result types.CoSuperAssignmentCommandResult
+	var result types.EngineeringAssignmentCommandResult
 	if reportExists {
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 			assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
 			if err != nil {
-				return types.CoSuperAssignmentCommandResult{}, err
+				return types.EngineeringAssignmentCommandResult{}, err
 			}
 		}
 		commandID := "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID
-		result, err = rt.store.ReplayRecordedCoSuperAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, commandID)
+		result, err = rt.store.ReplayRecordedEngineeringAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, commandID)
 	} else {
 		// Revocation must precede terminal commitment! No terminal state is visible until revoke ack.
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 			assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
 			if err != nil {
-				return types.CoSuperAssignmentCommandResult{}, err
+				return types.EngineeringAssignmentCommandResult{}, err
 			}
 		}
-		if assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal report requires revoked executor acknowledgement")
+		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("terminal report requires revoked executor acknowledgement")
 		}
-		result, err = rt.commitAssignedCoSuperReport(ctx, assignment, report)
+		result, err = rt.commitAssignedEngineeringReport(ctx, assignment, report)
 	}
 	if err != nil {
 		// Name the exact strand state on every failed terminal attempt: the
@@ -848,54 +848,54 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		// watchdog so the continuation re-drives without depending on the
 		// worker's next cell (a frozen capsule refuses every operation) or
 		// on a restart.
-		rt.armAssignedCoSuperFateWatchdog(assignment)
-		return types.CoSuperAssignmentCommandResult{}, err
+		rt.armAssignedEngineeringFateWatchdog(assignment)
+		return types.EngineeringAssignmentCommandResult{}, err
 	}
 	return result, nil
 }
 
-// assignedCoSuperTerminalRevokeIntent recomputes the revoke intent the
+// assignedEngineeringTerminalRevokeIntent recomputes the revoke intent the
 // terminal saga itself mints in revokeAssignedCapsule for the fixed reason
 // "terminal assignment report recorded". A stranded revoke_requested strand
 // carries exactly this intent, which lets the same terminal report re-enter
 // the saga instead of conflicting with the saga's own mid-flight state.
-func assignedCoSuperTerminalRevokeIntent(assignment types.CoSuperAssignment) string {
+func assignedEngineeringTerminalRevokeIntent(assignment types.EngineeringAssignment) string {
 	return "capsule-revoke-intent:" + objectgraph.SHA256([]byte(strings.Join([]string{
 		assignment.AssignmentID, fmt.Sprint(assignment.Binding.Attempt), assignment.BoundRunID, assignment.Binding.CapsuleID,
 		"terminal assignment report recorded",
 	}, "\x00")))
 }
 
-// assignedCoSuperFatePending reports whether one assignment still owes a
+// assignedEngineeringFatePending reports whether one assignment still owes a
 // continuation after a committed fate disposition: a nonterminal bound
 // assignment whose capsule moved past active with a staged pending proposal
 // has a terminal saga mid-flight that nobody else will finish.
-func assignedCoSuperFatePending(assignment types.CoSuperAssignment) bool {
-	if assignment.Disposition != types.CoSuperAssignmentBound || assignment.PendingProposal == nil {
+func assignedEngineeringFatePending(assignment types.EngineeringAssignment) bool {
+	if assignment.Disposition != types.EngineeringAssignmentBound || assignment.PendingProposal == nil {
 		return false
 	}
 	switch assignment.CapsuleDisposition {
-	case types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested, types.CoSuperCapsuleRevoked:
+	case types.EngineeringCapsuleFreezeRequested, types.EngineeringCapsuleFrozen, types.EngineeringCapsuleRevokeRequested, types.EngineeringCapsuleRevoked:
 		return true
 	default:
 		return false
 	}
 }
 
-// armAssignedCoSuperFateWatchdog is the fate-transition watchdog: after a
+// armAssignedEngineeringFateWatchdog is the fate-transition watchdog: after a
 // committed disposition leaves pending fate work, a delayed re-drive confirms
 // the strand predicate and finishes the saga. If the in-flight commit landed
 // first the re-read resolves terminal or active and the watchdog no-ops; a
 // process death before firing is covered by the boot reconcile's resume
 // branch. Fire-and-forget: no lost timer can jam the one-live slot beyond
 // the deadline sweep backstop.
-func (rt *Runtime) armAssignedCoSuperFateWatchdog(assignment types.CoSuperAssignment) {
-	if rt == nil || !assignedCoSuperFatePending(assignment) {
+func (rt *Runtime) armAssignedEngineeringFateWatchdog(assignment types.EngineeringAssignment) {
+	if rt == nil || !assignedEngineeringFatePending(assignment) {
 		return
 	}
 	assignmentID, attempt := assignment.AssignmentID, assignment.Binding.Attempt
 	ownerID, computerID := assignment.Binding.OwnerID, assignment.Binding.ComputerID
-	time.AfterFunc(assignedCoSuperFateWatchdogDelay, func() {
+	time.AfterFunc(assignedEngineeringFateWatchdogDelay, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		if err := rt.resumeStrandedFateAssignmentIfPending(ctx, ownerID, computerID, assignmentID, attempt); err != nil {
@@ -907,14 +907,14 @@ func (rt *Runtime) armAssignedCoSuperFateWatchdog(assignment types.CoSuperAssign
 // resumeStrandedFateAssignmentIfPending re-reads the assignment and finishes
 // the stranded terminal saga when the strand predicate still holds.
 func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) error {
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, assignmentID, attempt)
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil
 		}
 		return err
 	}
-	if !assignedCoSuperFatePending(assignment) {
+	if !assignedEngineeringFatePending(assignment) {
 		return nil
 	}
 	if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
@@ -924,7 +924,7 @@ func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ow
 	return nil
 }
 
-func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentReport, error) {
+func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.EngineeringAssignment, report types.EngineeringAssignmentReport) (types.EngineeringAssignmentReport, error) {
 	refs := make([]string, 0, len(report.Commands))
 	for _, command := range report.Commands {
 		refs = append(refs, command.ExecutionRef)
@@ -973,7 +973,7 @@ func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.CoSuperA
 // capsule refuses every operation at acquireOp), so the reducer authors the
 // fate from the stored proposal through the exact same report path a live
 // worker would drive — same intent identity, idempotent on replay.
-func (rt *Runtime) resumeStrandedFrozenAssignmentCommit(ctx context.Context, assignment types.CoSuperAssignment) error {
+func (rt *Runtime) resumeStrandedFrozenAssignmentCommit(ctx context.Context, assignment types.EngineeringAssignment) error {
 	proposal := assignment.PendingProposal
 	if proposal == nil || strings.TrimSpace(assignment.BoundRunID) == "" {
 		return fmt.Errorf("stranded assignment %s has no resumable proposal", assignment.AssignmentID)
@@ -986,16 +986,16 @@ func (rt *Runtime) resumeStrandedFrozenAssignmentCommit(ctx context.Context, ass
 			"assigned_work_item_id": assignment.Binding.AssignedWorkItemID,
 		},
 	}
-	_, err := rt.recordAssignedCoSuperReport(ctx, rec, "resume:"+assignment.AssignmentID+":"+fmt.Sprint(assignment.Binding.Attempt), proposal.Report)
+	_, err := rt.recordAssignedEngineeringReport(ctx, rec, "resume:"+assignment.AssignmentID+":"+fmt.Sprint(assignment.Binding.Attempt), proposal.Report)
 	return err
 }
 
 // resumeStrandedFrozenAssignmentCommits sweeps every computer-wide assignment
 // for the stranded frozen-proposal signature and resumes its terminal commit.
-// It runs on the Super selection path (next to the deadline sweep) so a
+// It runs on the Management selection path (next to the deadline sweep) so a
 // mid-saga failure inside a running process recovers without a restart, and
 // the boot reconcile covers the restart window through
-// ReconcileCoSuperAssignmentsForTrajectory.
+// ReconcileEngineeringAssignmentsForTrajectory.
 func (rt *Runtime) resumeStrandedFrozenAssignmentCommits(ctx context.Context) {
 	if rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
 		return
@@ -1004,17 +1004,17 @@ func (rt *Runtime) resumeStrandedFrozenAssignmentCommits(ctx context.Context) {
 	if computerID == "" {
 		return
 	}
-	assignments, err := rt.store.ListCoSuperAssignmentsForComputer(ctx, computerID)
+	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
 	if err != nil {
 		log.Printf("runtime: stranded frozen assignment sweep list: %v", err)
 		return
 	}
 	for _, assignment := range assignments {
-		if assignment.Disposition != types.CoSuperAssignmentBound || assignment.PendingProposal == nil {
+		if assignment.Disposition != types.EngineeringAssignmentBound || assignment.PendingProposal == nil {
 			continue
 		}
 		switch assignment.CapsuleDisposition {
-		case types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested, types.CoSuperCapsuleRevoked:
+		case types.EngineeringCapsuleFreezeRequested, types.EngineeringCapsuleFrozen, types.EngineeringCapsuleRevokeRequested, types.EngineeringCapsuleRevoked:
 		default:
 			continue
 		}
@@ -1026,16 +1026,16 @@ func (rt *Runtime) resumeStrandedFrozenAssignmentCommits(ctx context.Context) {
 	}
 }
 
-func coSuperExecutionAttestationFromReceipt(assignment types.CoSuperAssignment, reportID string, command types.CoSuperRecordedCommand, receipt capsule.ExecutionReceipt) (types.CoSuperExecutionAttestation, error) {
+func engineeringExecutionAttestationFromReceipt(assignment types.EngineeringAssignment, reportID string, command types.EngineeringRecordedCommand, receipt capsule.ExecutionReceipt) (types.EngineeringExecutionAttestation, error) {
 	if receipt.AgentRunID != assignment.BoundRunID || receipt.CapsuleID != assignment.Binding.CapsuleID || objectgraph.SHA256([]byte(receipt.Command)) != command.CommandDigest ||
 		"sha256:"+strings.TrimPrefix(receipt.SourceTreeDigest, "sha256:") != assignment.Binding.SubjectDigest || strings.TrimSpace(receipt.GrantedReceiptRef) == "" {
-		return types.CoSuperExecutionAttestation{}, fmt.Errorf("assignment granted receipt scope is invalid")
+		return types.EngineeringExecutionAttestation{}, fmt.Errorf("assignment granted receipt scope is invalid")
 	}
 	occurredAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(receipt.OccurredAt))
 	if err != nil {
-		return types.CoSuperExecutionAttestation{}, fmt.Errorf("assignment command receipt occurred_at is invalid")
+		return types.EngineeringExecutionAttestation{}, fmt.Errorf("assignment command receipt occurred_at is invalid")
 	}
-	return types.CoSuperExecutionAttestation{
+	return types.EngineeringExecutionAttestation{
 		GrantedReceiptRef: receipt.GrantedReceiptRef, CommandID: command.CommandID, CommandDigest: command.CommandDigest,
 		ExitCode: receipt.ExitCode, StdoutDigest: "sha256:" + strings.TrimPrefix(receipt.StdoutDigest, "sha256:"), StderrDigest: "sha256:" + strings.TrimPrefix(receipt.StderrDigest, "sha256:"),
 		SourceSubjectDigest: "sha256:" + strings.TrimPrefix(receipt.SourceTreeDigest, "sha256:"), FinalSubjectDigest: "sha256:" + strings.TrimPrefix(receipt.WorktreeDigest, "sha256:"), WorktreeDigest: "sha256:" + strings.TrimPrefix(receipt.WorktreeDigest, "sha256:"),
@@ -1043,7 +1043,7 @@ func coSuperExecutionAttestationFromReceipt(assignment types.CoSuperAssignment, 
 	}, nil
 }
 
-func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, assignment types.CoSuperAssignment, handle string, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentReport, error) {
+func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, assignment types.EngineeringAssignment, handle string, report types.EngineeringAssignmentReport) (types.EngineeringAssignmentReport, error) {
 	refs := make([]string, 0, len(report.Commands))
 	for _, command := range report.Commands {
 		refs = append(refs, command.ExecutionRef)
@@ -1066,7 +1066,7 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 		}
 		report.ExecutorReceiptRefs = append(report.ExecutorReceiptRefs, receipt.GrantedReceiptRef)
 		if assignment.GrantPolicyAttestation != nil {
-			attestation, buildErr := coSuperExecutionAttestationFromReceipt(assignment, report.ReportID, report.Commands[i], receipt)
+			attestation, buildErr := engineeringExecutionAttestationFromReceipt(assignment, report.ReportID, report.Commands[i], receipt)
 			if buildErr != nil {
 				return report, buildErr
 			}
@@ -1076,8 +1076,8 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 	return report, nil
 }
 
-func (rt *Runtime) commitAssignedCoSuperReport(ctx context.Context, assignment types.CoSuperAssignment, report types.CoSuperAssignmentReport) (types.CoSuperAssignmentCommandResult, error) {
-	if report.Result == types.CoSuperResultPartial {
+func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignment types.EngineeringAssignment, report types.EngineeringAssignmentReport) (types.EngineeringAssignmentCommandResult, error) {
+	if report.Result == types.EngineeringResultPartial {
 		refs := make([]string, 0, len(report.Commands))
 		for _, command := range report.Commands {
 			refs = append(refs, command.ExecutionRef)
@@ -1085,24 +1085,24 @@ func (rt *Runtime) commitAssignedCoSuperReport(ctx context.Context, assignment t
 		if len(refs) > 0 {
 			receipts, err := rt.capsuleExecutor.ResolveExecutionReceipts(refs)
 			if err != nil || len(receipts) != len(refs) {
-				return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial assignment command evidence unavailable: %w", err)
+				return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("partial assignment command evidence unavailable: %w", err)
 			}
 			for i, receipt := range receipts {
 				if receipt.CapsuleID != assignment.Binding.CapsuleID || objectgraph.SHA256([]byte(receipt.Command)) != report.Commands[i].CommandDigest {
-					return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("partial assignment command evidence binding mismatch")
+					return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("partial assignment command evidence binding mismatch")
 				}
 			}
 		}
 	} else if len(report.Commands) != len(report.ExecutorReceiptRefs) {
-		return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("terminal assignment requires one durable granted executor receipt per command")
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("terminal assignment requires one durable granted executor receipt per command")
 	}
-	req := types.RecordCoSuperAssignmentReportRequest{
+	req := types.RecordEngineeringAssignmentReportRequest{
 		CommandID: "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID,
 		OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 		ExpectedLifecycleVersion: assignment.LifecycleVersion, Report: report,
-		ExecutionAttestations: append([]types.CoSuperExecutionAttestation(nil), report.ExecutionAttestations...),
+		ExecutionAttestations: append([]types.EngineeringExecutionAttestation(nil), report.ExecutionAttestations...),
 	}
-	req.CommandDigest, _ = store.ComputeRecordCoSuperAssignmentReportDigest(req)
-	return rt.store.RecordCoSuperAssignmentReport(ctx, req)
+	req.CommandDigest, _ = store.ComputeRecordEngineeringAssignmentReportDigest(req)
+	return rt.store.RecordEngineeringAssignmentReport(ctx, req)
 }

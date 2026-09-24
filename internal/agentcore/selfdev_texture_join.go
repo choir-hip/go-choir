@@ -37,7 +37,7 @@ func selfDevelopmentTextureJoinIDs(ownerID, computerID, operationID string) (doc
 // revision that is the operation's cast. The document's lifecycle trajectory
 // IS the operation's trajectory, so the operation store resolves it by
 // trajectory. The revision occurrence opens the implementation assignment on
-// the document channel — no Super run mediates the opener.
+// the document channel — no Management run mediates the opener.
 func (rt *Runtime) ensureSelfDevelopmentEngineeringDoc(ctx context.Context, operation selfdev.Operation, ownerID, prompt string) error {
 	if rt == nil || rt.store == nil {
 		return fmt.Errorf("start self-development run: store authority unavailable")
@@ -71,7 +71,7 @@ func (rt *Runtime) ensureSelfDevelopmentEngineeringDoc(ctx context.Context, oper
 		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
 		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
 		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
-		InitialWork:    types.WorkItemRecord{WorkItemID: workID, Objective: directive, AssignedAgentID: deskAgentID, AuthorityProfile: agentprofile.CoSuper},
+		InitialWork:    types.WorkItemRecord{WorkItemID: workID, Objective: directive, AssignedAgentID: deskAgentID, AuthorityProfile: agentprofile.Engineering},
 		InitialDocument: types.Document{
 			DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
 			Title: "Self-development operation " + operation.OperationID, CreatedAt: now, UpdatedAt: now,
@@ -83,7 +83,7 @@ func (rt *Runtime) ensureSelfDevelopmentEngineeringDoc(ctx context.Context, oper
 		},
 		Agent: types.AgentRecord{
 			AgentID: deskAgentID, OwnerID: ownerID, ComputerID: computerID,
-			Profile: agentprofile.CoSuper, Role: agentprofile.CoSuper, ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+			Profile: agentprofile.Engineering, Role: agentprofile.Engineering, ChannelID: docID, CreatedAt: now, UpdatedAt: now,
 		},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
@@ -105,7 +105,7 @@ func (rt *Runtime) ensureSelfDevelopmentEngineeringDoc(ctx context.Context, oper
 		}
 	}
 	requestID := "owner-request-selfdev-" + operation.OperationID
-	occurrence, occErr := DocumentRevisionOccurrence(*result.Revision, agentprofile.CoSuper, requestID, result.Trajectory.LifecycleVersion, reducerSeq)
+	occurrence, occErr := DocumentRevisionOccurrence(*result.Revision, agentprofile.Engineering, requestID, result.Trajectory.LifecycleVersion, reducerSeq)
 	if occErr != nil {
 		return fmt.Errorf("build self-development engineering revision occurrence: %w", occErr)
 	}

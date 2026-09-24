@@ -10,12 +10,12 @@ import (
 
 func lifecycleControlFailureFixture(t *testing.T, retainCanonicalWorkBinding bool) (*Store, types.StartLifecycleRequest, types.RunRecord, types.BindLifecycleControlDeliveryRequest, types.FailLifecycleControlActivationRequest) {
 	t.Helper()
-	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
 	turnReq := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	turnReq.CommandID = "turn-for-activation-failure"
 	turnReq.Controls = []types.TextureTurnControl{
-		textureTurnControl(t, "control-activation-failure-a", researcherWork.AssignedAgentID, researcherWork.WorkItemID),
-		textureTurnControl(t, "control-activation-failure-b", researcherWork.AssignedAgentID, researcherWork.WorkItemID),
+		textureTurnControl(t, "control-activation-failure-a", researchWork.AssignedAgentID, researchWork.WorkItemID),
+		textureTurnControl(t, "control-activation-failure-b", researchWork.AssignedAgentID, researchWork.WorkItemID),
 	}
 	setTextureTurnDigest(t, &turnReq, TextureSourceGraphWriteSet{})
 	turn, err := s.ApplyTextureTurn(context.Background(), turnReq)
@@ -45,7 +45,7 @@ func lifecycleControlFailureFixture(t *testing.T, retainCanonicalWorkBinding boo
 	if err := s.UpdateRun(context.Background(), run); err != nil {
 		t.Fatal(err)
 	}
-	bind.ActivationRefresh = &types.LifecycleControlActivationRefresh{Prompt: run.Prompt, LogicalActivationKey: "logical-failure-key", FailedAttemptKey: "failed-attempt-key", BuildCommit: "build-test", Versions: versions, WorkItemIDs: []string{researcherWork.WorkItemID}}
+	bind.ActivationRefresh = &types.LifecycleControlActivationRefresh{Prompt: run.Prompt, LogicalActivationKey: "logical-failure-key", FailedAttemptKey: "failed-attempt-key", BuildCommit: "build-test", Versions: versions, WorkItemIDs: []string{researchWork.WorkItemID}}
 	bind.CommandDigest, _ = ComputeBindLifecycleControlDeliveryDigest(bind)
 	failure := types.FailLifecycleControlActivationRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: LifecycleControlActivationFailureCommandID("failed-attempt-key"),

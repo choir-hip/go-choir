@@ -3,13 +3,13 @@ package agentcore
 import (
 	"context"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/projectionbase"
+	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
-	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // resolveRestoreBaseSource returns the verified-base source for recovery. An

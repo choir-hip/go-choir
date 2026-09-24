@@ -96,8 +96,8 @@ func (k ItemKind) Valid() bool {
 type Item struct {
 	ItemID         ItemID
 	OwnerID        string
-	ParentItemID   ItemID    // empty for root
-	Name           string    // basename within parent
+	ParentItemID   ItemID // empty for root
+	Name           string // basename within parent
 	Kind           ItemKind
 	CurrentVersion VersionID // empty if deleted
 	DeletedAt      *time.Time
@@ -232,11 +232,11 @@ type Event struct {
 	DeviceID      string
 	SubjectID     string // user ID or API key ID (the author)
 	EventType     EventType
-	Kind          ItemKind  // file or folder (ItemType in the spec)
-	BlobRef       BlobRef   // content-addressed blob for blob_upload events
-	ParentEventID EventID   // previous event for this item (hash chain)
-	CursorSeq     int64     // monotonic sequence number
-	PayloadJSON   string    // version ref, new name, new parent, etc.
+	Kind          ItemKind // file or folder (ItemType in the spec)
+	BlobRef       BlobRef  // content-addressed blob for blob_upload events
+	ParentEventID EventID  // previous event for this item (hash chain)
+	CursorSeq     int64    // monotonic sequence number
+	PayloadJSON   string   // version ref, new name, new parent, etc.
 	CreatedAt     time.Time
 }
 
@@ -265,11 +265,11 @@ func (e Event) Valid() bool {
 type SyncState string
 
 const (
-	StateSynced      SyncState = "synced"
-	StateLocalOnly   SyncState = "local_only"
-	StateRemoteOnly  SyncState = "remote_only"
-	StateConflict    SyncState = "conflict"
-	StateStuck       SyncState = "stuck"
+	StateSynced     SyncState = "synced"
+	StateLocalOnly  SyncState = "local_only"
+	StateRemoteOnly SyncState = "remote_only"
+	StateConflict   SyncState = "conflict"
+	StateStuck      SyncState = "stuck"
 )
 
 // Valid reports whether the SyncState is one of the defined constants.

@@ -32,7 +32,7 @@ type RunContextOptions struct {
 	// peer coordination is choir.Message, not a JSON tool.
 	InCellCarrier bool
 	// NoReportChannel is true when the desk has no peer-coordination tool at
-	// all (tools-actuator assigned CoSuper): the prompt must not name one.
+	// all (tools-actuator assigned Engineering): the prompt must not name one.
 	NoReportChannel bool
 }
 
@@ -52,27 +52,27 @@ func ReconcilerRuntimeOverlay() string {
 	return mustRenderOverlay("reconciler_runtime", nil)
 }
 
-func SuperRuntimeOverlay() string {
+func ManagementRuntimeOverlay() string {
 	return mustRenderOverlay("management_runtime", nil)
 }
 
-func CoSuperRuntimeOverlay() string {
+func EngineeringRuntimeOverlay() string {
 	return mustRenderOverlay("engineering_runtime", nil)
 }
 
-// RLMCoSuperOverlay is the sealed-Go variant served when actuator=rlm:
+// RLMEngineeringOverlay is the sealed-Go variant served when actuator=rlm:
 // capsule_go_eval is the sole capsule doorway and the choir package subsumes
 // the JSON file/exec tools. The legacy catalog sentence is replaced, not
 // amended, so the model never sees two authorities.
-type RLMCoSuperOverlayOptions struct {
+type RLMEngineeringOverlayOptions struct {
 	HasSelfDevelopmentOperation bool
 }
 
-func RLMCoSuperOverlay(opts RLMCoSuperOverlayOptions) string {
+func RLMEngineeringOverlay(opts RLMEngineeringOverlayOptions) string {
 	return mustRenderOverlay("rlm_engineering_runtime", opts)
 }
 
-func ResearcherRuntimeOverlay() string {
+func ResearchRuntimeOverlay() string {
 	return mustRenderOverlay("research_runtime", nil)
 }
 

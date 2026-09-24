@@ -106,7 +106,7 @@ done:
 
 func stubAgentProfile(task *types.RunRecord) string {
 	if task == nil {
-		return agentprofile.Super
+		return agentprofile.Management
 	}
 	profile := strings.TrimSpace(task.AgentProfile)
 	if profile == "" && task.Metadata != nil {
@@ -114,7 +114,7 @@ func stubAgentProfile(task *types.RunRecord) string {
 	}
 	profile = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(profile), "_", "-"))
 	if profile == "" {
-		return agentprofile.Super
+		return agentprofile.Management
 	}
 	return profile
 }

@@ -31,7 +31,7 @@ func TestSLMRedactor_RedactsViaStubServer(t *testing.T) {
 		}
 		// Echo back a finding for the email embedded in the user text.
 		resp := slmChatResponse{Message: slmChatMessage{
-			Role: "assistant",
+			Role:    "assistant",
 			Content: `[{"class":"email","text":"zoe@example.com"}]`,
 		}}
 		_ = json.NewEncoder(w).Encode(resp)

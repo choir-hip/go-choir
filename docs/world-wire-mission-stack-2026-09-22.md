@@ -112,8 +112,8 @@ The carrier program is mid-flight and blocked. This phase completes it.
 - **1d — Ontology cutover** *(ratified 2026-09-22)*. Implement the minimal
   event-driven design: delivered = in state head, fenced atomic commit,
   serial-per-actor, cast-only sub-RLMs, migration inside a write fence;
-  management and research cross; `actuator=tools` deleted (R8), Super
-  substrate retired (R10), and the `tell`/`correct`/`LifecycleOwnerInstruction`
+  management and research cross; `actuator=tools` deleted (R8), the legacy
+  management substrate retired (R10), and the `tell`/`correct`/`LifecycleOwnerInstruction`
   out-of-band path plus `cmd/choir/roster.go` deleted — owner input becomes a
   document edit event. Proves: delivery and continuation are *derivable* —
   the wake family's structural death. Scope: deletes the wrong-path cluster
@@ -122,7 +122,7 @@ The carrier program is mid-flight and blocked. This phase completes it.
   paths, sweep recovery, non-event mutations). Owner-corrected 2026-09-22:
   `tell` is a hallucination (a revision is just a diff — no payload to
   preserve) and roster isn't a concept (it's a sub-RLM call — delete, not
-  migrate); `actuator=tools`/Super stay blocked on desk crossings;
+  migrate); `actuator=tools`/management stay blocked on desk crossings;
   `install_frontend_pointer` is the platform-shell deploy contract (separate
   migration); vmctl/sourcecycled deferred (post-RLM reengineer / unknown).
 - **1e — Remaining desk crossings** *(migration targets of 1d)*. Texture,
@@ -240,36 +240,37 @@ Only after the computer demonstrably develops itself (Phase 3 gate).
 > the desk-RLM rectification sequence
 > ([`desk-rlm-rectification-plan-2026-09-23.md`](desk-rlm-rectification-plan-2026-09-23.md),
 > proposed under owner review): R0 strand-2 patch → R1 vocabulary/docs →
-> K ontology kernel (the M3 draft stands) → R2 commitment ledger + carrier
-> + verbs → R3 live desks + supervision loop → R4 scores/surfacing/packs →
-> R5 durable vocabulary. M7, M9a/b, M10, M11 (self-dev path) and M12–M16
-> (world wire) are unchanged and follow R4. M4/M5 drafts are superseded.
+> K ontology kernel → R2 commitment ledger + carrier + verbs → R3 live desks
+> + supervision loop → R4 scores/surfacing/packs → R5 durable vocabulary.
+> M8 is subsumed by R4; M7 and M9a/b–M16 retain their downstream positions.
 
-Synthesized from a 9-agent convergent panel
+Synthesized from a 9-agent convergent panel:
 
 ```text
-M1  Owner input is a document revision        [cleanup = subclass (a) cutover]
-M2  Sub-RLM call on the document channel      [1c ≡ 3a — same mission]
-M3  Ontology kernel                           [1d remainder: wakes/sweeps/dual/non-event]
-M4  Remaining desks cross                     [1e + R8 + R10]
-M5  Record type + ledger                      [2a]
-M6  precommit Yaegi surface                   [2b]
-M7  Skip the harness                          [3b]
-M8  Context packs + learning-claims gate      [2c]
-M9a Platform→computer update push             [3d-i]
-M9b Computer→computer code publish            [3d-ii]
-M10 choir → microVMs via yaegi                [3c]
-M11 Self-dev proof on records                 [3e — the wire gate]
-M12 Supervision workbench                     [4a]
-M13 Beta hardening                            [4b]
-M14 Wire observation plane                    [5a]
-M15 Editorial + publication transaction       [5b]
-M16 World Wire live                           [5c]
+R0  Strand-2 patch
+R1  Live vocabulary and documentation cutover
+K   Ontology kernel
+R2  Commitment ledger, carrier, and semantic-act verbs
+R3  Live desks and supervision loop
+R4  Scores, surfacing, context packs, and learning-claims gate
+R5  Durable vocabulary migration
+M7  Skip the harness
+M8  Subsumed by R4; no standalone mission
+M9a Platform→computer update push
+M9b Computer→computer code publish
+M10 Choir → microVMs via yaegi
+M11 Self-development proof on records
+M12 Supervision workbench
+M13 Beta hardening
+M14 Wire observation plane
+M15 Editorial and publication transaction
+M16 World Wire live
 ```
 
-**The spine:** M1 → M2 → M3 → (M4 ∥ M5) → M7 → M11 → M14 → M15 → M16.
-After M3 the roadmap is not a single chain: M4, M5, M9a are parallel; M7 ∥ M6
-is the main overlap; M8 ∥ M9 is the next.
+**The spine:** R0 ∥ R1 → K → R2 → R3 → R4 → M7 → M11 → M14 → M15 → M16.
+R5 is independent after R1 and must land before consumers of durable vocabulary;
+M8 is paid by R4. M9a/b and M10 overlap the self-development path; M12–M16
+remain the World Wire sequence.
 
 **Not missions:** 1a (closed — the evidence floor is M2), 1b (folded into M3),
 Phase 0 remainder, box score, `install_frontend_pointer` (platform-shell
@@ -300,7 +301,7 @@ document revisions and `tell` is only an extra wake. If yes, M1 is "stop the
 extra wake, delete the channel." If no, persist the diff as the revision
 event first, then delete.
 
-**Not in M1:** overlay tools (M2/R7), `actuator=tools`/Super (M4),
+**Not in M1:** overlay tools (M2/R7), `actuator=tools`/management (M4),
 process-local wakes/sweeps (M3), `install_frontend_pointer`, vmctl,
 sourcecycled.
 

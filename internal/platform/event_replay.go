@@ -96,7 +96,7 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 
 func replayTransitionInput(kind computerevent.EventKind, next computerevent.Head) computerevent.TransitionInput {
 	switch kind {
-	case computerevent.EventGenesisImported, computerevent.EventEffectAccepted, computerevent.EventRollbackRequested, computerevent.EventResearcherUpdate:
+	case computerevent.EventGenesisImported, computerevent.EventEffectAccepted, computerevent.EventRollbackRequested, computerevent.EventResearchUpdate:
 		return computerevent.TransitionInput{TargetStateCommitment: next.DesiredStateCommitment}
 	case computerevent.EventMaterializationFailed:
 		return computerevent.TransitionInput{RestoredPriorEffective: true}

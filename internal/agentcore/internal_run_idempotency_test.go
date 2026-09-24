@@ -356,8 +356,8 @@ func TestHandleInternalRunSubmissionResolvesIdentityBeforeOverload(t *testing.T)
 		t.Fatalf("non-string ingestion identity status = %d, want 400; body=%s", invalidTypedIdentityW.Code, invalidTypedIdentityW.Body.String())
 	}
 	wrongProfile := processorHandoffSubmissionFixture(submission.OwnerID, "researcher-typed-handoff", "processor", []string{"source-item-partial"})
-	wrongProfile.Metadata[runMetadataAgentProfile] = agentprofile.Researcher
-	wrongProfile.Metadata[runMetadataAgentRole] = agentprofile.Researcher
+	wrongProfile.Metadata[runMetadataAgentProfile] = agentprofile.Research
+	wrongProfile.Metadata[runMetadataAgentRole] = agentprofile.Research
 	wrongProfileW := postInternalRunSubmissionFixture(t, handler, wrongProfile)
 	if wrongProfileW.Code != http.StatusBadRequest {
 		t.Fatalf("non-ingestion profile handoff identity status = %d, want 400; body=%s", wrongProfileW.Code, wrongProfileW.Body.String())

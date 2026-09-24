@@ -99,7 +99,7 @@ func lifecycleUpdateFromToolOutput(t *testing.T, s *store.Store, run *types.RunR
 	return types.CoagentSourcePacket{}
 }
 
-func startBoundLegacyCoSuperResultRun(t *testing.T, s *store.Store, target types.AgentRecord, suffix string) *types.RunRecord {
+func startBoundLegacyEngineeringResultRun(t *testing.T, s *store.Store, target types.AgentRecord, suffix string) *types.RunRecord {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -111,19 +111,19 @@ func startBoundLegacyCoSuperResultRun(t *testing.T, s *store.Store, target types
 	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{TrajectoryID: trajectoryID, OwnerID: target.OwnerID, ComputerID: computerID, Kind: types.TrajectoryKindTask, SubjectRefs: map[string]string{"channel_id": target.ChannelID}, Status: types.TrajectoryLive, SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true}}); err != nil {
 		t.Fatalf("create legacy result trajectory: %v", err)
 	}
-	parent := types.RunRecord{RunID: parentRunID, AgentID: target.AgentID, ChannelID: target.ChannelID, TrajectoryID: trajectoryID, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: target.OwnerID, ComputerID: computerID, State: types.RunCompleted, CreatedAt: now, UpdatedAt: now, FinishedAt: &now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataAgentID: target.AgentID, runMetadataAgentProfile: agentprofile.Super, runMetadataAgentRole: agentprofile.Super, runMetadataChannelID: target.ChannelID}}
+	parent := types.RunRecord{RunID: parentRunID, AgentID: target.AgentID, ChannelID: target.ChannelID, TrajectoryID: trajectoryID, AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, OwnerID: target.OwnerID, ComputerID: computerID, State: types.RunCompleted, CreatedAt: now, UpdatedAt: now, FinishedAt: &now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataAgentID: target.AgentID, runMetadataAgentProfile: agentprofile.Management, runMetadataAgentRole: agentprofile.Management, runMetadataChannelID: target.ChannelID}}
 	if err := s.CreateRun(ctx, parent); err != nil {
-		t.Fatalf("create owning Super run: %v", err)
+		t.Fatalf("create owning Management run: %v", err)
 	}
-	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: callerAgentID, OwnerID: target.OwnerID, ComputerID: computerID, Profile: agentprofile.CoSuper, Role: agentprofile.CoSuper, ChannelID: target.ChannelID, CreatedAt: now, UpdatedAt: now}); err != nil {
-		t.Fatalf("upsert CoSuper: %v", err)
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: callerAgentID, OwnerID: target.OwnerID, ComputerID: computerID, Profile: agentprofile.Engineering, Role: agentprofile.Engineering, ChannelID: target.ChannelID, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("upsert Engineering: %v", err)
 	}
-	caller := &types.RunRecord{RunID: callerRunID, AgentID: callerAgentID, RequestedByRunID: parentRunID, ChannelID: target.ChannelID, TrajectoryID: trajectoryID, AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, OwnerID: target.OwnerID, ComputerID: computerID, State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataAgentID: callerAgentID, runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper, runMetadataChannelID: target.ChannelID, "requested_by_run_id": parentRunID, "requested_by_agent_id": target.AgentID, "requested_by_profile": agentprofile.Super}}
+	caller := &types.RunRecord{RunID: callerRunID, AgentID: callerAgentID, RequestedByRunID: parentRunID, ChannelID: target.ChannelID, TrajectoryID: trajectoryID, AgentProfile: agentprofile.Engineering, AgentRole: agentprofile.Engineering, OwnerID: target.OwnerID, ComputerID: computerID, State: types.RunRunning, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataAgentID: callerAgentID, runMetadataAgentProfile: agentprofile.Engineering, runMetadataAgentRole: agentprofile.Engineering, runMetadataChannelID: target.ChannelID, "requested_by_run_id": parentRunID, "requested_by_agent_id": target.AgentID, "requested_by_profile": agentprofile.Management}}
 	if err := s.CreateRun(ctx, *caller); err != nil {
-		t.Fatalf("create CoSuper result run: %v", err)
+		t.Fatalf("create Engineering result run: %v", err)
 	}
-	if _, claimed, err := s.ClaimCoSuperSlot(ctx, target.OwnerID, trajectoryID, "implementation", callerRunID, callerAgentID, parentRunID); err != nil || !claimed {
-		t.Fatalf("claim CoSuper assignment: claimed=%t err=%v", claimed, err)
+	if _, claimed, err := s.ClaimEngineeringSlot(ctx, target.OwnerID, trajectoryID, "implementation", callerRunID, callerAgentID, parentRunID); err != nil || !claimed {
+		t.Fatalf("claim Engineering assignment: claimed=%t err=%v", claimed, err)
 	}
 	return caller
 }
@@ -371,13 +371,13 @@ func setTestDispatch(rt *Runtime, s *store.Store) {
 		case "coagent_result":
 			// Synchronous: the boot sweep needs the reconcile to
 			// complete before the test checks the result.
-			if strings.HasPrefix(toAgentID, agentprofile.CoSuper+":") {
+			if strings.HasPrefix(toAgentID, agentprofile.Engineering+":") {
 				// Engineering desk occurrence: decode the revision cast and
 				// open the assignment directly, mirroring the actor handler.
 				// Non-occurrence content falls through to the generic wake.
 				if occurrence, occErr := DecodeTextureActorOccurrence(content); occErr == nil &&
 					occurrence.Kind == TextureActorOccurrenceDocumentRevision {
-					docID := strings.TrimSpace(strings.TrimPrefix(toAgentID, agentprofile.CoSuper+":"))
+					docID := strings.TrimSpace(strings.TrimPrefix(toAgentID, agentprofile.Engineering+":"))
 					if _, err := rt.ReconcileEngineeringRevisionCast(ctx, ownerID, docID, occurrence.HeadRevisionID); err != nil {
 						log.Printf("test dispatch: reconcile engineering cast for %s: %v", toAgentID, err)
 					}

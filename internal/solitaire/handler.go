@@ -19,8 +19,8 @@ type createGameRequest struct {
 }
 
 type moveResponse struct {
-	Game *GameState  `json:"game"`
-	Move MoveRecord  `json:"move"`
+	Game *GameState `json:"game"`
+	Move MoveRecord `json:"move"`
 }
 
 func (h *Handler) HandleSolitaireRouter(w http.ResponseWriter, r *http.Request) {

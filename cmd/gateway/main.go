@@ -136,9 +136,9 @@ func loadProviderConfig() provider.ProviderConfig {
 			"us.anthropic.claude-sonnet-4-6",
 			"us.anthropic.claude-opus-4-6-v1",
 		},
-		ZAIModels: []string{"glm-5.2", "glm-5.1", "glm-5-turbo"},
-		ChatGPTModels:            []string{"gpt-6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"},
-		ChatGPTReasoningEffort:   "low",
+		ZAIModels:              []string{"glm-5.2", "glm-5.1", "glm-5-turbo"},
+		ChatGPTModels:          []string{"gpt-6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"},
+		ChatGPTReasoningEffort: "low",
 		OpenCodeGoModels: []string{
 			"deepseek-v4.1-flash",
 			"glm-5.3-flash",

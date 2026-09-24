@@ -18,20 +18,20 @@ import (
 
 // BrokerConfig configures the trusted guest broker.
 type BrokerConfig struct {
-	ComputerID      string
-	CurrentEpoch    uint64
-	AllowedRoot     string
-	MaxOutputBytes  int64
-	DefaultTimeout  time.Duration
+	ComputerID     string
+	CurrentEpoch   uint64
+	AllowedRoot    string
+	MaxOutputBytes int64
+	DefaultTimeout time.Duration
 }
 
 // Broker executes authorized operations requested by untrusted Yaegi activations.
 type Broker struct {
-	mu           sync.Mutex
-	cfg          BrokerConfig
-	handles      *HandleIssuer
-	assignments  map[string]AssignPayload
-	messages     map[string]MessagePayload
+	mu          sync.Mutex
+	cfg         BrokerConfig
+	handles     *HandleIssuer
+	assignments map[string]AssignPayload
+	messages    map[string]MessagePayload
 }
 
 // NewBroker creates a new trusted broker instance.
@@ -69,6 +69,7 @@ func (b *Broker) SetEpoch(epoch uint64) {
 	defer b.mu.Unlock()
 	b.cfg.CurrentEpoch = epoch
 }
+
 // DrainReceipts returns worker-local assign/message entries recorded since
 // the last drain and clears them, so the session loop surfaces each receipt
 // to the host exactly once in SessionResult. Entries are host-reconciled,

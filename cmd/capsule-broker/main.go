@@ -724,8 +724,8 @@ func (b *Broker) handleGoEvalOneShot(ctx context.Context, cap *capsule.Capabilit
 	// package deputies or otherwise expand its authority. This is the
 	// assignment-scoped authority boundary, not a request-trusted vocabulary.
 	allowed := yaegikernel.DefaultSafeStdlibPackages
-	if cap.AgentRole == capsule.RoleCoSuper {
-		// CoSuper may additionally use the narrow set needed for authoring,
+	if cap.AgentRole == capsule.RoleEngineering {
+		// Engineering may additionally use the narrow set needed for authoring,
 		// but it is still a fixed server-owned set, not caller input.
 		allowed = yaegikernel.DefaultSafeStdlibPackages
 	}

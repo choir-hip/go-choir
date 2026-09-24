@@ -39,7 +39,6 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 	}
 	sweepStagingArtifacts(storeDir)
 
-
 	empty := isStoreEmpty(storeDir)
 	var localSeq uint64
 	if !empty {

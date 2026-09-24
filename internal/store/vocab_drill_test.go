@@ -12,8 +12,8 @@ package store
 // bare-compound ID suffixes.
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -327,9 +327,9 @@ func TestVocabDrillMigrateRevertMigrate(t *testing.T) {
 	drillAssertFence(t, vocabmigrate.VocabularyV2, drillRoleColumns(t, s))
 	drillAssertJoins(t, s)
 	drillAssertAuthzEquivalence(t, s, rep, originals)
-	// Longest-token-first: "work-co-super-2" must migrate to
+	// Longest-token-first: "work-Engineering-2" must migrate to
 	// "work-engineering-2", never "work-co-management-2" (the "-super-"
-	// infix is a substring of "-co-super-"; regression pin for F3).
+	// infix is a substring of "-Engineering-"; regression pin for F3).
 	var wid string
 	if err := s.db.QueryRowContext(ctx, `SELECT work_item_id FROM work_items WHERE objective = 'review'`).Scan(&wid); err != nil {
 		t.Fatalf("drill infix: %v", err)

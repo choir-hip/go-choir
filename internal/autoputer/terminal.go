@@ -88,9 +88,9 @@ func NewTerminalHandler() *TerminalHandler {
 	}
 }
 
-// NewSuperConsoleHandler creates a singleton Super Console handler backed by an
+// NewManagementConsoleHandler creates a singleton Management Console handler backed by an
 // out-of-process zot session. It intentionally does not expose a raw shell.
-func NewSuperConsoleHandler(rootDir string) *TerminalHandler {
+func NewManagementConsoleHandler(rootDir string) *TerminalHandler {
 	return &TerminalHandler{
 		manager: NewTerminalManager(),
 		upgrader: websocket.Upgrader{
@@ -98,13 +98,13 @@ func NewSuperConsoleHandler(rootDir string) *TerminalHandler {
 				return true
 			},
 		},
-		command:   resolveSuperConsoleCommand(),
+		command:   resolveManagementConsoleCommand(),
 		rootDir:   rootDir,
 		singleton: true,
 	}
 }
 
-func resolveSuperConsoleCommand() []string {
+func resolveManagementConsoleCommand() []string {
 	if override := strings.TrimSpace(os.Getenv("CHOIR_ZOT_PATH")); override != "" {
 		return []string{override}
 	}
@@ -224,7 +224,7 @@ func (th *TerminalHandler) newSession(conn *websocket.Conn, user string) (*Termi
 
 func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, error) {
 	if len(th.command) > 0 {
-		command := th.superConsoleCommandWithGatewayDefaults()
+		command := th.managementConsoleCommandWithGatewayDefaults()
 		cmd := exec.Command(command[0], command[1:]...)
 		rootDir := strings.TrimSpace(th.rootDir)
 		if rootDir == "" {
@@ -260,7 +260,7 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 	return cmd, nil
 }
 
-func (th *TerminalHandler) superConsoleCommandWithGatewayDefaults() []string {
+func (th *TerminalHandler) managementConsoleCommandWithGatewayDefaults() []string {
 	command := append([]string(nil), th.command...)
 	if isFallbackZotSessionCommand(command) {
 		return command
@@ -418,8 +418,8 @@ func RegisterTerminalRoutes(s interface {
 	s.HandleFunc("/api/terminal/ws", th.HandleTerminalWS)
 }
 
-// RegisterSuperConsoleRoutes registers the singleton Super Console route.
-func RegisterSuperConsoleRoutes(s interface {
+// RegisterManagementConsoleRoutes registers the singleton Management Console route.
+func RegisterManagementConsoleRoutes(s interface {
 	HandleFunc(string, http.HandlerFunc)
 }, th *TerminalHandler) {
 	s.HandleFunc("/api/super-console/ws", th.HandleTerminalWS)

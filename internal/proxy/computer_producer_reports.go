@@ -42,7 +42,7 @@ func computerProducerReportsComputerID(path string) (computerID string, settle b
 // authenticated computer binding. Settlement tombstones are lifecycle/CAS
 // store writes under owner authority: API-key access requires the exact
 // computer:lifecycle scope, never Texture revision authority and never
-// Super consumption.
+// Management consumption.
 func (h *Handler) HandleComputerProducerReports(w http.ResponseWriter, r *http.Request) {
 	computerID, settle, ok := computerProducerReportsComputerID(r.URL.Path)
 	if !ok {

@@ -83,7 +83,7 @@ func TestTextureDiagnosisAndTraceLogsIncludeDecisionRecords(t *testing.T) {
 		TrajectoryID: trajectoryIDForRun(run),
 		ActorID:      run.AgentID,
 		DecisionKind: "wait_for_evidence",
-		Reason:       "Researcher has not delivered source evidence yet.",
+		Reason:       "Research has not delivered source evidence yet.",
 		EvidenceRefs: []string{"run:" + run.RunID},
 		NextAction:   "Wait for the addressed worker update.",
 		CreatedAt:    run.CreatedAt,

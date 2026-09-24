@@ -196,80 +196,80 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 	if scopeErr != nil {
 		return nil, fmt.Errorf("actorruntime: resolve coagent_result scope: %w", scopeErr)
 	}
-	if strings.HasPrefix(strings.TrimSpace(u.Content), agentcore.LifecycleResearcherAdmissionRecoveryPrefix) {
-		rec, terminal, recoveryErr := h.rt.ResolveLifecycleResearcherAdmissionRecovery(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
+	if strings.HasPrefix(strings.TrimSpace(u.Content), agentcore.LifecycleResearchAdmissionRecoveryPrefix) {
+		rec, terminal, recoveryErr := h.rt.ResolveLifecycleResearchAdmissionRecovery(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
 		if recoveryErr != nil {
-			if errors.Is(recoveryErr, agentcore.ErrInvalidLifecycleResearcherRecovery) {
+			if errors.Is(recoveryErr, agentcore.ErrInvalidLifecycleResearchRecovery) {
 				return nil, nil // durable malformed/foreign recovery occurrence
 			}
-			return nil, fmt.Errorf("%w: actorruntime: defer lifecycle Researcher recovery until a distinct wake/restart: %v", actor.ErrDeferUnprocessed, recoveryErr)
+			return nil, fmt.Errorf("%w: actorruntime: defer lifecycle Research recovery until a distinct wake/restart: %v", actor.ErrDeferUnprocessed, recoveryErr)
 		}
 		if terminal {
 			return nil, nil
 		}
 		if rec == nil {
-			return nil, fmt.Errorf("actorruntime: lifecycle Researcher admission recovery returned no exact run")
+			return nil, fmt.Errorf("actorruntime: lifecycle Research admission recovery returned no exact run")
 		}
 		if err := h.rt.ExecuteActivationSyncChecked(ctx, rec); err != nil {
 			if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
 				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
 			}
-			return nil, fmt.Errorf("actorruntime: execute lifecycle Researcher admission recovery: %w", err)
+			return nil, fmt.Errorf("actorruntime: execute lifecycle Research admission recovery: %w", err)
 		}
 		return h.memoryFromRunState(rec)
 	}
-	if strings.HasPrefix(strings.TrimSpace(u.Content), agentcore.PersistentSuperRecoveryPrefix) {
-		log.Printf("actorruntime: persistent Super recovery received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
-		rec, terminal, recoveryErr := h.rt.ResolvePersistentSuperRecovery(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
+	if strings.HasPrefix(strings.TrimSpace(u.Content), agentcore.PersistentManagementRecoveryPrefix) {
+		log.Printf("actorruntime: persistent Management recovery received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
+		rec, terminal, recoveryErr := h.rt.ResolvePersistentManagementRecovery(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
 		if recoveryErr != nil {
-			if errors.Is(recoveryErr, agentcore.ErrInvalidPersistentSuperRecovery) {
-				log.Printf("actorruntime: persistent Super recovery discarded as invalid agent=%s: %v", agentID, recoveryErr)
+			if errors.Is(recoveryErr, agentcore.ErrInvalidPersistentManagementRecovery) {
+				log.Printf("actorruntime: persistent Management recovery discarded as invalid agent=%s: %v", agentID, recoveryErr)
 				return nil, nil
 			}
-			return nil, fmt.Errorf("%w: actorruntime: defer persistent Super recovery until a distinct wake/restart: %v", actor.ErrDeferUnprocessed, recoveryErr)
+			return nil, fmt.Errorf("%w: actorruntime: defer persistent Management recovery until a distinct wake/restart: %v", actor.ErrDeferUnprocessed, recoveryErr)
 		}
 		if terminal {
-			log.Printf("actorruntime: persistent Super recovery terminal agent=%s", agentID)
+			log.Printf("actorruntime: persistent Management recovery terminal agent=%s", agentID)
 			return nil, nil
 		}
 		if rec == nil {
-			return nil, fmt.Errorf("actorruntime: persistent Super recovery returned no exact run")
+			return nil, fmt.Errorf("actorruntime: persistent Management recovery returned no exact run")
 		}
-		log.Printf("actorruntime: persistent Super recovery executing run=%s", rec.RunID)
+		log.Printf("actorruntime: persistent Management recovery executing run=%s", rec.RunID)
 		if err := h.rt.ExecuteActivationSyncChecked(ctx, rec); err != nil {
 			if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
 				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
 			}
-			return nil, fmt.Errorf("actorruntime: execute persistent Super recovery: %w", err)
+			return nil, fmt.Errorf("actorruntime: execute persistent Management recovery: %w", err)
 		}
 		return h.memoryFromRunState(rec)
 	}
-	if strings.HasPrefix(strings.TrimSpace(u.Content), "sha256:") && agentID == agentprofile.Super+":"+ownerID {
-		log.Printf("actorruntime: persistent Super live occurrence received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
-		rec, terminal, liveErr := h.rt.ResolvePersistentSuperLiveOccurrence(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
+	if strings.HasPrefix(strings.TrimSpace(u.Content), "sha256:") && agentID == agentprofile.Management+":"+ownerID {
+		log.Printf("actorruntime: persistent Management live occurrence received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
+		rec, terminal, liveErr := h.rt.ResolvePersistentManagementLiveOccurrence(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
 		if liveErr != nil {
-			if errors.Is(liveErr, agentcore.ErrInvalidPersistentSuperRecovery) {
-				log.Printf("actorruntime: persistent Super live occurrence discarded as invalid agent=%s: %v", agentID, liveErr)
+			if errors.Is(liveErr, agentcore.ErrInvalidPersistentManagementRecovery) {
+				log.Printf("actorruntime: persistent Management live occurrence discarded as invalid agent=%s: %v", agentID, liveErr)
 				return nil, nil
 			}
 			if errors.Is(liveErr, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
 				return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, liveErr)
 			}
-			return nil, fmt.Errorf("%w: actorruntime: defer persistent Super live occurrence: %v", actor.ErrDeferUnprocessed, liveErr)
+			return nil, fmt.Errorf("%w: actorruntime: defer persistent Management live occurrence: %v", actor.ErrDeferUnprocessed, liveErr)
 		}
 		if terminal {
-			log.Printf("actorruntime: persistent Super live occurrence terminal agent=%s", agentID)
+			log.Printf("actorruntime: persistent Management live occurrence terminal agent=%s", agentID)
 			return nil, nil
 		}
 		if rec == nil {
-			return nil, fmt.Errorf("actorruntime: persistent Super live occurrence returned no exact run")
+			return nil, fmt.Errorf("actorruntime: persistent Management live occurrence returned no exact run")
 		}
 		// Locked mint already dispatched initial_dispatch. Resident exact-match
-		// Super is already bound. Do not execute here (recovery prefix does).
-		log.Printf("actorruntime: persistent Super live occurrence bound run=%s", rec.RunID)
+		// Management is already bound. Do not execute here (recovery prefix does).
+		log.Printf("actorruntime: persistent Management live occurrence bound run=%s", rec.RunID)
 		return nil, nil
 	}
-	if strings.HasPrefix(agentID, agentprofile.CoSuper+":") {
+	if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
 		// Engineering desk occurrence: the document-channel cast. The desk
 		// agent never runs; the occurrence's revision opens the assignment
 		// directly and the assignment's own activation executes the work.
@@ -286,7 +286,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 			if strings.TrimSpace(u.FromAgentID) != "" && strings.TrimSpace(u.FromAgentID) != "owner:"+occurrence.OwnerID {
 				return nil, nil // durable foreign source envelope
 			}
-			docID := strings.TrimSpace(strings.TrimPrefix(agentID, agentprofile.CoSuper+":"))
+			docID := strings.TrimSpace(strings.TrimPrefix(agentID, agentprofile.Engineering+":"))
 			if docID == "" || docID != occurrence.DocumentID {
 				return nil, nil
 			}
@@ -407,11 +407,11 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		}
 		wakeProfile, _ := agentprofile.Canonical(rec.AgentProfile)
 		wakeRole, _ := agentprofile.Canonical(rec.AgentRole)
-		lifecycleControlResearcher :=
-			(wakeProfile == agentprofile.Researcher ||
-				wakeRole == agentprofile.Researcher) &&
+		lifecycleControlResearch :=
+			(wakeProfile == agentprofile.Research ||
+				wakeRole == agentprofile.Research) &&
 				strings.TrimSpace(metadataString(rec.Metadata, "request_source")) == "lifecycle_texture_control"
-		if lifecycleControlResearcher {
+		if lifecycleControlResearch {
 			if strings.TrimSpace(u.TrajectoryID) == "" || strings.TrimSpace(u.TrajectoryID) != strings.TrimSpace(rec.TrajectoryID) {
 				return nil, fmt.Errorf("actorruntime: parked lifecycle coagent wake trajectory mismatch")
 			}
@@ -439,7 +439,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		}
 		rec.Metadata["actor_reactivate_existing_memory"] = true
 		rec.Metadata["actor_reactivated_from_passivated"] = true
-		if !lifecycleControlResearcher {
+		if !lifecycleControlResearch {
 			rec.Metadata["request_source"] = "update_coagent"
 		}
 		rec.State = types.RunPending

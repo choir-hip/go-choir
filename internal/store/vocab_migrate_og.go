@@ -9,7 +9,7 @@ package store
 //
 //   1. Every string leaf in metadata and body is classified: exact V1 desk
 //      tokens map through the frozen ForwardV1ToV2; desk-bearing IDs
-//      (super:/co-super:/cosuper:/researcher: prefixes, -super-/-co-super-/
+//      (super:/Engineering:/cosuper:/researcher: prefixes, -super-/-Engineering-/
 //      -cosuper-/-researcher- infixes) rewrite through migrateIDForward;
 //      frozen protocol values (owner, trusted-core) never move; everything
 //      else is untouched. Prose is safe: both rules require the whole leaf
@@ -44,22 +44,22 @@ import (
 
 // ogObjectRow is one og_objects row under migration.
 type ogObjectRow struct {
-	canonicalID string
-	kind        string
-	ownerID     string
-	computerID  string
-	versionID   string
-	body        []byte
-	metadata    []byte
-	tombstone   bool
+	canonicalID  string
+	kind         string
+	ownerID      string
+	computerID   string
+	versionID    string
+	body         []byte
+	metadata     []byte
+	tombstone    bool
 	supersededBy string
 
-	bodyJSON    any // decoded body (nil when not JSON)
-	metaJSON    map[string]any
-	fields      map[string]string // json path -> original leaf value (changed only)
-	newID       string
-	newHash     string
-	dirty       bool
+	bodyJSON any // decoded body (nil when not JSON)
+	metaJSON map[string]any
+	fields   map[string]string // json path -> original leaf value (changed only)
+	newID    string
+	newHash  string
+	dirty    bool
 }
 
 // ogEdgeRow is one og_edges row under migration.
@@ -299,7 +299,6 @@ func (o *ogObjectRow) identityFieldMigrated() bool {
 	}
 	return false
 }
-
 
 // planOGMigration computes the migrated state of every og_objects/og_edges
 // row without mutating the store. seed maps historical canonical/edge IDs to

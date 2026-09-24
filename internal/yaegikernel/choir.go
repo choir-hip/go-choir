@@ -24,7 +24,7 @@ type ChoirScope struct {
 	epoch        uint64
 	activationID string
 	readOnly     bool
-	// slot is the co-super slot carried from the verified capability
+	// slot is the Engineering slot carried from the verified capability
 	// (implementation|verifier). Verifier-only affordances gate on it; the
 	// model can never set it.
 	slot string
@@ -37,11 +37,11 @@ type ChoirScope struct {
 	inbox []IncomingMessage
 }
 
-// SessionRoleResearcher is the read-only role: sessions bound to it observe
+// SessionRoleResearch is the read-only role: sessions bound to it observe
 // files and directories but cannot write, execute, assign, or message. The
 // role arrives on a trusted worker flag from the verified outer capability,
 // never from model input. Any other role string means full engineering scope.
-const SessionRoleResearcher = "research"
+const SessionRoleResearch = "research"
 
 // NewChoirScope mints a session-scoped handle for exactly the file, assign,
 // and message actions and returns the scope the choir symbols close over.
@@ -54,7 +54,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 		return nil, fmt.Errorf("choir: handle issuer is required")
 	}
 	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage}
-	readOnly := role == SessionRoleResearcher
+	readOnly := role == SessionRoleResearch
 	if readOnly {
 		actions = []BrokerAction{ActionReadFile, ActionListDir}
 	}

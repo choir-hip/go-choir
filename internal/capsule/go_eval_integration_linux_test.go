@@ -16,7 +16,7 @@ import (
 // TestCapsuleGoEvalEndToEnd is opt-in (needs root, cgroup v2, overlayfs,
 // namespaces, Landlock, seccomp, and the immutable broker) — same harness as
 // TestExecutorInheritedBrokerListenerEndToEnd, but it drives the go_eval verb
-// through a real spawned capsule to prove the sealed-CoSuper Go authoring path
+// through a real spawned capsule to prove the sealed-Engineering Go authoring path
 // end to end (the Definition's focused-product-path activation evidence).
 func TestCapsuleGoEvalEndToEnd(t *testing.T) {
 	if os.Getenv("CHOIR_CAPSULE_INTEGRATION") != "1" {
@@ -78,7 +78,7 @@ func TestCapsuleGoEvalEndToEnd(t *testing.T) {
 		t.Fatalf("capsule broker did not become active: %+v", caps)
 	}
 
-	capability, err := executor.MintCapability("g1-goeval-run", RoleCoSuper, capsuleID, time.Minute)
+	capability, err := executor.MintCapability("g1-goeval-run", RoleEngineering, capsuleID, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -179,7 +179,7 @@ func metadataStringSlice(value any) []string {
 	return out
 }
 
-func normalizeCoSuperSlot(raw string) string {
+func normalizeEngineeringSlot(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "implementation", "implementer", "worker", "writer", "builder":
 		return "implementation"

@@ -1213,7 +1213,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 	}
 	if err := registry.Register(Tool{
 		Name:        "request_super_execution",
-		Description: "Ask Super to execute follow-on platform work.",
+		Description: "Ask Management to execute follow-on platform work.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"requested"}`, nil
@@ -1283,7 +1283,7 @@ func TestRunToolLoopRefusesProviderAvailabilityFallback(t *testing.T) {
 	}
 
 	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"run the wire proof"}]}`)},
-		"You are Super.",
+		"You are Management.",
 		0,
 		emit,
 		nil,

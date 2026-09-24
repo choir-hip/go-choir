@@ -107,7 +107,7 @@ test('floating desktop icons render with emoji and labels', async ({ page, authe
   const surface = page.locator('[data-desktop-surface]');
   await expect(surface).toBeVisible();
 
-  // Trace is unshipped and Terminal is replaced by singleton Super Console.
+  // Trace is unshipped and Terminal is replaced by singleton Engineering Console.
   const icons = surface.locator('[data-desktop-icon]');
   await expect(icons).toHaveCount(8);
 
@@ -333,7 +333,7 @@ test('Texture opens near full mobile workspace and clears the prompt bar', async
 // ---------------------------------------------------------------
 // Test: Trace appears as a debugging desktop app
 // ---------------------------------------------------------------
-test('Trace is unshipped and Super Console replaces Terminal', async ({ page, authenticator }) => {
+test('Trace is unshipped and Engineering Console replaces Terminal', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -342,7 +342,7 @@ test('Trace is unshipped and Super Console replaces Terminal', async ({ page, au
   await expect(page.locator('[data-desktop-icon-id="super-console"]')).toBeVisible();
 });
 
-test('Super Console opens as the singleton repair app', async ({ page, authenticator }) => {
+test('Engineering Console opens as the singleton repair app', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 

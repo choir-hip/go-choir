@@ -21,10 +21,10 @@ func (rt *Runtime) SettleLifecycleProducerReports(ctx context.Context, req types
 	}
 	if req.IncludeDeliveredStale {
 		// Delivered-stale settlement must never tombstone the live work of the
-		// resident Super: reports delivered to the currently active run are that
+		// resident Management: reports delivered to the currently active run are that
 		// run's execution input, everything else delivered is storm-era residue.
 		ownerID := strings.TrimSpace(req.OwnerID)
-		if resident, found, err := rt.activeRunByAgent(ctx, ownerID, persistentSuperAgentID(ownerID)); err != nil {
+		if resident, found, err := rt.activeRunByAgent(ctx, ownerID, persistentManagementAgentID(ownerID)); err != nil {
 			return types.LifecycleResult{}, fmt.Errorf("settle producer reports: resolve resident super: %w", err)
 		} else if found {
 			req.ExcludeDeliveredToRunID = resident.RunID
@@ -42,7 +42,7 @@ func (rt *Runtime) SettleLifecycleProducerReports(ctx context.Context, req types
 	return rt.store.SettleLifecycleProducerReports(ctx, req)
 }
 
-// ListPendingProducerReports returns pending undelivered producer reports for the persistent Super.
+// ListPendingProducerReports returns pending undelivered producer reports for the persistent Management.
 func (rt *Runtime) ListPendingProducerReports(ctx context.Context, ownerID, computerID, requestedByAgentID string) ([]types.CoagentSourcePacket, error) {
 	if rt == nil || rt.store == nil {
 		return nil, fmt.Errorf("list pending producer reports: store unavailable")
@@ -52,7 +52,7 @@ func (rt *Runtime) ListPendingProducerReports(ctx context.Context, ownerID, comp
 
 // ListDeliveredStaleProducerReports returns pending producer reports already
 // delivered to a run, excluding reports delivered to the currently active
-// resident Super (those are live execution input, not residue).
+// resident Management (those are live execution input, not residue).
 func (rt *Runtime) ListDeliveredStaleProducerReports(ctx context.Context, ownerID, computerID, requestedByAgentID string) ([]types.CoagentSourcePacket, error) {
 	if rt == nil || rt.store == nil {
 		return nil, fmt.Errorf("list delivered stale producer reports: store unavailable")
@@ -62,7 +62,7 @@ func (rt *Runtime) ListDeliveredStaleProducerReports(ctx context.Context, ownerI
 		return nil, err
 	}
 	activeRuns := map[string]bool{}
-	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, persistentSuperAgentID(ownerID)); err != nil {
+	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, persistentManagementAgentID(ownerID)); err != nil {
 		return nil, fmt.Errorf("list delivered stale producer reports: resolve resident super: %w", err)
 	} else if found {
 		activeRuns[resident.RunID] = true

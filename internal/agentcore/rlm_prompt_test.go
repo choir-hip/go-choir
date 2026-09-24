@@ -9,22 +9,22 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func testCoSuperRun() *types.RunRecord {
+func testEngineeringRun() *types.RunRecord {
 	return &types.RunRecord{
 		RunID:        "run-rlm-prompt",
-		AgentProfile: agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
 		OwnerID:      "user-alice",
 	}
 }
 
-// TestCoSuperPromptSwitchesToSealedGoUnderRLM proves the model-facing schema
-// cutover: under actuator=rlm the CoSuper prompt teaches capsule_go_eval plus
+// TestEngineeringPromptSwitchesToSealedGoUnderRLM proves the model-facing schema
+// cutover: under actuator=rlm the Engineering prompt teaches capsule_go_eval plus
 // the choir package; under tools the fallback exposes only one-shot Go eval
 // and no in-cell carrier.
-func TestCoSuperPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
+func TestEngineeringPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
 	rt := &Runtime{}
 	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
-	rlmPrompt, err := rt.systemPromptForRun(testCoSuperRun())
+	rlmPrompt, err := rt.systemPromptForRun(testEngineeringRun())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestCoSuperPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
 	}
 
 	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorTools)
-	toolsPrompt, err := rt.systemPromptForRun(testCoSuperRun())
+	toolsPrompt, err := rt.systemPromptForRun(testEngineeringRun())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestCoSuperPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
 func TestRLMPromptOmitsFreezeMandateForDocumentTrajectory(t *testing.T) {
 	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
 	rt, _ := testRuntime(t)
-	run := testCoSuperRun()
+	run := testEngineeringRun()
 	run.ComputerID = "autoputer-test"
 	run.TrajectoryID = "trajectory-document-cast"
 	const mandate = "Freeze the capsule diff with choir.Freeze."
@@ -82,7 +82,7 @@ func TestRLMPromptOmitsFreezeMandateForDocumentTrajectory(t *testing.T) {
 func TestRLMPromptOmitsRetiredToolNames(t *testing.T) {
 	rt := &Runtime{}
 	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
-	rlmPrompt, err := rt.systemPromptForRun(testCoSuperRun())
+	rlmPrompt, err := rt.systemPromptForRun(testEngineeringRun())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,17 +93,17 @@ func TestRLMPromptOmitsRetiredToolNames(t *testing.T) {
 	}
 }
 
-// TestCoSuperPromptIsModelIndependent is the standing one-prompt guard: the
+// TestEngineeringPromptIsModelIndependent is the standing one-prompt guard: the
 // assembled system prompt must be byte-identical for two runs that differ
 // only in model selection metadata. A per-model fork anywhere in prompt
 // assembly fails this test.
-func TestCoSuperPromptIsModelIndependent(t *testing.T) {
+func TestEngineeringPromptIsModelIndependent(t *testing.T) {
 	rt := &Runtime{}
 	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
 
-	runA := testCoSuperRun()
+	runA := testEngineeringRun()
 	runA.Metadata = map[string]any{"model": "deepseek-v4.1-flash", "llm_policy_overlay_id": "roster-a"}
-	runB := testCoSuperRun()
+	runB := testEngineeringRun()
 	runB.Metadata = map[string]any{"model": "muse-spark-1.3-contributor-free", "llm_policy_overlay_id": "roster-b"}
 
 	promptA, err := rt.systemPromptForRun(runA)

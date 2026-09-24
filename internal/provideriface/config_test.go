@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestLoadConfigDefaultsResearcherCount(t *testing.T) {
+func TestLoadConfigDefaultsResearchCount(t *testing.T) {
 	t.Setenv("AUTOPUTER_ID", "")
 	t.Setenv("RUNTIME_STORE_PATH", "")
 	t.Setenv("RUNTIME_PROVIDER_TIMEOUT", "")
@@ -17,8 +17,8 @@ func TestLoadConfigDefaultsResearcherCount(t *testing.T) {
 	t.Setenv("RUNTIME_TEXTURE_ACTOR_PARK_IDLE", "")
 
 	cfg := LoadConfig()
-	if cfg.ResearcherCount != DefaultResearcherCount {
-		t.Fatalf("researcher_count = %d, want %d", cfg.ResearcherCount, DefaultResearcherCount)
+	if cfg.ResearchCount != DefaultResearchCount {
+		t.Fatalf("researcher_count = %d, want %d", cfg.ResearchCount, DefaultResearchCount)
 	}
 	if cfg.ActivationBudget != DefaultActivationBudget {
 		t.Fatalf("activation_budget = %s, want %s", cfg.ActivationBudget, DefaultActivationBudget)
@@ -31,7 +31,7 @@ func TestLoadConfigDefaultsResearcherCount(t *testing.T) {
 	}
 }
 
-func TestLoadConfigReadsResearcherCount(t *testing.T) {
+func TestLoadConfigReadsResearchCount(t *testing.T) {
 	t.Setenv("RUNTIME_RESEARCHER_COUNT", "5")
 	t.Setenv("RUNTIME_SUPERVISION_INTERVAL", "7s")
 	t.Setenv("RUNTIME_PROVIDER_TIMEOUT", "3s")
@@ -40,8 +40,8 @@ func TestLoadConfigReadsResearcherCount(t *testing.T) {
 	t.Setenv("RUNTIME_TEXTURE_ACTOR_PARK_IDLE", "45s")
 
 	cfg := LoadConfig()
-	if cfg.ResearcherCount != 5 {
-		t.Fatalf("researcher_count = %d, want 5", cfg.ResearcherCount)
+	if cfg.ResearchCount != 5 {
+		t.Fatalf("researcher_count = %d, want 5", cfg.ResearchCount)
 	}
 	if cfg.TextureActorParkIdle != 45*time.Second {
 		t.Fatalf("texture_actor_park_idle = %s, want 45s", cfg.TextureActorParkIdle)
@@ -63,13 +63,13 @@ func TestLoadConfigReadsResearcherCount(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFallsBackOnInvalidResearcherCount(t *testing.T) {
+func TestLoadConfigFallsBackOnInvalidResearchCount(t *testing.T) {
 	_ = os.Setenv("RUNTIME_RESEARCHER_COUNT", "-2")
 	t.Cleanup(func() { _ = os.Unsetenv("RUNTIME_RESEARCHER_COUNT") })
 
 	cfg := LoadConfig()
-	if cfg.ResearcherCount != DefaultResearcherCount {
-		t.Fatalf("researcher_count = %d, want fallback %d", cfg.ResearcherCount, DefaultResearcherCount)
+	if cfg.ResearchCount != DefaultResearchCount {
+		t.Fatalf("researcher_count = %d, want fallback %d", cfg.ResearchCount, DefaultResearchCount)
 	}
 }
 

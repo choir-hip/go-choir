@@ -133,7 +133,7 @@ func (s *Store) CountPendingDeliveredWorkerUpdatesByRun(ctx context.Context, own
 }
 
 // PendingDeliveredWorkerUpdateCanonicalIDsByRun maps delivered-to run IDs to
-// newest choir.worker_update canonical IDs. Super rewarm GetObject those rows
+// newest choir.worker_update canonical IDs. Management rewarm GetObject those rows
 // instead of JSON_EXTRACT-scanning every worker-update body per tombstone.
 func (s *Store) PendingDeliveredWorkerUpdateCanonicalIDsByRun(ctx context.Context, ownerID, computerID string) (map[string][]string, error) {
 	_, ids, err := s.indexPendingDeliveredWorkerUpdatesByRun(ctx, ownerID, computerID)
@@ -273,7 +273,7 @@ func (s *Store) ResolveLifecycleControlActivation(ctx context.Context, ownerID, 
 	}
 	deliverAgentProfile, _ := agentprofile.Canonical(agent.Profile)
 	deliverAgentRole, _ := agentprofile.Canonical(agent.Role)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || deliverAgentProfile != agentprofile.Researcher || deliverAgentRole != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || deliverAgentProfile != agentprofile.Research || deliverAgentRole != agentprofile.Research || agent.LifecycleVersion <= 0 {
 		return LifecycleControlActivationReplay{}, ErrLifecycleInvalidTransition
 	}
 	result := LifecycleControlActivationReplay{}
@@ -358,12 +358,12 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	}
 	profile, _ := agentprofile.Canonical(agent.Profile)
 	admitRole, _ := agentprofile.Canonical(agent.Role)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || admitRole != profile || (profile != agentprofile.Researcher && !(profile == agentprofile.Super && agent.AgentID == agentprofile.Super+":"+ownerID && agent.LifecycleVersion == 0)) {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || admitRole != profile || (profile != agentprofile.Research && !(profile == agentprofile.Management && agent.AgentID == agentprofile.Management+":"+ownerID && agent.LifecycleVersion == 0)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	var runObj objectgraph.Object
 	var run types.RunRecord
-	if profile == agentprofile.Super {
+	if profile == agentprofile.Management {
 		runObj, err = s.getRunObjectByOwnerOG(ctx, ownerID, req.TargetRunID)
 		if err == nil {
 			err = ogDecode(runObj, &run)
@@ -378,7 +378,7 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	if run.RunID != req.TargetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != req.TargetAgentID || deliverTargetProfile != profile || !run.State.Active() {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	if profile == agentprofile.Super {
+	if profile == agentprofile.Management {
 		if strings.TrimSpace(run.TrajectoryID) != "" || metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != req.TrajectoryID {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
@@ -473,7 +473,7 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 		}
 	}
 	if req.ActivationRefresh != nil {
-		if profile != agentprofile.Researcher || len(controlWorkIDs) != len(req.ActivationRefresh.WorkItemIDs) {
+		if profile != agentprofile.Research || len(controlWorkIDs) != len(req.ActivationRefresh.WorkItemIDs) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		for index := range controlWorkIDs {
@@ -499,7 +499,7 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 	run.Metadata["assignment_trajectory_id"] = req.TrajectoryID
 	// A resident exact run can receive more controls after its first bind. Keep
 	// every historical control join in order; replacing this slice would make
-	// older CoSuper assignment/report authority disappear.
+	// older Engineering assignment/report authority disappear.
 	mergedBindings := make([]map[string]string, 0, len(controlBindings))
 	seenBindings := map[string]bool{}
 	appendBinding := func(binding map[string]string) {
@@ -585,7 +585,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRun(ctx context.Context, ownerID
 }
 
 // ListLifecycleControlsDeliveredToRunPage returns downward controls plus
-// authenticated CoSuper reports already delivered to one exact run. It
+// authenticated Engineering reports already delivered to one exact run. It
 // validates the complete exact-run set before returning a page, never consults
 // the legacy mailbox, and resumes strictly after an immutable occurrence cursor.
 func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, targetRunID string, after int64, limit int) (LifecycleDeliveredPacketPage, error) {
@@ -610,11 +610,11 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 	profile, _ := agentprofile.Canonical(agent.Profile)
 	admitRole, _ := agentprofile.Canonical(agent.Role)
 	if agent.OwnerID != ownerID || agent.ComputerID != computerID || admitRole != profile ||
-		(profile != agentprofile.Researcher && !(profile == agentprofile.Super && targetAgentID == agentprofile.Super+":"+ownerID && agent.LifecycleVersion == 0)) {
+		(profile != agentprofile.Research && !(profile == agentprofile.Management && targetAgentID == agentprofile.Management+":"+ownerID && agent.LifecycleVersion == 0)) {
 		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
 	var run types.RunRecord
-	if profile == agentprofile.Super {
+	if profile == agentprofile.Management {
 		run, err = s.GetRunByOwner(ctx, ownerID, targetRunID)
 		if err == ErrNotFound {
 			run, err = s.GetRun(ctx, targetRunID)
@@ -629,7 +629,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 	if run.RunID != targetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != targetAgentID || deliverPageProfile != profile {
 		return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 	}
-	if profile == agentprofile.Super {
+	if profile == agentprofile.Management {
 		if strings.TrimSpace(run.TrajectoryID) != "" || metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != trajectoryID {
 			return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 		}
@@ -678,8 +678,8 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 		case types.LifecyclePacketDirectionProducerReport:
-			if profile != agentprofile.Super || producerWorkID == "" || targetWorkID == "" || strings.TrimSpace(update.ControlBindingID) == "" ||
-				!lifecycleRunBindsWork(run, targetWorkID) || !persistentSuperControlBinding(run.Metadata, trajectoryID, targetWorkID, update.ControlBindingID) {
+			if profile != agentprofile.Management || producerWorkID == "" || targetWorkID == "" || strings.TrimSpace(update.ControlBindingID) == "" ||
+				!lifecycleRunBindsWork(run, targetWorkID) || !persistentManagementControlBinding(run.Metadata, trajectoryID, targetWorkID, update.ControlBindingID) {
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 			producerRun, runErr := s.GetLifecycleRun(ctx, ownerID, computerID, update.SourceRunID)
@@ -691,8 +691,8 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 				return LifecycleDeliveredPacketPage{}, workErr
 			}
 			if producerRun.RunID != update.SourceRunID || producerRun.AgentID != update.AgentID || producerRun.TrajectoryID != trajectoryID ||
-				producerRun.AgentProfile != agentprofile.CoSuper || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) ||
-				producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || producerWork.AuthorityProfile != agentprofile.CoSuper {
+				producerRun.AgentProfile != agentprofile.Engineering || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) ||
+				producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || producerWork.AuthorityProfile != agentprofile.Engineering {
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 		default:
@@ -724,7 +724,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 }
 
 // ListHistoricalLifecycleControlsDeliveredToRun returns every downward control
-// durably delivered to one exact old persistent-Super run after its trajectory
+// durably delivered to one exact old persistent-Management run after its trajectory
 // became terminal. It is evidence authentication only: terminal/passivated run
 // and terminal work identities are required, and no delivery or lifecycle state
 // is changed.
@@ -734,7 +734,7 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 		return nil, err
 	}
 	trajectoryID, targetAgentID, targetRunID = strings.TrimSpace(trajectoryID), strings.TrimSpace(targetAgentID), strings.TrimSpace(targetRunID)
-	if trajectoryID == "" || targetAgentID != agentprofile.Super+":"+ownerID || targetRunID == "" {
+	if trajectoryID == "" || targetAgentID != agentprofile.Management+":"+ownerID || targetRunID == "" {
 		return nil, ErrLifecycleInvalidTransition
 	}
 	trajectory, err := s.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
@@ -748,8 +748,8 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.Profile != agentprofile.Super ||
-		agent.Role != agentprofile.Super || agent.LifecycleVersion != 0 {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.Profile != agentprofile.Management ||
+		agent.Role != agentprofile.Management || agent.LifecycleVersion != 0 {
 		return nil, ErrLifecycleInvalidTransition
 	}
 	run, err := s.GetRunByOwner(ctx, ownerID, targetRunID)
@@ -757,9 +757,9 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 		return nil, err
 	}
 	if run.RunID != targetRunID || run.OwnerID != ownerID || run.ComputerID != computerID || run.AgentID != targetAgentID ||
-		run.AgentProfile != agentprofile.Super || run.AgentRole != agentprofile.Super || run.TrajectoryID != "" ||
+		run.AgentProfile != agentprofile.Management || run.AgentRole != agentprofile.Management || run.TrajectoryID != "" ||
 		metadataStringValueStore(run.Metadata, "assignment_trajectory_id") != trajectoryID ||
-		!persistentSuperHistoricalReportRunStateAllowed(run.State) {
+		!persistentManagementHistoricalReportRunStateAllowed(run.State) {
 		return nil, ErrLifecycleInvalidTransition
 	}
 	objects, err := s.listWorkerUpdateObjects(ctx, ownerID, computerID, targetRunID)
@@ -779,7 +779,7 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 			control.TargetAgentID != targetAgentID || control.DeliveredAt == nil || control.TargetWorkItemID == "" ||
 			control.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 || strings.TrimSpace(control.Packet.Kind) == "" ||
 			strings.TrimSpace(control.Content) == "" || !lifecycleRunBindsWork(run, control.TargetWorkItemID) ||
-			!persistentSuperControlBinding(run.Metadata, trajectoryID, control.TargetWorkItemID, control.UpdateID) {
+			!persistentManagementControlBinding(run.Metadata, trajectoryID, control.TargetWorkItemID, control.UpdateID) {
 			return nil, ErrLifecycleInvalidTransition
 		}
 		payloadDigest, digestErr := ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
@@ -791,7 +791,7 @@ func (s *Store) ListHistoricalLifecycleControlsDeliveredToRun(ctx context.Contex
 			return nil, workErr
 		}
 		if work.OwnerID != ownerID || work.ComputerID != computerID || work.TrajectoryID != trajectoryID ||
-			work.AssignedAgentID != targetAgentID || work.AuthorityProfile != agentprofile.Super || !workItemTerminal(work.Status) {
+			work.AssignedAgentID != targetAgentID || work.AuthorityProfile != agentprofile.Management || !workItemTerminal(work.Status) {
 			return nil, ErrLifecycleInvalidTransition
 		}
 		controls = append(controls, control)

@@ -214,7 +214,7 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 	}
 	event, uerr := computerevent.DecodeHistoricEvent(rawEvent)
 	if uerr != nil || event.EventKind != computerevent.EventVerificationRecorded ||
-		event.ActorProfile != agentprofile.CoSuper || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
+		event.ActorProfile != agentprofile.Engineering || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
 		return fmt.Errorf("checkpoint authority: verifier event authority mismatch")
 	}
 	payloadRef, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])

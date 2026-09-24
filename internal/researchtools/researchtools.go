@@ -317,7 +317,7 @@ func newSourceSearchTool(sourceClient SourceSearchClient, deps Dependencies) too
 		MaxResults int    `json:"max_results,omitempty"`
 	}
 	return toolregistry.Tool{Name: "source_search",
-		Description: "Search the configured Choir Source Service ledger for durable source items. Researcher-only: use results as untrusted source evidence, then checkpoint source IDs, item IDs, hashes, caveats, and unresolved gaps for Texture.",
+		Description: "Search the configured Choir Source Service ledger for durable source items. Research-only: use results as untrusted source evidence, then checkpoint source IDs, item IDs, hashes, caveats, and unresolved gaps for Texture.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":       map[string]any{"type": "string"},
 			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
@@ -640,7 +640,7 @@ func newWebSearchTool(searchClient search.Client, deps Dependencies) toolregistr
 		MaxResults int    `json:"max_results,omitempty"`
 	}
 	return toolregistry.Tool{Name: "web_search",
-		Description: "Search the web using the configured multi-provider search client. Researcher cadence: for a broad first pass, call one web_search, then update_coagent on the next model turn before any additional search-only turn; deeper searches can run after or alongside that checkpoint.",
+		Description: "Search the web using the configured multi-provider search client. Research cadence: for a broad first pass, call one web_search, then update_coagent on the next model turn before any additional search-only turn; deeper searches can run after or alongside that checkpoint.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":       map[string]any{"type": "string"},
 			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
@@ -691,7 +691,7 @@ func newWebSearchTool(searchClient search.Client, deps Dependencies) toolregistr
 }
 
 func shouldRequireResearchUpdateAfterTool(ctx context.Context, deps Dependencies) bool {
-	if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Researcher {
+	if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Research {
 		return false
 	}
 	if deps.Store == nil {

@@ -144,7 +144,7 @@ func TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T) {
+func TestExecuteToolsSkipsDuplicateTextureResearchSpawnInSameTurn(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var executed []string
 	if err := registry.Register(toolregistry.Tool{Name: "spawn_agent",
@@ -180,13 +180,13 @@ func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T
 	if len(results) != 3 {
 		t.Fatalf("results = %d, want 3", len(results))
 	}
-	if results[0].IsError || results[0].Output != agentprofile.Researcher {
+	if results[0].IsError || results[0].Output != agentprofile.Research {
 		t.Fatalf("first spawn result = %#v, want success", results[0])
 	}
 	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate texture researcher spawn") {
 		t.Fatalf("second spawn result = %#v, want non-error duplicate notice", results[1])
 	}
-	if results[2].IsError || results[2].Output != agentprofile.Researcher {
+	if results[2].IsError || results[2].Output != agentprofile.Research {
 		t.Fatalf("third spawn result = %#v, want distinct-objective success", results[2])
 	}
 }
@@ -235,7 +235,7 @@ func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t
 	}
 }
 
-func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
+func TestResearchSourceSearchCallsSourceServiceAPI(t *testing.T) {
 	ctx := context.Background()
 	item := testSourceAPIItem()
 	var sawSearch bool
@@ -269,8 +269,8 @@ func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
-	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
-	if _, ok := researcherRegistry.Lookup("source_search"); !ok {
+	researchRegistry := rt.ToolRegistryForProfile(agentprofile.Research)
+	if _, ok := researchRegistry.Lookup("source_search"); !ok {
 		t.Fatalf("researcher missing source_search")
 	}
 	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
@@ -281,10 +281,10 @@ func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 	rec := &types.RunRecord{
 		RunID:        "researcher-source-search-run",
 		OwnerID:      "owner-source-search",
-		AgentProfile: agentprofile.Researcher,
-		AgentRole:    agentprofile.Researcher,
+		AgentProfile: agentprofile.Research,
+		AgentRole:    agentprofile.Research,
 	}
-	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), "source_search", json.RawMessage(`{
+	raw, err := researchRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), "source_search", json.RawMessage(`{
 		"query": "rates",
 		"max_results": 5
 	}`))
@@ -355,7 +355,7 @@ func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 	}
 }
 
-func TestResearcherSourceSearchWithoutConfiguredAPIIsUnavailable(t *testing.T) {
+func TestResearchSourceSearchWithoutConfiguredAPIIsUnavailable(t *testing.T) {
 	t.Setenv("SOURCE_SERVICE_BASE_URL", "")
 	t.Setenv("SOURCE_SERVICE_URL", "")
 	t.Setenv("SOURCECYCLED_API_URL", "")
@@ -365,11 +365,11 @@ func TestResearcherSourceSearchWithoutConfiguredAPIIsUnavailable(t *testing.T) {
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
-	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
-	_, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
+	researchRegistry := rt.ToolRegistryForProfile(agentprofile.Research)
+	_, err := researchRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "researcher-source-search-unconfigured",
 		OwnerID:      "owner-source-search",
-		AgentProfile: agentprofile.Researcher,
+		AgentProfile: agentprofile.Research,
 	})), "source_search", json.RawMessage(`{"query":"rates"}`))
 	if err == nil || !strings.Contains(err.Error(), "source search client not configured") {
 		t.Fatalf("source_search err = %v, want source search client not configured", err)
@@ -405,7 +405,7 @@ func testSourceAPIItem() sourceapi.ItemResult {
 	}
 }
 
-func terminalResearcherRunFixture(runID, ownerID, docID, result string, state types.RunState, now time.Time) types.RunRecord {
+func terminalResearchRunFixture(runID, ownerID, docID, result string, state types.RunState, now time.Time) types.RunRecord {
 	finishedAt := now
 	rec := types.RunRecord{
 		RunID:            runID,
@@ -413,15 +413,15 @@ func terminalResearcherRunFixture(runID, ownerID, docID, result string, state ty
 		RequestedByRunID: "texture-parent:" + runID,
 		ChannelID:        docID,
 		OwnerID:          ownerID,
-		AgentProfile:     agentprofile.Researcher,
-		AgentRole:        agentprofile.Researcher,
+		AgentProfile:     agentprofile.Research,
+		AgentRole:        agentprofile.Research,
 		State:            state,
 		Result:           result,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Researcher,
-			runMetadataAgentRole:    agentprofile.Researcher,
+			runMetadataAgentProfile: agentprofile.Research,
+			runMetadataAgentRole:    agentprofile.Research,
 			runMetadataAgentID:      "research:" + runID,
 			runMetadataChannelID:    docID,
 			"requested_by_profile":  agentprofile.Texture,
@@ -439,8 +439,8 @@ func TestRootTerminalRunSkipsOutcomeBindingWithoutStoreLookup(t *testing.T) {
 	root := types.RunRecord{
 		RunID:        "unpersisted-root-terminal",
 		AgentID:      "engineering:unpersisted-root-terminal",
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		State:        types.RunCompleted,
 		Result:       "Root result has no requester.",
 	}
@@ -453,7 +453,7 @@ func TestFallbackAbstainsOnAssignmentRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	rec := terminalResearcherRunFixture(
+	rec := terminalResearchRunFixture(
 		"owner",
 		"computer",
 		"run-assigned-child",
@@ -481,36 +481,36 @@ func TestFallbackRecordsOrphanObservationOnAssignedTerminalRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	seed, err := store.SeedCoSuperAssignmentAuthority(s, "owner-orphan-prod", rt.TextureComputerID(), 1)
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-orphan-prod", rt.TextureComputerID(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assignmentID := "assignment-orphan-prod"
 	capability := "opaque-orphan-prod"
 	capsuleID := "capsule-orphan-prod"
-	open := types.OpenCoSuperAssignmentRequest{
+	open := types.OpenEngineeringAssignmentRequest{
 		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.CoSuperAssignmentBinding{
+		Binding: types.EngineeringAssignmentBinding{
 			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
 			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
 			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
 			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
 			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
 			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
 			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
 			Writable:          true, CapsuleID: capsuleID,
-			NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
-			FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 		},
 		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
 	}
-	if open.CommandDigest, err = store.ComputeOpenCoSuperAssignmentDigest(open); err != nil {
+	if open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	runID := seed.AssignedRunIDs[0]
@@ -530,16 +530,16 @@ func TestFallbackRecordsOrphanObservationOnAssignedTerminalRun(t *testing.T) {
 			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
 		},
 	}
-	bind := types.BindCoSuperAssignmentRequest{
+	bind := types.BindEngineeringAssignmentRequest{
 		CommandID: "command-bind-" + assignmentID + "-1",
 		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
 		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
 		OpaqueCapability: capability, CapsuleID: capsuleID,
 	}
-	if bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind); err != nil {
+	if bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BindCoSuperAssignment(ctx, bind); err != nil {
+	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
 		t.Fatal(err)
 	}
 	persisted, err := s.GetLifecycleRun(ctx, seed.OwnerID, seed.ComputerID, runID)
@@ -553,28 +553,28 @@ func TestFallbackRecordsOrphanObservationOnAssignedTerminalRun(t *testing.T) {
 	}
 	probe := types.RunRecord{
 		RunID: runID, OwnerID: seed.OwnerID, RequestedByRunID: seed.ParentRunID,
-		AgentProfile: agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
 	}
 	if err := rt.bindTerminalRunOutcome(ctx, &probe, false); err != nil {
 		t.Fatalf("fallback orphan observation: %v", err)
 	}
-	assignment, err := s.GetCoSuperAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 1)
+	assignment, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !assignment.Disposition.Terminal() {
 		t.Fatalf("assignment disposition = %v, want terminal orphan close", assignment.Disposition)
 	}
-	propDigest, err := store.ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, types.CoSuperResultFailed, types.CoSuperVerdictNone, nil, nil, nil)
+	propDigest, err := store.ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, types.EngineeringResultFailed, types.EngineeringVerdictNone, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	reportID := store.TerminalReportID(seed.OwnerID, seed.ComputerID, assignmentID, 1, propDigest)
-	report, err := s.GetCoSuperAssignmentReport(ctx, seed.OwnerID, seed.ComputerID, reportID)
+	report, err := s.GetEngineeringAssignmentReport(ctx, seed.OwnerID, seed.ComputerID, reportID)
 	if err != nil {
 		t.Fatalf("orphan report %s: %v", reportID, err)
 	}
-	if report.Result != types.CoSuperResultFailed {
+	if report.Result != types.EngineeringResultFailed {
 		t.Fatalf("orphan report result = %v, want failed", report.Result)
 	}
 	updates, err := s.ListPendingWorkerUpdates(ctx, seed.OwnerID, "texture:"+run.ChannelID, 10)
@@ -586,7 +586,7 @@ func TestFallbackRecordsOrphanObservationOnAssignedTerminalRun(t *testing.T) {
 	}
 }
 
-func TestResearcherPlainTerminalResultBindsAddressedOutcome(t *testing.T) {
+func TestResearchPlainTerminalResultBindsAddressedOutcome(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		marker func(map[string]any)
@@ -609,7 +609,7 @@ func TestResearcherPlainTerminalResultBindsAddressedOutcome(t *testing.T) {
 			rt, s := testRuntime(t)
 			now := time.Now().UTC()
 			suffix := strings.ReplaceAll(tc.name, " ", "-")
-			rec := terminalResearcherRunFixture(
+			rec := terminalResearchRunFixture(
 				"run-researcher-plain-terminal-"+suffix,
 				"owner-researcher-plain-terminal-"+suffix,
 				"doc-researcher-plain-terminal-"+suffix,
@@ -667,11 +667,11 @@ func TestResearcherPlainTerminalResultBindsAddressedOutcome(t *testing.T) {
 	}
 }
 
-func TestResearcherTerminalOutcomeRequiresDurableTerminalRun(t *testing.T) {
+func TestResearchTerminalOutcomeRequiresDurableTerminalRun(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()
-	stored := terminalResearcherRunFixture(
+	stored := terminalResearchRunFixture(
 		"run-researcher-terminal-order",
 		"owner-researcher-terminal-order",
 		"doc-researcher-terminal-order",
@@ -718,7 +718,7 @@ func TestBootBindsExplicitUpdateAcrossDispatchBeforeToolResultCrashWindow(t *tes
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()
-	rec := terminalResearcherRunFixture(
+	rec := terminalResearchRunFixture(
 		"run-researcher-explicit-terminal",
 		"owner-researcher-explicit-terminal",
 		"doc-researcher-explicit-terminal",
@@ -735,7 +735,7 @@ func TestBootBindsExplicitUpdateAcrossDispatchBeforeToolResultCrashWindow(t *tes
 		AgentID:       rec.AgentID,
 		TargetAgentID: "texture:" + rec.ChannelID,
 		ChannelID:     rec.ChannelID,
-		Role:          agentprofile.Researcher,
+		Role:          agentprofile.Research,
 		SourceRunID:   rec.RunID,
 		Packet: newCoagentPacket(
 			"evidence_update",
@@ -802,7 +802,7 @@ func TestDerivedWorkerUpdateIDSurvivesReplaceableSourceRun(t *testing.T) {
 		AgentID:       "research:update-id",
 		TargetAgentID: "texture:update-id",
 		ChannelID:     "doc-update-id",
-		Role:          agentprofile.Researcher,
+		Role:          agentprofile.Research,
 		Packet:        newCoagentPacket("evidence_update", "Same content.", nil, nil, nil, nil, nil),
 	}
 	first := base
@@ -815,7 +815,7 @@ func TestDerivedWorkerUpdateIDSurvivesReplaceableSourceRun(t *testing.T) {
 	}
 }
 
-func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
+func TestManagementExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()
@@ -825,14 +825,14 @@ func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
 		RequestedByRunID: "run-super-explicit-parent",
 		ChannelID:        "doc-super-explicit-terminal",
 		OwnerID:          "owner-super-explicit-terminal",
-		AgentProfile:     agentprofile.Super,
-		AgentRole:        agentprofile.Super,
+		AgentProfile:     agentprofile.Management,
+		AgentRole:        agentprofile.Management,
 		State:            types.RunRunning,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Super,
-			runMetadataAgentRole:    agentprofile.Super,
+			runMetadataAgentProfile: agentprofile.Management,
+			runMetadataAgentRole:    agentprofile.Management,
 			runMetadataAgentID:      "management:explicit-terminal",
 			runMetadataChannelID:    "doc-super-explicit-terminal",
 			runMetadataTrajectoryID: "trajectory-super-explicit-terminal",
@@ -840,7 +840,7 @@ func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
 		},
 	}
 	if err := s.CreateRun(ctx, rec); err != nil {
-		t.Fatalf("create running Super run: %v", err)
+		t.Fatalf("create running Management run: %v", err)
 	}
 	update := types.CoagentSourcePacket{
 		OwnerID:       rec.OwnerID,
@@ -849,11 +849,11 @@ func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
 		TargetAgentID: "engineering:explicit-terminal",
 		ChannelID:     rec.ChannelID,
 		TrajectoryID:  trajectoryIDForRun(&rec),
-		Role:          agentprofile.Super,
+		Role:          agentprofile.Management,
 		Packet: newCoagentPacket(
 			"evidence_update",
-			"Explicit final Super update.",
-			[]types.CoagentPacketClaim{coagentClaim("Super terminal evidence.")},
+			"Explicit final Management update.",
+			[]types.CoagentPacketClaim{coagentClaim("Management terminal evidence.")},
 			nil,
 			nil,
 			nil,
@@ -876,7 +876,7 @@ func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
 	}
 	storedUpdate, created, err := s.DispatchWorkerUpdate(ctx, update, message)
 	if err != nil || !created {
-		t.Fatalf("dispatch explicit Super update: created=%t err=%v", created, err)
+		t.Fatalf("dispatch explicit Management update: created=%t err=%v", created, err)
 	}
 	output, _ := json.Marshal(map[string]any{
 		"update_id":     storedUpdate.UpdateID,
@@ -902,25 +902,25 @@ func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
 		Kind:         types.EventToolResult,
 		Payload:      eventPayload,
 	}); err != nil {
-		t.Fatalf("append explicit Super update event: %v", err)
+		t.Fatalf("append explicit Management update event: %v", err)
 	}
 	rec.State = types.RunCompleted
-	rec.Result = "Super completed after its explicit terminal update."
+	rec.Result = "Management completed after its explicit terminal update."
 	rec.UpdatedAt = now.Add(time.Second)
 	rec.FinishedAt = &rec.UpdatedAt
 	if err := s.UpdateRun(ctx, rec); err != nil {
-		t.Fatalf("persist terminal Super run: %v", err)
+		t.Fatalf("persist terminal Management run: %v", err)
 	}
 	if err := rt.bindTerminalRunOutcome(ctx, &rec, false); err != nil {
-		t.Fatalf("bind explicit Super terminal update: %v", err)
+		t.Fatalf("bind explicit Management terminal update: %v", err)
 	}
 	bound, err := s.GetWorkerUpdate(ctx, rec.OwnerID, update.UpdateID)
 	if err != nil {
-		t.Fatalf("get bound Super update: %v", err)
+		t.Fatalf("get bound Management update: %v", err)
 	}
 	wantDigest := types.TerminalRunOutcomeSHA256(rec.RunID, rec.State, rec.Result, rec.Error)
 	if bound.SourceRunID != rec.RunID || bound.SourceOutcomeSHA256 != wantDigest || bound.MessageSeq != storedUpdate.MessageSeq {
-		t.Fatalf("bound Super update = %+v, want run %q digest %q seq %d", bound, rec.RunID, wantDigest, storedUpdate.MessageSeq)
+		t.Fatalf("bound Management update = %+v, want run %q digest %q seq %d", bound, rec.RunID, wantDigest, storedUpdate.MessageSeq)
 	}
 }
 
@@ -928,7 +928,7 @@ func TestTerminalOutcomeIgnoresExplicitUpdateToNonRequester(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()
-	rec := terminalResearcherRunFixture(
+	rec := terminalResearchRunFixture(
 		"run-terminal-nonrequester",
 		"owner-terminal-nonrequester",
 		"doc-terminal-nonrequester",
@@ -945,7 +945,7 @@ func TestTerminalOutcomeIgnoresExplicitUpdateToNonRequester(t *testing.T) {
 		TargetAgentID: "engineering:unrelated-recipient",
 		ChannelID:     rec.ChannelID,
 		TrajectoryID:  trajectoryIDForRun(&rec),
-		Role:          agentprofile.Researcher,
+		Role:          agentprofile.Research,
 		SourceRunID:   rec.RunID,
 		Packet:        newCoagentPacket("evidence_update", "Update for another actor.", nil, nil, nil, nil, nil),
 		CreatedAt:     now,
@@ -988,11 +988,11 @@ func TestTerminalOutcomeIgnoresExplicitUpdateToNonRequester(t *testing.T) {
 	}
 }
 
-func TestBootReconciliationIsIdempotentForTerminalResearcherOutcome(t *testing.T) {
+func TestBootReconciliationIsIdempotentForTerminalResearchOutcome(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()
-	rec := terminalResearcherRunFixture(
+	rec := terminalResearchRunFixture(
 		"run-researcher-restart-outcome",
 		"owner-researcher-restart-outcome",
 		"doc-researcher-restart-outcome",
@@ -1048,16 +1048,16 @@ func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testi
 			RequestedByRunID: "parent-generic-terminal",
 			ChannelID:        channelID,
 			OwnerID:          ownerID,
-			AgentProfile:     agentprofile.CoSuper,
-			AgentRole:        agentprofile.CoSuper,
+			AgentProfile:     agentprofile.Engineering,
+			AgentRole:        agentprofile.Engineering,
 			State:            types.RunCompleted,
 			Result:           "generic delegated child result",
 			CreatedAt:        now,
 			UpdatedAt:        finishedAt,
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: agentprofile.CoSuper,
-				runMetadataAgentRole:    agentprofile.CoSuper,
+				runMetadataAgentProfile: agentprofile.Engineering,
+				runMetadataAgentRole:    agentprofile.Engineering,
 				runMetadataAgentID:      "engineering:" + runID,
 				runMetadataChannelID:    channelID,
 				runMetadataTrajectoryID: "trajectory-" + runID,
@@ -1103,16 +1103,16 @@ func TestBootTerminalRepairSkipsHistoricalRootRuns(t *testing.T) {
 			RunID:        "run-historical-root-" + string(rune('A'+i)),
 			AgentID:      "research:historical-root-" + string(rune('A'+i)),
 			OwnerID:      ownerID,
-			AgentProfile: agentprofile.Researcher,
-			AgentRole:    agentprofile.Researcher,
+			AgentProfile: agentprofile.Research,
+			AgentRole:    agentprofile.Research,
 			State:        types.RunCompleted,
 			Result:       "historical root",
 			CreatedAt:    now,
 			UpdatedAt:    now,
 			FinishedAt:   &now,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: agentprofile.Researcher,
-				runMetadataAgentRole:    agentprofile.Researcher,
+				runMetadataAgentProfile: agentprofile.Research,
+				runMetadataAgentRole:    agentprofile.Research,
 			},
 		}
 		if err := s.CreateRun(ctx, root); err != nil {
@@ -1125,16 +1125,16 @@ func TestBootTerminalRepairSkipsHistoricalRootRuns(t *testing.T) {
 		RequestedByRunID: "parent-historical-root",
 		ChannelID:        channelID,
 		OwnerID:          ownerID,
-		AgentProfile:     agentprofile.CoSuper,
-		AgentRole:        agentprofile.CoSuper,
+		AgentProfile:     agentprofile.Engineering,
+		AgentRole:        agentprofile.Engineering,
 		State:            types.RunCompleted,
 		Result:           "delegated child still needs repair",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		FinishedAt:       &now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataAgentID:      "engineering:historical-root-child",
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: "trajectory-historical-root-child",
@@ -1173,16 +1173,16 @@ func TestBootTerminalRepairUsesOwnerScopedRecentWindow(t *testing.T) {
 			RequestedByRunID: "parent-scoped-terminal",
 			ChannelID:        channelID,
 			OwnerID:          owner,
-			AgentProfile:     agentprofile.CoSuper,
-			AgentRole:        agentprofile.CoSuper,
+			AgentProfile:     agentprofile.Engineering,
+			AgentRole:        agentprofile.Engineering,
 			State:            types.RunCompleted,
 			Result:           "delegated child result",
 			CreatedAt:        now,
 			UpdatedAt:        now,
 			FinishedAt:       &now,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: agentprofile.CoSuper,
-				runMetadataAgentRole:    agentprofile.CoSuper,
+				runMetadataAgentProfile: agentprofile.Engineering,
+				runMetadataAgentRole:    agentprofile.Engineering,
 				runMetadataAgentID:      "engineering:" + runID,
 				runMetadataChannelID:    channelID,
 				runMetadataTrajectoryID: "trajectory-" + runID,
@@ -1392,7 +1392,7 @@ func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
+func TestExecuteToolsManagementSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	counts := map[string]int{}
@@ -1414,7 +1414,7 @@ func TestExecuteToolsSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
-		AgentProfile: agentprofile.Super,
+		AgentProfile: agentprofile.Management,
 	}))
 	calls := []types.ToolCall{
 		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"engineering","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
@@ -1447,7 +1447,7 @@ func TestExecuteToolsSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsCoSuperSkipsDuplicateBashCommand(t *testing.T) {
+func TestExecuteToolsEngineeringSkipsDuplicateBashCommand(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	executions := 0
@@ -1463,7 +1463,7 @@ func TestExecuteToolsCoSuperSkipsDuplicateBashCommand(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "cosuper-run",
 		OwnerID:      "owner",
-		AgentProfile: agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
 	}))
 	calls := []types.ToolCall{
 		{ID: "bash-1", Name: "bash", Arguments: json.RawMessage(`{"command":"go test ./internal/platform","timeout_ms":60000}`)},
@@ -1496,7 +1496,7 @@ func envValue(env []string, key string) string {
 	return ""
 }
 
-func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
+func TestExecuteToolsDoesNotCapResearchSearchBatch(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var searches int32
 	if err := registry.Register(toolregistry.Tool{Name: "web_search",
@@ -1516,7 +1516,7 @@ func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "researcher-run",
 		OwnerID:      "owner",
-		AgentProfile: agentprofile.Researcher,
+		AgentProfile: agentprofile.Research,
 	}))
 	calls := []types.ToolCall{
 		{ID: "search-1", Name: "web_search", Arguments: json.RawMessage(`{"query":"ai news may 2026"}`)},

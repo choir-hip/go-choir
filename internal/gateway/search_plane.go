@@ -145,9 +145,9 @@ func searchOutageResponse(err error) (*SearchOutageResponse, bool) {
 		return nil, false
 	}
 	resp := &SearchOutageResponse{
-		Error: "search_outage",
-		Code:  outage.Code(),
-		Query: outage.Query,
+		Error:          "search_outage",
+		Code:           outage.Code(),
+		Query:          outage.Query,
 		ProviderHealth: map[string]ProviderHealthSummary{},
 		Attempts:       make([]SearchProviderAttempt, len(outage.Attempts)),
 	}

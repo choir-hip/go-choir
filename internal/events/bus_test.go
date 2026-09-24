@@ -18,7 +18,7 @@ func TestEventBusPublishReceive(t *testing.T) {
 			EventID:   "evt-001",
 			Seq:       1,
 			Timestamp: time.Now().UTC(),
-			RunID:    "task-001",
+			RunID:     "task-001",
 			Kind:      types.EventRunStarted,
 			Payload:   json.RawMessage(`{}`),
 		},

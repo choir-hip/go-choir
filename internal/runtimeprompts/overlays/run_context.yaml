@@ -10,8 +10,8 @@ body: |
   {{end}}{{if .RequesterAgentID}}
   Requester agent id: {{.RequesterAgentID}}.
   {{end}}{{if .TextureDeliveryAgentID}}
-  Address every update_coagent to Texture coagent {{.TextureDeliveryAgentID}}. Set agent_id to that exact value on every delivery call.
+  Texture delivery scope: {{.TextureDeliveryAgentID}}. Treat this as bound routing metadata; use only a report or message module already exposed by your desk.
   {{end}}{{if .ChannelID}}
   Current coordination channel: {{.ChannelID}}.
   {{end}}
-  {{if .InCellCarrier}}Use choir.Message for addressed peer coordination and keep messages concise and actionable.{{else if .NoReportChannel}}Peer coordination is not available on this desk; report through the assignment's terminal result.{{else}}Use update_coagent for addressed peer coordination and keep messages concise and actionable.{{end}}
+  {{if .InCellCarrier}}Use the in-cell message module for addressed peer coordination and keep messages concise and actionable.{{else if .NoReportChannel}}Peer coordination is not available on this desk; report through the assignment's terminal result.{{else}}Use only the report or message module exposed in the current tool catalog for addressed peer coordination; keep messages concise and actionable.{{end}}

@@ -33,9 +33,9 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	if err != nil {
 		t.Fatalf("parse policy: %v", err)
 	}
-	super := policy.Resolve(agentprofile.Super)
-	if super.Provider != "chatgpt" || super.Model != "gpt-5.5" || super.ReasoningEffort != "medium" || super.MaxTokens != 24000 {
-		t.Fatalf("super selection = %+v", super)
+	management := policy.Resolve(agentprofile.Management)
+	if management.Provider != "chatgpt" || management.Model != "gpt-5.5" || management.ReasoningEffort != "medium" || management.MaxTokens != 24000 {
+		t.Fatalf("super selection = %+v", management)
 	}
 	texture := policy.Resolve(agentprofile.Texture)
 	if texture.Provider != "fireworks" || texture.Model != "accounts/fireworks/models/deepseek-v4-flash" || texture.MaxTokens != 12000 {
@@ -55,11 +55,11 @@ func TestManagerCreatesDefaultCutoverPolicy(t *testing.T) {
 		t.Fatalf("load generated policy: %v", err)
 	}
 	for role, want := range map[string]provideriface.LLMSelection{
-		agentprofile.Conductor: {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
-		agentprofile.Super:     {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "high"},
-		agentprofile.Texture:   {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
-		VerifierRole:           {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
-		MultimodalVerifierRole: {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
+		agentprofile.Conductor:  {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
+		agentprofile.Management: {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "high"},
+		agentprofile.Texture:    {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
+		VerifierRole:            {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
+		MultimodalVerifierRole:  {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
 	} {
 		got := policy.Resolve(role)
 		if got.Provider != want.Provider || got.Model != want.Model || got.ReasoningEffort != want.ReasoningEffort {
@@ -110,7 +110,7 @@ reasoning = "medium"
 	if err == nil || !strings.Contains(err.Error(), "previous valid policy") {
 		t.Fatalf("load error = %v", err)
 	}
-	selection := policy.Resolve(agentprofile.Super)
+	selection := policy.Resolve(agentprofile.Management)
 	if selection.Model != "gpt-5.5" || selection.ReasoningEffort != "medium" {
 		t.Fatalf("cached selection = %+v", selection)
 	}
@@ -138,21 +138,21 @@ reasoning = "medium"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	selection, err := manager.Resolve(context.Background(), "owner", agentprofile.Researcher, "safe-eval")
+	selection, err := manager.Resolve(context.Background(), "owner", agentprofile.Research, "safe-eval")
 	if err != nil {
 		t.Fatalf("resolve overlay: %v", err)
 	}
 	if selection.Provider != "chatgpt" || selection.Model != "gpt-5.6-luna" || selection.ReasoningEffort != "medium" || !strings.HasSuffix(selection.Source, "safe-eval.toml") {
 		t.Fatalf("overlay selection = %+v", selection)
 	}
-	if _, err := manager.Resolve(context.Background(), "owner", agentprofile.Researcher, "../escape"); err == nil || !strings.Contains(err.Error(), "not allowed") {
+	if _, err := manager.Resolve(context.Background(), "owner", agentprofile.Research, "../escape"); err == nil || !strings.Contains(err.Error(), "not allowed") {
 		t.Fatalf("unsafe overlay error = %v", err)
 	}
 	expiredAt := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	if err := os.WriteFile(filepath.Join(overlayDir, "expired.toml"), []byte("[overlay]\nexpires_at = \""+expiredAt+"\"\n\n[roles.research]\nprovider = \"chatgpt\"\nmodel = \"gpt-5.6-luna\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	fallback, err := manager.Resolve(context.Background(), "owner", agentprofile.Researcher, "expired")
+	fallback, err := manager.Resolve(context.Background(), "owner", agentprofile.Research, "expired")
 	if err == nil || !strings.Contains(err.Error(), "overlay expired") {
 		t.Fatalf("expired overlay error = %v", err)
 	}
@@ -163,12 +163,12 @@ reasoning = "medium"
 
 func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	manager := NewManager(ManagerConfig{})
-	metadata := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Super, nil)
+	metadata := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Management, nil)
 	if metadata[MetadataProvider] != "chatgpt" || metadata[MetadataModel] != "gpt-5.6-luna" || metadata[MetadataReasoningEffort] != "high" || metadata[MetadataPolicySource] != "platform_fallback" {
 		t.Fatalf("enriched metadata = %#v", metadata)
 	}
 	explicit := map[string]any{MetadataProvider: "custom", MetadataModel: "custom-model"}
-	got := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Super, explicit)
+	got := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Management, explicit)
 	if got[MetadataProvider] != "custom" || got[MetadataModel] != "custom-model" || len(got) != 2 {
 		t.Fatalf("explicit metadata changed = %#v", got)
 	}

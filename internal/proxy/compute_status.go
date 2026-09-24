@@ -66,7 +66,7 @@ type computeRuntimeStatus struct {
 	Service          string                 `json:"service,omitempty"`
 	RuntimeHealth    string                 `json:"runtime_health,omitempty"`
 	RunningRuns      int                    `json:"running_runs,omitempty"`
-	ResearcherCount  int                    `json:"researcher_count,omitempty"`
+	ResearchCount    int                    `json:"researcher_count,omitempty"`
 	ObservationError string                 `json:"observation_error,omitempty"`
 	PersistentDisk   *persistentdisk.Status `json:"persistent_disk,omitempty"`
 }
@@ -707,23 +707,23 @@ func (h *Handler) probeRuntimeHealthForTarget(targetURL string) *computeRuntimeS
 	defer func() { _ = resp.Body.Close() }()
 
 	var body struct {
-		Status          string                 `json:"status"`
-		Service         string                 `json:"service"`
-		RuntimeHealth   string                 `json:"runtime_health"`
-		RunningRuns     int                    `json:"running_runs"`
-		ResearcherCount int                    `json:"researcher_count"`
-		PersistentDisk  *persistentdisk.Status `json:"persistent_disk,omitempty"`
+		Status         string                 `json:"status"`
+		Service        string                 `json:"service"`
+		RuntimeHealth  string                 `json:"runtime_health"`
+		RunningRuns    int                    `json:"running_runs"`
+		ResearchCount  int                    `json:"researcher_count"`
+		PersistentDisk *persistentdisk.Status `json:"persistent_disk,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return &computeRuntimeStatus{Reachable: resp.StatusCode >= 200 && resp.StatusCode < 500, ObservationError: "runtime health decode failed"}
 	}
 	runtimeStatus := &computeRuntimeStatus{
-		Reachable:       resp.StatusCode >= 200 && resp.StatusCode < 500,
-		Status:          body.Status,
-		Service:         body.Service,
-		RuntimeHealth:   body.RuntimeHealth,
-		RunningRuns:     body.RunningRuns,
-		ResearcherCount: body.ResearcherCount,
+		Reachable:     resp.StatusCode >= 200 && resp.StatusCode < 500,
+		Status:        body.Status,
+		Service:       body.Service,
+		RuntimeHealth: body.RuntimeHealth,
+		RunningRuns:   body.RunningRuns,
+		ResearchCount: body.ResearchCount,
 	}
 	if body.PersistentDisk != nil {
 		runtimeStatus.PersistentDisk = body.PersistentDisk

@@ -57,12 +57,12 @@ func minInt(left, right int) int {
 	return right
 }
 
-func persistentSuperAgentID(ownerID string) string {
+func persistentManagementAgentID(ownerID string) string {
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
-		return agentprofile.Super
+		return agentprofile.Management
 	}
-	return agentprofile.Super + ":" + ownerID
+	return agentprofile.Management + ":" + ownerID
 }
 
 func coagentPacketSourceURIs(packet types.CoagentSourcePacketPayload, kinds ...string) []string {

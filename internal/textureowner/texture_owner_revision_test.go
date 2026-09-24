@@ -139,7 +139,7 @@ func TestLifecycleTextureWaitBlockNoChangeThenOwnerRevisionResumesSameResidentRu
 	}
 }
 
-func TestLifecycleTextureResearcherOpenerDerivesIdentitiesAndCommitsBeforeWake(t *testing.T) {
+func TestLifecycleTextureResearchOpenerDerivesIdentitiesAndCommitsBeforeWake(t *testing.T) {
 	core, handler := testAPISetup(t)
 	installSynchronousTextureOwnerWake(t, core, handler)
 	start := startObservationLifecycle(t, core.Store())
@@ -158,40 +158,40 @@ func TestLifecycleTextureResearcherOpenerDerivesIdentitiesAndCommitsBeforeWake(t
 	}
 	doc, _ := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
 	args := editTextureArgs{ToolCallID: "open-researcher-tool", WorkDisposition: string(types.WorkItemOpen), Controls: []textureControlArgs{{
-		OpenResearcher: true, Objective: "research exact gap",
+		OpenResearch: true, Objective: "research exact gap",
 		Packet: types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}},
 	}}}
 	snapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
 	controls, err := handler.textureTurnControls(t.Context(), &run, doc, snapshot, args)
 	if err != nil || len(controls) != 1 || controls[0].OpenAgent == nil || controls[0].OpenWork == nil || !strings.HasPrefix(controls[0].TargetAgentID, "research:") || controls[0].OpenAgent.AgentID != controls[0].TargetAgentID || controls[0].OpenWork.WorkItemID != controls[0].TargetWorkItemID {
-		t.Fatalf("runtime-derived Researcher opener=%+v err=%v", controls, err)
+		t.Fatalf("runtime-derived Research opener=%+v err=%v", controls, err)
 	}
 	openWork := controls[0].OpenWork
 	if openWork.CreatedByRunID != run.RunID || openWork.Details["requested_by_profile"] != "texture" || openWork.Details["requested_by_agent_id"] != run.AgentID || openWork.Details["requested_by_run_id"] != run.RunID {
-		t.Fatalf("Researcher work item lacks requester Texture binding: %+v", openWork)
+		t.Fatalf("Research work item lacks requester Texture binding: %+v", openWork)
 	}
 	if _, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, controls[0].TargetAgentID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("Researcher agent existed before atomic turn: %v", err)
+		t.Fatalf("Research agent existed before atomic turn: %v", err)
 	}
 	result, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, args, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "research requested")
 	if err != nil || result.TextureTurn == nil || len(result.Controls) != 1 {
-		t.Fatalf("atomic Researcher runtime turn=%+v err=%v", result, err)
+		t.Fatalf("atomic Research runtime turn=%+v err=%v", result, err)
 	}
 	createdAgent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, controls[0].TargetAgentID)
 	if err != nil || createdAgent.Profile != "research" || createdAgent.LifecycleVersion != 1 {
-		t.Fatalf("created Researcher=%+v err=%v", createdAgent, err)
+		t.Fatalf("created Research=%+v err=%v", createdAgent, err)
 	}
 	legacy, err := core.Store().ListPendingWorkerUpdates(t.Context(), start.OwnerID, controls[0].TargetAgentID, 10)
 	if err != nil || len(legacy) != 0 {
-		t.Fatalf("Researcher first control leaked to legacy mailbox: %+v err=%v", legacy, err)
+		t.Fatalf("Research first control leaked to legacy mailbox: %+v err=%v", legacy, err)
 	}
 	replay, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, args, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "research requested")
 	if err != nil || !replay.Replay || len(replay.Controls) != 1 || replay.Controls[0].TargetAgentID != controls[0].TargetAgentID {
-		t.Fatalf("Researcher runtime opener replay=%+v err=%v", replay, err)
+		t.Fatalf("Research runtime opener replay=%+v err=%v", replay, err)
 	}
 }
 
-func TestLifecycleTextureSemanticControlErrorKeepsSameRunWritableForAtomicResearcherRetry(t *testing.T) {
+func TestLifecycleTextureSemanticControlErrorKeepsSameRunWritableForAtomicResearchRetry(t *testing.T) {
 	core, handler := testAPISetup(t)
 	installSynchronousTextureOwnerWake(t, core, handler)
 	start := startObservationLifecycle(t, core.Store())
@@ -295,17 +295,17 @@ func TestLifecycleTextureSemanticControlErrorKeepsSameRunWritableForAtomicResear
 	}
 	if afterValid.HeadRevision.RevisionID == before.HeadRevision.RevisionID ||
 		len(afterValid.Agents) != len(before.Agents)+1 || len(afterValid.WorkItems) != len(before.WorkItems)+1 || len(afterValid.Updates) != len(before.Updates)+1 {
-		t.Fatalf("corrected retry did not atomically commit revision/Researcher/work/control:\n before=%+v\n after=%+v", before, afterValid)
+		t.Fatalf("corrected retry did not atomically commit revision/Research/work/control:\n before=%+v\n after=%+v", before, afterValid)
 	}
-	var researcher types.AgentRecord
+	var research types.AgentRecord
 	for _, candidate := range afterValid.Agents {
 		if strings.HasPrefix(candidate.AgentID, "research:") {
-			researcher = candidate
+			research = candidate
 			break
 		}
 	}
-	if researcher.AgentID == "" || researcher.Profile != "research" || researcher.LifecycleVersion != 1 {
-		t.Fatalf("corrected retry Researcher = %+v", researcher)
+	if research.AgentID == "" || research.Profile != "research" || research.LifecycleVersion != 1 {
+		t.Fatalf("corrected retry Research = %+v", research)
 	}
 	mutation, err := core.Store().GetAgentMutationByRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
 	if err != nil || mutation == nil || mutation.State != "pending" || mutation.RevisionID != afterValid.HeadRevision.RevisionID {

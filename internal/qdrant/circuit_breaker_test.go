@@ -41,7 +41,9 @@ type stubEmbedder struct {
 	embedFn func(ctx context.Context, texts []string) ([][]float32, error)
 }
 
-func (e *stubEmbedder) Model() EmbeddingModel { return EmbeddingModel{Name: "stub", Version: "1", Dimensions: 8} }
+func (e *stubEmbedder) Model() EmbeddingModel {
+	return EmbeddingModel{Name: "stub", Version: "1", Dimensions: 8}
+}
 func (e *stubEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 	if e.embedFn != nil {
 		return e.embedFn(ctx, texts)

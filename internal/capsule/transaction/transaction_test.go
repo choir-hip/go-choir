@@ -92,6 +92,7 @@ func TestTransactionBuilderAcceptsKnownPaths(t *testing.T) {
 		t.Errorf("Blob group: expected 1, got %d", len(record.Groups["Blob"]))
 	}
 }
+
 // TestClassifierRelativeUpperdirPaths pins the production path contract:
 // walkUpperdir emits paths relative to the upperdir root, so the classifier
 // must normalize them to absolute guest paths for rule matching. Before the

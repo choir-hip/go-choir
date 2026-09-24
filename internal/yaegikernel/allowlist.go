@@ -72,6 +72,7 @@ func NewDefaultSafeAllowlist() *Allowlist {
 	}
 	return &Allowlist{allowed: m}
 }
+
 // DefaultSafeStdlibPackagesList returns the default safe packages plus the
 // prebound choir package for session workers.
 func DefaultSafeStdlibPackagesList() []string {

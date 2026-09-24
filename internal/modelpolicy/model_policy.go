@@ -164,7 +164,7 @@ func (p Policy) Resolve(role string) provideriface.LLMSelection {
 func NormalizeRole(role string) string {
 	normalized := strings.TrimSpace(strings.ToLower(role))
 	switch normalized {
-	case agentprofile.Super, agentprofile.CoSuper, agentprofile.Researcher,
+	case agentprofile.Management, agentprofile.Engineering, agentprofile.Research,
 		agentprofile.Conductor, agentprofile.Texture, agentprofile.Processor,
 		agentprofile.Reconciler, agentprofile.Email, VerifierRole:
 		return normalized
@@ -347,15 +347,15 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 	return Policy{
 		Defaults: defaults,
 		Roles: map[string]provideriface.LLMSelection{
-			agentprofile.Conductor:  chatGPTMini,
-			agentprofile.Super:      chatGPTForeground,
-			agentprofile.CoSuper:    {Provider: "opencode-go", Model: "deepseek-v4.1-flash", Source: "platform_fallback"},
-			agentprofile.Researcher: chatGPTMini,
-			agentprofile.Texture:    chatGPTWire,
-			agentprofile.Processor:  chatGPTWire,
-			agentprofile.Reconciler: chatGPTWire,
-			VerifierRole:            chatGPTMini,
-			MultimodalVerifierRole:  chatGPTMini,
+			agentprofile.Conductor:   chatGPTMini,
+			agentprofile.Management:  chatGPTForeground,
+			agentprofile.Engineering: {Provider: "opencode-go", Model: "deepseek-v4.1-flash", Source: "platform_fallback"},
+			agentprofile.Research:    chatGPTMini,
+			agentprofile.Texture:     chatGPTWire,
+			agentprofile.Processor:   chatGPTWire,
+			agentprofile.Reconciler:  chatGPTWire,
+			VerifierRole:             chatGPTMini,
+			MultimodalVerifierRole:   chatGPTMini,
 		},
 		Source: "platform_fallback",
 	}

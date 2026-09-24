@@ -112,9 +112,9 @@ func TestExtractCostEntriesSkipsBudgetUsage(t *testing.T) {
 	t.Parallel()
 	// Budget-usage events are cumulative and must not be extracted as per-call.
 	payload, _ := json.Marshal(map[string]any{
-		"phase":                "tool_loop_budget_usage",
-		"input_tokens":         5000,
-		"output_tokens":        2000,
+		"phase":                    "tool_loop_budget_usage",
+		"input_tokens":             5000,
+		"output_tokens":            2000,
 		"activation_input_tokens":  1000,
 		"activation_output_tokens": 500,
 	})
@@ -244,8 +244,8 @@ func TestAggregateByDay(t *testing.T) {
 	t.Parallel()
 	// 2023-11-14 UTC and 2023-11-15 UTC.
 	entries := []CostEntry{
-		{RunID: "run-1", Provider: "openai", Model: "gpt-4o", InputTokens: 1000, OutputTokens: 500, Timestamp: time.Unix(1699977600, 0), Cost: EstimateCall("gpt-4o", 1000, 500)},  // 2023-11-14 16:00 UTC
-		{RunID: "run-2", Provider: "openai", Model: "gpt-4o", InputTokens: 500, OutputTokens: 200, Timestamp: time.Unix(1700064000, 0), Cost: EstimateCall("gpt-4o", 500, 200)},    // 2023-11-15 16:00 UTC
+		{RunID: "run-1", Provider: "openai", Model: "gpt-4o", InputTokens: 1000, OutputTokens: 500, Timestamp: time.Unix(1699977600, 0), Cost: EstimateCall("gpt-4o", 1000, 500)}, // 2023-11-14 16:00 UTC
+		{RunID: "run-2", Provider: "openai", Model: "gpt-4o", InputTokens: 500, OutputTokens: 200, Timestamp: time.Unix(1700064000, 0), Cost: EstimateCall("gpt-4o", 500, 200)},   // 2023-11-15 16:00 UTC
 	}
 	summary := Aggregate(entries)
 	day1, ok := summary.ByDay["2023-11-14"]

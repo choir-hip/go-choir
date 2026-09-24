@@ -8,14 +8,14 @@ import (
 )
 
 const (
-	Conductor  = "conductor"
-	Super      = "management"
-	CoSuper    = "engineering"
-	Researcher = "research"
-	Texture    = "texture"
-	Processor  = "processor"
-	Reconciler = "reconciler"
-	Email      = "email"
+	Conductor   = "conductor"
+	Management  = "management"
+	Engineering = "engineering"
+	Research    = "research"
+	Texture     = "texture"
+	Processor   = "processor"
+	Reconciler  = "reconciler"
+	Email       = "email"
 )
 
 // Policy is the canonical capability, spawn, and message policy for an agent profile.
@@ -45,9 +45,9 @@ func PolicyFor(profile string) (Policy, error) {
 			AllowCoAgentTools:   true,
 			AllowedSpawnTargets: []string{Texture},
 		}, nil
-	case Researcher:
+	case Research:
 		return Policy{
-			Profile:                   Researcher,
+			Profile:                   Research,
 			AllowReadOnlyFiles:        true,
 			AllowResearchTools:        true,
 			AllowEvidenceTools:        true,
@@ -68,8 +68,8 @@ func PolicyFor(profile string) (Policy, error) {
 			Profile:               Texture,
 			AllowMemoryTools:      true,
 			AllowCoAgentTools:     false,
-			AllowedSpawnTargets:   []string{Researcher},
-			AllowedMessageTargets: []string{Researcher, Super},
+			AllowedSpawnTargets:   []string{Research},
+			AllowedMessageTargets: []string{Research, Management},
 		}, nil
 	case Processor:
 		return Policy{
@@ -97,23 +97,23 @@ func PolicyFor(profile string) (Policy, error) {
 		}, nil
 	case Email:
 		return Policy{Profile: Email}, nil
-	case CoSuper:
-		// CoSuper has no static tool authority. The assignment runtime constructs a
-		// fresh per-run registry from the exact capsule-local closed set plus
-		// update_coagent. Message policy allows reports to Super; executability of
-		// those packets is sender-authorized at Super, not granted by packet.kind.
-		return Policy{Profile: CoSuper, AllowedMessageTargets: []string{Super}}, nil
-	case Super:
+	case Engineering:
+		// Engineering has no static tool authority. The assignment runtime constructs a
+		// fresh per-run registry from the exact capsule-local closed set. Message policy
+		// allows reports to Management; executability of those packets is
+		// sender-authorized at Management, not granted by packet.kind.
+		return Policy{Profile: Engineering, AllowedMessageTargets: []string{Management}}, nil
+	case Management:
 		return Policy{
-			Profile:                   Super,
+			Profile:                   Management,
 			AllowReadOnlyFiles:        true,
 			AllowResearchTools:        true,
 			AllowEvidenceTools:        true,
 			AllowMemoryTools:          true,
 			AllowModelDiagnosticTools: true,
 			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       []string{Researcher},
-			AllowedMessageTargets:     []string{Texture, Researcher},
+			AllowedSpawnTargets:       []string{Research},
+			AllowedMessageTargets:     []string{Texture, Research},
 		}, nil
 	default:
 		// Canonical but unlisted profiles (the verifier roles) get a bare
@@ -146,7 +146,7 @@ func (e UnknownProfileError) Error() string {
 func Canonical(profile string) (string, error) {
 	normalized := strings.ToLower(strings.TrimSpace(profile))
 	switch normalized {
-	case Super, CoSuper, Researcher, Texture, Conductor, Processor, Reconciler, Email,
+	case Management, Engineering, Research, Texture, Conductor, Processor, Reconciler, Email,
 		"verifier":
 		return normalized, nil
 	case "verifier-multimodal", "verifier_multimodal":

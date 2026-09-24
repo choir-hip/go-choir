@@ -36,11 +36,11 @@ func promptRoles() []string {
 	return []string{
 		agentprofile.Conductor,
 		agentprofile.Texture,
-		agentprofile.Researcher,
+		agentprofile.Research,
 		agentprofile.Processor,
 		agentprofile.Reconciler,
-		agentprofile.Super,
-		agentprofile.CoSuper,
+		agentprofile.Management,
+		agentprofile.Engineering,
 	}
 }
 

@@ -36,11 +36,11 @@ func bindControlRequestForTest(t *testing.T, s *Store, start types.StartLifecycl
 	return req
 }
 
-func TestBindLifecycleControlDeliveryResearcherAtomicReplayAndPendingExclusion(t *testing.T) {
-	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+func TestBindLifecycleControlDeliveryResearchAtomicReplayAndPendingExclusion(t *testing.T) {
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID = "turn-for-delivery"
-	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-delivery", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-delivery", researchWork.AssignedAgentID, researchWork.WorkItemID)}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	turn, err := s.ApplyTextureTurn(context.Background(), req)
 	if err != nil {
@@ -82,10 +82,10 @@ func TestBindLifecycleControlDeliveryResearcherAtomicReplayAndPendingExclusion(t
 }
 
 func TestBindLifecycleControlDeliveryVersionsAndActivationRefreshFateShare(t *testing.T) {
-	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
 	turnReq := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	turnReq.CommandID = "turn-versioned-refresh"
-	turnReq.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-versioned-refresh", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	turnReq.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-versioned-refresh", researchWork.AssignedAgentID, researchWork.WorkItemID)}
 	setTextureTurnDigest(t, &turnReq, TextureSourceGraphWriteSet{})
 	turn, err := s.ApplyTextureTurn(context.Background(), turnReq)
 	if err != nil {
@@ -96,7 +96,7 @@ func TestBindLifecycleControlDeliveryVersionsAndActivationRefreshFateShare(t *te
 		t.Fatal(err)
 	}
 	stale := bindControlRequestForTest(t, s, start, run, turn.Controls)
-	oldWork, err := s.GetLifecycleWorkItem(context.Background(), start.OwnerID, start.ComputerID, researcherWork.WorkItemID)
+	oldWork, err := s.GetLifecycleWorkItem(context.Background(), start.OwnerID, start.ComputerID, researchWork.WorkItemID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,11 +142,11 @@ func TestBindLifecycleControlDeliveryVersionsAndActivationRefreshFateShare(t *te
 	}
 }
 
-func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *testing.T) {
+func TestBindLifecycleControlDeliveryExactPersistentManagementRemainsNonLifecycle(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	now := time.Now().UTC()
-	superID := "management:" + start.OwnerID
-	if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, Profile: "management", Role: "management", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	managementID := "management:" + start.OwnerID
+	if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: managementID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, Profile: "management", Role: "management", ChannelID: managementID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	packet := textureTurnControlPacket("persistent-super")
@@ -154,13 +154,13 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	workID := "persistent-super-work"
 	turnReq := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	turnReq.CommandID = "turn-persistent-super-delivery"
-	turnReq.Controls = []types.TextureTurnControl{{ControlID: "control-persistent-super", TargetAgentID: superID, TargetWorkItemID: workID, OpenWork: &types.WorkItemRecord{WorkItemID: workID, Objective: "execute exact request", AuthorityProfile: "management", AssignedAgentID: superID}, Packet: packet, Content: "control persistent-super", PayloadDigest: digest}}
+	turnReq.Controls = []types.TextureTurnControl{{ControlID: "control-persistent-super", TargetAgentID: managementID, TargetWorkItemID: workID, OpenWork: &types.WorkItemRecord{WorkItemID: workID, Objective: "execute exact request", AuthorityProfile: "management", AssignedAgentID: managementID}, Packet: packet, Content: "control persistent-super", PayloadDigest: digest}}
 	setTextureTurnDigest(t, &turnReq, TextureSourceGraphWriteSet{})
 	turn, err := s.ApplyTextureTurn(context.Background(), turnReq)
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := types.RunRecord{RunID: "persistent-super-run", OwnerID: start.OwnerID, ComputerID: start.ComputerID, AgentID: superID, AgentProfile: "management", AgentRole: "management", ChannelID: start.InitialDocument.DocID, State: types.RunRunning, Metadata: map[string]any{"assignment_trajectory_id": start.TrajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID}, CreatedAt: now, UpdatedAt: now}
+	run := types.RunRecord{RunID: "persistent-super-run", OwnerID: start.OwnerID, ComputerID: start.ComputerID, AgentID: managementID, AgentProfile: "management", AgentRole: "management", ChannelID: start.InitialDocument.DocID, State: types.RunRunning, Metadata: map[string]any{"assignment_trajectory_id": start.TrajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID}, CreatedAt: now, UpdatedAt: now}
 	if err := s.CreateRun(context.Background(), run); err != nil {
 		t.Fatal(err)
 	}
@@ -170,49 +170,49 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	}
 	stored, err := s.GetRunByOwner(context.Background(), start.OwnerID, run.RunID)
 	if err != nil || stored.TrajectoryID != "" {
-		t.Fatalf("persistent Super promoted to lifecycle: %+v %v", stored, err)
+		t.Fatalf("persistent Management promoted to lifecycle: %+v %v", stored, err)
 	}
 	bindings, ok := stored.Metadata["lifecycle_control_bindings"].([]any)
 	if !ok || len(bindings) != 1 { // JSON decode from OG uses []any.
-		t.Fatalf("persistent Super lacks ordered control bindings: %#v", stored.Metadata["lifecycle_control_bindings"])
+		t.Fatalf("persistent Management lacks ordered control bindings: %#v", stored.Metadata["lifecycle_control_bindings"])
 	}
 	binding, ok := bindings[0].(map[string]any)
 	if !ok || binding["trajectory_id"] != start.TrajectoryID || binding["update_id"] != turn.Controls[0].UpdateID || binding["target_work_item_id"] != workID {
-		t.Fatalf("persistent Super decoded binding mismatch: %#v", bindings[0])
+		t.Fatalf("persistent Management decoded binding mismatch: %#v", bindings[0])
 	}
-	delivered, err := s.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, superID, run.RunID, 10)
+	delivered, err := s.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, managementID, run.RunID, 10)
 	if err != nil || len(delivered) != 1 || delivered[0].Content != "control persistent-super" || delivered[0].Packet.Kind != "execution_request" {
-		t.Fatalf("persistent Super exact delivered payload=%+v err=%v", delivered, err)
+		t.Fatalf("persistent Management exact delivered payload=%+v err=%v", delivered, err)
 	}
 	injectionEnvelope, _ := json.Marshal(map[string]any{
 		"schema": "choir.lifecycle_injection.v1", "packet_type": "coagent_update",
 		"owner_id": start.OwnerID, "computer_id": start.ComputerID, "trajectory_id": start.TrajectoryID,
-		"target_agent_id": superID, "target_run_id": run.RunID,
+		"target_agent_id": managementID, "target_run_id": run.RunID,
 		"updates": []map[string]any{{"update_id": turn.Controls[0].UpdateID}},
 	})
 	injectionMessage, _ := json.Marshal(map[string]any{"role": "user", "content": "Choir authenticated coagent update packet.\n\n" + string(injectionEnvelope)})
 	reportPacket := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_result", Summary: "super progress", Notes: []string{"evidence:progress"}}
 	reportPayloadDigest, _ := ComputeLifecycleUpdatePayloadDigest(reportPacket, "super progress")
 	report := types.QueueLifecycleUpdateRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "queue-super-progress", TrajectoryID: start.TrajectoryID,
-		TargetAgentID: caller.AgentID, ProducerAgentID: superID, ControlBindingID: turn.Controls[0].UpdateID, TargetWorkItemID: start.InitialWork.WorkItemID,
+		TargetAgentID: caller.AgentID, ProducerAgentID: managementID, ControlBindingID: turn.Controls[0].UpdateID, TargetWorkItemID: start.InitialWork.WorkItemID,
 		ConsumedDeliveryUpdateIDs: []string{turn.Controls[0].UpdateID},
 		ProducerUpdateID:          "super-progress-occurrence", UpdateID: "super-progress-result", ChannelID: start.InitialDocument.DocID, Role: "management", SourceRunID: run.RunID,
 		Packet: reportPacket, Content: "super progress", WorkDisposition: types.WorkItemCompleted, WorkItemID: workID, PayloadDigest: reportPayloadDigest}
-	report.CommandDigest, _ = ComputeQueuePersistentSuperReportDigest(report)
+	report.CommandDigest, _ = ComputeQueuePersistentManagementReportDigest(report)
 	if _, err := s.QueueLifecycleUpdate(context.Background(), report); !errors.Is(err, ErrLifecycleInvalidTransition) {
-		t.Fatalf("persistent Super report accepted caller IDs without durable runtime injection: %v", err)
+		t.Fatalf("persistent Management report accepted caller IDs without durable runtime injection: %v", err)
 	}
 	if _, err := s.AppendRunMemoryEntry(context.Background(), types.RunMemoryEntry{
-		RunID: run.RunID, OwnerID: start.OwnerID, AgentID: superID, Kind: types.RunMemoryEntryMessage,
+		RunID: run.RunID, OwnerID: start.OwnerID, AgentID: managementID, Kind: types.RunMemoryEntryMessage,
 		Role: types.RunMemoryRoleRuntimeInjection, Message: injectionMessage, CreatedAt: now,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	queued, err := s.QueueLifecycleUpdate(context.Background(), report)
 	if err != nil || queued.Update == nil || queued.Update.Direction != types.LifecyclePacketDirectionProducerReport || queued.Update.TargetWorkItemID != start.InitialWork.WorkItemID || queued.Update.ControlBindingID != turn.Controls[0].UpdateID {
-		t.Fatalf("persistent Super report = %+v err=%v", queued, err)
+		t.Fatalf("persistent Management report = %+v err=%v", queued, err)
 	}
-	history, historyErr := s.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, superID, run.RunID, 10)
+	history, historyErr := s.ListLifecycleControlsDeliveredToRun(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID, managementID, run.RunID, 10)
 	if historyErr != nil || len(history) != 1 || history[0].Disposition != types.UpdateIncorporated {
 		t.Fatalf("incorporated exact-run delivery history = %+v err=%v", history, historyErr)
 	}
@@ -223,18 +223,18 @@ func TestBindLifecycleControlDeliveryExactPersistentSuperRemainsNonLifecycle(t *
 	conflict := report
 	conflict.Content = "conflicting progress"
 	conflict.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(conflict.Packet, conflict.Content)
-	conflict.CommandDigest, _ = ComputeQueuePersistentSuperReportDigest(conflict)
+	conflict.CommandDigest, _ = ComputeQueuePersistentManagementReportDigest(conflict)
 	if _, err := s.QueueLifecycleUpdate(context.Background(), conflict); !errors.Is(err, ErrLifecycleCommandConflict) {
 		t.Fatalf("super report conflict = %v", err)
 	}
 	consume := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	consume.CommandID = "consume-super-progress"
-	consume.Inbound = []types.TextureTurnInboundDisposition{{TargetAgentID: caller.AgentID, ProducerAgentID: superID,
+	consume.Inbound = []types.TextureTurnInboundDisposition{{TargetAgentID: caller.AgentID, ProducerAgentID: managementID,
 		ProducerUpdateID: report.ProducerUpdateID, UpdateID: report.UpdateID, Disposition: types.UpdateIncorporated,
 		ProducerWorkItemID: workID, WorkDisposition: types.WorkItemCompleted, WorkResultRef: "super-result:complete", Reason: "progress incorporated"}}
 	setTextureTurnDigest(t, &consume, TextureSourceGraphWriteSet{})
 	if _, err := s.ApplyTextureTurn(context.Background(), consume); err != nil {
-		t.Fatalf("consume target-correlated Super report: %v", err)
+		t.Fatalf("consume target-correlated Management report: %v", err)
 	}
 	producerWork, _ := s.GetLifecycleWorkItem(context.Background(), start.OwnerID, start.ComputerID, workID)
 	targetWork, _ := s.GetLifecycleWorkItem(context.Background(), start.OwnerID, start.ComputerID, start.InitialWork.WorkItemID)
@@ -252,10 +252,10 @@ func TestDeliveredLifecycleControlReaderSurvivesStoreRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, start, caller, researcherWork := setupLifecycleTextureTargetFixtureWithStore(t, first)
+	_, start, caller, researchWork := setupLifecycleTextureTargetFixtureWithStore(t, first)
 	request := textureTurnBaseRequest(t, first, start, caller, types.TextureTurnWait)
 	request.CommandID = "turn-delivery-restart"
-	request.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-delivery-restart", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	request.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-delivery-restart", researchWork.AssignedAgentID, researchWork.WorkItemID)}
 	setTextureTurnDigest(t, &request, TextureSourceGraphWriteSet{})
 	turn, err := first.ApplyTextureTurn(context.Background(), request)
 	if err != nil {
@@ -298,17 +298,17 @@ func TestQueueLifecycleUpdateDigestPreservesHistoricalShape(t *testing.T) {
 	if err != nil || compatible != historical {
 		t.Fatalf("historical digest changed: base=%s extended=%s err=%v", historical, compatible, err)
 	}
-	reportDigest, err := ComputeQueuePersistentSuperReportDigest(extended)
+	reportDigest, err := ComputeQueuePersistentManagementReportDigest(extended)
 	if err != nil || reportDigest == historical {
-		t.Fatalf("persistent Super report lacks distinct digest domain: historical=%s report=%s err=%v", historical, reportDigest, err)
+		t.Fatalf("persistent Management report lacks distinct digest domain: historical=%s report=%s err=%v", historical, reportDigest, err)
 	}
 }
 
 func TestListLifecycleControlsDeliveredToRunDoesNotLoadOwnerSnapshot(t *testing.T) {
-	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID = "turn-kind-scoped-delivery"
-	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-kind-scoped", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-kind-scoped", researchWork.AssignedAgentID, researchWork.WorkItemID)}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	turn, err := s.ApplyTextureTurn(context.Background(), req)
 	if err != nil {
@@ -343,10 +343,10 @@ func TestListLifecycleControlsDeliveredToRunDoesNotLoadOwnerSnapshot(t *testing.
 }
 
 func TestCountPendingDeliveredWorkerUpdatesByRun(t *testing.T) {
-	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID = "turn-count-pending-delivery"
-	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-count-pending", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-count-pending", researchWork.AssignedAgentID, researchWork.WorkItemID)}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	turn, err := s.ApplyTextureTurn(context.Background(), req)
 	if err != nil {
@@ -400,10 +400,10 @@ func TestCountPendingDeliveredWorkerUpdatesByRun(t *testing.T) {
 }
 
 func TestListPendingLifecycleUpdatesDoesNotLoadOwnerSnapshot(t *testing.T) {
-	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID = "turn-pending-kind-scoped"
-	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-pending-kind-scoped", researcherWork.AssignedAgentID, researcherWork.WorkItemID)}
+	req.Controls = []types.TextureTurnControl{textureTurnControl(t, "control-pending-kind-scoped", researchWork.AssignedAgentID, researchWork.WorkItemID)}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	if _, err := s.ApplyTextureTurn(context.Background(), req); err != nil {
 		t.Fatal(err)
@@ -422,7 +422,7 @@ func TestListPendingLifecycleUpdatesDoesNotLoadOwnerSnapshot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	pending, err := s.ListPendingLifecycleUpdates(context.Background(), start.OwnerID, start.ComputerID, researcherWork.AssignedAgentID, 10)
+	pending, err := s.ListPendingLifecycleUpdates(context.Background(), start.OwnerID, start.ComputerID, researchWork.AssignedAgentID, 10)
 	if err != nil || len(pending) == 0 {
 		t.Fatalf("kind-scoped pending updates = %+v, %v", pending, err)
 	}

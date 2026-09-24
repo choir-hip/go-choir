@@ -395,8 +395,8 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	}()
 	readinessCapability := &Capability{
 		CapabilityID: "broker-readiness-" + caps.ID, Handle: "broker-readiness", CapsuleID: caps.ID,
-		AgentRunID: "guest-core-readiness", AgentRole: RoleResearcher, TargetCapsule: caps.ID,
-		Verbs: RoleVerbSets[RoleResearcher], ExpiresAt: time.Now().UTC().Add(time.Minute),
+		AgentRunID: "guest-core-readiness", AgentRole: RoleResearch, TargetCapsule: caps.ID,
+		Verbs: RoleVerbSets[RoleResearch], ExpiresAt: time.Now().UTC().Add(time.Minute),
 	}
 	if err := SignCapability(readinessCapability, e.privateKey, "guest-ephemeral"); err != nil {
 		return fmt.Errorf("capsule sign broker readiness capability: %w", err)
@@ -531,15 +531,15 @@ func (e *Executor) MintCapability(agentRunID string, role AgentRole, capsuleID s
 
 // MintCapabilityHandle installs a runtime-precommitted opaque handle after the
 // assignment opener has durably bound its digest. The handle remains usable
-// only by the exact run/capsule pair and is never returned to the parent Super.
+// only by the exact run/capsule pair and is never returned to the parent Management.
 func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsuleID, handle string, ttl time.Duration, slot string) (*Capability, error) {
 	if strings.TrimSpace(agentRunID) == "" || strings.TrimSpace(handle) == "" || handle != strings.TrimSpace(handle) || ttl <= 0 || ttl > 24*time.Hour {
 		return nil, fmt.Errorf("capsule capability requires run identity, canonical opaque handle, and ttl in (0,24h]")
 	}
-	if role != RoleCoSuper && role != RoleResearcher {
+	if role != RoleEngineering && role != RoleResearch {
 		return nil, fmt.Errorf("capsule capability role %q is not grantable", role)
 	}
-	// Slot is part of the minted authority: assigned CoSuper runs carry
+	// Slot is part of the minted authority: assigned Engineering runs carry
 	// implementation or verifier; every other grant carries none. An
 	// arbitrary slot must not mint.
 	switch slot {
@@ -547,12 +547,12 @@ func (e *Executor) MintCapabilityHandle(agentRunID string, role AgentRole, capsu
 	default:
 		return nil, fmt.Errorf("capsule capability slot %q is not grantable", slot)
 	}
-	if role == RoleResearcher && slot != "" {
+	if role == RoleResearch && slot != "" {
 		return nil, fmt.Errorf("capsule capability slot %q on a researcher grant", slot)
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if role == RoleCoSuper {
+	if role == RoleEngineering {
 		if caps, ok := e.capsules[capsuleID]; !ok || caps.State != StateActive {
 			return nil, fmt.Errorf("capsule %s is not active", capsuleID)
 		}
@@ -806,7 +806,7 @@ func (e *Executor) persistReceiptArtifact(kind, ref string, canonical []byte) er
 
 func (e *Executor) PersistGrantedFreezeReceipt(ctx context.Context, agentRunID, handle string) (CapsuleFateReceipt, error) {
 	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
-	if err != nil || capability.AgentRole != RoleCoSuper {
+	if err != nil || capability.AgentRole != RoleEngineering {
 		return CapsuleFateReceipt{}, fmt.Errorf("capsule freeze receipt authority unavailable")
 	}
 	caps.mu.RLock()
@@ -925,7 +925,7 @@ func (e *Executor) OpenGrantedExecutionReceipt(ref string) (GrantedExecutionRece
 
 func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRunID, handle string, refs []string) ([]ExecutionReceipt, error) {
 	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
-	if err != nil || capability.AgentRole != RoleCoSuper {
+	if err != nil || capability.AgentRole != RoleEngineering {
 		return nil, fmt.Errorf("capsule execution evidence unavailable")
 	}
 	caps.mu.RLock()
@@ -1069,12 +1069,12 @@ func (e *Executor) ControlHandle(agentRunID, capsuleID string) (string, error) {
 	return "", fmt.Errorf("capsule control handle unavailable")
 }
 
-func (e *Executor) GrantCoSuper(superRunID, controlHandle, coSuperRunID string, ttl time.Duration) (string, error) {
-	capsuleID, err := e.resolveControl(superRunID, controlHandle)
+func (e *Executor) GrantEngineering(managementRunID, controlHandle, engineeringRunID string, ttl time.Duration) (string, error) {
+	capsuleID, err := e.resolveControl(managementRunID, controlHandle)
 	if err != nil {
 		return "", err
 	}
-	capability, err := e.MintCapability(coSuperRunID, RoleCoSuper, capsuleID, ttl)
+	capability, err := e.MintCapability(engineeringRunID, RoleEngineering, capsuleID, ttl)
 	if err != nil {
 		return "", err
 	}
@@ -1118,7 +1118,7 @@ func (e *Executor) ExtractOwned(agentRunID, handle string) ([]FileChange, error)
 // diff. A frozen capsule may be retried after a later freeze step fails.
 func (e *Executor) ExtractGranted(ctx context.Context, agentRunID, handle string) ([]FileChange, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleCoSuper {
+	if err != nil || capability.AgentRole != RoleEngineering {
 		return nil, fmt.Errorf("capsule granted diff unavailable")
 	}
 	e.mu.RLock()
@@ -1145,14 +1145,14 @@ func (e *Executor) ExtractGranted(ctx context.Context, agentRunID, handle string
 
 func (e *Executor) ResolveGrantedCapsuleID(agentRunID, handle string) (string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleCoSuper {
+	if err != nil || capability.AgentRole != RoleEngineering {
 		return "", fmt.Errorf("capsule granted identity unavailable")
 	}
 	return capability.TargetCapsule, nil
 }
 func (e *Executor) ResolveGrantedWorktreeDigest(ctx context.Context, agentRunID, handle string) (string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleCoSuper {
+	if err != nil || capability.AgentRole != RoleEngineering {
 		return "", fmt.Errorf("capsule granted worktree unavailable")
 	}
 	e.mu.RLock()
@@ -1180,7 +1180,7 @@ func (e *Executor) ResolveGrantedWorktreeDigest(ctx context.Context, agentRunID,
 // verification; it never exposes a host path.
 func (e *Executor) PersistGrantedCandidate(ctx context.Context, agentRunID, handle string) (SourcePreflight, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleCoSuper {
+	if err != nil || capability.AgentRole != RoleEngineering {
 		return SourcePreflight{}, fmt.Errorf("capsule candidate authority unavailable")
 	}
 	e.mu.RLock()
@@ -1231,7 +1231,7 @@ func (e *Executor) PersistGrantedCandidate(ctx context.Context, agentRunID, hand
 
 func (e *Executor) ResolveGrantedSourceSnapshotDigest(agentRunID, handle string) (string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleCoSuper {
+	if err != nil || capability.AgentRole != RoleEngineering {
 		return "", fmt.Errorf("capsule granted source snapshot unavailable")
 	}
 	e.mu.RLock()
@@ -1245,7 +1245,7 @@ func (e *Executor) ResolveGrantedSourceSnapshotDigest(agentRunID, handle string)
 
 func (e *Executor) ResolveGrantedFreezeBindings(agentRunID, handle string) (string, string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleCoSuper {
+	if err != nil || capability.AgentRole != RoleEngineering {
 		return "", "", fmt.Errorf("capsule freeze bindings unavailable")
 	}
 	e.mu.RLock()
@@ -1267,7 +1267,7 @@ func (e *Executor) ResolveGrantedFreezeBindings(agentRunID, handle string) (stri
 
 func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, incomingRoot string) ([]FrozenReleaseFile, string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
-	if err != nil || capability.AgentRole != RoleCoSuper {
+	if err != nil || capability.AgentRole != RoleEngineering {
 		return nil, "", fmt.Errorf("capsule release staging unavailable")
 	}
 	e.mu.RLock()

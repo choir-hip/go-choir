@@ -11,8 +11,8 @@ import (
 
 // LifecycleTextureControlTargetRequest is the runtime-derived identity envelope
 // checked before ApplyTextureTurn may include a downward lifecycle control.
-// TargetWorkItemID is required for an existing Researcher continuation. It may
-// be empty for the persistent-Super opener, which creates the target work in the
+// TargetWorkItemID is required for an existing Research continuation. It may
+// be empty for the persistent-Management opener, which creates the target work in the
 // same future reducer transaction.
 type LifecycleTextureControlTargetRequest struct {
 	OwnerID          string
@@ -26,7 +26,7 @@ type LifecycleTextureControlTargetRequest struct {
 }
 
 // LifecycleTextureControlTargetBinding contains only store-proven authority.
-// A nil TargetWorkItem is valid only for a persistent-Super opener.
+// A nil TargetWorkItem is valid only for a persistent-Management opener.
 type LifecycleTextureControlTargetBinding struct {
 	Trajectory     types.TrajectoryRecord
 	Document       types.Document
@@ -120,23 +120,23 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 		Trajectory: trajectory, Document: document, CallerRun: callerRun, CallerAgent: callerAgent, TargetAgent: targetAgent,
 	}
 
-	exactPersistentSuperID := agentprofile.Super + ":" + ownerID
+	exactPersistentManagementID := agentprofile.Management + ":" + ownerID
 	switch {
-	case req.TargetAgentID == exactPersistentSuperID:
-		if targetAgent.AgentID != exactPersistentSuperID || targetAgent.OwnerID != ownerID || targetAgent.ComputerID != computerID ||
-			strings.TrimSpace(targetAgent.Profile) != agentprofile.Super || strings.TrimSpace(targetAgent.Role) != agentprofile.Super ||
+	case req.TargetAgentID == exactPersistentManagementID:
+		if targetAgent.AgentID != exactPersistentManagementID || targetAgent.OwnerID != ownerID || targetAgent.ComputerID != computerID ||
+			strings.TrimSpace(targetAgent.Profile) != agentprofile.Management || strings.TrimSpace(targetAgent.Role) != agentprofile.Management ||
 			targetAgent.LifecycleVersion != 0 {
-			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("persistent Super target binding mismatch")
+			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("persistent Management target binding mismatch")
 		}
-		binding.TargetProfile = agentprofile.Super
-	case strings.TrimSpace(targetAgent.Profile) == agentprofile.Researcher && strings.TrimSpace(targetAgent.Role) == agentprofile.Researcher:
+		binding.TargetProfile = agentprofile.Management
+	case strings.TrimSpace(targetAgent.Profile) == agentprofile.Research && strings.TrimSpace(targetAgent.Role) == agentprofile.Research:
 		if targetAgent.AgentID != req.TargetAgentID || targetAgent.OwnerID != ownerID || targetAgent.ComputerID != computerID ||
 			targetAgent.LifecycleVersion <= 0 || req.TargetWorkItemID == "" {
-			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("Researcher target requires lifecycle identity and an existing target work item")
+			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("Research target requires lifecycle identity and an existing target work item")
 		}
-		binding.TargetProfile = agentprofile.Researcher
+		binding.TargetProfile = agentprofile.Research
 	default:
-		return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("target must be a bound Researcher or the exact persistent Super")
+		return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("target must be a bound Research or the exact persistent Management")
 	}
 
 	if req.TargetWorkItemID != "" {
@@ -152,7 +152,7 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 		}
 		binding.TargetWorkItem = &work
 	}
-	if binding.TargetProfile == agentprofile.Researcher {
+	if binding.TargetProfile == agentprofile.Research {
 		activeRunID := strings.TrimSpace(targetAgent.ActiveRunID)
 		if activeRunID != "" {
 			targetRun, err := reader.GetLifecycleRun(ctx, ownerID, computerID, activeRunID)
@@ -162,9 +162,9 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 			workItemIDs, bindingErr := lifecycleActivationWorkItemIDs(targetRun.Metadata)
 			if bindingErr != nil || targetRun.RunID != activeRunID || targetRun.OwnerID != ownerID || targetRun.ComputerID != computerID ||
 				targetRun.TrajectoryID != req.TrajectoryID || targetRun.AgentID != req.TargetAgentID ||
-				strings.TrimSpace(targetRun.AgentProfile) != agentprofile.Researcher || strings.TrimSpace(targetRun.AgentRole) != agentprofile.Researcher ||
+				strings.TrimSpace(targetRun.AgentProfile) != agentprofile.Research || strings.TrimSpace(targetRun.AgentRole) != agentprofile.Research ||
 				!targetRun.State.Active() || !containsLifecycleIdentity(workItemIDs, req.TargetWorkItemID) {
-				return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("active Researcher run does not bind the target work")
+				return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("active Research run does not bind the target work")
 			}
 			binding.TargetRun = &targetRun
 		}

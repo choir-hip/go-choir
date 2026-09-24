@@ -49,9 +49,9 @@ type Handler struct {
 	Provider    provideriface.Provider
 
 	wakeTextureControl func(context.Context, types.CoagentSourcePacket)
-	textureEditMu        sync.Mutex
-	textureWakeLocksMu   sync.Mutex
-	textureWakeLocks     map[string]*textureWakeLock
+	textureEditMu      sync.Mutex
+	textureWakeLocksMu sync.Mutex
+	textureWakeLocks   map[string]*textureWakeLock
 }
 
 func (h *Handler) lockTextureWakeScope(ownerID, computerID, docID string) func() {
@@ -320,7 +320,7 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 
 func agentRoleForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Super
+		return agentprofile.Management
 	}
 	if strings.TrimSpace(rec.AgentRole) != "" {
 		configuredRole, _ := agentprofile.Canonical(rec.AgentRole)
@@ -390,7 +390,7 @@ func currentTextureAgentID(docID string) string {
 
 func agentProfileForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Super
+		return agentprofile.Management
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
 		configuredProfile, _ := agentprofile.Canonical(rec.AgentProfile)
@@ -405,5 +405,5 @@ func agentProfileForRun(rec *types.RunRecord) string {
 	if taskType, _ := rec.Metadata["type"].(string); taskType == textureAgentRevisionTaskType {
 		return agentprofile.Texture
 	}
-	return agentprofile.Super
+	return agentprofile.Management
 }

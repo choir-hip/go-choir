@@ -31,11 +31,11 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 	}
 	expected := map[string][]string{
 		agentprofile.Conductor: {"cancel_agent"},
-		agentprofile.Super: append(append(slices.Clone(ordinary),
+		agentprofile.Management: append(append(slices.Clone(ordinary),
 			"update_coagent"), "cancel_co_super_assignment", "report_to_texture"),
-		agentprofile.CoSuper:    {},
-		agentprofile.Researcher: append(slices.Clone(ordinary), "update_coagent"),
-		agentprofile.Texture:    {"get_run_memory_entry"},
+		agentprofile.Engineering: {},
+		agentprofile.Research:    append(slices.Clone(ordinary), "update_coagent"),
+		agentprofile.Texture:     {"get_run_memory_entry"},
 		agentprofile.Processor: append(append(slices.Clone(ordinary), "update_coagent"),
 			"record_wire_processor_decision"),
 		agentprofile.Reconciler: append(slices.Clone(ordinary), "update_coagent"),
@@ -66,12 +66,12 @@ func TestTextureRegistryHasNoGenericCancellationOrCapsuleLifecycleAuthority(t *t
 	}
 }
 
-func TestDelegatedCoSuperCannotReachHostEffectToolsOrCallbacks(t *testing.T) {
+func TestDelegatedEngineeringCannotReachHostEffectToolsOrCallbacks(t *testing.T) {
 	rt := &Runtime{capsuleExecutor: new(capsule.Executor)}
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
-	registry := rt.ToolRegistryForProfile(agentprofile.CoSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.Engineering)
 
 	// Keep the full prohibited authority vocabulary explicit. The exact-set
 	// contract above rejects every unlisted tool as well; this table documents
@@ -107,8 +107,8 @@ func TestDelegatedCoSuperCannotReachHostEffectToolsOrCallbacks(t *testing.T) {
 	}
 }
 
-func TestAssignedCoSuperBuilderIsExactClosedSet(t *testing.T) {
-	registry, err := buildAssignedCoSuperRegistry(nil)
+func TestAssignedEngineeringBuilderIsExactClosedSet(t *testing.T) {
+	registry, err := buildAssignedEngineeringRegistry(nil)
 	if err != nil {
 		t.Fatalf("build assigned registry: %v", err)
 	}
@@ -145,9 +145,9 @@ func registryToolNames(registry *toolregistry.ToolRegistry) []string {
 	return names
 }
 
-func TestAssignedCoSuperSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
+func TestAssignedEngineeringSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
 	registry := toolregistry.MustNewToolRegistry()
-	if err := RegisterAssignedCoSuperTools(registry, &Runtime{}); err != nil {
+	if err := RegisterAssignedEngineeringTools(registry, &Runtime{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := registry.Lookup("assign_co_super"); ok {
@@ -165,18 +165,18 @@ func TestAssignedCoSuperSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
 
 func TestAssignmentIdentityUsesOnlyDocumentRevisionAndKind(t *testing.T) {
 	ownerID, computerID, trajectoryID, revisionID := "owner", "computer", "trajectory", "revision"
-	left := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.CoSuperAssignmentImplementation, "")
-	right := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.CoSuperAssignmentVerification, "candidate")
+	left := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.EngineeringAssignmentImplementation, "")
+	right := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.EngineeringAssignmentVerification, "candidate")
 	if left == right {
 		t.Fatal("assignment kind absent from document assignment identity")
 	}
-	if left == deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, "other-revision", types.CoSuperAssignmentImplementation, "") {
+	if left == deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, "other-revision", types.EngineeringAssignmentImplementation, "") {
 		t.Fatal("admitting revision absent from assignment identity")
 	}
-	if left == deterministicDocumentAssignmentIdentity(ownerID, computerID, "other-trajectory", revisionID, types.CoSuperAssignmentImplementation, "") {
+	if left == deterministicDocumentAssignmentIdentity(ownerID, computerID, "other-trajectory", revisionID, types.EngineeringAssignmentImplementation, "") {
 		t.Fatal("trajectory absent from assignment identity")
 	}
-	if left != deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.CoSuperAssignmentImplementation, "") {
+	if left != deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.EngineeringAssignmentImplementation, "") {
 		t.Fatal("document assignment identity is not deterministic")
 	}
 }
@@ -188,7 +188,7 @@ func TestAssignmentIdentityUsesOnlyDocumentRevisionAndKind(t *testing.T) {
 // rather than silently reusing the original model selection.
 func TestDocumentAssignmentRequestCarriesModelPolicyOverlay(t *testing.T) {
 	req := OpenDocumentAssignmentRequest{
-		Objective: "implement", Kind: types.CoSuperAssignmentImplementation,
+		Objective: "implement", Kind: types.EngineeringAssignmentImplementation,
 		RevisionID: "revision", ModelPolicyOverlayID: "p5-chatgpt-g56luna",
 	}
 	if req.ModelPolicyOverlayID == "" {
@@ -196,33 +196,33 @@ func TestDocumentAssignmentRequestCarriesModelPolicyOverlay(t *testing.T) {
 	}
 }
 
-func TestStartCoagentRunHardRefusesCoSuperForEveryCaller(t *testing.T) {
+func TestStartCoagentRunHardRefusesEngineeringForEveryCaller(t *testing.T) {
 	s, err := openTestStore(filepath.Join(t.TempDir(), "runtime.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
 	now := time.Now().UTC()
-	parent := types.RunRecord{RunID: "parent", AgentID: "management:owner", AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, OwnerID: "owner", ComputerID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
+	parent := types.RunRecord{RunID: "parent", AgentID: "management:owner", AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, OwnerID: "owner", ComputerID: "computer", State: types.RunRunning, CreatedAt: now, UpdatedAt: now}
 	if err := s.CreateRun(context.Background(), parent); err != nil {
 		t.Fatal(err)
 	}
 	rt := &Runtime{store: s, cfg: provideriface.Config{ComputerID: "computer"}}
 	for _, constraints := range []map[string]any{
-		{runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper},
+		{runMetadataAgentProfile: agentprofile.Engineering, runMetadataAgentRole: agentprofile.Engineering},
 		{runMetadataAgentRole: "engineering"},
 	} {
-		if _, err := rt.StartCoagentRun(context.Background(), parent.RunID, "forbidden", parent.OwnerID, constraints); err == nil || !strings.Contains(err.Error(), "refuses all CoSuper") {
-			t.Fatalf("generic CoSuper activation error=%v", err)
+		if _, err := rt.StartCoagentRun(context.Background(), parent.RunID, "forbidden", parent.OwnerID, constraints); err == nil || !strings.Contains(err.Error(), "refuses all Engineering") {
+			t.Fatalf("generic Engineering activation error=%v", err)
 		}
 	}
 }
 
-func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
+func TestAssignedEngineeringPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
 	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
 	rt := &Runtime{}
-	for _, kind := range []types.CoSuperAssignmentKind{types.CoSuperAssignmentImplementation, types.CoSuperAssignmentVerification} {
-		rec := &types.RunRecord{RunID: "assigned", AgentID: "engineering:assigned", AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
+	for _, kind := range []types.EngineeringAssignmentKind{types.EngineeringAssignmentImplementation, types.EngineeringAssignmentVerification} {
+		rec := &types.RunRecord{RunID: "assigned", AgentID: "engineering:assigned", AgentProfile: agentprofile.Engineering, AgentRole: agentprofile.Engineering, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
 		prompt, err := rt.systemPromptForRun(rec)
 		if err != nil {
 			t.Fatal(err)
@@ -231,11 +231,11 @@ func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
 			t.Fatalf("prompt does not name exact %s assignment: %s", kind, prompt)
 		}
 		if !strings.Contains(prompt, "choir.Message") {
-			t.Fatalf("assigned CoSuper prompt omits the in-cell report channel: %s", prompt)
+			t.Fatalf("assigned Engineering prompt omits the in-cell report channel: %s", prompt)
 		}
 		for _, name := range []string{"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "update_coagent", "record_assignment_result"} {
 			if strings.Contains(prompt, name) {
-				t.Fatalf("assigned CoSuper prompt still names retired tool %s: %s", name, prompt)
+				t.Fatalf("assigned Engineering prompt still names retired tool %s: %s", name, prompt)
 			}
 		}
 		if strings.Contains(prompt, "may be added later") || strings.Contains(prompt, "report one precise result through update_coagent") {
@@ -244,32 +244,32 @@ func TestAssignedCoSuperPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
 	}
 }
 
-func TestPersistentSuperReportToolDoesNotDependOnCapsuleExecutor(t *testing.T) {
+func TestPersistentManagementReportToolDoesNotDependOnCapsuleExecutor(t *testing.T) {
 	rt := &Runtime{}
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	registry := rt.ToolRegistryForProfile(agentprofile.Super)
+	registry := rt.ToolRegistryForProfile(agentprofile.Management)
 	if _, ok := registry.Lookup("report_to_texture"); !ok {
-		t.Fatal("persistent Super lacks capsule-independent report_to_texture")
+		t.Fatal("persistent Management lacks capsule-independent report_to_texture")
 	}
 	for _, name := range []string{"assign_co_super", "cancel_co_super_assignment", "spawn_capsule"} {
 		if _, ok := registry.Lookup(name); ok {
-			t.Fatalf("capsule-unavailable Super exposes %s", name)
+			t.Fatalf("capsule-unavailable Management exposes %s", name)
 		}
 	}
 }
 
-// TestRLMAssignedCoSuperOverlayIsSealedGo is Def 2 item 4 schema derivation:
-// under the RLM route the assigned CoSuper model schema keeps capsule_go_eval
+// TestRLMAssignedEngineeringOverlayIsSealedGo is Def 2 item 4 schema derivation:
+// under the RLM route the assigned Engineering model schema keeps capsule_go_eval
 // as the sole capsule-effect entry plus host reconciliation channels, with
 // the JSON exec/file tools removed (subsumed by in-cell choir ops).
-func TestRLMAssignedCoSuperOverlayIsSealedGo(t *testing.T) {
+func TestRLMAssignedEngineeringOverlayIsSealedGo(t *testing.T) {
 	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
 	if !capsule.HostSelectsRLM() {
 		t.Fatal("host route authority did not select RLM")
 	}
-	registry, err := buildAssignedCoSuperRegistry(nil)
+	registry, err := buildAssignedEngineeringRegistry(nil)
 	if err != nil {
 		t.Fatalf("build RLM assigned registry: %v", err)
 	}

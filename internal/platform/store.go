@@ -14,13 +14,13 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
+	db        *sql.DB
 	committer *doltbatch.Committer
 	// corpusDB serves Store B (world-wire/corpus) tables: og_*, platform
 	// texture mirrors, and the publication/provenance/artifact domain. It is
 	// the same pool as db until the authority split deploys a separate
 	// corpus DSN; corpus() returns whichever is configured.
-	corpusDB *sql.DB
+	corpusDB        *sql.DB
 	corpusCommitter *doltbatch.Committer
 	// artifactsRoot is the filesystem CAS root for externalized og_objects
 	// bodies (Move 3). Empty disables externalization — bodies stay inline.

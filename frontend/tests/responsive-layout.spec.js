@@ -86,7 +86,7 @@ async function mockTraceTrajectory(page, options = {}) {
   const trajectory = {
     trajectory_id: trajectoryId,
     title: 'A revise event was triggered for the current texture document. Intent: inspect mobile Trace provenance readability.',
-    subtitle: 'conductor · super',
+    subtitle: 'conductor · management',
     state: 'completed',
     live: false,
     agent_count: 3,
@@ -101,13 +101,13 @@ async function mockTraceTrajectory(page, options = {}) {
   const snapshot = {
     trajectory,
     agents: [
-      { agent_id: 'super', label: 'super', role: 'super', profile: 'foreground' },
-      { agent_id: 'implementation', label: 'implementation co-super', role: 'cosuper', profile: 'worker' },
-      { agent_id: 'verifier', label: 'verifier co-super', role: 'cosuper', profile: 'worker' },
+      { agent_id: 'management', label: 'management', role: 'management', profile: 'foreground' },
+      { agent_id: 'implementation', label: 'implementation engineering', role: 'engineering', profile: 'worker' },
+      { agent_id: 'verifier', label: 'verifier engineering', role: 'engineering', profile: 'worker' },
     ],
     edges: [
-      { from_agent_id: 'super', to_agent_id: 'implementation', label: 'delegates' },
-      { from_agent_id: 'super', to_agent_id: 'verifier', label: 'verifies' },
+      { from_agent_id: 'management', to_agent_id: 'implementation', label: 'delegates' },
+      { from_agent_id: 'management', to_agent_id: 'verifier', label: 'verifies' },
     ],
     moments,
     search: { providers },

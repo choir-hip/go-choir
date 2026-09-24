@@ -19,13 +19,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestUpdateCoagentAcceptsResearcherEvidenceUpdateSourcePacket(t *testing.T) {
+func TestUpdateCoagentAcceptsResearchEvidenceUpdateSourcePacket(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	ownerID := "user-d9-researcher"
 	docID := "doc-d9-researcher"
-	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-researcher", agentprofile.Researcher)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-d9-researcher"), "update_coagent", json.RawMessage(`{
+	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-researcher", agentprofile.Research)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-d9-researcher"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"official source is ready",
@@ -38,7 +38,7 @@ func TestUpdateCoagentAcceptsResearcherEvidenceUpdateSourcePacket(t *testing.T) 
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researcherRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
 	if stored.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 || stored.Packet.Kind != "evidence_update" {
 		t.Fatalf("packet identity = %#v", stored.Packet)
 	}
@@ -63,7 +63,7 @@ func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	const ownerID, docID = "user-producer-work-disposition", "doc-producer-work-disposition"
-	run, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "producer-work-disposition", agentprofile.Researcher)
+	run, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "producer-work-disposition", agentprofile.Research)
 	workID := metadataStringValue(run.Metadata, "lifecycle_work_item_id")
 	execute := func(callID, disposition, summary string) types.CoagentSourcePacket {
 		t.Helper()
@@ -71,7 +71,7 @@ func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
 		if disposition != "" {
 			dispositionField = `,"work_disposition":"` + disposition + `"`
 		}
-		raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(run, callID), "update_coagent", json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"`+summary+`","agent_id":"texture:`+docID+`"`+dispositionField+`,"claims":[{"text":"`+summary+`"}]}`))
+		raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(run, callID), "update_coagent", json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"`+summary+`","agent_id":"texture:`+docID+`"`+dispositionField+`,"claims":[{"text":"`+summary+`"}]}`))
 		if err != nil {
 			t.Fatalf("update_coagent %s: %v", disposition, err)
 		}
@@ -100,19 +100,19 @@ func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
 func TestUpdateCoagentRefusesPresentInvalidWorkDisposition(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
-	run := d9CoagentRun("run-invalid-producer-disposition", "owner-invalid-producer-disposition", "research:invalid", agentprofile.Researcher, "doc-invalid", "")
+	run := d9CoagentRun("run-invalid-producer-disposition", "owner-invalid-producer-disposition", "research:invalid", agentprofile.Research, "doc-invalid", "")
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run))
 	for name, value := range map[string]string{"null": "null", "blank": `" "`, "unknown": `"done"`} {
 		t.Run(name, func(t *testing.T) {
 			raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"invalid","agent_id":"texture:doc-invalid","work_disposition":` + value + `}`)
-			if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(ctx, "update_coagent", raw); err == nil {
+			if _, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(ctx, "update_coagent", raw); err == nil {
 				t.Fatalf("update_coagent accepted invalid work disposition: %s", raw)
 			}
 		})
 	}
 }
 
-func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
+func TestSpawnedLifecycleResearchQueuesOpenAndCompletedUpdates(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
@@ -133,8 +133,8 @@ func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
 		t.Fatalf("create lifecycle parent activation: %v", err)
 	}
 	child, err := rt.StartCoagentRun(ctx, parent.RunID, "research the durable subject", ownerID, map[string]any{
-		runMetadataAgentProfile: agentprofile.Researcher,
-		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataAgentProfile: agentprofile.Research,
+		runMetadataAgentRole:    agentprofile.Research,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
@@ -149,7 +149,7 @@ func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
 		raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"` + disposition + ` lifecycle checkpoint","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","work_disposition":"` + disposition + `","claims":[{"text":"` + disposition + ` lifecycle checkpoint"}]}`)
 		execution := toolExecutionContextForRun(child)
 		execution.ToolCallID = producerUpdateID
-		if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
+		if _, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(
 			toolregistry.WithExecutionContext(ctx, execution),
 			"update_coagent", raw,
 		); err != nil {
@@ -211,34 +211,34 @@ func TestSpawnedLifecycleResearcherQueuesOpenAndCompletedUpdates(t *testing.T) {
 	}
 }
 
-type researcherAdmissionCountingProvider struct {
+type researchAdmissionCountingProvider struct {
 	mu    sync.Mutex
 	calls int
 	stub  *provider.StubProvider
 }
 
-func newResearcherAdmissionCountingProvider() *researcherAdmissionCountingProvider {
-	return &researcherAdmissionCountingProvider{stub: provider.NewStubProvider(0)}
+func newResearchAdmissionCountingProvider() *researchAdmissionCountingProvider {
+	return &researchAdmissionCountingProvider{stub: provider.NewStubProvider(0)}
 }
 
-func (p *researcherAdmissionCountingProvider) Execute(ctx context.Context, rec *types.RunRecord, emit provideriface.EventEmitFunc) error {
+func (p *researchAdmissionCountingProvider) Execute(ctx context.Context, rec *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	p.mu.Lock()
 	p.calls++
 	p.mu.Unlock()
 	return p.stub.Execute(ctx, rec, emit)
 }
 
-func (p *researcherAdmissionCountingProvider) ProviderName() string {
+func (p *researchAdmissionCountingProvider) ProviderName() string {
 	return "researcher-admission-counting"
 }
 
-func (p *researcherAdmissionCountingProvider) Count() int {
+func (p *researchAdmissionCountingProvider) Count() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.calls
 }
 
-func setSynchronousResearcherAdmissionDispatch(rt *Runtime, s *store.Store) {
+func setSynchronousResearchAdmissionDispatch(rt *Runtime, s *store.Store) {
 	rt.SetDispatchActor(func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
 		if kind != "initial_dispatch" {
 			return nil
@@ -254,12 +254,12 @@ func setSynchronousResearcherAdmissionDispatch(rt *Runtime, s *store.Store) {
 	})
 }
 
-func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t *testing.T) {
+func TestLifecycleResearchOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
-	counting := newResearcherAdmissionCountingProvider()
+	counting := newResearchAdmissionCountingProvider()
 	rt.provider = counting
-	setSynchronousResearcherAdmissionDispatch(rt, s)
+	setSynchronousResearchAdmissionDispatch(rt, s)
 	ctx := context.Background()
 	const ownerID, docID = "user-researcher-admission", "doc-researcher-admission"
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
@@ -290,8 +290,8 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 		t.Fatal(err)
 	}
 	child, err := rt.StartCoagentRun(ctx, parent.RunID, "inspect the exact source", ownerID, map[string]any{
-		runMetadataAgentProfile: agentprofile.Researcher,
-		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataAgentProfile: agentprofile.Research,
+		runMetadataAgentRole:    agentprofile.Research,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
@@ -303,14 +303,14 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	}
 	idle, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", child.RunID)
 	if err != nil || idle.State != types.RunPassivated || metadataStringValue(idle.Metadata, "passivated_reason") != "lifecycle_researcher_provider_admission_refused" {
-		t.Fatalf("open-work Researcher is not durably idle: %+v err=%v", idle, err)
+		t.Fatalf("open-work Research is not durably idle: %+v err=%v", idle, err)
 	}
 	work, err := s.GetLifecycleWorkItem(ctx, ownerID, "autoputer-test", workID)
 	if err != nil || work.Status != types.WorkItemOpen {
 		t.Fatalf("open work was changed by admission refusal: %+v err=%v", work, err)
 	}
 	if generic, err := rt.reconcileAssignedWorkItemActor(ctx, []types.WorkItemRecord{work}); err != nil || generic != nil {
-		t.Fatalf("generic reconciliation minted lifecycle Researcher run: %+v err=%v", generic, err)
+		t.Fatalf("generic reconciliation minted lifecycle Research run: %+v err=%v", generic, err)
 	}
 	for range 2 {
 		rt.sweepOpenWorkItemActors(ctx)
@@ -352,7 +352,7 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	}
 	completed, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", activated.RunID)
 	if err != nil || completed.State != types.RunCompleted {
-		t.Fatalf("controlled Researcher did not finish one bounded activation: %+v err=%v", completed, err)
+		t.Fatalf("controlled Research did not finish one bounded activation: %+v err=%v", completed, err)
 	}
 	reportPacket := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "bounded report remains open", Claims: []types.CoagentPacketClaim{{Text: "bounded report remains open"}}}
 	reportContent := "bounded report remains open"
@@ -361,7 +361,7 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "queue-researcher-admission-open-report",
 		TrajectoryID: trajectoryID, UpdateID: "update-researcher-admission-open-report", TargetAgentID: textureAgentID,
 		ProducerAgentID: child.AgentID, ProducerUpdateID: "producer-researcher-admission-open-report", SourceRunID: completed.RunID,
-		ChannelID: docID, Role: agentprofile.Researcher, WorkItemID: workID, WorkDisposition: types.WorkItemOpen,
+		ChannelID: docID, Role: agentprofile.Research, WorkItemID: workID, WorkDisposition: types.WorkItemOpen,
 		PayloadDigest: reportDigest, Packet: reportPacket, Content: reportContent,
 	}
 	report.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(report)
@@ -389,25 +389,25 @@ func TestLifecycleResearcherOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	researcherRuns := 0
+	researchRuns := 0
 	for _, run := range runs {
 		if run.AgentID == child.AgentID {
-			researcherRuns++
+			researchRuns++
 		}
 	}
-	if researcherRuns != 2 {
-		t.Fatalf("Researcher run count=%d want idle initial plus one controlled activation; runs=%+v", researcherRuns, runs)
+	if researchRuns != 2 {
+		t.Fatalf("Research run count=%d want idle initial plus one controlled activation; runs=%+v", researchRuns, runs)
 	}
 }
 
-func TestLifecycleResearcherAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *testing.T) {
+func TestLifecycleResearchAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *testing.T) {
 	rt, s := testRuntime(t)
-	counting := newResearcherAdmissionCountingProvider()
+	counting := newResearchAdmissionCountingProvider()
 	rt.provider = counting
-	fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-retry", "admission-retry")
-	rt.passivateLifecycleResearcherAfterAdmissionError(context.Background(), &fixture.run, errors.New("injected admission store failure after bind"))
+	fixture := bindResearchControlFixture(t, rt, s, "owner-admission-retry", "admission-retry")
+	rt.passivateLifecycleResearchAfterAdmissionError(context.Background(), &fixture.run, errors.New("injected admission store failure after bind"))
 	parked, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, fixture.run.RunID)
-	if err != nil || parked.State != types.RunPassivated || metadataStringValue(parked.Metadata, "passivated_reason") != lifecycleResearcherAdmissionRetryReason {
+	if err != nil || parked.State != types.RunPassivated || metadataStringValue(parked.Metadata, "passivated_reason") != lifecycleResearchAdmissionRetryReason {
 		t.Fatalf("admission failure was not durably retryable: %+v err=%v", parked, err)
 	}
 	var recoveryContents []string
@@ -420,7 +420,7 @@ func TestLifecycleResearcherAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *
 	})
 	rt.Start(context.Background())
 	if len(recoveryContents) == 1 {
-		rec, terminal, resolveErr := rt.ResolveLifecycleResearcherAdmissionRecovery(context.Background(), parked.OwnerID, parked.ComputerID, parked.AgentID, recoveryContents[0], parked.TrajectoryID, fixture.control.AgentID)
+		rec, terminal, resolveErr := rt.ResolveLifecycleResearchAdmissionRecovery(context.Background(), parked.OwnerID, parked.ComputerID, parked.AgentID, recoveryContents[0], parked.TrajectoryID, fixture.control.AgentID)
 		if resolveErr != nil || terminal || rec == nil {
 			t.Fatalf("resolve appended recovery rec=%+v terminal=%v err=%v", rec, terminal, resolveErr)
 		}
@@ -444,12 +444,12 @@ func TestLifecycleResearcherAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *
 	}
 }
 
-func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns(t *testing.T) {
+func TestLifecycleResearchProviderAdmissionFailsClosedForStaleAndCancelledRuns(t *testing.T) {
 	t.Run("stale pending projection", func(t *testing.T) {
 		rt, s := testRuntime(t)
-		counting := newResearcherAdmissionCountingProvider()
+		counting := newResearchAdmissionCountingProvider()
 		rt.provider = counting
-		fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-stale-pending", "admission-stale-pending")
+		fixture := bindResearchControlFixture(t, rt, s, "owner-admission-stale-pending", "admission-stale-pending")
 		stale := fixture.run
 		stale.State = types.RunPending
 		rt.ExecuteActivationSync(context.Background(), &stale)
@@ -459,9 +459,9 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 	})
 	t.Run("stale running projection", func(t *testing.T) {
 		rt, s := testRuntime(t)
-		counting := newResearcherAdmissionCountingProvider()
+		counting := newResearchAdmissionCountingProvider()
 		rt.provider = counting
-		fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-stale-running", "admission-stale-running")
+		fixture := bindResearchControlFixture(t, rt, s, "owner-admission-stale-running", "admission-stale-running")
 		canonical := fixture.run
 		canonical.State = types.RunPending
 		canonical.UpdatedAt = time.Now().UTC()
@@ -475,13 +475,13 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 			t.Fatalf("stale running projection calls=%d state=%s", counting.Count(), fixture.run.State)
 		}
 	})
-	t.Run("legacy version-zero Researcher remains executable", func(t *testing.T) {
+	t.Run("legacy version-zero Research remains executable", func(t *testing.T) {
 		rt, _ := testRuntime(t)
-		counting := newResearcherAdmissionCountingProvider()
+		counting := newResearchAdmissionCountingProvider()
 		rt.provider = counting
-		rec, err := rt.createRunWithMetadata(context.Background(), "legacy Researcher work", "owner-admission-legacy", map[string]any{
-			runMetadataAgentProfile: agentprofile.Researcher,
-			runMetadataAgentRole:    agentprofile.Researcher,
+		rec, err := rt.createRunWithMetadata(context.Background(), "legacy Research work", "owner-admission-legacy", map[string]any{
+			runMetadataAgentProfile: agentprofile.Research,
+			runMetadataAgentRole:    agentprofile.Research,
 			runMetadataAgentID:      "research:admission-legacy",
 		})
 		if err != nil {
@@ -489,16 +489,16 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 		}
 		rt.ExecuteActivationSync(context.Background(), rec)
 		if counting.Count() != 1 || rec.State != types.RunCompleted {
-			t.Fatalf("legacy Researcher calls=%d state=%s", counting.Count(), rec.State)
+			t.Fatalf("legacy Research calls=%d state=%s", counting.Count(), rec.State)
 		}
 	})
 	t.Run("declared lifecycle missing canonical trajectory", func(t *testing.T) {
 		rt, s := testRuntime(t)
-		counting := newResearcherAdmissionCountingProvider()
+		counting := newResearchAdmissionCountingProvider()
 		rt.provider = counting
 		rec, err := rt.createRunWithMetadata(context.Background(), "malformed declared lifecycle control", "owner-admission-missing-trajectory", map[string]any{
-			runMetadataAgentProfile:               agentprofile.Researcher,
-			runMetadataAgentRole:                  agentprofile.Researcher,
+			runMetadataAgentProfile:               agentprofile.Research,
+			runMetadataAgentRole:                  agentprofile.Research,
 			runMetadataAgentID:                    "research:admission-missing-trajectory",
 			runMetadataTrajectoryID:               "missing-canonical-lifecycle-trajectory",
 			"request_source":                      "lifecycle_texture_control",
@@ -517,9 +517,9 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 	})
 	t.Run("cancelled trajectory", func(t *testing.T) {
 		rt, s := testRuntime(t)
-		counting := newResearcherAdmissionCountingProvider()
+		counting := newResearchAdmissionCountingProvider()
 		rt.provider = counting
-		fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-cancelled", "admission-cancelled")
+		fixture := bindResearchControlFixture(t, rt, s, "owner-admission-cancelled", "admission-cancelled")
 		snapshot, err := s.GetLifecycleSnapshot(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, fixture.trajectoryID)
 		if err != nil {
 			t.Fatal(err)
@@ -537,9 +537,9 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 
 	t.Run("admission and passivation store failure is returned to actor", func(t *testing.T) {
 		rt, s := testRuntime(t)
-		counting := newResearcherAdmissionCountingProvider()
+		counting := newResearchAdmissionCountingProvider()
 		rt.provider = counting
-		fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-store-cut", "admission-store-cut")
+		fixture := bindResearchControlFixture(t, rt, s, "owner-admission-store-cut", "admission-store-cut")
 		if err := s.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -551,17 +551,17 @@ func TestLifecycleResearcherProviderAdmissionFailsClosedForStaleAndCancelledRuns
 		}
 	})
 
-	t.Run("legacy version-zero Researcher attached to lifecycle trajectory remains executable", func(t *testing.T) {
+	t.Run("legacy version-zero Research attached to lifecycle trajectory remains executable", func(t *testing.T) {
 		rt, s := testRuntime(t)
-		counting := newResearcherAdmissionCountingProvider()
+		counting := newResearchAdmissionCountingProvider()
 		rt.provider = counting
 		const ownerID, docID, agentID = "owner-admission-legacy-trajectory", "doc-admission-legacy-trajectory", "research:legacy-trajectory"
 		trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 		now := time.Now().UTC()
-		if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+		if err := s.UpsertAgent(context.Background(), types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
 			t.Fatal(err)
 		}
-		rec := types.RunRecord{RunID: "run-admission-legacy-trajectory", AgentID: agentID, AgentProfile: agentprofile.Researcher, AgentRole: agentprofile.Researcher, OwnerID: ownerID, ComputerID: "autoputer-test", ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunPending, CreatedAt: now, UpdatedAt: now}
+		rec := types.RunRecord{RunID: "run-admission-legacy-trajectory", AgentID: agentID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, OwnerID: ownerID, ComputerID: "autoputer-test", ChannelID: docID, TrajectoryID: trajectoryID, State: types.RunPending, CreatedAt: now, UpdatedAt: now}
 		if err := s.CreateRun(context.Background(), rec); err != nil {
 			t.Fatal(err)
 		}
@@ -606,13 +606,13 @@ func TestUpdateCoagentRejectsLegacyFieldsAndExecutionRequestWithoutActions(t *te
 	ctx := context.Background()
 	ownerID := "user-d9-reject"
 	docID := "doc-d9-reject"
-	superRun := d9CoagentRun("run-d9-reject", ownerID, "management:d9", agentprofile.Super, docID, currentTextureAgentID(docID))
+	managementRun := d9CoagentRun("run-d9-reject", ownerID, "management:d9", agentprofile.Management, docID, currentTextureAgentID(docID))
 	for _, raw := range []json.RawMessage{
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy","findings":["old shape"]}`),
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy","evidence_ids":["ev-old"]}`),
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"missing actions","notes":["not executable"]}`),
 	} {
-		if _, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", raw); err == nil {
+		if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw); err == nil {
 			t.Fatalf("update_coagent unexpectedly accepted %s", string(raw))
 		}
 	}
@@ -622,7 +622,7 @@ func TestUpdateCoagentRejectsMalformedExecutionRequestPackets(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	superRun := d9CoagentRun("run-d9-malformed", "user-d9-malformed", "management:d9-malformed", agentprofile.Super, "doc-d9-malformed", currentTextureAgentID("doc-d9-malformed"))
+	managementRun := d9CoagentRun("run-d9-malformed", "user-d9-malformed", "management:d9-malformed", agentprofile.Management, "doc-d9-malformed", currentTextureAgentID("doc-d9-malformed"))
 	validSafety := `"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}`
 	for name, raw := range map[string]json.RawMessage{
 		"missing action type": json.RawMessage(`{
@@ -664,7 +664,7 @@ func TestUpdateCoagentRejectsMalformedExecutionRequestPackets(t *testing.T) {
 			"actions":[{"type":"run_command","objective":"Run the requested command.",` + validSafety + `}]
 		}`),
 	} {
-		if _, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", raw); err == nil {
+		if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw); err == nil {
 			t.Fatalf("%s: update_coagent unexpectedly accepted malformed execution_request", name)
 		}
 	}
@@ -674,7 +674,7 @@ func TestUpdateCoagentRejectsUnsupportedSourceAndSelectorKinds(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	run := d9CoagentRun("run-d9-source-vocab", "user-d9-source-vocab", "research:d9-source-vocab", agentprofile.Researcher, "doc-d9-source-vocab", "")
+	run := d9CoagentRun("run-d9-source-vocab", "user-d9-source-vocab", "research:d9-source-vocab", agentprofile.Research, "doc-d9-source-vocab", "")
 	for name, raw := range map[string]json.RawMessage{
 		"unsupported source kind": json.RawMessage(`{
 			"schema_version":"coagent_source_packet.v1",
@@ -697,7 +697,7 @@ func TestUpdateCoagentRejectsUnsupportedSourceAndSelectorKinds(t *testing.T) {
 			"actions":[{"type":"run_command","objective":"Return impossible evidence.","expected_sources":[{"kind":"magic_oracle","required":true}],"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}}]
 		}`),
 	} {
-		if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "update_coagent", raw); err == nil {
+		if _, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "update_coagent", raw); err == nil {
 			t.Fatalf("%s: update_coagent unexpectedly accepted unsupported source vocabulary", name)
 		}
 	}
@@ -708,8 +708,8 @@ func TestUpdateCoagentCanonicalizesSourceContractAliases(t *testing.T) {
 	d9InstallTools(t, rt)
 	ownerID := "user-d9-source-alias"
 	docID := "doc-d9-source-alias"
-	run, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-source-alias", agentprofile.Researcher)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(run, "call-d9-source-alias"), "update_coagent", json.RawMessage(`{
+	run, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-source-alias", agentprofile.Research)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(run, "call-d9-source-alias"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"source aliases normalize",
@@ -733,7 +733,7 @@ func TestUpdateCoagentCanonicalizesSourceContractAliases(t *testing.T) {
 func TestUpdateCoagentToolSchemaRequiresSourceTargetURIAndVocabularyEnums(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
-	tool, ok := rt.ToolRegistryForProfile(agentprofile.Researcher).Lookup("update_coagent")
+	tool, ok := rt.ToolRegistryForProfile(agentprofile.Research).Lookup("update_coagent")
 	if !ok {
 		t.Fatal("update_coagent tool missing")
 	}
@@ -764,13 +764,13 @@ func TestUpdateCoagentToolSchemaRequiresSourceTargetURIAndVocabularyEnums(t *tes
 	}
 }
 
-func TestUpdateCoagentAcceptsSuperExecutionResultSourcesAndTextureCollatesPacketSourcesOnly(t *testing.T) {
+func TestUpdateCoagentAcceptsManagementExecutionResultSourcesAndTextureCollatesPacketSourcesOnly(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	ownerID := "user-d9-super-result"
 	docID := "doc-d9-super-result"
-	producerRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-result", agentprofile.Researcher)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(producerRun, "call-d9-result"), "update_coagent", json.RawMessage(`{
+	producerRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-result", agentprofile.Research)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(producerRun, "call-d9-result"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"execution_result",
 		"summary":"command, diff, and tests completed",
@@ -817,7 +817,7 @@ func TestLifecycleRunInjectorReadsComputerScopedPendingUpdates(t *testing.T) {
 		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "queue-lifecycle-injector",
 		TrajectoryID: trajectoryID, TargetAgentID: targetAgentID, ProducerAgentID: producerAgentID,
 		ProducerUpdateID: "producer-lifecycle-injector", UpdateID: "update-lifecycle-injector",
-		ChannelID: docID, Role: agentprofile.Researcher, SourceRunID: producerRunID,
+		ChannelID: docID, Role: agentprofile.Research, SourceRunID: producerRunID,
 		WorkItemID: producerWorkID, WorkDisposition: types.WorkItemOpen,
 		Packet: packet, Content: "scoped lifecycle content", Disposition: types.UpdatePending,
 	}
@@ -881,7 +881,7 @@ func TestPendingCoagentUpdatesRejectsLifecycleMarkerAsAuthority(t *testing.T) {
 		UpdateID: "update-legacy-marker-injector", OwnerID: ownerID,
 		AgentID: "research:legacy-marker-injector", TargetAgentID: targetAgentID,
 		ChannelID: "doc-legacy-marker-injector", TrajectoryID: "legacy-trajectory-marker-injector",
-		Role: agentprofile.Researcher,
+		Role: agentprofile.Research,
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update", Summary: "legacy marker update",
@@ -917,20 +917,20 @@ func TestUpdateCoagentRejectsTrajectoryMarkerAsLifecycleAuthority(t *testing.T) 
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 	legacy := d9CoagentRun(
 		"run-legacy-producer-lifecycle-collision", ownerID,
-		"research:legacy-producer-lifecycle-collision", agentprofile.Researcher, docID, "",
+		"research:legacy-producer-lifecycle-collision", agentprofile.Research, docID, "",
 	)
 	legacy.ComputerID, legacy.TrajectoryID = "autoputer-test", trajectoryID
 	legacy.Metadata[runMetadataTrajectoryID] = trajectoryID
 	now := time.Now().UTC()
 	legacy.State, legacy.CreatedAt, legacy.UpdatedAt = types.RunRunning, now, now
-	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: legacy.AgentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: legacy.AgentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("upsert durable legacy producer: %v", err)
 	}
 	if err := s.CreateRunOG(ctx, *legacy); err != nil {
 		t.Fatalf("create durable pre-cutover producer row: %v", err)
 	}
 	raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy producer remains legacy","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","claims":[{"text":"legacy producer remains legacy"}]}`)
-	_, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(
+	_, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(
 		toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(legacy)),
 		"update_coagent", raw,
 	)
@@ -993,7 +993,7 @@ func TestLifecycleRuntimeSubmissionPreservesCanonicalActivationAdmission(t *test
 	const workItemID = "work-runtime-active-run-cas"
 	if err := s.UpsertAgent(ctx, types.AgentRecord{
 		AgentID: agentID, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
-		Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: channelID,
+		Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: channelID,
 	}); err != nil {
 		t.Fatalf("seed researcher agent: %v", err)
 	}
@@ -1002,7 +1002,7 @@ func TestLifecycleRuntimeSubmissionPreservesCanonicalActivationAdmission(t *test
 		CommandID: "command-open-runtime-active-run-cas", TrajectoryID: trajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: workItemID, Objective: "admit exactly one runtime activation",
-			AssignedAgentID: agentID, AuthorityProfile: agentprofile.Researcher,
+			AssignedAgentID: agentID, AuthorityProfile: agentprofile.Research,
 		},
 	}
 	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
@@ -1012,8 +1012,8 @@ func TestLifecycleRuntimeSubmissionPreservesCanonicalActivationAdmission(t *test
 	peer := testPeerRuntime(t, rt, s)
 	runtimes := []*Runtime{rt, peer}
 	baseMetadata := map[string]any{
-		runMetadataAgentID: agentID, runMetadataAgentProfile: agentprofile.Researcher,
-		runMetadataAgentRole: agentprofile.Researcher, runMetadataChannelID: channelID,
+		runMetadataAgentID: agentID, runMetadataAgentProfile: agentprofile.Research,
+		runMetadataAgentRole: agentprofile.Research, runMetadataChannelID: channelID,
 		runMetadataTrajectoryID: trajectoryID, "lifecycle_work_item_id": workItemID,
 	}
 	type result struct {
@@ -1225,18 +1225,18 @@ func d9UpdateID(t *testing.T, raw string) string {
 	return resp.UpdateID
 }
 
-func TestLifecycleResearcherAdmissionErrorPassivationRecoversOnce(t *testing.T) {
+func TestLifecycleResearchAdmissionErrorPassivationRecoversOnce(t *testing.T) {
 	rt, s := testRuntime(t)
-	counting := newResearcherAdmissionCountingProvider()
+	counting := newResearchAdmissionCountingProvider()
 	rt.provider = counting
-	fixture := bindResearcherControlFixture(t, rt, s, "owner-admission-recovery", "admission-recovery")
+	fixture := bindResearchControlFixture(t, rt, s, "owner-admission-recovery", "admission-recovery")
 	ctx := context.Background()
 
 	// Model the retryable provider-admission read/CAS failure after the exact
 	// control bind but before provider entry. The one-shot initial_dispatch may
 	// already be processed, so restart must use a distinct exact occurrence.
-	rt.passivateLifecycleResearcherAfterAdmissionError(ctx, &fixture.run, errors.New("transient admission store outage"))
-	if fixture.run.State != types.RunPassivated || metadataStringValue(fixture.run.Metadata, "passivated_reason") != lifecycleResearcherAdmissionRetryReason {
+	rt.passivateLifecycleResearchAfterAdmissionError(ctx, &fixture.run, errors.New("transient admission store outage"))
+	if fixture.run.State != types.RunPassivated || metadataStringValue(fixture.run.Metadata, "passivated_reason") != lifecycleResearchAdmissionRetryReason {
 		t.Fatalf("retryable admission failure state=%s reason=%q", fixture.run.State, metadataStringValue(fixture.run.Metadata, "passivated_reason"))
 	}
 
@@ -1285,8 +1285,8 @@ func TestUpdateCoagentAcceptsJoinableIdentitySourcesWithoutSchemaChange(t *testi
 	d9InstallTools(t, rt)
 	ownerID := "user-joinable-packet"
 	docID := "doc-joinable-packet"
-	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-packet", agentprofile.Researcher)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-joinable-packet"), "update_coagent", json.RawMessage(`{
+	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-packet", agentprofile.Research)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-joinable-packet"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"freeze identities for supervision",
@@ -1302,7 +1302,7 @@ func TestUpdateCoagentAcceptsJoinableIdentitySourcesWithoutSchemaChange(t *testi
 	if err != nil {
 		t.Fatalf("joinable identity packet rejected: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researcherRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
 	if len(stored.Packet.Sources) != 4 {
 		t.Fatalf("sources = %#v", stored.Packet.Sources)
 	}
@@ -1313,8 +1313,8 @@ func TestUpdateCoagentRejectsUnknownJoinableSourceKind(t *testing.T) {
 	d9InstallTools(t, rt)
 	ownerID := "user-joinable-kind"
 	docID := "doc-joinable-kind"
-	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-kind", agentprofile.Researcher)
-	if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-joinable-kind"), "update_coagent", json.RawMessage(`{
+	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-kind", agentprofile.Research)
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-joinable-kind"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"unknown source kind must remain refused",

@@ -76,7 +76,7 @@ func (c *Capsule) Exec(ctx context.Context, cap *Capability, req ExecRequest) (E
 
 // GoEval evaluates model-authored Go source in the capsule via the broker's
 // go_eval verb. Authorization is the capability's role verb set (go_eval is
-// granted to CoSuper and Researcher), never the raw payload.
+// granted to Engineering and Research), never the raw payload.
 func (c *Capsule) GoEval(ctx context.Context, cap *Capability, req GoEvalRequest) (GoEvalResult, error) {
 
 	if !cap.AgentRole.HasVerb("go_eval") {

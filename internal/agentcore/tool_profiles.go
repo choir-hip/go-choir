@@ -3,10 +3,6 @@ package agentcore
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"os"
-	"strings"
-	"time"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
@@ -15,22 +11,26 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"net/http"
+	"os"
+	"strings"
+	"time"
 )
 
 const (
-	runMetadataAgentProfile       = "agent_profile"
-	runMetadataChannelID          = "channel_id"
-	runMetadataAgentRole          = "agent_role"
-	runMetadataAgentID            = "agent_id"
-	runMetadataModel              = "model"
-	runMetadataDesktopID          = "desktop_id"
-	runMetadataToolCWD            = "tool_cwd"
-	runMetadataOwnerEmail         = "owner_email"
-	runMetadataCoSuperSlot        = "co_super_slot"
-	runMetadataSpawnReused        = "spawn_reused_existing_child"
-	runMetadataProcessorKey       = "processor_key"
-	runMetadataReconcilerScope    = "reconciler_scope"
-	runMetadataExplicitResearcher = "explicit_researcher_request"
+	runMetadataAgentProfile     = "agent_profile"
+	runMetadataChannelID        = "channel_id"
+	runMetadataAgentRole        = "agent_role"
+	runMetadataAgentID          = "agent_id"
+	runMetadataModel            = "model"
+	runMetadataDesktopID        = "desktop_id"
+	runMetadataToolCWD          = "tool_cwd"
+	runMetadataOwnerEmail       = "owner_email"
+	runMetadataEngineeringSlot  = "co_super_slot"
+	runMetadataSpawnReused      = "spawn_reused_existing_child"
+	runMetadataProcessorKey     = "processor_key"
+	runMetadataReconcilerScope  = "reconciler_scope"
+	runMetadataExplicitResearch = "explicit_researcher_request"
 )
 
 func toolExecutionContextForRun(rec *types.RunRecord) toolregistry.ExecutionContext {
@@ -74,7 +74,7 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 
 func agentProfileForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Super
+		return agentprofile.Management
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
 		profile, _ := agentprofile.Canonical(rec.AgentProfile)
@@ -86,7 +86,7 @@ func agentProfileForRun(rec *types.RunRecord) string {
 			return canonicalProfile
 		}
 	}
-	return agentprofile.Super
+	return agentprofile.Management
 }
 
 func runHasProfile(rec *types.RunRecord, profile string) bool {
@@ -100,7 +100,7 @@ func runHasProfile(rec *types.RunRecord, profile string) bool {
 
 func agentRoleForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return agentprofile.Super
+		return agentprofile.Management
 	}
 	if strings.TrimSpace(rec.AgentRole) != "" {
 		role, _ := agentprofile.Canonical(rec.AgentRole)
@@ -245,7 +245,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == agentprofile.Texture {
 		b.WriteString(textureprompts.RunOverlay())
 		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
-			b.WriteString("\n\nLifecycle Texture control authority:\nDo not call spawn_agent. Open each new Researcher atomically inside the successful patch_texture, rewrite_texture, or record_texture_decision transition: add one controls item with open_researcher=true, an objective, and the first typed downward packet. Continue an existing bound Researcher only by target_work_item_id. Agent/work/control/update/target identities and direction are runtime-derived; never author them in packet fields.")
+			b.WriteString("\n\nLifecycle Texture control authority:\nDo not call spawn_agent. Open each new Research atomically inside the successful patch_texture, rewrite_texture, or record_texture_decision transition: add one controls item with open_researcher=true, an objective, and the first typed downward packet. Continue an existing bound Research only by target_work_item_id. Agent/work/control/update/target identities and direction are runtime-derived; never author them in packet fields.")
 		}
 	}
 	if profile == agentprofile.Processor {
@@ -254,10 +254,10 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == agentprofile.Reconciler {
 		b.WriteString(runtimeprompts.ReconcilerRuntimeOverlay())
 	}
-	if profile == agentprofile.Super {
-		b.WriteString(runtimeprompts.SuperRuntimeOverlay())
+	if profile == agentprofile.Management {
+		b.WriteString(runtimeprompts.ManagementRuntimeOverlay())
 	}
-	if profile == agentprofile.CoSuper {
+	if profile == agentprofile.Engineering {
 		if capsule.HostSelectsRLM() {
 			hasSelfDevelopmentOperation := false
 			if rt != nil && rt.selfdevOperations != nil && rec != nil && strings.TrimSpace(rec.ComputerID) != "" {
@@ -266,11 +266,11 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 					hasSelfDevelopmentOperation = err == nil
 				}
 			}
-			b.WriteString(runtimeprompts.RLMCoSuperOverlay(runtimeprompts.RLMCoSuperOverlayOptions{
+			b.WriteString(runtimeprompts.RLMEngineeringOverlay(runtimeprompts.RLMEngineeringOverlayOptions{
 				HasSelfDevelopmentOperation: hasSelfDevelopmentOperation,
 			}))
 		} else {
-			b.WriteString(runtimeprompts.CoSuperRuntimeOverlay())
+			b.WriteString(runtimeprompts.EngineeringRuntimeOverlay())
 		}
 		kind := metadataStringValue(rec.Metadata, "assignment_kind")
 		if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {
@@ -280,7 +280,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			b.WriteString(kind)
 			b.WriteString(" subject_digest=")
 			b.WriteString(metadataStringValue(rec.Metadata, "subject_digest"))
-			if kind == string(types.CoSuperAssignmentVerification) {
+			if kind == string(types.EngineeringAssignmentVerification) {
 				b.WriteString(" candidate_id=")
 				b.WriteString(metadataStringValue(rec.Metadata, "source_candidate_id"))
 				b.WriteString(". This verification capsule contains that exact immutable candidate subject.")
@@ -289,14 +289,14 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			}
 		}
 	}
-	if profile == agentprofile.Researcher {
-		b.WriteString(runtimeprompts.ResearcherRuntimeOverlay())
+	if profile == agentprofile.Research {
+		b.WriteString(runtimeprompts.ResearchRuntimeOverlay())
 	}
 	requesterAgentID := ""
 	textureDeliveryAgentID := ""
 	if rec != nil {
 		requesterAgentID = metadataStringValue(rec.Metadata, "requested_by_agent_id")
-		if profile == agentprofile.Researcher && isTextureAgentID(requesterAgentID) {
+		if profile == agentprofile.Research && isTextureAgentID(requesterAgentID) {
 			textureDeliveryAgentID = requesterAgentID
 		}
 	}
@@ -305,8 +305,8 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		RequesterAgentID:       requesterAgentID,
 		TextureDeliveryAgentID: textureDeliveryAgentID,
 		ChannelID:              channelID,
-		InCellCarrier:          profile == agentprofile.CoSuper && capsule.HostSelectsRLM(),
-		NoReportChannel:        profile == agentprofile.CoSuper && !capsule.HostSelectsRLM(),
+		InCellCarrier:          profile == agentprofile.Engineering && capsule.HostSelectsRLM(),
+		NoReportChannel:        profile == agentprofile.Engineering && !capsule.HostSelectsRLM(),
 	}))
 	return b.String(), nil
 }
@@ -328,14 +328,14 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 
 type registryToolInstaller func(*toolregistry.ToolRegistry) error
 
-// delegatedCoSuperRegistryInputs is deliberately a closed set of assignment
+// delegatedEngineeringRegistryInputs is deliberately a closed set of assignment
 // capabilities. Host self-development, event, updater, materialization,
 // acceptance, route, VM, path-mutation, and owner-decision installers do not
 // belong in this input type, so the delegated registry cannot receive their
 // backing callbacks by configuration accident.
-func buildAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
+func buildAssignedEngineeringRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
 	if capsule.HostSelectsRLM() {
-		return buildRLMAssignedCoSuperRegistry(rt)
+		return buildRLMAssignedEngineeringRegistry(rt)
 	}
 	registry := toolregistry.MustNewToolRegistry()
 	if err := RegisterCapsuleLocalTools(registry, rt); err != nil {
@@ -344,12 +344,12 @@ func buildAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, erro
 	return registry, nil
 }
 
-// buildRLMAssignedCoSuperRegistry is the sealed-Go overlay (Def 2 item 4):
+// buildRLMAssignedEngineeringRegistry is the sealed-Go overlay (Def 2 item 4):
 // capsule_go_eval is the sole JSON envelope — the desk's only tool. Every
 // other affordance is a typed in-cell choir function staging intents for the
 // one reducer: files, commands, messages, spawning, completion, freeze,
 // verify, and bundle inspection.
-func buildRLMAssignedCoSuperRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
+func buildRLMAssignedEngineeringRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	if err := registry.Register(newCapsuleGoEvalTool(rt)); err != nil {
 		return nil, fmt.Errorf("build RLM assigned co-super registry: %w", err)
@@ -394,9 +394,9 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 	return registry, nil
 }
 
-// InstallDefaultAgentTools installs role-bound registries. Super receives only
+// InstallDefaultAgentTools installs role-bound registries. Management receives only
 // the persistent assignment/cancel authority; capsule effects are runtime-owned.
-// CoSuper has an empty static registry. An exact assigned run receives a fresh
+// Engineering has an empty static registry. An exact assigned run receives a fresh
 // closed capsule-local registry; under actuator=rlm the desk is the in-cell
 // carrier (capsule_go_eval only), under actuator=tools it is capsule effects
 // only. Reporting, freeze, and verification are in-cell affordances.
@@ -413,35 +413,35 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	sourceClient := researchtools.NewSourceClientFromEnv()
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
-	superPolicy, err := agentprofile.PolicyFor(agentprofile.Super)
+	managementPolicy, err := agentprofile.PolicyFor(agentprofile.Management)
 	if err != nil {
 		return err
 	}
-	superRegistry, err := rt.buildRegistryForRole(superPolicy, cwd, searchClient, sourceClient, httpClient)
+	managementRegistry, err := rt.buildRegistryForRole(managementPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
-	if err := RegisterCoagentUpdateTools(superRegistry, rt); err != nil {
+	if err := RegisterCoagentUpdateTools(managementRegistry, rt); err != nil {
 		return err
 	}
-	if err := RegisterPersistentSuperReportTools(superRegistry, rt); err != nil {
+	if err := RegisterPersistentManagementReportTools(managementRegistry, rt); err != nil {
 		return err
 	}
 	if rt.capsuleExecutor != nil {
-		if err := RegisterAssignedCoSuperTools(superRegistry, rt); err != nil {
+		if err := RegisterAssignedEngineeringTools(managementRegistry, rt); err != nil {
 			return err
 		}
 	}
-	coSuperRegistry := toolregistry.MustNewToolRegistry()
-	researcherPolicy, err := agentprofile.PolicyFor(agentprofile.Researcher)
+	engineeringRegistry := toolregistry.MustNewToolRegistry()
+	researchPolicy, err := agentprofile.PolicyFor(agentprofile.Research)
 	if err != nil {
 		return err
 	}
-	researcherRegistry, err := rt.buildRegistryForRole(researcherPolicy, cwd, searchClient, sourceClient, httpClient)
+	researchRegistry, err := rt.buildRegistryForRole(researchPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
-	if err := RegisterCoagentUpdateTools(researcherRegistry, rt); err != nil {
+	if err := RegisterCoagentUpdateTools(researchRegistry, rt); err != nil {
 		return err
 	}
 	processorPolicy, err := agentprofile.PolicyFor(agentprofile.Processor)
@@ -494,14 +494,14 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		return err
 	}
 
-	rt.toolRegistry = superRegistry
+	rt.toolRegistry = managementRegistry
 	if rt.toolProfiles == nil {
 		rt.toolProfiles = make(map[string]*toolregistry.ToolRegistry)
 	}
 	rt.toolProfiles[agentprofile.Conductor] = conductorRegistry
-	rt.toolProfiles[agentprofile.Super] = superRegistry
-	rt.toolProfiles[agentprofile.CoSuper] = coSuperRegistry
-	rt.toolProfiles[agentprofile.Researcher] = researcherRegistry
+	rt.toolProfiles[agentprofile.Management] = managementRegistry
+	rt.toolProfiles[agentprofile.Engineering] = engineeringRegistry
+	rt.toolProfiles[agentprofile.Research] = researchRegistry
 	rt.toolProfiles[agentprofile.Processor] = processorRegistry
 	rt.toolProfiles[agentprofile.Reconciler] = reconcilerRegistry
 	rt.toolProfiles[agentprofile.Texture] = textureRegistry

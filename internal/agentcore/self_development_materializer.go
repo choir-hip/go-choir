@@ -134,7 +134,7 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 				SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
 				EventKind: computerevent.EventMaterializationStarted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 				IdempotencyKey: idempotency, RequestCommitment: computerevent.ZeroHead,
-				TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, ActorProfile: agentprofile.Super,
+				TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, ActorProfile: agentprofile.Management,
 				AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
 				ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent, ReducerVersion: computerevent.ReducerVersionV1,
 			}
@@ -298,7 +298,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
 			EventKind: eventKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Super, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
+			ActorProfile: agentprofile.Management, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
 			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
 			ResultingEffectiveCommitment: head.DesiredStateCommitment,
 			ReducerVersion:               computerevent.ReducerVersionV1,
@@ -384,7 +384,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 			EventKind: computerevent.EventCheckpointPublished, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: checkpointEventIdempotency, RequestCommitment: computerevent.ZeroHead,
 			TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Super, AuthorityRef: "platform-control:checkpoint",
+			ActorProfile: agentprofile.Management, AuthorityRef: "platform-control:checkpoint",
 			PayloadCommitment: computerevent.ZeroHead, PrivacyClass: "owner",
 			ProposedEffectRef: checkpoint.Checkpoint.Digest, DecisionRef: operation.DecisionEvent, ReducerVersion: computerevent.ReducerVersionV1,
 		}
@@ -489,7 +489,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 			EventKind: computerevent.EventRouteProjectionUpdated, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: routeEventIdempotency, RequestCommitment: computerevent.ZeroHead,
 			TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Super, AuthorityRef: "vmctl:route-cas",
+			ActorProfile: agentprofile.Management, AuthorityRef: "vmctl:route-cas",
 			PayloadCommitment: computerevent.ZeroHead, PrivacyClass: "owner",
 			ProposedEffectRef: routeCertificateDigest, DecisionRef: operation.DecisionEvent, ReducerVersion: computerevent.ReducerVersionV1,
 		}
@@ -532,7 +532,7 @@ func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation se
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
 			EventKind: computerevent.EventMaterializationFailed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Super, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
+			ActorProfile: agentprofile.Management, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
 			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
 			ReducerVersion: computerevent.ReducerVersionV1,
 		}

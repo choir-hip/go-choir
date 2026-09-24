@@ -23,9 +23,9 @@ const (
 	// terminal progress deadline, not a retry or supervision policy.
 	DefaultActivationBudget = 60 * time.Minute
 
-	// DefaultResearcherCount is the default number of researcher workers
+	// DefaultResearchCount is the default number of researcher workers
 	// the microVM topology should assume when none is configured.
-	DefaultResearcherCount = 3
+	DefaultResearchCount = 3
 
 	// DefaultTextureWakeDebounce is the initial coalescing window for worker
 	// findings before the runtime schedules the next texture synthesis.
@@ -111,7 +111,7 @@ func LoadConfig() Config {
 		ProviderTimeout:     durationOr("RUNTIME_PROVIDER_TIMEOUT", DefaultProviderTimeout),
 		ActivationBudget:    durationOr("RUNTIME_ACTIVATION_BUDGET", DefaultActivationBudget),
 		SupervisionInterval: durationOr("RUNTIME_SUPERVISION_INTERVAL", 5*time.Second),
-		ResearcherCount:     intOr("RUNTIME_RESEARCHER_COUNT", DefaultResearcherCount),
+		ResearchCount:       intOr("RUNTIME_RESEARCHER_COUNT", DefaultResearchCount),
 		TextureWakeDebounce: durationOr("RUNTIME_TEXTURE_WAKE_DEBOUNCE", DefaultTextureWakeDebounce),
 		TextureActorParkIdle: durationOr(
 			"RUNTIME_TEXTURE_ACTOR_PARK_IDLE",

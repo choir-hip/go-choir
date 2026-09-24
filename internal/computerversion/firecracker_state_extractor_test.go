@@ -68,10 +68,10 @@ func (e FirecrackerStateExtractor) Extract(ctx context.Context, request ExtractR
 	}
 
 	type fileEntry struct {
-		relPath  string
-		size     int64
-		sha256   string
-		blobRef  string
+		relPath string
+		size    int64
+		sha256  string
+		blobRef string
 	}
 
 	files := make([]fileEntry, 0)
@@ -121,10 +121,10 @@ func (e FirecrackerStateExtractor) Extract(ctx context.Context, request ExtractR
 	// file_manifest observations
 	for _, f := range files {
 		entry := firecrackerFileManifestEntry{
-			Path:     f.relPath,
-			Size:     f.size,
-			SHA256:   f.sha256,
-			BlobRef:  f.blobRef,
+			Path:    f.relPath,
+			Size:    f.size,
+			SHA256:  f.sha256,
+			BlobRef: f.blobRef,
 		}
 		encoded, err := json.Marshal(entry)
 		if err != nil {

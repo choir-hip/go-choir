@@ -46,10 +46,10 @@ type Scenario struct {
 // ItemID whose Reason contains Substring, and whose LocalVer/RemoteVer
 // VersionIDs match the expected values (empty string matches any).
 type ConflictExpectation struct {
-	ItemID           model.ItemID
-	ReasonContains   string
-	LocalVersionID   model.VersionID
-	RemoteVersionID  model.VersionID
+	ItemID          model.ItemID
+	ReasonContains  string
+	LocalVersionID  model.VersionID
+	RemoteVersionID model.VersionID
 }
 
 // --- builders ------------------------------------------------------------
@@ -185,11 +185,11 @@ func localEditRemoteEditSameFileConflict() Scenario {
 	remote := treeOf([]model.Item{remoteItem}, []model.Version{remoteVer})
 
 	return Scenario{
-		Name:              "2-local-edit-vs-remote-edit-same-file",
-		Remote:            remote,
-		Local:             local,
-		Synced:            synced,
-		ExpectNoActions:   true,
+		Name:            "2-local-edit-vs-remote-edit-same-file",
+		Remote:          remote,
+		Local:           local,
+		Synced:          synced,
+		ExpectNoActions: true,
 		ExpectConflictItems: []ConflictExpectation{
 			{
 				ItemID:          "base_item_1",

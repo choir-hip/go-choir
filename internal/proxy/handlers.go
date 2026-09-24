@@ -772,9 +772,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		h.HandleWS(w, r)
 		return
 	case path == "/api/super-console/ws":
-		h.HandleSuperConsoleWS(w, r)
+		h.HandleManagementConsoleWS(w, r)
 	case path == "/api/terminal/ws":
-		writeJSON(w, http.StatusGone, errorResponse{Error: "terminal app has been replaced by Super Console"})
+		writeJSON(w, http.StatusGone, errorResponse{Error: "terminal app has been replaced by Management Console"})
 		return
 	case path == "/api/universal-wire/stories":
 		h.HandleUniversalWireStories(w, r)
@@ -971,12 +971,12 @@ func (h *Handler) autoputerWSURL() string {
 	return autoputerWSURLForBase(h.autoputerURL.String(), "")
 }
 
-// HandleSuperConsoleWS handles GET /api/super-console/ws. It validates the access JWT
+// HandleManagementConsoleWS handles GET /api/super-console/ws. It validates the access JWT
 // cookie, denies requests with missing or invalid auth without upgrading, and
 // relays WebSocket frames bidirectionally between the client and the autoputer
 // singleton zot PTY endpoint. This allows the browser to connect to zot through
 // the auth-gated proxy without exposing a raw terminal app.
-func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleManagementConsoleWS(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Validate auth BEFORE upgrading.
 	authResult, err := h.authenticate(r)
 	if err != nil {
@@ -1014,7 +1014,7 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	clientW := &wsWriter{conn: clientConn}
 
 	// Step 4: Dial the autoputer terminal WebSocket endpoint.
-	terminalWSURL := h.superConsoleWSURLForTarget(autoputerURL, r.URL.RawQuery)
+	terminalWSURL := h.managementConsoleWSURLForTarget(autoputerURL, r.URL.RawQuery)
 	autoputerHeader := http.Header{}
 	autoputerHeader.Set("X-Authenticated-User", authResult.UserID)
 	if authResult.Email != "" {
@@ -1062,9 +1062,9 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	<-relayDone
 }
 
-// superConsoleWSURLForTarget derives the Super Console WebSocket URL for a specific
+// superConsoleWSURLForTarget derives the Management Console WebSocket URL for a specific
 // autoputer target URL.
-func (h *Handler) superConsoleWSURLForTarget(targetURL, rawQuery string) string {
+func (h *Handler) managementConsoleWSURLForTarget(targetURL, rawQuery string) string {
 	u, err := url.Parse(targetURL)
 	if err != nil {
 		return "ws://127.0.0.1:8085/api/super-console/ws"

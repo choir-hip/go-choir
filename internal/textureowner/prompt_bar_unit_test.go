@@ -97,7 +97,7 @@ func TestHandlePromptBarOperationalProofStartsWithTextureAndNoEffectActor(t *tes
 		t.Fatalf("list runs before texture super request: %v", err)
 	}
 	for _, run := range runs {
-		if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == agentprofile.Super {
+		if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == agentprofile.Management {
 			t.Fatalf("super run appeared before Texture request on prompt-bar trajectory: %+v", run)
 		}
 	}
@@ -253,7 +253,7 @@ func TestHandlePromptBarExplicitEffectPromptStartsWithTextureWithoutEffectActor(
 			t.Fatalf("list runs: %v", err)
 		}
 		for _, run := range runs {
-			if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == agentprofile.Super {
+			if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == agentprofile.Management {
 				t.Fatalf("automatic super run appeared before Texture requested one: %+v", run)
 			}
 		}
@@ -292,7 +292,7 @@ func waitForPromptBarUnitRunTerminal(t *testing.T, rt *Runtime, runID, ownerID s
 	return types.RunRecord{}
 }
 
-func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
+func TestHandlePromptBarResearchMentionDoesNotSetRoutingFlag(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Create a texture document for M3. Ask researcher for a concise finding. Ask super to create a tiny verification note."}`, "user-alice")
@@ -314,8 +314,8 @@ func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
 	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
 		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
 	}
-	if metadataBoolValue(conductor.Metadata, runMetadataExplicitResearcher) {
-		t.Fatalf("conductor metadata must not set %s from prompt text: %+v", runMetadataExplicitResearcher, conductor.Metadata)
+	if metadataBoolValue(conductor.Metadata, runMetadataExplicitResearch) {
+		t.Fatalf("conductor metadata must not set %s from prompt text: %+v", runMetadataExplicitResearch, conductor.Metadata)
 	}
 	if decision.InitialLoopID == "" {
 		t.Fatalf("conductor decision missing initial loop: %+v", decision)
@@ -324,8 +324,8 @@ func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if metadataBoolValue(initialRun.Metadata, runMetadataExplicitResearcher) {
-		t.Fatalf("initial run metadata must not set %s from prompt text: %+v", runMetadataExplicitResearcher, initialRun.Metadata)
+	if metadataBoolValue(initialRun.Metadata, runMetadataExplicitResearch) {
+		t.Fatalf("initial run metadata must not set %s from prompt text: %+v", runMetadataExplicitResearch, initialRun.Metadata)
 	}
 	if initialRun.AgentProfile != agentprofile.Texture || initialRun.AgentRole != agentprofile.Texture {
 		t.Fatalf("initial loop profile = %q/%q, want ordinary texture route", initialRun.AgentProfile, initialRun.AgentRole)

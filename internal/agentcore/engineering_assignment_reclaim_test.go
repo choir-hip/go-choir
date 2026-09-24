@@ -11,33 +11,33 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func seedReclaimAssignmentFrom(t *testing.T, s *store.Store, fixture store.CoSuperAssignmentSeed, ownerID, computerID, assignmentID, capsuleID string) types.CoSuperAssignment {
+func seedReclaimAssignmentFrom(t *testing.T, s *store.Store, fixture store.EngineeringAssignmentSeed, ownerID, computerID, assignmentID, capsuleID string) types.EngineeringAssignment {
 	t.Helper()
 	ctx := context.Background()
 	capability := "opaque-reclaim-" + assignmentID
-	binding := types.CoSuperAssignmentBinding{
+	binding := types.EngineeringAssignmentBinding{
 		OwnerID: fixture.OwnerID, ComputerID: fixture.ComputerID, TrajectoryID: fixture.TrajectoryID,
 		ParentAgentID: fixture.ParentAgentID, ParentRunID: fixture.ParentRunID,
 		ParentDecisionID: fixture.ParentDecisionID, ParentControlID: fixture.ParentControlID,
 		ParentWorkItemID: fixture.ParentWorkID, AssignedWorkItemID: fixture.AssignedWorkIDs[len(assignmentID)%len(fixture.AssignedWorkIDs)],
-		AssignedAgentID: fixture.AssignedAgentIDs[len(assignmentID)%len(fixture.AssignedAgentIDs)], Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+		AssignedAgentID: fixture.AssignedAgentIDs[len(assignmentID)%len(fixture.AssignedAgentIDs)], Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
 		ScopeDigest:           objectgraph.SHA256([]byte("scope:" + assignmentID)),
 		RequestDigest:         objectgraph.SHA256([]byte("request:" + assignmentID)),
-		CapabilityDigest:      store.DigestCoSuperOpaqueCapability(capability),
+		CapabilityDigest:      store.DigestEngineeringOpaqueCapability(capability),
 		ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
 		SubjectDigest:         objectgraph.SHA256([]byte("subject:" + assignmentID)),
 		SourceArtifactRef:     "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
 		Writable:              true, CapsuleID: capsuleID,
-		NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
-		FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 	}
-	open := types.OpenCoSuperAssignmentRequest{
+	open := types.OpenEngineeringAssignmentRequest{
 		CommandID: "open-" + assignmentID, AssignmentID: assignmentID, Binding: binding,
 		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: "test"},
 	}
-	open.CommandDigest, _ = store.ComputeOpenCoSuperAssignmentDigest(open)
-	opened, err := s.OpenCoSuperAssignment(ctx, open)
+	open.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(open)
+	opened, err := s.OpenEngineeringAssignment(ctx, open)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,18 +49,18 @@ func TestReclaimSupersededAssignmentCapsulesRevokesStaleAssignments(t *testing.T
 	ctx := context.Background()
 	ownerID, computerID := "owner-reclaim", rt.TextureComputerID()
 
-	fixture, err := store.SeedCoSuperAssignmentAuthority(s, ownerID, computerID, 1)
+	fixture, err := store.SeedEngineeringAssignmentAuthority(s, ownerID, computerID, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parent := types.RunRecord{
 		RunID: fixture.ParentRunID, OwnerID: ownerID, ComputerID: computerID,
-		AgentID: fixture.ParentAgentID, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super,
+		AgentID: fixture.ParentAgentID, AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management,
 		State: types.RunRunning, Metadata: map[string]any{},
 	}
 
 	stale := seedReclaimAssignmentFrom(t, s, fixture, ownerID, computerID, "assignment-stale", "capsule-stale")
-	if stale.CapsuleDisposition == types.CoSuperCapsuleRevoked {
+	if stale.CapsuleDisposition == types.EngineeringCapsuleRevoked {
 		t.Fatal("seeded assignment should start non-revoked")
 	}
 
@@ -72,7 +72,7 @@ func TestReclaimSupersededAssignmentCapsulesRevokesStaleAssignments(t *testing.T
 		t.Fatalf("reclaim: %v", err)
 	}
 
-	reclaimed, err := s.GetCoSuperAssignment(ctx, ownerID, computerID, stale.AssignmentID, stale.Binding.Attempt)
+	reclaimed, err := s.GetEngineeringAssignment(ctx, ownerID, computerID, stale.AssignmentID, stale.Binding.Attempt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,13 +89,13 @@ func TestReclaimSkipsCurrentAndAlreadyRevoked(t *testing.T) {
 	ctx := context.Background()
 	ownerID, computerID := "owner-reclaim-skip", rt.TextureComputerID()
 
-	fixture, err := store.SeedCoSuperAssignmentAuthority(s, ownerID, computerID, 2)
+	fixture, err := store.SeedEngineeringAssignmentAuthority(s, ownerID, computerID, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parent := types.RunRecord{
 		RunID: fixture.ParentRunID, OwnerID: ownerID, ComputerID: computerID,
-		AgentID: fixture.ParentAgentID, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super,
+		AgentID: fixture.ParentAgentID, AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management,
 		State: types.RunRunning, Metadata: map[string]any{},
 	}
 
@@ -108,7 +108,7 @@ func TestReclaimSkipsCurrentAndAlreadyRevoked(t *testing.T) {
 		t.Fatalf("reclaim: %v", err)
 	}
 
-	currentAfter, err := s.GetCoSuperAssignment(ctx, ownerID, computerID, current.AssignmentID, current.Binding.Attempt)
+	currentAfter, err := s.GetEngineeringAssignment(ctx, ownerID, computerID, current.AssignmentID, current.Binding.Attempt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestReclaimSkipsCurrentAndAlreadyRevoked(t *testing.T) {
 		t.Fatal("current assignment must not be reclaimed")
 	}
 
-	staleAfter, err := s.GetCoSuperAssignment(ctx, ownerID, computerID, stale.AssignmentID, stale.Binding.Attempt)
+	staleAfter, err := s.GetEngineeringAssignment(ctx, ownerID, computerID, stale.AssignmentID, stale.Binding.Attempt)
 	if err != nil {
 		t.Fatal(err)
 	}

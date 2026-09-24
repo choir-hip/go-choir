@@ -49,7 +49,7 @@ const (
 	EventMaterializationFailed   EventKind = "materialization_failed"
 	EventRollbackRequested       EventKind = "rollback_requested"
 	EventRollbackApplied         EventKind = "rollback_applied"
-	EventResearcherUpdate        EventKind = "researcher_update"
+	EventResearchUpdate          EventKind = "researcher_update"
 	EventCheckpointPublished     EventKind = "checkpoint_published"
 	EventRouteProjectionUpdated  EventKind = "route_projection_updated"
 	EventLifecycleObserved       EventKind = "lifecycle_observed"
@@ -67,7 +67,7 @@ var validEventKinds = map[EventKind]struct{}{
 	EventArtifactProduced: {}, EventEffectProposed: {}, EventVerificationRecorded: {},
 	EventEffectAccepted: {}, EventEffectRejected: {}, EventMaterializationStarted: {},
 	EventMaterializationApplied: {}, EventMaterializationFailed: {}, EventRollbackRequested: {},
-	EventRollbackApplied: {}, EventResearcherUpdate: {}, EventCheckpointPublished: {},
+	EventRollbackApplied: {}, EventResearchUpdate: {}, EventCheckpointPublished: {},
 	EventRouteProjectionUpdated: {}, EventLifecycleObserved: {}, EventKeyRotated: {},
 	EventKeyRevoked: {}, EventRecoveryRecorded: {}, EventRestoreRequested: {},
 	EventProjectionBatchRecorded: {}, EventFileRootCommitted: {},

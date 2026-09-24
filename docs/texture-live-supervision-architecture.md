@@ -111,9 +111,9 @@ One transport/provenance envelope, two record semantics:
   `Resolve` is the resolver's act.
 
 `choir.Outcome` folds into `Report`; `choir.Message` demotes to `choir.Note`;
-`choir.Assign` (the synchronous broker path) folds into `Cast`. The retired
-`update_coagent` tool and `assign_co_super` opener are deleted for the four
-desks; `Report` generalizes the evidence write.
+`choir.Assign` (the synchronous broker path) folds into `Cast`. The legacy
+assignment opener is replaced by the document-channel and delegated `Cast`;
+`Report` generalizes the evidence write for all four desks.
 
 ### The commitment ledger
 
@@ -262,9 +262,9 @@ executes, tests, and promotes changes to its own environment.
 | :--- | :--- |
 | Document channel as owner input (M1) | **Landed** 2026-09-23 (deployed `3b780ed2`) |
 | Engineering desk on the yaegi in-cell carrier | **Landed** (M2 partial) |
-| `assign_co_super`, `tell`/`correct`/`roster` side channel | **Deleted** |
+| Legacy assignment opener → document-channel and delegated `Cast` | **Deleted** |
 | Four persistent root desks, semantic-act surface, delegated cast | **Proposed** — R2/R3, under owner review |
 | Commitment ledger, scores, materiality projection | **Proposed** — R2/R4 |
-| `super_controller` replacement, kernel timer for fate sweeps | **Proposed** — R3/K |
+| Management controller replacement, kernel timer for fate sweeps | **Proposed** — R3/K |
 | `actuator=tools` desk path | **Retired target** — one carrier: yaegi cells |
 | `processor`/`reconciler`/`conductor` | **Deferred** — world-wire/system-one decision, out of scope |

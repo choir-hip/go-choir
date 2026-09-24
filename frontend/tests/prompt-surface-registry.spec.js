@@ -367,7 +367,7 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
   await page.locator('[data-desk-sheet-close]').click();
 });
 
-test('Super Console appears in desktop and mobile app switchers while Trace is absent', async ({ page, browser }) => {
+test('Engineering Console appears in desktop and mobile app switchers while Trace is absent', async ({ page, browser }) => {
   await page.goto(BASE_URL);
   await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="trace"]')).toHaveCount(0);
   await openDeskApp(page, 'super-console');

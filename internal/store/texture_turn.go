@@ -223,7 +223,7 @@ func validateTextureTurnShape(req types.ApplyTextureTurnRequest, graph TextureSo
 		}
 	}
 	seenControl := map[string]struct{}{}
-	persistentSuperOpenerCount := 0
+	persistentManagementOpenerCount := 0
 	for _, control := range req.Controls {
 		if _, terminalInSameTurn := seenWork[control.TargetWorkItemID]; terminalInSameTurn {
 			return fmt.Errorf("apply Texture turn: control target work cannot be settled by the same turn")
@@ -250,17 +250,17 @@ func validateTextureTurnShape(req types.ApplyTextureTurnRequest, graph TextureSo
 				return fmt.Errorf("apply Texture turn: opener requires exact work and first typed control packet")
 			}
 			if control.OpenAgent == nil {
-				persistentSuperOpenerCount++
+				persistentManagementOpenerCount++
 				if control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0 {
-					return fmt.Errorf("apply Texture turn: persistent-Super opener requires execution_request actions")
+					return fmt.Errorf("apply Texture turn: persistent-Management opener requires execution_request actions")
 				}
-			} else if control.OpenAgent.AgentID != control.TargetAgentID || control.OpenAgent.Profile != agentprofile.Researcher || control.OpenAgent.Role != agentprofile.Researcher || control.OpenAgent.ChannelID != req.DocumentID || control.OpenWork.AssignedAgentID != control.TargetAgentID || control.OpenWork.AuthorityProfile != agentprofile.Researcher {
-				return fmt.Errorf("apply Texture turn: Researcher opener requires exact runtime-derived agent and work binding")
+			} else if control.OpenAgent.AgentID != control.TargetAgentID || control.OpenAgent.Profile != agentprofile.Research || control.OpenAgent.Role != agentprofile.Research || control.OpenAgent.ChannelID != req.DocumentID || control.OpenWork.AssignedAgentID != control.TargetAgentID || control.OpenWork.AuthorityProfile != agentprofile.Research {
+				return fmt.Errorf("apply Texture turn: Research opener requires exact runtime-derived agent and work binding")
 			}
 		}
 	}
-	if persistentSuperOpenerCount > 1 {
-		return fmt.Errorf("apply Texture turn: at most one persistent-Super opener is allowed")
+	if persistentManagementOpenerCount > 1 {
+		return fmt.Errorf("apply Texture turn: at most one persistent-Management opener is allowed")
 	}
 	return nil
 }
@@ -557,7 +557,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			targetAgent.OwnerID, targetAgent.ComputerID, targetAgent.ComputerID = ownerID, computerID, computerID
 			targetAgent.LifecycleVersion, targetAgent.LastReducerSeq = 1, seq+1
 			targetAgent.CreatedAt, targetAgent.UpdatedAt = now, now
-			if targetAgent.AgentID != control.TargetAgentID || targetAgent.Profile != agentprofile.Researcher || targetAgent.Role != agentprofile.Researcher || targetAgent.ChannelID != req.DocumentID || targetAgent.ActiveRunID != "" {
+			if targetAgent.AgentID != control.TargetAgentID || targetAgent.Profile != agentprofile.Research || targetAgent.Role != agentprofile.Research || targetAgent.ChannelID != req.DocumentID || targetAgent.ActiveRunID != "" {
 				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 			}
 			targetCanonicalID, buildErr := lifecycleCanonicalID(ogKindAgent, ownerID, computerID, targetAgent.AgentID)
@@ -578,7 +578,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			}
 			addCondition(objectgraph.ObjectCondition{CanonicalID: targetAgentObj.CanonicalID})
 			objects = append(objects, targetAgentObj)
-			binding = LifecycleTextureControlTargetBinding{TargetAgent: targetAgent, TargetProfile: agentprofile.Researcher}
+			binding = LifecycleTextureControlTargetBinding{TargetAgent: targetAgent, TargetProfile: agentprofile.Research}
 		} else {
 			validatorWorkID := control.TargetWorkItemID
 			if control.OpenWork != nil {
@@ -603,11 +603,11 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			}
 			addCondition(objectgraph.ObjectCondition{CanonicalID: targetAgentObj.CanonicalID, Exists: true, ExpectedContentHash: targetAgentObj.ContentHash})
 		}
-		// Persistent Super has execution authority, so every continuation (not
+		// Persistent Management has execution authority, so every continuation (not
 		// only its opener) must remain a typed executable request. Validate at
 		// the reducer boundary before constructing any backlog object.
-		if binding.TargetProfile == agentprofile.Super && (control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0) {
-			return types.LifecycleResult{}, fmt.Errorf("apply Texture turn: persistent-Super control requires execution_request actions")
+		if binding.TargetProfile == agentprofile.Management && (control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0) {
+			return types.LifecycleResult{}, fmt.Errorf("apply Texture turn: persistent-Management control requires execution_request actions")
 		}
 		if binding.TargetRun != nil {
 			targetRunObj, targetRun, runErr := s.textureTurnRunObject(ctx, ownerID, computerID, binding.TargetRun.RunID)
@@ -638,11 +638,11 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		} else {
 			openerProfile := binding.TargetProfile
 			switch openerProfile {
-			case agentprofile.Super:
-				if control.OpenAgent != nil || binding.TargetAgent.AgentID != agentprofile.Super+":"+ownerID {
+			case agentprofile.Management:
+				if control.OpenAgent != nil || binding.TargetAgent.AgentID != agentprofile.Management+":"+ownerID {
 					return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 				}
-			case agentprofile.Researcher:
+			case agentprofile.Research:
 				if control.OpenAgent == nil || binding.TargetAgent.AgentID != control.TargetAgentID {
 					return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 				}
@@ -723,11 +723,11 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			Packet: control.Packet, Content: control.Content, CreatedAt: now,
 		}
 		// Scheduling contract (I26): every execution_request bound for the
-		// persistent Super receives one durable computer-scoped arrival ordinal
+		// persistent Management receives one durable computer-scoped arrival ordinal
 		// at mailbox entry so cross-trajectory FIFO selection is restart-safe.
 		// Ordinal allocation rides this turn's conditional batch; a concurrent
 		// allocator conflicts the whole command instead of reusing a number.
-		if packet.Packet.Kind == "execution_request" && control.TargetAgentID == agentprofile.Super+":"+ownerID {
+		if packet.Packet.Kind == "execution_request" && control.TargetAgentID == agentprofile.Management+":"+ownerID {
 			ordinal, ordinalErr := s.nextArrivalOrdinal(ctx, ownerID, computerID)
 			if ordinalErr != nil {
 				return types.LifecycleResult{}, fmt.Errorf("apply Texture turn: allocate arrival ordinal: %w", ordinalErr)

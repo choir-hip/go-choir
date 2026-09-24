@@ -185,9 +185,9 @@ type EmailDraft struct {
 	ProviderMessageID string
 	// AttachmentsJSON is the hash-bound outbound attachment set (JSON array of
 	// {id, filename, content_type, size_bytes, sha256}); covered by VersionHash.
-	AttachmentsJSON   string
-	CreatedAt         string
-	UpdatedAt         string
+	AttachmentsJSON string
+	CreatedAt       string
+	UpdatedAt       string
 }
 
 // EmailApprovalToken binds one approval channel to one exact draft version.
@@ -1216,6 +1216,7 @@ func (s *Store) Stats(ctx context.Context) (StoreStats, error) {
 	}
 	return stats, nil
 }
+
 // ListMessagesOptions configures message listing and pagination.
 type ListMessagesOptions struct {
 	OwnerID string
@@ -1362,6 +1363,7 @@ func (s *Store) ListMessages(ctx context.Context, ownerID, folder string, limit 
 	}
 	return res.Messages, nil
 }
+
 // GetMessage returns an owner-visible message by id.
 func (s *Store) GetMessage(ctx context.Context, ownerID, messageID string) (EmailMessage, error) {
 	db, err := s.mailboxForOwner(ownerID)

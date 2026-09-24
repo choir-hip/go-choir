@@ -114,7 +114,7 @@ func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity 
 	}
 	if entity.Provenance.CreatedBy == "" {
 		entity.Provenance = textureSourceEntityProvenance{
-			CreatedBy:           firstNonEmpty(strings.TrimSpace(rec.AgentID), agentprofile.CoSuper),
+			CreatedBy:           firstNonEmpty(strings.TrimSpace(rec.AgentID), agentprofile.Engineering),
 			RightsScope:         "private_user_source",
 			UntrustedSourceText: true,
 		}
@@ -152,7 +152,7 @@ func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Handler, ownerID, 
 		}
 		return evidenceRecordToSourceEntity(rec)
 	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact", "operation", "receipt", "event_head":
-		return executionEvidenceSourceEntity(key, value, value, agentprofile.CoSuper)
+		return executionEvidenceSourceEntity(key, value, value, agentprofile.Engineering)
 	default:
 		return textureSourceEntity{}
 	}
@@ -218,7 +218,7 @@ func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Handler, owner
 				},
 				Evidence: textureSourceEntityEvidence{State: sourcecontract.EvidenceStateAvailable, ResearchState: "represented"},
 				Provenance: textureSourceEntityProvenance{
-					CreatedBy:           firstNonEmpty(strings.TrimSpace(update.AgentID), agentprofile.CoSuper),
+					CreatedBy:           firstNonEmpty(strings.TrimSpace(update.AgentID), agentprofile.Engineering),
 					RightsScope:         "private_user_source",
 					UntrustedSourceText: true,
 				},
@@ -738,7 +738,7 @@ func executionEvidenceSourceEntity(kind, identity, label, createdBy string) text
 		},
 		Evidence: textureSourceEntityEvidence{State: sourcecontract.EvidenceStateAvailable, ResearchState: "represented"},
 		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           firstNonEmpty(strings.TrimSpace(createdBy), agentprofile.CoSuper),
+			CreatedBy:           firstNonEmpty(strings.TrimSpace(createdBy), agentprofile.Engineering),
 			RightsScope:         "private_user_source",
 			UntrustedSourceText: true,
 		},

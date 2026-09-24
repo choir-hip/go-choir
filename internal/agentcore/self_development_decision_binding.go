@@ -51,7 +51,7 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 		operation.BundleDigest == "" || operation.BundleDigest != event.ProposedEffectRef {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: operation identity mismatch")
 	}
-	if event.SchemaVersion != computerevent.SchemaVersionV1 || event.ActorProfile != agentprofile.Super ||
+	if event.SchemaVersion != computerevent.SchemaVersionV1 || event.ActorProfile != agentprofile.Management ||
 		event.PrivacyClass != "owner" || event.ReducerVersion != computerevent.ReducerVersionV1 ||
 		!computerevent.IsSHA256(event.RequestCommitment) || !computerevent.IsSHA256(event.DecisionRef) {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: event authority contract mismatch")

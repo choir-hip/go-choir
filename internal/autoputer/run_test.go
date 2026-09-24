@@ -22,7 +22,7 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 		SkillsRoot:           "/skills",
 		ProviderTimeout:      7 * time.Second,
 		SupervisionInterval:  3 * time.Second,
-		ResearcherCount:      2,
+		ResearchCount:        2,
 		TextureWakeDebounce:  250 * time.Millisecond,
 		TextureActorParkIdle: 45 * time.Second,
 		VmctlURL:             "http://10.200.60.1:8083",

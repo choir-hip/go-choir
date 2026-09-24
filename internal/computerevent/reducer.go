@@ -28,7 +28,7 @@ type Head struct {
 
 type TransitionInput struct {
 	// TargetStateCommitment is resolved from the immutable proposed effect,
-	// rollback decision, or typed Researcher mutation referenced by the event.
+	// rollback decision, or typed Research mutation referenced by the event.
 	TargetStateCommitment string `json:"target_state_commitment"`
 	// RestoredPriorEffective is set only after a verified MaterializationReceipt
 	// or UpdaterRecoveryReceipt proves the previous effective release is restored.
@@ -124,7 +124,7 @@ func Reduce(current *Head, event Event, input TransitionInput) (Head, error) {
 		next.EffectiveEventHead = digest
 		next.EffectiveStateCommitment = current.DesiredStateCommitment
 		next.PendingTransitionRef = ""
-	case EventResearcherUpdate:
+	case EventResearchUpdate:
 		if current.PendingTransitionRef != "" {
 			return Head{}, ErrPendingTransition
 		}

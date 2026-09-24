@@ -16,8 +16,8 @@ type TextureWorkflowVerificationOptions struct {
 	PromptSubmissionID          string
 	RequireResearchUpdates      bool
 	RequireWorkerUpdates        bool
-	RequirePersistentSuper      bool
-	RequireCoSuper              bool
+	RequirePersistentManagement bool
+	RequireEngineering          bool
 	RequireSearchToolEvent      bool
 	RequireArtifactWriteEvent   bool
 	RequireVerificationCmdEvent bool
@@ -111,14 +111,14 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 		guarantee("worker run creation is backed by parent tool results")
 	}
 
-	if opts.RequirePersistentSuper {
-		if err := verifyPersistentSuperPath(ownerID, trajectoryRuns); err != nil {
+	if opts.RequirePersistentManagement {
+		if err := verifyPersistentManagementPath(ownerID, trajectoryRuns); err != nil {
 			return report, err
 		}
 		guarantee("privileged execution flowed through persistent super")
 	}
-	if opts.RequireCoSuper {
-		if err := verifyCoSuperParents(trajectoryRuns); err != nil {
+	if opts.RequireEngineering {
+		if err := verifyEngineeringParents(trajectoryRuns); err != nil {
 			return report, err
 		}
 		guarantee("co-super execution was spawned only by super")
@@ -151,7 +151,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if opts.RequireResearchUpdates {
 		researchUpdateCount := 0
 		for _, update := range updates {
-			if update.Role != agentprofile.Researcher {
+			if update.Role != agentprofile.Research {
 				continue
 			}
 			researchUpdateCount++
@@ -170,7 +170,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if opts.RequireWorkerUpdates {
 		workerUpdateCount := 0
 		for _, update := range updates {
-			if update.Role == agentprofile.Researcher {
+			if update.Role == agentprofile.Research {
 				continue
 			}
 			if !textureAgentIDMatchesDoc(update.TargetAgentID, doc.DocID) || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
@@ -240,7 +240,7 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 		}
 		if agentProfileForRun(&parent) == agentprofile.Texture {
 			switch agentProfileForRun(&run) {
-			case agentprofile.Researcher:
+			case agentprofile.Research:
 			default:
 				return fmt.Errorf("texture run %s directly delegated to disallowed %s run %s", parent.RunID, agentProfileForRun(&run), run.RunID)
 			}
@@ -259,10 +259,10 @@ func workerUpdatesForTextureDoc(updates []types.CoagentSourcePacket, docID strin
 	return out
 }
 
-func verifyPersistentSuperPath(ownerID string, runs []types.RunRecord) error {
-	wantAgentID := persistentSuperAgentID(ownerID)
+func verifyPersistentManagementPath(ownerID string, runs []types.RunRecord) error {
+	wantAgentID := persistentManagementAgentID(ownerID)
 	for _, run := range runs {
-		if agentProfileForRun(&run) != agentprofile.Super {
+		if agentProfileForRun(&run) != agentprofile.Management {
 			continue
 		}
 		if run.AgentID != wantAgentID {
@@ -278,24 +278,24 @@ func verifyPersistentSuperPath(ownerID string, runs []types.RunRecord) error {
 	return fmt.Errorf("missing persistent super inbox run requested by texture")
 }
 
-func verifyCoSuperParents(runs []types.RunRecord) error {
+func verifyEngineeringParents(runs []types.RunRecord) error {
 	runByID := make(map[string]types.RunRecord, len(runs))
-	coSuperCount := 0
+	engineeringCount := 0
 	for _, run := range runs {
 		runByID[run.RunID] = run
 	}
 	for _, run := range runs {
-		if agentProfileForRun(&run) != agentprofile.CoSuper {
+		if agentProfileForRun(&run) != agentprofile.Engineering {
 			continue
 		}
-		coSuperCount++
+		engineeringCount++
 		parent, ok := runByID[run.RequestedByRunID]
 		parentProfile := agentProfileForRun(&parent)
-		if !ok || parentProfile != agentprofile.Super {
+		if !ok || parentProfile != agentprofile.Management {
 			return fmt.Errorf("co-super run %s parent profile = %q, want super", run.RunID, parentProfile)
 		}
 	}
-	if coSuperCount == 0 {
+	if engineeringCount == 0 {
 		return fmt.Errorf("missing co-super run")
 	}
 	return nil
@@ -321,11 +321,11 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 			if !isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 				return fmt.Errorf("child Texture run %s is not a Texture agent revision", run.RunID)
 			}
-		case parentProfile == agentprofile.Texture && childProfile == agentprofile.Researcher:
+		case parentProfile == agentprofile.Texture && childProfile == agentprofile.Research:
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("researcher run %s lacks parent texture spawn_agent result", run.RunID)
 			}
-		case parentProfile == agentprofile.Super && (childProfile == agentprofile.CoSuper || childProfile == agentprofile.Researcher):
+		case parentProfile == agentprofile.Management && (childProfile == agentprofile.Engineering || childProfile == agentprofile.Research):
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("%s run %s lacks parent super spawn_agent result", childProfile, run.RunID)
 			}

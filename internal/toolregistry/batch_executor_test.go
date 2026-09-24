@@ -134,11 +134,11 @@ func TestExecuteToolBatchSideEffectSkipPolicies(t *testing.T) {
 		name, profile, tool, args string
 		notice                    bool
 	}{
-		{"super bash", agentprofile.Super, "bash", `{"command":"echo x"}`, false},
-		{"cosuper bash", agentprofile.CoSuper, "bash", `{"command":"echo x"}`, false},
-		{"super co-super spawn", agentprofile.Super, "spawn_agent", `{"profile":"engineering","slot":"implementation","channel_id":"c"}`, false},
+		{"super bash", agentprofile.Management, "bash", `{"command":"echo x"}`, false},
+		{"cosuper bash", agentprofile.Engineering, "bash", `{"command":"echo x"}`, false},
+		{"super co-super spawn", agentprofile.Management, "spawn_agent", `{"profile":"engineering","slot":"implementation","channel_id":"c"}`, false},
 		{"texture researcher", agentprofile.Texture, "spawn_agent", `{"profile":"research","channel_id":"c","objective":"find facts"}`, true},
-		{"update", agentprofile.Researcher, "update_coagent", `{"summary":"x"}`, false},
+		{"update", agentprofile.Research, "update_coagent", `{"summary":"x"}`, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -218,7 +218,7 @@ func TestExecuteToolBatchInstallsProviderToolCallID(t *testing.T) {
 	}
 }
 
-func TestExecuteToolBatchAssignedCoSuperAdmissionGrammar(t *testing.T) {
+func TestExecuteToolBatchAssignedEngineeringAdmissionGrammar(t *testing.T) {
 	registry := NewToolRegistry()
 	var executed []string
 	_ = registry.Register(Tool{Name: "capsule_go_eval", Func: func(_ context.Context, args json.RawMessage) (string, error) {

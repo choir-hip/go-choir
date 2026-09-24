@@ -78,7 +78,7 @@ func buildInstallChain(t *testing.T, artifactsRoot, computerID string) []string 
 		}
 		kind := computerevent.EventGenesisImported
 		if seq > 1 {
-			kind = computerevent.EventResearcherUpdate
+			kind = computerevent.EventResearchUpdate
 		}
 		event := computerevent.Event{
 			SchemaVersion:                    computerevent.SchemaVersionV1,

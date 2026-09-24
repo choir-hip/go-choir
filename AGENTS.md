@@ -13,6 +13,17 @@ The README is the open-source front door; this file is the operating contract,
 and [docs/choir-doctrine.md](docs/choir-doctrine.md) is the normative
 architecture. Do not let this file drift into doctrine.
 
+## Desk Ontology
+
+The persistent root RLM desks are **Texture**, **management**, **engineering**,
+and **research**. Texture is the sole writer of canonical document revisions;
+management owns computer-wide coherence and admits engineering through delegated
+casts; engineering performs capsule-bound mutation; research has read-only
+world-evidence authority. The commitment ledger is the durable substrate:
+semantic acts record commitments and evidence on the tape, while Texture renders
+that ledger into the owner-facing supervision surface. Use the desk-specific
+in-cell module surface rather than legacy tool-call channels.
+
 Before authoring or executing any mission Definition, read
 [docs/standing-questions.md](docs/standing-questions.md) — the pre-flight
 question set (decision provenance, settled-decision conformance, deletion

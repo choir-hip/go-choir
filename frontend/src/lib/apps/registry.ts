@@ -241,9 +241,9 @@ export const APP_REGISTRY = [
   },
   {
     id: 'super-console',
-    name: 'Super Console',
+    name: 'Engineering Console',
     icon: '⌘',
-    description: 'zot repair console',
+    description: 'engineering repair console',
     component: () => import('../SuperConsoleApp.svelte'),
     launcher: { desk: true, desktopIcon: true, mobileSwitcher: true, order: 140 },
     window: { singleton: true, heavy: true },

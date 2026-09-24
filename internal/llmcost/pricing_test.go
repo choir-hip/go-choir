@@ -36,7 +36,7 @@ func TestLookupPricingDatedSnapshot(t *testing.T) {
 	t.Parallel()
 	// Dated OpenAI snapshots should resolve to the base pricing entry.
 	cases := []struct {
-		query    string
+		query     string
 		baseModel string
 	}{
 		{"gpt-4-0613", "gpt-4"},

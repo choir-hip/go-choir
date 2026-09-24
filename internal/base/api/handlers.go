@@ -102,10 +102,10 @@ func (h *Handler) Routes() http.Handler {
 
 // authResult holds the authenticated identity for a request.
 type authResult struct {
-	UserID  string
-	Email   string
-	KeyID   string
-	Scopes  []string
+	UserID string
+	Email  string
+	KeyID  string
+	Scopes []string
 }
 
 // authenticate validates the Bearer token API key and returns the identity.
@@ -368,10 +368,10 @@ func (h *Handler) handleGetItem(w http.ResponseWriter, r *http.Request) {
 // --- GET /api/base/items/{id}/status ------------------------------------
 
 type statusResponse struct {
-	ItemID    model.ItemID  `json:"item_id"`
+	ItemID    model.ItemID    `json:"item_id"`
 	State     model.SyncState `json:"state"`
 	VersionID model.VersionID `json:"version_id,omitempty"`
-	UpdatedAt time.Time     `json:"updated_at,omitempty"`
+	UpdatedAt time.Time       `json:"updated_at,omitempty"`
 }
 
 // handleGetStatus returns a derived sync status for an item. Without a local

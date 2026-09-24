@@ -86,9 +86,9 @@ func DefaultOwnerResolver(r *http.Request) string {
 //   - GET /api/trace/events?run_id=...[&limit=N]   list events for a run
 //   - GET /api/trace/events/{id}                   single event with parent chain
 type HTTPHandler struct {
-	queries   *Queries
-	owner     OwnerResolver
-	maxLimit  int
+	queries      *Queries
+	owner        OwnerResolver
+	maxLimit     int
 	defaultLimit int
 }
 
@@ -201,7 +201,7 @@ type traceEventListResponse struct {
 }
 
 type traceEventDetailResponse struct {
-	Event      *Event  `json:"event"`
+	Event       *Event  `json:"event"`
 	ParentChain []Event `json:"parent_chain,omitempty"`
 }
 

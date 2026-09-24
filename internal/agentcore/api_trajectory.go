@@ -73,7 +73,7 @@ func writeLifecycleAPIError(w http.ResponseWriter, err error) {
 // answer open obligations from durable state alone.
 func (h *APIHandler) HandleTrajectoryDetail(w http.ResponseWriter, r *http.Request) {
 	if capsuleEvidencePathCandidate(r.URL.EscapedPath()) {
-		h.HandleCoSuperCapsuleEvidence(w, r)
+		h.HandleEngineeringCapsuleEvidence(w, r)
 		return
 	}
 	if _, ok := trajectoryCancelIDFromPath(r.URL.EscapedPath()); ok || r.Method == http.MethodPost {
@@ -287,7 +287,7 @@ func canonicalCapsuleEvidenceSegment(raw string) (string, bool) {
 	return value, true
 }
 
-func coSuperCapsuleEvidenceRoute(r *http.Request) (trajectoryID, assignmentID string, attempt uint64, ok bool) {
+func engineeringCapsuleEvidenceRoute(r *http.Request) (trajectoryID, assignmentID string, attempt uint64, ok bool) {
 	const prefix = "/api/trajectories/"
 	escapedPath := r.URL.EscapedPath()
 	if !strings.HasPrefix(escapedPath, prefix) {
@@ -320,10 +320,10 @@ func coSuperCapsuleEvidenceRoute(r *http.Request) (trajectoryID, assignmentID st
 	return trajectoryID, assignmentID, attempt, true
 }
 
-// HandleCoSuperCapsuleEvidence serves a bounded, manually sanitized point
+// HandleEngineeringCapsuleEvidence serves a bounded, manually sanitized point
 // projection from one durable ObjectGraph snapshot. It never opens the live
 // capsule executor or a raw receipt endpoint.
-func (h *APIHandler) HandleCoSuperCapsuleEvidence(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) HandleEngineeringCapsuleEvidence(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -333,7 +333,7 @@ func (h *APIHandler) HandleCoSuperCapsuleEvidence(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	trajectoryID, assignmentID, attempt, ok := coSuperCapsuleEvidenceRoute(r)
+	trajectoryID, assignmentID, attempt, ok := engineeringCapsuleEvidenceRoute(r)
 	if !ok {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid capsule evidence route"})
 		return
@@ -343,13 +343,13 @@ func (h *APIHandler) HandleCoSuperCapsuleEvidence(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "capsule evidence unavailable"})
 		return
 	}
-	evidence, loadErr := h.rt.Store().GetCoSuperCapsuleEvidence(r.Context(), ownerID, computerID, trajectoryID, assignmentID, attempt)
+	evidence, loadErr := h.rt.Store().GetEngineeringCapsuleEvidence(r.Context(), ownerID, computerID, trajectoryID, assignmentID, attempt)
 	switch {
 	case loadErr == nil:
 		writeAPIJSON(w, http.StatusOK, evidence)
 	case errors.Is(loadErr, store.ErrNotFound):
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "capsule evidence not found"})
-	case errors.Is(loadErr, store.ErrCoSuperEvidenceTooLarge):
+	case errors.Is(loadErr, store.ErrEngineeringEvidenceTooLarge):
 		writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiError{Error: "capsule evidence exceeds response bounds"})
 	default:
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "capsule evidence unavailable"})

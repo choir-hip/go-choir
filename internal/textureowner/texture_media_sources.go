@@ -326,7 +326,7 @@ func sourceServiceItemRefToSourceEntity(itemID, contextText string) textureSourc
 			ResearchState: "represented",
 		},
 		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           agentprofile.Researcher,
+			CreatedBy:           agentprofile.Research,
 			RightsScope:         "source_service_projection",
 			UntrustedSourceText: true,
 		},
@@ -364,7 +364,7 @@ func contentItemRefToSourceEntity(item types.ContentItem) textureSourceEntity {
 			ResearchState: "represented",
 		},
 		Provenance: textureSourceEntityProvenance{
-			CreatedBy:           agentprofile.Researcher,
+			CreatedBy:           agentprofile.Research,
 			RightsScope:         "private_user_source",
 			UntrustedSourceText: true,
 		},

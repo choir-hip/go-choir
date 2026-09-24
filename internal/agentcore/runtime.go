@@ -73,7 +73,7 @@ type Runtime struct {
 	health    types.RuntimeHealthState
 	// bootInProgress is set only while Runtime.Start is executing. Health
 	// probes that run while HTTP is already up must not JSON_EXTRACT/list
-	// og_objects until boot sweeps finish; they contend with Super rewarm
+	// og_objects until boot sweeps finish; they contend with Management rewarm
 	// and OOM the 4 GiB guest. Default false so tests and post-boot health
 	// still count durable running processors.
 	bootInProgress atomic.Bool
@@ -124,7 +124,7 @@ type Runtime struct {
 		ResolveExecutionReceipts([]string) ([]capsule.ExecutionReceipt, error)
 	}
 	assignmentLookup interface {
-		GetCoSuperAssignment(context.Context, string, string, string, uint64) (types.CoSuperAssignment, error)
+		GetEngineeringAssignment(context.Context, string, string, string, uint64) (types.EngineeringAssignment, error)
 	}
 	assignmentRuntime           assignmentCapsuleRuntime
 	bootLog                     *bootLogRing
@@ -147,13 +147,13 @@ type Runtime struct {
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
 	selfdevStartMu              sync.Mutex
-	// superReconcileMu serializes persistent-Super creation across every
+	// superReconcileMu serializes persistent-Management creation across every
 	// reconcile entry path (API start, inbox continuation, boot rewarm). It is
 	// distinct from selfdevStartMu, which only guards ensureSelfDevelopmentRun;
 	// a blocking Lock here would self-deadlock that path (sync.Mutex is not
 	// re-entrant).
-	superReconcileMu     sync.Mutex
-	selfdevMaterializeMu sync.Mutex
+	managementReconcileMu sync.Mutex
+	selfdevMaterializeMu  sync.Mutex
 	// restoreBaseSource overrides verified-base resolution for recovery
 	// (rematerialize, restore, replay-completeness). Nil builds a platform
 	// source from CorpusdURL plus guest credentials per call; tests inject
@@ -227,12 +227,12 @@ func (rt *Runtime) activate(rec *types.RunRecord) {
 	if err := rt.dispatchActor(context.Background(), rec.OwnerID, rec.ComputerID, agentID, "initial_dispatch", rec.RunID, trajectoryID, ""); err != nil {
 		log.Printf("runtime: activate dispatch for run %s: %v", rec.RunID, err)
 	}
-	// Central arm point: a freshly minted pending persistent-Super run whose
+	// Central arm point: a freshly minted pending persistent-Management run whose
 	// initial_dispatch is lost (the boot-window race) has no watchdog and no
 	// retry authority anywhere else; the fresh-mint watchdog re-drives it
-	// through a recovery occurrence. Non-Super and reactivated runs are
+	// through a recovery occurrence. Non-Management and reactivated runs are
 	// filtered inside (the reactivation resume watchdog owns the latter).
-	rt.armFreshMintSuperResumeWatchdog(rec)
+	rt.armFreshMintManagementResumeWatchdog(rec)
 }
 
 // ExecuteActivationSync runs executeActivation in the caller's goroutine. It
@@ -345,9 +345,9 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 		if ownerID != "" {
 			return "conductor:" + ownerID
 		}
-	case agentprofile.Super:
+	case agentprofile.Management:
 		if ownerID != "" {
-			return persistentSuperAgentID(ownerID)
+			return persistentManagementAgentID(ownerID)
 		}
 	case agentprofile.Texture:
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
@@ -365,12 +365,12 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 	return uuid.New().String()
 }
 
-func persistentSuperAgentID(ownerID string) string {
+func persistentManagementAgentID(ownerID string) string {
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
-		return agentprofile.Super
+		return agentprofile.Management
 	}
-	return agentprofile.Super + ":" + ownerID
+	return agentprofile.Management + ":" + ownerID
 }
 
 func defaultChannelID(profile string, metadata map[string]any, parent *types.RunRecord, agentID string) string {
@@ -388,13 +388,13 @@ func defaultChannelID(profile string, metadata map[string]any, parent *types.Run
 			return docID
 		}
 	}
-	if profile == agentprofile.Super || profile == agentprofile.Processor || profile == agentprofile.Reconciler {
+	if profile == agentprofile.Management || profile == agentprofile.Processor || profile == agentprofile.Reconciler {
 		return agentID
 	}
 	return ""
 }
 
-func (rt *Runtime) EnsurePersistentSuperAgent(ctx context.Context, ownerID string) (types.AgentRecord, error) {
+func (rt *Runtime) EnsurePersistentManagementAgent(ctx context.Context, ownerID string) (types.AgentRecord, error) {
 	if rt == nil || rt.store == nil {
 		return types.AgentRecord{}, fmt.Errorf("runtime store unavailable")
 	}
@@ -403,13 +403,13 @@ func (rt *Runtime) EnsurePersistentSuperAgent(ctx context.Context, ownerID strin
 		return types.AgentRecord{}, fmt.Errorf("owner_id is required")
 	}
 	now := time.Now().UTC()
-	agentID := persistentSuperAgentID(ownerID)
+	agentID := persistentManagementAgentID(ownerID)
 	rec := types.AgentRecord{
 		AgentID:    agentID,
 		OwnerID:    ownerID,
 		ComputerID: rt.cfg.ComputerID,
-		Profile:    agentprofile.Super,
-		Role:       agentprofile.Super,
+		Profile:    agentprofile.Management,
+		Role:       agentprofile.Management,
 		ChannelID:  agentID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -625,9 +625,9 @@ func (rt *Runtime) Start(ctx context.Context) {
 		log.Printf("runtime: boot phase end %s dur=%s", name, time.Since(started).Round(time.Millisecond))
 	}
 	bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
-	bootPhase("cosuper_assignment_capsules", func() { rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx) })
+	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	bootPhase("rewarm_lifecycle_activations", func() { rt.rewarmInterruptedLifecycleActivations(ctx) })
-	bootPhase("rewarm_persistent_super", func() { rt.rewarmInterruptedPersistentSuperActors(ctx) })
+	bootPhase("rewarm_persistent_management", func() { rt.rewarmInterruptedPersistentManagementActors(ctx) })
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
 	var terminalOutcomeTargets map[string]bool
 	bootPhase("reconcile_terminal_run_outcomes", func() { terminalOutcomeTargets = rt.reconcileTerminalRunOutcomes(ctx) })
@@ -716,7 +716,7 @@ func shouldLogWireLifecycle(rec *types.RunRecord) bool {
 		return false
 	}
 	profile := agentProfileForRun(rec)
-	if profile == agentprofile.Processor || profile == agentprofile.Texture || profile == agentprofile.Researcher || profile == agentprofile.CoSuper {
+	if profile == agentprofile.Processor || profile == agentprofile.Texture || profile == agentprofile.Research || profile == agentprofile.Engineering {
 		if metadataStringValue(rec.Metadata, runMetadataProcessorKey) != "" || strings.TrimSpace(rec.OwnerID) == vmctl.UniversalWirePlatformOwnerID {
 			return true
 		}
@@ -978,8 +978,8 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 			metadata[modelpolicy.MetadataPolicyOverlayID] = overlayID
 		}
 	}
-	if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
-		metadata[runMetadataCoSuperSlot] = slot
+	if slot := normalizeEngineeringSlot(metadataStringValue(metadata, runMetadataEngineeringSlot)); slot != "" {
+		metadata[runMetadataEngineeringSlot] = slot
 	}
 	targetRaw := firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentProfile), metadataStringValue(metadata, runMetadataAgentRole))
 	targetProfile := ""
@@ -990,8 +990,8 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		}
 		targetProfile = resolved
 	}
-	if targetProfile == agentprofile.CoSuper {
-		return nil, fmt.Errorf("generic StartCoagentRun refuses all CoSuper activation; use the authenticated persistent-Super assignment runtime")
+	if targetProfile == agentprofile.Engineering {
+		return nil, fmt.Errorf("generic StartCoagentRun refuses all Engineering activation; use the authenticated persistent-Management assignment runtime")
 	}
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 
@@ -1013,15 +1013,15 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 				coagentProfile = resolved
 			}
 		}
-		slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot))
-		if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != "" && slot == "" && coagentProfile == agentprofile.CoSuper {
+		slot := normalizeEngineeringSlot(metadataStringValue(metadata, runMetadataEngineeringSlot))
+		if strings.TrimSpace(metadataStringValue(metadata, runMetadataEngineeringSlot)) != "" && slot == "" && coagentProfile == agentprofile.Engineering {
 			return nil, fmt.Errorf("super co-super run requires co_super_slot to be implementation or verifier")
 		}
-		if coagentProfile == agentprofile.CoSuper && slot == "" {
+		if coagentProfile == agentprofile.Engineering && slot == "" {
 			return nil, fmt.Errorf("super co-super run requires co_super_slot=\"implementation\" or co_super_slot=\"verifier\"")
 		}
-		if slot != "" && coagentProfile == agentprofile.CoSuper {
-			existing, found, err := rt.activeCoSuperSlotRun(ctx, ownerID, metadataStringValue(metadata, runMetadataTrajectoryID), slot)
+		if slot != "" && coagentProfile == agentprofile.Engineering {
+			existing, found, err := rt.activeEngineeringSlotRun(ctx, ownerID, metadataStringValue(metadata, runMetadataTrajectoryID), slot)
 			if err != nil {
 				return nil, err
 			}
@@ -1031,11 +1031,11 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 				return &existing, nil
 			}
 		}
-		if err := rt.enforceCoSuperSlotBudget(ctx, &requesterRec); err != nil {
+		if err := rt.enforceEngineeringSlotBudget(ctx, &requesterRec); err != nil {
 			return nil, err
 		}
-		if slot == "verifier" && coagentProfile == agentprofile.CoSuper {
-			if err := rt.enforceSuperVerifierSequencing(ctx, &requesterRec); err != nil {
+		if slot == "verifier" && coagentProfile == agentprofile.Engineering {
+			if err := rt.enforceManagementVerifierSequencing(ctx, &requesterRec); err != nil {
 				return nil, err
 			}
 		}
@@ -1051,22 +1051,22 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 	if requesterAgent, lookupErr := rt.store.GetAgentByScope(ctx, ownerID, rt.cfg.ComputerID, requesterRec.AgentID); lookupErr == nil && requesterAgent.LifecycleVersion > 0 {
 		switch agentRec.Profile {
-		case agentprofile.Super, agentprofile.CoSuper:
+		case agentprofile.Management, agentprofile.Engineering:
 			return nil, fmt.Errorf("durable-work lifecycle refuses effects-capable %s activation", agentRec.Profile)
 		}
 	}
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
 		agentRec.ChannelID = runID
 	}
-	claimedCoSuperSlot := false
-	claimedCoSuperTrajectoryID := ""
-	claimedCoSuperSlotName := ""
+	claimedEngineeringSlot := false
+	claimedEngineeringTrajectoryID := ""
+	claimedEngineeringSlotName := ""
 	slotAgentProfile := agentRec.Profile
-	if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
-		slotAgentProfile == agentprofile.CoSuper &&
+	if slot := normalizeEngineeringSlot(metadataStringValue(metadata, runMetadataEngineeringSlot)); slot != "" &&
+		slotAgentProfile == agentprofile.Engineering &&
 		rt.coagentSpawnBudgetApplies(&requesterRec) {
 		trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
-		existing, claimed, err := rt.store.ClaimCoSuperSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, requesterRunID)
+		existing, claimed, err := rt.store.ClaimEngineeringSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, requesterRunID)
 		if err != nil {
 			return nil, err
 		}
@@ -1075,35 +1075,35 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 			existing.Metadata[runMetadataSpawnReused] = true
 			return &existing, nil
 		}
-		claimedCoSuperSlot = true
-		claimedCoSuperTrajectoryID = trajectoryID
-		claimedCoSuperSlotName = slot
+		claimedEngineeringSlot = true
+		claimedEngineeringTrajectoryID = trajectoryID
+		claimedEngineeringSlotName = slot
 	}
 	grantedCapsuleHandle := ""
-	releaseCoSuperSlotClaim := func(cause error) error {
+	releaseEngineeringSlotClaim := func(cause error) error {
 		if grantedCapsuleHandle != "" && rt.capsuleExecutor != nil {
 			if err := rt.capsuleExecutor.RevokeCapability(runID, grantedCapsuleHandle); err != nil {
 				cause = fmt.Errorf("%w (also failed to revoke capsule capability: %v)", cause, err)
 			}
 		}
-		if !claimedCoSuperSlot {
+		if !claimedEngineeringSlot {
 			return cause
 		}
-		if err := rt.store.ReleaseCoSuperSlotClaim(context.Background(), ownerID, claimedCoSuperTrajectoryID, claimedCoSuperSlotName, runID); err != nil {
+		if err := rt.store.ReleaseEngineeringSlotClaim(context.Background(), ownerID, claimedEngineeringTrajectoryID, claimedEngineeringSlotName, runID); err != nil {
 			return fmt.Errorf("%w (also failed to release co-super slot claim: %v)", cause, err)
 		}
 		return cause
 	}
 	grantAgentProfile := agentRec.Profile
-	if grantAgentProfile == agentprofile.CoSuper &&
-		normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)) == "implementation" {
+	if grantAgentProfile == agentprofile.Engineering &&
+		normalizeEngineeringSlot(metadataStringValue(metadata, runMetadataEngineeringSlot)) == "implementation" {
 		controlHandle := strings.TrimSpace(metadataStringValue(metadata, "capsule_control_handle"))
 		if rt.capsuleExecutor == nil || controlHandle == "" {
-			return nil, releaseCoSuperSlotClaim(fmt.Errorf("co-super implementation capsule authority unavailable"))
+			return nil, releaseEngineeringSlotClaim(fmt.Errorf("co-super implementation capsule authority unavailable"))
 		}
-		grantedCapsuleHandle, err = rt.capsuleExecutor.GrantCoSuper(requesterRunID, controlHandle, runID, 24*time.Hour)
+		grantedCapsuleHandle, err = rt.capsuleExecutor.GrantEngineering(requesterRunID, controlHandle, runID, 24*time.Hour)
 		if err != nil {
-			return nil, releaseCoSuperSlotClaim(fmt.Errorf("grant co-super capsule: %w", err))
+			return nil, releaseEngineeringSlotClaim(fmt.Errorf("grant co-super capsule: %w", err))
 		}
 		delete(metadata, "capsule_control_handle")
 		metadata["capsule_handle"] = grantedCapsuleHandle
@@ -1116,7 +1116,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
 	if err := rt.store.UpsertAgent(ctx, agentRec); err != nil {
-		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist coagent agent: %w", err))
+		return nil, releaseEngineeringSlotClaim(fmt.Errorf("persist coagent agent: %w", err))
 	}
 
 	// Create the runtime run record.
@@ -1138,7 +1138,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	rt.stampAndMintTrajectory(ctx, rec)
 	spawnedWork, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, &requesterRec, "spawned_work_item_id")
 	if err != nil {
-		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned coagent work item: %w", err))
+		return nil, releaseEngineeringSlotClaim(fmt.Errorf("persist spawned coagent work item: %w", err))
 	}
 	if spawnedWork.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
 		spawnedProfile := agentProfileForRun(rec)
@@ -1154,10 +1154,10 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		}
 		project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
 		if _, err := rt.store.ReplaceLifecycleActivation(ctx, project); err != nil {
-			return nil, releaseCoSuperSlotClaim(fmt.Errorf("project spawned lifecycle run: %w", err))
+			return nil, releaseEngineeringSlotClaim(fmt.Errorf("project spawned lifecycle run: %w", err))
 		}
 	} else if err := rt.store.CreateRun(ctx, *rec); err != nil {
-		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist coagent run: %w", err))
+		return nil, releaseEngineeringSlotClaim(fmt.Errorf("persist coagent run: %w", err))
 	}
 	rt.createAgentMutationForRun(ctx, rec)
 
@@ -1173,7 +1173,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	}
 	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
-		return nil, releaseCoSuperSlotClaim(err)
+		return nil, releaseEngineeringSlotClaim(err)
 	}
 
 	// Dispatch via actor runtime.
@@ -1335,7 +1335,7 @@ func (rt *Runtime) ensureSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 func spawnedCoagentWorkItemProfile(profile string) bool {
 	workItemProfile, _ := agentprofile.Canonical(profile)
 	switch workItemProfile {
-	case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
+	case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
 		return true
 	default:
 		return false
@@ -1364,49 +1364,49 @@ func appendUniqueString(existing []string, values ...string) []string {
 	return out
 }
 
-const maxSuperActiveCoSuperSlots = 2
+const maxManagementActiveEngineeringSlots = 2
 
 func (rt *Runtime) coagentSpawnBudgetApplies(requesterRec *types.RunRecord) bool {
 	if requesterRec == nil {
 		return false
 	}
 	budgetProfile := agentProfileForRun(requesterRec)
-	return budgetProfile == agentprofile.Super
+	return budgetProfile == agentprofile.Management
 }
 
-func (rt *Runtime) enforceCoSuperSlotBudget(ctx context.Context, requesterRec *types.RunRecord) error {
+func (rt *Runtime) enforceEngineeringSlotBudget(ctx context.Context, requesterRec *types.RunRecord) error {
 	if rt == nil || rt.store == nil || requesterRec == nil {
 		return nil
 	}
 	trajectoryID := trajectoryIDForRun(requesterRec)
-	active, err := rt.store.CountActiveCoSuperSlots(ctx, requesterRec.OwnerID, trajectoryID)
+	active, err := rt.store.CountActiveEngineeringSlots(ctx, requesterRec.OwnerID, trajectoryID)
 	if err != nil {
 		return fmt.Errorf("check active co-super slots for super trajectory budget: %w", err)
 	}
-	if active >= maxSuperActiveCoSuperSlots {
-		return fmt.Errorf("super active co-super slot limit reached for trajectory %s (%d/%d); coordinate existing implementation/verifier agents over channels, cancel or wait for a co-super slot, or submit a precise blocker instead of spawning more", trajectoryID, active, maxSuperActiveCoSuperSlots)
+	if active >= maxManagementActiveEngineeringSlots {
+		return fmt.Errorf("super active co-super slot limit reached for trajectory %s (%d/%d); coordinate existing implementation/verifier agents over channels, cancel or wait for a co-super slot, or submit a precise blocker instead of spawning more", trajectoryID, active, maxManagementActiveEngineeringSlots)
 	}
 	return nil
 }
 
-func (rt *Runtime) activeCoSuperSlotRun(ctx context.Context, ownerID, trajectoryID, slot string) (types.RunRecord, bool, error) {
+func (rt *Runtime) activeEngineeringSlotRun(ctx context.Context, ownerID, trajectoryID, slot string) (types.RunRecord, bool, error) {
 	if rt == nil || rt.store == nil {
 		return types.RunRecord{}, false, nil
 	}
-	slot = normalizeCoSuperSlot(slot)
+	slot = normalizeEngineeringSlot(slot)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	if slot == "" || trajectoryID == "" {
 		return types.RunRecord{}, false, nil
 	}
-	return rt.store.ActiveCoSuperSlotRun(ctx, ownerID, trajectoryID, slot)
+	return rt.store.ActiveEngineeringSlotRun(ctx, ownerID, trajectoryID, slot)
 }
 
-func (rt *Runtime) enforceSuperVerifierSequencing(ctx context.Context, requesterRec *types.RunRecord) error {
+func (rt *Runtime) enforceManagementVerifierSequencing(ctx context.Context, requesterRec *types.RunRecord) error {
 	if rt == nil || rt.store == nil || requesterRec == nil {
 		return nil
 	}
 	trajectoryID := trajectoryIDForRun(requesterRec)
-	impl, found, err := rt.store.CoSuperSlotRun(ctx, requesterRec.OwnerID, trajectoryID, "implementation")
+	impl, found, err := rt.store.EngineeringSlotRun(ctx, requesterRec.OwnerID, trajectoryID, "implementation")
 	if err != nil {
 		return fmt.Errorf("lookup implementation co-super slot for verifier sequencing: %w", err)
 	}
@@ -1467,9 +1467,9 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 		// assignment revoke intent must precede capability revoke/destroy/inspect,
 		// structured executor ack, and assignment/work/run cancellation.
 		rt.runningMu.Unlock()
-		assignmentProjected, err = rt.cancelBoundCoSuperRun(context.WithoutCancel(ctx), rec, reason)
+		assignmentProjected, err = rt.cancelBoundEngineeringRun(context.WithoutCancel(ctx), rec, reason)
 		if err != nil {
-			return fmt.Errorf("cancel bound CoSuper run fate: %w", err)
+			return fmt.Errorf("cancel bound Engineering run fate: %w", err)
 		}
 		rt.runningMu.Lock()
 		rec, err = rt.getRunForComputer(context.Background(), ownerID, runID)
@@ -1604,7 +1604,7 @@ func (rt *Runtime) cancelTrajectoryAuthorityCommand(ctx context.Context, ownerID
 				return types.LifecycleResult{}, prepErr
 			}
 			if trajectory.Status == types.TrajectoryLive {
-				if _, fateErr := rt.prepareCoSuperTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, computerID, trajectoryID, intent.Reason); fateErr != nil {
+				if _, fateErr := rt.prepareEngineeringTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, computerID, trajectoryID, intent.Reason); fateErr != nil {
 					return types.LifecycleResult{}, fmt.Errorf("prepare trajectory assignment fate: %w", fateErr)
 				}
 			}
@@ -1651,7 +1651,7 @@ func (rt *Runtime) CancelTrajectoryCommand(ctx context.Context, trajectoryID, ow
 	if result.Trajectory.Status != types.TrajectoryCancelled {
 		return result, nil, nil
 	}
-	if err := rt.finishCoSuperTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, result.Trajectory.ComputerID, trajectoryID, reason); err != nil {
+	if err := rt.finishEngineeringTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, result.Trajectory.ComputerID, trajectoryID, reason); err != nil {
 		return result, nil, fmt.Errorf("finish trajectory assignment cancellation: %w", err)
 	}
 	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, result.Trajectory.ComputerID, trajectoryID)
@@ -1671,7 +1671,7 @@ func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID s
 	if trajectory.Status != types.TrajectoryCancelled {
 		return trajectory, nil, nil
 	}
-	if err := rt.finishCoSuperTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, trajectory.ComputerID, trajectoryID, "owner cancellation"); err != nil {
+	if err := rt.finishEngineeringTrajectoryCancellation(context.WithoutCancel(ctx), ownerID, trajectory.ComputerID, trajectoryID, "owner cancellation"); err != nil {
 		return trajectory, nil, fmt.Errorf("finish trajectory assignment cancellation: %w", err)
 	}
 	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, trajectory.ComputerID, trajectoryID)
@@ -2218,51 +2218,51 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 				log.Printf("runtime: passivated stale lifecycle run %s before restart dispatch", rec.RunID)
 				continue
 			}
-			if assignedCoSuperRun(rec) {
-				if err := rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID); err != nil {
-					log.Printf("runtime: boot assigned CoSuper reconcile run %s: %v", rec.RunID, err)
+			if assignedEngineeringRun(rec) {
+				if err := rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID); err != nil {
+					log.Printf("runtime: boot assigned Engineering reconcile run %s: %v", rec.RunID, err)
 					continue
 				}
 				stored, loadErr := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
 				if loadErr != nil {
-					log.Printf("runtime: boot assigned CoSuper reload run %s: %v", rec.RunID, loadErr)
+					log.Printf("runtime: boot assigned Engineering reload run %s: %v", rec.RunID, loadErr)
 					continue
 				}
 				*rec = stored
 				if !rec.State.Active() {
-					log.Printf("runtime: boot assigned CoSuper run %s already terminal after reconcile", rec.RunID)
+					log.Printf("runtime: boot assigned Engineering run %s already terminal after reconcile", rec.RunID)
 					continue
 				}
 				assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 				attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
-				assignment, assignErr := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
-				if assignErr != nil || assignment.Disposition.Terminal() || !rt.assignedCoSuperCapsuleUsable(assignment) {
+				assignment, assignErr := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+				if assignErr != nil || assignment.Disposition.Terminal() || !rt.assignedEngineeringCapsuleUsable(assignment) {
 					if assignErr != nil {
-						log.Printf("runtime: boot assigned CoSuper lookup run %s: %v", rec.RunID, assignErr)
+						log.Printf("runtime: boot assigned Engineering lookup run %s: %v", rec.RunID, assignErr)
 					} else {
-						log.Printf("runtime: boot assigned CoSuper run %s skipped wake; capsule is not restartable", rec.RunID)
+						log.Printf("runtime: boot assigned Engineering run %s skipped wake; capsule is not restartable", rec.RunID)
 					}
 					continue
 				}
 			}
-			lifecycleResearcher, admitted, refusal, admissionErr := rt.admitLifecycleResearcherProviderEntry(ctx, rec)
+			lifecycleResearch, admitted, refusal, admissionErr := rt.admitLifecycleResearchProviderEntry(ctx, rec)
 			if admissionErr != nil {
-				if passivateErr := rt.passivateLifecycleResearcherAfterAdmissionError(ctx, rec, admissionErr); passivateErr != nil {
-					log.Printf("runtime: boot lifecycle rewarm: persist Researcher admission retry run %s: %v", rec.RunID, passivateErr)
+				if passivateErr := rt.passivateLifecycleResearchAfterAdmissionError(ctx, rec, admissionErr); passivateErr != nil {
+					log.Printf("runtime: boot lifecycle rewarm: persist Research admission retry run %s: %v", rec.RunID, passivateErr)
 				}
-				log.Printf("runtime: boot lifecycle rewarm: Researcher admission run %s: %v", rec.RunID, admissionErr)
+				log.Printf("runtime: boot lifecycle rewarm: Research admission run %s: %v", rec.RunID, admissionErr)
 				continue
 			}
-			if lifecycleResearcher && !admitted {
-				if passivateErr := rt.passivateLifecycleResearcherWithoutProviderAuthority(ctx, rec, refusal); passivateErr != nil {
-					log.Printf("runtime: boot lifecycle rewarm: persist Researcher admission refusal run %s: %v", rec.RunID, passivateErr)
+			if lifecycleResearch && !admitted {
+				if passivateErr := rt.passivateLifecycleResearchWithoutProviderAuthority(ctx, rec, refusal); passivateErr != nil {
+					log.Printf("runtime: boot lifecycle rewarm: persist Research admission refusal run %s: %v", rec.RunID, passivateErr)
 				}
-				log.Printf("runtime: boot lifecycle Researcher run %s remains idle: %s", rec.RunID, refusal)
+				log.Printf("runtime: boot lifecycle Research run %s remains idle: %s", rec.RunID, refusal)
 				continue
 			}
 			rt.activate(rec)
 			rewarmProfile, _ := agentprofile.Canonical(rec.AgentProfile)
-			if rewarmProfile == agentprofile.Researcher &&
+			if rewarmProfile == agentprofile.Research &&
 				metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" &&
 				metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) != "" {
 				delivered, deliveryErr := rt.lifecycleRunHasCanonicalControlDelivery(ctx, rec)
@@ -2282,12 +2282,12 @@ func (rt *Runtime) rewarmInterruptedLifecycleActivations(ctx context.Context) {
 	rt.reactivateRetryableLifecycleInjectionRuns(ctx, computerID)
 }
 
-// rewarmInterruptedPersistentSuperActors re-enters the persistent Super
+// rewarmInterruptedPersistentManagementActors re-enters the persistent Management
 // controller for exact lifecycle runs that were passivated by a process
 // restart. The controller selects only the run's delivered controls and emits
-// a distinct exact-run recovery occurrence; this does not create a new Super
+// a distinct exact-run recovery occurrence; this does not create a new Management
 // from arbitrary backlog.
-func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
+func (rt *Runtime) rewarmInterruptedPersistentManagementActors(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return
 	}
@@ -2299,17 +2299,17 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 	var runs []types.RunRecord
 	var err error
 	if ownerID != "" {
-		log.Printf("runtime: boot persistent-Super rewarm owner-scoped owner=%s computer=%s limit=%d", ownerID, computerID, bootPersistentSuperRewarmLimit)
-		runs, err = rt.store.ListPassivatedPersistentSuperControlRunsByOwner(ctx, ownerID, computerID, "", bootPersistentSuperRewarmLimit)
+		log.Printf("runtime: boot persistent-Management rewarm owner-scoped owner=%s computer=%s limit=%d", ownerID, computerID, bootPersistentManagementRewarmLimit)
+		runs, err = rt.store.ListPassivatedPersistentManagementControlRunsByOwner(ctx, ownerID, computerID, "", bootPersistentManagementRewarmLimit)
 		if err != nil {
-			log.Printf("runtime: boot persistent-Super rewarm owner-scoped list: %v", err)
+			log.Printf("runtime: boot persistent-Management rewarm owner-scoped list: %v", err)
 			return
 		}
-		log.Printf("runtime: boot persistent-Super rewarm owner-scoped candidates=%d", len(runs))
+		log.Printf("runtime: boot persistent-Management rewarm owner-scoped candidates=%d", len(runs))
 	} else {
 		runs, err = rt.store.ListAllRunsByState(ctx, types.RunPassivated)
 		if err != nil {
-			log.Printf("runtime: boot persistent-Super rewarm: list passivated runs: %v", err)
+			log.Printf("runtime: boot persistent-Management rewarm: list passivated runs: %v", err)
 			return
 		}
 	}
@@ -2317,8 +2317,8 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 	for _, run := range runs {
 		rewarmRunProfile := agentProfileForRun(&run)
 		rewarmRunRole, _ := agentprofile.Canonical(run.AgentRole)
-		if rewarmRunProfile != agentprofile.Super ||
-			rewarmRunRole != agentprofile.Super ||
+		if rewarmRunProfile != agentprofile.Management ||
+			rewarmRunRole != agentprofile.Management ||
 			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" {
 			continue
 		}
@@ -2331,21 +2331,21 @@ func (rt *Runtime) rewarmInterruptedPersistentSuperActors(ctx context.Context) {
 			continue
 		}
 		seen[key] = struct{}{}
-		log.Printf("runtime: boot persistent-Super rewarm candidate run=%s owner=%s agent=%s", run.RunID, run.OwnerID, run.AgentID)
-		if resumed, ok, resumeErr := rt.ResumeInterruptedPersistentSuperControlRun(ctx, run.OwnerID, run.AgentID); resumeErr != nil {
-			log.Printf("runtime: boot persistent-Super rewarm run %s: %v", run.RunID, resumeErr)
+		log.Printf("runtime: boot persistent-Management rewarm candidate run=%s owner=%s agent=%s", run.RunID, run.OwnerID, run.AgentID)
+		if resumed, ok, resumeErr := rt.ResumeInterruptedPersistentManagementControlRun(ctx, run.OwnerID, run.AgentID); resumeErr != nil {
+			log.Printf("runtime: boot persistent-Management rewarm run %s: %v", run.RunID, resumeErr)
 		} else if ok && resumed != nil {
-			log.Printf("runtime: boot persistent-Super rewarm dispatched run=%s", resumed.RunID)
+			log.Printf("runtime: boot persistent-Management rewarm dispatched run=%s", resumed.RunID)
 		} else {
-			log.Printf("runtime: boot persistent-Super rewarm candidate run %s did not resume", run.RunID)
+			log.Printf("runtime: boot persistent-Management rewarm candidate run %s did not resume", run.RunID)
 		}
 	}
-	rt.rewarmReactivatedSuperResumeWatchdogs(ctx, ownerID, computerID)
+	rt.rewarmReactivatedManagementResumeWatchdogs(ctx, ownerID, computerID)
 }
 
 // reactivateRetryableLifecycleInjectionRuns resumes the same passivated
-// lifecycle Researcher activation whose authenticated control append failed.
-// Texture is reconstructed by its owner and persistent Super by its controller. It does not
+// lifecycle Research activation whose authenticated control append failed.
+// Texture is reconstructed by its owner and persistent Management by its controller. It does not
 // select backlog, create a run, bind controls, or reconstruct another role.
 func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context, computerID string) {
 	runs, err := rt.store.ListLifecycleRunsByState(ctx, "", computerID, types.RunPassivated)
@@ -2358,10 +2358,10 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 		passivatedReason := metadataStringValue(rec.Metadata, "passivated_reason")
 		retryProfile, _ := agentprofile.Canonical(rec.AgentProfile)
 		retryRole, _ := agentprofile.Canonical(rec.AgentRole)
-		if retryProfile != agentprofile.Researcher ||
-			retryRole != agentprofile.Researcher ||
+		if retryProfile != agentprofile.Research ||
+			retryRole != agentprofile.Research ||
 			metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
-			(passivatedReason != runtimeInjectionAppendFailurePassivationReason && passivatedReason != lifecycleResearcherAdmissionRetryReason) {
+			(passivatedReason != runtimeInjectionAppendFailurePassivationReason && passivatedReason != lifecycleResearchAdmissionRetryReason) {
 			continue
 		}
 		trajectory, trajectoryErr := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID)
@@ -2379,7 +2379,7 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 		if !eligible {
 			continue
 		}
-		controls, controlsErr := rt.lifecycleResearcherAdmissionRecoveryControls(ctx, rec)
+		controls, controlsErr := rt.lifecycleResearchAdmissionRecoveryControls(ctx, rec)
 		if controlsErr != nil {
 			log.Printf("runtime: boot lifecycle injection recovery: validate exact deliveries for run %s: %v", rec.RunID, controlsErr)
 			continue
@@ -2390,8 +2390,8 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 		agent, agentErr := rt.store.GetAgentByScope(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
 		recoveryAgentProfile, _ := agentprofile.Canonical(agent.Profile)
 		recoveryAgentRole, _ := agentprofile.Canonical(agent.Role)
-		if agentErr != nil || recoveryAgentProfile != agentprofile.Researcher ||
-			recoveryAgentRole != agentprofile.Researcher ||
+		if agentErr != nil || recoveryAgentProfile != agentprofile.Research ||
+			recoveryAgentRole != agentprofile.Research ||
 			(strings.TrimSpace(agent.ActiveRunID) != "" && strings.TrimSpace(agent.ActiveRunID) != rec.RunID) {
 			if agentErr != nil {
 				log.Printf("runtime: boot lifecycle injection recovery: validate actor for run %s: %v", rec.RunID, agentErr)
@@ -2401,8 +2401,8 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 		// Actor delivery remains paused during boot. Both retry reasons require a
 		// distinct exact-run occurrence: initial_dispatch may already be processed
 		// across the MarkProcessed-before-SaveSnapshot crash cut.
-		if recoveryErr := rt.enqueueLifecycleResearcherAdmissionRecoveryOccurrence(ctx, rec, controls); recoveryErr != nil {
-			log.Printf("runtime: enqueue lifecycle Researcher recovery run %s: %v", rec.RunID, recoveryErr)
+		if recoveryErr := rt.enqueueLifecycleResearchAdmissionRecoveryOccurrence(ctx, rec, controls); recoveryErr != nil {
+			log.Printf("runtime: enqueue lifecycle Research recovery run %s: %v", rec.RunID, recoveryErr)
 			continue
 		}
 		rec.Metadata = cloneMetadata(rec.Metadata)
@@ -2417,32 +2417,32 @@ func (rt *Runtime) reactivateRetryableLifecycleInjectionRuns(ctx context.Context
 			log.Printf("runtime: boot lifecycle injection recovery: reactivate exact run %s: %v", rec.RunID, err)
 			continue
 		}
-		log.Printf("runtime: reactivated exact lifecycle Researcher run %s through structured recovery occurrence (%s)", rec.RunID, passivatedReason)
+		log.Printf("runtime: reactivated exact lifecycle Research run %s through structured recovery occurrence (%s)", rec.RunID, passivatedReason)
 		continue
 	}
 }
 
-// enqueueLifecycleResearcherAdmissionRecoveryOccurrence emits a distinct,
+// enqueueLifecycleResearchAdmissionRecoveryOccurrence emits a distinct,
 // deterministic actor wake after a provider-admission store/CAS error. Reusing
 // initial_dispatch would collide with its already processed one-shot actor row.
-func (rt *Runtime) enqueueLifecycleResearcherAdmissionRecoveryOccurrence(ctx context.Context, rec *types.RunRecord, controls []types.CoagentSourcePacket) error {
+func (rt *Runtime) enqueueLifecycleResearchAdmissionRecoveryOccurrence(ctx context.Context, rec *types.RunRecord, controls []types.CoagentSourcePacket) error {
 	if rt == nil || rt.dispatchActor == nil || rec == nil || len(controls) == 0 {
-		return fmt.Errorf("lifecycle Researcher admission recovery dispatch unavailable")
+		return fmt.Errorf("lifecycle Research admission recovery dispatch unavailable")
 	}
-	o := LifecycleResearcherAdmissionRecoveryOccurrence{
+	o := LifecycleResearchAdmissionRecoveryOccurrence{
 		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, TrajectoryID: rec.TrajectoryID,
 		AgentID: rec.AgentID, RunID: rec.RunID,
 		LogicalKey:    metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata),
 		SourceAgentID: controls[0].AgentID,
-		Controls:      make([]LifecycleResearcherAdmissionRecoveryControl, 0, len(controls)),
+		Controls:      make([]LifecycleResearchAdmissionRecoveryControl, 0, len(controls)),
 	}
 	for _, control := range controls {
 		if control.AgentID != o.SourceAgentID {
-			return fmt.Errorf("lifecycle Researcher admission recovery controls have multiple sources")
+			return fmt.Errorf("lifecycle Research admission recovery controls have multiple sources")
 		}
-		o.Controls = append(o.Controls, LifecycleResearcherAdmissionRecoveryControl{UpdateID: control.UpdateID, LifecycleVersion: control.LifecycleVersion, ReducerSeq: control.ReducerSeq})
+		o.Controls = append(o.Controls, LifecycleResearchAdmissionRecoveryControl{UpdateID: control.UpdateID, LifecycleVersion: control.LifecycleVersion, ReducerSeq: control.ReducerSeq})
 	}
-	content, err := EncodeLifecycleResearcherAdmissionRecovery(o)
+	content, err := EncodeLifecycleResearchAdmissionRecovery(o)
 	if err != nil {
 		return err
 	}
@@ -2455,11 +2455,11 @@ func (rt *Runtime) enqueueLifecycleResearcherAdmissionRecoveryOccurrence(ctx con
 // the first scanned=256 log.
 const bootTerminalRepairRecentLimit = 256
 
-// bootPersistentSuperRewarmLimit caps the owner-indexed header window used
-// to find passivated Super control runs. ListAllRunsByState(passivated)
+// bootPersistentManagementRewarmLimit caps the owner-indexed header window used
+// to find passivated Management control runs. ListAllRunsByState(passivated)
 // JSON_EXTRACT-scans every choir.run body and is what kills the 4 GiB guest
-// before Super dispatch.
-const bootPersistentSuperRewarmLimit = 1024
+// before Management dispatch.
+const bootPersistentManagementRewarmLimit = 1024
 
 // reconcileTerminalRunOutcomes repairs missing terminal-outcome bindings.
 // Production computers (computer-* or CHOIR_OWNER_ID) use an owner-scoped
@@ -2631,7 +2631,7 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 		key := ownerID + "\x00" + agentID + "\x00" + trajectoryID
 		grouped[key] = append(grouped[key], item)
 	}
-	superSeen := map[string]struct{}{}
+	managementSeen := map[string]struct{}{}
 	for _, workItems := range grouped {
 		first := workItems[0]
 		var err error
@@ -2646,22 +2646,22 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 			log.Printf("runtime: boot cancellation-intent lookup owner=%s trajectory=%s: %v", first.OwnerID, first.TrajectoryID, intentErr)
 			continue
 		}
-		if strings.TrimSpace(first.AssignedAgentID) == persistentSuperAgentID(strings.TrimSpace(first.OwnerID)) {
-			superKey := strings.TrimSpace(first.OwnerID) + "\x00" + strings.TrimSpace(first.AssignedAgentID)
-			if _, ok := superSeen[superKey]; ok {
+		if strings.TrimSpace(first.AssignedAgentID) == persistentManagementAgentID(strings.TrimSpace(first.OwnerID)) {
+			managementKey := strings.TrimSpace(first.OwnerID) + "\x00" + strings.TrimSpace(first.AssignedAgentID)
+			if _, ok := managementSeen[managementKey]; ok {
 				continue
 			}
-			superSeen[superKey] = struct{}{}
+			managementSeen[managementKey] = struct{}{}
 			// Boot is recovery, not a scheduler tick: backlog is durable and waits for live triggers.
-			log.Printf("runtime: boot work-item sweep skipping persistent Super owner=%s agent=%s (boot does not schedule)", first.OwnerID, first.AssignedAgentID)
+			log.Printf("runtime: boot work-item sweep skipping persistent Management owner=%s agent=%s (boot does not schedule)", first.OwnerID, first.AssignedAgentID)
 			continue
-		} else if sweepAuthority, _ := agentprofile.Canonical(first.AuthorityProfile); sweepAuthority == agentprofile.CoSuper {
-			err = rt.ReconcileCoSuperAssignmentsForTrajectory(ctx, first.OwnerID,
+		} else if sweepAuthority, _ := agentprofile.Canonical(first.AuthorityProfile); sweepAuthority == agentprofile.Engineering {
+			err = rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, first.OwnerID,
 				firstNonEmpty(first.ComputerID, rt.TextureComputerID()), first.TrajectoryID)
-		} else if sweepAuthority, _ := agentprofile.Canonical(first.AuthorityProfile); sweepAuthority == agentprofile.Researcher {
+		} else if sweepAuthority, _ := agentprofile.Canonical(first.AuthorityProfile); sweepAuthority == agentprofile.Research {
 			// Open lifecycle work is durable responsibility, not provider authority.
 			// Only an exact pending Texture control enters the fingerprint reconciler;
-			// otherwise the Researcher remains idle and inspectable.
+			// otherwise the Research remains idle and inspectable.
 			pendingControls, pendingErr := rt.store.ListAllPendingLifecycleUpdates(ctx, first.OwnerID, computerID, first.AssignedAgentID)
 			if pendingErr != nil {
 				err = pendingErr
@@ -2704,14 +2704,14 @@ func (rt *Runtime) sweepPassivatedSpawnedCoagentWork(ctx context.Context) {
 			continue
 		}
 		sweptAuthority, _ := agentprofile.Canonical(firstNonEmpty(item.AuthorityProfile, agentProfileForRun(rec)))
-		if item.LifecycleVersion > 0 && sweptAuthority == agentprofile.Researcher {
+		if item.LifecycleVersion > 0 && sweptAuthority == agentprofile.Research {
 			computerID := firstNonEmpty(strings.TrimSpace(item.ComputerID), rt.TextureComputerID())
 			pendingControls, pendingErr := rt.store.ListAllPendingLifecycleUpdates(ctx, item.OwnerID, computerID, item.AssignedAgentID)
 			if pendingErr != nil {
-				log.Printf("runtime: boot passivated Researcher control lookup run=%s work_item=%s: %v", rec.RunID, item.WorkItemID, pendingErr)
+				log.Printf("runtime: boot passivated Research control lookup run=%s work_item=%s: %v", rec.RunID, item.WorkItemID, pendingErr)
 			} else if len(pendingControls) > 0 {
 				if _, reconcileErr := rt.reconcileUpdatedCoagentActor(ctx, item.OwnerID, item.AssignedAgentID); reconcileErr != nil && !errors.Is(reconcileErr, ErrDurablyTerminalLifecycleControlActivation) {
-					log.Printf("runtime: boot passivated Researcher control reconcile run=%s work_item=%s: %v", rec.RunID, item.WorkItemID, reconcileErr)
+					log.Printf("runtime: boot passivated Research control reconcile run=%s work_item=%s: %v", rec.RunID, item.WorkItemID, reconcileErr)
 				}
 			}
 			continue
@@ -2795,14 +2795,14 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		return nil, fmt.Errorf("lookup assigned work-item actor: %w", err)
 	}
 	profile, _ := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))
-	if profile == agentprofile.Researcher && (agent.LifecycleVersion > 0 || first.LifecycleVersion > 0) {
-		// Lifecycle Researchers are activated only by the exact Texture-control
+	if profile == agentprofile.Research && (agent.LifecycleVersion > 0 || first.LifecycleVersion > 0) {
+		// Lifecycle Research are activated only by the exact Texture-control
 		// fingerprint reconciler. Generic assigned-work recovery preserves the
 		// open obligation without creating or dispatching a run.
 		return nil, nil
 	}
 	switch profile {
-	case agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler:
+	case agentprofile.Research, agentprofile.Processor, agentprofile.Reconciler:
 		// Texture reconstruction belongs to textureowner.ReconcileAgentWake,
 		// which derives revision authority from the canonical document head.
 		// A generic assigned-work run cannot safely synthesize that authority.
@@ -2842,7 +2842,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	if profile == agentprofile.Researcher {
+	if profile == agentprofile.Research {
 		updates, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 		if listErr != nil {
 			return nil, listErr
@@ -2906,18 +2906,18 @@ func buildAssignedWorkItemPrompt(workItems []types.WorkItemRecord) string {
 	return strings.TrimSpace(b.String())
 }
 
-// admitLifecycleResearcherProviderEntry is the single provider-boundary
-// authority check for durable lifecycle Researchers. Open work records are
+// admitLifecycleResearchProviderEntry is the single provider-boundary
+// authority check for durable lifecycle Research. Open work records are
 // inspectable obligations, not provider authority: execution requires one exact
 // current Texture-control fingerprint joined to the canonical run. Legacy
-// (lifecycle-version-zero) Researcher runs remain outside this invariant.
-func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, rec *types.RunRecord) (lifecycle, admitted bool, reason string, err error) {
+// (lifecycle-version-zero) Research runs remain outside this invariant.
+func (rt *Runtime) admitLifecycleResearchProviderEntry(ctx context.Context, rec *types.RunRecord) (lifecycle, admitted bool, reason string, err error) {
 	if rt == nil || rt.store == nil || rec == nil {
 		return false, false, "runtime or run unavailable", nil
 	}
 	profile, _ := agentprofile.Canonical(rec.AgentProfile)
 	role, _ := agentprofile.Canonical(rec.AgentRole)
-	if profile != agentprofile.Researcher && role != agentprofile.Researcher {
+	if profile != agentprofile.Research && role != agentprofile.Research {
 		return false, true, "", nil
 	}
 	ownerID := strings.TrimSpace(rec.OwnerID)
@@ -2932,11 +2932,11 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 		declaresLifecycleControl = true
 	}
 	if ownerID == "" || computerID == "" || agentID == "" {
-		return true, false, "Researcher run has incomplete owner/computer/agent authority", nil
+		return true, false, "Research run has incomplete owner/computer/agent authority", nil
 	}
 	if trajectoryID == "" {
 		if declaresLifecycleControl {
-			return true, false, "declared lifecycle Researcher has no trajectory authority", nil
+			return true, false, "declared lifecycle Research has no trajectory authority", nil
 		}
 		return false, true, "", nil
 	}
@@ -2946,10 +2946,10 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 			return false, true, "", nil
 		}
 		if scopeErr != nil {
-			return true, false, "", fmt.Errorf("classify lifecycle Researcher agent: %w", scopeErr)
+			return true, false, "", fmt.Errorf("classify lifecycle Research agent: %w", scopeErr)
 		}
 		if scopedAgent.LifecycleVersion <= 0 {
-			// A legacy version-zero Researcher stays outside lifecycle provider
+			// A legacy version-zero Research stays outside lifecycle provider
 			// admission even when its historical metadata names a lifecycle
 			// trajectory. Only Store-owned lifecycle subject version or an exact
 			// Texture-control fingerprint opts into this boundary.
@@ -2959,7 +2959,7 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 	}
 	trajectory, loadErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
 	if errors.Is(loadErr, store.ErrNotFound) {
-		return true, false, "declared lifecycle Researcher has no canonical trajectory authority", nil
+		return true, false, "declared lifecycle Research has no canonical trajectory authority", nil
 	}
 	if loadErr != nil {
 		return true, false, "", fmt.Errorf("load lifecycle trajectory: %w", loadErr)
@@ -2969,10 +2969,10 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 	if ctx.Err() != nil {
 		return deny("activation context is cancelled")
 	}
-	if profile != agentprofile.Researcher || role != agentprofile.Researcher ||
+	if profile != agentprofile.Research || role != agentprofile.Research ||
 		trajectory.OwnerID != ownerID || trajectory.ComputerID != computerID || trajectory.TrajectoryID != trajectoryID ||
 		trajectory.Status != types.TrajectoryLive {
-		return deny("lifecycle Researcher scope is not exact and live")
+		return deny("lifecycle Research scope is not exact and live")
 	}
 	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, ownerID, computerID, trajectoryID); intentErr == nil {
 		return deny("trajectory has cancellation intent")
@@ -2982,26 +2982,26 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 
 	stored, loadErr := rt.store.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
 	if loadErr != nil {
-		return true, false, "", fmt.Errorf("load exact lifecycle Researcher run: %w", loadErr)
+		return true, false, "", fmt.Errorf("load exact lifecycle Research run: %w", loadErr)
 	}
 	storedProfile, _ := agentprofile.Canonical(stored.AgentProfile)
 	storedRole, _ := agentprofile.Canonical(stored.AgentRole)
 	if stored.RunID != strings.TrimSpace(rec.RunID) || stored.OwnerID != ownerID || stored.ComputerID != computerID ||
 		stored.TrajectoryID != trajectoryID || stored.AgentID != agentID || stored.State != rec.State ||
 		(stored.State != types.RunPending && stored.State != types.RunRunning) ||
-		storedProfile != agentprofile.Researcher || storedRole != agentprofile.Researcher {
-		return deny("run projection is stale or outside the exact lifecycle Researcher scope")
+		storedProfile != agentprofile.Research || storedRole != agentprofile.Research {
+		return deny("run projection is stale or outside the exact lifecycle Research scope")
 	}
 	agent, loadErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
 	if loadErr != nil {
-		return true, false, "", fmt.Errorf("load exact lifecycle Researcher agent: %w", loadErr)
+		return true, false, "", fmt.Errorf("load exact lifecycle Research agent: %w", loadErr)
 	}
 	scopeAgentProfile, _ := agentprofile.Canonical(agent.Profile)
 	scopeAgentRole, _ := agentprofile.Canonical(agent.Role)
 	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agent.LifecycleVersion <= 0 ||
-		scopeAgentProfile != agentprofile.Researcher || scopeAgentRole != agentprofile.Researcher ||
+		scopeAgentProfile != agentprofile.Research || scopeAgentRole != agentprofile.Research ||
 		strings.TrimSpace(agent.ActiveRunID) != stored.RunID {
-		return deny("Researcher agent does not own the exact live run")
+		return deny("Research agent does not own the exact live run")
 	}
 	if metadataStringValue(stored.Metadata, "request_source") != "lifecycle_texture_control" ||
 		metadataStringValue(stored.Metadata, lifecycleLogicalActivationKeyMetadata) == "" ||
@@ -3015,7 +3015,7 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 	}
 	snapshot, loadErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
 	if loadErr != nil {
-		return true, false, "", fmt.Errorf("load lifecycle Researcher admission snapshot: %w", loadErr)
+		return true, false, "", fmt.Errorf("load lifecycle Research admission snapshot: %w", loadErr)
 	}
 	workByID := make(map[string]types.WorkItemRecord, len(snapshot.WorkItems))
 	for _, work := range snapshot.WorkItems {
@@ -3119,16 +3119,16 @@ func (rt *Runtime) admitLifecycleResearcherProviderEntry(ctx context.Context, re
 			return true, false, "", fmt.Errorf("bind exact pending lifecycle controls before provider entry: %w", bindErr)
 		}
 		*rec = stored
-		return rt.admitLifecycleResearcherProviderEntry(ctx, rec)
+		return rt.admitLifecycleResearchProviderEntry(ctx, rec)
 	}
 	*rec = stored
 	return true, true, "", nil
 }
 
 const (
-	lifecycleResearcherAdmissionRefusalReason = "lifecycle_researcher_provider_admission_refused"
-	lifecycleResearcherAdmissionRetryReason   = "lifecycle_researcher_provider_admission_retry"
-	activationRetryableErrorMetadata          = "runtime_activation_retryable_error"
+	lifecycleResearchAdmissionRefusalReason = "lifecycle_researcher_provider_admission_refused"
+	lifecycleResearchAdmissionRetryReason   = "lifecycle_researcher_provider_admission_retry"
+	activationRetryableErrorMetadata        = "runtime_activation_retryable_error"
 )
 
 func markActivationRetryableError(rec *types.RunRecord, err error) {
@@ -3139,24 +3139,24 @@ func markActivationRetryableError(rec *types.RunRecord, err error) {
 	rec.Metadata[activationRetryableErrorMetadata] = strings.TrimSpace(err.Error())
 }
 
-func (rt *Runtime) passivateLifecycleResearcherWithoutProviderAuthority(ctx context.Context, rec *types.RunRecord, reason string) error {
-	return rt.passivateLifecycleResearcherProviderEntry(ctx, rec, reason, lifecycleResearcherAdmissionRefusalReason)
+func (rt *Runtime) passivateLifecycleResearchWithoutProviderAuthority(ctx context.Context, rec *types.RunRecord, reason string) error {
+	return rt.passivateLifecycleResearchProviderEntry(ctx, rec, reason, lifecycleResearchAdmissionRefusalReason)
 }
 
-func (rt *Runtime) passivateLifecycleResearcherAfterAdmissionError(ctx context.Context, rec *types.RunRecord, admissionErr error) error {
+func (rt *Runtime) passivateLifecycleResearchAfterAdmissionError(ctx context.Context, rec *types.RunRecord, admissionErr error) error {
 	if admissionErr == nil {
 		return nil
 	}
-	return rt.passivateLifecycleResearcherProviderEntry(ctx, rec, admissionErr.Error(), lifecycleResearcherAdmissionRetryReason)
+	return rt.passivateLifecycleResearchProviderEntry(ctx, rec, admissionErr.Error(), lifecycleResearchAdmissionRetryReason)
 }
 
-func (rt *Runtime) passivateLifecycleResearcherProviderEntry(ctx context.Context, rec *types.RunRecord, reason, passivatedReason string) error {
+func (rt *Runtime) passivateLifecycleResearchProviderEntry(ctx context.Context, rec *types.RunRecord, reason, passivatedReason string) error {
 	if rt == nil || rt.store == nil || rec == nil || strings.TrimSpace(rec.RunID) == "" {
-		return fmt.Errorf("passivate lifecycle Researcher: runtime, store, and run are required")
+		return fmt.Errorf("passivate lifecycle Research: runtime, store, and run are required")
 	}
 	stored, err := rt.getRunForComputer(context.WithoutCancel(ctx), rec.OwnerID, rec.RunID)
 	if err != nil {
-		return fmt.Errorf("load lifecycle Researcher for passivation: %w", err)
+		return fmt.Errorf("load lifecycle Research for passivation: %w", err)
 	}
 	if !stored.State.Active() {
 		*rec = stored
@@ -3166,7 +3166,7 @@ func (rt *Runtime) passivateLifecycleResearcherProviderEntry(ctx context.Context
 		*rec = stored
 		return nil
 	} else if !errors.Is(intentErr, store.ErrNotFound) {
-		return fmt.Errorf("load lifecycle Researcher cancellation intent before passivation: %w", intentErr)
+		return fmt.Errorf("load lifecycle Research cancellation intent before passivation: %w", intentErr)
 	}
 	stored.State = types.RunPassivated
 	stored.Error = ""
@@ -3178,7 +3178,7 @@ func (rt *Runtime) passivateLifecycleResearcherProviderEntry(ctx context.Context
 	stored.Metadata["provider_admission_refusal"] = strings.TrimSpace(reason)
 	delete(stored.Metadata, activationRetryableErrorMetadata)
 	if err := rt.store.UpdateRun(context.WithoutCancel(ctx), stored); err != nil {
-		return fmt.Errorf("persist lifecycle Researcher provider-admission passivation: %w", err)
+		return fmt.Errorf("persist lifecycle Research provider-admission passivation: %w", err)
 	}
 	*rec = stored
 	return nil
@@ -3201,19 +3201,19 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 		rt.runningMu.Unlock()
 	}()
 
-	lifecycleResearcher, admitted, refusal, admissionErr := rt.admitLifecycleResearcherProviderEntry(ctx, rec)
+	lifecycleResearch, admitted, refusal, admissionErr := rt.admitLifecycleResearchProviderEntry(ctx, rec)
 	if admissionErr != nil {
-		if passivateErr := rt.passivateLifecycleResearcherAfterAdmissionError(ctx, rec, admissionErr); passivateErr != nil {
+		if passivateErr := rt.passivateLifecycleResearchAfterAdmissionError(ctx, rec, admissionErr); passivateErr != nil {
 			markActivationRetryableError(rec, fmt.Errorf("provider admission failed (%v) and retry passivation failed: %w", admissionErr, passivateErr))
 		}
-		log.Printf("runtime: refuse lifecycle Researcher provider entry for run %s: %v", rec.RunID, admissionErr)
+		log.Printf("runtime: refuse lifecycle Research provider entry for run %s: %v", rec.RunID, admissionErr)
 		return
 	}
-	if lifecycleResearcher && !admitted {
-		if passivateErr := rt.passivateLifecycleResearcherWithoutProviderAuthority(ctx, rec, refusal); passivateErr != nil {
+	if lifecycleResearch && !admitted {
+		if passivateErr := rt.passivateLifecycleResearchWithoutProviderAuthority(ctx, rec, refusal); passivateErr != nil {
 			markActivationRetryableError(rec, fmt.Errorf("provider admission refusal %q could not passivate: %w", refusal, passivateErr))
 		}
-		log.Printf("runtime: lifecycle Researcher run %s remains idle: %s", rec.RunID, refusal)
+		log.Printf("runtime: lifecycle Research run %s remains idle: %s", rec.RunID, refusal)
 		return
 	}
 
@@ -3256,11 +3256,11 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 
 	registry := rt.toolRegistryForRun(rec)
 	overlayProfile := agentProfileForRun(rec)
-	if overlayProfile == agentprofile.CoSuper {
+	if overlayProfile == agentprofile.Engineering {
 		var bindErr error
-		registry, _, bindErr = rt.assignedCoSuperToolOverlay(ctx, rec, registry)
+		registry, _, bindErr = rt.assignedEngineeringToolOverlay(ctx, rec, registry)
 		if bindErr != nil {
-			rt.handleExecutionError(ctx, rec, fmt.Errorf("bind assigned CoSuper registry: %w", bindErr))
+			rt.handleExecutionError(ctx, rec, fmt.Errorf("bind assigned Engineering registry: %w", bindErr))
 			return
 		}
 	}
@@ -3297,28 +3297,28 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
-	assignedCoSuperOverlay := false
+	assignedEngineeringOverlay := false
 	if rt.capsuleExecutor != nil {
 		switch agentProfileForRun(rec) {
-		case agentprofile.Super:
+		case agentprofile.Management:
 			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
-				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.selfdevComputerID, Role: capsule.RoleSuper,
+				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.selfdevComputerID, Role: capsule.RoleManagement,
 				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 			})
-		case agentprofile.CoSuper:
-			overlay, handle, overlayErr := rt.assignedCoSuperToolOverlay(ctx, rec, registry)
+		case agentprofile.Engineering:
+			overlay, handle, overlayErr := rt.assignedEngineeringToolOverlay(ctx, rec, registry)
 			if overlayErr != nil {
-				rt.handleExecutionError(ctx, rec, fmt.Errorf("bind assigned CoSuper tool overlay: %w", overlayErr))
+				rt.handleExecutionError(ctx, rec, fmt.Errorf("bind assigned Engineering tool overlay: %w", overlayErr))
 				return
 			}
 			if handle != "" {
-				assignedCoSuperOverlay = true
+				assignedEngineeringOverlay = true
 				registry = overlay
-				// Exact assigned CoSupers receive the runtime-held capsule handle
+				// Exact assigned Engineering receive the runtime-held capsule handle
 				// for in-cell capsule effects. Host file, spawn, materialize,
 				// checkpoint, route, VM, and owner decision authority are not
 				// injected.
-				ctx = WithCapsuleCtx(ctx, rt.assignedCoSuperCapsuleToolCtx(rec, handle))
+				ctx = WithCapsuleCtx(ctx, rt.assignedEngineeringCapsuleToolCtx(rec, handle))
 			}
 		}
 	}
@@ -3380,7 +3380,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolregistry.WithToolLoopLLMConfig(llmConfig),
 		toolregistry.WithToolLoopConversationID(rec.RunID),
 	}
-	if assignedCoSuperOverlay {
+	if assignedEngineeringOverlay {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolResult("capsule_go_eval", func(output string) bool {
 			var decoded struct {
 				FateTerminal bool `json:"fate_terminal"`
@@ -3484,7 +3484,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
-	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
+	rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
 }
 
 const runtimeInjectionAppendFailurePassivationReason = "runtime_injection_append_failed"
@@ -3495,10 +3495,10 @@ func retryableLifecycleRuntimeInjectionFailure(rec *types.RunRecord, err error) 
 	}
 	profile, _ := agentprofile.Canonical(rec.AgentProfile)
 	role, _ := agentprofile.Canonical(rec.AgentRole)
-	if profile != role || (profile != agentprofile.Researcher && profile != agentprofile.Texture && profile != agentprofile.Super) {
+	if profile != role || (profile != agentprofile.Research && profile != agentprofile.Texture && profile != agentprofile.Management) {
 		return false
 	}
-	if profile == agentprofile.Super && rec.AgentID != persistentSuperAgentID(rec.OwnerID) {
+	if profile == agentprofile.Management && rec.AgentID != persistentManagementAgentID(rec.OwnerID) {
 		return false
 	}
 	return metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" &&
@@ -3603,7 +3603,7 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 	if shouldLogWireLifecycle(rec) {
 		log.Printf("runtime: passivated idle %s reason=%s", wireLifecycleSummary(rec), reason)
 	}
-	rt.maybeContinuePersistentSuperInbox(context.Background(), rec)
+	rt.maybeContinuePersistentManagementInbox(context.Background(), rec)
 }
 
 func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types.RunRecord) error {
@@ -3712,7 +3712,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	}
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
-	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
+	rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
 
 }
 
@@ -4369,7 +4369,7 @@ func (rt *Runtime) textureRunRequestedWorkers(ctx context.Context, rec *types.Ru
 			}
 			profile, _ := output["profile"].(string)
 			role, _ := output["role"].(string)
-			if strings.TrimSpace(profile) == agentprofile.Researcher || strings.TrimSpace(role) == agentprofile.Researcher {
+			if strings.TrimSpace(profile) == agentprofile.Research || strings.TrimSpace(role) == agentprofile.Research {
 				return true
 			}
 		}
@@ -4392,7 +4392,7 @@ func (rt *Runtime) channelHasGroundedHistory(ctx context.Context, ownerID, chann
 			continue
 		}
 		switch agentProfileForRun(&run) {
-		case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
+		case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
 			groundedRunIDs[run.RunID] = struct{}{}
 		}
 	}
@@ -4424,7 +4424,7 @@ const (
 // the original user context (seed_prompt, source_path, etc.).
 var durableMetadataKeys = []string{
 	"seed_prompt",
-	runMetadataExplicitResearcher,
+	runMetadataExplicitResearch,
 	"source_path",
 	canonicalTextureSourcePathMetadataKey,
 	"import_manifest",
@@ -4472,7 +4472,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 		rt.passivateRuntimeInjectionAppendFailure(rec, err)
 		return
 	}
-	if assignedCoSuperRun(rec) {
+	if assignedEngineeringRun(rec) {
 		termErr := rt.terminalizeRun(context.Background(), rec.RunID, rec.OwnerID, err.Error())
 		if termErr == nil {
 			if stored, loadErr := rt.getRunForComputer(context.Background(), rec.OwnerID, rec.RunID); loadErr == nil {
@@ -4480,7 +4480,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 			}
 			return
 		}
-		log.Printf("runtime: assigned CoSuper execution error could not join assignment fate for run %s: %v (%v)", rec.RunID, err, termErr)
+		log.Printf("runtime: assigned Engineering execution error could not join assignment fate for run %s: %v (%v)", rec.RunID, err, termErr)
 		return
 	}
 	now := time.Now().UTC()
@@ -4573,7 +4573,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 
 	log.Printf("runtime: run %s → %s: %v", rec.RunID, state, err)
 	if state.Terminal() {
-		rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
+		rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
 	}
 
 }

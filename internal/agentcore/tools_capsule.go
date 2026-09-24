@@ -96,7 +96,7 @@ func requireCapsuleRole(ctx context.Context, role capsule.AgentRole) (*CapsuleTo
 }
 
 func requireCurrentAssignedCapsule(ctx context.Context) (*CapsuleToolCtx, error) {
-	value, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+	value, err := requireCapsuleRole(ctx, capsule.RoleEngineering)
 	if err != nil {
 		return nil, err
 	}
@@ -120,8 +120,8 @@ func requireCapsuleMutationRole(ctx context.Context) (*CapsuleToolCtx, error) {
 	}
 	if execution.RunRecord == nil || metadataStringValue(execution.RunRecord.Metadata, "assignment_id") == "" ||
 		metadataIntValue(execution.RunRecord.Metadata, "assignment_attempt") <= 0 || toolCtx.CapsuleHandle == "" ||
-		(kind != string(types.CoSuperAssignmentImplementation) && kind != string(types.CoSuperAssignmentVerification)) {
-		return nil, fmt.Errorf("capsule mutation requires an exact bound writable CoSuper assignment")
+		(kind != string(types.EngineeringAssignmentImplementation) && kind != string(types.EngineeringAssignmentVerification)) {
+		return nil, fmt.Errorf("capsule mutation requires an exact bound writable Engineering assignment")
 	}
 	return toolCtx, nil
 }
@@ -141,7 +141,7 @@ func newSpawnCapsuleTool() toolregistry.Tool {
 			"pids_max":      map[string]any{"type": "integer"},
 		}, nil, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleSuper)
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleManagement)
 			if err != nil {
 				return "", err
 			}
@@ -191,7 +191,7 @@ func newDestroyCapsuleTool() toolregistry.Tool {
 			"handle": map[string]any{"type": "string"}, "force": map[string]any{"type": "boolean"},
 		}, []string{"handle"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleSuper)
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleManagement)
 			if err != nil {
 				return "", err
 			}
@@ -212,7 +212,7 @@ func newListCapsulesTool() toolregistry.Tool {
 		Name: "list_capsules", Description: "List this conductor run's capsules by opaque handle.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{}, nil, false),
 		Func: func(ctx context.Context, _ json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleSuper)
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleManagement)
 			if err != nil {
 				return "", err
 			}
@@ -357,7 +357,7 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 // Verify intent; rec is the bound run record whose co_super_slot must be the
 // verifier slot.
 func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleToolCtx, rec *types.RunRecord, operationID, bundleDigest, decision string, verifierRefs []string) (map[string]any, error) {
-	if rec == nil || normalizeCoSuperSlot(metadataStringValue(rec.Metadata, runMetadataCoSuperSlot)) != "verifier" {
+	if rec == nil || normalizeEngineeringSlot(metadataStringValue(rec.Metadata, runMetadataEngineeringSlot)) != "verifier" {
 		return nil, fmt.Errorf("verification recording is restricted to the co-super verifier slot")
 	}
 	if toolCtx.OperationStore == nil || toolCtx.EventAppender == nil || toolCtx.EventProjection == nil {
@@ -419,7 +419,7 @@ func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleTool
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: toolCtx.ComputerID,
 			EventKind: computerevent.EventVerificationRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: eventIdempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.CoSuper, AuthorityRef: "guest-core:self-development-verifier",
+			ActorProfile: agentprofile.Engineering, AuthorityRef: "guest-core:self-development-verifier",
 			PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
 		}
 		if _, _, appendErr := toolCtx.EventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.self-development-verification+json", "public"); appendErr != nil {
@@ -520,7 +520,7 @@ func finalizeVerifiedCapsuleBundle(ctx context.Context, toolCtx *CapsuleToolCtx,
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: toolCtx.ComputerID,
 			EventKind: computerevent.EventEffectProposed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: eventIdempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.CoSuper, AuthorityRef: "guest-core:verified-bundle-finalizer",
+			ActorProfile: agentprofile.Engineering, AuthorityRef: "guest-core:verified-bundle-finalizer",
 			PrivacyClass: "public", VerifierRefs: []string{verifierRef}, ReducerVersion: computerevent.ReducerVersionV1,
 		}
 		if _, pinnedDigest, appendErr := toolCtx.EventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, finalBytes, "application/vnd.choir.capsule-effect+json", "public"); appendErr != nil || pinnedDigest != finalDigest {
@@ -555,7 +555,7 @@ func newInspectCapsuleTool() toolregistry.Tool {
 		Name: "inspect_capsule", Description: "Inspect the safe lifecycle projection for an opaque capsule handle.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{"handle": map[string]any{"type": "string"}}, []string{"handle"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleSuper)
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleManagement)
 			if err != nil {
 				return "", err
 			}
@@ -573,8 +573,8 @@ func newInspectCapsuleTool() toolregistry.Tool {
 }
 
 // newCapsuleGoEvalTool evaluates model-authored Go source inside the assigned
-// capsule through the broker. It is CoSuper-only for now: the Researcher
-// Go-only profile requires a Researcher capsule-context injection path in
+// capsule through the broker. It is Engineering-only for now: the Research
+// Go-only profile requires a Research capsule-context injection path in
 // runtime.go that is a separate wiring slice. The tool uses
 // requireCurrentAssignedCapsule, which revalidates the durable assignment,
 // cancellation intent, work-item, run-state, and capsule fate immediately
@@ -658,25 +658,25 @@ func sortedUniqueStrings(values []string) []string {
 // recordedCommandsFromReceipts projects resolved execution receipts into the
 // recorded-command rows the assignment report binds. Shared by the retired
 // JSON tool path and the reducer's Complete-intent fate path.
-func recordedCommandsFromReceipts(receipts []capsule.ExecutionReceipt) []types.CoSuperRecordedCommand {
-	commands := make([]types.CoSuperRecordedCommand, 0, len(receipts))
+func recordedCommandsFromReceipts(receipts []capsule.ExecutionReceipt) []types.EngineeringRecordedCommand {
+	commands := make([]types.EngineeringRecordedCommand, 0, len(receipts))
 	for _, receipt := range receipts {
 		commandDigest := objectgraph.SHA256([]byte(receipt.Command))
 		commandID := "capsule-command:" + objectgraph.SHA256([]byte(receipt.ReceiptRef))
-		commands = append(commands, types.CoSuperRecordedCommand{CommandID: commandID, CommandDigest: commandDigest, ExecutionRef: receipt.ReceiptRef, ExitCode: receipt.ExitCode})
+		commands = append(commands, types.EngineeringRecordedCommand{CommandID: commandID, CommandDigest: commandDigest, ExecutionRef: receipt.ReceiptRef, ExitCode: receipt.ExitCode})
 	}
 	return commands
 }
 
 // recordedOutputsFromReceipts projects resolved execution receipts into the
 // recorded stdout/stderr output rows the assignment report binds.
-func recordedOutputsFromReceipts(receipts []capsule.ExecutionReceipt) []types.CoSuperRecordedOutput {
-	outputs := make([]types.CoSuperRecordedOutput, 0, len(receipts)*2)
+func recordedOutputsFromReceipts(receipts []capsule.ExecutionReceipt) []types.EngineeringRecordedOutput {
+	outputs := make([]types.EngineeringRecordedOutput, 0, len(receipts)*2)
 	for _, receipt := range receipts {
 		commandID := "capsule-command:" + objectgraph.SHA256([]byte(receipt.ReceiptRef))
 		outputs = append(outputs,
-			types.CoSuperRecordedOutput{OutputID: commandID + ":stdout", Kind: "stdout", Digest: "sha256:" + strings.TrimPrefix(receipt.StdoutDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stdout"},
-			types.CoSuperRecordedOutput{OutputID: commandID + ":stderr", Kind: "stderr", Digest: "sha256:" + strings.TrimPrefix(receipt.StderrDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stderr"})
+			types.EngineeringRecordedOutput{OutputID: commandID + ":stdout", Kind: "stdout", Digest: "sha256:" + strings.TrimPrefix(receipt.StdoutDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stdout"},
+			types.EngineeringRecordedOutput{OutputID: commandID + ":stderr", Kind: "stderr", Digest: "sha256:" + strings.TrimPrefix(receipt.StderrDigest, "sha256:"), Ref: receipt.ReceiptRef + "#stderr"})
 	}
 	return outputs
 }

@@ -22,14 +22,14 @@ import (
 //     actions);
 //   - Texture source collation reads ONLY packet.sources; prose in notes,
 //     summary, or claims.text does not become a source entity;
-//   - Super executes ONLY Texture-authorized Direction=control execution_request
+//   - Management executes ONLY Texture-authorized Direction=control execution_request
 //     packets (sender-authorization privilege gate; packet.kind is not authority);
-//   - a CoSuper packet declaring kind=execution_request must not open Super execution;
-//   - assigned CoSuper producer reports remain in the mailbox and never become
-//     Super execution; unsigned CoSuper packets without Direction=producer_report
+//   - a Engineering packet declaring kind=execution_request must not open Management execution;
+//   - assigned Engineering producer reports remain in the mailbox and never become
+//     Management execution; unsigned Engineering packets without Direction=producer_report
 //     are still settled as non-executable;
-//   - static CoSuper registry still has no update_coagent (assigned overlay does);
-//   - unauthorized packets addressed to persistent Super are settled instead
+//   - static Engineering registry still has no update_coagent (assigned overlay does);
+//   - unauthorized packets addressed to persistent Management are settled instead
 //     of remaining as live pending backlog.
 //
 // Every later deletion commit (E2-E4) must keep this file green. If a test
@@ -66,12 +66,12 @@ func TestSurvivorContract_AcceptsCanonicalSurface(t *testing.T) {
 	d9InstallTools(t, rt)
 	ownerID := "user-survivor-canonical"
 	docID := "doc-survivor"
-	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-canonical", agentprofile.Researcher)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-survivor-canonical"), "update_coagent", json.RawMessage(validEvidenceUpdatePacket))
+	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-canonical", agentprofile.Research)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-survivor-canonical"), "update_coagent", json.RawMessage(validEvidenceUpdatePacket))
 	if err != nil {
 		t.Fatalf("update_coagent canonical surface rejected: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researcherRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
 	if stored.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 {
 		t.Fatalf("schema_version = %q, want %q", stored.Packet.SchemaVersion, types.CoagentSourcePacketSchemaV1)
 	}
@@ -97,7 +97,7 @@ func TestSurvivorContract_RejectsEveryLegacyTopLevelField(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	superRun := d9CoagentRun("run-survivor-reject", "user-survivor-reject", "management:survivor-reject", agentprofile.Super, "doc-survivor-reject", currentTextureAgentID("doc-survivor-reject"))
+	managementRun := d9CoagentRun("run-survivor-reject", "user-survivor-reject", "management:survivor-reject", agentprofile.Management, "doc-survivor-reject", currentTextureAgentID("doc-survivor-reject"))
 	for _, field := range []string{
 		"findings",
 		"evidence_ids",
@@ -117,7 +117,7 @@ func TestSurvivorContract_RejectsEveryLegacyTopLevelField(t *testing.T) {
 			"channel_id":"doc-survivor-reject",
 			"` + field + `":["legacy-value"]
 		}`)
-		_, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", raw)
+		_, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw)
 		if err == nil {
 			t.Fatalf("update_coagent accepted legacy field %q", field)
 		}
@@ -135,7 +135,7 @@ func TestSurvivorContract_RejectsUnknownTopLevelField(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	superRun := d9CoagentRun("run-survivor-unknown", "user-survivor-unknown", "management:survivor-unknown", agentprofile.Super, "doc-survivor-unknown", currentTextureAgentID("doc-survivor-unknown"))
+	managementRun := d9CoagentRun("run-survivor-unknown", "user-survivor-unknown", "management:survivor-unknown", agentprofile.Management, "doc-survivor-unknown", currentTextureAgentID("doc-survivor-unknown"))
 	raw := json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
@@ -144,7 +144,7 @@ func TestSurvivorContract_RejectsUnknownTopLevelField(t *testing.T) {
 		"channel_id":"doc-survivor-unknown",
 		"secret平行surface":["should be rejected"]
 	}`)
-	if _, err := rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", raw); err == nil {
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw); err == nil {
 		t.Fatalf("update_coagent accepted unknown top-level field (parallel surface reintroduction risk)")
 	}
 }
@@ -160,12 +160,12 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 	d9InstallTools(t, rt)
 	ownerID := "user-survivor-collation"
 	docID := "doc-survivor-collation"
-	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-collation", agentprofile.Researcher)
+	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-collation", agentprofile.Research)
 	// Deliberately embed source-shaped text in notes and summary prose that
 	// must NOT be scraped: an http URL in notes, a "[Source: foo]" style
 	// label in summary, and a bare command_output: URI in claims.text. Only
 	// the single typed packet.sources entry may become an entity.
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-survivor-collation"), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-survivor-collation"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"Summary references [Source: prose-only] and should not be scraped.",
@@ -178,7 +178,7 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researcherRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
 	if len(stored.Packet.Sources) != 1 {
 		t.Fatalf("stored packet sources = %#v, want exactly one typed source", stored.Packet.Sources)
 	}
@@ -190,39 +190,39 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 	}
 }
 
-// TestSurvivorContract_SuperExecutesOnlyExecutionRequestPackets pins the
-// privilege gate: persistent Super must not start privileged execution from
+// TestSurvivorContract_ManagementExecutesOnlyExecutionRequestPackets pins the
+// privilege gate: persistent Management must not start privileged execution from
 // a non-execution_request packet. This complements
-// TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets by also
+// TestPersistentManagementIgnoresNonExecutionRequestUpdatePackets by also
 // asserting the deliverable-for-run filter from the run side, so a later
 // change cannot weaken one path while leaving the other intact.
-func TestSurvivorContract_CoSuperExecutionRequestDoesNotOpenPersistentSuper(t *testing.T) {
+func TestSurvivorContract_EngineeringExecutionRequestDoesNotOpenPersistentManagement(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
-	if _, ok := rt.ToolRegistryForProfile(agentprofile.CoSuper).Lookup("update_coagent"); ok {
-		t.Fatal("static CoSuper registry retained unassigned update_coagent")
+	if _, ok := rt.ToolRegistryForProfile(agentprofile.Engineering).Lookup("update_coagent"); ok {
+		t.Fatal("static Engineering registry retained unassigned update_coagent")
 	}
 	ctx := context.Background()
 	ownerID := "user-survivor-cosuper-exec"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure persistent super: %v", err)
 	}
 	now := mustNow(t)
-	cosuperExec := types.CoagentSourcePacket{
+	comanagementExec := types.CoagentSourcePacket{
 		OwnerID:       ownerID,
 		AgentID:       "engineering:survivor-exec",
-		TargetAgentID: superAgent.AgentID,
-		ChannelID:     superAgent.ChannelID,
-		Role:          agentprofile.CoSuper,
+		TargetAgentID: managementAgent.AgentID,
+		ChannelID:     managementAgent.ChannelID,
+		Role:          agentprofile.Engineering,
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "execution_request",
-			Summary:       "CoSuper-authored execution_request must not open Super",
+			Summary:       "Engineering-authored execution_request must not open Management",
 			Claims:        []types.CoagentPacketClaim{{Text: "kind is content, not authority."}},
 			Actions: []types.CoagentPacketAction{{
 				Type:      "run_command",
-				Objective: "This must not become privileged Super work.",
+				Objective: "This must not become privileged Management work.",
 				Safety: types.CoagentPacketActionSafety{
 					MutationClass: "green",
 					Network:       "forbidden",
@@ -232,35 +232,35 @@ func TestSurvivorContract_CoSuperExecutionRequestDoesNotOpenPersistentSuper(t *t
 		},
 		CreatedAt: now,
 	}
-	cosuperExec.UpdateID = deriveWorkerUpdateID(cosuperExec)
-	cosuperExec.Content = buildWorkerUpdateMessage(cosuperExec)
+	comanagementExec.UpdateID = deriveWorkerUpdateID(comanagementExec)
+	comanagementExec.Content = buildWorkerUpdateMessage(comanagementExec)
 	msg := &types.ChannelMessage{
-		ChannelID: cosuperExec.ChannelID, From: cosuperExec.AgentID, FromAgentID: cosuperExec.AgentID,
-		ToAgentID: cosuperExec.TargetAgentID, Role: cosuperExec.Role, Content: cosuperExec.Content, Timestamp: cosuperExec.CreatedAt,
+		ChannelID: comanagementExec.ChannelID, From: comanagementExec.AgentID, FromAgentID: comanagementExec.AgentID,
+		ToAgentID: comanagementExec.TargetAgentID, Role: comanagementExec.Role, Content: comanagementExec.Content, Timestamp: comanagementExec.CreatedAt,
 	}
-	if _, created, err := s.DispatchWorkerUpdate(ctx, cosuperExec, msg); err != nil || !created {
-		t.Fatalf("dispatch CoSuper execution_request: created=%v err=%v", created, err)
+	if _, created, err := s.DispatchWorkerUpdate(ctx, comanagementExec, msg); err != nil || !created {
+		t.Fatalf("dispatch Engineering execution_request: created=%v err=%v", created, err)
 	}
-	run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	run, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
 	if err != nil {
 		t.Fatalf("reconcile persistent super: %v", err)
 	}
 	if run != nil {
-		t.Fatalf("CoSuper execution_request opened persistent Super run %s", run.RunID)
+		t.Fatalf("Engineering execution_request opened persistent Management run %s", run.RunID)
 	}
-	stored, err := s.GetWorkerUpdate(ctx, ownerID, cosuperExec.UpdateID)
+	stored, err := s.GetWorkerUpdate(ctx, ownerID, comanagementExec.UpdateID)
 	if err != nil {
-		t.Fatalf("get CoSuper execution_request: %v", err)
+		t.Fatalf("get Engineering execution_request: %v", err)
 	}
 	if stored.DeliveredToRunID != "settled_non_executable" || stored.DeliveredAt == nil {
-		t.Fatalf("CoSuper execution_request not settled: %+v", stored)
+		t.Fatalf("Engineering execution_request not settled: %+v", stored)
 	}
-	if persistentSuperExecutablePacket(cosuperExec) {
-		t.Fatal("CoSuper execution_request remained Super-executable")
+	if persistentManagementExecutablePacket(comanagementExec) {
+		t.Fatal("Engineering execution_request remained Management-executable")
 	}
-	textureExec := authorizedPersistentSuperExecutionRequest(ownerID, superAgent.AgentID, superAgent.ChannelID, "Texture control opens Super", now.Add(time.Millisecond))
-	if !persistentSuperExecutablePacket(textureExec) {
-		t.Fatal("Texture control execution_request lost Super executability")
+	textureExec := authorizedPersistentManagementExecutionRequest(ownerID, managementAgent.AgentID, managementAgent.ChannelID, "Texture control opens Management", now.Add(time.Millisecond))
+	if !persistentManagementExecutablePacket(textureExec) {
+		t.Fatal("Texture control execution_request lost Management executability")
 	}
 }
 
@@ -278,11 +278,11 @@ func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 	d9InstallTools(t, rt)
 	ownerID := "user-survivor-reported"
 	docID := "doc-survivor-reported"
-	researcherRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-reported", agentprofile.Researcher)
+	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-reported", agentprofile.Research)
 	// A packet.source with an unsupported kind that cannot materialize. The
 	// current behavior silently drops it. The survivor contract requires the
 	// drop be reported.
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolContextForTestCall(researcherRun, "call-survivor-reported"), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-survivor-reported"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"packet with a source that cannot materialize",
@@ -302,13 +302,13 @@ func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 		}
 		t.Fatalf("update_coagent: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researcherRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
 	if len(stored.Packet.Sources) != 1 || stored.Packet.Sources[0].SourceID != "src-unsupported" {
 		t.Fatalf("unsupported source was not durably visible in its packet: %#v", stored.Packet.Sources)
 	}
 }
 
-func authorizedPersistentSuperExecutionRequest(ownerID, targetAgentID, channelID, summary string, now time.Time) types.CoagentSourcePacket {
+func authorizedPersistentManagementExecutionRequest(ownerID, targetAgentID, channelID, summary string, now time.Time) types.CoagentSourcePacket {
 	update := types.CoagentSourcePacket{
 		OwnerID:       ownerID,
 		AgentID:       "texture:survivor-control",
@@ -343,16 +343,16 @@ func mustNow(t *testing.T) time.Time {
 	return time.Now().UTC()
 }
 
-// TestSurvivorContract_SuperSettlesNonExecutionRequestPackets proves the E3.2
-// obligation: non-execution packets addressed to persistent Super are
+// TestSurvivorContract_ManagementSettlesNonExecutionRequestPackets proves the E3.2
+// obligation: non-execution packets addressed to persistent Management are
 // automatically settled (marked delivered/settled) during reconciliation
 // so they do not linger in the mailbox backlog forever.
 
-func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *testing.T) {
+func TestSurvivorContract_ManagementSettlesNonExecutionBeforeExecutionBacklog(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "user-survivor-settle-mixed"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure persistent super: %v", err)
 	}
@@ -361,9 +361,9 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 	nonExec := types.CoagentSourcePacket{
 		OwnerID:       ownerID,
 		AgentID:       "engineering:survivor-settle-mixed",
-		TargetAgentID: superAgent.AgentID,
-		ChannelID:     superAgent.ChannelID,
-		Role:          agentprofile.CoSuper,
+		TargetAgentID: managementAgent.AgentID,
+		ChannelID:     managementAgent.ChannelID,
+		Role:          agentprofile.Engineering,
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update",
@@ -374,7 +374,7 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 	}
 	nonExec.UpdateID = deriveWorkerUpdateID(nonExec)
 	nonExec.Content = buildWorkerUpdateMessage(nonExec)
-	exec := authorizedPersistentSuperExecutionRequest(ownerID, superAgent.AgentID, superAgent.ChannelID, "executable work after non-execution packet", now.Add(time.Millisecond))
+	exec := authorizedPersistentManagementExecutionRequest(ownerID, managementAgent.AgentID, managementAgent.ChannelID, "executable work after non-execution packet", now.Add(time.Millisecond))
 
 	for _, update := range []types.CoagentSourcePacket{nonExec, exec} {
 		msg := &types.ChannelMessage{
@@ -394,12 +394,12 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 		}
 	}
 
-	run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	run, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
 	if err != nil {
 		t.Fatalf("reconcile persistent super: %v", err)
 	}
 	if run == nil {
-		t.Fatal("expected execution_request to start a persistent Super run")
+		t.Fatal("expected execution_request to start a persistent Management run")
 	}
 	ids := metadataStringSlice(run.Metadata["worker_update_ids"])
 	if len(ids) != 1 || ids[0] != exec.UpdateID {
@@ -413,7 +413,7 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 	if storedNonExec.DeliveredToRunID != "settled_non_executable" || storedNonExec.DeliveredAt == nil {
 		t.Fatalf("non-execution update not settled: %+v", storedNonExec)
 	}
-	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, superAgent.AgentID, 10)
+	backlog, err := s.ListCoagentMailboxBacklog(ctx, ownerID, managementAgent.AgentID, 10)
 	if err != nil {
 		t.Fatalf("list backlog: %v", err)
 	}
@@ -422,23 +422,23 @@ func TestSurvivorContract_SuperSettlesNonExecutionBeforeExecutionBacklog(t *test
 	}
 }
 
-func TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog(t *testing.T) {
+func TestSurvivorContract_ManagementExecutesBeforeSettledNonExecutionBacklog(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "user-survivor-settle-reversed"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure persistent super: %v", err)
 	}
 
 	now := mustNow(t)
-	exec := authorizedPersistentSuperExecutionRequest(ownerID, superAgent.AgentID, superAgent.ChannelID, "executable work before non-execution packet", now)
+	exec := authorizedPersistentManagementExecutionRequest(ownerID, managementAgent.AgentID, managementAgent.ChannelID, "executable work before non-execution packet", now)
 	nonExec := types.CoagentSourcePacket{
 		OwnerID:       ownerID,
 		AgentID:       "engineering:survivor-settle-reversed",
-		TargetAgentID: superAgent.AgentID,
-		ChannelID:     superAgent.ChannelID,
-		Role:          agentprofile.CoSuper,
+		TargetAgentID: managementAgent.AgentID,
+		ChannelID:     managementAgent.ChannelID,
+		Role:          agentprofile.Engineering,
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update",
@@ -468,12 +468,12 @@ func TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog(t *testi
 		}
 	}
 
-	run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	run, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
 	if err != nil {
 		t.Fatalf("reconcile persistent super: %v", err)
 	}
 	if run == nil {
-		t.Fatal("expected execution_request to start a persistent Super run")
+		t.Fatal("expected execution_request to start a persistent Management run")
 	}
 	ids := metadataStringSlice(run.Metadata["worker_update_ids"])
 	if len(ids) != 1 || ids[0] != exec.UpdateID {
@@ -489,13 +489,13 @@ func TestSurvivorContract_SuperExecutesBeforeSettledNonExecutionBacklog(t *testi
 	}
 }
 
-func assignedCoSuperSuperReportPacket(ownerID, targetAgentID, channelID, summary string, now time.Time) types.CoagentSourcePacket {
+func assignedEngineeringManagementReportPacket(ownerID, targetAgentID, channelID, summary string, now time.Time) types.CoagentSourcePacket {
 	update := types.CoagentSourcePacket{
 		OwnerID:       ownerID,
 		AgentID:       "engineering:survivor-report",
 		TargetAgentID: targetAgentID,
 		ChannelID:     channelID,
-		Role:          agentprofile.CoSuper,
+		Role:          agentprofile.Engineering,
 		Direction:     types.LifecyclePacketDirectionProducerReport,
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
@@ -512,7 +512,7 @@ func assignedCoSuperSuperReportPacket(ownerID, targetAgentID, channelID, summary
 
 func TestSurvivorContract_SenderAuthorizationNotPacketKind(t *testing.T) {
 	now := mustNow(t)
-	texture := authorizedPersistentSuperExecutionRequest("owner-auth", "management:owner-auth", "management:owner-auth", "texture control", now)
+	texture := authorizedPersistentManagementExecutionRequest("owner-auth", "management:owner-auth", "management:owner-auth", "texture control", now)
 	cases := []struct {
 		name       string
 		mutate     func(types.CoagentSourcePacket) types.CoagentSourcePacket
@@ -531,81 +531,81 @@ func TestSurvivorContract_SenderAuthorizationNotPacketKind(t *testing.T) {
 			return u
 		}},
 		{name: "cosuper control execution_request spoof", mutate: func(u types.CoagentSourcePacket) types.CoagentSourcePacket {
-			u.Role = agentprofile.CoSuper
+			u.Role = agentprofile.Engineering
 			u.AgentID = "engineering:spoof"
 			return u
 		}},
 		{name: "cosuper producer_report execution_request", mutate: func(u types.CoagentSourcePacket) types.CoagentSourcePacket {
-			u.Role = agentprofile.CoSuper
+			u.Role = agentprofile.Engineering
 			u.AgentID = "engineering:spoof"
 			u.Direction = types.LifecyclePacketDirectionProducerReport
 			return u
 		}},
 		{name: "researcher control execution_request", mutate: func(u types.CoagentSourcePacket) types.CoagentSourcePacket {
-			u.Role = agentprofile.Researcher
+			u.Role = agentprofile.Research
 			u.AgentID = "research:spoof"
 			return u
 		}},
 		{name: "cosuper producer_report evidence_update", mutate: func(u types.CoagentSourcePacket) types.CoagentSourcePacket {
-			return assignedCoSuperSuperReportPacket(u.OwnerID, u.TargetAgentID, u.ChannelID, "report", now)
+			return assignedEngineeringManagementReportPacket(u.OwnerID, u.TargetAgentID, u.ChannelID, "report", now)
 		}, report: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := tc.mutate(texture)
-			if persistentSuperExecutablePacket(got) != tc.executable {
-				t.Fatalf("executable=%v want %v", persistentSuperExecutablePacket(got), tc.executable)
+			if persistentManagementExecutablePacket(got) != tc.executable {
+				t.Fatalf("executable=%v want %v", persistentManagementExecutablePacket(got), tc.executable)
 			}
-			if persistentSuperAdmissibleReport(got) != tc.report {
-				t.Fatalf("admissible report=%v want %v", persistentSuperAdmissibleReport(got), tc.report)
+			if persistentManagementAdmissibleReport(got) != tc.report {
+				t.Fatalf("admissible report=%v want %v", persistentManagementAdmissibleReport(got), tc.report)
 			}
 		})
 	}
 }
 
-func TestSurvivorContract_AssignedCoSuperReportDoesNotOpenPersistentSuper(t *testing.T) {
+func TestSurvivorContract_AssignedEngineeringReportDoesNotOpenPersistentManagement(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "user-survivor-cosuper-report"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure persistent super: %v", err)
 	}
 	now := mustNow(t)
-	report := assignedCoSuperSuperReportPacket(ownerID, superAgent.AgentID, superAgent.ChannelID, "assigned CoSuper report", now)
+	report := assignedEngineeringManagementReportPacket(ownerID, managementAgent.AgentID, managementAgent.ChannelID, "assigned Engineering report", now)
 	msg := &types.ChannelMessage{
 		ChannelID: report.ChannelID, From: report.AgentID, FromAgentID: report.AgentID,
 		ToAgentID: report.TargetAgentID, Role: report.Role, Content: report.Content, Timestamp: report.CreatedAt,
 	}
 	if _, created, err := s.DispatchWorkerUpdate(ctx, report, msg); err != nil || !created {
-		t.Fatalf("dispatch CoSuper report: created=%v err=%v", created, err)
+		t.Fatalf("dispatch Engineering report: created=%v err=%v", created, err)
 	}
-	run, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	run, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
 	if err != nil {
 		t.Fatalf("reconcile persistent super: %v", err)
 	}
 	if run != nil {
-		t.Fatalf("CoSuper producer report opened persistent Super run %s", run.RunID)
+		t.Fatalf("Engineering producer report opened persistent Management run %s", run.RunID)
 	}
 	stored, err := s.GetWorkerUpdate(ctx, ownerID, report.UpdateID)
 	if err != nil {
-		t.Fatalf("get CoSuper report: %v", err)
+		t.Fatalf("get Engineering report: %v", err)
 	}
 	if stored.DeliveredAt != nil || stored.DeliveredToRunID != "" {
-		t.Fatalf("CoSuper producer report settled instead of retained: %+v", stored)
+		t.Fatalf("Engineering producer report settled instead of retained: %+v", stored)
 	}
-	superRun := types.RunRecord{
-		RunID: "run-mailbox-super", OwnerID: ownerID, AgentID: superAgent.AgentID,
-		AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super,
+	managementRun := types.RunRecord{
+		RunID: "run-mailbox-super", OwnerID: ownerID, AgentID: managementAgent.AgentID,
+		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management,
 		Metadata: map[string]any{"request_source": "update_coagent"},
 	}
-	if !coagentUpdateDeliverableForRun(&superRun, report) {
-		t.Fatal("mailbox Super cannot inject retained CoSuper producer report")
+	if !coagentUpdateDeliverableForRun(&managementRun, report) {
+		t.Fatal("mailbox Management cannot inject retained Engineering producer report")
 	}
-	if persistentSuperExecutablePacket(report) {
-		t.Fatal("CoSuper producer report became Super-executable")
+	if persistentManagementExecutablePacket(report) {
+		t.Fatal("Engineering producer report became Management-executable")
 	}
-	textureExec := authorizedPersistentSuperExecutionRequest(ownerID, superAgent.AgentID, superAgent.ChannelID, "Texture control opens Super after report", now.Add(time.Millisecond))
+	textureExec := authorizedPersistentManagementExecutionRequest(ownerID, managementAgent.AgentID, managementAgent.ChannelID, "Texture control opens Management after report", now.Add(time.Millisecond))
 	execMsg := &types.ChannelMessage{
 		ChannelID: textureExec.ChannelID, From: textureExec.AgentID, FromAgentID: textureExec.AgentID,
 		ToAgentID: textureExec.TargetAgentID, Role: textureExec.Role, Content: textureExec.Content, Timestamp: textureExec.CreatedAt,
@@ -613,9 +613,9 @@ func TestSurvivorContract_AssignedCoSuperReportDoesNotOpenPersistentSuper(t *tes
 	if _, created, err := s.DispatchWorkerUpdate(ctx, textureExec, execMsg); err != nil || !created {
 		t.Fatalf("dispatch Texture control: created=%v err=%v", created, err)
 	}
-	run, err = rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	run, err = rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
 	if err != nil || run == nil {
-		t.Fatalf("Texture control should open Super after retained report: run=%v err=%v", run, err)
+		t.Fatalf("Texture control should open Management after retained report: run=%v err=%v", run, err)
 	}
 	ids := metadataStringSlice(run.Metadata["worker_update_ids"])
 	if len(ids) != 1 || ids[0] != textureExec.UpdateID {
@@ -623,15 +623,15 @@ func TestSurvivorContract_AssignedCoSuperReportDoesNotOpenPersistentSuper(t *tes
 	}
 	storedReport, err := s.GetWorkerUpdate(ctx, ownerID, report.UpdateID)
 	if err != nil {
-		t.Fatalf("get retained CoSuper report: %v", err)
+		t.Fatalf("get retained Engineering report: %v", err)
 	}
 	if storedReport.DeliveredToRunID == "settled_non_executable" {
-		t.Fatal("CoSuper producer report was settled when Super opened")
+		t.Fatal("Engineering producer report was settled when Management opened")
 	}
 	if !coagentUpdateDeliverableForRun(run, storedReport) {
-		t.Fatal("opened Super cannot inject retained CoSuper producer report")
+		t.Fatal("opened Management cannot inject retained Engineering producer report")
 	}
-	if !persistentSuperExecutablePacket(textureExec) {
-		t.Fatal("Texture control execution_request lost Super executability")
+	if !persistentManagementExecutablePacket(textureExec) {
+		t.Fatal("Texture control execution_request lost Management executability")
 	}
 }

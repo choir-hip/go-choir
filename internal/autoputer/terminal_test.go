@@ -473,17 +473,17 @@ func TestFindShell(t *testing.T) {
 	}
 }
 
-func TestResolveSuperConsoleCommandPrefersOverride(t *testing.T) {
+func TestResolveManagementConsoleCommandPrefersOverride(t *testing.T) {
 	t.Setenv("CHOIR_ZOT_PATH", "/opt/choir/bin/zot")
 	t.Setenv("PATH", t.TempDir())
 
-	got := resolveSuperConsoleCommand()
+	got := resolveManagementConsoleCommand()
 	if len(got) != 1 || got[0] != "/opt/choir/bin/zot" {
-		t.Fatalf("resolveSuperConsoleCommand() = %#v, want override zot path", got)
+		t.Fatalf("resolveManagementConsoleCommand() = %#v, want override zot path", got)
 	}
 }
 
-func TestResolveSuperConsoleCommandFindsZotOnPath(t *testing.T) {
+func TestResolveManagementConsoleCommandFindsZotOnPath(t *testing.T) {
 	t.Setenv("CHOIR_ZOT_PATH", "")
 	binDir := t.TempDir()
 	zotPath := filepath.Join(binDir, "zot")
@@ -492,9 +492,9 @@ func TestResolveSuperConsoleCommandFindsZotOnPath(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir)
 
-	got := resolveSuperConsoleCommand()
+	got := resolveManagementConsoleCommand()
 	if len(got) != 1 || got[0] != zotPath {
-		t.Fatalf("resolveSuperConsoleCommand() = %#v, want PATH zot %q", got, zotPath)
+		t.Fatalf("resolveManagementConsoleCommand() = %#v, want PATH zot %q", got, zotPath)
 	}
 }
 

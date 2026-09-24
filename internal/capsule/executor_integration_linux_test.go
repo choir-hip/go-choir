@@ -74,7 +74,7 @@ func TestExecutorInheritedBrokerListenerEndToEnd(t *testing.T) {
 	if caps.State != StateActive || caps.PID <= 0 || caps.listener == nil || caps.broker == nil {
 		t.Fatalf("capsule broker did not become active through inherited listener: %+v", caps)
 	}
-	capability, err := executor.MintCapability("g1-listener-reconnect", RoleCoSuper, capsuleID, time.Minute)
+	capability, err := executor.MintCapability("g1-listener-reconnect", RoleEngineering, capsuleID, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,14 +43,14 @@ func NewTree() Tree {
 type ActionType string
 
 const (
-	ActionDownload      ActionType = "download"       // remote has it, local doesn't
-	ActionUpload        ActionType = "upload"         // local has it, remote doesn't
-	ActionDeleteLocal   ActionType = "delete_local"   // remote deleted, local has
-	ActionDeleteRemote  ActionType = "delete_remote"  // local deleted, remote has
-	ActionUpdateLocal   ActionType = "update_local"   // remote has newer version
-	ActionUpdateRemote  ActionType = "update_remote"  // local has newer version
-	ActionMoveLocal     ActionType = "move_local"     // remote moved it
-	ActionMoveRemote    ActionType = "move_remote"    // local moved it
+	ActionDownload     ActionType = "download"      // remote has it, local doesn't
+	ActionUpload       ActionType = "upload"        // local has it, remote doesn't
+	ActionDeleteLocal  ActionType = "delete_local"  // remote deleted, local has
+	ActionDeleteRemote ActionType = "delete_remote" // local deleted, remote has
+	ActionUpdateLocal  ActionType = "update_local"  // remote has newer version
+	ActionUpdateRemote ActionType = "update_remote" // local has newer version
+	ActionMoveLocal    ActionType = "move_local"    // remote moved it
+	ActionMoveRemote   ActionType = "move_remote"   // local moved it
 )
 
 // Action describes one reconciliation step. The Version field carries the
@@ -134,9 +134,9 @@ func pathCollisions(remote, local Tree) []Conflict {
 	// collision exists. We only flag collisions across sides (a local item and
 	// a remote item at the same path with different IDs).
 	type collision struct {
-		localID  model.ItemID
-		localVer model.Version
-		remoteID model.ItemID
+		localID   model.ItemID
+		localVer  model.Version
+		remoteID  model.ItemID
 		remoteVer model.Version
 	}
 	seen := make(map[loc]collision)

@@ -9,7 +9,7 @@ import (
 // Regression: assignedCapsule must return a nil INTERFACE (not a boxed
 // typed-nil *capsule.Executor) when no executor is configured. The typed-nil
 // box defeats every `exec == nil` guard downstream and previously caused a
-// SIGSEGV in assignedCoSuperCapsuleUsable at the post-replay reconcile
+// SIGSEGV in assignedEngineeringCapsuleUsable at the post-replay reconcile
 // (evidence: recovery-post-replay-cosuper-fate-nil-executor-panic-2026-08-24.md).
 func TestAssignedCapsuleWithoutExecutorIsNilInterface(t *testing.T) {
 	rt := &Runtime{} // no capsuleExecutor, no assignmentRuntime
@@ -18,16 +18,16 @@ func TestAssignedCapsuleWithoutExecutorIsNilInterface(t *testing.T) {
 	}
 }
 
-// Regression: with a bound CoSuper assignment and NO capsule executor,
-// assignedCoSuperCapsuleUsable must report unusable — never dereference a
+// Regression: with a bound Engineering assignment and NO capsule executor,
+// assignedEngineeringCapsuleUsable must report unusable — never dereference a
 // nil *capsule.Executor.
-func TestAssignedCoSuperCapsuleUsableWithoutExecutorDoesNotPanic(t *testing.T) {
+func TestAssignedEngineeringCapsuleUsableWithoutExecutorDoesNotPanic(t *testing.T) {
 	rt := &Runtime{}
-	assignment := types.CoSuperAssignment{
+	assignment := types.EngineeringAssignment{
 		BoundRunID: "run-bound",
-		Binding:    types.CoSuperAssignmentBinding{CapsuleID: "capsule-bound"},
+		Binding:    types.EngineeringAssignmentBinding{CapsuleID: "capsule-bound"},
 	}
-	if rt.assignedCoSuperCapsuleUsable(assignment) {
+	if rt.assignedEngineeringCapsuleUsable(assignment) {
 		t.Fatal("no capsule executor must never report a usable assignment capsule")
 	}
 }

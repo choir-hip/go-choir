@@ -180,10 +180,10 @@ func TestChoirSymbolsInSession(t *testing.T) {
 	}
 }
 
-// TestChoirResearcherScopeIsReadOnly is the B2 regression: a researcher-bound
+// TestChoirResearchScopeIsReadOnly is the B2 regression: a researcher-bound
 // scope observes files but cannot write, execute, assign, message, or report
 // outcomes, at both the export table and the method level.
-func TestChoirResearcherScopeIsReadOnly(t *testing.T) {
+func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	secret := make([]byte, 32)
@@ -198,7 +198,7 @@ func TestChoirResearcherScopeIsReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, SessionRoleResearcher, "")
+	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, SessionRoleResearch, "")
 	if err != nil {
 		t.Fatal(err)
 	}

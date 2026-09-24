@@ -23,21 +23,21 @@ import (
 )
 
 const (
-	coSuperAssignmentMemoryMax = int64(1 << 30)
-	coSuperAssignmentCPUQuota  = int64(100000)
-	coSuperAssignmentPidsMax   = int64(256)
-	// coSuperAssignmentDeadline is the fail-closed scheduling deadline for one
+	engineeringAssignmentMemoryMax = int64(1 << 30)
+	engineeringAssignmentCPUQuota  = int64(100000)
+	engineeringAssignmentPidsMax   = int64(256)
+	// coManagementAssignmentDeadline is the fail-closed scheduling deadline for one
 	// live assignment (I26): a bound assignment that has not reached a terminal
 	// disposition by this bound is cancelled with an expired reason. The
 	// underlying execution request stays pending and retryable — the scheduler
 	// may re-admit it later; expiry fails the assignment, never the work.
-	coSuperAssignmentDeadline = 6 * time.Hour
-	// assignedCoSuperFateWatchdogDelay is the fate-transition watchdog delay:
+	engineeringAssignmentDeadline = 6 * time.Hour
+	// assignedEngineeringFateWatchdogDelay is the fate-transition watchdog delay:
 	// after a committed disposition strands the terminal saga, the watchdog
 	// re-drives the continuation without waiting for a worker cell or a
 	// restart. Longer than an in-flight commit needs, shorter than the
 	// deadline backstop.
-	assignedCoSuperFateWatchdogDelay = 5 * time.Minute
+	assignedEngineeringFateWatchdogDelay = 5 * time.Minute
 )
 
 type assignmentCapsuleRuntime interface {
@@ -55,8 +55,8 @@ type assignmentCapsuleRuntime interface {
 	PersistRevocationReceipt(string, string, string, string) (capsule.CapsuleRevocationReceipt, error)
 }
 
-type AssignedCoSuperStart struct {
-	Assignment types.CoSuperAssignment
+type AssignedEngineeringStart struct {
+	Assignment types.EngineeringAssignment
 	Run        types.RunRecord
 	Replay     bool
 }
@@ -101,7 +101,7 @@ func overlayIDNamedInObjective(objective string) string {
 // one document-driven cast. The revision is the admission: the same revision
 // always names the same assignment, so occurrence redelivery and boot scans
 // replay rather than mint duplicates.
-func deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID string, kind types.CoSuperAssignmentKind, candidateID string) string {
+func deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID string, kind types.EngineeringAssignmentKind, candidateID string) string {
 	seed := strings.Join([]string{
 		"choir:co-super-assignment:v3", ownerID, computerID, trajectoryID, revisionID, string(kind), candidateID,
 	}, "\x00")
@@ -121,55 +121,55 @@ func deterministicDocumentAssignmentCapability(assignmentID string, attempt uint
 // revision on an engineering-bound lifecycle document opens one assignment.
 type OpenDocumentAssignmentRequest struct {
 	Objective            string
-	Kind                 types.CoSuperAssignmentKind
+	Kind                 types.EngineeringAssignmentKind
 	CandidateID          string
 	RevisionID           string
 	ModelPolicyOverlayID string
 }
 
-// startAssignedCoSuperForDocument opens one assignment whose parent authority is
+// startAssignedEngineeringForDocument opens one assignment whose parent authority is
 // the engineering desk agent bound to the document plus the owner-authored
-// revision that carried the cast. It replaces the retired Super-mediated
+// revision that carried the cast. It replaces the retired Management-mediated
 // assign_co_super opener: the revision event IS the admission.
-func (rt *Runtime) startAssignedCoSuperForDocument(ctx context.Context, doc types.Document, revision types.Revision, req OpenDocumentAssignmentRequest) (AssignedCoSuperStart, error) {
+func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc types.Document, revision types.Revision, req OpenDocumentAssignmentRequest) (AssignedEngineeringStart, error) {
 	req.Objective, req.CandidateID, req.RevisionID = strings.TrimSpace(req.Objective), strings.TrimSpace(req.CandidateID), strings.TrimSpace(req.RevisionID)
 	if req.Objective == "" || req.RevisionID == "" ||
-		(req.Kind != types.CoSuperAssignmentImplementation && req.Kind != types.CoSuperAssignmentVerification) {
-		return AssignedCoSuperStart{}, fmt.Errorf("document assignment requires objective, kind, and the admitting revision")
+		(req.Kind != types.EngineeringAssignmentImplementation && req.Kind != types.EngineeringAssignmentVerification) {
+		return AssignedEngineeringStart{}, fmt.Errorf("document assignment requires objective, kind, and the admitting revision")
 	}
-	if (req.Kind == types.CoSuperAssignmentVerification) != (req.CandidateID != "") {
-		return AssignedCoSuperStart{}, fmt.Errorf("verification requires one exact candidate_id and implementation forbids it")
+	if (req.Kind == types.EngineeringAssignmentVerification) != (req.CandidateID != "") {
+		return AssignedEngineeringStart{}, fmt.Errorf("verification requires one exact candidate_id and implementation forbids it")
 	}
 	if strings.TrimSpace(req.ModelPolicyOverlayID) == "" {
 		if named := overlayIDNamedInObjective(req.Objective); named != "" {
-			return AssignedCoSuperStart{}, fmt.Errorf("document assignment objective names model_policy_overlay_id=%s but the structured field is empty: pass it as model_policy_overlay_id (prose names select nothing; the base policy would silently serve instead)", named)
+			return AssignedEngineeringStart{}, fmt.Errorf("document assignment objective names model_policy_overlay_id=%s but the structured field is empty: pass it as model_policy_overlay_id (prose names select nothing; the base policy would silently serve instead)", named)
 		}
 	}
 	if rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
-		return AssignedCoSuperStart{}, fmt.Errorf("assigned CoSuper capsule authority unavailable")
+		return AssignedEngineeringStart{}, fmt.Errorf("assigned Engineering capsule authority unavailable")
 	}
 	ownerID, computerID := strings.TrimSpace(doc.OwnerID), strings.TrimSpace(doc.ComputerID)
 	trajectoryID, docID := strings.TrimSpace(doc.TrajectoryID), strings.TrimSpace(doc.DocID)
 	if ownerID == "" || computerID == "" || trajectoryID == "" || docID == "" ||
 		revision.RevisionID != req.RevisionID || revision.DocID != docID || revision.TrajectoryID != trajectoryID ||
 		revision.AuthorKind != types.AuthorUser {
-		return AssignedCoSuperStart{}, fmt.Errorf("document assignment requires an owner-authored revision on the bound document")
+		return AssignedEngineeringStart{}, fmt.Errorf("document assignment requires an owner-authored revision on the bound document")
 	}
-	parentAgentID := agentprofile.CoSuper + ":" + docID
+	parentAgentID := agentprofile.Engineering + ":" + docID
 	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
-		return AssignedCoSuperStart{}, fmt.Errorf("derive assignment scope: %w", err)
+		return AssignedEngineeringStart{}, fmt.Errorf("derive assignment scope: %w", err)
 	}
 	if snapshot.Trajectory.Status != types.TrajectoryLive {
-		return AssignedCoSuperStart{}, fmt.Errorf("document assignment requires a live trajectory")
+		return AssignedEngineeringStart{}, fmt.Errorf("document assignment requires a live trajectory")
 	}
 	parentWorkID := ""
 	var parentWork *types.WorkItemRecord
 	for i := range snapshot.WorkItems {
 		work := snapshot.WorkItems[i]
-		if work.Status == types.WorkItemOpen && work.AssignedAgentID == parentAgentID && work.AuthorityProfile == agentprofile.CoSuper {
+		if work.Status == types.WorkItemOpen && work.AssignedAgentID == parentAgentID && work.AuthorityProfile == agentprofile.Engineering {
 			if parentWorkID != "" {
-				return AssignedCoSuperStart{}, fmt.Errorf("document trajectory has multiple open engineering desk work items")
+				return AssignedEngineeringStart{}, fmt.Errorf("document trajectory has multiple open engineering desk work items")
 			}
 			parentWorkID = work.WorkItemID
 			copy := work
@@ -177,7 +177,7 @@ func (rt *Runtime) startAssignedCoSuperForDocument(ctx context.Context, doc type
 		}
 	}
 	if parentWork == nil {
-		return AssignedCoSuperStart{}, fmt.Errorf("document trajectory has no open engineering desk work item")
+		return AssignedEngineeringStart{}, fmt.Errorf("document trajectory has no open engineering desk work item")
 	}
 	attempt := uint64(1)
 	assignmentID := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, req.RevisionID, req.Kind, req.CandidateID)
@@ -188,31 +188,31 @@ func (rt *Runtime) startAssignedCoSuperForDocument(ctx context.Context, doc type
 		requestDigestParts = append(requestDigestParts, overlay)
 	}
 	requestDigest := objectgraph.SHA256([]byte(strings.Join(requestDigestParts, "\x00")))
-	if existing, getErr := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, assignmentID, attempt); getErr == nil {
+	if existing, getErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt); getErr == nil {
 		if existing.Binding.ParentAgentID != parentAgentID || existing.Binding.ParentControlID != req.RevisionID ||
 			existing.Binding.ParentWorkItemID != parentWorkID || existing.Binding.Kind != req.Kind ||
 			existing.Binding.RequestDigest != requestDigest || existing.Binding.SourceCandidateID != req.CandidateID {
-			return AssignedCoSuperStart{}, store.ErrCoSuperAssignmentCommandConflict
+			return AssignedEngineeringStart{}, store.ErrEngineeringAssignmentCommandConflict
 		}
-		if existing.Disposition == types.CoSuperAssignmentBound || existing.Disposition.Terminal() {
+		if existing.Disposition == types.EngineeringAssignmentBound || existing.Disposition.Terminal() {
 			run := types.RunRecord{}
 			if existing.BoundRunID != "" {
 				run, _ = rt.store.GetLifecycleRun(ctx, ownerID, computerID, existing.BoundRunID)
 			}
-			return AssignedCoSuperStart{Assignment: existing, Run: run, Replay: true}, nil
+			return AssignedEngineeringStart{Assignment: existing, Run: run, Replay: true}, nil
 		}
 		// Open but unbound: the durable open committed and the spawn/bind saga
 		// stranded (process crash or transient failure). The deterministic
 		// capability re-derives exactly, so resume the saga rather than fail.
-		return rt.resumeAssignedCoSuperForDocument(ctx, existing, req)
+		return rt.resumeAssignedEngineeringForDocument(ctx, existing, req)
 	} else if !errors.Is(getErr, store.ErrNotFound) {
-		return AssignedCoSuperStart{}, getErr
+		return AssignedEngineeringStart{}, getErr
 	}
 	if err := rt.reclaimSupersededAssignmentCapsules(ctx, types.RunRecord{OwnerID: ownerID, ComputerID: computerID}, assignmentID); err != nil {
-		return AssignedCoSuperStart{}, fmt.Errorf("reclaim superseded assignment capsules: %w", err)
+		return AssignedEngineeringStart{}, fmt.Errorf("reclaim superseded assignment capsules: %w", err)
 	}
 	parentControlID := req.RevisionID
-	if req.Kind == types.CoSuperAssignmentVerification {
+	if req.Kind == types.EngineeringAssignmentVerification {
 		// The verification assignment's parent control is the candidate record:
 		// the durable receipt of the completed implementation it verifies.
 		parentControlID = req.CandidateID
@@ -225,79 +225,79 @@ func (rt *Runtime) startAssignedCoSuperForDocument(ctx context.Context, doc type
 		Work     types.WorkItemRecord `json:"work"`
 	}{revision, *parentWork})
 	if err != nil {
-		return AssignedCoSuperStart{}, err
+		return AssignedEngineeringStart{}, err
 	}
 	scopeDigest := objectgraph.SHA256(scopeBytes)
 	sourceArtifactRef := ""
-	if req.Kind == types.CoSuperAssignmentVerification {
-		candidate, candidateErr := rt.store.GetCoSuperSubjectCandidate(ctx, ownerID, computerID, req.CandidateID)
+	if req.Kind == types.EngineeringAssignmentVerification {
+		candidate, candidateErr := rt.store.GetEngineeringSubjectCandidate(ctx, ownerID, computerID, req.CandidateID)
 		if candidateErr != nil || candidate.TrajectoryID != trajectoryID || candidate.ArtifactRef == "" {
-			return AssignedCoSuperStart{}, fmt.Errorf("verification candidate is unavailable or outside exact trajectory authority")
+			return AssignedEngineeringStart{}, fmt.Errorf("verification candidate is unavailable or outside exact trajectory authority")
 		}
-		implementation, loadErr := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, candidate.AssignmentID, candidate.Attempt)
-		if loadErr != nil || implementation.Binding.Kind != types.CoSuperAssignmentImplementation ||
+		implementation, loadErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, candidate.AssignmentID, candidate.Attempt)
+		if loadErr != nil || implementation.Binding.Kind != types.EngineeringAssignmentImplementation ||
 			implementation.Binding.ParentAgentID != parentAgentID || implementation.Binding.ParentWorkItemID != parentWorkID ||
-			implementation.Binding.TrajectoryID != trajectoryID || implementation.Disposition != types.CoSuperAssignmentCompleted {
-			return AssignedCoSuperStart{}, fmt.Errorf("verification candidate is not an exact completed implementation artifact")
+			implementation.Binding.TrajectoryID != trajectoryID || implementation.Disposition != types.EngineeringAssignmentCompleted {
+			return AssignedEngineeringStart{}, fmt.Errorf("verification candidate is not an exact completed implementation artifact")
 		}
 		sourceArtifactRef = candidate.ArtifactRef
 	}
 	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, sourceArtifactRef)
 	if err != nil {
-		return AssignedCoSuperStart{}, fmt.Errorf("preflight immutable assignment subject: %w", err)
+		return AssignedEngineeringStart{}, fmt.Errorf("preflight immutable assignment subject: %w", err)
 	}
 	subjectDigest := "sha256:" + strings.TrimPrefix(preflight.SubjectDigest, "sha256:")
-	if req.Kind == types.CoSuperAssignmentVerification {
-		candidate, _ := rt.store.GetCoSuperSubjectCandidate(ctx, ownerID, computerID, req.CandidateID)
+	if req.Kind == types.EngineeringAssignmentVerification {
+		candidate, _ := rt.store.GetEngineeringSubjectCandidate(ctx, ownerID, computerID, req.CandidateID)
 		if candidate.SubjectDigest != subjectDigest || candidate.ArtifactRef != preflight.ArtifactRef {
-			return AssignedCoSuperStart{}, fmt.Errorf("verification candidate artifact digest mismatch")
+			return AssignedEngineeringStart{}, fmt.Errorf("verification candidate artifact digest mismatch")
 		}
 	}
 	opaque := deterministicDocumentAssignmentCapability(assignmentID, attempt)
-	binding := types.CoSuperAssignmentBinding{
+	binding := types.EngineeringAssignmentBinding{
 		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
 		ParentAgentID: parentAgentID, ParentRunID: "", ParentDecisionID: parentDecisionID,
 		ParentControlID: parentControlID, ParentWorkItemID: parentWorkID,
-		AssignedWorkItemID: "work:" + assignmentID, AssignedAgentID: agentprofile.CoSuper + ":" + assignmentID,
+		AssignedWorkItemID: "work:" + assignmentID, AssignedAgentID: agentprofile.Engineering + ":" + assignmentID,
 		Kind: req.Kind, Attempt: attempt,
-		ScopeDigest: scopeDigest, RequestDigest: requestDigest, CapabilityDigest: store.DigestCoSuperOpaqueCapability(opaque),
+		ScopeDigest: scopeDigest, RequestDigest: requestDigest, CapabilityDigest: store.DigestEngineeringOpaqueCapability(opaque),
 		ExecutionHandleDigest: objectgraph.SHA256([]byte(opaque)), SubjectDigest: subjectDigest,
 		SourceArtifactRef: preflight.ArtifactRef, SourceCandidateID: req.CandidateID,
 		Writable: true, CapsuleID: "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-"),
-		NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
-		FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 	}
-	open := types.OpenCoSuperAssignmentRequest{
+	open := types.OpenEngineeringAssignmentRequest{
 		CommandID: "co-super-open:" + assignmentID + fmt.Sprintf(":%d", attempt), AssignmentID: assignmentID, Binding: binding,
 		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: req.Objective},
 	}
-	open.CommandDigest, err = store.ComputeOpenCoSuperAssignmentDigest(open)
+	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
 	if err != nil {
-		return AssignedCoSuperStart{}, err
+		return AssignedEngineeringStart{}, err
 	}
-	opened, err := rt.store.OpenCoSuperAssignment(ctx, open)
+	opened, err := rt.store.OpenEngineeringAssignment(ctx, open)
 	if err != nil {
-		return AssignedCoSuperStart{}, err
+		return AssignedEngineeringStart{}, err
 	}
 	return rt.spawnBindActivateAssignment(ctx, opened.Assignment, preflight, opaque, req)
 }
 
-// resumeAssignedCoSuperForDocument re-drives the spawn/bind saga for an
+// resumeAssignedEngineeringForDocument re-drives the spawn/bind saga for an
 // assignment whose durable open committed but whose bind never landed. The
 // deterministic capability re-derives the exact digest the binding committed.
-func (rt *Runtime) resumeAssignedCoSuperForDocument(ctx context.Context, assignment types.CoSuperAssignment, req OpenDocumentAssignmentRequest) (AssignedCoSuperStart, error) {
+func (rt *Runtime) resumeAssignedEngineeringForDocument(ctx context.Context, assignment types.EngineeringAssignment, req OpenDocumentAssignmentRequest) (AssignedEngineeringStart, error) {
 	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, assignment.Binding.SourceArtifactRef)
 	if err != nil {
-		return AssignedCoSuperStart{}, fmt.Errorf("preflight immutable assignment subject: %w", err)
+		return AssignedEngineeringStart{}, fmt.Errorf("preflight immutable assignment subject: %w", err)
 	}
 	if preflight.ArtifactRef != assignment.Binding.SourceArtifactRef ||
 		"sha256:"+strings.TrimPrefix(preflight.SubjectDigest, "sha256:") != assignment.Binding.SubjectDigest {
-		return AssignedCoSuperStart{}, fmt.Errorf("resumed assignment subject drifted from the committed binding")
+		return AssignedEngineeringStart{}, fmt.Errorf("resumed assignment subject drifted from the committed binding")
 	}
 	opaque := deterministicDocumentAssignmentCapability(assignment.AssignmentID, assignment.Binding.Attempt)
-	if store.DigestCoSuperOpaqueCapability(opaque) != assignment.Binding.CapabilityDigest {
-		return AssignedCoSuperStart{}, fmt.Errorf("resumed assignment capability does not match the committed binding")
+	if store.DigestEngineeringOpaqueCapability(opaque) != assignment.Binding.CapabilityDigest {
+		return AssignedEngineeringStart{}, fmt.Errorf("resumed assignment capability does not match the committed binding")
 	}
 	return rt.spawnBindActivateAssignment(ctx, assignment, preflight, opaque, req)
 }
@@ -305,28 +305,28 @@ func (rt *Runtime) resumeAssignedCoSuperForDocument(ctx context.Context, assignm
 // spawnBindActivateAssignment is the shared post-open saga: spawn the capsule,
 // mint the capability, bind the run, wake the actor. Every failure path cancels
 // the durable open so a stranded assignment never blocks a later cast.
-func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment types.CoSuperAssignment, preflight capsule.SourcePreflight, opaque string, req OpenDocumentAssignmentRequest) (AssignedCoSuperStart, error) {
+func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment types.EngineeringAssignment, preflight capsule.SourcePreflight, opaque string, req OpenDocumentAssignmentRequest) (AssignedEngineeringStart, error) {
 	binding := assignment.Binding
 	ownerID, computerID, trajectoryID := binding.OwnerID, binding.ComputerID, binding.TrajectoryID
 	assignmentID, attempt := assignment.AssignmentID, binding.Attempt
 	agentID, workID, runID, capsuleID := binding.AssignedAgentID, binding.AssignedWorkItemID, "run:"+assignmentID, binding.CapsuleID
 	cancelOpen := func(cause error) error {
-		current, loadErr := rt.store.GetCoSuperAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
+		current, loadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
 		if loadErr == nil && !current.Disposition.Terminal() {
-			cancel := types.CancelCoSuperAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
+			cancel := types.CancelEngineeringAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
 				AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: cause.Error()}
-			cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-			_, _ = rt.store.CancelCoSuperAssignment(context.Background(), cancel)
+			cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+			_, _ = rt.store.CancelEngineeringAssignment(context.Background(), cancel)
 		}
 		return cause
 	}
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelSpawn()
 	spec := capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
-		MemoryMax: coSuperAssignmentMemoryMax, CpuQuota: coSuperAssignmentCPUQuota, CpuPeriod: 100000, PidsMax: coSuperAssignmentPidsMax,
+		MemoryMax: engineeringAssignmentMemoryMax, CpuQuota: engineeringAssignmentCPUQuota, CpuPeriod: 100000, PidsMax: engineeringAssignmentPidsMax,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
 		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest}
-	if req.Kind == types.CoSuperAssignmentVerification {
+	if req.Kind == types.EngineeringAssignmentVerification {
 		// The verifier's exact-binding mount is mandatory: the host installs
 		// the operation's frozen bundle read-only at /selfdev/bundle with a
 		// binding.json the in-cell inspect reads. A verification assignment
@@ -334,20 +334,20 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		// closed rather than spawn a verifier whose inspection capability is
 		// unreachable.
 		if rt.selfdevOperations == nil || rt.selfdevUpdaterRoot == "" {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment requires the self-development operation store and updater root"))
+			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("verification assignment requires the self-development operation store and updater root"))
 		}
 		operation, opErr := rt.selfdevOperations.GetByTrajectory(spawnCtx, computerID, trajectoryID)
 		if opErr != nil {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment cannot resolve its self-development operation: %w", opErr))
+			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("verification assignment cannot resolve its self-development operation: %w", opErr))
 		}
 		if operation.BundleDigest == "" ||
 			(operation.State != selfdev.StateFrozen && operation.State != selfdev.StateVerified && operation.State != selfdev.StateAwaitingApproval) {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment requires a frozen self-development bundle (state %s)", operation.State))
+			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("verification assignment requires a frozen self-development bundle (state %s)", operation.State))
 		}
 		bundleDir := filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest)
 		info, statErr := os.Stat(bundleDir)
 		if statErr != nil || !info.IsDir() {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("verification assignment bundle directory unavailable: %v", statErr))
+			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("verification assignment bundle directory unavailable: %v", statErr))
 		}
 		bindingJSON, _ := json.Marshal(map[string]string{"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest})
 		spec.VerifierBundleDir = bundleDir
@@ -359,23 +359,23 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		// exists; verify it is still active rather than respawning.
 		diagnostics, diagErr := rt.capsuleExecutor.InspectCapsuleRaw(capsuleID)
 		if diagErr != nil || diagnostics == nil {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("resumed assignment capsule is not inspectable: %v", diagErr))
+			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("resumed assignment capsule is not inspectable: %v", diagErr))
 		}
 		created = &capsule.Capsule{ID: capsuleID, State: capsule.StateActive}
 	} else {
 		var spawnErr error
 		created, spawnErr = rt.capsuleExecutor.Spawn(spawnCtx, spec)
 		if spawnErr != nil {
-			return AssignedCoSuperStart{}, cancelOpen(fmt.Errorf("spawn assigned capsule after durable open: %w", spawnErr))
+			return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("spawn assigned capsule after durable open: %w", spawnErr))
 		}
 	}
 	cleanupCapsule := func(cause error) error {
-		current, loadErr := rt.store.GetCoSuperAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
+		current, loadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
 		if loadErr != nil {
 			return fmt.Errorf("%w (load opened assignment for capsule cleanup: %v)", cause, loadErr)
 		}
 		intent := "capsule-revoke-intent:" + objectgraph.SHA256([]byte(current.AssignmentID+"\x00pre-bind\x00"+cause.Error()))
-		requested, fateErr := rt.store.SetCoSuperCapsuleDisposition(context.Background(), coSuperFateRequest(current, types.CoSuperCapsuleRevokeRequested, intent, ""))
+		requested, fateErr := rt.store.SetEngineeringCapsuleDisposition(context.Background(), engineeringFateRequest(current, types.EngineeringCapsuleRevokeRequested, intent, ""))
 		if fateErr != nil {
 			return fmt.Errorf("%w (persist pre-bind capsule revoke intent: %v)", cause, fateErr)
 		}
@@ -392,37 +392,37 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		if receiptErr != nil {
 			return fmt.Errorf("%w (persist structured pre-bind revoke acknowledgement: %v)", cause, receiptErr)
 		}
-		fateAck, fateAckErr := coSuperFateAckRequest(requested.Assignment, types.CoSuperCapsuleRevoked, intent, receipt.ReceiptRef, "", "", receipt.OccurredAt, receipt.CapsuleAbsent)
+		fateAck, fateAckErr := engineeringFateAckRequest(requested.Assignment, types.EngineeringCapsuleRevoked, intent, receipt.ReceiptRef, "", "", receipt.OccurredAt, receipt.CapsuleAbsent)
 		if fateAckErr != nil {
 			return fmt.Errorf("%w (invalid revoke receipt occurred_at: %v)", cause, fateAckErr)
 		}
-		acked, fateErr := rt.store.SetCoSuperCapsuleDisposition(context.Background(), fateAck)
+		acked, fateErr := rt.store.SetEngineeringCapsuleDisposition(context.Background(), fateAck)
 		if fateErr != nil {
 			return fmt.Errorf("%w (persist pre-bind capsule revoke acknowledgement: %v)", cause, fateErr)
 		}
-		cancel := types.CancelCoSuperAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
+		cancel := types.CancelEngineeringAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
 			AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: acked.Assignment.LifecycleVersion, Reason: cause.Error()}
-		cancel.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancel)
-		if _, cancelErr := rt.store.CancelCoSuperAssignment(context.Background(), cancel); cancelErr != nil {
+		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+		if _, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel); cancelErr != nil {
 			return fmt.Errorf("%w (cancel pre-bind assignment after revoke ack: %v)", cause, cancelErr)
 		}
 		return cause
 	}
 	if created.ID != capsuleID || created.State != capsule.StateActive {
-		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("assigned capsule acknowledgement mismatch"))
+		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("assigned capsule acknowledgement mismatch"))
 	}
 	spawnedAt := time.Now().UTC()
 	slot := "implementation"
-	if req.Kind == types.CoSuperAssignmentVerification {
+	if req.Kind == types.EngineeringAssignmentVerification {
 		slot = "verifier"
 	}
-	capability, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleCoSuper, capsuleID, opaque, 24*time.Hour, slot)
+	capability, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleEngineering, capsuleID, opaque, 24*time.Hour, slot)
 	grantedAt := time.Now().UTC()
 	if err != nil {
-		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("mint exact assignment capability: %w", err))
+		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("mint exact assignment capability: %w", err))
 	}
-	compiledVerbs := make([]string, 0, len(capsule.RoleVerbSets[capsule.RoleCoSuper]))
-	for verb, allowed := range capsule.RoleVerbSets[capsule.RoleCoSuper] {
+	compiledVerbs := make([]string, 0, len(capsule.RoleVerbSets[capsule.RoleEngineering]))
+	for verb, allowed := range capsule.RoleVerbSets[capsule.RoleEngineering] {
 		if allowed {
 			compiledVerbs = append(compiledVerbs, verb)
 		}
@@ -431,38 +431,38 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	actualVerbs := make([]string, 0, len(capability.Verbs))
 	for verb, allowed := range capability.Verbs {
 		if !allowed {
-			return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("minted assignment capability contains a disabled verb"))
+			return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("minted assignment capability contains a disabled verb"))
 		}
 		actualVerbs = append(actualVerbs, verb)
 	}
 	slices.Sort(actualVerbs)
-	if capability.AgentRole != capsule.RoleCoSuper || capability.AgentRunID != runID || capability.CapsuleID != capsuleID || capability.TargetCapsule != capsuleID ||
+	if capability.AgentRole != capsule.RoleEngineering || capability.AgentRunID != runID || capability.CapsuleID != capsuleID || capability.TargetCapsule != capsuleID ||
 		capability.Handle != opaque || capability.Slot != slot || !slices.Equal(actualVerbs, compiledVerbs) || len(capability.ExternalAccess) != 0 || strings.TrimSpace(capability.KeyID) == "" ||
 		len(capability.Signature) == 0 || !capability.ExpiresAt.After(grantedAt) || capability.ExpiresAt.After(grantedAt.Add(24*time.Hour+time.Second)) {
-		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("minted assignment capability acknowledgement mismatch"))
+		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("minted assignment capability acknowledgement mismatch"))
 	}
 	capabilityBytes, err := json.Marshal(capability)
 	if err != nil {
-		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("digest minted assignment capability: %w", err))
+		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("digest minted assignment capability: %w", err))
 	}
-	grantAttestation := &types.CoSuperGrantPolicyAttestation{
+	grantAttestation := &types.EngineeringGrantPolicyAttestation{
 		Role: string(capability.AgentRole), GrantedVerbs: actualVerbs,
-		VerbSetDigest:          store.ComputeCoSuperGrantVerbSetDigest(actualVerbs),
-		PolicyDigest:           store.ComputeCoSuperGrantPolicyDigest(string(capability.AgentRole), actualVerbs, binding.NetworkMode, binding.FilesystemMode, binding.Writable),
+		VerbSetDigest:          store.ComputeEngineeringGrantVerbSetDigest(actualVerbs),
+		PolicyDigest:           store.ComputeEngineeringGrantPolicyDigest(string(capability.AgentRole), actualVerbs, binding.NetworkMode, binding.FilesystemMode, binding.Writable),
 		SignedCapabilityDigest: objectgraph.SHA256(capabilityBytes), SpawnAcknowledged: true, ActiveAcknowledged: true, GrantAcknowledged: true,
 		SpawnedAt: spawnedAt, GrantedAt: grantedAt,
 	}
 	run := types.RunRecord{
 		RunID: runID, AgentID: agentID, ChannelID: agentID, RequestedByRunID: "", TrajectoryID: trajectoryID,
-		AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, OwnerID: ownerID, ComputerID: computerID,
+		AgentProfile: agentprofile.Engineering, AgentRole: agentprofile.Engineering, OwnerID: ownerID, ComputerID: computerID,
 		State: types.RunPending, Prompt: req.Objective,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper, runMetadataAgentRole: agentprofile.CoSuper, runMetadataAgentID: agentID,
+			runMetadataAgentProfile: agentprofile.Engineering, runMetadataAgentRole: agentprofile.Engineering, runMetadataAgentID: agentID,
 			runMetadataTrajectoryID: trajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID,
-			"requested_by_agent_id": binding.ParentAgentID, "requested_by_profile": agentprofile.CoSuper,
+			"requested_by_agent_id": binding.ParentAgentID, "requested_by_profile": agentprofile.Engineering,
 			"assignment_id": assignmentID, "assignment_attempt": attempt, "assignment_kind": string(req.Kind),
-			runMetadataCoSuperSlot:  slot,
-			"assigned_work_item_id": workID, "capsule_id": capsuleID,
+			runMetadataEngineeringSlot: slot,
+			"assigned_work_item_id":    workID, "capsule_id": capsuleID,
 			"parent_decision_id": binding.ParentDecisionID, "parent_control_id": binding.ParentControlID,
 			"parent_work_item_id": binding.ParentWorkItemID, "scope_digest": binding.ScopeDigest, "request_digest": binding.RequestDigest,
 			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest, "subject_digest": binding.SubjectDigest,
@@ -472,35 +472,35 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
 		run.Metadata[modelpolicy.MetadataPolicyOverlayID] = overlay
 	}
-	run.Metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, agentprofile.CoSuper, run.Metadata)
+	run.Metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, agentprofile.Engineering, run.Metadata)
 	// Fail closed on policy errors like the Texture eval path: an unknown or
 	// unresolvable overlay must not silently fall back to the default model.
 	if policyErr := metadataStringValue(run.Metadata, modelpolicy.MetadataPolicyError); policyErr != "" {
-		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("model policy overlay did not resolve: %s", policyErr))
+		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("model policy overlay did not resolve: %s", policyErr))
 	}
 	if model := metadataStringValue(run.Metadata, modelpolicy.MetadataModel); model != "" {
 		run.Metadata[runMetadataModel] = model
 	}
-	bind := types.BindCoSuperAssignmentRequest{
+	bind := types.BindEngineeringAssignmentRequest{
 		CommandID: "co-super-bind:" + assignmentID + fmt.Sprintf(":%d", attempt), OwnerID: ownerID, ComputerID: computerID,
 		AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: assignment.LifecycleVersion,
 		RunID: runID, Run: run, OpaqueCapability: opaque, CapsuleID: capsuleID, GrantPolicyAttestation: grantAttestation,
 	}
-	bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind)
+	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
 	if err != nil {
-		return AssignedCoSuperStart{}, cleanupCapsule(err)
+		return AssignedEngineeringStart{}, cleanupCapsule(err)
 	}
-	bound, err := rt.store.BindCoSuperAssignment(ctx, bind)
+	bound, err := rt.store.BindEngineeringAssignment(ctx, bind)
 	if err != nil {
-		return AssignedCoSuperStart{}, cleanupCapsule(fmt.Errorf("bind assigned CoSuper activation: %w", err))
+		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("bind assigned Engineering activation: %w", err))
 	}
 	// The lifecycle Bind receipt is durable before this actor wake. No generic
-	// lifecycle-Super refusal is removed and no pre-cutover mailbox is written.
+	// lifecycle-Management refusal is removed and no pre-cutover mailbox is written.
 	rt.activate(&run)
-	return AssignedCoSuperStart{Assignment: bound.Assignment, Run: run}, nil
+	return AssignedEngineeringStart{Assignment: bound.Assignment, Run: run}, nil
 }
 
-func runtimePersistentSuperControlID(metadata map[string]any, trajectoryID, workItemID string) string {
+func runtimePersistentManagementControlID(metadata map[string]any, trajectoryID, workItemID string) string {
 	raw, ok := metadata["lifecycle_control_bindings"]
 	if !ok {
 		return ""
@@ -536,7 +536,7 @@ func runtimePersistentSuperControlID(metadata map[string]any, trajectoryID, work
 	return matched
 }
 
-func persistentSuperRunStateAllowedRuntime(state types.RunState) bool {
+func persistentManagementRunStateAllowedRuntime(state types.RunState) bool {
 	return state == types.RunPending || state == types.RunRunning || state == types.RunPassivated
 }
 
@@ -547,7 +547,7 @@ func persistentSuperRunStateAllowedRuntime(state types.RunState) bool {
 // releases admission budget before the new capsule spawns. Fail closed: a
 // reclaim failure must not open a new assignment on a leaked budget.
 func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, parent types.RunRecord, currentAssignmentID string) error {
-	assignments, err := rt.store.ListCoSuperAssignmentsForComputer(ctx, parent.ComputerID)
+	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, parent.ComputerID)
 	if err != nil {
 		return err
 	}
@@ -555,11 +555,11 @@ func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, pare
 		// Only bound/live capsules hold admission budget. Unbound capsules were
 		// never spawned and revoked capsules already released theirs.
 		if assignment.AssignmentID == currentAssignmentID ||
-			assignment.CapsuleDisposition == types.CoSuperCapsuleRevoked ||
-			assignment.CapsuleDisposition == types.CoSuperCapsuleUnbound {
+			assignment.CapsuleDisposition == types.EngineeringCapsuleRevoked ||
+			assignment.CapsuleDisposition == types.EngineeringCapsuleUnbound {
 			continue
 		}
-		// Prior assignments may have been opened by a different persistent-Super
+		// Prior assignments may have been opened by a different persistent-Management
 		// run identity (e.g. before a restart reactivated the actor). Reclaim
 		// through the exact parent recorded on each assignment binding, not the
 		// current caller, so the fate path's parent-identity check passes.
@@ -568,7 +568,7 @@ func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, pare
 		reclaimParent.AgentID = assignment.Binding.ParentAgentID
 		if assignment.Disposition.Terminal() && assignment.BoundRunID != "" {
 			// A terminal assignment whose capsule was never revoked still holds
-			// admission budget. cancelAssignedCoSuper replays without revoking
+			// admission budget. cancelAssignedEngineering replays without revoking
 			// for terminal dispositions, so revoke the capsule directly through
 			// the fate path.
 			reclaimed, err := rt.revokeAssignedCapsule(ctx, assignment,
@@ -581,7 +581,7 @@ func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, pare
 				assignment.AssignmentID, assignment.Binding.CapsuleID, reclaimed.CapsuleDisposition)
 			continue
 		}
-		result, err := rt.cancelAssignedCoSuper(ctx, reclaimParent, assignment.AssignmentID, assignment.Binding.Attempt,
+		result, err := rt.cancelAssignedEngineering(ctx, reclaimParent, assignment.AssignmentID, assignment.Binding.Attempt,
 			"superseded by a fresh implementation assignment; capsule budget reclaimed")
 		if err != nil {
 			return fmt.Errorf("reclaim %s (capsule %s): %w", assignment.AssignmentID, assignment.Binding.CapsuleID, err)

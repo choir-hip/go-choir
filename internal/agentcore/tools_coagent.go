@@ -212,9 +212,9 @@ func newCancelAgentTool(rt *Runtime) toolregistry.Tool {
 			agentID := strings.TrimSpace(in.AgentID)
 			var target types.RunRecord
 			targetFromCallerSlot := false
-			if toolregistry.ExecutionContextFrom(ctx).Profile == agentprofile.Super {
+			if toolregistry.ExecutionContextFrom(ctx).Profile == agentprofile.Management {
 				callerTrajectoryID := trajectoryIDForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)
-				slot, found, err := rt.store.CoSuperSlotByAgentAndTrajectory(ctx, ownerID, callerTrajectoryID, agentID)
+				slot, found, err := rt.store.EngineeringSlotByAgentAndTrajectory(ctx, ownerID, callerTrajectoryID, agentID)
 				if err != nil {
 					return "", fmt.Errorf("lookup co-super slot before cancel: %w", err)
 				}

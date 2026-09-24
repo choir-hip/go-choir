@@ -85,7 +85,7 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 	if deskProfile == "" {
 		deskProfile = agentprofile.Texture
 	}
-	if deskProfile != agentprofile.Texture && deskProfile != agentprofile.CoSuper {
+	if deskProfile != agentprofile.Texture && deskProfile != agentprofile.Engineering {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "desk must be texture or engineering"})
 		return
 	}
@@ -112,7 +112,7 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if !result.Replay {
-		if deskProfile == agentprofile.CoSuper {
+		if deskProfile == agentprofile.Engineering {
 			// Engineering desk: dispatch the revision occurrence; the mailbox
 			// consumer opens the assignment asynchronously. A synchronous
 			// reconcile here would hold the HTTP request across a 90s spawn.

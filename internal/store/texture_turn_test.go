@@ -47,7 +47,7 @@ func textureTurnBaseRequest(t *testing.T, s *Store, start types.StartLifecycleRe
 	}
 }
 
-func textureTurnQueueResearcherReport(t *testing.T, s *Store, start types.StartLifecycleRequest, work types.WorkItemRecord, id string) types.QueueLifecycleUpdateRequest {
+func textureTurnQueueResearchReport(t *testing.T, s *Store, start types.StartLifecycleRequest, work types.WorkItemRecord, id string) types.QueueLifecycleUpdateRequest {
 	t.Helper()
 	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: id}
 	content := "report " + id
@@ -94,19 +94,19 @@ func setTextureTurnDigest(t *testing.T, req *types.ApplyTextureTurnRequest, grap
 }
 
 func TestApplyTextureTurnOrderedControlsAtomicReplayAndLegacyIsolation(t *testing.T) {
-	s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
-	report := textureTurnQueueResearcherReport(t, s, start, researcherWork, "ordered")
+	report := textureTurnQueueResearchReport(t, s, start, researchWork, "ordered")
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnNoSemanticChange)
 	req.CommandID = "texture-turn-ordered"
 	req.Inbound = []types.TextureTurnInboundDisposition{{
 		TargetAgentID: start.Agent.AgentID, ProducerAgentID: report.ProducerAgentID, ProducerUpdateID: report.ProducerUpdateID,
-		UpdateID: report.UpdateID, Disposition: types.UpdateIncorporated, ProducerWorkItemID: researcherWork.WorkItemID,
+		UpdateID: report.UpdateID, Disposition: types.UpdateIncorporated, ProducerWorkItemID: researchWork.WorkItemID,
 		WorkDisposition: types.WorkItemOpen,
 	}}
 	req.Controls = []types.TextureTurnControl{
-		textureTurnControl(t, "control-first", researcherWork.AssignedAgentID, researcherWork.WorkItemID),
-		textureTurnControl(t, "control-second", researcherWork.AssignedAgentID, researcherWork.WorkItemID),
+		textureTurnControl(t, "control-first", researchWork.AssignedAgentID, researchWork.WorkItemID),
+		textureTurnControl(t, "control-second", researchWork.AssignedAgentID, researchWork.WorkItemID),
 	}
 	req.SubjectRefs = map[string]string{"latest_evidence": "evidence://ordered"}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
@@ -122,17 +122,17 @@ func TestApplyTextureTurnOrderedControlsAtomicReplayAndLegacyIsolation(t *testin
 	if err != nil || storedReport.Disposition != types.UpdateIncorporated || storedReport.DispositionRef != start.InitialRevision.RevisionID {
 		t.Fatalf("explicit no-change inbound disposition = %+v, %v", storedReport, err)
 	}
-	pending, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, researcherWork.AssignedAgentID, 10)
+	pending, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, researchWork.AssignedAgentID, 10)
 	if err != nil || len(pending) != 2 || pending[0].UpdateID != "control-first" || pending[1].UpdateID != "control-second" {
 		t.Fatalf("ordered pending controls = %+v, %v", pending, err)
 	}
 	for _, packet := range pending {
 		producer, target, resolveErr := ResolveLifecyclePacketWorkBindings(packet)
-		if resolveErr != nil || producer != "" || target != researcherWork.WorkItemID || packet.Direction != types.LifecyclePacketDirectionControl {
+		if resolveErr != nil || producer != "" || target != researchWork.WorkItemID || packet.Direction != types.LifecyclePacketDirectionControl {
 			t.Fatalf("control work binding = %+v producer=%q target=%q err=%v", packet, producer, target, resolveErr)
 		}
 	}
-	legacy, err := s.ListPendingWorkerUpdates(ctx, start.OwnerID, researcherWork.AssignedAgentID, 10)
+	legacy, err := s.ListPendingWorkerUpdates(ctx, start.OwnerID, researchWork.AssignedAgentID, 10)
 	if err != nil || len(legacy) != 0 {
 		t.Fatalf("legacy mailbox exposed controls: %+v, %v", legacy, err)
 	}
@@ -154,7 +154,7 @@ func TestApplyTextureTurnOrderedControlsAtomicReplayAndLegacyIsolation(t *testin
 	}
 }
 
-func TestApplyTextureTurnResearcherOpenerAgentWorkAndFirstControlAreAtomic(t *testing.T) {
+func TestApplyTextureTurnResearchOpenerAgentWorkAndFirstControlAreAtomic(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
 	targetAgentID, targetWorkID := "research:atomic-open", "work-researcher-atomic-open"
@@ -171,31 +171,31 @@ func TestApplyTextureTurnResearcherOpenerAgentWorkAndFirstControlAreAtomic(t *te
 
 	result, err := s.ApplyTextureTurn(ctx, req)
 	if err != nil || len(result.Controls) != 1 || len(result.TargetWorkItems) != 1 {
-		t.Fatalf("atomic Researcher opener = %+v, %v", result, err)
+		t.Fatalf("atomic Research opener = %+v, %v", result, err)
 	}
 	agent, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, targetAgentID)
 	if err != nil || agent.Profile != "research" || agent.Role != "research" || agent.ChannelID != start.InitialDocument.DocID || agent.LifecycleVersion != 1 {
-		t.Fatalf("atomic Researcher agent = %+v, %v", agent, err)
+		t.Fatalf("atomic Research agent = %+v, %v", agent, err)
 	}
 	work, err := s.GetLifecycleWorkItem(ctx, start.OwnerID, start.ComputerID, targetWorkID)
 	if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != targetAgentID || work.CreatedByRunID != caller.RunID {
-		t.Fatalf("atomic Researcher work = %+v, %v", work, err)
+		t.Fatalf("atomic Research work = %+v, %v", work, err)
 	}
 	pending, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, targetAgentID, 10)
 	if err != nil || len(pending) != 1 || pending[0].UpdateID != control.ControlID || pending[0].TargetWorkItemID != targetWorkID || pending[0].Direction != types.LifecyclePacketDirectionControl {
-		t.Fatalf("atomic Researcher first control = %+v, %v", pending, err)
+		t.Fatalf("atomic Research first control = %+v, %v", pending, err)
 	}
 	legacy, err := s.ListPendingWorkerUpdates(ctx, start.OwnerID, targetAgentID, 10)
 	if err != nil || len(legacy) != 0 {
-		t.Fatalf("Researcher opener leaked to legacy mailbox: %+v, %v", legacy, err)
+		t.Fatalf("Research opener leaked to legacy mailbox: %+v, %v", legacy, err)
 	}
 	replay, err := s.ApplyTextureTurn(ctx, req)
 	if err != nil || !replay.Replay || len(replay.Controls) != 1 {
-		t.Fatalf("Researcher opener replay = %+v, %v", replay, err)
+		t.Fatalf("Research opener replay = %+v, %v", replay, err)
 	}
 }
 
-func TestApplyTextureTurnResearcherOpenerRefusesMismatchedAgentWithoutPartialMutation(t *testing.T) {
+func TestApplyTextureTurnResearchOpenerRefusesMismatchedAgentWithoutPartialMutation(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
@@ -207,11 +207,11 @@ func TestApplyTextureTurnResearcherOpenerRefusesMismatchedAgentWithoutPartialMut
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	before, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
 	if _, err := s.ApplyTextureTurn(ctx, req); err == nil {
-		t.Fatal("mismatched Researcher opener accepted")
+		t.Fatal("mismatched Research opener accepted")
 	}
 	after, _ := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
 	if after.SnapshotCursor != before.SnapshotCursor {
-		t.Fatalf("refused Researcher opener partially mutated trajectory: %d -> %d", before.SnapshotCursor, after.SnapshotCursor)
+		t.Fatalf("refused Research opener partially mutated trajectory: %d -> %d", before.SnapshotCursor, after.SnapshotCursor)
 	}
 	if _, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, "research:forged"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("refused opener created agent: %v", err)
@@ -221,46 +221,46 @@ func TestApplyTextureTurnResearcherOpenerRefusesMismatchedAgentWithoutPartialMut
 	}
 }
 
-func TestApplyTextureTurnPersistentSuperOpenerIsAtomic(t *testing.T) {
+func TestApplyTextureTurnPersistentManagementOpenerIsAtomic(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	superID := "management:" + start.OwnerID
-	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "management", Role: "management", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	managementID := "management:" + start.OwnerID
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: managementID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		Profile: "management", Role: "management", ChannelID: managementID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
-	req.CommandID, req.Reason = "texture-turn-super-opener", "Super execution is required"
-	control := textureTurnControl(t, "control-super-first", superID, "work-super-target")
+	req.CommandID, req.Reason = "texture-turn-super-opener", "Management execution is required"
+	control := textureTurnControl(t, "control-super-first", managementID, "work-super-target")
 	control.OpenWork = &types.WorkItemRecord{WorkItemID: "work-super-target", Objective: "coordinate exact implementation",
-		AuthorityProfile: "management", AssignedAgentID: superID, StepBudget: 8}
+		AuthorityProfile: "management", AssignedAgentID: managementID, StepBudget: 8}
 	req.Controls = []types.TextureTurnControl{control}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	result, err := s.ApplyTextureTurn(ctx, req)
 	if err != nil {
-		t.Fatalf("apply Super opener: %v", err)
+		t.Fatalf("apply Management opener: %v", err)
 	}
 	if result.TextureTurn == nil || result.TextureTurn.Outcome != types.TextureTurnWait || len(result.TargetWorkItems) != 1 ||
 		result.TargetWorkItems[0].WorkItemID != control.TargetWorkItemID || result.TargetWorkItems[0].CreatedByRunID != caller.RunID {
-		t.Fatalf("Super opener result = %+v", result)
+		t.Fatalf("Management opener result = %+v", result)
 	}
 	work, err := s.GetLifecycleWorkItem(ctx, start.OwnerID, start.ComputerID, control.TargetWorkItemID)
-	if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != superID || work.Details["requested_by_agent_id"] != caller.AgentID {
-		t.Fatalf("atomic Super work = %+v, %v", work, err)
+	if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != managementID || work.Details["requested_by_agent_id"] != caller.AgentID {
+		t.Fatalf("atomic Management work = %+v, %v", work, err)
 	}
-	pending, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, superID, 10)
+	pending, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, managementID, 10)
 	if err != nil || len(pending) != 1 || pending[0].Packet.Kind != "execution_request" || pending[0].TargetWorkItemID != work.WorkItemID {
-		t.Fatalf("atomic Super first request = %+v, %v", pending, err)
+		t.Fatalf("atomic Management first request = %+v, %v", pending, err)
 	}
-	legacy, err := s.ListPendingWorkerUpdates(ctx, start.OwnerID, superID, 10)
+	legacy, err := s.ListPendingWorkerUpdates(ctx, start.OwnerID, managementID, 10)
 	if err != nil || len(legacy) != 0 {
-		t.Fatalf("Super control leaked to legacy mailbox: %+v, %v", legacy, err)
+		t.Fatalf("Management control leaked to legacy mailbox: %+v, %v", legacy, err)
 	}
 
 	replay, err := s.ApplyTextureTurn(ctx, req)
 	if err != nil || !replay.Replay || len(replay.Controls) != 1 || len(replay.TargetWorkItems) != 1 {
-		t.Fatalf("equal Super opener replay = %+v, %v", replay, err)
+		t.Fatalf("equal Management opener replay = %+v, %v", replay, err)
 	}
 	changedPayload := req
 	changedPayload.Controls = append([]types.TextureTurnControl(nil), req.Controls...)
@@ -268,18 +268,18 @@ func TestApplyTextureTurnPersistentSuperOpenerIsAtomic(t *testing.T) {
 	changedPayload.Controls[0].PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(changedPayload.Controls[0].Packet, changedPayload.Controls[0].Content)
 	setTextureTurnDigest(t, &changedPayload, TextureSourceGraphWriteSet{})
 	if _, err := s.ApplyTextureTurn(ctx, changedPayload); !errors.Is(err, ErrLifecycleCommandConflict) {
-		t.Fatalf("changed Super opener payload replay error = %v", err)
+		t.Fatalf("changed Management opener payload replay error = %v", err)
 	}
 
 	reuse := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
-	reuse.CommandID, reuse.Reason = "texture-turn-super-reuse", "continue exact Super work"
-	reuseControl := textureTurnControl(t, "control-super-second", superID, work.WorkItemID)
+	reuse.CommandID, reuse.Reason = "texture-turn-super-reuse", "continue exact Management work"
+	reuseControl := textureTurnControl(t, "control-super-second", managementID, work.WorkItemID)
 	reuseControl.OpenWork = control.OpenWork
 	reuse.Controls = []types.TextureTurnControl{reuseControl}
 	setTextureTurnDigest(t, &reuse, TextureSourceGraphWriteSet{})
 	reused, err := s.ApplyTextureTurn(ctx, reuse)
 	if err != nil || len(reused.TargetWorkItems) != 1 || reused.TargetWorkItems[0].WorkItemID != work.WorkItemID {
-		t.Fatalf("exact Super work reuse = %+v, %v", reused, err)
+		t.Fatalf("exact Management work reuse = %+v, %v", reused, err)
 	}
 	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
 	if err != nil {
@@ -291,48 +291,47 @@ func TestApplyTextureTurnPersistentSuperOpenerIsAtomic(t *testing.T) {
 			workCount++
 		}
 	}
-	pending, err = s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, superID, 10)
+	pending, err = s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, managementID, 10)
 	if err != nil || workCount != 1 || len(pending) != 2 || pending[1].UpdateID != "control-super-second" {
-		t.Fatalf("Super reuse duplicated work or lost ordered control: work_count=%d pending=%+v err=%v", workCount, pending, err)
+		t.Fatalf("Management reuse duplicated work or lost ordered control: work_count=%d pending=%+v err=%v", workCount, pending, err)
 	}
 
 	conflict := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	conflict.CommandID, conflict.Reason = "texture-turn-super-reuse-conflict", "conflicting reuse"
-	conflictingControl := textureTurnControl(t, "control-super-conflict", superID, work.WorkItemID)
+	conflictingControl := textureTurnControl(t, "control-super-conflict", managementID, work.WorkItemID)
 	conflictingWork := *control.OpenWork
 	conflictingWork.Objective = "different authority under reused identity"
 	conflictingControl.OpenWork = &conflictingWork
 	conflict.Controls = []types.TextureTurnControl{conflictingControl}
 	setTextureTurnDigest(t, &conflict, TextureSourceGraphWriteSet{})
 	if _, err := s.ApplyTextureTurn(ctx, conflict); !errors.Is(err, ErrLifecycleCommandConflict) {
-		t.Fatalf("changed Super work reuse error = %v, want conflict", err)
+		t.Fatalf("changed Management work reuse error = %v, want conflict", err)
 	}
-	pending, err = s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, superID, 10)
+	pending, err = s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, managementID, 10)
 	if err != nil || len(pending) != 2 {
-		t.Fatalf("conflicting Super reuse queued control: %+v, %v", pending, err)
+		t.Fatalf("conflicting Management reuse queued control: %+v, %v", pending, err)
 	}
 	malformed := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	malformed.CommandID, malformed.Reason = "texture-turn-super-malformed-continuation", "must refuse malformed continuation"
-	bad := textureTurnControl(t, "control-super-malformed", superID, work.WorkItemID)
+	bad := textureTurnControl(t, "control-super-malformed", managementID, work.WorkItemID)
 	bad.Packet.Kind, bad.Packet.Actions = "evidence_update", nil
 	bad.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(bad.Packet, bad.Content)
 	malformed.Controls = []types.TextureTurnControl{bad}
 	setTextureTurnDigest(t, &malformed, TextureSourceGraphWriteSet{})
-	if _, err := s.ApplyTextureTurn(ctx, malformed); err == nil || !strings.Contains(err.Error(), "persistent-Super control requires execution_request actions") {
-		t.Fatalf("malformed Super continuation error = %v", err)
+	if _, err := s.ApplyTextureTurn(ctx, malformed); err == nil || !strings.Contains(err.Error(), "persistent-Management control requires execution_request actions") {
+		t.Fatalf("malformed Management continuation error = %v", err)
 	}
-	afterMalformed, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, superID, 10)
+	afterMalformed, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, managementID, 10)
 	if err != nil || len(afterMalformed) != 2 {
 		t.Fatalf("malformed continuation poisoned backlog: %+v, %v", afterMalformed, err)
 	}
 }
 
-
 func TestApplyTextureTurnNonRevisionOutcomesDispositionInboundWithoutFakeRevision(t *testing.T) {
 	for _, outcome := range []types.TextureTurnOutcome{types.TextureTurnNoSemanticChange, types.TextureTurnWait, types.TextureTurnBlock} {
 		t.Run(string(outcome), func(t *testing.T) {
 			s, start, caller, work := setupLifecycleTextureTargetFixture(t)
-			report := textureTurnQueueResearcherReport(t, s, start, work, string(outcome))
+			report := textureTurnQueueResearchReport(t, s, start, work, string(outcome))
 			req := textureTurnBaseRequest(t, s, start, caller, outcome)
 			req.CommandID = "texture-turn-" + string(outcome)
 			req.Inbound = []types.TextureTurnInboundDisposition{{TargetAgentID: start.Agent.AgentID,
@@ -594,10 +593,10 @@ func TestApplyTextureTurnCallerWorkConsequenceAtomicReplayAndRefusal(t *testing.
 	})
 
 	t.Run("wrong caller work refuses before mutation", func(t *testing.T) {
-		s, start, caller, researcherWork := setupLifecycleTextureTargetFixture(t)
+		s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
 		req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 		req.CommandID = "texture-turn-wrong-caller-work"
-		req.CallerWorkItemID = researcherWork.WorkItemID
+		req.CallerWorkItemID = researchWork.WorkItemID
 		setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 		before, _ := s.GetLifecycleSnapshot(context.Background(), start.OwnerID, start.ComputerID, start.TrajectoryID)
 		if _, err := s.ApplyTextureTurn(context.Background(), req); err == nil {
@@ -609,4 +608,3 @@ func TestApplyTextureTurnCallerWorkConsequenceAtomicReplayAndRefusal(t *testing.
 		}
 	})
 }
-

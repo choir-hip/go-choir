@@ -1472,7 +1472,7 @@ func (s *Store) ListRunsByIngestionHandoff(ctx context.Context, ownerID, profile
 	return runs, nil
 }
 
-// ListRunsBySelfDevelopmentOperation returns the unique top-level Super run
+// ListRunsBySelfDevelopmentOperation returns the unique top-level Management run
 // bound to a durable self-development operation.
 func (s *Store) ListRunsBySelfDevelopmentOperation(ctx context.Context, ownerID, operationID string, limit int) ([]types.RunRecord, error) {
 	ownerID = strings.TrimSpace(ownerID)
@@ -1605,10 +1605,10 @@ func (s *Store) ListActiveRunsByTrajectory(ctx context.Context, ownerID, traject
 	return runs, nil
 }
 
-// ClaimCoSuperSlot atomically claims (owner, trajectory, slot) for a co-super
+// ClaimEngineeringSlot atomically claims (owner, trajectory, slot) for a Engineering
 // run. If a live run already owns the slot, that run is returned and claimed is
 // false. If the previous owner is terminal, the slot is advanced to runID.
-func (s *Store) ClaimCoSuperSlot(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, requesterRunID string) (types.RunRecord, bool, error) {
+func (s *Store) ClaimEngineeringSlot(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, requesterRunID string) (types.RunRecord, bool, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	slot = strings.TrimSpace(slot)
@@ -1630,7 +1630,7 @@ func (s *Store) ClaimCoSuperSlot(ctx context.Context, ownerID, trajectoryID, slo
 		return types.RunRecord{}, true, nil
 	}
 
-	existingRunID, err := s.coSuperSlotRunID(ctx, ownerID, trajectoryID, slot)
+	existingRunID, err := s.engineeringSlotRunID(ctx, ownerID, trajectoryID, slot)
 	if err != nil {
 		return types.RunRecord{}, false, err
 	}
@@ -1661,7 +1661,7 @@ func (s *Store) ClaimCoSuperSlot(ctx context.Context, ownerID, trajectoryID, slo
 	if rows, err := res.RowsAffected(); err != nil {
 		return types.RunRecord{}, false, fmt.Errorf("check co-super slot claim rows: %w", err)
 	} else if rows == 0 {
-		existingRunID, err = s.coSuperSlotRunID(ctx, ownerID, trajectoryID, slot)
+		existingRunID, err = s.engineeringSlotRunID(ctx, ownerID, trajectoryID, slot)
 		if err != nil {
 			return types.RunRecord{}, false, err
 		}
@@ -1671,10 +1671,10 @@ func (s *Store) ClaimCoSuperSlot(ctx context.Context, ownerID, trajectoryID, slo
 	return types.RunRecord{}, true, nil
 }
 
-// ReleaseCoSuperSlotClaim releases a newly claimed co-super slot only if it is
+// ReleaseEngineeringSlotClaim releases a newly claimed Engineering slot only if it is
 // still owned by runID. It is used to avoid leaving a durable claim behind when
 // run creation fails after the slot claim succeeds.
-func (s *Store) ReleaseCoSuperSlotClaim(ctx context.Context, ownerID, trajectoryID, slot, runID string) error {
+func (s *Store) ReleaseEngineeringSlotClaim(ctx context.Context, ownerID, trajectoryID, slot, runID string) error {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	slot = strings.TrimSpace(slot)
@@ -1698,10 +1698,10 @@ func (s *Store) ReleaseCoSuperSlotClaim(ctx context.Context, ownerID, trajectory
 	return nil
 }
 
-// CoSuperSlotRecord is the durable trajectory-slot ownership record for a
-// co-super activation. RequestedByRunID is retained as requester provenance,
+// EngineeringSlotRecord is the durable trajectory-slot ownership record for a
+// Engineering activation. RequestedByRunID is retained as requester provenance,
 // not as the authority relation.
-type CoSuperSlotRecord struct {
+type EngineeringSlotRecord struct {
 	OwnerID          string
 	TrajectoryID     string
 	Slot             string
@@ -1712,7 +1712,7 @@ type CoSuperSlotRecord struct {
 	UpdatedAt        time.Time
 }
 
-func (s *Store) coSuperSlotRunID(ctx context.Context, ownerID, trajectoryID, slot string) (string, error) {
+func (s *Store) engineeringSlotRunID(ctx context.Context, ownerID, trajectoryID, slot string) (string, error) {
 	var runID string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT run_id
@@ -1733,15 +1733,15 @@ func (s *Store) coSuperSlotRunID(ctx context.Context, ownerID, trajectoryID, slo
 	return runID, nil
 }
 
-// CoSuperSlotByAgent returns the most recent trajectory slot record for a
-// co-super agent. Authority callers use this instead of active-run parentage.
-func (s *Store) CoSuperSlotByAgent(ctx context.Context, ownerID, agentID string) (CoSuperSlotRecord, bool, error) {
+// EngineeringSlotByAgent returns the most recent trajectory slot record for a
+// Engineering agent. Authority callers use this instead of active-run parentage.
+func (s *Store) EngineeringSlotByAgent(ctx context.Context, ownerID, agentID string) (EngineeringSlotRecord, bool, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	agentID = strings.TrimSpace(agentID)
 	if ownerID == "" || agentID == "" {
-		return CoSuperSlotRecord{}, false, nil
+		return EngineeringSlotRecord{}, false, nil
 	}
-	var rec CoSuperSlotRecord
+	var rec EngineeringSlotRecord
 	err := s.db.QueryRowContext(ctx,
 		`SELECT owner_id, trajectory_id, slot, run_id, agent_id, requested_by_run_id, claimed_at, updated_at
 		   FROM co_super_slots
@@ -1763,23 +1763,23 @@ func (s *Store) CoSuperSlotByAgent(ctx context.Context, ownerID, agentID string)
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return CoSuperSlotRecord{}, false, nil
+			return EngineeringSlotRecord{}, false, nil
 		}
-		return CoSuperSlotRecord{}, false, fmt.Errorf("query co-super slot by agent: %w", err)
+		return EngineeringSlotRecord{}, false, fmt.Errorf("query co-super slot by agent: %w", err)
 	}
 	return rec, true, nil
 }
 
-// CoSuperSlotByAgentAndTrajectory returns the trajectory slot record for a
-// co-super agent on a specific trajectory.
-func (s *Store) CoSuperSlotByAgentAndTrajectory(ctx context.Context, ownerID, trajectoryID, agentID string) (CoSuperSlotRecord, bool, error) {
+// EngineeringSlotByAgentAndTrajectory returns the trajectory slot record for a
+// Engineering agent on a specific trajectory.
+func (s *Store) EngineeringSlotByAgentAndTrajectory(ctx context.Context, ownerID, trajectoryID, agentID string) (EngineeringSlotRecord, bool, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	agentID = strings.TrimSpace(agentID)
 	if ownerID == "" || trajectoryID == "" || agentID == "" {
-		return CoSuperSlotRecord{}, false, nil
+		return EngineeringSlotRecord{}, false, nil
 	}
-	var rec CoSuperSlotRecord
+	var rec EngineeringSlotRecord
 	err := s.db.QueryRowContext(ctx,
 		`SELECT owner_id, trajectory_id, slot, run_id, agent_id, requested_by_run_id, claimed_at, updated_at
 		   FROM co_super_slots
@@ -1803,19 +1803,19 @@ func (s *Store) CoSuperSlotByAgentAndTrajectory(ctx context.Context, ownerID, tr
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return CoSuperSlotRecord{}, false, nil
+			return EngineeringSlotRecord{}, false, nil
 		}
-		return CoSuperSlotRecord{}, false, fmt.Errorf("query co-super slot by agent and trajectory: %w", err)
+		return EngineeringSlotRecord{}, false, fmt.Errorf("query co-super slot by agent and trajectory: %w", err)
 	}
 	return rec, true, nil
 }
 
-// CoSuperSlotRun returns the run currently recorded for a co-super
+// EngineeringSlotRun returns the run currently recorded for a Engineering
 // (trajectory, slot), including terminal and passivated history. Admission
 // callers use this as the trajectory slot authority instead of parent-child
 // ancestry.
-func (s *Store) CoSuperSlotRun(ctx context.Context, ownerID, trajectoryID, slot string) (types.RunRecord, bool, error) {
-	runID, err := s.coSuperSlotRunID(ctx, ownerID, trajectoryID, slot)
+func (s *Store) EngineeringSlotRun(ctx context.Context, ownerID, trajectoryID, slot string) (types.RunRecord, bool, error) {
+	runID, err := s.engineeringSlotRunID(ctx, ownerID, trajectoryID, slot)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return types.RunRecord{}, false, nil
@@ -1832,11 +1832,11 @@ func (s *Store) CoSuperSlotRun(ctx context.Context, ownerID, trajectoryID, slot 
 	return rec, true, nil
 }
 
-// ActiveCoSuperSlotRun returns the live run currently claiming a
+// ActiveEngineeringSlotRun returns the live run currently claiming a
 // (trajectory, slot), if any. Passivated runs are reusable non-terminal
 // history, not active slot owners.
-func (s *Store) ActiveCoSuperSlotRun(ctx context.Context, ownerID, trajectoryID, slot string) (types.RunRecord, bool, error) {
-	rec, found, err := s.CoSuperSlotRun(ctx, ownerID, trajectoryID, slot)
+func (s *Store) ActiveEngineeringSlotRun(ctx context.Context, ownerID, trajectoryID, slot string) (types.RunRecord, bool, error) {
+	rec, found, err := s.EngineeringSlotRun(ctx, ownerID, trajectoryID, slot)
 	if err != nil {
 		return types.RunRecord{}, false, err
 	}
@@ -1846,9 +1846,9 @@ func (s *Store) ActiveCoSuperSlotRun(ctx context.Context, ownerID, trajectoryID,
 	return rec, true, nil
 }
 
-// CountActiveCoSuperSlots returns the number of trajectory-scoped co-super
+// CountActiveEngineeringSlots returns the number of trajectory-scoped Engineering
 // slots whose recorded activation is still active.
-func (s *Store) CountActiveCoSuperSlots(ctx context.Context, ownerID, trajectoryID string) (int, error) {
+func (s *Store) CountActiveEngineeringSlots(ctx context.Context, ownerID, trajectoryID string) (int, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	if ownerID == "" || trajectoryID == "" {
@@ -1995,8 +1995,8 @@ func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computer
 	}
 	// Scheduling authority reads the PRIMARY object graph, not the read pool:
 	// the read pool's transaction snapshot can predate a just-committed mint,
-	// and a stale "no resident" answer here mints a second Super and breaks the
-	// I26 singleton (one active Super run per computer). This query is bounded
+	// and a stale "no resident" answer here mints a second Management and breaks the
+	// I26 singleton (one active Management run per computer). This query is bounded
 	// (refs scan + single object loads), so primary reads are proportionate.
 	graph := s.ogStore
 	if graph == nil {
@@ -2848,22 +2848,22 @@ func (s *Store) refreshCoagentMailboxCursorOG(ctx context.Context, ownerID, agen
 // addressed channel audit message. The worker_updates row is the durable wake
 // backlog; the update_id is idempotent per owner, so retries can return the
 // existing update without duplicating delivery.
-func workerMailboxAllowsAssignedCoSuperSuperReport(update types.CoagentSourcePacket) bool {
+func workerMailboxAllowsAssignedEngineeringManagementReport(update types.CoagentSourcePacket) bool {
 	ownerID := strings.TrimSpace(update.OwnerID)
 	if ownerID == "" {
 		return false
 	}
 	reportRole, _ := agentprofile.Canonical(update.Role)
 	return update.Direction == types.LifecyclePacketDirectionProducerReport &&
-		reportRole == agentprofile.CoSuper &&
-		strings.TrimSpace(update.TargetAgentID) == agentprofile.Super+":"+ownerID
+		reportRole == agentprofile.Engineering &&
+		strings.TrimSpace(update.TargetAgentID) == agentprofile.Management+":"+ownerID
 }
 
 func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSourcePacket, message *types.ChannelMessage) (types.CoagentSourcePacket, bool, error) {
 	// Serialize the entire dispatch path to preserve idempotency:
 	if strings.TrimSpace(update.ComputerID) != "" && strings.TrimSpace(update.TrajectoryID) != "" {
 		if _, err := s.GetLifecycleTrajectory(ctx, update.OwnerID, update.ComputerID, update.TrajectoryID); err == nil {
-			if !workerMailboxAllowsAssignedCoSuperSuperReport(update) {
+			if !workerMailboxAllowsAssignedEngineeringManagementReport(update) {
 				return types.CoagentSourcePacket{}, false, ErrLifecycleAuthorityRequired
 			}
 		} else if !errors.Is(err, ErrNotFound) {

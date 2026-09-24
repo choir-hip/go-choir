@@ -45,10 +45,10 @@ func (r *RegexRedactor) RedactText(text string) (string, []Finding, error) {
 		matches := p.pattern.FindAllStringIndex(text, -1)
 		for _, m := range matches {
 			findings = append(findings, Finding{
-				Class:  p.class,
-				Start:  m[0],
-				End:    m[1],
-				Match:  text[m[0]:m[1]],
+				Class: p.class,
+				Start: m[0],
+				End:   m[1],
+				Match: text[m[0]:m[1]],
 			})
 		}
 	}

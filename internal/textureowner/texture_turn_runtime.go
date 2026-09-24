@@ -101,35 +101,35 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 		targetAgentID, targetWorkItemID := "", strings.TrimSpace(raw.TargetWorkItemID)
 		var openAgent *types.AgentRecord
 		var openWork *types.WorkItemRecord
-		if raw.OpenPersistentSuper {
-			targetAgentID = agentprofile.Super + ":" + strings.TrimSpace(rec.OwnerID)
+		if raw.OpenPersistentManagement {
+			targetAgentID = agentprofile.Management + ":" + strings.TrimSpace(rec.OwnerID)
 			targetWorkItemID, err = textureTurnRuntimeID(rec, in.ToolCallID, "persistent-super-work", i)
 			if err != nil {
 				return nil, err
 			}
 			if packet.Kind != "execution_request" || len(packet.Actions) == 0 {
-				return nil, fmt.Errorf("Texture controls[%d] persistent-Super opener requires execution_request actions", i)
+				return nil, fmt.Errorf("Texture controls[%d] persistent-Management opener requires execution_request actions", i)
 			}
 			work := types.WorkItemRecord{
 				WorkItemID: targetWorkItemID, Objective: strings.TrimSpace(raw.Objective),
-				AuthorityProfile: agentprofile.Super, Status: types.WorkItemOpen,
+				AuthorityProfile: agentprofile.Management, Status: types.WorkItemOpen,
 				AssignedAgentID: targetAgentID,
 			}
 			openWork = &work
-		} else if raw.OpenResearcher {
+		} else if raw.OpenResearch {
 			agentIdentity, identityErr := textureTurnRuntimeID(rec, in.ToolCallID, "researcher-agent", i)
 			if identityErr != nil {
 				return nil, identityErr
 			}
-			targetAgentID = agentprofile.Researcher + ":" + agentIdentity
+			targetAgentID = agentprofile.Research + ":" + agentIdentity
 			targetWorkItemID, err = textureTurnRuntimeID(rec, in.ToolCallID, "researcher-work", i)
 			if err != nil {
 				return nil, err
 			}
-			agent := types.AgentRecord{AgentID: targetAgentID, Profile: agentprofile.Researcher, Role: agentprofile.Researcher, ChannelID: doc.DocID}
+			agent := types.AgentRecord{AgentID: targetAgentID, Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: doc.DocID}
 			work := types.WorkItemRecord{
 				WorkItemID: targetWorkItemID, Objective: strings.TrimSpace(raw.Objective),
-				AuthorityProfile: agentprofile.Researcher, Status: types.WorkItemOpen,
+				AuthorityProfile: agentprofile.Research, Status: types.WorkItemOpen,
 				AssignedAgentID: targetAgentID,
 				CreatedByRunID:  rec.RunID,
 				Details: map[string]any{
@@ -150,7 +150,7 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 			}
 		}
 		// Runtime lookup is an early fail-closed refusal for existing targets; a
-		// Researcher opener proves absence and creates its runtime-derived agent in
+		// Research opener proves absence and creates its runtime-derived agent in
 		// the same ApplyTextureTurn CAS as work and first control.
 		if openAgent == nil {
 			if _, err := h.Store.GetAgentByScope(ctx, rec.OwnerID, doc.ComputerID, targetAgentID); err != nil {

@@ -56,7 +56,7 @@ func TestRunOverlayHasNoWireBranch(t *testing.T) {
 	}
 }
 
-func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentSuperCapsules(t *testing.T) {
+func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentManagementCapsules(t *testing.T) {
 	prompts := map[string]string{
 		"run": RunOverlay(),
 		"revision": RevisionPolicyOverlay(RevisionPolicyOptions{

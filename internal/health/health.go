@@ -156,10 +156,10 @@ type DependencyResult struct {
 
 // ReadinessResponse is the JSON body returned by ReadinessHandler.
 type ReadinessResponse struct {
-	Status      string                      `json:"status"`
-	Service     string                      `json:"service"`
-	CheckedAt   time.Time                   `json:"checked_at"`
-	Cached      bool                        `json:"cached"`
+	Status       string                      `json:"status"`
+	Service      string                      `json:"service"`
+	CheckedAt    time.Time                   `json:"checked_at"`
+	Cached       bool                        `json:"cached"`
 	Dependencies map[string]DependencyResult `json:"dependencies,omitempty"`
 }
 

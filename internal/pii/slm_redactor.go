@@ -71,9 +71,9 @@ func WithSLMPrompt(p string) SLMOption {
 // "llama3.2:3b", "qwen2.5:7b"). The model must be pulled locally.
 func NewSLMRedactor(model string, opts ...SLMOption) *SLMRedactor {
 	s := &SLMRedactor{
-		baseURL: defaultSLMBaseURL,
-		model:   model,
-		client:  &http.Client{Timeout: defaultSLMTimeout},
+		baseURL:  defaultSLMBaseURL,
+		model:    model,
+		client:   &http.Client{Timeout: defaultSLMTimeout},
 		fallback: NewRegexRedactor(),
 		prompt:   defaultSLMPrompt,
 	}
@@ -98,8 +98,8 @@ const defaultSLMPrompt = `You are a PII redaction engine. Identify personally id
 
 // slmChatRequest is the Ollama /api/chat payload.
 type slmChatRequest struct {
-	Model    string          `json:"model"`
-	Stream   bool            `json:"stream"`
+	Model    string           `json:"model"`
+	Stream   bool             `json:"stream"`
 	Messages []slmChatMessage `json:"messages"`
 }
 
@@ -144,7 +144,7 @@ func (s *SLMRedactor) RedactText(text string) (string, []Finding, error) {
 
 func (s *SLMRedactor) redactViaSLM(ctx context.Context, text string) (string, []Finding, error) {
 	body, err := json.Marshal(slmChatRequest{
-		Model: s.model,
+		Model:  s.model,
 		Stream: false,
 		Messages: []slmChatMessage{
 			{Role: "system", Content: s.prompt},

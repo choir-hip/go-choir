@@ -28,7 +28,7 @@ async function registerAndLoadDesktop(page, authenticator, email) {
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
-// Helper: open Super Console via double-click on floating desktop icon
+// Helper: open Engineering Console via double-click on floating desktop icon
 async function openTerminal(page) {
   const icon = page.locator('[data-desktop-icon-id="super-console"]');
   await icon.dblclick();
@@ -43,7 +43,7 @@ async function waitForTerminalCanvas(page) {
 // ---------------------------------------------------------------
 // Test: terminal launches from floating desktop icon (VAL-TERM-001)
 // ---------------------------------------------------------------
-test('super console launches from floating desktop icon', async ({ page, authenticator }) => {
+test('Engineering Console launches from floating desktop icon', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -55,7 +55,7 @@ test('super console launches from floating desktop icon', async ({ page, authent
   await expect(terminalWindow).toBeVisible();
 
   const titleText = await terminalWindow.locator('[data-window-titlebar] .titltexture, [data-window-titlebar]').first().textContent();
-  expect(titleText).toContain('Super Console');
+  expect(titleText).toContain('Engineering Console');
 });
 
 // ---------------------------------------------------------------
@@ -109,7 +109,7 @@ test('dark theme matching desktop aesthetic', async ({ page, authenticator }) =>
 // ---------------------------------------------------------------
 // Test: terminal window close cleans up (VAL-TERM-009 partial)
 // ---------------------------------------------------------------
-test('super console window can be closed', async ({ page, authenticator }) => {
+test('Engineering Console window can be closed', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 

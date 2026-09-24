@@ -4,9 +4,9 @@ package capsule
 type AgentRole string
 
 const (
-	RoleSuper      AgentRole = "management"  // lifecycle/authority only; no broker verbs
-	RoleCoSuper    AgentRole = "engineering" // read/write/exec inside one granted capsule
-	RoleResearcher AgentRole = "research"    // read-only inspection across capsules
+	RoleManagement  AgentRole = "management"  // lifecycle/authority only; no broker verbs
+	RoleEngineering AgentRole = "engineering" // read/write/exec inside one granted capsule
+	RoleResearch    AgentRole = "research"    // read-only inspection across capsules
 )
 
 // Actuator route authority (Def 2 route_authority): one flag, three
@@ -40,8 +40,8 @@ func HostSelectsRLM() bool {
 type VerbSet map[string]bool
 
 var RoleVerbSets = map[AgentRole]VerbSet{
-	RoleSuper: {},
-	RoleCoSuper: {
+	RoleManagement: {},
+	RoleEngineering: {
 		"exec": true, "read_file": true, "write_file": true, "edit_file": true,
 		"list_dir": true, "stat": true, "lstat": true, "readlink": true,
 		"mkdir": true, "mkdir_all": true, "remove": true, "remove_all": true,
@@ -49,7 +49,7 @@ var RoleVerbSets = map[AgentRole]VerbSet{
 		"file_hash": true, "kill_session": true, "go_eval": true,
 		"get_actuator": true, "init_session": true, "close_session": true,
 	},
-	RoleResearcher: {
+	RoleResearch: {
 		"read_file": true, "list_dir": true, "stat": true, "lstat": true,
 		"readlink": true, "file_hash": true, "go_eval": true,
 		"get_actuator": true,

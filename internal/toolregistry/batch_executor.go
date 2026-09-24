@@ -19,10 +19,10 @@ import (
 func ExecuteToolBatch(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, emit provideriface.EventEmitFunc) []types.ToolResult {
 	results := make([]types.ToolResult, len(calls))
 
-	// Stage 1 (pre-dispatch): narrow assigned-CoSuper admission grammar
+	// Stage 1 (pre-dispatch): narrow assigned-Engineering admission grammar
 	// (settlement gate item 4). Statically refuse contradictory or forbidden
 	// batches with none run.
-	if refusalErr := validateCoSuperBatchAdmission(calls); refusalErr != nil {
+	if refusalErr := validateEngineeringBatchAdmission(calls); refusalErr != nil {
 		for i, call := range calls {
 			results[i] = types.ToolResult{
 				CallID:  call.ID,
@@ -153,7 +153,7 @@ func isTextureWriteToolName(name string) bool {
 	}
 }
 
-func validateCoSuperBatchAdmission(calls []types.ToolCall) error {
+func validateEngineeringBatchAdmission(calls []types.ToolCall) error {
 	evalCount := 0
 	for _, call := range calls {
 		if strings.TrimSpace(call.Name) == "capsule_go_eval" {
@@ -208,16 +208,16 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 }
 
 func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip func(index int, reason string)) {
-	seenSuperSpawn := map[string]int{}
+	seenManagementSpawn := map[string]int{}
 	seenCoagentUpdate := map[string]int{}
 	seenBash := map[string]int{}
-	seenTextureResearcherSpawn := map[string]int{}
+	seenTextureResearchSpawn := map[string]int{}
 
 	for i, call := range calls {
 		switch call.Name {
 		case "patch_texture", "rewrite_texture":
 		case "bash":
-			if profile != agentprofile.Super && profile != agentprofile.CoSuper {
+			if profile != agentprofile.Management && profile != agentprofile.Engineering {
 				continue
 			}
 			key := normalizedToolCallArgs(call)
@@ -232,25 +232,25 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 		case "spawn_agent":
 			switch profile {
 			case agentprofile.Texture:
-				key, ok := toolCallTextureResearcherSpawnKey(call)
+				key, ok := toolCallTextureResearchSpawnKey(call)
 				if !ok {
 					continue
 				}
-				if previous, exists := seenTextureResearcherSpawn[key]; exists {
+				if previous, exists := seenTextureResearchSpawn[key]; exists {
 					setSkip(i, fmt.Sprintf("tool_notice: duplicate texture researcher spawn for %s already planned in this turn at call %s; one researcher for this exact objective is enough", key, calls[previous].ID))
 					continue
 				}
-				seenTextureResearcherSpawn[key] = i
-			case agentprofile.Super:
-				key, ok := toolCallSuperCoSuperSpawnKey(call)
+				seenTextureResearchSpawn[key] = i
+			case agentprofile.Management:
+				key, ok := toolCallManagementEngineeringSpawnKey(call)
 				if !ok {
 					continue
 				}
-				if previous, exists := seenSuperSpawn[key]; exists {
+				if previous, exists := seenManagementSpawn[key]; exists {
 					setSkip(i, fmt.Sprintf("tool_error: duplicate spawn_agent for %s already planned in this turn at call %s; reuse that child instead of launching or reusing it again", key, calls[previous].ID))
 					continue
 				}
-				seenSuperSpawn[key] = i
+				seenManagementSpawn[key] = i
 			}
 		case "update_coagent":
 			key := normalizedToolCallArgs(call)
@@ -266,7 +266,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 	}
 }
 
-func toolCallSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
+func toolCallManagementEngineeringSpawnKey(call types.ToolCall) (string, bool) {
 	var in struct {
 		Role      string `json:"role"`
 		Profile   string `json:"profile"`
@@ -280,17 +280,17 @@ func toolCallSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
 	if profile == "" {
 		profile, _ = agentprofile.Canonical(in.Role)
 	}
-	if profile != agentprofile.CoSuper {
+	if profile != agentprofile.Engineering {
 		return "", false
 	}
-	slot := normalizeCoSuperSlot(in.Slot)
+	slot := normalizeEngineeringSlot(in.Slot)
 	if slot == "" {
 		return "", false
 	}
 	return profile + ":" + slot + ":" + strings.TrimSpace(in.ChannelID), true
 }
 
-func toolCallTextureResearcherSpawnKey(call types.ToolCall) (string, bool) {
+func toolCallTextureResearchSpawnKey(call types.ToolCall) (string, bool) {
 	var in struct {
 		Role      string `json:"role"`
 		Profile   string `json:"profile"`
@@ -304,7 +304,7 @@ func toolCallTextureResearcherSpawnKey(call types.ToolCall) (string, bool) {
 	if profile == "" {
 		profile, _ = agentprofile.Canonical(in.Role)
 	}
-	if profile != agentprofile.Researcher {
+	if profile != agentprofile.Research {
 		return "", false
 	}
 	channelID := strings.TrimSpace(in.ChannelID)
@@ -346,7 +346,7 @@ func toolCallSpawnProfile(call types.ToolCall) string {
 	return profile
 }
 
-func normalizeCoSuperSlot(raw string) string {
+func normalizeEngineeringSlot(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "implementation", "implementer", "worker", "writer", "builder":
 		return "implementation"

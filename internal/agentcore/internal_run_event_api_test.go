@@ -187,8 +187,8 @@ func TestHandleExecutionErrorDoesNotReTerminalizeStoredTerminalRun(t *testing.T)
 		CreatedAt: now,
 		UpdatedAt: now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			"assignment_id":         "assignment-late-error",
 		},
 	}

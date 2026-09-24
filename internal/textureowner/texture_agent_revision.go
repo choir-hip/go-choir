@@ -138,7 +138,7 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 			continue
 		}
 		profile := strings.TrimSpace(work.AuthorityProfile)
-		if profile != agentprofile.Texture && profile != agentprofile.CoSuper {
+		if profile != agentprofile.Texture && profile != agentprofile.Engineering {
 			continue
 		}
 		if work.AssignedAgentID != profile+":"+doc.DocID {
@@ -677,8 +677,8 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString(outline)
 	}
 	hardRequirements := textureHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content)
-	hasSuperDelivery := textureWorkerMessagesContainRole(recentWorkerMessages, agentprofile.Super)
-	if !hasSuperDelivery {
+	hasManagementDelivery := textureWorkerMessagesContainRole(recentWorkerMessages, agentprofile.Management)
+	if !hasManagementDelivery {
 		hardRequirements = textureFilterFinalCommandEvidenceRequirements(hardRequirements)
 		if strings.Contains(metadataString(metadata, "seed_prompt")+req.Prompt+current.Content, "[CMD]") {
 			hardRequirements = append(hardRequirements, "Pending command evidence rule: before a super delivery exists, do not include a Source Ledger row, status row, or placeholder whose label is [CMD]; describe command evidence as pending without that label.")
@@ -696,7 +696,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString(textureprompts.RevisionPolicyOverlay(textureprompts.RevisionPolicyOptions{
 		OwnerPromptRequestRevision: ownerPromptRequestRevision,
 		UserAuthoredRevision:       current.AuthorKind == types.AuthorUser,
-		ExplicitResearcherRequest:  metadataBoolValue(metadata, runMetadataExplicitResearcher),
+		ExplicitResearchRequest:    metadataBoolValue(metadata, runMetadataExplicitResearch),
 		HasGroundedHistory:         hasGroundedHistory,
 		DocID:                      current.DocID,
 		RevisionID:                 current.RevisionID,
@@ -865,7 +865,7 @@ func (rt *Handler) recentWorkerMessages(ctx context.Context, ownerID, channelID 
 			continue
 		}
 		switch runProfiles[strings.TrimSpace(message.FromRunID)] {
-		case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
+		case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
 			filtered = append(filtered, message)
 		}
 	}

@@ -174,7 +174,7 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 	properties["work_disposition"] = map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native producer work consequence for lifecycle updates; omission preserves assigned work as open. Use completed only when this update fully satisfies that work."}
 	return toolregistry.Tool{
 		Name:        "update_coagent",
-		Description: "Send one source packet to the explicit agent_id durably bound to this run. The target must be an allowed exact requester, owning parent, or assigned child in the same owner, computer, trajectory, and document scope; channel or metadata hints never select a target. Lifecycle Researcher, Processor, and Reconciler reports use the lifecycle backlog and require runtime call identity plus assigned work. Assigned CoSuper reports to the requesting persistent Super use the worker mailbox; packet.kind describes content and does not open Super execution. Pre-cutover Super and CoSuper result/assignment paths use the legacy backlog only when durable run and assignment rows prove the relationship. Wake occurs only after commit.",
+		Description: "Send one source packet to the explicit agent_id durably bound to this run. The target must be an allowed exact requester, owning parent, or assigned child in the same owner, computer, trajectory, and document scope; channel or metadata hints never select a target. Lifecycle Research, Processor, and Reconciler reports use the lifecycle backlog and require runtime call identity plus assigned work. Assigned Engineering reports to the requesting persistent Management use the worker mailbox; packet.kind describes content and does not open Management execution. Pre-cutover Management and Engineering result/assignment paths use the legacy backlog only when durable run and assignment rows prove the relationship. Wake occurs only after commit.",
 		Parameters:  toolregistry.JSONSchemaObject(properties, []string{"schema_version", "kind", "summary", "agent_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			if err := rejectLegacyUpdateCoagentFields(raw); err != nil {
@@ -210,7 +210,7 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 				CreatedAt:       time.Now().UTC(),
 				WorkDisposition: types.WorkItemStatus(workDisposition),
 			}
-			if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Super {
+			if authority.callerProfile == agentprofile.Engineering && authority.targetProfile == agentprofile.Management {
 				update.Direction = types.LifecyclePacketDirectionProducerReport
 			}
 			if authority.lifecycle {
@@ -303,7 +303,7 @@ type coagentUpdateAuthorityStore interface {
 	GetLifecycleWorkItem(context.Context, string, string, string) (types.WorkItemRecord, error)
 	GetTrajectory(context.Context, string, string) (types.TrajectoryRecord, error)
 	GetWorkItem(context.Context, string, string) (types.WorkItemRecord, error)
-	CoSuperSlotByAgentAndTrajectory(context.Context, string, string, string) (store.CoSuperSlotRecord, bool, error)
+	EngineeringSlotByAgentAndTrajectory(context.Context, string, string, string) (store.EngineeringSlotRecord, bool, error)
 }
 
 type coagentUpdateAuthority struct {
@@ -396,8 +396,8 @@ func resolveCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	authority.trajectoryID = strings.TrimSpace(trajectoryIDForRun(&authority.callerRun))
 
 	if authority.lifecycle {
-		if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Super {
-			if err := validateAssignedCoSuperPersistentSuperReport(ctx, authorityStore, &authority); err != nil {
+		if authority.callerProfile == agentprofile.Engineering && authority.targetProfile == agentprofile.Management {
+			if err := validateAssignedEngineeringPersistentManagementReport(ctx, authorityStore, &authority); err != nil {
 				return authority, err
 			}
 			authority.lifecycle = false
@@ -465,12 +465,12 @@ func enforceCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 		}
 		return fmt.Errorf("update_coagent %s cannot message %s", callerProfile, targetProfile)
 	}
-	if callerProfile == agentprofile.Super && targetProfile == agentprofile.CoSuper {
+	if callerProfile == agentprofile.Management && targetProfile == agentprofile.Engineering {
 		trajectoryID := strings.TrimSpace(trajectoryIDForRun(execution.RunRecord))
 		if trajectoryID == "" {
 			return fmt.Errorf("update_coagent super to co-super requires caller trajectory")
 		}
-		slot, found, err := authorityStore.CoSuperSlotByAgentAndTrajectory(ctx, ownerID, trajectoryID, target.AgentID)
+		slot, found, err := authorityStore.EngineeringSlotByAgentAndTrajectory(ctx, ownerID, trajectoryID, target.AgentID)
 		if err != nil {
 			return fmt.Errorf("lookup co-super assignment slot: %w", err)
 		}
@@ -486,7 +486,7 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 		return fmt.Errorf("update_coagent lifecycle authority is missing")
 	}
 	switch authority.callerProfile {
-	case agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler:
+	case agentprofile.Research, agentprofile.Processor, agentprofile.Reconciler:
 	default:
 		return fmt.Errorf("update_coagent lifecycle producer profile %s is not allowed", authority.callerProfile)
 	}
@@ -631,21 +631,21 @@ func validatePreCutoverCoagentUpdateAuthority(ctx context.Context, authorityStor
 	}
 
 	if requester, err := loadLegacyRequesterRun(ctx, authorityStore, authority.callerRun, authority.target); err == nil {
-		if authority.callerProfile == agentprofile.CoSuper {
+		if authority.callerProfile == agentprofile.Engineering {
 			switch authority.targetProfile {
 			case agentprofile.Texture:
-				return validateCoSuperTextureResultPath(ctx, authorityStore, *authority)
-			case agentprofile.Super:
-				return validateCoSuperOwningSuper(ctx, authorityStore, *authority, requester)
+				return validateEngineeringTextureResultPath(ctx, authorityStore, *authority)
+			case agentprofile.Management:
+				return validateEngineeringOwningManagement(ctx, authorityStore, *authority, requester)
 			}
 		}
 		return nil
 	}
-	if authority.callerProfile == agentprofile.Super && (authority.targetProfile == agentprofile.Researcher || authority.targetProfile == agentprofile.CoSuper) {
+	if authority.callerProfile == agentprofile.Management && (authority.targetProfile == agentprofile.Research || authority.targetProfile == agentprofile.Engineering) {
 		return validateLegacyOwnedChild(ctx, authorityStore, *authority)
 	}
-	if authority.callerProfile == agentprofile.CoSuper && authority.targetProfile == agentprofile.Texture {
-		return validateCoSuperTextureResultPath(ctx, authorityStore, *authority)
+	if authority.callerProfile == agentprofile.Engineering && authority.targetProfile == agentprofile.Texture {
+		return validateEngineeringTextureResultPath(ctx, authorityStore, *authority)
 	}
 	return fmt.Errorf("update_coagent target is neither the exact requester nor an assigned child")
 }
@@ -698,8 +698,8 @@ func validateLegacyOwnedChild(ctx context.Context, authorityStore coagentUpdateA
 		strings.TrimSpace(trajectoryIDForRun(&child)) != authority.trajectoryID {
 		return fmt.Errorf("update_coagent child run is not owned by the calling super")
 	}
-	if authority.targetProfile == agentprofile.CoSuper {
-		slot, found, err := authorityStore.CoSuperSlotByAgentAndTrajectory(ctx, authority.callerRun.OwnerID, authority.trajectoryID, authority.target.AgentID)
+	if authority.targetProfile == agentprofile.Engineering {
+		slot, found, err := authorityStore.EngineeringSlotByAgentAndTrajectory(ctx, authority.callerRun.OwnerID, authority.trajectoryID, authority.target.AgentID)
 		if err != nil {
 			return fmt.Errorf("lookup assigned co-super slot: %w", err)
 		}
@@ -723,26 +723,26 @@ func validateLegacyOwnedChild(ctx context.Context, authorityStore coagentUpdateA
 	return fmt.Errorf("update_coagent assigned child lacks exact open work provenance")
 }
 
-func validateAssignedCoSuperPersistentSuperReport(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority *coagentUpdateAuthority) error {
+func validateAssignedEngineeringPersistentManagementReport(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority *coagentUpdateAuthority) error {
 	if authority == nil {
-		return fmt.Errorf("update_coagent assigned CoSuper Super report authority is missing")
+		return fmt.Errorf("update_coagent assigned Engineering Management report authority is missing")
 	}
-	if authority.callerProfile != agentprofile.CoSuper || authority.targetProfile != agentprofile.Super {
-		return fmt.Errorf("update_coagent assigned CoSuper report requires a persistent Super target")
+	if authority.callerProfile != agentprofile.Engineering || authority.targetProfile != agentprofile.Management {
+		return fmt.Errorf("update_coagent assigned Engineering report requires a persistent Management target")
 	}
 	if authority.target.LifecycleVersion > 0 {
-		return fmt.Errorf("update_coagent assigned CoSuper cannot address a lifecycle Super")
+		return fmt.Errorf("update_coagent assigned Engineering cannot address a lifecycle Management")
 	}
-	if authority.target.AgentID != persistentSuperAgentID(authority.callerRun.OwnerID) {
-		return fmt.Errorf("update_coagent assigned CoSuper target is not the owning persistent Super")
+	if authority.target.AgentID != persistentManagementAgentID(authority.callerRun.OwnerID) {
+		return fmt.Errorf("update_coagent assigned Engineering target is not the owning persistent Management")
 	}
 	if metadataStringValue(authority.callerRun.Metadata, "assignment_id") == "" || metadataIntValue(authority.callerRun.Metadata, "assignment_attempt") <= 0 {
-		return fmt.Errorf("update_coagent calling CoSuper lacks exact assignment")
+		return fmt.Errorf("update_coagent calling Engineering lacks exact assignment")
 	}
 	requesterProfile, _ := agentprofile.Canonical(metadataStringValue(authority.callerRun.Metadata, "requested_by_profile"))
 	if metadataStringValue(authority.callerRun.Metadata, "requested_by_agent_id") != authority.target.AgentID ||
-		requesterProfile != agentprofile.Super {
-		return fmt.Errorf("update_coagent calling CoSuper was not requested by the target Super")
+		requesterProfile != agentprofile.Management {
+		return fmt.Errorf("update_coagent calling Engineering was not requested by the target Management")
 	}
 	requesterRunID, err := exactRequesterRunID(authority.callerRun)
 	if err != nil {
@@ -750,61 +750,61 @@ func validateAssignedCoSuperPersistentSuperReport(ctx context.Context, authority
 	}
 	parent, err := loadScopedLegacyRun(ctx, authorityStore, authority.callerRun.OwnerID, authority.callerRun.ComputerID, requesterRunID)
 	if err != nil {
-		return fmt.Errorf("resolve owning persistent Super run: %w", err)
+		return fmt.Errorf("resolve owning persistent Management run: %w", err)
 	}
 	parentProfile := configuredAgentProfileForRun(&parent)
 	parentRole := agentRoleForRun(&parent)
 	if parent.AgentID != authority.target.AgentID ||
-		parentProfile != agentprofile.Super ||
-		parentRole != agentprofile.Super ||
+		parentProfile != agentprofile.Management ||
+		parentRole != agentprofile.Management ||
 		parent.TrajectoryID != "" {
-		return fmt.Errorf("update_coagent owning Super run binding mismatch")
+		return fmt.Errorf("update_coagent owning Management run binding mismatch")
 	}
 	callerTrajectory := strings.TrimSpace(authority.trajectoryID)
 	if callerTrajectory == "" {
-		return fmt.Errorf("update_coagent assigned CoSuper trajectory is required")
+		return fmt.Errorf("update_coagent assigned Engineering trajectory is required")
 	}
 	if parentTrajectory := metadataStringValue(parent.Metadata, "assignment_trajectory_id"); parentTrajectory != "" && parentTrajectory != callerTrajectory {
-		return fmt.Errorf("update_coagent assigned CoSuper trajectory does not match owning Super assignment trajectory")
+		return fmt.Errorf("update_coagent assigned Engineering trajectory does not match owning Management assignment trajectory")
 	}
 	return nil
 }
 
-func validateCoSuperOwningSuper(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority coagentUpdateAuthority, owningSuper types.RunRecord) error {
-	if authority.trajectoryID == "" || owningSuper.AgentID != authority.target.AgentID {
-		return fmt.Errorf("update_coagent co-super owning Super binding mismatch")
+func validateEngineeringOwningManagement(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority coagentUpdateAuthority, owningManagement types.RunRecord) error {
+	if authority.trajectoryID == "" || owningManagement.AgentID != authority.target.AgentID {
+		return fmt.Errorf("update_coagent co-super owning Management binding mismatch")
 	}
-	slot, found, err := authorityStore.CoSuperSlotByAgentAndTrajectory(ctx, authority.callerRun.OwnerID, authority.trajectoryID, authority.callerRun.AgentID)
+	slot, found, err := authorityStore.EngineeringSlotByAgentAndTrajectory(ctx, authority.callerRun.OwnerID, authority.trajectoryID, authority.callerRun.AgentID)
 	if err != nil {
 		return fmt.Errorf("lookup calling co-super assignment: %w", err)
 	}
-	if !found || slot.RunID != authority.callerRun.RunID || slot.RequestedByRunID != owningSuper.RunID {
-		return fmt.Errorf("update_coagent calling co-super is not assigned to target Super")
+	if !found || slot.RunID != authority.callerRun.RunID || slot.RequestedByRunID != owningManagement.RunID {
+		return fmt.Errorf("update_coagent calling co-super is not assigned to target Management")
 	}
 	return nil
 }
 
-func validateCoSuperTextureResultPath(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority coagentUpdateAuthority) error {
-	if authority.callerProfile != agentprofile.CoSuper || authority.targetProfile != agentprofile.Texture || authority.trajectoryID == "" {
+func validateEngineeringTextureResultPath(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority coagentUpdateAuthority) error {
+	if authority.callerProfile != agentprofile.Engineering || authority.targetProfile != agentprofile.Texture || authority.trajectoryID == "" {
 		return fmt.Errorf("update_coagent co-super result path is not applicable")
 	}
-	slot, found, err := authorityStore.CoSuperSlotByAgentAndTrajectory(ctx, authority.callerRun.OwnerID, authority.trajectoryID, authority.callerRun.AgentID)
+	slot, found, err := authorityStore.EngineeringSlotByAgentAndTrajectory(ctx, authority.callerRun.OwnerID, authority.trajectoryID, authority.callerRun.AgentID)
 	if err != nil {
 		return fmt.Errorf("lookup calling co-super assignment: %w", err)
 	}
 	if !found || slot.RunID != authority.callerRun.RunID || strings.TrimSpace(slot.RequestedByRunID) == "" {
 		return fmt.Errorf("update_coagent calling co-super lacks exact assignment")
 	}
-	owningSuper, err := loadScopedLegacyRun(ctx, authorityStore, authority.callerRun.OwnerID, authority.callerRun.ComputerID, slot.RequestedByRunID)
+	owningManagement, err := loadScopedLegacyRun(ctx, authorityStore, authority.callerRun.OwnerID, authority.callerRun.ComputerID, slot.RequestedByRunID)
 	if err != nil {
 		return fmt.Errorf("resolve owning super run: %w", err)
 	}
-	owningSuperProfile := configuredAgentProfileForRun(&owningSuper)
-	if owningSuperProfile != agentprofile.Super {
-		return fmt.Errorf("update_coagent co-super assignment owner is not Super")
+	owningManagementProfile := configuredAgentProfileForRun(&owningManagement)
+	if owningManagementProfile != agentprofile.Management {
+		return fmt.Errorf("update_coagent co-super assignment owner is not Management")
 	}
-	if _, err := loadLegacyRequesterRun(ctx, authorityStore, owningSuper, authority.target); err != nil {
-		return fmt.Errorf("resolve Texture requester through owning Super: %w", err)
+	if _, err := loadLegacyRequesterRun(ctx, authorityStore, owningManagement, authority.target); err != nil {
+		return fmt.Errorf("resolve Texture requester through owning Management: %w", err)
 	}
 	return nil
 }

@@ -39,28 +39,28 @@ type Config struct {
 	AttachmentMaxBytes int64
 	// DraftAttachmentMaxBytes caps total attachment bytes per draft (25 MiB).
 	DraftAttachmentMaxBytes int64
-	WebhookClockSkew time.Duration
+	WebhookClockSkew        time.Duration
 }
 
 // LoadConfig resolves MAILD_* and RESEND_* environment variables.
 func LoadConfig() (*Config, error) {
 	storageRoot := envOr("MAILD_STORAGE_ROOT", DefaultLocalDir)
 	cfg := &Config{
-		Port:             envOr("MAILD_PORT", DefaultPort),
-		DBPath:           envOr("MAILD_DB_PATH", filepath.Join(storageRoot, "mail.db")),
-		StorageRoot:      storageRoot,
-		PrimaryDomain:    envOr("MAILD_PRIMARY_DOMAIN", DefaultPrimaryDomain),
-		RootOwnerID:      envOr("MAILD_ROOT_OWNER_ID", DefaultRootOwnerID),
-		ResendAPIKey:     os.Getenv("RESEND_API_KEY"),
-		ResendBaseURL:    envOr("RESEND_BASE_URL", DefaultResendBaseURL),
-		VmctlURL:         os.Getenv("MAILD_VMCTL_URL"),
-		WebhookSecret:    os.Getenv("RESEND_WEBHOOK_SECRET"),
-		WebhookMaxBytes:  int64EnvOr("MAILD_WEBHOOK_MAX_BYTES", DefaultWebhookMaxBody),
-		APIMaxBytes:      int64EnvOr("MAILD_API_MAX_BYTES", DefaultAPIMaxBody),
-		ProviderMaxBytes: int64EnvOr("MAILD_PROVIDER_MAX_BYTES", DefaultProviderMaxBody),
-		AttachmentMaxBytes:     int64EnvOr("MAILD_ATTACHMENT_MAX_BYTES", DefaultAttachmentMaxBytes),
+		Port:                    envOr("MAILD_PORT", DefaultPort),
+		DBPath:                  envOr("MAILD_DB_PATH", filepath.Join(storageRoot, "mail.db")),
+		StorageRoot:             storageRoot,
+		PrimaryDomain:           envOr("MAILD_PRIMARY_DOMAIN", DefaultPrimaryDomain),
+		RootOwnerID:             envOr("MAILD_ROOT_OWNER_ID", DefaultRootOwnerID),
+		ResendAPIKey:            os.Getenv("RESEND_API_KEY"),
+		ResendBaseURL:           envOr("RESEND_BASE_URL", DefaultResendBaseURL),
+		VmctlURL:                os.Getenv("MAILD_VMCTL_URL"),
+		WebhookSecret:           os.Getenv("RESEND_WEBHOOK_SECRET"),
+		WebhookMaxBytes:         int64EnvOr("MAILD_WEBHOOK_MAX_BYTES", DefaultWebhookMaxBody),
+		APIMaxBytes:             int64EnvOr("MAILD_API_MAX_BYTES", DefaultAPIMaxBody),
+		ProviderMaxBytes:        int64EnvOr("MAILD_PROVIDER_MAX_BYTES", DefaultProviderMaxBody),
+		AttachmentMaxBytes:      int64EnvOr("MAILD_ATTACHMENT_MAX_BYTES", DefaultAttachmentMaxBytes),
 		DraftAttachmentMaxBytes: int64EnvOr("MAILD_DRAFT_ATTACHMENT_MAX_BYTES", DefaultDraftAttachmentMaxBytes),
-		WebhookClockSkew: 5 * time.Minute,
+		WebhookClockSkew:        5 * time.Minute,
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

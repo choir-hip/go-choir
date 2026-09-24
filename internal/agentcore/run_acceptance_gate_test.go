@@ -106,7 +106,7 @@ func TestFreezeCheckpointSurvivesPostFrozenStates(t *testing.T) {
 		run := types.RunRecord{
 			RunID: "run-" + target.state, ComputerID: computerID, State: types.RunCompleted,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: agentprofile.CoSuper, "assignment_kind": string(types.CoSuperAssignmentImplementation),
+				runMetadataAgentProfile: agentprofile.Engineering, "assignment_kind": string(types.EngineeringAssignmentImplementation),
 				runMetadataTrajectoryID: trajectoryID,
 			},
 		}

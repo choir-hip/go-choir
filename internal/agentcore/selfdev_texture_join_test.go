@@ -66,11 +66,11 @@ func TestSelfDevelopmentEngineeringDocJoinCommitsDirectiveRevision(t *testing.T)
 			deskWork = &copy
 		}
 	}
-	if deskWork == nil || deskWork.AssignedAgentID != deskAgentID || deskWork.AuthorityProfile != agentprofile.CoSuper {
+	if deskWork == nil || deskWork.AssignedAgentID != deskAgentID || deskWork.AuthorityProfile != agentprofile.Engineering {
 		t.Fatalf("engineering desk work item missing or misbound: %+v", deskWork)
 	}
 	agent, err := productStore.GetAgentByScope(ctx, ownerID, computerID, deskAgentID)
-	if err != nil || agent.Profile != agentprofile.CoSuper || agent.ChannelID != docID {
+	if err != nil || agent.Profile != agentprofile.Engineering || agent.ChannelID != docID {
 		t.Fatalf("engineering desk agent missing or misbound: %+v err=%v", agent, err)
 	}
 }

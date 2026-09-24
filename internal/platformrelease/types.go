@@ -36,8 +36,8 @@ type ComponentRelease struct {
 // of the Choir platform baseline (P1).
 type PlatformRelease struct {
 	SchemaVersion               string             `json:"schema_version"`
-	ReleaseID                   string             `json:"release_id"`                     // e.g. "pr-20260908-653f0105"
-	PlatformBaseRef             string             `json:"platform_base_ref"`              // canonical git ref (e.g. "main@653f0105")
+	ReleaseID                   string             `json:"release_id"`        // e.g. "pr-20260908-653f0105"
+	PlatformBaseRef             string             `json:"platform_base_ref"` // canonical git ref (e.g. "main@653f0105")
 	CreatedAt                   time.Time          `json:"created_at"`
 	GuestKernelDigest           string             `json:"guest_kernel_digest,omitempty"`
 	GuestImageDigest            string             `json:"guest_image_digest,omitempty"`

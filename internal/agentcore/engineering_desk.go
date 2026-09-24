@@ -18,7 +18,7 @@ import (
 // document. The desk agent never runs; it is the durable parent authority and
 // mailbox the document-channel occurrences target.
 func engineeringDeskAgentID(docID string) string {
-	return agentprofile.CoSuper + ":" + strings.TrimSpace(docID)
+	return agentprofile.Engineering + ":" + strings.TrimSpace(docID)
 }
 
 // engineeringRevisionObjective derives the assignment objective from the
@@ -40,7 +40,7 @@ func engineeringRevisionObjective(revision types.Revision) string {
 // owner-authored revision admits. The occurrence consumer calls this with the
 // revision the occurrence names; the boot scan and commit dispatch call
 // ReconcileEngineeringDesk, which reconciles the head.
-func (rt *Runtime) ReconcileEngineeringRevisionCast(ctx context.Context, ownerID, docID, revisionID string) (*types.CoSuperAssignment, error) {
+func (rt *Runtime) ReconcileEngineeringRevisionCast(ctx context.Context, ownerID, docID, revisionID string) (*types.EngineeringAssignment, error) {
 	ownerID, docID, revisionID = strings.TrimSpace(ownerID), strings.TrimSpace(docID), strings.TrimSpace(revisionID)
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	if ownerID == "" || docID == "" || revisionID == "" || computerID == "" {
@@ -73,7 +73,7 @@ func (rt *Runtime) ReconcileEngineeringRevisionCast(ctx context.Context, ownerID
 //  2. Verification chaining: a completed implementation assignment minted a
 //     candidate and the bound self-development operation is frozen — open the
 //     verification assignment host-side.
-func (rt *Runtime) ReconcileEngineeringDesk(ctx context.Context, ownerID, docID string) (*types.CoSuperAssignment, error) {
+func (rt *Runtime) ReconcileEngineeringDesk(ctx context.Context, ownerID, docID string) (*types.EngineeringAssignment, error) {
 	if rt == nil || rt.store == nil {
 		return nil, fmt.Errorf("engineering desk reconcile: store authority unavailable")
 	}
@@ -106,7 +106,7 @@ func (rt *Runtime) ReconcileEngineeringDesk(ctx context.Context, ownerID, docID 
 // ReconcileEngineeringDeskForTrajectory is the trajectory-keyed variant used
 // by the assignment-completion path: the completing assignment names its
 // trajectory, and the snapshot resolves the bound document.
-func (rt *Runtime) ReconcileEngineeringDeskForTrajectory(ctx context.Context, ownerID, trajectoryID string) (*types.CoSuperAssignment, error) {
+func (rt *Runtime) ReconcileEngineeringDeskForTrajectory(ctx context.Context, ownerID, trajectoryID string) (*types.EngineeringAssignment, error) {
 	if rt == nil || rt.store == nil {
 		return nil, fmt.Errorf("engineering desk reconcile: store authority unavailable")
 	}
@@ -129,12 +129,12 @@ func (rt *Runtime) ReconcileEngineeringDeskForTrajectory(ctx context.Context, ow
 // reconcileEngineeringCast opens the implementation assignment one revision
 // admits, then chains verification when the cast completed and a bound
 // self-development operation is frozen.
-func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Document, snapshot types.LifecycleSnapshot, revision types.Revision) (*types.CoSuperAssignment, error) {
+func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Document, snapshot types.LifecycleSnapshot, revision types.Revision) (*types.EngineeringAssignment, error) {
 	ownerID, computerID, trajectoryID, docID := doc.OwnerID, doc.ComputerID, doc.TrajectoryID, doc.DocID
 	deskAgentID := engineeringDeskAgentID(docID)
 	deskBound := false
 	for _, agent := range snapshot.Agents {
-		if agent.AgentID == deskAgentID && agent.Profile == agentprofile.CoSuper && agent.LifecycleVersion > 0 {
+		if agent.AgentID == deskAgentID && agent.Profile == agentprofile.Engineering && agent.LifecycleVersion > 0 {
 			deskBound = true
 			break
 		}
@@ -145,25 +145,25 @@ func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Docum
 	if revision.RevisionID == "" || revision.DocID != docID || revision.TrajectoryID != trajectoryID || revision.AuthorKind != types.AuthorUser {
 		return nil, fmt.Errorf("engineering desk reconcile: revision is not an owner-authored revision on the bound document")
 	}
-	assignmentID := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revision.RevisionID, types.CoSuperAssignmentImplementation, "")
-	existing, getErr := rt.store.GetCoSuperAssignment(ctx, ownerID, computerID, assignmentID, 1)
+	assignmentID := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revision.RevisionID, types.EngineeringAssignmentImplementation, "")
+	existing, getErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, 1)
 	if getErr != nil && !errors.Is(getErr, store.ErrNotFound) {
 		return nil, fmt.Errorf("engineering desk reconcile: %w", getErr)
 	}
-	if errors.Is(getErr, store.ErrNotFound) || (existing.Disposition != types.CoSuperAssignmentBound && !existing.Disposition.Terminal()) {
+	if errors.Is(getErr, store.ErrNotFound) || (existing.Disposition != types.EngineeringAssignmentBound && !existing.Disposition.Terminal()) {
 		objective := engineeringRevisionObjective(revision)
 		if objective == "" {
 			return nil, fmt.Errorf("engineering desk reconcile: admitting revision carries no objective")
 		}
-		started, openErr := rt.startAssignedCoSuperForDocument(ctx, doc, revision, OpenDocumentAssignmentRequest{
-			Objective: objective, Kind: types.CoSuperAssignmentImplementation, RevisionID: revision.RevisionID,
+		started, openErr := rt.startAssignedEngineeringForDocument(ctx, doc, revision, OpenDocumentAssignmentRequest{
+			Objective: objective, Kind: types.EngineeringAssignmentImplementation, RevisionID: revision.RevisionID,
 		})
 		if openErr != nil {
 			return nil, fmt.Errorf("engineering desk reconcile: open cast: %w", openErr)
 		}
 		return &started.Assignment, nil
 	}
-	if existing.Disposition == types.CoSuperAssignmentCompleted {
+	if existing.Disposition == types.EngineeringAssignmentCompleted {
 		if verification, verr := rt.reconcileEngineeringVerification(ctx, doc, snapshot, existing); verr != nil {
 			return nil, verr
 		} else if verification != nil {
@@ -176,7 +176,7 @@ func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Docum
 // reconcileEngineeringVerification opens the verification assignment for a
 // completed implementation when the bound self-development operation is
 // frozen. Host-side: no model turn mediates it.
-func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc types.Document, snapshot types.LifecycleSnapshot, implementation types.CoSuperAssignment) (*types.CoSuperAssignment, error) {
+func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc types.Document, snapshot types.LifecycleSnapshot, implementation types.EngineeringAssignment) (*types.EngineeringAssignment, error) {
 	if rt.selfdevOperations == nil {
 		return nil, nil
 	}
@@ -193,7 +193,7 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 		if parseErr != nil {
 			continue
 		}
-		report, reportErr := rt.store.GetCoSuperAssignmentReport(ctx, implementation.Binding.OwnerID, implementation.Binding.ComputerID, suffix)
+		report, reportErr := rt.store.GetEngineeringAssignmentReport(ctx, implementation.Binding.OwnerID, implementation.Binding.ComputerID, suffix)
 		if reportErr != nil {
 			continue
 		}
@@ -205,9 +205,9 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 		return nil, nil
 	}
 	verificationID := deterministicDocumentAssignmentIdentity(implementation.Binding.OwnerID, implementation.Binding.ComputerID,
-		doc.TrajectoryID, implementation.Binding.ParentControlID, types.CoSuperAssignmentVerification, candidateID)
-	if existing, getErr := rt.store.GetCoSuperAssignment(ctx, implementation.Binding.OwnerID, implementation.Binding.ComputerID, verificationID, 1); getErr == nil {
-		if existing.Disposition == types.CoSuperAssignmentBound || existing.Disposition.Terminal() {
+		doc.TrajectoryID, implementation.Binding.ParentControlID, types.EngineeringAssignmentVerification, candidateID)
+	if existing, getErr := rt.store.GetEngineeringAssignment(ctx, implementation.Binding.OwnerID, implementation.Binding.ComputerID, verificationID, 1); getErr == nil {
+		if existing.Disposition == types.EngineeringAssignmentBound || existing.Disposition.Terminal() {
 			return &existing, nil
 		}
 	} else if !errors.Is(getErr, store.ErrNotFound) {
@@ -219,8 +219,8 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 	}
 	objective := "Verify the frozen self-development bundle for operation " + operation.OperationID +
 		" against the implementation assignment's candidate artifact."
-	started, openErr := rt.startAssignedCoSuperForDocument(ctx, doc, revision, OpenDocumentAssignmentRequest{
-		Objective: objective, Kind: types.CoSuperAssignmentVerification, CandidateID: candidateID,
+	started, openErr := rt.startAssignedEngineeringForDocument(ctx, doc, revision, OpenDocumentAssignmentRequest{
+		Objective: objective, Kind: types.EngineeringAssignmentVerification, CandidateID: candidateID,
 		RevisionID: implementation.Binding.ParentControlID,
 	})
 	if openErr != nil {

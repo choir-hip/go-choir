@@ -67,8 +67,8 @@ func TestTextureControlPacketsStrictDecodeEveryNestedAuthorityBoundary(t *testin
 	}
 }
 
-func TestTextureControlAuthorityRejectorCoversCompleteCoSuperAssignmentBinding(t *testing.T) {
-	bindingType := reflect.TypeOf(types.CoSuperAssignmentBinding{})
+func TestTextureControlAuthorityRejectorCoversCompleteEngineeringAssignmentBinding(t *testing.T) {
+	bindingType := reflect.TypeOf(types.EngineeringAssignmentBinding{})
 	for i := 0; i < bindingType.NumField(); i++ {
 		field := bindingType.Field(i)
 		jsonName := strings.Split(field.Tag.Get("json"), ",")[0]
@@ -78,7 +78,7 @@ func TestTextureControlAuthorityRejectorCoversCompleteCoSuperAssignmentBinding(t
 		t.Run(jsonName, func(t *testing.T) {
 			value := map[string]any{"nested": []any{map[string]any{jsonName: "model-authored"}}}
 			if err := rejectTextureControlAuthorityFields(value, "packet.actions[0].inputs"); err == nil {
-				t.Fatalf("runtime-owned CoSuper assignment binding %q is not reserved", jsonName)
+				t.Fatalf("runtime-owned Engineering assignment binding %q is not reserved", jsonName)
 			}
 		})
 	}

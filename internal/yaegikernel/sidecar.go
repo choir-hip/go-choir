@@ -175,7 +175,7 @@ type SessionWorkerConfig struct {
 	Epoch           uint64
 	AllowedRoot     string
 	Role            string
-	// Slot is the co-super slot (implementation|verifier) carried from the
+	// Slot is the Engineering slot (implementation|verifier) carried from the
 	// verified capability; the choir scope reports it through Context and
 	// gates the verifier-only affordances on it.
 	Slot string

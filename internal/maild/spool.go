@@ -43,9 +43,9 @@ type SpooledMessage struct {
 // SpoolQueue provides an fsync'd, RFC 5321 compliant store-and-forward queue
 // for in-flight email messages destined for persistent guest computers.
 type SpoolQueue struct {
-	mu        sync.Mutex
-	spoolDir  string
-	db        *sql.DB
+	mu       sync.Mutex
+	spoolDir string
+	db       *sql.DB
 }
 
 // NewSpoolQueue initializes the spool queue directory structure and index database.

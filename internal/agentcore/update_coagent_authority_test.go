@@ -26,7 +26,7 @@ type coagentAuthorityFakeStore struct {
 	legacyTraj    map[string]types.TrajectoryRecord
 	lifecycleWork map[string]types.WorkItemRecord
 	legacyWork    map[string]types.WorkItemRecord
-	slots         map[string]store.CoSuperSlotRecord
+	slots         map[string]store.EngineeringSlotRecord
 	errors        map[string]error
 }
 
@@ -101,10 +101,10 @@ func (f *coagentAuthorityFakeStore) GetWorkItem(_ context.Context, _, id string)
 	}
 	return v, nil
 }
-func (f *coagentAuthorityFakeStore) CoSuperSlotByAgentAndTrajectory(_ context.Context, _, trajectory, agent string) (store.CoSuperSlotRecord, bool, error) {
+func (f *coagentAuthorityFakeStore) EngineeringSlotByAgentAndTrajectory(_ context.Context, _, trajectory, agent string) (store.EngineeringSlotRecord, bool, error) {
 	key := trajectory + "\x00" + agent
 	if err := f.fail("slot:" + key); err != nil {
-		return store.CoSuperSlotRecord{}, false, err
+		return store.EngineeringSlotRecord{}, false, err
 	}
 	v, ok := f.slots[key]
 	return v, ok, nil
@@ -127,7 +127,7 @@ func lifecycleAuthorityFixture(profile string) (*Runtime, *coagentAuthorityFakeS
 		legacyTraj:    map[string]types.TrajectoryRecord{},
 		lifecycleWork: map[string]types.WorkItemRecord{workID: {WorkItemID: workID, OwnerID: owner, ComputerID: computer, TrajectoryID: trajectory, AssignedAgentID: callerID, AuthorityProfile: profile, Status: types.WorkItemOpen, Details: map[string]any{
 			"requested_by_run_id": parentRunID, "requested_by_agent_id": targetID, "requested_by_profile": agentprofile.Texture,
-		}}}, legacyWork: map[string]types.WorkItemRecord{}, slots: map[string]store.CoSuperSlotRecord{}, errors: map[string]error{},
+		}}}, legacyWork: map[string]types.WorkItemRecord{}, slots: map[string]store.EngineeringSlotRecord{}, errors: map[string]error{},
 	}
 	rt := &Runtime{cfg: provideriface.Config{ComputerID: computer}}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller))
@@ -135,7 +135,7 @@ func lifecycleAuthorityFixture(profile string) (*Runtime, *coagentAuthorityFakeS
 }
 
 func TestResolveCoagentUpdateAuthorityLifecycleRoleAndBindingMatrix(t *testing.T) {
-	for _, profile := range []string{agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler} {
+	for _, profile := range []string{agentprofile.Research, agentprofile.Processor, agentprofile.Reconciler} {
 		t.Run(profile, func(t *testing.T) {
 			rt, f, ctx, target := lifecycleAuthorityFixture(profile)
 			a, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, "")
@@ -144,7 +144,7 @@ func TestResolveCoagentUpdateAuthorityLifecycleRoleAndBindingMatrix(t *testing.T
 			}
 		})
 	}
-	for _, profile := range []string{agentprofile.Email, agentprofile.Super, agentprofile.CoSuper, agentprofile.Conductor} {
+	for _, profile := range []string{agentprofile.Email, agentprofile.Management, agentprofile.Engineering, agentprofile.Conductor} {
 		t.Run("refuse_"+profile, func(t *testing.T) {
 			rt, f, ctx, target := lifecycleAuthorityFixture(profile)
 			if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
@@ -155,13 +155,13 @@ func TestResolveCoagentUpdateAuthorityLifecycleRoleAndBindingMatrix(t *testing.T
 }
 
 func TestResolveCoagentUpdateAuthorityRequiresExplicitScopedTargetAndEveryLookup(t *testing.T) {
-	rt, f, ctx, target := lifecycleAuthorityFixture(agentprofile.Researcher)
+	rt, f, ctx, target := lifecycleAuthorityFixture(agentprofile.Research)
 	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, "", ""); err == nil || !strings.Contains(err.Error(), "explicit agent_id") {
 		t.Fatalf("missing target err=%v", err)
 	}
 	for _, op := range []string{"agent:" + target, "agent:research:producer-a", "lifecycle-run:run-producer-a", "lifecycle-trajectory:trajectory-a", "lifecycle-run:run-texture-a", "lifecycle-work:work-producer-a"} {
 		t.Run(op, func(t *testing.T) {
-			rt, f, ctx, target := lifecycleAuthorityFixture(agentprofile.Researcher)
+			rt, f, ctx, target := lifecycleAuthorityFixture(agentprofile.Research)
 			f.errors[op] = errors.New("injected lookup failure")
 			if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
 				t.Fatal("lookup error accepted")
@@ -192,14 +192,14 @@ func TestResolveCoagentUpdateAuthorityRefusesScopeDocumentTrajectoryRequesterAnd
 			v.OwnerID = "owner-b"
 			f.agents[target] = v
 		},
-		"arbitrary Super": func(_ *Runtime, f *coagentAuthorityFakeStore, _ *toolregistry.ExecutionContext, target string) {
+		"arbitrary Management": func(_ *Runtime, f *coagentAuthorityFakeStore, _ *toolregistry.ExecutionContext, target string) {
 			v := f.agents[target]
-			v.Profile, v.Role = agentprofile.Super, agentprofile.Super
+			v.Profile, v.Role = agentprofile.Management, agentprofile.Management
 			f.agents[target] = v
 		},
-		"direct CoSuper": func(_ *Runtime, f *coagentAuthorityFakeStore, _ *toolregistry.ExecutionContext, target string) {
+		"direct Engineering": func(_ *Runtime, f *coagentAuthorityFakeStore, _ *toolregistry.ExecutionContext, target string) {
 			v := f.agents[target]
-			v.Profile, v.Role = agentprofile.CoSuper, agentprofile.CoSuper
+			v.Profile, v.Role = agentprofile.Engineering, agentprofile.Engineering
 			f.agents[target] = v
 		},
 		"target document": func(_ *Runtime, f *coagentAuthorityFakeStore, _ *toolregistry.ExecutionContext, _ string) {
@@ -235,7 +235,7 @@ func TestResolveCoagentUpdateAuthorityRefusesScopeDocumentTrajectoryRequesterAnd
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
-			rt, f, ctx, target := lifecycleAuthorityFixture(agentprofile.Researcher)
+			rt, f, ctx, target := lifecycleAuthorityFixture(agentprofile.Research)
 			e := toolregistry.ExecutionContextFrom(ctx)
 			mutate(rt, f, &e, target)
 			ctx = toolregistry.WithExecutionContext(context.Background(), e)
@@ -254,80 +254,80 @@ func legacyRequesterFixture(profile, targetProfile string) (*Runtime, *coagentAu
 	callerAgent := types.AgentRecord{AgentID: callerID, OwnerID: owner, ComputerID: computer, Profile: profile, Role: profile, ChannelID: channel}
 	parent := types.RunRecord{RunID: parentRunID, AgentID: targetID, OwnerID: owner, ComputerID: computer, AgentProfile: targetProfile, AgentRole: targetProfile, ChannelID: channel, TrajectoryID: trajectory}
 	caller := types.RunRecord{RunID: callerRunID, AgentID: callerID, OwnerID: owner, ComputerID: computer, AgentProfile: profile, AgentRole: profile, ChannelID: channel, TrajectoryID: trajectory, RequestedByRunID: parentRunID, Metadata: map[string]any{"requested_by_run_id": parentRunID, "requested_by_agent_id": targetID, "requested_by_profile": targetProfile, "trajectory_id": trajectory}}
-	f := &coagentAuthorityFakeStore{agents: map[string]types.AgentRecord{targetID: target, callerID: callerAgent}, lifecycleRuns: map[string]types.RunRecord{}, legacyRuns: map[string]types.RunRecord{parentRunID: parent, callerRunID: caller}, lifecycleTraj: map[string]types.TrajectoryRecord{}, legacyTraj: map[string]types.TrajectoryRecord{trajectory: {TrajectoryID: trajectory, OwnerID: owner, ComputerID: computer, SubjectRefs: map[string]string{"channel_id": channel}}}, lifecycleWork: map[string]types.WorkItemRecord{}, legacyWork: map[string]types.WorkItemRecord{}, slots: map[string]store.CoSuperSlotRecord{}, errors: map[string]error{}}
+	f := &coagentAuthorityFakeStore{agents: map[string]types.AgentRecord{targetID: target, callerID: callerAgent}, lifecycleRuns: map[string]types.RunRecord{}, legacyRuns: map[string]types.RunRecord{parentRunID: parent, callerRunID: caller}, lifecycleTraj: map[string]types.TrajectoryRecord{}, legacyTraj: map[string]types.TrajectoryRecord{trajectory: {TrajectoryID: trajectory, OwnerID: owner, ComputerID: computer, SubjectRefs: map[string]string{"channel_id": channel}}}, lifecycleWork: map[string]types.WorkItemRecord{}, legacyWork: map[string]types.WorkItemRecord{}, slots: map[string]store.EngineeringSlotRecord{}, errors: map[string]error{}}
 	rt := &Runtime{cfg: provideriface.Config{ComputerID: computer}}
 	return rt, f, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller)), targetID
 }
 
-func TestResolveCoagentUpdateAuthorityRefusesLegacySuperCoSuperMessaging(t *testing.T) {
-	rt, f, _, _ := legacyRequesterFixture(agentprofile.CoSuper, agentprofile.Super)
-	superRun := f.legacyRuns["legacy-parent-run"]
+func TestResolveCoagentUpdateAuthorityRefusesLegacyManagementEngineeringMessaging(t *testing.T) {
+	rt, f, _, _ := legacyRequesterFixture(agentprofile.Engineering, agentprofile.Management)
+	managementRun := f.legacyRuns["legacy-parent-run"]
 	child := f.legacyRuns["legacy-child-run"]
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&superRun))
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&managementRun))
 	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, child.AgentID, ""); err == nil {
-		t.Fatal("persistent Super retained legacy update_coagent path to CoSuper")
+		t.Fatal("persistent Management retained legacy update_coagent path to Engineering")
 	}
-	rt, f, ctx, target := legacyRequesterFixture(agentprofile.CoSuper, agentprofile.Super)
+	rt, f, ctx, target := legacyRequesterFixture(agentprofile.Engineering, agentprofile.Management)
 	if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
-		t.Fatal("unassigned CoSuper retained legacy update_coagent path to Super")
+		t.Fatal("unassigned Engineering retained legacy update_coagent path to Management")
 	}
 }
 
-func assignedCoSuperSuperReportFixture() (*Runtime, *coagentAuthorityFakeStore, context.Context, string) {
+func assignedEngineeringManagementReportFixture() (*Runtime, *coagentAuthorityFakeStore, context.Context, string) {
 	const owner, computer, trajectory = "owner-a", "computer-a", "trajectory-a"
-	superID, callerID, callerRunID, parentRunID := "management:"+owner, "engineering:assigned-a", "run-cosuper-a", "run-super-a"
-	target := types.AgentRecord{AgentID: superID, OwnerID: owner, ComputerID: computer, Profile: agentprofile.Super, Role: agentprofile.Super, ChannelID: superID}
-	callerAgent := types.AgentRecord{AgentID: callerID, OwnerID: owner, ComputerID: computer, Profile: agentprofile.CoSuper, Role: agentprofile.CoSuper, ChannelID: callerID}
-	parent := types.RunRecord{RunID: parentRunID, AgentID: superID, OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super, ChannelID: superID, Metadata: map[string]any{"assignment_trajectory_id": trajectory}}
-	caller := types.RunRecord{RunID: callerRunID, AgentID: callerID, OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.CoSuper, AgentRole: agentprofile.CoSuper, ChannelID: callerID, TrajectoryID: trajectory, RequestedByRunID: parentRunID, Metadata: map[string]any{
-		"requested_by_run_id": parentRunID, "requested_by_agent_id": superID, "requested_by_profile": agentprofile.Super,
+	managementID, callerID, callerRunID, parentRunID := "management:"+owner, "engineering:assigned-a", "run-cosuper-a", "run-super-a"
+	target := types.AgentRecord{AgentID: managementID, OwnerID: owner, ComputerID: computer, Profile: agentprofile.Management, Role: agentprofile.Management, ChannelID: managementID}
+	callerAgent := types.AgentRecord{AgentID: callerID, OwnerID: owner, ComputerID: computer, Profile: agentprofile.Engineering, Role: agentprofile.Engineering, ChannelID: callerID}
+	parent := types.RunRecord{RunID: parentRunID, AgentID: managementID, OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, ChannelID: managementID, Metadata: map[string]any{"assignment_trajectory_id": trajectory}}
+	caller := types.RunRecord{RunID: callerRunID, AgentID: callerID, OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.Engineering, AgentRole: agentprofile.Engineering, ChannelID: callerID, TrajectoryID: trajectory, RequestedByRunID: parentRunID, Metadata: map[string]any{
+		"requested_by_run_id": parentRunID, "requested_by_agent_id": managementID, "requested_by_profile": agentprofile.Management,
 		"assignment_id": "assignment-a", "assignment_attempt": 1, "trajectory_id": trajectory,
 	}}
 	f := &coagentAuthorityFakeStore{
-		agents:        map[string]types.AgentRecord{superID: target, callerID: callerAgent},
+		agents:        map[string]types.AgentRecord{managementID: target, callerID: callerAgent},
 		lifecycleRuns: map[string]types.RunRecord{callerRunID: caller},
 		legacyRuns:    map[string]types.RunRecord{parentRunID: parent},
 		lifecycleTraj: map[string]types.TrajectoryRecord{trajectory: {TrajectoryID: trajectory, OwnerID: owner, ComputerID: computer, SubjectRefs: map[string]string{"doc_id": "doc-a"}}},
 		legacyTraj:    map[string]types.TrajectoryRecord{},
 		lifecycleWork: map[string]types.WorkItemRecord{},
 		legacyWork:    map[string]types.WorkItemRecord{},
-		slots:         map[string]store.CoSuperSlotRecord{},
+		slots:         map[string]store.EngineeringSlotRecord{},
 		errors:        map[string]error{},
 	}
 	rt := &Runtime{cfg: provideriface.Config{ComputerID: computer}}
-	return rt, f, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller)), superID
+	return rt, f, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller)), managementID
 }
 
-func TestResolveCoagentUpdateAuthorityAssignedCoSuperReportsToPersistentSuper(t *testing.T) {
-	rt, f, ctx, target := assignedCoSuperSuperReportFixture()
+func TestResolveCoagentUpdateAuthorityAssignedEngineeringReportsToPersistentManagement(t *testing.T) {
+	rt, f, ctx, target := assignedEngineeringManagementReportFixture()
 	a, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, "")
-	if err != nil || a.lifecycle || a.target.AgentID != target || a.callerProfile != agentprofile.CoSuper {
-		t.Fatalf("assigned CoSuper Super report authority=%+v err=%v", a, err)
+	if err != nil || a.lifecycle || a.target.AgentID != target || a.callerProfile != agentprofile.Engineering {
+		t.Fatalf("assigned Engineering Management report authority=%+v err=%v", a, err)
 	}
 }
 
-func TestResolveCoagentUpdateAuthorityAssignedCoSuperReportRefusals(t *testing.T) {
+func TestResolveCoagentUpdateAuthorityAssignedEngineeringReportRefusals(t *testing.T) {
 	t.Run("missing assignment", func(t *testing.T) {
-		rt, f, ctx, target := assignedCoSuperSuperReportFixture()
+		rt, f, ctx, target := assignedEngineeringManagementReportFixture()
 		caller := f.lifecycleRuns["run-cosuper-a"]
 		delete(caller.Metadata, "assignment_id")
 		f.lifecycleRuns[caller.RunID] = caller
 		ctx = toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&caller))
 		if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
-			t.Fatal("unassigned CoSuper Super report accepted")
+			t.Fatal("unassigned Engineering Management report accepted")
 		}
 	})
-	t.Run("lifecycle Super", func(t *testing.T) {
-		rt, f, ctx, target := assignedCoSuperSuperReportFixture()
+	t.Run("lifecycle Management", func(t *testing.T) {
+		rt, f, ctx, target := assignedEngineeringManagementReportFixture()
 		v := f.agents[target]
 		v.LifecycleVersion = 2
 		f.agents[target] = v
 		if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
-			t.Fatal("lifecycle Super target accepted")
+			t.Fatal("lifecycle Management target accepted")
 		}
 	})
 	t.Run("requester drift", func(t *testing.T) {
-		rt, f, ctx, target := assignedCoSuperSuperReportFixture()
+		rt, f, ctx, target := assignedEngineeringManagementReportFixture()
 		caller := f.lifecycleRuns["run-cosuper-a"]
 		caller.Metadata["requested_by_agent_id"] = "management:other"
 		f.lifecycleRuns[caller.RunID] = caller
@@ -337,17 +337,17 @@ func TestResolveCoagentUpdateAuthorityAssignedCoSuperReportRefusals(t *testing.T
 		}
 	})
 	t.Run("texture target", func(t *testing.T) {
-		rt, f, ctx, _ := assignedCoSuperSuperReportFixture()
+		rt, f, ctx, _ := assignedEngineeringManagementReportFixture()
 		textureID := "texture:doc-a"
 		f.agents[textureID] = types.AgentRecord{AgentID: textureID, OwnerID: "owner-a", ComputerID: "computer-a", Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: "doc-a", LifecycleVersion: 1}
 		if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, textureID, ""); err == nil {
-			t.Fatal("assigned CoSuper Texture target accepted")
+			t.Fatal("assigned Engineering Texture target accepted")
 		}
 	})
 }
 
 func TestResolveCoagentUpdateAuthorityPreCutoverCompatibilityAndRefusals(t *testing.T) {
-	rt, f, ctx, target := legacyRequesterFixture(agentprofile.Researcher, agentprofile.Texture)
+	rt, f, ctx, target := legacyRequesterFixture(agentprofile.Research, agentprofile.Texture)
 	a, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, "")
 	if err != nil || a.lifecycle {
 		t.Fatalf("legacy authority=%+v err=%v", a, err)
@@ -356,8 +356,8 @@ func TestResolveCoagentUpdateAuthorityPreCutoverCompatibilityAndRefusals(t *test
 		"arbitrary super": func(f *coagentAuthorityFakeStore) {
 			v := f.agents[target]
 			v.AgentID = "management:arbitrary"
-			v.Profile = agentprofile.Super
-			v.Role = agentprofile.Super
+			v.Profile = agentprofile.Management
+			v.Role = agentprofile.Management
 			delete(f.agents, target)
 			f.agents[v.AgentID] = v
 		},
@@ -367,7 +367,7 @@ func TestResolveCoagentUpdateAuthorityPreCutoverCompatibilityAndRefusals(t *test
 		"missing parent": func(f *coagentAuthorityFakeStore) { delete(f.legacyRuns, "legacy-parent-run") },
 	} {
 		t.Run(name, func(t *testing.T) {
-			rt, f, ctx, target := legacyRequesterFixture(agentprofile.Researcher, agentprofile.Texture)
+			rt, f, ctx, target := legacyRequesterFixture(agentprofile.Research, agentprofile.Texture)
 			mutate(f)
 			if _, err := resolveCoagentUpdateAuthorityWithStore(ctx, rt, f, target, ""); err == nil {
 				t.Fatal("legacy authority drift accepted")
@@ -418,7 +418,7 @@ func TestUpdateCoagentLifecycleExactToolCallReplayWakesOnce(t *testing.T) {
 	if err := s.CreateRun(ctx, parent); err != nil {
 		t.Fatalf("create lifecycle parent: %v", err)
 	}
-	child, err := rt.StartCoagentRun(ctx, parent.RunID, "research replay identity", ownerID, map[string]any{runMetadataAgentProfile: agentprofile.Researcher, runMetadataAgentRole: agentprofile.Researcher, runMetadataChannelID: docID})
+	child, err := rt.StartCoagentRun(ctx, parent.RunID, "research replay identity", ownerID, map[string]any{runMetadataAgentProfile: agentprofile.Research, runMetadataAgentRole: agentprofile.Research, runMetadataChannelID: docID})
 	if err != nil {
 		t.Fatalf("spawn lifecycle researcher: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestUpdateCoagentLifecycleExactToolCallReplayWakesOnce(t *testing.T) {
 	execution := toolExecutionContextForRun(child)
 	execution.ToolCallID = "provider-call-stable-1"
 	callCtx := toolregistry.WithExecutionContext(ctx, execution)
-	registry := rt.ToolRegistryForProfile(agentprofile.Researcher)
+	registry := rt.ToolRegistryForProfile(agentprofile.Research)
 	first, err := registry.Execute(callCtx, "update_coagent", args)
 	if err != nil {
 		t.Fatalf("first update: %v", err)

@@ -322,7 +322,7 @@ func ComputeQueueLifecycleUpdateDigest(req types.QueueLifecycleUpdateRequest) (s
 	})
 }
 
-func ComputeQueuePersistentSuperReportDigest(req types.QueueLifecycleUpdateRequest) (string, error) {
+func ComputeQueuePersistentManagementReportDigest(req types.QueueLifecycleUpdateRequest) (string, error) {
 	workDisposition, err := normalizeUpdateWorkDisposition(req.WorkDisposition)
 	if err != nil {
 		return "", err
@@ -619,7 +619,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	}
 	docID := strings.TrimSpace(req.InitialDocument.DocID)
 	deskProfile := strings.TrimSpace(req.Agent.Profile)
-	if deskProfile != "texture" && deskProfile != agentprofile.CoSuper {
+	if deskProfile != "texture" && deskProfile != agentprofile.Engineering {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: durable subject profile must be texture or engineering: %w", ErrLifecycleInvalidTransition)
 	}
 	expectedAgentID := deskProfile + ":" + docID
@@ -682,7 +682,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: agent profile and role must match: %w", ErrLifecycleInvalidTransition)
 	}
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", agentprofile.CoSuper, agentprofile.Researcher, "processor", "reconciler":
+	case "texture", agentprofile.Engineering, agentprofile.Research, "processor", "reconciler":
 	default:
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: effects-capable agent profile is not admissible: %w", ErrLifecycleInvalidTransition)
 	}
@@ -1499,13 +1499,13 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 			if update.TrajectoryID == trajectoryID && update.LifecycleVersion > 0 {
 				snapshot.Updates = append(snapshot.Updates, update)
 			}
-		case ogKindCoSuperAssignment:
-			assignment, decodeErr := decodeLifecycleObject[types.CoSuperAssignment](obj)
+		case ogKindEngineeringAssignment:
+			assignment, decodeErr := decodeLifecycleObject[types.EngineeringAssignment](obj)
 			if decodeErr != nil {
 				return types.LifecycleSnapshot{}, decodeErr
 			}
 			if assignment.Binding.TrajectoryID == trajectoryID {
-				snapshot.CoSuperAssignments = append(snapshot.CoSuperAssignments, assignment)
+				snapshot.EngineeringAssignments = append(snapshot.EngineeringAssignments, assignment)
 			}
 		case ogKindLifecycleEvent:
 			event, decodeErr := decodeLifecycleObject[types.LifecycleEvent](obj)
@@ -1543,11 +1543,11 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 	}
 	sort.Slice(snapshot.WorkItems, func(i, j int) bool { return snapshot.WorkItems[i].WorkItemID < snapshot.WorkItems[j].WorkItemID })
 	sort.Slice(snapshot.Agents, func(i, j int) bool { return snapshot.Agents[i].AgentID < snapshot.Agents[j].AgentID })
-	sort.Slice(snapshot.CoSuperAssignments, func(i, j int) bool {
-		if snapshot.CoSuperAssignments[i].AssignmentID != snapshot.CoSuperAssignments[j].AssignmentID {
-			return snapshot.CoSuperAssignments[i].AssignmentID < snapshot.CoSuperAssignments[j].AssignmentID
+	sort.Slice(snapshot.EngineeringAssignments, func(i, j int) bool {
+		if snapshot.EngineeringAssignments[i].AssignmentID != snapshot.EngineeringAssignments[j].AssignmentID {
+			return snapshot.EngineeringAssignments[i].AssignmentID < snapshot.EngineeringAssignments[j].AssignmentID
 		}
-		return snapshot.CoSuperAssignments[i].Binding.Attempt < snapshot.CoSuperAssignments[j].Binding.Attempt
+		return snapshot.EngineeringAssignments[i].Binding.Attempt < snapshot.EngineeringAssignments[j].Binding.Attempt
 	})
 	sort.Slice(snapshot.Updates, func(i, j int) bool {
 		if snapshot.Updates[i].ReducerSeq == snapshot.Updates[j].ReducerSeq {
@@ -1629,7 +1629,7 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	if trajectoryID := strings.TrimSpace(storedReceipt.TrajectoryID); trajectoryID != "" && commandID != "" {
 		if intentObj, intentErr := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, ownerID, computerID, trajectoryID); intentErr == nil {
 			intent, decodeErr := decodeLifecycleObject[types.LifecycleCancellationIntent](intentObj)
-			allowedFate := storedReceipt.Kind == types.LifecycleSetCoSuperCapsuleDisposition || storedReceipt.Kind == types.LifecycleCancelCoSuperAssignment || storedReceipt.Kind == types.LifecycleRecordCoSuperAssignment
+			allowedFate := storedReceipt.Kind == types.LifecycleSetEngineeringCapsuleDisposition || storedReceipt.Kind == types.LifecycleCancelEngineeringAssignment || storedReceipt.Kind == types.LifecycleRecordEngineeringAssignment
 			lateEvidence := false
 			for _, event := range result.Events {
 				if event.Kind == types.LifecycleUpdateLate {
@@ -1778,14 +1778,14 @@ func (s *Store) requireLifecycleAssignedAgent(ctx context.Context, ownerID, comp
 		return types.AgentRecord{}, err
 	}
 	switch strings.TrimSpace(agent.Profile) {
-	case "texture", agentprofile.CoSuper, agentprofile.Researcher, "processor", "reconciler":
+	case "texture", agentprofile.Engineering, agentprofile.Research, "processor", "reconciler":
 	default:
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
 	if strings.TrimSpace(agent.Role) != strings.TrimSpace(agent.Profile) {
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
-	if (strings.HasPrefix(agentID, "texture:") || strings.HasPrefix(agentID, agentprofile.CoSuper+":")) && agent.LifecycleVersion <= 0 {
+	if (strings.HasPrefix(agentID, "texture:") || strings.HasPrefix(agentID, agentprofile.Engineering+":")) && agent.LifecycleVersion <= 0 {
 		return types.AgentRecord{}, ErrLifecycleInvalidTransition
 	}
 	return agent, nil
@@ -1839,11 +1839,11 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 	var resultAgent *types.AgentRecord
 	if errors.Is(agentErr, ErrNotFound) {
 		switch strings.TrimSpace(work.AuthorityProfile) {
-		case agentprofile.CoSuper, agentprofile.Researcher, "processor", "reconciler":
+		case agentprofile.Engineering, agentprofile.Research, "processor", "reconciler":
 		default:
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent profile: %w", ErrLifecycleInvalidTransition)
 		}
-		if strings.HasPrefix(work.AssignedAgentID, "texture:") || strings.HasPrefix(work.AssignedAgentID, agentprofile.CoSuper+":") {
+		if strings.HasPrefix(work.AssignedAgentID, "texture:") || strings.HasPrefix(work.AssignedAgentID, agentprofile.Engineering+":") {
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle open work: assigned agent: %w", ErrLifecycleInvalidTransition)
 		}
 	} else if agentErr != nil {
@@ -2181,10 +2181,10 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 	} else if previousActiveRunID == run.RunID {
 		agent.ActiveRunID = ""
 	}
-	// The first valid work-bound Researcher activation is the cutover from a
+	// The first valid work-bound Research activation is the cutover from a
 	// generic durable agent record to lifecycle identity. Projection does not
 	// advance the trajectory reducer, so it adopts the current reducer sequence.
-	if agent.Profile == agentprofile.Researcher && agent.LifecycleVersion <= 0 && len(boundWorkItemIDs) > 0 && lifecycleRunOwnsActivation(run.State) {
+	if agent.Profile == agentprofile.Research && agent.LifecycleVersion <= 0 && len(boundWorkItemIDs) > 0 && lifecycleRunOwnsActivation(run.State) {
 		agent.LifecycleVersion = 1
 		agent.LastReducerSeq = trajectory.ReducerSeq
 	}
@@ -2561,7 +2561,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	}
 	computedCommandDigest, commandDigestErr := ComputeQueueLifecycleUpdateDigest(req)
 	if req.ControlBindingID != "" || req.TargetWorkItemID != "" {
-		computedCommandDigest, commandDigestErr = ComputeQueuePersistentSuperReportDigest(req)
+		computedCommandDigest, commandDigestErr = ComputeQueuePersistentManagementReportDigest(req)
 	}
 	if err := requireLifecycleDigest(req.CommandDigest, computedCommandDigest, commandDigestErr); err != nil {
 		return types.LifecycleResult{}, err
@@ -2582,7 +2582,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	lateEvidenceOnly := trajectory.Status != types.TrajectoryLive
 	documentID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
 	if documentID == "" || strings.TrimSpace(req.ChannelID) != documentID ||
-		(req.TargetAgentID != "texture:"+documentID && req.TargetAgentID != agentprofile.CoSuper+":"+documentID) {
+		(req.TargetAgentID != "texture:"+documentID && req.TargetAgentID != agentprofile.Engineering+":"+documentID) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	documentObj, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, documentID)
@@ -2606,7 +2606,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	}
 	if agent.AgentID != req.TargetAgentID || agent.OwnerID != ownerID || agent.ComputerID != computerID ||
 		agent.LifecycleVersion <= 0 || agent.Profile != agent.Role || strings.TrimSpace(agent.ChannelID) != documentID ||
-		(agent.Profile != "texture" && agent.Profile != agentprofile.CoSuper) {
+		(agent.Profile != "texture" && agent.Profile != agentprofile.Engineering) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	var producerRunObj objectgraph.Object
@@ -2618,9 +2618,9 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		key    string
 	}
 	var deliveredPacketConsumptions []deliveredPacketConsumption
-	persistentSuperProducer := req.ProducerAgentID == agentprofile.Super+":"+ownerID
-	if persistentSuperProducer {
-		if req.ControlBindingID == "" || req.TargetWorkItemID == "" || req.Role != agentprofile.Super {
+	persistentManagementProducer := req.ProducerAgentID == agentprofile.Management+":"+ownerID
+	if persistentManagementProducer {
+		if req.ControlBindingID == "" || req.TargetWorkItemID == "" || req.Role != agentprofile.Management {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		producerRunObj, err = s.getRunObjectByOwnerOG(ctx, ownerID, req.SourceRunID)
@@ -2630,15 +2630,15 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		if err != nil {
 			return types.LifecycleResult{}, err
 		}
-		producerRunStateAllowed := persistentSuperRunStateAllowed(producerRun.State)
+		producerRunStateAllowed := persistentManagementRunStateAllowed(producerRun.State)
 		if lateEvidenceOnly {
-			producerRunStateAllowed = persistentSuperHistoricalReportRunStateAllowed(producerRun.State)
+			producerRunStateAllowed = persistentManagementHistoricalReportRunStateAllowed(producerRun.State)
 		}
 		if producerRunObj.ComputerID != "" || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
 			producerRun.ComputerID != computerID || producerRun.TrajectoryID != "" || producerRun.AgentID != req.ProducerAgentID ||
-			producerRun.AgentProfile != agentprofile.Super || producerRun.AgentRole != agentprofile.Super || !producerRunStateAllowed ||
+			producerRun.AgentProfile != agentprofile.Management || producerRun.AgentRole != agentprofile.Management || !producerRunStateAllowed ||
 			producerRun.ChannelID != req.ChannelID || metadataExactString(producerRun.Metadata, "assignment_trajectory_id") != req.TrajectoryID ||
-			!persistentSuperControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID) {
+			!persistentManagementControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		controlKey := req.TrajectoryID + "\x00" + req.ProducerAgentID + "\x00" + req.TargetAgentID + "\x00" + req.ControlBindingID
@@ -2673,7 +2673,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		producerAuthorityConditions = append(producerAuthorityConditions,
-			coSuperObjectCondition(controlObj), coSuperObjectCondition(targetRunObj), coSuperObjectCondition(targetWorkObj))
+			engineeringObjectCondition(controlObj), engineeringObjectCondition(targetRunObj), engineeringObjectCondition(targetWorkObj))
 
 		if !lateEvidenceOnly {
 			// The complete consumable set is the canonical exact-run delivery order
@@ -2715,7 +2715,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 			if !memorySeen[req.ControlBindingID] || len(expectedConsumed) == 0 {
 				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 			}
-			// Do not terminalize a Super obligation while an arrival-during-provider
+			// Do not terminalize a Management obligation while an arrival-during-provider
 			// packet remains unseen: it must stay executable by a later same-run turn.
 			if unseenPending && req.WorkDisposition != types.WorkItemOpen {
 				return types.LifecycleResult{}, ErrConcurrentStateChange
@@ -2769,7 +2769,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	}
 	if work.TrajectoryID != req.TrajectoryID || strings.TrimSpace(work.AssignedAgentID) != req.ProducerAgentID ||
 		strings.TrimSpace(work.AuthorityProfile) != strings.TrimSpace(producerRun.AgentProfile) ||
-		(lateEvidenceOnly && persistentSuperProducer && !workItemTerminal(work.Status)) {
+		(lateEvidenceOnly && persistentManagementProducer && !workItemTerminal(work.Status)) {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
 	updateKey := req.TrajectoryID + "\x00" + req.TargetAgentID + "\x00" + req.ProducerAgentID + "\x00" + req.ProducerUpdateID
@@ -2864,7 +2864,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		nextSeq++
 		consumed.update.Disposition = types.UpdateIncorporated
 		consumed.update.DispositionRef = req.UpdateID
-		consumed.update.DispositionReason = "authenticated durable run-memory delivery incorporated by Super report"
+		consumed.update.DispositionReason = "authenticated durable run-memory delivery incorporated by Management report"
 		consumed.update.LifecycleVersion++
 		consumed.update.ReducerSeq = nextSeq
 		updatedMeta := lifecycleMetadata("update_id", consumed.update.UpdateID, computerID, req.TrajectoryID, nextSeq)
@@ -2873,7 +2873,7 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		if buildErr != nil {
 			return types.LifecycleResult{}, buildErr
 		}
-		consumedConditions = append(consumedConditions, coSuperObjectCondition(consumed.object))
+		consumedConditions = append(consumedConditions, engineeringObjectCondition(consumed.object))
 		consumedObjects = append(consumedObjects, updatedObj)
 		event := types.LifecycleEvent{
 			EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1), OwnerID: ownerID, ComputerID: computerID,
@@ -4533,7 +4533,7 @@ func (s *Store) ListPendingProducerReports(ctx context.Context, ownerID, compute
 	if err != nil {
 		return nil, err
 	}
-	targetAgentID := agentprofile.Super + ":" + ownerID
+	targetAgentID := agentprofile.Management + ":" + ownerID
 	updates, err := s.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, targetAgentID)
 	if err != nil {
 		return nil, err
@@ -4558,14 +4558,14 @@ func (s *Store) ListPendingProducerReports(ctx context.Context, ownerID, compute
 }
 
 // ListDeliveredPendingProducerReports returns producer reports addressed to
-// the persistent Super that are still pending disposition but already
+// the persistent Management that are still pending disposition but already
 // delivered to a run — the delivered half of the storm-era residue class.
 func (s *Store) ListDeliveredPendingProducerReports(ctx context.Context, ownerID, computerID, requestedByAgentID string) ([]types.CoagentSourcePacket, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
 	if err != nil {
 		return nil, err
 	}
-	targetAgentID := agentprofile.Super + ":" + ownerID
+	targetAgentID := agentprofile.Management + ":" + ownerID
 	graph := s.ogReadStore
 	if graph == nil {
 		graph = s.ogStore

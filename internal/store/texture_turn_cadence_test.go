@@ -17,7 +17,7 @@ import (
 // semantic-changing authoring turns produce exactly one revision each;
 // wait/block/no-change turns produce none; the deterministic self-development
 // caller never authors a revision (no milestone forcing).
-func cadenceSuperOpenerFixture(t *testing.T, s *Store, suffix string) (*Store, types.StartLifecycleRequest, types.RunRecord, string) {
+func cadenceManagementOpenerFixture(t *testing.T, s *Store, suffix string) (*Store, types.StartLifecycleRequest, types.RunRecord, string) {
 	t.Helper()
 	_, start, caller, _ := setupLifecycleTextureTargetFixtureWithStore(t, s)
 	return s, start, caller, "management:" + start.OwnerID
@@ -128,23 +128,23 @@ func TestSelfDevelopmentDeterministicCallerNeverAuthorsRevisions(t *testing.T) {
 
 // Scheduler/assignment lifecycle never calls ApplyTextureTurn: asserted by
 // absence — no cosuper_assignment source file references ApplyTextureTurn.
-// This test pins the observable consequence: opening and cancelling CoSuper
+// This test pins the observable consequence: opening and cancelling Engineering
 // assignments leaves every texture document head untouched.
 
-func TestCoSuperAssignmentLifecycleLeavesDocumentHeadsUntouched(t *testing.T) {
+func TestEngineeringAssignmentLifecycleLeavesDocumentHeadsUntouched(t *testing.T) {
 	// The scheduling contract (I26) forbids scheduler/assignment lifecycle from
 	// manufacturing revisions. Pinned at the store boundary: QueueLifecycleUpdate
 	// (the only write path assignment receipts use) cannot advance a document
 	// head — its reducer writes update objects and events only. The full
 	// delivered-control join is exercised by lifecycle_control_delivery_test;
 	// here we pin just the observable: no ApplyTextureTurn callsite exists in
-	// cosuper_assignment_*.go or super_controller.go, so no lifecycle event can
-	// carry artifact-advancing semantics.
+	// engineering_assignment_*.go or management_controller.go, so no lifecycle
+	// event can carry artifact-advancing semantics.
 	repo := filepath.Join("..", "..")
 	sources := []string{
-		filepath.Join(repo, "internal", "agentcore", "cosuper_assignment_runtime.go"),
-		filepath.Join(repo, "internal", "agentcore", "cosuper_assignment_fate.go"),
-		filepath.Join(repo, "internal", "agentcore", "super_controller.go"),
+		filepath.Join(repo, "internal", "agentcore", "engineering_assignment_runtime.go"),
+		filepath.Join(repo, "internal", "agentcore", "engineering_assignment_fate.go"),
+		filepath.Join(repo, "internal", "agentcore", "management_controller.go"),
 	}
 	for _, path := range sources {
 		body, err := os.ReadFile(path)

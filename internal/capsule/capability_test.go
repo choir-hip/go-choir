@@ -19,9 +19,9 @@ func TestCapabilitySignAndVerify(t *testing.T) {
 		Handle:        "build-a",
 		CapsuleID:     "capsule-uuid-001",
 		AgentRunID:    "run-001",
-		AgentRole:     RoleCoSuper,
+		AgentRole:     RoleEngineering,
 		TargetCapsule: "capsule-uuid-001",
-		Verbs:         RoleVerbSets[RoleCoSuper],
+		Verbs:         RoleVerbSets[RoleEngineering],
 		ExpiresAt:     time.Now().Add(1 * time.Hour),
 	}
 
@@ -76,8 +76,8 @@ func TestVerifyCapabilityWithKey(t *testing.T) {
 
 	cap := &Capability{
 		CapabilityID: "cap-combined-test",
-		AgentRole:    RoleCoSuper,
-		Verbs:        RoleVerbSets[RoleCoSuper],
+		AgentRole:    RoleEngineering,
+		Verbs:        RoleVerbSets[RoleEngineering],
 		ExpiresAt:    time.Now().Add(1 * time.Hour),
 	}
 

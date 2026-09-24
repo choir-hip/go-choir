@@ -652,7 +652,7 @@ func (s *DoltStore) ListAllObjectRefsByKindOwner(ctx context.Context, kind, owne
 	return out, rows.Err()
 }
 
-// JSONBodyFieldRow is extracted JSON body fields plus computer_id. Super
+// JSONBodyFieldRow is extracted JSON body fields plus computer_id. Management
 // rewarm indexes pending delivered worker-updates this way so it does not
 // materialize LONGBLOB bodies.
 type JSONBodyFieldRow struct {

@@ -25,18 +25,18 @@ func TestSchedulingReadiness_Criterion1_LiveTriggerFIFOSelection(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "owner-fifo-scheduling"
 	computerID := "autoputer-test"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 
 	// Seed 3 competing Texture execution requests with distinct ArrivalOrdinals across 3 trajectories
-	f1 := seedTextureLifecycleControl(t, s, ownerID, "fifo-doc-1", superAgent.AgentID, agentprofile.Super)
-	f2 := seedTextureLifecycleControl(t, s, ownerID, "fifo-doc-2", superAgent.AgentID, agentprofile.Super)
-	f3 := seedTextureLifecycleControl(t, s, ownerID, "fifo-doc-3", superAgent.AgentID, agentprofile.Super)
+	f1 := seedTextureLifecycleControl(t, s, ownerID, "fifo-doc-1", managementAgent.AgentID, agentprofile.Management)
+	f2 := seedTextureLifecycleControl(t, s, ownerID, "fifo-doc-2", managementAgent.AgentID, agentprofile.Management)
+	f3 := seedTextureLifecycleControl(t, s, ownerID, "fifo-doc-3", managementAgent.AgentID, agentprofile.Management)
 
-	pending, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, superAgent.AgentID, 100)
+	pending, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, managementAgent.AgentID, 100)
 	if err != nil {
 		t.Fatalf("list pending controls: %v", err)
 	}
@@ -53,15 +53,15 @@ func TestSchedulingReadiness_Criterion1_LiveTriggerFIFOSelection(t *testing.T) {
 
 	fixtures := []lifecycleControlFixture{f1, f2, f3}
 
-	// For each live cycle, deliver the named trigger and observe exactly one new Super run
+	// For each live cycle, deliver the named trigger and observe exactly one new Management run
 	// whose selected work item is the lowest pending ordinal. Later requests remain pending.
 	for cycle := range 3 {
 		expectedFixture := fixtures[cycle]
 
 		// Deliver the live trigger
-		run, err := rt.ReconcileCoagentWake(ctx, ownerID, superAgent.AgentID)
+		run, err := rt.ReconcileCoagentWake(ctx, ownerID, managementAgent.AgentID)
 		if err != nil || run == nil {
-			t.Fatalf("cycle %d: live trigger failed to mint Super: run=%v err=%v", cycle, run, err)
+			t.Fatalf("cycle %d: live trigger failed to mint Management: run=%v err=%v", cycle, run, err)
 		}
 
 		// Assert selected work item matches the lowest pending ordinal (expectedFixture)
@@ -73,7 +73,7 @@ func TestSchedulingReadiness_Criterion1_LiveTriggerFIFOSelection(t *testing.T) {
 		}
 
 		// Assert later requests remain pending with delivered_to_run_id null/empty
-		remainingPending, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, superAgent.AgentID, 100)
+		remainingPending, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, managementAgent.AgentID, 100)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,30 +93,30 @@ func TestSchedulingReadiness_Criterion1_LiveTriggerFIFOSelection(t *testing.T) {
 		if err := s.UpdateRun(ctx, *run); err != nil {
 			t.Fatal(err)
 		}
-		rt.maybeContinuePersistentSuperInbox(ctx, run)
+		rt.maybeContinuePersistentManagementInbox(ctx, run)
 	}
 }
 
 // Acceptance Criterion 2: Boot-Does-Not-Schedule (structurally enforced)
 // Precondition: admissible unclaimed backlog exists.
-// Boot rewarm/sweep runs: zero Super or CoSuper runs created, positive assertion
+// Boot rewarm/sweep runs: zero Management or Engineering runs created, positive assertion
 // that exact-run resume did not enter selection, pending ordinals remain untouched.
 func TestSchedulingReadiness_Criterion2_BootDoesNotSchedule(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "owner-boot-recovery"
 	computerID := "autoputer-test"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 
 	// PRECONDITION: at least one admissible, unclaimed backlog item exists
-	f1 := seedTextureLifecycleControl(t, s, ownerID, "boot-doc-1", superAgent.AgentID, agentprofile.Super)
-	f2 := seedTextureLifecycleControl(t, s, ownerID, "boot-doc-2", superAgent.AgentID, agentprofile.Super)
+	f1 := seedTextureLifecycleControl(t, s, ownerID, "boot-doc-1", managementAgent.AgentID, agentprofile.Management)
+	f2 := seedTextureLifecycleControl(t, s, ownerID, "boot-doc-2", managementAgent.AgentID, agentprofile.Management)
 
-	pendingBefore, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, superAgent.AgentID, 100)
+	pendingBefore, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, managementAgent.AgentID, 100)
 	if err != nil || len(pendingBefore) < 2 {
 		t.Fatalf("precondition failed: pending controls before boot = %v, err=%v", pendingBefore, err)
 	}
@@ -127,24 +127,24 @@ func TestSchedulingReadiness_Criterion2_BootDoesNotSchedule(t *testing.T) {
 	defer log.SetOutput(os.Stderr)
 
 	// Execute boot rewarm and work-item sweep
-	rt.rewarmInterruptedPersistentSuperActors(ctx)
+	rt.rewarmInterruptedPersistentManagementActors(ctx)
 	rt.sweepOpenWorkItemActors(ctx)
 
 	logOutput := buf.String()
 
 	// Assert from boot logs that reconcile never entered selection
-	if !strings.Contains(logOutput, "boot work-item sweep skipping persistent Super") {
+	if !strings.Contains(logOutput, "boot work-item sweep skipping persistent Management") {
 		t.Errorf("boot logs missing sweep skip log line; got:\n%s", logOutput)
 	}
 
-	// Assert across the window that ZERO Super or CoSuper run rows are created
-	activeRun, err := rt.latestActiveRunByAgent(ctx, ownerID, superAgent.AgentID)
+	// Assert across the window that ZERO Management or Engineering run rows are created
+	activeRun, err := rt.latestActiveRunByAgent(ctx, ownerID, managementAgent.AgentID)
 	if !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("boot minted unexpected Super run=%+v err=%v", activeRun, err)
+		t.Fatalf("boot minted unexpected Management run=%+v err=%v", activeRun, err)
 	}
 
 	// Assert pending ordinals remain pending with unchanged delivery state
-	pendingAfter, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, superAgent.AgentID, 100)
+	pendingAfter, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, managementAgent.AgentID, 100)
 	if err != nil || len(pendingAfter) != len(pendingBefore) {
 		t.Fatalf("pending count changed across boot: before=%d, after=%d", len(pendingBefore), len(pendingAfter))
 	}
@@ -168,7 +168,7 @@ func TestSchedulingReadiness_Criterion3_InFlightResumePreservesIdentity(t *testi
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	ownerID := "owner-inflight-resume"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,11 +178,11 @@ func TestSchedulingReadiness_Criterion3_InFlightResumePreservesIdentity(t *testi
 		return nil
 	})
 
-	// Seed control and start the in-flight Super run
-	f := seedTextureLifecycleControl(t, s, ownerID, "inflight-doc", superAgent.AgentID, agentprofile.Super)
-	firstRun, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	// Seed control and start the in-flight Management run
+	f := seedTextureLifecycleControl(t, s, ownerID, "inflight-doc", managementAgent.AgentID, agentprofile.Management)
+	firstRun, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
 	if err != nil || firstRun == nil {
-		t.Fatalf("initial Super run failed: %v", err)
+		t.Fatalf("initial Management run failed: %v", err)
 	}
 
 	// Passivate the in-flight run with runtime_restarted (simulating process restart)
@@ -201,7 +201,7 @@ func TestSchedulingReadiness_Criterion3_InFlightResumePreservesIdentity(t *testi
 	defer log.SetOutput(os.Stderr)
 
 	// Execute isolated resume entry point
-	resumed, ok, err := rt.ResumeInterruptedPersistentSuperControlRun(ctx, ownerID, superAgent.AgentID)
+	resumed, ok, err := rt.ResumeInterruptedPersistentManagementControlRun(ctx, ownerID, managementAgent.AgentID)
 	if err != nil || !ok || resumed == nil {
 		t.Fatalf("dedicated resume failed: resumed=%v ok=%t err=%v", resumed, ok, err)
 	}
@@ -216,12 +216,12 @@ func TestSchedulingReadiness_Criterion3_InFlightResumePreservesIdentity(t *testi
 
 	// Assert from logs that resume did not fall through to selection
 	logOutput := buf.String()
-	if !strings.Contains(logOutput, "persistent-Super exact-run resume reactivated run="+firstRun.RunID) {
+	if !strings.Contains(logOutput, "persistent-Management exact-run resume reactivated run="+firstRun.RunID) {
 		t.Errorf("resume logs missing reactivation log line; got:\n%s", logOutput)
 	}
 
 	// Assert only ONE recovery occurrence was enqueued, no duplicate runs created
-	activeRun, err := rt.latestActiveRunByAgent(ctx, ownerID, superAgent.AgentID)
+	activeRun, err := rt.latestActiveRunByAgent(ctx, ownerID, managementAgent.AgentID)
 	if err != nil || activeRun.RunID != firstRun.RunID {
 		t.Fatalf("expected single active run %s, got %+v err=%v", firstRun.RunID, activeRun, err)
 	}
@@ -229,10 +229,10 @@ func TestSchedulingReadiness_Criterion3_InFlightResumePreservesIdentity(t *testi
 }
 
 // Acceptance Criterion 4: Producer Report Settlement at Store Layer
-// Enumerate undelivered CoSuper cancel producer reports, settle them via dedicated
+// Enumerate undelivered Engineering cancel producer reports, settle them via dedicated
 // runtime/store lifecycle-reducer command with CAS precondition, terminal disposition (UpdateLate),
 // and idempotent settlement receipt. Assert all pending store selectors exclude settled IDs,
-// claimedPersistentSuperProducerReportIDs is retired, and boot/reconcile mints zero Super runs.
+// claimedPersistentManagementProducerReportIDs is retired, and boot/reconcile mints zero Management runs.
 func TestSchedulingReadiness_Criterion4_ProducerReportStoreSettlement(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
@@ -240,9 +240,9 @@ func TestSchedulingReadiness_Criterion4_ProducerReportStoreSettlement(t *testing
 	computerID := rt.TextureComputerID()
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 
-	// Seed two cancelled CoSuper reports
-	_, rep1, traj1 := seedCancelledCoSuperReport(t, rt, s, ownerID, "report-settle-1")
-	_, rep2, _ := seedCancelledCoSuperReport(t, rt, s, ownerID, "report-settle-2")
+	// Seed two cancelled Engineering reports
+	_, rep1, traj1 := seedCancelledEngineeringReport(t, rt, s, ownerID, "report-settle-1")
+	_, rep2, _ := seedCancelledEngineeringReport(t, rt, s, ownerID, "report-settle-2")
 
 	// 1. Enumerate undelivered cancel producer reports
 	pendingReports, err := rt.ListPendingProducerReports(ctx, ownerID, computerID, "")
@@ -288,8 +288,8 @@ func TestSchedulingReadiness_Criterion4_ProducerReportStoreSettlement(t *testing
 		t.Fatalf("expected 0 pending producer reports after settlement, got %d", len(afterPending))
 	}
 
-	superAgentID := persistentSuperAgentID(ownerID)
-	allPending, err := s.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, superAgentID)
+	managementAgentID := persistentManagementAgentID(ownerID)
+	allPending, err := s.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, managementAgentID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,10 +301,10 @@ func TestSchedulingReadiness_Criterion4_ProducerReportStoreSettlement(t *testing
 		}
 	}
 
-	// 4. Assert boot or reconcile after settlement mints zero Super runs referencing them
-	reconcileRun, err := rt.reconcilePersistentSuperActor(ctx, ownerID, superAgentID)
+	// 4. Assert boot or reconcile after settlement mints zero Management runs referencing them
+	reconcileRun, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgentID)
 	if err != nil || reconcileRun != nil {
-		t.Fatalf("reconcile after settlement minted unexpected Super=%+v err=%v", reconcileRun, err)
+		t.Fatalf("reconcile after settlement minted unexpected Management=%+v err=%v", reconcileRun, err)
 	}
 
 	// 5. Assert idempotency
@@ -315,10 +315,10 @@ func TestSchedulingReadiness_Criterion4_ProducerReportStoreSettlement(t *testing
 }
 
 // Acceptance Criterion 5: Terminal-Event Probe, Positive and Negative
-// (a) Terminate a Super while >= 1 admissible unclaimed backlog item exists and assert
-// zero successor Super is minted from undelivered backlog (maybeContinuePersistentSuperInbox path);
+// (a) Terminate a Management while >= 1 admissible unclaimed backlog item exists and assert
+// zero successor Management is minted from undelivered backlog (maybeContinuePersistentManagementInbox path);
 // (b) Prove the document-channel re-cast path: a new owner-authored revision on the
-// engineering-bound document opens a fresh assignment — no Super mediates the opener.
+// engineering-bound document opens a fresh assignment — no Management mediates the opener.
 func TestSchedulingReadiness_Criterion5_TerminalEventDocumentRecast(t *testing.T) {
 	ctx := context.Background()
 	runtime, productStore := testRuntime(t)
@@ -337,27 +337,27 @@ func TestSchedulingReadiness_Criterion5_TerminalEventDocumentRecast(t *testing.T
 		t.Fatal(err)
 	}
 
-	superAgentID := persistentSuperAgentID(ownerID)
+	managementAgentID := persistentManagementAgentID(ownerID)
 
 	// Seed an admissible unclaimed backlog item in another trajectory
-	fDecoy := seedTextureLifecycleControl(t, productStore, ownerID, "decoy-backlog", superAgentID, agentprofile.Super)
+	fDecoy := seedTextureLifecycleControl(t, productStore, ownerID, "decoy-backlog", managementAgentID, agentprofile.Management)
 
-	// Part (a): a terminal Super mints zero successor from undelivered backlog.
+	// Part (a): a terminal Management mints zero successor from undelivered backlog.
 	finished := time.Now().UTC()
-	terminalSuper := types.RunRecord{
-		RunID: "run-terminal-super", AgentID: superAgentID, OwnerID: ownerID, ComputerID: computerID,
-		AgentProfile: agentprofile.Super, AgentRole: agentprofile.Super,
+	terminalManagement := types.RunRecord{
+		RunID: "run-terminal-super", AgentID: managementAgentID, OwnerID: ownerID, ComputerID: computerID,
+		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management,
 		State: types.RunFailed, Error: "tool loop: exceeded 200 iterations without end_turn",
 		CreatedAt: finished.Add(-time.Hour), UpdatedAt: finished, FinishedAt: &finished,
-		Metadata: map[string]any{runMetadataAgentProfile: agentprofile.Super, runMetadataAgentRole: agentprofile.Super},
+		Metadata: map[string]any{runMetadataAgentProfile: agentprofile.Management, runMetadataAgentRole: agentprofile.Management},
 	}
-	if err := productStore.CreateRun(ctx, terminalSuper); err != nil {
+	if err := productStore.CreateRun(ctx, terminalManagement); err != nil {
 		t.Fatal(err)
 	}
-	runtime.maybeContinuePersistentSuperInbox(ctx, &terminalSuper)
-	activeAfterTerminal, err := runtime.latestActiveRunByAgent(ctx, ownerID, superAgentID)
+	runtime.maybeContinuePersistentManagementInbox(ctx, &terminalManagement)
+	activeAfterTerminal, err := runtime.latestActiveRunByAgent(ctx, ownerID, managementAgentID)
 	if !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("terminal continuation minted unexpected Super from backlog: run=%+v err=%v", activeAfterTerminal, err)
+		t.Fatalf("terminal continuation minted unexpected Management from backlog: run=%+v err=%v", activeAfterTerminal, err)
 	}
 
 	// Part (b): the engineering document is the cast surface. A second

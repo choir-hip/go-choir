@@ -96,7 +96,7 @@ func (rt *Runtime) ExecuteActivationSyncChecked(ctx context.Context, rec *types.
 	}
 	if rec.State == types.RunPassivated {
 		reason := metadataStringValue(rec.Metadata, "passivated_reason")
-		if reason == runtimeInjectionAppendFailurePassivationReason || reason == lifecycleResearcherAdmissionRetryReason {
+		if reason == runtimeInjectionAppendFailurePassivationReason || reason == lifecycleResearchAdmissionRetryReason {
 			return fmt.Errorf("%w: %s", ErrActivationOccurrenceMustRemainUnprocessed, reason)
 		}
 	}
@@ -160,7 +160,7 @@ func (rt *Runtime) TextureChannelHasGroundedHistory(ctx context.Context, ownerID
 			continue
 		}
 		switch agentProfileForRun(&run) {
-		case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
+		case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
 			groundedRunIDs[run.RunID] = struct{}{}
 		}
 	}
@@ -422,7 +422,7 @@ func DocumentRevisionOccurrence(revision types.Revision, deskProfile, requestID 
 	}
 	if revision.AuthorKind != types.AuthorUser || o.HeadRevisionID == "" ||
 		o.OwnerID == "" || o.ComputerID == "" || o.TrajectoryID == "" || o.DocumentID == "" ||
-		(deskProfile != agentprofile.Texture && deskProfile != agentprofile.CoSuper) {
+		(deskProfile != agentprofile.Texture && deskProfile != agentprofile.Engineering) {
 		return TextureActorOccurrence{}, fmt.Errorf("document revision occurrence: incomplete canonical owner revision")
 	}
 	return o, nil
@@ -444,48 +444,48 @@ func TextureRecoveryOccurrence(base TextureActorOccurrence, runID, tailID, headI
 	return base
 }
 
-const LifecycleResearcherAdmissionRecoveryPrefix = "lifecycle-researcher-admission-recovery:v1:"
+const LifecycleResearchAdmissionRecoveryPrefix = "lifecycle-researcher-admission-recovery:v1:"
 
-type LifecycleResearcherAdmissionRecoveryControl struct {
+type LifecycleResearchAdmissionRecoveryControl struct {
 	UpdateID         string
 	LifecycleVersion int64
 	ReducerSeq       int64
 }
 
-type LifecycleResearcherAdmissionRecoveryOccurrence struct {
+type LifecycleResearchAdmissionRecoveryOccurrence struct {
 	OwnerID, ComputerID, TrajectoryID, AgentID, RunID, LogicalKey, SourceAgentID string
-	Controls                                                                     []LifecycleResearcherAdmissionRecoveryControl
+	Controls                                                                     []LifecycleResearchAdmissionRecoveryControl
 }
 
-func EncodeLifecycleResearcherAdmissionRecovery(o LifecycleResearcherAdmissionRecoveryOccurrence) (string, error) {
+func EncodeLifecycleResearchAdmissionRecovery(o LifecycleResearchAdmissionRecoveryOccurrence) (string, error) {
 	fields := []string{o.OwnerID, o.ComputerID, o.TrajectoryID, o.AgentID, o.RunID, o.LogicalKey, o.SourceAgentID, fmt.Sprintf("%d", len(o.Controls))}
 	for _, control := range o.Controls {
 		fields = append(fields, control.UpdateID, fmt.Sprintf("%d", control.LifecycleVersion), fmt.Sprintf("%d", control.ReducerSeq))
 	}
 	for _, field := range fields[:7] {
 		if strings.TrimSpace(field) == "" {
-			return "", fmt.Errorf("lifecycle Researcher recovery occurrence: incomplete scope")
+			return "", fmt.Errorf("lifecycle Research recovery occurrence: incomplete scope")
 		}
 	}
 	if len(o.Controls) == 0 {
-		return "", fmt.Errorf("lifecycle Researcher recovery occurrence: controls are required")
+		return "", fmt.Errorf("lifecycle Research recovery occurrence: controls are required")
 	}
 	raw := make([]byte, 0, 512)
 	for _, field := range fields {
 		raw = appendTextureOccurrenceField(raw, strings.TrimSpace(field))
 	}
-	return LifecycleResearcherAdmissionRecoveryPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
+	return LifecycleResearchAdmissionRecoveryPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
-func DecodeLifecycleResearcherAdmissionRecovery(content string) (LifecycleResearcherAdmissionRecoveryOccurrence, error) {
-	var out LifecycleResearcherAdmissionRecoveryOccurrence
+func DecodeLifecycleResearchAdmissionRecovery(content string) (LifecycleResearchAdmissionRecoveryOccurrence, error) {
+	var out LifecycleResearchAdmissionRecoveryOccurrence
 	content = strings.TrimSpace(content)
-	if !strings.HasPrefix(content, LifecycleResearcherAdmissionRecoveryPrefix) {
-		return out, fmt.Errorf("lifecycle Researcher recovery occurrence: unsupported identity")
+	if !strings.HasPrefix(content, LifecycleResearchAdmissionRecoveryPrefix) {
+		return out, fmt.Errorf("lifecycle Research recovery occurrence: unsupported identity")
 	}
-	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(content, LifecycleResearcherAdmissionRecoveryPrefix))
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(content, LifecycleResearchAdmissionRecoveryPrefix))
 	if err != nil {
-		return out, fmt.Errorf("lifecycle Researcher recovery occurrence: decode: %w", err)
+		return out, fmt.Errorf("lifecycle Research recovery occurrence: decode: %w", err)
 	}
 	at := 0
 	fields := make([]string, 8)
@@ -497,42 +497,42 @@ func DecodeLifecycleResearcherAdmissionRecovery(content string) (LifecycleResear
 	}
 	count64, countErr := strconv.ParseInt(fields[7], 10, 32)
 	if countErr != nil || strconv.FormatInt(count64, 10) != fields[7] || count64 <= 0 || count64 > 10000 {
-		return out, fmt.Errorf("lifecycle Researcher recovery occurrence: invalid control count")
+		return out, fmt.Errorf("lifecycle Research recovery occurrence: invalid control count")
 	}
 	count := int(count64)
-	out = LifecycleResearcherAdmissionRecoveryOccurrence{OwnerID: fields[0], ComputerID: fields[1], TrajectoryID: fields[2], AgentID: fields[3], RunID: fields[4], LogicalKey: fields[5], SourceAgentID: fields[6], Controls: make([]LifecycleResearcherAdmissionRecoveryControl, count)}
+	out = LifecycleResearchAdmissionRecoveryOccurrence{OwnerID: fields[0], ComputerID: fields[1], TrajectoryID: fields[2], AgentID: fields[3], RunID: fields[4], LogicalKey: fields[5], SourceAgentID: fields[6], Controls: make([]LifecycleResearchAdmissionRecoveryControl, count)}
 	for i := 0; i < count; i++ {
 		updateID, fieldErr := readTextureOccurrenceField(raw, &at)
 		if fieldErr != nil {
-			return LifecycleResearcherAdmissionRecoveryOccurrence{}, fieldErr
+			return LifecycleResearchAdmissionRecoveryOccurrence{}, fieldErr
 		}
 		versionRaw, fieldErr := readTextureOccurrenceField(raw, &at)
 		if fieldErr != nil {
-			return LifecycleResearcherAdmissionRecoveryOccurrence{}, fieldErr
+			return LifecycleResearchAdmissionRecoveryOccurrence{}, fieldErr
 		}
 		seqRaw, fieldErr := readTextureOccurrenceField(raw, &at)
 		if fieldErr != nil {
-			return LifecycleResearcherAdmissionRecoveryOccurrence{}, fieldErr
+			return LifecycleResearchAdmissionRecoveryOccurrence{}, fieldErr
 		}
 		version, versionErr := strconv.ParseInt(versionRaw, 10, 64)
 		if versionErr != nil || strconv.FormatInt(version, 10) != versionRaw || version <= 0 {
-			return LifecycleResearcherAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Researcher recovery occurrence: invalid lifecycle version")
+			return LifecycleResearchAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Research recovery occurrence: invalid lifecycle version")
 		}
 		seq, seqErr := strconv.ParseInt(seqRaw, 10, 64)
 		if seqErr != nil || strconv.FormatInt(seq, 10) != seqRaw || seq <= 0 {
-			return LifecycleResearcherAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Researcher recovery occurrence: invalid reducer sequence")
+			return LifecycleResearchAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Research recovery occurrence: invalid reducer sequence")
 		}
 		if strings.TrimSpace(updateID) == "" {
-			return LifecycleResearcherAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Researcher recovery occurrence: empty update id")
+			return LifecycleResearchAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Research recovery occurrence: empty update id")
 		}
-		out.Controls[i] = LifecycleResearcherAdmissionRecoveryControl{UpdateID: strings.TrimSpace(updateID), LifecycleVersion: version, ReducerSeq: seq}
+		out.Controls[i] = LifecycleResearchAdmissionRecoveryControl{UpdateID: strings.TrimSpace(updateID), LifecycleVersion: version, ReducerSeq: seq}
 	}
 	if at != len(raw) {
-		return LifecycleResearcherAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Researcher recovery occurrence: trailing bytes")
+		return LifecycleResearchAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Research recovery occurrence: trailing bytes")
 	}
-	canonical, canonicalErr := EncodeLifecycleResearcherAdmissionRecovery(out)
+	canonical, canonicalErr := EncodeLifecycleResearchAdmissionRecovery(out)
 	if canonicalErr != nil || canonical != content {
-		return LifecycleResearcherAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Researcher recovery occurrence: noncanonical encoding")
+		return LifecycleResearchAdmissionRecoveryOccurrence{}, fmt.Errorf("lifecycle Research recovery occurrence: noncanonical encoding")
 	}
 	return out, nil
 }
@@ -547,7 +547,7 @@ func invalidLifecycleProducerReportAuthority(format string, args ...any) error {
 
 // ValidateLifecycleProducerReportAuthority proves that an upward lifecycle
 // report came from the exact Store-owned run/work and, for lifecycle
-// Researchers/CoSupers, from a fingerprinted Texture-control activation. The
+// Research/Engineering, from a fingerprinted Texture-control activation. The
 // legacy QueueLifecycleUpdate projection may omit ControlBindingID for these
 // roles, so the run fingerprint and canonical delivered-control ledger are the
 // binding authority.
@@ -564,32 +564,32 @@ func (rt *Runtime) ValidateLifecycleProducerReportAuthority(ctx context.Context,
 	}
 	profile, _ := agentprofile.Canonical(run.AgentProfile)
 	trajectoryBound := run.TrajectoryID == report.TrajectoryID
-	if profile == agentprofile.Super {
+	if profile == agentprofile.Management {
 		trajectoryBound = run.TrajectoryID == "" && metadataStringValue(run.Metadata, "assignment_trajectory_id") == report.TrajectoryID
 	}
 	if run.RunID != report.SourceRunID || run.OwnerID != report.OwnerID || run.ComputerID != report.ComputerID || run.AgentID != report.AgentID || !trajectoryBound || run.ChannelID != report.ChannelID || !lifecycleControlWorkIDsForRun(run)[report.ProducerWorkItemID] {
 		return invalidLifecycleProducerReportAuthority("producer report source run authority mismatch")
 	}
-	if profile == agentprofile.Super {
-		if run.AgentID != persistentSuperAgentID(report.OwnerID) || report.ControlBindingID == "" || report.TargetWorkItemID == "" {
-			return invalidLifecycleProducerReportAuthority("persistent Super report lacks exact control binding authority")
+	if profile == agentprofile.Management {
+		if run.AgentID != persistentManagementAgentID(report.OwnerID) || report.ControlBindingID == "" || report.TargetWorkItemID == "" {
+			return invalidLifecycleProducerReportAuthority("persistent Management report lacks exact control binding authority")
 		}
 	}
-	if profile == agentprofile.CoSuper {
+	if profile == agentprofile.Engineering {
 		assignmentID := metadataStringValue(run.Metadata, "assignment_id")
 		attempt := uint64(metadataIntValue(run.Metadata, "assignment_attempt"))
-		assignment, assignmentErr := rt.store.GetCoSuperAssignment(ctx, report.OwnerID, report.ComputerID, assignmentID, attempt)
+		assignment, assignmentErr := rt.store.GetEngineeringAssignment(ctx, report.OwnerID, report.ComputerID, assignmentID, attempt)
 		if assignmentErr != nil {
 			if errors.Is(assignmentErr, store.ErrNotFound) {
-				return invalidLifecycleProducerReportAuthority("CoSuper source assignment is missing")
+				return invalidLifecycleProducerReportAuthority("Engineering source assignment is missing")
 			}
-			return fmt.Errorf("load CoSuper source assignment: %w", assignmentErr)
+			return fmt.Errorf("load Engineering source assignment: %w", assignmentErr)
 		}
 		if assignment.LifecycleVersion <= 0 || assignment.Binding.OwnerID != report.OwnerID || assignment.Binding.ComputerID != report.ComputerID || assignment.Binding.TrajectoryID != report.TrajectoryID || assignment.Binding.AssignedAgentID != report.AgentID || assignment.Binding.AssignedWorkItemID != report.ProducerWorkItemID || assignment.BoundRunID != report.SourceRunID {
-			return invalidLifecycleProducerReportAuthority("CoSuper report source assignment authority mismatch")
+			return invalidLifecycleProducerReportAuthority("Engineering report source assignment authority mismatch")
 		}
 	}
-	if profile == agentprofile.Researcher {
+	if profile == agentprofile.Research {
 		if metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" || metadataStringValue(run.Metadata, lifecycleLogicalActivationKeyMetadata) == "" {
 			return invalidLifecycleProducerReportAuthority("producer report source run has no lifecycle Texture-control fingerprint")
 		}
@@ -617,23 +617,23 @@ func (rt *Runtime) ValidateLifecycleProducerReportAuthority(ctx context.Context,
 	return nil
 }
 
-// ErrInvalidLifecycleResearcherRecovery marks a durable malformed or foreign
+// ErrInvalidLifecycleResearchRecovery marks a durable malformed or foreign
 // structured recovery occurrence. Operational Store/read/not-ready errors must
 // remain unprocessed and retry only on a distinct wake/restart.
-var ErrInvalidLifecycleResearcherRecovery = errors.New("invalid lifecycle Researcher recovery occurrence")
+var ErrInvalidLifecycleResearchRecovery = errors.New("invalid lifecycle Research recovery occurrence")
 
-func invalidLifecycleResearcherRecovery(format string, args ...any) error {
-	return fmt.Errorf("%w: %s", ErrInvalidLifecycleResearcherRecovery, fmt.Sprintf(format, args...))
+func invalidLifecycleResearchRecovery(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", ErrInvalidLifecycleResearchRecovery, fmt.Sprintf(format, args...))
 }
 
-func (rt *Runtime) lifecycleResearcherAdmissionRecoveryControls(ctx context.Context, rec *types.RunRecord) ([]types.CoagentSourcePacket, error) {
+func (rt *Runtime) lifecycleResearchAdmissionRecoveryControls(ctx context.Context, rec *types.RunRecord) ([]types.CoagentSourcePacket, error) {
 	delivered, err := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
 	if err != nil || len(delivered) > 0 {
 		return delivered, err
 	}
 	versions, err := lifecycleActivationVersionsForRun(rec)
 	if err != nil || len(versions) == 0 {
-		return nil, invalidLifecycleResearcherRecovery("recovery has no exact activation versions: %v", err)
+		return nil, invalidLifecycleResearchRecovery("recovery has no exact activation versions: %v", err)
 	}
 	pending, err := rt.store.ListAllPendingLifecycleUpdates(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
 	if err != nil {
@@ -649,47 +649,47 @@ func (rt *Runtime) lifecycleResearcherAdmissionRecoveryControls(ctx context.Cont
 		control, ok := byID[version.UpdateID]
 		if !ok || control.TrajectoryID != rec.TrajectoryID || control.TargetAgentID != rec.AgentID || control.TargetWorkItemID != version.TargetWorkItemID ||
 			control.Direction != types.LifecyclePacketDirectionControl || control.Disposition != types.UpdatePending || control.DeliveredAt != nil || control.DeliveredToRunID != "" || control.LifecycleVersion != version.ControlLifecycleVersion {
-			return nil, invalidLifecycleResearcherRecovery("pending control %q is not exact", version.UpdateID)
+			return nil, invalidLifecycleResearchRecovery("pending control %q is not exact", version.UpdateID)
 		}
 		work, workErr := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.ComputerID, version.TargetWorkItemID)
 		if workErr != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != rec.AgentID || work.TrajectoryID != rec.TrajectoryID || work.LifecycleVersion != version.WorkLifecycleVersion {
 			if workErr != nil {
 				if errors.Is(workErr, store.ErrNotFound) {
-					return nil, invalidLifecycleResearcherRecovery("work %q is missing", version.TargetWorkItemID)
+					return nil, invalidLifecycleResearchRecovery("work %q is missing", version.TargetWorkItemID)
 				}
 				return nil, workErr
 			}
-			return nil, invalidLifecycleResearcherRecovery("work %q is not exact", version.TargetWorkItemID)
+			return nil, invalidLifecycleResearchRecovery("work %q is not exact", version.TargetWorkItemID)
 		}
 		controls = append(controls, control)
 		workByID[work.WorkItemID] = work
 	}
 	logical, failed, _, err := lifecycleActivationKeys(rec.OwnerID, rec.ComputerID, rec.TrajectoryID, rec.AgentID, metadataStringValue(rec.Metadata, lifecycleActivationBuildMetadata), controls, workByID)
 	if err != nil || logical != metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) || failed != metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata) {
-		return nil, invalidLifecycleResearcherRecovery("pending fingerprint mismatch")
+		return nil, invalidLifecycleResearchRecovery("pending fingerprint mismatch")
 	}
 	return controls, nil
 }
 
-// ResolveLifecycleResearcherAdmissionRecovery authenticates a distinct restart
+// ResolveLifecycleResearchAdmissionRecovery authenticates a distinct restart
 // wake without relying on actor snapshot memory. Terminal/disposed control fate
 // is a zero-provider acknowledgement; live pending authority returns the exact
 // canonical run for synchronous execution.
-func (rt *Runtime) ResolveLifecycleResearcherAdmissionRecovery(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (*types.RunRecord, bool, error) {
-	o, err := DecodeLifecycleResearcherAdmissionRecovery(content)
+func (rt *Runtime) ResolveLifecycleResearchAdmissionRecovery(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (*types.RunRecord, bool, error) {
+	o, err := DecodeLifecycleResearchAdmissionRecovery(content)
 	if err != nil {
-		return nil, false, invalidLifecycleResearcherRecovery("decode: %v", err)
+		return nil, false, invalidLifecycleResearchRecovery("decode: %v", err)
 	}
 	if o.OwnerID != strings.TrimSpace(ownerID) || o.ComputerID != strings.TrimSpace(computerID) || o.AgentID != strings.TrimSpace(agentID) ||
 		o.TrajectoryID != strings.TrimSpace(trajectoryID) || o.SourceAgentID != strings.TrimSpace(fromAgentID) {
-		return nil, false, invalidLifecycleResearcherRecovery("envelope mismatch")
+		return nil, false, invalidLifecycleResearchRecovery("envelope mismatch")
 	}
 	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, false, invalidLifecycleResearcherRecovery("trajectory is missing")
+			return nil, false, invalidLifecycleResearchRecovery("trajectory is missing")
 		}
-		return nil, false, fmt.Errorf("load lifecycle Researcher recovery trajectory: %w", err)
+		return nil, false, fmt.Errorf("load lifecycle Research recovery trajectory: %w", err)
 	}
 	if trajectory.Status != types.TrajectoryLive {
 		return nil, true, nil
@@ -697,39 +697,39 @@ func (rt *Runtime) ResolveLifecycleResearcherAdmissionRecovery(ctx context.Conte
 	if _, cancelErr := rt.store.GetLifecycleCancellationIntent(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID); cancelErr == nil {
 		return nil, true, nil
 	} else if !errors.Is(cancelErr, store.ErrNotFound) {
-		return nil, false, fmt.Errorf("load lifecycle Researcher recovery cancellation intent: %w", cancelErr)
+		return nil, false, fmt.Errorf("load lifecycle Research recovery cancellation intent: %w", cancelErr)
 	}
 	rec, err := rt.store.GetLifecycleRun(ctx, o.OwnerID, o.ComputerID, o.RunID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, false, invalidLifecycleResearcherRecovery("run is missing")
+			return nil, false, invalidLifecycleResearchRecovery("run is missing")
 		}
-		return nil, false, fmt.Errorf("load lifecycle Researcher recovery run: %w", err)
+		return nil, false, fmt.Errorf("load lifecycle Research recovery run: %w", err)
 	}
 	if rec.State.Terminal() {
 		return nil, true, nil
 	}
-	if rec.State == types.RunPassivated && (metadataStringValue(rec.Metadata, "passivated_reason") == lifecycleResearcherAdmissionRetryReason || metadataStringValue(rec.Metadata, "passivated_reason") == runtimeInjectionAppendFailurePassivationReason) {
-		return nil, false, fmt.Errorf("lifecycle Researcher recovery run is awaiting boot projection")
+	if rec.State == types.RunPassivated && (metadataStringValue(rec.Metadata, "passivated_reason") == lifecycleResearchAdmissionRetryReason || metadataStringValue(rec.Metadata, "passivated_reason") == runtimeInjectionAppendFailurePassivationReason) {
+		return nil, false, fmt.Errorf("lifecycle Research recovery run is awaiting boot projection")
 	}
 	if rec.OwnerID != o.OwnerID || rec.ComputerID != o.ComputerID || rec.TrajectoryID != o.TrajectoryID || rec.AgentID != o.AgentID ||
 		(rec.State != types.RunPending && rec.State != types.RunRunning) || metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) != o.LogicalKey {
-		return nil, false, invalidLifecycleResearcherRecovery("run authority mismatch")
+		return nil, false, invalidLifecycleResearchRecovery("run authority mismatch")
 	}
-	controls, err := rt.lifecycleResearcherAdmissionRecoveryControls(ctx, &rec)
+	controls, err := rt.lifecycleResearchAdmissionRecoveryControls(ctx, &rec)
 	if err != nil {
-		return nil, false, fmt.Errorf("load lifecycle Researcher recovery controls: %w", err)
+		return nil, false, fmt.Errorf("load lifecycle Research recovery controls: %w", err)
 	}
 	if len(controls) == 0 {
 		return nil, true, nil
 	}
 	if len(controls) != len(o.Controls) {
-		return nil, false, invalidLifecycleResearcherRecovery("control set changed")
+		return nil, false, invalidLifecycleResearchRecovery("control set changed")
 	}
 	for i, control := range controls {
 		expected := o.Controls[i]
 		if control.UpdateID != expected.UpdateID || control.LifecycleVersion != expected.LifecycleVersion || control.ReducerSeq != expected.ReducerSeq || control.AgentID != o.SourceAgentID || control.TargetAgentID != o.AgentID {
-			return nil, false, invalidLifecycleResearcherRecovery("control authority mismatch")
+			return nil, false, invalidLifecycleResearchRecovery("control authority mismatch")
 		}
 	}
 	return &rec, false, nil

@@ -58,41 +58,41 @@ func (absentAssignmentCapsule) PersistRevocationReceipt(agentRunID, capabilityDi
 	return receipt, nil
 }
 
-func TestReconcileCoSuperAssignmentCapsulesAfterRestartTerminalizesAbsentCapsule(t *testing.T) {
+func TestReconcileEngineeringAssignmentCapsulesAfterRestartTerminalizesAbsentCapsule(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	rt.assignmentRuntime = absentAssignmentCapsule{}
-	seed, err := store.SeedCoSuperAssignmentAuthority(s, "owner-assignment", rt.TextureComputerID(), 1)
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-assignment", rt.TextureComputerID(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assignmentID := "assignment-boot-sweep"
 	capability := "opaque-boot-sweep"
 	capsuleID := "capsule-boot-sweep"
-	open := types.OpenCoSuperAssignmentRequest{
+	open := types.OpenEngineeringAssignmentRequest{
 		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.CoSuperAssignmentBinding{
+		Binding: types.EngineeringAssignmentBinding{
 			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
 			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
 			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
 			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
 			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
 			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
 			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
 			Writable:          true, CapsuleID: capsuleID,
-			NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
-			FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 		},
 		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
 	}
-	open.CommandDigest, err = store.ComputeOpenCoSuperAssignmentDigest(open)
+	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	runID := "run:" + assignmentID
@@ -113,22 +113,22 @@ func TestReconcileCoSuperAssignmentCapsulesAfterRestartTerminalizesAbsentCapsule
 			"source_candidate_id": open.Binding.SourceCandidateID,
 		},
 	}
-	bind := types.BindCoSuperAssignmentRequest{
+	bind := types.BindEngineeringAssignmentRequest{
 		CommandID: "command-bind-" + assignmentID + "-1",
 		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
 		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
 		OpaqueCapability: capability, CapsuleID: capsuleID,
 	}
-	bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind)
+	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BindCoSuperAssignment(ctx, bind); err != nil {
+	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
 		t.Fatal(err)
 	}
-	rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx)
-	assignment, err := s.GetCoSuperAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
-	if err != nil || !assignment.Disposition.Terminal() || assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+	rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx)
+	assignment, err := s.GetEngineeringAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
+	if err != nil || !assignment.Disposition.Terminal() || assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 		t.Fatalf("assignment fate=%+v err=%v", assignment, err)
 	}
 	got, err := s.GetLifecycleRun(ctx, open.Binding.OwnerID, open.Binding.ComputerID, runID)
@@ -141,34 +141,34 @@ func TestReconcileSkipsTerminalUnboundCapsule(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	rt.assignmentRuntime = absentAssignmentCapsule{}
-	seed, err := store.SeedCoSuperAssignmentAuthority(s, "owner-assignment", rt.TextureComputerID(), 2)
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-assignment", rt.TextureComputerID(), 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	openReq := func(assignmentID, capsuleID, capability string, index int) types.OpenCoSuperAssignmentRequest {
-		req := types.OpenCoSuperAssignmentRequest{
+	openReq := func(assignmentID, capsuleID, capability string, index int) types.OpenEngineeringAssignmentRequest {
+		req := types.OpenEngineeringAssignmentRequest{
 			CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-			Binding: types.CoSuperAssignmentBinding{
+			Binding: types.EngineeringAssignmentBinding{
 				OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
 				ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
 				ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
 				ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[index], AssignedAgentID: seed.AssignedAgentIDs[index],
-				Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+				Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
 				ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-				CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
+				CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
 				SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
 				SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
 				Writable:          true, CapsuleID: capsuleID,
-				NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
-				FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+				NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+				FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 			},
 			AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[index]},
 			AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[index], AssignedAgentID: seed.AssignedAgentIDs[index], Objective: "bounded delegated assignment"},
 		}
-		req.CommandDigest, _ = store.ComputeOpenCoSuperAssignmentDigest(req)
+		req.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(req)
 		return req
 	}
-	bindReq := func(open types.OpenCoSuperAssignmentRequest, runID, capability string) types.BindCoSuperAssignmentRequest {
+	bindReq := func(open types.OpenEngineeringAssignmentRequest, runID, capability string) types.BindEngineeringAssignmentRequest {
 		run := types.RunRecord{
 			RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
 			RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
@@ -186,45 +186,45 @@ func TestReconcileSkipsTerminalUnboundCapsule(t *testing.T) {
 				"source_candidate_id": open.Binding.SourceCandidateID,
 			},
 		}
-		req := types.BindCoSuperAssignmentRequest{
+		req := types.BindEngineeringAssignmentRequest{
 			CommandID: "command-bind-" + open.AssignmentID + "-1",
 			OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: open.AssignmentID,
 			Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
 			OpaqueCapability: capability, CapsuleID: open.Binding.CapsuleID,
 		}
-		req.CommandDigest, _ = store.ComputeBindCoSuperAssignmentDigest(req)
+		req.CommandDigest, _ = store.ComputeBindEngineeringAssignmentDigest(req)
 		return req
 	}
 
 	openA := openReq("assignment-a", "capsule-a", "cap-a", 0)
-	if _, err := s.OpenCoSuperAssignment(ctx, openA); err != nil {
+	if _, err := s.OpenEngineeringAssignment(ctx, openA); err != nil {
 		t.Fatal(err)
 	}
-	cancelA := types.CancelCoSuperAssignmentRequest{
+	cancelA := types.CancelEngineeringAssignmentRequest{
 		CommandID: "command-cancel-a-1", OwnerID: openA.Binding.OwnerID, ComputerID: openA.Binding.ComputerID,
 		AssignmentID: "assignment-a", Attempt: 1, ExpectedLifecycleVersion: 1, Reason: "spawn failed before bind",
 	}
-	cancelA.CommandDigest, _ = store.ComputeCancelCoSuperAssignmentDigest(cancelA)
-	if _, err := s.CancelCoSuperAssignment(ctx, cancelA); err != nil {
+	cancelA.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancelA)
+	if _, err := s.CancelEngineeringAssignment(ctx, cancelA); err != nil {
 		t.Fatal(err)
 	}
 
 	openB := openReq("assignment-b", "capsule-b", "cap-b", 1)
-	if _, err := s.OpenCoSuperAssignment(ctx, openB); err != nil {
+	if _, err := s.OpenEngineeringAssignment(ctx, openB); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BindCoSuperAssignment(ctx, bindReq(openB, "run:assignment-b", "cap-b")); err != nil {
+	if _, err := s.BindEngineeringAssignment(ctx, bindReq(openB, "run:assignment-b", "cap-b")); err != nil {
 		t.Fatal(err)
 	}
 
-	rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx)
+	rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx)
 
-	a, err := s.GetCoSuperAssignment(ctx, seed.OwnerID, seed.ComputerID, "assignment-a", 1)
-	if err != nil || !a.Disposition.Terminal() || a.CapsuleDisposition != types.CoSuperCapsuleUnbound {
+	a, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, "assignment-a", 1)
+	if err != nil || !a.Disposition.Terminal() || a.CapsuleDisposition != types.EngineeringCapsuleUnbound {
 		t.Fatalf("terminal-unbound assignment changed: %+v err=%v", a, err)
 	}
-	b, err := s.GetCoSuperAssignment(ctx, seed.OwnerID, seed.ComputerID, "assignment-b", 1)
-	if err != nil || !b.Disposition.Terminal() || b.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+	b, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, "assignment-b", 1)
+	if err != nil || !b.Disposition.Terminal() || b.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 		t.Fatalf("bound assignment not reconciled: %+v err=%v", b, err)
 	}
 	runB, err := s.GetLifecycleRun(ctx, seed.OwnerID, seed.ComputerID, "run:assignment-b")
@@ -233,7 +233,7 @@ func TestReconcileSkipsTerminalUnboundCapsule(t *testing.T) {
 	}
 }
 
-func TestRewarmAssignedCoSuperReconcilesAbsentCapsuleWithoutWake(t *testing.T) {
+func TestRewarmAssignedEngineeringReconcilesAbsentCapsuleWithoutWake(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	rt.assignmentRuntime = absentAssignmentCapsule{}
@@ -242,37 +242,37 @@ func TestRewarmAssignedCoSuperReconcilesAbsentCapsuleWithoutWake(t *testing.T) {
 		wakes = append(wakes, kind+":"+content)
 		return nil
 	})
-	seed, err := store.SeedCoSuperAssignmentAuthority(s, "owner-assignment", rt.TextureComputerID(), 1)
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-assignment", rt.TextureComputerID(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assignmentID := "assignment-boot-absent"
 	capability := "opaque-boot-absent"
 	capsuleID := "capsule-boot-absent"
-	open := types.OpenCoSuperAssignmentRequest{
+	open := types.OpenEngineeringAssignmentRequest{
 		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.CoSuperAssignmentBinding{
+		Binding: types.EngineeringAssignmentBinding{
 			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
 			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
 			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
 			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
 			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
 			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
 			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
 			Writable:          true, CapsuleID: capsuleID,
-			NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
-			FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 		},
 		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
 	}
-	open.CommandDigest, err = store.ComputeOpenCoSuperAssignmentDigest(open)
+	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	runID := "run:" + assignmentID
@@ -293,17 +293,17 @@ func TestRewarmAssignedCoSuperReconcilesAbsentCapsuleWithoutWake(t *testing.T) {
 			"source_candidate_id": open.Binding.SourceCandidateID,
 		},
 	}
-	bind := types.BindCoSuperAssignmentRequest{
+	bind := types.BindEngineeringAssignmentRequest{
 		CommandID: "command-bind-" + assignmentID + "-1",
 		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
 		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
 		OpaqueCapability: capability, CapsuleID: capsuleID,
 	}
-	bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind)
+	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BindCoSuperAssignment(ctx, bind); err != nil {
+	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
 		t.Fatal(err)
 	}
 	listed, listErr := s.ListLifecycleRunsByState(ctx, "", rt.TextureComputerID(), types.RunPending)
@@ -318,7 +318,7 @@ func TestRewarmAssignedCoSuperReconcilesAbsentCapsuleWithoutWake(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("bound CoSuper run missing from lifecycle pending index: %+v", listed)
+		t.Fatalf("bound Engineering run missing from lifecycle pending index: %+v", listed)
 	}
 	runBefore, loadErr := s.GetLifecycleRun(ctx, open.Binding.OwnerID, open.Binding.ComputerID, runID)
 	if loadErr != nil {
@@ -326,17 +326,17 @@ func TestRewarmAssignedCoSuperReconcilesAbsentCapsuleWithoutWake(t *testing.T) {
 	}
 	eligible, eligibilityErr := rt.lifecycleActivationBindingsEligible(ctx, &runBefore)
 	if eligibilityErr != nil || !eligible {
-		t.Fatalf("assigned CoSuper should remain eligible for boot reconcile: eligible=%t err=%v run=%+v", eligible, eligibilityErr, runBefore)
+		t.Fatalf("assigned Engineering should remain eligible for boot reconcile: eligible=%t err=%v run=%+v", eligible, eligibilityErr, runBefore)
 	}
 	rt.rewarmInterruptedLifecycleActivations(ctx)
 	rt.sweepOpenWorkItemActors(ctx)
 	for _, wake := range wakes {
 		if strings.HasPrefix(wake, "initial_dispatch:") {
-			t.Fatalf("rewarm re-dispatched assigned CoSuper after restart: %v", wakes)
+			t.Fatalf("rewarm re-dispatched assigned Engineering after restart: %v", wakes)
 		}
 	}
-	assignment, err := s.GetCoSuperAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
-	if err != nil || !assignment.Disposition.Terminal() || assignment.CapsuleDisposition != types.CoSuperCapsuleRevoked {
+	assignment, err := s.GetEngineeringAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
+	if err != nil || !assignment.Disposition.Terminal() || assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 		t.Fatalf("assignment fate=%+v err=%v", assignment, err)
 	}
 	got, err := s.GetLifecycleRun(ctx, open.Binding.OwnerID, open.Binding.ComputerID, runID)
@@ -356,37 +356,37 @@ func TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel(t *testing.T)
 	ctx := context.Background()
 	rt.assignmentRuntime = absentAssignmentCapsule{}
 	rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)
-	seed, err := store.SeedCoSuperAssignmentAuthority(s, "owner-assignment", rt.TextureComputerID(), 1)
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-assignment", rt.TextureComputerID(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assignmentID := "assignment-strand-frozen"
 	capability := "opaque-strand-frozen"
 	capsuleID := "capsule-strand-frozen"
-	open := types.OpenCoSuperAssignmentRequest{
+	open := types.OpenEngineeringAssignmentRequest{
 		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.CoSuperAssignmentBinding{
+		Binding: types.EngineeringAssignmentBinding{
 			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
 			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
 			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
 			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.CoSuperAssignmentImplementation, Attempt: 1,
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
 			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestCoSuperOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
 			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
 			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
 			Writable:          true, CapsuleID: capsuleID,
-			NetworkMode:    types.CoSuperCapsuleNetworkForbidden,
-			FilesystemMode: types.CoSuperCapsuleFilesystemAssignmentLocalWritableOverlay,
+			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 		},
 		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
 	}
-	open.CommandDigest, err = store.ComputeOpenCoSuperAssignmentDigest(open)
+	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.OpenCoSuperAssignment(ctx, open); err != nil {
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	runID := "run:" + assignmentID
@@ -406,69 +406,69 @@ func TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel(t *testing.T)
 			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
 		},
 	}
-	bind := types.BindCoSuperAssignmentRequest{
+	bind := types.BindEngineeringAssignmentRequest{
 		CommandID: "command-bind-" + assignmentID + "-1",
 		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
 		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
 		OpaqueCapability: capability, CapsuleID: capsuleID,
 	}
-	bind.CommandDigest, err = store.ComputeBindCoSuperAssignmentDigest(bind)
+	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BindCoSuperAssignment(ctx, bind); err != nil {
+	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
 		t.Fatal(err)
 	}
 	// Stage the exact proposal a Complete reduce stages: the terminal report
 	// content and the freeze intent keyed to its proposition digest.
-	report := types.CoSuperAssignmentReport{
-		Result: types.CoSuperResultCompleted, Verdict: types.CoSuperVerdictNone, Summary: "resumable stranded work",
+	report := types.EngineeringAssignmentReport{
+		Result: types.EngineeringResultCompleted, Verdict: types.EngineeringVerdictNone, Summary: "resumable stranded work",
 		ObservedSubjectDigest: open.Binding.SubjectDigest,
-		Commands:              []types.CoSuperRecordedCommand{{CommandID: "observed-command", CommandDigest: objectgraph.SHA256([]byte("command")), ExecutionRef: "receipt:execution"}},
-		Outputs:               []types.CoSuperRecordedOutput{{OutputID: "output", Kind: "evidence", Digest: objectgraph.SHA256([]byte("output")), Ref: "artifact:output"}},
+		Commands:              []types.EngineeringRecordedCommand{{CommandID: "observed-command", CommandDigest: objectgraph.SHA256([]byte("command")), ExecutionRef: "receipt:execution"}},
+		Outputs:               []types.EngineeringRecordedOutput{{OutputID: "output", Kind: "evidence", Digest: objectgraph.SHA256([]byte("output")), Ref: "artifact:output"}},
 	}
 	propositionDigest, digestErr := store.ComputeTerminalPropositionDigest(open.Binding.SubjectDigest,
 		report.Result, report.Verdict, report.Commands, report.Outputs, report.EvidenceRefs)
 	if digestErr != nil {
 		t.Fatal(digestErr)
 	}
-	freeze := types.SetCoSuperCapsuleDispositionRequest{
+	freeze := types.SetEngineeringCapsuleDispositionRequest{
 		CommandID: "command-freeze-" + assignmentID, OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
 		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 2,
-		Disposition: types.CoSuperCapsuleFreezeRequested,
+		Disposition: types.EngineeringCapsuleFreezeRequested,
 		IntentRef:   "capsule-freeze-intent:" + propositionDigest,
-		PendingProposal: &types.CoSuperPendingProposal{
+		PendingProposal: &types.EngineeringPendingProposal{
 			PropositionDigest: propositionDigest, Report: report,
 			FreezeIntentRef: "capsule-freeze-intent:" + propositionDigest, CreatedAt: time.Now().UTC(),
 		},
 	}
-	freeze.CommandDigest, err = store.ComputeSetCoSuperCapsuleDispositionDigest(freeze)
+	freeze.CommandDigest, err = store.ComputeSetEngineeringCapsuleDispositionDigest(freeze)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SetCoSuperCapsuleDisposition(ctx, freeze); err != nil {
+	if _, err := s.SetEngineeringCapsuleDisposition(ctx, freeze); err != nil {
 		t.Fatal(err)
 	}
-	ack := types.SetCoSuperCapsuleDispositionRequest{
+	ack := types.SetEngineeringCapsuleDispositionRequest{
 		CommandID: "command-frozen-" + assignmentID, OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
 		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 3,
-		Disposition: types.CoSuperCapsuleFrozen, IntentRef: "capsule-freeze-intent:" + propositionDigest,
+		Disposition: types.EngineeringCapsuleFrozen, IntentRef: "capsule-freeze-intent:" + propositionDigest,
 		AckRef: "capsule-fate:sha256:" + propositionDigest,
 	}
-	ack.CommandDigest, err = store.ComputeSetCoSuperCapsuleDispositionDigest(ack)
+	ack.CommandDigest, err = store.ComputeSetEngineeringCapsuleDispositionDigest(ack)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SetCoSuperCapsuleDisposition(ctx, ack); err != nil {
+	if _, err := s.SetEngineeringCapsuleDisposition(ctx, ack); err != nil {
 		t.Fatal(err)
 	}
 
-	rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx)
-	assignment, err := s.GetCoSuperAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
+	rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx)
+	assignment, err := s.GetEngineeringAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if assignment.Disposition != types.CoSuperAssignmentBound || assignment.CapsuleDisposition != types.CoSuperCapsuleFrozen {
+	if assignment.Disposition != types.EngineeringAssignmentBound || assignment.CapsuleDisposition != types.EngineeringCapsuleFrozen {
 		t.Fatalf("stranded frozen assignment was not preserved for resume: %+v", assignment)
 	}
 	if assignment.PendingProposal == nil || assignment.PendingProposal.PropositionDigest != propositionDigest {
@@ -480,69 +480,69 @@ func TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel(t *testing.T)
 	}
 	// Idempotent: a second reconcile keeps the strand resumable rather than
 	// minting a second resume report.
-	rt.reconcileCoSuperAssignmentCapsulesAfterRestart(ctx)
-	again, err := s.GetCoSuperAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
-	if err != nil || again.Disposition != types.CoSuperAssignmentBound || again.CapsuleDisposition != types.CoSuperCapsuleFrozen {
+	rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx)
+	again, err := s.GetEngineeringAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
+	if err != nil || again.Disposition != types.EngineeringAssignmentBound || again.CapsuleDisposition != types.EngineeringCapsuleFrozen {
 		t.Fatalf("second reconcile changed the strand: %+v err=%v", again, err)
 	}
 }
 
-// TestAssignedCoSuperFatePendingSignature pins the strand predicate: a bound
+// TestAssignedEngineeringFatePendingSignature pins the strand predicate: a bound
 // assignment with a staged proposal on any pending fate disposition
 // (freeze_requested, frozen, revoke_requested) owes a continuation; terminal,
 // active, or proposal-less states do not.
-func TestAssignedCoSuperFatePendingSignature(t *testing.T) {
-	base := types.CoSuperAssignment{AssignmentID: "assignment-p", Disposition: types.CoSuperAssignmentBound,
-		Binding: types.CoSuperAssignmentBinding{Attempt: 1}}
-	withProposal := func(a types.CoSuperAssignment) types.CoSuperAssignment {
-		a.PendingProposal = &types.CoSuperPendingProposal{PropositionDigest: "sha256:prop"}
+func TestAssignedEngineeringFatePendingSignature(t *testing.T) {
+	base := types.EngineeringAssignment{AssignmentID: "assignment-p", Disposition: types.EngineeringAssignmentBound,
+		Binding: types.EngineeringAssignmentBinding{Attempt: 1}}
+	withProposal := func(a types.EngineeringAssignment) types.EngineeringAssignment {
+		a.PendingProposal = &types.EngineeringPendingProposal{PropositionDigest: "sha256:prop"}
 		return a
 	}
-	if assignedCoSuperFatePending(withProposal(base)) {
+	if assignedEngineeringFatePending(withProposal(base)) {
 		t.Fatal("active capsule must not be pending")
 	}
-	for _, disposition := range []types.CoSuperCapsuleDisposition{
-		types.CoSuperCapsuleFreezeRequested, types.CoSuperCapsuleFrozen, types.CoSuperCapsuleRevokeRequested,
-		types.CoSuperCapsuleRevoked,
+	for _, disposition := range []types.EngineeringCapsuleDisposition{
+		types.EngineeringCapsuleFreezeRequested, types.EngineeringCapsuleFrozen, types.EngineeringCapsuleRevokeRequested,
+		types.EngineeringCapsuleRevoked,
 	} {
 		stranded := withProposal(base)
 		stranded.CapsuleDisposition = disposition
-		if !assignedCoSuperFatePending(stranded) {
+		if !assignedEngineeringFatePending(stranded) {
 			t.Fatalf("disposition %s must be pending", disposition)
 		}
 	}
 	completed := withProposal(base)
-	completed.Disposition = types.CoSuperAssignmentCompleted
-	if assignedCoSuperFatePending(completed) {
+	completed.Disposition = types.EngineeringAssignmentCompleted
+	if assignedEngineeringFatePending(completed) {
 		t.Fatal("terminal disposition must not be pending")
 	}
 	bare := base
-	bare.CapsuleDisposition = types.CoSuperCapsuleFrozen
-	if assignedCoSuperFatePending(bare) {
+	bare.CapsuleDisposition = types.EngineeringCapsuleFrozen
+	if assignedEngineeringFatePending(bare) {
 		t.Fatal("frozen without a proposal must not be pending (restart-cancel owns it)")
 	}
 }
 
-// TestAssignedCoSuperTerminalRevokeIntentRoundTrip pins the deterministic
+// TestAssignedEngineeringTerminalRevokeIntentRoundTrip pins the deterministic
 // revoke intent the terminal saga mints: a stranded revoke_requested strand
 // must recompute the exact intent so the same terminal report can re-enter
 // the saga (P5-review F3).
-func TestAssignedCoSuperTerminalRevokeIntentRoundTrip(t *testing.T) {
-	assignment := types.CoSuperAssignment{
-		AssignmentID: "assignment-9ec36ecb", Disposition: types.CoSuperAssignmentBound,
+func TestAssignedEngineeringTerminalRevokeIntentRoundTrip(t *testing.T) {
+	assignment := types.EngineeringAssignment{
+		AssignmentID: "assignment-9ec36ecb", Disposition: types.EngineeringAssignmentBound,
 		BoundRunID: "run:assignment-9ec36ecb",
-		Binding:    types.CoSuperAssignmentBinding{Attempt: 1, CapsuleID: "capsule-9ec36ecb"},
+		Binding:    types.EngineeringAssignmentBinding{Attempt: 1, CapsuleID: "capsule-9ec36ecb"},
 	}
-	first := assignedCoSuperTerminalRevokeIntent(assignment)
+	first := assignedEngineeringTerminalRevokeIntent(assignment)
 	if first == "" || !strings.HasPrefix(first, "capsule-revoke-intent:") {
 		t.Fatalf("intent = %q", first)
 	}
-	if again := assignedCoSuperTerminalRevokeIntent(assignment); again != first {
+	if again := assignedEngineeringTerminalRevokeIntent(assignment); again != first {
 		t.Fatalf("intent not deterministic: %q vs %q", again, first)
 	}
 	mutated := assignment
 	mutated.Binding.Attempt = 2
-	if mutatedIntent := assignedCoSuperTerminalRevokeIntent(mutated); mutatedIntent == first {
+	if mutatedIntent := assignedEngineeringTerminalRevokeIntent(mutated); mutatedIntent == first {
 		t.Fatal("attempt must be part of the intent identity")
 	}
 }

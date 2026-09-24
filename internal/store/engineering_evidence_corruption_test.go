@@ -44,45 +44,45 @@ func fabricatedObject(t *testing.T, kind objectgraph.ObjectKind, ownerID, comput
 	return obj
 }
 
-// coSuperEvidenceScenario is the rich base used by the corruption table.
+// coManagementEvidenceScenario is the rich base used by the corruption table.
 // Implementation assignment A records a changed-subject report producing
 // candidate C; verification assignment V is then bound over that candidate
 // and records a certifying report. The evidence projection is requested for
 // V, so V's assignment/report/event are the direct tamper targets while the
 // candidate source lineage exercises A's report/event.
-type coSuperEvidenceScenario struct {
+type engineeringEvidenceScenario struct {
 	ctx context.Context
 	s   *Store
-	f   coSuperAssignmentStoreFixture
+	f   engineeringAssignmentStoreFixture
 
-	verifyOpen     types.OpenCoSuperAssignmentRequest
+	verifyOpen     types.OpenEngineeringAssignmentRequest
 	verifyReportID string
 	verifyEventID  string
 
-	implOpen      types.OpenCoSuperAssignmentRequest
+	implOpen      types.OpenEngineeringAssignmentRequest
 	implReportID  string
 	implReportRef string
 	implEventID   string
 	candidateID   string
 }
 
-func buildCoSuperEvidenceScenario(t *testing.T) *coSuperEvidenceScenario {
+func buildEngineeringEvidenceScenario(t *testing.T) *engineeringEvidenceScenario {
 	t.Helper()
 	s := openTestStore(t)
 	ctx := context.Background()
-	f := installCoSuperAssignmentAuthority(t, s, 2)
-	sc := &coSuperEvidenceScenario{ctx: ctx, s: s, f: f}
+	f := installEngineeringAssignmentAuthority(t, s, 2)
+	sc := &engineeringEvidenceScenario{ctx: ctx, s: s, f: f}
 
-	impl := coSuperOpenRequest(f, 0, "assignment-corruption-impl", 1, types.CoSuperAssignmentImplementation, true, "cap-corruption-impl", "capsule-corruption-impl")
-	if _, err := s.OpenCoSuperAssignment(ctx, impl); err != nil {
+	impl := engineeringOpenRequest(f, 0, "assignment-corruption-impl", 1, types.EngineeringAssignmentImplementation, true, "cap-corruption-impl", "capsule-corruption-impl")
+	if _, err := s.OpenEngineeringAssignment(ctx, impl); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(impl, f.assignedRunIDs[0], "cap-corruption-impl")); err != nil {
+	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(impl, f.assignedRunIDs[0], "cap-corruption-impl")); err != nil {
 		t.Fatal(err)
 	}
 	changedDigest := objectgraph.SHA256([]byte("corruption changed subject"))
-	implReport := assignmentReportRequest(impl, 2, "report-corruption-impl", changedDigest, types.CoSuperResultCompleted, types.CoSuperVerdictNone)
-	result, err := s.RecordCoSuperAssignmentReport(ctx, implReport)
+	implReport := assignmentReportRequest(impl, 2, "report-corruption-impl", changedDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
+	result, err := s.RecordEngineeringAssignmentReport(ctx, implReport)
 	if err != nil || result.Candidate == nil || result.Report == nil || result.Report.CandidateID == "" {
 		t.Fatalf("impl changed report: %+v, %v", result, err)
 	}
@@ -92,19 +92,19 @@ func buildCoSuperEvidenceScenario(t *testing.T) *coSuperEvidenceScenario {
 	sc.candidateID = result.Candidate.CandidateID
 	sc.implReportRef = reportRefFor(t, s, ctx, f, impl, sc.implReportID)
 
-	verify := coSuperOpenRequest(f, 1, "assignment-corruption-verify", 1, types.CoSuperAssignmentVerification, true, "cap-corruption-verify", "capsule-corruption-verify")
+	verify := engineeringOpenRequest(f, 1, "assignment-corruption-verify", 1, types.EngineeringAssignmentVerification, true, "cap-corruption-verify", "capsule-corruption-verify")
 	verify.Binding.SubjectDigest = result.Candidate.SubjectDigest
 	verify.Binding.SourceCandidateID = result.Candidate.CandidateID
 	verify.Binding.SourceArtifactRef = "capsule-subject:" + result.Candidate.SubjectDigest
-	verify.CommandDigest, _ = ComputeOpenCoSuperAssignmentDigest(verify)
-	if _, err := s.OpenCoSuperAssignment(ctx, verify); err != nil {
+	verify.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(verify)
+	if _, err := s.OpenEngineeringAssignment(ctx, verify); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BindCoSuperAssignment(ctx, bindCoSuperRequest(verify, f.assignedRunIDs[1], "cap-corruption-verify")); err != nil {
+	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(verify, f.assignedRunIDs[1], "cap-corruption-verify")); err != nil {
 		t.Fatal(err)
 	}
-	verifyReport := assignmentReportRequest(verify, 2, "report-corruption-verify", verify.Binding.SubjectDigest, types.CoSuperResultCompleted, types.CoSuperVerdictPass)
-	verifyResult, err := s.RecordCoSuperAssignmentReport(ctx, verifyReport)
+	verifyReport := assignmentReportRequest(verify, 2, "report-corruption-verify", verify.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
+	verifyResult, err := s.RecordEngineeringAssignmentReport(ctx, verifyReport)
 	if err != nil || verifyResult.Report == nil {
 		t.Fatalf("verify report: %+v, %v", verifyResult, err)
 	}
@@ -115,12 +115,12 @@ func buildCoSuperEvidenceScenario(t *testing.T) *coSuperEvidenceScenario {
 }
 
 // evidence reads the requested verify projection.
-func (sc *coSuperEvidenceScenario) evidence(t *testing.T) (CoSuperCapsuleEvidence, error) {
+func (sc *engineeringEvidenceScenario) evidence(t *testing.T) (EngineeringCapsuleEvidence, error) {
 	t.Helper()
-	return sc.s.GetCoSuperCapsuleEvidence(sc.ctx, sc.f.ownerID, sc.f.computerID, sc.f.trajectoryID, "assignment-corruption-verify", 1)
+	return sc.s.GetEngineeringCapsuleEvidence(sc.ctx, sc.f.ownerID, sc.f.computerID, sc.f.trajectoryID, "assignment-corruption-verify", 1)
 }
 
-func (sc *coSuperEvidenceScenario) canonical(t *testing.T, kind objectgraph.ObjectKind, key string) string {
+func (sc *engineeringEvidenceScenario) canonical(t *testing.T, kind objectgraph.ObjectKind, key string) string {
 	t.Helper()
 	id, err := lifecycleCanonicalID(kind, sc.f.ownerID, sc.f.computerID, key)
 	if err != nil {
@@ -129,7 +129,7 @@ func (sc *coSuperEvidenceScenario) canonical(t *testing.T, kind objectgraph.Obje
 	return id
 }
 
-func (sc *coSuperEvidenceScenario) body(t *testing.T, canonical string) []byte {
+func (sc *engineeringEvidenceScenario) body(t *testing.T, canonical string) []byte {
 	t.Helper()
 	obj, err := sc.s.ogStore.GetObject(sc.ctx, canonical)
 	if err != nil {
@@ -139,9 +139,9 @@ func (sc *coSuperEvidenceScenario) body(t *testing.T, canonical string) []byte {
 }
 
 // reportRefFor resolves the canonical object id of a committed report.
-func reportRefFor(t *testing.T, s *Store, ctx context.Context, f coSuperAssignmentStoreFixture, open types.OpenCoSuperAssignmentRequest, reportID string) string {
+func reportRefFor(t *testing.T, s *Store, ctx context.Context, f engineeringAssignmentStoreFixture, open types.OpenEngineeringAssignmentRequest, reportID string) string {
 	t.Helper()
-	assignment, err := s.GetCoSuperAssignment(ctx, f.ownerID, f.computerID, open.AssignmentID, open.Binding.Attempt)
+	assignment, err := s.GetEngineeringAssignment(ctx, f.ownerID, f.computerID, open.AssignmentID, open.Binding.Attempt)
 	if err != nil || len(assignment.ReportRefs) == 0 {
 		t.Fatalf("assignment report refs: %+v, %v", assignment, err)
 	}
@@ -149,11 +149,11 @@ func reportRefFor(t *testing.T, s *Store, ctx context.Context, f coSuperAssignme
 }
 
 func isCorrupt(err error) bool {
-	return strings.Contains(err.Error(), ErrCoSuperEvidenceCorrupt.Error())
+	return strings.Contains(err.Error(), ErrEngineeringEvidenceCorrupt.Error())
 }
 
-func TestCoSuperCapsuleEvidenceCrossAssignmentCandidateSourceLineage(t *testing.T) {
-	sc := buildCoSuperEvidenceScenario(t)
+func TestEngineeringCapsuleEvidenceCrossAssignmentCandidateSourceLineage(t *testing.T) {
+	sc := buildEngineeringEvidenceScenario(t)
 	ev, err := sc.evidence(t)
 	if err != nil {
 		t.Fatalf("verify evidence: %v", err)
@@ -177,11 +177,11 @@ func TestCoSuperCapsuleEvidenceCrossAssignmentCandidateSourceLineage(t *testing.
 	}
 }
 
-func TestCoSuperCapsuleEvidenceRejectsTamperedVerifyAssignment(t *testing.T) {
-	sc := buildCoSuperEvidenceScenario(t)
+func TestEngineeringCapsuleEvidenceRejectsTamperedVerifyAssignment(t *testing.T) {
+	sc := buildEngineeringEvidenceScenario(t)
 	ctx, s, f := sc.ctx, sc.s, sc.f
-	assignmentCanonical := sc.canonical(t, ogKindCoSuperAssignment, coSuperAttemptKey("assignment-corruption-verify", 1))
-	var a types.CoSuperAssignment
+	assignmentCanonical := sc.canonical(t, ogKindEngineeringAssignment, engineeringAttemptKey("assignment-corruption-verify", 1))
+	var a types.EngineeringAssignment
 	if err := json.Unmarshal(sc.body(t, assignmentCanonical), &a); err != nil {
 		t.Fatal(err)
 	}
@@ -201,22 +201,22 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedVerifyAssignment(t *testing.T) {
 		}
 		big.ReportRefs = refs
 		tamperObject(t, s, ctx, assignmentCanonical, big)
-		if _, err := sc.evidence(t); err != ErrCoSuperEvidenceTooLarge {
+		if _, err := sc.evidence(t); err != ErrEngineeringEvidenceTooLarge {
 			t.Fatalf("too large: err = %v", err)
 		}
 	})
 	// Cross-owner and cross-computer reads must stay NotFound even after
 	// the scope is populated.
-	if _, err := s.GetCoSuperCapsuleEvidence(ctx, "other-owner", f.computerID, f.trajectoryID, "assignment-corruption-verify", 1); err != ErrNotFound {
+	if _, err := s.GetEngineeringCapsuleEvidence(ctx, "other-owner", f.computerID, f.trajectoryID, "assignment-corruption-verify", 1); err != ErrNotFound {
 		t.Fatalf("cross owner = %v", err)
 	}
 }
 
-func TestCoSuperCapsuleEvidenceRejectsTamperedVerifyReport(t *testing.T) {
-	sc := buildCoSuperEvidenceScenario(t)
+func TestEngineeringCapsuleEvidenceRejectsTamperedVerifyReport(t *testing.T) {
+	sc := buildEngineeringEvidenceScenario(t)
 	ctx, s, f := sc.ctx, sc.s, sc.f
-	reportCanonical := sc.canonical(t, ogKindCoSuperReport, sc.verifyReportID)
-	var r types.CoSuperAssignmentReport
+	reportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.verifyReportID)
+	var r types.EngineeringAssignmentReport
 	if err := json.Unmarshal(sc.body(t, reportCanonical), &r); err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedVerifyReport(t *testing.T) {
 	t.Run("unjoined assignment report", func(t *testing.T) {
 		fake := r
 		fake.ReportID = "report-corruption-extra"
-		fakeObj := fabricatedObject(t, ogKindCoSuperReport, f.ownerID, f.computerID, fake.ReportID, fake, coSuperReportMetadata(fake))
+		fakeObj := fabricatedObject(t, ogKindEngineeringReport, f.ownerID, f.computerID, fake.ReportID, fake, engineeringReportMetadata(fake))
 		if err := s.ogStore.PutObject(ctx, fakeObj); err != nil {
 			t.Fatal(err)
 		}
@@ -261,15 +261,15 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedVerifyReport(t *testing.T) {
 	})
 }
 
-func TestCoSuperCapsuleEvidenceRejectsTamperedVerifyEvent(t *testing.T) {
-	sc := buildCoSuperEvidenceScenario(t)
+func TestEngineeringCapsuleEvidenceRejectsTamperedVerifyEvent(t *testing.T) {
+	sc := buildEngineeringEvidenceScenario(t)
 	ctx, s, f := sc.ctx, sc.s, sc.f
 	eventCanonical := sc.canonical(t, ogKindLifecycleEvent, sc.verifyEventID)
 	var ev types.LifecycleEvent
 	if err := json.Unmarshal(sc.body(t, eventCanonical), &ev); err != nil {
 		t.Fatal(err)
 	}
-	reportCanonical := sc.canonical(t, ogKindCoSuperReport, sc.verifyReportID)
+	reportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.verifyReportID)
 	expect := func(name string, mutated types.LifecycleEvent) {
 		t.Helper()
 		t.Run(name, func(t *testing.T) {
@@ -280,7 +280,7 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedVerifyEvent(t *testing.T) {
 		})
 	}
 	kindMismatch := ev
-	kindMismatch.Kind = types.LifecycleCoSuperAssignmentBound
+	kindMismatch.Kind = types.LifecycleEngineeringAssignmentBound
 	expect("report event kind or work scope", kindMismatch)
 
 	scopeMismatch := ev
@@ -321,10 +321,10 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedVerifyEvent(t *testing.T) {
 	})
 }
 
-func TestCoSuperCapsuleEvidenceRejectsTamperedCandidate(t *testing.T) {
-	sc := buildCoSuperEvidenceScenario(t)
+func TestEngineeringCapsuleEvidenceRejectsTamperedCandidate(t *testing.T) {
+	sc := buildEngineeringEvidenceScenario(t)
 	ctx, s := sc.ctx, sc.s
-	var c types.CoSuperSubjectCandidate
+	var c types.EngineeringSubjectCandidate
 	obj, err := s.ogStore.GetObject(ctx, sc.candidateID)
 	if err != nil {
 		t.Fatal(err)
@@ -340,7 +340,7 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedCandidate(t *testing.T) {
 		fake.AssignmentID = sc.verifyOpen.AssignmentID
 		fake.Attempt = sc.verifyOpen.Binding.Attempt
 		key := strings.Join([]string{sc.f.ownerID, sc.f.computerID, "fabricated", "candidate"}, "\x00")
-		fakeObj := fabricatedObject(t, ogKindCoSuperCandidate, sc.f.ownerID, sc.f.computerID, key, fake,
+		fakeObj := fabricatedObject(t, ogKindEngineeringCandidate, sc.f.ownerID, sc.f.computerID, key, fake,
 			map[string]any{"candidate_id": fake.CandidateID, "computer_id": sc.f.computerID, "trajectory_id": sc.f.trajectoryID})
 		fake.CandidateID = fakeObj.CanonicalID
 		fakeObj.Body, _ = json.Marshal(fake)
@@ -361,8 +361,8 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedCandidate(t *testing.T) {
 		}
 	})
 	t.Run("referenced candidate missing", func(t *testing.T) {
-		verifyReportCanonical := sc.canonical(t, ogKindCoSuperReport, sc.verifyReportID)
-		var r types.CoSuperAssignmentReport
+		verifyReportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.verifyReportID)
+		var r types.EngineeringAssignmentReport
 		if err := json.Unmarshal(sc.body(t, verifyReportCanonical), &r); err != nil {
 			t.Fatal(err)
 		}
@@ -375,10 +375,10 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedCandidate(t *testing.T) {
 	})
 }
 
-func TestCoSuperCapsuleEvidenceRejectsTamperedCandidateSource(t *testing.T) {
-	sc := buildCoSuperEvidenceScenario(t)
+func TestEngineeringCapsuleEvidenceRejectsTamperedCandidateSource(t *testing.T) {
+	sc := buildEngineeringEvidenceScenario(t)
 	ctx, s := sc.ctx, sc.s
-	var c types.CoSuperSubjectCandidate
+	var c types.EngineeringSubjectCandidate
 	obj, err := s.ogStore.GetObject(ctx, sc.candidateID)
 	if err != nil {
 		t.Fatal(err)
@@ -409,8 +409,8 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedCandidateSource(t *testing.T) {
 	// A candidate whose source report validates but carries a different
 	// candidate identity must fail closed.
 	t.Run("candidate report join identity", func(t *testing.T) {
-		implReportCanonical := sc.canonical(t, ogKindCoSuperReport, sc.implReportID)
-		var rr types.CoSuperAssignmentReport
+		implReportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.implReportID)
+		var rr types.EngineeringAssignmentReport
 		if err := json.Unmarshal(sc.body(t, implReportCanonical), &rr); err != nil {
 			t.Fatal(err)
 		}
@@ -423,10 +423,10 @@ func TestCoSuperCapsuleEvidenceRejectsTamperedCandidateSource(t *testing.T) {
 	})
 }
 
-func TestCoSuperCapsuleEvidenceRejectsTamperedImplEventSourceScope(t *testing.T) {
+func TestEngineeringCapsuleEvidenceRejectsTamperedImplEventSourceScope(t *testing.T) {
 	// The cross-assignment source event join must validate run/agent scope
 	// exactly like the direct report join.
-	sc := buildCoSuperEvidenceScenario(t)
+	sc := buildEngineeringEvidenceScenario(t)
 	ctx, s := sc.ctx, sc.s
 	implEventCanonical := sc.canonical(t, ogKindLifecycleEvent, sc.implEventID)
 	var ev types.LifecycleEvent

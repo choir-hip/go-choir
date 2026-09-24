@@ -1,7 +1,7 @@
 // Package pii implements a PII retraction pipeline that redacts personally
 // identifiable information from runtime trace events before persistence.
 //
-// Design
+// # Design
 //
 // The pipeline runs at ingestion: every trace event that may carry user
 // content passes through a Redactor before it is written to the durable
@@ -40,16 +40,16 @@ package pii
 type PIIClass string
 
 const (
-	ClassEmail       PIIClass = "email"
-	ClassPhone       PIIClass = "phone"
-	ClassSSN         PIIClass = "ssn"
-	ClassCreditCard  PIIClass = "credit_card"
-	ClassAPIKey      PIIClass = "api_key"
-	ClassIP          PIIClass = "ip"
-	ClassName        PIIClass = "name"
-	ClassAddress     PIIClass = "address"
-	ClassCredential  PIIClass = "credential"
-	ClassUnknown     PIIClass = "unknown"
+	ClassEmail      PIIClass = "email"
+	ClassPhone      PIIClass = "phone"
+	ClassSSN        PIIClass = "ssn"
+	ClassCreditCard PIIClass = "credit_card"
+	ClassAPIKey     PIIClass = "api_key"
+	ClassIP         PIIClass = "ip"
+	ClassName       PIIClass = "name"
+	ClassAddress    PIIClass = "address"
+	ClassCredential PIIClass = "credential"
+	ClassUnknown    PIIClass = "unknown"
 )
 
 // RedactionToken returns the placeholder token used to replace retracted PII

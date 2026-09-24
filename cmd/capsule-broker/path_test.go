@@ -78,8 +78,8 @@ func TestBrokerAuthenticatedRPCReadiness(t *testing.T) {
 	}()
 	capability := &capsule.Capability{
 		CapabilityID: "readiness", Handle: "readiness", CapsuleID: broker.capsuleID,
-		AgentRunID: "guest-core-readiness", AgentRole: capsule.RoleResearcher,
-		TargetCapsule: broker.capsuleID, Verbs: capsule.RoleVerbSets[capsule.RoleResearcher],
+		AgentRunID: "guest-core-readiness", AgentRole: capsule.RoleResearch,
+		TargetCapsule: broker.capsuleID, Verbs: capsule.RoleVerbSets[capsule.RoleResearch],
 		ExpiresAt: time.Now().UTC().Add(time.Minute),
 	}
 	if err := capsule.SignCapability(capability, privateKey, "test"); err != nil {

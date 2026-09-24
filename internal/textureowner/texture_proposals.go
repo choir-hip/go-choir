@@ -59,7 +59,7 @@ func (h *Handler) HandleInternalTextureProposalDelivery(w http.ResponseWriter, r
 		req.DeliveryID = uuid.NewString()
 	}
 
-	superAgent, err := h.Core.EnsurePersistentSuperAgent(r.Context(), req.OwnerID)
+	managementAgent, err := h.Core.EnsurePersistentManagementAgent(r.Context(), req.OwnerID)
 	if err != nil {
 		log.Printf("texture proposal delivery: ensure super: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to prepare author inbox"})
@@ -75,10 +75,10 @@ func (h *Handler) HandleInternalTextureProposalDelivery(w http.ResponseWriter, r
 		req.DeliveryID,
 	)
 	message := types.ChannelMessage{
-		ChannelID:   superAgent.ChannelID,
+		ChannelID:   managementAgent.ChannelID,
 		From:        "platform",
 		FromAgentID: "platform:publication-proposals",
-		ToAgentID:   superAgent.AgentID,
+		ToAgentID:   managementAgent.AgentID,
 		Role:        "publication_proposal",
 		Content:     content,
 		Timestamp:   now,
@@ -87,8 +87,8 @@ func (h *Handler) HandleInternalTextureProposalDelivery(w http.ResponseWriter, r
 		UpdateID:      req.DeliveryID,
 		OwnerID:       req.OwnerID,
 		AgentID:       message.FromAgentID,
-		TargetAgentID: superAgent.AgentID,
-		ChannelID:     superAgent.ChannelID,
+		TargetAgentID: managementAgent.AgentID,
+		ChannelID:     managementAgent.ChannelID,
 		MessageSeq:    message.Seq,
 		Role:          message.Role,
 		Packet: types.CoagentSourcePacketPayload{
@@ -107,14 +107,14 @@ func (h *Handler) HandleInternalTextureProposalDelivery(w http.ResponseWriter, r
 		return
 	}
 
-	run, err := h.Core.ReconcilePersistentSuperActor(r.Context(), req.OwnerID, superAgent.AgentID)
+	run, err := h.Core.ReconcilePersistentManagementActor(r.Context(), req.OwnerID, managementAgent.AgentID)
 	if err != nil {
 		log.Printf("texture proposal delivery: reconcile super: %v", err)
 		writeAPIJSON(w, http.StatusAccepted, internalTextureProposalDeliveryResponse{
 			DeliveryID:    req.DeliveryID,
 			OwnerID:       req.OwnerID,
-			TargetAgentID: superAgent.AgentID,
-			ChannelID:     superAgent.ChannelID,
+			TargetAgentID: managementAgent.AgentID,
+			ChannelID:     managementAgent.ChannelID,
 			State:         "queued",
 		})
 		return
@@ -122,8 +122,8 @@ func (h *Handler) HandleInternalTextureProposalDelivery(w http.ResponseWriter, r
 	resp := internalTextureProposalDeliveryResponse{
 		DeliveryID:    req.DeliveryID,
 		OwnerID:       req.OwnerID,
-		TargetAgentID: superAgent.AgentID,
-		ChannelID:     superAgent.ChannelID,
+		TargetAgentID: managementAgent.AgentID,
+		ChannelID:     managementAgent.ChannelID,
 		State:         "delivered",
 	}
 	if run != nil {

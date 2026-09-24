@@ -27,9 +27,9 @@ func NewGDELTFetcher(userAgent string) *GDELTFetcher {
 }
 
 type gdeltLastUpdateURLs struct {
-	GKG       string
-	Mentions  string
-	Export    string
+	GKG      string
+	Mentions string
+	Export   string
 }
 
 func parseGDELTLastUpdate(body string) gdeltLastUpdateURLs {

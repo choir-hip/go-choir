@@ -64,7 +64,7 @@ func TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) 
 	if _, ok := textureRegistry.Lookup("request_email_draft"); !ok {
 		t.Fatal("Texture registry missing request_email_draft")
 	}
-	if _, ok := rt.ToolRegistryForProfile(agentprofile.Super).Lookup("request_email_draft"); ok {
+	if _, ok := rt.ToolRegistryForProfile(agentprofile.Management).Lookup("request_email_draft"); ok {
 		t.Fatal("super must not have direct email draft tool")
 	}
 	maildCalled := false
@@ -250,14 +250,14 @@ func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert email agent: %v", err)
 	}
-	superRun, err := rt.StartRunWithMetadata(context.Background(), "try direct email cast", "user-alice", map[string]any{
-		runMetadataAgentProfile: agentprofile.Super,
-		runMetadataAgentRole:    agentprofile.Super,
+	managementRun, err := rt.StartRunWithMetadata(context.Background(), "try direct email cast", "user-alice", map[string]any{
+		runMetadataAgentProfile: agentprofile.Management,
+		runMetadataAgentRole:    agentprofile.Management,
 	})
 	if err != nil {
 		t.Fatalf("create super run: %v", err)
 	}
-	_, err = rt.ToolRegistryForProfile(agentprofile.Super).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "update_coagent", mustJSON(t, map[string]any{
+	_, err = rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(managementRun)), "update_coagent", mustJSON(t, map[string]any{
 		"schema_version": types.CoagentSourcePacketSchemaV1,
 		"agent_id":       persistentEmailAgentID("user-alice"),
 		"kind":           "evidence_update",
@@ -398,14 +398,14 @@ func TestGroundedEmailArtifactDoesNotForceEmailAppagentContinuation(t *testing.T
 		t.Fatalf("create initial appagent revision: %v", err)
 	}
 	researchRun, err := rt.StartRunWithMetadata(ctx, "Research example.com title", doc.OwnerID, map[string]any{
-		runMetadataAgentProfile: agentprofile.Researcher,
-		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataAgentProfile: agentprofile.Research,
+		runMetadataAgentRole:    agentprofile.Research,
 		runMetadataChannelID:    doc.DocID,
 	})
 	if err != nil {
 		t.Fatalf("start research run: %v", err)
 	}
-	if _, err := rt.ChannelCast(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researchRun)), doc.DocID, "texture:"+doc.DocID, "", "researcher-1", agentprofile.Researcher, "Evidence: the official page title is Example Domain."); err != nil {
+	if _, err := rt.ChannelCast(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researchRun)), doc.DocID, "texture:"+doc.DocID, "", "researcher-1", agentprofile.Research, "Evidence: the official page title is Example Domain."); err != nil {
 		t.Fatalf("post grounded worker message: %v", err)
 	}
 	run := types.RunRecord{
@@ -449,7 +449,7 @@ func TestGroundedEmailArtifactDoesNotForceEmailAppagentContinuation(t *testing.T
 		"doc_id":"doc-grounded-email-continuation",
 		"base_revision_id":"rev-grounded-initial-email-continuation",
 		"rationale":"owner requested a full email draft artifact",
-		"content":"# Email Appagent Draft Request\n\n**Status:** Draft prepared from grounded research — pending Email appagent review.\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email researched result proof\n**Body:**\nThe official title of https://example.com is \"Example Domain\".\n\n---\n\n**Source refs:** Researcher worker message. No outbound email is authorized."
+		"content":"# Email Appagent Draft Request\n\n**Status:** Draft prepared from grounded research — pending Email appagent review.\n\n**Recipient:** yusefnathanson@me.com\n**Subject:** Choir Email researched result proof\n**Body:**\nThe official title of https://example.com is \"Example Domain\".\n\n---\n\n**Source refs:** Research worker message. No outbound email is authorized."
 	}`))
 	if err != nil {
 		t.Fatalf("rewrite_texture: %v", err)

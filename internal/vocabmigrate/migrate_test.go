@@ -120,7 +120,7 @@ func TestRowRoundTrips(t *testing.T) {
 		t.Fatalf("stays-live message outcome = %+v", out)
 	}
 
-	grant := &types.CoSuperGrantPolicyAttestation{Role: "co-super"}
+	grant := &types.EngineeringGrantPolicyAttestation{Role: "co-super"}
 	if out := MigrateGrantAttestation(grant, log); !out.Changed || grant.Role != "engineering" {
 		t.Fatalf("grant outcome = %+v", out)
 	}

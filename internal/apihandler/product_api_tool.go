@@ -21,7 +21,7 @@ const (
 	productAPIToolMaxBodyBytes = 1 << 20
 )
 
-// RegisterProductAPIRequestTool registers the foreground Super product API
+// RegisterProductAPIRequestTool registers the foreground Management product API
 // tool against the canonical server route table.
 func RegisterProductAPIRequestTool(s *server.Server, registry *toolregistry.ToolRegistry) error {
 	if s == nil {
@@ -59,7 +59,7 @@ func newProductAPIRequestTool(s *server.Server) toolregistry.Tool {
 				return "", fmt.Errorf("decode product_api_request args: %w", err)
 			}
 			execution := toolregistry.ExecutionContextFrom(ctx)
-			if execution.Profile != agentprofile.Super {
+			if execution.Profile != agentprofile.Management {
 				return "", fmt.Errorf("product_api_request is only available to foreground super")
 			}
 			ownerID := execution.OwnerID

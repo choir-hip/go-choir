@@ -53,7 +53,7 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 	if strings.TrimSpace(persisted.RequestedByRunID) == "" {
 		return terminalOutcomeBinding{}, nil
 	}
-	// Durable lifecycle updates and CoSuper assignments are already canonical obligations.
+	// Durable lifecycle updates and Engineering assignments are already canonical obligations.
 	// Terminal run state is only their activation projection; it must not synthesize or bind
 	// a second worker-update authority from the RunRecord outcome.
 	assignmentID := strings.TrimSpace(metadataStringValue(persisted.Metadata, "assignment_id"))
@@ -63,7 +63,7 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 		if persisted.State == types.RunCancelled {
 			reason = types.OrphanReasonCancelled
 		}
-		obs := types.CoSuperOrphanObservation{
+		obs := types.EngineeringOrphanObservation{
 			OwnerID:      persisted.OwnerID,
 			ComputerID:   persisted.ComputerID,
 			RunID:        persisted.RunID,
@@ -72,7 +72,7 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 			Reason:       reason,
 			ObservedAt:   time.Now().UTC(),
 		}
-		if _, err := rt.store.RecordCoSuperOrphanObservation(ctx, obs); err != nil && !errors.Is(err, store.ErrCoSuperAssignmentCommandConflict) {
+		if _, err := rt.store.RecordEngineeringOrphanObservation(ctx, obs); err != nil && !errors.Is(err, store.ErrEngineeringAssignmentCommandConflict) {
 			return terminalOutcomeBinding{}, fmt.Errorf("record orphan observation for run %s: %w", persisted.RunID, err)
 		}
 		return terminalOutcomeBinding{}, nil

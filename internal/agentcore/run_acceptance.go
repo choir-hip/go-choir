@@ -175,9 +175,9 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		// Document-channel cast: the engineering desk's direction opener is
 		// the committed assignment the owner revision admitted, not an
 		// apply_texture_turn tool result.
-		if assignments, listErr := rt.store.ListCoSuperAssignments(ctx, root.OwnerID, runsComputerID(trajectoryRuns), trajectoryIDFromRuns(trajectoryRuns)); listErr == nil {
+		if assignments, listErr := rt.store.ListEngineeringAssignments(ctx, root.OwnerID, runsComputerID(trajectoryRuns), trajectoryIDFromRuns(trajectoryRuns)); listErr == nil {
 			for _, assignment := range assignments {
-				if assignment.Disposition == types.CoSuperAssignmentBound || assignment.Disposition.Terminal() {
+				if assignment.Disposition == types.EngineeringAssignmentBound || assignment.Disposition.Terminal() {
 					builder.addCheckpoint("super_direction_opened", "passed", assignment.CreatedAt, 0, nil, map[string]any{
 						"assignment_id": assignment.AssignmentID, "receipt_kind": "cosuper_assignment",
 						"disposition": assignment.Disposition,
@@ -632,20 +632,20 @@ func addAcceptanceDurableAgentCapsuleCheckpoints(ctx context.Context, rt *Runtim
 	var implRun, verifyRun *types.RunRecord
 	for i := range runs {
 		run := runs[i]
-		if traceRunProfile(run) != agentprofile.CoSuper || run.State != types.RunCompleted {
+		if traceRunProfile(run) != agentprofile.Engineering || run.State != types.RunCompleted {
 			continue
 		}
-		completedRefs = append(completedRefs, builder.addRunEvidence(run, "durable CoSuper run completed"))
+		completedRefs = append(completedRefs, builder.addRunEvidence(run, "durable Engineering run completed"))
 		switch metadataStringValue(run.Metadata, "assignment_kind") {
-		case string(types.CoSuperAssignmentImplementation):
+		case string(types.EngineeringAssignmentImplementation):
 			implRun = &runs[i]
-		case string(types.CoSuperAssignmentVerification):
+		case string(types.EngineeringAssignmentVerification):
 			verifyRun = &runs[i]
 		}
 	}
 	if len(completedRefs) > 0 {
 		builder.addCheckpoint("durable_agent_completed", "passed", time.Time{}, 0, completedRefs, map[string]any{
-			"role": agentprofile.CoSuper, "run_count": len(completedRefs),
+			"role": agentprofile.Engineering, "run_count": len(completedRefs),
 		})
 	}
 	// Freeze/verify evidence is canonical operation state, not tool names:

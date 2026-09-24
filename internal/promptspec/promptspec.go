@@ -10,11 +10,11 @@ import (
 
 // Document is a versioned agent prompt with metadata and multiline body text.
 type Document struct {
-	Version  int               `yaml:"version"`
-	Role     string            `yaml:"role,omitempty"`
-	Flags    map[string]bool   `yaml:"flags,omitempty"`
-	Comments []string          `yaml:"comments,omitempty"`
-	Body     string            `yaml:"body"`
+	Version  int             `yaml:"version"`
+	Role     string          `yaml:"role,omitempty"`
+	Flags    map[string]bool `yaml:"flags,omitempty"`
+	Comments []string        `yaml:"comments,omitempty"`
+	Body     string          `yaml:"body"`
 }
 
 // Parse decodes a prompt YAML document and normalizes body text.

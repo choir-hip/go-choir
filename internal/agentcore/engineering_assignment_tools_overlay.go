@@ -13,31 +13,31 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.RunRecord, base *toolregistry.ToolRegistry) (*toolregistry.ToolRegistry, string, error) {
+func (rt *Runtime) assignedEngineeringToolOverlay(ctx context.Context, rec *types.RunRecord, base *toolregistry.ToolRegistry) (*toolregistry.ToolRegistry, string, error) {
 	if rec == nil {
 		return base, "", nil
 	}
 	profile := agentProfileForRun(rec)
-	if profile != agentprofile.CoSuper {
+	if profile != agentprofile.Engineering {
 		return base, "", nil
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
 	if assignmentID == "" && attempt == 0 {
-		return nil, "", fmt.Errorf("unassigned CoSuper cannot execute")
+		return nil, "", fmt.Errorf("unassigned Engineering cannot execute")
 	}
 	if assignmentID == "" || attempt == 0 || rt.capsuleExecutor == nil {
-		return nil, "", fmt.Errorf("assigned CoSuper tool overlay binding unavailable")
+		return nil, "", fmt.Errorf("assigned Engineering tool overlay binding unavailable")
 	}
 	lookup := rt.assignmentLookup
 	if lookup == nil {
 		lookup = rt.store
 	}
-	assignment, err := lookup.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+	assignment, err := lookup.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
 	if err != nil {
 		return nil, "", err
 	}
-	if assignment.Disposition != types.CoSuperAssignmentBound || assignment.CapsuleDisposition != types.CoSuperCapsuleActive ||
+	if assignment.Disposition != types.EngineeringAssignmentBound || assignment.CapsuleDisposition != types.EngineeringCapsuleActive ||
 		assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedAgentID != rec.AgentID ||
 		assignment.Binding.TrajectoryID != rec.TrajectoryID || assignment.Binding.ComputerID != rec.ComputerID ||
 		metadataStringValue(rec.Metadata, "capsule_id") != assignment.Binding.CapsuleID ||
@@ -48,7 +48,7 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 		metadataStringValue(rec.Metadata, "request_digest") != assignment.Binding.RequestDigest ||
 		metadataStringValue(rec.Metadata, "source_artifact_ref") != assignment.Binding.SourceArtifactRef ||
 		metadataStringValue(rec.Metadata, "source_candidate_id") != assignment.Binding.SourceCandidateID {
-		return nil, "", fmt.Errorf("assigned CoSuper durable run binding mismatch")
+		return nil, "", fmt.Errorf("assigned Engineering durable run binding mismatch")
 	}
 	resolver := rt.assignmentHandleResolver
 	if resolver == nil {
@@ -56,28 +56,28 @@ func (rt *Runtime) assignedCoSuperToolOverlay(ctx context.Context, rec *types.Ru
 	}
 	handle, err := resolver.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 	if err != nil || strings.TrimSpace(handle) == "" {
-		return nil, "", fmt.Errorf("assigned CoSuper runtime capability unavailable: %w", err)
+		return nil, "", fmt.Errorf("assigned Engineering runtime capability unavailable: %w", err)
 	}
 	// Never clone the static profile registry. Assignment authority is a fresh
 	// exact closed set so no read_file/glob/grep/evidence/model host callback
 	// can cross the durable assignment boundary by registry inheritance.
 	// capsule_go_eval is the sole JSON envelope; every other affordance is an
 	// in-cell choir function staging intents for the one reducer.
-	registry, err := buildAssignedCoSuperRegistry(rt)
+	registry, err := buildAssignedEngineeringRegistry(rt)
 	if err != nil {
 		return nil, "", err
 	}
 	return registry, handle, nil
 }
 
-func (rt *Runtime) assignedCoSuperCapsuleToolCtx(rec *types.RunRecord, handle string) *CapsuleToolCtx {
+func (rt *Runtime) assignedEngineeringCapsuleToolCtx(rec *types.RunRecord, handle string) *CapsuleToolCtx {
 	toolCtx := &CapsuleToolCtx{
 		Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rec.ComputerID,
-		Role: capsule.RoleCoSuper, CapsuleHandle: handle,
+		Role: capsule.RoleEngineering, CapsuleHandle: handle,
 		EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 		OperationStore: rt.selfdevOperations, UpdaterRoot: rt.selfdevUpdaterRoot,
 		ValidateCurrentObligation: func(callCtx context.Context) error {
-			return rt.validateAssignedCoSuperExecution(callCtx, rec)
+			return rt.validateAssignedEngineeringExecution(callCtx, rec)
 		},
 	}
 	if rt != nil && rt.store != nil {
@@ -86,17 +86,17 @@ func (rt *Runtime) assignedCoSuperCapsuleToolCtx(rec *types.RunRecord, handle st
 	return toolCtx
 }
 
-func (rt *Runtime) validateAssignedCoSuperExecution(ctx context.Context, rec *types.RunRecord) error {
+func (rt *Runtime) validateAssignedEngineeringExecution(ctx context.Context, rec *types.RunRecord) error {
 	if rec == nil || rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
-		return fmt.Errorf("assigned CoSuper execution authority unavailable")
+		return fmt.Errorf("assigned Engineering execution authority unavailable")
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
-	assignment, err := rt.store.GetCoSuperAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
 	if err != nil {
 		return err
 	}
-	if assignment.Disposition != types.CoSuperAssignmentBound || assignment.CapsuleDisposition != types.CoSuperCapsuleActive ||
+	if assignment.Disposition != types.EngineeringAssignmentBound || assignment.CapsuleDisposition != types.EngineeringCapsuleActive ||
 		assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedWorkItemID != metadataStringValue(rec.Metadata, "assigned_work_item_id") {
 		return fmt.Errorf("assignment fate is not active and bound")
 	}

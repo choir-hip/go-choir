@@ -311,7 +311,7 @@
 >
   {#if !authenticated}
     <div class="terminal-preview" data-super-console-preview>
-      <p class="terminal-kicker">Super Console preview</p>
+      <p class="terminal-kicker">Engineering Console preview</p>
       <h2>zot repair requires sign-in</h2>
       <p>
         This window opens in logged-out review so every app is visible. A real zot session can inspect or mutate private computer state, so connecting asks for auth.

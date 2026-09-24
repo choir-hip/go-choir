@@ -1,4 +1,5 @@
 package solitaire
+
 // Candidate A: foundation validation omits suit check (pre-declared defect for falsification spine)
 
 import (
@@ -18,19 +19,19 @@ const (
 )
 
 type GameState struct {
-	GameID       string       `json:"game_id"`
-	OwnerID      string       `json:"owner_id"`
-	ComputerID   string       `json:"computer_id"`
-	Status       GameStatus   `json:"status"`
-	DeckSeed     uint64       `json:"deck_seed"`
-	Tableau      [7][]Card    `json:"tableau"`
-	Foundations  [4][]Card    `json:"foundations"`
-	Stock        []Card       `json:"stock"`
-	Waste        []Card       `json:"waste"`
-	Score        int          `json:"score"`
-	MovesCount   int          `json:"moves_count"`
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
+	GameID      string     `json:"game_id"`
+	OwnerID     string     `json:"owner_id"`
+	ComputerID  string     `json:"computer_id"`
+	Status      GameStatus `json:"status"`
+	DeckSeed    uint64     `json:"deck_seed"`
+	Tableau     [7][]Card  `json:"tableau"`
+	Foundations [4][]Card  `json:"foundations"`
+	Stock       []Card     `json:"stock"`
+	Waste       []Card     `json:"waste"`
+	Score       int        `json:"score"`
+	MovesCount  int        `json:"moves_count"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 type MoveType string
@@ -68,15 +69,15 @@ type MoveRecord struct {
 func NewGame(ownerID, computerID string, seed uint64) *GameState {
 	now := time.Now().UTC()
 	deck, effectiveSeed := ShuffleDeck(NewStandardDeck(), seed)
-	
+
 	game := &GameState{
-		GameID:      "game-" + uuid.New().String(),
-		OwnerID:     ownerID,
-		ComputerID:  computerID,
-		Status:      StatusInProgress,
-		DeckSeed:    effectiveSeed,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		GameID:     "game-" + uuid.New().String(),
+		OwnerID:    ownerID,
+		ComputerID: computerID,
+		Status:     StatusInProgress,
+		DeckSeed:   effectiveSeed,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 
 	cardIdx := 0

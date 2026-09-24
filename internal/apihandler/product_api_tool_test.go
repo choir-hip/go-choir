@@ -47,7 +47,7 @@ func TestProductAPIRequestToolUsesCanonicalServerAndRunOwner(t *testing.T) {
 	}
 	tool, ok := registry.Lookup(productAPIToolName)
 	if !ok {
-		t.Fatal("canonical Super registry missing product_api_request")
+		t.Fatal("canonical Management registry missing product_api_request")
 	}
 	if tool.Description != "Call an allowed authenticated product API route in the current runtime using the run owner as the authenticated user. This is for foreground super product-path orchestration; it refuses internal, test, agent, prompt-config, and raw event mutation routes." {
 		t.Fatalf("description changed: %q", tool.Description)
@@ -62,7 +62,7 @@ func TestProductAPIRequestToolUsesCanonicalServerAndRunOwner(t *testing.T) {
 		AgentID:    "agent-super-product-api",
 		OwnerID:    "user-product-api",
 		OwnerEmail: "owner@example.com",
-		Profile:    agentprofile.Super,
+		Profile:    agentprofile.Management,
 	})
 	raw, err := registry.Execute(ctx, productAPIToolName, json.RawMessage(`{
 		"method":" post ",
@@ -134,9 +134,9 @@ func TestProductAPIRequestToolRejectsUnauthorizedAndDisallowedRequests(t *testin
 	if err := RegisterProductAPIRequestTool(canonical, registry); err != nil {
 		t.Fatalf("register product_api_request: %v", err)
 	}
-	superCtx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+	managementCtx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		OwnerID: "user-product-api",
-		Profile: agentprofile.Super,
+		Profile: agentprofile.Management,
 	})
 
 	for _, tc := range []struct {
@@ -155,7 +155,7 @@ func TestProductAPIRequestToolRejectsUnauthorizedAndDisallowedRequests(t *testin
 		{name: "newline path", args: `{"method":"GET","path":"/api/texture/documents\nX-Evil: true"}`, want: "path must not contain newlines"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := registry.Execute(superCtx, productAPIToolName, json.RawMessage(tc.args)); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if _, err := registry.Execute(managementCtx, productAPIToolName, json.RawMessage(tc.args)); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want containing %q", err, tc.want)
 			}
 		})
@@ -163,18 +163,18 @@ func TestProductAPIRequestToolRejectsUnauthorizedAndDisallowedRequests(t *testin
 
 	workerCtx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		OwnerID: "user-product-api",
-		Profile: agentprofile.CoSuper,
+		Profile: agentprofile.Engineering,
 	})
 	if _, err := registry.Execute(workerCtx, productAPIToolName, json.RawMessage(`{"method":"GET","path":"/api/universal-wire/stories"}`)); err == nil || !strings.Contains(err.Error(), "only available to foreground super") {
-		t.Fatalf("non-Super error = %v", err)
+		t.Fatalf("non-Management error = %v", err)
 	}
-	missingOwnerCtx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{Profile: agentprofile.Super})
+	missingOwnerCtx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{Profile: agentprofile.Management})
 	if _, err := registry.Execute(missingOwnerCtx, productAPIToolName, json.RawMessage(`{"method":"GET","path":"/api/universal-wire/stories"}`)); err == nil || !strings.Contains(err.Error(), "missing owner context") {
 		t.Fatalf("missing-owner error = %v", err)
 	}
 
 	oversizedBody := `{"method":"POST","path":"/api/texture/documents","body":{"value":"` + strings.Repeat("x", productAPIToolMaxBodyBytes) + `"}}`
-	if _, err := registry.Execute(superCtx, productAPIToolName, json.RawMessage(oversizedBody)); err == nil || !strings.Contains(err.Error(), "body exceeds 1048576 bytes") {
+	if _, err := registry.Execute(managementCtx, productAPIToolName, json.RawMessage(oversizedBody)); err == nil || !strings.Contains(err.Error(), "body exceeds 1048576 bytes") {
 		t.Fatalf("oversized-body error = %v", err)
 	}
 }
@@ -194,7 +194,7 @@ func TestProductAPIRequestToolCapsResponseAndReportsHTTPError(t *testing.T) {
 	}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		OwnerID: "user-product-api",
-		Profile: agentprofile.Super,
+		Profile: agentprofile.Management,
 	})
 	raw, err := registry.Execute(ctx, productAPIToolName, json.RawMessage(`{"method":"GET","path":"/api/trace/oversized"}`))
 	if err != nil {

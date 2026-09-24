@@ -10,22 +10,22 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// CoSuperAssignmentSeed is the exact parent Super/trajectory authority used by
+// EngineeringAssignmentSeed is the exact parent Management/trajectory authority used by
 // assignment command tests and runtime restart tests.
-type CoSuperAssignmentSeed struct {
+type EngineeringAssignmentSeed struct {
 	OwnerID, ComputerID, TrajectoryID                 string
 	ParentAgentID, ParentRunID, ParentWorkID          string
 	ParentDecisionID, ParentControlID                 string
 	AssignedAgentIDs, AssignedWorkIDs, AssignedRunIDs []string
 }
 
-// SeedCoSuperAssignmentAuthority installs the immutable parent Super run,
-// trajectory, document, and Super work required to open assigned CoSuper work.
-func SeedCoSuperAssignmentAuthority(s *Store, ownerID, computerID string, count int) (CoSuperAssignmentSeed, error) {
+// SeedEngineeringAssignmentAuthority installs the immutable parent Management run,
+// trajectory, document, and Management work required to open assigned Engineering work.
+func SeedEngineeringAssignmentAuthority(s *Store, ownerID, computerID string, count int) (EngineeringAssignmentSeed, error) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
-	f := CoSuperAssignmentSeed{
+	f := EngineeringAssignmentSeed{
 		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: "trajectory-assignment",
 		ParentAgentID: "management:" + ownerID, ParentRunID: "run-management-assignment", ParentWorkID: "work-management-assignment",
 		ParentDecisionID: "decision:" + objectgraph.SHA256([]byte("decision-assignment")), ParentControlID: "control-assignment",
@@ -63,23 +63,23 @@ func SeedCoSuperAssignmentAuthority(s *Store, ownerID, computerID string, count 
 	}
 	trajObj, err := must(ogKindTrajectory, f.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", f.TrajectoryID, f.ComputerID, f.TrajectoryID, 1))
 	if err != nil {
-		return CoSuperAssignmentSeed{}, err
+		return EngineeringAssignmentSeed{}, err
 	}
 	agentObj, err := must(ogKindAgent, f.ParentAgentID, parentAgent, map[string]any{"agent_id": f.ParentAgentID, "computer_id": f.ComputerID})
 	if err != nil {
-		return CoSuperAssignmentSeed{}, err
+		return EngineeringAssignmentSeed{}, err
 	}
 	workObj, err := must(ogKindWorkItem, f.ParentWorkID, parentWork, lifecycleMetadata("work_item_id", f.ParentWorkID, f.ComputerID, f.TrajectoryID, 1))
 	if err != nil {
-		return CoSuperAssignmentSeed{}, err
+		return EngineeringAssignmentSeed{}, err
 	}
 	docObj, err := must(ogKindTexDoc, document.DocID, document, map[string]any{"doc_id": document.DocID, "computer_id": f.ComputerID})
 	if err != nil {
-		return CoSuperAssignmentSeed{}, err
+		return EngineeringAssignmentSeed{}, err
 	}
 	revObj, err := must(ogKindTexRev, revision.RevisionID, revision, map[string]any{"revision_id": revision.RevisionID, "doc_id": document.DocID, "computer_id": f.ComputerID})
 	if err != nil {
-		return CoSuperAssignmentSeed{}, err
+		return EngineeringAssignmentSeed{}, err
 	}
 	objects := []objectgraph.Object{trajObj, agentObj, workObj, docObj, revObj}
 	for i := 0; i < count; i++ {
@@ -88,10 +88,10 @@ func SeedCoSuperAssignmentAuthority(s *Store, ownerID, computerID string, count 
 		f.AssignedRunIDs = append(f.AssignedRunIDs, fmt.Sprintf("run-cosuper-assignment-%02d", i))
 	}
 	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: objects}); err != nil {
-		return CoSuperAssignmentSeed{}, err
+		return EngineeringAssignmentSeed{}, err
 	}
 	if err := s.CreateRunOG(ctx, parentRun); err != nil {
-		return CoSuperAssignmentSeed{}, err
+		return EngineeringAssignmentSeed{}, err
 	}
 	return f, nil
 }

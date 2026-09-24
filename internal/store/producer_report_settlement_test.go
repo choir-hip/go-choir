@@ -19,10 +19,10 @@ func TestSettleLifecycleProducerReports(t *testing.T) {
 	}
 	now := time.Now().UTC()
 
-	superAgentID := agentprofile.Super + ":" + startReq.OwnerID
+	managementAgentID := agentprofile.Management + ":" + startReq.OwnerID
 	producerAgentID := "engineering:assignment-97191e37-657c-5acf-af18-f1c80d09def2"
 
-	// Seed three pending cancel producer reports from the CoSuper assignment
+	// Seed three pending cancel producer reports from the Engineering assignment
 	reportIDs := []string{
 		"assignment-report:cancel-report:sha256:1111111111111111111111111111111111111111111111111111111111111111",
 		"assignment-report:cancel-report:sha256:2222222222222222222222222222222222222222222222222222222222222222",
@@ -36,8 +36,8 @@ func TestSettleLifecycleProducerReports(t *testing.T) {
 			OwnerID:          startReq.OwnerID,
 			ComputerID:       startReq.ComputerID,
 			AgentID:          producerAgentID,
-			TargetAgentID:    superAgentID,
-			ChannelID:        superAgentID,
+			TargetAgentID:    managementAgentID,
+			ChannelID:        managementAgentID,
 			TrajectoryID:     startReq.TrajectoryID,
 			Role:             "engineering",
 			Direction:        types.LifecyclePacketDirectionProducerReport,
@@ -73,8 +73,8 @@ func TestSettleLifecycleProducerReports(t *testing.T) {
 		OwnerID:          startReq.OwnerID,
 		ComputerID:       startReq.ComputerID,
 		AgentID:          "engineering:other-assignment",
-		TargetAgentID:    superAgentID,
-		ChannelID:        superAgentID,
+		TargetAgentID:    managementAgentID,
+		ChannelID:        managementAgentID,
 		TrajectoryID:     startReq.TrajectoryID,
 		Role:             "engineering",
 		Direction:        types.LifecyclePacketDirectionProducerReport,
@@ -154,7 +154,7 @@ func TestSettleLifecycleProducerReports(t *testing.T) {
 		t.Fatalf("expected 0 pending cancel producer reports after settlement, got %d", len(afterPending))
 	}
 
-	allPending, err := s.ListAllPendingLifecycleUpdates(ctx, startReq.OwnerID, startReq.ComputerID, superAgentID)
+	allPending, err := s.ListAllPendingLifecycleUpdates(ctx, startReq.OwnerID, startReq.ComputerID, managementAgentID)
 	if err != nil {
 		t.Fatal(err)
 	}

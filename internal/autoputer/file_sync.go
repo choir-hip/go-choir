@@ -605,7 +605,7 @@ func (s *fileSync) appendRootCommitted(ctx context.Context, root string, manifes
 		EventKind:          computerevent.EventFileRootCommitted,
 		OccurredAt:         time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey:     "file-root:" + root,
-		ActorProfile:       agentprofile.Super,
+		ActorProfile:       agentprofile.Management,
 		AuthorityRef:       "authority:guest-file-sync",
 		PrivacyClass:       "owner",
 		ReducerVersion:     computerevent.ReducerVersionV1,

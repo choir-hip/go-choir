@@ -105,18 +105,18 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 
 func TestSpawnAgentRejectsInvalidExplicitProfile(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
-	superPolicy, err := agentprofile.PolicyFor(agentprofile.Super)
+	managementPolicy, err := agentprofile.PolicyFor(agentprofile.Management)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := RegisterSpawnTool(registry, nil, nil, superPolicy); err != nil {
+	if err := RegisterSpawnTool(registry, nil, nil, managementPolicy); err != nil {
 		t.Fatal(err)
 	}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
-		RunID: "parent-run", OwnerID: "user-alice", Profile: agentprofile.Super,
+		RunID: "parent-run", OwnerID: "user-alice", Profile: agentprofile.Management,
 	})
 
-	for _, profile := range []string{"texture", "texture research", "management", "engineering", "Researcher", "conductor"} {
+	for _, profile := range []string{"texture", "texture research", "management", "engineering", "Research", "conductor"} {
 		_, err := registry.Execute(ctx, "spawn_agent", json.RawMessage(`{"objective":"Research the subject.","role":"research","profile":"`+profile+`"}`))
 		if err == nil {
 			t.Fatalf("spawn_agent accepted explicit profile %q outside the caller's allowed targets", profile)

@@ -61,11 +61,11 @@ type textureUpdateDisposition struct {
 // control, and update identities. The runtime derives those from the exact
 // target work binding and authenticated tool-call identity.
 type textureControlArgs struct {
-	TargetWorkItemID    string                           `json:"target_work_item_id,omitempty"`
-	OpenPersistentSuper bool                             `json:"open_persistent_super,omitempty"`
-	OpenResearcher      bool                             `json:"open_researcher,omitempty"`
-	Objective           string                           `json:"objective,omitempty"`
-	Packet              types.CoagentSourcePacketPayload `json:"packet"`
+	TargetWorkItemID         string                           `json:"target_work_item_id,omitempty"`
+	OpenPersistentManagement bool                             `json:"open_persistent_super,omitempty"`
+	OpenResearch             bool                             `json:"open_researcher,omitempty"`
+	Objective                string                           `json:"objective,omitempty"`
+	Packet                   types.CoagentSourcePacketPayload `json:"packet"`
 }
 
 type editTextureArgs struct {
@@ -173,16 +173,16 @@ func validateTextureControls(toolName string, controls []textureControlArgs) err
 		if control.TargetWorkItemID != "" {
 			modes++
 		}
-		if control.OpenPersistentSuper {
+		if control.OpenPersistentManagement {
 			modes++
 		}
-		if control.OpenResearcher {
+		if control.OpenResearch {
 			modes++
 		}
 		if modes != 1 {
 			return fmt.Errorf("%s controls[%d] must name exactly one of target_work_item_id, open_persistent_super, or open_researcher", toolName, i)
 		}
-		if (control.OpenPersistentSuper || control.OpenResearcher) && control.Objective == "" {
+		if (control.OpenPersistentManagement || control.OpenResearch) && control.Objective == "" {
 			return fmt.Errorf("%s controls[%d] opener requires objective", toolName, i)
 		}
 	}
@@ -235,7 +235,7 @@ var textureControlAuthorityFields = map[string]bool{
 	"run_id": true, "source_run_id": true, "target_work_item_id": true, "producer_work_item_id": true, "work_item_id": true,
 	"direction": true, "message_seq": true, "payload_digest": true, "lifecycle_version": true, "reducer_seq": true,
 	"disposition": true, "disposition_ref": true, "delivered_to_loop_id": true, "delivered_to_run_id": true, "delivered_at": true,
-	// Persistent-Super assignment/capsule bindings and terminal outcome
+	// Persistent-Management assignment/capsule bindings and terminal outcome
 	// witnesses are trusted-runtime outputs, never model-authored action input.
 	"control_binding_id": true, "assignment_id": true, "assignment_attempt": true, "assignment_kind": true, "attempt": true,
 	"loop_id": true, "decision_id": true,
@@ -316,7 +316,7 @@ func rejectNullTextureControlPacketNodes(raw json.RawMessage, path string) error
 func textureControlsSchema() map[string]any {
 	return map[string]any{
 		"type":        "array",
-		"description": "Ordered controls. Continue an exact bound work item by target_work_item_id, atomically open a runtime-derived Researcher with open_researcher and objective, or atomically open the owner's one persistent Super with open_persistent_super and objective. Target actor, direction, command/control/update identities, and opener agent/work identities are runtime-derived.",
+		"description": "Ordered controls. Continue an exact bound work item by target_work_item_id, atomically open a runtime-derived Research with open_researcher and objective, or atomically open the owner's one persistent Management with open_persistent_super and objective. Target actor, direction, command/control/update identities, and opener agent/work identities are runtime-derived.",
 		"items": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -326,7 +326,7 @@ func textureControlsSchema() map[string]any {
 				"objective":             map[string]any{"type": "string"},
 				"packet": func() map[string]any {
 					schema := agentcore.CoagentSourcePacketPayloadSchema()
-					schema["description"] = "Typed coagent_source_packet.v1 payload. Researcher controls normally use kind=question with questions; persistent-Super openers require kind=execution_request with at least one action. Target and delivery envelope authority are runtime-derived and must not appear here."
+					schema["description"] = "Typed coagent_source_packet.v1 payload. Research controls normally use kind=question with questions; persistent-Management openers require kind=execution_request with at least one action. Target and delivery envelope authority are runtime-derived and must not appear here."
 					return schema
 				}(),
 			},

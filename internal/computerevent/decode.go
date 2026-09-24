@@ -59,7 +59,7 @@ var frozenV1Canonical = map[string]string{
 // frozenV1Normalize extends the frozen table with the NormalizeRole-only V1
 // extras, keyed in normalized form (underscores already folded to hyphens by
 // the lookup). Canonical has no branch for cosuper-coding; the overlapping
-// keys (cosuper, co_super, co-super) resolve through the canonical table via
+// keys (cosuper, co_super, Engineering) resolve through the canonical table via
 // the fallthrough below, exactly mirroring the frozen §1b acceptor set.
 var frozenV1Normalize = map[string]string{
 	"cosuper-coding": "co-super",

@@ -2,12 +2,12 @@ package apihandler
 
 import (
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/solitaire"
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/solitaire"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 )
 

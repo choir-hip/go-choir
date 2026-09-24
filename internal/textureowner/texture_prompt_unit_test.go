@@ -363,7 +363,7 @@ func TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T)
 		AuthorKind: types.AuthorAppAgent,
 	}
 	recent := []types.ChannelMessage{{
-		Role:    agentprofile.Researcher,
+		Role:    agentprofile.Research,
 		From:    "research:one",
 		Content: "Findings: identified matchups, but final scores are still unavailable from this packet.",
 	}}
@@ -399,7 +399,7 @@ func TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches(t *testing.T) 
 		AuthorKind: types.AuthorUser,
 	}
 	recent := []types.ChannelMessage{{
-		Role:    agentprofile.Researcher,
+		Role:    agentprofile.Research,
 		From:    "research:one",
 		Content: "A usable source packet is ready for incorporation.",
 	}}
@@ -423,7 +423,7 @@ func TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches(t *testing.T) 
 	}
 
 	structured := buildAgentRevisionRequest(current, nil, map[string]any{
-		runMetadataExplicitResearcher: true,
+		runMetadataExplicitResearch: true,
 	}, textureAgentRevisionRequest{Intent: "initial_conductor_workflow"}, "", true, nil, nil)
 	if !strings.Contains(structured, "The owner explicitly asked for research help.") {
 		t.Fatalf("structured research intent did not select the policy branch:\n%s", structured)
@@ -541,7 +541,7 @@ func TestTextureContentItemSourceEntityDefaultsToWholeResource(t *testing.T) {
 	}
 }
 
-func TestTexturePromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(t *testing.T) {
+func TestTexturePromptRestoresFinalCommandEvidenceRequirementAfterManagementDelivery(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-long-rubric-super",
 		RevisionID: "rev-long-rubric-super",
@@ -549,7 +549,7 @@ func TestTexturePromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(
 		AuthorKind: types.AuthorAppAgent,
 	}
 	recent := []types.ChannelMessage{{
-		Role:    agentprofile.Super,
+		Role:    agentprofile.Management,
 		From:    "management:one",
 		Content: "Worker update ready.\n\nFindings:\n- [CMD] command exited 0 and printed the expected hash.",
 	}}
@@ -580,7 +580,7 @@ func TestTexturePromptMixedObligationKeepsExactExecuteAffordanceWithoutKeywordBr
 		AuthorKind: types.AuthorAppAgent,
 	}
 	recent := []types.ChannelMessage{{
-		Role:    agentprofile.Researcher,
+		Role:    agentprofile.Research,
 		From:    "research:one",
 		Content: "Worker update ready.\n\nFindings:\n- [S1] Texture documents have durable revisions.",
 	}}

@@ -80,7 +80,7 @@ func TestCoagentPacketHTTPSourceStaysURLBackedNotSyntheticContentItem(t *testing
 	update := types.CoagentSourcePacket{
 		OwnerID: "owner-url-source",
 		AgentID: "research:url-source",
-		Role:    agentprofile.Researcher,
+		Role:    agentprofile.Research,
 		Packet: types.CoagentSourcePacketPayload{
 			Sources: []types.CoagentPacketSource{{
 				SourceID: "src-http",
@@ -111,7 +111,7 @@ func TestCoagentPacketHTTPSourcePreservesSourceTextForTransclusion(t *testing.T)
 	update := types.CoagentSourcePacket{
 		OwnerID: "owner-url-source-text",
 		AgentID: "research:url-source-text",
-		Role:    agentprofile.Researcher,
+		Role:    agentprofile.Research,
 		Packet: types.CoagentSourcePacketPayload{
 			Sources: []types.CoagentPacketSource{{
 				SourceID: "src-whitehouse",
@@ -189,7 +189,7 @@ func TestCoagentPacketContentIDSourceHydratesImportedText(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		OwnerID: ownerID,
 		AgentID: "research:content-id-source-text",
-		Role:    agentprofile.Researcher,
+		Role:    agentprofile.Research,
 		Packet: types.CoagentSourcePacketPayload{
 			Sources: []types.CoagentPacketSource{{
 				SourceID: "src-content-id",
@@ -246,7 +246,7 @@ func TestEvidenceSummaryEntityAllowsNativeCitationWithoutQuoteMatch(t *testing.T
 	rec := types.EvidenceRecord{
 		EvidenceID: "ev-summary",
 		Title:      "OpenAI docs",
-		Content:    "Researcher synthesis: OpenAI API docs identify GPT-5.5 as public.",
+		Content:    "Research synthesis: OpenAI API docs identify GPT-5.5 as public.",
 		Metadata:   json.RawMessage(`{"content_id":"content-openai-docs"}`),
 	}
 	entity := evidenceRecordToSourceEntity(rec)
@@ -328,7 +328,7 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 		AgentID:       "research:refs",
 		TargetAgentID: targetAgentID,
 		ChannelID:     "doc-refs",
-		Role:          agentprofile.Researcher,
+		Role:          agentprofile.Research,
 		Packet:        newCoagentPacket("evidence_update", "source refs ready", coagentClaimsFromTexts([]string{"Typed refs should be available to Texture."}, sources), sources, nil, nil, nil),
 		Content:       "source refs ready",
 		CreatedAt:     now,
@@ -393,7 +393,7 @@ func TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping(
 		AgentID:       "management:execution",
 		TargetAgentID: "texture:doc-execution",
 		ChannelID:     "doc-execution",
-		Role:          agentprofile.Super,
+		Role:          agentprofile.Management,
 		Packet: newCoagentPacket("execution_result", "implementation and verification evidence ready",
 			coagentClaimsFromTexts([]string{"Do not scrape command_output:prose-only or diff_hunk:prose-only from ordinary findings."}, sources),
 			sources,
@@ -473,7 +473,7 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 		AgentID:       "research:native-sources",
 		TargetAgentID: targetAgentID,
 		ChannelID:     docID,
-		Role:          agentprofile.Researcher,
+		Role:          agentprofile.Research,
 		Packet:        newCoagentPacket("evidence_update", "native source refs ready", coagentClaimsFromTexts([]string{"The source-backed finding is ready."}, sources), sources, nil, nil, nil),
 		Content:       "Use the source-backed finding.",
 		CreatedAt:     now,
@@ -583,7 +583,7 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 		Kind:       "source_excerpt",
 		Title:      "OpenAI GPT-5.5 docs evidence",
 		SourceURI:  "https://developers.openai.com/api/docs/models/gpt-5.5",
-		Content:    "Researcher synthesis: OpenAI's API docs identify GPT-5.5 as the current public frontier model.",
+		Content:    "Research synthesis: OpenAI's API docs identify GPT-5.5 as the current public frontier model.",
 		Metadata:   json.RawMessage(`{"content_id":"content-openai-docs"}`),
 		CreatedAt:  now,
 	}); err != nil {
@@ -620,7 +620,7 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 		AgentID:       "research:summary-source",
 		TargetAgentID: targetAgentID,
 		ChannelID:     docID,
-		Role:          agentprofile.Researcher,
+		Role:          agentprofile.Research,
 		Packet:        newCoagentPacket("evidence_update", "source evidence ready", coagentClaimsFromTexts([]string{"OpenAI GPT-5.5 public release evidence is ready."}, sources), sources, nil, nil, nil),
 		Content:       "Use the OpenAI docs source evidence.",
 		CreatedAt:     now,
@@ -799,7 +799,7 @@ func TestSelfDevelopmentJoinableIdentitiesRideExistingPacketSources(t *testing.T
 	update := types.CoagentSourcePacket{
 		OwnerID: "owner-joinable",
 		AgentID: "management:joinable",
-		Role:    agentprofile.Super,
+		Role:    agentprofile.Management,
 		Packet: types.CoagentSourcePacketPayload{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update",
@@ -890,10 +890,10 @@ func TestTextureProductionRegistryOmitsGenericUpdateCoagent(t *testing.T) {
 			t.Fatalf("Texture production registry missing %s", name)
 		}
 	}
-	if _, ok := core.ToolRegistryForProfile(agentprofile.Super).Lookup("update_coagent"); !ok {
-		t.Fatal("Super registry omitted update_coagent")
+	if _, ok := core.ToolRegistryForProfile(agentprofile.Management).Lookup("update_coagent"); !ok {
+		t.Fatal("Management registry omitted update_coagent")
 	}
-	if _, ok := core.ToolRegistryForProfile(agentprofile.Super).Lookup("report_to_texture"); !ok {
-		t.Fatal("Super registry omitted report_to_texture")
+	if _, ok := core.ToolRegistryForProfile(agentprofile.Management).Lookup("report_to_texture"); !ok {
+		t.Fatal("Management registry omitted report_to_texture")
 	}
 }

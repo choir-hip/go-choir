@@ -101,7 +101,7 @@ func (rt *Runtime) BootstrapChain(ctx context.Context, ownerID, computerID strin
 		EventKind:                    computerevent.EventGenesisImported,
 		OccurredAt:                   time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey:               "lifecycle-bootstrap-chain:" + computerID,
-		ActorProfile:                 agentprofile.Super,
+		ActorProfile:                 agentprofile.Management,
 		AuthorityRef:                 "external-owner-genesis:" + ownerID,
 		PrivacyClass:                 "owner",
 		PayloadCommitment:            commitment,

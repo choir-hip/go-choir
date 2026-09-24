@@ -15,9 +15,9 @@ func seedChain(t *testing.T, s *SQLStore) {
 	ctx := context.Background()
 	base := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
 	events := []struct {
-		id       string
-		kind     string
-		parent   string
+		id        string
+		kind      string
+		parent    string
 		offsetMin int
 	}{
 		{"root", "tool.invoked", "", 0},

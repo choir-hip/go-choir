@@ -10,6 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 	"io"
 	"log"
 	"net/http"
@@ -17,11 +22,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"github.com/go-webauthn/webauthn/protocol"
-	"github.com/go-webauthn/webauthn/webauthn"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 )
 
 // AccessTokenCookieName is the cookie name for the short-lived access JWT.

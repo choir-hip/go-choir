@@ -67,8 +67,8 @@ func TestSpawnMintsTrajectoryAndChildJoinsIt(t *testing.T) {
 	// differs. (StartCoagentRun is the pre-M3 spawn API; the provenance edge
 	// it records is spawned_by, not a control relationship.)
 	spawned, err := rt.StartCoagentRun(ctx, root.RunID, "research the topic", "user-alice", map[string]any{
-		runMetadataAgentProfile: agentprofile.Researcher,
-		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataAgentProfile: agentprofile.Research,
+		runMetadataAgentRole:    agentprofile.Research,
 	})
 	if err != nil {
 		t.Fatalf("start spawned run: %v", err)
@@ -312,8 +312,8 @@ func TestCancelRunTrajectoryDrainsMoreThanOneActivePage(t *testing.T) {
 		if err := s.CreateRun(ctx, types.RunRecord{
 			RunID:        runID,
 			AgentID:      fmt.Sprintf("agent-cancel-many-%04d", i),
-			AgentProfile: agentprofile.CoSuper,
-			AgentRole:    agentprofile.CoSuper,
+			AgentProfile: agentprofile.Engineering,
+			AgentRole:    agentprofile.Engineering,
 			OwnerID:      "user-alice",
 			ComputerID:   "autoputer-test",
 			State:        types.RunPending,
@@ -322,8 +322,8 @@ func TestCancelRunTrajectoryDrainsMoreThanOneActivePage(t *testing.T) {
 			CreatedAt:    now.Add(time.Duration(i) * time.Millisecond),
 			UpdatedAt:    now.Add(time.Duration(i) * time.Millisecond),
 			Metadata: map[string]any{
-				runMetadataAgentProfile: agentprofile.CoSuper,
-				runMetadataAgentRole:    agentprofile.CoSuper,
+				runMetadataAgentProfile: agentprofile.Engineering,
+				runMetadataAgentRole:    agentprofile.Engineering,
 				runMetadataTrajectoryID: trajectoryID,
 			},
 		}); err != nil {
@@ -387,8 +387,8 @@ func TestCancelTrajectoryIsOwnerScopedTerminalizesAuthorityAndActiveRuns(t *test
 	if err := s.CreateRun(ctx, types.RunRecord{
 		RunID:        activeRunID,
 		AgentID:      "agent-owner-cancel-active",
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
@@ -397,8 +397,8 @@ func TestCancelTrajectoryIsOwnerScopedTerminalizesAuthorityAndActiveRuns(t *test
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}); err != nil {
@@ -495,8 +495,8 @@ func TestCancelTrajectoryRetriesActivationDrainForAlreadyCancelledAuthority(t *t
 	if err := s.CreateRun(ctx, types.RunRecord{
 		RunID:        runID,
 		AgentID:      "agent-cancel-drain-retry",
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
@@ -505,8 +505,8 @@ func TestCancelTrajectoryRetriesActivationDrainForAlreadyCancelledAuthority(t *t
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}); err != nil {
@@ -562,8 +562,8 @@ func TestCancelTrajectoryReturnsSettledTruthWithoutCancellingActivations(t *test
 	if err := s.CreateRunOG(ctx, types.RunRecord{
 		RunID:        runID,
 		AgentID:      "agent-settled-cancel-truth",
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
@@ -572,8 +572,8 @@ func TestCancelTrajectoryReturnsSettledTruthWithoutCancellingActivations(t *test
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}); err != nil {
@@ -620,8 +620,8 @@ func TestCancelledRequestDoesNotInterruptPostAuthorityActivationDrain(t *testing
 	if err := s.CreateRun(ctx, types.RunRecord{
 		RunID:        runID,
 		AgentID:      "agent-detached-cancel-drain",
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
@@ -630,8 +630,8 @@ func TestCancelledRequestDoesNotInterruptPostAuthorityActivationDrain(t *testing
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}); err != nil {
@@ -737,8 +737,8 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 	if err := s.CreateRun(ctx, types.RunRecord{
 		RunID:        activeRunID,
 		AgentID:      "agent-api-cancel-active",
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
@@ -747,8 +747,8 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}); err != nil {
@@ -921,9 +921,9 @@ func TestEvaluateTrajectorySettlementIsPureDataEvaluation(t *testing.T) {
 	}
 }
 
-func TestCoSuperCapsuleEvidenceRouteIsStrict(t *testing.T) {
+func TestEngineeringCapsuleEvidenceRouteIsStrict(t *testing.T) {
 	valid := httptest.NewRequest(http.MethodGet, "/api/trajectories/traj%25%20one/capsule-evidence/assignment%20one?attempt=12", nil)
-	trajectory, assignment, attempt, ok := coSuperCapsuleEvidenceRoute(valid)
+	trajectory, assignment, attempt, ok := engineeringCapsuleEvidenceRoute(valid)
 	if !ok || trajectory != "traj% one" || assignment != "assignment one" || attempt != 12 {
 		t.Fatalf("valid route = %q %q %d %t", trajectory, assignment, attempt, ok)
 	}
@@ -944,13 +944,13 @@ func TestCoSuperCapsuleEvidenceRouteIsStrict(t *testing.T) {
 	}
 	for _, raw := range invalid {
 		r := httptest.NewRequest(http.MethodGet, raw, nil)
-		if _, _, _, ok := coSuperCapsuleEvidenceRoute(r); ok {
+		if _, _, _, ok := engineeringCapsuleEvidenceRoute(r); ok {
 			t.Errorf("accepted %q", raw)
 		}
 	}
 }
 
-func TestCoSuperCapsuleEvidenceHandlerAuthenticatesAndDispatchesBeforeCancel(t *testing.T) {
+func TestEngineeringCapsuleEvidenceHandlerAuthenticatesAndDispatchesBeforeCancel(t *testing.T) {
 	h := &APIHandler{}
 	unauth := httptest.NewRecorder()
 	h.HandleTrajectoryDetail(unauth, httptest.NewRequest(http.MethodGet, "/api/trajectories/t/capsule-evidence/a?attempt=1", nil))

@@ -31,7 +31,7 @@ func (e *Executor) Spawn(context.Context, SpawnSpec) (*Capsule, error) { return 
 func (e *Executor) Destroy(context.Context, string) error              { return stubErr("destroy") }
 func (e *Executor) ForceDestroy(context.Context, string) error         { return stubErr("destroy") }
 func (e *Executor) ControlHandle(string, string) (string, error)       { return "", stubErr("control") }
-func (e *Executor) GrantCoSuper(string, string, string, time.Duration) (string, error) {
+func (e *Executor) GrantEngineering(string, string, string, time.Duration) (string, error) {
 	return "", stubErr("grant")
 }
 func (e *Executor) DestroyOwned(context.Context, string, string, bool) error {

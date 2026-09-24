@@ -30,7 +30,7 @@ func TestResolveGrantedExecutionReceiptsBindsFinalSubjectNotPreEval(t *testing.T
 	caps := &Capsule{ID: "capsule-grant", State: StateFrozen, MergedDir: merged, SourceSnapshotDigest: sourceDigest}
 	capability := &Capability{
 		CapabilityID: "cap-grant", Handle: "handle-grant", AgentRunID: "run-grant",
-		AgentRole: RoleCoSuper, TargetCapsule: caps.ID, ExpiresAt: time.Now().Add(time.Hour),
+		AgentRole: RoleEngineering, TargetCapsule: caps.ID, ExpiresAt: time.Now().Add(time.Hour),
 	}
 	executor := &Executor{
 		stateDir:          state,

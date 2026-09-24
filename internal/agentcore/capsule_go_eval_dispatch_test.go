@@ -20,14 +20,14 @@ func TestCapsuleGoEvalToolDispatchesToExecutorGoEval(t *testing.T) {
 	}
 	tool := newCapsuleGoEvalTool(nil)
 
-	// CoSuper role with a passing obligation validator; the stub executor is a
+	// Engineering role with a passing obligation validator; the stub executor is a
 	// zero-value *capsule.Executor on non-linux, whose GoEval returns an error.
 	// We assert the error is the executor's go_eval error (proving dispatch).
 	toolCtx := &CapsuleToolCtx{
 		Executor:                  new(capsule.Executor),
 		AgentRunID:                "run-dispatch",
 		ComputerID:                "computer",
-		Role:                      capsule.RoleCoSuper,
+		Role:                      capsule.RoleEngineering,
 		CapsuleHandle:             "handle",
 		ValidateCurrentObligation: func(ctx context.Context) error { return nil },
 	}

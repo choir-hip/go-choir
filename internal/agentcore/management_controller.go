@@ -23,11 +23,11 @@ import (
 
 const runMetadataWorkerUpdatesInjected = "worker_updates_injected"
 const runMetadataProducerReportIDs = "producer_report_ids"
-const runMetadataCoSuperReplacementRequested = "cosuper_replacement_requested"
-const runMetadataCoSuperReplacementOmitReports = "cosuper_replacement_omit_reports"
+const runMetadataEngineeringReplacementRequested = "cosuper_replacement_requested"
+const runMetadataEngineeringReplacementOmitReports = "cosuper_replacement_omit_reports"
 
-const persistentSuperCoagentInboxPrompt = "Process pending coagent update packets for privileged execution."
-const persistentSuperCoSuperCancelContinuationPrompt = "Prior implementation CoSuper assignment is terminal. Open a fresh implementation CoSuper assignment with assign_co_super."
+const persistentManagementCoagentInboxPrompt = "Process pending coagent update packets for privileged execution."
+const persistentManagementEngineeringCancelContinuationPrompt = "Prior implementation Engineering assignment is terminal. Open a fresh implementation Engineering assignment."
 
 const (
 	lifecycleLogicalActivationKeyMetadata = "lifecycle_logical_activation_key"
@@ -46,11 +46,11 @@ var ErrDurablyTerminalLifecycleControlActivation = errors.New("durably terminal 
 // Version two intentionally advances the actor-log identity after the
 // superseded v1 occurrence was durably acknowledged before multi-packet
 // recovery validation was corrected.
-const PersistentSuperRecoveryPrefix = "persistent-super-recovery:v2:"
+const PersistentManagementRecoveryPrefix = "persistent-super-recovery:v2:"
 
-var ErrInvalidPersistentSuperRecovery = errors.New("invalid persistent Super recovery occurrence")
+var ErrInvalidPersistentManagementRecovery = errors.New("invalid persistent Management recovery occurrence")
 
-type PersistentSuperRecoveryControl struct {
+type PersistentManagementRecoveryControl struct {
 	UpdateID         string
 	AgentID          string
 	Direction        types.LifecyclePacketDirection
@@ -58,20 +58,20 @@ type PersistentSuperRecoveryControl struct {
 	ReducerSeq       int64
 }
 
-type PersistentSuperRecoveryOccurrence struct {
+type PersistentManagementRecoveryOccurrence struct {
 	OwnerID, ComputerID, TrajectoryID, AgentID, RunID, SourceAgentID string
-	Controls                                                         []PersistentSuperRecoveryControl
+	Controls                                                         []PersistentManagementRecoveryControl
 }
 
-func EncodePersistentSuperRecovery(o PersistentSuperRecoveryOccurrence) (string, error) {
+func EncodePersistentManagementRecovery(o PersistentManagementRecoveryOccurrence) (string, error) {
 	fields := []string{o.OwnerID, o.ComputerID, o.TrajectoryID, o.AgentID, o.RunID, o.SourceAgentID, strconv.Itoa(len(o.Controls))}
 	for _, field := range fields[:6] {
 		if strings.TrimSpace(field) == "" {
-			return "", fmt.Errorf("%w: incomplete scope", ErrInvalidPersistentSuperRecovery)
+			return "", fmt.Errorf("%w: incomplete scope", ErrInvalidPersistentManagementRecovery)
 		}
 	}
 	if len(o.Controls) == 0 || len(o.Controls) > 10000 {
-		return "", fmt.Errorf("%w: controls are required", ErrInvalidPersistentSuperRecovery)
+		return "", fmt.Errorf("%w: controls are required", ErrInvalidPersistentManagementRecovery)
 	}
 	raw := make([]byte, 0, 512)
 	for _, field := range fields {
@@ -81,7 +81,7 @@ func EncodePersistentSuperRecovery(o PersistentSuperRecoveryOccurrence) (string,
 		if strings.TrimSpace(control.UpdateID) == "" || strings.TrimSpace(control.AgentID) == "" ||
 			control.Direction == "" || control.LifecycleVersion <= 0 || control.ReducerSeq <= 0 ||
 			strings.TrimSpace(control.AgentID) != strings.TrimSpace(o.SourceAgentID) {
-			return "", fmt.Errorf("%w: invalid control", ErrInvalidPersistentSuperRecovery)
+			return "", fmt.Errorf("%w: invalid control", ErrInvalidPersistentManagementRecovery)
 		}
 		raw = appendTextureOccurrenceField(raw, strings.TrimSpace(control.UpdateID))
 		raw = appendTextureOccurrenceField(raw, strings.TrimSpace(control.AgentID))
@@ -89,56 +89,56 @@ func EncodePersistentSuperRecovery(o PersistentSuperRecoveryOccurrence) (string,
 		raw = appendTextureOccurrenceField(raw, strconv.FormatInt(control.LifecycleVersion, 10))
 		raw = appendTextureOccurrenceField(raw, strconv.FormatInt(control.ReducerSeq, 10))
 	}
-	return PersistentSuperRecoveryPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
+	return PersistentManagementRecoveryPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
-func DecodePersistentSuperRecovery(content string) (PersistentSuperRecoveryOccurrence, error) {
-	var out PersistentSuperRecoveryOccurrence
+func DecodePersistentManagementRecovery(content string) (PersistentManagementRecoveryOccurrence, error) {
+	var out PersistentManagementRecoveryOccurrence
 	content = strings.TrimSpace(content)
-	if !strings.HasPrefix(content, PersistentSuperRecoveryPrefix) {
-		return out, fmt.Errorf("%w: unsupported identity", ErrInvalidPersistentSuperRecovery)
+	if !strings.HasPrefix(content, PersistentManagementRecoveryPrefix) {
+		return out, fmt.Errorf("%w: unsupported identity", ErrInvalidPersistentManagementRecovery)
 	}
-	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(content, PersistentSuperRecoveryPrefix))
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(content, PersistentManagementRecoveryPrefix))
 	if err != nil {
-		return out, fmt.Errorf("%w: decode: %v", ErrInvalidPersistentSuperRecovery, err)
+		return out, fmt.Errorf("%w: decode: %v", ErrInvalidPersistentManagementRecovery, err)
 	}
 	at := 0
 	fields := make([]string, 7)
 	for i := range fields {
 		fields[i], err = readTextureOccurrenceField(raw, &at)
 		if err != nil {
-			return out, fmt.Errorf("%w: read scope: %v", ErrInvalidPersistentSuperRecovery, err)
+			return out, fmt.Errorf("%w: read scope: %v", ErrInvalidPersistentManagementRecovery, err)
 		}
 	}
 	count64, err := strconv.ParseInt(fields[6], 10, 32)
 	if err != nil || count64 <= 0 || count64 > 10000 || strconv.FormatInt(count64, 10) != fields[6] {
-		return out, fmt.Errorf("%w: invalid control count", ErrInvalidPersistentSuperRecovery)
+		return out, fmt.Errorf("%w: invalid control count", ErrInvalidPersistentManagementRecovery)
 	}
-	out = PersistentSuperRecoveryOccurrence{
+	out = PersistentManagementRecoveryOccurrence{
 		OwnerID: fields[0], ComputerID: fields[1], TrajectoryID: fields[2],
 		AgentID: fields[3], RunID: fields[4], SourceAgentID: fields[5],
-		Controls: make([]PersistentSuperRecoveryControl, int(count64)),
+		Controls: make([]PersistentManagementRecoveryControl, int(count64)),
 	}
 	for i := range out.Controls {
 		updateID, updateErr := readTextureOccurrenceField(raw, &at)
 		if updateErr != nil {
-			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read control: %v", ErrInvalidPersistentSuperRecovery, updateErr)
+			return PersistentManagementRecoveryOccurrence{}, fmt.Errorf("%w: read control: %v", ErrInvalidPersistentManagementRecovery, updateErr)
 		}
 		agentID, agentErr := readTextureOccurrenceField(raw, &at)
 		if agentErr != nil {
-			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read control agent: %v", ErrInvalidPersistentSuperRecovery, agentErr)
+			return PersistentManagementRecoveryOccurrence{}, fmt.Errorf("%w: read control agent: %v", ErrInvalidPersistentManagementRecovery, agentErr)
 		}
 		direction, directionErr := readTextureOccurrenceField(raw, &at)
 		if directionErr != nil {
-			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read control direction: %v", ErrInvalidPersistentSuperRecovery, directionErr)
+			return PersistentManagementRecoveryOccurrence{}, fmt.Errorf("%w: read control direction: %v", ErrInvalidPersistentManagementRecovery, directionErr)
 		}
 		versionRaw, versionErr := readTextureOccurrenceField(raw, &at)
 		if versionErr != nil {
-			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read lifecycle version: %v", ErrInvalidPersistentSuperRecovery, versionErr)
+			return PersistentManagementRecoveryOccurrence{}, fmt.Errorf("%w: read lifecycle version: %v", ErrInvalidPersistentManagementRecovery, versionErr)
 		}
 		seqRaw, seqErr := readTextureOccurrenceField(raw, &at)
 		if seqErr != nil {
-			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: read reducer sequence: %v", ErrInvalidPersistentSuperRecovery, seqErr)
+			return PersistentManagementRecoveryOccurrence{}, fmt.Errorf("%w: read reducer sequence: %v", ErrInvalidPersistentManagementRecovery, seqErr)
 		}
 		version, versionErr := strconv.ParseInt(versionRaw, 10, 64)
 		seq, seqErr := strconv.ParseInt(seqRaw, 10, 64)
@@ -146,19 +146,19 @@ func DecodePersistentSuperRecovery(content string) (PersistentSuperRecoveryOccur
 			(direction != string(types.LifecyclePacketDirectionControl) && direction != string(types.LifecyclePacketDirectionProducerReport)) ||
 			version <= 0 || seq <= 0 || versionErr != nil || seqErr != nil ||
 			strconv.FormatInt(version, 10) != versionRaw || strconv.FormatInt(seq, 10) != seqRaw {
-			return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: invalid control authority", ErrInvalidPersistentSuperRecovery)
+			return PersistentManagementRecoveryOccurrence{}, fmt.Errorf("%w: invalid control authority", ErrInvalidPersistentManagementRecovery)
 		}
-		out.Controls[i] = PersistentSuperRecoveryControl{
+		out.Controls[i] = PersistentManagementRecoveryControl{
 			UpdateID: strings.TrimSpace(updateID), AgentID: strings.TrimSpace(agentID),
 			Direction: types.LifecyclePacketDirection(direction), LifecycleVersion: version, ReducerSeq: seq,
 		}
 	}
 	if at != len(raw) {
-		return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: trailing bytes", ErrInvalidPersistentSuperRecovery)
+		return PersistentManagementRecoveryOccurrence{}, fmt.Errorf("%w: trailing bytes", ErrInvalidPersistentManagementRecovery)
 	}
-	canonical, canonicalErr := EncodePersistentSuperRecovery(out)
+	canonical, canonicalErr := EncodePersistentManagementRecovery(out)
 	if canonicalErr != nil || canonical != content {
-		return PersistentSuperRecoveryOccurrence{}, fmt.Errorf("%w: noncanonical encoding", ErrInvalidPersistentSuperRecovery)
+		return PersistentManagementRecoveryOccurrence{}, fmt.Errorf("%w: noncanonical encoding", ErrInvalidPersistentManagementRecovery)
 	}
 	return out, nil
 }
@@ -234,88 +234,88 @@ func lifecycleActivationKeys(ownerID, computerID, trajectoryID, agentID, buildCo
 	return logicalKey, failedKey, versions, nil
 }
 
-// reconcilePersistentSuperActor is the durable controller boundary for the
+// reconcilePersistentManagementActor is the durable controller boundary for the
 // user's privileged execution actor. update_coagent can append addressed work
 // for the persistent super, but only this runtime controller starts or reuses
 // the super execution loop that drains those durable updates. Creation is
 // serialized across every entry path by superReconcileMu: without it, an
 // inbox-continuation reconcile can interleave with a selfdevStartMu-holding
 // API start and both mint operation-bound Supers (multiple-runs defect).
-func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
-	rt.superReconcileMu.Lock()
-	defer rt.superReconcileMu.Unlock()
-	return rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, "")
+func (rt *Runtime) reconcilePersistentManagementActor(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
+	rt.managementReconcileMu.Lock()
+	defer rt.managementReconcileMu.Unlock()
+	return rt.reconcilePersistentManagementActorLocked(ctx, ownerID, agentID, "")
 }
 
-// ResumeInterruptedPersistentSuperControlRun is the dedicated structurally isolated
+// ResumeInterruptedPersistentManagementControlRun is the dedicated structurally isolated
 // entry point for boot rewarm. It reactivates only exact in-flight runs passivated
 // by a process restart (or injection-append failure), and returns unconditionally
 // without entering any backlog selection logic.
-func (rt *Runtime) ResumeInterruptedPersistentSuperControlRun(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
-	rt.superReconcileMu.Lock()
-	defer rt.superReconcileMu.Unlock()
-	return rt.resumeInterruptedPersistentSuperControlRunLocked(ctx, ownerID, agentID)
+func (rt *Runtime) ResumeInterruptedPersistentManagementControlRun(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
+	rt.managementReconcileMu.Lock()
+	defer rt.managementReconcileMu.Unlock()
+	return rt.resumeInterruptedPersistentManagementControlRunLocked(ctx, ownerID, agentID)
 }
 
-func (rt *Runtime) resumeInterruptedPersistentSuperControlRunLocked(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
+func (rt *Runtime) resumeInterruptedPersistentManagementControlRunLocked(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
 	if ownerID == "" {
 		return nil, false, fmt.Errorf("owner_id is required")
 	}
 	if agentID == "" {
-		agentID = persistentSuperAgentID(ownerID)
+		agentID = persistentManagementAgentID(ownerID)
 	}
 	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, false, fmt.Errorf("check resident super run: %w", err)
 	} else if found {
-		log.Printf("runtime: persistent-Super exact-run resume found resident run=%s owner=%s agent=%s", resident.RunID, ownerID, agentID)
+		log.Printf("runtime: persistent-Management exact-run resume found resident run=%s owner=%s agent=%s", resident.RunID, ownerID, agentID)
 		return &resident, false, nil
 	}
-	resumed, ok, err := rt.reactivateRestartedPersistentSuperControlRun(ctx, ownerID, agentID)
+	resumed, ok, err := rt.reactivateRestartedPersistentManagementControlRun(ctx, ownerID, agentID)
 	if err != nil {
 		return nil, false, err
 	}
 	if ok && resumed != nil {
-		log.Printf("runtime: persistent-Super exact-run resume reactivated run=%s owner=%s agent=%s", resumed.RunID, ownerID, agentID)
+		log.Printf("runtime: persistent-Management exact-run resume reactivated run=%s owner=%s agent=%s", resumed.RunID, ownerID, agentID)
 		return resumed, true, nil
 	}
 	// Boot is a recovery event, never a scheduler tick. Return unconditionally
 	// without falling through to any backlog selection.
-	log.Printf("runtime: persistent-Super exact-run resume did not enter selection (resumed=false) owner=%s agent=%s", ownerID, agentID)
+	log.Printf("runtime: persistent-Management exact-run resume did not enter selection (resumed=false) owner=%s agent=%s", ownerID, agentID)
 	return nil, false, nil
 }
 
-func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, ownerID, agentID string, exactUpdateID string) (*types.RunRecord, error) {
+func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context, ownerID, agentID string, exactUpdateID string) (*types.RunRecord, error) {
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
 	}
 	if agentID == "" {
-		agentID = persistentSuperAgentID(ownerID)
+		agentID = persistentManagementAgentID(ownerID)
 	}
 	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, fmt.Errorf("check resident super run: %w", err)
 	} else if found {
-		if err := rt.persistentSuperResidentMatchesExact(&resident, exactUpdateID); err != nil {
+		if err := rt.persistentManagementResidentMatchesExact(&resident, exactUpdateID); err != nil {
 			return nil, err
 		}
 		// The live occurrence binding to a pending resident is the only
 		// observer a lost mint dispatch ever gets; arm the fresh-mint
 		// watchdog so the strand cannot self-seal behind this bind.
-		rt.armFreshMintSuperResumeWatchdog(&resident)
+		rt.armFreshMintManagementResumeWatchdog(&resident)
 		return &resident, nil
 	}
-	if resumed, ok, err := rt.reactivateRestartedPersistentSuperControlRun(ctx, ownerID, agentID); err != nil {
+	if resumed, ok, err := rt.reactivateRestartedPersistentManagementControlRun(ctx, ownerID, agentID); err != nil {
 		return nil, err
 	} else if ok {
-		if err := rt.persistentSuperResidentMatchesExact(resumed, exactUpdateID); err != nil {
+		if err := rt.persistentManagementResidentMatchesExact(resumed, exactUpdateID); err != nil {
 			return nil, err
 		}
 		return resumed, nil
 	}
 	if active, err := rt.latestActiveRunByAgent(ctx, ownerID, agentID); err == nil {
 		if active.State == types.RunBlocked {
-			// A blocked Super is awaiting external input/approval; do not spawn
-			// a competing Super or mint an unprompted Texture rewake.
-			if err := rt.persistentSuperResidentMatchesExact(&active, exactUpdateID); err != nil {
+			// A blocked Management is awaiting external input/approval; do not spawn
+			// a competing Management or mint an unprompted Texture rewake.
+			if err := rt.persistentManagementResidentMatchesExact(&active, exactUpdateID); err != nil {
 				return nil, err
 			}
 			return &active, nil
@@ -331,18 +331,18 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	// that failed mid-terminal-saga must release its slot through the fate
 	// it already staged, not sit frozen until the deadline cancels it.
 	rt.resumeStrandedFrozenAssignmentCommits(ctx)
-	rt.enforceCoSuperAssignmentDeadlines(ctx)
-	updates, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
+	rt.enforceEngineeringAssignmentDeadlines(ctx)
+	updates, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, agentID, 100)
 	if err != nil {
 		return nil, err
 	}
 	lifecycleControls := len(updates) > 0
 	if !lifecycleControls {
-		updates, err = rt.listAndSettlePersistentSuperBacklog(ctx, ownerID, agentID)
+		updates, err = rt.listAndSettlePersistentManagementBacklog(ctx, ownerID, agentID)
 		if err != nil {
 			return nil, err
 		}
-		updates = filterPersistentSuperExecutionUpdates(updates)
+		updates = filterPersistentManagementExecutionUpdates(updates)
 	}
 	if len(updates) == 0 {
 		return nil, nil
@@ -366,7 +366,7 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 			break
 		}
 		if !matched {
-			return nil, fmt.Errorf("exact live Super control %s is not pending", exact)
+			return nil, fmt.Errorf("exact live Management control %s is not pending", exact)
 		}
 	}
 	requestSource := "update_coagent"
@@ -374,8 +374,8 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 		requestSource = "lifecycle_texture_control"
 	}
 	metadata := map[string]any{
-		runMetadataAgentProfile: agentprofile.Super,
-		runMetadataAgentRole:    agentprofile.Super,
+		runMetadataAgentProfile: agentprofile.Management,
+		runMetadataAgentRole:    agentprofile.Management,
 		runMetadataAgentID:      agentID,
 		"request_source":        requestSource,
 		"requested_by_agent_id": first.AgentID,
@@ -399,7 +399,7 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 		metadata["worker_update_ids"] = []string{first.UpdateID}
 	}
 
-	prompt := persistentSuperCoagentInboxPrompt
+	prompt := persistentManagementCoagentInboxPrompt
 	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
 		return nil, err
@@ -409,7 +409,7 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 		delete(rec.Metadata, runMetadataTrajectoryID)
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 			rt.failUnactivatedLifecycleControlRun(ctx, rec, err)
-			return nil, fmt.Errorf("preserve non-lifecycle persistent-Super run: %w", err)
+			return nil, fmt.Errorf("preserve non-lifecycle persistent-Management run: %w", err)
 		}
 		targetControls := selectLifecycleControlActivation(updates, first.TrajectoryID, map[string]bool{targetWorkItemID: true})
 		if len(targetControls) == 0 {
@@ -424,7 +424,7 @@ func (rt *Runtime) reconcilePersistentSuperActorLocked(ctx context.Context, owne
 	return rec, nil
 }
 
-func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
+func (rt *Runtime) reactivateRestartedPersistentManagementControlRun(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
 	var runs []types.RunRecord
 	var err error
 	computerID := ""
@@ -432,12 +432,12 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 		computerID = strings.TrimSpace(rt.TextureComputerID())
 	}
 	if strings.TrimSpace(ownerID) != "" {
-		runs, err = rt.store.ListPassivatedPersistentSuperControlRunsByOwner(ctx, ownerID, computerID, agentID, bootPersistentSuperRewarmLimit)
+		runs, err = rt.store.ListPassivatedPersistentManagementControlRunsByOwner(ctx, ownerID, computerID, agentID, bootPersistentManagementRewarmLimit)
 	} else {
 		runs, err = rt.store.ListAllRunsByState(ctx, types.RunPassivated)
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("list restarted persistent-Super runs: %w", err)
+		return nil, false, fmt.Errorf("list restarted persistent-Management runs: %w", err)
 	}
 	var pendingIDsByRun map[string][]string
 	if strings.TrimSpace(ownerID) != "" && rt != nil && rt.store != nil {
@@ -445,33 +445,33 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 		if err != nil {
 			return nil, false, fmt.Errorf("index delivered worker updates: %w", err)
 		}
-		log.Printf("runtime: persistent-Super rewarm delivered-pending-runs=%d", len(pendingIDsByRun))
+		log.Printf("runtime: persistent-Management rewarm delivered-pending-runs=%d", len(pendingIDsByRun))
 	}
 	var candidate *types.RunRecord
 	var candidateControls []types.CoagentSourcePacket
 	for i := range runs {
 		run := &runs[i]
 		passivatedReason := metadataStringValue(run.Metadata, "passivated_reason")
-		if run.OwnerID != ownerID || run.AgentID != agentID || !isPersistentSuperAgentRun(run) ||
+		if run.OwnerID != ownerID || run.AgentID != agentID || !isPersistentManagementAgentRun(run) ||
 			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" ||
 			(passivatedReason != "runtime_restarted" && passivatedReason != runtimeInjectionAppendFailurePassivationReason) {
 			continue
 		}
 		if strings.TrimSpace(run.TrajectoryID) != "" {
-			// Super delivery requires empty TrajectoryID. Listing packets for a
+			// Management delivery requires empty TrajectoryID. Listing packets for a
 			// tombstone used to ReadObjectSnapshot the whole computer.
-			log.Printf("runtime: skip restarted persistent-Super control run %s: non-empty trajectory_id", run.RunID)
+			log.Printf("runtime: skip restarted persistent-Management control run %s: non-empty trajectory_id", run.RunID)
 			continue
 		}
 		if pendingIDsByRun != nil && len(pendingIDsByRun[run.RunID]) == 0 {
-			log.Printf("runtime: persistent-Super rewarm packets run=%s pending=0", run.RunID)
+			log.Printf("runtime: persistent-Management rewarm packets run=%s pending=0", run.RunID)
 			continue
 		}
-		log.Printf("runtime: persistent-Super rewarm validate run=%s", run.RunID)
+		log.Printf("runtime: persistent-Management rewarm validate run=%s", run.RunID)
 		var controls []types.CoagentSourcePacket
 		var readErr error
 		if pendingIDsByRun != nil {
-			controls, readErr = rt.pendingSuperRecoveryPacketsByCanonicalID(ctx, run, pendingIDsByRun[run.RunID])
+			controls, readErr = rt.pendingManagementRecoveryPacketsByCanonicalID(ctx, run, pendingIDsByRun[run.RunID])
 		} else {
 			controls, readErr = rt.listPendingLifecyclePacketsDeliveredToRun(ctx, run)
 		}
@@ -480,22 +480,22 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 				continue
 			}
 			if errors.Is(readErr, store.ErrLifecycleInvalidTransition) {
-				// A Super run that cannot present its delivered controls (empty
+				// A Management run that cannot present its delivered controls (empty
 				// TrajectoryID contract, stale assignment_trajectory_id, etc.)
 				// is not reactivation authority. Keep scanning; aborting here
-				// blocks minting a healthy Super and makes every boot work-item
+				// blocks minting a healthy Management and makes every boot work-item
 				// trajectory repeat ListAllRunsByState until the guest OOMs.
-				log.Printf("runtime: skip restarted persistent-Super control run %s: %v", run.RunID, readErr)
+				log.Printf("runtime: skip restarted persistent-Management control run %s: %v", run.RunID, readErr)
 				continue
 			}
-			return nil, false, fmt.Errorf("validate restarted persistent-Super control run %s: %w", run.RunID, readErr)
+			return nil, false, fmt.Errorf("validate restarted persistent-Management control run %s: %w", run.RunID, readErr)
 		}
 		if len(controls) == 0 {
-			log.Printf("runtime: persistent-Super rewarm packets run=%s pending=0", run.RunID)
+			log.Printf("runtime: persistent-Management rewarm packets run=%s pending=0", run.RunID)
 			continue
 		}
-		log.Printf("runtime: persistent-Super rewarm packets run=%s pending=%d", run.RunID, len(controls))
-		// Passivated Super refs are already newest-first. The first run with
+		log.Printf("runtime: persistent-Management rewarm packets run=%s pending=%d", run.RunID, len(controls))
+		// Passivated Management refs are already newest-first. The first run with
 		// pending controls is the reactivation authority; later tombstones
 		// must not each GetObject worker updates.
 		copy := *run
@@ -516,22 +516,22 @@ func (rt *Runtime) reactivateRestartedPersistentSuperControlRun(ctx context.Cont
 	candidate.FinishedAt = nil
 	candidate.UpdatedAt = time.Now().UTC()
 	if err := rt.store.UpdateRun(ctx, *candidate); err != nil {
-		return nil, false, fmt.Errorf("reactivate restarted persistent-Super control run %s: %w", candidate.RunID, err)
+		return nil, false, fmt.Errorf("reactivate restarted persistent-Management control run %s: %w", candidate.RunID, err)
 	}
-	if err := rt.enqueuePersistentSuperRecoveryOccurrence(ctx, candidate, candidateControls); err != nil {
-		return nil, false, fmt.Errorf("enqueue restarted persistent-Super recovery: %w", err)
+	if err := rt.enqueuePersistentManagementRecoveryOccurrence(ctx, candidate, candidateControls); err != nil {
+		return nil, false, fmt.Errorf("enqueue restarted persistent-Management recovery: %w", err)
 	}
-	rt.armReactivatedSuperResumeWatchdog(ownerID, candidate.RunID, candidate.UpdatedAt)
+	rt.armReactivatedManagementResumeWatchdog(ownerID, candidate.RunID, candidate.UpdatedAt)
 	return candidate, true, nil
 }
 
-// persistentSuperResumeDispatchDeadline bounds how long a reactivated persistent
-// Super run may sit in pending without its recovery occurrence dispatching.
+// persistentManagementResumeDispatchDeadline bounds how long a reactivated persistent
+// Management run may sit in pending without its recovery occurrence dispatching.
 // Running runs self-terminate through the tool-loop iteration cap, and blocked
 // runs are excluded from residency, so pending-never-dispatched is the only
 // state that can jam the I26 singleton slot indefinitely (2026-09-03 fe92ea2b:
 // reactivated at boot, never dispatched, blocked every live wake for hours).
-const persistentSuperResumeDispatchDeadline = 10 * time.Minute
+const persistentManagementResumeDispatchDeadline = 10 * time.Minute
 
 // resumeWatchdogFiredMetadata marks runs terminalized by the resume watchdog,
 // distinguishing them from model-loop failures in forensics.
@@ -541,13 +541,13 @@ const resumeWatchdogFiredMetadata = "resume_watchdog_fired"
 // spent; it is swallowed by the walker, never surfaced as a boot error.
 var errResumeWatchdogScanCap = errors.New("resume watchdog scan cap reached")
 
-// reactivatedSuperResumeExpired is the pure hang predicate: a persistent Super
+// reactivatedManagementResumeExpired is the pure hang predicate: a persistent Management
 // run carrying the reactivation flag, still pending past the dispatch deadline.
-// Scoped strictly to persistent Super runs — the Researcher injection-recovery
+// Scoped strictly to persistent Management runs — the Research injection-recovery
 // path shares the flag and must never be failed here. Zero UpdatedAt counts as
 // expired: with no freshness signal the fail-closed choice releases the slot.
-func reactivatedSuperResumeExpired(rec *types.RunRecord, now time.Time) bool {
-	if rec == nil || !isPersistentSuperAgentRun(rec) {
+func reactivatedManagementResumeExpired(rec *types.RunRecord, now time.Time) bool {
+	if rec == nil || !isPersistentManagementAgentRun(rec) {
 		return false
 	}
 	if rec.State != types.RunPending {
@@ -559,16 +559,16 @@ func reactivatedSuperResumeExpired(rec *types.RunRecord, now time.Time) bool {
 	if rec.UpdatedAt.IsZero() {
 		return true
 	}
-	return now.Sub(rec.UpdatedAt) > persistentSuperResumeDispatchDeadline
+	return now.Sub(rec.UpdatedAt) > persistentManagementResumeDispatchDeadline
 }
 
-// failExpiredReactivatedSuperResume terminalizes a reactivated persistent Super
+// failExpiredReactivatedManagementResume terminalizes a reactivated persistent Management
 // run stuck in pending past the dispatch deadline, releasing the singleton
 // slot. Fail-closed with a structured reason; delivered packets stay durable
 // and a fresh live trigger can re-drive the work. Returns true when it failed
 // a run. A recovery occurrence arriving after this fail resolves terminal and
 // no-ops, so late dispatch is harmless in either order.
-func (rt *Runtime) failExpiredReactivatedSuperResume(ctx context.Context, ownerID, runID string, now time.Time) (bool, error) {
+func (rt *Runtime) failExpiredReactivatedManagementResume(ctx context.Context, ownerID, runID string, now time.Time) (bool, error) {
 	if rt == nil || rt.store == nil {
 		return false, fmt.Errorf("resume watchdog: store unavailable")
 	}
@@ -579,12 +579,12 @@ func (rt *Runtime) failExpiredReactivatedSuperResume(ctx context.Context, ownerI
 		}
 		return false, err
 	}
-	if !reactivatedSuperResumeExpired(&rec, now.UTC()) {
+	if !reactivatedManagementResumeExpired(&rec, now.UTC()) {
 		return false, nil
 	}
 	finished := now.UTC()
 	rec.State = types.RunFailed
-	rec.Error = "persistent Super resume activation never dispatched within 10m; slot released, re-drive via live trigger"
+	rec.Error = "persistent Management resume activation never dispatched within 10m; slot released, re-drive via live trigger"
 	rec.FinishedAt = &finished
 	rec.UpdatedAt = finished
 	rec.Metadata = cloneMetadata(rec.Metadata)
@@ -592,12 +592,12 @@ func (rt *Runtime) failExpiredReactivatedSuperResume(ctx context.Context, ownerI
 	if err := rt.store.UpdateRun(ctx, rec); err != nil {
 		return false, err
 	}
-	log.Printf("runtime: persistent-Super resume watchdog failed undispatched run=%s owner=%s agent=%s", rec.RunID, rec.OwnerID, rec.AgentID)
+	log.Printf("runtime: persistent-Management resume watchdog failed undispatched run=%s owner=%s agent=%s", rec.RunID, rec.OwnerID, rec.AgentID)
 	return true, nil
 }
 
-// freshMintSuperResumeStranded is the fresh-mint hang predicate: a persistent
-// Super run minted pending whose initial_dispatch never executed, still
+// freshMintManagementResumeStranded is the fresh-mint hang predicate: a persistent
+// Management run minted pending whose initial_dispatch never executed, still
 // pending past the dispatch deadline. The reactivation watchdog covers only
 // runs carrying the reactivation flag, so a fresh mint with a lost
 // boot-window dispatch has no watchdog and no retry authority and the strand
@@ -605,8 +605,8 @@ func (rt *Runtime) failExpiredReactivatedSuperResume(ctx context.Context, ownerI
 // rewarm window, pending 45 minutes, no dispatch log and no inference). Zero
 // UpdatedAt counts as stranded: with no freshness signal the fail-closed
 // choice releases the slot.
-func freshMintSuperResumeStranded(rec *types.RunRecord, now time.Time) bool {
-	if rec == nil || !isPersistentSuperAgentRun(rec) {
+func freshMintManagementResumeStranded(rec *types.RunRecord, now time.Time) bool {
+	if rec == nil || !isPersistentManagementAgentRun(rec) {
 		return false
 	}
 	if rec.State != types.RunPending {
@@ -619,19 +619,19 @@ func freshMintSuperResumeStranded(rec *types.RunRecord, now time.Time) bool {
 	if rec.UpdatedAt.IsZero() {
 		return true
 	}
-	return now.Sub(rec.UpdatedAt) > persistentSuperResumeDispatchDeadline
+	return now.Sub(rec.UpdatedAt) > persistentManagementResumeDispatchDeadline
 }
 
-// freshMintSuperResumeArming is the arm-time predicate: every freshly minted
-// pending persistent Super run gets one watchdog; the deadline check happens
+// freshMintManagementResumeArming is the arm-time predicate: every freshly minted
+// pending persistent Management run gets one watchdog; the deadline check happens
 // again at fire time so an in-flight dispatch is never raced.
-func freshMintSuperResumeArming(rec *types.RunRecord) bool {
-	return rec != nil && isPersistentSuperAgentRun(rec) &&
+func freshMintManagementResumeArming(rec *types.RunRecord) bool {
+	return rec != nil && isPersistentManagementAgentRun(rec) &&
 		rec.State == types.RunPending &&
 		!metadataBoolValue(rec.Metadata, "actor_reactivated_from_passivated")
 }
 
-// armFreshMintSuperResumeWatchdog bounds a freshly minted persistent Super
+// armFreshMintManagementResumeWatchdog bounds a freshly minted persistent Management
 // run. Fire-and-forget, mirroring the reactivation resume watchdog, but it
 // re-drives through a recovery occurrence instead of failing the run: a
 // fresh mint whose initial_dispatch was lost has no live trigger queued
@@ -640,13 +640,13 @@ func freshMintSuperResumeArming(rec *types.RunRecord) bool {
 // re-drives it through the exact recovery branch; if the dispatch executed
 // first the recovery occurrence resolves terminal and no-ops. A process
 // death before firing is covered by boot passivation plus the rewarm.
-func (rt *Runtime) armFreshMintSuperResumeWatchdog(rec *types.RunRecord) {
-	if rt == nil || !freshMintSuperResumeArming(rec) {
+func (rt *Runtime) armFreshMintManagementResumeWatchdog(rec *types.RunRecord) {
+	if rt == nil || !freshMintManagementResumeArming(rec) {
 		return
 	}
-	delay := persistentSuperResumeDispatchDeadline
+	delay := persistentManagementResumeDispatchDeadline
 	if !rec.UpdatedAt.IsZero() {
-		if remaining := persistentSuperResumeDispatchDeadline - time.Since(rec.UpdatedAt); remaining > 0 {
+		if remaining := persistentManagementResumeDispatchDeadline - time.Since(rec.UpdatedAt); remaining > 0 {
 			delay = remaining
 		} else {
 			delay = time.Second // already stranded: fire just off the current goroutine
@@ -655,11 +655,11 @@ func (rt *Runtime) armFreshMintSuperResumeWatchdog(rec *types.RunRecord) {
 	time.AfterFunc(delay, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		redriven, err := rt.redriveStrandedFreshMintSuper(ctx, rec.OwnerID, rec.RunID)
+		redriven, err := rt.redriveStrandedFreshMintManagement(ctx, rec.OwnerID, rec.RunID)
 		if err != nil {
-			log.Printf("runtime: persistent-Super fresh-mint watchdog run %s: %v", rec.RunID, err)
+			log.Printf("runtime: persistent-Management fresh-mint watchdog run %s: %v", rec.RunID, err)
 		} else if redriven {
-			log.Printf("runtime: persistent-Super fresh-mint watchdog re-drove stranded run=%s owner=%s", rec.RunID, rec.OwnerID)
+			log.Printf("runtime: persistent-Management fresh-mint watchdog re-drove stranded run=%s owner=%s", rec.RunID, rec.OwnerID)
 		}
 	})
 }
@@ -668,7 +668,7 @@ func (rt *Runtime) armFreshMintSuperResumeWatchdog(rec *types.RunRecord) {
 // the run, confirm the strand predicate still holds, and enqueue a recovery
 // occurrence bound to one of the run's still-pending delivered controls.
 // Returns true when a recovery occurrence was enqueued.
-func (rt *Runtime) redriveStrandedFreshMintSuper(ctx context.Context, ownerID, runID string) (bool, error) {
+func (rt *Runtime) redriveStrandedFreshMintManagement(ctx context.Context, ownerID, runID string) (bool, error) {
 	if rt == nil || rt.store == nil {
 		return false, fmt.Errorf("fresh-mint watchdog: store unavailable")
 	}
@@ -679,7 +679,7 @@ func (rt *Runtime) redriveStrandedFreshMintSuper(ctx context.Context, ownerID, r
 		}
 		return false, err
 	}
-	if !freshMintSuperResumeStranded(&rec, time.Now().UTC()) {
+	if !freshMintManagementResumeStranded(&rec, time.Now().UTC()) {
 		return false, nil
 	}
 	packets, err := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, &rec)
@@ -689,39 +689,39 @@ func (rt *Runtime) redriveStrandedFreshMintSuper(ctx context.Context, ownerID, r
 	if len(packets) == 0 {
 		return false, nil
 	}
-	if err := rt.enqueuePersistentSuperRecoveryOccurrence(ctx, &rec, packets); err != nil {
+	if err := rt.enqueuePersistentManagementRecoveryOccurrence(ctx, &rec, packets); err != nil {
 		return false, fmt.Errorf("fresh-mint watchdog re-drive: %w", err)
 	}
 	return true, nil
 }
 
-// armReactivatedSuperResumeWatchdog starts the dispatch watchdog for a freshly
+// armReactivatedManagementResumeWatchdog starts the dispatch watchdog for a freshly
 // reactivated run. Fire-and-forget: if the process dies first, the boot rewarm
 // below re-arms or fails it, so no lost timer can jam the slot.
-func (rt *Runtime) armReactivatedSuperResumeWatchdog(ownerID, runID string, armedAt time.Time) {
+func (rt *Runtime) armReactivatedManagementResumeWatchdog(ownerID, runID string, armedAt time.Time) {
 	ownerID, runID = strings.TrimSpace(ownerID), strings.TrimSpace(runID)
 	if rt == nil || ownerID == "" || runID == "" {
 		return
 	}
-	delay := persistentSuperResumeDispatchDeadline
+	delay := persistentManagementResumeDispatchDeadline
 	if !armedAt.IsZero() {
-		if remaining := persistentSuperResumeDispatchDeadline - time.Since(armedAt); remaining > 0 {
+		if remaining := persistentManagementResumeDispatchDeadline - time.Since(armedAt); remaining > 0 {
 			delay = remaining
 		}
 	}
 	time.AfterFunc(delay, func() {
-		if _, err := rt.failExpiredReactivatedSuperResume(context.Background(), ownerID, runID, time.Now().UTC()); err != nil {
-			log.Printf("runtime: persistent-Super resume watchdog run %s: %v", runID, err)
+		if _, err := rt.failExpiredReactivatedManagementResume(context.Background(), ownerID, runID, time.Now().UTC()); err != nil {
+			log.Printf("runtime: persistent-Management resume watchdog run %s: %v", runID, err)
 		}
 	})
 }
 
-// rewarmReactivatedSuperResumeWatchdogs bounds reactivations that survived a
+// rewarmReactivatedManagementResumeWatchdogs bounds reactivations that survived a
 // process restart: a run reactivated before the crash sits pending with the
 // flag but no live timer. Already-expired ones fail immediately; the rest get
 // a fresh watchdog for their remaining window. Computer-scoped paged walk with
 // a scan cap, so this adds no unbounded body scan to boot.
-func (rt *Runtime) rewarmReactivatedSuperResumeWatchdogs(ctx context.Context, ownerID, computerID string) {
+func (rt *Runtime) rewarmReactivatedManagementResumeWatchdogs(ctx context.Context, ownerID, computerID string) {
 	if rt == nil || rt.store == nil {
 		return
 	}
@@ -732,21 +732,21 @@ func (rt *Runtime) rewarmReactivatedSuperResumeWatchdogs(ctx context.Context, ow
 	now := time.Now().UTC()
 	scanned := 0
 	walkErr := rt.store.ForEachLifecycleRunsByState(ctx, ownerID, computerID, types.RunPending, func(rec types.RunRecord) error {
-		if scanned >= bootPersistentSuperRewarmLimit {
+		if scanned >= bootPersistentManagementRewarmLimit {
 			return errResumeWatchdogScanCap
 		}
 		scanned++
-		if !isPersistentSuperAgentRun(&rec) ||
+		if !isPersistentManagementAgentRun(&rec) ||
 			!metadataBoolValue(rec.Metadata, "actor_reactivated_from_passivated") {
 			return nil
 		}
-		if reactivatedSuperResumeExpired(&rec, now) {
-			if _, err := rt.failExpiredReactivatedSuperResume(ctx, rec.OwnerID, rec.RunID, now); err != nil {
+		if reactivatedManagementResumeExpired(&rec, now) {
+			if _, err := rt.failExpiredReactivatedManagementResume(ctx, rec.OwnerID, rec.RunID, now); err != nil {
 				log.Printf("runtime: boot resume-watchdog fail run %s: %v", rec.RunID, err)
 			}
 			return nil
 		}
-		rt.armReactivatedSuperResumeWatchdog(rec.OwnerID, rec.RunID, rec.UpdatedAt)
+		rt.armReactivatedManagementResumeWatchdog(rec.OwnerID, rec.RunID, rec.UpdatedAt)
 		return nil
 	})
 	if walkErr != nil && !errors.Is(walkErr, errResumeWatchdogScanCap) {
@@ -754,27 +754,27 @@ func (rt *Runtime) rewarmReactivatedSuperResumeWatchdogs(ctx context.Context, ow
 	}
 }
 
-func (rt *Runtime) enqueuePersistentSuperRecoveryOccurrence(ctx context.Context, rec *types.RunRecord, packets []types.CoagentSourcePacket) error {
+func (rt *Runtime) enqueuePersistentManagementRecoveryOccurrence(ctx context.Context, rec *types.RunRecord, packets []types.CoagentSourcePacket) error {
 	if rt == nil || rt.store == nil || rt.dispatchActor == nil || rec == nil || len(packets) == 0 {
-		return fmt.Errorf("persistent Super recovery occurrence dispatch unavailable")
+		return fmt.Errorf("persistent Management recovery occurrence dispatch unavailable")
 	}
 	trajectoryID := lifecycleControlTrajectoryForRun(rec)
-	if trajectoryID == "" || !isPersistentSuperAgentRun(rec) {
-		return fmt.Errorf("%w: recovery run scope is not persistent Super", ErrInvalidPersistentSuperRecovery)
+	if trajectoryID == "" || !isPersistentManagementAgentRun(rec) {
+		return fmt.Errorf("%w: recovery run scope is not persistent Management", ErrInvalidPersistentManagementRecovery)
 	}
 	if len(packets) == 0 {
-		return fmt.Errorf("persistent Super recovery occurrence has no packets")
+		return fmt.Errorf("persistent Management recovery occurrence has no packets")
 	}
 	packet := packets[0]
 	if packet.OwnerID != rec.OwnerID || packet.ComputerID != rec.ComputerID ||
 		packet.TargetAgentID != rec.AgentID || packet.TrajectoryID != trajectoryID ||
 		packet.AgentID == "" || packet.Direction == "" {
-		return fmt.Errorf("%w: recovery packet scope mismatch", ErrInvalidPersistentSuperRecovery)
+		return fmt.Errorf("%w: recovery packet scope mismatch", ErrInvalidPersistentManagementRecovery)
 	}
-	occurrence, err := EncodePersistentSuperRecovery(PersistentSuperRecoveryOccurrence{
+	occurrence, err := EncodePersistentManagementRecovery(PersistentManagementRecoveryOccurrence{
 		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, TrajectoryID: trajectoryID,
 		AgentID: rec.AgentID, RunID: rec.RunID, SourceAgentID: packet.AgentID,
-		Controls: []PersistentSuperRecoveryControl{{
+		Controls: []PersistentManagementRecoveryControl{{
 			UpdateID: packet.UpdateID, AgentID: packet.AgentID, Direction: packet.Direction,
 			LifecycleVersion: packet.LifecycleVersion, ReducerSeq: packet.ReducerSeq,
 		}},
@@ -782,19 +782,19 @@ func (rt *Runtime) enqueuePersistentSuperRecoveryOccurrence(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	log.Printf("runtime: persistent-Super recovery occurrence queued run=%s update=%s source=%s", rec.RunID, packet.UpdateID, packet.AgentID)
+	log.Printf("runtime: persistent-Management recovery occurrence queued run=%s update=%s source=%s", rec.RunID, packet.UpdateID, packet.AgentID)
 	if err := rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID,
 		"coagent_result", occurrence, trajectoryID, packet.AgentID); err != nil {
-		return fmt.Errorf("dispatch persistent Super recovery %s: %w", packet.UpdateID, err)
+		return fmt.Errorf("dispatch persistent Management recovery %s: %w", packet.UpdateID, err)
 	}
 	return nil
 }
 
-// ResolvePersistentSuperRecovery authenticates a distinct restart wake for the
-// exact persistent Super run. It does not discover a replacement run: the
+// ResolvePersistentManagementRecovery authenticates a distinct restart wake for the
+// exact persistent Management run. It does not discover a replacement run: the
 // occurrence names the run and the delivered packet authority it must resume.
-func (rt *Runtime) ResolvePersistentSuperRecovery(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (*types.RunRecord, bool, error) {
-	occurrence, err := DecodePersistentSuperRecovery(content)
+func (rt *Runtime) ResolvePersistentManagementRecovery(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (*types.RunRecord, bool, error) {
+	occurrence, err := DecodePersistentManagementRecovery(content)
 	if err != nil {
 		return nil, false, err
 	}
@@ -803,15 +803,15 @@ func (rt *Runtime) ResolvePersistentSuperRecovery(ctx context.Context, ownerID, 
 		occurrence.AgentID != strings.TrimSpace(agentID) ||
 		occurrence.TrajectoryID != strings.TrimSpace(trajectoryID) ||
 		occurrence.SourceAgentID != strings.TrimSpace(fromAgentID) ||
-		occurrence.AgentID != persistentSuperAgentID(occurrence.OwnerID) {
-		return nil, false, fmt.Errorf("%w: envelope mismatch", ErrInvalidPersistentSuperRecovery)
+		occurrence.AgentID != persistentManagementAgentID(occurrence.OwnerID) {
+		return nil, false, fmt.Errorf("%w: envelope mismatch", ErrInvalidPersistentManagementRecovery)
 	}
 	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, occurrence.OwnerID, occurrence.ComputerID, occurrence.TrajectoryID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, false, fmt.Errorf("%w: trajectory is missing", ErrInvalidPersistentSuperRecovery)
+			return nil, false, fmt.Errorf("%w: trajectory is missing", ErrInvalidPersistentManagementRecovery)
 		}
-		return nil, false, fmt.Errorf("load persistent Super recovery trajectory: %w", err)
+		return nil, false, fmt.Errorf("load persistent Management recovery trajectory: %w", err)
 	}
 	if trajectory.Status != types.TrajectoryLive {
 		return nil, true, nil
@@ -819,30 +819,30 @@ func (rt *Runtime) ResolvePersistentSuperRecovery(ctx context.Context, ownerID, 
 	if _, cancelErr := rt.store.GetLifecycleCancellationIntent(ctx, occurrence.OwnerID, occurrence.ComputerID, occurrence.TrajectoryID); cancelErr == nil {
 		return nil, true, nil
 	} else if !errors.Is(cancelErr, store.ErrNotFound) {
-		return nil, false, fmt.Errorf("load persistent Super recovery cancellation intent: %w", cancelErr)
+		return nil, false, fmt.Errorf("load persistent Management recovery cancellation intent: %w", cancelErr)
 	}
 	rec, err := rt.store.GetRunByOwner(ctx, occurrence.OwnerID, occurrence.RunID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, false, fmt.Errorf("%w: run is missing", ErrInvalidPersistentSuperRecovery)
+			return nil, false, fmt.Errorf("%w: run is missing", ErrInvalidPersistentManagementRecovery)
 		}
-		return nil, false, fmt.Errorf("load persistent Super recovery run: %w", err)
+		return nil, false, fmt.Errorf("load persistent Management recovery run: %w", err)
 	}
 	if rec.State.Terminal() {
 		return nil, true, nil
 	}
 	if rec.OwnerID != occurrence.OwnerID || rec.ComputerID != occurrence.ComputerID ||
-		rec.AgentID != occurrence.AgentID || !isPersistentSuperAgentRun(&rec) ||
+		rec.AgentID != occurrence.AgentID || !isPersistentManagementAgentRun(&rec) ||
 		rec.TrajectoryID != "" ||
 		metadataStringValue(rec.Metadata, "assignment_trajectory_id") != occurrence.TrajectoryID {
-		return nil, false, fmt.Errorf("%w: run authority mismatch", ErrInvalidPersistentSuperRecovery)
+		return nil, false, fmt.Errorf("%w: run authority mismatch", ErrInvalidPersistentManagementRecovery)
 	}
 	if rec.State != types.RunPending && rec.State != types.RunRunning {
-		return nil, false, fmt.Errorf("%w: run is not executable", ErrInvalidPersistentSuperRecovery)
+		return nil, false, fmt.Errorf("%w: run is not executable", ErrInvalidPersistentManagementRecovery)
 	}
 	packets, err := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, &rec)
 	if err != nil {
-		return nil, false, fmt.Errorf("load persistent Super recovery packets: %w", err)
+		return nil, false, fmt.Errorf("load persistent Management recovery packets: %w", err)
 	}
 	if len(packets) == 0 {
 		return nil, true, nil
@@ -858,13 +858,13 @@ func (rt *Runtime) ResolvePersistentSuperRecovery(ctx context.Context, ownerID, 
 			}
 		}
 		if !matched {
-			return nil, false, fmt.Errorf("%w: packet authority changed", ErrInvalidPersistentSuperRecovery)
+			return nil, false, fmt.Errorf("%w: packet authority changed", ErrInvalidPersistentManagementRecovery)
 		}
 	}
 	return &rec, false, nil
 }
 
-func (rt *Runtime) markPersistentSuperRunUpdatesDelivered(ctx context.Context, rec *types.RunRecord) error {
+func (rt *Runtime) markPersistentManagementRunUpdatesDelivered(ctx context.Context, rec *types.RunRecord) error {
 	if rec == nil || strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.RunID) == "" {
 		return nil
 	}
@@ -974,12 +974,12 @@ func (rt *Runtime) completeSuccessfulRunWorkItems(ctx context.Context, rec *type
 	return nil
 }
 
-func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *types.RunRecord) {
-	if !isPersistentSuperAgentRun(rec) || (rec.State != types.RunPassivated && !rec.State.Terminal()) {
+func (rt *Runtime) maybeContinuePersistentManagementInbox(ctx context.Context, rec *types.RunRecord) {
+	if !isPersistentManagementAgentRun(rec) || (rec.State != types.RunPassivated && !rec.State.Terminal()) {
 		return
 	}
-	if isPersistentSuperInboxRun(rec) && rec.State == types.RunCompleted {
-		if err := rt.markPersistentSuperRunUpdatesDelivered(ctx, rec); err != nil {
+	if isPersistentManagementInboxRun(rec) && rec.State == types.RunCompleted {
+		if err := rt.markPersistentManagementRunUpdatesDelivered(ctx, rec); err != nil {
 			log.Printf("runtime: mark persistent super updates delivered after %s: %v", rec.RunID, err)
 			return
 		}
@@ -987,11 +987,11 @@ func (rt *Runtime) maybeContinuePersistentSuperInbox(ctx context.Context, rec *t
 	// Terminal events wake Texture, never select backlog.
 }
 
-func isPersistentSuperInboxRun(rec *types.RunRecord) bool {
+func isPersistentManagementInboxRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	if !isPersistentSuperAgentRun(rec) {
+	if !isPersistentManagementAgentRun(rec) {
 		return false
 	}
 	if metadataStringValue(rec.Metadata, "request_source") != "update_coagent" {
@@ -1000,40 +1000,40 @@ func isPersistentSuperInboxRun(rec *types.RunRecord) bool {
 	return true
 }
 
-func isPersistentSuperAgentRun(rec *types.RunRecord) bool {
+func isPersistentManagementAgentRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	if agentProfileForRun(rec) != agentprofile.Super {
+	if agentProfileForRun(rec) != agentprofile.Management {
 		return false
 	}
 	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.AgentID) == "" {
 		return false
 	}
-	return rec.AgentID == persistentSuperAgentID(rec.OwnerID)
+	return rec.AgentID == persistentManagementAgentID(rec.OwnerID)
 }
 
-func filterPersistentSuperExecutionUpdates(updates []types.CoagentSourcePacket) []types.CoagentSourcePacket {
+func filterPersistentManagementExecutionUpdates(updates []types.CoagentSourcePacket) []types.CoagentSourcePacket {
 	if len(updates) == 0 {
 		return nil
 	}
 	out := make([]types.CoagentSourcePacket, 0, len(updates))
 	for _, update := range updates {
-		if persistentSuperExecutableUpdate(update) {
+		if persistentManagementExecutableUpdate(update) {
 			out = append(out, update)
 		}
 	}
 	return out
 }
 
-func (rt *Runtime) listAndSettlePersistentSuperBacklog(ctx context.Context, ownerID, agentID string) ([]types.CoagentSourcePacket, error) {
+func (rt *Runtime) listAndSettlePersistentManagementBacklog(ctx context.Context, ownerID, agentID string) ([]types.CoagentSourcePacket, error) {
 	const limit = 100
 	for i := 0; i < 10; i++ {
 		updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 		if err != nil {
 			return nil, fmt.Errorf("list super pending updates: %w", err)
 		}
-		settled, err := rt.settlePersistentSuperNonExecutionUpdates(ctx, ownerID, agentID, updates)
+		settled, err := rt.settlePersistentManagementNonExecutionUpdates(ctx, ownerID, agentID, updates)
 		if err != nil {
 			return nil, fmt.Errorf("settle non-execution super updates: %w", err)
 		}
@@ -1044,13 +1044,13 @@ func (rt *Runtime) listAndSettlePersistentSuperBacklog(ctx context.Context, owne
 	return nil, fmt.Errorf("settle non-execution super updates: mailbox did not converge")
 }
 
-func (rt *Runtime) settlePersistentSuperNonExecutionUpdates(ctx context.Context, ownerID, agentID string, updates []types.CoagentSourcePacket) (bool, error) {
+func (rt *Runtime) settlePersistentManagementNonExecutionUpdates(ctx context.Context, ownerID, agentID string, updates []types.CoagentSourcePacket) (bool, error) {
 	var nonExecIDs []string
 	for _, u := range updates {
 		if u.DeliveredAt != nil || strings.TrimSpace(u.DeliveredToRunID) != "" {
 			continue
 		}
-		if !persistentSuperExecutableUpdate(u) && !persistentSuperAdmissibleReport(u) {
+		if !persistentManagementExecutableUpdate(u) && !persistentManagementAdmissibleReport(u) {
 			if id := strings.TrimSpace(u.UpdateID); id != "" {
 				nonExecIDs = append(nonExecIDs, id)
 			}
@@ -1072,7 +1072,7 @@ func lifecycleControlTrajectoryForRun(rec *types.RunRecord) string {
 	return strings.TrimSpace(firstNonEmpty(rec.TrajectoryID, metadataStringValue(rec.Metadata, "assignment_trajectory_id"), metadataStringValue(rec.Metadata, runMetadataTrajectoryID)))
 }
 
-func (rt *Runtime) pendingSuperRecoveryPacketsByCanonicalID(ctx context.Context, rec *types.RunRecord, canonicalIDs []string) ([]types.CoagentSourcePacket, error) {
+func (rt *Runtime) pendingManagementRecoveryPacketsByCanonicalID(ctx context.Context, rec *types.RunRecord, canonicalIDs []string) ([]types.CoagentSourcePacket, error) {
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil, nil
 	}
@@ -1270,7 +1270,7 @@ func (rt *Runtime) bindLifecycleControlsToRun(ctx context.Context, rec *types.Ru
 		return types.LifecycleResult{}, err
 	}
 	var rebound types.RunRecord
-	if isPersistentSuperAgentRun(rec) {
+	if isPersistentManagementAgentRun(rec) {
 		rebound, err = rt.store.GetRunByOwner(ctx, rec.OwnerID, rec.RunID)
 	} else {
 		rebound, err = rt.store.GetLifecycleRun(ctx, rec.OwnerID, rec.ComputerID, rec.RunID)
@@ -1346,23 +1346,23 @@ func (rt *Runtime) terminalizeFingerprintedLifecycleControlRun(ctx context.Conte
 	return fmt.Errorf("%w: run=%s failed_attempt=%s", ErrDurablyTerminalLifecycleControlActivation, rec.RunID, failedKey)
 }
 
-func (rt *Runtime) listPendingPersistentSuperLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
+func (rt *Runtime) listPendingPersistentManagementLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
 	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
-	if ownerID == "" || computerID == "" || agentID != persistentSuperAgentID(ownerID) {
-		return nil, fmt.Errorf("list persistent-Super lifecycle controls: exact owner, computer, and persistent agent are required")
+	if ownerID == "" || computerID == "" || agentID != persistentManagementAgentID(ownerID) {
+		return nil, fmt.Errorf("list persistent-Management lifecycle controls: exact owner, computer, and persistent agent are required")
 	}
 	agent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
 	if err != nil {
-		return nil, fmt.Errorf("load exact persistent Super: %w", err)
+		return nil, fmt.Errorf("load exact persistent Management: %w", err)
 	}
 	agentProfile, _ := agentprofile.Canonical(agent.Profile)
 	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if agentProfile != agentprofile.Super || agentRole != agentprofile.Super || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
-		return nil, fmt.Errorf("persistent Super lifecycle control target has invalid authority")
+	if agentProfile != agentprofile.Management || agentRole != agentprofile.Management || agent.LifecycleVersion != 0 || agent.OwnerID != ownerID || agent.ComputerID != computerID {
+		return nil, fmt.Errorf("persistent Management lifecycle control target has invalid authority")
 	}
 	updates, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 	if err != nil {
-		return nil, fmt.Errorf("list persistent-Super lifecycle controls: %w", err)
+		return nil, fmt.Errorf("list persistent-Management lifecycle controls: %w", err)
 	}
 	controls := make([]types.CoagentSourcePacket, 0, len(updates))
 	for _, update := range updates {
@@ -1390,23 +1390,23 @@ func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, own
 		if work.LifecycleVersion <= 0 || work.WorkItemID != update.TargetWorkItemID || work.Status != types.WorkItemOpen || work.AssignedAgentID != agentID || work.TrajectoryID != update.TrajectoryID || work.OwnerID != ownerID || work.ComputerID != computerID {
 			return nil, fmt.Errorf("pending lifecycle control %q is not joined to exact open target work", update.UpdateID)
 		}
-		if executionOnly && !persistentSuperExecutableUpdate(update) {
-			return nil, fmt.Errorf("persistent-Super lifecycle control %q is not an execution request", update.UpdateID)
+		if executionOnly && !persistentManagementExecutableUpdate(update) {
+			return nil, fmt.Errorf("persistent-Management lifecycle control %q is not an execution request", update.UpdateID)
 		}
 		out = append(out, update)
 	}
 	return out, nil
 }
 
-func persistentSuperSenderAuthorized(update types.CoagentSourcePacket) bool {
+func persistentManagementSenderAuthorized(update types.CoagentSourcePacket) bool {
 	role, _ := agentprofile.Canonical(update.Role)
 	return role == agentprofile.Texture &&
 		update.Direction == types.LifecyclePacketDirectionControl
 }
 
-func persistentSuperAdmissibleReport(update types.CoagentSourcePacket) bool {
+func persistentManagementAdmissibleReport(update types.CoagentSourcePacket) bool {
 	role, _ := agentprofile.Canonical(update.Role)
-	if role != agentprofile.CoSuper ||
+	if role != agentprofile.Engineering ||
 		update.Direction != types.LifecyclePacketDirectionProducerReport {
 		return false
 	}
@@ -1419,8 +1419,8 @@ func persistentSuperAdmissibleReport(update types.CoagentSourcePacket) bool {
 	}
 }
 
-func persistentSuperExecutablePacket(update types.CoagentSourcePacket) bool {
-	if !persistentSuperSenderAuthorized(update) {
+func persistentManagementExecutablePacket(update types.CoagentSourcePacket) bool {
+	if !persistentManagementSenderAuthorized(update) {
 		return false
 	}
 	packet := normalizeCoagentSourcePacketPayload(update.Packet)
@@ -1430,14 +1430,14 @@ func persistentSuperExecutablePacket(update types.CoagentSourcePacket) bool {
 	return validateCoagentSourcePacketPayload(packet) == nil
 }
 
-func persistentSuperExecutableUpdate(update types.CoagentSourcePacket) bool {
+func persistentManagementExecutableUpdate(update types.CoagentSourcePacket) bool {
 	if update.DeliveredAt != nil || strings.TrimSpace(update.DeliveredToRunID) != "" {
 		return false
 	}
-	return persistentSuperExecutablePacket(update)
+	return persistentManagementExecutablePacket(update)
 }
 
-func persistentSuperMailboxInjectable(rec *types.RunRecord, update types.CoagentSourcePacket) bool {
+func persistentManagementMailboxInjectable(rec *types.RunRecord, update types.CoagentSourcePacket) bool {
 	if rec == nil {
 		return false
 	}
@@ -1459,9 +1459,9 @@ func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSo
 	if rec == nil {
 		return false
 	}
-	if isPersistentSuperAgentRun(rec) {
-		if persistentSuperAdmissibleReport(update) || persistentSuperExecutablePacket(update) {
-			return persistentSuperMailboxInjectable(rec, update)
+	if isPersistentManagementAgentRun(rec) {
+		if persistentManagementAdmissibleReport(update) || persistentManagementExecutablePacket(update) {
+			return persistentManagementMailboxInjectable(rec, update)
 		}
 		return false
 	}
@@ -1473,7 +1473,7 @@ func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSo
 	return true
 }
 
-func buildPersistentSuperUpdatePrompt(updates []types.CoagentSourcePacket) string {
+func buildPersistentManagementUpdatePrompt(updates []types.CoagentSourcePacket) string {
 	var b strings.Builder
 	b.WriteString("Process the pending update_coagent records addressed to you as the user's persistent super actor.\n\n")
 	b.WriteString("Each delivered packet is a validated packet.kind=execution_request with executable actions. When you have command output, diffs, tests, artifacts, questions, or blockers, report them back with update_coagent as packet.sources, claims, actions, questions, and notes.\n")
@@ -1684,7 +1684,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		return nil, fmt.Errorf("lookup coagent: %w", err)
 	}
 	profile, _ := agentprofile.Canonical(firstNonEmpty(agent.Profile, agent.Role))
-	lifecycleAgent := profile == agentprofile.Researcher && agent.LifecycleVersion > 0
+	lifecycleAgent := profile == agentprofile.Research && agent.LifecycleVersion > 0
 	if residentFound && !lifecycleAgent {
 		return &resident, nil
 	}
@@ -1752,7 +1752,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		return nil, nil
 	}
 	first := updates[0]
-	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Super {
+	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Management {
 		return nil, nil
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
@@ -1786,12 +1786,12 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		var trajectoryID string
 		workItems, workByID, trajectoryID, err = rt.hydrateLifecycleControlWorkItems(ctx, ownerID, computerID, agentID, updates)
 		if err != nil {
-			return nil, fmt.Errorf("hydrate lifecycle Researcher controls: %w", err)
+			return nil, fmt.Errorf("hydrate lifecycle Research controls: %w", err)
 		}
 		logicalKey, failedKey, versions, keyErr := lifecycleActivationKeys(ownerID, computerID, trajectoryID, agentID, buildinfo.Commit, updates, workByID)
 		activationVersions = versions
 		if keyErr != nil {
-			return nil, fmt.Errorf("fingerprint lifecycle Researcher controls: %w", keyErr)
+			return nil, fmt.Errorf("fingerprint lifecycle Research controls: %w", keyErr)
 		}
 		metadata["request_source"] = "lifecycle_texture_control"
 		metadata[runMetadataTrajectoryID] = trajectoryID
@@ -1974,10 +1974,10 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 		}
 	}
 	computerID := strings.TrimSpace(rec.ComputerID)
-	if isPersistentSuperAgentRun(rec) {
+	if isPersistentManagementAgentRun(rec) {
 		if metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
-			if _, err := rt.EnsurePersistentSuperAgent(ctx, rec.OwnerID); err != nil {
-				return nil, fmt.Errorf("restore persistent Super agent: %w", err)
+			if _, err := rt.EnsurePersistentManagementAgent(ctx, rec.OwnerID); err != nil {
+				return nil, fmt.Errorf("restore persistent Management agent: %w", err)
 			}
 			packets, err := rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
 			if err != nil && errors.Is(err, store.ErrNotFound) {
@@ -1987,7 +1987,7 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 			if trajectoryID != "" {
 				pending, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 				if listErr == nil {
-					omitClaimed := metadataBoolValue(rec.Metadata, runMetadataCoSuperReplacementOmitReports)
+					omitClaimed := metadataBoolValue(rec.Metadata, runMetadataEngineeringReplacementOmitReports)
 					claimed := map[string]bool{}
 					if omitClaimed {
 						for _, id := range metadataStringSlice(rec.Metadata[runMetadataProducerReportIDs]) {
@@ -1997,7 +1997,7 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 						}
 					}
 					for _, p := range pending {
-						if p.TrajectoryID != trajectoryID || !persistentSuperAdmissibleReport(p) {
+						if p.TrajectoryID != trajectoryID || !persistentManagementAdmissibleReport(p) {
 							continue
 						}
 						if omitClaimed && claimed[strings.TrimSpace(p.UpdateID)] {
@@ -2015,7 +2015,7 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 		if computerID == "" {
 			return nil, fmt.Errorf("list pending lifecycle updates: computer_id is required")
 		}
-		if agentProfileForRun(rec) == agentprofile.Researcher {
+		if agentProfileForRun(rec) == agentprofile.Research {
 			return rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
 		}
 		return rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
@@ -2250,7 +2250,7 @@ func shouldAppendInitialCoagentMailboxTurns(rec *types.RunRecord) bool {
 	}
 	requestSource := metadataStringValue(rec.Metadata, "request_source")
 	// Exact lifecycle packets must pass through the authenticated runtime
-	// injection append, including Researcher and persistent Super cold starts.
+	// injection append, including Research and persistent Management cold starts.
 	if requestSource == "lifecycle_texture_control" {
 		return true
 	}
@@ -2320,7 +2320,7 @@ func runSupportsCoagentUpdateInjection(rec *types.RunRecord) bool {
 		return false
 	}
 	switch agentProfileForRun(rec) {
-	case agentprofile.Super, agentprofile.CoSuper, agentprofile.Researcher, agentprofile.Texture:
+	case agentprofile.Management, agentprofile.Engineering, agentprofile.Research, agentprofile.Texture:
 		return strings.TrimSpace(rec.AgentID) != ""
 	default:
 		return false
@@ -2385,7 +2385,7 @@ func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	if requestSource == "update_coagent" || requestSource == "lifecycle_texture_control" {
 		return true
 	}
-	if agentProfileForRun(rec) == agentprofile.Researcher && len(lifecycleControlWorkIDsForRun(rec)) > 0 {
+	if agentProfileForRun(rec) == agentprofile.Research && len(lifecycleControlWorkIDsForRun(rec)) > 0 {
 		return true
 	}
 	return len(coagentUpdateIDsForRun(rec)) > 0
@@ -2424,7 +2424,7 @@ func (rt *Runtime) parkedLifecycleControlCandidate(ctx context.Context, ownerID,
 		scanProfile, _ := agentprofile.Canonical(run.AgentProfile)
 		scanRole, _ := agentprofile.Canonical(run.AgentRole)
 		if strings.TrimSpace(run.AgentID) != agentID || (run.State != types.RunPassivated && run.State != types.RunBlocked) ||
-			scanProfile != agentprofile.Researcher || scanRole != agentprofile.Researcher ||
+			scanProfile != agentprofile.Research || scanRole != agentprofile.Research ||
 			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" ||
 			metadataStringValue(run.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(run.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
 			continue
@@ -2490,7 +2490,7 @@ func (rt *Runtime) enqueueCanonicalLifecycleControlOccurrences(ctx context.Conte
 }
 
 // ReconcileParkedLifecycleCoagentWake reactivates one exact actor-memory
-// Researcher run and appends any pending controls before the handler may
+// Research run and appends any pending controls before the handler may
 // execute or acknowledge the wake. The actor-supplied run ID is required;
 // broad passivated-run discovery is not request-path authority.
 func (rt *Runtime) ReconcileParkedLifecycleCoagentWake(ctx context.Context, ownerID, agentID, runID string) (*types.RunRecord, error) {
@@ -2514,7 +2514,7 @@ func (rt *Runtime) reconcileParkedLifecycleCoagentWakeLocked(ctx context.Context
 	}
 	agentProfile, _ := agentprofile.Canonical(agent.Profile)
 	agentRole, _ := agentprofile.Canonical(agent.Role)
-	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentProfile != agentprofile.Researcher || agentRole != agentprofile.Researcher || agent.LifecycleVersion <= 0 {
+	if agent.OwnerID != ownerID || agent.ComputerID != computerID || agent.AgentID != agentID || agentProfile != agentprofile.Research || agentRole != agentprofile.Research || agent.LifecycleVersion <= 0 {
 		return nil, store.ErrLifecycleInvalidTransition
 	}
 	rec, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID)
@@ -2523,7 +2523,7 @@ func (rt *Runtime) reconcileParkedLifecycleCoagentWakeLocked(ctx context.Context
 	}
 	runProfile, _ := agentprofile.Canonical(rec.AgentProfile)
 	runRole, _ := agentprofile.Canonical(rec.AgentRole)
-	if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || runProfile != agentprofile.Researcher || runRole != agentprofile.Researcher ||
+	if rec.OwnerID != ownerID || rec.ComputerID != computerID || rec.AgentID != agentID || runProfile != agentprofile.Research || runRole != agentprofile.Research ||
 		(rec.State != types.RunPassivated && !rec.State.Active()) || metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" ||
 		metadataStringValue(rec.Metadata, lifecycleLogicalActivationKeyMetadata) == "" || metadataStringValue(rec.Metadata, lifecycleFailedAttemptKeyMetadata) == "" {
 		return nil, store.ErrLifecycleInvalidTransition
@@ -2592,13 +2592,13 @@ func (rt *Runtime) ReconcileCoagentWake(ctx context.Context, ownerID, agentID st
 	if ownerID == "" || agentID == "" {
 		return nil, nil
 	}
-	if agentID == persistentSuperAgentID(ownerID) {
-		return rt.reconcilePersistentSuperActor(ctx, ownerID, agentID)
+	if agentID == persistentManagementAgentID(ownerID) {
+		return rt.reconcilePersistentManagementActor(ctx, ownerID, agentID)
 	}
 	return rt.reconcileUpdatedCoagentActor(ctx, ownerID, agentID)
 }
 
-func (rt *Runtime) persistentSuperResidentMatchesExact(rec *types.RunRecord, exactUpdateID string) error {
+func (rt *Runtime) persistentManagementResidentMatchesExact(rec *types.RunRecord, exactUpdateID string) error {
 	exact := strings.TrimSpace(exactUpdateID)
 	if rec == nil || exact == "" {
 		return nil
@@ -2608,15 +2608,15 @@ func (rt *Runtime) persistentSuperResidentMatchesExact(rec *types.RunRecord, exa
 			return nil
 		}
 	}
-	for _, id := range persistentSuperBoundUpdateIDs(rec.Metadata["lifecycle_control_bindings"]) {
+	for _, id := range persistentManagementBoundUpdateIDs(rec.Metadata["lifecycle_control_bindings"]) {
 		if id == exact {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: persistent Super slot occupied by run %s", ErrActivationOccurrenceMustRemainUnprocessed, rec.RunID)
+	return fmt.Errorf("%w: persistent Management slot occupied by run %s", ErrActivationOccurrenceMustRemainUnprocessed, rec.RunID)
 }
 
-func persistentSuperBoundUpdateIDs(raw any) []string {
+func persistentManagementBoundUpdateIDs(raw any) []string {
 	appendID := func(dst []string, id string) []string {
 		id = strings.TrimSpace(id)
 		if id == "" {
@@ -2653,27 +2653,27 @@ func persistentSuperBoundUpdateIDs(raw any) []string {
 	}
 }
 
-// ResolvePersistentSuperLiveOccurrence binds a hashed live Texture→Super wake
+// ResolvePersistentManagementLiveOccurrence binds a hashed live Texture→Management wake
 // to the exact pending control named by the occurrence. Generic
 // ReconcileCoagentWake remains FIFO; this path is the live trigger.
-func (rt *Runtime) ResolvePersistentSuperLiveOccurrence(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (*types.RunRecord, bool, error) {
+func (rt *Runtime) ResolvePersistentManagementLiveOccurrence(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (*types.RunRecord, bool, error) {
 	if rt == nil || rt.store == nil {
 		return nil, false, fmt.Errorf("runtime store unavailable")
 	}
 	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
 	content, trajectoryID, fromAgentID = strings.TrimSpace(content), strings.TrimSpace(trajectoryID), strings.TrimSpace(fromAgentID)
 	if ownerID == "" || computerID == "" || agentID == "" || !strings.HasPrefix(content, "sha256:") {
-		return nil, false, fmt.Errorf("%w: unsupported live Super occurrence", ErrInvalidPersistentSuperRecovery)
+		return nil, false, fmt.Errorf("%w: unsupported live Management occurrence", ErrInvalidPersistentManagementRecovery)
 	}
-	if agentID != persistentSuperAgentID(ownerID) {
-		return nil, false, fmt.Errorf("%w: not persistent Super", ErrInvalidPersistentSuperRecovery)
+	if agentID != persistentManagementAgentID(ownerID) {
+		return nil, false, fmt.Errorf("%w: not persistent Management", ErrInvalidPersistentManagementRecovery)
 	}
 	if computerID != strings.TrimSpace(rt.TextureComputerID()) {
-		return nil, false, fmt.Errorf("%w: computer mismatch", ErrInvalidPersistentSuperRecovery)
+		return nil, false, fmt.Errorf("%w: computer mismatch", ErrInvalidPersistentManagementRecovery)
 	}
-	rt.superReconcileMu.Lock()
-	defer rt.superReconcileMu.Unlock()
-	pending, err := rt.listPendingPersistentSuperLifecycleControls(ctx, ownerID, computerID, agentID, 100)
+	rt.managementReconcileMu.Lock()
+	defer rt.managementReconcileMu.Unlock()
+	pending, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, agentID, 100)
 	if err != nil {
 		return nil, false, err
 	}
@@ -2690,7 +2690,7 @@ func (rt *Runtime) ResolvePersistentSuperLiveOccurrence(ctx context.Context, own
 			continue
 		}
 		if found {
-			return nil, false, fmt.Errorf("%w: ambiguous live Super occurrence", ErrInvalidPersistentSuperRecovery)
+			return nil, false, fmt.Errorf("%w: ambiguous live Management occurrence", ErrInvalidPersistentManagementRecovery)
 		}
 		matched = update
 		found = true
@@ -2698,7 +2698,7 @@ func (rt *Runtime) ResolvePersistentSuperLiveOccurrence(ctx context.Context, own
 	if !found {
 		return nil, true, nil
 	}
-	rec, err := rt.reconcilePersistentSuperActorLocked(ctx, ownerID, agentID, matched.UpdateID)
+	rec, err := rt.reconcilePersistentManagementActorLocked(ctx, ownerID, agentID, matched.UpdateID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -2744,7 +2744,7 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 	if target == "" {
 		return
 	}
-	if target == persistentSuperAgentID(update.OwnerID) && update.Direction == types.LifecyclePacketDirectionProducerReport {
+	if target == persistentManagementAgentID(update.OwnerID) && update.Direction == types.LifecyclePacketDirectionProducerReport {
 		return
 	}
 	if update.Direction == types.LifecyclePacketDirectionControl {
@@ -2754,7 +2754,7 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 		} else if found {
 			updates, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, update.OwnerID, update.ComputerID, target)
 			if listErr == nil {
-				updates, listErr = rt.validateTargetBoundLifecycleControls(ctx, update.OwnerID, update.ComputerID, target, updates, agentProfileForRun(&resident) == agentprofile.Super)
+				updates, listErr = rt.validateTargetBoundLifecycleControls(ctx, update.OwnerID, update.ComputerID, target, updates, agentProfileForRun(&resident) == agentprofile.Management)
 			}
 			updates = selectLifecycleControlActivation(updates, resident.TrajectoryID, lifecycleControlWorkIDsForRun(&resident))
 			if listErr != nil || len(updates) == 0 {

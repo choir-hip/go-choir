@@ -1448,7 +1448,7 @@ func TestLifecycleTextureEditsAndInjectionAreComputerScopedAcrossRestart(t *test
 			OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-" + computerID,
 			TrajectoryID: start.TrajectoryID, TargetAgentID: agentID, ProducerAgentID: producerAgentID,
 			ProducerUpdateID: "producer-" + computerID, UpdateID: "update-" + computerID,
-			ChannelID: docID, Role: agentprofile.Researcher, SourceRunID: producerRunID,
+			ChannelID: docID, Role: agentprofile.Research, SourceRunID: producerRunID,
 			Packet: packet, Content: content, PayloadDigest: payloadDigest,
 			WorkDisposition: types.WorkItemOpen, WorkItemID: producerWorkID,
 		}

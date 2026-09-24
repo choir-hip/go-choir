@@ -10,37 +10,37 @@ import (
 )
 
 // The scheduling contract (I26) requires every execution_request bound for the
-// persistent Super to carry a durable computer-scoped arrival ordinal. Ordinals
+// persistent Management to carry a durable computer-scoped arrival ordinal. Ordinals
 // must be monotonic across turns, restarts, and trajectories on one computer;
 // FIFO selection orders by (ordinal, update_id).
-func TestApplyTextureTurnAssignsComputerScopedArrivalOrdinalsToSuperExecutionRequests(t *testing.T) {
+func TestApplyTextureTurnAssignsComputerScopedArrivalOrdinalsToManagementExecutionRequests(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	superID := "management:" + start.OwnerID
-	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "management", Role: "management", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	managementID := "management:" + start.OwnerID
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: managementID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		Profile: "management", Role: "management", ChannelID: managementID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID, req.Reason = "texture-turn-ordinal-first", "first opener"
-	control := textureTurnControl(t, "control-ordinal-a", superID, "work-super-target")
+	control := textureTurnControl(t, "control-ordinal-a", managementID, "work-super-target")
 	control.OpenWork = &types.WorkItemRecord{WorkItemID: "work-super-target", Objective: "coordinate exact implementation",
-		AuthorityProfile: "management", AssignedAgentID: superID, StepBudget: 8}
+		AuthorityProfile: "management", AssignedAgentID: managementID, StepBudget: 8}
 	req.Controls = []types.TextureTurnControl{control}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	first, err := s.ApplyTextureTurn(ctx, req)
 	if err != nil {
-		t.Fatalf("apply first Super opener: %v", err)
+		t.Fatalf("apply first Management opener: %v", err)
 	}
 	if len(first.Controls) != 1 || first.Controls[0].ArrivalOrdinal != 1 {
-		t.Fatalf("first Super execution request ordinal = %+v, want 1", first.Controls)
+		t.Fatalf("first Management execution request ordinal = %+v, want 1", first.Controls)
 	}
 
 	second := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	second.CommandID, second.Reason = "texture-turn-ordinal-second", "continuation"
-	secondControl := textureTurnControl(t, "control-ordinal-b", superID, control.TargetWorkItemID)
+	secondControl := textureTurnControl(t, "control-ordinal-b", managementID, control.TargetWorkItemID)
 	secondControl.OpenWork = control.OpenWork
 	second.Controls = []types.TextureTurnControl{secondControl}
 	setTextureTurnDigest(t, &second, TextureSourceGraphWriteSet{})
@@ -48,9 +48,9 @@ func TestApplyTextureTurnAssignsComputerScopedArrivalOrdinalsToSuperExecutionReq
 		t.Fatalf("apply second control: %v", err)
 	}
 
-	pending, err := s.ListAllPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, superID)
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, managementID)
 	if err != nil || len(pending) != 2 {
-		t.Fatalf("pending Super controls = %+v, %v", pending, err)
+		t.Fatalf("pending Management controls = %+v, %v", pending, err)
 	}
 	if pending[0].UpdateID != "control-ordinal-a" || pending[0].ArrivalOrdinal != 1 ||
 		pending[1].UpdateID != "control-ordinal-b" || pending[1].ArrivalOrdinal != 2 {
@@ -63,23 +63,23 @@ func TestApplyTextureTurnAssignsComputerScopedArrivalOrdinalsToSuperExecutionReq
 	}
 }
 
-// A non-execution control or a Researcher-targeted control must NOT consume an
-// arrival ordinal: the scheduler counts only Super-bound execution requests.
-func TestApplyTextureTurnDoesNotSpendArrivalOrdinalOnResearcherControls(t *testing.T) {
+// A non-execution control or a Research-targeted control must NOT consume an
+// arrival ordinal: the scheduler counts only Management-bound execution requests.
+func TestApplyTextureTurnDoesNotSpendArrivalOrdinalOnResearchControls(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
 
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID, req.Reason = "texture-turn-researcher-no-spend", "research direction"
-	researcherAgentID := "research:ordinal-check"
-	researcherWorkID := "research-work-ordinal-check"
-	control := textureTurnControl(t, "control-researcher-ordinal", researcherAgentID, researcherWorkID)
+	researchAgentID := "research:ordinal-check"
+	researchWorkID := "research-work-ordinal-check"
+	control := textureTurnControl(t, "control-researcher-ordinal", researchAgentID, researchWorkID)
 	control.Packet.Kind = "question"
 	control.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
-	control.OpenAgent = &types.AgentRecord{AgentID: researcherAgentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+	control.OpenAgent = &types.AgentRecord{AgentID: researchAgentID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		Profile: "research", Role: "research", ChannelID: start.InitialDocument.DocID}
-	control.OpenWork = &types.WorkItemRecord{WorkItemID: researcherWorkID, Objective: "research exact gap",
-		AuthorityProfile: "research", AssignedAgentID: researcherAgentID}
+	control.OpenWork = &types.WorkItemRecord{WorkItemID: researchWorkID, Objective: "research exact gap",
+		AuthorityProfile: "research", AssignedAgentID: researchAgentID}
 	req.Controls = []types.TextureTurnControl{control}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	result, err := s.ApplyTextureTurn(ctx, req)
@@ -95,7 +95,7 @@ func TestApplyTextureTurnDoesNotSpendArrivalOrdinalOnResearcherControls(t *testi
 		t.Fatal(err)
 	}
 	if found {
-		t.Fatalf("arrival sequence object was created for non-Super control")
+		t.Fatalf("arrival sequence object was created for non-Management control")
 	}
 }
 
@@ -130,9 +130,9 @@ func TestArrivalOrdinalAllocationConflictsInsteadOfReusing(t *testing.T) {
 	s, start, _, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	superID := "management:" + start.OwnerID
-	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: superID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		Profile: "management", Role: "management", ChannelID: superID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	managementID := "management:" + start.OwnerID
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: managementID, OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		Profile: "management", Role: "management", ChannelID: managementID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	// Directly allocate one ordinal to advance the counter...

@@ -135,7 +135,7 @@ func TestServeCellFailedDropsTray(t *testing.T) {
 }
 
 // TestChoirExportsCarryOrchestrationSurface proves the model-facing surface:
-// Spawn/Complete/Inbox exist for CoSuper, Inbox alone for researchers.
+// Spawn/Complete/Inbox exist for Engineering, Inbox alone for researchers.
 func TestChoirExportsCarryOrchestrationSurface(t *testing.T) {
 	broker, issuer, scope, _ := testChoirFixture(t)
 	exports := scope.ChoirExports()["choir/choir"]
@@ -144,11 +144,11 @@ func TestChoirExportsCarryOrchestrationSurface(t *testing.T) {
 			t.Errorf("cosuper exports missing %q", name)
 		}
 	}
-	researcher, err := NewChoirScope(broker, issuer, "computer-choir", "activation-r", 1, SessionRoleResearcher, "")
+	research, err := NewChoirScope(broker, issuer, "computer-choir", "activation-r", 1, SessionRoleResearch, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rexp := researcher.ChoirExports()["choir/choir"]
+	rexp := research.ChoirExports()["choir/choir"]
 	if _, ok := rexp["Inbox"]; !ok {
 		t.Error("researcher exports missing Inbox")
 	}
@@ -157,7 +157,7 @@ func TestChoirExportsCarryOrchestrationSurface(t *testing.T) {
 			t.Errorf("researcher exports must not carry %q", name)
 		}
 	}
-	if _, err := researcher.Spawn("research", "x"); err == nil {
+	if _, err := research.Spawn("research", "x"); err == nil {
 		t.Error("researcher spawn must be denied")
 	}
 }

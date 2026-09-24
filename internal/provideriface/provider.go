@@ -180,8 +180,8 @@ type Config struct {
 	// supervisor has been deleted and this value is currently unused.
 	SupervisionInterval time.Duration
 
-	// ResearcherCount is the configured researcher worker count for this VM.
-	ResearcherCount int
+	// ResearchCount is the configured researcher worker count for this VM.
+	ResearchCount int
 
 	// TextureWakeDebounce is the coalescing window for addressed worker findings
 	// before the runtime schedules the next texture synthesis.

@@ -129,10 +129,10 @@ func Run() {
 
 	filesRoot := provideriface.ResolveFilesRoot(os.Getenv("AUTOPUTER_FILES_ROOT"))
 
-	// Initialize the singleton Super Console PTY handler. The PTY process is
+	// Initialize the singleton Management Console PTY handler. The PTY process is
 	// zot, not an interactive shell.
-	superConsoleHandler := NewSuperConsoleHandler(filesRoot)
-	RegisterSuperConsoleRoutes(s, superConsoleHandler)
+	managementConsoleHandler := NewManagementConsoleHandler(filesRoot)
+	RegisterManagementConsoleRoutes(s, managementConsoleHandler)
 
 	// Initialize the runtime engine with persisted state.
 	rtRuntimeCfg := provideriface.LoadConfig()
@@ -440,9 +440,9 @@ func Run() {
 		}
 		for _, profile := range []string{
 			agentprofile.Conductor,
-			agentprofile.Super,
-			agentprofile.CoSuper,
-			agentprofile.Researcher,
+			agentprofile.Management,
+			agentprofile.Engineering,
+			agentprofile.Research,
 			agentprofile.Texture,
 			agentprofile.Processor,
 			agentprofile.Reconciler,
@@ -462,14 +462,14 @@ func Run() {
 	apiHandler := apihandler.NewHandler(rt.Runtime.Store())
 	apihandler.RegisterRoutes(s, runtimeHandler, textureHandler, apiHandler, browserHandler, desktopHandler, contentService, mediaHandler, rtRuntimeCfg.EnableTestAPIs)
 	if toolsEnabled {
-		superRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super)
-		if err := apihandler.RegisterProductAPIRequestTool(s, superRegistry); err != nil {
+		managementRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Management)
+		if err := apihandler.RegisterProductAPIRequestTool(s, managementRegistry); err != nil {
 			log.Fatalf("autoputer: register product API tool: %v", err)
 		}
 		log.Printf("autoputer: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
 			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
-			superRegistry.Size(),
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Researcher)),
+			managementRegistry.Size(),
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Research)),
 			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
 		)
 	}
@@ -497,7 +497,7 @@ func Run() {
 	// only after the replay reaches the canonical head (B5/B6/B9).
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	log.Printf("autoputer: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
+	log.Printf("autoputer: orchestration topology (super=1, researchers=%d)", rtCfg.ResearchCount)
 	gate := &replayHealthGate{base: s.HealthHandler()}
 	if replayAppender != nil {
 		gate.mu.Lock()
@@ -645,7 +645,7 @@ func reconcilePendingLifecycleReceipts(appender *computerevent.ComputerEventAppe
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 			EventKind: eventKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: "lifecycle-observed:" + lifecycleReceipt.ReceiptID,
-			ActorProfile:   agentprofile.Super, AuthorityRef: authorityRef,
+			ActorProfile:   agentprofile.Management, AuthorityRef: authorityRef,
 			PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
 		}
 		if _, _, appendErr := appender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.lifecycle-receipt+json", "public"); appendErr != nil {
@@ -683,7 +683,7 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		SkillsRoot:                      rtRuntimeCfg.SkillsRoot,
 		ProviderTimeout:                 rtRuntimeCfg.ProviderTimeout,
 		SupervisionInterval:             rtRuntimeCfg.SupervisionInterval,
-		ResearcherCount:                 rtRuntimeCfg.ResearcherCount,
+		ResearchCount:                   rtRuntimeCfg.ResearchCount,
 		TextureWakeDebounce:             rtRuntimeCfg.TextureWakeDebounce,
 		TextureActorParkIdle:            rtRuntimeCfg.TextureActorParkIdle,
 		VmctlURL:                        rtRuntimeCfg.VmctlURL,

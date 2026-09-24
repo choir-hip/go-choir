@@ -83,10 +83,10 @@ func TestCircuitBreaker_ConsecutiveFailuresResetOnSuccess(t *testing.T) {
 func TestCircuitBreaker_HalfOpenAfterTimeout(t *testing.T) {
 	now := atomicNow()
 	b := newTestBreaker(BreakerConfig{
-		FailureThreshold:   1,
-		OpenTimeout:        10 * time.Second,
-		HalfOpenMaxProbes:  1,
-		Now:                now.now,
+		FailureThreshold:  1,
+		OpenTimeout:       10 * time.Second,
+		HalfOpenMaxProbes: 1,
+		Now:               now.now,
 	})
 	_ = b.Execute(func() error { return errors.New("boom") })
 	if b.State() != StateOpen {
@@ -103,10 +103,10 @@ func TestCircuitBreaker_HalfOpenAfterTimeout(t *testing.T) {
 func TestCircuitBreaker_HalfOpenSuccessCloses(t *testing.T) {
 	now := atomicNow()
 	b := newTestBreaker(BreakerConfig{
-		FailureThreshold:   1,
-		OpenTimeout:        10 * time.Second,
-		HalfOpenMaxProbes:  1,
-		Now:                now.now,
+		FailureThreshold:  1,
+		OpenTimeout:       10 * time.Second,
+		HalfOpenMaxProbes: 1,
+		Now:               now.now,
 	})
 	_ = b.Execute(func() error { return errors.New("boom") })
 	now.advance(11 * time.Second)
@@ -125,10 +125,10 @@ func TestCircuitBreaker_HalfOpenSuccessCloses(t *testing.T) {
 func TestCircuitBreaker_HalfOpenFailureReopens(t *testing.T) {
 	now := atomicNow()
 	b := newTestBreaker(BreakerConfig{
-		FailureThreshold:   1,
-		OpenTimeout:        10 * time.Second,
-		HalfOpenMaxProbes:  1,
-		Now:                now.now,
+		FailureThreshold:  1,
+		OpenTimeout:       10 * time.Second,
+		HalfOpenMaxProbes: 1,
+		Now:               now.now,
 	})
 	_ = b.Execute(func() error { return errors.New("boom") })
 	now.advance(11 * time.Second)
@@ -144,10 +144,10 @@ func TestCircuitBreaker_HalfOpenFailureReopens(t *testing.T) {
 func TestCircuitBreaker_HalfOpenRejectsExtraProbes(t *testing.T) {
 	now := atomicNow()
 	b := newTestBreaker(BreakerConfig{
-		FailureThreshold:   1,
-		OpenTimeout:        10 * time.Second,
-		HalfOpenMaxProbes:  1,
-		Now:                now.now,
+		FailureThreshold:  1,
+		OpenTimeout:       10 * time.Second,
+		HalfOpenMaxProbes: 1,
+		Now:               now.now,
 	})
 	_ = b.Execute(func() error { return errors.New("boom") })
 	now.advance(11 * time.Second)

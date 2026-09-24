@@ -96,7 +96,7 @@ func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T
 		t.Fatal(err)
 	}
 	updateID, _ := computerevent.NewEventID()
-	update := computerevent.Event{SchemaVersion: 1, EventID: updateID, ComputerID: computerID, EventKind: computerevent.EventResearcherUpdate, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "current-update", ActorProfile: "research", AuthorityRef: "typed-update", PayloadCommitment: strings.Repeat("0", 64), PrivacyClass: "owner", ResultingEffectiveCommitment: strings.Repeat("f", 64), ReducerVersion: 1}
+	update := computerevent.Event{SchemaVersion: 1, EventID: updateID, ComputerID: computerID, EventKind: computerevent.EventResearchUpdate, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "current-update", ActorProfile: "research", AuthorityRef: "typed-update", PayloadCommitment: strings.Repeat("0", 64), PrivacyClass: "owner", ResultingEffectiveCommitment: strings.Repeat("f", 64), ReducerVersion: 1}
 	if _, err := appender.AppendNew(ctx, update, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("f", 64)}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -743,10 +743,10 @@ func TestSelfDevelopmentStartCommitsEngineeringDocCast(t *testing.T) {
 			deskWork = &copy
 		}
 	}
-	if deskWork == nil || deskWork.AssignedAgentID != deskAgentID || deskWork.AuthorityProfile != agentprofile.CoSuper {
+	if deskWork == nil || deskWork.AssignedAgentID != deskAgentID || deskWork.AuthorityProfile != agentprofile.Engineering {
 		t.Fatalf("engineering desk work item missing or misbound: %+v", deskWork)
 	}
-	// No Super run mediates the opener: the document channel is the cast.
+	// No Management run mediates the opener: the document channel is the cast.
 	if runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2); err != nil || len(runs) != 0 {
 		t.Fatalf("self-development start minted a mediating run: %+v err=%v", runs, err)
 	}

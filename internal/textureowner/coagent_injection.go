@@ -10,7 +10,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-
 func (h *Handler) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.InjectUserTurnsFunc {
 	if h == nil || h.Core == nil {
 		return nil

@@ -9,59 +9,59 @@ const DurableWorkSchemaV1 = "choir.durable_work.v1"
 type LifecycleCommandKind string
 
 const (
-	LifecycleStart                        LifecycleCommandKind = "start"
-	LifecycleOpenWork                     LifecycleCommandKind = "open_work"
-	LifecycleAmendWork                    LifecycleCommandKind = "amend_work"
-	LifecycleRecordRefs                   LifecycleCommandKind = "record_refs"
-	LifecycleQueueUpdate                  LifecycleCommandKind = "queue_update"
-	LifecycleApplyUpdate                  LifecycleCommandKind = "apply_update"
-	LifecycleCommitArtifactHead           LifecycleCommandKind = "commit_artifact_head"
-	LifecycleReplaceActivation            LifecycleCommandKind = "replace_activation"
-	LifecycleSettleWork                   LifecycleCommandKind = "settle_work"
-	LifecycleRefuseWork                   LifecycleCommandKind = "refuse_work"
-	LifecycleSettleTrajectory             LifecycleCommandKind = "settle_trajectory"
-	LifecycleCancelTrajectory             LifecycleCommandKind = "cancel_trajectory"
-	LifecyclePrepareCancelTrajectory      LifecycleCommandKind = "prepare_cancel_trajectory"
-	LifecycleArchiveArtifact              LifecycleCommandKind = "archive_artifact"
-	LifecycleApplyTextureTurn             LifecycleCommandKind = "apply_texture_turn"
-	LifecycleBindControlDelivery          LifecycleCommandKind = "bind_control_delivery"
-	LifecycleFailControlActivation        LifecycleCommandKind = "fail_control_activation"
-	LifecycleOpenCoSuperAssignment        LifecycleCommandKind = "open_co_super_assignment"
-	LifecycleBindCoSuperAssignment        LifecycleCommandKind = "bind_co_super_assignment"
-	LifecycleRecordCoSuperAssignment      LifecycleCommandKind = "record_co_super_assignment"
-	LifecycleCancelCoSuperAssignment      LifecycleCommandKind = "cancel_co_super_assignment"
-	LifecycleSetCoSuperCapsuleDisposition LifecycleCommandKind = "set_co_super_capsule_disposition"
-	LifecycleSettleProducerReports        LifecycleCommandKind = "settle_producer_reports"
+	LifecycleStart                            LifecycleCommandKind = "start"
+	LifecycleOpenWork                         LifecycleCommandKind = "open_work"
+	LifecycleAmendWork                        LifecycleCommandKind = "amend_work"
+	LifecycleRecordRefs                       LifecycleCommandKind = "record_refs"
+	LifecycleQueueUpdate                      LifecycleCommandKind = "queue_update"
+	LifecycleApplyUpdate                      LifecycleCommandKind = "apply_update"
+	LifecycleCommitArtifactHead               LifecycleCommandKind = "commit_artifact_head"
+	LifecycleReplaceActivation                LifecycleCommandKind = "replace_activation"
+	LifecycleSettleWork                       LifecycleCommandKind = "settle_work"
+	LifecycleRefuseWork                       LifecycleCommandKind = "refuse_work"
+	LifecycleSettleTrajectory                 LifecycleCommandKind = "settle_trajectory"
+	LifecycleCancelTrajectory                 LifecycleCommandKind = "cancel_trajectory"
+	LifecyclePrepareCancelTrajectory          LifecycleCommandKind = "prepare_cancel_trajectory"
+	LifecycleArchiveArtifact                  LifecycleCommandKind = "archive_artifact"
+	LifecycleApplyTextureTurn                 LifecycleCommandKind = "apply_texture_turn"
+	LifecycleBindControlDelivery              LifecycleCommandKind = "bind_control_delivery"
+	LifecycleFailControlActivation            LifecycleCommandKind = "fail_control_activation"
+	LifecycleOpenEngineeringAssignment        LifecycleCommandKind = "open_co_super_assignment"
+	LifecycleBindEngineeringAssignment        LifecycleCommandKind = "bind_co_super_assignment"
+	LifecycleRecordEngineeringAssignment      LifecycleCommandKind = "record_co_super_assignment"
+	LifecycleCancelEngineeringAssignment      LifecycleCommandKind = "cancel_co_super_assignment"
+	LifecycleSetEngineeringCapsuleDisposition LifecycleCommandKind = "set_co_super_capsule_disposition"
+	LifecycleSettleProducerReports            LifecycleCommandKind = "settle_producer_reports"
 )
 
 type LifecycleEventKind string
 
 const (
-	LifecycleUpdateLate                      LifecycleEventKind = "update_late"
-	LifecycleTrajectoryStarted               LifecycleEventKind = "trajectory_started"
-	LifecycleWorkOpened                      LifecycleEventKind = "work_opened"
-	LifecycleWorkAmended                     LifecycleEventKind = "work_amended"
-	LifecycleRefsRecorded                    LifecycleEventKind = "refs_recorded"
-	LifecycleUpdateQueued                    LifecycleEventKind = "update_queued"
-	LifecycleActivationReplaced              LifecycleEventKind = "activation_replaced"
-	LifecycleUpdateApplied                   LifecycleEventKind = "update_applied"
-	LifecycleArtifactHeadAdvanced            LifecycleEventKind = "artifact_head_advanced"
-	LifecycleWorkSettled                     LifecycleEventKind = "work_settled"
-	LifecycleUpdateRejected                  LifecycleEventKind = "update_rejected"
-	LifecycleWorkRefused                     LifecycleEventKind = "work_refused"
-	LifecycleTrajectorySettled               LifecycleEventKind = "trajectory_settled"
-	LifecycleTrajectoryCancelled             LifecycleEventKind = "trajectory_cancelled"
-	LifecycleTrajectoryCancellationRequested LifecycleEventKind = "trajectory_cancellation_requested"
-	LifecycleArtifactArchived                LifecycleEventKind = "artifact_archived"
-	LifecycleTextureTurnCommitted            LifecycleEventKind = "texture_turn_committed"
-	LifecycleControlQueued                   LifecycleEventKind = "control_queued"
-	LifecycleControlDelivered                LifecycleEventKind = "control_delivered"
-	LifecycleControlActivationFailed         LifecycleEventKind = "control_activation_failed"
-	LifecycleCoSuperAssignmentOpened         LifecycleEventKind = "co_super_assignment_opened"
-	LifecycleCoSuperAssignmentBound          LifecycleEventKind = "co_super_assignment_bound"
-	LifecycleCoSuperAssignmentReported       LifecycleEventKind = "co_super_assignment_reported"
-	LifecycleCoSuperAssignmentCancelled      LifecycleEventKind = "co_super_assignment_cancelled"
-	LifecycleCoSuperCapsuleDispositionSet    LifecycleEventKind = "co_super_capsule_disposition_set"
+	LifecycleUpdateLate                       LifecycleEventKind = "update_late"
+	LifecycleTrajectoryStarted                LifecycleEventKind = "trajectory_started"
+	LifecycleWorkOpened                       LifecycleEventKind = "work_opened"
+	LifecycleWorkAmended                      LifecycleEventKind = "work_amended"
+	LifecycleRefsRecorded                     LifecycleEventKind = "refs_recorded"
+	LifecycleUpdateQueued                     LifecycleEventKind = "update_queued"
+	LifecycleActivationReplaced               LifecycleEventKind = "activation_replaced"
+	LifecycleUpdateApplied                    LifecycleEventKind = "update_applied"
+	LifecycleArtifactHeadAdvanced             LifecycleEventKind = "artifact_head_advanced"
+	LifecycleWorkSettled                      LifecycleEventKind = "work_settled"
+	LifecycleUpdateRejected                   LifecycleEventKind = "update_rejected"
+	LifecycleWorkRefused                      LifecycleEventKind = "work_refused"
+	LifecycleTrajectorySettled                LifecycleEventKind = "trajectory_settled"
+	LifecycleTrajectoryCancelled              LifecycleEventKind = "trajectory_cancelled"
+	LifecycleTrajectoryCancellationRequested  LifecycleEventKind = "trajectory_cancellation_requested"
+	LifecycleArtifactArchived                 LifecycleEventKind = "artifact_archived"
+	LifecycleTextureTurnCommitted             LifecycleEventKind = "texture_turn_committed"
+	LifecycleControlQueued                    LifecycleEventKind = "control_queued"
+	LifecycleControlDelivered                 LifecycleEventKind = "control_delivered"
+	LifecycleControlActivationFailed          LifecycleEventKind = "control_activation_failed"
+	LifecycleEngineeringAssignmentOpened      LifecycleEventKind = "co_super_assignment_opened"
+	LifecycleEngineeringAssignmentBound       LifecycleEventKind = "co_super_assignment_bound"
+	LifecycleEngineeringAssignmentReported    LifecycleEventKind = "co_super_assignment_reported"
+	LifecycleEngineeringAssignmentCancelled   LifecycleEventKind = "co_super_assignment_cancelled"
+	LifecycleEngineeringCapsuleDispositionSet LifecycleEventKind = "co_super_capsule_disposition_set"
 )
 
 type StartLifecycleRequest struct {
@@ -153,7 +153,7 @@ type TextureTurnInboundDisposition struct {
 }
 
 // TextureTurnControl is one ordered, downward target-control packet. OpenWork
-// is populated only for the exact persistent-Super opener. The work and first
+// is populated only for the exact persistent-Management opener. The work and first
 // execution_request are committed by the same conditional turn batch.
 type TextureTurnControl struct {
 	ControlID        string                     `json:"control_id"`
@@ -481,19 +481,19 @@ type LifecycleActivationProjection struct {
 }
 
 type LifecycleSnapshot struct {
-	Trajectory          TrajectoryRecord              `json:"trajectory"`
-	WorkItems           []WorkItemRecord              `json:"work_items"`
-	Agents              []AgentRecord                 `json:"agents"`
-	CoSuperAssignments  []CoSuperAssignment           `json:"co_super_assignments,omitempty"`
-	Activation          LifecycleActivationProjection `json:"activation"`
-	Schema              string                        `json:"schema"`
-	CurrentDocumentHead *Revision                     `json:"current_document_head,omitempty"`
-	Updates             []CoagentSourcePacket         `json:"updates"`
-	Document            Document                      `json:"document"`
-	HeadRevision        Revision                      `json:"head_revision"`
-	Events              []LifecycleEvent              `json:"events"`
-	SnapshotCursor      int64                         `json:"snapshot_cursor"`
-	Watermark           int64                         `json:"watermark"`
+	Trajectory             TrajectoryRecord              `json:"trajectory"`
+	WorkItems              []WorkItemRecord              `json:"work_items"`
+	Agents                 []AgentRecord                 `json:"agents"`
+	EngineeringAssignments []EngineeringAssignment       `json:"co_super_assignments,omitempty"`
+	Activation             LifecycleActivationProjection `json:"activation"`
+	Schema                 string                        `json:"schema"`
+	CurrentDocumentHead    *Revision                     `json:"current_document_head,omitempty"`
+	Updates                []CoagentSourcePacket         `json:"updates"`
+	Document               Document                      `json:"document"`
+	HeadRevision           Revision                      `json:"head_revision"`
+	Events                 []LifecycleEvent              `json:"events"`
+	SnapshotCursor         int64                         `json:"snapshot_cursor"`
+	Watermark              int64                         `json:"watermark"`
 }
 
 type LifecycleEventPage struct {

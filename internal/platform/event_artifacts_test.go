@@ -713,7 +713,7 @@ func platformTestDigest(value byte) string {
 	return string(buffer)
 }
 
-func TestCheckpointVerifierEvidenceRequiresPinnedCoSuperPass(t *testing.T) {
+func TestCheckpointVerifierEvidenceRequiresPinnedEngineeringPass(t *testing.T) {
 	platformStore, root := openTestPlatformStore(t)
 	service := NewService(platformStore, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
 	artifacts, err := NewEventArtifactService(service, platformTestKeyResolver{key: service.signingKey.Public})

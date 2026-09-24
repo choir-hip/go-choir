@@ -52,7 +52,7 @@ func writeTerminalRunOutcomeDigestField(digest hash.Hash, value string) {
 
 // CoagentSourcePacketPayload is the canonical update_coagent payload. It is a
 // source packet, not a chat message: readable prose is a projection of this
-// payload, while Texture may cite only Sources and Super may execute only
+// payload, while Texture may cite only Sources and Management may execute only
 // execution_request Actions.
 type CoagentSourcePacketPayload struct {
 	SchemaVersion string                `json:"schema_version"`

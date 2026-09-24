@@ -2256,10 +2256,10 @@ func (h *Handler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *http.R
 
 	role := strings.TrimSpace(req.Role)
 	if role == "" {
-		role = agentprofile.Super
+		role = agentprofile.Management
 	}
 	switch role {
-	case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
+	case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
 	default:
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "role must be research, management, or engineering"})
 		return

@@ -67,7 +67,7 @@ const (
 	ogEdgeAppDesktop     = objectgraph.EdgeKind("app_instance_desktop")
 	ogEdgeDocRevision    = objectgraph.EdgeKind("document_revision")
 	ogEdgeRevParent      = objectgraph.EdgeKind("revision_parent")
-	ogEdgeSuperSlot      = objectgraph.EdgeKind("super_slot")
+	ogEdgeManagementSlot = objectgraph.EdgeKind("super_slot")
 	ogEdgeCoagentMailbox = objectgraph.EdgeKind("coagent_mailbox")
 	ogEdgeDocAlias       = objectgraph.EdgeKind("document_alias")
 	ogEdgeDocMutation    = objectgraph.EdgeKind("document_mutation")
@@ -859,21 +859,21 @@ func (s *Store) ListRecentRunsByOwner(ctx context.Context, ownerID, computerID s
 	return runs, nil
 }
 
-const passivatedSuperRunsByOwnerDefaultLimit = 1024
+const passivatedManagementRunsByOwnerDefaultLimit = 1024
 
-// ListPassivatedPersistentSuperControlRunsByOwner returns passivated
-// persistent-Super runs for one owner. It lists og_objects headers through
+// ListPassivatedPersistentManagementControlRunsByOwner returns passivated
+// persistent-Management runs for one owner. It lists og_objects headers through
 // idx_og_objects_kind_owner (no metadata JSON_EXTRACT, no body), then
-// GetObject only for passivated Super rows. Callers apply request_source
-// and passivated_reason. Historical non-Super passivated runs and other
+// GetObject only for passivated Management rows. Callers apply request_source
+// and passivated_reason. Historical non-Management passivated runs and other
 // owners are not loaded.
-func (s *Store) ListPassivatedPersistentSuperControlRunsByOwner(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.RunRecord, error) {
+func (s *Store) ListPassivatedPersistentManagementControlRunsByOwner(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.RunRecord, error) {
 	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
 	if ownerID == "" {
 		return nil, fmt.Errorf("list passivated super runs: owner_id is required")
 	}
 	if limit <= 0 {
-		limit = passivatedSuperRunsByOwnerDefaultLimit
+		limit = passivatedManagementRunsByOwnerDefaultLimit
 	}
 	graph := s.ogReadStore
 	if graph == nil {
@@ -910,7 +910,7 @@ func (s *Store) ListPassivatedPersistentSuperControlRunsByOwner(ctx context.Cont
 			}
 		} else {
 			profile := strings.ToLower(ogMetadataText(meta, "agent_profile"))
-			if profile != agentprofile.Super && !strings.HasPrefix(headerAgentID, agentprofile.Super+":") {
+			if profile != agentprofile.Management && !strings.HasPrefix(headerAgentID, agentprofile.Management+":") {
 				continue
 			}
 		}
@@ -1696,7 +1696,7 @@ func (s *Store) CreateWorkerUpdateOG(ctx context.Context, rec types.CoagentSourc
 	}
 	if strings.TrimSpace(rec.ComputerID) != "" && strings.TrimSpace(rec.TrajectoryID) != "" {
 		if _, err := s.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID); err == nil {
-			if !workerMailboxAllowsAssignedCoSuperSuperReport(rec) {
+			if !workerMailboxAllowsAssignedEngineeringManagementReport(rec) {
 				return ErrLifecycleAuthorityRequired
 			}
 		} else if !errors.Is(err, ErrNotFound) {

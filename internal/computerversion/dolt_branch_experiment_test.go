@@ -28,6 +28,7 @@ import (
 //  7. Merge the branch into main (DOLT_MERGE)
 //  8. Tag the merge commit (DOLT_TAG)
 //  9. Verify the tag references the merge commit
+//
 // 10. Reset main to the tag (DOLT_RESET) for rollback
 func TestDoltBranchMergeTagExperiment(t *testing.T) {
 	root := t.TempDir()

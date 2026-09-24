@@ -196,9 +196,9 @@ func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 	}
 }
 
-// TestSessionWorkerResearcherDeniedEndToEnd is the B2 regression: a worker
+// TestSessionWorkerResearchDeniedEndToEnd is the B2 regression: a worker
 // spawned with the researcher role refuses writes through the real binary.
-func TestSessionWorkerResearcherDeniedEndToEnd(t *testing.T) {
+func TestSessionWorkerResearchDeniedEndToEnd(t *testing.T) {
 	bin := buildBrokerBinary(t)
 	w, err := spawnSessionWorker(bin, workerSessionConfig{
 		computerID: "test-capsule", epoch: 1, activation: "run-researcher",

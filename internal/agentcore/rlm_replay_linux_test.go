@@ -263,7 +263,7 @@ func (env *rlmReplayEnv) rlmTakeCensus(t *testing.T, ctx context.Context, manife
 	if err != nil {
 		t.Fatalf("census updates: %v", err)
 	}
-	assignment, err := env.s.GetCoSuperAssignment(ctx, env.ownerID, env.computerID, manifest.ImplAssignmentID, 1)
+	assignment, err := env.s.GetEngineeringAssignment(ctx, env.ownerID, env.computerID, manifest.ImplAssignmentID, 1)
 	if err != nil {
 		t.Fatalf("census assignment: %v", err)
 	}
@@ -379,7 +379,7 @@ func rlmReplayView(receipt, durable map[string]any) map[string]any {
 }
 
 // rlmReportCommandIDs projects command_ids from a stored report.
-func rlmReportCommandIDs(report types.CoSuperAssignmentReport) []string {
+func rlmReportCommandIDs(report types.EngineeringAssignmentReport) []string {
 	ids := make([]string, 0, len(report.Commands))
 	for _, c := range report.Commands {
 		ids = append(ids, c.CommandID)
@@ -387,7 +387,7 @@ func rlmReportCommandIDs(report types.CoSuperAssignmentReport) []string {
 	return ids
 }
 
-func rlmReportOutputDigests(report types.CoSuperAssignmentReport) []string {
+func rlmReportOutputDigests(report types.EngineeringAssignmentReport) []string {
 	digests := make([]string, 0, len(report.Outputs))
 	for _, o := range report.Outputs {
 		digests = append(digests, o.Digest)
@@ -577,12 +577,12 @@ func (env *rlmReplayEnv) rlmExecCtx(ctx context.Context, rec *types.RunRecord, t
 // operation whose dedup proof lives in the durable layer (operation state,
 // update dedup, lifecycle command digest), not in admission.
 func (env *rlmReplayEnv) rlmReplayToolCtx(rec *types.RunRecord, handle string) *CapsuleToolCtx {
-	toolCtx := env.rt.assignedCoSuperCapsuleToolCtx(rec, handle)
+	toolCtx := env.rt.assignedEngineeringCapsuleToolCtx(rec, handle)
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
 	workItemID := metadataStringValue(rec.Metadata, "assigned_work_item_id")
 	toolCtx.ValidateCurrentObligation = func(callCtx context.Context) error {
-		assignment, err := env.s.GetCoSuperAssignment(callCtx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+		assignment, err := env.s.GetEngineeringAssignment(callCtx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
 		if err != nil {
 			return fmt.Errorf("replay obligation: %w", err)
 		}
@@ -721,7 +721,7 @@ func TestRLMReplayGoldens(t *testing.T) {
 			_ = env.executor.ForceDestroy(context.Background(), id)
 		}
 	})
-	if _, err := env.executor.MintCapabilityHandle(manifest.ImplRunID, capsule.RoleCoSuper, manifest.ImplCapsuleID, manifest.ImplHandle, 24*time.Hour, ""); err != nil {
+	if _, err := env.executor.MintCapabilityHandle(manifest.ImplRunID, capsule.RoleEngineering, manifest.ImplCapsuleID, manifest.ImplHandle, 24*time.Hour, ""); err != nil {
 		t.Fatalf("mint impl handle: %v", err)
 	}
 	for _, m := range []struct {
@@ -884,7 +884,7 @@ if err != nil { panic(err) }
 	}); err != nil {
 		t.Fatalf("respawn verifier capsule: %v", err)
 	}
-	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleCoSuper, manifest.VerifyCapsuleID, manifest.VerifyHandle, 24*time.Hour, "verifier"); err != nil {
+	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleEngineering, manifest.VerifyCapsuleID, manifest.VerifyHandle, 24*time.Hour, "verifier"); err != nil {
 		t.Fatalf("mint verifier handle: %v", err)
 	}
 	inspectCell := `package main
@@ -933,7 +933,7 @@ fmt.Print(string(b))
 		t.Fatalf("spawn conflict verifier capsule: %v", err)
 	}
 	defer env.executor.ForceDestroy(context.Background(), conflictCapsule)
-	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleCoSuper, conflictCapsule, conflictHandle, 24*time.Hour, "verifier"); err != nil {
+	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleEngineering, conflictCapsule, conflictHandle, 24*time.Hour, "verifier"); err != nil {
 		t.Fatalf("mint conflict verifier handle: %v", err)
 	}
 	conflictToolCtx := env.rlmReplayToolCtx(&verifyRun, conflictHandle)
@@ -993,7 +993,7 @@ fmt.Print(string(b))
 		t.Fatalf("spawn corrupt verifier capsule: %v", err)
 	}
 	defer env.executor.ForceDestroy(context.Background(), corruptCapsule)
-	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleCoSuper, corruptCapsule, corruptHandle, 24*time.Hour, "verifier"); err != nil {
+	if _, err := env.executor.MintCapabilityHandle(manifest.VerifyRunID, capsule.RoleEngineering, corruptCapsule, corruptHandle, 24*time.Hour, "verifier"); err != nil {
 		t.Fatalf("mint corrupt verifier handle: %v", err)
 	}
 	corruptToolCtx := env.rlmReplayToolCtx(&verifyRun, corruptHandle)
@@ -1103,7 +1103,7 @@ if err != nil { panic(err) }
 	}); err != nil {
 		t.Fatalf("respawn impl capsule for update: %v", err)
 	}
-	if _, err := env.executor.MintCapabilityHandle(manifest.ImplRunID, capsule.RoleCoSuper, manifest.ImplCapsuleID, manifest.ImplHandle, 24*time.Hour, ""); err != nil {
+	if _, err := env.executor.MintCapabilityHandle(manifest.ImplRunID, capsule.RoleEngineering, manifest.ImplCapsuleID, manifest.ImplHandle, 24*time.Hour, ""); err != nil {
 		t.Fatalf("mint impl handle for update: %v", err)
 	}
 	implToolCtx = env.rlmReplayToolCtx(&implRun, manifest.ImplHandle)
@@ -1219,7 +1219,7 @@ if err != nil { panic(err) }
 	env.rlmReplayCell(t, ctx, &implRun, implToolCtx, "replay-report-"+runSuffix, reportCell)
 	// Canonical equality through the store: the assignment must still carry
 	// exactly the golden report — no second report, no disposition change.
-	assignment, err := env.s.GetCoSuperAssignment(ctx, env.ownerID, env.computerID, manifest.ImplAssignmentID, 1)
+	assignment, err := env.s.GetEngineeringAssignment(ctx, env.ownerID, env.computerID, manifest.ImplAssignmentID, 1)
 	if err != nil {
 		t.Fatalf("load impl assignment: %v", err)
 	}
@@ -1230,7 +1230,7 @@ if err != nil { panic(err) }
 	// not report IDs — resolve the durable row through the golden's report_id
 	// identity key. Every compared VALUE below still comes from the loaded row.
 	reportID := rlmGoldenString(t, reportGolden.Durable, "report_id")
-	report, err := env.s.GetCoSuperAssignmentReport(ctx, env.ownerID, env.computerID, reportID)
+	report, err := env.s.GetEngineeringAssignmentReport(ctx, env.ownerID, env.computerID, reportID)
 	if err != nil {
 		t.Fatalf("load stored report: %v", err)
 	}
@@ -1283,7 +1283,7 @@ if err != nil { panic(err) }
 	}
 	dispatches.record(reportGolden.SemanticID + "|conflict")
 	_, conflictErr := env.rlmReplayCellErr(ctx, &implRun, implToolCtx, "replay-report-conflict-"+runSuffix, conflictCell)
-	assignmentAfter, err := env.s.GetCoSuperAssignment(ctx, env.ownerID, env.computerID, manifest.ImplAssignmentID, 1)
+	assignmentAfter, err := env.s.GetEngineeringAssignment(ctx, env.ownerID, env.computerID, manifest.ImplAssignmentID, 1)
 	if err != nil {
 		t.Fatalf("reload impl assignment: %v", err)
 	}

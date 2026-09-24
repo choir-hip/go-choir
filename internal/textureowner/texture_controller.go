@@ -61,7 +61,7 @@ func (rt *Handler) lifecycleDocDeskProfile(ctx context.Context, ownerID string, 
 			continue
 		}
 		profile := strings.TrimSpace(work.AuthorityProfile)
-		if (profile == agentprofile.Texture || profile == agentprofile.CoSuper) && work.AssignedAgentID == profile+":"+doc.DocID {
+		if (profile == agentprofile.Texture || profile == agentprofile.Engineering) && work.AssignedAgentID == profile+":"+doc.DocID {
 			return profile
 		}
 	}
@@ -90,12 +90,12 @@ func (rt *Handler) Start(ctx context.Context) error {
 	textureSubjects := make([]types.AgentRecord, 0)
 	for _, subject := range subjects {
 		subjectProfile, _ := agentprofile.Canonical(subject.Profile)
-		if subjectProfile == agentprofile.CoSuper && subject.LifecycleVersion > 0 && subject.ChannelID != subject.AgentID {
+		if subjectProfile == agentprofile.Engineering && subject.LifecycleVersion > 0 && subject.ChannelID != subject.AgentID {
 			// Engineering desk: the desk agent's channel is the bound document,
 			// not its own mailbox — that discriminates it from assigned agents
 			// (engineering:{assignmentID}, channel = own mailbox). Reconcile
 			// the pending cast directly; the desk agent never runs.
-			docID := strings.TrimSpace(strings.TrimPrefix(subject.AgentID, agentprofile.CoSuper+":"))
+			docID := strings.TrimSpace(strings.TrimPrefix(subject.AgentID, agentprofile.Engineering+":"))
 			if docID == "" || docID != strings.TrimSpace(subject.ChannelID) {
 				continue
 			}
@@ -990,7 +990,7 @@ func (rt *Handler) isEligibleWorkerMessage(ctx context.Context, ownerID, docID s
 		return false, err
 	}
 	switch agentProfileForRun(run) {
-	case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
+	case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
 		cache[runID] = true
 		return true, nil
 	default:
@@ -1097,9 +1097,9 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		}
 		producerProfile, _ := agentprofile.Canonical(producerAgent.Profile)
 		if producerAgent.OwnerID != o.OwnerID || producerAgent.ComputerID != o.ComputerID || producerAgent.ChannelID != o.DocumentID ||
-			(producerProfile != agentprofile.Researcher && producerProfile != agentprofile.Super && producerProfile != agentprofile.CoSuper) ||
-			(producerProfile == agentprofile.Super && producerAgent.AgentID != persistentSuperAgentID(o.OwnerID)) ||
-			(producerProfile != agentprofile.Super && producerAgent.LifecycleVersion <= 0) {
+			(producerProfile != agentprofile.Research && producerProfile != agentprofile.Management && producerProfile != agentprofile.Engineering) ||
+			(producerProfile == agentprofile.Management && producerAgent.AgentID != persistentManagementAgentID(o.OwnerID)) ||
+			(producerProfile != agentprofile.Management && producerAgent.LifecycleVersion <= 0) {
 			return zero, "", invalidTextureOccurrence("Texture producer agent authority mismatch")
 		}
 		producerWork, producerWorkErr := rt.Store.GetLifecycleWorkItem(ctx, o.OwnerID, o.ComputerID, o.ProducerWorkID)
@@ -1121,7 +1121,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 			return zero, "", producerRunErr
 		}
 		trajectoryBound := producerRun.TrajectoryID == o.TrajectoryID
-		if producerProfile == agentprofile.Super {
+		if producerProfile == agentprofile.Management {
 			trajectoryBound = producerRun.TrajectoryID == "" && metadataStringValue(producerRun.Metadata, "assignment_trajectory_id") == o.TrajectoryID
 		}
 		producerRunProfile, _ := agentprofile.Canonical(producerRun.AgentProfile)

@@ -74,7 +74,7 @@ func TestHistoricDecodePreservesBytes(t *testing.T) {
 	want := Event{
 		SchemaVersion: SchemaVersionV1, ReducerVersion: ReducerVersionV1,
 		EventID: eventID, ComputerID: "computer-test", Sequence: 7,
-		PreviousHead: ZeroHead, EventKind: EventResearcherUpdate,
+		PreviousHead: ZeroHead, EventKind: EventResearchUpdate,
 		OccurredAt:     time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC).Format(time.RFC3339Nano),
 		IdempotencyKey: "fixture-1", RequestCommitment: testDigestC,
 		ActorProfile: "co-super", AuthorityRef: "owner",

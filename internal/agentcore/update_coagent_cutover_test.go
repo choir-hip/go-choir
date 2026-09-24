@@ -39,7 +39,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	ctx := context.Background()
 	ownerID := "user-alice"
 	trajectoryID := "traj-update-restart"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure super agent: %v", err)
 	}
@@ -57,8 +57,8 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 		UpdateID:      "update-restart-1",
 		OwnerID:       ownerID,
 		AgentID:       "texture:control",
-		TargetAgentID: superAgent.AgentID,
-		ChannelID:     superAgent.ChannelID,
+		TargetAgentID: managementAgent.AgentID,
+		ChannelID:     managementAgent.ChannelID,
 		TrajectoryID:  trajectoryID,
 		Role:          agentprofile.Texture,
 		Direction:     types.LifecyclePacketDirectionControl,
@@ -85,7 +85,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	} else if created {
 		t.Fatal("repeat dispatch created duplicate update")
 	}
-	pending, err := s.ListPendingWorkerUpdates(ctx, ownerID, superAgent.AgentID, 10)
+	pending, err := s.ListPendingWorkerUpdates(ctx, ownerID, managementAgent.AgentID, 10)
 	if err != nil {
 		t.Fatalf("list pending updates: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	rt2 := New(rt.cfg, s, events.NewEventBus(), provider.NewStubProvider(0))
 	setTestDispatch(rt2, s)
 	t.Cleanup(rt2.Stop)
-	run, err := rt2.reconcilePersistentSuperActor(ctx, ownerID, superAgent.AgentID)
+	run, err := rt2.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
 	if err != nil {
 		t.Fatalf("reconcile after restart: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	if len(updates) != 1 || updates[0].DeliveredToRunID != run.RunID || updates[0].DeliveredAt == nil {
 		t.Fatalf("delivered update = %+v, want exactly-once delivery to %s", updates, run.RunID)
 	}
-	pending, err = s.ListPendingWorkerUpdates(ctx, ownerID, superAgent.AgentID, 10)
+	pending, err = s.ListPendingWorkerUpdates(ctx, ownerID, managementAgent.AgentID, 10)
 	if err != nil {
 		t.Fatalf("list pending after completion: %v", err)
 	}
@@ -144,8 +144,8 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 		AgentID:    agentID,
 		OwnerID:    ownerID,
 		ComputerID: "autoputer-test",
-		Profile:    agentprofile.CoSuper,
-		Role:       agentprofile.CoSuper,
+		Profile:    agentprofile.Engineering,
+		Role:       agentprofile.Engineering,
 		ChannelID:  channelID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -166,8 +166,8 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 		AgentID:      agentID,
 		ChannelID:    channelID,
 		TrajectoryID: trajectoryID,
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
@@ -175,8 +175,8 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
@@ -190,7 +190,7 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 		TrajectoryID:     trajectoryID,
 		Objective:        "finish assigned open obligation",
 		Reason:           "restart recovery should not require a pending update_coagent row",
-		AuthorityProfile: agentprofile.CoSuper,
+		AuthorityProfile: agentprofile.Engineering,
 		AssignedAgentID:  agentID,
 		CreatedByRunID:   interrupted.RunID,
 	})
@@ -233,7 +233,7 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 	if active, activeErr := s2.GetLatestActiveRunByAgent(ctx, ownerID, agentID); activeErr == nil {
-		t.Fatalf("effects-OFF restart created CoSuper activation: %+v", active)
+		t.Fatalf("effects-OFF restart created Engineering activation: %+v", active)
 	}
 }
 
@@ -272,8 +272,8 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		AgentID:    agentID,
 		OwnerID:    ownerID,
 		ComputerID: "autoputer-test",
-		Profile:    agentprofile.Researcher,
-		Role:       agentprofile.Researcher,
+		Profile:    agentprofile.Research,
+		Role:       agentprofile.Research,
 		ChannelID:  channelID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -318,8 +318,8 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		AgentID:          agentID,
 		ChannelID:        channelID,
 		RequestedByRunID: parentID,
-		AgentProfile:     agentprofile.Researcher,
-		AgentRole:        agentprofile.Researcher,
+		AgentProfile:     agentprofile.Research,
+		AgentRole:        agentprofile.Research,
 		OwnerID:          ownerID,
 		ComputerID:       "autoputer-test",
 		State:            types.RunRunning,
@@ -327,8 +327,8 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Researcher,
-			runMetadataAgentRole:    agentprofile.Researcher,
+			runMetadataAgentProfile: agentprofile.Research,
+			runMetadataAgentRole:    agentprofile.Research,
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
@@ -461,8 +461,8 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		AgentID:    agentID,
 		OwnerID:    ownerID,
 		ComputerID: "autoputer-test",
-		Profile:    agentprofile.Researcher,
-		Role:       agentprofile.Researcher,
+		Profile:    agentprofile.Research,
+		Role:       agentprofile.Research,
 		ChannelID:  channelID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -500,8 +500,8 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		AgentID:          agentID,
 		ChannelID:        channelID,
 		RequestedByRunID: parentID,
-		AgentProfile:     agentprofile.Researcher,
-		AgentRole:        agentprofile.Researcher,
+		AgentProfile:     agentprofile.Research,
+		AgentRole:        agentprofile.Research,
 		OwnerID:          ownerID,
 		ComputerID:       "autoputer-test",
 		State:            types.RunPassivated,
@@ -509,8 +509,8 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Researcher,
-			runMetadataAgentRole:    agentprofile.Researcher,
+			runMetadataAgentProfile: agentprofile.Research,
+			runMetadataAgentRole:    agentprofile.Research,
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
@@ -616,8 +616,8 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		AgentID:    agentID,
 		OwnerID:    ownerID,
 		ComputerID: "autoputer-test",
-		Profile:    agentprofile.CoSuper,
-		Role:       agentprofile.CoSuper,
+		Profile:    agentprofile.Engineering,
+		Role:       agentprofile.Engineering,
 		ChannelID:  channelID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -647,8 +647,8 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		AgentID:      agentID,
 		ChannelID:    channelID,
 		TrajectoryID: trajectoryID,
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
@@ -656,8 +656,8 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    channelID,
 			runMetadataTrajectoryID: trajectoryID,
@@ -671,7 +671,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		TrajectoryID:     trajectoryID,
 		Objective:        "finish combined assigned obligation",
 		Reason:           "restart recovery must include assigned work with pending updates",
-		AuthorityProfile: agentprofile.CoSuper,
+		AuthorityProfile: agentprofile.Engineering,
 		AssignedAgentID:  agentID,
 		CreatedByRunID:   interrupted.RunID,
 	})
@@ -683,7 +683,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		TrajectoryID:     otherTrajectoryID,
 		Objective:        "finish second trajectory assigned obligation",
 		Reason:           "restart recovery must include every pending-update trajectory",
-		AuthorityProfile: agentprofile.CoSuper,
+		AuthorityProfile: agentprofile.Engineering,
 		AssignedAgentID:  agentID,
 		CreatedByRunID:   interrupted.RunID,
 	})
@@ -697,7 +697,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		TargetAgentID: agentID,
 		ChannelID:     channelID,
 		TrajectoryID:  trajectoryID,
-		Role:          agentprofile.CoSuper,
+		Role:          agentprofile.Engineering,
 		Packet:        testCoagentUpdatePacket("execution_result", "combined restart update"),
 		Content:       "pending update content for combined restart",
 		CreatedAt:     now.Add(time.Millisecond),
@@ -721,7 +721,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		TargetAgentID: agentID,
 		ChannelID:     channelID,
 		TrajectoryID:  otherTrajectoryID,
-		Role:          agentprofile.CoSuper,
+		Role:          agentprofile.Engineering,
 		Packet:        testCoagentUpdatePacket("evidence_update", "second trajectory restart update"),
 		Content:       "pending update content for second trajectory",
 		CreatedAt:     now.Add(2 * time.Millisecond),
@@ -918,8 +918,8 @@ func TestStartCoagentRunCompletesSpawnedWorkItem(t *testing.T) {
 	seedSpawnedChildParent(t, ctx, s, ownerID, trajectoryID, parentID, channelID)
 
 	child, err := rt.StartCoagentRun(ctx, parentID, "research successful spawn work", ownerID, map[string]any{
-		runMetadataAgentProfile: agentprofile.Researcher,
-		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataAgentProfile: agentprofile.Research,
+		runMetadataAgentRole:    agentprofile.Research,
 		runMetadataChannelID:    channelID,
 	})
 	if err != nil {
@@ -1097,8 +1097,8 @@ func runM3RestartStartProcess(t *testing.T) {
 		AgentID:      m3RestartAgentID,
 		ChannelID:    m3RestartChannelID,
 		TrajectoryID: m3RestartTrajectory,
-		AgentProfile: agentprofile.Researcher,
-		AgentRole:    agentprofile.Researcher,
+		AgentProfile: agentprofile.Research,
+		AgentRole:    agentprofile.Research,
 		OwnerID:      m3RestartOwnerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunPending,
@@ -1106,8 +1106,8 @@ func runM3RestartStartProcess(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Researcher,
-			runMetadataAgentRole:    agentprofile.Researcher,
+			runMetadataAgentProfile: agentprofile.Research,
+			runMetadataAgentRole:    agentprofile.Research,
 			runMetadataAgentID:      m3RestartAgentID,
 			runMetadataChannelID:    m3RestartChannelID,
 			runMetadataTrajectoryID: m3RestartTrajectory,
@@ -1144,8 +1144,8 @@ func runM3SpawnRestartStartProcess(t *testing.T) {
 
 	seedSpawnedChildParent(t, ctx, s, m3SpawnRestartOwnerID, m3SpawnRestartTrajectory, m3SpawnRestartParentID, m3SpawnRestartChannelID)
 	child, err := rt.StartCoagentRun(ctx, m3SpawnRestartParentID, "research restart-resilient spawned work", m3SpawnRestartOwnerID, map[string]any{
-		runMetadataAgentProfile: agentprofile.Researcher,
-		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataAgentProfile: agentprofile.Research,
+		runMetadataAgentRole:    agentprofile.Research,
 		runMetadataChannelID:    m3SpawnRestartChannelID,
 	})
 	if err != nil {
@@ -1320,8 +1320,8 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 		AgentID:    m3RestartAgentID,
 		OwnerID:    m3RestartOwnerID,
 		ComputerID: "autoputer-test",
-		Profile:    agentprofile.Researcher,
-		Role:       agentprofile.Researcher,
+		Profile:    agentprofile.Research,
+		Role:       agentprofile.Research,
 		ChannelID:  m3RestartChannelID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -1344,7 +1344,7 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 		TargetAgentID: m3RestartAgentID,
 		ChannelID:     m3RestartChannelID,
 		TrajectoryID:  m3RestartTrajectory,
-		Role:          agentprofile.Researcher,
+		Role:          agentprofile.Research,
 		Packet:        testCoagentUpdatePacket("execution_result", "process restart update"),
 		Content:       "pending update content from the killed process proof",
 		CreatedAt:     now.Add(time.Millisecond),
@@ -1367,7 +1367,7 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 		TrajectoryID:     m3RestartTrajectory,
 		Objective:        "finish process restart assigned obligation",
 		Reason:           "process restart proof should rewarm this durable work",
-		AuthorityProfile: agentprofile.Researcher,
+		AuthorityProfile: agentprofile.Research,
 		AssignedAgentID:  m3RestartAgentID,
 		CreatedByRunID:   m3RestartInterruptID,
 	})
@@ -1502,8 +1502,8 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 	trajectoryID := "traj-resident-reuse"
 
 	active, err := rt.StartRunWithMetadata(ctx, "continue active work", ownerID, map[string]any{
-		runMetadataAgentProfile: agentprofile.Researcher,
-		runMetadataAgentRole:    agentprofile.Researcher,
+		runMetadataAgentProfile: agentprofile.Research,
+		runMetadataAgentRole:    agentprofile.Research,
 		runMetadataAgentID:      agentID,
 		runMetadataChannelID:    "chan-resident-reuse",
 		runMetadataTrajectoryID: trajectoryID,
@@ -1524,7 +1524,7 @@ func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 		TargetAgentID: agentID,
 		ChannelID:     active.ChannelID,
 		TrajectoryID:  trajectoryID,
-		Role:          agentprofile.Researcher,
+		Role:          agentprofile.Research,
 		Packet:        testCoagentUpdatePacket("evidence_update", "new steering input"),
 		Content:       "new steering input",
 		CreatedAt:     time.Now().UTC(),
@@ -1562,8 +1562,8 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 		AgentID:    agentID,
 		OwnerID:    ownerID,
 		ComputerID: "autoputer-test",
-		Profile:    agentprofile.CoSuper,
-		Role:       agentprofile.CoSuper,
+		Profile:    agentprofile.Engineering,
+		Role:       agentprofile.Engineering,
 		ChannelID:  "chan-blocked-history",
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -1575,8 +1575,8 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 		AgentID:      agentID,
 		ChannelID:    "chan-blocked-history",
 		TrajectoryID: trajectoryID,
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunBlocked,
@@ -1585,8 +1585,8 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    "chan-blocked-history",
 			runMetadataTrajectoryID: trajectoryID,
@@ -1602,7 +1602,7 @@ func TestCoagentRewarmIgnoresBlockedHistoricalActivation(t *testing.T) {
 		TargetAgentID: agentID,
 		ChannelID:     blocked.ChannelID,
 		TrajectoryID:  trajectoryID,
-		Role:          agentprofile.CoSuper,
+		Role:          agentprofile.Engineering,
 		Packet:        testCoagentUpdatePacket("evidence_update", "durable backlog should start a fresh activation"),
 		Content:       "durable backlog should start a fresh activation",
 		CreatedAt:     now.Add(time.Millisecond),
@@ -1661,7 +1661,7 @@ func TestTrajectoryObligationsReportPendingUpdateCoagent(t *testing.T) {
 	ctx := context.Background()
 	ownerID := "user-alice"
 	trajectoryID := "traj-update-stall"
-	superAgent, err := rt.EnsurePersistentSuperAgent(ctx, ownerID)
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
 	if err != nil {
 		t.Fatalf("ensure super agent: %v", err)
 	}
@@ -1681,10 +1681,10 @@ func TestTrajectoryObligationsReportPendingUpdateCoagent(t *testing.T) {
 		UpdateID:      "update-stall-1",
 		OwnerID:       ownerID,
 		AgentID:       "engineering:verifier",
-		TargetAgentID: superAgent.AgentID,
-		ChannelID:     superAgent.ChannelID,
+		TargetAgentID: managementAgent.AgentID,
+		ChannelID:     managementAgent.ChannelID,
 		TrajectoryID:  trajectoryID,
-		Role:          agentprofile.CoSuper,
+		Role:          agentprofile.Engineering,
 		Packet:        testCoagentUpdatePacket("execution_result", "verification result pending"),
 		Content:       "verification result pending",
 		CreatedAt:     time.Now().UTC(),
@@ -1740,7 +1740,7 @@ func TestUpdateCoagentDeliveryRequiresSuccessfulActivation(t *testing.T) {
 				TargetAgentID: targetAgentID,
 				ChannelID:     "chan-delivery-" + tc.name,
 				TrajectoryID:  "traj-delivery-" + tc.name,
-				Role:          agentprofile.CoSuper,
+				Role:          agentprofile.Engineering,
 				Packet:        testCoagentUpdatePacket("evidence_update", "delivery rule evidence"),
 				Content:       "delivery rule evidence",
 				CreatedAt:     now,
@@ -1763,8 +1763,8 @@ func TestUpdateCoagentDeliveryRequiresSuccessfulActivation(t *testing.T) {
 				AgentID:      targetAgentID,
 				ChannelID:    update.ChannelID,
 				TrajectoryID: update.TrajectoryID,
-				AgentProfile: agentprofile.CoSuper,
-				AgentRole:    agentprofile.CoSuper,
+				AgentProfile: agentprofile.Engineering,
+				AgentRole:    agentprofile.Engineering,
 				OwnerID:      ownerID,
 				ComputerID:   "autoputer-test",
 				State:        types.RunRunning,
@@ -1772,8 +1772,8 @@ func TestUpdateCoagentDeliveryRequiresSuccessfulActivation(t *testing.T) {
 				CreatedAt:    now,
 				UpdatedAt:    now,
 				Metadata: map[string]any{
-					runMetadataAgentProfile: agentprofile.CoSuper,
-					runMetadataAgentRole:    agentprofile.CoSuper,
+					runMetadataAgentProfile: agentprofile.Engineering,
+					runMetadataAgentRole:    agentprofile.Engineering,
 					runMetadataAgentID:      targetAgentID,
 					runMetadataChannelID:    update.ChannelID,
 					runMetadataTrajectoryID: update.TrajectoryID,
@@ -1842,7 +1842,7 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 		TargetAgentID: "coagent:right",
 		ChannelID:     "chan-stray",
 		TrajectoryID:  "traj-stray",
-		Role:          agentprofile.CoSuper,
+		Role:          agentprofile.Engineering,
 		Packet:        testCoagentUpdatePacket("evidence_update", "stray metadata must not consume this"),
 		Content:       "stray metadata must not consume this",
 		CreatedAt:     now,
@@ -1887,8 +1887,8 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 		AgentID:      update.TargetAgentID,
 		ChannelID:    update.ChannelID,
 		TrajectoryID: update.TrajectoryID,
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
@@ -1896,8 +1896,8 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataAgentID:      update.TargetAgentID,
 			"worker_update_ids":     []string{update.UpdateID},
 		},
@@ -1908,8 +1908,8 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 		AgentID:      "coagent:wrong",
 		ChannelID:    update.ChannelID,
 		TrajectoryID: update.TrajectoryID,
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
@@ -1917,8 +1917,8 @@ func TestUpdateCoagentDeliveryIgnoresStrayWorkerUpdateMetadata(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile:          agentprofile.CoSuper,
-			runMetadataAgentRole:             agentprofile.CoSuper,
+			runMetadataAgentProfile:          agentprofile.Engineering,
+			runMetadataAgentRole:             agentprofile.Engineering,
 			runMetadataAgentID:               "coagent:wrong",
 			runMetadataWorkerUpdatesInjected: true,
 			"worker_update_ids":              []string{update.UpdateID},
@@ -1948,8 +1948,8 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 		AgentID:      targetAgentID,
 		ChannelID:    "chan-warm-update",
 		TrajectoryID: trajectoryID,
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
+		AgentProfile: agentprofile.Engineering,
+		AgentRole:    agentprofile.Engineering,
 		OwnerID:      ownerID,
 		ComputerID:   "autoputer-test",
 		State:        types.RunRunning,
@@ -1957,8 +1957,8 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataAgentProfile: agentprofile.Engineering,
+			runMetadataAgentRole:    agentprofile.Engineering,
 			runMetadataAgentID:      targetAgentID,
 			runMetadataChannelID:    "chan-warm-update",
 			runMetadataTrajectoryID: trajectoryID,
@@ -1975,7 +1975,7 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 		TargetAgentID: targetAgentID,
 		ChannelID:     rec.ChannelID,
 		TrajectoryID:  trajectoryID,
-		Role:          agentprofile.CoSuper,
+		Role:          agentprofile.Engineering,
 		Packet:        testCoagentUpdatePacket("evidence_update", "warm steering evidence"),
 		Content:       "WARM_UPDATE_CONTENT: incorporate this before finishing.",
 		CreatedAt:     now.Add(time.Millisecond),
@@ -2059,23 +2059,23 @@ func toolLoopRequestContains(req provideriface.ToolLoopRequest, needle string) b
 	return false
 }
 
-// TestSuperCoSuperSlotReusedByTrajectorySlot verifies the co-super slot
-// reuse semantics for the Super/CoSuper trajectory-slot model:
+// TestManagementEngineeringSlotReusedByTrajectorySlot verifies the Engineering slot
+// reuse semantics for the Management/Engineering trajectory-slot model:
 //
 //  1. A second StartCoagentRun for the same (trajectory, slot) while the
 //     owner run is still active MUST reuse the existing run and mark it
 //     with spawn_reused=true (no duplicate slot occupant).
 //  2. After the slot owner is passivated (RunPassivated, a non-terminal
-//     reusable state), ActiveCoSuperSlotRun MUST report the slot as
+//     reusable state), ActiveEngineeringSlotRun MUST report the slot as
 //     unoccupied.
 //  3. A subsequent StartCoagentRun for the same (trajectory, slot) MUST
 //     spawn a fresh run (not reuse the passivated run) and MUST NOT set
 //     spawn_reused=true.
 //
-// This behavior matters because co-super slots are trajectory-scoped
+// This behavior matters because Engineering slots are trajectory-scoped
 // single-occupancy coordination points: at most one implementation and one
-// verifier co-super may be active per trajectory. Reuse prevents duplicate
-// work; passivation-then-fresh-spawn allows a crashed/stalled co-super to be
+// verifier Engineering may be active per trajectory. Reuse prevents duplicate
+// work; passivation-then-fresh-spawn allows a crashed/stalled Engineering to be
 // replaced without resurrecting the dead run.
 //
 // FLAKINESS PATTERN (quarantined — see mission M12):
@@ -2086,9 +2086,9 @@ func toolLoopRequestContains(req provideriface.ToolLoopRequest, needle string) b
 // setTestDispatch (test_helpers_test.go). setTestDispatch launches
 // `go func() { rt.ExecuteActivationSync(ctx, &rec) }()` for every
 // initial_dispatch, and the stub provider (NewStubProvider(0)) completes runs
-// with zero delay. The test depends on the first co-super run remaining
+// with zero delay. The test depends on the first Engineering run remaining
 // "active" (state pending/running/blocked) between the first and second
-// StartCoagentRun calls so that activeCoSuperSlotRun (runtime.go:640) finds it
+// StartCoagentRun calls so that activeEngineeringSlotRun (runtime.go:640) finds it
 // and returns it as reused. When the dispatch goroutine wins the race and
 // transitions the first run to a terminal state before the second
 // StartCoagentRun issues its active-slot lookup, the lookup returns not-found,
@@ -2106,7 +2106,7 @@ func toolLoopRequestContains(req provideriface.ToolLoopRequest, needle string) b
 // with a scheduling-pressure-dependent race.
 //
 // Needs investigation (separate mission): either (a) make the test
-// deterministic by holding the first co-super in a non-terminal state until
+// deterministic by holding the first Engineering in a non-terminal state until
 // the reuse assertion completes (e.g. a blocking provider or an explicit
 // gate), or (b) add a synchronous "claim-only" start path for slot-reuse
 // tests that bypasses the async dispatch. Do NOT weaken the assertions — the

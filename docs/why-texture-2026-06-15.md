@@ -178,23 +178,25 @@ Texture does not require a cold protocol cathedral before the product path
 works. The minimal protocol should be learned from working implementation and
 canonized only after proof.
 
-## The Tape Is Primary
+## The Commitment Substrate Is Primary
 
-The **audit log is the authority**; everything else is a projection. Every
-semantic state change is a typed transaction appended to the tape. The object
-graph, Texture revisions, checkpoints, snapshots, run records, and UI surfaces
-are materialized projections maintained by deterministic reducers. The vision's
-old framing holds: "the tape IS the program; the computer is the fixpoint of
-the program." Texture is the standing, versioned projection of its slice of the
-tape — which is why Texture is the right supervision surface: it shows the
-state the tape computes, not the tape's raw emissions.
+The **commitment substrate** is the authority: one commitment ledger on the
+tape. Every semantic act appends a typed transaction that creates, changes, or
+resolves a commitment with an accountable desk, resolver, and deadline. The
+object graph, Texture revisions, checkpoints, snapshots, run records, and UI
+surfaces are materialized projections maintained by deterministic reducers. The
+vision's old framing still holds: "the tape IS the program; the computer is the
+fixpoint of the program." Texture is the standing, versioned projection of its
+slice of the commitment substrate, which is why it is the right supervision
+surface: it shows the work's commitments and evidence rather than raw
+emissions.
 
-The kernel already implements the durable-work portion of the tape: command
-digests for idempotency, a per-trajectory `ReducerSeq`, a replay cursor, and
-restart reconstruction from embedded Dolt. `computerevent` is the signed
-per-computer portion. Replay-completeness — rebuilding any projection from an
-empty store by folding the tape — is the long-term target, not a prerequisite
-for the current liveness work.
+The kernel already implements the durable-work portion of the commitment
+substrate: command digests for idempotency, a per-trajectory `ReducerSeq`, a
+replay cursor, and restart reconstruction from embedded Dolt.
+`computerevent` is the signed per-computer portion. Replay-completeness —
+rebuilding any projection from an empty store by folding the tape — is the
+long-term target, not a prerequisite for the current liveness work.
 
 ## Reducers and the Kernel
 

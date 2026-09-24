@@ -205,7 +205,7 @@ func TestPersistGrantedCandidateIsReconstructableAndReusable(t *testing.T) {
 		t.Fatal(err)
 	}
 	caps := &Capsule{ID: "capsule", State: StateFrozen, MergedDir: merged, SourceSnapshotDigest: strings.Repeat("a", 64)}
-	capability := &Capability{CapabilityID: "cap", Handle: "handle", AgentRunID: "run", AgentRole: RoleCoSuper, TargetCapsule: caps.ID, ExpiresAt: time.Now().Add(time.Hour)}
+	capability := &Capability{CapabilityID: "cap", Handle: "handle", AgentRunID: "run", AgentRole: RoleEngineering, TargetCapsule: caps.ID, ExpiresAt: time.Now().Add(time.Hour)}
 	e := &Executor{stateDir: state, capsules: map[string]*Capsule{caps.ID: caps}, capabilities: map[capKey]*Capability{{AgentRunID: "run", Handle: "handle"}: capability}, revokedCaps: map[string]bool{}}
 	candidate, err := e.PersistGrantedCandidate(context.Background(), "run", "handle")
 	if err != nil {

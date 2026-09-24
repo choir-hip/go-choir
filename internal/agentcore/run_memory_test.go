@@ -407,7 +407,7 @@ func TestRunMemoryCompactionPromptIncludesObjectiveAndRetrievalInstructions(t *t
 	rec := &types.RunRecord{
 		RunID:        "run-1",
 		State:        types.RunRunning,
-		AgentProfile: agentprofile.Super,
+		AgentProfile: agentprofile.Management,
 		Prompt:       "Run docs/mission-llm-run-memory-compaction-v0.md as MissionGradient.",
 	}
 	plan := runMemoryCompactionPlan{

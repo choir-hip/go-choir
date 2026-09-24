@@ -77,7 +77,7 @@ func TestStageGrantedReleaseRefusesSecrets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			capability := &Capability{CapabilityID: "cap-1", Handle: "grant-1", CapsuleID: "capsule-1", TargetCapsule: "capsule-1", AgentRunID: "cosuper-1", AgentRole: RoleCoSuper, Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour)}
+			capability := &Capability{CapabilityID: "cap-1", Handle: "grant-1", CapsuleID: "capsule-1", TargetCapsule: "capsule-1", AgentRunID: "cosuper-1", AgentRole: RoleEngineering, Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour)}
 			if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 				t.Fatal(err)
 			}
@@ -123,8 +123,8 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 	}
 	capability := &Capability{
 		CapabilityID: "cap-success", Handle: "grant-success", CapsuleID: "capsule-success",
-		TargetCapsule: "capsule-success", AgentRunID: "cosuper-success", AgentRole: RoleCoSuper,
-		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+		TargetCapsule: "capsule-success", AgentRunID: "cosuper-success", AgentRole: RoleEngineering,
+		Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 		t.Fatal(err)
@@ -175,8 +175,8 @@ func TestStageGrantedReleaseRefusesMissingFrontend(t *testing.T) {
 	}
 	capability := &Capability{
 		CapabilityID: "cap-missing-spa", Handle: "grant-missing-spa", CapsuleID: "capsule-missing-spa",
-		TargetCapsule: "capsule-missing-spa", AgentRunID: "cosuper-missing-spa", AgentRole: RoleCoSuper,
-		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+		TargetCapsule: "capsule-missing-spa", AgentRunID: "cosuper-missing-spa", AgentRole: RoleEngineering,
+		Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 		t.Fatal(err)
@@ -205,8 +205,8 @@ func TestExtractGrantedFreezesBeforeDiff(t *testing.T) {
 	}
 	capability := &Capability{
 		CapabilityID: "cap-freeze", Handle: "grant-freeze", CapsuleID: "capsule-freeze",
-		TargetCapsule: "capsule-freeze", AgentRunID: "cosuper-freeze", AgentRole: RoleCoSuper,
-		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+		TargetCapsule: "capsule-freeze", AgentRunID: "cosuper-freeze", AgentRole: RoleEngineering,
+		Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 		t.Fatal(err)
@@ -253,8 +253,8 @@ func TestStageGrantedReleaseRefusesSymlinkComponents(t *testing.T) {
 	}
 	capability := &Capability{
 		CapabilityID: "cap-symlink", Handle: "grant-symlink", CapsuleID: "capsule-symlink",
-		TargetCapsule: "capsule-symlink", AgentRunID: "cosuper-symlink", AgentRole: RoleCoSuper,
-		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+		TargetCapsule: "capsule-symlink", AgentRunID: "cosuper-symlink", AgentRole: RoleEngineering,
+		Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 		t.Fatal(err)
@@ -282,8 +282,8 @@ func TestQuiesceWaitsForBrokerExecution(t *testing.T) {
 	}
 	capability := &Capability{
 		CapabilityID: "cap-exec", Handle: "grant-exec", CapsuleID: "capsule-exec",
-		TargetCapsule: "capsule-exec", AgentRunID: "cosuper-exec", AgentRole: RoleCoSuper,
-		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+		TargetCapsule: "capsule-exec", AgentRunID: "cosuper-exec", AgentRole: RoleEngineering,
+		Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 		t.Fatal(err)
@@ -384,8 +384,8 @@ func TestFrozenCapsuleRefusesEveryBrokerOperation(t *testing.T) {
 	}
 	capability := &Capability{
 		CapabilityID: "cap-frozen", Handle: "grant-frozen", CapsuleID: "capsule-frozen",
-		TargetCapsule: "capsule-frozen", AgentRunID: "cosuper-frozen", AgentRole: RoleCoSuper,
-		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+		TargetCapsule: "capsule-frozen", AgentRunID: "cosuper-frozen", AgentRole: RoleEngineering,
+		Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 		t.Fatal(err)
@@ -442,8 +442,8 @@ func TestExecutionReceiptValidationRequiresFrozenCapsule(t *testing.T) {
 	}
 	capability := &Capability{
 		CapabilityID: "cap-receipt", Handle: "grant-receipt", CapsuleID: "capsule-receipt",
-		TargetCapsule: "capsule-receipt", AgentRunID: "cosuper-receipt", AgentRole: RoleCoSuper,
-		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+		TargetCapsule: "capsule-receipt", AgentRunID: "cosuper-receipt", AgentRole: RoleEngineering,
+		Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 		t.Fatal(err)
@@ -467,8 +467,8 @@ func TestExtractGrantedPropagatesCancellation(t *testing.T) {
 	}
 	capability := &Capability{
 		CapabilityID: "cap-cancel", Handle: "grant-cancel", CapsuleID: "capsule-cancel",
-		TargetCapsule: "capsule-cancel", AgentRunID: "cosuper-cancel", AgentRole: RoleCoSuper,
-		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+		TargetCapsule: "capsule-cancel", AgentRunID: "cosuper-cancel", AgentRole: RoleEngineering,
+		Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 		t.Fatal(err)

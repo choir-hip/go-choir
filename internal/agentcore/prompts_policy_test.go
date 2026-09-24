@@ -16,16 +16,16 @@ func TestRolePolicyFromSpecSeparatesSpawnAndMessageTargets(t *testing.T) {
 		t.Fatal(policyErr)
 	}
 	got := rolePolicyFromSpec(texturePolicy)
-	if want := []string{agentprofile.Researcher}; !reflect.DeepEqual(got.AllowedSpawnTargets, want) {
+	if want := []string{agentprofile.Research}; !reflect.DeepEqual(got.AllowedSpawnTargets, want) {
 		t.Fatalf("Texture allowed spawn targets = %v, want %v", got.AllowedSpawnTargets, want)
 	}
-	if want := []string{agentprofile.Researcher, agentprofile.Super}; !reflect.DeepEqual(got.AllowedMessageTargets, want) {
+	if want := []string{agentprofile.Research, agentprofile.Management}; !reflect.DeepEqual(got.AllowedMessageTargets, want) {
 		t.Fatalf("Texture allowed message targets = %v, want %v", got.AllowedMessageTargets, want)
 	}
-	canSpawnSuper, spawnErr := agentprofile.CanSpawn(agentprofile.Texture, agentprofile.Super)
-	canMessageSuper, messageErr := agentprofile.CanMessage(agentprofile.Texture, agentprofile.Super)
-	if spawnErr != nil || messageErr != nil || canSpawnSuper || !canMessageSuper {
-		t.Fatal("prompt policy must expose Super as Texture message-only authority")
+	canSpawnManagement, spawnErr := agentprofile.CanSpawn(agentprofile.Texture, agentprofile.Management)
+	canMessageManagement, messageErr := agentprofile.CanMessage(agentprofile.Texture, agentprofile.Management)
+	if spawnErr != nil || messageErr != nil || canSpawnManagement || !canMessageManagement {
+		t.Fatal("prompt policy must expose Management as Texture message-only authority")
 	}
 	raw, err := json.Marshal(got)
 	if err != nil {

@@ -240,7 +240,7 @@ type runtimeHealthResponse struct {
 	RuntimeHealth         types.RuntimeHealthState `json:"runtime_health"`
 	RunningRuns           int                      `json:"running_runs"`
 	RunningProcessorRuns  int                      `json:"running_processor_runs"`
-	ResearcherCount       int                      `json:"researcher_count"`
+	ResearchCount         int                      `json:"researcher_count"`
 	ActiveProvider        string                   `json:"active_provider"`
 	PersistentDisk        *persistentdisk.Status   `json:"persistent_disk,omitempty"`
 	Build                 buildinfo.Info           `json:"build"`
@@ -1021,7 +1021,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		RuntimeHealth:        health,
 		RunningRuns:          h.rt.RunningCount(),
 		RunningProcessorRuns: runningProcessorRuns,
-		ResearcherCount:      h.rt.cfg.ResearcherCount,
+		ResearchCount:        h.rt.cfg.ResearchCount,
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("autoputer"),
 	}

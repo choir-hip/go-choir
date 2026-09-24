@@ -249,8 +249,8 @@ func (*Store) UpdateDocument() {}
 func (*Store) CreateWorkItem() {}
 func (*Store) UpdateTrajectoryStatus() {}
 func (*Store) PatchRevisionMetadata() {}
-func (*Store) ClaimCoSuperSlot() {}
-func (*Store) ReleaseCoSuperSlotClaim() {}
+func (*Store) ClaimEngineeringSlot() {}
+func (*Store) ReleaseEngineeringSlotClaim() {}
 func (*Store) CancelAgentMutation() {}
 `)
 	writeFixture(t, root, "internal/agentcore/writers.go", `package runtime
@@ -264,22 +264,22 @@ func writeState(value *store.Store) {
 	value.CreateWorkItem()
 	value.UpdateTrajectoryStatus()
 	value.PatchRevisionMetadata()
-	value.ClaimCoSuperSlot()
-	value.ReleaseCoSuperSlotClaim()
+	value.ClaimEngineeringSlot()
+	value.ReleaseEngineeringSlotClaim()
 	value.CancelAgentMutation()
 }
 `)
 	inventory := mustScan(t, root)
 	required := map[string]string{
-		"CreateDocument":          "wire",
-		"CreateRevision":          "wire",
-		"UpdateDocument":          "wire",
-		"CreateWorkItem":          "wire",
-		"UpdateTrajectoryStatus":  "wire",
-		"PatchRevisionMetadata":   "wire",
-		"ClaimCoSuperSlot":        "lifecycle",
-		"ReleaseCoSuperSlotClaim": "lifecycle",
-		"CancelAgentMutation":     "lifecycle",
+		"CreateDocument":              "wire",
+		"CreateRevision":              "wire",
+		"UpdateDocument":              "wire",
+		"CreateWorkItem":              "wire",
+		"UpdateTrajectoryStatus":      "wire",
+		"PatchRevisionMetadata":       "wire",
+		"ClaimEngineeringSlot":        "lifecycle",
+		"ReleaseEngineeringSlotClaim": "lifecycle",
+		"CancelAgentMutation":         "lifecycle",
 	}
 	for index := range inventory.StoreCalls {
 		call := &inventory.StoreCalls[index]

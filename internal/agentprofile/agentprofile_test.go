@@ -10,14 +10,14 @@ func TestCanonical(t *testing.T) {
 	t.Parallel()
 
 	live := map[string][]string{
-		Researcher: {"research", " RESEARCH "},
-		CoSuper:    {"engineering", " ENGINEERING "},
-		Texture:    {"texture", " TEXTURE "},
-		Processor:  {"processor"},
-		Reconciler: {"reconciler"},
-		Email:      {"email"},
-		Super:      {"management", " MANAGEMENT "},
-		Conductor:  {"conductor", " CONDUCTOR "},
+		Research:    {"research", " RESEARCH "},
+		Engineering: {"engineering", " ENGINEERING "},
+		Texture:     {"texture", " TEXTURE "},
+		Processor:   {"processor"},
+		Reconciler:  {"reconciler"},
+		Email:       {"email"},
+		Management:  {"management", " MANAGEMENT "},
+		Conductor:   {"conductor", " CONDUCTOR "},
 	}
 	for want, values := range live {
 		for _, value := range values {
@@ -63,15 +63,15 @@ func TestPolicyFor(t *testing.T) {
 			Profile: Conductor, AllowCoAgentTools: true,
 			AllowedSpawnTargets: []string{Texture},
 		},
-		Researcher: {
-			Profile: Researcher, AllowReadOnlyFiles: true, AllowResearchTools: true,
+		Research: {
+			Profile: Research, AllowReadOnlyFiles: true, AllowResearchTools: true,
 			AllowEvidenceTools: true, AllowMemoryTools: true,
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
 			AllowedMessageTargets: []string{Texture},
 		},
 		Texture: {
 			Profile: Texture, AllowMemoryTools: true, AllowCoAgentTools: false,
-			AllowedSpawnTargets: []string{Researcher}, AllowedMessageTargets: []string{Researcher, Super},
+			AllowedSpawnTargets: []string{Research}, AllowedMessageTargets: []string{Research, Management},
 		},
 		Processor: {
 			Profile: Processor, AllowReadOnlyFiles: true, AllowResearchTools: true,
@@ -85,13 +85,13 @@ func TestPolicyFor(t *testing.T) {
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
 			AllowedSpawnTargets: []string{Texture}, AllowedMessageTargets: []string{Texture},
 		},
-		Email:   {Profile: Email},
-		CoSuper: {Profile: CoSuper, AllowedMessageTargets: []string{Super}},
-		Super: {
-			Profile: Super, AllowReadOnlyFiles: true, AllowResearchTools: true,
+		Email:       {Profile: Email},
+		Engineering: {Profile: Engineering, AllowedMessageTargets: []string{Management}},
+		Management: {
+			Profile: Management, AllowReadOnlyFiles: true, AllowResearchTools: true,
 			AllowEvidenceTools: true, AllowMemoryTools: true,
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Researcher}, AllowedMessageTargets: []string{Texture, Researcher},
+			AllowedSpawnTargets: []string{Research}, AllowedMessageTargets: []string{Texture, Research},
 		},
 	}
 	for profile, want := range tests {
@@ -115,21 +115,21 @@ func TestPolicyFor(t *testing.T) {
 func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 	t.Parallel()
 
-	profiles := []string{Conductor, Super, CoSuper, Researcher, Texture, Processor, Reconciler, Email}
+	profiles := []string{Conductor, Management, Engineering, Research, Texture, Processor, Reconciler, Email}
 	spawn := map[string]map[string]bool{
 		Conductor:  {Texture: true},
-		Super:      {Researcher: true},
-		Texture:    {Researcher: true},
+		Management: {Research: true},
+		Texture:    {Research: true},
 		Processor:  {Texture: true},
 		Reconciler: {Texture: true},
 	}
 	message := map[string]map[string]bool{
-		Super:      {Texture: true, Researcher: true},
-		CoSuper:    {Super: true},
-		Researcher: {Texture: true},
-		Texture:    {Researcher: true, Super: true},
-		Processor:  {Texture: true},
-		Reconciler: {Texture: true},
+		Management:  {Texture: true, Research: true},
+		Engineering: {Management: true},
+		Research:    {Texture: true},
+		Texture:     {Research: true, Management: true},
+		Processor:   {Texture: true},
+		Reconciler:  {Texture: true},
 	}
 	for _, caller := range profiles {
 		caller := caller
@@ -170,11 +170,11 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 		}
 		return ok
 	}
-	if mustSpawn(Texture, Super) || !mustMessage(Texture, Super) {
-		t.Fatal("Texture must message but never spawn Super")
+	if mustSpawn(Texture, Management) || !mustMessage(Texture, Management) {
+		t.Fatal("Texture must message but never spawn Management")
 	}
-	if mustMessage(Texture, CoSuper) {
-		t.Fatal("Texture must never message CoSuper")
+	if mustMessage(Texture, Engineering) {
+		t.Fatal("Texture must never message Engineering")
 	}
 	if !mustSpawn(Conductor, Texture) || mustMessage(Conductor, Texture) {
 		t.Fatal("Conductor keeps spawn-only Texture authority under V2 names")
@@ -189,8 +189,8 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 		caller string
 		target string
 	}{
-		{"unknown", Researcher},
-		{Super, "unknown"},
+		{"unknown", Research},
+		{Management, "unknown"},
 		{"unknown", "unknown"},
 	} {
 		if ok, _ := CanSpawn(check.caller, check.target); ok {
@@ -215,7 +215,7 @@ func TestIsTexture(t *testing.T) {
 			t.Errorf("IsTexture(%q) = false", profile)
 		}
 	}
-	for _, profile := range []string{"", Researcher, "unknown", "texture-agent", "DOCUMENT_AGENT"} {
+	for _, profile := range []string{"", Research, "unknown", "texture-agent", "DOCUMENT_AGENT"} {
 		if IsTexture(profile) {
 			t.Errorf("IsTexture(%q) = true", profile)
 		}

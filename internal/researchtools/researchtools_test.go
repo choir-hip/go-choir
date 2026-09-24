@@ -326,7 +326,7 @@ func TestContentReadsPreserveBoundsSelectorsProvenanceAndCheckpointPressure(t *t
 		t.Fatalf("register: %v", err)
 	}
 	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
-		RunID: "research-run", OwnerID: item.OwnerID, Profile: agentprofile.Researcher,
+		RunID: "research-run", OwnerID: item.OwnerID, Profile: agentprofile.Research,
 	})
 	raw, err := registry.Execute(toolCtx, "read_content_item", json.RawMessage(`{"content_id":"content-1","max_text_chars":12,"max_segments":1}`))
 	if err != nil {

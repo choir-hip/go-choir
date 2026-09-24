@@ -34,8 +34,8 @@ const VocabularyV2 = "v2"
 var forwardV1ToV2 = map[string]string{
 	// Management desk (Canonical V1 {super}).
 	"super": "management",
-	// Engineering desk (Canonical V1 cosuper/co-super/coagent/co-agent,
-	// NormalizeRole extras co_super/cosuper_coding/co-super-coding,
+	// Engineering desk (Canonical V1 cosuper/Engineering/coagent/co-agent,
+	// NormalizeRole extras co_super/cosuper_coding/Engineering-coding,
 	// V1 spawn synonym engineering).
 	"co-super": "engineering", "cosuper": "engineering",
 	"coagent": "engineering", "co-agent": "engineering",
@@ -176,7 +176,7 @@ func (o *Outcome) mapToken(key, token string, log *ProvenanceLog) string {
 }
 
 // MigrateAgentID rewrites desk-bearing agent-ID prefixes under the frozen
-// map: super:→management:, co-super:/cosuper:→engineering:, researcher:→
+// map: super:→management:, Engineering:/cosuper:→engineering:, researcher:→
 // research:. work:/run:/texture:/conductor: and bare command identities are
 // untouched. It reports (possibly unchanged) ID plus outcome.
 func MigrateAgentID(id string, log *ProvenanceLog) (string, Outcome) {
@@ -240,10 +240,10 @@ func MigrateInboxDelivery(msg *types.InboxDelivery, log *ProvenanceLog) Outcome 
 	return out
 }
 
-// MigrateGrantAttestation migrates CoSuperGrantPolicyAttestation Role.
+// MigrateGrantAttestation migrates EngineeringGrantPolicyAttestation Role.
 // Digest note: the live V2 attestation takes a V2-domain successor digest
 // with the mapping receipt linking the immutable V1 predecessor.
-func MigrateGrantAttestation(att *types.CoSuperGrantPolicyAttestation, log *ProvenanceLog) Outcome {
+func MigrateGrantAttestation(att *types.EngineeringGrantPolicyAttestation, log *ProvenanceLog) Outcome {
 	var out Outcome
 	att.Role = out.mapToken("role", att.Role, log)
 	return out
