@@ -70,17 +70,17 @@ projector**, not a cross-store transaction:
   dispatcher re-reads its projection; any wake minted-but-unincorporated is
   re-delivered. No boot sweep enumerating store state.
 
-## What the projector must reuse
+## What the projector must NOT do (panel-corrected 2026-09-24)
 
-`wakeUpdatedCoagent` is not a bare wake mint — it binds lifecycle controls
-to resident runs (`bindLifecycleControlsToRun`) before dispatching. The
-projector must call `wakeUpdatedCoagent` per backlog row, not re-implement
-the wake, so the resident-binding path is preserved. The projector is a
-resumable fold over the coagent mailbox backlog (`ListCoagentMailboxBacklogAll`)
-with a durable cursor, run continuously — not only at boot — so the crash
-window between coagent-write and wake-mint is covered by re-projection, not
-by a boot scan. `sweepPendingUpdateActors` is exactly this fold run once at
-boot; the projector is the same fold made resumable and continuous.
+An earlier draft said the projector must reuse `wakeUpdatedCoagent` and its
+`bindLifecycleControlsToRun` resident-binding. The consensus panel and the
+surface scout corrected this: the projector must be **pure** — it only mints
+the durable actor wake and marks the outbox projected. Resident binding is
+the activation's job (`injectUserTurns` re-binds on re-entry), so the
+projector calling `bindLifecycleControlsToRun` is a mutating timer racing
+the running activation — the same wrong-path class it replaces. The
+implemented fold (`sweepActorWakeOutbox` + `choir.actor_wake_outbox`,
+`12a3521d`) is pure and metadata-indexed.
 
 ## Per-sub-class migration contract
 
