@@ -295,6 +295,11 @@ func ComputeReplaceLifecycleActivationDigest(req types.ReplaceLifecycleActivatio
 	return lifecycleDigest(req)
 }
 
+func ComputeTerminalizeRunDigest(req types.TerminalizeRunRequest) (string, error) {
+	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
+	return lifecycleDigest(req)
+}
+
 func ComputeRecordLifecycleRefsDigest(req types.RecordLifecycleRefsRequest) (string, error) {
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
 	req.ArtifactRefs, req.EvidenceRefs = normalizeLifecycleRefs(req.ArtifactRefs), normalizeLifecycleRefs(req.EvidenceRefs)
@@ -4462,6 +4467,118 @@ func (s *Store) SettleLifecycleTrajectory(ctx context.Context, req types.SettleL
 	}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{
 		Receipt: receipt, Trajectory: trajectory, Document: &document, Revision: &head, Events: []types.LifecycleEvent{event},
+	})
+}
+
+// TerminalizeRun atomically moves a lifecycle-bound run to a terminal state
+// and records the transition as a canonical lifecycle event in the same
+// batch. It replaces the bare UpdateRun + separate AppendEvent path so the
+// state change and its event commit together, and the outbox fold derives
+// any wake from the committed objects.
+func (s *Store) TerminalizeRun(ctx context.Context, req types.TerminalizeRunRequest) (types.LifecycleResult, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	req.OwnerID, req.ComputerID = ownerID, computerID
+	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
+	req.TrajectoryID, req.AgentID, req.RunID = strings.TrimSpace(req.TrajectoryID), strings.TrimSpace(req.AgentID), strings.TrimSpace(req.RunID)
+	if err := validateLifecycleCommand(req.CommandID, req.CommandDigest, req.TrajectoryID); err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if req.RunID == "" || req.AgentID == "" || !req.TerminalState.Valid() || !req.TerminalState.Terminal() {
+		return types.LifecycleResult{}, fmt.Errorf("lifecycle terminalize run: run_id, agent_id, and a terminal terminal_state are required")
+	}
+	computedDigest, digestErr := ComputeTerminalizeRunDigest(req)
+	if err := requireLifecycleDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
+		return types.LifecycleResult{}, err
+	}
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+	if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
+		return replay, replayErr
+	}
+	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, req.TrajectoryID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	runCanonicalID, err := lifecycleCanonicalID(ogKindRun, ownerID, computerID, req.RunID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	runObj, err := s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, req.RunID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	run, err := decodeLifecycleObject[types.RunRecord](runObj)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if run.RunID != req.RunID || run.OwnerID != ownerID || run.ComputerID != computerID ||
+		run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	if run.State.Terminal() && run.State != req.TerminalState {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	now := time.Now().UTC()
+	nextSeq := trajectory.ReducerSeq + 1
+	run.State = req.TerminalState
+	run.Error = req.Reason
+	if req.Result != "" {
+		run.Result = req.Result
+	}
+	run.UpdatedAt = now
+	run.FinishedAt = &now
+	trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = nextSeq, trajectory.LifecycleVersion+1, now
+	event := types.LifecycleEvent{
+		EventID: req.CommandID + ":1", OwnerID: ownerID, ComputerID: computerID,
+		TrajectoryID: req.TrajectoryID, Kind: types.LifecycleRunTerminalized,
+		ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: nextSeq,
+		CommandID: req.CommandID, CommandDigest: req.CommandDigest,
+		ArtifactRefs: []string{run.RunID}, CreatedAt: now,
+	}
+	runMetadata := map[string]any{
+		"run_id": run.RunID, "agent_id": run.AgentID, "channel_id": run.ChannelID,
+		"requested_by_run_id": run.RequestedByRunID, "trajectory_id": run.TrajectoryID,
+		"agent_profile": run.AgentProfile, "agent_role": run.AgentRole, "computer_id": run.ComputerID,
+		"state": string(run.State), "created_at": run.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at": run.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	runBody, err := json.Marshal(run)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	runMetadataJSON, err := objectgraph.NormalizeMetadata(runMetadata)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	runUpdated := objectgraph.Object{
+		CanonicalID: runCanonicalID, ObjectKind: ogKindRun, OwnerID: ownerID, ComputerID: computerID,
+		ContentHash: objectgraph.ContentHash(ogKindRun, runBody, runMetadataJSON), Body: runBody, Metadata: runMetadataJSON,
+		CreatedAt: runObj.CreatedAt, UpdatedAt: now,
+	}
+	trajectoryUpdated, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, nextSeq), trajectoryObj.CreatedAt, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event, lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, nextSeq), now, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleTerminalizeRun, nextSeq, []objectgraph.Object{eventObj})
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	conditions := []objectgraph.ObjectCondition{
+		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
+		{CanonicalID: runObj.CanonicalID, Exists: true, ExpectedContentHash: runObj.ContentHash},
+		{CanonicalID: eventObj.CanonicalID},
+		{CanonicalID: receiptObj.CanonicalID},
+	}
+	objects := []objectgraph.Object{runUpdated, trajectoryUpdated, eventObj, receiptObj}
+	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{
+		Receipt: receipt, Trajectory: trajectory, Events: []types.LifecycleEvent{event},
 	})
 }
 

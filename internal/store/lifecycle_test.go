@@ -147,6 +147,70 @@ func TestStartLifecycleAtomicReplayAndScope(t *testing.T) {
 	}
 }
 
+func TestTerminalizeRunCommitsStateAndEventAtomically(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	// Project a running activation so the run exists in lifecycle scope.
+	run := lifecycleRunFixture(start, "run-terminalize-1", types.RunRunning)
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "project-terminalize:" + start.TrajectoryID,
+		TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: run,
+	}
+	project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project activation: %v", err)
+	}
+
+	term := types.TerminalizeRunRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "terminalize-run:run-terminalize-1", TrajectoryID: start.TrajectoryID,
+		AgentID: start.Agent.AgentID, RunID: run.RunID,
+		TerminalState: types.RunCancelled, Reason: "test cancel",
+	}
+	term.CommandDigest, _ = ComputeTerminalizeRunDigest(term)
+	result, err := s.TerminalizeRun(ctx, term)
+	if err != nil {
+		t.Fatalf("terminalize run: %v", err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Kind != types.LifecycleRunTerminalized {
+		t.Fatalf("expected one run_terminalized event, got %+v", result.Events)
+	}
+	got, err := s.GetLifecycleRun(ctx, start.OwnerID, start.ComputerID, run.RunID)
+	if err != nil {
+		t.Fatalf("get terminalized run: %v", err)
+	}
+	if got.State != types.RunCancelled || got.Error != "test cancel" || got.FinishedAt == nil {
+		t.Fatalf("run not terminalized: %+v", got)
+	}
+	// The canonical event is on the lifecycle tape, committed in the same batch.
+	events, err := s.ListLifecycleEvents(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("list lifecycle events: %v", err)
+	}
+	found := false
+	for _, ev := range events {
+		if ev.Kind == types.LifecycleRunTerminalized {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("run_terminalized event missing from lifecycle tape: %+v", events)
+	}
+	// Replay is idempotent: same command ID returns the stored receipt.
+	replay, err := s.TerminalizeRun(ctx, term)
+	if err != nil {
+		t.Fatalf("replay terminalize: %v", err)
+	}
+	if !replay.Replay {
+		t.Fatalf("expected replay of terminalize command")
+	}
+}
+
 func TestStartLifecyclePreparesStructuredRevision(t *testing.T) {
 	t.Run("derives readable content and preserves replay hash", func(t *testing.T) {
 		s := openTestStore(t)

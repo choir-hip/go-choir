@@ -1518,7 +1518,11 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 		rec.Error = reason
 		rec.UpdatedAt = now
 		rec.FinishedAt = &now
-		if err := rt.store.UpdateRun(ctx, rec); err != nil {
+		// Lifecycle-bound runs terminalize through the canonical reducer
+		// command so the state change and its run_terminalized event commit
+		// in one batch. Non-lifecycle runs keep the bare UpdateRun path
+		// (which fails closed in kernel mode until they are bound).
+		if err := rt.terminalizeRunCanonical(ctx, &rec, reason); err != nil {
 			rt.runningMu.Unlock()
 			return fmt.Errorf("update cancelled run: %w", err)
 		}
@@ -1536,6 +1540,41 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 	errPayload, _ := json.Marshal(map[string]string{"error": reason})
 	rt.emitEvent(context.Background(), &rec, types.EventRunCancelled, events.CauseTaskLifecycle, errPayload)
 	return nil
+}
+
+// terminalizeRunCanonical persists a run's terminal state through the
+// canonical TerminalizeRun reducer command when the run is lifecycle-bound
+// (its trajectory object exists), so the state change and the canonical
+// run_terminalized event commit in one atomic batch. Runs without a
+// lifecycle trajectory fall back to the bare UpdateRun write.
+func (rt *Runtime) terminalizeRunCanonical(ctx context.Context, rec *types.RunRecord, reason string) error {
+	trajectoryID := strings.TrimSpace(trajectoryIDForRun(rec))
+	if trajectoryID == "" || rec.OwnerID == "" || rec.ComputerID == "" {
+		return rt.store.UpdateRun(ctx, *rec)
+	}
+	if _, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, trajectoryID); err != nil {
+		// No lifecycle trajectory object: not lifecycle-bound, keep the
+		// bare write path.
+		return rt.store.UpdateRun(ctx, *rec)
+	}
+	req := types.TerminalizeRunRequest{
+		OwnerID:       rec.OwnerID,
+		ComputerID:    rec.ComputerID,
+		CommandID:     "terminalize-run:" + rec.RunID,
+		TrajectoryID:  trajectoryID,
+		AgentID:       rec.AgentID,
+		RunID:         rec.RunID,
+		TerminalState: rec.State,
+		Reason:        reason,
+		Result:        rec.Result,
+	}
+	digest, err := store.ComputeTerminalizeRunDigest(req)
+	if err != nil {
+		return err
+	}
+	req.CommandDigest = digest
+	_, err = rt.store.TerminalizeRun(ctx, req)
+	return err
 }
 
 // persistActivationState serializes activation writes with cancellation and

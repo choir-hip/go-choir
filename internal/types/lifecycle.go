@@ -32,6 +32,7 @@ const (
 	LifecycleCancelEngineeringAssignment      LifecycleCommandKind = "cancel_co_super_assignment"
 	LifecycleSetEngineeringCapsuleDisposition LifecycleCommandKind = "set_co_super_capsule_disposition"
 	LifecycleSettleProducerReports            LifecycleCommandKind = "settle_producer_reports"
+	LifecycleTerminalizeRun                   LifecycleCommandKind = "terminalize_run"
 )
 
 type LifecycleEventKind string
@@ -62,6 +63,7 @@ const (
 	LifecycleEngineeringAssignmentReported    LifecycleEventKind = "co_super_assignment_reported"
 	LifecycleEngineeringAssignmentCancelled   LifecycleEventKind = "co_super_assignment_cancelled"
 	LifecycleEngineeringCapsuleDispositionSet LifecycleEventKind = "co_super_capsule_disposition_set"
+	LifecycleRunTerminalized                  LifecycleEventKind = "run_terminalized"
 )
 
 type StartLifecycleRequest struct {
@@ -289,6 +291,28 @@ type ReplaceLifecycleActivationRequest struct {
 	TrajectoryID  string    `json:"trajectory_id"`
 	AgentID       string    `json:"agent_id"`
 	Run           RunRecord `json:"run"`
+}
+
+// TerminalizeRunRequest is the canonical command that moves a run to a
+// terminal state and records the transition event in the same atomic batch.
+// It replaces the bare UpdateRun + separate AppendEvent path so the state
+// change and its canonical event commit together.
+type TerminalizeRunRequest struct {
+	OwnerID       string `json:"owner_id"`
+	ComputerID    string `json:"computer_id"`
+	CommandID     string `json:"command_id"`
+	CommandDigest string `json:"command_digest"`
+	TrajectoryID  string `json:"trajectory_id"`
+	AgentID       string `json:"agent_id"`
+	RunID         string `json:"run_id"`
+	// TerminalState is the target terminal state (RunCompleted, RunFailed,
+	// or RunCancelled).
+	TerminalState RunState `json:"terminal_state"`
+	// Reason is the human/agent-visible terminal reason (error text for
+	// failed/cancelled, empty for completed).
+	Reason string `json:"reason,omitempty"`
+	// Result is the terminal result payload for completed runs.
+	Result string `json:"result,omitempty"`
 }
 
 type RecordLifecycleRefsRequest struct {
