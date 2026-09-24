@@ -167,11 +167,18 @@ edges (`sourcecycled`, `vmctl`, `frontend-current`) remain boundary
 exceptions. These are the remaining-work items below, now panel-confirmed.
 
 **Remaining:** ~~the store→actor projection~~ **DONE** — the outbox fold
-landed (`12a3521d`): `choir.actor_wake_outbox` committed in the same
-`PutBatchConditional` as each pending+targeted worker_update, drained by the
-pure `sweepActorWakeOutbox` projector (metadata-indexed, idempotent, never
-binds). Still remaining: the per-instance migration of the 51 classified
-instances (sub-class b in flight); the write-fence cutover; the cluster
+landed (`12a3521d`), then generalized (`bf40aa1c`) to mint wakes from any
+obligation-bearing object in `commitLifecycleTransition`, not just
+`worker_update`. Sub-class (b) watchdogs migrated to durable `not_before`
+events (`f18cd4bf`). Cutover wake-gap analysis
+(`docs/problems/kernel-cutover-wake-gap-analysis-2026-09-24.md`) found 11
+missing wake edges; **G1/G3/G5/G8/G10 closed** (work item, initial work,
+owner revision, cancellation intent, assignment deadline). **Still open:**
+G2 passivation rewarm, G6 texture reactivation, G9 pre-watchdog fate, G11
+self-dev materializer (all direct writes outside `commitLifecycleTransition`
+or non-lifecycle state — need per-gap design). G4/G7 fold into R3's
+dual-path cutover (legacy `DispatchWorkerUpdate`/`CreateWorkItem` deleted,
+not given new outbox kinds). Then: the write-fence cutover; the cluster
 recount to zero; staging verification; a second consensus review.
 
 ## Boundary exceptions (unchanged)
