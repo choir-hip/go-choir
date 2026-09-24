@@ -154,28 +154,43 @@ receipt, no outbox row. So `persistLifecycleRun`→`UpdateRun` is
 non-event-emitting even for lifecycle-bound runs. The (e) fix is not just
 the OG fallback: run state transitions need real reducer commands.
 
-**Landed (494df986):** `Store.kernelMode` flag + `SetKernelMode`/`KernelMode`
-+ `UpdateRunOG` fail-closed guard — in kernel mode a bare OG write that
-changes `RunState` returns `ErrLifecycleAuthorityRequired`; metadata-only
-updates still pass. `Runtime.SetKernelMode` propagates to the store. Guard
-is inert until `WithKernelMode` goes live (only `actorruntime/adapter.go`
-calls it). Test: `TestUpdateRunKernelModeRejectsBareStateTransition`.
+**Landed (494df986, d3b2cdfe, 4c41e31b):**
+- `Store.kernelMode` flag + `SetKernelMode`/`KernelMode`; `Runtime.SetKernelMode`
+  propagates. The flag exists but the fail-closed guard is NOT yet wired (see
+  below).
+- `TerminalizeRun` command (`terminalize_run` / `run_terminalized`): run →
+  terminal + event + receipt + sequence in one batch. `terminalizeRun` routes
+  lifecycle-bound runs through it.
+- `ReactivateRun` command (`reactivate_run` / `run_reactivated`): passivated/
+  interrupted → pending/running + event + metadata patch in one batch. Both
+  actorruntime reactivation sites route through `ReactivateRunCanonical`.
 
-**Remaining (e) work — typed commands (not yet built):**
-- `TerminalizeRun` — run terminal + `LifecycleRunTerminal` event +
-  worker-update delivery marks + bound work-item resolution in one batch
-  (subsumes `terminalizeRun`, `UpdateRunAndMarkWorkerUpdatesDelivered`,
-  `completeSuccessfulRunWorkItems`). Needs new event kinds
-  (`run_terminalized`, `run_reactivated`) — none exist today.
-- `ReactivateRun` — explicit re-drive to `RunRunning`/`RunPending` +
-  `LifecycleRunReactivated` event (boot sweeps are deleted, not this).
+**Guard correction (found while wiring):** the fail-closed guard cannot live
+in `UpdateRun`/`UpdateRunOG` yet. `persistLifecycleRun` handles every
+trajectory-bound run, so a guard keyed on "trajectory exists" is dead code
+there; and the activation-completion path (`persistActivationState` →
+`updateRunAndMarkSuccessfulCoagentActivationDelivered` → `UpdateRun`) writes
+run state on every activation through the same non-event `projectLifecycleRun`
+projection. Guarding `UpdateRun` on lifecycle-run state changes would break
+activation completion. The guard must come AFTER the activation write path
+migrates to a reducer command.
+
+**Remaining (e) work:**
+- **Activation-completion command** (the biggest non-event writer): the
+  `persistActivationState`/`updateRunAndMarkSuccessfulCoagentActivationDelivered`
+  path writes run state via `projectLifecycleRun` (no event). Needs a
+  `CommitActivationOutcome` reducer command emitting `activation_outcome`
+  (or similar) + folding run/agent/worker-update-delivery in one batch.
+  Until this lands, `UpdateRun` on a lifecycle run is non-event-emitting.
 - `PatchRunMetadata` — metadata-only, no state change, no event.
 - Migrate `UpdateWorkItemStatus`/`UpdateTrajectoryStatus` callers to the
   existing `ResolveLifecycleWork`/`SettleLifecycleWork`/
   `CancelLifecycleTrajectory`/`SettleTrajectoryAuthority` commands — zero
   new commands needed there.
-- After callers migrate: extend the fail-closed guard to
-  `UpdateWorkItemStatusOG`/`UpdateTrajectoryStatusOG`.
+- After the activation path + work-item callers migrate: wire the
+  fail-closed guard so `UpdateRun`/`UpdateWorkItemStatus`/
+  `UpdateTrajectoryStatus` reject lifecycle-owned state transitions that
+  bypass a reducer command in kernel mode.
 
 ### (c) Dual paths — legacy JSON capsule ops, `DispatchWorkerUpdate`, `report_to_texture`
 
