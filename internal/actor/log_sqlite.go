@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS actor_heads (
 	for _, col := range []string{
 		`ALTER TABLE actor_updates ADD COLUMN not_before TIMESTAMP`,
 		`ALTER TABLE actor_updates ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE actor_updates ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return nil, fmt.Errorf("actor log migrate %q: %w", col, err)
@@ -101,6 +102,27 @@ UPDATE actor_updates SET processed_at = ?
 WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`,
 		time.Now().UTC(), updateID, agentID)
 	return err
+}
+
+// RecordAttempt durably increments the dispatch-attempt counter for an
+// unprocessed update and returns the new count. Retry accounting is itself
+// durable state, so poison detection survives a dispatcher restart
+// (ontology: dispatch_attempted/delivery_failed are tape events).
+func (l *SQLiteLog) RecordAttempt(ctx context.Context, agentID, updateID string) (int, error) {
+	res, err := l.db.ExecContext(ctx, `
+UPDATE actor_updates SET attempts = attempts + 1
+WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`, updateID, agentID)
+	if err != nil {
+		return 0, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return 0, nil // already processed or absent
+	}
+	var attempts int
+	if err := l.db.QueryRowContext(ctx, `SELECT attempts FROM actor_updates WHERE update_id = ?`, updateID).Scan(&attempts); err != nil {
+		return 0, err
+	}
+	return attempts, nil
 }
 
 // ErrEpochConflict is returned by Commit when the actor's durable epoch has

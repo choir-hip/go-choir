@@ -100,6 +100,9 @@ type KernelLog interface {
 	// NextDue is the due-index: earliest future not_before among unprocessed
 	// scheduled events.
 	NextDue(ctx context.Context, now time.Time) (time.Time, bool, error)
+	// RecordAttempt durably increments the dispatch-attempt counter for an
+	// unprocessed update (retry accounting as tape state).
+	RecordAttempt(ctx context.Context, agentID, updateID string) (int, error)
 	// LoadSnapshot / SaveSnapshot persist the actor's compacted memory.
 	LoadSnapshot(ctx context.Context, agentID string) ([]byte, error)
 	SaveSnapshot(ctx context.Context, agentID string, memory []byte) error
@@ -261,7 +264,28 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		newMemory, herr := d.handler.HandleUpdate(actx, agentID, u, memory)
 		if herr != nil {
 			// At-least-once: leave unprocessed; the dispatcher retries.
-			// Retry accounting as tape events is a follow-up slice.
+			// Retry accounting is durable tape state so poison detection
+			// survives a restart.
+			attempts, aerr := d.log.RecordAttempt(ctx, agentID, u.UpdateID)
+			if aerr != nil {
+				log.Printf("dispatcher: record attempt %s/%s: %v", agentID, u.UpdateID, aerr)
+			}
+			if d.opts.MaxAttempts > 0 && attempts >= d.opts.MaxAttempts && d.opts.ErrorSink != "" && u.Kind != "delivery_failed" {
+				// Poison event: emit delivery_failed to the error sink and
+				// incorporate the poisoned event so it stops re-firing. Do NOT
+				// fold the failed handler's memory — it is unreliable.
+				buf.Add(Update{
+					UpdateID:    u.UpdateID + ":delivery_failed",
+					ToAgentID:   d.opts.ErrorSink,
+					FromAgentID: agentID,
+					Kind:        "delivery_failed",
+					Content:     u.UpdateID,
+					CreatedAt:   time.Now().UTC(),
+				})
+				incorporated = append(incorporated, u.UpdateID)
+				log.Printf("dispatcher: poison %s/%s after %d attempts -> %s", agentID, u.UpdateID, attempts, d.opts.ErrorSink)
+				continue
+			}
 			log.Printf("dispatcher: handle %s/%s: %v", agentID, u.UpdateID, herr)
 			continue
 		}

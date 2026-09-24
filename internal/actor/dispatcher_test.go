@@ -3,6 +3,7 @@ package actor
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -210,5 +211,53 @@ func TestKernelRuntimeDeliversAndResumes(t *testing.T) {
 	}
 	if atomic.LoadInt32(&handled) < 2 {
 		t.Fatalf("restart did not resume pending delivery: handled=%d", handled)
+	}
+}
+
+// A poison event (handler always errors) is retried MaxAttempts times, then
+// a delivery_failed event is emitted to the error sink and the poisoned
+// event is incorporated so it stops re-firing.
+func TestDispatcherPoisonEventRoutesToErrorSink(t *testing.T) {
+	l := openKernelLog(t)
+	ctx := context.Background()
+
+	var calls int32
+	h := HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		return memory, fmt.Errorf("always fails")
+	})
+	d := NewDispatcher(l, h, DispatcherOptions{
+		PollInterval: 15 * time.Millisecond,
+		MaxAttempts:  2,
+		ErrorSink:    "error-sink",
+	})
+	go d.Run(ctx)
+	defer d.Stop()
+
+	if _, err := l.Append(ctx, mkUpdate("p1", "agent-p")); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	d.Notify()
+
+	// Wait for the poisoned event to be incorporated (stops re-firing).
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, processed, err := l.UpdateStatus(ctx, "agent-p", "p1")
+		if err == nil && processed {
+			break
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	_, processed, err := l.UpdateStatus(ctx, "agent-p", "p1")
+	if err != nil || !processed {
+		t.Fatalf("poison event not incorporated: processed=%v err=%v", processed, err)
+	}
+	// The delivery_failed event must be on the error sink's tape.
+	exists, _, err := l.UpdateStatus(ctx, "error-sink", "p1:delivery_failed")
+	if err != nil || !exists {
+		t.Fatalf("delivery_failed not emitted to error sink: exists=%v err=%v", exists, err)
+	}
+	if atomic.LoadInt32(&calls) < 2 {
+		t.Fatalf("expected >=2 attempts, got %d", calls)
 	}
 }
