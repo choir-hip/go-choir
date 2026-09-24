@@ -41,6 +41,10 @@ func (c *testCapsuleCgroup) Thaw(ctx context.Context) error {
 	c.frozen = false
 	return c.thawErr
 }
+func (c *testCapsuleCgroup) Kill() error { return nil }
+func (c *testCapsuleCgroup) WaitEmpty(ctx context.Context) error {
+	return ctx.Err()
+}
 
 func TestStageGrantedReleaseRefusesSecrets(t *testing.T) {
 	for name, relative := range map[string]struct {
