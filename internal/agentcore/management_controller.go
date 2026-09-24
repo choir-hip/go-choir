@@ -927,12 +927,21 @@ func appendCoagentUpdateIDsForRun(rec *types.RunRecord, updateIDs []string) {
 }
 
 func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx context.Context, rec *types.RunRecord) error {
+	return rt.updateRunAndMarkSuccessfulCoagentActivationDeliveredWithEvent(ctx, rec, nil)
+}
+
+// updateRunAndMarkSuccessfulCoagentActivationDeliveredWithEvent persists the
+// run's activation state and, when event is non-nil and the run is
+// lifecycle-bound, folds the runtime event into the same atomic batch as the
+// run projection. Worker-update delivery marks and work-item completion keep
+// their existing post-write behavior.
+func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDeliveredWithEvent(ctx context.Context, rec *types.RunRecord, event *types.EventRecord) error {
 	if rec == nil {
 		return nil
 	}
 	updateIDs := coagentUpdateIDsForRun(rec)
 	if runHasProfile(rec, agentprofile.Texture) || metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
-		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+		if err := rt.store.UpdateRunWithEvent(ctx, *rec, event); err != nil {
 			return err
 		}
 		if metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
@@ -941,13 +950,18 @@ func (rt *Runtime) updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx cont
 		return rt.completeSuccessfulRunWorkItems(ctx, rec)
 	}
 	if len(updateIDs) == 0 || rec.State != types.RunCompleted {
-		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+		if err := rt.store.UpdateRunWithEvent(ctx, *rec, event); err != nil {
 			return err
 		}
 		return rt.completeSuccessfulRunWorkItems(ctx, rec)
 	}
 	if err := rt.store.UpdateRunAndMarkWorkerUpdatesDelivered(ctx, *rec, rec.OwnerID, updateIDs); err != nil {
 		return err
+	}
+	if event != nil {
+		if err := rt.store.AppendEvent(ctx, event); err != nil {
+			log.Printf("runtime: persist activation event %s: %v", event.EventID, err)
+		}
 	}
 	return rt.completeSuccessfulRunWorkItems(ctx, rec)
 }

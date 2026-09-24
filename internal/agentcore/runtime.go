@@ -1613,6 +1613,15 @@ func (rt *Runtime) ReactivateRunCanonical(ctx context.Context, rec *types.RunRec
 // persistActivationState serializes activation writes with cancellation and
 // progress-deadline terminalization. A stored terminal state always wins.
 func (rt *Runtime) persistActivationState(ctx context.Context, rec *types.RunRecord) (bool, error) {
+	return rt.persistActivationStateWithEvent(ctx, rec, nil)
+}
+
+// persistActivationStateWithEvent is persistActivationState plus an optional
+// runtime event that is folded into the same atomic batch as the run-state
+// projection for lifecycle-bound runs, so the state change and its
+// choir.event commit together. The caller still publishes the live bus
+// event after this returns.
+func (rt *Runtime) persistActivationStateWithEvent(ctx context.Context, rec *types.RunRecord, event *types.EventRecord) (bool, error) {
 	rt.runningMu.Lock()
 	defer rt.runningMu.Unlock()
 
@@ -1624,9 +1633,42 @@ func (rt *Runtime) persistActivationState(ctx context.Context, rec *types.RunRec
 		*rec = stored
 		return false, nil
 	}
-	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx, rec); err != nil {
+	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDeliveredWithEvent(ctx, rec, event); err != nil {
 		return false, err
 	}
+	return true, nil
+}
+
+// persistActivationStateAndEmit writes the activation state and its runtime
+// event in one atomic batch for lifecycle-bound runs (the event folds into
+// the projection's PutBatchConditional), then publishes the live bus event
+// and trace record after the commit. For non-lifecycle runs the event is
+// appended separately. Returns whether the state was persisted.
+func (rt *Runtime) persistActivationStateAndEmit(ctx context.Context, rec *types.RunRecord, kind types.EventKind, cause events.EventCause, payload json.RawMessage) (bool, error) {
+	evRec := &types.EventRecord{
+		EventID:      uuid.New().String(),
+		RunID:        rec.RunID,
+		AgentID:      rec.AgentID,
+		ChannelID:    rec.ChannelID,
+		OwnerID:      rec.OwnerID,
+		TrajectoryID: trajectoryIDForRun(rec),
+		Timestamp:    time.Now().UTC(),
+		Kind:         kind,
+		Payload:      payload,
+	}
+	persisted, err := rt.persistActivationStateWithEvent(ctx, rec, evRec)
+	if err != nil {
+		return false, err
+	}
+	if !persisted {
+		return false, nil
+	}
+	rt.appendTraceEvent(ctx, evRec)
+	rt.bus.Publish(events.RuntimeEvent{
+		Record: *evRec,
+		Actor:  events.ActorRuntime,
+		Cause:  cause,
+	})
 	return true, nil
 }
 
@@ -3697,12 +3739,17 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// completed-run transition or parent notification.
 	persistCtx := context.Background()
 
-	// Persist the terminal run state BEFORE publishing the completion
-	// event. Otherwise a subscriber that reacts to the event and
-	// immediately fetches run status can observe the run as still
-	// running, and if the persist fails the store is left with a
-	// completion event for a non-terminal run.
-	persisted, err := rt.persistActivationState(persistCtx, rec)
+	// Persist the terminal run state and the completion event in one atomic
+	// batch for lifecycle-bound runs (the event folds into the projection's
+	// PutBatchConditional). The bus publish happens inside
+	// persistActivationStateAndEmit after the commit, so a subscriber that
+	// reacts to the event and fetches run status observes the terminal state.
+	resultLenPayload, _ := json.Marshal(map[string]any{
+		"result_length": len(text),
+		"input_tokens":  usage.InputTokens,
+		"output_tokens": usage.OutputTokens,
+	})
+	persisted, err := rt.persistActivationStateAndEmit(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	if err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
 		return
@@ -3713,12 +3760,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if bindErr := rt.bindTerminalRunOutcome(persistCtx, rec, true); bindErr != nil {
 		log.Printf("runtime: bind completion outcome for run %s: %v", rec.RunID, bindErr)
 	}
-	resultLenPayload, _ := json.Marshal(map[string]any{
-		"result_length": len(text),
-		"input_tokens":  usage.InputTokens,
-		"output_tokens": usage.OutputTokens,
-	})
-	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	if shouldLogWireLifecycle(rec) {
 		preview := rec.Result
 		if len(preview) > 160 {

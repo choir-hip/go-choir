@@ -2547,6 +2547,16 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		}
 		objects = append(objects, updatedAgentObj)
 	}
+	// Fold the caller's runtime event into the same batch so the activation
+	// state change and its choir.event commit atomically.
+	if req.Event != nil {
+		eventObj, eventErr := buildEventObject(req.Event, run.UpdatedAt.UTC())
+		if eventErr != nil {
+			return types.LifecycleResult{}, eventErr
+		}
+		objects = append(objects, eventObj)
+		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID})
+	}
 	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects}); err != nil {
 		if errors.Is(err, objectgraph.ErrConflict) {
 			return types.LifecycleResult{}, ErrConcurrentStateChange

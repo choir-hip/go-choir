@@ -1288,6 +1288,14 @@ func (s *Store) ReconcileLifecycleSettlementForTerminalRun(ctx context.Context, 
 }
 
 func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (bool, error) {
+	return s.persistLifecycleRunWithEvent(ctx, rec, nil)
+}
+
+// persistLifecycleRunWithEvent routes a lifecycle-bound run through the
+// canonical projection. When event is non-nil it is folded into the same
+// atomic batch as the run projection so the state change and its runtime
+// event commit together.
+func (s *Store) persistLifecycleRunWithEvent(ctx context.Context, rec types.RunRecord, event *types.EventRecord) (bool, error) {
 	rec.TrajectoryID = runTrajectoryID(rec)
 	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.ComputerID) == "" || strings.TrimSpace(rec.TrajectoryID) == "" {
 		return false, nil
@@ -1308,6 +1316,7 @@ func (s *Store) persistLifecycleRun(ctx context.Context, rec types.RunRecord) (b
 		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID,
 		CommandID:    "lifecycle-activation:" + strings.TrimPrefix(objectgraph.SHA256(body), "sha256:"),
 		TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: rec,
+		Event:        event,
 	}
 	req.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(req)
 	if trajectory.Status == types.TrajectoryLive {
@@ -1353,11 +1362,26 @@ func (s *Store) GetRunByOwner(ctx context.Context, ownerID, runID string) (types
 
 // UpdateRun updates an existing run record.
 func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
-	if handled, err := s.persistLifecycleRun(ctx, rec); handled {
+	return s.UpdateRunWithEvent(ctx, rec, nil)
+}
+
+// UpdateRunWithEvent updates a run and, when event is non-nil and the run is
+// lifecycle-bound, folds the runtime event into the same atomic batch as the
+// run projection so the state change and its choir.event commit together.
+// For non-lifecycle runs the event is appended separately after the run
+// write (the projection batch does not exist for them).
+func (s *Store) UpdateRunWithEvent(ctx context.Context, rec types.RunRecord, event *types.EventRecord) error {
+	if handled, err := s.persistLifecycleRunWithEvent(ctx, rec, event); handled {
 		return err
 	}
 	if !rec.State.Active() {
-		return s.UpdateRunOG(ctx, rec)
+		if err := s.UpdateRunOG(ctx, rec); err != nil {
+			return err
+		}
+		if event != nil {
+			return s.AppendEvent(ctx, event)
+		}
+		return nil
 	}
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
@@ -1378,7 +1402,13 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 			return err
 		}
 	}
-	return s.UpdateRunOG(ctx, rec)
+	if err := s.UpdateRunOG(ctx, rec); err != nil {
+		return err
+	}
+	if event != nil {
+		return s.AppendEvent(ctx, event)
+	}
+	return nil
 }
 
 // UpdateRunAndMarkWorkerUpdatesDelivered updates a run and marks its waking

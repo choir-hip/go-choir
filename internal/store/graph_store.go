@@ -1114,6 +1114,46 @@ func (s *Store) AppendEventOG(ctx context.Context, rec *types.EventRecord) error
 	return nil
 }
 
+// buildEventObject constructs the choir.event object for an event record
+// without writing it, so a caller can fold the event into an atomic
+// PutBatchConditional batch (e.g. a run-state projection) instead of a
+// separate AppendEvent transaction.
+func buildEventObject(rec *types.EventRecord, now time.Time) (objectgraph.Object, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	metadata := map[string]any{
+		"event_id":      rec.EventID,
+		"seq":           rec.Seq,
+		"stream_seq":    rec.StreamSeq,
+		"run_id":        rec.RunID,
+		"agent_id":      rec.AgentID,
+		"channel_id":    rec.ChannelID,
+		"trajectory_id": rec.TrajectoryID,
+		"kind":          string(rec.Kind),
+		"phase":         rec.Phase,
+		"timestamp":     rec.Timestamp.UTC().Format(time.RFC3339Nano),
+	}
+	body, err := json.Marshal(rec)
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	meta, err := objectgraph.NormalizeMetadata(metadata)
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	contentHash := objectgraph.ContentHash(ogKindEvent, body, meta)
+	id, err := objectgraph.BuildCanonicalID(ogKindEvent, rec.OwnerID, objectgraph.StableSuffixFromContent(contentHash))
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	return objectgraph.Object{
+		CanonicalID: id, ObjectKind: ogKindEvent, OwnerID: rec.OwnerID,
+		ContentHash: contentHash, Body: body, Metadata: meta,
+		CreatedAt: now, UpdatedAt: now,
+	}, nil
+}
+
 // ListEventsOG lists events for a run from the object graph.
 func (s *Store) ListEventsOG(ctx context.Context, runID string, limit int) ([]types.EventRecord, error) {
 	if limit <= 0 {

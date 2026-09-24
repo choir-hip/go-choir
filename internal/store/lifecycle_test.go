@@ -273,6 +273,58 @@ func TestReactivateRunCommitsStateAndEventAtomically(t *testing.T) {
 	}
 }
 
+func TestUpdateRunWithEventFoldsEventIntoProjectionBatch(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	run := lifecycleRunFixture(start, "run-fold-event", types.RunRunning)
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "project-fold:" + start.TrajectoryID,
+		TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: run,
+	}
+	project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project activation: %v", err)
+	}
+
+	// A state change + runtime event committed in one batch.
+	run.State = types.RunCompleted
+	run.UpdatedAt = run.UpdatedAt.Add(time.Second)
+	ev := &types.EventRecord{
+		EventID: "ev-fold-1", RunID: run.RunID, AgentID: run.AgentID,
+		OwnerID: run.OwnerID, TrajectoryID: run.TrajectoryID,
+		Kind: types.EventRunCompleted, Timestamp: run.UpdatedAt,
+	}
+	if err := s.UpdateRunWithEvent(ctx, run, ev); err != nil {
+		t.Fatalf("update run with event: %v", err)
+	}
+	got, err := s.GetLifecycleRun(ctx, start.OwnerID, start.ComputerID, run.RunID)
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	if got.State != types.RunCompleted {
+		t.Fatalf("run state = %s, want completed", got.State)
+	}
+	// The choir.event landed in the same commit.
+	events, err := s.ListEventsOG(ctx, run.RunID, 10)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	found := false
+	for _, e := range events {
+		if e.EventID == "ev-fold-1" && e.Kind == types.EventRunCompleted {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("folded choir.event missing: %+v", events)
+	}
+}
+
 func TestStartLifecyclePreparesStructuredRevision(t *testing.T) {
 	t.Run("derives readable content and preserves replay hash", func(t *testing.T) {
 		s := openTestStore(t)

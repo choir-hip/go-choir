@@ -293,6 +293,12 @@ type ReplaceLifecycleActivationRequest struct {
 	TrajectoryID  string    `json:"trajectory_id"`
 	AgentID       string    `json:"agent_id"`
 	Run           RunRecord `json:"run"`
+	// Event, when set, is folded into the same atomic batch as the run
+	// projection so the activation state change and its runtime event commit
+	// together. It is not part of the command digest (a projection side
+	// record, not a command input); on replay the stored receipt returns and
+	// the event is not re-emitted.
+	Event *EventRecord `json:"-"`
 }
 
 // TerminalizeRunRequest is the canonical command that moves a run to a
