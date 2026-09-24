@@ -20,6 +20,15 @@ func TestActorWakeOutboxProjectorDispatchesOnceAndMarksProjected(t *testing.T) {
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 	targetAgentID := currentTextureAgentID(docID)
 	producerAgentID, producerWorkID, producerRunID := projectTestLifecycleProducer(t, s, ownerID, "autoputer-test", trajectoryID, docID, "actor-wake-outbox")
+	setupWakes, err := s.ListUnprojectedActorWakes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, wake := range setupWakes {
+		if err := s.MarkActorWakeProjected(ctx, wake.CanonicalID); err != nil {
+			t.Fatalf("mark setup wake projected: %v", err)
+		}
+	}
 	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "durable actor wake"}
 	req := types.QueueLifecycleUpdateRequest{
 		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "queue-actor-wake-outbox",
@@ -37,11 +46,10 @@ func TestActorWakeOutboxProjectorDispatchesOnceAndMarksProjected(t *testing.T) {
 
 	var dispatches atomic.Int32
 	rt.SetDispatchActor(func(_ context.Context, owner, computer, target, kind, content, trajectory, from string) error {
-		if owner != ownerID || computer != "autoputer-test" || target != targetAgentID || kind != "coagent_result" ||
-			content == "" || trajectory != trajectoryID || from != producerAgentID {
-			t.Fatalf("projected wake = owner=%q computer=%q target=%q kind=%q content=%q trajectory=%q from=%q", owner, computer, target, kind, content, trajectory, from)
+		if owner == ownerID && computer == "autoputer-test" && target == targetAgentID && kind == "coagent_result" &&
+			content != "" && trajectory == trajectoryID && from == producerAgentID {
+			dispatches.Add(1)
 		}
-		dispatches.Add(1)
 		return nil
 	})
 	rt.sweepActorWakeOutbox(ctx)

@@ -2644,13 +2644,23 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 		log.Printf("runtime: actor wake outbox sweep: %v", err)
 		return
 	}
-	if rt.dispatchActor == nil {
-		log.Printf("runtime: actor wake outbox sweep: actor dispatch unavailable")
+	if rt.dispatchActor == nil && rt.scheduleActor == nil {
+		log.Printf("runtime: actor wake outbox sweep: actor delivery unavailable")
 		return
 	}
 	for _, wake := range wakes {
-		if err := rt.dispatchActor(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID); err != nil {
-			log.Printf("runtime: actor wake outbox dispatch %s: %v", wake.SourceUpdateID, err)
+		var dispatchErr error
+		if !wake.NotBefore.IsZero() {
+			if rt.scheduleActor == nil {
+				log.Printf("runtime: actor wake outbox schedule unavailable for %s", wake.SourceUpdateID)
+				continue
+			}
+			dispatchErr = rt.scheduleActor(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID, wake.NotBefore.UTC())
+		} else {
+			dispatchErr = rt.dispatchActor(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
+		}
+		if dispatchErr != nil {
+			log.Printf("runtime: actor wake outbox dispatch %s: %v", wake.SourceUpdateID, dispatchErr)
 			continue
 		}
 		if err := rt.store.MarkActorWakeProjected(ctx, wake.CanonicalID); err != nil && !errors.Is(err, store.ErrConcurrentStateChange) {
@@ -2701,6 +2711,69 @@ func (rt *Runtime) stopProjector() {
 		rt.projectorStop = nil
 	}
 }
+// ReconcileLifecycleWorkAssignment applies the same durable work-item routing
+// as boot recovery to one canonical assignment wake. A closed, replaced, or
+// already-claimed work item is deliberately a no-op.
+func (rt *Runtime) ReconcileLifecycleWorkAssignment(ctx context.Context, ownerID, computerID, agentID, trajectoryID, workItemID string) error {
+	if rt == nil || rt.store == nil {
+		return fmt.Errorf("lifecycle work assignment: store unavailable")
+	}
+	work, err := rt.store.GetLifecycleWorkItem(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(workItemID))
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if work.Status != types.WorkItemOpen || work.OwnerID != strings.TrimSpace(ownerID) ||
+		work.ComputerID != strings.TrimSpace(computerID) || work.AssignedAgentID != strings.TrimSpace(agentID) ||
+		work.TrajectoryID != strings.TrimSpace(trajectoryID) {
+		return nil
+	}
+	if intent, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, work.OwnerID, work.ComputerID, work.TrajectoryID); intentErr == nil {
+		_, _, cancelErr := rt.CancelTrajectoryCommand(ctx, work.TrajectoryID, work.OwnerID, intent.CommandID, intent.Reason, intent.RequestedLifecycleVersion, intent.ExpectedHeadRevisionID)
+		return cancelErr
+	} else if !errors.Is(intentErr, store.ErrNotFound) {
+		return intentErr
+	}
+	profile, _ := agentprofile.Canonical(work.AuthorityProfile)
+	switch profile {
+	case agentprofile.Engineering:
+		return rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, work.OwnerID, work.ComputerID, work.TrajectoryID)
+	case agentprofile.Research:
+		updates, updateErr := rt.store.ListAllPendingLifecycleUpdates(ctx, work.OwnerID, work.ComputerID, work.AssignedAgentID)
+		if updateErr != nil || len(updates) == 0 {
+			return updateErr
+		}
+		_, reconcileErr := rt.reconcileUpdatedCoagentActor(ctx, work.OwnerID, work.AssignedAgentID)
+		if errors.Is(reconcileErr, ErrDurablyTerminalLifecycleControlActivation) {
+			return nil
+		}
+		return reconcileErr
+	default:
+		_, reconcileErr := rt.reconcileAssignedWorkItemActor(ctx, []types.WorkItemRecord{work})
+		return reconcileErr
+	}
+}
+
+// HandleLifecycleCancellationWake re-drives the durable cancellation authority;
+// once the intent has been consumed or the trajectory is terminal it has no
+// further effect.
+func (rt *Runtime) HandleLifecycleCancellationWake(ctx context.Context, ownerID, computerID, agentID, trajectoryID string) error {
+	if strings.TrimSpace(agentID) != persistentManagementAgentID(strings.TrimSpace(ownerID)) {
+		return nil
+	}
+	intent, err := rt.store.GetLifecycleCancellationIntent(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(trajectoryID))
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, _, err = rt.CancelTrajectoryCommand(ctx, trajectoryID, ownerID, intent.CommandID, intent.Reason, intent.RequestedLifecycleVersion, intent.ExpectedHeadRevisionID)
+	return err
+}
+
 func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return

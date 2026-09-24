@@ -470,7 +470,7 @@ func lifecycleMetadata(idField, id, computerID, trajectoryID string, seq int64) 
 
 // ActorWakeOutbox is the durable store→actor handoff. Its body contains the
 // complete immutable actor occurrence so the projector never has to re-read or
-// interpret the source worker update.
+// interpret the source transition.
 type ActorWakeOutbox struct {
 	CanonicalID    string    `json:"-"`
 	SourceUpdateID string    `json:"source_update_id"`
@@ -482,7 +482,25 @@ type ActorWakeOutbox struct {
 	AgentID        string    `json:"agent_id"`
 	Kind           string    `json:"kind"`
 	Content        string    `json:"content"`
+	NotBefore      time.Time `json:"not_before,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
+}
+
+type actorWakeWorkAssignedContent struct {
+	WorkItemID   string `json:"work_item_id"`
+	TrajectoryID string `json:"trajectory_id"`
+}
+
+type actorWakeOwnerRevisionContent struct {
+	RevisionID       string `json:"revision_id"`
+	RequestID        string `json:"request_id"`
+	LifecycleVersion int64  `json:"lifecycle_version"`
+	ReducerSeq       int64  `json:"reducer_seq"`
+}
+
+type actorWakeEngineeringDeadlineContent struct {
+	AssignmentID string `json:"assignment_id"`
+	Attempt      uint64 `json:"attempt"`
 }
 
 func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object) (ActorWakeOutbox, objectgraph.Object, error) {
@@ -499,26 +517,145 @@ func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object) (ActorWakeOutbox
 	if content == "" || strings.TrimSpace(update.TrajectoryID) == "" || strings.TrimSpace(update.AgentID) == "" {
 		return ActorWakeOutbox{}, objectgraph.Object{}, ErrLifecycleInvalidTransition
 	}
+	return actorWakeOutbox(worker, strings.TrimSpace(update.UpdateID), strings.TrimSpace(update.TargetAgentID),
+		strings.TrimSpace(update.TrajectoryID), strings.TrimSpace(update.AgentID), "coagent_result", content, time.Time{}, "wake:"+worker.CanonicalID)
+}
+
+func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Object) (ActorWakeOutbox, objectgraph.Object, error) {
+	switch obj.ObjectKind {
+	case ogKindWorkerUpdate:
+		return actorWakeOutboxFromWorkerUpdate(obj)
+	case ogKindWorkItem:
+		work, err := decodeLifecycleObject[types.WorkItemRecord](obj)
+		if err != nil {
+			return ActorWakeOutbox{}, objectgraph.Object{}, err
+		}
+		if work.Status != types.WorkItemOpen || work.LifecycleVersion != 1 || strings.TrimSpace(work.AssignedAgentID) == "" || strings.TrimSpace(work.TrajectoryID) == "" {
+			return ActorWakeOutbox{}, objectgraph.Object{}, nil
+		}
+		content, err := json.Marshal(actorWakeWorkAssignedContent{WorkItemID: work.WorkItemID, TrajectoryID: work.TrajectoryID})
+		if err != nil {
+			return ActorWakeOutbox{}, objectgraph.Object{}, err
+		}
+		sourceID := "work:" + work.WorkItemID + ":" + fmt.Sprint(work.LifecycleVersion)
+		return actorWakeOutbox(obj, sourceID, work.AssignedAgentID, work.TrajectoryID, "", "lifecycle_work_assigned", string(content), time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID)
+	case ogKindLifecycleCancelIntent:
+		intent, err := decodeLifecycleObject[types.LifecycleCancellationIntent](obj)
+		if err != nil {
+			return ActorWakeOutbox{}, objectgraph.Object{}, err
+		}
+		if strings.TrimSpace(intent.TrajectoryID) == "" || strings.TrimSpace(intent.OwnerID) == "" {
+			return ActorWakeOutbox{}, objectgraph.Object{}, ErrLifecycleInvalidTransition
+		}
+		return actorWakeOutbox(obj, "cancel:"+intent.CommandID, "management:"+intent.OwnerID, intent.TrajectoryID, "",
+			"lifecycle_cancellation", intent.TrajectoryID, time.Time{}, "wake:"+obj.CanonicalID+":"+intent.CommandID)
+	case ogKindEngineeringAssignment:
+		assignment, err := decodeLifecycleObject[types.EngineeringAssignment](obj)
+		if err != nil {
+			return ActorWakeOutbox{}, objectgraph.Object{}, err
+		}
+		if assignment.Disposition != types.EngineeringAssignmentOpen || assignment.LifecycleVersion != 1 || strings.TrimSpace(assignment.Binding.ParentAgentID) == "" {
+			return ActorWakeOutbox{}, objectgraph.Object{}, nil
+		}
+		content, err := json.Marshal(actorWakeEngineeringDeadlineContent{AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt})
+		if err != nil {
+			return ActorWakeOutbox{}, objectgraph.Object{}, err
+		}
+		sourceID := "assignment:" + assignment.AssignmentID + ":" + fmt.Sprint(assignment.Binding.Attempt)
+		return actorWakeOutbox(obj, sourceID, assignment.Binding.ParentAgentID, assignment.Binding.TrajectoryID, "",
+			"assigned_engineering_fate_deadline", string(content), obj.CreatedAt.UTC().Add(6*time.Hour), "wake:"+obj.CanonicalID+":"+sourceID)
+	case ogKindTexRev:
+		revision, err := decodeLifecycleObject[types.Revision](obj)
+		if err != nil {
+			return ActorWakeOutbox{}, objectgraph.Object{}, err
+		}
+		if revision.AuthorKind != types.AuthorUser || strings.TrimSpace(revision.DocID) == "" || strings.TrimSpace(revision.TrajectoryID) == "" {
+			return ActorWakeOutbox{}, objectgraph.Object{}, nil
+		}
+		profile := agentprofile.Texture
+		for _, candidate := range objects {
+			if candidate.ObjectKind != ogKindAgent {
+				continue
+			}
+			agent, decodeErr := decodeLifecycleObject[types.AgentRecord](candidate)
+			if decodeErr != nil || agent.ChannelID != revision.DocID {
+				continue
+			}
+			if candidateProfile, canonical := agentprofile.Canonical(agent.Profile); canonical == nil &&
+				(candidateProfile == agentprofile.Texture || candidateProfile == agentprofile.Engineering) {
+				profile = candidateProfile
+				break
+			}
+		}
+		lifecycleVersion, reducerSeq := actorWakeRevisionVersions(revision.TrajectoryID, obj, objects)
+		content, err := json.Marshal(actorWakeOwnerRevisionContent{RevisionID: revision.RevisionID, RequestID: revision.RevisionID,
+			LifecycleVersion: lifecycleVersion, ReducerSeq: reducerSeq})
+		if err != nil {
+			return ActorWakeOutbox{}, objectgraph.Object{}, err
+		}
+		sourceID := "revision:" + revision.RevisionID
+		return actorWakeOutbox(obj, sourceID, profile+":"+revision.DocID, revision.TrajectoryID, "owner:"+revision.OwnerID,
+			"owner_revision", string(content), time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID)
+	default:
+		return ActorWakeOutbox{}, objectgraph.Object{}, nil
+	}
+}
+
+func actorWakeReducerSeq(metadata json.RawMessage) int64 {
+	var values map[string]any
+	if json.Unmarshal(metadata, &values) != nil {
+		return 0
+	}
+	if seq, ok := values["reducer_seq"].(float64); ok {
+		return int64(seq)
+	}
+	return 0
+}
+
+func actorWakeRevisionVersions(trajectoryID string, revision objectgraph.Object, objects []objectgraph.Object) (int64, int64) {
+	for _, candidate := range objects {
+		if candidate.ObjectKind != ogKindTrajectory {
+			continue
+		}
+		trajectory, err := decodeLifecycleObject[types.TrajectoryRecord](candidate)
+		if err == nil && trajectory.TrajectoryID == trajectoryID {
+			return trajectory.LifecycleVersion, trajectory.ReducerSeq
+		}
+	}
+	seq := actorWakeReducerSeq(revision.Metadata)
+	return seq, seq
+}
+
+func (s *Store) actorWakeResolverObjects(ctx context.Context, obj objectgraph.Object, objects []objectgraph.Object) []objectgraph.Object {
+	if obj.ObjectKind != ogKindTexRev {
+		return objects
+	}
+	revision, err := decodeLifecycleObject[types.Revision](obj)
+	if err != nil || strings.TrimSpace(revision.DocID) == "" {
+		return objects
+	}
+	for _, profile := range []string{agentprofile.Texture, agentprofile.Engineering} {
+		agent, getErr := s.lifecycleGetObject(ctx, ogKindAgent, revision.OwnerID, revision.ComputerID, profile+":"+revision.DocID)
+		if getErr == nil {
+			return append(append([]objectgraph.Object{}, objects...), agent)
+		}
+	}
+	return objects
+}
+
+func actorWakeOutbox(source objectgraph.Object, sourceID, targetAgentID, trajectoryID, agentID, kind, content string, notBefore time.Time, key string) (ActorWakeOutbox, objectgraph.Object, error) {
 	wake := ActorWakeOutbox{
-		SourceUpdateID: strings.TrimSpace(update.UpdateID),
-		OwnerID:        strings.TrimSpace(update.OwnerID),
-		ComputerID:     strings.TrimSpace(update.ComputerID),
-		TargetAgentID:  strings.TrimSpace(update.TargetAgentID),
-		TrajectoryID:   strings.TrimSpace(update.TrajectoryID),
-		AgentID:        strings.TrimSpace(update.AgentID),
-		Kind:           "coagent_result",
-		Content:        content,
-		CreatedAt:      worker.CreatedAt.UTC(),
+		SourceUpdateID: strings.TrimSpace(sourceID), OwnerID: strings.TrimSpace(source.OwnerID), ComputerID: strings.TrimSpace(source.ComputerID),
+		TargetAgentID: strings.TrimSpace(targetAgentID), TrajectoryID: strings.TrimSpace(trajectoryID), AgentID: strings.TrimSpace(agentID),
+		Kind: strings.TrimSpace(kind), Content: content, NotBefore: notBefore.UTC(), CreatedAt: source.CreatedAt.UTC(),
+	}
+	if wake.OwnerID == "" || wake.ComputerID == "" || wake.TargetAgentID == "" || wake.Kind == "" || wake.Content == "" {
+		return ActorWakeOutbox{}, objectgraph.Object{}, ErrLifecycleInvalidTransition
 	}
 	wake.UpdateID = types.ActorWakeUpdateID(wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
-	metadata := map[string]any{
-		"source_update_id": wake.SourceUpdateID,
-		"update_id":        wake.UpdateID,
-		"target_agent_id":  wake.TargetAgentID,
-		"trajectory_id":    wake.TrajectoryID,
-		"projected":        false,
-	}
-	outbox, err := lifecycleObject(ogKindActorWakeOutbox, wake.OwnerID, wake.ComputerID, "wake:"+worker.CanonicalID, wake, metadata, worker.CreatedAt, worker.UpdatedAt)
+	metadata := map[string]any{"source_update_id": wake.SourceUpdateID, "update_id": wake.UpdateID, "target_agent_id": wake.TargetAgentID,
+		"trajectory_id": wake.TrajectoryID, "projected": false}
+	outbox, err := lifecycleObject(ogKindActorWakeOutbox, wake.OwnerID, wake.ComputerID, key, wake, metadata, source.CreatedAt, source.UpdatedAt)
 	if err != nil {
 		return ActorWakeOutbox{}, objectgraph.Object{}, err
 	}
@@ -1792,10 +1929,7 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		seenConditions[condition.CanonicalID] = struct{}{}
 	}
 	for _, obj := range objects {
-		if obj.ObjectKind != ogKindWorkerUpdate {
-			continue
-		}
-		_, outbox, outboxErr := actorWakeOutboxFromWorkerUpdate(obj)
+		_, outbox, outboxErr := actorWakeOutboxFromObject(obj, s.actorWakeResolverObjects(ctx, obj, objects))
 		if outboxErr != nil {
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle: derive actor wake outbox: %w", outboxErr)
 		}

@@ -3625,10 +3625,17 @@ func TestQueueLifecycleUpdateCommitsActorWakeOutbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(wakes) != 1 {
-		t.Fatalf("unprojected actor wakes = %d, want 1", len(wakes))
+	var wake ActorWakeOutbox
+	foundWake := false
+	for _, candidate := range wakes {
+		if candidate.SourceUpdateID == queued.Update.UpdateID {
+			wake, foundWake = candidate, true
+			break
+		}
 	}
-	wake := wakes[0]
+	if !foundWake {
+		t.Fatalf("worker-update outbox wake missing from %+v", wakes)
+	}
 	wantCanonicalID, err := lifecycleCanonicalID(ogKindActorWakeOutbox, start.OwnerID, start.ComputerID, "wake:"+worker.CanonicalID)
 	if err != nil {
 		t.Fatal(err)

@@ -2894,11 +2894,12 @@ func TestKernelOutboxProjectorMintsOneSQLiteActorWake(t *testing.T) {
 		t.Fatalf("start kernel adapter: %v", err)
 	}
 	queue := seedDurableTextureUpdate(t, s, ctx, "autoputer-test", "owner-outbox-projector", "doc-outbox-projector", "update-outbox-projector", "outbox projector content")
+	mailboxID := scopedActorMailboxID("owner-outbox-projector", "autoputer-test", "texture:doc-outbox-projector")
 
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		var rows int
-		if err := adapter.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates`).Scan(&rows); err != nil {
+		if err := adapter.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates WHERE to_agent_id = ? AND kind = 'coagent_result'`, mailboxID).Scan(&rows); err != nil {
 			t.Fatal(err)
 		}
 		if rows == 1 {
@@ -2913,7 +2914,7 @@ func TestKernelOutboxProjectorMintsOneSQLiteActorWake(t *testing.T) {
 	// the wake's deterministic key and its projected outbox flag converge.
 	time.Sleep(600 * time.Millisecond)
 	var rows int
-	if err := adapter.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates`).Scan(&rows); err != nil {
+	if err := adapter.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates WHERE to_agent_id = ? AND kind = 'coagent_result'`, mailboxID).Scan(&rows); err != nil {
 		t.Fatal(err)
 	}
 	if rows != 1 {
@@ -2923,7 +2924,9 @@ func TestKernelOutboxProjectorMintsOneSQLiteActorWake(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(wakes) != 0 {
-		t.Fatalf("unprojected wakes after SQLite append = %+v", wakes)
+	for _, wake := range wakes {
+		if wake.SourceUpdateID == queue.UpdateID {
+			t.Fatalf("queued update wake remains unprojected: %+v", wake)
+		}
 	}
 }

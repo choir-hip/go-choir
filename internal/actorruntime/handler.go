@@ -96,6 +96,12 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleFreshMintManagementResumeDeadline(ctx, u, memory)
 	case "reactivated_management_resume_deadline":
 		return h.handleReactivatedManagementResumeDeadline(ctx, u, memory)
+	case "lifecycle_work_assigned":
+		return h.handleLifecycleWorkAssigned(ctx, u, memory)
+	case "lifecycle_cancellation":
+		return h.handleLifecycleCancellation(ctx, u, memory)
+	case "owner_revision":
+		return h.handleOwnerRevision(ctx, u, memory)
 	case "cancel":
 		return h.handleCancel(ctx, u, memory)
 	default:
@@ -146,6 +152,78 @@ func (h *actorHandler) handleReactivatedManagementResumeDeadline(ctx context.Con
 		return nil, fmt.Errorf("actorruntime: reactivated Management deadline: %w", err)
 	}
 	return memory, nil
+}
+
+func (h *actorHandler) handleLifecycleWorkAssigned(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve lifecycle work assignment scope: %w", err)
+	}
+	var content struct {
+		WorkItemID   string `json:"work_item_id"`
+		TrajectoryID string `json:"trajectory_id"`
+	}
+	if err := json.Unmarshal([]byte(u.Content), &content); err != nil {
+		return nil, nil
+	}
+	if strings.TrimSpace(content.TrajectoryID) != strings.TrimSpace(u.TrajectoryID) || strings.TrimSpace(content.WorkItemID) == "" {
+		return nil, nil
+	}
+	if err := h.rt.ReconcileLifecycleWorkAssignment(ctx, ownerID, computerID, agentID, content.TrajectoryID, content.WorkItemID); err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: reconcile lifecycle work assignment: %v", actor.ErrDeferUnprocessed, err)
+	}
+	return memory, nil
+}
+
+func (h *actorHandler) handleLifecycleCancellation(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve lifecycle cancellation scope: %w", err)
+	}
+	if strings.TrimSpace(u.Content) != strings.TrimSpace(u.TrajectoryID) || strings.TrimSpace(u.TrajectoryID) == "" {
+		return nil, nil
+	}
+	if err := h.rt.HandleLifecycleCancellationWake(ctx, ownerID, computerID, agentID, u.TrajectoryID); err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: reconcile lifecycle cancellation: %v", actor.ErrDeferUnprocessed, err)
+	}
+	return memory, nil
+}
+
+func (h *actorHandler) handleOwnerRevision(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve owner revision scope: %w", err)
+	}
+	var content struct {
+		RevisionID       string `json:"revision_id"`
+		RequestID        string `json:"request_id"`
+		LifecycleVersion int64  `json:"lifecycle_version"`
+		ReducerSeq       int64  `json:"reducer_seq"`
+	}
+	if err := json.Unmarshal([]byte(u.Content), &content); err != nil || strings.TrimSpace(content.RevisionID) == "" {
+		return nil, nil
+	}
+	revision, err := h.rt.Store().GetLifecycleRevision(ctx, ownerID, computerID, content.RevisionID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: load owner revision: %v", actor.ErrDeferUnprocessed, err)
+	}
+	profile := agentprofile.Texture
+	if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
+		profile = agentprofile.Engineering
+	}
+	occurrence, err := agentcore.DocumentRevisionOccurrence(revision, profile, content.RequestID, content.LifecycleVersion, content.ReducerSeq)
+	if err != nil || occurrence.TargetAgentID != agentID || occurrence.TrajectoryID != u.TrajectoryID {
+		return nil, nil
+	}
+	encoded, err := agentcore.EncodeTextureActorOccurrence(occurrence)
+	if err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: encode owner revision occurrence: %v", actor.ErrDeferUnprocessed, err)
+	}
+	u.Kind, u.Content = "coagent_result", encoded
+	return h.handleCoagentResult(ctx, u, memory)
 }
 
 // handleChannelMessage resumes a parked recipient against the durable channel
