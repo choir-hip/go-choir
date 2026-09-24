@@ -652,6 +652,14 @@ func (s *Store) UpdateRunOG(ctx context.Context, rec types.RunRecord) error {
 	if err := ogDecode(existing, &existingRec); err != nil {
 		return err
 	}
+	// Kernel mode: a bare OG write may update run metadata but must not move
+	// lifecycle-owned state. State transitions belong to the canonical
+	// reducer path (an event-backed command committed in one batch), so a
+	// state change here fails closed instead of writing a non-event-backed
+	// mutation.
+	if s.kernelMode.Load() && existingRec.State != rec.State {
+		return ErrLifecycleAuthorityRequired
+	}
 	// Preserve created_at from the original.
 	created := existingRec.CreatedAt
 	if created.IsZero() {

@@ -550,6 +550,42 @@ func TestUpdateRun(t *testing.T) {
 	}
 }
 
+func TestUpdateRunKernelModeRejectsBareStateTransition(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	rec := types.RunRecord{
+		RunID:      "task-kernel-guard",
+		OwnerID:    "user-bob",
+		ComputerID: "autoputer-dev",
+		State:      types.RunPending,
+		Prompt:     "kernel guard probe",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	s.SetKernelMode()
+
+	// A bare state transition outside the canonical reducer path fails closed.
+	rec.State = types.RunRunning
+	rec.UpdatedAt = now.Add(1 * time.Second)
+	if err := s.UpdateRun(ctx, rec); !errors.Is(err, ErrLifecycleAuthorityRequired) {
+		t.Fatalf("kernel-mode state transition: got %v, want ErrLifecycleAuthorityRequired", err)
+	}
+
+	// A metadata-only update (state unchanged) is still permitted.
+	rec.State = types.RunPending
+	rec.Result = "metadata only"
+	rec.UpdatedAt = now.Add(2 * time.Second)
+	if err := s.UpdateRun(ctx, rec); err != nil {
+		t.Fatalf("kernel-mode metadata update: %v", err)
+	}
+}
+
 func TestUpdateRunAndMarkWorkerUpdatesDelivered(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

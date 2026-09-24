@@ -49,6 +49,20 @@ var ErrStaleDocumentHead = errors.New("stale document head")
 // loses a compare-and-set race against a newer stored record.
 var ErrConcurrentStateChange = errors.New("concurrent state change")
 
+// SetKernelMode marks the store post-ontology-kernel. Once set, bare OG
+// state transitions (UpdateRunOG and siblings) that change lifecycle-owned
+// state fail closed with ErrLifecycleAuthorityRequired instead of writing a
+// non-event-backed mutation. Called by Runtime.SetKernelMode.
+func (s *Store) SetKernelMode() {
+	s.kernelMode.Store(true)
+}
+
+// KernelMode reports whether the store is in post-ontology-kernel mode.
+func (s *Store) KernelMode() bool {
+	return s.kernelMode.Load()
+}
+
+
 // ErrLifecycleAuthorityRequired is returned when a legacy writer attempts to
 // mutate state owned by the durable lifecycle reducer.
 var ErrLifecycleAuthorityRequired = errors.New("durable lifecycle authority required")
@@ -118,6 +132,11 @@ type Store struct {
 	// declared role fields outside the V2 vocabulary. Set when the migration
 	// report exists (open) or when the fenced cutover persists it.
 	vocabCutover atomic.Bool
+	// kernelMode marks the store post-ontology-kernel: bare OG state
+	// transitions that bypass the canonical reducer path fail closed instead
+	// of silently writing a non-event-backed mutation. Set by
+	// Runtime.SetKernelMode via Store.SetKernelMode.
+	kernelMode atomic.Bool
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.

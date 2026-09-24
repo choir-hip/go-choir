@@ -2671,9 +2671,15 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 
 
 // SetKernelMode enables the derivable-continuation projector. Called by the
-// adapter when the dispatcher is the delivery authority.
+// adapter when the dispatcher is the delivery authority. It also marks the
+// store post-ontology-kernel so bare OG state transitions that bypass the
+// canonical reducer path fail closed instead of writing a non-event-backed
+// mutation.
 func (rt *Runtime) SetKernelMode() {
 	rt.kernelMode = true
+	if rt.store != nil {
+		rt.store.SetKernelMode()
+	}
 }
 
 // startProjector launches the continuous store→actor projection. It drains the
