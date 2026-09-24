@@ -34,7 +34,7 @@ node_fields:
 nodes:
   - id: og-dolt-heresy-completion-2026-07-08
     title: OG / Dolt / Heresy Completion
-    path: docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+    path: docs/archive/og-dolt-heresy-completion-2026-07-08.md
     ledger: ''
     status: settled
     kind: subordinate_contract
@@ -51,7 +51,7 @@ nodes:
       - docs/current-architecture.md
   - id: documentation-authority-reduction-2026-07-09
     title: Documentation Authority Reduction
-    path: docs/definitions/documentation-authority-reduction-2026-07-09.md
+    path: docs/archive/documentation-authority-reduction-2026-07-09.md
     ledger: ''
     status: settled
     kind: docs_truth
@@ -65,7 +65,7 @@ nodes:
       - cmd/doccheck/main.go
   - id: choir-seam-repair-2026-07-10
     title: Choir Contradiction and Seam Repair
-    path: docs/definitions/choir-seam-repair-2026-07-10.md
+    path: docs/archive/choir-seam-repair-2026-07-10.md
     ledger: ''
     status: settled
     kind: product_completion
@@ -79,7 +79,7 @@ nodes:
       - docs/computer-ontology.md
   - id: choir-audited-autoputer-construction-2026-07-15
     title: Make the Autoputer Real — Audited Computer Construction
-    path: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+    path: docs/archive/choir-audited-autoputer-construction-2026-07-15.md
     ledger: ''
     status: settled
     kind: spine
@@ -96,12 +96,12 @@ nodes:
       - docs/standing-questions.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+      - docs/archive/og-dolt-heresy-completion-2026-07-08.md
       - AGENTS.md
       - docs/choir-doctrine.md
   - id: choir-cli-self-development-2026-07-16
     title: Make Choir Self-Developing — Capsule-Scoped Audited Work
-    path: docs/definitions/choir-cli-self-development-2026-07-16.md
+    path: docs/archive/choir-cli-self-development-2026-07-16.md
     ledger: ''
     status: superseded
     kind: spine
@@ -116,7 +116,7 @@ nodes:
       citable, but the rejected Round 72 candidate must not be merged or
       deployed. Self-development effects remain OFF.
     sources:
-      - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+      - docs/archive/choir-audited-autoputer-construction-2026-07-15.md
       - docs/evidence/audited-construction-terminal-receipt-2026-07-17.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
@@ -125,7 +125,7 @@ nodes:
       - AGENTS.md
   - id: choir-coherent-computer-convergence-2026-07-21
     title: Converge Choir on One Durable Agentic Computer
-    path: docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
+    path: docs/archive/choir-coherent-computer-convergence-2026-07-21.md
     ledger: ''
     status: settled
     kind: spine
@@ -143,8 +143,8 @@ nodes:
       successor stays blocked pending separate owner ratification and registry
       promotion.
     sources:
-      - docs/definitions/choir-cli-self-development-2026-07-16.md
-      - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+      - docs/archive/choir-cli-self-development-2026-07-16.md
+      - docs/archive/choir-audited-autoputer-construction-2026-07-15.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
       - docs/standing-questions.md
@@ -152,7 +152,7 @@ nodes:
       - AGENTS.md
   - id: choir-continuous-texture-supervision-2026-08-07
     title: Continuous Texture Supervision
-    path: docs/definitions/choir-continuous-texture-supervision-2026-08-07.md
+    path: docs/archive/choir-continuous-texture-supervision-2026-08-07.md
     ledger: docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
     status: superseded
     kind: spine
@@ -169,23 +169,23 @@ nodes:
       payload (SHA-256 a66562ec9964ca8d0e8a6932427f97a1a115c49fc3e59751654e12c8e36017b8,
       not executed, retained append-only). Effects remained OFF under CTS.
     sources:
-      - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
+      - docs/archive/choir-coherent-computer-convergence-2026-07-21.md
       - docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
       - docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md
       - docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md
       - docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md
-      - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+      - docs/archive/choir-supervised-self-development-effects-2026-08-11.md
       - docs/standing-questions.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
       - docs/choir-doctrine.md
-      - docs/supervision-protocol.md
+      - docs/archive/supervision-protocol.md
       - docs/texture-agentic-invariants-2026-06-13.md
       - docs/ACTIVE.md
       - AGENTS.md
   - id: choir-sandbox-autoputer-rename-2026-08-11
     title: Sandbox to Autoputer Rename
-    path: docs/definitions/choir-sandbox-autoputer-rename-2026-08-11.md
+    path: docs/archive/choir-sandbox-autoputer-rename-2026-08-11.md
     ledger: ''
     status: settled
     kind: subordinate_contract
@@ -205,15 +205,15 @@ nodes:
       path passed deployed acceptance. No compatibility path is permitted.
 
     sources:
-      - docs/definitions/choir-sandbox-autoputer-rename-2026-08-11.md
-      - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+      - docs/archive/choir-sandbox-autoputer-rename-2026-08-11.md
+      - docs/archive/choir-supervised-self-development-effects-2026-08-11.md
       - docs/computer-ontology.md
       - docs/choir-doctrine.md
       - docs/standing-questions.md
       - AGENTS.md
   - id: choir-tape-recovery-2026-08-13
     title: Tape-Based Recovery (Whole-Computer Restore)
-    path: docs/definitions/choir-tape-recovery-2026-08-13.md
+    path: docs/archive/choir-tape-recovery-2026-08-13.md
     ledger: ''
     status: settled
     kind: spine
@@ -233,7 +233,7 @@ nodes:
       satisfied-by this Definition. World Wire is tabled until after the
       actor RLM rewrite.
     sources:
-      - docs/definitions/choir-tape-recovery-2026-08-13.md
+      - docs/archive/choir-tape-recovery-2026-08-13.md
       - docs/memo-per-computer-frontend-2026-08-13.md
       - docs/choir-doctrine.md
       - docs/computer-ontology.md
@@ -243,7 +243,7 @@ nodes:
       - AGENTS.md
   - id: choir-supervised-self-development-effects-2026-08-11
     title: Supervised Self-Development with Effects
-    path: docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
+    path: docs/archive/choir-supervised-self-development-effects-2026-08-11.md
     ledger: ''
     status: superseded
     kind: spine
@@ -259,7 +259,7 @@ nodes:
       - docs/ACTIVE.md
   - id: choir-substrate-cleanup-and-cutover-2026-08-25
     title: Substrate Cleanup and Cutover
-    path: docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
+    path: docs/archive/choir-substrate-cleanup-and-cutover-2026-08-25.md
     ledger: ''
     status: settled
     kind: spine
@@ -276,14 +276,14 @@ nodes:
       resume of a hibernated test computer. Substrate landed; the carrier is
       the sole working entrypoint.
     sources:
-      - docs/definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md
+      - docs/archive/choir-substrate-cleanup-and-cutover-2026-08-25.md
       - docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md
       - docs/reports/choir-system-orientation-and-station-report-2026-08-25.md
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
   - id: choir-scheduling-and-candidate-proof-2026-08-21
     title: Scheduling Contract and Candidate Proof
-    path: docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
+    path: docs/archive/choir-scheduling-and-candidate-proof-2026-08-21.md
     ledger: ''
     status: superseded
     kind: spine
@@ -300,13 +300,13 @@ nodes:
       scheduling and normal-boot stability; Definition 3
       (choir-supervised-self-development-on-rlm-2026-09-02) owns Candidate A self-development.
     sources:
-      - docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md
+      - docs/archive/choir-scheduling-and-candidate-proof-2026-08-21.md
       - docs/standing-questions.md
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
   - id: choir-substrate-and-scheduling-readiness-2026-09-02
     title: Substrate & Scheduling Readiness
-    path: docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
+    path: docs/archive/choir-substrate-and-scheduling-readiness-2026-09-02.md
     ledger: ''
     status: settled
     kind: spine
@@ -323,7 +323,7 @@ nodes:
       settlement via store-layer CAS reducer, isolated exact-run resume, terminal probe
       negative/positive verified, and >15 normal boots to health 200 without hold.
     sources:
-      - docs/definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md
+      - docs/archive/choir-substrate-and-scheduling-readiness-2026-09-02.md
       - docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md
       - docs/evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md
       - docs/evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md
@@ -334,7 +334,7 @@ nodes:
       - docs/ACTIVE.md
   - id: choir-rlm-session-interpreter-cutover-2026-09-02
     title: RLM Session Interpreter & Ambient Tool Parity
-    path: docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md
+    path: docs/archive/choir-rlm-session-interpreter-cutover-2026-09-02.md
     ledger: ''
     status: superseded
     kind: spine
@@ -350,12 +350,12 @@ nodes:
       choir-rlm-target-architecture-cutover-2026-09-04 following 8-model agentic
       consensus review and Rev 5 target architecture specification.
     sources:
-      - docs/definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md
-      - docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
+      - docs/archive/choir-rlm-session-interpreter-cutover-2026-09-02.md
+      - docs/archive/choir-rlm-target-architecture-cutover-2026-09-04.md
       - docs/ACTIVE.md
   - id: choir-rlm-target-architecture-cutover-2026-09-04
     title: Choir RLM Target Architecture Cutover
-    path: docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
+    path: docs/archive/choir-rlm-target-architecture-cutover-2026-09-04.md
     ledger: ''
     status: blocked
     kind: spine
@@ -380,14 +380,14 @@ nodes:
       no open settlement remainder.
       Restore spine is choir-rlm-restore-zero-2026-09-08. Do not mark complete.
     sources:
-      - docs/definitions/choir-rlm-target-architecture-cutover-2026-09-04.md
-      - docs/designs/rlm-target-architecture-2026-09-04.md
+      - docs/archive/choir-rlm-target-architecture-cutover-2026-09-04.md
+      - docs/archive/rlm-target-architecture-2026-09-04.md
       - docs/reports/choir-status-and-next-steps-2026-09-04.md
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
   - id: choir-supervised-self-development-on-rlm-2026-09-02
     title: Supervised Self-Development on RLM
-    path: docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
+    path: docs/archive/choir-supervised-self-development-on-rlm-2026-09-02.md
     ledger: ''
     status: blocked
     kind: spine
@@ -404,13 +404,13 @@ nodes:
       under reversible-selfdev-v1, promotion, falsification, and restore to
       pre-A checkpoint 99949fe2 on the RLM surface.
     sources:
-      - docs/definitions/choir-supervised-self-development-on-rlm-2026-09-02.md
+      - docs/archive/choir-supervised-self-development-on-rlm-2026-09-02.md
       - docs/reports/choir-harness-state-and-rlm-cutover-plan-2026-09-02.md
       - docs/choir-doctrine.md
       - docs/ACTIVE.md
   - id: choir-rlm-restore-zero-2026-09-08
     title: RLM Restore-Zero
-    path: docs/definitions/choir-rlm-restore-zero-2026-09-08.md
+    path: docs/archive/choir-rlm-restore-zero-2026-09-08.md
     ledger: ''
     status: settled
     kind: spine
@@ -425,7 +425,7 @@ nodes:
       owner store. PlanRecovery resume local=148431 W=148431 H=148431 tail=0;
       no prefix page fetches. G4 constructed-computer CI skip left intact.
     sources:
-      - docs/definitions/choir-rlm-restore-zero-2026-09-08.md
+      - docs/archive/choir-rlm-restore-zero-2026-09-08.md
       - docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md
       - docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md
       - docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md
@@ -434,7 +434,7 @@ nodes:
       - docs/ACTIVE.md
   - id: choir-rlm-settlement-gate-2026-09-09
     title: RLM Settlement Gate
-    path: docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
+    path: docs/archive/choir-rlm-settlement-gate-2026-09-09.md
     ledger: ''
     status: settled
     kind: spine
@@ -448,12 +448,12 @@ nodes:
       computer-03335285269bdba4f94377e56879f9e6 at commit 0475ed84.
       All 8 acceptance items satisfied.
     sources:
-      - docs/definitions/choir-rlm-settlement-gate-2026-09-09.md
+      - docs/archive/choir-rlm-settlement-gate-2026-09-09.md
       - docs/evidence/choir-rlm-settlement-deployed-proof-2026-09-09.md
       - docs/ACTIVE.md
   - id: choir-rlm-versioned-rename-2026-09-09
     title: RLM Versioned Rename
-    path: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
+    path: docs/archive/choir-rlm-versioned-rename-2026-09-09.md
     ledger: ''
     status: settled
     kind: spine
@@ -470,12 +470,12 @@ nodes:
       computer-03335285269bdba4f94377e56879f9e6 at epoch 909 with fast-path
       reboot in 29s.
     sources:
-      - docs/definitions/choir-rlm-versioned-rename-2026-09-09.md
+      - docs/archive/choir-rlm-versioned-rename-2026-09-09.md
       - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
       - docs/ACTIVE.md
   - id: choir-host-orchestrated-recovery-2026-08-22
     title: Host-Orchestrated Recovery (Cold Recover Current)
-    path: docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md
+    path: docs/archive/choir-host-orchestrated-recovery-2026-08-22.md
     ledger: ''
     status: settled
     kind: subordinate_contract
@@ -490,12 +490,12 @@ nodes:
       Initial cold recover_current attempt blank-seeded sparse image without a
       differential base, hitting the same 132k-event replay timeout.
     sources:
-      - docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md
+      - docs/archive/choir-host-orchestrated-recovery-2026-08-22.md
       - docs/evidence/effects-red-guest-dependent-restore-2026-08-22.md
       - docs/evidence/effects-red-recovery-no-differential-base-2026-08-23.md
   - id: choir-durable-substrate-recovery-2026-08-23
     title: Recovery of Stopped Computer (ProjectionBase Rebuild)
-    path: docs/definitions/choir-durable-substrate-recovery-2026-08-23.md
+    path: docs/archive/choir-durable-substrate-recovery-2026-08-23.md
     ledger: ''
     status: settled
     kind: subordinate_contract
@@ -510,8 +510,8 @@ nodes:
       Settled historical recovery operation. 0333528 was recovered to canonical head
       132,436 via the fixed boot/replay contract. Offline ProjectionBase rebuild was deferred.
     sources:
-      - docs/definitions/choir-durable-substrate-recovery-2026-08-23.md
-      - docs/designs/choir-durable-substrate-2026-08-23.md
+      - docs/archive/choir-durable-substrate-recovery-2026-08-23.md
+      - docs/archive/choir-durable-substrate-2026-08-23.md
       - docs/evidence/root-cause-clustering-recovery-substrate-2026-08-23.md
       - docs/evidence/effects-red-recovery-projections-present-2026-08-23.md
       - docs/evidence/effects-red-recovery-no-differential-base-2026-08-23.md
@@ -522,7 +522,7 @@ nodes:
       - AGENTS.md
   - id: choir-durable-substrate-preflight-2026-08-24
     title: Durable Substrate Pre-Flight (Dolt 2.0, d03 Loop, GC Policy, Replay Ceiling)
-    path: docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
+    path: docs/archive/choir-durable-substrate-preflight-2026-08-24.md
     status: settled
     kind: spine
     entrypoint: false
@@ -541,7 +541,7 @@ nodes:
       guard; live computer 0333528 liveness restored (Texture startup stale ActiveRunID
       reconciliation fixed and verified on staging). Unblocks the 4-track overhauls.
     sources:
-      - docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
+      - docs/archive/choir-durable-substrate-preflight-2026-08-24.md
       - docs/evidence/dolt-v2-research-2026-08-24.md
       - docs/evidence/recovery-replay-guest-io-ceiling-assessment-2026-08-24.md
       - docs/evidence/fleet-d03dacaa-invalid-genesis-loop-2026-08-24.md
@@ -554,7 +554,7 @@ nodes:
       - AGENTS.md
   - id: choir-durable-substrate-overhauls-2026-08-23
     title: Durable Substrate Overhauls
-    path: docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
+    path: docs/archive/choir-durable-substrate-overhauls-2026-08-23.md
     ledger: ''
     status: settled
     kind: spine
@@ -572,15 +572,15 @@ nodes:
       atomic boot hydration, and ProjectionBase materializer; Track M host fsync'd MTA
       spool, async LMTP drain, and guest Maildir; Assurance & Scale self-describing
     sources:
-      - docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md
-      - docs/designs/choir-durable-substrate-2026-08-23.md
+      - docs/archive/choir-durable-substrate-overhauls-2026-08-23.md
+      - docs/archive/choir-durable-substrate-2026-08-23.md
       - docs/choir-doctrine.md
       - docs/computer-ontology.md
       - docs/ACTIVE.md
       - AGENTS.md
   - id: choir-0333528-stabilize-and-hold-2026-08-24
     title: Stabilize and Hold 0333528 (maintenance hold gate)
-    path: docs/definitions/choir-0333528-stabilize-and-hold-2026-08-24.md
+    path: docs/archive/choir-0333528-stabilize-and-hold-2026-08-24.md
     ledger: ''
     status: settled
     kind: subordinate_contract
@@ -595,17 +595,17 @@ nodes:
       computer-03335285269bdba4f94377e56879f9e6 (held=true, RUNTIME_MAINTENANCE_HOLD=1).
       Sealed as an immutable historical evidence artifact.
     sources:
-      - docs/definitions/choir-0333528-stabilize-and-hold-2026-08-24.md
+      - docs/archive/choir-0333528-stabilize-and-hold-2026-08-24.md
       - docs/evidence/0333528-recurring-corruption-loop-2026-08-24.md
-      - docs/definitions/choir-durable-substrate-recovery-2026-08-23.md
-      - docs/definitions/choir-durable-substrate-preflight-2026-08-24.md
+      - docs/archive/choir-durable-substrate-recovery-2026-08-23.md
+      - docs/archive/choir-durable-substrate-preflight-2026-08-24.md
       - docs/choir-doctrine.md
       - docs/computer-ontology.md
       - docs/ACTIVE.md
       - AGENTS.md
   - id: choir-private-go-actor-kernel-2026-08-12
     title: Private Go Actor Kernel
-    path: docs/definitions/choir-private-go-actor-kernel-2026-08-12.md
+    path: docs/archive/choir-private-go-actor-kernel-2026-08-12.md
     ledger: ''
     status: settled
     kind: spine
@@ -621,8 +621,8 @@ nodes:
       inside disposable guest-local capsules with unified Bash/Go broker
       routing, opaque handles, durable continuity across forced
     sources:
-      - docs/definitions/choir-supervised-self-development-effects-2026-08-11.md
-      - docs/memo-persistent-rlm-actors-2026-08-09.md
+      - docs/archive/choir-supervised-self-development-effects-2026-08-11.md
+      - docs/archive/memo-persistent-rlm-actors-2026-08-09.md
       - docs/standing-questions.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
@@ -631,7 +631,7 @@ nodes:
       - AGENTS.md
   - id: choir-instruction-substrate-prune-2026-08-11
     title: Instruction Substrate Prune
-    path: docs/definitions/choir-instruction-substrate-prune-2026-08-11.md
+    path: docs/archive/choir-instruction-substrate-prune-2026-08-11.md
     ledger: ''
     status: settled
     kind: ci_maintenance
@@ -646,7 +646,7 @@ nodes:
       invariant conservation. Retired tracker must not be re-opened; historical
       evidence only.
     sources:
-      - docs/definitions/choir-instruction-substrate-prune-2026-08-11.md
+      - docs/archive/choir-instruction-substrate-prune-2026-08-11.md
       - docs/evidence/choir-instruction-substrate-prune-triage-2026-08-11.md
       - docs/evidence/choir-instruction-substrate-prune-doccheck-2026-08-11.md
       - docs/evidence/choir-instruction-substrate-prune-packet-2026-08-11.md
@@ -656,7 +656,7 @@ nodes:
       - AGENTS.md
   - id: choir-in-choir-computer-control-draft-2026-07-18
     title: DRAFT — Choir-in-Choir Computer Control
-    path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
+    path: docs/archive/choir-in-choir-computer-control-draft-2026-07-18.md
     ledger: ''
     status: blocked
     kind: product_completion
@@ -672,8 +672,8 @@ nodes:
       access, SSH, raw vmctl, shared owner credentials, candidate VMs, transitive
       grants, implementation, or /goal execution.
     sources:
-      - docs/definitions/choir-cli-self-development-2026-07-16.md
-      - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
+      - docs/archive/choir-cli-self-development-2026-07-16.md
+      - docs/archive/choir-coherent-computer-convergence-2026-07-21.md
       - docs/standing-questions.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
@@ -682,7 +682,7 @@ nodes:
       - AGENTS.md
   - id: choir-computerversion-performance-optimization-draft-2026-07-15
     title: DRAFT — ComputerVersion Realization Performance Optimization
-    path: docs/definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md
+    path: docs/archive/choir-computerversion-performance-optimization-draft-2026-07-15.md
     ledger: ''
     status: blocked
     kind: product_completion
@@ -698,7 +698,7 @@ nodes:
       numerical SLOs from the baseline, obtain owner ratification, and promote
       a revised successor through all registries before /goal execution.
     sources:
-      - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+      - docs/archive/choir-audited-autoputer-construction-2026-07-15.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
       - docs/standing-questions.md
@@ -706,7 +706,7 @@ nodes:
       - AGENTS.md
   - id: choir-rlm-engineering-carrier-2026-09-11
     title: RLM Engineering Carrier
-    path: docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md
+    path: docs/archive/choir-rlm-engineering-carrier-2026-09-11.md
     ledger: ''
     status: superseded
     kind: spine
@@ -730,7 +730,7 @@ nodes:
       - docs/standing-questions.md
   - id: choir-texture-owner-input-cutover-2026-09-22
     title: Texture Owner Input Cutover (M1)
-    path: docs/definitions/choir-texture-owner-input-cutover-2026-09-22.md
+    path: docs/archive/choir-texture-owner-input-cutover-2026-09-22.md
     ledger: ''
     status: landed
     kind: spine
@@ -749,30 +749,28 @@ nodes:
       - docs/world-wire-mission-stack-2026-09-22.md
       - docs/problems/root-cause-wrong-path-cluster-2026-09-22.md
       - docs/current-situation-2026-09-22.md
-      - docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
+      - docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
       - docs/choir-doctrine.md
       - AGENTS.md
       - docs/standing-questions.md
   - id: choir-sub-rlm-document-channel-2026-09-22
     title: Sub-RLM Document Channel / Carrier Landing (M2)
-    path: docs/definitions/choir-sub-rlm-document-channel-2026-09-22.md
+    path: docs/archive/choir-sub-rlm-document-channel-2026-09-22.md
     ledger: ''
-    status: working
+    status: superseded
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
       - choir-texture-owner-input-cutover-2026-09-22
     enables: []
     note: >-
-      M2 of the ordered mission list. Carrier landing and self-dev
-      capability phase 1 as one mission (1c ≡ 3a): harness drives a real
-      task via choir CLI as a sub-RLM cast on the document channel;
-      engineering desk on in-cell carrier; R7/R9 deletions. Promoted to sole
-      working entrypoint 2026-09-23 on M1's landed terminal receipt.
+      Superseded 2026-09-23. Its remaining carrier and document-channel
+      scope is replaced by the desk-RLM rectification R-sequence (R0–R5),
+      retained here only as the historical M2 record.
     sources:
       - docs/world-wire-mission-stack-2026-09-22.md
-      - docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md
+      - docs/archive/choir-rlm-engineering-carrier-2026-09-11.md
   - id: choir-ontology-kernel-draft-2026-09-22
     title: Ontology Kernel (M3, draft)
     path: docs/definitions/choir-ontology-kernel-draft-2026-09-22.md
@@ -792,11 +790,11 @@ nodes:
       executable until promoted.
     sources:
       - docs/world-wire-mission-stack-2026-09-22.md
-      - docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
+      - docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
       - docs/problems/root-cause-wrong-path-cluster-2026-09-22.md
   - id: choir-desk-crossings-super-retirement-draft-2026-09-22
     title: Desk Crossings + Super/actuator=tools Retirement (M4, draft)
-    path: docs/definitions/choir-desk-crossings-super-retirement-draft-2026-09-22.md
+    path: docs/archive/choir-desk-crossings-super-retirement-draft-2026-09-22.md
     ledger: ''
     status: superseded
     kind: spine
@@ -812,7 +810,7 @@ nodes:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-precommitment-record-ledger-draft-2026-09-22
     title: Precommitment Record Type + OG Ledger (M5, draft)
-    path: docs/definitions/choir-precommitment-record-ledger-draft-2026-09-22.md
+    path: docs/archive/choir-precommitment-record-ledger-draft-2026-09-22.md
     ledger: ''
     status: superseded
     kind: spine

@@ -71,14 +71,16 @@ choir run status <submission_id>
 ```
 
 `run start` posts to `/api/prompt-bar` — the same endpoint the browser prompt
-bar uses. The conductor decides which agent app to route to. The submission
-often completes synchronously: the response `state` may already be
-`completed`, and `run status` then returns the `decision` (routed app,
-`doc_id`, revision/loop ids). For a Texture-routed run, follow up with
-`choir texture revisions <doc_id>` to read what the appagent wrote — the
-appagent revision typically lands within ~10 seconds of submission. Each run
-also creates a trajectory visible in `choir trajectories` under the same id
-as the submission's channel.
+bar uses. `conductor` is deferred to system-one and does not decide current
+routing. The current route is the document-channel/desk path: a bound desk
+receives the document event and may use delegated `choir.Cast` for a
+per-assignment sub-RLM run. The submission often completes synchronously: the
+response `state` may already be `completed`, and `run status` then returns the
+`decision` (routed app, `doc_id`, revision/loop ids). For a Texture-routed run,
+follow up with `choir texture revisions <doc_id>` to read what the appagent
+wrote — the appagent revision typically lands within ~10 seconds of submission.
+Each run also creates a trajectory visible in `choir trajectories` under the
+same id as the submission's channel.
 
 ### API key management
 

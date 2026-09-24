@@ -1,26 +1,20 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-24. **Stale as of 2026-09-22** — this memo predates
-the RLM carrier cutover and the precommitment-records direction; read it as a
-substrate reference, not the current mission state. The sole working
-entrypoint is the
-[RLM Engineering Carrier](definitions/choir-rlm-engineering-carrier-2026-09-11.md)
-(see `ACTIVE.md`). The owner-ratified
-[durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
-completed deployed acceptance and is historical evidence authority. The superseded
-[self-development Definition](definitions/choir-cli-self-development-2026-07-16.md),
-completed audited-construction Definition, and OG/Dolt subordinate D-ROUTE,
-detector, and deletion contracts remain evidence.
-Previous revision: 2026-06-11 ontology revision — durable actors, trajectories,
-conjecture vocabulary; see the Ontology section.
+**Last updated:** 2026-09-23 — rewritten for the desk-RLM rectification
+(`docs/desk-rlm-rectification-plan-2026-09-23.md`). The prior revision
+(2026-07-24, stale-bannered 2026-09-22) described the Super/CoSuper/Researcher
+hierarchy and `update_coagent` as the agent-to-agent primitive; that model is
+superseded. The working mission set is the R-sequence in `ACTIVE.md`.
 
 This is the current architecture memo for Choir. It is meant to be the first
-document read before changing `texture`, conductor routing, workers, Trace, Dolt,
+document read before changing `texture`, desk routing, workers, Trace, Dolt,
 `vmctl`, publication, or appagent behavior. For current vocabulary and project
 direction, read [semantic-registry.md](semantic-registry.md) and
 [choir-doctrine.md](choir-doctrine.md). For the current common platform/default
 computer OS, desktop shell, and app catalog state, read
-[platform-os-app-state.md](platform-os-app-state.md).
+[platform-os-app-state.md](platform-os-app-state.md). For the supervision
+surface, read
+[texture-live-supervision-architecture.md](texture-live-supervision-architecture.md).
 
 ## Document Contract
 
@@ -33,7 +27,7 @@ Every claim in this document belongs to exactly one of three states, and the
 tags below make that explicit (this repairs heresy H020, mixed current/target
 onboarding):
 
-- **Live (2026-07)** — implemented and running in this repo/staging now.
+- **Live** — implemented and running in this repo/staging now.
 - **Target** — decided direction, not yet (fully) implemented. Where an owner
   decision exists, it is cited.
 - **Retired** — a former design or vocabulary that still has code/doc residue
@@ -63,6 +57,8 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 | Subsystem | Status | Current authority boundary |
 | --- | --- | --- |
 | Automatic computer | **Live accepted persistent substrate and generic durable-work kernel** | Stable computers, audited ComputerVersion construction, lifecycle, canonical artifact/subject/work/update reducers, restart reconstruction, native settlement/cancellation, and signed no-SSH inspection are accepted at deployed commit `4ffcae3a`. Effects remain OFF; rejected self-development work is preserved branch evidence only. |
+| Document channel (M1) | **Live** | Owner input to a lifecycle-bound Texture document is a canonical document revision event; the `tell`/`correct`/`roster`/`LifecycleOwnerInstruction` side channel is deleted (deployed `3b780ed2`, 2026-09-23). |
+| Engineering desk carrier | **Live, partial** | The engineering desk runs yaegi Go cells via `capsule_go_eval`; staged `choir.*` intents reduce through the reducer. The desk agent is not yet a persistent root RLM and the document has no live `AuthorAppAgent` writer — see the supervision gap below. |
 | Choir CLI | **Accepted lifecycle read/control client** | Submit/read/trajectory/search/Wire/API-key/current-computer commands exist. `lifecycle snapshot` and durable cursor replay matched desktop/browser state in staging acceptance. The CLI does not implement `/goal`; self-development controls exist only in rejected evidence. |
 | Web desktop | **Live** | `frontend/src/lib/apps/registry.ts` is the executable app inventory; this memo and `platform-os-app-state.md` classify behavior and gaps. |
 | macOS desktop | **Buildable wrapper; shipment unproven here** | Wails shell around the Svelte product; distribution/daily-driver status requires dated acceptance evidence. |
@@ -76,42 +72,44 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 `/goal <definition.md>` is an external compatible-harness invocation. Choir's
 CLI, prompt bar, and runtime do not implement an end-to-end Definition runner.
 
-## Ontology (2026-06-11 Revision)
+## Ontology
 
-The architecture program of 2026-06-11 revised the core ontology. Its settled
-claims are now maintained in this document, [choir-doctrine.md](choir-doctrine.md),
-and [runtime-invariants.md](runtime-invariants.md); the source program remains
-available in Git history. The runtime protocols are model-checked in `specs/`
-(TLC runs in CI).
+The core ontology is maintained in this document,
+[choir-doctrine.md](choir-doctrine.md), and
+[runtime-invariants.md](runtime-invariants.md). The runtime protocols are
+model-checked in `specs/` (TLC runs in CI).
 
-**Transitional honesty (revised 2026-07-07):** the actor cutover is further
-along than earlier revisions of this paragraph claimed. **Live (2026-07):** the
-actor runtime is fully wired and is the *only* execution substrate — the
-`dispatchActor` hook panics if nil, with no legacy fallback path; cold-start,
-coagent wake, cancel, park-resume, and the tool loop all run through the
-actor; warm delivery is a Go channel, not DB polling (H030 repaired).
-`internal/runtime` was dissolved in commit `c791a0ae` (2026-07-14): the live
-business-logic layer (tool loops, texture state machine, wire synthesis, run
-memory) now lives in `internal/agentcore`, `internal/textureowner`, and
-`internal/coagentowner`, with the actor runtime substrate in
-`internal/actorruntime` and `internal/actor`. **Retired (residue still in
-tree):** parent/child run control and RunContinuations are named heresies
-(H001–H008). They have no current execution assignment and must receive no new
-callers; any future mutation requires explicit active-Definition authority.
+**Live:** the actor runtime is fully wired and is the *only* execution
+substrate — the `dispatchActor` hook panics if nil, with no legacy fallback
+path; cold-start, coagent wake, cancel, park-resume, and the tool loop all run
+through the actor; warm delivery is a Go channel, not DB polling (H030
+repaired). The live business-logic layer (tool loops, texture state machine,
+wire synthesis, run memory) lives in `internal/agentcore`,
+`internal/textureowner`, and `internal/coagentowner`, with the actor runtime
+substrate in `internal/actorruntime` and `internal/actor`. **Retired (residue
+still in tree):** parent/child run control and RunContinuations are named
+heresies (H001–H008). They have no current execution assignment and must
+receive no new callers; any future mutation requires explicit active-Definition
+authority.
 
 | Term | Meaning |
 |---|---|
+| **desk** | a persistent root-RLM actor bound to a profile and a channel; runs yaegi Go cells in a subprocess; never terminates while its subject is live. The four desks are `management`, `engineering`, `research`, `texture`. |
+| **root RLM** | the desk's cell loop is the actor; sub-RLMs are per-assignment runs the desk casts. |
 | **actor** | an agent as a durable actor: goroutine + mailbox while resident; idempotent update log + compacted memory snapshot while passivated. Actors never "complete" — they passivate and re-warm. |
-| **activation** | one residency: wake → work (possibly hours, many compactions) → passivate. Bounded by budgets and eviction, not retired leases (no lease concept in v1). |
-| **update** | the one agent-to-agent message primitive (`update_coagent`): typed, idempotent by update_id, durably logged before delivery. The only wake source. |
+| **activation** | one residency: wake → work (possibly hours, many compactions) → passivate. Bounded by budgets and eviction. |
+| **semantic act** | the desk-to-desk communication primitive: in-cell `choir.*` functions (`Cast`, `Report`, `Ask`, `Precommit`, `Resolve`, `Cancel`, `Escalate`, `Note`, plus engineering's `Complete`/`Freeze`/`Verify`). One transport/provenance envelope, two record semantics (operational vs epistemic). |
+| **cast** | async admission between actors. *Owner-cast* (owner revision admits work — kept) and *delegated cast* (a desk's staged `choir.Cast` admits work — new admission authority). |
+| **commitment** | a typed claim with resolver and deadline on the ledger; resolves to an outcome; accrues to the desk's score. |
+| **assignment** | the durable work record a cast opens. The fate saga (freeze/revoke/destroy/record) survives as host machinery. |
 | **mailbox** | the in-memory delivery vehicle for a resident actor. Never the truth — always rebuildable from the log. |
 | **sweep** | the recovery rule: any non-resident agent with unprocessed backlog is activation-eligible. Covers boot, crash windows, post-eviction re-wake. |
 | **trajectory** | the causality object: durable record with kind, subject refs, and an explicit settlement rule (data, not code). Replaces parent/child trees as the control model. |
-| **work item** | a durable assignment on a trajectory: objective, authority envelope, fingerprint-deduped. Replaces retired RunContinuation. |
-| **settlement** | a trajectory's goal closure, earned by its rule (e.g. publication: published AND listed AND no open work). Replaces root-run completion as liveness truth. |
+| **work item** | a durable assignment on a trajectory: objective, authority envelope, fingerprint-deduped. |
+| **settlement** | a trajectory's goal closure, earned by its rule. Replaces root-run completion as liveness truth. |
 | **obligation** | an open work item, blocker, or question on a live trajectory. "Open obligations with no resident assignee" is the stall query — observability, never a planner. |
-| **authority envelope** | a code-enforced profile boundary. Super orchestrates but cannot mutate directly; CoSuper effects are capsule broker verbs; Researcher has typed updates only; VSuper aliases are retired for self-development. |
-| **capsule** | an ephemeral guest-local effect chamber. Canonical source contains an effects-OFF executor and namespace/cgroup/overlay/seccomp/Landlock/broker components, but the exact Node A harness receipts and rejected Round 72 changes are not staging product acceptance. The accepted live boundaries are audited ComputerVersion construction and the generic durable-work kernel; no current Definition authorizes capsule, updater, checkpoint, or route effects. |
+| **authority envelope** | a code-enforced profile boundary. Management orchestrates but cannot mutate directly; engineering effects are capsule-broker verbs; research has read/search plus message authority. |
+| **capsule** | an ephemeral guest-local effect chamber. The accepted live boundaries are audited ComputerVersion construction and the generic durable-work kernel; no current Definition authorizes capsule, updater, checkpoint, or route effects. |
 | **computer event / acceptance** | the canonical per-ComputerID causal and state-transition record. A frozen bundle remains inert until an authorized acceptance event; updater, checkpoint, and route are projections, not alternate promotion authorities. |
 | **conjecture / hyperthesis / assertion** | the epistemic vocabulary: a claim under test with a named blind edge and scope; an assertion is a supported conjecture with receipts; heresy is a circulating claim whose proof died. |
 
@@ -120,7 +118,13 @@ are replaced — work items and warm steering). **Parent/child as control**
 (provenance-only edge remains). **"Channel"** unqualified — say *mailbox* for
 delivery, *document/trajectory channel* for the product surface, *Go channel*
 for the primitive. **"Autoputer" as product ontology** — the product object is a
-persistent computer (code/service rename deferred until capsules land).
+persistent computer (code/service rename deferred). **`super`/`cosuper`/
+`researcher` as live role names** — the live profile values are
+`management`/`engineering`/`research`; `update_coagent` and `assign_co_super`
+are deleted for the four desks; `actuator=tools` is retired in favor of the
+yaegi-cell carrier. Durable vocabulary (`co_super_assignment_*` event kinds,
+OG kinds, SQL tables, the `choir:co-super-assignment:v3` identity seed) remains
+old pending the stratum-B migration — renaming the identity seed breaks replay.
 
 The self-improvement frame (one promotion discipline at every grain):
 
@@ -153,9 +157,9 @@ to stabilize the deployed system around the right causal model.
 Choir is not retired chat and not a generic coding-agent runner. The visible
 product is a web desktop with apps. Some apps grow into appagents; most apps can
 remain plain display/control surfaces. The hidden product machinery is a dark
-factory of researchers, supers, cosupers, capsules, events, evidence, artifacts,
-document versions, checkpoints, projections, and eventually publications,
-radio traversals, and citation/economic state.
+factory of desks, sub-RLMs, capsules, events, evidence, artifacts, document
+versions, checkpoints, projections, and eventually publications, radio
+traversals, and citation/economic state.
 
 The operating stance is staging-first. Meaningful claims about vmctl, gateway
 credentials, live model/search calls, lifecycle, event acceptance,
@@ -166,11 +170,11 @@ remains useful for focused unit shaping, but local proof does not establish
 product readiness.
 
 This staging-first rule applies to platform behavior and shared runtime claims.
-The self-development target is one long-lived, reconstructible computer: a
-CoSuper works only inside a capability-bound guest capsule; the resulting
-effect bundle is independently verified and remains inert until an external,
-ComputerID-scoped approval appends an acceptance event. A root guest updater
-then stages and health-checks the release, publishes a reconstruction
+The self-development target is one long-lived, reconstructible computer:
+engineering work executes only inside a capability-bound guest capsule; the
+resulting effect bundle is independently verified and remains inert until an
+external, ComputerID-scoped approval appends an acceptance event. A root guest
+updater then stages and health-checks the release, publishes a reconstruction
 checkpoint, and asks vmctl to project the accepted checkpoint into the route.
 No candidate VM, mutable branch, host daemon, AppAdoption/lineage record, raw
 vmctl, SSH, or internal API is part of that product path.
@@ -221,16 +225,15 @@ host services
   -> sourcecycled owns the current experimental source-service daemon
 
 platform computer runtime
-  -> cloud-level processors/reconcilers/researchers/Texture agents where present
+  -> cloud-level desks and source/publication agents where present
   -> cloud-owned Wire artifacts, editions, indexes, and agent notebooks
   -> cloud-owned source/publication state that is semantic product state
 
 per-user computer runtime
-  -> conductor routes owner intent
+  -> owner revision on a bound document is the input event
   -> app surfaces project durable state
   -> appagents own canonical semantic artifacts when needed
-  -> researcher/super/co-super durable runs create evidence; capsule-scoped effects remain inert candidates
-  -> user processors/reconcilers personalize accessible corpora where present
+  -> desk actors and capsule-scoped sub-RLMs create evidence; capsule effects remain inert candidates
   -> embedded Dolt owns private computer product state
   -> zot can run as a Super Console subprocess when configured
 ```
@@ -244,12 +247,12 @@ Important boundary rules:
   are host/platform or sidecar services in the current codebase. They should
   stay narrow and should not become private document, appagent, or user-computer
   semantic owners.
-- The per-user computer runtime is where private conductor, Texture, appagent,
-  Trace, run memory, app state, source metadata, canonical event projections,
-  and inert capsule-proposal metadata live.
-- Platform-level semantic work, such as World Wire article/edition Textures
-  and public source synthesis, should be scoped to platform computer authority
-  even when host daemons perform serving, lifecycle, or adapter work.
+- The per-user computer runtime is where private Texture, appagent, Trace, run
+  memory, app state, source metadata, canonical event projections, and inert
+  capsule-proposal metadata live.
+- Platform-level semantic work, such as World Wire article/edition Textures and
+  public source synthesis, should be scoped to platform computer authority even
+  when host daemons perform serving, lifecycle, or adapter work.
 - Provider secrets stay in the gateway/platform boundary. Per-computer model
   policy chooses among platform-declared capabilities without copying secrets
   into user state.
@@ -281,15 +284,14 @@ model catalog are platform-owned, but the effective model policy for a user
 computer is computer-owned durable state. The platform may ship default role
 mappings, such as ChatGPT for a foreground role or Fireworks-hosted DeepSeek/Kimi
 for another, but those mappings are not architectural boundaries. Any configured
-model may serve conductor, Texture, researcher, super, co-super, verifier, or
-future production roles when its declared capabilities match the current turn.
-Text-only models can run orchestration, research, coding, writing, and text/code/evidence
-verification. Multimodal models are required only for turns that actually need
-screenshots, images, video frames, uploaded files, or other media input. The
-target architecture is a hierarchy of platform catalog -> platform defaults ->
-per-computer policy -> per-run/task override -> modality requirement, with
-owner and `super` edits flowing through product state rather than Node B config
-patches.
+model may serve a desk, verifier, or future production role when its declared
+capabilities match the current turn. Text-only models can run orchestration,
+research, coding, writing, and text/code/evidence verification. Multimodal
+models are required only for turns that actually need screenshots, images,
+video frames, uploaded files, or other media input. The target architecture is
+a hierarchy of platform catalog -> platform defaults -> per-computer policy ->
+per-run/task override -> modality requirement, with owner and management-desk
+edits flowing through product state rather than Node B config patches.
 
 Platform publication now has a first service boundary. A host-side `corpusd`
 service writes to a separate localhost-only `dolt sql-server` primary and owns
@@ -303,7 +305,9 @@ provenance and a content-addressed hash chain — to `corpusd`. A published
 Texture IS its full versioned history, not only the head projection; the
 manifest is the signable spine a reader/verifier can independently replay and
 check. Public published snapshots now resolve through the Svelte Choir
-shell and Texture app at the current `/pub/texture/...` compatibility route (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`): signed-out visitors get a guest read-only Texture
+shell and Texture app at the current `/pub/texture/...` compatibility route
+(`texture-cutover-allow:` public route shim; deletion receipt:
+`texture-hard-cutover-v0`): signed-out visitors get a guest read-only Texture
 surface, signed-in users can create private derivatives and proposals, and proxy
 read APIs fetch sanitized publication bundles from internal-only `corpusd`
 endpoints. Platform services still never gain write access to the live private
@@ -323,11 +327,11 @@ Code-present/current foundations:
 1. Public and signed-out desktop surfaces exist, and mutable paths are expected
    to cross an auth boundary before continuing through an owned computer. Treat
    individual public/auth-on-mutation journeys as staging-proof-sensitive.
-2. Prompt bar, conductor routing, Texture documents/revisions/history/export,
-   durable runs/trajectories, Trace projections, computer events, guest-local
-   capsules, self-development operations, checkpoints, and route projections
-   form the current source-level product surface. Effects remain default-off;
-   no current Definition authorizes deployed self-development activation.
+2. Prompt bar, Texture documents/revisions/history/export, durable
+   runs/trajectories, Trace projections, computer events, guest-local capsules,
+   self-development operations, checkpoints, and route projections form the
+   current source-level product surface. Effects remain default-off; no current
+   Definition authorizes deployed self-development activation.
 3. Texture already has deterministic backend coverage for document creation,
    revisions, user edits, delegated update integration, stale-result protection,
    source entities, source repairs, attachments, diagnosis, import, export,
@@ -338,24 +342,25 @@ Code-present/current foundations:
    app state is tracked in
    [platform-os-app-state.md](platform-os-app-state.md).
 5. Platform publication has `corpusd`, proxy publish/read APIs, public
-   `/pub/texture/...` compatibility routes (`texture-cutover-allow:` public route shim; deletion receipt: `texture-hard-cutover-v0`), sanitized publication
-   bundles, export, retrieval search, proposal delivery state, and
+   `/pub/texture/...` compatibility routes (`texture-cutover-allow:` public
+   route shim; deletion receipt: `texture-hard-cutover-v0`), sanitized
+   publication bundles, export, retrieval search, proposal delivery state, and
    private-derivative/proposal flows.
 6. The source/Wire substrate has current code in `cmd/sourcecycled`,
    `internal/cycle`, `internal/sourcefetch`, `internal/sourcecontract`,
    `internal/sources`, runtime content/source entity handling, and frontend
-   source panels/viewers. `source_search` can query Source Service for
-   researcher turns when configured, and Texture can preserve
-   `source_service_item:<id>` refs, but there is not yet a user-facing
-   Wire app over an edition Texture, subscription/event stream, newsletter
-   pipeline, or durable per-source scheduling proof.
+   source panels/viewers. `source_search` can query Source Service for research
+   turns when configured, and Texture can preserve `source_service_item:<id>`
+   refs, but there is not yet a user-facing Wire app over an edition Texture,
+   subscription/event stream, newsletter pipeline, or durable per-source
+   scheduling proof.
 
 Active hardening:
 
 1. Keep public desktop and auth-on-mutation verified on staging as the source
    system changes land.
-2. Make Texture/researcher/super/user edit flows smoother, more observable, and
-   less dependent on timing luck, while preserving the two writer classes
+2. Make Texture/desk/owner edit flows smoother, more observable, and less
+   dependent on timing luck, while preserving the two writer classes
    (`AuthorUser` owner edits with immediate canonical-head CAS; `AuthorAppAgent`
    Texture as sole agent writer) and the machine-verifiable revision contract.
 3. Turn source/Wire from substrate into a prominent Wire product surface with
@@ -383,7 +388,8 @@ way that weakens the existing Texture/source/publication contract.
 The current intended core loop is:
 
 ```text
-prompt -> conductor -> texture -> researcher/persistent super -> cosuper -> texture versions
+owner revision -> texture desk -> management desk -> engineering desk (cast)
+  -> capsule-bound sub-RLM cells -> commitment ledger -> texture revisions
 ```
 
 Then:
@@ -466,16 +472,13 @@ A `texture` version is a canonical document state:
   blocker, or a substantive edit depending on the request.
 - `v2+` are user edits and later Texture-authored revisions.
 
-The conductor must not write the first appagent document version. It routes the
-prompt, creates or opens the Texture document shell, preserves the user's seed,
-and starts Texture. Texture writes the first response version. The prior
-"conductor creates an initial seed" policy is superseded because it blurred the
-writer-class boundary. Conductor may materialize the `v0` owner prompt as
-canonical input (`AuthorUser`); Texture owns `v1` and every subsequent
-agent-authored version (`AuthorAppAgent`). Every revision is a monotonic,
-self-contained snapshot of current semantic state; owner edits remain immediate
-`AuthorUser` head-CAS versions at any time, and prior versions are never
-required context for acting on the current head.
+Owner input is the document revision itself (M1): the owner edit is the
+canonical `AuthorUser` head-CAS event, and no separate tell/instruction channel
+exists. Texture owns `v1` and every subsequent agent-authored version
+(`AuthorAppAgent`). Every revision is a monotonic, self-contained snapshot of
+current semantic state; owner edits remain immediate `AuthorUser` head-CAS
+versions at any time, and prior versions are never required context for acting
+on the current head.
 
 For existing user-authored Texture documents, the current user revision is
 already canonical document state. A follow-up owner request should not force a
@@ -486,20 +489,20 @@ state instead of hiding it in Trace.
 The target Texture loop is deliberately small:
 
 ```text
-prompt -> conductor route -> v0 owner input -> Texture writes v1 response
-  -> Texture sends durable co-agent messages when needed
-  -> workers reply with durable updates/evidence
+owner revision (v0) -> Texture writes v1 response
+  -> Texture casts/reports to desks through semantic acts when needed
+  -> desks reply with durable reports/evidence and resolved commitments
   -> Texture wakes and writes the next version
 ```
 
-The complexity should live in durable agent-to-agent communication and evidence,
+The complexity should live in durable desk-to-desk communication and evidence,
 not in prompt taxonomies, conductor-authored drafts, tool-choice classifiers, or
 hidden workflow state machines.
 
-Workers do not send patches to `texture`. That mixes concerns. Workers emit
-updates: findings, evidence, source references, artifact refs, branch/commit
+Desks do not send patches to `texture`. That mixes concerns. Desks emit
+reports: findings, evidence, source references, artifact refs, branch/commit
 refs, preview refs, test results, questions, constraints, or proposal summaries.
-The `texture` appagent/writer decides whether and how those updates become a new
+The `texture` appagent/writer decides whether and how those reports become a new
 document version.
 
 For candidate coding work and human approval, the default owner-review artifact
@@ -510,7 +513,7 @@ evidence bundles or run acceptance. Diffs and logs are still important, but
 they should not be the only human proof for interactive product behavior.
 
 The first implementation can create a new `texture` revision after each meaningful
-worker update. That policy should be isolated so it can later debounce, batch, or
+desk report. That policy should be isolated so it can later debounce, batch, or
 delay revisions when the user is not attending the latest version. Correctness
 must not depend on the debounce policy.
 
@@ -528,29 +531,53 @@ Required deterministic tests:
 - Prompt creation produces one document with `v0` owner prompt/user input and a
   started Texture writer run.
 - Texture creates `v1` through the same Texture edit path used for later appagent
-  revisions; conductor cannot create appagent-authored document text.
+  revisions; no other agent can create appagent-authored document text.
 - Owner-triggered work that cannot complete immediately produces an honest
   acknowledgement/work-state revision instead of a trivial instruction cleanup.
 - User edits always create user-authored versions.
-- Worker updates are durably attached to the document trajectory.
-- A `texture` revision records which worker updates it consumed, skipped, or left
+- Desk reports are durably attached to the document trajectory.
+- A `texture` revision records which desk reports it consumed, skipped, or left
   pending.
-- A stale worker result cannot overwrite or erase a later user-authored version.
+- A stale desk result cannot overwrite or erase a later user-authored version.
 - User edits redirect future synthesis.
-- Unified logs/evidence can explain prompt -> conductor -> texture -> worker
-  update -> version during development/debugging.
+- Unified logs/evidence can explain owner revision -> texture -> desk
+  report -> version during development/debugging.
 
 Browser/e2e tests should verify integration, but the product contract should be
 proven by deterministic backend/API tests with fake providers, fake workers, and
 a fake clock.
 
-## Agent Roles
+## Desk Roles
 
-`conductor` receives top-level user and connector input. It decides whether to
-open an app, show a toast, or route to another flow. It does not mutate workspace
-state. In the current Texture path, its only agent delegation target is `texture`;
-it does not spawn `researcher`, `super`, or `cosuper`. Those document-work
-requests begin after `texture` owns the document.
+Four desks are persistent root RLMs. Each runs yaegi Go cells in a killable
+subprocess and exposes a desk-specific `choir` module surface. Sub-RLMs are
+per-assignment runs a desk casts.
+
+`texture` is the sole *agent* writer (`AuthorAppAgent`) for canonical document
+versions and the delegated controller for the trajectory; the owner is the
+separate `AuthorUser` writer class with immediate canonical-head CAS. Texture
+synthesizes owner edits and material desk reports into durable, idea-level
+state; judges that state against the objective; and sends revised direction to
+management or research. One Texture actor may write many versions between owner
+reads. A semantic-changing Texture turn produces exactly one new version;
+wait/block/no-change turns produce none.
+
+`management` is exactly one per computer: the whole-computer coherence,
+error-correction, and resource-arbitration authority — not a concurrency
+limiter. It sees every document's state, holds delegated `Cast` admission into
+engineering, inspects evidence, requests verification, and escalates to the
+owner. It cannot mutate the document or the computer directly.
+
+`engineering` performs mutation only through capsule-bound sub-RLM cells. Its
+effect verbs are `Complete`/`Freeze`/`Verify`; implementation-slot shell,
+filesystem, and build effects occur only through a capability-bound guest-local
+capsule broker. Neither the desk nor its sub-RLMs receive direct core-VM
+mutation or host authority.
+
+`research` reads local files and the web, then asserts findings/evidence through
+`Report`. Its production registry excludes bash, raw Dolt, writable files,
+capsule commit, acceptance, route, and host authority. Its current read-only
+scope cannot message — a policy redesign is needed for full message authority.
 
 `app` means a user-facing desktop surface. An app does not have to be an
 appagent.
@@ -585,70 +612,45 @@ view state must not live only in browser component variables. Per-app code can
 define the shape of its typed context, but persistence and reload semantics must
 use the universal shell/API path.
 
-`texture` is the sole *agent* writer (`AuthorAppAgent`) for canonical document
-versions and the delegated controller for the trajectory; the owner is the
-separate `AuthorUser` writer class with immediate canonical-head CAS. Texture
-synthesizes owner edits and material coagent updates into durable, idea-level
-state; judges that state against the objective; and sends revised direction to
-Researcher or Super. One Texture actor may write many versions between owner
-reads. A semantic-changing Texture turn produces exactly one new version;
-wait/block/no-change turns produce none.
-
-`researcher` reads local files and the web, then submits findings/evidence only
-through the typed `update_coagent` source-packet mutation. Its production
-registry excludes bash, raw Dolt, writable files, capsule commit, acceptance,
-route, and host authority.
-
-`super` is exactly one per computer: the whole-computer coherence,
-error-correction, and resource-arbitration authority — not a concurrency
-limiter. It sees every document's state, orchestrates capsules and delegation,
-inspects evidence, requests verification, and returns intermediate or terminal
-operational synthesis to Texture through typed updates. It cannot mutate the
-document or the computer directly; its production registry excludes document
-writes, direct host writes, acceptance/commit, candidate shipper, worker-VM,
-route, and host tools.
-
-`vsuper`, `candidate-super`, and aliases are retired from production
-self-development profiles and fail closed.
-
-`cosuper` is a durable execution co-agent. Implementation-slot shell,
-filesystem, and build effects occur only through a capability-bound guest-local
-capsule broker; verifier slots cannot execute or write. Neither slot receives
-direct core-VM mutation or host authority.
-
 `worker VM`, `background computer`, and `candidate VM` are obsolete product
 concepts. Their product authority is retired, but canonical-main code residue
 remains unclaimed pending inventory; rejected-branch deletion is not a landed
 claim. Generic delegated agents remain durable runs/trajectories and may perform
 effects only through a separately accepted capsule path.
 
+`processor`, `reconciler`, and `conductor` are deferred roles: processor and
+reconciler are world-wire roles to be RLM-ified or deleted later; conductor may
+become a "system one" model. They are out of scope for the desk rectification
+and retain their current machinery until their phase.
+
 ### Supervision Boundary And Current Gap
 
 Supervision is not a separate protocol-health layer or actor hierarchy. Texture
 is the delegated supervisory control loop: it maintains the current semantic
-state, receives material updates as the trajectory advances, writes a new
+state, receives material desk reports as the trajectory advances, writes a new
 immutable version when that state changes, and sends revised direction back to
-Researcher or Super. Super supervises execution and verification; scoped
-CoSupers return capability-bounded work and evidence. The owner may read only
-occasionally and can correct the current head without approving every
-intermediate version. The durable-work kernel, typed updates, trajectories,
+management or research. Management supervises execution and verification;
+engineering sub-RLMs return capability-bounded work and evidence. The owner may
+read only occasionally and can correct the current head without approving every
+intermediate version. The durable-work kernel, semantic acts, trajectories,
 work items, Trace, settlement queries, and canonical events are substrate, not
 another supervisor.
 
 The complete bidirectional product loop is not currently accepted live
-behavior. Texture's production registry can spawn Researcher but lacks the
-`update_coagent` tool its prompt names for follow-up, and its delegate policy
-does not currently connect it to the persistent Super. Effects also remain OFF,
-and no current goal file authorizes capsule/self-development effects. The
-self-development gate is sequenced by the revised roadmap
-(`world-wire-mission-stack-2026-09-22.md`, Phase 3) after the carrier and
-precommitment records. The bounded supervision contract it must satisfy —
+behavior. The engineering-bound document has no live `AuthorAppAgent` writer:
+owner revisions trigger host reconcile and open the assignment directly, but
+nothing writes a revision back, so the owner sees only their own last edit.
+Effects also remain OFF, and no current goal file authorizes
+capsule/self-development effects. The desk-RLM rectification sequence (R0–R5 in
+`ACTIVE.md`, planned in
+[desk-rlm-rectification-plan-2026-09-23.md](desk-rlm-rectification-plan-2026-09-23.md))
+closes this gap: persistent root desks, the semantic-act surface, delegated
+cast, the commitment ledger, and Texture's editorial projection of the ledger
+into revisions. The bounded supervision contract it must satisfy —
 computer-scoped arrival ordinals, FIFO among non-expired requests, request
-expiry and assignment deadlines, retryable admission refusal, the
-Texture → Super → scoped CoSuper → Super → Texture path, and N concurrent
-assignments under an admission-ledger overcommit factor — is in
-[supervision-protocol.md](supervision-protocol.md); the old "Mission A/B"
-labels are contract vocabulary, not the current mission sequence.
+expiry and assignment deadlines, retryable admission refusal, and N concurrent
+assignments under an admission-ledger overcommit factor — is carried in the
+rectification plan and the supervision architecture doc.
 
 ## Computer Model
 
@@ -676,7 +678,7 @@ self-development effects are inert bundles, not hibernating computers.
 - May diverge from the platform baseline.
 - Is reconstructed from immutable events, receipts, releases, checkpoints, and
   artifacts without model/tool/network rerun.
-- Is not edited directly by Super, CoSuper, a repair console, or host tools.
+- Is not edited directly by a desk, a repair console, or host tools.
 
 `realization`:
 
@@ -749,7 +751,7 @@ This section is the current authority for the public-identity roadmap target.
 ## Self-Development And Platform Paths
 
 Computer-local self-development targets one explicit stable `ComputerID`.
-CoSuper work executes only in a guest-local capability-bound capsule and
+Engineering work executes only in a guest-local capability-bound capsule and
 freezes as an immutable effect bundle. Independent verification and external
 scoped approval append an acceptance event. A root guest updater atomically
 stages, restarts, and health-checks the guest release; only an applied event
@@ -772,6 +774,7 @@ Platform source changes remain GitHub main → CI → NixOS deploy → staging p
 Shared source/app/publication packages use separate sharing protocols. Neither
 deployment nor package import appends a computer acceptance event merely by
 moving bytes.
+
 ## State Placement
 
 Choir uses exactly two Dolt stores.
@@ -791,9 +794,9 @@ Choir uses exactly two Dolt stores.
 The trusted guest `ComputerEventAppender` is the sole semantic writer for one
 ComputerID. Runtime EventRecord, Trace, trajectories, actor logs, run memory,
 reducers, status, checkpoints, routes, and vmctl are projections or actuators.
-Typed Researcher updates fate-share the exact embedded mutation with event CAS;
-other accepted state changes advance desired and effective heads through the
-declared updater state machine.
+Desk reports fate-share the exact embedded mutation with event CAS; other
+accepted state changes advance desired and effective heads through the declared
+updater state machine.
 
 The embedded store materializes desktop/app graph, appagent state, Texture
 versions, prompts/policies, typed findings, local trajectory indexes, and
@@ -858,7 +861,9 @@ append to an idempotent update log, then deliver into a Go-channel mailbox,
 activating the recipient if cold; nothing polls. Across VMs, the
 transactional outbox carries the same semantics over HTTP (at-least-once
 visibility, exactly-once ledger effects). Both protocols are model-checked:
-`specs/actor_protocol.tla`, `specs/actor_protocol_xvm.tla`. Today's
+`specs/actor_protocol.tla`, `specs/actor_protocol_xvm.tla`. The desk-RLM
+target carries the same semantics through the in-cell `choir.*` semantic acts:
+a staged act commits through the reducer, then wakes the recipient desk.
 `channel_messages` + per-turn inbox polling is legacy deletion residue and must
 receive no new callers.
 
@@ -915,7 +920,7 @@ should trigger auth when needed while preserving the user's current intent.
 
 The prompt bar should react optimistically to user input. Simple version: show a
 loading toast. Better version: animate or expand the prompt into the new `texture`
-window when the conductor opens it.
+window when it opens.
 
 All apps should eventually support true fullscreen, not only maximized windows.
 
@@ -955,7 +960,7 @@ Future coding agents should not simplify Choir into:
 - retired chat plus a task runner
 - one global agent with tools
 - one active computer that mutable workers freely edit
-- workers patching `texture` text directly
+- desks patching `texture` text directly
 - world-wire store as a global polling bus
 - provider-specific product behavior
 - publication as a flat export with no version/provenance model
@@ -963,6 +968,6 @@ Future coding agents should not simplify Choir into:
 The invariant is simpler:
 
 ```text
-versioned living documents + appagents + capsule-scoped effects + canonical
-events + durable provenance + publication/citation readiness
+versioned living documents + persistent desk RLMs + capsule-scoped effects +
+canonical events + durable provenance + publication/citation readiness
 ```

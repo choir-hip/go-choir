@@ -5,18 +5,18 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Working Definition — Sub-RLM Document Channel / Carrier Landing (M2)
+## Working Set — Desk-RLM Rectification Sequence (R0–R5)
 
-[`definitions/choir-sub-rlm-document-channel-2026-09-22.md`](definitions/choir-sub-rlm-document-channel-2026-09-22.md)
-is the sole working entrypoint, promoted 2026-09-23 on M1's landed terminal
-receipt. An external harness drives a real Choir development task through
-the `choir` CLI as a sub-RLM cast on the document channel M1 landed; the
-engineering desk runs on the in-cell carrier; R7/R9 deletions land. Run with
-`/goal docs/definitions/choir-sub-rlm-document-channel-2026-09-22.md`.
+The working set is the desk-RLM rectification sequence: R0–R5 drafts under
+owner review, governed by the
+[`desk-rlm-rectification-plan-2026-09-23.md`](desk-rlm-rectification-plan-2026-09-23.md).
+They are proposed, non-executable successors rather than a schedule; each can
+promote only through its stated predecessor and terminal receipt. The draft
+successors are listed below.
 
-## Landed Definition — Texture Owner Input Cutover (M1)
+## Archived Receipt — Texture Owner Input Cutover (M1)
 
-[`definitions/choir-texture-owner-input-cutover-2026-09-22.md`](definitions/choir-texture-owner-input-cutover-2026-09-22.md)
+[`archive/choir-texture-owner-input-cutover-2026-09-22.md`](archive/choir-texture-owner-input-cutover-2026-09-22.md)
 **landed 2026-09-23** (deployed commit `3b780ed2`, CI green, deployed
 acceptance spec `frontend/tests/texture-owner-revision-deployed.spec.js`
 passing on https://choir.news with a turn-consumption receipt binding the
@@ -24,15 +24,22 @@ owner revision). Owner input to a lifecycle-bound Texture document is a
 canonical document revision event; the `tell`/`correct`/`roster`/
 `LifecycleOwnerInstruction` side channel is deleted. Consensus review sent
 the first acceptance back (spec bound any head, not the owner's); the
-tightened spec closed it.
+tightened spec closed it. This is an archived receipt, not a working
+entrypoint.
 
-## Superseded Definition — RLM Engineering Carrier
+## Superseded Archive — Sub-RLM Document Channel / Carrier Landing (M2)
 
-[`definitions/choir-rlm-engineering-carrier-2026-09-11.md`](definitions/choir-rlm-engineering-carrier-2026-09-11.md)
-is **superseded** by the M1 owner-input cutover (2026-09-22). Its remaining
-scope — engineering desk on the in-cell carrier, R7/R9 deletions, canonical
-run acceptance — becomes M2 in the ordered mission list, dependent on M1's
-document channel. Its P0 freeze artifact is retained as evidence.
+[`archive/choir-sub-rlm-document-channel-2026-09-22.md`](archive/choir-sub-rlm-document-channel-2026-09-22.md)
+is **superseded** by the desk-RLM rectification R-sequence. Its remaining
+carrier and document-channel scope is retained as historical context; it is
+not a working entrypoint.
+
+## Superseded Archive — RLM Engineering Carrier
+
+[`archive/choir-rlm-engineering-carrier-2026-09-11.md`](archive/choir-rlm-engineering-carrier-2026-09-11.md)
+is archived historical evidence. Its remaining in-cell carrier, R7/R9
+retirement, and canonical-run scope is addressed only through the desk-RLM
+rectification sequence.
 
 ## Draft Successors — Not Executable (desk-RLM rectification sequence)
 
@@ -53,7 +60,7 @@ sequence; the M3 ontology-kernel draft stands as mission K.
 
 ## Completed Definition — Private Programmable Go Actor Kernel
 
-[`definitions/choir-private-go-actor-kernel-2026-08-12.md`](definitions/choir-private-go-actor-kernel-2026-08-12.md)
+[`archive/choir-private-go-actor-kernel-2026-08-12.md`](archive/choir-private-go-actor-kernel-2026-08-12.md)
 completed 2026-08-27 (deployed commit `53f80af4`). It establishes private,
 interpreted Go activations via a process-per-activation Yaegi sidecar inside
 disposable guest-local capsules with unified Bash/Go broker routing, opaque
@@ -61,7 +68,7 @@ handles, durable continuity across forced activation death, immutable Texture
 transclusion of host-selected salient receipts, and verified genesis surface derivability.
 ## Completed Definition — Durable Substrate Overhauls
 
-[`definitions/choir-durable-substrate-overhauls-2026-08-23.md`](definitions/choir-durable-substrate-overhauls-2026-08-23.md)
+[`archive/choir-durable-substrate-overhauls-2026-08-23.md`](archive/choir-durable-substrate-overhauls-2026-08-23.md)
 completed 2026-08-26 (commits `f0e68b0a`..`e65e91c4`). All four tracks are
 implemented and verified: (1) Track K key escrow with 2-of-N quorum gate and
 WebAuthn PRF wrapping (deployed & proven on staging); (2) Track F encrypted 4MiB
@@ -71,7 +78,7 @@ spool, async LMTP drain, and guest Maildir; (4) Assurance & Scale self-describin
 recovery capsules, automated restore drill runner, and background blob integrity scrubber.
 ## Completed Definition — Substrate Cleanup and Cutover
 
-[`definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md`](definitions/choir-substrate-cleanup-and-cutover-2026-08-25.md)
+[`archive/choir-substrate-cleanup-and-cutover-2026-08-25.md`](archive/choir-substrate-cleanup-and-cutover-2026-08-25.md)
 completed 2026-08-26 (commit `a12532d2`, staging `c3314c59`). The guest MicroVM
 closure now executes strictly ONE immutable Nix store binary
 (wrapper `safvdbs8...` has zero `choir-updater/current` fallback references),
@@ -95,7 +102,7 @@ Evidence: [`evidence/account-recovery-yusefnathanson-2026-08-27.md`](evidence/ac
 
 ## Completed Definition — Substrate & Scheduling Readiness
 
-[`definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md)
+[`archive/choir-substrate-and-scheduling-readiness-2026-09-02.md`](archive/choir-substrate-and-scheduling-readiness-2026-09-02.md)
 completed 2026-09-03 (deployed commits `2bf93be7`..`bf6c51c0`). Target achieved:
 live-trigger-only Super wakes, FIFO selection under computer-scoped arrival ordinals
 across 4 sequential cycles without supersession, boot-does-not-schedule assertion
@@ -109,7 +116,7 @@ Effects remain OFF.
 
 ## Completed Definition — RLM Restore-Zero
 
-[`definitions/choir-rlm-restore-zero-2026-09-08.md`](definitions/choir-rlm-restore-zero-2026-09-08.md)
+[`archive/choir-rlm-restore-zero-2026-09-08.md`](archive/choir-rlm-restore-zero-2026-09-08.md)
 completed 2026-09-09 on owner-scoped retained-store boot of `9341b5d1`.
 PlanRecovery resumed `computer-03335285269bdba4f94377e56879f9e6` at
 `local=148431 W=148431 H=148431 tail=0` (epoch 894, `10.200.12.2`).
@@ -121,7 +128,7 @@ The earlier W=1/W=13 HTTP 200 claim remains demoted. Follow-on: keep W near H;
 nontrivial-tail rematerialize/restore drill; proxy 502-during-resolve is not this mission.
 ## Completed Definition — RLM Settlement Gate
 
-[`definitions/choir-rlm-settlement-gate-2026-09-09.md`](definitions/choir-rlm-settlement-gate-2026-09-09.md)
+[`archive/choir-rlm-settlement-gate-2026-09-09.md`](archive/choir-rlm-settlement-gate-2026-09-09.md)
 completed 2026-09-09 (deployed commit `6b758878`, CI run `34401118732`). All 8
 acceptance items are satisfied: Yaegi compile gate with non-mutating heap preservation,
 deletion of session-spawn fallback `fallbackGoEval` from active RLM route,
@@ -137,7 +144,7 @@ holder (residue R6). Mission-0 live drill debt stays mission-0-owned (residue R1
 
 ## Completed Definition — RLM Versioned Rename
 
-[`definitions/choir-rlm-versioned-rename-2026-09-09.md`](definitions/choir-rlm-versioned-rename-2026-09-09.md)
+[`archive/choir-rlm-versioned-rename-2026-09-09.md`](archive/choir-rlm-versioned-rename-2026-09-09.md)
 completed 2026-09-11 (deployed commit `e3396329`, CI run `34571343061`). All 15
 acceptance items are satisfied: frozen V1 field inventory artifact published (12 classes),
 version-selected V1 decode seam, writer cutover to V2 canonical desks (`management`, `engineering`, `research`),
@@ -150,7 +157,7 @@ The cutover stays remainder holder (residue R6); mission-0 live drill debt stays
 tool and operation retirement belongs to the Engineering-carrier successor mission.
 ## Blocked Definition — RLM Target Architecture Cutover (remainder holder)
 
-[`definitions/choir-rlm-target-architecture-cutover-2026-09-04.md`](definitions/choir-rlm-target-architecture-cutover-2026-09-04.md)
+[`archive/choir-rlm-target-architecture-cutover-2026-09-04.md`](archive/choir-rlm-target-architecture-cutover-2026-09-04.md)
 is **blocked and non-executable** (dispositioned 2026-09-09 with owner topology
 authority). Execution proof retained (epoch 888 exit-0 cell, proof file, signed
 receipt, fence intact); run acceptance closed under completed mission 1
@@ -160,12 +167,12 @@ it. Do not mark complete.
 
 ## Superseded Definition — RLM Session Interpreter Cutover
 
-[`definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md`](definitions/choir-rlm-session-interpreter-cutover-2026-09-02.md)
+[`archive/choir-rlm-session-interpreter-cutover-2026-09-02.md`](archive/choir-rlm-session-interpreter-cutover-2026-09-02.md)
 is **superseded** by `choir-rlm-target-architecture-cutover-2026-09-04.md`. Its session persistence scope
 is subsumed by the comprehensive RLM target architecture.
 ## Queued Definition — Supervised Self-Development on RLM
 
-[`definitions/choir-supervised-self-development-on-rlm-2026-09-02.md`](definitions/choir-supervised-self-development-on-rlm-2026-09-02.md)
+[`archive/choir-supervised-self-development-on-rlm-2026-09-02.md`](archive/choir-supervised-self-development-on-rlm-2026-09-02.md)
 is **paused pending restore-zero and desk-rename deployed acceptance** (settlement-gate acceptance closed 2026-09-09).
 Target: Candidate change A solitaire implementation authored via RLM session cells, 5-ref freeze,
 qualified consensus under `reversible-selfdev-v1`, promotion, live play verification, falsification with B,
@@ -173,12 +180,12 @@ and restore to pre-A checkpoint `99949fe2`.
 
 ## Superseded Definition — Scheduling Contract and Candidate Proof
 
-[`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
+[`archive/choir-scheduling-and-candidate-proof-2026-08-21.md`](archive/choir-scheduling-and-candidate-proof-2026-08-21.md)
 is **superseded** by the 3-Definition autonomous engineering sequence (Definition 1 for substrate/scheduling,
 Definition 3 for candidate A solitaire proof).
 ## Sealed Operation — Stabilize and Hold 0333528
 
-[`definitions/choir-0333528-stabilize-and-hold-2026-08-24.md`](definitions/choir-0333528-stabilize-and-hold-2026-08-24.md)
+[`archive/choir-0333528-stabilize-and-hold-2026-08-24.md`](archive/choir-0333528-stabilize-and-hold-2026-08-24.md)
 is **settled and sealed** as a historical operation. Its hold statement below
 is superseded: the hold was lifted 2026-09-03 during outage recovery
 (see `docs/evidence/effects-red-computer-unresolvable-after-refresh-2026-09-03.md`
@@ -190,18 +197,18 @@ canonical head past 133,319, as immutable evidence artifact.)
 
 ## Completed Pre-Flight & Historical Recovery
 
-[`definitions/choir-durable-substrate-preflight-2026-08-24.md`](definitions/choir-durable-substrate-preflight-2026-08-24.md)
+[`archive/choir-durable-substrate-preflight-2026-08-24.md`](archive/choir-durable-substrate-preflight-2026-08-24.md)
 completed 2026-08-24. All four pre-flight areas are settled and verified:
 (1) Dolt 2.0 embedded-driver upgrade verified; (2) `candidate-fleet-d03dacaa...` invalid-genesis
 loop resolved; (3) active-guest Dolt GC policy verified with 5 GiB safe-guard; (4) live computer
 `computer-03335285269bdba4f94377e56879f9e6` liveness restored.
 
-[`definitions/choir-durable-substrate-recovery-2026-08-23.md`](definitions/choir-durable-substrate-recovery-2026-08-23.md)
+[`archive/choir-durable-substrate-recovery-2026-08-23.md`](archive/choir-durable-substrate-recovery-2026-08-23.md)
 is settled historical recovery evidence. 0333528 was recovered to canonical head 132,436
 via the fixed boot/replay contract. Offline ProjectionBase rebuild was deferred to Track F.
 ## Completed Substrate — Tape-Based Recovery
 
-[`definitions/choir-tape-recovery-2026-08-13.md`](definitions/choir-tape-recovery-2026-08-13.md)
+[`archive/choir-tape-recovery-2026-08-13.md`](archive/choir-tape-recovery-2026-08-13.md)
 completed 2026-08-15. Staging `4ac90583` paid all six required
 receipts, including `serving_join` (unsigned host shell ≠ retained
 SPA ≠ secondary SPA after vmctl resolve) and
@@ -214,21 +221,21 @@ to reopen it.
 
 ## Superseded Effects Definition — Historical Evidence
 
-[`definitions/choir-supervised-self-development-effects-2026-08-11.md`](definitions/choir-supervised-self-development-effects-2026-08-11.md)
+[`archive/choir-supervised-self-development-effects-2026-08-11.md`](archive/choir-supervised-self-development-effects-2026-08-11.md)
 is superseded historical evidence. Its policy, email, and restore reasoning remain
 citable historical evidence; it is not an executable entrypoint. The tape-recovery Definition
-owns restore substrate receipts; it too is settled evidence, not an entrypoint. Active execution lives solely in
-[`definitions/choir-sub-rlm-document-channel-2026-09-22.md`](definitions/choir-sub-rlm-document-channel-2026-09-22.md)
-(the sole working entrypoint; the M1 owner-input cutover it succeeds is landed evidence).
+owns restore substrate receipts; it too is settled evidence, not an entrypoint. No
+archived Definition is executable; the desk-RLM rectification drafts named
+above are the current working set under owner review.
 
 The scope-disjoint
-[`choir-instruction-substrate-prune-2026-08-11.md`](definitions/choir-instruction-substrate-prune-2026-08-11.md)
+[`choir-instruction-substrate-prune-2026-08-11.md`](archive/choir-instruction-substrate-prune-2026-08-11.md)
 completed 2026-08-12: 106/106 beads dispositioned, doccheck signal repaired,
 instruction packet pruned with invariant conservation. It is settled evidence,
 not an entrypoint; do not re-open the retired beads store.
 
 The active Definition had one owner-ratified pre-effects subordinate contract:
-[`definitions/choir-sandbox-autoputer-rename-2026-08-11.md`](definitions/choir-sandbox-autoputer-rename-2026-08-11.md).
+[`archive/choir-sandbox-autoputer-rename-2026-08-11.md`](archive/choir-sandbox-autoputer-rename-2026-08-11.md).
 It owned the single clean naming cutover before effects work resumed: service
 surfaces became `autoputer`, persistent computer identity surfaces became
 `computer`, and no compatibility path was permitted. The cutover is complete:
@@ -252,7 +259,7 @@ plus the disposed Mission 0 direct-key ceremony at
 recovery bypass, SSH, or weaker authorization is admissible).
 They are historical evidence, not rollback or live schedule; effects remain OFF.
 The active executable slice and `next_action` live solely in
-[`definitions/choir-sub-rlm-document-channel-2026-09-22.md`](definitions/choir-sub-rlm-document-channel-2026-09-22.md).
+[`archive/choir-sub-rlm-document-channel-2026-09-22.md`](archive/choir-sub-rlm-document-channel-2026-09-22.md).
 The tape-recovery restore proof is paid (complete 2026-08-15).
 Completed Definitions are historical evidence, not executable entrypoints;
 receipts remain in `mission-graph.yaml` and Git history. Retained settled
@@ -267,20 +274,20 @@ None is executable unless explicitly promoted in the current registry.
 
 ## Superseded — Scheduling Contract and Candidate Proof
 
-[`definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`](definitions/choir-scheduling-and-candidate-proof-2026-08-21.md)
+[`archive/choir-scheduling-and-candidate-proof-2026-08-21.md`](archive/choir-scheduling-and-candidate-proof-2026-08-21.md)
 is superseded by the 3-Definition autonomous engineering sequence (2026-09-02):
 substrate/scheduling scope lives in Definition 1
-([`choir-substrate-and-scheduling-readiness-2026-09-02.md`](definitions/choir-substrate-and-scheduling-readiness-2026-09-02.md));
+([`choir-substrate-and-scheduling-readiness-2026-09-02.md`](archive/choir-substrate-and-scheduling-readiness-2026-09-02.md));
 candidate proof scope lives in Definition 3
-([`choir-supervised-self-development-on-rlm-2026-09-02.md`](definitions/choir-supervised-self-development-on-rlm-2026-09-02.md)).
+([`choir-supervised-self-development-on-rlm-2026-09-02.md`](archive/choir-supervised-self-development-on-rlm-2026-09-02.md)).
 It is not an executable entrypoint.
 
 ## Draft Successor Definitions — Not Executable
 
 Draft successors are blocked hypotheses, not schedules or implementation
 authority. Their source Definitions and three registries retain constraints:
-[`definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md`](definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md)
-and [`definitions/choir-in-choir-computer-control-draft-2026-07-18.md`](definitions/choir-in-choir-computer-control-draft-2026-07-18.md).
+[`archive/choir-computerversion-performance-optimization-draft-2026-07-15.md`](archive/choir-computerversion-performance-optimization-draft-2026-07-15.md)
+and [`archive/choir-in-choir-computer-control-draft-2026-07-18.md`](archive/choir-in-choir-computer-control-draft-2026-07-18.md).
 Neither authorizes implementation, host access, raw vmctl, SSH, shared
 credentials, candidate VMs, or promotion without separate owner ratification.
 
@@ -295,7 +302,7 @@ entrypoints.
 RLM restore-zero completed 2026-09-09 and is historical evidence, not an
 entrypoint. RLM versioned rename completed 2026-09-11 (deployed commit `e3396329`) and is
 non-entrypoint evidence. The Sub-RLM Document Channel / Carrier Landing (M2)
-(`definitions/choir-sub-rlm-document-channel-2026-09-22.md`) holds the sole
+(`archive/choir-sub-rlm-document-channel-2026-09-22.md`) holds the sole
 working entrypoint; the M1 owner-input cutover is landed evidence.
 ## Unowned External Work
 

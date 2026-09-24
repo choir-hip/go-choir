@@ -10,8 +10,8 @@ checker.
 
 **Revision 2026-07-31:** re-visioning additions — the tape-primary stance,
 "what is a reducer / what is the kernel", the reconceived `appagent`, and
-supervision via semantic state updates. These sections are current and carry
-the [vision](archive/vision-choir-category-texture-transclusion-v0.md)
+supervision through the commitment ledger and semantic acts. These sections are
+current and carry the [vision](archive/vision-choir-category-texture-transclusion-v0.md)
 re-visioning forward.
 
 ## Spine
@@ -115,18 +115,22 @@ or remove transclusions, but the previous version's provenance remains intact.
 
 ## Writer And Executor Boundary
 
-Texture owns meaning and learning. Super owns privileged execution.
+Texture owns meaning and learning. The management desk owns coherence,
+error-correction, resource arbitration, and delegated `choir.Cast` admission;
+the engineering desk owns privileged, capsule-bound mutation.
 
-That boundary prevents narrative bias. The main executor has incentives to
+That boundary prevents narrative bias. The implementing desk has incentives to
 defend the path it took. The Texture writer's job is to keep the artifact
-legible, not to justify the worker's route. Researcher, source, app, super,
-verifier, and candidate-world agents should produce evidence and claims that
-Texture can incorporate, reject, qualify, or leave pending.
+legible, not to justify that route. Research, source, app, engineering,
+verification, and candidate-world evidence should arrive as claims and
+`choir.Report` material that Texture can incorporate, reject, qualify, or leave
+pending.
 
-Texture can request execution when the artifact requires code, generated
-assets, privileged actions, candidate computers, verifier contracts, promotion
-evidence, or rollback preparation. But ordinary exogenous work should first
-materialize as Texture-owned artifact state, not bypass Texture into execution.
+Texture can send a semantic act to management when the artifact requires code,
+generated assets, privileged actions, candidate computers, verifier contracts,
+promotion evidence, or rollback preparation. Management then admits engineering
+with a delegated cast. Ordinary exogenous work should first materialize as
+Texture-owned artifact state, not bypass Texture into execution.
 
 ## Runtime Boundary
 
@@ -163,10 +167,12 @@ learning substrate as facts, structure, evidence, and decisions.
 
 ## Boundaries
 
-Texture does not own the whole execution tree. Super owns coding-agent trees,
-candidate computers, implementer/verifier separation, package/adoption
-evidence, and privileged mutation. Texture receives and directs the evidence
-surfaced from that work.
+Texture does not own the whole execution topology. The four persistent root RLM
+desks are Texture, management, engineering, and research: management admits
+engineering work and escalates to the owner; engineering owns capsule-bound
+sub-RLM mutation, implementer/verifier separation, package/adoption evidence,
+and privileged effects; research has read-only world and message authority.
+Texture receives and directs the evidence surfaced from that work.
 
 Texture does not require a cold protocol cathedral before the product path
 works. The minimal protocol should be learned from working implementation and
@@ -193,7 +199,7 @@ for the current liveness work.
 ## Reducers and the Kernel
 
 Two words that arrive in the codebase from the accepted
-[kernel contract](definitions/choir-coherent-computer-convergence-2026-07-21.md)
+[kernel contract](archive/choir-coherent-computer-convergence-2026-07-21.md)
 deserve plain definitions.
 
 **A reducer** is the function that computes a projection from the tape. Two

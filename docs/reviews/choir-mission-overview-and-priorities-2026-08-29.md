@@ -50,7 +50,7 @@ frontier, and it aligns exactly with your stated arc.
 ## 3. Where self-development stands
 
 The mission authority is now the compact candidate-proof Definition
-(`docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`), which
+(`docs/archive/choir-scheduling-and-candidate-proof-2026-08-21.md`), which
 superseded the August 11 effects definition on 2026-08-20. Its success shape,
 unchanged: **CoSuper authors candidate A inside its capsule** (a solitaire API
 change with a pre-declared foundation defect), **freezes five verifiable
@@ -127,7 +127,7 @@ GitHub, for completeness: there are **zero open GitHub Issues** — the search
 API returns an empty set for open and closed issues alike. Two items that look
 like issues (#52 ChatGPT web-search provider, #44 model-policy helper
 extraction) are actually open pull requests. The UX backlog lives in docs
-(`docs/ui-ux-review-2026-07-10.md`, plus the auth onboarding review), not in
+(`docs/archive/ui-ux-review-2026-07-10.md`, plus the auth onboarding review), not in
 the tracker.
 
 ## 6. What "self-development working" means (the finish line, concretely)
@@ -167,7 +167,7 @@ rehearsal envelope, by design.
 
 | Where | What |
 |---|---|
-| `docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md` | Current mission authority (supersedes the 08-11 effects definition) |
+| `docs/archive/choir-scheduling-and-candidate-proof-2026-08-21.md` | Current mission authority (supersedes the 08-11 effects definition) |
 | `docs/problems/` (12 files, 08-28) | Boot crash-loop family, image-full warning, single-health flip, rewarm scan chain, worker-update scan, selfdev wake no-op, texture boot ambiguity |
 | `docs/evidence/root-cause-clustering-objectgraph-body-scan-2026-08-28.md` | Seven symptoms → one og_objects body-scan cause; per-field index partially wired |
 | `docs/evidence/account-recovery-yusefnathanson-2026-08-27.md` | Recovery problem documented; repair (Track M) not landed |

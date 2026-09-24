@@ -3,7 +3,7 @@
 Fenced cutover that moves the world-wire/corpus tables out of the
 `platform` Dolt repo into a dedicated `corpus` repo served by
 `go-choir-corpus-dolt` (port 13307). Design:
-`docs/designs/platform-dolt-storage-normalization-2026-09-18.md` (Move 2).
+`docs/archive/platform-dolt-storage-normalization-2026-09-18.md` (Move 2).
 
 **Class:** red (canonical platform store topology change).
 **Rollback:** the pre-cutover dump is the rollback artifact; the env flip is

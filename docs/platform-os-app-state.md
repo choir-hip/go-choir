@@ -3,7 +3,7 @@
 **Status:** canonical platform-level state ledger — **stale as of 2026-09-22**;
 predates the RLM carrier cutover and precommitment-records direction. Read as
 a substrate reference; current mission state lives in `ACTIVE.md` and the
-[RLM Engineering Carrier](definitions/choir-rlm-engineering-carrier-2026-09-11.md).
+[RLM Engineering Carrier](archive/choir-rlm-engineering-carrier-2026-09-11.md).
 **Last updated:** 2026-07-24
 **Changelog:** Recorded deployed generic durable-work acceptance and completion
 of the convergence Definition. Historical design material remains in Git
@@ -132,8 +132,9 @@ preference for its roles and tasks.
 
 The target state is:
 
-- any configured compatible model can serve conductor, Texture, researcher,
-  super, co-super, verifier, or a future bounded role;
+- any configured compatible model can serve a current desk (Texture, research,
+  management, or engineering), verifier, or future bounded role; `conductor`
+  is deferred to system-one;
 - ChatGPT, Fireworks DeepSeek V4 Flash/Pro, Fireworks Kimi K2.6, and later
   catalog models are selectable by policy wherever the current turn's
   modality, tool, context, latency, and cost requirements match;
@@ -143,9 +144,10 @@ The target state is:
 - Kimi K2.6 and ChatGPT multimodal paths are required only when a turn actually
   carries screenshots, images, video frames, or other media inputs;
 - per-computer model policy is durable computer-owned state, editable through
-  owner-facing product/Texture paths. Super may report or propose a typed policy
-  update in response to an owner prompt, but only the authorized
-  computer-event/appender path applies it; Super does not mutate policy directly;
+  owner-facing product/Texture paths. Management may report or propose a typed
+  policy update in response to an owner prompt, but only the authorized
+  computer-event/appender path applies it; management does not mutate policy
+  directly;
 - platform deploys or Node B environment edits are not required merely to
   change which configured model a computer uses for a role;
 - Trace and run evidence record the resolved provider/model/reasoning for each
@@ -153,15 +155,15 @@ The target state is:
   dashboard.
 
 This policy model deliberately separates "recommended defaults" from
-"compatible execution." A strong coding model may be the default for `super` or
-`co-super`, and a fast writing model may be the default for Texture, but those
-are computer policy choices. They must remain changeable without creating
-role-specific provider assumptions in the runtime. The operational test is
-per-turn compatibility: if the next turn is text-only, a text-only model such as
-Fireworks DeepSeek V4 Flash/Pro remains eligible for any role, including
-verification; if the next turn carries a screenshot or other media input, policy
-must select a declared multimodal path such as Kimi K2.6 or ChatGPT multimodal,
-or record a precise capability blocker.
+"compatible execution." A strong coding model may be the default for
+engineering or management, and a fast writing model may be the default for
+Texture, but those are computer policy choices. They must remain changeable
+without creating role-specific provider assumptions in the runtime. The
+operational test is per-turn compatibility: if the next turn is text-only, a
+text-only model such as Fireworks DeepSeek V4 Flash/Pro remains eligible for any
+role, including verification; if the next turn carries a screenshot or other
+media input, policy must select a declared multimodal path such as Kimi K2.6 or
+ChatGPT multimodal, or record a precise capability blocker.
 
 Current generated policy declares separate verifier lanes: `verifier` defaults
 to Fireworks DeepSeek V4 Pro for text-only evidence checks, while
@@ -242,10 +244,10 @@ Known gaps:
 | **Texture** | Primary appagent and versioned document editor. Two writer classes: `AuthorUser` owner edits use immediate canonical-head CAS; `AuthorAppAgent` Texture turns create monotonic self-contained revisions; no other agent writes document text. Source citation is tri-state: every source entity is cited (`source_ref` in the body), toolbar-only (a Style.texture style source), or marked-unused (`mark_source_unused` with rationale). The former `source_embed` block node is removed; all citations are `source_ref` with `display_mode` (`numbered_ref` \| `expanded_ref`). There is no `WireTexture` prompt control-flow branch; article-format guidance is unconditional, driven by the default Style.texture. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, proposal demo videos, interactive graphics, and nested Textures. | Keep strengthening citation integrity, typed media/evidence blocks, model-visible rendering, and product-path verification without moving semantic authority out of Texture. |
 | **Trace Evidence** | Trace remains as structured evidence, unified logs, run bundles, acceptance records, and diagnosis artifacts. The visual Trace app is no longer a product direction and should be unshipped rather than redesigned. | Preserve machine-readable evidence for zot, Texture reports, run acceptance, and operator diagnosis. Do not keep an emergency human Trace UI. |
 | **Web Lens** | Explicit live/original web inspection surface. It still carries legacy `browser` implementation IDs, data attributes, session tables, and iframe behavior, but the product object is Web Lens, not a general manual Browser app. Durable web-derived sources should default to Source Viewer/reader artifacts before live/original inspection. | Rename or quarantine browser-session implementation residue over time. Backend control/screenshot support remains a distinct substrate frontier for Web Lens, source acquisition, and capsule-proposal inspection; it must not become a bypass around product APIs or the primary source-gathering workflow. |
-| **Super Console** | Target replacement for retired Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It is a human-facing repair surface: it reads unified logs/source/files/process state and requests supported APIs/CLI for command-actuation such as `!` commands, producing markdown diagnosis reports Texture can open. It is not the Super agent, does not directly patch or restart the core VM or write documents, and cannot bypass event/receipt authority. | Do not expose retired raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple retired chat-agent sessions. It is repair mode when Texture/MAS malfunctions. |
+| **Super Console** | Target replacement for retired Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It is a human-facing repair surface: it reads unified logs/source/files/process state and requests supported APIs/CLI for command-actuation such as `!` commands, producing markdown diagnosis reports Texture can open. It is not the management desk, does not directly patch or restart the core VM or write documents, and cannot bypass event/receipt authority. | Do not expose retired raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple retired chat-agent sessions. It is repair mode when Texture/MAS malfunctions. |
 | **Settings** | Account, runtime health, and server-backed theme presets/editing. Deleted package/adoption promotion controls are not retained. | Theme system needs taste/design hardening. Runtime health still needs a true push source rather than opportunistic event refreshes. |
-| **Compute Monitor** | First-class app for the signed-in user's stable computer, realization health, app restore weight, and bounded recovery. It exposes no worker/candidate-machine classification or controls. | Add event-backed computer status, trend history, app-owned process/resource accounting, conductor recovery intents, and stronger long-session regression proof without exposing raw VM identities. |
-| **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and Texture radio continuity later. |
+| **Compute Monitor** | First-class app for the signed-in user's stable computer, realization health, app restore weight, and bounded recovery. It exposes no worker/candidate-machine classification or controls. | Add event-backed computer status, trend history, app-owned process/resource accounting, deferred system-one recovery intents, and stronger long-session regression proof without exposing raw VM identities. |
+| **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, deferred system-one actions, and Texture radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
 | **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/Texture hook, and keyboard controls. |
 | **Video** | First-class app for native video and YouTube embeds. Native video has custom/native controls, speed/seek, server-backed recents, and server-backed playback-position sync. | Add fullscreen/theater fit, captions/subtitles, transcript/Texture hook, playlist/folder navigation, and consistent YouTube/native control surfaces. |
@@ -262,8 +264,8 @@ Known gaps:
   controls, viewport math, and safe parsing utilities.
 - Do not revive a generic `MediaFileApp` or grow `ContentViewer` into an
   everything-viewer.
-- Files, launcher, prompt/conductor decisions, and public routes should converge
-  on the same app identity for the same artifact.
+- Files, launcher, deferred system-one prompt-routing decisions, and public
+  routes should converge on the same app identity for the same artifact.
 - Texture may embed snippets from other apps, but the full-control surface remains
   the owning app. Embedded snippets are durable artifact references and layout
   intent; they are not a reason to collapse Image, Audio, Video, Podcast, PDF,

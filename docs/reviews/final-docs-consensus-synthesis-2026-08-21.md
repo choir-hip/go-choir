@@ -34,10 +34,10 @@ Prior definition had `not_done_when` gates and `landing.required_receipts` that 
 
 ## Where this leaves us
 
-All steering docs are aligned to the ratified architecture. The successor Definition (`docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`) is now:
+All steering docs are aligned to the ratified architecture. The successor Definition (`docs/archive/choir-scheduling-and-candidate-proof-2026-08-21.md`) is now:
 - schema-complete per panel findings,
 - registry-promoted as the sole executable `/goal`,
 - free of the milestone-forcing heresy,
 - inheriting the prior acceptance unchanged plus two scheduler-specific not_done_when gates.
 
-Ready for owner invocation: `/goal docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md`
+Ready for owner invocation: `/goal docs/archive/choir-scheduling-and-candidate-proof-2026-08-21.md`

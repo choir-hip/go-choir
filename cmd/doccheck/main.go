@@ -45,7 +45,6 @@ var highRead = map[string]bool{
 	"docs/runtime-invariants.md":                    true,
 	"docs/texture-agentic-invariants-2026-06-13.md": true,
 	"docs/source-external-data-publication.md":      true,
-	"docs/definitions/choir-audited-autoputer-construction-2026-07-15.md": true,
 }
 
 // defaultReadPacket is intentionally small. It includes the docs router plus

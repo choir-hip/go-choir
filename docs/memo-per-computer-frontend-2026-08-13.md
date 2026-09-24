@@ -116,7 +116,7 @@ Live architecture is **host-global SPA + per-computer API**. Evidence:
 
 The active effects Definition already records this as live fact and forbids
 shipping UI in the current candidate, because the browser would never read it
-(`docs/definitions/choir-supervised-self-development-effects-2026-08-11.md:36-37,537-538`).
+(`docs/archive/choir-supervised-self-development-effects-2026-08-11.md:36-37,537-538`).
 That forbid is correct for **this** candidate. It is not permission to leave
 the UI outside the computer.
 
@@ -224,7 +224,7 @@ served SPA bytes or an equivalent materialization receipt.
 
 Documented restore already says: resolve checkpoint, quiesce, forward restore
 intent, restage release, rebuild VM-local state, extractor match, route CAS
-(`docs/definitions/choir-supervised-self-development-effects-2026-08-11.md:519-527`).
+(`docs/archive/choir-supervised-self-development-effects-2026-08-11.md:519-527`).
 "Restage the release" must include the computer-surface SPA. Caddy/proxy must
 point at that realization. A later main deploy must not move this computer
 back onto `frontend-current`.

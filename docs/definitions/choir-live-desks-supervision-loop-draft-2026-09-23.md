@@ -121,7 +121,7 @@ boundaries:
     - docs/desk-rlm-rectification-plan-2026-09-23.md
     - docs/why-texture-2026-06-15.md
     - docs/texture-live-supervision-architecture.md
-    - docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
+    - docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
     - AGENTS.md
   must_preserve:
     - texture as sole agent writer (AuthorAppAgent) per document

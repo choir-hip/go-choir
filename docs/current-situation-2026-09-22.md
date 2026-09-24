@@ -4,6 +4,13 @@ Date: 2026-09-22
 Purpose: the owner's missing context. One page on what is true, what is
 decided, what is open, and what the docs now say. Read this before the
 mission stack.
+> **Supersession — 2026-09-23:** The
+> [desk-RLM rectification plan](desk-rlm-rectification-plan-2026-09-23.md)
+> supersedes this snapshot's M2-tail mission sequencing. The roster re-run
+> wording below and Phase 1's “roster path” are stale: the current path is a
+> document-channel delegated sub-RLM `choir.Cast`. The R8/R10 deferral note is
+> superseded by R2/R3.
+
 
 ## The product direction (decided)
 
@@ -77,7 +84,7 @@ cutover below.
 
 ### 2. The ontology cutover — **ratified 2026-09-22**
 
-`docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md` is
+`docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md` is
 **ratified**: collapse delivery/continuation into derivable state (delivered =
 in state head, fenced atomic commit, serial-per-actor, cast-only sub-RLMs).
 It subsumes the remaining desk crossings and retires the Super substrate

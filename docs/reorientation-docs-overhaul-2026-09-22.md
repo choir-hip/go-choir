@@ -50,9 +50,9 @@ repaired by Phase A — see status at top):
 | Stale active-slice claim | `docs/ACTIVE.md:178-185, 217-218` | Names superseded `choir-rlm-session-interpreter-cutover-2026-09-02` as the active executable slice; contradicts the same file's correct sole-entrypoint claim (lines 8-15) |
 | Stale residue | `docs/mission-residues.md` R7 | Says carrier "not yet chartered"; it is chartered and working |
 | Zombie executable | `choir-autoputer-completion-2026-07-13` (retired to Git history) | Header said `working`; graph and its own later state said superseded/blocked |
-| Zombie executable | `docs/definitions/choir-scheduling-and-candidate-proof-2026-08-21.md:130-157` | `resumed_owner_directed` + live `next_action`; graph/ACTIVE say superseded |
-| Zombie executable | `docs/definitions/choir-host-orchestrated-recovery-2026-08-22.md:101-132` | Says `working`, asks for push/deploy; graph says settled/superseded-incomplete |
-| Missing status | `docs/definitions/choir-durable-substrate-overhauls-2026-08-23.md:106-133` | No canonical `now.status`; graph says settled |
+| Zombie executable | `docs/archive/choir-scheduling-and-candidate-proof-2026-08-21.md:130-157` | `resumed_owner_directed` + live `next_action`; graph/ACTIVE say superseded |
+| Zombie executable | `docs/archive/choir-host-orchestrated-recovery-2026-08-22.md:101-132` | Says `working`, asks for push/deploy; graph says settled/superseded-incomplete |
+| Missing status | `docs/archive/choir-durable-substrate-overhauls-2026-08-23.md:106-133` | No canonical `now.status`; graph says settled |
 | Stale A/B next step | `docs/mission-mail-app-v2-2026-09-15.md:92-116` | "Owner picks keeper" — owner already picked Mail; EmailApp deleted |
 | Broken link | `docs/mission-mail-attachments-and-app-cutover-2026-09-17.md:201-203` | Promises `mission-report-mail-attachments-2026-09-17.md`; file does not exist |
 | Stale architecture claims | `docs/current-architecture.md`, `docs/platform-os-app-state.md` | Say no product Definition is executable; carrier is |

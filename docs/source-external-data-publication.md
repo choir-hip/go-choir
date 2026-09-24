@@ -19,7 +19,7 @@ external source
   -> raw snapshot hash/ref
   -> cleaned source artifact
   -> searchable source item
-  -> researcher finding
+  -> research desk finding
   -> Texture source entity
   -> publication citation/transclusion/export metadata
 ```
@@ -56,12 +56,12 @@ other private source records.
 `ContentItem` stores normalized source text or media metadata plus provenance.
 The text is evidence, not instructions.
 
-### Researcher
+### Research desk
 
-Researcher agents retrieve and summarize evidence. They may use web search,
-Source Service search, URL import, and `ContentItem` reads. They produce
-durable source findings with IDs, selectors, hashes, caveats, and open gaps.
-They do not write canonical Texture prose.
+The research desk retrieves and summarizes evidence. It may use web search,
+Source Service search, URL import, and `ContentItem` reads. It produces durable
+source findings with IDs, selectors, hashes, caveats, and open gaps. It does not
+write canonical Texture prose.
 
 ### Texture
 
@@ -183,8 +183,8 @@ or data vintage labels.
 
 Search returns candidate source items. Resolution returns exact item metadata
 and any requested selector text/metadata. Search results should include enough
-data for a researcher to decide whether more web search, source resolution, or
-private corpus search is needed.
+data for the research desk to decide whether more web search, source resolution,
+or private corpus search is needed.
 
 The Source Service API boundary should support at least:
 
@@ -425,7 +425,7 @@ external source fetched
   -> raw/cleaned hashes recorded
   -> source item searchable
   -> item resolvable by API
-  -> researcher finding cites item IDs/selectors/hashes
+  -> research desk finding cites item IDs/selectors/hashes
   -> Texture revision stores source_entities
   -> citation marker expands into transclusion
   -> expanded transclusion opens owning app/window

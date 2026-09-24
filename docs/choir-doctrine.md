@@ -282,11 +282,11 @@ These are hard consequences of the conjecture set.
 
 `I1` Canonical document versions have two writer classes. `AuthorUser` is the
 owner-edit path and performs an immediate canonical-head CAS. `AuthorAppAgent`
-is the Texture agent and the sole *agent* writer; Super, CoSuper, Researcher,
-workers, and runtime updates never write document text directly. Findings,
-worker updates, search results, and verifier output are non-canonical until
-Texture incorporates them through an AuthorAppAgent revision. Every revision is
-a new monotonic version and a self-contained snapshot of current semantic state;
+is the Texture desk and the sole *agent* writer; the management, engineering,
+and research desks, workers, and runtime updates never write document text
+directly. Findings, worker updates, search results, and verifier output are
+non-canonical until Texture incorporates them through an AuthorAppAgent revision.
+Every revision is a new monotonic version and a self-contained snapshot of current semantic state;
 prior versions are never required context. A Texture-agent turn that changes
 semantic state commits exactly one new version; wait/block/no-change turns
 commit none. `texture_turn_committed` counts turn outcomes, not revisions.
@@ -296,12 +296,14 @@ affordances and durable obligations; it must not convert role mentions or
 metadata into a required semantic next step.
 
 `I2a` Exogenous user and source input enters Choir through Texture-owned artifact
-state by default. Conductor may classify, open, or create the target
-Texture/context, but ordinary prompt-bar requests, sourcecycled/news ingestion,
-article creation, mission work, and most user prompts must not route directly to
-super. Super is downstream execution authority invoked from Texture when the
-artifact needs coding, privileged execution, candidate work, generation,
-verification, or other supervision.
+state by default. The deferred world-wire/system-one conductor may classify, open,
+or create the target Texture/context, but ordinary prompt-bar requests,
+sourcecycled/news ingestion, article creation, mission work, and most user prompts
+must not route directly to the management desk. Management is downstream
+coherence and admission authority: when an artifact needs coding, privileged
+execution, candidate work, generation, verification, or other supervision,
+Texture communicates by semantic act and management may issue a delegated
+`choir.Cast` to engineering.
 
 `I2b` Texture must make owner-triggered work visible as artifact state. For
 prompt-bar input, `V0` is the owner prompt and `V1` is Texture's first response to
@@ -311,11 +313,12 @@ draft, acknowledgement, work-state note, blocker, or research/execution plan.
 What is forbidden is a mechanically forced trivial patch that hides ongoing
 delegation or background work from the owner-readable artifact.
 
-`I2c` Agent-to-agent update identity is runtime-owned. The runtime mints or
-deterministically derives `update_id` from the delivery envelope and normalized
-payload; an LLM must not have to invent it. Model-visible update payloads may
-describe kind, target, findings, evidence, refs, blockers, and questions; the
-durable `update_id` is not semantic content.
+`I2c` Agent-to-agent semantic-act identity is runtime-owned. The runtime mints or
+deterministically derives an idempotency identity from the delivery envelope and
+normalized act payload; an LLM must not have to invent it. Model-visible acts may
+be `choir.Report`, `Cast`, `Ask`, `Precommit`, `Resolve`, `Cancel`, `Escalate`, or
+`Note` and may describe findings, evidence, refs, blockers, and questions; their
+runtime identity is not semantic content.
 
 `I3` Parent/child is not a control ontology. Provenance-only spawned-by edges may
 remain temporarily, but control, liveness, settlement, cancellation, budgeting,
@@ -418,22 +421,29 @@ greens only after that serving join. CI pointer rotation and a host
 `frontend-current` tree are not computer changes. The current host-global SPA
 is non-conformance, not product ontology.
 
-`I26` There is exactly one Super per ComputerID. Super sees every document's
-state, arbitrates resources, and supplies coherence/error correction over the
-computer; it is not a concurrency limiter and holds no document/event mutation
-authority. CoSupers are task-level actuators. The doctrinal shape permits one
-CoSuper assignment to hold N capability-bound capsules; candidate A may
-implement a transitional 1:1 assignment/capsule binding. Mission A admits one
-live CoSuper assignment per computer: each request carries a durable
+`I26` Each computer has four persistent root RLM desks — management, engineering,
+research, and Texture — running yaegi Go cells in killable subprocesses.
+Texture is the sole agent writer of document text; research has read-only world
+and message authority; engineering mutates only through capsule-bound
+per-assignment sub-RLM cells; and management supplies computer-wide
+coherence/error correction, resource arbitration, delegated-`choir.Cast`
+admission into engineering, and owner escalation. Management holds no
+document/event mutation authority and is not a concurrency limiter.
+
+The management admission ledger permits one live engineering assignment per
+computer in the initial sequential phase: each request carries a durable
 computer-scoped arrival ordinal, selection is FIFO among non-expired requests,
 requests expire on operation terminality / superseding owner correction /
 deadline, assignment deadlines fail rather than hang, and admission refusal is
-retryable with work left pending. Mission-A containment is `memory.high`
-= requested, `memory.max` = 2×requested, with `memory.events` OOM counters as
-feedback; PSI pause/resume and zram are not required in Mission A. Mission B —
-parallel Textures/trajectories and N concurrent assignments under an admission
-ledger with overcommit factor — is a release-gate requirement proven after
-sequential correctness.
+retryable with work left pending. An engineering assignment may hold N
+capability-bound capsules; the transitional implementation may bind one capsule
+per assignment. Containment is `memory.high` = requested, `memory.max` =
+2×requested, with `memory.events` OOM counters as feedback; PSI pause/resume and
+zram are not required initially. Later parallel Textures/trajectories and N
+concurrent assignments require an admission-ledger release gate after sequential
+correctness. The commitment ledger is the management supervision surface: its
+objects live on the tape, reports resolve commitments, and scores stay off the
+acting desk's context.
 
 
 `I14` Source evidence remains object identity, not link-shaped prose. Texture

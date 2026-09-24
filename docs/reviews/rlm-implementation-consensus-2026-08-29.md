@@ -28,7 +28,7 @@ precisely the opposite: **the prompt is loaded into a persistent REPL as a
 variable the model programmatically inspects and slices, and the model can
 recursively call sub-LLMs from within the REPL.**
 
-Choir's own doctrine memo (`docs/memo-persistent-rlm-actors-2026-08-09.md`)
+Choir's own doctrine memo (`docs/archive/memo-persistent-rlm-actors-2026-08-09.md`)
 already specifies this correctly: the loop is *model → Go cell → observations
 → model → typed outcome*; the actor is durable but the **activation is
 disposable**; Go variables and artifact refs are working memory that live only

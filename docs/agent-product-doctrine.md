@@ -7,7 +7,7 @@ Long-running missions execute as `/goal <doc>.md` goal files. New missions are
 authored with [skills/throughline/SKILL.md](../skills/throughline/SKILL.md);
 the older `skills/definition/SKILL.md` format remains valid for the existing
 goal-file corpus but is deprecated for new authoring. The
-[durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
+[durable-computer convergence Definition](archive/choir-coherent-computer-convergence-2026-07-21.md)
 completed on 2026-07-24 and is historical product-evidence authority. The
 current executable product mission is named only by `docs/ACTIVE.md`; this file
 does not create a second schedule.
@@ -20,29 +20,27 @@ unless `AGENTS.md` is carrying a newer explicitly promoted operating update.
 
 ## Authority Boundaries
 
-- `conductor` routes exogenous user/app/connector input into Texture/artifact state. It has no self-development mutation authority.
+- `conductor`, `processor`, and `reconciler` are deferred to world-wire/system-one.
+  They are not part of the live four-desk topology; their legacy packet
+  machinery remains until their respective phases.
+- The persistent root RLM desks are `management`, `engineering`, `research`, and
+  Texture. Each runs yaegi Go cells in a killable subprocess. A desk is durable
+  for its subject; a sub-RLM is a per-assignment run that a desk casts.
 - Appagents own durable app artifacts. Canonical document versions have two
   writer classes: `AuthorUser` owner edits (immediate canonical-head CAS) and
-  `AuthorAppAgent` Texture revisions (sole agent writer). No other agent writes
+  `AuthorAppAgent` Texture revisions (sole agent writer). No other desk writes
   document text.
-- `researcher` currently reads/researches and may submit only the typed
-  `update_coagent` source-packet mutation through the canonical event appender.
-  It has no Bash, raw Dolt, writable files, capsule commit, acceptance, route,
-  or host authority. The ratified successor profile preserves those boundaries
-  while replacing its model/tool loop with a private Go activation and narrow
-  source, transform, artifact, evidence, work, assignment, messaging, and
-  outcome modules.
-- `super` is the foreground orchestration root. It may orchestrate capsules,
-  delegation, inspection, verification requests, and decision proposals; it has
-  no Bash, writable/coding, shipper, worker-VM, route, or host tools. Migration
-  of Super onto the common private-Go kernel remains a later profile cutover,
-  not a completion claim of the first CoSuper/Researcher Definition.
-- `co-super` currently remains an agent loop whose shell, filesystem, and build
-  effects are capability-bound guest-local capsule broker operations. The
-  ratified successor replaces that loop with the common private-Go kernel; only
-  an effects-capable implementation assignment mounts direct Bash and Go
-  execution modules. The `co-super` name grants no ambient execution authority.
-- `vsuper`, candidate-super, and aliases are retired from production profiles for self-development and fail closed.
+- The research desk has read-only world and message authority. It reports
+  evidence through `choir.Report`; it has no Bash, raw Dolt, writable files,
+  capsule commit, acceptance, route, or host authority.
+- The management desk is the one-per-ComputerID coherence, error-correction,
+  and resource-arbitration root. It does not mutate documents or computer
+  events. It admits engineering work through delegated `choir.Cast` and
+  escalates unresolved owner decisions.
+- The engineering desk performs capability-bound guest-local capsule mutation
+  through per-assignment sub-RLM cells. Its effect verbs are `Complete`,
+  `Freeze`, and `Verify`; no desk name grants ambient execution authority.
+- Retired profile aliases fail closed for self-development.
 - Verification is a read-only contract over evidence. It cannot append, accept, materialize, checkpoint, or route an event.
 
 One stable `ComputerID` plus its canonical event chain is the evolving
@@ -52,22 +50,26 @@ changes only after verified guest materialization.
 
 ## Supervision Contract (2026-08-21)
 
-- **Texture agent scope is exactly two jobs:** revise the human-readable
-  document and message other agents. No capsule, host, provider-routing,
-  event-chain, or promotion authority. Humans interface only with Texture.
-- **Super singleton:** exactly one per ComputerID — coherence,
+- **Texture desk scope is exactly two jobs:** revise the human-readable document
+  and communicate with other desks by semantic act. No capsule, host,
+  provider-routing, event-chain, or promotion authority. Humans interface only
+  with Texture.
+- **Management desk singleton:** exactly one per ComputerID — coherence,
   error-correction, and resource arbitration over the whole computer; not a
-  concurrency limiter, never a document/computer mutator.
-- **CoSuper cardinality:** task-level actuator; N capability-bound capsules
-  per assignment is doctrinal; candidate A implements transitional 1:1.
-- **Mission A scheduling:** one live CoSuper assignment per computer;
-  computer-scoped arrival ordinals; FIFO among non-expired requests; expiry by
-  terminal operation / superseding owner correction / deadline; deadlines fail
-  rather than hang; admission refusal retryable with work pending.
-- **Mission-A memory containment:** `memory.high` = requested, `memory.max` =
+  concurrency limiter and never a document/computer mutator.
+- **Engineering admission and containment:** management admits one live
+  engineering assignment per computer in the initial sequential phase. An
+  assignment may hold N capability-bound capsules; the transitional
+  implementation is 1:1. Requests have computer-scoped arrival ordinals, FIFO
+  selection among non-expired requests, terminal/supersession/deadline expiry,
+  failure rather than hanging deadlines, and retryable refusal with work pending.
+- **Memory containment:** `memory.high` = requested, `memory.max` =
   2×requested, `memory.events` OOM feedback; no PSI pause/resume or zram.
-  Mission B — parallel Textures/trajectories, N assignments, admission-ledger
-  overcommit — is a release-gate requirement after sequential proof.
+  Later parallel Textures/trajectories and N assignments require an
+  admission-ledger release gate after sequential proof.
+- **Commitment ledger:** commitment objects live on the tape, never in a third
+  store. Reports resolve commitments; scores remain outside the acting desk's
+  context and form the management supervision surface.
 
 ## Current Invariants (2026-07-08)
 
@@ -109,30 +111,30 @@ changes only after verified guest materialization.
   the induced resolve-failure path returns a bounded 504; re-prove after a
   routing or timeout change rather than reopening the old 180-second diagnosis.
 
-Texture delegation is agentic. Texture may revise, ask Researcher, ask Super,
-ask both, ask neither, wait for more evidence, or report a blocker within its
-authority envelope. `patch_texture` and `rewrite_texture` store canonical
-revisions; neither may become a semantic workflow gate that requires a
-subsequent researcher/super/verifier tool call. Exact required-tool
-continuation is reserved for narrow mechanical protocols, not appagent policy.
+Texture delegation is agentic. Texture may revise, ask the research desk, report
+or ask the management desk, do several of those, do none, wait for more evidence,
+or report a blocker within its authority envelope. `patch_texture` and
+`rewrite_texture` store canonical revisions; neither may become a semantic
+workflow gate that requires a subsequent research, management, verification, or
+other appagent call. Exact required-tool continuation is reserved for narrow
+mechanical protocols, not appagent policy.
 
-Prompt bar, source ingestion, and article/news creation should show Conductor
-entry followed by Texture artifact materialization. `super` before Texture is a
-route invariant failure. `super` after Texture is valid only when Texture sends
-an explicit typed execution request through a capability the runtime grants.
+Prompt bar, source ingestion, and article/news creation should show deferred
+world-wire ingress followed by Texture artifact materialization. Management
+before Texture is a route invariant failure. Management after Texture is valid
+only when Texture sends a semantic act through a capability the runtime grants.
 
 Supervision is asynchronous and continuous. Texture may write many semantic
-versions between owner reads while it receives intermediate updates and sends
-revised direction to Researcher or Super. Capsule work, verification, and
-durable operations return typed updates and evidence handles as they progress,
-not only a terminal report. Worker-VM and candidate-VM delegation are obsolete
-and deleted. Generic delegated agents use durable runs/trajectories and
-capsules.
+versions between owner reads while it receives intermediate reports and sends
+revised direction to research or management. Capsule work, verification, and
+durable operations return `choir.Report` evidence handles as they progress, not
+only a terminal report. Worker-VM and candidate-VM delegation are obsolete and
+deleted. Generic delegated agents use durable runs/trajectories and capsules.
 
-Super addresses a CoSuper through the durable run/trajectory and its
-capsule-bound operation handle. No VSuper forwarding authority exists for
-self-development. A subordinate must not reconcile competing supervisors or
-receive a capability from model-visible text.
+Management admits engineering through a delegated `choir.Cast` and its durable
+assignment/trajectory and capsule-bound operation handle. A subordinate must
+not reconcile competing supervisors or receive a capability from model-visible
+text.
 
 Verifier agents are read-only with respect to canonical product state. They may
 execute only in an independently provisioned read-only capsule whose
@@ -140,27 +142,26 @@ capabilities cannot commit, accept, materialize, checkpoint, or route effects.
 
 ## Private Go Activation And Capability Profiles
 
-The ratified successor architecture converges Researcher, Super, CoSuper,
-Texture, and bounded appagents on one durable-actor activation kernel. It is not
-current deployed behavior. On each wake the target kernel gives the actor a
-private, disposable Yaegi interpreter, an assignment-scoped module manifest,
-current activation capabilities, bounded observations, and a typed outcome
-contract. The model incrementally authors and executes Go. Differences among
-actors belong in organizational bindings, module profiles, policy, and outcomes
-rather than persona-specific model loops.
+The desk architecture converges management, engineering, research, Texture, and
+bounded appagents on one durable-actor activation kernel. Each persistent root
+desk runs a private, disposable Yaegi interpreter in a killable subprocess with
+an assignment-scoped module manifest, current activation capabilities, bounded
+observations, and a typed outcome contract. The model incrementally authors and
+executes Go. Differences among desks belong in organizational bindings, module
+profiles, policy, and outcomes rather than persona-specific model loops.
 
-Restricted activations expose only the Go-cell operation to the model. Search,
-source fetch, document and file-format transforms, artifact operations,
+Restricted desk activations expose only the Go-cell operation to the model.
+Search, source fetch, document and file-format transforms, artifact operations,
 delegation, messaging, evidence, and work state are narrow imported modules;
-there is no duplicate ambient JSON-tool path. Backends may use compiled
-services or isolated converters internally without exposing shell, raw HTTP, or
-general filesystem authority to the actor.
+there is no duplicate ambient JSON-tool path. Backends may use compiled services
+or isolated converters internally without exposing shell, raw HTTP, or general
+filesystem authority to the actor.
 
-Until each profile passes its named product-path cutover, legacy ambient tool
-profiles are frozen against new capabilities and new call sites. The first
-kernel Definition owns CoSuper and Researcher cutover; Super, Texture, and
-bounded appagent profiles require explicit successor acceptance and deletion
-authority. No successful first profile makes an unmigrated profile complete.
+The four desks use in-cell yaegi `choir.*` semantic-act functions rather than a
+tool-call channel. The retired `update_coagent` interface is absent for desks;
+its packet machinery survives as `Report`'s body and for deferred world-wire
+roles until their phase. No successful desk migration makes a deferred role
+complete.
 
 An effects-capable implementation assignment may additionally expose direct
 Bash for ergonomic computer interaction. Direct Bash and the Go
@@ -215,8 +216,9 @@ Keep the agent loop programmatically uniform where authority permits: provider
 call semantics, cancellation, retry, compaction, and durable trajectory
 projection should not fork by persona. Capability resolution, privacy-safe
 canonical event append, capsule isolation, and typed role policy are deliberate
-security boundaries. Production roles are conductor, Texture, Researcher,
-Super, CoSuper, and explicitly bounded appagents; VSuper aliases refuse.
+security boundaries. Production actor roles are the management, engineering,
+research, and Texture desks, explicitly bounded appagents, and deferred
+world-wire/system-one roles; retired aliases refuse.
 
 Prefer prompts, tool descriptions, capability policy, and product-visible
 state over role-specific harness branches. (Prompt content itself is moving
@@ -254,27 +256,28 @@ marked-unused (`mark_source_unused` with a rationale). The former
 ## Texture as Artifact Control Plane
 
 Texture is also Choir's artifact control plane and the delegated controller for
-long-running artifact trajectories. Conductor routes exogenous user/app/source
-input into Texture-owned artifact state: prompt-bar requests, sourcecycled/news
-ingestion, article creation, mission work, and most user prompts should open or
-create Texture/context first. Super is not the direct ingress target for
-ordinary user or source prompts. Texture may later send the persistent Super a
-typed execution request when the artifact needs execution, coding-agent trees,
-generated artifacts, verification, candidate work, or another privileged
-action. Researcher and Super return material updates as the work advances;
-Texture incorporates what they teach into idea-level versions and redirects the
-trajectory. The owner samples and corrects the current head asynchronously
-rather than approving each version.
+long-running artifact trajectories. Deferred world-wire ingress routes exogenous
+user/app/source input into Texture-owned artifact state: prompt-bar requests,
+sourcecycled/news ingestion, article creation, mission work, and most user
+prompts should open or create Texture/context first. Management is not the direct
+ingress target for ordinary user or source prompts. Texture may later send the
+management desk a semantic act when the artifact needs execution, coding-agent
+trees, generated artifacts, verification, candidate work, or another privileged
+action. Management admits engineering with delegated `choir.Cast`; research and
+engineering return `choir.Report` material as work advances. Texture incorporates
+what they teach into idea-level versions and redirects the trajectory. The owner
+samples and corrects the current head asynchronously rather than approving each
+version.
 
 Read `texture-agentic-invariants-2026-06-13.md` before changing Texture tools,
-prompts, routing, revision creation, coagent wake behavior, Trace/Texture
+prompts, routing, revision creation, desk wake behavior, Trace/Texture
 projection, run acceptance involving Texture, or missions that use Texture as
 their owner-readable narrative. Texture is the canonical document/versioning
 core and must remain an agentic participant in a multi-agent system, not a
 workflow runner. Runtime may expose affordances and durable obligations, but it
-must not force Texture to call researcher, super, verifier, or any semantic
-appagent merely because prompt text, revision metadata, or an acceptance probe
-mentions that role.
+must not force Texture to call research, management, verification, or any
+semantic appagent merely because prompt text, revision metadata, or an acceptance
+probe mentions that role.
 
 ## Runtime Configuration
 
@@ -289,22 +292,23 @@ patch Node B environment variables or tracked server files as a substitute for a
 runtime policy path unless the mission is explicitly a platform config deploy.
 
 Role defaults are policy defaults, not architecture. Any configured model may
-serve any production agent role when its declared capabilities match the current
-turn: conductor, Texture, researcher, super, co-super, verifier, or a future
-bounded role. Text-only models are valid for orchestration, research, coding,
-and verification that does not need media input. Multimodal models are required
-only when the turn needs screenshots, images, video frames, files, or other
-media inputs. If a current policy maps a role to ChatGPT or Fireworks, treat
-that as the active computer's effective policy, not a hard-coded role boundary.
-Capability is evaluated for the next turn, not permanently for the role.
-Do not add new role-specific provider assumptions such as "conductor must be
-ChatGPT", "super must be ChatGPT", "Texture must be Fireworks", or "verifier must
-be multimodal" unless the current turn's capability requirements actually imply
-that. The long-term target is dynamic, agentically editable per-computer model
-policy: an owner prompt may ask `super` to edit the computer's model policy,
-and subsequent runs should use that policy without a platform deploy or Node B
-environment edit. The platform catalog records model capabilities and provider
-request semantics; per-computer policy selects among those capabilities.
+serve a production desk or bounded role when its declared capabilities match the
+current turn: management, engineering, research, Texture, verification, or a
+future bounded role. Text-only models are valid for orchestration, research,
+coding, and verification that does not need media input. Multimodal models are
+required only when the turn needs screenshots, images, video frames, files, or
+other media inputs. If a current policy maps a desk to ChatGPT or Fireworks,
+treat that as the active computer's effective policy, not a hard-coded role
+boundary. Capability is evaluated for the next turn, not permanently for the
+role. Do not add new role-specific provider assumptions such as "management must
+be ChatGPT", "Texture must be Fireworks", or "verification must be multimodal"
+unless the current turn's capability requirements actually imply that. The
+long-term target is dynamic, agentically editable per-computer model policy: an
+owner prompt may ask management to admit a capability-bound engineering change
+to the computer's model policy, and subsequent runs should use that policy
+without a platform deploy or Node B environment edit. The platform catalog
+records model capabilities and provider request semantics; per-computer policy
+selects among those capabilities.
 
 Provider request schemas must preserve modality. If a task needs screenshots,
 videos, files, or other media evidence, route through a model/provider path that
@@ -357,7 +361,7 @@ worker/candidate VM, local tests, a verifier statement, checkpoint publication,
 or route transition. The self-development gate is now carried by the revised
 roadmap (`docs/world-wire-mission-stack-2026-09-22.md`, Phase 3) after the
 carrier and precommitment records; the superseded effects Definition
-(`docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`)
+(`archive/choir-supervised-self-development-effects-2026-08-11.md`)
 is historical evidence for the effect-policy shape, not the live path.
 Effects turn on only through effect-specific multiagent consensus policies and
 audited actuators, not as a global ON boolean. Reversible effects gain a restore

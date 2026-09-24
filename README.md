@@ -58,21 +58,28 @@ want to help build the substrate, start here.
 
 ## How it works, in one breath
 
-Human intent enters through the prompt bar. The conductor routes it to an
-appagent — Texture for documents, which owns the canonical artifact. When the
-artifact needs execution, Texture calls Super, whose protocol can coordinate
-CoSuper executors inside guest-local capsules. Risky or long-running effects
-freeze as exact proposals. An effect-specific policy evaluates a qualified
-multiagent consensus, optionally including a human, before a trusted actuator
-executes the decision. Reversible state can be reconstructed or restored from
-retained events and receipts; irreversible consequences retain receipts and
-recover through compensation or a new forward action.
+Human intent enters through the prompt bar and deferred world-wire ingress
+materializes it in Texture, the sole agent writer of the canonical artifact.
+Texture, management, engineering, and research are persistent root RLM desks
+running yaegi Go cells in killable subprocesses. When an artifact needs
+execution, Texture sends a semantic act to management; management admits
+engineering through delegated `choir.Cast`, and engineering mutates only through
+capsule-bound per-assignment sub-RLM cells. Research has read-only world and
+message authority. Risky or long-running effects freeze as exact proposals.
+An effect-specific policy evaluates a qualified multiagent consensus, optionally
+including a human, before a trusted actuator executes the decision. Commitment
+objects live on the tape, reports resolve them, and Texture renders their
+material supervision state under editorial discretion. Reversible state can be
+reconstructed or restored from retained events and receipts; irreversible
+consequences retain receipts and recover through compensation or a new forward
+action.
 
 ```text
-prompt bar -> conductor -> appagent (Texture) -> Super protocol
--> CoSuper execution in a capsule -> frozen proposal + verifier evidence
+prompt bar -> world-wire ingress (deferred) -> Texture desk
+-> semantic act -> management desk -> delegated choir.Cast
+-> engineering sub-RLM in capsule -> frozen proposal + verifier evidence
 -> policy-governed multiagent consensus -> audited actuator
--> consequence receipt -> restore, correction, or compensation
+-> commitment/report ledger -> Texture revision -> restore, correction, or compensation
 ```
 
 ## Concepts in five words

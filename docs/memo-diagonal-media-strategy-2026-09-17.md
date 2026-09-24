@@ -223,9 +223,9 @@ layer (box score) are the business, with the platform as the endgame.
 ## Sources
 
 - `docs/choir-vision.md` — the order: computer first, wire downstream.
-- `docs/memo-autopaper-world-wire-generalization-codesign-2026-08-09.md` —
+- `docs/archive/memo-autopaper-world-wire-generalization-codesign-2026-08-09.md` —
   the wire as generalization codesign.
-- `docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md` —
+- `docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md` —
   desks, casts, OG, tape.
 - `docs/reviews/picl-consensus-synthesis-2026-09-17.md` — the learning
   record schema the box score consumes.

@@ -37,7 +37,7 @@ start:
         uses not_before + dispatcher due-index; fate continuation is an
         executor actor.'
       claim_scope: current
-      evidence_ref: docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
+      evidence_ref: docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
 
 finish:
   deliver: >-
@@ -122,7 +122,7 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
-    - ratified ontology cutover (docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md)
+    - ratified ontology cutover (docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md)
     - ordered mission list (docs/world-wire-mission-stack-2026-09-22.md, M3)
     - wrong-path cluster assessment (docs/problems/root-cause-wrong-path-cluster-2026-09-22.md)
   must_preserve:

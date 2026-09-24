@@ -17,14 +17,18 @@ the computer. That is phase one — the technology, not the product.
 
 ## Phase 1 — the automatic computer
 
-A persistent computer that works continuously and develops itself under
-owner supervision. An **RLM** (recursive language model, cf. Zhang et
-al., MIT) runs long-horizon work by spawning sub-agents as async calls,
-and **precommitment records** keep learning weightless — committed predictions resolve
-into provenance-linked records instead of weight updates. Every change
-is a typed event; every surface is a deterministic projection. Proven on
-staging: whole-computer restore, encrypted file storage, key escrow,
-restart-surviving actors — all with deployed evidence.
+A persistent computer that works continuously and develops itself under owner
+supervision. Four persistent root **RLM desks** — Texture, management,
+engineering, and research — run yaegi Go cells in killable subprocesses;
+sub-RLMs are per-assignment runs a desk casts. Texture is the sole agent writer,
+management provides coherence and admits engineering through delegated
+`choir.Cast`, engineering mutates through capsule-bound cells, and research has
+read-only world and message authority. They communicate through in-cell
+`choir.*` semantic acts. **Precommitment records** live as commitment objects on
+the tape: reports resolve them into provenance-linked records instead of weight
+updates. Every change is a typed event; every surface is a deterministic
+projection. Proven on staging: whole-computer restore, encrypted file storage,
+key escrow, restart-surviving actors — all with deployed evidence.
 
 ## Phase 2 — the automatic newspaper
 

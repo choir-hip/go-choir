@@ -79,9 +79,8 @@ entitlement policy change is required before they can lose 24/7 service.
 
 ## Agent Roles
 
-`conductor` routes top-level user and connector input. It does not mutate
-workspace state and does not orchestrate document workers. In the current Texture
-path, its only agent delegation target is `texture`.
+`conductor` is deferred to system-one. It is not a current desk, routing
+authority, workspace mutator, or document-worker orchestrator.
 
 `app` is a user-facing desktop surface. It does not have to be an appagent.
 
@@ -106,36 +105,41 @@ with `mark_source_unused` rather than silently dropped. Texture prompts carry no
 boolean control-flow branches (Choir Doctrine I16); article-format and citation
 guidance is unconditional, driven by the default Style.texture.
 
-`researcher` reads local context and the web, writes findings/evidence to Dolt,
-and does not own document text.
+`research` is the read-only world and message authority. It reads local context
+and the web, reports findings/evidence through `choir.Report`, and does not own
+document text.
 
-`super` is exactly one per ComputerID: the whole-computer coherence,
-error-correction, and resource-arbitration authority — not a concurrency
-limiter and not a document/computer mutator. It may orchestrate durable
-delegated runs and capability-bound capsules and inspect their evidence; it
-does not directly mutate the computer, host, route, or canonical event state.
+`management` is exactly one persistent desk per ComputerID: the whole-computer
+coherence, error-correction, and resource-arbitration authority — not a
+concurrency limiter and not a document/computer mutator. It may inspect
+evidence, admit delegated `choir.Cast` work into engineering, and `Escalate` to
+the owner; it does not directly mutate the computer, host, route, or canonical
+event state.
 
 `vsuper` is retired. Its aliases, profile, prompt, spawn rules, tool grants, and
 runtime paths are deleted; it must not survive as a privileged worker role.
 
-`cosuper` is a task-level actuator performing scoped effectful work inside
-capability-bound guest capsule(s). One assignment may hold N capsules
-doctrinally; candidate A implements transitional 1:1. CoSuper has no host, raw
-VM, route, canonical event, or acceptance authority.
+`engineering` performs scoped effectful work through capsule-bound per-assignment
+sub-RLM cells. It uses `Complete`, `Freeze`, and `Verify` for effect outcomes.
+One engineering assignment may hold N capsules doctrinally; candidate A
+implements transitional 1:1. Engineering has no host, raw VM, route, canonical
+event, or acceptance authority.
 
-Delegated agents such as researcher, super, cosuper, and future specialized
-roles are durable runs/trajectories with scoped tools. They are not worker
-computers or worker VMs.
+The four desks — Texture, research, management, and engineering — are
+persistent root RLMs running yaegi Go cells in killable subprocesses. They
+communicate with in-cell `choir.*` semantic acts, not a tool-call channel.
+Per-assignment sub-RLMs are runs cast by a desk; they are not worker computers
+or worker VMs.
 
 ## Scheduling and Memory Containment (Mission A)
 
-One live CoSuper assignment per computer. Durable computer-scoped arrival
+One live engineering assignment per computer. Durable computer-scoped arrival
 ordinals order requests; FIFO applies among non-expired requests; requests
 expire on operation terminality / superseding owner correction / deadline;
 assignment deadlines fail rather than hang; admission refusal is retryable with
 work pending. Containment: `memory.high` = requested, `memory.max` =
 2×requested, `memory.events` OOM counters as feedback — no PSI pause/resume and
-no zram in Mission A. Mission B (parallel textures/trajectories, N concurrent
+no zram in Mission A. Mission B (parallel Texture trajectories, N concurrent
 assignments, admission-ledger overcommit) is a release-gate requirement after
 sequential proof.
 
@@ -165,12 +169,13 @@ serving work. It may serve published artifacts without hydrating private user
 computers; it is infrastructure, not a user, worker, background, or candidate
 computer.
 
-## Super-Tier Execution Policy
+## Desk-Tier Execution Policy
 
-`super` and `cosuper` do not edit the live desktop directly. `super` may inspect
-and orchestrate through typed public APIs. Effectful `cosuper` work runs inside
-a capability-bound capsule with least-privilege tools and produces an inert
-bundle for external verification and acceptance.
+Management and engineering do not edit the live desktop directly. Management
+may inspect and orchestrate through typed public APIs, delegated `choir.Cast`,
+and `Escalate` to the owner. Effectful engineering work runs inside a
+capability-bound capsule with least-privilege tools and produces an inert bundle
+for external verification and acceptance.
 
 Do not use VM placement, branch merge, route switching, or a role name as a
 safety or promotion model. Safety comes from capability isolation, typed app
@@ -270,9 +275,9 @@ do not conflate the two.
 
 Trace should show trajectories, not isolated loops.
 
-A trajectory starts with user or connector input and continues through conductor
-routing, appagent ownership, worker delegation, VM execution, findings,
-artifacts, versions, and publication candidates.
+A trajectory starts with user or connector input and continues through a
+document-channel/desk route, appagent ownership, delegated sub-RLM work, VM
+execution, findings, artifacts, versions, and publication candidates.
 
 Trace should make causality visible without forcing the user to read every raw
 message.

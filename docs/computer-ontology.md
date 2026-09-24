@@ -75,7 +75,7 @@ different merge laws.
 | Computer event authority | **Live effects-OFF substrate; self-development gate sequenced by the revised roadmap** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery remain the separate semantic-event authority. The completed durable-work acceptance exercised no effects. Effects turn on through effect-specific multiagent consensus and audited actuators—not as a global ON flip and not only for reversible effects—under the Phase-3 self-development program, not a live Definition. |
 | Capsules | **Implemented source candidate; effect proof pending** | Guest-local namespaces, cgroup, seccomp, Landlock, capability broker, transaction tape, and fail-closed admission require the self-development gate (revised roadmap Phase 3) and deployed acceptance. |
 | Features adoption and activation | **Retired authority; canonical residue unclaimed** | AppChangePackage/AppAdoption/lineage records are not self-development authority or product fallback. Rejected-branch deletion is not a landed claim. |
-| Self-development acceptance/materialization | **Gate sequenced by revised roadmap; no live Definition** | The effect-policy shape (effect-specific consensus, complete checkpointing, acceptance-fenced restore, irreversible-consequence receipts) is design evidence from the superseded `docs/definitions/choir-supervised-self-development-effects-2026-08-11.md`. Current authority is the carrier (blocked on owner decision) then precommitment records then the Phase-3 self-development program. Do not resume CTS or the historical self-dev roadmap as the schedule. |
+| Self-development acceptance/materialization | **Gate sequenced by revised roadmap; no live Definition** | The effect-policy shape (effect-specific consensus, complete checkpointing, acceptance-fenced restore, irreversible-consequence receipts) is design evidence from the superseded `archive/choir-supervised-self-development-effects-2026-08-11.md`. Current authority is the carrier (blocked on owner decision) then precommitment records then the Phase-3 self-development program. Do not resume CTS or the historical self-dev roadmap as the schedule. |
 
 Do not collapse a code-present substrate into a live product claim. A worker
 VM, forked desktop, AppChangePackage, capsule, frozen effect bundle,
@@ -136,7 +136,7 @@ reruns a model, tool, or network observation.
 
 The Dolt substrate is split into two stores that must never be conflated (see
 D-STORES and D-WIRE in
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)):
+[archive/og-dolt-heresy-completion-2026-07-08.md](archive/og-dolt-heresy-completion-2026-07-08.md)):
 
 - **World-wire store:** platform `ObjectGraphStore` at
   `internal/platform/objectgraph_store.go`, served by `corpusd` in sql-server
@@ -162,7 +162,7 @@ Do not force every change through one storage abstraction.
 | --- | --- | --- |
 | Canonical computer events | immutable causal envelopes, accepted/rejected effects, desired/effective heads and commitments | one guest `ComputerEventAppender` requests typed corpusd head CAS; no other writer appends semantic events |
 | VM/OS/runtime | realization, installed release, running services, local caches, process environment | root guest updater and lifecycle actuators project an authorized event; realization replacement does not change ComputerID |
-| Dolt/app state | textures, appagent state, typed Researcher updates, event index, accepted effective-state materialization | deterministic reducer plus exact event-head/state preconditions; typed Researcher updates fate-share with append |
+| Dolt/app state | textures, appagent state, research `choir.Report` bodies, event index, accepted effective-state materialization | deterministic reducer plus exact event-head/state preconditions; Report provenance fate-shares with append while its commitment object remains on the tape |
 | Actor recovery log (narrow SQLite) | durable actor updates and compacted activation snapshots used by `internal/actorruntime` | recovery/replay only; never semantic event, trajectory, acceptance, or promotion truth |
 | Choir Base (partial SQLite journal + tree/blob substrate) | append-only source/file observations, derived tree, content-addressed blobs, File Provider/materialization support | tested but not canonical computer authority; product wiring must preserve the event/embedded-Dolt boundary |
 | Source/build | CodeRef source, offline recipe/toolchain/dependencies, runtime/service artifacts | capsule effect bundle becomes desired code only through an accepted event |
@@ -239,8 +239,9 @@ The typed state transition—not a generic filesystem merge—is the authority:
 
 - Source/build effects are ordered in the frozen bundle and rebuilt from
   pinned offline inputs.
-- Typed Researcher updates fate-share their exact embedded-Dolt mutation with
-  the event append.
+- Typed research `choir.Report` evidence claims fate-share their exact
+  embedded-Dolt projection with the event append; the corresponding commitment
+  object remains on the tape rather than in a third store.
 - Blobs, private payloads, verifier results, releases, and checkpoints are
   immutable content-addressed artifacts with signed receipts.
 - Runtime state is materialized by the root guest updater; opaque running
@@ -318,8 +319,8 @@ Current state:
   reconstruction, and no-SSH inspection are live;
 - the effects-OFF cutover provides one canonical per-computer event appender,
   private payload protocol, guest updater, public self-development API/CLI,
-  and capsule-only CoSuper execution; direct VSuper/worker/candidate/package
-  mutation paths are deleted or refuse;
+  and capsule-bound engineering-desk mutation; direct retired worker/candidate/
+  package mutation paths are deleted or refuse;
 - the capsule executor's namespace, cgroup v2, overlayfs, seccomp, Landlock,
   inherited AF_UNIX listener, reconnect, and cleanup path passes the exact
   Node A Linux proof;
@@ -330,8 +331,9 @@ Current state:
 Near target:
 
 - one stable ComputerID owns a complete privacy-safe canonical event chain;
-- Super cannot mutate directly, CoSuper effects are capsule-only, VSuper
-  aliases refuse, and Researcher writes only through its typed update;
+- the management desk cannot mutate directly; engineering effects are
+  capsule-bound; research reports evidence through `choir.Report`; and retired
+  aliases refuse;
 - an inert frozen bundle becomes desired state only through scoped external
   acceptance and becomes effective only after verified guest materialization;
 - checkpoints and vmctl routes are reconstructible projections with explicit
@@ -352,28 +354,33 @@ Ideal direction:
 ## Supervision Actor Contract
 
 - **Texture document authority has two writer classes:** `AuthorUser` owner
-  edits with immediate canonical-head CAS, and `AuthorAppAgent` Texture-agent
-  revisions. No other agent writes document text. Each Texture-agent
-  semantic-change turn creates one monotonic, self-contained version; no-change
-  turns create none. `texture_turn_committed` lifecycle events are not
-  revisions. The Texture agent's only jobs are revising the document and
-  messaging other agents.
-- **Super is one singleton per ComputerID**: a coherence/error-correction and
-  resource-arbitration mechanism over the whole computer — not a concurrency
-  limiter, and never a document or computer mutator. CoSupers are task-level
-  actuators; one assignment may hold N capability-bound capsules doctrinally,
-  while candidate-A implementation is transitional 1:1.
-- **Scheduling (Mission A):** one live CoSuper assignment per computer;
-  durable computer-scoped arrival ordinals; FIFO among non-expired requests;
-  expiry by terminal operation / superseding owner correction / deadline;
-  assignment deadlines fail rather than hang; admission refusal is retryable
-  with work pending. Mission-B parallelism (N concurrent assignments,
-  admission ledger, overcommit factor) is a release-gate requirement after
-  sequential proof.
-- **Memory containment (Mission A):** `memory.high` = requested,
-  `memory.max` = 2×requested, `memory.events` OOM counters as feedback; no PSI
-  pause/resume tier or zram dependency. Long-term, dynamic VM resize under
-  Cloud Hypervisor makes admission accounting advisory.
+  edits with immediate canonical-head CAS, and `AuthorAppAgent` Texture-desk
+  revisions. No other desk writes document text. Each Texture semantic-change
+  turn creates one monotonic, self-contained version; no-change turns create
+  none. `texture_turn_committed` lifecycle events are not revisions. The Texture
+  desk's only jobs are revising the document and communicating with other desks.
+- **Four persistent root RLM desks:** Texture, management, engineering, and
+  research run yaegi Go cells in killable subprocesses. Management is the
+  one-per-ComputerID coherence/error-correction and resource-arbitration desk,
+  never a document or computer mutator or concurrency limiter. Research has
+  read-only world and message authority. Engineering uses capsule-bound
+  per-assignment sub-RLM cells and its effect verbs are `Complete`, `Freeze`,
+  and `Verify`.
+- **Management admission:** management issues delegated `choir.Cast` to admit
+  one live engineering assignment per computer in the initial sequential phase.
+  Requests have durable computer-scoped arrival ordinals, FIFO selection among
+  non-expired requests, terminal/supersession/deadline expiry, failure rather
+  than hanging deadlines, and retryable refusal with work pending. An
+  assignment may hold N capability-bound capsules; the transitional
+  implementation is 1:1. Later parallelism (N assignments and an admission
+  ledger with overcommit) requires a release gate after sequential proof.
+- **Memory containment:** `memory.high` = requested, `memory.max` =
+  2×requested, `memory.events` OOM counters as feedback; no PSI pause/resume
+  tier or zram dependency. Long-term, dynamic VM resize under Cloud Hypervisor
+  makes admission accounting advisory.
+- **Commitment supervision:** commitments are OG objects on the tape, never a
+  third store. `choir.Report` resolves commitments, scores stay off the acting
+  desk's context, and the ledger is management's supervision surface.
 
 ## Naming Rules
 

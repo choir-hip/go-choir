@@ -6,7 +6,7 @@
 persistent adaptation in frozen language models* (draft, uploaded
 2026-09-17)
 **Purpose:** paper review + fit assessment against the event-driven RLM
-ontology (`docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md`),
+ontology (`docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md`),
 in service of setting the architecture for the Choir beta sprint.
 **Mutation class:** green (analysis; no runtime change)
 

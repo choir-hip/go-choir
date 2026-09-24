@@ -26,8 +26,9 @@ identity claim:
 This is the system prompt for the <role> agent in Choir.
 ```
 
-`<role>` is the functional role name (`texture`, `researcher`, `super`,
-`conductor`, `vsuper`, `co-super`, `processor`, `reconciler`, …).
+`<role>` is the functional desk name (`texture`, `research`, `management`, or
+`engineering`). `conductor` is deferred to system-one; `processor` and
+`reconciler` are deferred to world-wire. `vsuper` is retired.
 
 ## Choir context
 
@@ -43,21 +44,22 @@ carry the opening frame plus role-specific theory and operational morphisms.
 
 ## Texture role contract
 
-Texture agent scope is exactly two jobs: revise the owner-readable document and
-message other agents. It has no capsule, host filesystem, provider-routing,
-event-chain, or promotion authority. Humans interface only with Texture;
-Texture documents are optimized for human-language prose and structure.
-`AuthorUser` is the owner writer and may immediately CAS the canonical head;
-`AuthorAppAgent` is Texture and the sole agent writer. Researcher, Super, and
-CoSuper packets are inputs/evidence and never direct document writes.
+Texture scope is exactly two jobs: revise the owner-readable document and
+communicate through semantic acts. It has no capsule, host filesystem,
+provider-routing, event-chain, or promotion authority. Humans interface only
+with Texture; Texture documents are optimized for human-language prose and
+structure. `AuthorUser` is the owner writer and may immediately CAS the
+canonical head; `AuthorAppAgent` is Texture and the sole agent writer. Research,
+management, and engineering reports are inputs/evidence and never direct
+document writes.
 
-A Texture-agent authoring turn that changes semantic state commits exactly one
-new monotonic, self-contained snapshot. Prior versions are optional history,
-never required context. Wait, block, control, rejected, pending, and no-change
-turns may emit `texture_turn_committed` lifecycle events but do not create
-revisions. A delivered `coagent_update` wakes or supplies a turn; it does not
-itself require a revision. A successful patch test should assert a revision
-only when the patch changes semantic state.
+A Texture authoring turn that changes semantic state commits exactly one new
+monotonic, self-contained snapshot. Prior versions are optional history, never
+required context. Wait, block, control, rejected, pending, and no-change turns
+may emit `texture_turn_committed` lifecycle events but do not create revisions.
+A delivered semantic act may wake or supply a turn; it does not itself require a
+revision. A successful patch test should assert a revision only when the patch
+changes semantic state.
 
 ## Obligation over persona
 
@@ -68,113 +70,106 @@ Prefer obligation, authority envelope, and morphism class over persona:
 - when to checkpoint, incorporate, delegate, or stop;
 - stop when **marginal returns diminish**, not when a role “feels done.”
 
-## Coagent update delivery (2026-06-17)
+## Semantic-act delivery (2026-09-23)
 
-`update_coagent` is the sole agent-to-agent wake primitive. Delivery semantics are
-uniform across Texture, super, researcher, vsuper, and co-super activations.
+For the four desks, `update_coagent` is deleted. The desks communicate through
+in-cell yaegi `choir.*` functions, not a tool-call channel. `Report` carries
+evidence; `Cast` is delegated admission into a per-assignment sub-RLM run;
+`Ask`, `Precommit`, `Resolve`, `Cancel`, `Escalate`, and `Note` carry their
+respective semantic authorities. Engineering effect verbs are `Complete`,
+`Freeze`, and `Verify`. `processor` and `reconciler` retain packet machinery
+until their deferred world-wire phase.
 
-### Typed packets, not inferred routing
+### Typed Report bodies, not inferred routing
 
-- Every delivered update becomes a **typed user turn** in the target activation's
-  context window: a `coagent_update` JSON packet with `packet_type`,
-  `delivery_phase` (`activation_mailbox_turn`, `cold_activation`,
-  `mid_activation`, `final_checkpoint`), and structured update records.
-- **Warm activations** inject pending updates between tool-loop iterations.
-- **Texture activation wakes** append pending updates as the first durable
-  mailbox turn in run memory, not as prompt-prefix reconstruction.
-- **Cold activation** packet prepending is compatibility behavior for
-  non-Texture actors that do not yet have the durable thread substrate.
-- `update_id` is a runtime-owned idempotency and delivery handle. Model-facing
-  prompts and tool schemas should not require an LLM to invent a globally unique
-  checkpoint key. The runtime may return `update_id` after persistence for Trace,
-  delivery accounting, and debugging.
-- Runtime must **not** traverse spawned-by / parent-run edges to decide who
-  receives an update. Provenance fields (`RequestedByRunID`, `requested_by_run_id`)
-  are audit-only.
+- A delivered `Report` carries a typed body in the target desk's context with
+  its act metadata, delivery phase (`activation_mailbox_turn`, `cold_activation`,
+  `mid_activation`, `final_checkpoint`), and structured evidence records.
+- Persistent desk RLMs receive pending semantic acts between yaegi-cell
+  executions. A desk is a killable subprocess; a sub-RLM is a per-assignment
+  run cast by a desk.
+- Report identity is runtime-owned for Trace, delivery accounting, and
+  debugging. Model-facing prompts and functions must not require an agent to
+  invent a globally unique checkpoint key.
+- Runtime must **not** traverse spawned-by / parent-run edges to decide the
+  recipient. Provenance fields are audit-only.
 
-### One Texture coagent per article
+### One Texture desk binding per article
 
-- Each Texture document/article has a durable Texture coagent id:
-  `texture:<doc_id>`.
-- Researchers spawned for that article must address **that exact id** on every
-  `update_coagent` call via the required `agent_id` argument.
-- Spawn metadata (`requested_by_agent_id`, run-context overlay) names the
-  delivery target so the researcher can copy it; runtime does not infer the
-  target when the caller is a researcher.
-- Super and other roles may still use explicit `agent_id` or documented
-  non-researcher resolution paths; researchers may not omit `agent_id`.
+- Each Texture document/article binds to its persistent Texture desk.
+- Research desks report evidence to that binding. Management and engineering
+  use explicit semantic recipients and delegated `choir.Cast` where admission
+  is required.
+- Spawn metadata may name a recipient for convenience; runtime does not infer
+  the target from spawned-by lineage.
 
 ### Texture wake path
 
-- `wakeUpdatedCoagent` uses the same `reconcileUpdatedCoagentActor` entry path
-  for all addressed agents, including `texture:<doc_id>`.
-- Texture integrate runs (`integrate_worker_findings`) start when pending
-  updates exist and no conflicting pending mutation blocks; worker content
-  arrives through injected packets, not a separate channel-only prompt embed.
-- Failed Texture integrate runs must **not** advance the worker-update
-  checkpoint or mark updates delivered without a canonical revision.
+- The common desk reconcile path addresses the bound Texture desk.
+- Texture integration runs when pending Reports exist and no conflicting pending
+  mutation blocks; evidence arrives in Report bodies, not a separate channel
+  prompt embed.
+- Failed Texture integration must **not** advance Report delivery state or mark
+  evidence resolved without a canonical revision.
 
 ### Required tests
 
-- researcher `update_coagent` rejects missing or non-texture `agent_id`;
-- model-facing `update_coagent` can be called without a model-invented
-  `update_id`;
-- retries of one delivery dedupe by runtime-derived identity, while distinct
-  deliveries cannot collide because the model reused a local label such as
-  `checkpoint-1`;
-- typed packet builder and Texture warm/cold injection paths;
-- coagent rewarm and resident-activation injection behavior;
-- Texture wake after researcher delivery produces a revision when the model
-  patch changes semantic state; wait/no-change turns correctly produce no
-  revision.
+- Research Report delivery uses the explicit bound Texture recipient;
+- model-facing semantic acts need no model-invented global delivery id;
+- retries dedupe by runtime-derived identity while distinct deliveries cannot
+  collide because a model reused a local label;
+- typed Report construction and persistent desk delivery;
+- Texture integration after research evidence produces a revision when the
+  patch changes semantic state; wait/no-change turns correctly produce none.
 
 ## Research cadence
 
-Researcher search cadence is one source of Texture inputs, but update count and
-revision count are distinct. Texture revises whenever its semantic state
+Research desk search cadence is one source of Texture inputs, but Report count
+and revision count are distinct. Texture revises whenever its semantic state
 changes, at a cadence ranging from dozens to hundreds per session; it may also
-wait, reject, or defer without a revision. Do not treat researcher checkpoint
-volume, `texture_turn_committed` volume, or a fixed lifecycle stage as a
-revision guarantee. The selfdev join path's synthetic deterministic
-`TextureTurnWait` is a separate defect: it bypasses genuine Texture authoring
-and must not be repaired by forcing every worker milestone into a revision.
+wait, reject, or defer without a revision. Do not treat research Report volume,
+`texture_turn_committed` volume, or a fixed lifecycle stage as a revision
+guarantee. The selfdev join path's synthetic deterministic `TextureTurnWait` is
+a separate defect: it bypasses genuine Texture authoring and must not be
+repaired by forcing every worker milestone into a revision.
 
-While researchers keep searching and sending `update_coagent` checkpoints,
-Texture should keep incorporating with `patch_texture` and, when helpful, keep
-addressing researchers with follow-up questions via `update_coagent` or
-additional `spawn_agent` probes — until depth no longer materially improves
-the artifact.
+While research keeps searching and reporting evidence, Texture should keep
+incorporating with `patch_texture` and, when helpful, address research with
+semantic follow-up questions or delegated `choir.Cast` probes — until depth no
+longer materially improves the artifact.
 
-Researchers should prefer **parallel saturation**: in the same tool-call block,
-combine `update_coagent` with the next `web_search`, `source_search`, `fetch_url`,
-or import probe; repeat for multiple rounds in one run until further searches
-mostly repeat prior findings and no longer add marginal grounded material.
+Research should prefer **parallel saturation**: in the same yaegi-cell work,
+combine a `choir.Report` with the next `web_search`, `source_search`,
+`fetch_url`, or import probe; repeat for multiple rounds in one run until
+further searches mostly repeat prior findings and no longer add marginal
+grounded material.
 
-## Researcher delivery addressing
+## Research delivery addressing
 
-Each Texture article has its own Texture coagent (`texture:<doc_id>`). Researchers
-report to exactly one Texture coagent per activation.
+Each Texture article binds to its persistent Texture desk. Research reports to
+that exact binding for the active assignment.
 
-- Every researcher `update_coagent` call must set `agent_id` to that Texture
-  coagent id. Runtime rejects researcher deliveries without an explicit texture
-  agent id.
-- Spawn/run context names the delivery target (`requested_by_agent_id` and the
-  run-context overlay). The researcher copies that value into each tool call;
-  runtime does not infer the recipient from spawned-by lineage or channel alone.
-- See [texture-agentic-invariants-2026-06-13.md](texture-agentic-invariants-2026-06-13.md)
-  for the full coagent update delivery contract (typed packets, warm injection,
-  Texture wake).
+- Every research `choir.Report` identifies the bound Texture desk recipient.
+- Assignment context may name the delivery target. The research desk copies
+  that value into its semantic act; runtime does not infer a recipient from
+  spawned-by lineage or channel alone.
+- Report bodies preserve the typed evidence, warm delivery, and Texture-wake
+  machinery previously carried by packets.
 
 ## Enforcement
 
 - Seeded defaults live in `internal/promptstore/defaults/*.yaml` and
   `internal/textureprompts/texture.yaml`.
 - Per-run runtime overlays live in `internal/runtimeprompts/overlays/*.yaml`
-  (temporal grounding, conductor routing, researcher saturation, super/vsuper
-  boundaries, worker repo bootstrap, run context).
+  (temporal grounding, desk routing, research saturation, management/
+  engineering boundaries, worker repo bootstrap, run context).
 - Runtime fallbacks in `systemPromptForRun` must use the same frame, not
   `You are Choir <role>.`
 - Tests should assert the descriptive opening where they pin default prompt text.
+
+> **Transition note — 2026-09-23:** Prompt YAMLs still carry old role names
+> pending the R1 stratum-A sweep. They are transition residue, not current desk
+> authority.
 
 ## Style-guide Textures (planned)
 

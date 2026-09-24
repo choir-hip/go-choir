@@ -170,7 +170,7 @@ lives in.
 - `docs/choir-doctrine.md` — apex doctrine. This vision defers to it.
 - `docs/computer-ontology.md` — persistent computer, candidate, promotion
   ontology.
-- `docs/definitions/choir-coherent-computer-convergence-2026-07-21.md` — the
+- `docs/archive/choir-coherent-computer-convergence-2026-07-21.md` — the
   ratified durable-work kernel this vision runs on.
 - `docs/archive/vision-choir-category-texture-transclusion-v0.md` — the
   earlier texture/transclusion vision; its re-visioning banner and this

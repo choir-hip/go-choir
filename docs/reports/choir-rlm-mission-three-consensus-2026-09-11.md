@@ -6,7 +6,7 @@ Raw outputs: `.agentic-consensus/mission3/run1/` (manifest, per-agent output, co
 Base revision at run time: `main@6f1a8014`.
 
 This record is the durable adjudication. The draft it produced is
-[`../definitions/choir-rlm-engineering-carrier-2026-09-11.md`](../definitions/choir-rlm-engineering-carrier-2026-09-11.md).
+[`../archive/choir-rlm-engineering-carrier-2026-09-11.md`](../archive/choir-rlm-engineering-carrier-2026-09-11.md).
 
 ## Panel
 
