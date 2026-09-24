@@ -70,6 +70,18 @@ projector**, not a cross-store transaction:
   dispatcher re-reads its projection; any wake minted-but-unincorporated is
   re-delivered. No boot sweep enumerating store state.
 
+## What the projector must reuse
+
+`wakeUpdatedCoagent` is not a bare wake mint — it binds lifecycle controls
+to resident runs (`bindLifecycleControlsToRun`) before dispatching. The
+projector must call `wakeUpdatedCoagent` per backlog row, not re-implement
+the wake, so the resident-binding path is preserved. The projector is a
+resumable fold over the coagent mailbox backlog (`ListCoagentMailboxBacklogAll`)
+with a durable cursor, run continuously — not only at boot — so the crash
+window between coagent-write and wake-mint is covered by re-projection, not
+by a boot scan. `sweepPendingUpdateActors` is exactly this fold run once at
+boot; the projector is the same fold made resumable and continuous.
+
 ## Per-sub-class migration contract
 
 Each wrong-path instance migrates by the same rule: **the continuation it
