@@ -169,6 +169,43 @@ func (c *CgroupManager) Delete() error {
 	return c.manager.Delete()
 }
 
+// Kill atomically SIGKILLs every task in the cgroup via cgroup.kill.
+func (c *CgroupManager) Kill() error {
+	return c.manager.Kill()
+}
+
+// WaitEmpty blocks until the cgroup reports populated=0 (no remaining tasks)
+// or ctx is done. Required between Kill and Delete: cgroup.kill signals tasks
+// but they take a moment to exit, and Delete fails EBUSY on a non-empty cgroup.
+func (c *CgroupManager) WaitEmpty(ctx context.Context) error {
+	if c == nil || c.path == "" {
+		return fmt.Errorf("capsule cgroup is unavailable")
+	}
+	root := filepath.Join("/sys/fs/cgroup", strings.TrimPrefix(c.path, "/"))
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		events, err := os.ReadFile(filepath.Join(root, "cgroup.events"))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return fmt.Errorf("read capsule cgroup events: %w", err)
+		}
+		for _, line := range strings.Split(string(events), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 && fields[0] == "populated" && fields[1] == "0" {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 // Path returns the cgroup path.
 func (c *CgroupManager) Path() string {
 	return c.path

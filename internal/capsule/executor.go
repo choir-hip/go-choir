@@ -479,6 +479,14 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		cleanupErr = errors.Join(cleanupErr, err)
 	}
 	if caps.Cgroup != nil {
+		// Kill every remaining task (the go_eval worker's subprocesses outlive
+		// the main process), wait for the cgroup to drain, then delete. Delete
+		// alone fails EBUSY on a non-empty cgroup — observed stranding the
+		// capsule at revoke_requested on assignment completion.
+		_ = caps.Cgroup.Kill()
+		if err := caps.Cgroup.WaitEmpty(ctx); err != nil {
+			cleanupErr = errors.Join(cleanupErr, err)
+		}
 		if err := caps.Cgroup.Delete(); err != nil {
 			cleanupErr = errors.Join(cleanupErr, err)
 		}
