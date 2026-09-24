@@ -63,7 +63,7 @@ type Runtime struct {
 	// kernelMode, when true, drains the durable actor-wake outbox into actor
 	// updates. The live boot-time worker-update sweep remains unchanged; the
 	// kernel projector never binds or otherwise mutates resident runs.
-	kernelMode bool
+	kernelMode    bool
 	projectorStop chan struct{}
 	// traceStore is the optional Dolt-backed observability store. When set,
 	// every event emitted via emitEvent/persistEvent/persistSubmittedRun is
@@ -645,12 +645,22 @@ func (rt *Runtime) Start(ctx context.Context) {
 	bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
-	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
-	// The projector is the continuous store→actor fold and
-	// MigrateActorWakeOutbox (run in SetKernelMode) already minted durable
-	// wakes for every pending obligation. The boot-time rewarm/sweep scans
-	// that re-mint actor wakes are deleted - interrupted activations re-fire
-	// from their unprocessed triggering event (G2/G6 non-gap).
+	var terminalOutcomeTargets map[string]bool
+	bootPhase("reconcile_terminal_run_outcomes", func() { terminalOutcomeTargets = rt.reconcileTerminalRunOutcomes(ctx) })
+	// Boot-time state-repair passes. These are NOT obligation re-fire (the
+	// actor-wake outbox owns that) — they are state corrections with no
+	// canonical event to fold: passivating interrupted runs, minting spawned
+	// work items, re-entering persistent Management, re-driving open work.
+	// A process restart is not a canonical event, so the outbox cannot express
+	// them. Restored after the consensus panel + restart tests falsified the
+	// "outbox subsumes the sweeps" claim. See the gap-analysis doc.
+	bootPhase("rewarm_lifecycle_activations", func() { rt.rewarmInterruptedLifecycleActivations(ctx) })
+	bootPhase("rewarm_persistent_management", func() { rt.rewarmInterruptedPersistentManagementActors(ctx) })
+	bootPhase("sweep_passivated_spawned_work", func() { rt.sweepPassivatedSpawnedCoagentWork(ctx) })
+	// Reconcile canonical lifecycle work/control joins before the generic actor
+	// update sweep can acknowledge a durable occurrence around an unbound run.
+	bootPhase("sweep_open_work_item_actors", func() { rt.sweepOpenWorkItemActors(ctx) })
+	bootPhase("sweep_pending_update_actors", func() { rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets) })
 	rt.startProjector(ctx)
 	// Best-effort: ensure the production Qdrant collection exists so the
 	// semantic dedup pass on ingestion has a target. Runs asynchronously so
@@ -2170,8 +2180,9 @@ func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.
 }
 
 // passivateInterruptedActivations releases runs that were active in a previous
-// process without converting the durable agent's work into a failure. A later
-// update_coagent send or trajectory sweep may re-warm the actor.
+// process. Lifecycle-bound runs are excluded from the generic ListRunsByState
+// scan (lifecycleRunProjection); they are handled by the lifecycle rewarm pass
+// (rewarmInterruptedLifecycleActivations) wired in Start.
 func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 	states := []types.RunState{types.RunPending, types.RunRunning}
 	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
@@ -2180,12 +2191,6 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 	}
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	productionComputer := rt.cfg.ComputerID != "" && strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
-	// Lifecycle-bound runs are excluded from the generic ListRunsByState scan
-	// (lifecycleRunProjection), so interrupted lifecycle activations need their
-	// own passivation pass. Runs whose bindings are no longer eligible (Texture
-	// deferral, stale/terminal-pending work) are passivated through the canonical
-	// projection; eligible runs are left for the actor-wake outbox to re-fire.
-	rt.passivateIneligibleLifecycleActivations(ctx, computerID)
 	passivateBatch := func(runs []types.RunRecord, state types.RunState) bool {
 		progressed := false
 		for i := range runs {
@@ -2252,42 +2257,6 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 			if !passivateBatch(runs, state) {
 				break
 			}
-		}
-	}
-}
-
-// passivateIneligibleLifecycleActivations passivates interrupted lifecycle-bound
-// runs whose bindings are no longer eligible for re-dispatch. The generic
-// passivation scan skips lifecycle projections, so without this pass a stale
-// running lifecycle run (e.g. a Texture document owner awaiting its own
-// reconstruction, or a run whose work went terminal-pending) would hold
-// ActiveRunID forever. Eligible runs are left running for the actor-wake
-// outbox to re-fire.
-func (rt *Runtime) passivateIneligibleLifecycleActivations(ctx context.Context, computerID string) {
-	if rt == nil || rt.store == nil || strings.TrimSpace(computerID) == "" {
-		return
-	}
-	for _, state := range []types.RunState{types.RunPending, types.RunRunning} {
-		runs, err := rt.store.ListLifecycleRunsByState(ctx, "", computerID, state)
-		if err != nil {
-			log.Printf("runtime: boot lifecycle passivation: query %s runs: %v", state, err)
-			continue
-		}
-		for i := range runs {
-			rec := &runs[i]
-			eligible, eligibilityErr := rt.lifecycleActivationBindingsEligible(ctx, rec)
-			if eligibilityErr != nil {
-				log.Printf("runtime: boot lifecycle passivation: validate run %s bindings: %v", rec.RunID, eligibilityErr)
-				continue
-			}
-			if eligible {
-				continue
-			}
-			if err := rt.passivateInterruptedLifecycleActivation(ctx, rec); err != nil {
-				log.Printf("runtime: boot lifecycle passivation: passivate run %s: %v", rec.RunID, err)
-				continue
-			}
-			log.Printf("runtime: passivated ineligible lifecycle run %s after restart", rec.RunID)
 		}
 	}
 }
@@ -2377,7 +2346,6 @@ func (rt *Runtime) passivateInterruptedLifecycleActivation(ctx context.Context, 
 	*rec = passivated
 	return nil
 }
-
 
 // bootTerminalRepairRecentLimit caps the owner-indexed header window used on
 // production computers. The previous full-state JSON_EXTRACT walk loaded every
@@ -2547,7 +2515,6 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 	}
 }
 
-
 // SetKernelMode enables the derivable-continuation projector. Called by the
 // adapter when the dispatcher is the delivery authority. It also marks the
 // store post-ontology-kernel so bare OG state transitions that bypass the
@@ -2604,6 +2571,7 @@ func (rt *Runtime) stopProjector() {
 		rt.projectorStop = nil
 	}
 }
+
 // ReconcileLifecycleWorkAssignment applies the same durable work-item routing
 // as boot recovery to one canonical assignment wake. A closed, replaced, or
 // already-claimed work item is deliberately a no-op.

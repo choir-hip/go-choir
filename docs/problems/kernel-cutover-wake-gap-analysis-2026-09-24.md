@@ -130,3 +130,42 @@ can reach zero, each remaining boot mutation must be either (a) kept as an
 explicit named exception, or (b) given a canonical event so the fold sees it.
 The eligible-run zombie and the spawned-work-item mint are the two highest-risk
 instances.
+
+## Update 2026-09-24 (resolution): sweeps restored as explicit state-repair passes
+
+The panel's gate consequence was adjudicated by restoring the deleted sweeps
+rather than inventing canonical events for restart. The seven functions
+(`rewarmInterruptedLifecycleActivations`,
+`rewarmInterruptedPersistentManagementActors`,
+`reactivateRetryableLifecycleInjectionRuns`,
+`enqueueLifecycleResearchAdmissionRecoveryOccurrence`,
+`sweepPendingUpdateActors`, `sweepOpenWorkItemActors`,
+`sweepPassivatedSpawnedCoagentWork`) plus the Management helpers
+(`ResumeInterruptedPersistentManagementControlRun`,
+`resumeInterruptedPersistentManagementControlRunLocked`,
+`rewarmReactivatedManagementResumeWatchdogs`, `errResumeWatchdogScanCap`) were
+restored verbatim into `internal/agentcore/boot_recovery.go` /
+`management_controller.go` and wired into `Start` unconditionally (no
+`kernelMode` gate). They run alongside the projector: the outbox re-fires
+committed obligations, the sweeps perform the state repairs that have no
+canonical event. The reconcile functions they call are idempotent
+(`activeRunByAgent` resident checks), so the two paths do not double-activate.
+
+Verified: the seven restart/recovery tests that failed under the delete-only
+cutover now pass (`TestProcessRestartRewarmsCoagentAfterOSKill`,
+`TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork`,
+`TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResearchRun`,
+`TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog`,
+`TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog`,
+`TestProcessRestartRewarmsSpawnedChildWorkItemAfterOSKill`,
+`TestPersistentManagementLifecycleControlsStayTrajectoryIsolatedThenReconcile`),
+and the three earlier fixes still pass. The eligible-run zombie is resolved by
+`rewarmInterruptedLifecycleActivations` re-dispatching eligible runs via
+`rt.activate`; the spawned-work-item mint by `sweepPassivatedSpawnedCoagentWork`
++ `ensureSpawnedCoagentWorkItem`.
+
+**Residual:** the obligation-vs-occurrence `update_id` disconnect (the outbox
+`UpdateID` is never wired to the tape) remains a latent trap — documented in the
+`actorWakeOutbox` comment. `coagent_result` re-arm of a consumed wake still
+drops on the tape dedup. These are recorded for the next boundary, not fixed
+here.
