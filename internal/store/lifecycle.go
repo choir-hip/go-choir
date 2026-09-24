@@ -4691,9 +4691,14 @@ func (s *Store) ReactivateRun(ctx context.Context, req types.ReactivateRunReques
 		run.TrajectoryID != req.TrajectoryID || run.AgentID != req.AgentID {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	// Reactivation is only valid from a non-terminal, non-active state.
-	if run.State.Terminal() || run.State == req.TargetState {
+	// Reactivation is only valid from a non-terminal, non-active state. A run
+	// already in the target state is an idempotent no-op (a retried wake
+	// re-driving a pending run), not an invalid transition.
+	if run.State.Terminal() {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	if run.State == req.TargetState {
+		return types.LifecycleResult{Trajectory: trajectory}, nil
 	}
 	now := time.Now().UTC()
 	nextSeq := trajectory.ReducerSeq + 1

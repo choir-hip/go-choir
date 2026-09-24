@@ -365,6 +365,11 @@ func Run() {
 		log.Printf("autoputer: self-development verifier authority wired; mode remains off")
 	}
 	var rtOpts []actorruntime.RuntimeOption
+	// Ontology kernel cutover: the dispatcher is the sole delivery authority.
+	// SetKernelMode runs the write-fence pending-row migration
+	// (MigrateActorWakeOutbox) before the projector drains the outbox, so
+	// pre-cutover pending rows resume from the tape with no sweep.
+	rtOpts = append(rtOpts, actorruntime.WithKernelMode())
 
 	// Mount the Dolt-backed trace observability store when enabled. The store
 	// wraps the same Dolt *sql.DB that owns runtime/Texture state, so no extra
