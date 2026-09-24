@@ -2546,6 +2546,9 @@ func (rt *Runtime) startProjector(ctx context.Context) {
 		return
 	}
 	rt.projectorStop = make(chan struct{})
+	// Capture the channel locally: the goroutine must never read rt.projectorStop
+	// (stopProjector writes it to nil under Stop, which would race this select).
+	stop := rt.projectorStop
 	rt.wg.Add(1)
 	go func() {
 		defer rt.wg.Done()
@@ -2555,7 +2558,7 @@ func (rt *Runtime) startProjector(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-rt.projectorStop:
+			case <-stop:
 				return
 			case <-ticker.C:
 				rt.sweepActorWakeOutbox(ctx)
