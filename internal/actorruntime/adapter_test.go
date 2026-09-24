@@ -581,7 +581,6 @@ func TestAdapterStartRecoversLifecycleActorSnapshotsBeforeRuntimeSweep(t *testin
 			seed.Stop()
 
 			blocking := &targetStartupBlockingProvider{targetAgentID: fixture.agentID, started: make(chan struct{}, 1), release: make(chan struct{})}
-			t.Cleanup(func() { close(blocking.release) })
 			restarted := New(cfg, s, events.NewEventBus(), blocking, nil)
 			if err := restarted.BindTextureOwner(textureowner.NewHandler(restarted.Runtime)); err != nil {
 				t.Fatalf("bind restart Texture owner: %v", err)
@@ -590,6 +589,10 @@ func TestAdapterStartRecoversLifecycleActorSnapshotsBeforeRuntimeSweep(t *testin
 				restarted.Stop()
 				restarted.cleanupLog()
 			})
+			// release must be closed before Stop: Stop now waits for in-flight
+			// activations (wg.Wait), and the blocking provider holds one open
+			// until release. LIFO cleanup order runs this before the Stop above.
+			t.Cleanup(func() { close(blocking.release) })
 			if err := restarted.Start(ctx); err != nil {
 				t.Fatalf("restart adapter: %v", err)
 			}
@@ -2388,9 +2391,9 @@ func TestAdapterSQLitePersistentManagementRecoveryExecutesWithoutSnapshot(t *tes
 	}
 
 	adapter.Runtime.Start(ctx)
-	if err := adapter.actorRT.Sweep(ctx); err != nil {
-		t.Fatal(err)
-	}
+	// Kernel mode: Sweep is a no-op; the dispatcher's pending projection is the
+	// delivery authority. StartKernel launches the loop that drains it.
+	adapter.actorRT.StartKernel(ctx)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		stored, loadErr := s.GetRunByOwner(ctx, ownerID, rec.RunID)
@@ -2431,9 +2434,8 @@ func TestAdapterSQLitePreBindResearchRecoveryBindsAndExecutesWithoutSnapshot(t *
 		t.Fatalf("pre-bind setup already delivered controls=%+v err=%v", delivered, err)
 	}
 	adapter.Runtime.Start(ctx)
-	if err := adapter.actorRT.Sweep(ctx); err != nil {
-		t.Fatal(err)
-	}
+	// Kernel mode: Sweep is a no-op; StartKernel launches the dispatcher loop.
+	adapter.actorRT.StartKernel(ctx)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
@@ -2490,9 +2492,8 @@ func TestAdapterSQLiteResearchAdmissionRecoveryExecutesWithoutSnapshot(t *testin
 	// Intentionally do not save an actor snapshot. Runtime boot must enqueue a
 	// distinct recovery occurrence, and the real handler must resolve its run.
 	adapter.Runtime.Start(ctx)
-	if err := adapter.actorRT.Sweep(ctx); err != nil {
-		t.Fatal(err)
-	}
+	// Kernel mode: Sweep is a no-op; StartKernel launches the dispatcher loop.
+	adapter.actorRT.StartKernel(ctx)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
@@ -2563,11 +2564,9 @@ func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.
 	// Intentionally do not save an actor snapshot. Runtime boot must enqueue a
 	// distinct recovery occurrence, and the real handler must resolve its run.
 	adapter.Runtime.Start(ctx)
-	for range 3 {
-		if err := adapter.actorRT.Sweep(ctx); err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Kernel mode: Sweep is a no-op; StartKernel launches the dispatcher loop
+	// that drains the pending projection (the recovery rule).
+	adapter.actorRT.StartKernel(ctx)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
@@ -2598,7 +2597,17 @@ func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.
 	var backlog []actor.Update
 	var unprocessedErr error
 	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		backlog, unprocessedErr = adapter.log.Unprocessed(ctx, mailboxID)
+		unprocessed, err := adapter.log.Unprocessed(ctx, mailboxID)
+		unprocessedErr = err
+		backlog = backlog[:0]
+		for _, u := range unprocessed {
+			// A not_before-scheduled event (e.g. the activation-budget watchdog)
+			// is correctly retained until due; it is not a poisoned delivery.
+			if !u.NotBefore.IsZero() && time.Now().Before(u.NotBefore) {
+				continue
+			}
+			backlog = append(backlog, u)
+		}
 		if unprocessedErr == nil && len(backlog) == 0 {
 			break
 		}

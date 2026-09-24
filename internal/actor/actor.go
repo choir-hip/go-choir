@@ -231,6 +231,11 @@ func (rt *Runtime) StartKernel(ctx context.Context) {
 	if rt.kernel == nil {
 		return
 	}
+	// Mark started before launching so a concurrent Stop observes it even if
+	// the goroutine has not yet been scheduled to run its first line.
+	rt.kernel.mu.Lock()
+	rt.kernel.started = true
+	rt.kernel.mu.Unlock()
 	go rt.kernel.Run(ctx)
 }
 

@@ -83,6 +83,7 @@ type Dispatcher struct {
 	wake    chan struct{}  // pending-projection change signal
 	stop    chan struct{}
 	done    chan struct{}
+	started bool // Run was launched; Stop waits on done only then
 	stopped bool
 }
 
@@ -162,6 +163,9 @@ func (d *Dispatcher) Notify() {
 // activation per due agent, self-wake at the next due-index time. It blocks
 // until Stop.
 func (d *Dispatcher) Run(ctx context.Context) {
+	d.mu.Lock()
+	d.started = true
+	d.mu.Unlock()
 	defer close(d.done)
 	var dueTimer *time.Timer
 	var dueC <-chan time.Time
@@ -333,7 +337,12 @@ func (d *Dispatcher) Stop() {
 		d.stopped = true
 		close(d.stop)
 	}
+	started := d.started
 	d.mu.Unlock()
-	<-d.done
+	// done closes only when Run returns; if Run was never launched (an adapter
+	// constructed but never StartKernel'd), waiting on it would deadlock.
+	if started {
+		<-d.done
+	}
 	d.wg.Wait()
 }
