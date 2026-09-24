@@ -170,18 +170,28 @@ in `UpdateRun`/`UpdateRunOG` yet. `persistLifecycleRun` handles every
 trajectory-bound run, so a guard keyed on "trajectory exists" is dead code
 there; and the activation-completion path (`persistActivationState` →
 `updateRunAndMarkSuccessfulCoagentActivationDelivered` → `UpdateRun`) writes
-run state on every activation through the same non-event `projectLifecycleRun`
-projection. Guarding `UpdateRun` on lifecycle-run state changes would break
-activation completion. The guard must come AFTER the activation write path
-migrates to a reducer command.
+run state on every activation through `projectLifecycleRun`. Guarding
+`UpdateRun` on lifecycle-run state changes would break activation
+completion. The guard must come AFTER the activation write path migrates.
+
+**Projection-vs-command refinement (found while wiring):**
+`projectLifecycleRun` is *deliberately* a projection — "trajectory, work,
+update, event, and receipt authority are deliberately untouched." Activation
+state changes are the runtime's projection of progress, not lifecycle
+commands, so it correctly does not emit `choir.lifecycle_event`. The
+canonical event for a run transition is the separate `choir.event` stream
+(`emitEvent`→`AppendEvent`). The actual (e) defect for lifecycle runs is
+narrower than first stated: the run-state projection write and the
+`choir.event` append are not atomic (two OG writes, two transactions). The
+fix is to fold the `choir.event` object into the projection's
+`PutBatchConditional` batch — one atomic commit — not to turn the
+projection into a reducer command.
 
 **Remaining (e) work:**
-- **Activation-completion command** (the biggest non-event writer): the
-  `persistActivationState`/`updateRunAndMarkSuccessfulCoagentActivationDelivered`
-  path writes run state via `projectLifecycleRun` (no event). Needs a
-  `CommitActivationOutcome` reducer command emitting `activation_outcome`
-  (or similar) + folding run/agent/worker-update-delivery in one batch.
-  Until this lands, `UpdateRun` on a lifecycle run is non-event-emitting.
+- **Atomic projection+event**: fold the `choir.event` append into
+  `projectLifecycleRun`'s batch (or a shared batch helper) so activation
+  state changes and their runtime event commit together. This is the hot
+  path — every activation writes through it.
 - `PatchRunMetadata` — metadata-only, no state change, no event.
 - Migrate `UpdateWorkItemStatus`/`UpdateTrajectoryStatus` callers to the
   existing `ResolveLifecycleWork`/`SettleLifecycleWork`/
