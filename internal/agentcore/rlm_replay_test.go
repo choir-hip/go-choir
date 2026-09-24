@@ -452,15 +452,15 @@ func (r *rlmReplayStateMutatingRead) observe(operation, identity string, request
 
 var errRLMReplayBreakGlassRewarm = errors.New("replay rewarm requires owner break-glass: restart the host runtime through the owner deployment control")
 
-// rlmReplayForceRewarm uses the local runtime's existing restart recovery path
-// when available. No non-SSH public control exists in this package, so a nil
+// rlmReplayForceRewarm uses the kernel-mode restart recovery path when
+// available. No non-SSH public control exists in this package, so a nil
 // runtime returns the named owner-executed break-glass sentinel.
 func rlmReplayForceRewarm(ctx context.Context, rt *Runtime) error {
 	if rt == nil {
 		return errRLMReplayBreakGlassRewarm
 	}
-	rt.rewarmInterruptedLifecycleActivations(ctx)
-	rt.rewarmInterruptedPersistentManagementActors(ctx)
+	rt.SetKernelMode()
+	rt.sweepActorWakeOutbox(ctx)
 	return nil
 }
 

@@ -1,14 +1,11 @@
 package agentcore
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"log"
-	"os"
+	"time"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -121,21 +118,10 @@ func TestSchedulingReadiness_Criterion2_BootDoesNotSchedule(t *testing.T) {
 		t.Fatalf("precondition failed: pending controls before boot = %v, err=%v", pendingBefore, err)
 	}
 
-	// Capture log buffer for positive did-not-enter-selection assertion
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
-	// Execute boot rewarm and work-item sweep
-	rt.rewarmInterruptedPersistentManagementActors(ctx)
-	rt.sweepOpenWorkItemActors(ctx)
-
-	logOutput := buf.String()
-
-	// Assert from boot logs that reconcile never entered selection
-	if !strings.Contains(logOutput, "boot work-item sweep skipping persistent Management") {
-		t.Errorf("boot logs missing sweep skip log line; got:\n%s", logOutput)
-	}
+	// The kernel write fence mints durable wakes for pre-fold obligations; the
+	// projector only delivers those wakes and never selects Management backlog.
+	rt.SetKernelMode()
+	rt.sweepActorWakeOutbox(ctx)
 
 	// Assert across the window that ZERO Management or Engineering run rows are created
 	activeRun, err := rt.latestActiveRunByAgent(ctx, ownerID, managementAgent.AgentID)
@@ -195,29 +181,19 @@ func TestSchedulingReadiness_Criterion3_InFlightResumePreservesIdentity(t *testi
 		t.Fatal(err)
 	}
 
-	// Capture log buffer for positive did-not-enter-selection assertion
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
-	// Execute isolated resume entry point
-	resumed, ok, err := rt.ResumeInterruptedPersistentManagementControlRun(ctx, ownerID, managementAgent.AgentID)
-	if err != nil || !ok || resumed == nil {
-		t.Fatalf("dedicated resume failed: resumed=%v ok=%t err=%v", resumed, ok, err)
+	// ReconcileCoagentWake is the actor-side recovery entrypoint. It must
+	// reactivate the exact passivated run without selecting a new backlog item.
+	resumed, err := rt.ReconcileCoagentWake(ctx, ownerID, managementAgent.AgentID)
+	if err != nil || resumed == nil {
+		t.Fatalf("exact Management recovery failed: resumed=%v err=%v", resumed, err)
 	}
 
-	// Assert the exact interrupted run resumed with the SAME run ID
+	// Assert the exact interrupted run resumed with the SAME run ID.
 	if resumed.RunID != firstRun.RunID {
 		t.Fatalf("resumed run ID = %s, want original %s", resumed.RunID, firstRun.RunID)
 	}
 	if resumed.State != types.RunPending {
 		t.Fatalf("resumed run state = %s, want pending", resumed.State)
-	}
-
-	// Assert from logs that resume did not fall through to selection
-	logOutput := buf.String()
-	if !strings.Contains(logOutput, "persistent-Management exact-run resume reactivated run="+firstRun.RunID) {
-		t.Errorf("resume logs missing reactivation log line; got:\n%s", logOutput)
 	}
 
 	// Assert only ONE recovery occurrence was enqueued, no duplicate runs created

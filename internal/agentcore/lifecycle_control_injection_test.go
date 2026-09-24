@@ -1,13 +1,10 @@
 package agentcore
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -1089,7 +1086,9 @@ func TestAtomicResearchOpenColdWakeHydratesExactLifecycleWorkAndReplaysOneRun(t 
 	if count != 1 {
 		t.Fatalf("researcher runs=%d all=%+v", count, runs)
 	}
-	rt.sweepOpenWorkItemActors(context.Background())
+	if err := rt.ReconcileLifecycleWorkAssignment(context.Background(), fixture.ownerID, fixture.computerID, fixture.agentID, fixture.trajectoryID, fixture.workID); err != nil {
+		t.Fatalf("reconcile successful bind work wake: %v", err)
+	}
 	afterBoot, err := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -1154,11 +1153,13 @@ func TestLifecycleControlDurableFailedAttemptSuppressesSameBuildReplay(t *testin
 	if count != 1 {
 		t.Fatalf("same attempt created run; runs=%+v", runs)
 	}
-	// Process-start work recovery must delegate back to the exact fingerprint
-	// reconciler. Repeated boot sweeps neither mint nor dispatch around the typed
-	// same-build failure receipt.
-	rt.sweepOpenWorkItemActors(context.Background())
-	rt.sweepOpenWorkItemActors(context.Background())
+	// Re-drive the canonical assigned-work wake. Repeated projection must
+	// neither mint nor dispatch around the typed same-build failure receipt.
+	for range 2 {
+		if err := rt.ReconcileLifecycleWorkAssignment(context.Background(), fixture.ownerID, fixture.computerID, fixture.agentID, fixture.trajectoryID, fixture.workID); err != nil {
+			t.Fatalf("reconcile failed-attempt work wake: %v", err)
+		}
+	}
 	afterBoot, err := s.ListLifecycleRunsByTrajectory(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -2391,13 +2392,8 @@ func TestBootWorkItemSweepSkipsPersistentManagement(t *testing.T) {
 	for _, suffix := range []string{"sweep-a", "sweep-b", "sweep-c"} {
 		_ = seedTextureLifecycleControl(t, s, ownerID, suffix, managementAgent.AgentID, agentprofile.Management)
 	}
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
-	rt.sweepOpenWorkItemActors(ctx)
-	if !strings.Contains(buf.String(), "boot work-item sweep skipping persistent Management") {
-		t.Fatalf("expected boot work-item sweep to skip persistent Management, got:\n%s", buf.String())
-	}
+	rt.SetKernelMode()
+	rt.sweepActorWakeOutbox(ctx)
 	if _, err := rt.latestActiveRunByAgent(ctx, ownerID, managementAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("boot work-item sweep minted unexpected Management run: err=%v", err)
 	}

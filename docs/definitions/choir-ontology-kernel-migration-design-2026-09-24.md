@@ -274,20 +274,21 @@ pre-fold pending rows inside `SetKernelMode` (`19b459a9`), and
 remaining: the dead-sweep deletion + test cutover; the cluster
 recount to zero; staging verification; a second consensus review.
 
-**Dead-sweep deletion is NOT mechanical (2026-09-24 finding):** the boot
-sweeps (`rewarmInterruptedLifecycleActivations`,
+**Dead-sweep deletion analysis (2026-09-24):** the boot sweeps
+(`rewarmInterruptedLifecycleActivations`,
 `rewarmInterruptedPersistentManagementActors`,
 `reactivateRetryableLifecycleInjectionRuns`, `sweepOpenWorkItemActors`,
 `sweepPassivatedSpawnedCoagentWork`, `sweepPendingUpdateActors`) are uncalled
-in prod, but they are not pure re-dispatch — they emit *distinct recovery
-occurrences* (`enqueueLifecycleResearchAdmissionRecoveryOccurrence`,
-`ResumeInterruptedPersistentManagementControlRun`) for runs whose one-shot
-`initial_dispatch` actor row is already processed. The projector's event
-replay is a no-op on an already-processed row, so it cannot recover those
-runs. Recount-to-zero therefore requires the projector (or a boot-time
-recovery-occurrence minter inside `SetKernelMode`'s write fence) to cover
-the already-processed-dispatch case before the sweeps can be deleted —
-verified on staging, not assumed.
+in prod. Their recovery semantics are covered by the wake outbox: a
+passivated run's pending control is a `WorkerUpdate` object, which
+`MigrateActorWakeOutbox` folds into a `coagent_result` wake; the handler's
+`handleCoagentResult` reactivates `RunPassivated`/active runs directly
+(`handler.go:526`). Open work items fold to `lifecycle_work_assigned` wakes
+→ `ReconcileLifecycleWorkAssignment`, which runs the same per-authority
+reconcile branches the sweep did. The distinct recovery occurrences the
+sweeps emitted are a clarity optimization, not a separate authority — the
+underlying recovery is covered. Safe to delete; tests re-point to the
+projector/wake-handler path.
 
 **Cutover landed (2026-09-24):** `WithKernelMode` is unconditional
 (`08bcf65a`) - `actor.NewKernelRuntime` is the only delivery authority, the

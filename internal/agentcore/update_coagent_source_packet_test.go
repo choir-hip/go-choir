@@ -205,7 +205,9 @@ func TestSpawnedLifecycleResearchQueuesOpenAndCompletedUpdates(t *testing.T) {
 	if err != nil || len(legacyUpdates) != 0 {
 		t.Fatalf("terminal lifecycle projection emitted legacy updates: %+v, %v", legacyUpdates, err)
 	}
-	rt.sweepOpenWorkItemActors(ctx)
+	if err := rt.ReconcileLifecycleWorkAssignment(ctx, ownerID, "autoputer-test", child.AgentID, trajectoryID, workItemID); err != nil {
+		t.Fatalf("reconcile terminal spawned Research work wake: %v", err)
+	}
 	if active, err := s.GetLatestActiveRunByAgent(ctx, ownerID, child.AgentID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("boot sweep created activation despite pending terminal disposition: %+v, %v", active, err)
 	}
@@ -313,8 +315,9 @@ func TestLifecycleResearchOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t *t
 		t.Fatalf("generic reconciliation minted lifecycle Research run: %+v err=%v", generic, err)
 	}
 	for range 2 {
-		rt.sweepOpenWorkItemActors(ctx)
-		rt.sweepPassivatedSpawnedCoagentWork(ctx)
+		if err := rt.ReconcileLifecycleWorkAssignment(ctx, ownerID, "autoputer-test", child.AgentID, trajectoryID, workID); err != nil {
+			t.Fatalf("reconcile no-control Research work wake: %v", err)
+		}
 	}
 	if counting.Count() != 0 {
 		t.Fatalf("repeated no-control reconciliation made %d provider calls", counting.Count())
@@ -378,8 +381,9 @@ func TestLifecycleResearchOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t *t
 		if next, err := rt.reconcileUpdatedCoagentActor(ctx, ownerID, child.AgentID); err != nil || next != nil {
 			t.Fatalf("open report minted generic successor: %+v err=%v", next, err)
 		}
-		rt.sweepOpenWorkItemActors(ctx)
-		rt.sweepPassivatedSpawnedCoagentWork(ctx)
+		if err := rt.ReconcileLifecycleWorkAssignment(ctx, ownerID, "autoputer-test", child.AgentID, trajectoryID, workID); err != nil {
+			t.Fatalf("reconcile open-report Research work wake: %v", err)
+		}
 	}
 	rt.Start(ctx)
 	if counting.Count() != 1 {
@@ -528,8 +532,9 @@ func TestLifecycleResearchProviderAdmissionFailsClosedForStaleAndCancelledRuns(t
 			t.Fatal(err)
 		}
 		rt.ExecuteActivationSync(context.Background(), &fixture.run)
-		rt.sweepOpenWorkItemActors(context.Background())
-		rt.sweepPassivatedSpawnedCoagentWork(context.Background())
+		if err := rt.ReconcileLifecycleWorkAssignment(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, fixture.run.AgentID, fixture.run.TrajectoryID, fixture.workID); err != nil {
+			t.Fatalf("reconcile cancelled Research work wake: %v", err)
+		}
 		if counting.Count() != 0 {
 			t.Fatalf("cancelled trajectory made %d provider calls", counting.Count())
 		}
@@ -1232,44 +1237,49 @@ func TestLifecycleResearchAdmissionErrorPassivationRecoversOnce(t *testing.T) {
 	fixture := bindResearchControlFixture(t, rt, s, "owner-admission-recovery", "admission-recovery")
 	ctx := context.Background()
 
-	// Model the retryable provider-admission read/CAS failure after the exact
-	// control bind but before provider entry. The one-shot initial_dispatch may
-	// already be processed, so restart must use a distinct exact occurrence.
+	// The original unprocessed coagent_result wake is the recovery authority.
+	// Kernel-mode migration preserves it in the durable outbox; actor memory
+	// supplies the exact parked run ID to the narrow reconciliation boundary.
 	rt.passivateLifecycleResearchAfterAdmissionError(ctx, &fixture.run, errors.New("transient admission store outage"))
 	if fixture.run.State != types.RunPassivated || metadataStringValue(fixture.run.Metadata, "passivated_reason") != lifecycleResearchAdmissionRetryReason {
 		t.Fatalf("retryable admission failure state=%s reason=%q", fixture.run.State, metadataStringValue(fixture.run.Metadata, "passivated_reason"))
 	}
 
 	type dispatchRecord struct{ ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string }
-	var dispatches []dispatchRecord
+	expectedContent := LifecycleControlActorOccurrenceContent(fixture.control)
+	var controlWakes []dispatchRecord
 	rt.SetDispatchActor(func(_ context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
-		dispatches = append(dispatches, dispatchRecord{ownerID: ownerID, computerID: computerID, toAgentID: toAgentID, kind: kind, content: content, trajectoryID: trajectoryID, fromAgentID: fromAgentID})
+		if kind == "coagent_result" && content == expectedContent {
+			controlWakes = append(controlWakes, dispatchRecord{ownerID: ownerID, computerID: computerID, toAgentID: toAgentID, kind: kind, content: content, trajectoryID: trajectoryID, fromAgentID: fromAgentID})
+		}
 		return nil
 	})
-	rt.reactivateRetryableLifecycleInjectionRuns(ctx, fixture.run.ComputerID)
-	if len(dispatches) != 1 || dispatches[0].kind != "coagent_result" || !strings.HasPrefix(dispatches[0].content, "lifecycle-researcher-admission-recovery:v1:") {
-		t.Fatalf("recovery dispatches=%+v", dispatches)
+	rt.SetKernelMode()
+	rt.sweepActorWakeOutbox(ctx)
+	if len(controlWakes) != 1 {
+		t.Fatalf("projected control wakes=%+v", controlWakes)
 	}
-	if dispatches[0].ownerID != fixture.run.OwnerID || dispatches[0].computerID != fixture.run.ComputerID || dispatches[0].toAgentID != fixture.run.AgentID || dispatches[0].trajectoryID != fixture.run.TrajectoryID {
-		t.Fatalf("recovery dispatch scope=%+v", dispatches[0])
+	if controlWakes[0].ownerID != fixture.run.OwnerID || controlWakes[0].computerID != fixture.run.ComputerID || controlWakes[0].toAgentID != fixture.run.AgentID || controlWakes[0].trajectoryID != fixture.run.TrajectoryID {
+		t.Fatalf("projected control wake scope=%+v", controlWakes[0])
 	}
-	recovered, err := s.GetLifecycleRun(ctx, fixture.run.OwnerID, fixture.run.ComputerID, fixture.run.RunID)
+	recovered, err := rt.ReconcileParkedLifecycleCoagentWake(ctx, fixture.run.OwnerID, fixture.run.AgentID, fixture.run.RunID)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("reconcile exact parked Research wake: %v", err)
 	}
-	if recovered.State != types.RunPending {
-		t.Fatalf("recovered state=%s", recovered.State)
+	if recovered == nil || recovered.State != types.RunPending {
+		t.Fatalf("recovered state=%+v", recovered)
 	}
 
 	// The recovered exact run passes the central admission boundary once. Open
 	// work remains open, but completion does not mint a generic successor.
-	rt.ExecuteActivationSync(ctx, &recovered)
+	rt.ExecuteActivationSync(ctx, recovered)
 	if counting.Count() != 1 || recovered.State != types.RunCompleted {
 		t.Fatalf("recovered provider calls=%d state=%s", counting.Count(), recovered.State)
 	}
-	rt.reactivateRetryableLifecycleInjectionRuns(ctx, fixture.run.ComputerID)
-	if len(dispatches) != 1 || counting.Count() != 1 {
-		t.Fatalf("repeated recovery dispatches=%d provider calls=%d", len(dispatches), counting.Count())
+	projectedBeforeRepeat := len(controlWakes)
+	rt.sweepActorWakeOutbox(ctx)
+	if len(controlWakes) != projectedBeforeRepeat || counting.Count() != 1 {
+		t.Fatalf("repeated projector control wakes=%d want %d; provider calls=%d", len(controlWakes), projectedBeforeRepeat, counting.Count())
 	}
 	work, err := s.GetLifecycleWorkItem(ctx, fixture.run.OwnerID, fixture.run.ComputerID, fixture.workID)
 	if err != nil {

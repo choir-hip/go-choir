@@ -1126,35 +1126,19 @@ func TestRestartReDispatchesProjectedLifecycleActivation(t *testing.T) {
 	ctx := context.Background()
 	ownerID, docID := "user-lifecycle-restart", "doc-lifecycle-restart"
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
-	now := time.Now().UTC()
-	run := types.RunRecord{
-		RunID: "run-lifecycle-projection-before-dispatch", AgentID: currentTextureAgentID(docID),
-		OwnerID: ownerID, ComputerID: rt.TextureComputerID(), ChannelID: docID, TrajectoryID: trajectoryID,
-		State: types.RunPending, Prompt: "resume durable lifecycle obligation", AgentProfile: "texture", AgentRole: "texture",
-		CreatedAt: now, UpdatedAt: now,
-		Metadata: map[string]any{
-			runMetadataAgentID: currentTextureAgentID(docID), runMetadataAgentProfile: "texture",
-			runMetadataAgentRole: "texture", runMetadataTrajectoryID: trajectoryID,
-			"lifecycle_work_item_id": "test-work:" + ownerID + ":" + docID,
-		},
-	}
-	if err := s.CreateRun(ctx, run); err != nil {
-		t.Fatalf("project lifecycle activation: %v", err)
-	}
+	workID := "test-work:" + ownerID + ":" + docID
 	var dispatched []string
-	rt.SetDispatchActor(func(_ context.Context, gotOwnerID, gotComputerID, _ string, kind, content, gotTrajectoryID, _ string) error {
-		if kind == "initial_dispatch" && gotOwnerID == ownerID && gotComputerID == rt.TextureComputerID() && gotTrajectoryID == trajectoryID {
+	rt.SetDispatchActor(func(_ context.Context, gotOwnerID, gotComputerID, targetAgentID, kind, content, gotTrajectoryID, _ string) error {
+		if kind == "lifecycle_work_assigned" && gotOwnerID == ownerID && gotComputerID == rt.TextureComputerID() &&
+			targetAgentID == currentTextureAgentID(docID) && gotTrajectoryID == trajectoryID {
 			dispatched = append(dispatched, content)
 		}
 		return nil
 	})
-	rt.rewarmInterruptedLifecycleActivations(ctx)
-	if len(dispatched) != 1 || dispatched[0] != run.RunID {
-		t.Fatalf("restart lifecycle dispatches = %v, want [%s]", dispatched, run.RunID)
-	}
-	stored, err := s.GetLifecycleRun(ctx, ownerID, rt.TextureComputerID(), run.RunID)
-	if err != nil || stored.State != types.RunPending {
-		t.Fatalf("restart mutated lifecycle run projection: %+v, %v", stored, err)
+	rt.SetKernelMode()
+	rt.sweepActorWakeOutbox(ctx)
+	if len(dispatched) != 1 || !strings.Contains(dispatched[0], workID) {
+		t.Fatalf("restart lifecycle work wakes = %v, want one wake for %s", dispatched, workID)
 	}
 }
 

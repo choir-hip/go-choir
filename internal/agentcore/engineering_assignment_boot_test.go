@@ -328,8 +328,9 @@ func TestRewarmAssignedEngineeringReconcilesAbsentCapsuleWithoutWake(t *testing.
 	if eligibilityErr != nil || !eligible {
 		t.Fatalf("assigned Engineering should remain eligible for boot reconcile: eligible=%t err=%v run=%+v", eligible, eligibilityErr, runBefore)
 	}
-	rt.rewarmInterruptedLifecycleActivations(ctx)
-	rt.sweepOpenWorkItemActors(ctx)
+	if err := rt.ReconcileLifecycleWorkAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, open.Binding.AssignedAgentID, open.Binding.TrajectoryID, open.Binding.AssignedWorkItemID); err != nil {
+		t.Fatalf("reconcile assigned Engineering work wake: %v", err)
+	}
 	for _, wake := range wakes {
 		if strings.HasPrefix(wake, "initial_dispatch:") {
 			t.Fatalf("rewarm re-dispatched assigned Engineering after restart: %v", wakes)
