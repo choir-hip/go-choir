@@ -1644,6 +1644,72 @@ func TestEngineeringPendingProposalDurabilityAndAtomicRevokeFinality(t *testing.
 	}
 }
 
+// A committed capsule disposition that leaves pending fate work mints an
+// immediate actor wake (G9): the watchdog arms after commit, so a crash in
+// between would strand the saga without this derivable wake. The wake is
+// immediate (no not_before) and reuses the assigned_engineering_fate_deadline
+// handler, which is idempotent via the pending-fate predicate.
+func TestPendingFateCapsuleDispositionCommitsActorWakeOutbox(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installEngineeringAssignmentAuthority(t, s, 1)
+	open := engineeringOpenRequest(f, 0, "assignment-fate-wake", 1, types.EngineeringAssignmentImplementation, true, "cap-fate-wake", "capsule-fate-wake")
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	bound, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[0], "cap-fate-wake"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reportReq := assignmentReportRequest(open, bound.Assignment.LifecycleVersion, "report-fate-wake", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
+	propDigest, err := ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, reportReq.Report.Result, reportReq.Report.Verdict, reportReq.Report.Commands, reportReq.Report.Outputs, reportReq.Report.EvidenceRefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposal := types.EngineeringPendingProposal{
+		PropositionDigest: propDigest, Report: reportReq.Report,
+		FreezeIntentRef: "capsule-freeze-intent:" + propDigest, CreatedAt: time.Now().UTC(),
+	}
+	freezeReq := types.SetEngineeringCapsuleDispositionRequest{
+		CommandID: "cmd-fate-wake-freeze", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: bound.Assignment.LifecycleVersion,
+		Disposition: types.EngineeringCapsuleFreezeRequested, IntentRef: proposal.FreezeIntentRef,
+		PendingProposal: &proposal,
+	}
+	freezeReq.CommandDigest, _ = ComputeSetEngineeringCapsuleDispositionDigest(freezeReq)
+	if _, err := s.SetEngineeringCapsuleDisposition(ctx, freezeReq); err != nil {
+		t.Fatalf("set freeze requested: %v", err)
+	}
+
+	wakes, err := s.ListUnprojectedActorWakes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fateWake *ActorWakeOutbox
+	for i := range wakes {
+		if wakes[i].Kind == "assigned_engineering_fate_deadline" && wakes[i].NotBefore.IsZero() {
+			fateWake = &wakes[i]
+		}
+	}
+	if fateWake == nil {
+		t.Fatalf("pending-fate outbox wake missing from %+v", wakes)
+	}
+	if fateWake.TargetAgentID != open.Binding.ParentAgentID {
+		t.Fatalf("fate wake target = %q, want parent %q", fateWake.TargetAgentID, open.Binding.ParentAgentID)
+	}
+	var decoded struct {
+		AssignmentID string `json:"assignment_id"`
+		Attempt      uint64 `json:"attempt"`
+	}
+	if err := json.Unmarshal([]byte(fateWake.Content), &decoded); err != nil {
+		t.Fatalf("decode fate wake content: %v", err)
+	}
+	if decoded.AssignmentID != open.AssignmentID || decoded.Attempt != 1 {
+		t.Fatalf("fate wake content = %+v", decoded)
+	}
+}
+
 func TestRecordEngineeringOrphanObservation(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

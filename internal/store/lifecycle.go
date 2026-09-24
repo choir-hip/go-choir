@@ -503,6 +503,18 @@ type actorWakeEngineeringDeadlineContent struct {
 	Attempt      uint64 `json:"attempt"`
 }
 
+type actorWakeRunContent struct {
+	RunID string `json:"run_id"`
+}
+
+func actorWakeRunContentJSON(runID string) (string, error) {
+	content, err := json.Marshal(actorWakeRunContent{RunID: strings.TrimSpace(runID)})
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
 func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object) (ActorWakeOutbox, objectgraph.Object, error) {
 	update, err := decodeLifecycleObject[types.CoagentSourcePacket](worker)
 	if err != nil {
@@ -554,7 +566,7 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 		if err != nil {
 			return ActorWakeOutbox{}, objectgraph.Object{}, err
 		}
-		if assignment.Disposition != types.EngineeringAssignmentOpen || assignment.LifecycleVersion != 1 || strings.TrimSpace(assignment.Binding.ParentAgentID) == "" {
+		if strings.TrimSpace(assignment.Binding.ParentAgentID) == "" {
 			return ActorWakeOutbox{}, objectgraph.Object{}, nil
 		}
 		content, err := json.Marshal(actorWakeEngineeringDeadlineContent{AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt})
@@ -562,8 +574,23 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 			return ActorWakeOutbox{}, objectgraph.Object{}, err
 		}
 		sourceID := "assignment:" + assignment.AssignmentID + ":" + fmt.Sprint(assignment.Binding.Attempt)
-		return actorWakeOutbox(obj, sourceID, assignment.Binding.ParentAgentID, assignment.Binding.TrajectoryID, "",
-			"assigned_engineering_fate_deadline", string(content), obj.CreatedAt.UTC().Add(6*time.Hour), "wake:"+obj.CanonicalID+":"+sourceID)
+		// G10: a freshly opened assignment owes the six-hour bound deadline.
+		if assignment.Disposition == types.EngineeringAssignmentOpen && assignment.LifecycleVersion == 1 {
+			return actorWakeOutbox(obj, sourceID, assignment.Binding.ParentAgentID, assignment.Binding.TrajectoryID, "",
+				"assigned_engineering_fate_deadline", string(content), obj.CreatedAt.UTC().Add(6*time.Hour), "wake:"+obj.CanonicalID+":"+sourceID)
+		}
+		// G9: a committed disposition that leaves pending fate work owes an
+		// immediate re-drive — the watchdog arms after commit, so a crash in
+		// between would strand the saga without this derivable wake. The
+		// handler (resumeStrandedFateAssignmentIfPending) is idempotent.
+		if assignment.Disposition == types.EngineeringAssignmentBound && assignment.PendingProposal != nil {
+			switch assignment.CapsuleDisposition {
+			case types.EngineeringCapsuleFreezeRequested, types.EngineeringCapsuleFrozen, types.EngineeringCapsuleRevokeRequested, types.EngineeringCapsuleRevoked:
+				return actorWakeOutbox(obj, sourceID+":fate", assignment.Binding.ParentAgentID, assignment.Binding.TrajectoryID, "",
+					"assigned_engineering_fate_deadline", string(content), time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID+":fate")
+			}
+		}
+		return ActorWakeOutbox{}, objectgraph.Object{}, nil
 	case ogKindTexRev:
 		revision, err := decodeLifecycleObject[types.Revision](obj)
 		if err != nil {
