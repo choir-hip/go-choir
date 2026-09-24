@@ -166,11 +166,13 @@ conflict check, not a preemption lease (no claim/revoke); `frame_lock`
 edges (`sourcecycled`, `vmctl`, `frontend-current`) remain boundary
 exceptions. These are the remaining-work items below, now panel-confirmed.
 
-**Remaining:** the store→actor projection (fold mints actor wakes in the
-event-append transaction — replaces the 500ms scan); the per-instance
-migration of the 51 classified instances; the write-fence cutover; the
-cluster recount to zero; staging verification; a second consensus review
-after the projector redesign.
+**Remaining:** ~~the store→actor projection~~ **DONE** — the outbox fold
+landed (`12a3521d`): `choir.actor_wake_outbox` committed in the same
+`PutBatchConditional` as each pending+targeted worker_update, drained by the
+pure `sweepActorWakeOutbox` projector (metadata-indexed, idempotent, never
+binds). Still remaining: the per-instance migration of the 51 classified
+instances (sub-class b in flight); the write-fence cutover; the cluster
+recount to zero; staging verification; a second consensus review.
 
 ## Boundary exceptions (unchanged)
 
