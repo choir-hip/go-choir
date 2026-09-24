@@ -8,12 +8,18 @@ Mutation class of this document: green (analysis; no runtime change).
 
 **Update 2026-09-24 (post-implementation):** G1/G3/G5/G8/G10 closed by the
 generalized outbox (`bf40aa1c`); G9 closed by the pending-fate wake
-(`fcfc025a`). **6 of 11 closed.** Remaining: G2 (passivation rewarm), G6
-(texture reactivation), G11 (self-dev materializer) — all are direct
-`UpdateRun`/projection writes outside `commitLifecycleTransition`, so they
-have no canonical event to hang a wake on. They are sub-class (e) work:
-route the write through a reducer command that emits an event, then the
-outbox mints the wake. G4/G7 fold into R3's dual-path cutover.
+(`fcfc025a`). **Reclassified on re-analysis:** G2 and G6 are **non-gaps
+under the kernel model** — an interrupted activation's triggering event
+stays unprocessed (crash before `Commit`), so `PendingAgents` re-fires it
+directly; `handleInitialDispatch` accepts `RunPending`/`RunRunning` and
+re-executes. A cleanly-parked run is woken by its next event. The boot
+passivation sweep exists only to mark runs for the old rewarm path — it is
+deleted at cutover, not replaced by a wake. The residual concern is handler
+idempotency under re-execution (panel finding B5), a correctness property,
+not a wake edge. **G11 (self-dev materializer) is the only genuine remaining
+gap** — operation-state transitions mint no event; it may be a boundary
+exception (self-dev operations as a separate control plane) pending an
+authority decision. G4/G7 fold into R3's dual-path cutover.
 ## The finding
 
 The kernel's pending projection (`PendingAgents` = due unprocessed
