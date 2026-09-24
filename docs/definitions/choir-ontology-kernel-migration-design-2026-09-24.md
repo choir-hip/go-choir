@@ -259,12 +259,29 @@ event — `handleInitialDispatch` accepts `RunPending`/`RunRunning`), **G4/G7
 fold into R3** (legacy `DispatchWorkerUpdate`/`CreateWorkItem` deleted, not
 given outbox kinds), **G11 pending an authority decision** (self-dev
 materializer — possible boundary exception like sourcecycled/vmctl). The
-wake-edge set is complete for the in-scope cluster. Still remaining:
-sub-class (e) — route the ~13 direct `Update*` mutations through
-event-backed reducer commands (purity; the continuation-bearing ones are
-already covered); sub-class (c) dual paths → R3; the write-fence cutover;
-the cluster recount to zero; staging verification; a second consensus
-review.
+wake-edge set is complete for the in-scope cluster. **Sub-class (e) DONE**
+(2026-09-24): activation state writes fold their `choir.event` into the
+run-state projection's `PutBatchConditional` via `UpdateRunWithEvent` →
+`persistLifecycleRunWithEvent` → `projectLifecycleRun`
+(`acb85f44`/`4c129caa`); `rlm_reduce` message intents route through
+`QueueLifecycleUpdate` (`01a8f554`); the cancel-race is fixed —
+`TerminalizeRun`/`ReactivateRun` pass the cancel-intent guard and
+terminal→cancelled is allowed on a cancelled trajectory (`cfe6cab5`), and
+same-state reactivation is idempotent (`709b9792`). **Write-fence cutover
+DONE:** `MigrateActorWakeOutbox` mints deterministic outbox wakes for
+pre-fold pending rows inside `SetKernelMode` (`19b459a9`), and
+`WithKernelMode` is live in `autoputer/run.go` (`709b9792`). Still
+remaining: the dead-sweep deletion + test cutover (the sweeps' tests exercise
+the old recovery path and must be re-pointed at the projector); the cluster
+recount to zero; staging verification; a second consensus review.
+
+**Cutover landed (2026-09-24):** `WithKernelMode` is unconditional
+(`08bcf65a`) - `actor.NewKernelRuntime` is the only delivery authority, the
+non-kernel `NewRuntime`/`Sweep` branch is removed, and the boot wake-minting
+sweeps are no longer called. `MigrateActorWakeOutbox` runs inside
+`SetKernelMode`'s write fence (`19b459a9`). Redundant `time.AfterFunc`
+watchdog backups deleted (`3a6776c2`) - the durable `not_before` wakes are
+the continuation authority.
 
 ## Boundary exceptions (unchanged)
 
