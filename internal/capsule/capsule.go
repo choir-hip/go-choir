@@ -16,6 +16,8 @@ type capsuleCgroup interface {
 	Delete() error
 	Freeze(context.Context) error
 	Thaw(context.Context) error
+	Kill() error
+	WaitEmpty(context.Context) error
 }
 
 // Capsule represents a single capsule instance — an isolated execution
