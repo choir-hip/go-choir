@@ -44,25 +44,31 @@ is minted by folding a canonical event, never by scanning store state.
 ## The store→actor projection (the missing substrate)
 
 Replace "scan store → wake actor" with "canonical event → actor wake event →
-dispatcher":
+dispatcher". The two tapes live in **different stores** (Dolt for the
+canonical event log, SQLite for `actor_updates`), so the wake mint cannot be
+atomic with the event append. The correct model is a **derivable
+projector**, not a cross-store transaction:
 
 - A `QueueLifecycle*` command appends its lifecycle event (already does —
-  the keepers). The reducer fold additionally mints the addressed actor wake
-  onto `actor_updates` in the same transaction as the event append. That is
-  the derivable wake: the actor wake exists because the canonical event
-  exists, not because a sweep noticed the state.
+  the keepers). A **projector** folds new canonical events and mints the
+  addressed actor wake onto `actor_updates`, tracking a durable projection
+  cursor (its position in the canonical log).
+- The mint is **idempotent**: the actor wake's `update_id` is derived
+  deterministically from the canonical event id (same scheme as
+  `actorDispatchUpdateID`), so a replayed fold re-mints the same wake and
+  `Append` dedupes it. A crash between event-append and wake-mint is
+  recovered by re-projection from the cursor — the wake is derivable, never
+  lost.
+- The projector is itself a tape consumer like the dispatcher: pending =
+  canonical events minus the projection cursor. It is the dispatcher's
+  projection extended one level up to the authority tape — not a wrong-path
+  scan, because it folds the tape rather than enumerating mutable state.
 - The dispatcher's pending projection (`actor_updates` due unprocessed) is
-  then the *only* scan, and it is the dispatcher's internal projection —
-  permitted by the charter.
-- Recovery: on restart, the dispatcher re-reads the projection; any wake
-  minted-but-unincorporated is re-delivered. No boot sweep enumerating store
-  state — the wakes are already on the delivery tape.
-
-**Consequence:** the store→actor projection must be **idempotent on mint**.
-A lifecycle event's actor wake has a deterministic `update_id` derived from
-the event id (same scheme as `actorDispatchUpdateID`), so a replayed fold
-re-mints the same wake and `Append` dedupes it. No double-wake across a
-crash between event-append and wake-mint — they are one transaction.
+  then the delivery authority; the projector is the derivation that feeds
+  it. Together they are the one continuation path.
+- Recovery: on restart, the projector resumes from its cursor and the
+  dispatcher re-reads its projection; any wake minted-but-unincorporated is
+  re-delivered. No boot sweep enumerating store state.
 
 ## Per-sub-class migration contract
 
