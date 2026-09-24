@@ -60,11 +60,15 @@ CREATE TABLE IF NOT EXISTS actor_heads (
 }
 
 func (l *SQLiteLog) Append(ctx context.Context, u Update) (bool, error) {
+	var nb interface{}
+	if !u.NotBefore.IsZero() {
+		nb = u.NotBefore.UTC()
+	}
 	res, err := l.db.ExecContext(ctx, `
-INSERT INTO actor_updates (update_id, to_agent_id, from_agent_id, kind, content, trajectory_id, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO actor_updates (update_id, to_agent_id, from_agent_id, kind, content, trajectory_id, created_at, not_before)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(update_id) DO NOTHING`,
-		u.UpdateID, u.ToAgentID, u.FromAgentID, u.Kind, u.Content, u.TrajectoryID, u.CreatedAt.UTC())
+		u.UpdateID, u.ToAgentID, u.FromAgentID, u.Kind, u.Content, u.TrajectoryID, u.CreatedAt.UTC(), nb)
 	if err != nil {
 		return false, err
 	}
@@ -77,7 +81,7 @@ ON CONFLICT(update_id) DO NOTHING`,
 
 func (l *SQLiteLog) Unprocessed(ctx context.Context, agentID string) ([]Update, error) {
 	rows, err := l.db.QueryContext(ctx, `
-SELECT update_id, to_agent_id, from_agent_id, kind, content, trajectory_id, created_at
+SELECT update_id, to_agent_id, from_agent_id, kind, content, trajectory_id, created_at, not_before
 FROM actor_updates
 WHERE to_agent_id = ? AND processed_at IS NULL
 ORDER BY created_at, update_id`, agentID)
@@ -88,8 +92,12 @@ ORDER BY created_at, update_id`, agentID)
 	var out []Update
 	for rows.Next() {
 		var u Update
-		if err := rows.Scan(&u.UpdateID, &u.ToAgentID, &u.FromAgentID, &u.Kind, &u.Content, &u.TrajectoryID, &u.CreatedAt); err != nil {
+		var nb sql.NullTime
+		if err := rows.Scan(&u.UpdateID, &u.ToAgentID, &u.FromAgentID, &u.Kind, &u.Content, &u.TrajectoryID, &u.CreatedAt, &nb); err != nil {
 			return nil, err
+		}
+		if nb.Valid {
+			u.NotBefore = nb.Time
 		}
 		out = append(out, u)
 	}
@@ -138,8 +146,10 @@ var ErrEpochConflict = fmt.Errorf("actor: epoch conflict on fenced commit")
 //
 // emitted are the updates this activation produced (appended idempotently).
 // incorporated are the update IDs this activation folded into its state head
-// (marked processed). Both happen atomically with the epoch bump.
-func (l *SQLiteLog) Commit(ctx context.Context, agentID string, expectEpoch int64, emitted []Update, incorporated []string) (newEpoch int64, err error) {
+// (marked processed). memory is the actor's folded snapshot. All three land
+// atomically with the epoch bump — the snapshot is inside the transaction,
+// so a crash cannot mark an event delivered while dropping its memory.
+func (l *SQLiteLog) Commit(ctx context.Context, agentID string, expectEpoch int64, emitted []Update, incorporated []string, memory []byte) (newEpoch int64, err error) {
 	tx, err := l.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -199,6 +209,15 @@ UPDATE actor_updates SET processed_at = ? WHERE update_id = ? AND to_agent_id = 
 INSERT INTO actor_heads (agent_id, epoch, head) VALUES (?, ?, ?)
 ON CONFLICT(agent_id) DO UPDATE SET epoch = excluded.epoch, head = excluded.head`,
 		agentID, newEpoch, newHead); err != nil {
+		return 0, err
+	}
+
+	// Persist the folded memory snapshot inside the same transaction — the
+	// state head and the memory it points at commit atomically.
+	if _, err = tx.ExecContext(ctx, `
+INSERT INTO actor_snapshots (agent_id, memory, updated_at) VALUES (?, ?, ?)
+ON CONFLICT(agent_id) DO UPDATE SET memory = excluded.memory, updated_at = excluded.updated_at`,
+		agentID, memory, now); err != nil {
 		return 0, err
 	}
 

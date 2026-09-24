@@ -79,7 +79,8 @@ type Dispatcher struct {
 
 	mu      sync.Mutex
 	running map[string]bool // agentID -> activation in flight (serial fence)
-	wake    chan struct{}   // pending-projection change signal
+	wg      sync.WaitGroup // in-flight activations; Stop waits for them
+	wake    chan struct{}  // pending-projection change signal
 	stop    chan struct{}
 	done    chan struct{}
 	stopped bool
@@ -93,8 +94,9 @@ type KernelLog interface {
 	PendingAgents(ctx context.Context, now time.Time) ([]string, error)
 	// Unprocessed returns one agent's due backlog in append order.
 	Unprocessed(ctx context.Context, agentID string) ([]Update, error)
-	// Commit is the fenced atomic commit of emitted events + incorporated head.
-	Commit(ctx context.Context, agentID string, expectEpoch int64, emitted []Update, incorporated []string) (int64, error)
+	// Commit is the fenced atomic commit of emitted events + incorporated head
+	// + folded memory snapshot (all in one transaction).
+	Commit(ctx context.Context, agentID string, expectEpoch int64, emitted []Update, incorporated []string, memory []byte) (int64, error)
 	// Epoch returns the actor's current durable epoch.
 	Epoch(ctx context.Context, agentID string) (int64, error)
 	// NextDue is the due-index: earliest future not_before among unprocessed
@@ -120,6 +122,9 @@ type DispatcherOptions struct {
 	// ErrorSink is the agent ID that receives delivery_failed events. Empty
 	// disables poison routing.
 	ErrorSink string
+	// MaxConcurrent bounds how many actor activations may run at once across
+	// all agents (0 = default 8). Prevents unbounded goroutine fan-out.
+	MaxConcurrent int
 }
 
 // NewDispatcher constructs a dispatcher over the kernel log. Call Run to
@@ -127,6 +132,9 @@ type DispatcherOptions struct {
 func NewDispatcher(log KernelLog, handler Handler, opts DispatcherOptions) *Dispatcher {
 	if opts.PollInterval <= 0 {
 		opts.PollInterval = 250 * time.Millisecond
+	}
+	if opts.MaxConcurrent <= 0 {
+		opts.MaxConcurrent = 8
 	}
 	return &Dispatcher{
 		log:     log,
@@ -205,14 +213,15 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 	}
 	for _, agentID := range agents {
 		d.mu.Lock()
-		if d.running[agentID] {
+		if d.running[agentID] || len(d.running) >= d.opts.MaxConcurrent {
 			d.mu.Unlock()
 			continue
 		}
 		d.running[agentID] = true
 		d.mu.Unlock()
-
+		d.wg.Add(1)
 		go func(id string) {
+			defer d.wg.Done()
 			defer func() {
 				d.mu.Lock()
 				delete(d.running, id)
@@ -256,12 +265,16 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 	actx, buf := withEmissions(ctx)
 
 	var incorporated []string
+	var emitted []Update
 	for _, u := range pending {
 		// Skip scheduled events not yet due — the due-index fires them later.
 		if !u.NotBefore.IsZero() && time.Now().Before(u.NotBefore) {
 			continue
 		}
 		newMemory, herr := d.handler.HandleUpdate(actx, agentID, u, memory)
+		// Drain this event's emissions now so a failed handler's partial
+		// emissions are discarded, not committed with the batch.
+		evEmitted := buf.drain()
 		if herr != nil {
 			// At-least-once: leave unprocessed; the dispatcher retries.
 			// Retry accounting is durable tape state so poison detection
@@ -274,7 +287,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 				// Poison event: emit delivery_failed to the error sink and
 				// incorporate the poisoned event so it stops re-firing. Do NOT
 				// fold the failed handler's memory — it is unreliable.
-				buf.Add(Update{
+				emitted = append(emitted, Update{
 					UpdateID:    u.UpdateID + ":delivery_failed",
 					ToAgentID:   d.opts.ErrorSink,
 					FromAgentID: agentID,
@@ -287,17 +300,20 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 				continue
 			}
 			log.Printf("dispatcher: handle %s/%s: %v", agentID, u.UpdateID, herr)
-			continue
+			// Tape order among eligible events: stop at the first failure so
+			// a later event is not incorporated past an unprocessed earlier
+			// one. The failed event's emissions were already discarded.
+			break
 		}
+		emitted = append(emitted, evEmitted...)
 		memory = newMemory
 		incorporated = append(incorporated, u.UpdateID)
 	}
-	emitted := buf.drain()
 	if len(incorporated) == 0 && len(emitted) == 0 {
 		return
 	}
 
-	if _, err := d.log.Commit(ctx, agentID, epoch, emitted, incorporated); err != nil {
+	if _, err := d.log.Commit(ctx, agentID, epoch, emitted, incorporated, memory); err != nil {
 		if err == ErrEpochConflict {
 			// Stale activation: discard; the dispatcher re-fires from the new
 			// head on the next projection read.
@@ -306,15 +322,11 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		log.Printf("dispatcher: commit %s: %v", agentID, err)
 		return
 	}
-	// Persist the folded memory as the actor's compacted snapshot.
-	if err := d.log.SaveSnapshot(ctx, agentID, memory); err != nil {
-		log.Printf("dispatcher: save snapshot %s: %v", agentID, err)
-	}
 }
 
-// Stop halts the dispatcher loop and waits for it to exit. In-flight
-// activations finish or fail their fenced commit; durable state is
-// untouched, so a restart resumes from the tape.
+// Stop halts the dispatcher loop and waits for it to exit, then waits for
+// every in-flight activation to finish or fail its fenced commit. No
+// activation is orphaned: a restart cannot overlap a still-running handler.
 func (d *Dispatcher) Stop() {
 	d.mu.Lock()
 	if !d.stopped {
@@ -323,4 +335,5 @@ func (d *Dispatcher) Stop() {
 	}
 	d.mu.Unlock()
 	<-d.done
+	d.wg.Wait()
 }

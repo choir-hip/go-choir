@@ -123,11 +123,11 @@ func TestFencedCommitRejectsStaleEpoch(t *testing.T) {
 		t.Fatalf("epoch: %v", err)
 	}
 	// First activation commits at epoch0.
-	if _, err := l.Commit(ctx, "agent-x", epoch0, nil, []string{"e1"}); err != nil {
+	if _, err := l.Commit(ctx, "agent-x", epoch0, nil, []string{"e1"}, nil); err != nil {
 		t.Fatalf("commit 1: %v", err)
 	}
 	// A stale activation that also snapshotted epoch0 must fail.
-	if _, err := l.Commit(ctx, "agent-x", epoch0, nil, []string{"e1"}); err != ErrEpochConflict {
+	if _, err := l.Commit(ctx, "agent-x", epoch0, nil, []string{"e1"}, nil); err != ErrEpochConflict {
 		t.Fatalf("stale commit: got %v, want ErrEpochConflict", err)
 	}
 }
