@@ -126,6 +126,20 @@ Replacement: an event-backed reducer command (`QueueLifecycle*` or a new
 typed command) that appends the event and folds it into state. The direct
 `Update*` callers die; the reducer commands are keepers.
 
+**Classification (2026-09-24):** the defect is a mutation whose state change
+is not atomic with a canonical event. Three shapes found:
+- **Sweep-internal writes** (`passivateInterruptedActivations`,
+  `reactivateRetryableLifecycleInjectionRuns`, `sweepPassivatedSpawnedCoagentWork`)
+  — deleted with the sweep at cutover, not (e) defects.
+- **Mutation-then-separate-event** (`terminalizeRun` emits
+  `EventRunCancelled` via `AppendEvent` *after* `UpdateRun`) — not atomic,
+  and `AppendEvent` writes `choir.event`, not the lifecycle batch the outbox
+  folds. Genuine (e) defect: route through a reducer command so the
+  transition and its event commit in one batch.
+- **Bare mutations** (handler `UpdateRun` calls, texture reactivation,
+  self-dev operation states) — need per-site reducer commands or a
+  boundary-exception ruling.
+
 ### (c) Dual paths — legacy JSON capsule ops, `DispatchWorkerUpdate`, `report_to_texture`
 
 Replacement: the single canonical path (staged cell intent + reducer event).
