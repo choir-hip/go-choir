@@ -105,7 +105,7 @@ func (rt *Runtime) wakeChannelCastRecipient(ctx context.Context, message Channel
 	if computerID == "" {
 		computerID = rt.TextureComputerID()
 	}
-	if err := rt.dispatchActor(context.Background(), ownerID, computerID, target, "channel_message", channelMessageDispatchSeed(message), message.TrajectoryID, message.FromAgentID); err != nil {
+	if err := rt.dispatchActor(ctx, ownerID, computerID, target, "channel_message", channelMessageDispatchSeed(message), message.TrajectoryID, message.FromAgentID); err != nil {
 		log.Printf("runtime: actor wake channel cast for %s: %v", target, err)
 	}
 }
