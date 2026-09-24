@@ -29,6 +29,49 @@ import (
 // The dispatcher is a thin process loop, not an actor on the tape — the
 // residual-hard-point note in the ontology leaves multi-dispatcher failover
 // unresolved, and a single dispatcher per computer is assumed.
+
+// emissionBuffer accumulates the updates one activation emits. The
+// dispatcher places it in the activation's context; the dispatch hook
+// (actorruntime.Adapter.dispatch) routes emissions into it instead of
+// sending immediately. Commit flushes the buffer atomically with the state
+// head — so a stale or preempted activation's emissions die with it and are
+// never durable (ontology fenced-commit clause).
+type emissionBuffer struct {
+	mu      sync.Mutex
+	updates []Update
+}
+
+type emissionCtxKey struct{}
+
+// withEmissions returns a context carrying a fresh emission buffer.
+func withEmissions(ctx context.Context) (context.Context, *emissionBuffer) {
+	buf := &emissionBuffer{}
+	return context.WithValue(ctx, emissionCtxKey{}, buf), buf
+}
+
+// EmissionsFromCtx returns the activation's emission buffer, or nil when the
+// caller is not inside a dispatcher activation (e.g. a boot or API-initiated
+// send, which must emit immediately).
+func EmissionsFromCtx(ctx context.Context) *emissionBuffer {
+	buf, _ := ctx.Value(emissionCtxKey{}).(*emissionBuffer)
+	return buf
+}
+
+// Add appends an emitted update to the activation's buffer.
+func (b *emissionBuffer) Add(u Update) {
+	b.mu.Lock()
+	b.updates = append(b.updates, u)
+	b.mu.Unlock()
+}
+
+// drain returns the buffered updates in emission order.
+func (b *emissionBuffer) drain() []Update {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]Update, len(b.updates))
+	copy(out, b.updates)
+	return out
+}
 type Dispatcher struct {
 	log     KernelLog
 	handler Handler
@@ -204,15 +247,18 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 	if len(pending) == 0 {
 		return
 	}
+	// The activation's context carries the emission buffer: the dispatch hook
+	// routes this activation's emitted updates into it, and Commit flushes
+	// them atomically with the state head.
+	actx, buf := withEmissions(ctx)
 
 	var incorporated []string
-	var emitted []Update
 	for _, u := range pending {
 		// Skip scheduled events not yet due — the due-index fires them later.
 		if !u.NotBefore.IsZero() && time.Now().Before(u.NotBefore) {
 			continue
 		}
-		newMemory, herr := d.handler.HandleUpdate(ctx, agentID, u, memory)
+		newMemory, herr := d.handler.HandleUpdate(actx, agentID, u, memory)
 		if herr != nil {
 			// At-least-once: leave unprocessed; the dispatcher retries.
 			// Retry accounting as tape events is a follow-up slice.
@@ -222,6 +268,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		memory = newMemory
 		incorporated = append(incorporated, u.UpdateID)
 	}
+	emitted := buf.drain()
 	if len(incorporated) == 0 && len(emitted) == 0 {
 		return
 	}

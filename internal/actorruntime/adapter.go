@@ -106,6 +106,16 @@ func WithOnActorFailure(fn func(agentID string, err error)) RuntimeOption {
 	}
 }
 
+// WithKernelMode makes the dispatcher the sole delivery authority (ontology
+// kernel): Send appends to the durable log and signals the pending
+// projection; the Go-channel mailbox and Sweep are bypassed. Activations
+// commit {emitted events + state head} in one fenced append. This is the
+// K-mission cutover flag — the live path stays on the channel runtime until
+// the flag is set.
+func WithKernelMode() RuntimeOption {
+	return func(a *Adapter) { a.kernelMode = true }
+}
+
 // Adapter owns actor dispatch and lifecycle around an explicitly named runtime
 // business-logic core. Naming the field keeps the runtime method set from being
 // promoted onto the adapter.
@@ -133,6 +143,7 @@ type Adapter struct {
 	sendMode       actor.SendMode    // non-blocking (default) or blocking
 	sendTimeout    time.Duration     // blocking send timeout (default 5s)
 	onActorFailure actor.FailureFunc // supervisor callback for actor deaths
+	kernelMode     bool              // dispatcher is the sole delivery authority
 
 	startOnce sync.Once
 	started   bool
@@ -205,7 +216,11 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	if a.onActorFailure != nil {
 		actorOpts.OnActorFailure = a.onActorFailure
 	}
-	a.actorRT = actor.NewRuntime(actorLog, handler, actorOpts)
+	if a.kernelMode {
+		a.actorRT = actor.NewKernelRuntime(actorLog, actorLog, handler, actorOpts, actor.DispatcherOptions{})
+	} else {
+		a.actorRT = actor.NewRuntime(actorLog, handler, actorOpts)
+	}
 
 	// Wire the dispatch function. From this point, rt.activate(rec)
 	// sends an actor message and rt.wakeUpdatedCoagent(...) sends an
@@ -388,6 +403,14 @@ func (a *Adapter) dispatch(ctx context.Context, ownerID, computerID, toAgentID, 
 		return nil
 	}
 	a.dispatchMu.Unlock()
+	// Inside a dispatcher activation, emissions buffer into the fenced
+	// commit: they become durable only when the activation's {emitted + head}
+	// commit succeeds. Outside an activation (boot/API-initiated), send
+	// immediately.
+	if buf := actor.EmissionsFromCtx(ctx); buf != nil {
+		buf.Add(u)
+		return nil
+	}
 	return a.actorRT.Send(ctx, u)
 }
 
@@ -603,7 +626,11 @@ func (a *Adapter) Start(ctx context.Context) error {
 	if err := a.flushBootDispatches(ctx); err != nil {
 		return fmt.Errorf("actorruntime: boot dispatch flush: %w", err)
 	}
-	if err := a.actorRT.Sweep(ctx); err != nil {
+	if a.kernelMode {
+		// Kernel mode: the dispatcher's pending projection is the recovery
+		// rule — no boot sweep. Start the dispatcher loop.
+		a.actorRT.StartKernel(ctx)
+	} else if err := a.actorRT.Sweep(ctx); err != nil {
 		return fmt.Errorf("actorruntime: boot sweep: %w", err)
 	}
 	a.startOnce.Do(func() { a.started = true })
