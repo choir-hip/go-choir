@@ -2871,3 +2871,59 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureDocumentRevisionOccurrenc
 	}
 	assertTerminalState("second start", restarted)
 }
+
+func TestKernelOutboxProjectorMintsOneSQLiteActorWake(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "outbox.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	adapter := New(provideriface.Config{
+		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
+		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+	}, s, events.NewEventBus(), provider.NewStubProvider(0), nil, WithKernelMode())
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("start kernel adapter: %v", err)
+	}
+	queue := seedDurableTextureUpdate(t, s, ctx, "autoputer-test", "owner-outbox-projector", "doc-outbox-projector", "update-outbox-projector", "outbox projector content")
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		var rows int
+		if err := adapter.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates`).Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+		if rows == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("actor wake row was not projected for %s", queue.UpdateID)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	// A second projector interval cannot mint another actor_updates row because
+	// the wake's deterministic key and its projected outbox flag converge.
+	time.Sleep(600 * time.Millisecond)
+	var rows int
+	if err := adapter.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("actor wake rows = %d, want 1", rows)
+	}
+	wakes, err := s.ListUnprojectedActorWakes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wakes) != 0 {
+		t.Fatalf("unprojected wakes after SQLite append = %+v", wakes)
+	}
+}

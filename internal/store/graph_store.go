@@ -23,6 +23,7 @@ const (
 	ogKindWorkItem              = objectgraph.ObjectKind("choir.work_item")
 	ogKindChannelMsg            = objectgraph.ObjectKind("choir.channel_message")
 	ogKindWorkerUpdate          = objectgraph.ObjectKind("choir.worker_update")
+	ogKindActorWakeOutbox       = objectgraph.ObjectKind("choir.actor_wake_outbox")
 	ogKindLifecycleEvent        = objectgraph.ObjectKind("choir.lifecycle_event")
 	ogKindLifecycleCmd          = objectgraph.ObjectKind("choir.lifecycle_command")
 	ogKindLifecycleCancelIntent = objectgraph.ObjectKind("choir.lifecycle_cancel_intent")

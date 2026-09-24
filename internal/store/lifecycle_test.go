@@ -3602,3 +3602,43 @@ func TestListPendingLifecycleUpdatesArrivalOrdinalSort(t *testing.T) {
 			pending[0].UpdateID, pending[1].UpdateID)
 	}
 }
+
+func TestQueueLifecycleUpdateCommitsActorWakeOutbox(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	start.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(start)
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatal(err)
+	}
+	queue := queueLifecycleUpdateFixture(t, s, start, "queue-actor-wake-outbox")
+	queued, err := s.QueueLifecycleUpdate(ctx, queue)
+	if err != nil || queued.Update == nil {
+		t.Fatalf("queue lifecycle update = %+v, %v", queued, err)
+	}
+	updateKey := queue.TrajectoryID + "\x00" + queue.TargetAgentID + "\x00" + queue.ProducerAgentID + "\x00" + queue.ProducerUpdateID
+	worker, err := s.lifecycleGetObject(ctx, ogKindWorkerUpdate, start.OwnerID, start.ComputerID, updateKey)
+	if err != nil {
+		t.Fatalf("load committed worker update: %v", err)
+	}
+	wakes, err := s.ListUnprojectedActorWakes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wakes) != 1 {
+		t.Fatalf("unprojected actor wakes = %d, want 1", len(wakes))
+	}
+	wake := wakes[0]
+	wantCanonicalID, err := lifecycleCanonicalID(ogKindActorWakeOutbox, start.OwnerID, start.ComputerID, "wake:"+worker.CanonicalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wake.CanonicalID != wantCanonicalID || wake.SourceUpdateID != queued.Update.UpdateID ||
+		wake.TargetAgentID != queued.Update.TargetAgentID || wake.Content != types.LifecycleControlActorOccurrenceContent(*queued.Update) {
+		t.Fatalf("outbox wake = %+v", wake)
+	}
+	wantUpdateID := types.ActorWakeUpdateID(wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
+	if wake.UpdateID != wantUpdateID {
+		t.Fatalf("outbox update ID = %q, want %q", wake.UpdateID, wantUpdateID)
+	}
+}

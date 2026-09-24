@@ -233,18 +233,15 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 
 func actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) string {
 	canonicalKind := strings.TrimSpace(kind)
+	if canonicalKind == "coagent_result" {
+		return types.ActorWakeUpdateID(ownerID, computerID, toAgentID, canonicalKind, content, trajectoryID, fromAgentID)
+	}
 	canonicalContent := strings.TrimSpace(content)
-	canonicalTrajectoryID := strings.TrimSpace(trajectoryID)
-	canonicalFromAgentID := strings.TrimSpace(fromAgentID)
 	if canonicalContent == "" {
 		return uuid.New().String()
 	}
 	switch canonicalKind {
 	case "initial_dispatch", "channel_message":
-	case "coagent_result":
-		if canonicalTrajectoryID == "" || canonicalFromAgentID == "" {
-			return uuid.New().String()
-		}
 	default:
 		return uuid.New().String()
 	}
@@ -259,8 +256,8 @@ func actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajec
 		strings.TrimSpace(toAgentID),
 		canonicalKind,
 		canonicalContent,
-		canonicalTrajectoryID,
-		canonicalFromAgentID,
+		strings.TrimSpace(trajectoryID),
+		strings.TrimSpace(fromAgentID),
 	} {
 		identity = binary.AppendUvarint(identity, uint64(len(field)))
 		identity = append(identity, field...)

@@ -60,11 +60,9 @@ type Runtime struct {
 	provider    provideriface.Provider
 	promptStore *promptstore.Store
 
-	// kernelMode, when true, runs the derivable-continuation projector: a
-	// continuous fold over the coagent mailbox that mints actor wakes via
-	// wakeUpdatedCoagent, replacing the boot-time sweepPendingUpdateActors
-	// scan. Set by the adapter when the dispatcher is the delivery
-	// authority (ontology kernel).
+	// kernelMode, when true, drains the durable actor-wake outbox into actor
+	// updates. The live boot-time worker-update sweep remains unchanged; the
+	// kernel projector never binds or otherwise mutates resident runs.
 	kernelMode bool
 	projectorStop chan struct{}
 	// traceStore is the optional Dolt-backed observability store. When set,
@@ -2624,6 +2622,30 @@ func (rt *Runtime) sweepPendingUpdateActors(ctx context.Context, seen map[string
 	}
 }
 
+func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	wakes, err := rt.store.ListUnprojectedActorWakes(ctx)
+	if err != nil {
+		log.Printf("runtime: actor wake outbox sweep: %v", err)
+		return
+	}
+	if rt.dispatchActor == nil {
+		log.Printf("runtime: actor wake outbox sweep: actor dispatch unavailable")
+		return
+	}
+	for _, wake := range wakes {
+		if err := rt.dispatchActor(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID); err != nil {
+			log.Printf("runtime: actor wake outbox dispatch %s: %v", wake.SourceUpdateID, err)
+			continue
+		}
+		if err := rt.store.MarkActorWakeProjected(ctx, wake.CanonicalID); err != nil && !errors.Is(err, store.ErrConcurrentStateChange) {
+			log.Printf("runtime: actor wake outbox mark projected %s: %v", wake.SourceUpdateID, err)
+		}
+	}
+}
+
 
 // SetKernelMode enables the derivable-continuation projector. Called by the
 // adapter when the dispatcher is the delivery authority.
@@ -2631,14 +2653,11 @@ func (rt *Runtime) SetKernelMode() {
 	rt.kernelMode = true
 }
 
-// startProjector launches the continuous store→actor projection: a resumable
-// fold over the coagent mailbox backlog that mints actor wakes via
-// wakeUpdatedCoagent. It is the derivable replacement for the boot-time
-// sweepPendingUpdateActors scan — the same fold, run continuously so the
-// crash window between coagent-write and wake-mint is covered by
-// re-projection. The fold is idempotent (deterministic wake update_id), so
-// no separate projector cursor is needed; the recipient's mailbox cursor
-// already filters delivered rows.
+// startProjector launches the continuous store→actor projection. It drains the
+// durable metadata-indexed actor-wake outbox, so the 500 ms poll never scans
+// the canonical worker-update backlog. The fold only appends idempotent actor
+// occurrences and marks successful outbox entries projected; activation owns
+// all resident-run binding.
 func (rt *Runtime) startProjector(ctx context.Context) {
 	if !rt.kernelMode || rt.projectorStop != nil {
 		return
@@ -2656,7 +2675,7 @@ func (rt *Runtime) startProjector(ctx context.Context) {
 			case <-rt.projectorStop:
 				return
 			case <-ticker.C:
-				rt.sweepPendingUpdateActors(ctx, nil)
+				rt.sweepActorWakeOutbox(ctx)
 			}
 		}
 	}()

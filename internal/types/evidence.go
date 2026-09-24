@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"hash"
 	"io"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // EvidenceRecord is a durable piece of retrieved or generated material
@@ -195,4 +198,52 @@ type CoagentSourcePacket struct {
 	CreatedAt        time.Time                  `json:"created_at"`
 	DeliveredToRunID string                     `json:"delivered_to_loop_id,omitempty"`
 	DeliveredAt      *time.Time                 `json:"delivered_at,omitempty"`
+}
+
+// LifecycleControlActorOccurrenceContent derives the canonical actor occurrence
+// content for one persisted lifecycle update.
+func LifecycleControlActorOccurrenceContent(update CoagentSourcePacket) string {
+	updateID := strings.TrimSpace(update.UpdateID)
+	if updateID == "" {
+		return ""
+	}
+	identity := make([]byte, 0, len(updateID)+len(update.ProducerUpdateID)+64)
+	for _, field := range []string{
+		"choir:lifecycle-control-actor-occurrence:v2",
+		updateID,
+		strings.TrimSpace(update.ProducerUpdateID),
+	} {
+		identity = binary.AppendUvarint(identity, uint64(len(field)))
+		identity = append(identity, field...)
+	}
+	digest := sha256.Sum256(identity)
+	return "sha256:" + hex.EncodeToString(digest[:])
+}
+
+// ActorWakeUpdateID derives the exact durable actor-log key for a canonical
+// coagent wake. Empty or incomplete occurrences intentionally retain the
+// adapter's one-shot UUID behavior.
+func ActorWakeUpdateID(ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) string {
+	canonicalKind := strings.TrimSpace(kind)
+	canonicalContent := strings.TrimSpace(content)
+	canonicalTrajectoryID := strings.TrimSpace(trajectoryID)
+	canonicalFromAgentID := strings.TrimSpace(fromAgentID)
+	if canonicalContent == "" || canonicalKind != "coagent_result" || canonicalTrajectoryID == "" || canonicalFromAgentID == "" {
+		return uuid.New().String()
+	}
+	identity := make([]byte, 0, 256)
+	for _, field := range []string{
+		"choir:actor-dispatch:v2",
+		strings.TrimSpace(ownerID),
+		strings.TrimSpace(computerID),
+		strings.TrimSpace(toAgentID),
+		canonicalKind,
+		canonicalContent,
+		canonicalTrajectoryID,
+		canonicalFromAgentID,
+	} {
+		identity = binary.AppendUvarint(identity, uint64(len(field)))
+		identity = append(identity, field...)
+	}
+	return uuid.NewSHA1(uuid.NameSpaceOID, identity).String()
 }

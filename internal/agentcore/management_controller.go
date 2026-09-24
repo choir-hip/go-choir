@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -2716,24 +2715,7 @@ func LifecycleControlActorOccurrenceContent(update types.CoagentSourcePacket) st
 }
 
 func lifecycleControlActorOccurrenceContent(update types.CoagentSourcePacket) string {
-	updateID := strings.TrimSpace(update.UpdateID)
-	if updateID == "" {
-		return ""
-	}
-
-	// Length prefixes make authored update identifiers unambiguous even when
-	// either one contains the delimiter used by the legacy occurrence content.
-	identity := make([]byte, 0, len(updateID)+len(update.ProducerUpdateID)+64)
-	for _, field := range []string{
-		"choir:lifecycle-control-actor-occurrence:v2",
-		updateID,
-		strings.TrimSpace(update.ProducerUpdateID),
-	} {
-		identity = binary.AppendUvarint(identity, uint64(len(field)))
-		identity = append(identity, field...)
-	}
-	digest := sha256.Sum256(identity)
-	return "sha256:" + hex.EncodeToString(digest[:])
+	return types.LifecycleControlActorOccurrenceContent(update)
 }
 
 func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentSourcePacket) {
@@ -2779,7 +2761,7 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 	if rt.dispatchActor == nil {
 		panic("runtime: wakeUpdatedCoagent called without dispatchActor set — actor runtime is required")
 	}
-	if err := rt.dispatchActor(context.Background(), update.OwnerID, firstNonEmpty(update.ComputerID, rt.TextureComputerID()), target, "coagent_result", lifecycleControlActorOccurrenceContent(update), update.TrajectoryID, update.AgentID); err != nil {
+	if err := rt.dispatchActor(ctx, update.OwnerID, firstNonEmpty(update.ComputerID, rt.TextureComputerID()), target, "coagent_result", lifecycleControlActorOccurrenceContent(update), update.TrajectoryID, update.AgentID); err != nil {
 		log.Printf("runtime: actor wake coagent for update %s: %v", update.UpdateID, err)
 	}
 }

@@ -468,6 +468,122 @@ func lifecycleMetadata(idField, id, computerID, trajectoryID string, seq int64) 
 	}
 }
 
+// ActorWakeOutbox is the durable store→actor handoff. Its body contains the
+// complete immutable actor occurrence so the projector never has to re-read or
+// interpret the source worker update.
+type ActorWakeOutbox struct {
+	CanonicalID    string    `json:"-"`
+	SourceUpdateID string    `json:"source_update_id"`
+	UpdateID       string    `json:"update_id"`
+	OwnerID        string    `json:"owner_id"`
+	ComputerID     string    `json:"computer_id"`
+	TargetAgentID  string    `json:"target_agent_id"`
+	TrajectoryID   string    `json:"trajectory_id"`
+	AgentID        string    `json:"agent_id"`
+	Kind           string    `json:"kind"`
+	Content        string    `json:"content"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object) (ActorWakeOutbox, objectgraph.Object, error) {
+	update, err := decodeLifecycleObject[types.CoagentSourcePacket](worker)
+	if err != nil {
+		return ActorWakeOutbox{}, objectgraph.Object{}, err
+	}
+	if strings.TrimSpace(update.TargetAgentID) == "" ||
+		(update.Disposition != "" && update.Disposition != types.UpdatePending) ||
+		strings.TrimSpace(update.DeliveredToRunID) != "" {
+		return ActorWakeOutbox{}, objectgraph.Object{}, nil
+	}
+	content := types.LifecycleControlActorOccurrenceContent(update)
+	if content == "" || strings.TrimSpace(update.TrajectoryID) == "" || strings.TrimSpace(update.AgentID) == "" {
+		return ActorWakeOutbox{}, objectgraph.Object{}, ErrLifecycleInvalidTransition
+	}
+	wake := ActorWakeOutbox{
+		SourceUpdateID: strings.TrimSpace(update.UpdateID),
+		OwnerID:        strings.TrimSpace(update.OwnerID),
+		ComputerID:     strings.TrimSpace(update.ComputerID),
+		TargetAgentID:  strings.TrimSpace(update.TargetAgentID),
+		TrajectoryID:   strings.TrimSpace(update.TrajectoryID),
+		AgentID:        strings.TrimSpace(update.AgentID),
+		Kind:           "coagent_result",
+		Content:        content,
+		CreatedAt:      worker.CreatedAt.UTC(),
+	}
+	wake.UpdateID = types.ActorWakeUpdateID(wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
+	metadata := map[string]any{
+		"source_update_id": wake.SourceUpdateID,
+		"update_id":        wake.UpdateID,
+		"target_agent_id":  wake.TargetAgentID,
+		"trajectory_id":    wake.TrajectoryID,
+		"projected":        false,
+	}
+	outbox, err := lifecycleObject(ogKindActorWakeOutbox, wake.OwnerID, wake.ComputerID, "wake:"+worker.CanonicalID, wake, metadata, worker.CreatedAt, worker.UpdatedAt)
+	if err != nil {
+		return ActorWakeOutbox{}, objectgraph.Object{}, err
+	}
+	wake.CanonicalID = outbox.CanonicalID
+	return wake, outbox, nil
+}
+
+// ListUnprojectedActorWakes reads the metadata-indexed durable outbox. The
+// caller must mark a wake projected only after the SQLite actor append succeeds.
+func (s *Store) ListUnprojectedActorWakes(ctx context.Context) ([]ActorWakeOutbox, error) {
+	objects, err := s.ogListAllByMetadata(ctx, ogKindActorWakeOutbox, "projected", "false")
+	if err != nil {
+		return nil, fmt.Errorf("list unprojected actor wakes: %w", err)
+	}
+	wakes := make([]ActorWakeOutbox, 0, len(objects))
+	for _, obj := range objects {
+		wake, err := decodeLifecycleObject[ActorWakeOutbox](obj)
+		if err != nil {
+			return nil, fmt.Errorf("decode actor wake outbox %s: %w", obj.CanonicalID, err)
+		}
+		wake.CanonicalID = obj.CanonicalID
+		wakes = append(wakes, wake)
+	}
+	return wakes, nil
+}
+
+// MarkActorWakeProjected changes only the outbox projection state. A compare-
+// and-write condition makes racing projector instances harmless.
+func (s *Store) MarkActorWakeProjected(ctx context.Context, canonicalID string) error {
+	if s.ogStore == nil {
+		return fmt.Errorf("mark actor wake projected: object graph not initialized")
+	}
+	obj, err := s.ogStore.GetObject(ctx, strings.TrimSpace(canonicalID))
+	if err != nil {
+		return err
+	}
+	if obj.ObjectKind != ogKindActorWakeOutbox {
+		return fmt.Errorf("mark actor wake projected: object %s is not an actor wake outbox", canonicalID)
+	}
+	metadata := map[string]any{}
+	if err := json.Unmarshal(obj.Metadata, &metadata); err != nil {
+		return fmt.Errorf("mark actor wake projected: decode metadata: %w", err)
+	}
+	if projected, _ := metadata["projected"].(bool); projected {
+		return nil
+	}
+	metadata["projected"] = true
+	rawMetadata, err := objectgraph.NormalizeMetadata(metadata)
+	if err != nil {
+		return fmt.Errorf("mark actor wake projected: normalize metadata: %w", err)
+	}
+	updated := obj
+	updated.Metadata = rawMetadata
+	updated.UpdatedAt = time.Now().UTC()
+	updated.ContentHash = objectgraph.ContentHash(updated.ObjectKind, updated.Body, updated.Metadata)
+	condition := objectgraph.ObjectCondition{CanonicalID: obj.CanonicalID, Exists: true, ExpectedContentHash: obj.ContentHash}
+	if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{updated}}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			return ErrConcurrentStateChange
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Store) lifecycleGraph() objectgraph.Store {
 	if s.ogReadStore != nil {
 		return s.ogReadStore
@@ -1666,6 +1782,34 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	}
 	if !replacedReceipt {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle: transition receipt missing from atomic batch")
+	}
+	seenObjects := make(map[string]struct{}, len(objects))
+	for _, obj := range objects {
+		seenObjects[obj.CanonicalID] = struct{}{}
+	}
+	seenConditions := make(map[string]struct{}, len(conditions))
+	for _, condition := range conditions {
+		seenConditions[condition.CanonicalID] = struct{}{}
+	}
+	for _, obj := range objects {
+		if obj.ObjectKind != ogKindWorkerUpdate {
+			continue
+		}
+		_, outbox, outboxErr := actorWakeOutboxFromWorkerUpdate(obj)
+		if outboxErr != nil {
+			return types.LifecycleResult{}, fmt.Errorf("lifecycle: derive actor wake outbox: %w", outboxErr)
+		}
+		if outbox.CanonicalID == "" {
+			continue
+		}
+		if _, exists := seenObjects[outbox.CanonicalID]; !exists {
+			objects = append(objects, outbox)
+			seenObjects[outbox.CanonicalID] = struct{}{}
+		}
+		if _, exists := seenConditions[outbox.CanonicalID]; !exists {
+			conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID})
+			seenConditions[outbox.CanonicalID] = struct{}{}
+		}
 	}
 	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: edges}); err != nil {
 		if errors.Is(err, objectgraph.ErrConflict) {
