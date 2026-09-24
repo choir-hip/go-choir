@@ -131,14 +131,19 @@ is not atomic with a canonical event. Three shapes found:
 - **Sweep-internal writes** (`passivateInterruptedActivations`,
   `reactivateRetryableLifecycleInjectionRuns`, `sweepPassivatedSpawnedCoagentWork`)
   — deleted with the sweep at cutover, not (e) defects.
-- **Mutation-then-separate-event** (`terminalizeRun` emits
-  `EventRunCancelled` via `AppendEvent` *after* `UpdateRun`) — not atomic,
-  and `AppendEvent` writes `choir.event`, not the lifecycle batch the outbox
-  folds. Genuine (e) defect: route through a reducer command so the
-  transition and its event commit in one batch.
+- **Mutation-then-separate-event** (activation `persistActivationState` +
+  `emitEvent`) — **repaired (acb85f44, 4c129caa).**
+  `persistActivationStateAndEmit` folds the runtime event into the same
+  `PutBatchConditional` as the run-state projection via
+  `UpdateRunWithEvent` → `persistLifecycleRunWithEvent` →
+  `projectLifecycleRun`. All activation transitions (run_started,
+  run_completed, run_passivated, run_failed/cancelled/blocked) now commit
+  state + `choir.event` atomically for lifecycle-bound runs.
 - **Bare mutations** (handler `UpdateRun` calls, texture reactivation,
   self-dev operation states) — need per-site reducer commands or a
-  boundary-exception ruling.
+  boundary-exception ruling. `terminalizeRun`'s `EventRunCancelled` still
+  emits via `AppendEvent` after the canonical `TerminalizeRun` command —
+  the state change is atomic but the runtime event is a separate write.
 
 **Consensus decision (2026-09-24, claude+gemini38; codex+gpt6-sol
 rate-limited):** hybrid — typed reducer commands (B) + a fail-closed
