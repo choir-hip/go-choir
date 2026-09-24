@@ -130,14 +130,33 @@ rollback is a restore, not a revert.
 ## What is already true vs what remains
 
 **True now:** the delivery tape carries `not_before`/`epoch`; `Commit` is
-the fenced atomic commit; `PendingAgents`/`NextDue` are the projection and
-due-index; `Dispatcher` consumes serially per actor; `WithKernelMode` wires
-the adapter; emissions buffer into the fenced commit.
+the fenced atomic commit including the folded memory snapshot (moved inside
+the transaction after the 2026-09-24 panel); `PendingAgents`/`NextDue` are
+the projection and due-index; `Dispatcher` consumes serially per actor with
+a bounded `MaxConcurrent` fan-out and a `Stop` that waits for in-flight
+activations; `WithKernelMode` wires the adapter; emissions buffer into the
+fenced commit (per-event drain; a failed handler's emissions are discarded
+and the batch stops at the first failure, preserving tape order); poison
+events route `delivery_failed` to the error sink after `MaxAttempts` with
+durable retry accounting.
+
+**Consensus review 2026-09-24 (convergent, 4/8 panelists returned —
+codex, gpt6-sol, claude, gemini38): unanimous SEND BACK.** Blockers closed
+in `5d1360f8`/`f733106c`: atomic snapshot, `not_before` round-trip, tape
+order, per-event buffer, `Stop` WaitGroup, `MaxConcurrent`, channel-cast
+emission escape. **Open design findings the panel confirmed (not yet
+fixed):** the projector is a 500ms state scan over `ListCoagentMailboxBacklogAll`
+that mutates resident runs via `bindLifecycleControlsToRun` — not the
+derivable event fold this design specifies; the epoch is a commit-time
+conflict check, not a preemption lease (no claim/revoke); `frame_lock`
+edges (`sourcecycled`, `vmctl`, `frontend-current`) remain boundary
+exceptions. These are the remaining-work items below, now panel-confirmed.
 
 **Remaining:** the store→actor projection (fold mints actor wakes in the
-event-append transaction); the per-instance migration of the 51 classified
-instances; the write-fence cutover; the cluster recount to zero; staging
-verification; consensus review.
+event-append transaction — replaces the 500ms scan); the per-instance
+migration of the 51 classified instances; the write-fence cutover; the
+cluster recount to zero; staging verification; a second consensus review
+after the projector redesign.
 
 ## Boundary exceptions (unchanged)
 
