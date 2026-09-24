@@ -124,6 +124,7 @@ func (c *Capsule) Quiesce(ctx context.Context) error {
 		}
 	}
 	if err := c.Cgroup.Freeze(ctx); err != nil {
+		c.State = StateActive
 		return fmt.Errorf("freeze capsule %s cgroup: %w", c.ID, err)
 	}
 	c.State = StateFrozen

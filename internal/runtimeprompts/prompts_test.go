@@ -24,3 +24,13 @@ func TestSuperRuntimeOverlayIncludesAuthorityBoundary(t *testing.T) {
 		t.Fatalf("management runtime overlay missing authority boundary: %q", overlay)
 	}
 }
+
+func TestRLMCoSuperOverlayGatesFreezeMandate(t *testing.T) {
+	const mandate = "Freeze the capsule diff with choir.Freeze."
+	if overlay := RLMCoSuperOverlay(RLMCoSuperOverlayOptions{}); strings.Contains(overlay, mandate) {
+		t.Fatalf("document-cast overlay mandates Freeze: %q", overlay)
+	}
+	if overlay := RLMCoSuperOverlay(RLMCoSuperOverlayOptions{HasSelfDevelopmentOperation: true}); !strings.Contains(overlay, mandate) {
+		t.Fatalf("self-development overlay omits Freeze mandate: %q", overlay)
+	}
+}

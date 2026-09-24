@@ -232,32 +232,8 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if handle == "" || buildRecipeRef == "" || len(testReceipts) == 0 || len(dependencyToolchainRefs) == 0 {
 		return nil, fmt.Errorf("complete build recipe, test receipts, and dependency/toolchain refs are required")
 	}
-	changes, err := toolCtx.Executor.ExtractGranted(ctx, toolCtx.AgentRunID, handle)
-	if err != nil {
-		return nil, err
-	}
-	evidenceRefs := append([]string{buildRecipeRef}, testReceipts...)
-	evidenceRefs = append(evidenceRefs, dependencyToolchainRefs...)
-	executionReceipts, err := toolCtx.Executor.ResolveGrantedExecutionReceipts(ctx, toolCtx.AgentRunID, handle, evidenceRefs)
-	if err != nil {
-		return nil, err
-	}
-	if len(executionReceipts) < 3 {
-		return nil, fmt.Errorf("distinct build, test, and dependency/toolchain execution receipts are required")
-	}
 	if toolCtx.TransactionBuilder == nil || toolCtx.EventAppender == nil || toolCtx.ComputerID == "" {
 		return nil, fmt.Errorf("capsule event authority unavailable")
-	}
-	capsuleID, err := toolCtx.Executor.ResolveGrantedCapsuleID(toolCtx.AgentRunID, handle)
-	if err != nil {
-		return nil, err
-	}
-	record, err := toolCtx.TransactionBuilder.BuildBundleFromDiff(capsuleID, changes)
-	if err != nil {
-		return nil, err
-	}
-	if record.Rejected {
-		return map[string]any{"handle": handle, "rejected": true, "reject_reason": record.RejectReason}, nil
 	}
 	trajectoryID := trajectoryIDForRun(rec)
 	if toolCtx.OperationStore == nil || toolCtx.EventProjection == nil || strings.TrimSpace(toolCtx.UpdaterRoot) == "" || trajectoryID == "" {
@@ -279,6 +255,30 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	headBefore, err := toolCtx.EventProjection.Head(ctx, toolCtx.ComputerID)
 	if err != nil || headBefore == nil || headBefore.PendingTransitionRef != "" || headBefore.CanonicalEventHead != operation.BaseHead {
 		return nil, fmt.Errorf("self-development base head unavailable, stale, or pending")
+	}
+	capsuleID, err := toolCtx.Executor.ResolveGrantedCapsuleID(toolCtx.AgentRunID, handle)
+	if err != nil {
+		return nil, err
+	}
+	changes, err := toolCtx.Executor.ExtractGranted(ctx, toolCtx.AgentRunID, handle)
+	if err != nil {
+		return nil, err
+	}
+	evidenceRefs := append([]string{buildRecipeRef}, testReceipts...)
+	evidenceRefs = append(evidenceRefs, dependencyToolchainRefs...)
+	executionReceipts, err := toolCtx.Executor.ResolveGrantedExecutionReceipts(ctx, toolCtx.AgentRunID, handle, evidenceRefs)
+	if err != nil {
+		return nil, err
+	}
+	if len(executionReceipts) < 3 {
+		return nil, fmt.Errorf("distinct build, test, and dependency/toolchain execution receipts are required")
+	}
+	record, err := toolCtx.TransactionBuilder.BuildBundleFromDiff(capsuleID, changes)
+	if err != nil {
+		return nil, err
+	}
+	if record.Rejected {
+		return map[string]any{"handle": handle, "rejected": true, "reject_reason": record.RejectReason}, nil
 	}
 	files, temporary, err := toolCtx.Executor.StageGrantedRelease(ctx, toolCtx.AgentRunID, handle, filepath.Join(toolCtx.UpdaterRoot, "incoming"))
 	if err != nil {

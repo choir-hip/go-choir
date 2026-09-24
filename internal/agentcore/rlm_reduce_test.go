@@ -2,9 +2,11 @@ package agentcore
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -31,6 +33,30 @@ func testReductionCtx(scope ReductionScope) context.Context {
 		OwnerID:   scope.OwnerID,
 		ChannelID: scope.ChannelID,
 	})
+}
+
+func TestCommitFreezeIntentRejectsDocumentTrajectoryBeforeExecutorEffect(t *testing.T) {
+	rt, _ := testRuntime(t)
+	rec := &types.RunRecord{
+		RunID: "run-document-freeze", OwnerID: "user-alice", ComputerID: "autoputer-test", TrajectoryID: "document-trajectory",
+		Metadata: map[string]any{
+			"assignment_id": "assignment-document-freeze", "assignment_attempt": 1,
+			"assignment_kind": string(types.CoSuperAssignmentImplementation),
+		},
+	}
+	toolCtx := &CapsuleToolCtx{
+		Executor: new(capsule.Executor), AgentRunID: rec.RunID, ComputerID: rec.ComputerID,
+		Role: capsule.RoleCoSuper, CapsuleHandle: "bound-handle", OperationStore: rt.selfdevOperations,
+		ValidateCurrentObligation: func(context.Context) error { return nil },
+	}
+	ctx := WithCapsuleCtx(context.Background(), toolCtx)
+	ctx = toolregistry.WithExecutionContext(ctx, toolregistry.ExecutionContext{RunID: rec.RunID, RunRecord: rec})
+	reduction := &rlmCallReduction{rec: rec, toolCtx: toolCtx}
+
+	_, err := reduction.commitFreezeIntent(ctx, yaegikernel.StagedIntent{Kind: yaegikernel.IntentFreeze})
+	if err == nil || !strings.Contains(err.Error(), "resolve self-development operation") {
+		t.Fatalf("document trajectory freeze error = %v, want self-development operation refusal", err)
+	}
 }
 
 // TestReduceFailedCellDropsTray is the two-phase ack gate at the reduction

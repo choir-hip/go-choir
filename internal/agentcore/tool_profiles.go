@@ -1,12 +1,12 @@
 package agentcore
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 	"time"
-
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
@@ -259,7 +259,16 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == agentprofile.CoSuper {
 		if capsule.HostSelectsRLM() {
-			b.WriteString(runtimeprompts.RLMCoSuperOverlay())
+			hasSelfDevelopmentOperation := false
+			if rt != nil && rt.selfdevOperations != nil && rec != nil && strings.TrimSpace(rec.ComputerID) != "" {
+				if trajectoryID := trajectoryIDForRun(rec); trajectoryID != "" {
+					_, err := rt.selfdevOperations.GetByTrajectory(context.Background(), rec.ComputerID, trajectoryID)
+					hasSelfDevelopmentOperation = err == nil
+				}
+			}
+			b.WriteString(runtimeprompts.RLMCoSuperOverlay(runtimeprompts.RLMCoSuperOverlayOptions{
+				HasSelfDevelopmentOperation: hasSelfDevelopmentOperation,
+			}))
 		} else {
 			b.WriteString(runtimeprompts.CoSuperRuntimeOverlay())
 		}

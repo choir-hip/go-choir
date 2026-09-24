@@ -59,6 +59,23 @@ func TestCoSuperPromptSwitchesToSealedGoUnderRLM(t *testing.T) {
 	}
 }
 
+func TestRLMPromptOmitsFreezeMandateForDocumentTrajectory(t *testing.T) {
+	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
+	rt, _ := testRuntime(t)
+	run := testCoSuperRun()
+	run.ComputerID = "autoputer-test"
+	run.TrajectoryID = "trajectory-document-cast"
+	const mandate = "Freeze the capsule diff with choir.Freeze."
+
+	prompt, err := rt.systemPromptForRun(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(prompt, mandate) {
+		t.Fatalf("document-cast prompt mandates Freeze: %q", prompt)
+	}
+}
+
 // TestRLMPromptOmitsRetiredToolNames guards the same invariant on the RLM
 // overlay: the sealed-Go prompt must never present a retired JSON tool name
 // as callable.

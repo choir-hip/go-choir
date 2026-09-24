@@ -64,8 +64,12 @@ func CoSuperRuntimeOverlay() string {
 // capsule_go_eval is the sole capsule doorway and the choir package subsumes
 // the JSON file/exec tools. The legacy catalog sentence is replaced, not
 // amended, so the model never sees two authorities.
-func RLMCoSuperOverlay() string {
-	return mustRenderOverlay("rlm_engineering_runtime", nil)
+type RLMCoSuperOverlayOptions struct {
+	HasSelfDevelopmentOperation bool
+}
+
+func RLMCoSuperOverlay(opts RLMCoSuperOverlayOptions) string {
+	return mustRenderOverlay("rlm_engineering_runtime", opts)
 }
 
 func ResearcherRuntimeOverlay() string {

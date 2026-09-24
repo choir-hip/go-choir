@@ -716,30 +716,34 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 	}
 
 	if assignment.CapsuleDisposition == types.CoSuperCapsuleFreezeRequested {
+		freezeFailure := func(err error) (types.CoSuperAssignmentCommandResult, error) {
+			rt.armAssignedCoSuperFateWatchdog(assignment)
+			return types.CoSuperAssignmentCommandResult{}, err
+		}
 		handle, err := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 		if err != nil {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("resolve exact assignment capability after freeze intent: %w", err)
+			return freezeFailure(fmt.Errorf("resolve exact assignment capability after freeze intent: %w", err))
 		}
 		_, err = rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
 		if err != nil {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("freeze assignment after durable intent: %w", err)
+			return freezeFailure(fmt.Errorf("freeze assignment after durable intent: %w", err))
 		}
 		diagnostics, err := rt.capsuleExecutor.InspectCapsuleRaw(assignment.Binding.CapsuleID)
 		if err != nil || diagnostics.ID != assignment.Binding.CapsuleID || diagnostics.State != capsule.StateFrozen {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("executor did not acknowledge exact frozen assignment capsule: %w", err)
+			return freezeFailure(fmt.Errorf("executor did not acknowledge exact frozen assignment capsule: %w", err))
 		}
 		frozenDigest, err := rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
 		if err != nil || !types.ValidSHA256Digest(frozenDigest) {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("frozen assignment digest unavailable: %w", err)
+			return freezeFailure(fmt.Errorf("frozen assignment digest unavailable: %w", err))
 		}
 		freezeReceipt, receiptErr := rt.capsuleExecutor.PersistGrantedFreezeReceipt(ctx, rec.RunID, handle)
 		if receiptErr != nil || freezeReceipt.CapsuleID != assignment.Binding.CapsuleID || "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:") != frozenDigest || "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:") != assignment.Binding.SubjectDigest {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("durable typed executor freeze receipt unavailable: %w", receiptErr)
+			return freezeFailure(fmt.Errorf("durable typed executor freeze receipt unavailable: %w", receiptErr))
 		}
 		ack := freezeReceipt.ReceiptRef
 		fateAck, fateAckErr := coSuperFateAckRequest(assignment, types.CoSuperCapsuleFrozen, intent, ack, "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:"), "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:"), freezeReceipt.OccurredAt, false)
 		if fateAckErr != nil {
-			return types.CoSuperAssignmentCommandResult{}, fmt.Errorf("invalid freeze receipt occurred_at: %w", fateAckErr)
+			return freezeFailure(fmt.Errorf("invalid freeze receipt occurred_at: %w", fateAckErr))
 		}
 		if assignment.PendingProposal != nil {
 			fateAck.PendingProposal = assignment.PendingProposal
@@ -747,7 +751,7 @@ func (rt *Runtime) recordAssignedCoSuperReportOnce(ctx context.Context, rec *typ
 		}
 		frozen, err := rt.store.SetCoSuperCapsuleDisposition(ctx, fateAck)
 		if err != nil {
-			return types.CoSuperAssignmentCommandResult{}, err
+			return freezeFailure(err)
 		}
 		assignment = frozen.Assignment
 		if frozenDigest != assignment.Binding.SubjectDigest {

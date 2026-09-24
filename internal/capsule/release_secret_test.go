@@ -28,8 +28,11 @@ func (c *testCapsuleCgroup) Freeze(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if c.freezeErr != nil {
+		return c.freezeErr
+	}
 	c.frozen = true
-	return c.freezeErr
+	return nil
 }
 func (c *testCapsuleCgroup) Thaw(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
@@ -401,18 +404,19 @@ func TestFrozenCapsuleRefusesEveryBrokerOperation(t *testing.T) {
 	}
 }
 
-func TestAmbiguousFreezerTransitionsRemainFailClosed(t *testing.T) {
+func TestFreezeErrorsRestoreActiveWhileThawErrorsRemainFailClosed(t *testing.T) {
 	freezeCgroup := &testCapsuleCgroup{freezeErr: errors.New("freeze event unavailable")}
 	freezing := &Capsule{ID: "capsule-freeze-error", State: StateActive, Cgroup: freezeCgroup}
 	if err := freezing.Quiesce(context.Background()); err == nil {
-		t.Fatal("ambiguous freeze succeeded")
+		t.Fatal("freeze failure succeeded")
 	}
-	if freezing.State != StateQuiescing || !freezeCgroup.frozen {
+	if freezing.State != StateActive || freezeCgroup.frozen {
 		t.Fatalf("failed freeze state=%s cgroup_frozen=%t", freezing.State, freezeCgroup.frozen)
 	}
-	if err := freezing.acquireOp(); err == nil {
-		t.Fatal("operation admitted after ambiguous freeze")
+	if err := freezing.acquireOp(); err != nil {
+		t.Fatalf("operation admission did not recover after freeze failure: %v", err)
 	}
+	freezing.releaseOp()
 
 	thawCgroup := &testCapsuleCgroup{frozen: true, thawErr: errors.New("thaw event unavailable")}
 	thawing := &Capsule{ID: "capsule-thaw-error", State: StateFrozen, Cgroup: thawCgroup}

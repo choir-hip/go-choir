@@ -432,8 +432,13 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 				seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
 			}
 		case yaegikernel.IntentFreeze:
+			// Like Complete, freezing must outlive cell teardown: the cgroup
+			// transition cannot be cancelled by the caller once reduction
+			// starts.
+			fateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Minute)
 			var out map[string]any
-			out, err = r.commitFreezeIntent(ctx, in)
+			out, err = r.commitFreezeIntent(fateCtx, in)
+			cancel()
 			if err == nil {
 				r.freezeResult = out
 			}
@@ -492,6 +497,16 @@ func (r *rlmCallReduction) commitFreezeIntent(ctx context.Context, in yaegikerne
 	}
 	if _, err := requireCapsuleMutationRole(ctx); err != nil {
 		return nil, err
+	}
+	if r.toolCtx.OperationStore == nil {
+		return nil, fmt.Errorf("reduce: freeze intent without self-development operation authority")
+	}
+	trajectoryID := trajectoryIDForRun(r.rec)
+	if trajectoryID == "" {
+		return nil, fmt.Errorf("reduce: freeze intent without trajectory binding")
+	}
+	if _, err := r.toolCtx.OperationStore.GetByTrajectory(ctx, r.toolCtx.ComputerID, trajectoryID); err != nil {
+		return nil, fmt.Errorf("reduce: resolve self-development operation: %w", err)
 	}
 	return freezeCapsuleEffectBundle(ctx, r.toolCtx, r.rec, r.toolCtx.CapsuleHandle,
 		in.BuildRecipeRef, in.TestReceipts, in.DependencyToolchainRefs)
