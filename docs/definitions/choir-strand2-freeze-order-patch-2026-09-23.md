@@ -120,7 +120,7 @@ boundaries:
     - prompt overlay assembly (internal/runtimeprompts)
 
 now:
-  status: working
+  status: landed
   slice: freeze-order patch
   source_ref: main@6f064940
   deploy_identity: staging https://choir.news build.commit=c8811ff8
@@ -179,7 +179,46 @@ now:
   blocker_or_risk: none — promotable immediately
   next_action: promote and execute; the fix is adjudicated and independent
 
-receipts: []
+receipts:
+  - id: r0-deployed-acceptance-2026-09-24
+    boundary: finish.acceptance
+    commit_or_artifact: >-
+      staging build 9c607a3f; document-channel cast on trajectory
+      62e06ee1-83db-5316-b620-ca1ebd8e19ae, assignment
+      assignment-0ccbbe2e-2003-588c-a313-3ebcfc733db2
+    proof_refs:
+      - 'run run:assignment-0ccbbe2e-…: state=completed; a capsule_go_eval
+        probe (println "PROBE-ALIVE") EXECUTED after the refused Freeze —
+        executor stayed Active, the wedge class is closed'
+      - 'choir.Complete landed the fate saga: capsule_fate_history
+        freeze_requested → frozen → revoke_requested (events seq 10–12)'
+      - 'unit: TestCommitFreezeIntentRejectsDocumentTrajectoryBeforeExecutorEffect
+        + TestRLMPromptOmitsFreezeMandateForDocumentTrajectory pass'
+    observed_at: '2026-09-24T03:33:00Z'
+    note: >-
+      Acceptance met. A separate defect surfaced during teardown —
+      ForceDestroy failed on a non-empty cgroup, stranding the capsule at
+      revoke_requested. Documented in
+      docs/problems/capsule-teardown-cgroup-not-empty-2026-09-24.md and fixed
+      in 7a8b0cef + 249e923f + 64468db2 (Kill + WaitEmpty before Delete).
+  - id: r0-teardown-fix-verified-2026-09-24
+    boundary: finish.acceptance
+    commit_or_artifact: >-
+      staging build 64468db2; document-channel cast on trajectory
+      c60f819f-c856-5513-abff-90b234e3aa9d, assignment
+      assignment-742328ed-a842-5635-…
+    proof_refs:
+      - 'assignment reached disposition=completed, capsule_disposition=revoked
+        — the cgroup teardown race is closed; the capsule fully revokes on
+        normal completion'
+    observed_at: '2026-09-24T04:55:00Z'
+    note: >-
+      The model's run reports confabulate capsule death after a refused
+      Freeze ("assignment capsule is not active", "executor receipt
+      unavailable") — it reads the mounted source and fabricates real error
+      strings. Canonical evidence (probe executes, fate saga lands, store
+      shows no selfdev operation for the trajectory) is the ground truth.
+      This is a prompt/model reliability issue, not a freeze-order defect.
 ---
 
 ## Scope
