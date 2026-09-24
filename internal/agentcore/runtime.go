@@ -60,6 +60,13 @@ type Runtime struct {
 	provider    provideriface.Provider
 	promptStore *promptstore.Store
 
+	// kernelMode, when true, runs the derivable-continuation projector: a
+	// continuous fold over the coagent mailbox that mints actor wakes via
+	// wakeUpdatedCoagent, replacing the boot-time sweepPendingUpdateActors
+	// scan. Set by the adapter when the dispatcher is the delivery
+	// authority (ontology kernel).
+	kernelMode bool
+	projectorStop chan struct{}
 	// traceStore is the optional Dolt-backed observability store. When set,
 	// every event emitted via emitEvent/persistEvent/persistSubmittedRun is
 	// projected into the canonical trace schema (additive; existing event
@@ -635,7 +642,13 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// Reconcile canonical lifecycle work/control joins before the generic actor
 	// update sweep can acknowledge a durable occurrence around an unbound run.
 	bootPhase("sweep_open_work_item_actors", func() { rt.sweepOpenWorkItemActors(ctx) })
-	bootPhase("sweep_pending_update_actors", func() { rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets) })
+	if rt.kernelMode {
+		// Kernel mode: the projector is the continuous store→actor fold; the
+		// boot-time sweepPendingUpdateActors scan is subsumed by it.
+		rt.startProjector(ctx)
+	} else {
+		bootPhase("sweep_pending_update_actors", func() { rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets) })
+	}
 	// Best-effort: ensure the production Qdrant collection exists so the
 	// semantic dedup pass on ingestion has a target. Runs asynchronously so
 	// a slow or unreachable Qdrant cannot block runtime startup; the dedup
@@ -680,6 +693,7 @@ func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Contex
 // Stop gracefully shuts down the runtime, cancelling all in-flight runs.
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
+	rt.stopProjector()
 	rt.runningMu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()
@@ -2610,6 +2624,51 @@ func (rt *Runtime) sweepPendingUpdateActors(ctx context.Context, seen map[string
 	}
 }
 
+
+// SetKernelMode enables the derivable-continuation projector. Called by the
+// adapter when the dispatcher is the delivery authority.
+func (rt *Runtime) SetKernelMode() {
+	rt.kernelMode = true
+}
+
+// startProjector launches the continuous store→actor projection: a resumable
+// fold over the coagent mailbox backlog that mints actor wakes via
+// wakeUpdatedCoagent. It is the derivable replacement for the boot-time
+// sweepPendingUpdateActors scan — the same fold, run continuously so the
+// crash window between coagent-write and wake-mint is covered by
+// re-projection. The fold is idempotent (deterministic wake update_id), so
+// no separate projector cursor is needed; the recipient's mailbox cursor
+// already filters delivered rows.
+func (rt *Runtime) startProjector(ctx context.Context) {
+	if !rt.kernelMode || rt.projectorStop != nil {
+		return
+	}
+	rt.projectorStop = make(chan struct{})
+	rt.wg.Add(1)
+	go func() {
+		defer rt.wg.Done()
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-rt.projectorStop:
+				return
+			case <-ticker.C:
+				rt.sweepPendingUpdateActors(ctx, nil)
+			}
+		}
+	}()
+}
+
+// stopProjector halts the projection loop.
+func (rt *Runtime) stopProjector() {
+	if rt.projectorStop != nil {
+		close(rt.projectorStop)
+		rt.projectorStop = nil
+	}
+}
 func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return

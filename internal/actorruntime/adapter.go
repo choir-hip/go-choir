@@ -218,6 +218,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	}
 	if a.kernelMode {
 		a.actorRT = actor.NewKernelRuntime(actorLog, actorLog, handler, actorOpts, actor.DispatcherOptions{})
+		rt.SetKernelMode()
 	} else {
 		a.actorRT = actor.NewRuntime(actorLog, handler, actorOpts)
 	}
