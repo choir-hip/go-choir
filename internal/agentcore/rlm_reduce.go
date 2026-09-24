@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 	"log"
@@ -587,18 +588,50 @@ func (r *rlmCallReduction) commitMessageIntent(ctx context.Context, in yaegikern
 		ToAgentID: update.TargetAgentID, TrajectoryID: update.TrajectoryID,
 		Role: update.Role, Content: update.Content, Timestamp: update.CreatedAt,
 	}
-	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
-	if err != nil {
-		return 0, err
+	var stored types.CoagentSourcePacket
+	var created bool
+	if authority.lifecycle {
+		payloadDigest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(update.Packet, update.Content)
+		if digestErr != nil {
+			return 0, digestErr
+		}
+		queue := types.QueueLifecycleUpdateRequest{
+			OwnerID: update.OwnerID, ComputerID: update.ComputerID,
+			CommandID: "lifecycle-queue:" + update.UpdateID, TrajectoryID: update.TrajectoryID,
+			TargetAgentID: update.TargetAgentID, ProducerAgentID: update.AgentID,
+			ProducerUpdateID: update.ProducerUpdateID, UpdateID: update.UpdateID,
+			ChannelID: update.ChannelID, Role: update.Role, SourceRunID: update.SourceRunID,
+			Packet: update.Packet, Content: update.Content, PayloadDigest: payloadDigest,
+			WorkItemID: authority.workItemID,
+		}
+		queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
+		queued, queueErr := rt.store.QueueLifecycleUpdate(ctx, queue)
+		if queueErr != nil {
+			return 0, fmt.Errorf("queue durable lifecycle update: %w", queueErr)
+		}
+		if queued.Update == nil {
+			return 0, fmt.Errorf("queue durable lifecycle update: reducer returned no update projection")
+		}
+		stored, created = *queued.Update, !queued.Replay
+		if stored.Disposition == types.UpdatePending && created {
+			rt.emitChannelMessageEvent(ctx, *message, update.OwnerID)
+			rt.wakeUpdatedCoagent(ctx, stored)
+		}
+	} else {
+		var err error
+		stored, created, err = rt.store.DispatchWorkerUpdate(ctx, update, message)
+		if err != nil {
+			return 0, err
+		}
+		if stored.Disposition == "" && created {
+			rt.emitChannelMessageEvent(ctx, *message, update.OwnerID)
+			rt.wakeUpdatedCoagent(ctx, stored)
+		}
 	}
 	if stored.Disposition == "" && !created {
 		if err := validateExistingWorkerUpdate(stored, update); err != nil {
 			return 0, err
 		}
-	}
-	if stored.Disposition == "" && created {
-		rt.emitChannelMessageEvent(ctx, *message, update.OwnerID)
-		rt.wakeUpdatedCoagent(ctx, stored)
 	}
 	return uint64(stored.MessageSeq), nil
 }
