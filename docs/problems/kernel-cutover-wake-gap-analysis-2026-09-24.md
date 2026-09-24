@@ -89,3 +89,44 @@ This is the evidence that the kernel is build-then-migrate, not
 delete-only — and that the migration's hard part is not the substrate
 (landed) but the completeness of the wake edge set. R3/R4 and the
 self-development gate queue behind closing these gaps.
+
+## Update 2026-09-24 (consensus panel): a second gap class — state repair, not wake edges
+
+A 6-agent convergent panel (codex, claude-opus, gpt6-sol, cursor-grok, cursor,
+gemini; `.agentic-consensus/agentic-consensus-20260924-171648/`) reviewed the
+three cutover fixes (idempotent outbox re-mint, post-drain trajectory return,
+ineligible lifecycle passivation). All three fixes were confirmed correct for
+their immediate failures, but the panel named a **second, systematic gap class**
+distinct from the G1–G11 wake-edge set:
+
+> **The outbox re-fires a committed continuation obligation. It cannot perform
+> a boot-time state correction that has no canonical event to fold — and a
+> process restart is not a canonical event.** (claude)
+
+The deleted sweeps did two jobs: (1) re-fire an obligation, (2) mutate local
+state with no corresponding canonical event. The outbox replaces only (1).
+Corrections still at risk:
+
+| Correction | Old sweep | Kernel status |
+|---|---|---|
+| Eligible interrupted lifecycle run that crashes *after* its trigger commits | `rewarmInterruptedLifecycleActivations` → `rt.activate` | **zombie**: stays `running`, holds `ActiveRunID`, no unprocessed tape row, `MigrateActorWakeOutbox` won't re-arm a projected wake |
+| `ensureSpawnedCoagentWorkItem` minted on passivation | `sweepPassivatedSpawnedCoagentWork` / generic `passivateBatch` | **absent** from `passivateInterruptedLifecycleActivation` — passivated coagent work has nothing for the fold to project |
+| Open work items at `LifecycleVersion > 1` | `sweepOpenWorkItemActors` | `MigrateActorWakeOutbox` filters `LifecycleVersion == 1` — multi-version open work stranded |
+| Transient-failure retry runs (admission/injection) | `reactivateRetryableLifecycleInjectionRuns` | producer deleted; recovery-occurrence handler branches now dead code |
+| Interrupted persistent-management resume | `rewarmInterruptedPersistentManagementActors` | producer deleted; `MigrateActorWakeOutbox` does not index `RunRecord` |
+| Terminal-outcome binding repair | `reconcileTerminalRunOutcomes` | **still a boot sweep** — not folded |
+| `coagent_result` re-arm of a consumed wake | n/a | deterministic `update_id` → tape `ON CONFLICT DO NOTHING` drops the re-drive |
+
+**Identity disconnect (must not be "fixed" naively):** the outbox `UpdateID` is
+*obligation* identity (deterministic from the wake key); the tape `update_id`
+is *occurrence* identity (random per drain). Wiring the outbox `UpdateID` into
+the tape append without a re-arm generation discriminator would make a consumed
+row silently drop every re-drive. The correct shape is `key + generation`
+(e.g. source `LifecycleVersion`) for the tape id.
+
+**Gate consequence:** the design's "delete the sweep, rely on the outbox"
+coverage claim is falsified at the state-repair seam. Before the cluster recount
+can reach zero, each remaining boot mutation must be either (a) kept as an
+explicit named exception, or (b) given a canonical event so the fold sees it.
+The eligible-run zombie and the spawned-work-item mint are the two highest-risk
+instances.

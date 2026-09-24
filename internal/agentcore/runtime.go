@@ -1786,7 +1786,17 @@ func (rt *Runtime) CancelTrajectoryCommand(ctx context.Context, trajectoryID, ow
 		return result, nil, fmt.Errorf("finish trajectory assignment cancellation: %w", err)
 	}
 	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, result.Trajectory.ComputerID, trajectoryID)
-	return result, cancelled, err
+	if err != nil {
+		return result, cancelled, err
+	}
+	// The drain terminalizes live activations through TerminalizeRun, which
+	// appends run_terminalized events and advances the trajectory reducer. Return
+	// the post-drain trajectory so callers compare against the settled state, not
+	// the pre-drain snapshot.
+	if refreshed, refreshErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, result.Trajectory.ComputerID, trajectoryID); refreshErr == nil {
+		result.Trajectory = refreshed
+	}
+	return result, cancelled, nil
 }
 
 // CancelTrajectory cancels an owner-scoped trajectory and then terminates all
@@ -1806,7 +1816,16 @@ func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID s
 		return trajectory, nil, fmt.Errorf("finish trajectory assignment cancellation: %w", err)
 	}
 	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, trajectory.ComputerID, trajectoryID)
-	return trajectory, cancelled, err
+	if err != nil {
+		return trajectory, cancelled, err
+	}
+	// The drain terminalizes live activations through TerminalizeRun, which
+	// advances the trajectory reducer. Return the post-drain record so callers
+	// observe the settled state, not the pre-drain snapshot.
+	if refreshed, refreshErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, trajectory.ComputerID, trajectoryID); refreshErr == nil {
+		trajectory = refreshed
+	}
+	return trajectory, cancelled, nil
 }
 
 func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, ownerID, computerID, trajectoryID string) ([]string, error) {
@@ -2161,6 +2180,12 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 	}
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	productionComputer := rt.cfg.ComputerID != "" && strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
+	// Lifecycle-bound runs are excluded from the generic ListRunsByState scan
+	// (lifecycleRunProjection), so interrupted lifecycle activations need their
+	// own passivation pass. Runs whose bindings are no longer eligible (Texture
+	// deferral, stale/terminal-pending work) are passivated through the canonical
+	// projection; eligible runs are left for the actor-wake outbox to re-fire.
+	rt.passivateIneligibleLifecycleActivations(ctx, computerID)
 	passivateBatch := func(runs []types.RunRecord, state types.RunState) bool {
 		progressed := false
 		for i := range runs {
@@ -2227,6 +2252,42 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 			if !passivateBatch(runs, state) {
 				break
 			}
+		}
+	}
+}
+
+// passivateIneligibleLifecycleActivations passivates interrupted lifecycle-bound
+// runs whose bindings are no longer eligible for re-dispatch. The generic
+// passivation scan skips lifecycle projections, so without this pass a stale
+// running lifecycle run (e.g. a Texture document owner awaiting its own
+// reconstruction, or a run whose work went terminal-pending) would hold
+// ActiveRunID forever. Eligible runs are left running for the actor-wake
+// outbox to re-fire.
+func (rt *Runtime) passivateIneligibleLifecycleActivations(ctx context.Context, computerID string) {
+	if rt == nil || rt.store == nil || strings.TrimSpace(computerID) == "" {
+		return
+	}
+	for _, state := range []types.RunState{types.RunPending, types.RunRunning} {
+		runs, err := rt.store.ListLifecycleRunsByState(ctx, "", computerID, state)
+		if err != nil {
+			log.Printf("runtime: boot lifecycle passivation: query %s runs: %v", state, err)
+			continue
+		}
+		for i := range runs {
+			rec := &runs[i]
+			eligible, eligibilityErr := rt.lifecycleActivationBindingsEligible(ctx, rec)
+			if eligibilityErr != nil {
+				log.Printf("runtime: boot lifecycle passivation: validate run %s bindings: %v", rec.RunID, eligibilityErr)
+				continue
+			}
+			if eligible {
+				continue
+			}
+			if err := rt.passivateInterruptedLifecycleActivation(ctx, rec); err != nil {
+				log.Printf("runtime: boot lifecycle passivation: passivate run %s: %v", rec.RunID, err)
+				continue
+			}
+			log.Printf("runtime: passivated ineligible lifecycle run %s after restart", rec.RunID)
 		}
 	}
 }

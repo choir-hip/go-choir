@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -689,7 +691,18 @@ func actorWakeOutbox(source objectgraph.Object, sourceID, targetAgentID, traject
 	if wake.OwnerID == "" || wake.ComputerID == "" || wake.TargetAgentID == "" || wake.Kind == "" || wake.Content == "" {
 		return ActorWakeOutbox{}, objectgraph.Object{}, ErrLifecycleInvalidTransition
 	}
+	// The wake key is the deterministic obligation identity. ActorWakeUpdateID
+	// falls back to a random UUID for non-coagent_result kinds, which would make
+	// the outbox body unstable across consecutive transitions on the same source
+	// and defeat the idempotent re-mint below — so pin it to the key. NOTE: this
+	// UpdateID is the outbox obligation identity only; sweepActorWakeOutbox does
+	// NOT pass it to the delivery tape (the adapter mints a fresh occurrence id
+	// per drain). It must never be wired into the tape append without a re-arm
+	// generation, or a consumed row would silently drop the re-drive.
 	wake.UpdateID = types.ActorWakeUpdateID(wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
+	if wake.Kind != "coagent_result" {
+		wake.UpdateID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:actor-wake-outbox:v1:"+key)).String()
+	}
 	metadata := map[string]any{"source_update_id": wake.SourceUpdateID, "update_id": wake.UpdateID, "target_agent_id": wake.TargetAgentID,
 		"trajectory_id": wake.TrajectoryID, "projected": false}
 	outbox, err := lifecycleObject(ogKindActorWakeOutbox, wake.OwnerID, wake.ComputerID, key, wake, metadata, source.CreatedAt, source.UpdatedAt)
@@ -2019,8 +2032,43 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 			continue
 		}
 		if _, exists := seenObjects[outbox.CanonicalID]; !exists {
-			objects = append(objects, outbox)
-			seenObjects[outbox.CanonicalID] = struct{}{}
+			// The wake key is deterministic, so a prior transition on the same
+			// source may already have minted it. Re-minting is idempotent: an
+			// existing unprojected wake with identical body is kept (guard on
+			// its hash); an already-projected wake is re-armed for this
+			// transition (the obligation it signals is still open); only a body
+			// drift on a pending wake is a real conflict.
+			existing, getErr := s.lifecycleGraph().GetObject(ctx, outbox.CanonicalID)
+			switch {
+			case errors.Is(getErr, objectgraph.ErrNotFound):
+				objects = append(objects, outbox)
+				seenObjects[outbox.CanonicalID] = struct{}{}
+				conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID})
+				seenConditions[outbox.CanonicalID] = struct{}{}
+			case getErr != nil:
+				return types.LifecycleResult{}, getErr
+			default:
+				var existingMeta struct {
+					Projected bool `json:"projected"`
+				}
+				if json.Unmarshal(existing.Metadata, &existingMeta) != nil {
+					return types.LifecycleResult{}, fmt.Errorf("lifecycle: decode actor wake outbox %s metadata", outbox.CanonicalID)
+				}
+				conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID, Exists: true, ExpectedContentHash: existing.ContentHash})
+				seenConditions[outbox.CanonicalID] = struct{}{}
+				if existingMeta.Projected {
+					// Re-arm: the prior wake was consumed but the obligation is
+					// still open, so this transition re-mints it unprojected.
+					rearmed := outbox
+					rearmed.CreatedAt = existing.CreatedAt
+					objects = append(objects, rearmed)
+					seenObjects[outbox.CanonicalID] = struct{}{}
+				} else if !bytes.Equal(existing.Body, outbox.Body) {
+					// Body (not metadata timestamps) carries the obligation; a
+					// pending wake whose body changed is a real conflict.
+					return types.LifecycleResult{}, fmt.Errorf("lifecycle: actor wake outbox %s content drift", outbox.CanonicalID)
+				}
+			}
 		}
 		if _, exists := seenConditions[outbox.CanonicalID]; !exists {
 			conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID})
