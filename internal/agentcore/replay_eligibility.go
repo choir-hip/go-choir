@@ -16,7 +16,7 @@ import (
 // observable but cannot make a reversibility claim.
 var ErrReplayIneligible = errors.New("replay is ineligible")
 
-const replayEligibilityManifestVersion = 2
+const replayEligibilityManifestVersion = 3
 
 const emptyDoltTableHash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
@@ -59,6 +59,8 @@ var replayAirworthinessEntries = map[string]ReplayObservationClass{
 	"worker_updates":                  ReplayEmptyUntilSupported,
 	"coagent_mailboxes":               ReplayEmptyUntilSupported,
 	"co_super_slots":                  ReplayEmptyUntilSupported,
+	"wire_publish_debounce_entries":  ReplayEmptyUntilSupported,
+	"wire_publish_debounce_state":    ReplayEmptyUntilSupported,
 	"media_progress":                  ReplayEmptyUntilSupported,
 	"media_recents":                   ReplayEmptyUntilSupported,
 	"user_preferences":                ReplayEmptyUntilSupported,

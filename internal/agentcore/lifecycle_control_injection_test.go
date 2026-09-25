@@ -314,41 +314,14 @@ func TestPersistentManagementLifecycleControlsStayTrajectoryIsolatedThenReconcil
 	if err != nil || len(injected) != 1 || injected[0].TrajectoryID != firstTrajectory || injected[0].DeliveredToRunID != firstRun.RunID {
 		t.Fatalf("first run mixed trajectory payload=%+v err=%v", injected, err)
 	}
-	// Boot passivates the interrupted non-lifecycle run, then deterministically
-	// reactivates that exact delivered-to run before considering trajectory B.
-	rt.Start(context.Background())
-	bootRun, err := rt.latestActiveRunByAgent(context.Background(), ownerID, managementAgent.AgentID)
-	if err != nil || bootRun.RunID != firstRun.RunID || lifecycleControlTrajectoryForRun(&bootRun) != firstTrajectory {
-		t.Fatalf("boot exact-run reconciliation=%+v err=%v", bootRun, err)
-	}
-	foundRecovery := false
-	for _, dispatch := range dispatches {
-		if strings.HasPrefix(dispatch, "coagent_result:"+PersistentManagementRecoveryPrefix) {
-			foundRecovery = true
-			break
-		}
-	}
-	if !foundRecovery {
-		t.Fatalf("boot did not enqueue exact persistent Management recovery occurrence: %v", dispatches)
-	}
-	bootInject := rt.coagentUpdateTurnInjectorWithInitialPhase(&bootRun, coagentPacketDeliveryCold)
-	firstBootPayload, err := bootInject(false)
-	if err != nil || len(firstBootPayload) != 1 || !strings.Contains(string(firstBootPayload[0]), "durable typed control content") {
-		t.Fatalf("boot payload injection=%s err=%v", firstBootPayload, err)
-	}
-	appendAuthenticatedInjectionForTest(t, s, bootRun, firstBootPayload[0])
-	duplicateBootPayload, err := bootInject(false)
-	if err != nil || len(duplicateBootPayload) != 0 {
-		t.Fatalf("boot duplicate payload=%s err=%v", duplicateBootPayload, err)
-	}
-	bootRun.State = types.RunPassivated
-	bootRun.Metadata = cloneMetadata(bootRun.Metadata)
-	bootRun.Metadata["passivated_reason"] = "idle_actor_passivate"
-	bootRun.UpdatedAt = time.Now().UTC()
-	if err := s.UpdateRun(context.Background(), bootRun); err != nil {
+	firstRun.State = types.RunPassivated
+	firstRun.Metadata = cloneMetadata(firstRun.Metadata)
+	firstRun.Metadata["passivated_reason"] = "idle_actor_passivate"
+	firstRun.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(context.Background(), *firstRun); err != nil {
 		t.Fatal(err)
 	}
-	rt.maybeContinuePersistentManagementInbox(context.Background(), &bootRun)
+	rt.maybeContinuePersistentManagementInbox(context.Background(), firstRun)
 	// Terminal/passivation events wake Texture, never select backlog:
 	if _, err := rt.latestActiveRunByAgent(context.Background(), ownerID, managementAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("passivation inbox continuation minted unexpected Management from backlog: err=%v", err)
@@ -530,7 +503,7 @@ func TestLifecycleInjectionRestartDerivesSeenFromDurableMemoryAndRejectsSpoof(t 
 	}
 }
 
-func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResearchRun(t *testing.T) {
+func TestRuntimeInjectionAppendFailurePassivatesExactResearchRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatal(err)
@@ -539,10 +512,6 @@ func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResear
 	fixture.run.Metadata = cloneMetadata(fixture.run.Metadata)
 	fixture.run.Metadata["request_source"] = "lifecycle_texture_control"
 	if err := s.UpdateRun(context.Background(), fixture.run); err != nil {
-		t.Fatal(err)
-	}
-	bindingsBefore, err := json.Marshal(fixture.run.Metadata["lifecycle_control_bindings"])
-	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -611,62 +580,6 @@ func TestRuntimeInjectionAppendFailurePassivatesAndRestartReactivatesExactResear
 
 	if _, err := s.DB().ExecContext(context.Background(), `DROP TRIGGER fail_runtime_injection_append`); err != nil {
 		t.Fatal(err)
-	}
-	restarted := testPeerRuntime(t, rt, s)
-	var dispatches []string
-	restarted.SetDispatchActor(func(_ context.Context, _, _, agentID, kind, runID, trajectoryID, _ string) error {
-		dispatches = append(dispatches, agentID+"|"+kind+"|"+runID+"|"+trajectoryID)
-		return nil
-	})
-	restarted.Start(context.Background())
-
-	recovered, err := s.GetLifecycleRun(context.Background(), failed.OwnerID, failed.ComputerID, failed.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if recovered.RunID != failed.RunID || recovered.AgentID != failed.AgentID || recovered.AgentProfile != agentprofile.Research ||
-		recovered.AgentRole != agentprofile.Research || recovered.TrajectoryID != failed.TrajectoryID || recovered.State != types.RunPending ||
-		!metadataBoolValue(recovered.Metadata, "actor_reactivate_existing_memory") {
-		t.Fatalf("restart did not reactivate exact Research run: %+v", recovered)
-	}
-	bindingsAfter, err := json.Marshal(recovered.Metadata["lifecycle_control_bindings"])
-	if err != nil || string(bindingsAfter) != string(bindingsBefore) {
-		t.Fatalf("restart changed exact delivery bindings: before=%s after=%s err=%v", bindingsBefore, bindingsAfter, err)
-	}
-	pendingAfterRestart, err := restarted.listPendingLifecyclePacketsDeliveredToRun(context.Background(), &recovered)
-	if err != nil || len(pendingAfterRestart) != 1 || pendingAfterRestart[0].UpdateID != fixture.control.UpdateID || pendingAfterRestart[0].DeliveredToRunID != recovered.RunID {
-		t.Fatalf("restart changed exact pending delivery=%+v err=%v", pendingAfterRestart, err)
-	}
-	workAfterRestart, err := s.GetLifecycleWorkItem(context.Background(), recovered.OwnerID, recovered.ComputerID, fixture.workID)
-	if err != nil || workAfterRestart.Status != types.WorkItemOpen || workAfterRestart.AssignedAgentID != recovered.AgentID || workAfterRestart.TrajectoryID != recovered.TrajectoryID {
-		t.Fatalf("restart changed open work=%+v err=%v", workAfterRestart, err)
-	}
-	trajectoryAfterRestart, err := s.GetLifecycleTrajectory(context.Background(), recovered.OwnerID, recovered.ComputerID, recovered.TrajectoryID)
-	if err != nil || trajectoryAfterRestart.Status != types.TrajectoryLive {
-		t.Fatalf("restart changed live trajectory=%+v err=%v", trajectoryAfterRestart, err)
-	}
-	if len(dispatches) != 1 || !strings.Contains(dispatches[0], failed.AgentID+"|coagent_result|"+LifecycleResearchAdmissionRecoveryPrefix) {
-		t.Fatalf("restart dispatches=%v, want one structured exact-run recovery occurrence", dispatches)
-	}
-
-	var targetRuns []types.RunRecord
-	for _, state := range []types.RunState{types.RunPending, types.RunRunning, types.RunBlocked, types.RunPassivated, types.RunCompleted, types.RunFailed, types.RunCancelled} {
-		runs, listErr := s.ListLifecycleRunsByState(context.Background(), failed.OwnerID, failed.ComputerID, state)
-		if listErr != nil {
-			t.Fatal(listErr)
-		}
-		for _, run := range runs {
-			if run.AgentID == failed.AgentID {
-				targetRuns = append(targetRuns, run)
-			}
-		}
-	}
-	if len(targetRuns) != 1 || targetRuns[0].RunID != failed.RunID {
-		t.Fatalf("restart created or rebound another Research run: %+v", targetRuns)
-	}
-	retried, err := restarted.coagentUpdateTurnInjectorWithInitialPhase(&recovered, coagentPacketDeliveryCold)(false)
-	if err != nil || len(retried) != 1 || !strings.Contains(string(retried[0]), fixture.control.UpdateID) {
-		t.Fatalf("same-run retry payload=%s err=%v", retried, err)
 	}
 }
 func TestPersistentManagementReportToTextureCanonicalReplayWakeAndInjection(t *testing.T) {
@@ -1880,33 +1793,6 @@ func TestGenericReconcileFailsClosedUntilExactParkedMemoryRecovery(t *testing.T)
 	}
 }
 
-func TestStartReenqueuesCanonicalOccurrencesAfterBindBeforeSendCrash(t *testing.T) {
-	rt, s := testRuntime(t)
-	const suffix = "bind-before-send-crash"
-	fixture := seedAtomicResearchControl(t, s, suffix)
-	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
-	initial, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
-	if err != nil || initial == nil {
-		t.Fatalf("initial=%+v err=%v", initial, err)
-	}
-	later := commitLaterControlForResidentTest(t, s, fixture, suffix, "control-bind-before-send-b")
-	if _, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID); err != nil {
-		t.Fatal(err)
-	}
-	var dispatched []string
-	rt.SetDispatchActor(func(_ context.Context, _, _, _ string, kind, content, _, _ string) error {
-		dispatched = append(dispatched, kind+":"+content)
-		return nil
-	})
-	rt.Start(context.Background())
-	want := "coagent_result:" + LifecycleControlActorOccurrenceContent(later)
-	for _, got := range dispatched {
-		if got == want {
-			return
-		}
-	}
-	t.Fatalf("boot did not recover bound occurrence %s from %+v", want, dispatched)
-}
 
 func TestPersistentManagementRewakeReceivesPendingEngineeringCancellationReports(t *testing.T) {
 	rt, s := testRuntime(t)

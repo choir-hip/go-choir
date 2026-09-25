@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -101,11 +100,6 @@ type Runtime struct {
 	toolRegistry *toolregistry.ToolRegistry
 	toolProfiles map[string]*toolregistry.ToolRegistry
 
-	textureWakeAfter func(time.Duration, func()) textureWakeTimer
-
-	wirePublishDebounceMu sync.Mutex
-	wirePublishDebouncer  *wirePublishDebouncer
-	wirePublishTimer      textureWakeTimer
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex
 	modelPolicy           *modelpolicy.Manager
@@ -169,10 +163,6 @@ type Runtime struct {
 	restoreBaseSource projectionbase.BaseSource
 }
 
-type textureWakeTimer interface {
-	Stop() bool
-}
-
 // New creates a new Runtime with the given config, store, event bus, and
 // provider. The runtime is idle until Start is called.
 // If a tool registry is provided, the runtime will use the tool-calling
@@ -180,14 +170,13 @@ type textureWakeTimer interface {
 func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, opts ...RuntimeOption) *Runtime {
 	cfg = provideriface.NormalizeConfig(cfg)
 	rt := &Runtime{
-		cfg:              cfg,
-		store:            s,
-		bus:              bus,
-		provider:         provider,
-		health:           types.HealthReady,
-		running:          make(map[string]context.CancelFunc),
-		promptStore:      promptstore.New(cfg.PromptRoot),
-		textureWakeAfter: func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
+		cfg:         cfg,
+		store:       s,
+		bus:         bus,
+		provider:    provider,
+		health:      types.HealthReady,
+		running:     make(map[string]context.CancelFunc),
+		promptStore: promptstore.New(cfg.PromptRoot),
 		modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{
 			PolicyPath:     cfg.ModelPolicyPath,
 			ProviderConfig: cfg,
@@ -279,20 +268,11 @@ func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunReco
 		rt.scheduleContinuation(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID,
 			activationBudgetDeadlineUpdateKind, rec.RunID, metadataStringValue(rec.Metadata, runMetadataTrajectoryID), "", deadline)
 	}
-	stopProgressDeadline := context.AfterFunc(runCtx, func() {
-		if !errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-			return
-		}
-		if err := rt.terminalizeRun(
-			context.Background(),
-			rec.RunID,
-			rec.OwnerID,
-			"activation budget exceeded: progress deadline reached",
-		); err != nil && !strings.Contains(err.Error(), "cannot cancel") {
-			log.Printf("runtime: progress deadline for run %s: %v", rec.RunID, err)
-		}
-	})
-	defer stopProgressDeadline()
+	// No process-local deadline continuation. The durable
+	// activation_budget_deadline scheduled above survives a restart and is the
+	// sole authority that terminalizes the run (HandleActivationBudgetDeadline
+	// is idempotent). A process-local AfterFunc would be progress invisible to
+	// the tape — deleted under the "boot causes no work" ontology ruling.
 	defer cancel()
 
 	rt.executeActivation(runCtx, &runRec)
@@ -617,14 +597,6 @@ func WithComputerEventAppender(appender *computerevent.ComputerEventAppender) Ru
 	}
 }
 
-func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWakeTimer) RuntimeOption {
-	return func(rt *Runtime) {
-		if after != nil {
-			rt.textureWakeAfter = after
-		}
-	}
-}
-
 // Start begins runtime boot recovery. On boot, legacy in-process activations
 // are passivated. Lifecycle activations are re-dispatched from their canonical
 // pending/running run projections, then durable backlog and assigned work are
@@ -645,22 +617,14 @@ func (rt *Runtime) Start(ctx context.Context) {
 	bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
-	var terminalOutcomeTargets map[string]bool
-	bootPhase("reconcile_terminal_run_outcomes", func() { terminalOutcomeTargets = rt.reconcileTerminalRunOutcomes(ctx) })
-	// Boot-time state-repair passes. These are NOT obligation re-fire (the
-	// actor-wake outbox owns that) — they are state corrections with no
-	// canonical event to fold: passivating interrupted runs, minting spawned
-	// work items, re-entering persistent Management, re-driving open work.
-	// A process restart is not a canonical event, so the outbox cannot express
-	// them. Restored after the consensus panel + restart tests falsified the
-	// "outbox subsumes the sweeps" claim. See the gap-analysis doc.
-	bootPhase("rewarm_lifecycle_activations", func() { rt.rewarmInterruptedLifecycleActivations(ctx) })
-	bootPhase("rewarm_persistent_management", func() { rt.rewarmInterruptedPersistentManagementActors(ctx) })
-	bootPhase("sweep_passivated_spawned_work", func() { rt.sweepPassivatedSpawnedCoagentWork(ctx) })
-	// Reconcile canonical lifecycle work/control joins before the generic actor
-	// update sweep can acknowledge a durable occurrence around an unbound run.
-	bootPhase("sweep_open_work_item_actors", func() { rt.sweepOpenWorkItemActors(ctx) })
-	bootPhase("sweep_pending_update_actors", func() { rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets) })
+	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
+	// Boot causes no work. Restart-resumption sweeps that re-fired committed
+	// work (lifecycle rewarm, persistent-Management resume, passivated spawned
+	// work, open work items, mailbox backlog) are deleted under the owner
+	// ruling: committed obligations reach the actor through the canonical
+	// event tape + actor-wake outbox, not a boot wake. The four surviving
+	// phases are state repair only — they correct stranded RunRecord/claim
+	// state and mint no wakes.
 	rt.migrateActorWakeOutboxAsync(ctx)
 	rt.startProjector(ctx)
 	// Best-effort: ensure the production Qdrant collection exists so the
@@ -2262,92 +2226,6 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 	}
 }
 
-func (rt *Runtime) lifecycleActivationBindingsEligible(ctx context.Context, rec *types.RunRecord) (bool, error) {
-	if rt == nil || rt.store == nil || rec == nil {
-		return false, nil
-	}
-	bindingsProfile := agentProfileForRun(rec)
-	if bindingsProfile == agentprofile.Texture {
-		// Texture lifecycle activations are reconstructed by textureowner from
-		// canonical document state after generic core recovery.
-		return false, nil
-	}
-	workItemIDs := metadataStringSlice(rec.Metadata["work_item_ids"])
-	if singular := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")); singular != "" && !slices.Contains(workItemIDs, singular) {
-		workItemIDs = append(workItemIDs, singular)
-	}
-	if len(workItemIDs) == 0 {
-		return true, nil
-	}
-	ownerID := strings.TrimSpace(rec.OwnerID)
-	computerID := strings.TrimSpace(rec.ComputerID)
-	trajectoryID := strings.TrimSpace(rec.TrajectoryID)
-	agentID := strings.TrimSpace(rec.AgentID)
-	if ownerID == "" || computerID == "" || trajectoryID == "" || agentID == "" {
-		return false, nil
-	}
-	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
-		return false, err
-	}
-	currentWork := make(map[string]types.WorkItemRecord, len(snapshot.WorkItems))
-	for _, item := range snapshot.WorkItems {
-		currentWork[strings.TrimSpace(item.WorkItemID)] = item
-	}
-	pendingTerminal := make(map[string]bool)
-	for _, update := range snapshot.Updates {
-		if strings.TrimSpace(update.AgentID) == agentID &&
-			update.Disposition == types.UpdatePending &&
-			update.WorkDisposition != "" && update.WorkDisposition != types.WorkItemOpen {
-			pendingTerminal[strings.TrimSpace(update.WorkItemID)] = true
-		}
-	}
-	seen := make(map[string]struct{}, len(workItemIDs))
-	for _, workItemID := range workItemIDs {
-		workItemID = strings.TrimSpace(workItemID)
-		if workItemID == "" {
-			return false, nil
-		}
-		if _, duplicate := seen[workItemID]; duplicate {
-			continue
-		}
-		seen[workItemID] = struct{}{}
-		work, found := currentWork[workItemID]
-		if !found || work.Status != types.WorkItemOpen ||
-			strings.TrimSpace(work.OwnerID) != ownerID ||
-			firstNonEmpty(strings.TrimSpace(work.ComputerID), computerID) != computerID ||
-			strings.TrimSpace(work.TrajectoryID) != trajectoryID ||
-			strings.TrimSpace(work.AssignedAgentID) != agentID ||
-			pendingTerminal[workItemID] {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func (rt *Runtime) passivateInterruptedLifecycleActivation(ctx context.Context, rec *types.RunRecord) error {
-	passivated := *rec
-	passivated.State = types.RunPassivated
-	passivated.UpdatedAt = time.Now().UTC()
-	passivated.FinishedAt = nil
-	req := types.ReplaceLifecycleActivationRequest{
-		OwnerID: passivated.OwnerID, ComputerID: passivated.ComputerID,
-		CommandID:    "lifecycle-passivate-interrupted:" + passivated.RunID,
-		TrajectoryID: passivated.TrajectoryID, AgentID: passivated.AgentID, Run: passivated,
-	}
-	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
-	if _, err := rt.store.ReplaceLifecycleActivation(ctx, req); err != nil {
-		return err
-	}
-	if runHasProfile(&passivated, agentprofile.Texture) {
-		if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), passivated.OwnerID, agentMutationComputerID(&passivated), passivated.RunID); err != nil {
-			return fmt.Errorf("passivate interrupted Texture mutation: %w", err)
-		}
-	}
-	*rec = passivated
-	return nil
-}
-
 // bootTerminalRepairRecentLimit caps the owner-indexed header window used on
 // production computers. The previous full-state JSON_EXTRACT walk loaded every
 // completed/failed/cancelled choir.run body and killed the 4 GiB guest before
@@ -2363,10 +2241,11 @@ const bootPersistentManagementRewarmLimit = 1024
 // reconcileTerminalRunOutcomes repairs missing terminal-outcome bindings.
 // Production computers (computer-* or CHOIR_OWNER_ID) use an owner-scoped
 // recent window. Tests without an owner keep the exhaustive keyset walk.
-func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]bool {
-	woken := map[string]bool{}
+// It delivers committed outcomes owed to a requester — state repair, not
+// work resumption — so it survives the "boot causes no work" ruling.
+func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) {
 	if rt == nil || rt.store == nil {
-		return woken
+		return
 	}
 	var pending []types.CoagentSourcePacket
 	queued := map[string]bool{}
@@ -2383,8 +2262,7 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]
 		log.Printf("runtime: boot terminal outcome owner-scoped owner=%s computer=%s limit=%d", ownerID, computerID, bootTerminalRepairRecentLimit)
 		runs, err := rt.store.ListRecentRunsByOwner(ctx, ownerID, computerID, bootTerminalRepairRecentLimit)
 		if err != nil {
-			log.Printf("runtime: boot terminal outcome owner-scoped list: %v", err)
-			return woken
+			return
 		}
 		log.Printf("runtime: boot terminal outcome owner-scoped candidates=%d", len(runs))
 		for _, rec := range runs {
@@ -2438,11 +2316,8 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]
 		}
 	}
 	for _, update := range pending {
-		key := strings.TrimSpace(update.OwnerID) + "\x00" + strings.TrimSpace(update.TargetAgentID)
 		rt.wakeUpdatedCoagent(ctx, update)
-		woken[key] = true
 	}
-	return woken
 }
 
 func (rt *Runtime) collectTerminalRunOutcome(ctx context.Context, rec types.RunRecord, queued map[string]bool, pending *[]types.CoagentSourcePacket) {

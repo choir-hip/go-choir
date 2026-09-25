@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	activationBudgetDeadlineUpdateKind          = "activation_budget_deadline"
-	assignedEngineeringFateDeadlineUpdateKind  = "assigned_engineering_fate_deadline"
-	freshMintManagementDeadlineUpdateKind      = "fresh_mint_management_resume_deadline"
-	reactivatedManagementDeadlineUpdateKind    = "reactivated_management_resume_deadline"
+	activationBudgetDeadlineUpdateKind        = "activation_budget_deadline"
+	assignedEngineeringFateDeadlineUpdateKind = "assigned_engineering_fate_deadline"
+	freshMintManagementDeadlineUpdateKind     = "fresh_mint_management_resume_deadline"
+	reactivatedManagementDeadlineUpdateKind   = "reactivated_management_resume_deadline"
+	wireReconcilerPublishDeadlineUpdateKind   = "wire_reconciler_publish_deadline"
 )
 
 type assignedEngineeringFateDeadline struct {

@@ -404,7 +404,7 @@ func TestLifecycleResearchOpenWorkNeedsExactControlAndDoesNotMintSuccessors(t *t
 	}
 }
 
-func TestLifecycleResearchAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *testing.T) {
+func TestLifecycleResearchAdmissionErrorExactWakeReactivatesOnce(t *testing.T) {
 	rt, s := testRuntime(t)
 	counting := newResearchAdmissionCountingProvider()
 	rt.provider = counting
@@ -414,37 +414,30 @@ func TestLifecycleResearchAdmissionErrorRecoversWithDistinctOccurrenceOnce(t *te
 	if err != nil || parked.State != types.RunPassivated || metadataStringValue(parked.Metadata, "passivated_reason") != lifecycleResearchAdmissionRetryReason {
 		t.Fatalf("admission failure was not durably retryable: %+v err=%v", parked, err)
 	}
-	var recoveryContents []string
-	rt.SetDispatchActor(func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
-		if kind != "coagent_result" {
-			t.Fatalf("admission retry reused %q instead of a distinct recovery occurrence", kind)
+	var occurrences []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, _, kind, content, _, _ string) error {
+		if kind == "coagent_result" {
+			occurrences = append(occurrences, content)
 		}
-		recoveryContents = append(recoveryContents, content)
-		return nil // boot delivery is paused: append first, execute after projection
+		return nil
 	})
-	rt.Start(context.Background())
-	if len(recoveryContents) == 1 {
-		rec, terminal, resolveErr := rt.ResolveLifecycleResearchAdmissionRecovery(context.Background(), parked.OwnerID, parked.ComputerID, parked.AgentID, recoveryContents[0], parked.TrajectoryID, fixture.control.AgentID)
-		if resolveErr != nil || terminal || rec == nil {
-			t.Fatalf("resolve appended recovery rec=%+v terminal=%v err=%v", rec, terminal, resolveErr)
-		}
-		if err := rt.ExecuteActivationSyncChecked(context.Background(), rec); err != nil {
-			t.Fatal(err)
-		}
+	recovered, err := rt.ReconcileParkedLifecycleCoagentWake(context.Background(), parked.OwnerID, parked.AgentID, parked.RunID)
+	if err != nil || recovered == nil || recovered.RunID != parked.RunID || recovered.State != types.RunPending {
+		t.Fatalf("exact lifecycle wake=%+v err=%v", recovered, err)
 	}
-	if len(recoveryContents) != 1 || !strings.HasPrefix(recoveryContents[0], "lifecycle-researcher-admission-recovery:v1:") {
-		t.Fatalf("admission recovery occurrences=%v", recoveryContents)
+	wantOccurrence := LifecycleControlActorOccurrenceContent(fixture.control)
+	if len(occurrences) != 1 || occurrences[0] != wantOccurrence {
+		t.Fatalf("exact lifecycle wake occurrences=%v, want %s", occurrences, wantOccurrence)
+	}
+	if err := rt.ExecuteActivationSyncChecked(context.Background(), recovered); err != nil {
+		t.Fatal(err)
 	}
 	if counting.Count() != 1 {
-		t.Fatalf("admission restart provider calls=%d want 1", counting.Count())
+		t.Fatalf("admission exact wake provider calls=%d want 1", counting.Count())
 	}
 	completed, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, fixture.run.RunID)
 	if err != nil || completed.State != types.RunCompleted {
-		t.Fatalf("admission recovery run=%+v err=%v", completed, err)
-	}
-	rt.Start(context.Background())
-	if len(recoveryContents) != 1 || counting.Count() != 1 {
-		t.Fatalf("repeated restart duplicated recovery: occurrences=%v calls=%d", recoveryContents, counting.Count())
+		t.Fatalf("admission exact wake run=%+v err=%v", completed, err)
 	}
 }
 
@@ -1068,109 +1061,6 @@ func TestLifecycleRuntimeSubmissionPreservesCanonicalActivationAdmission(t *test
 	}
 }
 
-func TestGenericRestartRewarmDefersTexturePendingLifecycleBindingsToDocumentOwner(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		multiple bool
-		terminal bool
-	}{
-		{name: "pending_evidence_update"},
-		{name: "single_terminal", terminal: true},
-		{name: "multi_terminal_retains_other_open_item", multiple: true, terminal: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			rt, s := testRuntime(t)
-			ctx := context.Background()
-			ownerID := "user-lifecycle-rewarm-terminal-" + tc.name
-			docID := "doc-lifecycle-rewarm-terminal-" + tc.name
-			trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
-			agentID := currentTextureAgentID(docID)
-			firstWorkItemID := "test-work:" + ownerID + ":" + docID
-			workItemIDs := []string{firstWorkItemID}
-			secondWorkItemID := ""
-			if tc.multiple {
-				secondWorkItemID = "work-lifecycle-rewarm-second-" + tc.name
-				open := types.OpenLifecycleWorkRequest{
-					OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
-					CommandID: "command-open-lifecycle-rewarm-second-" + tc.name, TrajectoryID: trajectoryID,
-					WorkItem: types.WorkItemRecord{
-						WorkItemID: secondWorkItemID, Objective: "retain the still-open restart binding",
-						AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture,
-					},
-				}
-				open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
-				if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
-					t.Fatalf("open second lifecycle work: %v", err)
-				}
-				workItemIDs = append(workItemIDs, secondWorkItemID)
-			}
-			now := time.Now().UTC()
-			run := types.RunRecord{
-				RunID:   "run-lifecycle-rewarm-terminal-" + tc.name,
-				AgentID: agentID, OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
-				ChannelID: docID, TrajectoryID: trajectoryID,
-				State: types.RunRunning, Prompt: "interrupted lifecycle producer",
-				AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
-				CreatedAt: now, UpdatedAt: now,
-				Metadata: map[string]any{
-					runMetadataAgentID: agentID, runMetadataAgentProfile: agentprofile.Texture,
-					runMetadataAgentRole: agentprofile.Texture, runMetadataTrajectoryID: trajectoryID,
-					"work_item_ids": workItemIDs,
-				},
-			}
-			if !tc.multiple {
-				run.Metadata["lifecycle_work_item_id"] = firstWorkItemID
-			}
-			if err := s.CreateRun(ctx, run); err != nil {
-				t.Fatalf("project interrupted lifecycle activation: %v", err)
-			}
-			packet := types.CoagentSourcePacketPayload{
-				SchemaVersion: types.CoagentSourcePacketSchemaV1,
-				Kind:          "evidence_update",
-				Summary:       "terminal typed disposition already queued",
-			}
-			content := "terminal typed disposition already queued"
-			payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
-			queue := types.QueueLifecycleUpdateRequest{
-				OwnerID: ownerID, ComputerID: rt.TextureComputerID(),
-				CommandID:    "command-queue-lifecycle-rewarm-terminal-" + tc.name,
-				TrajectoryID: trajectoryID, TargetAgentID: agentID, ProducerAgentID: agentID,
-				ProducerUpdateID: "producer-lifecycle-rewarm-terminal-" + tc.name,
-				UpdateID:         "update-lifecycle-rewarm-terminal-" + tc.name,
-				ChannelID:        docID, Role: agentprofile.Texture, SourceRunID: run.RunID,
-				Packet: packet, Content: content, PayloadDigest: payloadDigest,
-			}
-			queue.WorkDisposition = types.WorkItemOpen
-			queue.WorkItemID = firstWorkItemID
-			if tc.terminal {
-				queue.WorkDisposition = types.WorkItemCompleted
-			}
-			queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
-			if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
-				t.Fatalf("queue terminal lifecycle update: %v", err)
-			}
-			var dispatched []string
-			rt.SetDispatchActor(func(_ context.Context, gotOwnerID, gotComputerID, toAgentID, kind, content, gotTrajectoryID, _ string) error {
-				if kind == "initial_dispatch" && gotOwnerID == ownerID && gotComputerID == rt.TextureComputerID() &&
-					gotTrajectoryID == trajectoryID && toAgentID == agentID {
-					dispatched = append(dispatched, content)
-				}
-				return nil
-			})
-			rt.Start(ctx)
-			if len(dispatched) != 0 {
-				t.Fatalf("generic restart claimed Texture dispatch authority: %v", dispatched)
-			}
-			stale, err := s.GetLifecycleRun(ctx, ownerID, rt.TextureComputerID(), run.RunID)
-			if err != nil || stale.State != types.RunPassivated {
-				t.Fatalf("stale restart activation = %+v, %v; want passivated", stale, err)
-			}
-			if active, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil || found {
-				t.Fatalf("generic restart created Texture replacement: found=%t run=%+v err=%v", found, active, err)
-			}
-		})
-	}
-}
 
 func schemaEnumContains(schema map[string]any, want string) bool {
 	values, ok := schema["enum"].([]string)

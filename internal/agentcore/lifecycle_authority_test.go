@@ -161,11 +161,15 @@ func TestActivationBudgetProgressDeadlineTerminalizesAndReleases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	// The 25ms deadline can terminalize the run before the dispatch goroutine
-	// reaches Execute; persistActivationState then refuses the stale activation
-	// and Execute never runs. Both interleavings satisfy the contract, so the
-	// started wait is bounded and the late-completion check is conditional.
+	// Production terminalizes via the durable activation_budget_deadline event
+	// (dispatcher due-index → HandleActivationBudgetDeadline); there is no
+	// process-local deadline timer. Drive the durable handler directly after the
+	// activation budget has elapsed — the same path a restart delivers.
 	started := waitProviderChan(provider.started, 10*time.Second)
+	time.Sleep(2 * rt.cfg.ActivationBudget)
+	if err := rt.HandleActivationBudgetDeadline(context.Background(), rec.OwnerID, rec.ComputerID, rec.AgentID, rec.RunID); err != nil {
+		t.Fatalf("durable activation budget deadline: %v", err)
+	}
 	stored := waitForTerminalRun(t, rt, rec.RunID)
 	if stored.State != types.RunCancelled || stored.FinishedAt == nil {
 		t.Fatalf("progress deadline run = state %q finished_at %v", stored.State, stored.FinishedAt)

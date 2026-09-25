@@ -2,93 +2,102 @@ package agentcore
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestWirePublishDebouncerFiresOnCountThreshold(t *testing.T) {
-	d := newWirePublishDebouncer()
-	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+func TestWirePublishDebounceFiresAtCountThreshold(t *testing.T) {
+	rt, _ := testAPISetup(t)
+	ctx := context.Background()
+	ownerID, computerID := universalWirePlatformOwnerID(), rt.TextureComputerID()
+	now := time.Now().UTC()
 
-	for i := 0; i < WireReconcilerPublishCountThreshold-1; i++ {
-		if _, fire := d.record(fmt.Sprintf("doc-%d", i), fmt.Sprintf("rev-%d", i), wirePublishLineage{}, now); fire {
-			t.Fatalf("publish %d should not fire reconciler yet", i+1)
+	for i := range WireReconcilerPublishCountThreshold {
+		content, err := encodeWirePublishDebounceEntry("doc-"+strconv.Itoa(i), "rev-"+strconv.Itoa(i), wirePublishLineage{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		pending, err := rt.Store().RecordWirePublishDebounceEntry(ctx, ownerID, computerID, wireReconcilerPublishDeadlineAgentID, content, now, WireReconcilerPublishCountThreshold, WireReconcilerPublishDebounceInterval)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pending.Due != (i == WireReconcilerPublishCountThreshold-1) {
+			t.Fatalf("publish %d due=%t", i+1, pending.Due)
 		}
 	}
-	batch, fire := d.record("doc-final", "rev-final", wirePublishLineage{}, now)
-	if !fire {
-		t.Fatal("10th publish should fire reconciler")
+	pending, err := rt.Store().ConsumeDueWirePublishDebounceBatch(ctx, ownerID, computerID, wireReconcilerPublishDeadlineAgentID, now, WireReconcilerPublishCountThreshold, WireReconcilerPublishDebounceInterval)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(batch.DocIDs) != WireReconcilerPublishCountThreshold {
-		t.Fatalf("batch doc ids = %d, want %d", len(batch.DocIDs), WireReconcilerPublishCountThreshold)
-	}
-}
-
-func TestWirePublishDebouncerFiresAfterIntervalSinceLastDispatch(t *testing.T) {
-	d := newWirePublishDebouncer()
-	start := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
-	if _, fire := d.record("doc-1", "rev-1", wirePublishLineage{}, start); fire {
-		t.Fatal("first publish should not fire immediately")
-	}
-	d.mu.Lock()
-	d.lastDispatch = start
-	d.mu.Unlock()
-
-	later := start.Add(WireReconcilerPublishDebounceInterval)
-	batch, fire := d.record("doc-2", "rev-2", wirePublishLineage{}, later)
-	if !fire {
-		t.Fatal("publish after debounce interval should fire reconciler")
-	}
-	if len(batch.DocIDs) != 2 {
-		t.Fatalf("batch doc ids = %d, want 2", len(batch.DocIDs))
+	if !pending.Fired || len(pending.Entries) != WireReconcilerPublishCountThreshold {
+		t.Fatalf("threshold batch=%+v", pending)
 	}
 }
 
-func TestWirePublishDebouncerFireDueRespectsInterval(t *testing.T) {
-	d := newWirePublishDebouncer()
-	start := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
-	if _, fire := d.record("doc-1", "rev-1", wirePublishLineage{}, start); fire {
-		t.Fatal("first publish should not fire immediately")
+func TestNoteWireEligiblePublishSchedulesDurableDeadline(t *testing.T) {
+	rt, _ := testAPISetup(t)
+	rt.SetKernelMode()
+	type scheduled struct {
+		ownerID    string
+		computerID string
+		agentID    string
+		kind       string
+		content    string
+		notBefore  time.Time
 	}
+	var got scheduled
+	rt.SetScheduleActor(func(_ context.Context, ownerID, computerID, agentID, kind, content, _, _ string, notBefore time.Time) error {
+		got = scheduled{ownerID: ownerID, computerID: computerID, agentID: agentID, kind: kind, content: content, notBefore: notBefore}
+		return nil
+	})
 
-	if _, fire := d.fireDue(start.Add(100 * time.Second)); fire {
-		t.Fatal("timer should not fire before interval elapses")
-	}
-	batch, fire := d.fireDue(start.Add(WireReconcilerPublishDebounceInterval))
-	if !fire || len(batch.DocIDs) != 1 {
-		t.Fatalf("timer fire = %v batch = %+v", fire, batch)
+	rt.noteWireEligiblePublish(context.Background(), "doc-scheduled", "rev-scheduled", nil)
+
+	if got.ownerID != universalWirePlatformOwnerID() || got.computerID != rt.TextureComputerID() || got.agentID != wireReconcilerPublishDeadlineAgentID ||
+		got.kind != wireReconcilerPublishDeadlineUpdateKind || got.content != wireReconcilerPublishDeadlineBatchKey || got.notBefore.IsZero() {
+		t.Fatalf("scheduled continuation=%+v", got)
 	}
 }
 
-func TestWirePublishDebouncerPreservesSingleCycleLineage(t *testing.T) {
-	d := newWirePublishDebouncer()
-	start := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
-	lineage := wirePublishLineage{CycleID: "cycle-1", RequestID: "processor-1", RequestKind: "processor"}
-	if _, fire := d.record("doc-1", "rev-1", lineage, start); fire {
-		t.Fatal("first publish should not fire immediately")
+func TestWirePublishDebounceSurvivesStoreReopen(t *testing.T) {
+	rt, _ := testAPISetup(t)
+	ctx := context.Background()
+	ownerID, computerID := universalWirePlatformOwnerID(), rt.TextureComputerID()
+	recordedAt := time.Now().UTC().Add(-WireReconcilerPublishDebounceInterval - time.Second)
+	content, err := encodeWirePublishDebounceEntry("doc-restart", "rev-restart", wirePublishLineage{CycleID: "cycle-1"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	batch, fire := d.fireDue(start.Add(WireReconcilerPublishDebounceInterval))
-	if !fire {
-		t.Fatal("lineage batch should fire when due")
+	if _, err := rt.Store().RecordWirePublishDebounceEntry(ctx, ownerID, computerID, wireReconcilerPublishDeadlineAgentID, content, recordedAt, WireReconcilerPublishCountThreshold, WireReconcilerPublishDebounceInterval); err != nil {
+		t.Fatal(err)
 	}
-	if batch.MixedLineage || batch.CycleID != lineage.CycleID || batch.RequestID != lineage.RequestID || batch.RequestKind != lineage.RequestKind {
-		t.Fatalf("batch lineage = %+v, want %+v", batch, lineage)
+	if err := rt.Store().Close(); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestWirePublishDebouncerFailsClosedForMixedCycleLineage(t *testing.T) {
-	d := newWirePublishDebouncer()
-	start := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
-	d.record("doc-1", "rev-1", wirePublishLineage{CycleID: "cycle-1"}, start)
-	d.record("doc-2", "rev-2", wirePublishLineage{CycleID: "cycle-2"}, start)
-	batch, fire := d.fireDue(start.Add(WireReconcilerPublishDebounceInterval))
-	if !fire || !batch.MixedLineage {
-		t.Fatalf("mixed batch fire=%t batch=%+v", fire, batch)
+	reopened, err := store.Open(rt.cfg.StorePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	pending, err := reopened.ConsumeDueWirePublishDebounceBatch(ctx, ownerID, computerID, wireReconcilerPublishDeadlineAgentID, time.Now().UTC(), WireReconcilerPublishCountThreshold, WireReconcilerPublishDebounceInterval)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pending.Fired || len(pending.Entries) != 1 {
+		t.Fatalf("recovered batch=%+v", pending)
+	}
+	batch, err := wirePublishBatchFromDebounceEntries(pending.Entries, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.DocIDs) != 1 || batch.DocIDs[0] != "doc-restart" || batch.CycleID != "cycle-1" {
+		t.Fatalf("recovered batch=%+v", batch)
 	}
 }
 

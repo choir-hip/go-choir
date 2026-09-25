@@ -320,14 +320,6 @@ func TestRewarmAssignedEngineeringReconcilesAbsentCapsuleWithoutWake(t *testing.
 	if !found {
 		t.Fatalf("bound Engineering run missing from lifecycle pending index: %+v", listed)
 	}
-	runBefore, loadErr := s.GetLifecycleRun(ctx, open.Binding.OwnerID, open.Binding.ComputerID, runID)
-	if loadErr != nil {
-		t.Fatalf("load bound run: %v", loadErr)
-	}
-	eligible, eligibilityErr := rt.lifecycleActivationBindingsEligible(ctx, &runBefore)
-	if eligibilityErr != nil || !eligible {
-		t.Fatalf("assigned Engineering should remain eligible for boot reconcile: eligible=%t err=%v run=%+v", eligible, eligibilityErr, runBefore)
-	}
 	if err := rt.ReconcileLifecycleWorkAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, open.Binding.AssignedAgentID, open.Binding.TrajectoryID, open.Binding.AssignedWorkItemID); err != nil {
 		t.Fatalf("reconcile assigned Engineering work wake: %v", err)
 	}

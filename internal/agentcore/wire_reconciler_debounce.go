@@ -2,13 +2,14 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
@@ -34,120 +35,56 @@ type wirePublishLineage struct {
 	RequestKind string
 }
 
-type wirePublishDebouncer struct {
-	mu sync.Mutex
+const (
+	wireReconcilerPublishDeadlineBatchKey = "story-corpus"
+	wireReconcilerPublishDeadlineAgentID  = "reconciler:story-corpus"
+)
 
-	pendingDocIDs      []string
-	pendingRevisionIDs []string
-	firstPendingAt     time.Time
-	lastDispatch       time.Time
-	pendingLineage     wirePublishLineage
-	mixedLineage       bool
+type wirePublishDebounceEntry struct {
+	DocID      string             `json:"doc_id"`
+	RevisionID string             `json:"revision_id"`
+	Lineage    wirePublishLineage `json:"lineage"`
 }
 
-func newWirePublishDebouncer() *wirePublishDebouncer {
-	return &wirePublishDebouncer{}
+func encodeWirePublishDebounceEntry(docID, revisionID string, lineage wirePublishLineage) (string, error) {
+	entry := wirePublishDebounceEntry{
+		DocID:      strings.TrimSpace(docID),
+		RevisionID: strings.TrimSpace(revisionID),
+		Lineage:    lineage,
+	}
+	if entry.DocID == "" || entry.RevisionID == "" {
+		return "", fmt.Errorf("wire publish debounce entry requires document and revision")
+	}
+	content, err := json.Marshal(entry)
+	if err != nil {
+		return "", fmt.Errorf("encode wire publish debounce entry: %w", err)
+	}
+	return string(content), nil
 }
 
-func (d *wirePublishDebouncer) record(docID, revisionID string, lineage wirePublishLineage, now time.Time) (wirePublishBatch, bool) {
-	docID = strings.TrimSpace(docID)
-	revisionID = strings.TrimSpace(revisionID)
-	if docID == "" || revisionID == "" {
-		return wirePublishBatch{}, false
+func wirePublishBatchFromDebounceEntries(entries []store.WirePublishDebounceEntry, triggeredAt time.Time) (wirePublishBatch, error) {
+	batch := wirePublishBatch{TriggeredAt: triggeredAt.UTC()}
+	for _, persisted := range entries {
+		var entry wirePublishDebounceEntry
+		if err := json.Unmarshal([]byte(persisted.Content), &entry); err != nil {
+			return wirePublishBatch{}, fmt.Errorf("decode wire publish debounce entry: %w", err)
+		}
+		entry.DocID = strings.TrimSpace(entry.DocID)
+		entry.RevisionID = strings.TrimSpace(entry.RevisionID)
+		if entry.DocID == "" || entry.RevisionID == "" {
+			return wirePublishBatch{}, fmt.Errorf("wire publish debounce entry requires document and revision")
+		}
+		if len(batch.DocIDs) == 0 {
+			batch.CycleID = entry.Lineage.CycleID
+			batch.RequestID = entry.Lineage.RequestID
+			batch.RequestKind = entry.Lineage.RequestKind
+		} else if batch.CycleID != entry.Lineage.CycleID || batch.RequestID != entry.Lineage.RequestID || batch.RequestKind != entry.Lineage.RequestKind {
+			batch.MixedLineage = true
+		}
+		batch.DocIDs = append(batch.DocIDs, entry.DocID)
+		batch.RevisionIDs = append(batch.RevisionIDs, entry.RevisionID)
 	}
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if len(d.pendingDocIDs) == 0 {
-		d.firstPendingAt = now
-		d.pendingLineage = lineage
-		d.mixedLineage = false
-	} else if d.pendingLineage != lineage {
-		d.mixedLineage = true
-	}
-	d.pendingDocIDs = append(d.pendingDocIDs, docID)
-	d.pendingRevisionIDs = append(d.pendingRevisionIDs, revisionID)
-
-	if len(d.pendingDocIDs) >= WireReconcilerPublishCountThreshold {
-		return d.fireLocked(now), true
-	}
-	if d.publishBatchDueLocked(now) {
-		return d.fireLocked(now), true
-	}
-	return wirePublishBatch{}, false
-}
-
-func (d *wirePublishDebouncer) fireDue(now time.Time) (wirePublishBatch, bool) {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if len(d.pendingDocIDs) == 0 || !d.publishBatchDueLocked(now) {
-		return wirePublishBatch{}, false
-	}
-	return d.fireLocked(now), true
-}
-
-func (d *wirePublishDebouncer) nextDispatchDelay(now time.Time) (time.Duration, bool) {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if len(d.pendingDocIDs) == 0 {
-		return 0, false
-	}
-	deadline := d.dispatchDeadlineLocked()
-	remaining := deadline.Sub(now)
-	if remaining <= 0 {
-		return 0, true
-	}
-	return remaining, true
-}
-
-func (d *wirePublishDebouncer) dispatchDeadlineLocked() time.Time {
-	if !d.lastDispatch.IsZero() {
-		return d.lastDispatch.Add(WireReconcilerPublishDebounceInterval)
-	}
-	if d.firstPendingAt.IsZero() {
-		return time.Time{}
-	}
-	return d.firstPendingAt.Add(WireReconcilerPublishDebounceInterval)
-}
-
-func (d *wirePublishDebouncer) publishBatchDueLocked(now time.Time) bool {
-	if len(d.pendingDocIDs) == 0 {
-		return false
-	}
-	deadline := d.dispatchDeadlineLocked()
-	if deadline.IsZero() {
-		return false
-	}
-	return !now.Before(deadline)
-}
-
-func (d *wirePublishDebouncer) fireLocked(now time.Time) wirePublishBatch {
-	batch := wirePublishBatch{
-		DocIDs:       append([]string(nil), d.pendingDocIDs...),
-		RevisionIDs:  append([]string(nil), d.pendingRevisionIDs...),
-		TriggeredAt:  now,
-		CycleID:      d.pendingLineage.CycleID,
-		RequestID:    d.pendingLineage.RequestID,
-		RequestKind:  d.pendingLineage.RequestKind,
-		MixedLineage: d.mixedLineage,
-	}
-	d.pendingDocIDs = nil
-	d.pendingRevisionIDs = nil
-	d.firstPendingAt = time.Time{}
-	d.pendingLineage = wirePublishLineage{}
-	d.mixedLineage = false
-	d.lastDispatch = now
-	return batch
+	return batch, nil
 }
 
 func wireCanonicalRevisionEligibleForDebouncedReconciler(doc types.Document, rev types.Revision, rec *types.RunRecord) bool {
@@ -183,71 +120,70 @@ func wirePublishReconcilerRequestID(cycleID string) string {
 }
 
 func (rt *Runtime) noteWireEligiblePublish(ctx context.Context, docID, revisionID string, rec *types.RunRecord) {
-	if rt == nil {
+	if rt == nil || rt.store == nil {
 		return
 	}
-	if rt.wirePublishDebouncer == nil {
-		rt.wirePublishDebouncer = newWirePublishDebouncer()
+	ownerID := universalWirePlatformOwnerID()
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if computerID == "" {
+		log.Printf("runtime: wire reconciler debounce skipped without computer identity")
+		return
 	}
 	now := time.Now().UTC()
 	lineage := wirePublishLineageForRun(rec)
-	batch, fire := rt.wirePublishDebouncer.record(docID, revisionID, lineage, now)
-	log.Printf("runtime: wire reconciler queued doc=%s rev=%s cycle=%s request=%s fire=%t", docID, revisionID, lineage.CycleID, lineage.RequestID, fire)
-	if fire {
-		rt.stopWirePublishDebouncerTimer()
-		rt.dispatchStoryCorpusReconcilerFromPublishBatch(ctx, batch)
+	content, err := encodeWirePublishDebounceEntry(docID, revisionID, lineage)
+	if err != nil {
+		log.Printf("runtime: wire reconciler debounce encode doc=%s rev=%s: %v", docID, revisionID, err)
 		return
 	}
-	rt.scheduleWirePublishDebouncerTimer(now)
+	pending, err := rt.store.RecordWirePublishDebounceEntry(ctx, ownerID, computerID, wireReconcilerPublishDeadlineAgentID, content, now, WireReconcilerPublishCountThreshold, WireReconcilerPublishDebounceInterval)
+	if err != nil {
+		log.Printf("runtime: wire reconciler debounce persist doc=%s rev=%s: %v", docID, revisionID, err)
+		return
+	}
+	notBefore := pending.Deadline
+	if pending.Due {
+		notBefore = now
+	}
+	if notBefore.IsZero() {
+		log.Printf("runtime: wire reconciler debounce persisted without deadline doc=%s rev=%s", docID, revisionID)
+		return
+	}
+	rt.scheduleContinuation(ctx, ownerID, computerID, wireReconcilerPublishDeadlineAgentID,
+		wireReconcilerPublishDeadlineUpdateKind, wireReconcilerPublishDeadlineBatchKey, "", "", notBefore)
+	log.Printf("runtime: wire reconciler queued doc=%s rev=%s cycle=%s request=%s due=%t deadline=%s", docID, revisionID, lineage.CycleID, lineage.RequestID, pending.Due, notBefore.Format(time.RFC3339Nano))
 }
 
-func (rt *Runtime) scheduleWirePublishDebouncerTimer(now time.Time) {
-	if rt == nil || rt.wirePublishDebouncer == nil {
-		return
+// HandleWireReconcilerPublishDeadline consumes the durable pending batch that
+// the deadline key names. A stale scheduled event observes the new deadline
+// and schedules it again; only the event that atomically consumes the batch
+// dispatches the reconciler.
+func (rt *Runtime) HandleWireReconcilerPublishDeadline(ctx context.Context, ownerID, computerID, agentID, content string) error {
+	if rt == nil || rt.store == nil {
+		return fmt.Errorf("wire reconciler publish deadline: store unavailable")
 	}
-	delay, ok := rt.wirePublishDebouncer.nextDispatchDelay(now)
-	if !ok {
-		rt.stopWirePublishDebouncerTimer()
-		return
+	if strings.TrimSpace(agentID) != wireReconcilerPublishDeadlineAgentID || strings.TrimSpace(content) != wireReconcilerPublishDeadlineBatchKey {
+		return nil
 	}
-	rt.wirePublishDebounceMu.Lock()
-	defer rt.wirePublishDebounceMu.Unlock()
-	if rt.wirePublishTimer != nil {
-		return
+	now := time.Now().UTC()
+	pending, err := rt.store.ConsumeDueWirePublishDebounceBatch(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), wireReconcilerPublishDeadlineAgentID, now, WireReconcilerPublishCountThreshold, WireReconcilerPublishDebounceInterval)
+	if err != nil {
+		return fmt.Errorf("consume wire reconciler publish deadline: %w", err)
 	}
-	rt.wirePublishTimer = rt.textureWakeAfter(delay, func() {
-		rt.onWirePublishDebouncerTimer()
-	})
-	log.Printf("runtime: wire reconciler timer scheduled delay=%s", delay)
-}
-
-func (rt *Runtime) stopWirePublishDebouncerTimer() {
-	rt.wirePublishDebounceMu.Lock()
-	defer rt.wirePublishDebounceMu.Unlock()
-	if rt.wirePublishTimer != nil {
-		rt.wirePublishTimer.Stop()
-		rt.wirePublishTimer = nil
+	if !pending.Fired {
+		if !pending.Deadline.IsZero() {
+			rt.scheduleContinuation(ctx, ownerID, computerID, wireReconcilerPublishDeadlineAgentID,
+				wireReconcilerPublishDeadlineUpdateKind, wireReconcilerPublishDeadlineBatchKey, "", "", pending.Deadline)
+		}
+		return nil
 	}
-}
-
-func (rt *Runtime) onWirePublishDebouncerTimer() {
-	if rt == nil {
-		return
+	batch, err := wirePublishBatchFromDebounceEntries(pending.Entries, now)
+	if err != nil {
+		return err
 	}
-	rt.wirePublishDebounceMu.Lock()
-	rt.wirePublishTimer = nil
-	rt.wirePublishDebounceMu.Unlock()
-
-	if rt.wirePublishDebouncer == nil {
-		return
-	}
-	batch, fire := rt.wirePublishDebouncer.fireDue(time.Now().UTC())
-	if !fire {
-		log.Printf("runtime: wire reconciler timer fired without a due batch")
-		return
-	}
-	log.Printf("runtime: wire reconciler timer fired docs=%d cycle=%s mixed_lineage=%t", len(batch.DocIDs), batch.CycleID, batch.MixedLineage)
-	rt.dispatchStoryCorpusReconcilerFromPublishBatch(context.Background(), batch)
+	log.Printf("runtime: wire reconciler durable deadline fired docs=%d cycle=%s mixed_lineage=%t", len(batch.DocIDs), batch.CycleID, batch.MixedLineage)
+	rt.dispatchStoryCorpusReconcilerFromPublishBatch(ctx, batch)
+	return nil
 }
 
 func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Context, batch wirePublishBatch) {

@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -97,6 +98,22 @@ func TestReplayEligibilityRejectsNonEmptyUnsupportedDirectWrites(t *testing.T) {
 	}
 	if len(eligibility.UnsupportedTables) != 1 || eligibility.UnsupportedTables[0] != "user_preferences" {
 		t.Fatalf("unsupported tables=%v", eligibility.UnsupportedTables)
+	}
+}
+
+func TestReplayEligibilityRejectsNonEmptyWirePublishDebounceState(t *testing.T) {
+	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
+	observations := computerversion.ObservationSet{Observations: []computerversion.Observation{
+		{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:wire_publish_debounce_entries", Value: "pending-batch"},
+		{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:wire_publish_debounce_state", Value: "dispatch-index"},
+	}}
+	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
+	eligibility := replayEligibility(head, head, observations, observations, result)
+	if eligibility.Eligible {
+		t.Fatal("non-empty durable debounce state was replay-eligible")
+	}
+	if got, want := eligibility.UnsupportedTables, []string{"wire_publish_debounce_entries", "wire_publish_debounce_state"}; !slices.Equal(got, want) {
+		t.Fatalf("unsupported tables=%v, want %v", got, want)
 	}
 }
 

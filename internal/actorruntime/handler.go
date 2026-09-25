@@ -96,6 +96,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleFreshMintManagementResumeDeadline(ctx, u, memory)
 	case "reactivated_management_resume_deadline":
 		return h.handleReactivatedManagementResumeDeadline(ctx, u, memory)
+	case "wire_reconciler_publish_deadline":
+		return h.handleWireReconcilerPublishDeadline(ctx, u, memory)
 	case "lifecycle_work_assigned":
 		return h.handleLifecycleWorkAssigned(ctx, u, memory)
 	case "lifecycle_cancellation":
@@ -150,6 +152,17 @@ func (h *actorHandler) handleReactivatedManagementResumeDeadline(ctx context.Con
 	}
 	if err := h.rt.HandleReactivatedManagementResumeDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("actorruntime: reactivated Management deadline: %w", err)
+	}
+	return memory, nil
+}
+
+func (h *actorHandler) handleWireReconcilerPublishDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve wire reconciler publish deadline scope: %w", err)
+	}
+	if err := h.rt.HandleWireReconcilerPublishDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("actorruntime: wire reconciler publish deadline: %w", err)
 	}
 	return memory, nil
 }
@@ -268,9 +281,9 @@ func (h *actorHandler) handleChannelMessage(ctx context.Context, u actor.Update,
 		// command so the state change and run_reactivated event commit
 		// atomically; non-lifecycle runs keep the bare UpdateRun path.
 		if err := h.rt.ReactivateRunCanonical(ctx, &rec, types.RunPending, map[string]any{
-			"actor_reactivate_existing_memory":    true,
-			"actor_reactivated_from_passivated":   true,
-			"request_source":                      "channel_message",
+			"actor_reactivate_existing_memory":  true,
+			"actor_reactivated_from_passivated": true,
+			"request_source":                    "channel_message",
 		}); err != nil {
 			return nil, fmt.Errorf("actorruntime: reactivate run %s from channel_message: %w", rs.RunID, err)
 		}

@@ -62,7 +62,6 @@ func (s *Store) KernelMode() bool {
 	return s.kernelMode.Load()
 }
 
-
 // ErrLifecycleAuthorityRequired is returned when a legacy writer attempts to
 // mutate state owned by the durable lifecycle reducer.
 var ErrLifecycleAuthorityRequired = errors.New("durable lifecycle authority required")
@@ -121,6 +120,7 @@ type Store struct {
 	runMemoryMu             sync.Mutex
 	textureMutationMu       sync.Mutex
 	channelMsgMu            sync.Mutex
+	wirePublishDebounceMu   sync.Mutex
 	eventMu                 sync.Mutex
 	presenceMu              sync.Mutex
 	sessionPresence         map[string]types.DesktopSessionContext
@@ -408,6 +408,27 @@ CREATE TABLE IF NOT EXISTS worker_updates (
 	delivered_at      DATETIME,
 	PRIMARY KEY (owner_id, update_id)
 );
+
+CREATE TABLE IF NOT EXISTS wire_publish_debounce_entries (
+	entry_id    BIGINT NOT NULL AUTO_INCREMENT,
+	owner_id    VARCHAR(255) NOT NULL,
+	computer_id VARCHAR(255) NOT NULL,
+	agent_id    VARCHAR(255) NOT NULL,
+	content     LONGTEXT NOT NULL,
+	created_at  DATETIME NOT NULL,
+	PRIMARY KEY (entry_id)
+);
+
+CREATE TABLE IF NOT EXISTS wire_publish_debounce_state (
+	owner_id         VARCHAR(255) NOT NULL,
+	computer_id      VARCHAR(255) NOT NULL,
+	agent_id         VARCHAR(255) NOT NULL,
+	last_dispatch_at DATETIME NOT NULL,
+	PRIMARY KEY (owner_id, computer_id, agent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wire_publish_debounce_entries_scope
+	ON wire_publish_debounce_entries(owner_id, computer_id, agent_id, entry_id);
 
 CREATE TABLE IF NOT EXISTS coagent_mailboxes (
 	owner_id              VARCHAR(255) NOT NULL DEFAULT '',
@@ -1319,7 +1340,7 @@ func (s *Store) persistLifecycleRunWithEvent(ctx context.Context, rec types.RunR
 		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID,
 		CommandID:    "lifecycle-activation:" + strings.TrimPrefix(objectgraph.SHA256(body), "sha256:"),
 		TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: rec,
-		Event:        event,
+		Event: event,
 	}
 	req.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(req)
 	if trajectory.Status == types.TrajectoryLive {

@@ -246,43 +246,12 @@ func (rt *Runtime) reconcilePersistentManagementActor(ctx context.Context, owner
 	return rt.reconcilePersistentManagementActorLocked(ctx, ownerID, agentID, "")
 }
 
-// ResumeInterruptedPersistentManagementControlRun re-enters the exact
-// persistent Management control run that was passivated by a process restart.
-// Boot is a recovery event, never a scheduler tick: it resumes the named run
-// or returns without falling through to any backlog selection.
-func (rt *Runtime) ResumeInterruptedPersistentManagementControlRun(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
-	rt.managementReconcileMu.Lock()
-	defer rt.managementReconcileMu.Unlock()
-	return rt.resumeInterruptedPersistentManagementControlRunLocked(ctx, ownerID, agentID)
-}
-
-func (rt *Runtime) resumeInterruptedPersistentManagementControlRunLocked(ctx context.Context, ownerID, agentID string) (*types.RunRecord, bool, error) {
-	if ownerID == "" {
-		return nil, false, fmt.Errorf("owner_id is required")
-	}
-	if agentID == "" {
-		agentID = persistentManagementAgentID(ownerID)
-	}
-	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
-		return nil, false, fmt.Errorf("check resident super run: %w", err)
-	} else if found {
-		log.Printf("runtime: persistent-Management exact-run resume found resident run=%s owner=%s agent=%s", resident.RunID, ownerID, agentID)
-		return &resident, false, nil
-	}
-	resumed, ok, err := rt.reactivateRestartedPersistentManagementControlRun(ctx, ownerID, agentID)
-	if err != nil {
-		return nil, false, err
-	}
-	if ok && resumed != nil {
-		log.Printf("runtime: persistent-Management exact-run resume reactivated run=%s owner=%s agent=%s", resumed.RunID, ownerID, agentID)
-		return resumed, true, nil
-	}
-	// Boot is a recovery event, never a scheduler tick. Return unconditionally
-	// without falling through to any backlog selection.
-	log.Printf("runtime: persistent-Management exact-run resume did not enter selection (resumed=false) owner=%s agent=%s", ownerID, agentID)
-	return nil, false, nil
-}
-
+// reconcilePersistentManagementActorLocked is the sole Management control
+// reconciliation path. The exported boot-resume wrappers
+// (ResumeInterruptedPersistentManagementControlRun /
+// resumeInterruptedPersistentManagementControlRunLocked) are deleted under the
+// "boot causes no work" ruling: a restart never re-drives Management work,
+// and a later live Management trigger re-enters through this reconcile.
 func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context, ownerID, agentID string, exactUpdateID string) (*types.RunRecord, error) {
 	if ownerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
@@ -704,47 +673,6 @@ func (rt *Runtime) armReactivatedManagementResumeWatchdog(ownerID, runID string,
 		reactivatedManagementDeadlineUpdateKind, runID, "", "", deadline)
 }
 
-// errResumeWatchdogScanCap stops the boot rewarm walk once the scan budget is
-// exhausted; it is a control-flow sentinel, not a failure.
-var errResumeWatchdogScanCap = errors.New("resume watchdog scan cap reached")
-
-// rewarmReactivatedManagementResumeWatchdogs re-arms the in-memory resume
-// watchdog for every persistent Management run that was reactivated from a
-// passivated state before the restart. The watchdog deadline is process-local,
-// so a restart loses it; this re-arms (or fails an already-expired) timer so a
-// lost resume deadline cannot jam the persistent Management slot.
-func (rt *Runtime) rewarmReactivatedManagementResumeWatchdogs(ctx context.Context, ownerID, computerID string) {
-	if rt == nil || rt.store == nil {
-		return
-	}
-	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
-	if ownerID == "" || computerID == "" {
-		return
-	}
-	now := time.Now().UTC()
-	scanned := 0
-	walkErr := rt.store.ForEachLifecycleRunsByState(ctx, ownerID, computerID, types.RunPending, func(rec types.RunRecord) error {
-		if scanned >= bootPersistentManagementRewarmLimit {
-			return errResumeWatchdogScanCap
-		}
-		scanned++
-		if !isPersistentManagementAgentRun(&rec) ||
-			!metadataBoolValue(rec.Metadata, "actor_reactivated_from_passivated") {
-			return nil
-		}
-		if reactivatedManagementResumeExpired(&rec, now) {
-			if _, err := rt.failExpiredReactivatedManagementResume(ctx, rec.OwnerID, rec.RunID, now); err != nil {
-				log.Printf("runtime: boot resume-watchdog fail run %s: %v", rec.RunID, err)
-			}
-			return nil
-		}
-		rt.armReactivatedManagementResumeWatchdog(rec.OwnerID, rec.RunID, rec.UpdatedAt)
-		return nil
-	})
-	if walkErr != nil && !errors.Is(walkErr, errResumeWatchdogScanCap) {
-		log.Printf("runtime: boot resume-watchdog rewarm list: %v", walkErr)
-	}
-}
 
 func (rt *Runtime) enqueuePersistentManagementRecoveryOccurrence(ctx context.Context, rec *types.RunRecord, packets []types.CoagentSourcePacket) error {
 	if rt == nil || rt.store == nil || rt.dispatchActor == nil || rec == nil || len(packets) == 0 {
