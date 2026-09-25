@@ -53,6 +53,7 @@ type ReductionScope struct {
 	ChannelID   string // durable mailbox channel
 	RunID       string // activation run carrying the inbox cursor
 	OwnerID     string // store owner for run memory
+	ComputerID  string // physical owner scope for ledger/OG objects
 	ReturnTo    string // supervisor desk: spawn requests and completion reports
 	Cursor      uint64 // durable unread cursor entering the cell
 	CellID      string // stable cell identity for intent idempotency keys
@@ -417,9 +418,12 @@ func CommitInboxCursor(ctx context.Context, st rlmCursorStore, ownerID, runID, c
 // are retained so a staged Complete intent can author the assignment fate
 // (P3-settlement: the reducer is the single fate author).
 type rlmCallReduction struct {
-	active    bool
-	mb        rlmMailbox
-	st        rlmCursorStore
+	active bool
+	mb     rlmMailbox
+	st     rlmCursorStore
+	// ledger is the concrete store for commitment-record writes (mission R2);
+	// it is *store.Store (rlmCursorStore is the narrow cursor-only view).
+	ledger    *store.Store
 	scope     ReductionScope
 	rec       *types.RunRecord
 	toolCtx   *CapsuleToolCtx
@@ -476,10 +480,12 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 			ChannelID:   channel,
 			RunID:       execCtx.RunID,
 			OwnerID:     execCtx.OwnerID,
+			ComputerID:  execCtx.ComputerID,
 			ReturnTo:    requester,
 			Cursor:      cursor,
 			CellID:      fmt.Sprintf("%s:%d", execCtx.RunID, cursor),
 		},
+		ledger:    rt.store,
 		inbox:     inbox,
 		highWater: highWater,
 	}
@@ -551,7 +557,9 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 		case yaegikernel.IntentOutcome:
 			seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
 		default:
-			seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
+			// Semantic acts (mission R2): ledger-bound kinds append the
+			// commitment record; every act may also mail its envelope.
+			seq, err = r.commitActIntent(ctx, in)
 		}
 		if err != nil {
 			return fmt.Errorf("reduce: persist %s: %w", in.LocalID, err)
@@ -569,6 +577,71 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 	r.receipt.Cursor = highWater
 	r.receipt.Committed = true
 	return nil
+}
+
+// commitActIntent commits one semantic act (mission R2). Epistemic acts that
+// open or resolve a commitment append a choir.commitment_record object on the
+// object graph (append-only; resolution is a linked record, never a rewrite,
+// so the ledger stays an auditable event log). Addressed acts additionally
+// mail their typed envelope to the target desk so it sees the act.
+// Returns the channel seq of any mailed envelope (0 for ledger-only acts).
+func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.StagedIntent) (uint64, error) {
+	if !isSemanticActKind(in.Kind) {
+		return castStagedIntent(ctx, r.mb, r.scope, in)
+	}
+	// Mint the commitment record. The record id binds the act to its cell for
+	// replay idempotency: a re-reduced cell re-derives the same id and the
+	// not-exists condition re-mints nothing.
+	rec := commitmentRecordForIntent(r.scope, in)
+	var seq uint64
+	var err error
+	if r.ledger != nil {
+		if _, rerr := r.ledger.AppendCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, rec); rerr != nil {
+			return 0, rerr
+		}
+	}
+	// Addressed acts mail their envelope so the target desk observes the act.
+	switch in.Kind {
+	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentNote,
+		yaegikernel.IntentReply, yaegikernel.IntentEscalate, yaegikernel.IntentReport:
+		seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
+	}
+	return seq, err
+}
+
+func isSemanticActKind(kind string) bool {
+	switch kind {
+	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentNote,
+		yaegikernel.IntentReply, yaegikernel.IntentCancel, yaegikernel.IntentEscalate,
+		yaegikernel.IntentPrecommit, yaegikernel.IntentReport, yaegikernel.IntentResolve:
+		return true
+	}
+	return false
+}
+
+// commitmentRecordForIntent derives the CommitmentRecord body for a staged
+// act. The record id is deterministic (cell + local id) so a replayed cell
+// re-derives the same record rather than minting a duplicate.
+func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent) types.CommitmentRecord {
+	rec := types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    fmt.Sprintf("%s:%s:%s", scope.CellID, in.Kind, in.LocalID),
+		Discrepancy: types.DiscrepancyUnresolved,
+		Provenance: types.CommitmentProvenance{
+			AgentID:    scope.FromAgentID,
+			ContextRef: scope.ChannelID,
+		},
+	}
+	switch in.Kind {
+	case yaegikernel.IntentPrecommit:
+		rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Statement}
+	case yaegikernel.IntentReport:
+		rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Claim}
+	}
+	if in.TargetRef != "" {
+		rec.ParentID = in.TargetRef
+	}
+	return rec
 }
 
 // isAssignedDesk reports whether this reduction serves an exact bound
