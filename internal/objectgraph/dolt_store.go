@@ -134,8 +134,10 @@ func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
+	// validate + intercept run OUTSIDE engineMu: intercept is the projection
+	// append path (network CAS + event write) and must not hold the engine
+	// mutex across a host round-trip. Only the direct-SQL engine write below
+	// needs serialization.
 	if s.validate != nil {
 		if err := s.validate(ctx, []Object{obj}, nil); err != nil {
 			return err
@@ -144,6 +146,8 @@ func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 	if s.intercept != nil {
 		return s.intercept(ctx, []Object{obj}, nil)
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -268,11 +272,12 @@ func (s *DoltStore) PutEdge(ctx context.Context, edge Edge) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
+	// intercept is the projection append path — do not hold engineMu across it.
 	if s.intercept != nil {
 		return s.intercept(ctx, nil, []Edge{edge})
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO og_edges
 		(edge_id, from_id, to_id, kind, metadata, created_at, tombstone)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -351,18 +356,28 @@ func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, 
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
+	// validate + intercept run OUTSIDE engineMu. intercept is the projection
+	// append path (network CAS + event write); holding the engine mutex across
+	// a host round-trip stalls every OG access and can deadlock boot. Only
+	// evaluateConditions + the direct-SQL batch tx below need serialization.
 	if s.validate != nil {
 		if err := s.validate(ctx, batch.Objects, batch.Edges); err != nil {
 			return err
 		}
 	}
 	if s.intercept != nil {
-		if err := s.evaluateConditions(ctx, conditions); err != nil {
-			return err
+		s.engineMu.Lock()
+		conditionsErr := s.evaluateConditions(ctx, conditions)
+		s.engineMu.Unlock()
+		if conditionsErr != nil {
+			return conditionsErr
 		}
 		return s.intercept(ctx, batch.Objects, batch.Edges)
+	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
+	if err := s.evaluateConditions(ctx, conditions); err != nil {
+		return err
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
@@ -875,13 +890,14 @@ func (s *DoltStore) DeleteObject(ctx context.Context, id string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
 	if s.intercept != nil {
-		// Inline the GetObject read: public methods must not call each other
-		// now that engine access is serialized by engineMu.
+		// Read the object under engineMu (engine access), then release before
+		// the intercept append (network CAS) so the mutex never spans a host
+		// round-trip. The GetObject read is inlined to avoid re-entry.
+		s.engineMu.Lock()
 		obj, err := scanDoltObject(s.db.QueryRowContext(ctx,
 			`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
+		s.engineMu.Unlock()
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return nil
@@ -891,6 +907,8 @@ func (s *DoltStore) DeleteObject(ctx context.Context, id string) error {
 		obj.Tombstone = true
 		return s.intercept(ctx, []Object{obj}, nil)
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM og_objects WHERE canonical_id = ?`, id)
 	if err != nil {

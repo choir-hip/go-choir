@@ -661,6 +661,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// update sweep can acknowledge a durable occurrence around an unbound run.
 	bootPhase("sweep_open_work_item_actors", func() { rt.sweepOpenWorkItemActors(ctx) })
 	bootPhase("sweep_pending_update_actors", func() { rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets) })
+	rt.migrateActorWakeOutboxAsync(ctx)
 	rt.startProjector(ctx)
 	// Best-effort: ensure the production Qdrant collection exists so the
 	// semantic dedup pass on ingestion has a target. Runs asynchronously so
@@ -2524,16 +2525,30 @@ func (rt *Runtime) SetKernelMode() {
 	rt.kernelMode = true
 	if rt.store != nil {
 		rt.store.SetKernelMode()
-		// Write fence: mint durable actor-wake outbox objects for every
-		// obligation-bearing canonical object that predates the outbox fold,
-		// so the projector delivers pre-cutover pending rows from the tape.
-		// Idempotent - deterministic wake keys make re-entry a no-op.
-		if minted, err := rt.store.MigrateActorWakeOutbox(context.Background()); err != nil {
+	}
+}
+
+// migrateActorWakeOutboxAsync mints durable actor-wake outbox objects for
+// every obligation-bearing canonical object that predates the outbox fold, so
+// the projector delivers pre-cutover pending rows from the tape. It runs off
+// the boot-critical path: each mint is a projection append (network CAS), so
+// doing N of them synchronously inside New/SetKernelMode stalls boot for a
+// populated account. Idempotent - deterministic wake keys make re-entry a
+// no-op; the projector delivers minted wakes on its next tick.
+func (rt *Runtime) migrateActorWakeOutboxAsync(ctx context.Context) {
+	if rt == nil || rt.store == nil || !rt.kernelMode {
+		return
+	}
+	rt.wg.Add(1)
+	go func() {
+		defer rt.wg.Done()
+		minted, err := rt.store.MigrateActorWakeOutbox(ctx)
+		if err != nil {
 			log.Printf("runtime: actor wake outbox migration: %v", err)
 		} else if minted > 0 {
 			log.Printf("runtime: actor wake outbox migration minted %d pending wakes", minted)
 		}
-	}
+	}()
 }
 
 // startProjector launches the continuous store→actor projection. It drains the

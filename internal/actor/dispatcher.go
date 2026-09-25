@@ -289,18 +289,42 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		if !u.NotBefore.IsZero() && time.Now().Before(u.NotBefore) {
 			continue
 		}
+		// Record the delivery attempt BEFORE running the handler so a
+		// process-fatal crash mid-handler still increments the durable counter.
+		// Recording only on a returned error left a crash→restart→re-fire→crash
+		// loop: the wake stays unprocessed and the attempt is never counted.
+		attempts, aerr := d.log.RecordAttempt(ctx, agentID, u.UpdateID)
+		if aerr != nil {
+			// Without a durable attempt count this delivery is unbounded; skip
+			// rather than risk an unrecorded crash loop. Retried next cycle.
+			log.Printf("dispatcher: record attempt %s/%s: %v", agentID, u.UpdateID, aerr)
+			break
+		}
+		// Poison check BEFORE the handler: an event that already exhausted its
+		// budget (e.g. it crashed the process on a prior delivery) is routed to
+		// the error sink without re-running the handler. attempts counts this
+		// delivery, so the bound is strict-greater.
+		if d.opts.MaxAttempts > 0 && attempts > d.opts.MaxAttempts && d.opts.ErrorSink != "" && u.Kind != "delivery_failed" {
+			emitted = append(emitted, Update{
+				UpdateID:    u.UpdateID + ":delivery_failed",
+				ToAgentID:   d.opts.ErrorSink,
+				FromAgentID: agentID,
+				Kind:        "delivery_failed",
+				Content:     u.UpdateID,
+				CreatedAt:   time.Now().UTC(),
+			})
+			incorporated = append(incorporated, u.UpdateID)
+			log.Printf("dispatcher: poison %s/%s after %d attempts -> %s", agentID, u.UpdateID, attempts, d.opts.ErrorSink)
+			continue
+		}
 		newMemory, herr := d.safeHandleUpdate(actx, agentID, u, memory)
 		// Drain this event's emissions now so a failed handler's partial
 		// emissions are discarded, not committed with the batch.
 		evEmitted := buf.drain()
 		if herr != nil {
 			// At-least-once: leave unprocessed; the dispatcher retries.
-			// Retry accounting is durable tape state so poison detection
-			// survives a restart.
-			attempts, aerr := d.log.RecordAttempt(ctx, agentID, u.UpdateID)
-			if aerr != nil {
-				log.Printf("dispatcher: record attempt %s/%s: %v", agentID, u.UpdateID, aerr)
-			}
+			// attempts already counts this delivery; >= poisons on the last
+			// allowed attempt.
 			if d.opts.MaxAttempts > 0 && attempts >= d.opts.MaxAttempts && d.opts.ErrorSink != "" && u.Kind != "delivery_failed" {
 				// Poison event: emit delivery_failed to the error sink and
 				// incorporate the poisoned event so it stops re-firing. Do NOT
