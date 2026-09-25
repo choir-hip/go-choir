@@ -9,8 +9,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 	"log"
@@ -153,11 +153,74 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 				return fmt.Errorf("reduce: verify %s requires the inspected bundle digest", in.LocalID)
 			}
 		default:
-			return fmt.Errorf("reduce: unknown intent kind %q", in.Kind)
+			if err := validateSemanticActIntent(in); err != nil {
+				return err
+			}
 		}
 	}
 	if complete > 1 {
 		return fmt.Errorf("reduce: at most one complete per cell")
+	}
+	return nil
+}
+
+// validateSemanticActIntent accepts the mission-R2 commitment-ledger act
+// kinds (cast/ask/note/reply/cancel/escalate/precommit/report/resolve) and
+// rejects anything else. Each act needs the field it names; an unrecognized
+// kind is still rejected.
+func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
+	needTo := func() error {
+		if in.ToDesk == "" {
+			return fmt.Errorf("reduce: %s %s missing destination desk", in.Kind, in.LocalID)
+		}
+		return nil
+	}
+	switch in.Kind {
+	case yaegikernel.IntentCast:
+		if err := needTo(); err != nil {
+			return err
+		}
+		if in.Objective == "" {
+			return fmt.Errorf("reduce: cast %s missing objective", in.LocalID)
+		}
+	case yaegikernel.IntentAsk:
+		if err := needTo(); err != nil {
+			return err
+		}
+		if in.Question == "" {
+			return fmt.Errorf("reduce: ask %s missing question", in.LocalID)
+		}
+	case yaegikernel.IntentNote, yaegikernel.IntentEscalate:
+		if err := needTo(); err != nil {
+			return err
+		}
+		if in.Body == "" {
+			return fmt.Errorf("reduce: %s %s missing body", in.Kind, in.LocalID)
+		}
+	case yaegikernel.IntentReply:
+		if err := needTo(); err != nil {
+			return err
+		}
+		if in.TargetRef == "" {
+			return fmt.Errorf("reduce: reply %s missing the ask's target ref", in.LocalID)
+		}
+	case yaegikernel.IntentCancel, yaegikernel.IntentResolve:
+		if in.TargetRef == "" {
+			return fmt.Errorf("reduce: %s %s missing the act ref it closes", in.Kind, in.LocalID)
+		}
+	case yaegikernel.IntentPrecommit:
+		if in.Statement == "" {
+			return fmt.Errorf("reduce: precommit %s missing the frozen prediction statement", in.LocalID)
+		}
+	case yaegikernel.IntentReport:
+		if err := needTo(); err != nil {
+			return err
+		}
+		if in.Claim == "" {
+			return fmt.Errorf("reduce: report %s missing the claim", in.LocalID)
+		}
+	default:
+		return fmt.Errorf("reduce: unknown intent kind %q", in.Kind)
 	}
 	return nil
 }
@@ -233,6 +296,32 @@ func castStagedIntent(ctx context.Context, mb rlmMailbox, scope ReductionScope, 
 	case yaegikernel.IntentComplete:
 		to = scope.ReturnTo
 		content = encodeEnvelope(rlmEnvelope{Kind: "complete", Result: in.Result, Verdict: in.Verdict, Summary: in.Summary, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
+	// Semantic-act verbs (mission R2). Addressed acts mail an envelope that
+	// carries the act kind so the receiving desk sees the typed act, not a
+	// bare message. Ledger-bound acts (precommit/report/resolve) additionally
+	// write the commitment record on the commit path (commitActIntent).
+	case yaegikernel.IntentCast:
+		to = in.ToDesk
+		content = encodeEnvelope(rlmEnvelope{Kind: "cast", Objective: in.Objective, Body: in.Statement, From: scope.FromAgentID})
+	case yaegikernel.IntentAsk:
+		to = in.ToDesk
+		content = encodeEnvelope(rlmEnvelope{Kind: "ask", Body: in.Question, From: scope.FromAgentID})
+	case yaegikernel.IntentNote:
+		to = in.ToDesk
+		content = encodeEnvelope(rlmEnvelope{Kind: "note", Body: in.Body, From: scope.FromAgentID})
+	case yaegikernel.IntentReply:
+		to = in.ToDesk
+		content = encodeEnvelope(rlmEnvelope{Kind: "reply", Body: in.Answer, From: scope.FromAgentID})
+	case yaegikernel.IntentEscalate:
+		to = in.ToDesk
+		content = encodeEnvelope(rlmEnvelope{Kind: "escalate", Body: in.Body, From: scope.FromAgentID})
+	case yaegikernel.IntentReport:
+		to = in.ToDesk
+		content = encodeEnvelope(rlmEnvelope{Kind: "report", Body: in.Claim, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
+	case yaegikernel.IntentResolve, yaegikernel.IntentCancel, yaegikernel.IntentPrecommit:
+		// Resolved purely on the ledger path: the act lands on the target
+		// commitment record, not a desk mailbox. Handled by commitActIntent.
+		return 0, nil
 	default:
 		return 0, fmt.Errorf("intent kind %q has no envelope path", in.Kind)
 	}

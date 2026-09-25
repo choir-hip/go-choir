@@ -137,6 +137,18 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		exports["Spawn"] = reflect.ValueOf(s.Spawn)
 		exports["Complete"] = reflect.ValueOf(s.Complete)
 		exports["Freeze"] = reflect.ValueOf(s.Freeze)
+		// Semantic-act verb surface (mission R2 commitment-ledger carrier).
+		// Operational + epistemic acts stage into the cell tray; the reducer
+		// authors them (and their ledger records) on cell return.
+		exports["Cast"] = reflect.ValueOf(s.Cast)
+		exports["Ask"] = reflect.ValueOf(s.Ask)
+		exports["Note"] = reflect.ValueOf(s.Note)
+		exports["Reply"] = reflect.ValueOf(s.Reply)
+		exports["CancelAct"] = reflect.ValueOf(s.CancelAct)
+		exports["Escalate"] = reflect.ValueOf(s.Escalate)
+		exports["Precommit"] = reflect.ValueOf(s.Precommit)
+		exports["Report"] = reflect.ValueOf(s.Report)
+		exports["ResolveAct"] = reflect.ValueOf(s.ResolveAct)
 	}
 	if s != nil && s.slot == "verifier" {
 		exports["Verify"] = reflect.ValueOf(s.Verify)
@@ -352,4 +364,99 @@ func (s *ChoirScope) Outcome(value string) (MessageResult, error) {
 		return MessageResult{MessageID: localID}, nil
 	}
 	return s.Message(s.activationID, "outcome", value)
+}
+
+// --- Semantic-act verbs (mission R2). Each delegates to the bound tray;
+// all require a bound cell and a non-read-only scope. The reducer authors
+// the act and its commitment-ledger record on cell return.
+
+func (s *ChoirScope) boundTray(op string) (*Tray, error) {
+	if err := s.mutateDenied(op); err != nil {
+		return nil, err
+	}
+	if s.tray == nil {
+		return nil, fmt.Errorf("choir: %s requires a bound cell", op)
+	}
+	return s.tray, nil
+}
+
+// Cast stages delegated admission of a downstream assignment.
+func (s *ChoirScope) Cast(desk, objective, spec string) (string, error) {
+	t, err := s.boundTray("cast")
+	if err != nil {
+		return "", err
+	}
+	return t.Cast(desk, objective, spec)
+}
+
+// Ask stages a directed query that resolves on the target's Reply.
+func (s *ChoirScope) Ask(toDesk, question string) (string, error) {
+	t, err := s.boundTray("ask")
+	if err != nil {
+		return "", err
+	}
+	return t.Ask(toDesk, question)
+}
+
+// Note stages raw unscored transport.
+func (s *ChoirScope) Note(toDesk, body string) (string, error) {
+	t, err := s.boundTray("note")
+	if err != nil {
+		return "", err
+	}
+	return t.Note(toDesk, body)
+}
+
+// Reply answers a staged Ask.
+func (s *ChoirScope) Reply(toDesk, targetRef, answer string) (string, error) {
+	t, err := s.boundTray("reply")
+	if err != nil {
+		return "", err
+	}
+	return t.Reply(toDesk, targetRef, answer)
+}
+
+// CancelAct retracts a commitment by ref.
+func (s *ChoirScope) CancelAct(targetRef string) (string, error) {
+	t, err := s.boundTray("cancel")
+	if err != nil {
+		return "", err
+	}
+	return t.Cancel(targetRef)
+}
+
+// Escalate surfaces an issue to management or the owner.
+func (s *ChoirScope) Escalate(toDesk, issue string) (string, error) {
+	t, err := s.boundTray("escalate")
+	if err != nil {
+		return "", err
+	}
+	return t.Escalate(toDesk, issue)
+}
+
+// Precommit freezes a typed prediction on the commitment ledger.
+func (s *ChoirScope) Precommit(statement, resolverID, deadline string) (string, error) {
+	t, err := s.boundTray("precommit")
+	if err != nil {
+		return "", err
+	}
+	return t.Precommit(statement, resolverID, deadline)
+}
+
+// Report asserts a typed claim with evidence refs and a named resolver.
+func (s *ChoirScope) Report(toDesk, claim string, evidenceRefs []string, resolverID string) (string, error) {
+	t, err := s.boundTray("report")
+	if err != nil {
+		return "", err
+	}
+	return t.Report(toDesk, claim, evidenceRefs, resolverID)
+}
+
+// ResolveAct is the named resolver's act closing a Report/Ask/Precommit.
+func (s *ChoirScope) ResolveAct(targetRef, outcome string) (string, error) {
+	t, err := s.boundTray("resolve")
+	if err != nil {
+		return "", err
+	}
+	return t.Resolve(targetRef, outcome)
 }

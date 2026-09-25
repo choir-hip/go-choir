@@ -31,6 +31,36 @@ const (
 	IntentVerify = "verify"
 )
 
+// Semantic-act intent kinds (commitment-ledger carrier, mission R2). These
+// stage the same way as the existing kinds: they land in the tray in
+// microseconds and the reducer authors the act on cell return. Cast/Ask/Note/
+// Reply/Cancel/Escalate are operational acts (tracked, not scored);
+// Precommit/Report/Resolve are epistemic acts (claims that resolve and score
+// on the commitment ledger).
+const (
+	// IntentCast is delegated admission: open a downstream assignment under
+	// the delegated-cast admission authority (not an owner revision).
+	IntentCast = "cast"
+	// IntentAsk is a directed query; it resolves on the target's Reply.
+	IntentAsk = "ask"
+	// IntentNote is raw unscored transport (the successor to Message's
+	// unstructured use).
+	IntentNote = "note"
+	// IntentReply answers a staged Ask.
+	IntentReply = "reply"
+	// IntentCancel retracts a commitment; IntentEscalate surfaces an issue to
+	// management or the owner. Both are operational, unscored.
+	IntentCancel   = "cancel"
+	IntentEscalate = "escalate"
+	// IntentPrecommit freezes a typed prediction on the commitment ledger.
+	IntentPrecommit = "precommit"
+	// IntentReport asserts a typed claim with evidence and names its
+	// resolver; it resolves when that resolver's acceptance lands.
+	IntentReport = "report"
+	// IntentResolve is the named resolver's act closing a Report/Ask.
+	IntentResolve = "resolve"
+)
+
 // Completion results for IntentComplete.
 const (
 	CompleteCompleted = "completed"
@@ -88,6 +118,22 @@ type StagedIntent struct {
 	Decision     string   `json:"decision,omitempty"`
 	VerifierRefs []string `json:"verifier_refs,omitempty"`
 	BundleDigest string   `json:"bundle_digest,omitempty"`
+	// Semantic-act fields (mission R2 commitment-ledger intents).
+	// TargetRef binds a Resolve/Reply/Cancel to the act it closes (the
+	// staged intent's canonical commitment or message id). Claim is a
+	// Report's typed claim text. ResolverID names the desk/actor that must
+	// accept a Report or resolve a Precommit. Question is an Ask's prompt;
+	// Answer is a Reply's/Resolve's body. Outcome is a Resolve verdict.
+	// Statement is a Precommit's frozen prediction body (JSON-encoded
+	// CommitmentRecord prediction). Deadline is a resolve-by bound.
+	TargetRef  string `json:"target_ref,omitempty"`
+	Claim      string `json:"claim,omitempty"`
+	ResolverID string `json:"resolver_id,omitempty"`
+	Question   string `json:"question,omitempty"`
+	Answer     string `json:"answer,omitempty"`
+	OutcomeVal string `json:"outcome_val,omitempty"`
+	Statement  string `json:"statement,omitempty"`
+	Deadline   string `json:"deadline,omitempty"`
 }
 
 // Tray stages one cell's outbound intents. It is not safe for concurrent use:
@@ -196,11 +242,95 @@ func (t *Tray) Outcome(toDesk, body string) (string, error) {
 	return t.stage(StagedIntent{Kind: IntentOutcome, ToDesk: toDesk, Body: body})
 }
 
+// --- Semantic-act tray methods (mission R2). All stage a single intent and
+// return the cell-local correlation id; the reducer authors the act and its
+// commitment-ledger record on cell return.
+
+// Cast stages delegated admission: open a downstream assignment for
+// (desk, objective) under the delegated-cast admission authority. Spec is an
+// optional structured payload (JSON) the assignment binds.
+func (t *Tray) Cast(desk, objective, spec string) (string, error) {
+	if desk == "" || objective == "" {
+		return "", fmt.Errorf("tray: cast requires a desk and objective")
+	}
+	return t.stage(StagedIntent{Kind: IntentCast, ToDesk: desk, Objective: objective, Statement: spec})
+}
+
+// Ask stages a directed query to a desk; it resolves on the target's Reply.
+func (t *Tray) Ask(toDesk, question string) (string, error) {
+	if toDesk == "" || question == "" {
+		return "", fmt.Errorf("tray: ask requires a desk and a question")
+	}
+	return t.stage(StagedIntent{Kind: IntentAsk, ToDesk: toDesk, Question: question})
+}
+
+// Note stages raw unscored transport to a desk (successor to unstructured
+// Message). Returns the cell-local correlation id.
+func (t *Tray) Note(toDesk, body string) (string, error) {
+	if toDesk == "" {
+		return "", fmt.Errorf("tray: note requires a destination desk")
+	}
+	return t.stage(StagedIntent{Kind: IntentNote, ToDesk: toDesk, Body: body})
+}
+
+// Reply answers a staged Ask; targetRef is the Ask's correlation id.
+func (t *Tray) Reply(toDesk, targetRef, answer string) (string, error) {
+	if toDesk == "" || targetRef == "" {
+		return "", fmt.Errorf("tray: reply requires a desk and the ask's target ref")
+	}
+	return t.stage(StagedIntent{Kind: IntentReply, ToDesk: toDesk, TargetRef: targetRef, Answer: answer})
+}
+
+// Cancel retracts a commitment by its correlation/record ref.
+func (t *Tray) Cancel(targetRef string) (string, error) {
+	if targetRef == "" {
+		return "", fmt.Errorf("tray: cancel requires the commitment ref")
+	}
+	return t.stage(StagedIntent{Kind: IntentCancel, TargetRef: targetRef})
+}
+
+// Escalate surfaces an issue to management or the owner.
+func (t *Tray) Escalate(toDesk, issue string) (string, error) {
+	if toDesk == "" || issue == "" {
+		return "", fmt.Errorf("tray: escalate requires a target and an issue")
+	}
+	return t.stage(StagedIntent{Kind: IntentEscalate, ToDesk: toDesk, Body: issue})
+}
+
+// Precommit freezes a typed prediction on the commitment ledger. statement is
+// the JSON-encoded CommitmentRecord prediction body; resolverID names who
+// resolves it; deadline bounds resolution.
+func (t *Tray) Precommit(statement, resolverID, deadline string) (string, error) {
+	if statement == "" {
+		return "", fmt.Errorf("tray: precommit requires a frozen prediction statement")
+	}
+	return t.stage(StagedIntent{Kind: IntentPrecommit, Statement: statement, ResolverID: resolverID, Deadline: deadline})
+}
+
+// Report asserts a typed claim with evidence refs and names its resolver.
+func (t *Tray) Report(toDesk, claim string, evidenceRefs []string, resolverID string) (string, error) {
+	if toDesk == "" || claim == "" {
+		return "", fmt.Errorf("tray: report requires a desk and a claim")
+	}
+	return t.stage(StagedIntent{Kind: IntentReport, ToDesk: toDesk, Claim: claim, EvidenceRefs: evidenceRefs, ResolverID: resolverID})
+}
+
+// Resolve is the named resolver's act closing a Report/Ask/Precommit;
+// targetRef is the act being resolved and outcome is the verdict.
+func (t *Tray) Resolve(targetRef, outcome string) (string, error) {
+	if targetRef == "" || outcome == "" {
+		return "", fmt.Errorf("tray: resolve requires the act ref and an outcome")
+	}
+	return t.stage(StagedIntent{Kind: IntentResolve, TargetRef: targetRef, OutcomeVal: outcome})
+}
+
 func (t *Tray) stage(in StagedIntent) (string, error) {
 	if len(t.intents) >= MaxIntentsPerCell {
 		return "", fmt.Errorf("tray: cell intent quota exceeded (%d)", MaxIntentsPerCell)
 	}
-	size := len(in.Body) + len(in.Objective) + len(in.Summary) + len(in.Verdict) + len(in.BuildRecipeRef) + len(in.Decision)
+	size := len(in.Body) + len(in.Objective) + len(in.Summary) + len(in.Verdict) + len(in.BuildRecipeRef) + len(in.Decision) +
+		len(in.TargetRef) + len(in.Claim) + len(in.ResolverID) + len(in.Question) + len(in.Answer) + len(in.OutcomeVal) +
+		len(in.Statement) + len(in.Deadline)
 	for _, refs := range [][]string{in.EvidenceRefs, in.ExecutionRefs, in.TestReceipts, in.DependencyToolchainRefs, in.VerifierRefs} {
 		for _, ref := range refs {
 			size += len(ref)
