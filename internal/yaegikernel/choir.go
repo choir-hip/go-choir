@@ -140,19 +140,19 @@ var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
 	// the filesystem (mutation is capsule-bound under engineering).
 	"management": {"Message", "Outcome", "Spawn", "Cast", "Ask", "Note", "Reply",
-		"CancelAct", "Escalate", "EscalateActions", "Precommit", "Report", "ResolveAct"},
+		"CancelAct", "Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct"},
 	// Engineering mutates inside its capsule and reports fate.
 	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Outcome", "Spawn",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ResolveAct"},
+		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct"},
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
 	"research": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ResolveAct"},
+		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct"},
 	// Texture authors document revisions and escalates; artifact writes are
 	// texture controls, not capsule file ops.
 	"texture": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ResolveAct"},
+		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct"},
 }
 
 func (s *ChoirScope) deskModule(name string) bool {
@@ -197,6 +197,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"EscalateActions": func() reflect.Value { return reflect.ValueOf(s.EscalateActions) },
 		"Precommit":       func() reflect.Value { return reflect.ValueOf(s.Precommit) },
 		"Report":          func() reflect.Value { return reflect.ValueOf(s.Report) },
+		"ReportPacket":    func() reflect.Value { return reflect.ValueOf(s.ReportPacket) },
 		"ResolveAct": func() reflect.Value {
 			return reflect.ValueOf(s.ResolveAct)
 		},
@@ -525,6 +526,18 @@ func (s *ChoirScope) Report(toDesk, claim string, evidenceRefs []string, resolve
 		return "", err
 	}
 	return t.Report(toDesk, claim, evidenceRefs, resolverID)
+}
+
+// ReportPacket asserts a report whose body is the full coagent source-packet
+// schema — the update_coagent packet contract surviving as Report's body
+// (mission R2). packetJSON is a JSON-encoded types.CoagentSourcePacketPayload;
+// the reducer validates kind/claims/sources/actions/questions before commit.
+func (s *ChoirScope) ReportPacket(toDesk, packetJSON, resolverID string) (string, error) {
+	t, err := s.boundTray("report")
+	if err != nil {
+		return "", err
+	}
+	return t.ReportPacket(toDesk, packetJSON, resolverID)
 }
 
 // ResolveAct is the named resolver's act closing a Report/Ask/Precommit.

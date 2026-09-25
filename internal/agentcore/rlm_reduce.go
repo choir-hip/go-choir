@@ -236,7 +236,10 @@ type rlmEnvelope struct {
 	Verdict      string   `json:"verdict,omitempty"`
 	Summary      string   `json:"summary,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
-	From         string   `json:"from"`
+	// Packet carries a report's coagent source-packet body on the wire so the
+	// receiving desk sees the full typed packet, not just the claim line.
+	Packet string `json:"packet,omitempty"`
+	From   string `json:"from"`
 }
 
 func encodeEnvelope(env rlmEnvelope) string {
@@ -318,7 +321,7 @@ func castStagedIntent(ctx context.Context, mb rlmMailbox, scope ReductionScope, 
 		content = encodeEnvelope(rlmEnvelope{Kind: "escalate", Body: in.Body, From: scope.FromAgentID})
 	case yaegikernel.IntentReport:
 		to = in.ToDesk
-		content = encodeEnvelope(rlmEnvelope{Kind: "report", Body: in.Claim, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
+		content = encodeEnvelope(rlmEnvelope{Kind: "report", Body: in.Claim, EvidenceRefs: in.EvidenceRefs, Packet: in.Packet, From: scope.FromAgentID})
 	case yaegikernel.IntentResolve, yaegikernel.IntentCancel, yaegikernel.IntentPrecommit:
 		// Resolved purely on the ledger path: the act lands on the target
 		// commitment record, not a desk mailbox. Handled by commitActIntent.
@@ -650,6 +653,19 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 			}
 		}
 	}
+	// A packet-bodied report carries the coagent packet schema as its body
+	// (mission R2 — the update_coagent packet contract surviving on the
+	// carrier). Validate it with the same payload validator the retired tool
+	// enforced, so kind/claims/sources/actions/questions keep their contract.
+	if in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.Packet) != "" {
+		var packet types.CoagentSourcePacketPayload
+		if err := json.Unmarshal([]byte(in.Packet), &packet); err != nil {
+			return 0, fmt.Errorf("reduce: report packet is not a valid packet body: %w", err)
+		}
+		if err := validateCoagentSourcePacketPayload(packet); err != nil {
+			return 0, fmt.Errorf("reduce: report packet invalid: %w", err)
+		}
+	}
 	// Addressed acts mail their envelope so the target desk observes the act.
 	var seq uint64
 	switch in.Kind {
@@ -687,7 +703,13 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 	case yaegikernel.IntentPrecommit:
 		rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Statement}
 	case yaegikernel.IntentReport:
-		rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Claim}
+		// A packet-bodied report preserves the full coagent packet as the
+		// claim body; a thin report uses the claim text.
+		if strings.TrimSpace(in.Packet) != "" {
+			rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Packet}
+		} else {
+			rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Claim}
+		}
 	}
 	if in.TargetRef != "" {
 		rec.ParentID = in.TargetRef

@@ -139,6 +139,11 @@ type StagedIntent struct {
 	// actions under explicit safety annotations. JSON-encoded
 	// []types.CoagentPacketAction; nil for a plain issue escalation.
 	Actions string `json:"actions,omitempty"`
+	// Packet carries a Report's full coagent source-packet body (the
+	// update_coagent packet schema surviving on the carrier) — JSON-encoded
+	// types.CoagentSourcePacketPayload. Set by ReportPacket; empty for a thin
+	// claim-only Report.
+	Packet string `json:"packet,omitempty"`
 }
 
 // Tray stages one cell's outbound intents. It is not safe for concurrent use:
@@ -334,6 +339,18 @@ func (t *Tray) Report(toDesk, claim string, evidenceRefs []string, resolverID st
 		return "", fmt.Errorf("tray: report requires a desk and a claim")
 	}
 	return t.stage(StagedIntent{Kind: IntentReport, ToDesk: toDesk, Claim: claim, EvidenceRefs: evidenceRefs, ResolverID: resolverID})
+}
+
+// ReportPacket stages a report whose body is the full coagent source-packet
+// schema — the update_coagent packet contract surviving as Report's body
+// (mission R2). packetJSON is a JSON-encoded types.CoagentSourcePacketPayload;
+// the reducer validates it (schema_version, kind, claims/sources/actions/
+// questions) before the act commits, preserving the packet's safety contract.
+func (t *Tray) ReportPacket(toDesk, packetJSON, resolverID string) (string, error) {
+	if toDesk == "" || strings.TrimSpace(packetJSON) == "" {
+		return "", fmt.Errorf("tray: report_packet requires a desk and a packet body")
+	}
+	return t.stage(StagedIntent{Kind: IntentReport, ToDesk: toDesk, Packet: packetJSON, ResolverID: resolverID})
 }
 
 // Resolve is the named resolver's act closing a Report/Ask/Precommit;

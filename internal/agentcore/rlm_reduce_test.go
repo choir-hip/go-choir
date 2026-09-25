@@ -389,6 +389,54 @@ func TestCommitActIntentEscalateActionsRejectsUnsafeActions(t *testing.T) {
 	}
 }
 
+// TestCommitActIntentReportPacketBody is the R2 Report-as-packet contract: a
+// report carrying the full coagent source-packet body validates against the
+// same payload schema the retired update_coagent enforced, and mails the
+// packet through the envelope so the target desk reads it.
+func TestCommitActIntentReportPacketBody(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	scope.CellID = "cell-report-packet"
+	ctx := testReductionCtx(scope)
+
+	// A packet failing the payload contract reduces nothing.
+	bad := `{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":""}`
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: scope}
+	if _, err := reduction.commitActIntent(ctx, yaegikernel.StagedIntent{
+		LocalID: "rep-bad", Kind: yaegikernel.IntentReport, ToDesk: "management",
+		Packet: bad, ResolverID: "management:root",
+	}); err == nil || !strings.Contains(err.Error(), "packet invalid") {
+		t.Fatalf("bad packet err = %v, want packet invalid", err)
+	}
+
+	// A valid packet commits and mails through the envelope.
+	good := `{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"source ready","claims":[{"text":"official source confirms"}],"sources":[{"source_id":"src-1","kind":"content_item","target":{"uri":"https://example.test/x"},"excerpt":"excerpt"}]}`
+	reduction = &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: scope}
+	seq, err := reduction.commitActIntent(ctx, yaegikernel.StagedIntent{
+		LocalID: "rep-ok", Kind: yaegikernel.IntentReport, ToDesk: "management",
+		Packet: good, ResolverID: "management:root",
+	})
+	if err != nil {
+		t.Fatalf("valid report packet: %v", err)
+	}
+	if seq == 0 {
+		t.Fatal("report packet mailed no envelope")
+	}
+	msgs, _, err := rt.ChannelRead(scope.ChannelID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundPacket := false
+	for _, m := range msgs {
+		if strings.Contains(m.Content, `"packet"`) && strings.Contains(m.Content, "src-1") {
+			foundPacket = true
+		}
+	}
+	if !foundPacket {
+		t.Fatalf("report packet body not on the wire: %+v", msgs)
+	}
+}
+
 func TestReduceCellIntentsSequentialCellsDistinctDestinations(t *testing.T) {
 	rt, _ := testRuntime(t)
 	scope := testReductionScope()
