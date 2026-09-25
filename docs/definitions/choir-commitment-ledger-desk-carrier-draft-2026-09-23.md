@@ -155,10 +155,16 @@ boundaries:
     - the object graph (new kinds; no third store)
 
 now:
-  status: working
-  slice: consumer census + commitment record schema landed (in-flight)
-  source_ref: main@60046751
-  deploy_identity: staging https://choir.news build.commit=ce28e407
+  status: complete
+  slice: carrier substrate landed + deployed (537fce04, resolve 5404d2c7)
+  source_ref: main@0707ff4a
+  deploy_identity: staging https://choir.news build.commit=537fce04
+  disposition: >-
+    Closed on the carrier substrate at owner direction 2026-09-25 ("close R2
+    on substrate, start R3"). The finish.acceptance end-state items that
+    require live desks / score accrual / deployed desk cells are folded into
+    R3/R4 — R2 delivered the substrate they run on; see
+    boundary_reconciliation_2026_09_25 for the exact items moved.
   candidate:
     id: none
     state: none
@@ -401,7 +407,27 @@ now:
     derived-view layer — R2 lands the resolution record shape it reads;
     (d) deployed delegated-cast proof needs a live desk cell on staging (R3).
 
-receipts: []
+receipts:
+  - id: r2-carrier-substrate-landed
+    boundary: terminal
+    identity: main@5404d2c7
+    proof_refs:
+      - 'deployed 537fce04 on choir.news — delegated-cast admission, async spawn wake, EscalateActions, ReportPacket, cast_authority reserved, update_coagent off management+research'
+      - '5404d2c7 — choir.Resolve writes a linked resolution record (discrepancy + observation + score + resolved_at) onto the OG ledger'
+      - 'acceptance probes internal/agentcore/r2_acceptance_test.go (cb6634dd) — precommit mint, registry census, delegated-cast admission authority'
+      - 'commitment schema internal/types/commitment.go + store.AppendCommitmentRecord (append-only OG choir.commitment_record)'
+      - 'consumer census docs/evidence/r2-update-coagent-consumer-census-2026-09-25.md'
+    rollback_ref: 'git revert of the carrier commits; ledger is additive (new OG kinds)'
+    disposition: >-
+      Closed on the carrier substrate 2026-09-25 at owner direction. The
+      live-desk / texture-ledger-consumer / score-accrual / deployed-cast
+      items moved to R3/R4 — see boundary_reconciliation_2026_09_25.
+    landing:
+      source_commit: 5404d2c7
+      ci_ref: 'push CI on 537fce04 (run 36193752882) success'
+      deploy_ref: 'staging deploy 537fce04'
+      environment_identity: 'choir.news build.commit=537fce04'
+      deployed_acceptance: 'carrier live; deployed desk-cell cast proof deferred to R3'
 ---
 
 ## The verb surface (adjudicated)
