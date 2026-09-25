@@ -8,6 +8,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -54,6 +55,59 @@ func TestR2PrecommitMintsLedgerRecord(t *testing.T) {
 	}
 	if id := commitmentCanonicalID(t, s, scope, intent); id == "" {
 		t.Fatal("precommit record absent from the commitment ledger")
+	}
+}
+
+// Probe 3 (resolution half) — a desk cell staging choir.Resolve(target,
+// outcome) writes the resolved outcome onto the ledger as a record linked to
+// the closed act: discrepancy class, resolver observation, and the resolver's
+// score answer are all captured so the score-accrual layer can read it. The
+// score never re-enters the acting cell's context — it lives only on the
+// ledger (the epistemic boundary).
+func TestR2ResolveWritesOutcomeOntoLedger(t *testing.T) {
+	rt, s := testRuntime(t)
+	scope := testReductionScope()
+	scope.CellID = "cell-r2-resolve"
+	ctx := testReductionCtx(scope)
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: scope, ledger: rt.store}
+
+	// A resolve with no outcome is rejected at the cell-reduce gate — the
+	// outcome is required before the act ever reaches commit.
+	if err := validateSemanticActIntent(yaegikernel.StagedIntent{
+		LocalID: "res-empty", Kind: yaegikernel.IntentResolve, TargetRef: "act:x",
+	}); err == nil {
+		t.Fatal("validateSemanticActIntent accepted an empty-outcome resolve")
+	}
+
+	// A resolve with a verdict mints a resolution record carrying the class,
+	// observation, and score answer.
+	intent := yaegikernel.StagedIntent{
+		LocalID: "res-1", Kind: yaegikernel.IntentResolve,
+		TargetRef: "act:frozen-corpus", OutcomeVal: "confirmed",
+	}
+	if _, err := reduction.commitActIntent(ctx, intent); err != nil {
+		t.Fatalf("resolve reduce: %v", err)
+	}
+	if id := commitmentCanonicalID(t, s, scope, intent); id == "" {
+		t.Fatal("resolve record absent from the commitment ledger")
+	}
+
+	// The derived record carries the resolution fields the score layer reads.
+	rec := commitmentRecordForIntent(scope, intent)
+	if rec.Discrepancy != types.DiscrepancyConfirmed {
+		t.Fatalf("resolve discrepancy = %q, want confirmed", rec.Discrepancy)
+	}
+	if rec.Observation.Excerpt != "confirmed" || rec.Observation.SourceRef != "act:frozen-corpus" {
+		t.Fatalf("resolve observation = %+v", rec.Observation)
+	}
+	if rec.Provenance.ResolvedAt == "" {
+		t.Fatal("resolve record missing ResolvedAt")
+	}
+	if len(rec.Scores) != 1 || rec.Scores[0].Answers["outcome"] != "confirmed" {
+		t.Fatalf("resolve score answer = %+v", rec.Scores)
+	}
+	if rec.ParentID != "act:frozen-corpus" {
+		t.Fatalf("resolve record not linked to closed act: ParentID=%q", rec.ParentID)
 	}
 }
 

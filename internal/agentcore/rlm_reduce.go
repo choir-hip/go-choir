@@ -205,9 +205,16 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		if in.TargetRef == "" {
 			return fmt.Errorf("reduce: reply %s missing the ask's target ref", in.LocalID)
 		}
-	case yaegikernel.IntentCancel, yaegikernel.IntentResolve:
+	case yaegikernel.IntentCancel:
 		if in.TargetRef == "" {
 			return fmt.Errorf("reduce: %s %s missing the act ref it closes", in.Kind, in.LocalID)
+		}
+	case yaegikernel.IntentResolve:
+		if in.TargetRef == "" {
+			return fmt.Errorf("reduce: %s %s missing the act ref it closes", in.Kind, in.LocalID)
+		}
+		if in.OutcomeVal == "" {
+			return fmt.Errorf("reduce: resolve %s missing the outcome verdict", in.LocalID)
 		}
 	case yaegikernel.IntentPrecommit:
 		if in.Statement == "" {
@@ -710,11 +717,51 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 		} else {
 			rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Claim}
 		}
+	case yaegikernel.IntentResolve:
+		// Resolution writes the outcome as a linked record on the ledger —
+		// never a rewrite of the target commitment (the ledger stays an
+		// auditable append-only event log). The record carries the verdict
+		// class, the resolver's observation, and the resolve timestamp so the
+		// score-accrual layer can read resolution→discrepancy without an
+		// index.
+		discrepancy := resolveOutcomeDiscrepancy(in.OutcomeVal)
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		rec.Discrepancy = discrepancy
+		rec.Observation = types.CommitmentObservation{
+			Excerpt:    in.OutcomeVal,
+			SourceRef:  in.TargetRef,
+			ObservedAt: now,
+		}
+		rec.Scores = []types.CommitmentScore{{
+			ScorerModelID: scope.FromAgentID,
+			Answers:       map[string]string{"outcome": in.OutcomeVal, "discrepancy": string(discrepancy)},
+			ScoredAt:      now,
+		}}
+		rec.Provenance.ResolvedAt = now
+		rec.RelatedIDs = []string{in.TargetRef}
 	}
 	if in.TargetRef != "" {
 		rec.ParentID = in.TargetRef
 	}
 	return rec
+}
+
+// resolveOutcomeDiscrepancy maps a resolver's free-form outcome verdict onto
+// the commitment ledger's discrepancy classes. Known verdicts normalize to
+// their class; an unrecognized free-form outcome is kept verbatim in the
+// record's observation and defaults to unresolved (the outcome never became
+// verifiable as a typed class) so resolution never fails on phrasing.
+func resolveOutcomeDiscrepancy(outcome string) types.DiscrepancyClass {
+	switch strings.ToLower(strings.TrimSpace(outcome)) {
+	case "confirmed", "correct", "held", "true", "pass", "passed", "success", "succeeded":
+		return types.DiscrepancyConfirmed
+	case "qualified", "partial", "partially", "mostly", "mixed":
+		return types.DiscrepancyQualified
+	case "contradicted", "wrong", "false", "fail", "failed", "refuted":
+		return types.DiscrepancyContradicted
+	default:
+		return types.DiscrepancyUnresolved
+	}
 }
 
 // isAssignedDesk reports whether this reduction serves an exact bound
