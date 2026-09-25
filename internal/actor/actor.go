@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -174,15 +175,32 @@ func (rt *Runtime) Stop() {
 	rt.mu.Unlock()
 }
 
-// Drain gracefully shuts down the actor runtime. The dispatcher's Stop waits
+// Drain gracefully shuts down the actor runtime, waiting up to timeout for
+// the dispatcher to finish in-flight activations. The dispatcher's Stop waits
 // for every in-flight activation to finish or fail its fenced commit, so no
-// activation is orphaned across a restart. Durable state is untouched; a new
-// runtime over the same log recovers via the pending projection.
+// activation is orphaned across a restart. If the timeout expires the runtime
+// is still marked closed; durable state is untouched and a new runtime over
+// the same log recovers via the pending projection.
 //
 // Drain is safe to call instead of Stop. It is also safe to call Stop after
 // Drain.
 func (rt *Runtime) Drain(timeout time.Duration) {
-	rt.Stop()
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	done := make(chan struct{})
+	go func() {
+		rt.kernel.Stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		log.Printf("actor runtime: drain timed out after %v", timeout)
+	}
+	rt.mu.Lock()
+	rt.closed = true
+	rt.mu.Unlock()
 }
 
 // resetTimer drains and resets a timer, tolerating an already-fired timer.

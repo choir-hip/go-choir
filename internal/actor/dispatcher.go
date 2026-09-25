@@ -66,12 +66,13 @@ func (b *emissionBuffer) Add(u Update) {
 	b.mu.Unlock()
 }
 
-// drain returns the buffered updates in emission order.
+// drain returns the buffered updates in emission order and clears the buffer,
+// so each call yields exactly the updates emitted since the previous drain.
 func (b *emissionBuffer) drain() []Update {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	out := make([]Update, len(b.updates))
-	copy(out, b.updates)
+	out := b.updates
+	b.updates = nil
 	return out
 }
 type Dispatcher struct {
@@ -288,7 +289,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		if !u.NotBefore.IsZero() && time.Now().Before(u.NotBefore) {
 			continue
 		}
-		newMemory, herr := d.handler.HandleUpdate(actx, agentID, u, memory)
+		newMemory, herr := d.safeHandleUpdate(actx, agentID, u, memory)
 		// Drain this event's emissions now so a failed handler's partial
 		// emissions are discarded, not committed with the batch.
 		evEmitted := buf.drain()
@@ -358,4 +359,23 @@ func (d *Dispatcher) Stop() {
 		<-d.done
 	}
 	d.wg.Wait()
+}
+
+// safeHandleUpdate converts a handler panic into an ordinary handler error so
+// the activation's retry/poison accounting still runs (a panic is not a free
+// pass around RecordAttempt). It reports the panic to OnActorFailure, then
+// returns an error so the event stays unprocessed and is retried — and a
+// chronically panicking handler is eventually routed to the error sink rather
+// than re-firing in a tight loop.
+func (d *Dispatcher) safeHandleUpdate(ctx context.Context, agentID string, u Update, memory []byte) (next []byte, err error) {
+	defer func() {
+		if rv := recover(); rv != nil {
+			err = fmt.Errorf("actor %s panic: %v", agentID, rv)
+			log.Printf("dispatcher: %v\n%s", err, debug.Stack())
+			if d.opts.OnActorFailure != nil {
+				d.opts.OnActorFailure(agentID, err)
+			}
+		}
+	}()
+	return d.handler.HandleUpdate(ctx, agentID, u, memory)
 }

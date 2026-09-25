@@ -268,3 +268,51 @@ func TestDispatcherPoisonEventRoutesToErrorSink(t *testing.T) {
 		t.Fatalf("expected >=2 attempts, got %d", calls)
 	}
 }
+
+// A handler that panics is not a free pass around poison accounting: the panic
+// is converted to a handler error, RecordAttempt runs, and after MaxAttempts
+// the event is routed to the error sink instead of re-firing in a tight loop.
+func TestDispatcherPanickingHandlerRoutesToErrorSink(t *testing.T) {
+	l := openKernelLog(t)
+	ctx := context.Background()
+
+	var calls int32
+	var failed atomic.Int32
+	h := HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		panic("handler boom")
+	})
+	d := NewDispatcher(l, h, DispatcherOptions{
+		PollInterval: 15 * time.Millisecond,
+		MaxAttempts:  2,
+		ErrorSink:    "error-sink",
+		OnActorFailure: func(agentID string, err error) {
+			failed.Add(1)
+		},
+	})
+	go d.Run(ctx)
+	defer d.Stop()
+
+	if _, err := l.Append(ctx, mkUpdate("panic1", "agent-x")); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	d.Notify()
+
+	// The panicking event must be incorporated (poisoned) after MaxAttempts,
+	// not re-fired forever.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, processed, err := l.UpdateStatus(ctx, "agent-x", "panic1")
+		if err == nil && processed {
+			break
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	_, processed, err := l.UpdateStatus(ctx, "agent-x", "panic1")
+	if err != nil || !processed {
+		t.Fatalf("panicking event not incorporated as poison: processed=%v err=%v calls=%d", processed, err, calls)
+	}
+	if failed.Load() == 0 {
+		t.Fatal("OnActorFailure was not called for the panicking handler")
+	}
+}
