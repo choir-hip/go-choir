@@ -235,18 +235,25 @@ now:
     skips deploy-impact (non_docs is push-diff-scoped); deploy was forced
     via workflow_dispatch force_staging_deploy.
  next_action: >-
-   Deletion pass landed and deployed (head 4daecd60, CI run 36110172609
-   green). Held-VM resurrection regression closed: deploy startup called
-   EnsureUniversalWirePlatformComputer -> ensureUniversalWirePlatformOwnership,
-   which drove stopped/booting/failed ownership to startExistingVM with no
-   IsHeld gate (internal/vmctl/platform_computer.go:104). Deployed as
-   91c8fd9f (CI 36156273423); Node B now logs `refused: held` and the
-   platform computer is durably stopped/held, zero firecracker, zero
-   pre-genesis spam. Remaining: restart-resume deployed proof (kill a live
-   guest autoputer mid-task, restart, observe tape-derived delivery),
-   in-scope recount to zero, consensus gate. Residual surfaced: a vmctl
-   restart can orphan a Firecracker proc for restart-loaded stopped
-   ownership (not manager-tracked) — parked as a follow-up, not blocking.
+   Consensus gate SEND-BACK (2026-09-25). The deletion mechanism is sound
+   (durable SQLite pending projection — dispatcher re-reads
+   PendingAgents/NextDue every poll; not memory), and the held-VM IsHeld
+   gate is accepted. But the gate found surviving boot-work paths that
+   still violate "boot causes no work" and can strand a committed
+   initial_dispatch:
+   (1) passivate_interrupted_activations (runtime.go:617) can mark a run
+       Passivated before the dispatcher delivers its pending
+       initial_dispatch; handleInitialDispatch then no-ops on Passivated
+       (handler.go:312) and marks the update processed -> stranded.
+   (2) reconcile_terminal_run_outcomes (runtime.go:2246,2318) mints wakes
+       via wakeUpdatedCoagent — contradicts the "mint no wakes" comment.
+   (3) recoverParkedLifecycleMailboxSnapshots (adapter.go:473) +
+       textureowner boot reconcile dispatch work at Start.
+   Plus: guest-rebind defect (docs/problems/vm-restart-no-rebind-8085)
+   blocks the live proof — root cause: no ProjectionBase advertised after
+   genesis (watermarkSeq==0), PlanRecovery fail-closes on restart.
+   Scope decision needed: K's deletion removed the sweeps that used to
+   mask these; the survivors need event-backed convergence or a ruling.
 
 receipts:
   - id: k-deletion-sweeps-timers-2026-09-25
