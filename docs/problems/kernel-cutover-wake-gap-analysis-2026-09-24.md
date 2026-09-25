@@ -216,3 +216,36 @@ dispatcher folds into the repair scans (making restart recovery
 dispatcher-driven), or (b) an owner-ratified charter amendment naming the
 state-repair sweeps + the debounce/deadline timers as exceptions. This is an
 authority decision, not an implementation detail — recorded for the owner.
+
+---
+
+## Landed fixes 2026-09-25 (incident: accounts fail to boot)
+
+Three red-class commits pushed to `main` to bound the delivery authority and
+unblock boot:
+
+- `f481e622` — **boot stall**: the embedded-Dolt `engineMu` no longer spans the
+  network CAS (validate+intercept moved out of the lock; `PutObject`/`PutBatch`
+  narrowed to the direct-SQL tx). `MigrateActorWakeOutbox` moved from synchronous
+  `actorruntime.New` to an async post-`Start` goroutine — it minted N sequential
+  network appends before the guest listened, the confirmed boot hang. Also:
+  `RecordAttempt` now runs *before* the handler + a pre-handler poison check, so
+  a process-fatal crash mid-handler still increments the durable attempt count.
+- `41f1303f` — **bound delivery**: `adapter.New` wires `MaxAttempts=8` +
+  `ErrorSink=<scoped delivery-poison mailbox>` (was dead code: empty
+  `DispatcherOptions`). `ErrDeferUnprocessed` now backs off via `DeferUpdate`
+  (sets `not_before`, rolls back the pre-recorded attempt) instead of
+  hot-looping and burning the poison budget.
+- `b575b2fb` — **stable wake identity**: `actorDispatchUpdateID` was a fresh
+  uuid for most kinds, so a recovery-sweep re-mint got a new `update_id`/budget
+  each boot and escaped the poison bound. Now a deterministic hash of the
+  logical wake `{owner,computer,to,kind,content,trajectory,from}` — a re-minted
+  wake lands on the same durable row and the same attempt count.
+
+**Panel adjudication adopted:** the boot sweeps are *kept* as wake producers for
+restart-recovery obligations (the pending projection cannot express a restart);
+the doom loop is bounded by `MaxAttempts`+`ErrorSink`+deterministic wake id
+rather than by deleting the sweeps. User directive "recovery is separate from
+auto-continue" is satisfied: sweeps mint wakes (recovery), the dispatcher
+delivers them (one delivery authority); a stuck wake dead-letters instead of
+auto-continuing forever.
