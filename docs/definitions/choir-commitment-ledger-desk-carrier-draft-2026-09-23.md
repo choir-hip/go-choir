@@ -353,6 +353,22 @@ now:
     commitment records; atomic commitment/OG commit inside the cursor
     (precondition 3); acceptance probes.
 
+  deployed_2026_09_25: >-
+    Staging runs 537fce04 (run 36193752882 success, push→CI→deploy loop
+    cleared shard-0 cast_authority and shard-4 texture regressions). Live on
+    choir.news: delegated-cast admission authority, async delegated-spawn
+    wake (delegated_assignment_spawn_deadline), EscalateActions (D13 verb),
+    ReportPacket (packet schema = Report body), cast_authority reserved from
+    model-authored control input, update_coagent off management+research.
+    REMAINING before finish.acceptance: (a) texture worker_updates_*
+    consumer-path migration to commitment records — ResolveTextureActor
+    Occurrence / producerOccurrence* / evidenceSourceEntitiesFromWorkerUpdates
+    still read the worker-update queue that now only wire roles write; (b)
+    atomic commitment/OG commit inside the cursor transaction (consensus
+    precondition 3's ledger side); (c) the four acceptance probes (delegated
+    cast opens assignment, report resolves on resolver, precommit freezes,
+    escalate-actions gated on safety).
+
 receipts: []
 ---
 
