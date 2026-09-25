@@ -875,8 +875,11 @@ func Open(dbPath string) (*Store, error) {
 	}
 	// Create a read-only DoltStore using the read connection pool so OG
 	// reads don't block during write transactions on the main connection.
+	// Both stores share one embedded engine, which is not safe for concurrent
+	// queries - serialize them on a single mutex.
 	if readDB != nil {
 		s.ogReadStore = objectgraph.NewDoltStore(readDB)
+		s.ogReadStore.ShareEngineMutex(ogDoltStore)
 	}
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,

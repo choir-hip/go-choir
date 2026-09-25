@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -59,6 +60,11 @@ type DoltStore struct {
 	db        *sql.DB
 	intercept MutationInterceptor
 	validate  WriteValidator
+	// engineMu serializes access to the embedded Dolt engine. Two DoltStore
+	// instances over one connector (write + read pools) share one engine,
+	// which is not safe for concurrent queries - they race on shared internal
+	// buffers (unescapeHTMLCodepoints mutating a JSON slice in place).
+	engineMu *sync.Mutex
 }
 
 // MutationInterceptor receives durable object/edge mutations before SQL.
@@ -98,7 +104,15 @@ type JSONFieldMatch struct {
 // NewDoltStore returns a DoltStore backed by the given *sql.DB. The
 // caller must call EnsureSchema before using the store.
 func NewDoltStore(db *sql.DB) *DoltStore {
-	return &DoltStore{db: db}
+	return &DoltStore{db: db, engineMu: &sync.Mutex{}}
+}
+
+// ShareEngineMutex points this store at another store's engine mutex so two
+// DoltStore instances over one embedded connector serialize all access.
+func (s *DoltStore) ShareEngineMutex(other *DoltStore) {
+	if other != nil && other.engineMu != nil {
+		s.engineMu = other.engineMu
+	}
 }
 
 // EnsureSchema creates the og_objects and og_edges tables if they do
@@ -107,6 +121,8 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	_, err := s.db.ExecContext(ctx, SchemaDDL)
 	if err != nil {
 		return fmt.Errorf("objectgraph dolt: ensure schema: %w", err)
@@ -118,6 +134,8 @@ func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	if s.validate != nil {
 		if err := s.validate(ctx, []Object{obj}, nil); err != nil {
 			return err
@@ -154,6 +172,8 @@ func (s *DoltStore) GetObject(ctx context.Context, id string) (Object, error) {
 	if s == nil || s.db == nil {
 		return Object{}, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	return scanDoltObject(s.db.QueryRowContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
 }
@@ -162,6 +182,8 @@ func (s *DoltStore) ListObjects(ctx context.Context, filter ListFilter) ([]Objec
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE 1=1`
 	var args []any
 	if filter.Kind != "" {
@@ -208,6 +230,8 @@ func (s *DoltStore) ReadObjectSnapshot(ctx context.Context, ownerID, computerID 
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	if ownerID == "" || computerID == "" {
 		return nil, fmt.Errorf("objectgraph dolt: snapshot owner_id and computer_id are required")
@@ -244,6 +268,8 @@ func (s *DoltStore) PutEdge(ctx context.Context, edge Edge) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	if s.intercept != nil {
 		return s.intercept(ctx, nil, []Edge{edge})
 	}
@@ -268,6 +294,8 @@ func (s *DoltStore) ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge, e
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	query := `SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone FROM og_edges WHERE 1=1`
 	var args []any
 	if filter.FromID != "" {
@@ -323,6 +351,8 @@ func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, 
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	if s.validate != nil {
 		if err := s.validate(ctx, batch.Objects, batch.Edges); err != nil {
 			return err
@@ -433,6 +463,8 @@ func (s *DoltStore) GetObjectByMetadata(ctx context.Context, kind, jsonPath, val
 	if s == nil || s.db == nil {
 		return Object{}, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	return scanDoltObject(s.db.QueryRowContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
@@ -446,6 +478,8 @@ func (s *DoltStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, v
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
@@ -474,6 +508,8 @@ func (s *DoltStore) ListObjectsPage(ctx context.Context, kind, afterCanonicalID 
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
@@ -502,6 +538,8 @@ func (s *DoltStore) ListObjectsByMetadataPage(ctx context.Context, kind, jsonPat
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	if !strings.HasPrefix(jsonPath, "$.") {
 		return nil, fmt.Errorf("objectgraph dolt: invalid metadata JSON path %q", jsonPath)
 	}
@@ -534,6 +572,8 @@ func (s *DoltStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
 		 WHERE object_kind = ? AND owner_id = ?`
@@ -590,6 +630,8 @@ func (s *DoltStore) ListObjectRefsByKindOwner(ctx context.Context, kind, ownerID
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
 		return nil, fmt.Errorf("objectgraph dolt: owner_id is required")
@@ -625,6 +667,8 @@ func (s *DoltStore) ListAllObjectRefsByKindOwner(ctx context.Context, kind, owne
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
 		return nil, fmt.Errorf("objectgraph dolt: owner_id is required")
@@ -667,6 +711,8 @@ func (s *DoltStore) ListJSONBodyFieldsByKindOwner(ctx context.Context, kind, own
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
 		return nil, fmt.Errorf("objectgraph dolt: owner_id is required")
@@ -719,6 +765,8 @@ func (s *DoltStore) GetEdge(ctx context.Context, fromID string, kind EdgeKind) (
 	if s == nil || s.db == nil {
 		return Edge{}, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	return scanDoltEdge(s.db.QueryRowContext(ctx,
 		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
 		 FROM og_edges WHERE from_id = ? AND kind = ? AND tombstone = FALSE
@@ -730,6 +778,8 @@ func (s *DoltStore) ListEdgesFrom(ctx context.Context, fromID string) ([]Edge, e
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
 		 FROM og_edges WHERE from_id = ? AND tombstone = FALSE ORDER BY created_at`, fromID)
@@ -754,6 +804,8 @@ func (s *DoltStore) ListEdgesByKind(ctx context.Context, fromID string, kind Edg
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
 		 FROM og_edges WHERE from_id = ? AND kind = ? AND tombstone = FALSE ORDER BY created_at`,
@@ -823,8 +875,13 @@ func (s *DoltStore) DeleteObject(ctx context.Context, id string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
 	if s.intercept != nil {
-		obj, err := s.GetObject(ctx, id)
+		// Inline the GetObject read: public methods must not call each other
+		// now that engine access is serialized by engineMu.
+		obj, err := scanDoltObject(s.db.QueryRowContext(ctx,
+			`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return nil
