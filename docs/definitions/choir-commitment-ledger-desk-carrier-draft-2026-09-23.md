@@ -369,6 +369,17 @@ now:
     cast opens assignment, report resolves on resolver, precommit freezes,
     escalate-actions gated on safety).
 
+  acceptance_probes: >-
+    internal/agentcore/r2_acceptance_test.go (cb6634dd): precommit mints an
+    idempotent OG commitment record; the four-desk registry census has
+    update_coagent absent and processor/reconciler retaining it; a management
+    choir.Cast mints its commitment and reaches openDelegatedCastAssignment
+    under caster authority (substrate stop at capsule preflight on darwin;
+    live executor continues on staging). report/escalate packet+safety
+    bodies were already covered by rlm_reduce_test.go. The deployed full
+    open+spawn on staging requires the Linux guest kernel and a live desk
+    cell; it is the remaining deployed-proof item.
+
 receipts: []
 ---
 
