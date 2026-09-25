@@ -155,10 +155,10 @@ boundaries:
     - the object graph (new kinds; no third store)
 
 now:
-  status: blocked_incomplete
-  slice: commitment ledger + carrier + verbs
-  source_ref: main@b0adf6f7
-  deploy_identity: staging https://choir.news build.commit=4de7fdf9
+  status: working
+  slice: consumer census + commitment record schema landed (in-flight)
+  source_ref: main@60046751
+  deploy_identity: staging https://choir.news build.commit=ce28e407
   candidate:
     id: none
     state: none
@@ -217,8 +217,18 @@ now:
   blocker_or_risk: >-
     K (ontology kernel) gates the live-desk half; the ledger + carrier +
     verbs half may proceed in parallel.
-  next_action: promote after plan ratification; begin with the consumer
-    census and the commitment record schema
+  next_action: >-
+    In progress. DONE: (a) update_coagent consumer census — 40 files
+    classified migrate/keep/delete in
+    docs/evidence/r2-update-coagent-consumer-census-2026-09-25.md; (b)
+    commitment record schema — internal/types/commitment.go
+    (CommitmentRecord + DiscrepancyClass + sub-types) and the
+    choir.commitment_record OG kind registered in store/graph_store.go.
+    NEXT: the yaegi carrier generalization (per-desk module sets, desk
+    cells in killable subprocess) and the semantic-act verb surface
+    (choir.Cast/Report/Ask/Precommit/Resolve/Cancel/Escalate/Note). The
+    delegated-cast admission authority and the four-desk update_coagent
+    migration follow the verb surface.
 
 receipts: []
 ---

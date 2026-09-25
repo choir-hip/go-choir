@@ -43,6 +43,7 @@ const (
 	ogKindCoagentMail           = objectgraph.ObjectKind("choir.coagent_mailbox")
 	ogKindDesktopSess           = objectgraph.ObjectKind("choir.desktop_session")
 	ogKindDesktopApp            = objectgraph.ObjectKind("choir.desktop_app_instance")
+	ogKindCommitmentRecord      = objectgraph.ObjectKind("choir.commitment_record")
 )
 
 // Edge kind constants.
