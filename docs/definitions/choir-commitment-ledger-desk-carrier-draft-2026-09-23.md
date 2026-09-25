@@ -338,6 +338,21 @@ now:
     injection now reads a queue that only wire roles write. Then atomic
     commitment/OG commit (precondition 3) and acceptance probes.
 
+  report_packet_body_2026_09_25: >-
+    The packet schema now survives as Report's body (commit 6c678fd4):
+    StagedIntent.Packet + Tray.ReportPacket/ChoirScope.ReportPacket let a desk
+    stage a full CoagentSourcePacketPayload (claims/sources/actions/questions).
+    commitActIntent validates it with validateCoagentSourcePacketPayload — the
+    same contract the retired tool enforced — and the packet rides the report
+    envelope (rlmEnvelope.Packet) to the target desk and lands as the
+    commitment record's hypothesis. ReportPacket is on all four desk module
+    sets. Test: TestCommitActIntentReportPacketBody. The desk cutover is now
+    honest — a desk that previously sent an execution_result/evidence_update
+    packet via update_coagent stages the identical payload via ReportPacket.
+    REMAINING: texture's worker_updates_* consumer-path migration to
+    commitment records; atomic commitment/OG commit inside the cursor
+    (precondition 3); acceptance probes.
+
 receipts: []
 ---
 
