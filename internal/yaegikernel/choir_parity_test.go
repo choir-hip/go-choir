@@ -155,9 +155,12 @@ func TestChoirSymbolsInSession(t *testing.T) {
 	}
 }
 
-// TestChoirResearchScopeIsReadOnly is the B2 regression: a researcher-bound
-// scope observes files but cannot write, execute, assign, message, or report
-// outcomes, at both the export table and the method level.
+// TestChoirResearchScopeIsReadOnly guards the read-only-world contract: a
+// researcher-bound scope observes files but cannot write, execute, or assign.
+// Mission R2 deliberately grants research full *message* authority (read-only
+// world access is not read-only messaging), so Message/Outcome/semantic verbs
+// export, but file/exec mutation stays absent from the table AND denied at
+// the method level.
 func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -178,9 +181,10 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	exports := scope.ChoirExports()["choir/choir"]
-	for _, sym := range []string{"WriteFile", "Exec", "Assign", "Message", "Outcome"} {
+	// World mutation is absent: research cannot write, exec, or assign.
+	for _, sym := range []string{"WriteFile", "Exec", "Assign"} {
 		if _, ok := exports[sym]; ok {
-			t.Fatalf("researcher exports %s", sym)
+			t.Fatalf("researcher exports world-mutation %s", sym)
 		}
 	}
 	for _, sym := range []string{"ReadFile", "ListDir", "Context"} {
@@ -188,6 +192,13 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 			t.Fatalf("researcher missing %s", sym)
 		}
 	}
+	// Message authority is present (R2): the staged verbs export for research.
+	for _, sym := range []string{"Message", "Outcome", "Cast", "Report", "Escalate"} {
+		if _, ok := exports[sym]; !ok {
+			t.Fatalf("researcher missing message authority %s", sym)
+		}
+	}
+	// Method-level: mutation calls still deny even though they never export.
 	if _, err := scope.WriteFile("x.txt", "x"); err == nil {
 		t.Fatal("researcher WriteFile allowed")
 	}
@@ -196,12 +207,6 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	}
 	if _, err := scope.Assign("t", "p", "i"); err == nil {
 		t.Fatal("researcher Assign allowed")
-	}
-	if _, err := scope.Message("r", "k", "b"); err == nil {
-		t.Fatal("researcher Message allowed")
-	}
-	if _, err := scope.Outcome("v"); err == nil {
-		t.Fatal("researcher Outcome allowed")
 	}
 	if _, err := scope.ReadFile("missing.txt"); err == nil {
 		t.Fatal("researcher ReadFile unexpectedly succeeded on missing file")

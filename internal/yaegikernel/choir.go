@@ -24,6 +24,10 @@ type ChoirScope struct {
 	epoch        uint64
 	activationID string
 	readOnly     bool
+	// desk is the agentprofile desk identity carried from the verified outer
+	// capability (management|engineering|research|texture). It selects the
+	// per-desk choir module set in ChoirExports; the model can never set it.
+	desk string
 	// slot is the Engineering slot carried from the verified capability
 	// (implementation|verifier). Verifier-only affordances gate on it; the
 	// model can never set it.
@@ -53,8 +57,8 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	if issuer == nil {
 		return nil, fmt.Errorf("choir: handle issuer is required")
 	}
-	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage}
 	readOnly := role == SessionRoleResearch
+	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage}
 	if readOnly {
 		actions = []BrokerAction{ActionReadFile, ActionListDir}
 	}
@@ -62,7 +66,19 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	if err != nil {
 		return nil, fmt.Errorf("choir: issue session handle: %w", err)
 	}
-	return &ChoirScope{broker: broker, handleRef: handleRef, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, slot: slot}, nil
+	return &ChoirScope{broker: broker, handleRef: handleRef, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: normalizeDeskRole(role), slot: slot}, nil
+}
+
+// normalizeDeskRole maps a session role to the desk profile whose module set
+// applies. The four desks are management, engineering, research, texture;
+// co-super and unknown roles resolve to the engineering surface so the
+// generalized carrier never under-provisions a working desk.
+func normalizeDeskRole(role string) string {
+	switch role {
+	case "management", "engineering", "research", "texture":
+		return role
+	}
+	return "engineering"
 }
 
 // BindCell binds one cell: installs the inbox snapshot and a fresh tray,
@@ -114,13 +130,48 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 	return nil
 }
 
-// ChoirExports returns the prebound choir package for model-authored Go:
-// file operations, assignment, activation context, outcome reporting, plus
-// the RLM orchestration surface (tray-staged Message/Spawn/Complete and the
-// side-effect-free Inbox snapshot). Model code imports it as `import
-// "choir"`. Read-only scopes export observation plus context and inbox only;
-// mutation entry points are omitted AND method-guarded, so a future export
-// mistake cannot re-open them.
+// deskModuleSet names the choir verbs a desk's cells may stage (mission R2:
+// the yaegi carrier generalized to per-desk module sets). Every desk shares
+// the observation tier (ReadFile/ListDir/Context/Inbox); the semantic-act
+// verbs are grouped so messaging authority is separable from world mutation.
+// "file" = ReadFile+ListDir+WriteFile+Exec; "delegate" = Assign+Spawn;
+// "commit" = Complete+Freeze; "epistemic" = the full semantic-act surface.
+var deskModuleSets = map[string][]string{
+	// Management delegates engineering work and reports; it does not touch
+	// the filesystem (mutation is capsule-bound under engineering).
+	"management": {"Message", "Outcome", "Spawn", "Cast", "Ask", "Note", "Reply",
+		"CancelAct", "Escalate", "Precommit", "Report", "ResolveAct"},
+	// Engineering mutates inside its capsule and reports fate.
+	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Outcome", "Spawn",
+		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
+		"Escalate", "Precommit", "Report", "ResolveAct"},
+	// Research observes the world read-only but has full message authority —
+	// read-only world access is not read-only messaging.
+	"research": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
+		"Escalate", "Precommit", "Report", "ResolveAct"},
+	// Texture authors document revisions and escalates; artifact writes are
+	// texture controls, not capsule file ops.
+	"texture": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
+		"Escalate", "Precommit", "Report", "ResolveAct"},
+}
+
+func (s *ChoirScope) deskModule(name string) bool {
+	if s == nil {
+		return false
+	}
+	for _, m := range deskModuleSets[s.desk] {
+		if m == name {
+			return true
+		}
+	}
+	return false
+}
+
+// ChoirExports returns the prebound choir package for model-authored Go,
+// scoped to the desk's module set. Observation (ReadFile/ListDir/Context/
+// Inbox) is universal; mutation and semantic verbs gate on the desk. Read-only
+// scopes still omit file/exec mutation, and verifier affordances gate on the
+// slot — a module entry only admits what the scope also authorizes.
 func (s *ChoirScope) ChoirExports() interp.Exports {
 	exports := map[string]reflect.Value{
 		"ReadFile": reflect.ValueOf(s.ReadFile),
@@ -128,27 +179,37 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Context":  reflect.ValueOf(s.Context),
 		"Inbox":    reflect.ValueOf(s.Inbox),
 	}
-	if s == nil || !s.readOnly {
-		exports["WriteFile"] = reflect.ValueOf(s.WriteFile)
-		exports["Exec"] = reflect.ValueOf(s.Exec)
-		exports["Assign"] = reflect.ValueOf(s.Assign)
-		exports["Message"] = reflect.ValueOf(s.Message)
-		exports["Outcome"] = reflect.ValueOf(s.Outcome)
-		exports["Spawn"] = reflect.ValueOf(s.Spawn)
-		exports["Complete"] = reflect.ValueOf(s.Complete)
-		exports["Freeze"] = reflect.ValueOf(s.Freeze)
-		// Semantic-act verb surface (mission R2 commitment-ledger carrier).
-		// Operational + epistemic acts stage into the cell tray; the reducer
-		// authors them (and their ledger records) on cell return.
-		exports["Cast"] = reflect.ValueOf(s.Cast)
-		exports["Ask"] = reflect.ValueOf(s.Ask)
-		exports["Note"] = reflect.ValueOf(s.Note)
-		exports["Reply"] = reflect.ValueOf(s.Reply)
-		exports["CancelAct"] = reflect.ValueOf(s.CancelAct)
-		exports["Escalate"] = reflect.ValueOf(s.Escalate)
-		exports["Precommit"] = reflect.ValueOf(s.Precommit)
-		exports["Report"] = reflect.ValueOf(s.Report)
-		exports["ResolveAct"] = reflect.ValueOf(s.ResolveAct)
+	verbs := map[string]func() reflect.Value{
+		"WriteFile": func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
+		"Exec":      func() reflect.Value { return reflect.ValueOf(s.Exec) },
+		"Assign":    func() reflect.Value { return reflect.ValueOf(s.Assign) },
+		"Message":   func() reflect.Value { return reflect.ValueOf(s.Message) },
+		"Outcome":   func() reflect.Value { return reflect.ValueOf(s.Outcome) },
+		"Spawn":     func() reflect.Value { return reflect.ValueOf(s.Spawn) },
+		"Complete":  func() reflect.Value { return reflect.ValueOf(s.Complete) },
+		"Freeze":    func() reflect.Value { return reflect.ValueOf(s.Freeze) },
+		"Cast":      func() reflect.Value { return reflect.ValueOf(s.Cast) },
+		"Ask":       func() reflect.Value { return reflect.ValueOf(s.Ask) },
+		"Note":      func() reflect.Value { return reflect.ValueOf(s.Note) },
+		"Reply":     func() reflect.Value { return reflect.ValueOf(s.Reply) },
+		"CancelAct": func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
+		"Escalate":  func() reflect.Value { return reflect.ValueOf(s.Escalate) },
+		"Precommit": func() reflect.Value { return reflect.ValueOf(s.Precommit) },
+		"Report":    func() reflect.Value { return reflect.ValueOf(s.Report) },
+		"ResolveAct": func() reflect.Value {
+			return reflect.ValueOf(s.ResolveAct)
+		},
+	}
+	for name, mint := range verbs {
+		// A verb is exported only when the desk's module set admits it AND the
+		// scope permits it: mutation verbs additionally require !readOnly.
+		if !s.deskModule(name) {
+			continue
+		}
+		if s.readOnly && (name == "WriteFile" || name == "Exec") {
+			continue
+		}
+		exports[name] = mint()
 	}
 	if s != nil && s.slot == "verifier" {
 		exports["Verify"] = reflect.ValueOf(s.Verify)
