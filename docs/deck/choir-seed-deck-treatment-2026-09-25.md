@@ -90,15 +90,14 @@ Choir is the automatic computer: a persistent place where agents, tools, notes, 
 ## 7. Business Model
 
 **Kicker:** Business model
-**Slide title:** Open runtime. Paid convenience.
-**Support line:** Code is not the moat. The moat is trust, use, history, and network value.
+**Slide title:** Sell curated data first. Expand into the platform.
 **Three Cards:**
-- **Open source:** Self-hostable runtime — trust, portability, adoption.
-- **Managed:** Hosted Choir — reliability without operations.
-- **Premium:** Pro research, Radio, APIs, teams — products on your state, never a claim on it.
-**Key line:** Your computer should not belong to your model provider. As intelligence gets cheaper, owned work history compounds.
+- **Curated Data (Day 1):** Sell high-signal Newspaper editions to funds & desks @ $50k/yr. Provenance and precommitment records deliver immediate cash flow.
+- **Platform & Voice (Scale):** License the engine so orgs can publish their own data products. 2-way Autoradio: $35/mo power speakers, $100/seat/mo async team desks.
+- **Sovereign FDE (Enterprise):** Open-source core deployed on customer VPC. Forward-Deployed Engineers build on-prem pipelines so enterprises own their learning loops ($500k+).
+**Keyline:** Your computer should not belong to your model provider. As intelligence gets cheaper, owned work history compounds.
 
-**Purpose:** Show the commercialization architecture. Resolve the data-ownership tension: premium products operate on user state without claiming it.
+**Purpose:** Avoid the classic "platform before product" trap. Monetize proven intelligence immediately with high-ACV data buyers, expand into platform and 2-way voice subscriptions, and capture enterprise sovereign budgets via the Palantir FDE model.
 
 ---
 
