@@ -326,6 +326,33 @@ receipts:
       projection, SIGKILL-safe).
     digest: reproducible guest-rebind defect blocks live proof; mechanism
       sound by source trace.
+
+  - id: k-restart-resume-proof-deployed-2026-09-25
+    slice: restart-resume deployed proof
+    status: PASSED (deployed head a40efe7b)
+    ref: diagnostic guest computer-45decf99e672bdf7b0207aaa8747efb2 /
+      vm-0e94299db0bd850d25690b8c897b4d98 (ephemeral, removed)
+    body: >-
+      After the projectionbase fix deployed (a40efe7b), a fresh disposable
+      guest bound :8085 post-restart and delivered the committed
+      initial_dispatch — the live K proof. Sequence: vmctl resolve ->
+      active guest 10.200.5.2:8085; chain already bootstrapped (seq 16);
+      POST /internal/runtime/runs admitted processor run
+      c000bbe7-4e69-42d0-aaa7-987d9df73d87 (HTTP 202 -> initial_dispatch
+      committed to the tape); SIGKILL the VM's Firecracker; vmctl resolve
+      re-created it active. Post-restart the guest bound :8085
+      (health 200 across retries — the wm==0 refuse no longer strands a
+      retained store) AND the run advanced pending->blocked at 17:29:27,
+      ~88s after restart. Guest autoputer journal shows
+      `runtime: run c000bbe7... -> blocked: tool loop iteration 0: gateway
+      call failed: ...429` — the dispatcher delivered the pending
+      initial_dispatch and the actor EXECUTED (failing only on the model
+      gateway rate-limit, downstream of activation). No resumption sweep
+      ran — the deleted phases are absent; recovery was the durable
+      pending projection. Guest + state dir removed; wire platform and the
+      owner's live computer untouched.
+    digest: restart-resume proven live on staging — committed actor_update
+      delivered post-restart via the durable dispatcher projection.
 ---
 
 ## What this mission is
