@@ -278,6 +278,25 @@ now:
     write inside commit must be made transactional with the cursor (atomic
     commit — consensus precondition); (4) acceptance probes.
 
+  status_2026_09_25: >-
+    R2 substrate + admission core landed and tested on main. Committed
+    chain: 60046751 census → 74460602 commitment schema → 2f6f490c verb
+    surface → f7df9213 ledger write path → 09057831 delegated-cast admission
+    authority → 7dda0a26 per-desk module sets → bfce0398 delegated-cast
+    authority tests (all pass: opens under caster authority, rejects
+    foreign/absent control). Deploy: bfce0398 diffs deployed ce28e407→head
+    so its staging deploy carries the cumulative R2 runtime delta (earlier
+    per-commit pushes were superseded; the surviving head run covers them).
+    IN PROGRESS / NOT DONE — update_coagent consumer migration is a
+    producer+consumer relocation, not a registry drop: removing
+    RegisterCoagentUpdateTools from management+research breaks ~70
+    desk-facing tests that Execute the tool and (more important) the desks
+    report into a lifecycle-update table (worker_updates_*) whose consumers
+    must now read commitment records. choir.Report currently mints only a
+    commitment record; the packet→desk-consumption rewrite is the remaining
+    scoped increment before finish.acceptance, then execution_request
+    verb/death (D13), atomic reducer commit, and acceptance probes.
+
 receipts: []
 ---
 
