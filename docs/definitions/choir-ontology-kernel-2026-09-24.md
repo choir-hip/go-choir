@@ -235,25 +235,25 @@ now:
     skips deploy-impact (non_docs is push-diff-scoped); deploy was forced
     via workflow_dispatch force_staging_deploy.
  next_action: >-
-   Consensus gate SEND-BACK (2026-09-25). The deletion mechanism is sound
-   (durable SQLite pending projection — dispatcher re-reads
-   PendingAgents/NextDue every poll; not memory), and the held-VM IsHeld
-   gate is accepted. But the gate found surviving boot-work paths that
-   still violate "boot causes no work" and can strand a committed
-   initial_dispatch:
-   (1) passivate_interrupted_activations (runtime.go:617) can mark a run
-       Passivated before the dispatcher delivers its pending
-       initial_dispatch; handleInitialDispatch then no-ops on Passivated
-       (handler.go:312) and marks the update processed -> stranded.
-   (2) reconcile_terminal_run_outcomes (runtime.go:2246,2318) mints wakes
-       via wakeUpdatedCoagent — contradicts the "mint no wakes" comment.
-   (3) recoverParkedLifecycleMailboxSnapshots (adapter.go:473) +
-       textureowner boot reconcile dispatch work at Start.
-   Plus: guest-rebind defect (docs/problems/vm-restart-no-rebind-8085)
-   blocks the live proof — root cause: no ProjectionBase advertised after
-   genesis (watermarkSeq==0), PlanRecovery fail-closes on restart.
-   Scope decision needed: K's deletion removed the sweeps that used to
-   mask these; the survivors need event-backed convergence or a ruling.
+   Send-back survivors FIXED and deployed proof PASSED. (a) Strand closed:
+   handleInitialDispatch reactivates a run passivated with
+   reason=runtime_restarted via ReactivateRunCanonical (handler.go),
+   mirroring coagent_result — committed initial_dispatch can no longer be
+   stranded Passivated. (b) reconcile_terminal_run_outcomes no longer
+   mints wakes; terminal packets carry ComputerID and deliver through the
+   durable actor-wake outbox (lifecycle.go). (c) parked-mailbox + Texture
+   boot reconcile confirmed idempotent deterministic tape re-mints. (d)
+   New defect caught+fixed: MigrateActorWakeOutbox aborting on the first
+   malformed object now skip-logs per object (lifecycle.go:805).
+   Guest-rebind defect root-caused + fixed: PlanRecovery no longer refuses
+   a retained store with watermarkSeq==0 (recovery_plan.go) — committed
+   a40efe7b. DEPLOYED PROOF PASSED: guest restarted post-SIGKILL bound
+   :8085 and delivered the committed initial_dispatch (run c000bbe7 ->
+   blocked on a downstream gateway 429, i.e. the actor executed). Landed
+   head pending deploy: ff4090a7 (survivors + outbox fix). One residual:
+   legacy terminal packets with empty ComputerID are skipped by the scoped
+   outbox (one-time migration gap, low). Awaiting ff4090a7 deploy + final
+   verification.
 
 receipts:
   - id: k-deletion-sweeps-timers-2026-09-25
