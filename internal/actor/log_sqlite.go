@@ -31,8 +31,6 @@ CREATE TABLE IF NOT EXISTS actor_updates (
 );
 CREATE INDEX IF NOT EXISTS idx_actor_updates_backlog
   ON actor_updates(to_agent_id, created_at) WHERE processed_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_actor_updates_due
-  ON actor_updates(not_before) WHERE processed_at IS NULL AND not_before IS NOT NULL;
 CREATE TABLE IF NOT EXISTS actor_snapshots (
   agent_id   TEXT PRIMARY KEY,
   memory     BLOB,
@@ -55,6 +53,13 @@ CREATE TABLE IF NOT EXISTS actor_heads (
 		if _, err := db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return nil, fmt.Errorf("actor log migrate %q: %w", col, err)
 		}
+	}
+	// The not_before-dependent index can only be created after the column
+	// exists (a pre-kernel actor_updates table lacks it until the ALTER above
+	// runs - creating this index in the DDL block aborts boot on such rows).
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_actor_updates_due
+  ON actor_updates(not_before) WHERE processed_at IS NULL AND not_before IS NOT NULL`); err != nil {
+		return nil, fmt.Errorf("actor log due index: %w", err)
 	}
 	return &SQLiteLog{db: db}, nil
 }
@@ -320,7 +325,6 @@ func (l *SQLiteLog) UpdateStatus(ctx context.Context, agentID, updateID string) 
 	}
 	return true, processedAt.Valid, nil
 }
-
 
 // MailboxIdentities lists every durable actor identity, including identities
 // retained only by processed history or a compacted snapshot.
