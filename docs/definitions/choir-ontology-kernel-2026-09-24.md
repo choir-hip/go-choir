@@ -200,15 +200,19 @@ now:
     owner_ratification_ref: ratified ontology cutover 2026-09-22
   belief:
     believed_state: >-
-      Kernel substrate landed and deployed. Owner ruling 2026-09-25: boot
-      causes no work. Deletion pass in progress — the five restart-resumption
-      boot phases (rewarm_lifecycle_activations, rewarm_persistent_management,
-      sweep_passivated_spawned_work, sweep_open_work_item_actors,
-      sweep_pending_update_actors) and their boot-only helpers are deleted;
-      boot_recovery.go removed wholesale; reconcile_terminal_run_outcomes
-      kept as state-repair (delivers committed outcomes, mints no wake beyond
-      committed obligation). runtime.go progress-deadline context.AfterFunc
-      deleted (durable activation_budget_deadline owns terminalization).
+      COMPLETE + DEPLOYED on staging as ce28e407 (2026-09-25). The ontology
+      kernel cutover landed: the five restart-resumption boot phases and
+      their boot-only helpers are deleted, boot_recovery.go removed
+      wholesale, runtime.go progress-deadline context.AfterFunc deleted
+      (durable activation_budget_deadline owns terminalization), the wire
+      debounce converted to a durable wire_reconciler_publish_deadline.
+      The send-back survivors are closed: handleInitialDispatch reactivates
+      a run passivated with reason=runtime_restarted (no strand);
+      reconcile_terminal_run_outcomes mints no wakes — committed terminal
+      outcomes deliver via the durable actor-wake outbox (skip-log on
+      malformed object, no abort). The guest-rebind defect is root-caused
+      + fixed: PlanRecovery resumes a retained store with no advertised
+      ProjectionBase (watermarkSeq==0). Deployed proof passed.
     main_uncertainty: >-
       Resolved — the (e) classifier ran: UpdateRun routes lifecycle-bound
       records through persistLifecycleRunWithEvent → ReplaceLifecycleActivation
@@ -230,30 +234,16 @@ now:
     intentional per owner ruling (boot starts no work): zombie RunRecords,
     lifecycle work version>1, delivered-control persistent Management,
     spawned-work mint — recorded in
-    docs/problems/kernel-cutover-wake-gap-analysis-2026-09-24.md.
-    Pipeline note: a docs-only head push with a cancelled earlier code push
-    skips deploy-impact (non_docs is push-diff-scoped); deploy was forced
-    via workflow_dispatch force_staging_deploy.
  next_action: >-
-   Send-back survivors FIXED and deployed proof PASSED. (a) Strand closed:
-   handleInitialDispatch reactivates a run passivated with
-   reason=runtime_restarted via ReactivateRunCanonical (handler.go),
-   mirroring coagent_result — committed initial_dispatch can no longer be
-   stranded Passivated. (b) reconcile_terminal_run_outcomes no longer
-   mints wakes; terminal packets carry ComputerID and deliver through the
-   durable actor-wake outbox (lifecycle.go). (c) parked-mailbox + Texture
-   boot reconcile confirmed idempotent deterministic tape re-mints. (d)
-   New defect caught+fixed: MigrateActorWakeOutbox aborting on the first
-   malformed object now skip-logs per object (lifecycle.go:805).
-   Guest-rebind defect root-caused + fixed: PlanRecovery no longer refuses
-   a retained store with watermarkSeq==0 (recovery_plan.go) — committed
-   a40efe7b. DEPLOYED PROOF PASSED: guest restarted post-SIGKILL bound
-   :8085 and delivered the committed initial_dispatch (run c000bbe7 ->
-   blocked on a downstream gateway 429, i.e. the actor executed). Landed
-   head pending deploy: ff4090a7 (survivors + outbox fix). One residual:
-   legacy terminal packets with empty ComputerID are skipped by the scoped
-   outbox (one-time migration gap, low). Awaiting ff4090a7 deploy + final
-   verification.
+   none — landed + deployed (staging ce28e407). Consensus gate send-back
+   closed: stranded initial_dispatch fixed (reactivate on
+   reason=runtime_restarted), no boot-minted wakes (outbox delivery),
+   outbox migration no longer aborts on a malformed object, guest-rebind
+   unblocked (watermarkSeq==0 retained resume). Live proof: VM restart ->
+   :8085 rebind -> committed initial_dispatch delivered -> run advanced to
+   blocked on a downstream gateway 429. Residual (accepted, low): legacy
+   terminal packets with empty ComputerID are skipped by the scoped outbox;
+   a one-time migration gap, not a crash loop.
 
 receipts:
   - id: k-deletion-sweeps-timers-2026-09-25
