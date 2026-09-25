@@ -40,6 +40,12 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 	if !ok || own == nil || own.IsReady() {
 		return 0
 	}
+	// A held computer is never warm-resumed by the always-on policy - same
+	// guard as WarmAlwaysOnDesktops. The platform computer's resurrection loop
+	// must honor a maintenance hold so it can actually be parked.
+	if own.IsHeld() {
+		return 0
+	}
 	if own.State == VMStateStopped || own.State == VMStateHibernated {
 		if guard == nil {
 			log.Printf("vmctl: refuse platform computer warm: ComputerVersion route guard is unavailable")
