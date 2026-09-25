@@ -72,4 +72,3 @@ func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 		t.Fatalf("packet text should not instruct ordinary clickable links: %q", text)
 	}
 }
-

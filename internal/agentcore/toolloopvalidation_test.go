@@ -118,7 +118,6 @@ func TestToolLoopFileReadRegistered(t *testing.T) {
 	}
 }
 
-
 // TestToolLoopFileReadWithRuntime tests the full runtime path: submit a task
 // that triggers file_read through the tool-calling loop, and verify the
 // file contents are incorporated into the final response.

@@ -3,9 +3,9 @@ package agentcore
 import (
 	"context"
 	"errors"
-	"time"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"

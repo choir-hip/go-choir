@@ -61,17 +61,17 @@ const validEvidenceUpdatePacket = `{
 // TestSurvivorContract_AcceptsCanonicalSurface proves the survivor packet
 // shape is accepted end-to-end and persists as a CoagentSourcePacket with
 // typed claims/sources/questions/notes.
-func TestSurvivorContract_AcceptsCanonicalSurface(t *testing.T) {
+func TestSurvivorContract_ProcessorAcceptsCanonicalSurface(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	ownerID := "user-survivor-canonical"
 	docID := "doc-survivor"
-	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-canonical", agentprofile.Research)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-survivor-canonical"), "update_coagent", json.RawMessage(validEvidenceUpdatePacket))
+	processorRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-canonical", agentprofile.Processor)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolContextForTestCall(processorRun, "call-survivor-canonical"), "update_coagent", json.RawMessage(validEvidenceUpdatePacket))
 	if err != nil {
 		t.Fatalf("update_coagent canonical surface rejected: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, processorRun, raw)
 	if stored.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 {
 		t.Fatalf("schema_version = %q, want %q", stored.Packet.SchemaVersion, types.CoagentSourcePacketSchemaV1)
 	}
@@ -97,7 +97,7 @@ func TestSurvivorContract_RejectsEveryLegacyTopLevelField(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	managementRun := d9CoagentRun("run-survivor-reject", "user-survivor-reject", "management:survivor-reject", agentprofile.Management, "doc-survivor-reject", currentTextureAgentID("doc-survivor-reject"))
+	processorRun := d9CoagentRun("run-survivor-reject", "user-survivor-reject", "processor:survivor-reject", agentprofile.Processor, "doc-survivor-reject", currentTextureAgentID("doc-survivor-reject"))
 	for _, field := range []string{
 		"findings",
 		"evidence_ids",
@@ -117,7 +117,7 @@ func TestSurvivorContract_RejectsEveryLegacyTopLevelField(t *testing.T) {
 			"channel_id":"doc-survivor-reject",
 			"` + field + `":["legacy-value"]
 		}`)
-		_, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw)
+		_, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(processorRun)), "update_coagent", raw)
 		if err == nil {
 			t.Fatalf("update_coagent accepted legacy field %q", field)
 		}
@@ -135,7 +135,7 @@ func TestSurvivorContract_RejectsUnknownTopLevelField(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	managementRun := d9CoagentRun("run-survivor-unknown", "user-survivor-unknown", "management:survivor-unknown", agentprofile.Management, "doc-survivor-unknown", currentTextureAgentID("doc-survivor-unknown"))
+	processorRun := d9CoagentRun("run-survivor-unknown", "user-survivor-unknown", "processor:survivor-unknown", agentprofile.Processor, "doc-survivor-unknown", currentTextureAgentID("doc-survivor-unknown"))
 	raw := json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
@@ -144,7 +144,7 @@ func TestSurvivorContract_RejectsUnknownTopLevelField(t *testing.T) {
 		"channel_id":"doc-survivor-unknown",
 		"secret平行surface":["should be rejected"]
 	}`)
-	if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw); err == nil {
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(processorRun)), "update_coagent", raw); err == nil {
 		t.Fatalf("update_coagent accepted unknown top-level field (parallel surface reintroduction risk)")
 	}
 }
@@ -160,12 +160,12 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 	d9InstallTools(t, rt)
 	ownerID := "user-survivor-collation"
 	docID := "doc-survivor-collation"
-	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-collation", agentprofile.Research)
+	processorRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-collation", agentprofile.Processor)
 	// Deliberately embed source-shaped text in notes and summary prose that
 	// must NOT be scraped: an http URL in notes, a "[Source: foo]" style
 	// label in summary, and a bare command_output: URI in claims.text. Only
 	// the single typed packet.sources entry may become an entity.
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-survivor-collation"), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolContextForTestCall(processorRun, "call-survivor-collation"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"Summary references [Source: prose-only] and should not be scraped.",
@@ -178,7 +178,7 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, processorRun, raw)
 	if len(stored.Packet.Sources) != 1 {
 		t.Fatalf("stored packet sources = %#v, want exactly one typed source", stored.Packet.Sources)
 	}
@@ -278,11 +278,11 @@ func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 	d9InstallTools(t, rt)
 	ownerID := "user-survivor-reported"
 	docID := "doc-survivor-reported"
-	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-reported", agentprofile.Research)
+	processorRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "survivor-reported", agentprofile.Processor)
 	// A packet.source with an unsupported kind that cannot materialize. The
 	// current behavior silently drops it. The survivor contract requires the
 	// drop be reported.
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-survivor-reported"), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolContextForTestCall(processorRun, "call-survivor-reported"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"packet with a source that cannot materialize",
@@ -302,7 +302,7 @@ func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 		}
 		t.Fatalf("update_coagent: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, processorRun, raw)
 	if len(stored.Packet.Sources) != 1 || stored.Packet.Sources[0].SourceID != "src-unsupported" {
 		t.Fatalf("unsupported source was not durably visible in its packet: %#v", stored.Packet.Sources)
 	}

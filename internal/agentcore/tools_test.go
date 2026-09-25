@@ -22,7 +22,6 @@ import (
 
 // --- Batch executor contract tests ---
 
-
 func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var executed int
@@ -1188,7 +1187,6 @@ func TestBootTerminalRepairUsesOwnerScopedRecentWindow(t *testing.T) {
 	}
 }
 
-
 func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
@@ -1225,7 +1223,6 @@ func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 		t.Fatalf("execution order = %v, want %v", order, want)
 	}
 }
-
 
 func TestExecuteToolsOutputTruncation(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()

@@ -125,7 +125,7 @@ func bindResearchControlFixture(t *testing.T, rt *Runtime, s *store.Store, owner
 	}
 	fixture.run.Metadata = stampLifecycleActivationMetadata(fixture.run.Metadata, logical, failed, buildinfo.Commit, versions)
 	fixture.run.Metadata["request_source"] = "lifecycle_texture_control"
-	fixture.run.Prompt = lifecycleControlActivationPrompt([]types.WorkItemRecord{work})
+	fixture.run.Prompt = lifecycleControlActivationPromptForProfile(agentprofile.Research, []types.WorkItemRecord{work})
 	if err := s.UpdateRun(context.Background(), fixture.run); err != nil {
 		t.Fatal(err)
 	}
@@ -1792,7 +1792,6 @@ func TestGenericReconcileFailsClosedUntilExactParkedMemoryRecovery(t *testing.T)
 		}
 	}
 }
-
 
 func TestPersistentManagementRewakeReceivesPendingEngineeringCancellationReports(t *testing.T) {
 	rt, s := testRuntime(t)

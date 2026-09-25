@@ -25,7 +25,7 @@ const runMetadataProducerReportIDs = "producer_report_ids"
 const runMetadataEngineeringReplacementRequested = "cosuper_replacement_requested"
 const runMetadataEngineeringReplacementOmitReports = "cosuper_replacement_omit_reports"
 
-const persistentManagementCoagentInboxPrompt = "Process pending coagent update packets for privileged execution."
+const persistentManagementCoagentInboxPrompt = "Process pending carrier packets for privileged execution. Use choir.Report to assert commitments, choir.EscalateActions for guarded execution requests, and choir.Cast to open assignments."
 const persistentManagementEngineeringCancelContinuationPrompt = "Prior implementation Engineering assignment is terminal. Open a fresh implementation Engineering assignment."
 
 const (
@@ -1409,8 +1409,8 @@ func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSo
 
 func buildPersistentManagementUpdatePrompt(updates []types.CoagentSourcePacket) string {
 	var b strings.Builder
-	b.WriteString("Process the pending update_coagent records addressed to you as the user's persistent super actor.\n\n")
-	b.WriteString("Each delivered packet is a validated packet.kind=execution_request with executable actions. When you have command output, diffs, tests, artifacts, questions, or blockers, report them back with update_coagent as packet.sources, claims, actions, questions, and notes.\n")
+	b.WriteString("Process the pending carrier records addressed to you as the user's persistent super actor.\n\n")
+	b.WriteString("Each delivered packet is a validated packet.kind=execution_request with executable actions. When you have command output, diffs, tests, artifacts, questions, or blockers, use choir.Report to assert a typed commitment with the evidence. Use choir.EscalateActions for guarded execution requests and choir.Cast to open assignments.\n")
 	for i, update := range updates {
 		b.WriteString("\nUpdate ")
 		b.WriteString(fmt.Sprintf("%d", i+1))
@@ -1474,9 +1474,9 @@ func (rt *Runtime) hydrateLifecycleControlWorkItems(ctx context.Context, ownerID
 	return workItems, workByID, trajectoryID, nil
 }
 
-func lifecycleControlActivationPrompt(workItems []types.WorkItemRecord) string {
+func lifecycleControlActivationPromptForProfile(profile string, workItems []types.WorkItemRecord) string {
 	prompt := "Continue assigned actor work. Process the coagent update packets in context."
-	if workPrompt := buildAssignedWorkItemPrompt(workItems); workPrompt != "" {
+	if workPrompt := buildAssignedWorkItemPromptForCarrier(workItems, profile == agentprofile.Management || profile == agentprofile.Research); workPrompt != "" {
 		prompt += "\n\n" + workPrompt
 	}
 	return prompt
@@ -1746,7 +1746,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 			// Refresh only the local desired projection. BindLifecycleControlDelivery
 			// validates the exact control/work versions and merges these narrowly
 			// owned fields into the canonical run in the same conditional batch.
-			active.Prompt = lifecycleControlActivationPrompt(workItems)
+			active.Prompt = lifecycleControlActivationPromptForProfile(profile, workItems)
 			active.Metadata = stampLifecycleActivationMetadata(active.Metadata, logicalKey, failedKey, strings.TrimSpace(buildinfo.Commit), versions)
 			active.Metadata["request_source"] = "lifecycle_texture_control"
 			active.Metadata[runMetadataTrajectoryID] = trajectoryID
@@ -1771,7 +1771,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		}
 	}
 
-	prompt := lifecycleControlActivationPrompt(workItems)
+	prompt := lifecycleControlActivationPromptForProfile(profile, workItems)
 	rec, err := rt.createRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
 		if lifecycleControls && (errors.Is(err, store.ErrLifecycleInvalidTransition) || errors.Is(err, store.ErrConcurrentStateChange)) {

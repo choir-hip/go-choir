@@ -50,4 +50,3 @@ func TestLateAssignmentExecutionReceiptsAuthenticateExactDetachedAuthority(t *te
 		t.Fatal("missing persisted raw receipt accepted")
 	}
 }
-

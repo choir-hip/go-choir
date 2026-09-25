@@ -67,6 +67,25 @@ func spawnBoundTestLifecycleProducer(t *testing.T, rt *Runtime, s *store.Store, 
 	if err := s.CreateRun(ctx, parent); err != nil {
 		t.Fatalf("create requesting lifecycle Texture: %v", err)
 	}
+	if profile == agentprofile.Processor {
+		agentID := profile + ":" + suffix
+		child := &types.RunRecord{
+			RunID: "processor-producer:" + suffix, AgentID: agentID, ChannelID: docID, TrajectoryID: trajectoryID,
+			RequestedByRunID: parent.RunID, AgentProfile: profile, AgentRole: profile, OwnerID: ownerID,
+			ComputerID: rt.TextureComputerID(), State: types.RunRunning, CreatedAt: now, UpdatedAt: now,
+			Metadata: map[string]any{
+				runMetadataAgentID: agentID, runMetadataAgentProfile: profile, runMetadataAgentRole: profile,
+				runMetadataChannelID: docID, runMetadataTrajectoryID: trajectoryID,
+				"requested_by": parent.RunID, "requested_by_run_id": parent.RunID,
+				"requested_by_agent_id": parent.AgentID, "requested_by_profile": agentprofile.Texture,
+			},
+		}
+		if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: child.ComputerID, Profile: profile, Role: profile, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+			t.Fatalf("seed processor lifecycle producer: %v", err)
+		}
+		bindTestLifecycleProducerWork(t, s, parent, child, profile)
+		return child, trajectoryID
+	}
 	child, err := rt.StartCoagentRun(ctx, parent.RunID, "produce bound lifecycle update", ownerID, map[string]any{
 		runMetadataAgentID: profile + ":" + suffix, runMetadataAgentProfile: profile,
 		runMetadataAgentRole: profile, runMetadataChannelID: docID,
@@ -74,9 +93,48 @@ func spawnBoundTestLifecycleProducer(t *testing.T, rt *Runtime, s *store.Store, 
 	if err != nil {
 		t.Fatalf("spawn bound lifecycle producer: %v", err)
 	}
+	bindTestLifecycleProducerWork(t, s, parent, child, profile)
 	return child, trajectoryID
 }
 
+func bindTestLifecycleProducerWork(t *testing.T, s *store.Store, requester types.RunRecord, producer *types.RunRecord, profile string) {
+	t.Helper()
+	if producer == nil || strings.TrimSpace(metadataStringValue(producer.Metadata, "lifecycle_work_item_id")) != "" {
+		return
+	}
+	ctx := context.Background()
+	workID := "test-lifecycle-producer-work:" + producer.RunID
+	open := types.OpenLifecycleWorkRequest{
+		OwnerID: producer.OwnerID, ComputerID: producer.ComputerID,
+		CommandID: "open-test-lifecycle-producer-work:" + producer.RunID,
+		TrajectoryID: producer.TrajectoryID,
+		WorkItem: types.WorkItemRecord{
+			WorkItemID: workID, Objective: "produce bound lifecycle update",
+			AuthorityProfile: profile, AssignedAgentID: producer.AgentID, CreatedByRunID: requester.RunID,
+			Details: map[string]any{
+				"requested_by_agent_id": requester.AgentID,
+				"requested_by_profile":  agentprofile.Texture,
+				"requested_by_run_id":   requester.RunID,
+			},
+		},
+	}
+	open.CommandDigest, _ = store.ComputeOpenLifecycleWorkDigest(open)
+	if _, err := s.OpenLifecycleWork(ctx, open); err != nil {
+		t.Fatalf("open test lifecycle producer work: %v", err)
+	}
+	producer.Metadata = cloneMetadata(producer.Metadata)
+	producer.Metadata["lifecycle_work_item_id"] = workID
+	producer.Metadata["work_item_ids"] = []string{workID}
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: producer.OwnerID, ComputerID: producer.ComputerID,
+		CommandID: "project-test-lifecycle-producer:" + producer.RunID,
+		TrajectoryID: producer.TrajectoryID, AgentID: producer.AgentID, Run: *producer,
+	}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("bind test lifecycle producer work: %v", err)
+	}
+}
 func toolContextForTestCall(run *types.RunRecord, callID string) context.Context {
 	execution := toolExecutionContextForRun(run)
 	execution.ToolCallID = callID

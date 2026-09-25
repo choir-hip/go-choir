@@ -31,10 +31,9 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 	}
 	expected := map[string][]string{
 		agentprofile.Conductor: {"cancel_agent"},
-		agentprofile.Management: append(append(slices.Clone(ordinary),
-			"update_coagent"), "cancel_co_super_assignment", "report_to_texture"),
+		agentprofile.Management: append(slices.Clone(ordinary), "cancel_co_super_assignment", "report_to_texture"),
 		agentprofile.Engineering: {},
-		agentprofile.Research:    append(slices.Clone(ordinary), "update_coagent"),
+		agentprofile.Research:    slices.Clone(ordinary),
 		agentprofile.Texture:     {"get_run_memory_entry"},
 		agentprofile.Processor: append(append(slices.Clone(ordinary), "update_coagent"),
 			"record_wire_processor_decision"),

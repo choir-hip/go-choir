@@ -235,10 +235,6 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 	}
 }
 
-
-
-
-
 func TestStartCoagentRunCompletesSpawnedWorkItem(t *testing.T) {
 	rt, s := testRuntimeWithProviderAndRegistry(t, provider.NewStubProvider(200*time.Millisecond), nil)
 	ctx := context.Background()
@@ -278,7 +274,6 @@ func TestStartCoagentRunCompletesSpawnedWorkItem(t *testing.T) {
 		t.Fatalf("spawned work item status = %q, want completed", item.Status)
 	}
 }
-
 
 type spawnedChildParentStore interface {
 	CreateTrajectoryIfAbsent(context.Context, types.TrajectoryRecord) (types.TrajectoryRecord, error)
@@ -329,7 +324,6 @@ func seedSpawnedChildParent(t *testing.T, ctx context.Context, s spawnedChildPar
 	}
 }
 
-
 func waitForWorkItemStatus(t *testing.T, s interface {
 	GetWorkItem(context.Context, string, string) (types.WorkItemRecord, error)
 }, ownerID, workItemID string, status types.WorkItemStatus, timeout time.Duration) types.WorkItemRecord {
@@ -349,9 +343,6 @@ func waitForWorkItemStatus(t *testing.T, s interface {
 	t.Fatalf("work item %s did not reach status %q within %v; last=%+v", workItemID, status, timeout, last)
 	return last
 }
-
-
-
 
 func TestCoagentRewarmUsesResidentActivationNotActiveRunProxy(t *testing.T) {
 	rt, s := testRuntimeWithProviderAndRegistry(t, provider.NewStubProvider(2*time.Second), nil)

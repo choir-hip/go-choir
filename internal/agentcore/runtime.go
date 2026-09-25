@@ -2625,7 +2625,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		metadata[runMetadataChannelID] = channelID
 	}
 	metadata = inheritRequesterMetadataFromWorkItem(ctx, rt.store, ownerID, metadata, first)
-	rec, err := rt.createRunWithMetadata(ctx, buildAssignedWorkItemPrompt(workItems), ownerID, metadata)
+	rec, err := rt.createRunWithMetadata(ctx, buildAssignedWorkItemPromptForCarrier(workItems, profile == agentprofile.Management || profile == agentprofile.Research), ownerID, metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -2653,11 +2653,23 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 }
 
 func buildAssignedWorkItemPrompt(workItems []types.WorkItemRecord) string {
+	return buildAssignedWorkItemPromptForCarrier(workItems, false)
+}
+
+func buildAssignedWorkItemPromptForCarrier(workItems []types.WorkItemRecord, choirCarrier bool) string {
 	var b strings.Builder
 	b.WriteString("Resume the open trajectory work item records assigned to you.\n")
-	b.WriteString("These durable obligations remain open in canonical state. Before ending this activation, call update_coagent with work_disposition=completed only when the assigned lifecycle work is fully satisfied; otherwise send work_disposition=open with a precise blocker. Final text and RunRecord completion do not settle work.\n")
+	if choirCarrier {
+		b.WriteString("These durable obligations remain open in canonical state. Before ending this activation, use choir.Report to assert work_disposition=completed only when the assigned lifecycle work is fully satisfied; otherwise use choir.Report with work_disposition=open and a precise blocker. Use choir.EscalateActions for guarded execution requests and choir.Cast to open assignments. Final text and RunRecord completion do not settle work.\n")
+	} else {
+		b.WriteString("These durable obligations remain open in canonical state. Before ending this activation, call update_coagent with work_disposition=completed only when the assigned lifecycle work is fully satisfied; otherwise send work_disposition=open with a precise blocker. Final text and RunRecord completion do not settle work.\n")
+	}
 	if len(workItems) > 1 {
-		b.WriteString("This activation carries multiple work items. Every update_coagent call must set work_item_id to the specific item it addresses.\n")
+		if choirCarrier {
+			b.WriteString("This activation carries multiple work items. Every choir.Report must set work_item_id to the specific item it addresses.\n")
+		} else {
+			b.WriteString("This activation carries multiple work items. Every update_coagent call must set work_item_id to the specific item it addresses.\n")
+		}
 	}
 	for i, item := range workItems {
 		b.WriteString("\nWork item ")

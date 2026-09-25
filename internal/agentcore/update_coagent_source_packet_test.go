@@ -19,13 +19,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestUpdateCoagentAcceptsResearchEvidenceUpdateSourcePacket(t *testing.T) {
+func TestUpdateCoagentAcceptsProcessorEvidenceUpdateSourcePacket(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	ownerID := "user-d9-researcher"
 	docID := "doc-d9-researcher"
-	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-researcher", agentprofile.Research)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-d9-researcher"), "update_coagent", json.RawMessage(`{
+	processorRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-processor", agentprofile.Processor)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolContextForTestCall(processorRun, "call-d9-processor"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"official source is ready",
@@ -38,7 +38,7 @@ func TestUpdateCoagentAcceptsResearchEvidenceUpdateSourcePacket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, processorRun, raw)
 	if stored.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 || stored.Packet.Kind != "evidence_update" {
 		t.Fatalf("packet identity = %#v", stored.Packet)
 	}
@@ -63,7 +63,7 @@ func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	const ownerID, docID = "user-producer-work-disposition", "doc-producer-work-disposition"
-	run, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "producer-work-disposition", agentprofile.Research)
+	run, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "producer-work-disposition", agentprofile.Processor)
 	workID := metadataStringValue(run.Metadata, "lifecycle_work_item_id")
 	execute := func(callID, disposition, summary string) types.CoagentSourcePacket {
 		t.Helper()
@@ -71,7 +71,7 @@ func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
 		if disposition != "" {
 			dispositionField = `,"work_disposition":"` + disposition + `"`
 		}
-		raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(run, callID), "update_coagent", json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"`+summary+`","agent_id":"texture:`+docID+`"`+dispositionField+`,"claims":[{"text":"`+summary+`"}]}`))
+		raw, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolContextForTestCall(run, callID), "update_coagent", json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"`+summary+`","agent_id":"texture:`+docID+`"`+dispositionField+`,"claims":[{"text":"`+summary+`"}]}`))
 		if err != nil {
 			t.Fatalf("update_coagent %s: %v", disposition, err)
 		}
@@ -100,46 +100,27 @@ func TestUpdateCoagentPersistsExplicitProducerWorkDisposition(t *testing.T) {
 func TestUpdateCoagentRefusesPresentInvalidWorkDisposition(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
-	run := d9CoagentRun("run-invalid-producer-disposition", "owner-invalid-producer-disposition", "research:invalid", agentprofile.Research, "doc-invalid", "")
+	run := d9CoagentRun("run-invalid-producer-disposition", "owner-invalid-producer-disposition", "processor:invalid", agentprofile.Processor, "doc-invalid", "")
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run))
 	for name, value := range map[string]string{"null": "null", "blank": `" "`, "unknown": `"done"`} {
 		t.Run(name, func(t *testing.T) {
 			raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"invalid","agent_id":"texture:doc-invalid","work_disposition":` + value + `}`)
-			if _, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(ctx, "update_coagent", raw); err == nil {
+			if _, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(ctx, "update_coagent", raw); err == nil {
 				t.Fatalf("update_coagent accepted invalid work disposition: %s", raw)
 			}
 		})
 	}
 }
 
-func TestSpawnedLifecycleResearchQueuesOpenAndCompletedUpdates(t *testing.T) {
+func TestSpawnedLifecycleProcessorQueuesOpenAndCompletedUpdates(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
 	const (
-		ownerID = "user-spawned-lifecycle-researcher"
-		docID   = "doc-spawned-lifecycle-researcher"
+		ownerID = "user-spawned-lifecycle-processor"
+		docID   = "doc-spawned-lifecycle-processor"
 	)
-	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
-	now := time.Now().UTC()
-	parent := types.RunRecord{
-		RunID: "run-spawned-lifecycle-parent", AgentID: "texture:" + docID, ChannelID: docID,
-		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture,
-		OwnerID: ownerID, ComputerID: "autoputer-test", State: types.RunRunning,
-		TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now,
-		Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID},
-	}
-	if err := s.CreateRun(ctx, parent); err != nil {
-		t.Fatalf("create lifecycle parent activation: %v", err)
-	}
-	child, err := rt.StartCoagentRun(ctx, parent.RunID, "research the durable subject", ownerID, map[string]any{
-		runMetadataAgentProfile: agentprofile.Research,
-		runMetadataAgentRole:    agentprofile.Research,
-		runMetadataChannelID:    docID,
-	})
-	if err != nil {
-		t.Fatalf("spawn lifecycle researcher: %v", err)
-	}
+	child, trajectoryID := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "spawned-lifecycle-processor", agentprofile.Processor)
 	workItemID := metadataStringValue(child.Metadata, "lifecycle_work_item_id")
 	if workItemID == "" || !containsString(metadataStringSlice(child.Metadata["work_item_ids"]), workItemID) {
 		t.Fatalf("spawned lifecycle work binding missing: %+v", child.Metadata)
@@ -149,7 +130,7 @@ func TestSpawnedLifecycleResearchQueuesOpenAndCompletedUpdates(t *testing.T) {
 		raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"` + disposition + ` lifecycle checkpoint","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","work_disposition":"` + disposition + `","claims":[{"text":"` + disposition + ` lifecycle checkpoint"}]}`)
 		execution := toolExecutionContextForRun(child)
 		execution.ToolCallID = producerUpdateID
-		if _, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(
+		if _, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(
 			toolregistry.WithExecutionContext(ctx, execution),
 			"update_coagent", raw,
 		); err != nil {
@@ -604,13 +585,13 @@ func TestUpdateCoagentRejectsLegacyFieldsAndExecutionRequestWithoutActions(t *te
 	ctx := context.Background()
 	ownerID := "user-d9-reject"
 	docID := "doc-d9-reject"
-	managementRun := d9CoagentRun("run-d9-reject", ownerID, "management:d9", agentprofile.Management, docID, currentTextureAgentID(docID))
+	managementRun := d9CoagentRun("run-d9-reject", ownerID, "processor:d9", agentprofile.Processor, docID, currentTextureAgentID(docID))
 	for _, raw := range []json.RawMessage{
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy","findings":["old shape"]}`),
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy","evidence_ids":["ev-old"]}`),
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"missing actions","notes":["not executable"]}`),
 	} {
-		if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw); err == nil {
+		if _, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw); err == nil {
 			t.Fatalf("update_coagent unexpectedly accepted %s", string(raw))
 		}
 	}
@@ -620,7 +601,7 @@ func TestUpdateCoagentRejectsMalformedExecutionRequestPackets(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	managementRun := d9CoagentRun("run-d9-malformed", "user-d9-malformed", "management:d9-malformed", agentprofile.Management, "doc-d9-malformed", currentTextureAgentID("doc-d9-malformed"))
+	managementRun := d9CoagentRun("run-d9-malformed", "user-d9-malformed", "processor:d9-malformed", agentprofile.Processor, "doc-d9-malformed", currentTextureAgentID("doc-d9-malformed"))
 	validSafety := `"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}`
 	for name, raw := range map[string]json.RawMessage{
 		"missing action type": json.RawMessage(`{
@@ -662,7 +643,7 @@ func TestUpdateCoagentRejectsMalformedExecutionRequestPackets(t *testing.T) {
 			"actions":[{"type":"run_command","objective":"Run the requested command.",` + validSafety + `}]
 		}`),
 	} {
-		if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw); err == nil {
+		if _, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(managementRun)), "update_coagent", raw); err == nil {
 			t.Fatalf("%s: update_coagent unexpectedly accepted malformed execution_request", name)
 		}
 	}
@@ -672,7 +653,7 @@ func TestUpdateCoagentRejectsUnsupportedSourceAndSelectorKinds(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
 	ctx := context.Background()
-	run := d9CoagentRun("run-d9-source-vocab", "user-d9-source-vocab", "research:d9-source-vocab", agentprofile.Research, "doc-d9-source-vocab", "")
+	run := d9CoagentRun("run-d9-source-vocab", "user-d9-source-vocab", "processor:d9-source-vocab", agentprofile.Processor, "doc-d9-source-vocab", "")
 	for name, raw := range map[string]json.RawMessage{
 		"unsupported source kind": json.RawMessage(`{
 			"schema_version":"coagent_source_packet.v1",
@@ -695,7 +676,7 @@ func TestUpdateCoagentRejectsUnsupportedSourceAndSelectorKinds(t *testing.T) {
 			"actions":[{"type":"run_command","objective":"Return impossible evidence.","expected_sources":[{"kind":"magic_oracle","required":true}],"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}}]
 		}`),
 	} {
-		if _, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "update_coagent", raw); err == nil {
+		if _, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "update_coagent", raw); err == nil {
 			t.Fatalf("%s: update_coagent unexpectedly accepted unsupported source vocabulary", name)
 		}
 	}
@@ -706,8 +687,8 @@ func TestUpdateCoagentCanonicalizesSourceContractAliases(t *testing.T) {
 	d9InstallTools(t, rt)
 	ownerID := "user-d9-source-alias"
 	docID := "doc-d9-source-alias"
-	run, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-source-alias", agentprofile.Research)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(run, "call-d9-source-alias"), "update_coagent", json.RawMessage(`{
+	run, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-source-alias", agentprofile.Processor)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolContextForTestCall(run, "call-d9-source-alias"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"source aliases normalize",
@@ -731,7 +712,7 @@ func TestUpdateCoagentCanonicalizesSourceContractAliases(t *testing.T) {
 func TestUpdateCoagentToolSchemaRequiresSourceTargetURIAndVocabularyEnums(t *testing.T) {
 	rt, _ := testRuntime(t)
 	d9InstallTools(t, rt)
-	tool, ok := rt.ToolRegistryForProfile(agentprofile.Research).Lookup("update_coagent")
+	tool, ok := rt.ToolRegistryForProfile(agentprofile.Processor).Lookup("update_coagent")
 	if !ok {
 		t.Fatal("update_coagent tool missing")
 	}
@@ -762,13 +743,13 @@ func TestUpdateCoagentToolSchemaRequiresSourceTargetURIAndVocabularyEnums(t *tes
 	}
 }
 
-func TestUpdateCoagentAcceptsManagementExecutionResultSourcesAndTextureCollatesPacketSourcesOnly(t *testing.T) {
+func TestUpdateCoagentAcceptsProcessorExecutionResultSourcesAndTextureCollatesPacketSourcesOnly(t *testing.T) {
 	rt, s := testRuntime(t)
 	d9InstallTools(t, rt)
 	ownerID := "user-d9-super-result"
 	docID := "doc-d9-super-result"
-	producerRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-result", agentprofile.Research)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(producerRun, "call-d9-result"), "update_coagent", json.RawMessage(`{
+	producerRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "d9-result", agentprofile.Processor)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolContextForTestCall(producerRun, "call-d9-result"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"execution_result",
 		"summary":"command, diff, and tests completed",
@@ -915,20 +896,20 @@ func TestUpdateCoagentRejectsTrajectoryMarkerAsLifecycleAuthority(t *testing.T) 
 	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
 	legacy := d9CoagentRun(
 		"run-legacy-producer-lifecycle-collision", ownerID,
-		"research:legacy-producer-lifecycle-collision", agentprofile.Research, docID, "",
+		"processor:legacy-producer-lifecycle-collision", agentprofile.Processor, docID, "",
 	)
 	legacy.ComputerID, legacy.TrajectoryID = "autoputer-test", trajectoryID
 	legacy.Metadata[runMetadataTrajectoryID] = trajectoryID
 	now := time.Now().UTC()
 	legacy.State, legacy.CreatedAt, legacy.UpdatedAt = types.RunRunning, now, now
-	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: legacy.AgentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: legacy.AgentID, OwnerID: ownerID, ComputerID: "autoputer-test", Profile: agentprofile.Processor, Role: agentprofile.Processor, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("upsert durable legacy producer: %v", err)
 	}
 	if err := s.CreateRunOG(ctx, *legacy); err != nil {
 		t.Fatalf("create durable pre-cutover producer row: %v", err)
 	}
 	raw := json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy producer remains legacy","agent_id":"texture:` + docID + `","channel_id":"` + docID + `","claims":[{"text":"legacy producer remains legacy"}]}`)
-	_, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(
+	_, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(
 		toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(legacy)),
 		"update_coagent", raw,
 	)
@@ -1185,8 +1166,8 @@ func TestUpdateCoagentAcceptsJoinableIdentitySourcesWithoutSchemaChange(t *testi
 	d9InstallTools(t, rt)
 	ownerID := "user-joinable-packet"
 	docID := "doc-joinable-packet"
-	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-packet", agentprofile.Research)
-	raw, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-joinable-packet"), "update_coagent", json.RawMessage(`{
+	processorRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-packet", agentprofile.Processor)
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolContextForTestCall(processorRun, "call-joinable-packet"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"freeze identities for supervision",
@@ -1202,7 +1183,7 @@ func TestUpdateCoagentAcceptsJoinableIdentitySourcesWithoutSchemaChange(t *testi
 	if err != nil {
 		t.Fatalf("joinable identity packet rejected: %v", err)
 	}
-	stored := lifecycleUpdateFromToolOutput(t, s, researchRun, raw)
+	stored := lifecycleUpdateFromToolOutput(t, s, processorRun, raw)
 	if len(stored.Packet.Sources) != 4 {
 		t.Fatalf("sources = %#v", stored.Packet.Sources)
 	}
@@ -1213,8 +1194,8 @@ func TestUpdateCoagentRejectsUnknownJoinableSourceKind(t *testing.T) {
 	d9InstallTools(t, rt)
 	ownerID := "user-joinable-kind"
 	docID := "doc-joinable-kind"
-	researchRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-kind", agentprofile.Research)
-	if _, err := rt.ToolRegistryForProfile(agentprofile.Research).Execute(toolContextForTestCall(researchRun, "call-joinable-kind"), "update_coagent", json.RawMessage(`{
+	processorRun, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "joinable-kind", agentprofile.Processor)
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolContextForTestCall(processorRun, "call-joinable-kind"), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"unknown source kind must remain refused",

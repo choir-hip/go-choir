@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -412,16 +411,7 @@ func TestUpdateCoagentLifecycleExactToolCallReplayWakesOnce(t *testing.T) {
 	d9InstallTools(t, rt)
 	ctx := context.Background()
 	const ownerID, docID = "owner-call-replay", "doc-call-replay"
-	trajectoryID := seedDurableTextureSubject(t, s, ownerID, docID)
-	now := time.Now().UTC()
-	parent := types.RunRecord{RunID: "run-texture-call-replay", AgentID: "texture:" + docID, ChannelID: docID, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, OwnerID: ownerID, ComputerID: "autoputer-test", State: types.RunRunning, TrajectoryID: trajectoryID, CreatedAt: now, UpdatedAt: now, Metadata: map[string]any{runMetadataTrajectoryID: trajectoryID, runMetadataChannelID: docID}}
-	if err := s.CreateRun(ctx, parent); err != nil {
-		t.Fatalf("create lifecycle parent: %v", err)
-	}
-	child, err := rt.StartCoagentRun(ctx, parent.RunID, "research replay identity", ownerID, map[string]any{runMetadataAgentProfile: agentprofile.Research, runMetadataAgentRole: agentprofile.Research, runMetadataChannelID: docID})
-	if err != nil {
-		t.Fatalf("spawn lifecycle researcher: %v", err)
-	}
+	child, _ := spawnBoundTestLifecycleProducer(t, rt, s, ownerID, docID, "call-replay", agentprofile.Processor)
 	var wakes atomic.Int32
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
 		wakes.Add(1)
@@ -431,7 +421,7 @@ func TestUpdateCoagentLifecycleExactToolCallReplayWakesOnce(t *testing.T) {
 	execution := toolExecutionContextForRun(child)
 	execution.ToolCallID = "provider-call-stable-1"
 	callCtx := toolregistry.WithExecutionContext(ctx, execution)
-	registry := rt.ToolRegistryForProfile(agentprofile.Research)
+	registry := rt.ToolRegistryForProfile(agentprofile.Processor)
 	first, err := registry.Execute(callCtx, "update_coagent", args)
 	if err != nil {
 		t.Fatalf("first update: %v", err)

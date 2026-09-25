@@ -421,9 +421,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	if err := RegisterCoagentUpdateTools(managementRegistry, rt); err != nil {
-		return err
-	}
 	if err := RegisterPersistentManagementReportTools(managementRegistry, rt); err != nil {
 		return err
 	}
@@ -441,9 +438,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	if err := RegisterCoagentUpdateTools(researchRegistry, rt); err != nil {
-		return err
-	}
 	processorPolicy, err := agentprofile.PolicyFor(agentprofile.Processor)
 	if err != nil {
 		return err
@@ -452,6 +446,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
+	// update_coagent remains on wire roles until their migration phase.
 	if err := RegisterCoagentUpdateTools(processorRegistry, rt); err != nil {
 		return err
 	}
