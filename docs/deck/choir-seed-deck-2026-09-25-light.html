@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Choir — Seed Pitch Deck (Sept 25, 2026)</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #ffffff;
+    --bg2: #f4f6fb;
+    --ink: #0d1628;
+    --dim: #45526b;
+    --faint: #8a94ab;
+    --accent: #4a63c8;
+    --accent-soft: #6d8dff;
+    --line: #dde3ef;
+  }
+  body {
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .slide {
+    width: 1280px; height: 720px;
+    page-break-after: always;
+    position: relative;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 72px 96px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .slide:nth-child(even) { background: var(--bg2); }
+  .kicker {
+    font-size: 15px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin-bottom: 26px;
+  }
+  h1 { font-size: 88px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.02; }
+  h2 { font-size: 54px; font-weight: 650; letter-spacing: -0.025em; line-height: 1.08; }
+  .sub { font-size: 26px; color: var(--dim); line-height: 1.45; margin-top: 26px; max-width: 920px; font-weight: 400; }
+  .body { font-size: 22px; color: var(--dim); line-height: 1.6; max-width: 980px; }
+  .body strong, .body b { color: var(--ink); font-weight: 600; }
+  .foot {
+    position: absolute; bottom: 36px; left: 96px; right: 96px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; color: var(--faint); letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .foot .num { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .rule { width: 64px; height: 3px; background: var(--accent); margin: 30px 0; }
+  .keyline { font-size: 30px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em; margin-top: 34px; max-width: 980px; line-height:1.3; }
+  .keyline .em { color: var(--accent); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 44px; margin-top: 40px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 40px; }
+  .card {
+    border: 1px solid var(--line); border-radius: 14px; padding: 26px 28px;
+    background: #ffffff;
+  }
+  .card .t { font-size: 14px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 12px; }
+  .card .d { font-size: 19px; color: var(--dim); line-height: 1.55; }
+  .card .d b { color: var(--ink); font-weight: 600; }
+  .flow { display:flex; align-items:center; gap:18px; margin-top:40px; flex-wrap:wrap; }
+  .flow .node { border:1px solid var(--line); border-radius:12px; padding:16px 22px; font-size:20px; color:var(--ink); background:#ffffff; }
+  .flow .arr { color:var(--accent); font-size:26px; }
+  .stat { display:flex; gap:56px; margin-top:44px; }
+  .stat .n { font-size:72px; font-weight:700; color:var(--accent); letter-spacing:-0.03em; }
+  .stat .l { font-size:16px; color:var(--dim); margin-top:8px; max-width:200px; line-height:1.4; }
+  .title-slide { justify-content: center; }
+  .title-slide .word { font-size: 150px; font-weight: 750; letter-spacing: -0.045em; line-height: 0.95; }
+  .corner-mark { position: absolute; top: 44px; right: 52px; width: 58px; height: 58px; }
+  .tag {
+    display: inline-block; border: 1px solid var(--accent); color: var(--accent-soft);
+    border-radius: 999px; padding: 5px 16px; font-size: 14px; letter-spacing: 0.12em;
+    text-transform: uppercase; font-weight: 600; margin-right: 10px; margin-top: 14px;
+  }
+  a.tag { text-decoration:none; }
+  .team-wrap { display:flex; align-items:center; gap:64px; margin-top:20px; }
+  .team-photo { width:300px; height:348px; object-fit:cover; border-radius:16px; border:1px solid var(--line); flex:none; }
+  .team .name { font-size:38px; font-weight:700; color:var(--ink); letter-spacing:-0.02em; }
+  .team .role { font-size:15px; color:var(--accent); letter-spacing:0.2em; text-transform:uppercase; font-weight:600; margin-top:10px; }
+  .team .bio { font-size:20px; color:var(--dim); line-height:1.6; margin-top:20px; }
+  .team .links { margin-top:22px; }
+  ul.pts { margin-top:30px; list-style:none; }
+  ul.pts li { font-size:22px; color:var(--dim); line-height:1.5; padding:10px 0 10px 30px; position:relative; }
+  ul.pts li::before { content:"—"; position:absolute; left:0; color:var(--accent); }
+  ul.pts li b { color:var(--ink); font-weight:600; }
+  .shots { display:flex; gap:26px; margin-top:34px; align-items:flex-start; }
+  .shots figure { margin:0; }
+  .shots img { display:block; width:auto; max-width:100%; border-radius:12px; border:1px solid var(--line); }
+  .shots .tall img { height:430px; }
+  .shots .med img { height:300px; }
+  .shots figcaption { font-size:14px; color:var(--faint); margin-top:10px; line-height:1.4; max-width:300px; }
+
+  .chip { display:inline-block; border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--faint); font-weight:600; vertical-align:middle; margin-left:8px; }
+  .grid2x2 { display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:34px; }
+  .shots .tall img { height:270px; }
+  .shots .med img { height:210px; }
+  .shots figcaption .chip { margin-left:0; margin-right:8px; }
+  .shots figcaption { max-width:340px; }
+  .placeholder { border:1px dashed var(--faint); border-radius:12px; padding:34px 28px; margin-top:30px; font-size:18px; color:var(--faint); letter-spacing:0.06em; text-align:center; }
+  .prod-wrap { display:flex; gap:48px; margin-top:36px; align-items:flex-start; }
+  .prod-text { flex:1; min-width:0; }
+  .prod-shot { width:430px; border-radius:12px; border:1px solid var(--line); }
+  .shots .big img { height:250px; width:auto; }
+</style>
+</head>
+<body>
+<!-- 1 · COVER -->
+<section class="slide title-slide">
+  <svg class="corner-mark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z" fill="#d4a94e"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z" fill="#d4a94e"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z" fill="#d4a94e"/></svg>
+  <div class="kicker">September 2026 · open source</div>
+  <h1 style="font-size:64px; max-width:1000px; line-height:1.1;">How do humans supervise work at agentic scale?</h1>
+  <div class="sub" style="font-size:40px; color:var(--ink); margin-top:44px;">
+    CHOIR — the automatic computer.
+  </div>
+  <div class="foot"><span><a href="https://choir.news" style="color:inherit; text-decoration:none;">choir.news</a></span><span class="num">01</span></div>
+</section>
+
+<!-- 2 · PROBLEM -->
+<section class="slide">
+  <div class="kicker">Problem</div>
+  <h2>Agentic work has outgrown<br>the supervisory interface.</h2>
+  <div class="rule"></div>
+  <ul class="pts">
+    <li>Work now runs faster and longer than a human can watch.</li>
+    <li>People wake up to answers they cannot inspect.</li>
+    <li>Chat does not scale to many agents, many people, continuous work.</li>
+  </ul>
+  <div class="keyline">A chat thread is not a workbench. <span class="em">The interface is a live, updated state document.</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">02</span></div>
+</section>
+
+<!-- 3 · SOLUTION -->
+<section class="slide">
+  <div class="kicker">Solution</div>
+  <h2>The work itself<br>is the interface.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    Agents update a versioned document — the authoritative state of the
+    work. Humans read it and edit it. An edit is a new version, and
+    steers what happens next.
+  </div>
+  <ul class="pts">
+    <li>Models and agents are swappable. The state is yours.</li>
+  </ul>
+  <div class="keyline">Language is for intent. <span class="em">The document is for steering.</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">03</span></div>
+</section>
+
+<!-- 4 · THE PRODUCT -->
+<section class="slide">
+  <div class="kicker">The product</div>
+  <h2>Familiar desktop and document UX.<br>Automated.</h2>
+  <div class="rule"></div>
+  <div class="prod-wrap">
+    <div class="prod-text">
+      <div class="card"><div class="t">Texture <span class="chip">on staging</span></div><div class="d">The surface — work as a versioned, editable document.</div></div>
+      <div class="card" style="margin-top:20px;"><div class="t">Mail <span class="chip">on staging</span></div><div class="d">Proof agents can act under supervision — send gated by owner approval.</div></div>
+      <div class="body" style="margin-top:20px; font-size:17px;">
+        Next: Newspaper <span class="chip">in refactor</span> · Radio <span class="chip">in development</span>
+      </div>
+    </div>
+    <img class="prod-shot" src="shot-texture.png" alt="Texture — the supervised document">
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">04</span></div>
+</section>
+
+<!-- 5 · CURRENT STATUS -->
+<section class="slide">
+  <div class="kicker">Current status</div>
+  <h2>Live on staging.<br>Honest about what's next.</h2>
+  <div class="rule"></div>
+  <div class="shots" style="margin-top:26px;">
+    <figure class="big"><img src="shot-mail.png" alt="Mail app"><figcaption><span class="chip">staging</span>Mail — send gated by owner approval.</figcaption></figure>
+    <figure class="big"><img src="shot-worldwire.png" alt="World Wire"><figcaption><span class="chip">in refactor</span>Automatic Newspaper — prototype → production.</figcaption></figure>
+  </div>
+  <div class="body" style="margin-top:16px; font-size:18px;">Today: staging. Next: production launch, then evidence of repeat use.</div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">05</span></div>
+</section>
+
+<!-- 6 · MARKET OPPORTUNITY -->
+<section class="slide">
+  <div class="kicker">Market opportunity</div>
+  <h2>Three existing budgets.<br>Compressed AI-native scale.</h2>
+  <div class="rule"></div>
+  <div class="grid3">
+    <div class="card">
+      <div class="t">News &amp; Alt-Data <span class="chip">$42B TAM</span></div>
+      <div class="d">Automatic Newspaper editions sold to funds &amp; desks @ $50k/yr. Provenance + precommitment records replace black-box summaries.</div>
+    </div>
+    <div class="card">
+      <div class="t">2-Way Voice <span class="chip">$50B TAM</span></div>
+      <div class="d">Automatic Radio: users speak, build brand, and prompt 24/7 agents. $35/mo power speakers; $100/seat/mo async team meetings.</div>
+    </div>
+    <div class="card">
+      <div class="t">Sovereign OS <span class="chip">$200B+ TAM</span></div>
+      <div class="d">Autoputer platform: open-source self-hosting + FDE model. Banks, defense, and health own their private learning loops on-prem.</div>
+    </div>
+  </div>
+  <div class="keyline" style="font-size:25px; margin-top:28px;">
+    Capturing under 2% of beachhead accounts reaches $50M+ ARR. <span class="em">AI-native velocity compresses a 7-year curve into 24 months.</span>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">06</span></div>
+</section>
+
+<!-- 7 · BUSINESS MODEL -->
+<section class="slide">
+  <div class="kicker">Business model</div>
+  <h2>Open runtime. Paid convenience.</h2>
+  <div class="rule"></div>
+  <div class="grid3">
+    <div class="card"><div class="t">Open source</div><div class="d">Self-hostable runtime — trust, portability, adoption.</div></div>
+    <div class="card"><div class="t">Managed</div><div class="d">Hosted Choir — reliability without operations.</div></div>
+    <div class="card"><div class="t">Premium</div><div class="d">Pro research, Radio, APIs, teams — products on your state, never a claim on it.</div></div>
+  </div>
+  <div class="keyline">Your computer should not <span class="em">belong to your model provider.</span><br><span style="font-size:22px; color:var(--dim); font-weight:400;">As intelligence gets cheaper, owned work history compounds.</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
+</section>
+
+<!-- 8 · POSITIONING -->
+<section class="slide">
+  <div class="kicker">Positioning</div>
+  <h2>Personal agents are here.<br>They need somewhere to work.</h2>
+  <div class="rule"></div>
+  <div class="grid3">
+    <div class="card"><div class="t">The category</div><div class="d">Muse, Instinct, Grok Bot, Town — agents with their own computers. OpenAI and Anthropic next.</div></div>
+    <div class="card"><div class="t">The gap</div><div class="d">Every agent's work lives in its vendor's silo. Nothing the human owns.</div></div>
+    <div class="card"><div class="t">Choir</div><div class="d">The workbench any agent can use — API, MCP, skill. State the user owns.</div></div>
+  </div>
+  <div class="body" style="margin-top:24px; font-size:19px;">
+    Why won't model vendors build this? Your state must work across
+    whichever agents and models you choose — theirs can't.
+  </div>
+  <div class="keyline" style="font-size:26px; margin-top:16px;">Agents come and go. <span class="em">The workbench stays yours.</span></div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
+</section>
+
+<!-- 9 · WHY ME -->
+<section class="slide">
+  <div class="kicker">Why me</div>
+  <div class="team-wrap">
+    <div class="team" style="margin-top:0; flex:1;">
+      <div class="name">Yusef Mosiah Nathanson</div>
+      <div class="role">Founder</div>
+      <div class="bio">
+        Made a living turning conflicting signals into verified decisions —
+        professional poker, then AI since 2015. Years of work across
+        agent systems, interfaces, provenance, and media converged into
+        Choir. I built the computer I needed to supervise my own agents.
+      </div>
+      <div class="links">
+        <a class="tag" href="https://github.com/yusefmosiah">github.com/yusefmosiah</a>
+        <a class="tag" href="https://mosiah.org">mosiah.org</a>
+      </div>
+    </div>
+    <img class="team-photo" src="Yusef_photo.jpeg" alt="Yusef Mosiah Nathanson">
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">09</span></div>
+</section>
+
+<!-- 10 · ASK -->
+<section class="slide">
+  <div class="kicker">The ask</div>
+  <h2>Building the system<br>that needs to exist.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    This meeting is to explore a relationship and get your read.
+    Funding would accelerate production launch and distribution.
+    The honest state is early: pre-traction, pre-production.
+    The work continues either way.
+  </div>
+  <div class="keyline">Milestone: <span class="em">production launch — then evidence of repeat use.</span></div>
+  <div style="margin-top:26px;">
+    <a class="tag" href="https://choir.news">choir.news</a>
+    <a class="tag" href="https://github.com/choir-hip/go-choir">github.com/choir-hip/go-choir</a>
+  </div>
+  <div class="foot"><span>choir — the automatic computer</span><span class="num">10</span></div>
+</section>
+</body>
+</html>
