@@ -2,7 +2,9 @@ package actor
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -126,6 +128,10 @@ type DispatcherOptions struct {
 	// MaxConcurrent bounds how many actor activations may run at once across
 	// all agents (0 = default 8). Prevents unbounded goroutine fan-out.
 	MaxConcurrent int
+	// OnActorFailure is called when an activation's handler panics. The
+	// callback receives the agent ID and the recovered error. It must not
+	// block. When nil, panics are logged only.
+	OnActorFailure FailureFunc
 }
 
 // NewDispatcher constructs a dispatcher over the kernel log. Call Run to
@@ -227,6 +233,13 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 		go func(id string) {
 			defer d.wg.Done()
 			defer func() {
+				if rv := recover(); rv != nil {
+					err := fmt.Errorf("actor %s panic: %v", id, rv)
+					log.Printf("dispatcher: %v\n%s", err, debug.Stack())
+					if d.opts.OnActorFailure != nil {
+						d.opts.OnActorFailure(id, err)
+					}
+				}
 				d.mu.Lock()
 				delete(d.running, id)
 				d.mu.Unlock()

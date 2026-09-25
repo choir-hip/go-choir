@@ -53,51 +53,9 @@ func WithTraceStore(s trace.Store) RuntimeOption {
 	}
 }
 
-// WithInboxCapacity sets the mailbox capacity for each actor (default: 1000
-// in the adapter, 256 in the bare actor runtime). This bounds the Go-channel
-// buffer. When the buffer is full, behavior depends on whether backpressure
-// is enabled (see WithBackpressure).
-func WithInboxCapacity(n int) RuntimeOption {
-	return func(a *Adapter) {
-		if n > 0 {
-			a.inboxCapacity = n
-		}
-	}
-}
-
-// WithSendTimeout sets the timeout for blocking Send when the mailbox is full
-// and backpressure is enabled in blocking mode (default 5s).
-func WithSendTimeout(d time.Duration) RuntimeOption {
-	return func(a *Adapter) {
-		if d > 0 {
-			a.sendTimeout = d
-		}
-	}
-}
-
-// WithBackpressure enables backpressure on Send. When the mailbox is full:
-//   - blocking=false: Send returns actor.ErrInboxFull immediately
-//     (non-blocking backpressure).
-//   - blocking=true: Send waits up to WithSendTimeout for space, then
-//     returns actor.ErrInboxFull (blocking backpressure).
-//
-// Without this option, Send silently drops to the durable log when the
-// mailbox is full (legacy behavior, backward compatible).
-func WithBackpressure(blocking bool) RuntimeOption {
-	return func(a *Adapter) {
-		a.backpressure = true
-		if blocking {
-			a.sendMode = actor.SendModeBlocking
-		} else {
-			a.sendMode = actor.SendModeNonBlocking
-		}
-	}
-}
-
-// WithOnActorFailure sets a callback invoked when an actor dies from a panic
-// or unrecoverable error. The callback receives the agent ID and the error.
-// It must not block (it is called from the dying actor's goroutine). When
-// not set, failures are logged only.
+// WithOnActorFailure sets a callback invoked when an actor's activation dies
+// from a panic. The callback receives the agent ID and the error. It must
+// not block. When not set, failures are logged only.
 func WithOnActorFailure(fn func(agentID string, err error)) RuntimeOption {
 	return func(a *Adapter) {
 		if fn != nil {
@@ -135,10 +93,6 @@ type Adapter struct {
 	logPath      string
 
 	// Actor runtime options (applied before actorRT construction).
-	inboxCapacity  int               // 0 = use actor default
-	backpressure   bool              // opt-in backpressure on Send
-	sendMode       actor.SendMode    // non-blocking (default) or blocking
-	sendTimeout    time.Duration     // blocking send timeout (default 5s)
 	onActorFailure actor.FailureFunc // supervisor callback for actor deaths
 	startOnce      sync.Once
 	started        bool
@@ -148,12 +102,8 @@ type Adapter struct {
 	bootDispatches []actor.Update
 }
 
-// New creates a runtime business-logic core and its actor-based lifecycle
-// adapter. The core remains explicitly available as Adapter.Runtime without
-// promoting its method set onto Adapter.
-//
-// The runtime core's ActorBridge is set to the adapter, so run activations and
-// coagent wakes go through actor.Send.
+// New constructs the adapter. The runtime core's ActorBridge is set to the
+// adapter, so run activations and coagent wakes go through actor.Send.
 func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, coreOpts []agentcore.RuntimeOption, opts ...RuntimeOption) *Adapter {
 	rt := agentcore.New(cfg, s, bus, provider, coreOpts...)
 
@@ -192,22 +142,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	// composition root before Start.
 	handler := newActorHandler(a.Runtime, nil)
 	a.handler = handler
-	actorOpts := actor.Options{
-		MaxResident:         0, // unlimited for now
-		HandlerRetryBackoff: 100 * time.Millisecond,
-		MailboxCapacity:     1000, // adapter default; override via WithInboxCapacity
-		IdleTimeout:         30 * time.Second,
-	}
-	if a.inboxCapacity > 0 {
-		actorOpts.MailboxCapacity = a.inboxCapacity
-	}
-	if a.backpressure {
-		actorOpts.Backpressure = true
-		actorOpts.SendMode = a.sendMode
-		if a.sendTimeout > 0 {
-			actorOpts.SendTimeout = a.sendTimeout
-		}
-	}
+	actorOpts := actor.Options{}
 	if a.onActorFailure != nil {
 		actorOpts.OnActorFailure = a.onActorFailure
 	}

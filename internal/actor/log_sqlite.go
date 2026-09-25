@@ -307,23 +307,6 @@ func (l *SQLiteLog) UpdateStatus(ctx context.Context, agentID, updateID string) 
 	return true, processedAt.Valid, nil
 }
 
-func (l *SQLiteLog) AgentsWithBacklog(ctx context.Context) ([]string, error) {
-	rows, err := l.db.QueryContext(ctx, `
-SELECT DISTINCT to_agent_id FROM actor_updates WHERE processed_at IS NULL`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var agentID string
-		if err := rows.Scan(&agentID); err != nil {
-			return nil, err
-		}
-		out = append(out, agentID)
-	}
-	return out, rows.Err()
-}
 
 // MailboxIdentities lists every durable actor identity, including identities
 // retained only by processed history or a compacted snapshot.

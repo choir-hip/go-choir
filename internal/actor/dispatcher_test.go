@@ -30,8 +30,8 @@ func mkUpdate(id, to string) Update {
 	return Update{UpdateID: id, ToAgentID: to, FromAgentID: "test", Kind: "k", Content: "c", CreatedAt: time.Now()}
 }
 
-// The pending projection must reproduce the sweep's backlog set for due
-// events: every agent with an unprocessed due update appears, and only those.
+// The pending projection returns every agent with a due unprocessed update,
+// and only those.
 func TestPendingProjectionReproducesSweepSet(t *testing.T) {
 	l := openKernelLog(t)
 	ctx := context.Background()
@@ -46,7 +46,7 @@ func TestPendingProjectionReproducesSweepSet(t *testing.T) {
 			t.Fatalf("append %s: %v", u.UpdateID, err)
 		}
 	}
-	// Incorporate one of agent-a's events; agent-c's event is fully pending.
+	// Incorporate one of agent-a's events; agent-a still has a2 pending.
 	if err := l.MarkProcessed(ctx, "agent-a", "a1"); err != nil {
 		t.Fatalf("mark: %v", err)
 	}
@@ -55,21 +55,17 @@ func TestPendingProjectionReproducesSweepSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PendingAgents: %v", err)
 	}
-	sweep, err := l.AgentsWithBacklog(ctx)
-	if err != nil {
-		t.Fatalf("AgentsWithBacklog: %v", err)
-	}
-	if len(pending) != len(sweep) {
-		t.Fatalf("pending %v != sweep %v", pending, sweep)
-	}
 	set := map[string]bool{}
 	for _, id := range pending {
 		set[id] = true
 	}
-	for _, id := range sweep {
-		if !set[id] {
-			t.Fatalf("sweep agent %s missing from pending projection", id)
+	for _, want := range []string{"agent-a", "agent-b", "agent-c"} {
+		if !set[want] {
+			t.Fatalf("pending projection missing %s: %v", want, pending)
 		}
+	}
+	if len(pending) != 3 {
+		t.Fatalf("pending projection = %v, want exactly {agent-a, agent-b, agent-c}", pending)
 	}
 }
 
