@@ -178,11 +178,11 @@ func actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajec
 	if canonicalContent == "" {
 		return uuid.New().String()
 	}
-	switch canonicalKind {
-	case "initial_dispatch", "channel_message":
-	default:
-		return uuid.New().String()
-	}
+	// Deterministic content-derived identity for every kind: the logical wake
+	// {to,kind,content,trajectory,from} maps to one update_id, so a recovery
+	// sweep re-minting the same wake after a restart hits the same durable
+	// row (and attempt budget) instead of escaping the poison bound. Two
+	// distinct occurrences with identical content are the same logical wake.
 
 	// Length prefixes make the occurrence identity injective even when an
 	// authored identifier contains a delimiter used by an older encoding.
