@@ -223,18 +223,22 @@ now:
       AfterFunc is textureWakeAfter for the wire debounce, being converted
       to a durable not_before continuation by the in-flight change.
   blocker_or_risk: >-
-    Resumption sweeps deleted. Stranding is intentional per owner ruling
-    (boot starts no work): zombie RunRecords, lifecycle work version>1,
-    delivered-control persistent Management, spawned-work mint — recorded in
-    docs/problems/kernel-cutover-wake-gap-analysis-2026-09-24.md. Committed
-    obligations reach actors via the actor-wake outbox + dispatcher, not a
-    boot wake. Remaining blocker: wire debounce durable conversion.
+    Resumption sweeps + progress AfterFunc + wire debounce process-local
+    timer all deleted; wire debounce converted to durable
+    wire_reconciler_publish_deadline (SQLite wire_publish_debounce_entries/
+    state, atomic consume, ReplayEmptyUntilSupported). Stranding is
+    intentional per owner ruling (boot starts no work): zombie RunRecords,
+    lifecycle work version>1, delivered-control persistent Management,
+    spawned-work mint — recorded in
+    docs/problems/kernel-cutover-wake-gap-analysis-2026-09-24.md.
+    Pipeline note: a docs-only head push with a cancelled earlier code push
+    skips deploy-impact (non_docs is push-diff-scoped); deploy was forced
+    via workflow_dispatch force_staging_deploy.
   next_action: >-
-    Deletion pass landed (commit 23c461b5, goal receipt b4c88622): five
-    resumption sweeps + progress AfterFunc deleted, wire debounce durable.
-    Remaining: staging restart-resume deployed proof (kill mid-task,
-    restart, observe tape-derived delivery), in-scope recount to zero,
-    then the consensus gate.
+    Deletion pass landed (commit 23c461b5 + receipt commits). Awaiting
+    staging deploy of head (forced run 36107191784), then the
+    restart-resume deployed proof (kill mid-task, restart, observe
+    tape-derived delivery), in-scope recount to zero, consensus gate.
 
 receipts:
   - id: k-deletion-sweeps-timers-2026-09-25
