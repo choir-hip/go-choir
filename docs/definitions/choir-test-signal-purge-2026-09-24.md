@@ -99,10 +99,11 @@ boundaries:
     - none (yellow class; no canonical-write or provider-routing surface)
 
 now:
-  status: working
-  slice: charter + first deletion pass
-  source_ref: main@42eee113
-  deploy_identity: staging https://choir.news
+  status: complete
+  slice: low-signal unit tests purged; suite green
+  source_ref: main@2fbecebc
+  deploy_identity: staging https://choir.news build.commit=ce28e407 (test-only
+    change; deploy correctly skipped — no runtime surface touched)
   candidate:
     id: none
     state: none
@@ -161,8 +162,24 @@ now:
   next_action: >-
     Author the per-package deletion rubric and fan out subagents; land the
     AGENTS.md rules in the same mission.
-
-receipts: []
+receipts:
+  - id: test-signal-purge-landed
+    boundary: terminal
+    identity: main@2fbecebc
+    proof_refs:
+      - 'CI run 36177280541 success — all Go Test shards green post-purge'
+      - 'git diff: 729 test/benchmark functions removed, 13 test files deleted, ~21.7k test lines'
+      - 'deploy-impact classify: deploy_needed=false (test-only, no runtime surface)'
+      - 'ledger: docs/evidence/test-signal-purge-ledger-2026-09-25.md'
+      - 'AGENTS.md: three testing rules added (Testing section)'
+    rollback_ref: 'git revert 2fbecebc restores all deleted tests'
+    disposition: landed — 729 test functions removed, suite green
+    landing:
+      source_commit: 2fbecebc
+      ci_ref: run 36177280541 (success)
+      deploy_ref: none — test-only change, deploy correctly skipped
+      environment_identity: 'choir.news build.commit=ce28e407'
+      deployed_acceptance: 'suite green in CI shards; go build + go vet clean'
 ---
 
 ## The three AGENTS.md rules (owner-stated, verbatim)
