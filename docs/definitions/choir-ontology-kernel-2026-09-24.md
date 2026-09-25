@@ -234,14 +234,19 @@ now:
     Pipeline note: a docs-only head push with a cancelled earlier code push
     skips deploy-impact (non_docs is push-diff-scoped); deploy was forced
     via workflow_dispatch force_staging_deploy.
-  next_action: >-
-    Deletion pass landed and deployed (head 4daecd60, CI run 36110172609
-    green incl. actorruntime shard 6, Deploy to Staging success). Remaining:
-    restart-resume deployed proof (kill a live guest autoputer mid-task,
-    restart, observe tape-derived delivery), in-scope recount to zero,
-    consensus gate. Open risk: the 1.4-held platform VM resurrected on
-    deploy via active_vm_refresh (IsHeld gates the idle sweeper only), so
-    the proof target is the live wire platform — needs a proof-safe guest.
+ next_action: >-
+   Deletion pass landed and deployed (head 4daecd60, CI run 36110172609
+   green). Held-VM resurrection regression closed: deploy startup called
+   EnsureUniversalWirePlatformComputer -> ensureUniversalWirePlatformOwnership,
+   which drove stopped/booting/failed ownership to startExistingVM with no
+   IsHeld gate (internal/vmctl/platform_computer.go:104). Deployed as
+   91c8fd9f (CI 36156273423); Node B now logs `refused: held` and the
+   platform computer is durably stopped/held, zero firecracker, zero
+   pre-genesis spam. Remaining: restart-resume deployed proof (kill a live
+   guest autoputer mid-task, restart, observe tape-derived delivery),
+   in-scope recount to zero, consensus gate. Residual surfaced: a vmctl
+   restart can orphan a Firecracker proc for restart-loaded stopped
+   ownership (not manager-tracked) — parked as a follow-up, not blocking.
 
 receipts:
   - id: k-deletion-sweeps-timers-2026-09-25
