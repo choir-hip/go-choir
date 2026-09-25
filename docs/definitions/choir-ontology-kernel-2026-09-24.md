@@ -200,29 +200,66 @@ now:
     owner_ratification_ref: ratified ontology cutover 2026-09-22
   belief:
     believed_state: >-
-      Kernel substrate landed and deployed (dispatcher, pending projection,
-      not_before due-index, state head, fenced commit). The remaining work is
-      the deletion pass: (b) process-local continuations, (d) sweep recovery,
-      (e) non-event mutations. The owner ruled 2026-09-25 that boot causes no
-      work — restart-resumption sweeps delete, state-repair sweeps keep.
+      Kernel substrate landed and deployed. Owner ruling 2026-09-25: boot
+      causes no work. Deletion pass in progress — the five restart-resumption
+      boot phases (rewarm_lifecycle_activations, rewarm_persistent_management,
+      sweep_passivated_spawned_work, sweep_open_work_item_actors,
+      sweep_pending_update_actors) and their boot-only helpers are deleted;
+      boot_recovery.go removed wholesale; reconcile_terminal_run_outcomes
+      kept as state-repair (delivers committed outcomes, mints no wake beyond
+      committed obligation). runtime.go progress-deadline context.AfterFunc
+      deleted (durable activation_budget_deadline owns terminalization).
     main_uncertainty: >-
-      Which UpdateRun/UpdateWorkItem/Trajectory calls mutate lifecycle-owned
-      state (must move to event-backed reducer) vs. non-lifecycle writeback
-      (allowed bare). Per-site classification, not blanket deletion.
+      Resolved — the (e) classifier ran: UpdateRun routes lifecycle-bound
+      records through persistLifecycleRunWithEvent → ReplaceLifecycleActivation
+      (event-backed); UpdateWorkItem*/UpdateTrajectory* reject lifecycle
+      objects with ErrLifecycleAuthorityRequired. No non-event mutation of
+      lifecycle-owned state exists. Residual edges: wire debounce durable
+      conversion (in flight), wire_publication legacy records (canonical
+      obligations on v0 non-lifecycle objects → migration, not deletion),
+      runtime.go:1942 trajectory-identity stamp (missing command).
     next_observation: >-
-      The deletion ledger: whether any Update* site names a state transition
-      no event currently records — that is the in-scope blocker.
+      The (b)/(d) acceptance grep is near-clean: the only surviving
+      AfterFunc is textureWakeAfter for the wire debounce, being converted
+      to a durable not_before continuation by the in-flight change.
   blocker_or_risk: >-
-    Mega-mission risk realized: substrate landed but the (b)/(d)/(e) deletions
-    are open. Owner sweep ruling (boot causes no work) narrows (d) to
-    resumption sweeps only — state repair stays.
+    Resumption sweeps deleted. Stranding is intentional per owner ruling
+    (boot starts no work): zombie RunRecords, lifecycle work version>1,
+    delivered-control persistent Management, spawned-work mint — recorded in
+    docs/problems/kernel-cutover-wake-gap-analysis-2026-09-24.md. Committed
+    obligations reach actors via the actor-wake outbox + dispatcher, not a
+    boot wake. Remaining blocker: wire debounce durable conversion.
   next_action: >-
-    Delete the wrong-path instances per the owner ruling: resumption sweeps
-    and (b)/(e) callers off progress-causing paths; then the restart-resume
-    deployed proof (kill mid-task, restart, observe tape-derived delivery),
-    recount to zero, and the consensus gate.
+    Land the wire-debounce durable continuation; run the (b)/(d)/(e)
+    acceptance greps to zero for in-scope classes; the restart-resume
+    deployed proof (kill mid-task, restart, observe tape-derived delivery);
+    then the consensus gate.
 
-receipts: []
+receipts:
+  - id: k-deletion-sweeps-timers-2026-09-25
+    slice: restart-resumption sweep + progress-timer deletion
+    status: landed (local; pending deploy proof)
+    ref: this worktree (pending commit)
+    body: >-
+      Deleted the five restart-resumption boot phases in
+      internal/agentcore/runtime.go:657-663 (rewarm_lifecycle_activations,
+      rewarm_persistent_management, sweep_passivated_spawned_work,
+      sweep_open_work_item_actors, sweep_pending_update_actors) plus their
+      boot-only helper chains — internal/agentcore/boot_recovery.go removed
+      wholesale; lifecycleActivationBindingsEligible and
+      passivateInterruptedLifecycleActivation deleted from runtime.go;
+      ResumeInterruptedPersistentManagementControlRun,
+      resumeInterruptedPersistentManagementControlRunLocked,
+      rewarmReactivatedManagementResumeWatchdogs, and errResumeWatchdogScanCap
+      deleted from management_controller.go; reconcileTerminalRunOutcomes
+      converted to no-return (dead woken map removed). Deleted the
+      runtime.go:282 progress-deadline context.AfterFunc — the durable
+      activation_budget_deadline (HandleActivationBudgetDeadline, idempotent)
+      owns run terminalization. engineering_assignment_boot_test.go eligibility
+      precondition removed (deleted helper). go build ./... and go vet
+      ./internal/agentcore clean.
+    digest: boot causes no work; committed obligations reach actors via the
+      actor-wake outbox + dispatcher projection, not a boot wake.
 ---
 
 ## What this mission is
