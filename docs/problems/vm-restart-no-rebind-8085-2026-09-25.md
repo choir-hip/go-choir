@@ -1,10 +1,17 @@
 # Guest VM does not rebind :8085 after SIGKILL + vmctl resolve-restart
 
-**Status:** ROOT-CAUSED 2026-09-25. Guest autoputer fatals on restart: canonical
-chain exists but no ProjectionBase watermark is advertised (`watermarkSeq==0`),
-so the recovery planner correctly refuses and the process exits before the
-listener binds. Blocks mission K restart-resume proof. Fix needs owner call
-(substrate work: host-side base publication + admission fence).
+**Status:** ROOT-CAUSED 2026-09-25, diagnosis narrowed. Guest autoputer fatals on
+restart: canonical chain exists but no ProjectionBase watermark is advertised
+(`watermarkSeq==0`), and `PlanRecovery` refuses `chainExists && watermarkSeq==0`
+at `internal/projectionbase/recovery_plan.go:98` — **before** checking whether a
+retained store can resume from its own head. A non-empty retained store reaches
+`RecoveryResume` from `localSeq` alone (lines 107-110,127-129) and never needs a
+base; the base is only required for `empty→Install` / `local<W→Rebase`. The
+watermark==0 refuse fires on a path where no base is needed. Separately, nothing
+auto-publishes a base post-genesis (`BootstrapChain` publishes genesis only,
+`chain_bootstrap.go:22-26`; `choir-rebuild-base` is a manual operator tool). Net
+effect: a restarted computer that never had a snapshot cannot resume — a real
+restart-durability gap, not a test artifact. Blocks mission K's live proof.
 **Surface:** `red` — vmctl VM lifecycle + guest autoputer + projection base.
 **Mutation class of any fix:** red (vmctl/guest/projectionbase).
 

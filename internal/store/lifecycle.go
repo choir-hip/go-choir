@@ -541,6 +541,14 @@ func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object) (ActorWakeOutbox
 	if content == "" || strings.TrimSpace(update.TrajectoryID) == "" || strings.TrimSpace(update.AgentID) == "" {
 		return ActorWakeOutbox{}, objectgraph.Object{}, ErrLifecycleInvalidTransition
 	}
+	// Generic worker updates are written through ogPut, whose object envelope
+	// predates computer scoping. Their immutable body is the authority for the
+	// outbox scope; lifecycle reducer objects already carry the same scope.
+	worker.OwnerID = update.OwnerID
+	worker.ComputerID = update.ComputerID
+	if strings.TrimSpace(worker.OwnerID) == "" || strings.TrimSpace(worker.ComputerID) == "" {
+		return ActorWakeOutbox{}, objectgraph.Object{}, nil
+	}
 	return actorWakeOutbox(worker, strings.TrimSpace(update.UpdateID), strings.TrimSpace(update.TargetAgentID),
 		strings.TrimSpace(update.TrajectoryID), strings.TrimSpace(update.AgentID), "coagent_result", content, time.Time{}, "wake:"+worker.CanonicalID)
 }

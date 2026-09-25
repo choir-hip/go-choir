@@ -257,6 +257,7 @@ func terminalOutcomeReferenceUpdate(rec *types.RunRecord, targetAgentID, channel
 	update := types.CoagentSourcePacket{
 		UpdateID:            terminalOutcomeReferenceUpdatePrefix + outcomeDigest[:32],
 		OwnerID:             rec.OwnerID,
+		ComputerID:          rec.ComputerID,
 		AgentID:             agentIDForRun(rec),
 		TargetAgentID:       targetAgentID,
 		ChannelID:           channelID,

@@ -309,6 +309,26 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: load run %s for initial dispatch: %w", runID, err)
 	}
+	if rec.State == types.RunPassivated &&
+		strings.TrimSpace(metadataString(rec.Metadata, "passivated_reason")) == "runtime_restarted" {
+		// The initial_dispatch occurrence is durable and may have been queued
+		// before boot passivated its run. It is the sole resume authority, not
+		// an already-consumed start: reactivate it before executing.
+		if rec.Metadata == nil {
+			rec.Metadata = make(map[string]any)
+		}
+		rec.Metadata["actor_reactivated_from_passivated"] = true
+		rec.State = types.RunRunning
+		rec.Error = ""
+		rec.Result = ""
+		rec.FinishedAt = nil
+		rec.UpdatedAt = time.Now().UTC()
+		if err := h.rt.ReactivateRunCanonical(ctx, &rec, types.RunRunning, map[string]any{
+			"actor_reactivated_from_passivated": true,
+		}); err != nil {
+			return nil, fmt.Errorf("actorruntime: reactivate restart-passivated run %s for initial dispatch: %w", runID, err)
+		}
+	}
 	if rec.State != types.RunPending && rec.State != types.RunRunning {
 		// Terminal/passivated runs were already handled by an earlier dispatch.
 		return nil, nil

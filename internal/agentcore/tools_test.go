@@ -1032,7 +1032,7 @@ func TestBootReconciliationIsIdempotentForTerminalResearchOutcome(t *testing.T) 
 	}
 }
 
-func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testing.T) {
+func TestBootTerminalRepairSynthesizesGenericChildrenThroughDurableOutbox(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()
@@ -1048,6 +1048,7 @@ func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testi
 			RequestedByRunID: "parent-generic-terminal",
 			ChannelID:        channelID,
 			OwnerID:          ownerID,
+			ComputerID:        rt.TextureComputerID(),
 			AgentProfile:     agentprofile.Engineering,
 			AgentRole:        agentprofile.Engineering,
 			State:            types.RunCompleted,
@@ -1068,14 +1069,14 @@ func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testi
 			t.Fatalf("create generic terminal child %d: %v", i, err)
 		}
 	}
-	var wakes atomic.Int32
+	var directWakes atomic.Int32
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
-		wakes.Add(1)
+		directWakes.Add(1)
 		return nil
 	})
 	rt.reconcileTerminalRunOutcomes(ctx)
-	if got := wakes.Load(); got != 1 {
-		t.Fatalf("distinct repaired target wakes = %d, want one", got)
+	if got := directWakes.Load(); got != 0 {
+		t.Fatalf("boot terminal repair directly dispatched %d wakes, want none", got)
 	}
 	updates, err := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 10)
 	if err != nil {
@@ -1087,6 +1088,23 @@ func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testi
 	for _, update := range updates {
 		if update.SourceRunID == "" || update.SourceOutcomeSHA256 == "" {
 			t.Fatalf("generic terminal repair lacks outcome binding: %+v", update)
+		}
+	}
+	if _, err := s.MigrateActorWakeOutbox(ctx); err != nil {
+		t.Fatalf("project terminal repairs into durable actor-wake outbox: %v", err)
+	}
+	wakes, err := s.ListUnprojectedActorWakes(ctx)
+	if err != nil {
+		t.Fatalf("list terminal repair actor-wake outbox: %v", err)
+	}
+	if len(wakes) != 2 {
+		t.Fatalf("terminal repair durable wakes = %d, want two: %+v", len(wakes), wakes)
+	}
+	for _, wake := range wakes {
+		if wake.OwnerID != ownerID || wake.ComputerID != rt.TextureComputerID() ||
+			wake.TargetAgentID != targetAgentID || wake.Kind != "coagent_result" ||
+			wake.SourceUpdateID == "" {
+			t.Fatalf("terminal repair outbox wake = %+v, want scoped coagent_result for %s", wake, targetAgentID)
 		}
 	}
 }

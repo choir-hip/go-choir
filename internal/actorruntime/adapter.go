@@ -470,6 +470,12 @@ func (a *Adapter) migrateLegacyActorMailboxes(ctx context.Context) error {
 	return nil
 }
 
+// recoverParkedLifecycleMailboxSnapshots re-appends the exact canonical
+// lifecycle-control occurrence only when a parked snapshot and a durable
+// pending control agree. ReconcileParkedLifecycleCoagentWake derives the same
+// content, and actorDispatchUpdateID is content-deterministic, so this boot
+// convergence can only hit the existing SQLite tape row; it cannot mint a
+// process-local wake or a second delivery identity.
 func (a *Adapter) recoverParkedLifecycleMailboxSnapshots(ctx context.Context) error {
 	mailboxIDs, err := a.log.MailboxIdentities(ctx)
 	if err != nil {

@@ -237,6 +237,11 @@ func (rt *Handler) Start(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+			// This boot convergence only re-appends exact lifecycle-owned
+			// producer/head occurrences. Adapter dispatch derives its update_id
+			// from this deterministic content, so the durable SQLite tape
+			// deduplicates an already-recorded occurrence; no process-local wake
+			// or fresh delivery identity is synthesized by the scan.
 			if err := rt.Core.DispatchActor(ctx, base.OwnerID, base.ComputerID, base.TargetAgentID, "coagent_result", content, base.TrajectoryID, source); err != nil {
 				return err
 			}

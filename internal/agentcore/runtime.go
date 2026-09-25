@@ -618,13 +618,11 @@ func (rt *Runtime) Start(ctx context.Context) {
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
 	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
-	// Boot causes no work. Restart-resumption sweeps that re-fired committed
-	// work (lifecycle rewarm, persistent-Management resume, passivated spawned
-	// work, open work items, mailbox backlog) are deleted under the owner
-	// ruling: committed obligations reach the actor through the canonical
-	// event tape + actor-wake outbox, not a boot wake. The four surviving
-	// phases are state repair only — they correct stranded RunRecord/claim
-	// state and mint no wakes.
+	// Boot does not directly deliver work. Restart-resumption sweeps that
+	// re-fired committed work (lifecycle rewarm, persistent-Management resume,
+	// passivated spawned work, open work items, mailbox backlog) are deleted
+	// under the owner ruling. The surviving phases never directly deliver;
+	// the actor-wake outbox projector is the sole post-restart delivery path.
 	rt.migrateActorWakeOutboxAsync(ctx)
 	rt.startProjector(ctx)
 	// Best-effort: ensure the production Qdrant collection exists so the
@@ -2241,14 +2239,13 @@ const bootPersistentManagementRewarmLimit = 1024
 // reconcileTerminalRunOutcomes repairs missing terminal-outcome bindings.
 // Production computers (computer-* or CHOIR_OWNER_ID) use an owner-scoped
 // recent window. Tests without an owner keep the exhaustive keyset walk.
-// It delivers committed outcomes owed to a requester — state repair, not
-// work resumption — so it survives the "boot causes no work" ruling.
+// It may append a missing terminal packet, but it never directly dispatches
+// one: the packet's durable actor-wake outbox projection is its sole delivery
+// authority after boot.
 func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return
 	}
-	var pending []types.CoagentSourcePacket
-	queued := map[string]bool{}
 	computerID := rt.TextureComputerID()
 	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
 	if ownerID == "" {
@@ -2256,7 +2253,7 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) {
 	}
 	productionComputer := strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
 	collect := func(rec types.RunRecord) {
-		rt.collectTerminalRunOutcome(ctx, rec, queued, &pending)
+		rt.collectTerminalRunOutcome(ctx, rec)
 	}
 	if ownerID != "" {
 		log.Printf("runtime: boot terminal outcome owner-scoped owner=%s computer=%s limit=%d", ownerID, computerID, bootTerminalRepairRecentLimit)
@@ -2305,7 +2302,7 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) {
 					return nil
 				}
 				requesterChildren++
-				rt.queuePersistedTerminalRunOutcome(ctx, &rec, queued, &pending)
+				rt.reconcilePersistedTerminalRunOutcome(ctx, &rec)
 				return nil
 			})
 			if err != nil {
@@ -2315,12 +2312,9 @@ func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) {
 			log.Printf("runtime: boot terminal outcome scanned=%d requester_children=%d state=%s", genericScanned, requesterChildren, state)
 		}
 	}
-	for _, update := range pending {
-		rt.wakeUpdatedCoagent(ctx, update)
-	}
 }
 
-func (rt *Runtime) collectTerminalRunOutcome(ctx context.Context, rec types.RunRecord, queued map[string]bool, pending *[]types.CoagentSourcePacket) {
+func (rt *Runtime) collectTerminalRunOutcome(ctx context.Context, rec types.RunRecord) {
 	if store.LifecycleTerminalSettlementRequested(rec) {
 		if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); err != nil {
 			log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", rec.RunID, err)
@@ -2332,29 +2326,13 @@ func (rt *Runtime) collectTerminalRunOutcome(ctx context.Context, rec types.RunR
 	if strings.TrimSpace(rec.RequestedByRunID) == "" {
 		return
 	}
-	rt.queuePersistedTerminalRunOutcome(ctx, &rec, queued, pending)
+	rt.reconcilePersistedTerminalRunOutcome(ctx, &rec)
 }
 
-func (rt *Runtime) queuePersistedTerminalRunOutcome(ctx context.Context, rec *types.RunRecord, queued map[string]bool, pending *[]types.CoagentSourcePacket) {
-	binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, rec)
-	if err != nil {
+func (rt *Runtime) reconcilePersistedTerminalRunOutcome(ctx context.Context, rec *types.RunRecord) {
+	if _, err := rt.ensurePersistedTerminalRunOutcome(ctx, rec); err != nil {
 		log.Printf("runtime: boot terminal outcome reconciliation for run %s: %v", rec.RunID, err)
-		return
 	}
-	if !binding.Present || strings.TrimSpace(binding.Update.DeliveredToRunID) != "" {
-		return
-	}
-	ownerID := strings.TrimSpace(binding.Update.OwnerID)
-	target := strings.TrimSpace(binding.Update.TargetAgentID)
-	if ownerID == "" || target == "" {
-		return
-	}
-	key := ownerID + "\x00" + target
-	if queued[key] {
-		return
-	}
-	queued[key] = true
-	*pending = append(*pending, binding.Update)
 }
 
 func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {

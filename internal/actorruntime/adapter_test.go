@@ -762,6 +762,42 @@ func TestAdapterStartRunExecutesViaActorHandler(t *testing.T) {
 	}
 }
 
+func TestInitialDispatchReactivatesRestartPassivatedRun(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	now := time.Now().UTC()
+	rec := types.RunRecord{
+		RunID:        "run-initial-dispatch-restart-passivated",
+		OwnerID:      "owner-initial-dispatch-restart-passivated",
+		ComputerID:   "autoputer-test",
+		AgentID:      "research:initial-dispatch-restart-passivated",
+		ChannelID:    "channel-initial-dispatch-restart-passivated",
+		AgentProfile: agentprofile.Research,
+		AgentRole:    agentprofile.Research,
+		State:        types.RunPassivated,
+		Prompt:       "resume the initial dispatch committed before restart",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			"passivated_reason": "runtime_restarted",
+		},
+	}
+	if err := env.store.CreateRun(env.ctx, rec); err != nil {
+		t.Fatalf("create restart-passivated initial run: %v", err)
+	}
+	update := actorUpdate(rec.OwnerID, "initial_dispatch", rec.AgentID, rec.RunID)
+	if _, err := newActorHandler(env.adapter.Runtime, nil).HandleUpdate(env.ctx, update.ToAgentID, update, nil); err != nil {
+		t.Fatalf("deliver committed initial dispatch after restart passivation: %v", err)
+	}
+	stored, err := env.store.GetRun(env.ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("load restart-resumed run: %v", err)
+	}
+	reactivated, _ := stored.Metadata["actor_reactivated_from_passivated"].(bool)
+	if stored.State != types.RunCompleted || !reactivated {
+		t.Fatalf("committed initial dispatch stranded restart-passivated run: %+v", stored)
+	}
+}
+
 // TestAdapterDispatchActorActive verifies that the Adapter wires the
 // dispatch function on the runtime core.
 func TestAdapterDispatchActorActive(t *testing.T) {
