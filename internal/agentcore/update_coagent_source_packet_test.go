@@ -1042,7 +1042,6 @@ func TestLifecycleRuntimeSubmissionPreservesCanonicalActivationAdmission(t *test
 	}
 }
 
-
 func schemaEnumContains(schema map[string]any, want string) bool {
 	values, ok := schema["enum"].([]string)
 	if ok {

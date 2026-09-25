@@ -30,8 +30,8 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 		"verify_model_capability", "web_search",
 	}
 	expected := map[string][]string{
-		agentprofile.Conductor: {"cancel_agent"},
-		agentprofile.Management: append(slices.Clone(ordinary), "cancel_co_super_assignment", "report_to_texture"),
+		agentprofile.Conductor:   {"cancel_agent"},
+		agentprofile.Management:  append(slices.Clone(ordinary), "cancel_co_super_assignment", "report_to_texture"),
 		agentprofile.Engineering: {},
 		agentprofile.Research:    slices.Clone(ordinary),
 		agentprofile.Texture:     {"get_run_memory_entry"},
@@ -179,7 +179,6 @@ func TestAssignmentIdentityUsesOnlyDocumentRevisionAndKind(t *testing.T) {
 		t.Fatal("document assignment identity is not deterministic")
 	}
 }
-
 
 func TestStartCoagentRunHardRefusesEngineeringForEveryCaller(t *testing.T) {
 	s, err := openTestStore(filepath.Join(t.TempDir(), "runtime.db"))

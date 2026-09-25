@@ -673,7 +673,6 @@ func (rt *Runtime) armReactivatedManagementResumeWatchdog(ownerID, runID string,
 		reactivatedManagementDeadlineUpdateKind, runID, "", "", deadline)
 }
 
-
 func (rt *Runtime) enqueuePersistentManagementRecoveryOccurrence(ctx context.Context, rec *types.RunRecord, packets []types.CoagentSourcePacket) error {
 	if rt == nil || rt.store == nil || rt.dispatchActor == nil || rec == nil || len(packets) == 0 {
 		return fmt.Errorf("persistent Management recovery occurrence dispatch unavailable")

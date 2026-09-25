@@ -106,7 +106,7 @@ func bindTestLifecycleProducerWork(t *testing.T, s *store.Store, requester types
 	workID := "test-lifecycle-producer-work:" + producer.RunID
 	open := types.OpenLifecycleWorkRequest{
 		OwnerID: producer.OwnerID, ComputerID: producer.ComputerID,
-		CommandID: "open-test-lifecycle-producer-work:" + producer.RunID,
+		CommandID:    "open-test-lifecycle-producer-work:" + producer.RunID,
 		TrajectoryID: producer.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: workID, Objective: "produce bound lifecycle update",
@@ -127,7 +127,7 @@ func bindTestLifecycleProducerWork(t *testing.T, s *store.Store, requester types
 	producer.Metadata["work_item_ids"] = []string{workID}
 	project := types.ReplaceLifecycleActivationRequest{
 		OwnerID: producer.OwnerID, ComputerID: producer.ComputerID,
-		CommandID: "project-test-lifecycle-producer:" + producer.RunID,
+		CommandID:    "project-test-lifecycle-producer:" + producer.RunID,
 		TrajectoryID: producer.TrajectoryID, AgentID: producer.AgentID, Run: *producer,
 	}
 	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
