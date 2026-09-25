@@ -2,12 +2,29 @@ package actor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"runtime/debug"
 	"sync"
 	"time"
 )
+
+// deferralBackoff bounds how far a deferred (ErrDeferUnprocessed) wake is
+// re-armed into the future. The handler asked to wait for an out-of-band
+// event; the not_before backoff stops the dispatcher hot-looping on it while
+// still retrying if the expected wake never arrives. Grows modestly with the
+// attempt count and caps at 30s.
+func deferralBackoff(attempts int) time.Duration {
+	d := 500 * time.Millisecond
+	for i := 1; i < attempts && d < 30*time.Second; i++ {
+		d *= 2
+	}
+	if d > 30*time.Second {
+		d = 30 * time.Second
+	}
+	return d
+}
 
 // Dispatcher is the sole consumer of the tape-derived pending projection
 // (ontology Move 1 + 2). It replaces the Go-channel mailbox and the boot
@@ -75,6 +92,7 @@ func (b *emissionBuffer) drain() []Update {
 	b.updates = nil
 	return out
 }
+
 type Dispatcher struct {
 	log     KernelLog
 	handler Handler
@@ -82,8 +100,8 @@ type Dispatcher struct {
 
 	mu      sync.Mutex
 	running map[string]bool // agentID -> activation in flight (serial fence)
-	wg      sync.WaitGroup // in-flight activations; Stop waits for them
-	wake    chan struct{}  // pending-projection change signal
+	wg      sync.WaitGroup  // in-flight activations; Stop waits for them
+	wake    chan struct{}   // pending-projection change signal
 	stop    chan struct{}
 	done    chan struct{}
 	started bool // Run was launched; Stop waits on done only then
@@ -109,6 +127,10 @@ type KernelLog interface {
 	// RecordAttempt durably increments the dispatch-attempt counter for an
 	// unprocessed update (retry accounting as tape state).
 	RecordAttempt(ctx context.Context, agentID, updateID string) (int, error)
+	// DeferUpdate re-arms an unprocessed update to a future not_before and
+	// rolls back the just-recorded attempt. Handler deferrals back off; they
+	// are waits for an out-of-band wake, not delivery failures.
+	DeferUpdate(ctx context.Context, agentID, updateID string, notBefore time.Time) error
 	// LoadSnapshot / SaveSnapshot persist the actor's compacted memory.
 	LoadSnapshot(ctx context.Context, agentID string) ([]byte, error)
 	SaveSnapshot(ctx context.Context, agentID string, memory []byte) error
@@ -319,8 +341,18 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		}
 		newMemory, herr := d.safeHandleUpdate(actx, agentID, u, memory)
 		// Drain this event's emissions now so a failed handler's partial
-		// emissions are discarded, not committed with the batch.
 		evEmitted := buf.drain()
+		// A handler deferral (ErrDeferUnprocessed) waits for an out-of-band
+		// wake: back it off by not_before and roll back the attempt so it
+		// neither hot-loops nor consumes the poison budget.
+		if errors.Is(herr, ErrDeferUnprocessed) {
+			backoff := time.Now().UTC().Add(deferralBackoff(attempts))
+			if derr := d.log.DeferUpdate(ctx, agentID, u.UpdateID, backoff); derr != nil {
+				log.Printf("dispatcher: defer %s/%s: %v", agentID, u.UpdateID, derr)
+			}
+			log.Printf("dispatcher: deferred %s/%s until %s", agentID, u.UpdateID, backoff.Format(time.RFC3339))
+			break
+		}
 		if herr != nil {
 			// At-least-once: leave unprocessed; the dispatcher retries.
 			// attempts already counts this delivery; >= poisons on the last

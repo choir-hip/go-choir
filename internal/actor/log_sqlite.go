@@ -133,6 +133,20 @@ WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`, updateID, age
 	return attempts, nil
 }
 
+// DeferUpdate re-arms an unprocessed update to fire again after notBefore and
+// rolls back the just-recorded delivery attempt. A handler deferral
+// (ErrDeferUnprocessed) is a wait for an out-of-band wake, not a delivery
+// failure — it must back off (stop the hot retry loop) without consuming the
+// poison budget. The pre-handler RecordAttempt already incremented attempts;
+// a deferral decrements it back so only genuine failures/crashes count.
+func (l *SQLiteLog) DeferUpdate(ctx context.Context, agentID, updateID string, notBefore time.Time) error {
+	_, err := l.db.ExecContext(ctx, `
+UPDATE actor_updates SET not_before = ?, attempts = MAX(attempts - 1, 0)
+WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`,
+		notBefore.UTC(), updateID, agentID)
+	return err
+}
+
 // ErrEpochConflict is returned by Commit when the actor's durable epoch has
 // advanced past the epoch the activation started from — a stale or preempted
 // activation may not commit.

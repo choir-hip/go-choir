@@ -149,7 +149,15 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	// The dispatcher is the sole delivery authority (ontology kernel). The
 	// legacy channel-mailbox runtime and its boot Sweep are removed - pending
 	// delivery is a tape projection, not a scan.
-	a.actorRT = actor.NewKernelRuntime(actorLog, actorLog, handler, actorOpts, actor.DispatcherOptions{})
+	// Bound delivery: a wake that fails (or crashes the process) MaxAttempts
+	// times is routed to the dead-letter sink mailbox instead of looping
+	// forever. The sink is a scoped mailbox whose unknown-kind handler drops
+	// delivery_failed events (actorruntime/handler.go default case).
+	sinkMailbox := scopedActorMailboxID(cfg.ComputerID, cfg.ComputerID, "delivery-poison")
+	a.actorRT = actor.NewKernelRuntime(actorLog, actorLog, handler, actorOpts, actor.DispatcherOptions{
+		MaxAttempts: 8,
+		ErrorSink:   sinkMailbox,
+	})
 	rt.SetKernelMode()
 
 	// Wire the dispatch function. From this point, rt.activate(rec)
