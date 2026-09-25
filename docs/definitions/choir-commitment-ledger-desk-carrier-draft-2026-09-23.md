@@ -232,9 +232,25 @@ now:
     delegated-cast admission authority — a new admission path that opens an
     engineering assignment without an owner revision, under a new identity
     scheme (not choir:co-super-assignment:v3), with the reducer commit made
-    atomic and the one-live-assignment ledger enforced; then per-desk yaegi
-    module sets, the four-desk update_coagent migration, and the
-    execution_request verb/death.
+    atomic and the one-live-assignment ledger enforced. IMPLEMENTATION MAP
+    (researched 2026-09-25): the caster (persistent Management) run already
+    carries assignment_trajectory_id + lifecycle_control_bindings metadata
+    (lifecycle_control_delivery.go:499,682), so the delegated parent
+    authority resolves through the EXISTING requireEngineeringParentAuthority
+    run path (engineering_assignments.go:599) — ParentRunID set to the
+    caster's run — NOT a new join. Needed: (1) a delegated mint path beside
+    startAssignedEngineeringForDocument (engineering_assignment_runtime.go)
+    that derives the binding from the cast intent + the caster's live run
+    instead of an owner revision, mints ParentDecisionID under a delegated
+    scheme (e.g. choir:delegated-decision:v1, not co-super-decision:v3), and
+    resolves subject/capsule provenance; (2) commitActIntent for IntentCast
+    calls OpenEngineeringAssignment (in place of/alongside the cast envelope)
+    and returns the assignment receipt; (3) one-live-assignment admission
+    ledger + atomic commit (reducer commit currently envelopes+cursor, not
+    transactional with the ledger write — consensus binding precondition);
+    (4) the spawn/bind/activate saga must run async after commit, not inside
+    the cell reducer. THEN per-desk yaegi module sets, the four-desk
+    update_coagent migration, and the execution_request verb/death.
 
 receipts: []
 ---
