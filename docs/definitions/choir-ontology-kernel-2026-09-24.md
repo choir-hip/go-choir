@@ -151,8 +151,8 @@ boundaries:
     - vmctl / VM lifecycle (deferred boundary — do not touch).
 
 now:
-  status: blocked_incomplete
-  slice: chartered — classification complete, kernel substrate absent
+  status: working
+  slice: substrate landed + boot/doom fixes deployed; deletion pass pending owner sweep ruling
   source_ref: main@66981cef
   deploy_identity: staging https://choir.news
   candidate:
@@ -200,31 +200,27 @@ now:
     owner_ratification_ref: ratified ontology cutover 2026-09-22
   belief:
     believed_state: >-
-      The cluster is classified and the design is ratified. No kernel
-      substrate exists — the dispatcher, pending projection, not_before
-      due-index, and state-head must be built before the 51 instances can
-      migrate onto them.
+      Kernel substrate landed and deployed (dispatcher, pending projection,
+      not_before due-index, state head, fenced commit). The remaining work is
+      the deletion pass: (b) process-local continuations, (d) sweep recovery,
+      (e) non-event mutations. The owner ruled 2026-09-25 that boot causes no
+      work — restart-resumption sweeps delete, state-repair sweeps keep.
     main_uncertainty: >-
-      Whether the kernel can land as one write-fenced migration or must split
-      into per-sub-class slices. Splitting risks a mixed-authority interval;
-      one mission risks a stall. Resolution: build the kernel first as a
-      parallel authority behind a flag, then cut each sub-class over inside
-      the fence.
+      Which UpdateRun/UpdateWorkItem/Trajectory calls mutate lifecycle-owned
+      state (must move to event-backed reducer) vs. non-lifecycle writeback
+      (allowed bare). Per-site classification, not blanket deletion.
     next_observation: >-
-      The kernel's first slice: does the dispatcher's tape-derived pending
-      projection reproduce the current sweep's pending set exactly on a
-      replayed tape?
+      The deletion ledger: whether any Update* site names a state transition
+      no event currently records — that is the in-scope blocker.
   blocker_or_risk: >-
-    Largest deletion in the stack; if it stalls, R3/R4/M7/M9 queue behind it.
-    The kernel does not exist yet — this is build-then-migrate, not
-    delete-only. Mega-mission risk is real: slice internally (kernel →
-    per-class deletion) inside one throughline.
+    Mega-mission risk realized: substrate landed but the (b)/(d)/(e) deletions
+    are open. Owner sweep ruling (boot causes no work) narrows (d) to
+    resumption sweeps only — state repair stays.
   next_action: >-
-    Charter the kernel substrate: define the dispatcher, pending projection
-    (tape events minus state head), not_before due-index, and fenced atomic
-    commit. Land it as a parallel authority behind a flag, prove the pending
-    projection reproduces the current sweep set on a replayed tape, then cut
-    each wrong-path sub-class over inside the write fence.
+    Delete the wrong-path instances per the owner ruling: resumption sweeps
+    and (b)/(e) callers off progress-causing paths; then the restart-resume
+    deployed proof (kill mid-task, restart, observe tape-derived delivery),
+    recount to zero, and the consensus gate.
 
 receipts: []
 ---

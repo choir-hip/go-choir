@@ -249,3 +249,26 @@ rather than by deleting the sweeps. User directive "recovery is separate from
 auto-continue" is satisfied: sweeps mint wakes (recovery), the dispatcher
 delivers them (one delivery authority); a stuck wake dead-letters instead of
 auto-continuing forever.
+
+## Owner ruling 2026-09-25 — sweep authority settled
+
+The pending "do the boot sweeps count as a continuation authority" question is
+answered by the owner:
+
+> At boot time work should not be restarted. Paid users' VMs are always-on; a
+> reboot means a crash or an update, in which case no work starts without user
+> input. Cold-booting non-paid users and burst VMs likewise start work only on
+> a prompt (owner or agent). **State recovery is a different thing entirely.**
+
+Consequence: the boot sweeps that *resume in-flight work* — `rewarm_*`,
+`sweep_open_work_item_actors`, `sweep_pending_update_actors`,
+`sweep_passivated_spawned_work` — are wrong-path under this ruling and are
+deleted in K's (d) pass. The sweeps that *repair durable state* —
+`passivate_interrupted_activations`, `reconcile_terminal_run_outcomes`,
+`recover_wire_publication_claims` — are state-recovery and stay. The
+re-listener wake loop (`actor.go:192`, `dispatcher.go:256`) is not a boot
+restart and is unaffected.
+
+This overrides the consensus panel's keep-the-sweeps adjudication: a panel
+reading "restart recovery needs producers" is superseded by the owner's
+"restart causes no work" authority.
