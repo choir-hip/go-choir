@@ -100,7 +100,7 @@
   .placeholder { border:1px dashed var(--faint); border-radius:12px; padding:34px 28px; margin-top:30px; font-size:18px; color:var(--faint); letter-spacing:0.06em; text-align:center; }
   .prod-wrap { display:flex; gap:48px; margin-top:36px; align-items:flex-start; }
   .prod-text { flex:1; min-width:0; }
-  .prod-shot { width:430px; border-radius:12px; border:1px solid var(--line); }
+  .prod-shot { width:400px; border-radius:12px; border:1px solid var(--line); }
   .shots .big img { height:250px; width:auto; }
 </style>
 </head>
@@ -109,8 +109,8 @@
 <section class="slide title-slide">
   <svg class="corner-mark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z" fill="#d4a94e"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z" fill="#d4a94e"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z" fill="#d4a94e"/></svg>
   <div class="kicker">September 2026 · open source</div>
-  <h1 style="font-size:64px; max-width:1000px; line-height:1.1;">How do humans supervise work at agentic scale?</h1>
-  <div class="sub" style="font-size:40px; color:var(--ink); margin-top:44px;">
+  <h1 style="font-size:56px; max-width:1040px; line-height:1.15; font-weight:700;">AI is a new species of computer.<br>The first question is: for what?</h1>
+  <div class="sub" style="font-size:38px; color:var(--ink); margin-top:40px;">
     CHOIR — the automatic computer.
   </div>
   <div class="foot"><span><a href="https://choir.news" style="color:inherit; text-decoration:none;">choir.news</a></span><span class="num">01</span></div>
@@ -122,11 +122,11 @@
   <h2>Agentic work has outgrown<br>the supervisory interface.</h2>
   <div class="rule"></div>
   <ul class="pts">
-    <li>Work now runs faster and longer than a human can watch.</li>
-    <li>People wake up to answers they cannot inspect.</li>
-    <li>Chat does not scale to many agents, many people, continuous work.</li>
+    <li>Computation runs faster, longer, and across more parallel threads than any human can watch.</li>
+    <li>Chat was designed for two humans taking turns; it collapses as a supervisory interface for autonomous agents.</li>
+    <li>People wake up to answers they cannot inspect and transcripts they cannot steer.</li>
   </ul>
-  <div class="keyline">A chat thread is not a workbench. <span class="em">The interface is a live, updated state document.</span></div>
+  <div class="keyline">A chat thread is not a workbench. <span class="em">A feed is not a perspective.</span></div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">02</span></div>
 </section>
 
@@ -136,11 +136,11 @@
   <h2>The work itself<br>is the interface.</h2>
   <div class="rule"></div>
   <div class="body">
-    Agents update a versioned document — the authoritative state of the
-    work. Humans read it and edit it. An edit is a new version, and
-    steers what happens next.
+    Agents update a versioned document — the authoritative state of the work.
+    Humans read that state directly and edit it. An edit is a new version, and steers what happens next.
   </div>
   <ul class="pts">
+    <li>Precommitment records make autonomous runs trustworthy, auditable, and self-improving.</li>
     <li>Models and agents are swappable. The state is yours.</li>
   </ul>
   <div class="keyline">Language is for intent. <span class="em">The document is for steering.</span></div>
@@ -155,10 +155,11 @@
   <div class="prod-wrap">
     <div class="prod-text">
       <div class="card"><div class="t">Texture <span class="chip">on staging</span></div><div class="d">The surface — work as a versioned, editable document.</div></div>
-      <div class="card" style="margin-top:20px;"><div class="t">Mail <span class="chip">on staging</span></div><div class="d">Proof agents can act under supervision — send gated by owner approval.</div></div>
-      <div class="body" style="margin-top:20px; font-size:17px;">
+      <div class="card" style="margin-top:16px;"><div class="t">Mail <span class="chip">on staging</span></div><div class="d">Proof agents can act under supervision — send gated by owner approval.</div></div>
+      <div class="body" style="margin-top:12px; font-size:15px;">
         Next: Newspaper <span class="chip">in refactor</span> · Radio <span class="chip">in development</span>
       </div>
+      <div class="keyline" style="font-size:20px; margin-top:8px;">Generate the visuals. <span class="em">Preserve the voice.</span></div>
     </div>
     <img class="prod-shot" src="shot-texture.png" alt="Texture — the supervised document">
   </div>
@@ -168,63 +169,62 @@
 <!-- 5 · CURRENT STATUS -->
 <section class="slide">
   <div class="kicker">Current status</div>
-  <h2>Live on staging.<br>Honest about what's next.</h2>
+  <h2>Live on staging. Open source.<br>Honest about what's next.</h2>
   <div class="rule"></div>
-  <div class="shots" style="margin-top:26px;">
+  <div class="shots" style="margin-top:24px;">
     <figure class="big"><img src="shot-mail.png" alt="Mail app"><figcaption><span class="chip">staging</span>Mail — send gated by owner approval.</figcaption></figure>
     <figure class="big"><img src="shot-worldwire.png" alt="World Wire"><figcaption><span class="chip">in refactor</span>Automatic Newspaper — prototype → production.</figcaption></figure>
   </div>
-  <div class="body" style="margin-top:16px; font-size:18px;">Today: staging. Next: production launch, then evidence of repeat use.</div>
+  <div class="body" style="margin-top:16px; font-size:18px;">Today: staging. Next: production launch, then repeat use.</div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">05</span></div>
 </section>
 
-<!-- 6 · MARKET OPPORTUNITY -->
+<!-- 6 · THE CATEGORY -->
 <section class="slide">
-  <div class="kicker">Market opportunity</div>
-  <h2>Three existing budgets.<br>Compressed AI-native scale.</h2>
+  <div class="kicker">The category</div>
+  <h2>Every person, team, and organization<br>gets an automatic computer.</h2>
   <div class="rule"></div>
   <div class="grid3">
     <div class="card">
-      <div class="t">News &amp; Alt-Data <span class="chip">$42B TAM</span></div>
-      <div class="d">Automatic Newspaper editions sold to funds &amp; desks @ $50k/yr. Provenance + precommitment records replace black-box summaries.</div>
+      <div class="t">Atomic Unit</div>
+      <div class="d">One persistent, self-driving computer per person, team, organization, or autonomous agent process.</div>
     </div>
     <div class="card">
-      <div class="t">2-Way Voice <span class="chip">$50B TAM</span></div>
-      <div class="d">Automatic Radio: users speak, build brand, and prompt 24/7 agents. $35/mo power speakers; $100/seat/mo async team meetings.</div>
+      <div class="t">Generations</div>
+      <div class="d">Mainframes (thousands) → PCs (~2B) → Smartphones (~4.5B) → Automatic Computers (>1B near term, 10B+ long term).</div>
     </div>
     <div class="card">
-      <div class="t">Sovereign OS <span class="chip">$200B+ TAM</span></div>
-      <div class="d">Autoputer platform: open-source self-hosting + FDE model. Banks, defense, and health own their private learning loops on-prem.</div>
+      <div class="t">Category Math</div>
+      <div class="d">50k prosumer publishers + 15k team seats = $54M ARR from a microscopic fraction of global instances.</div>
     </div>
   </div>
   <div class="keyline" style="font-size:25px; margin-top:28px;">
-    Capturing under 2% of beachhead accounts reaches $50M+ ARR. <span class="em">AI-native velocity compresses a 7-year curve into 24 months.</span>
+    We don't need to own the category. <span class="em">We need to be the default neutral workbench.</span>
   </div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">06</span></div>
 </section>
 
-<!-- 7 · BUSINESS MODEL -->
+<!-- 7 · MARKET & BUSINESS MODEL -->
 <section class="slide">
   <div class="kicker">Business model</div>
-  <h2>Sell curated data first.<br>Expand into the platform.</h2>
+  <h2>Open-source core.<br>The network is the business.</h2>
   <div class="rule"></div>
   <div class="grid3">
     <div class="card">
-      <div class="t">Curated Data <span class="chip">Day 1</span></div>
-      <div class="d">Sell high-signal Newspaper editions to funds &amp; desks @ $50k/yr. Provenance and precommitment records deliver immediate cash flow.</div>
+      <div class="t">Open-Source Core</div>
+      <div class="d">Free self-host. Builds developer trust, distribution, and non-negotiable enterprise data sovereignty.</div>
     </div>
     <div class="card">
-      <div class="t">Platform &amp; Voice <span class="chip">Scale</span></div>
-      <div class="d">License the engine so orgs can publish their own data products. 2-way Autoradio: $35/mo power speakers, $100/seat/mo async team desks.</div>
+      <div class="t">Hosted Convenience</div>
+      <div class="d">$35/mo prosumer publishers; $100/seat/mo team async meeting desks that steer 24/7 background agent swarms.</div>
     </div>
     <div class="card">
-      <div class="t">Sovereign FDE <span class="chip">Enterprise</span></div>
-      <div class="d">Open-source core deployed on customer VPC. Forward-Deployed Engineers build on-prem pipelines so enterprises own their learning loops ($500k+).</div>
+      <div class="t">The Network Asset</div>
+      <div class="d">Publishing network (paywall take-rates) + permissioned API queries over the aggregate, provenance-linked corpus.</div>
     </div>
   </div>
-  <div class="keyline" style="font-size:24px; margin-top:26px;">
-    Your computer should not <span class="em">belong to your model provider.</span><br>
-    <span style="font-size:20px; color:var(--dim); font-weight:400;">As intelligence gets cheaper, owned work history compounds.</span>
+  <div class="keyline" style="font-size:25px; margin-top:28px;">
+    We don't sell computers. <span class="em">We build the network where perspectives compound.</span>
   </div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">07</span></div>
 </section>
@@ -235,15 +235,22 @@
   <h2>Personal agents are here.<br>They need somewhere to work.</h2>
   <div class="rule"></div>
   <div class="grid3">
-    <div class="card"><div class="t">The category</div><div class="d">Muse, Instinct, Grok Bot, Town — agents with their own computers. OpenAI and Anthropic next.</div></div>
-    <div class="card"><div class="t">The gap</div><div class="d">Every agent's work lives in its vendor's silo. Nothing the human owns.</div></div>
-    <div class="card"><div class="t">Choir</div><div class="d">The workbench any agent can use — API, MCP, skill. State the user owns.</div></div>
+    <div class="card">
+      <div class="t">The Category</div>
+      <div class="d">Muse, Instinct, Grok Bot, Town, OpenAI Aeon — personal agents running inside vendor cloud silos.</div>
+    </div>
+    <div class="card">
+      <div class="t">The Gap</div>
+      <div class="d">Every agent traps memory and state in its proprietary silo. Built for digital chores, not compounding IP.</div>
+    </div>
+    <div class="card">
+      <div class="t">Choir</div>
+      <div class="d">The neutral workbench any agent can drive — API, MCP, skill, or code. State the user permanently owns.</div>
+    </div>
   </div>
-  <div class="body" style="margin-top:24px; font-size:19px;">
-    Why won't model vendors build this? Your state must work across
-    whichever agents and models you choose — theirs can't.
+  <div class="keyline" style="font-size:26px; margin-top:28px;">
+    Agents come and go. <span class="em">The workbench stays yours.</span>
   </div>
-  <div class="keyline" style="font-size:26px; margin-top:16px;">Agents come and go. <span class="em">The workbench stays yours.</span></div>
   <div class="foot"><span>choir — the automatic computer</span><span class="num">08</span></div>
 </section>
 
@@ -255,15 +262,15 @@
       <div class="name">Yusef Mosiah Nathanson</div>
       <div class="role">Founder</div>
       <div class="bio">
-        Made a living turning conflicting signals into verified decisions —
-        professional poker, then AI since 2015. Years of work across
-        agent systems, interfaces, provenance, and media converged into
-        Choir. I built the computer I needed to supervise my own agents.
+        Made a living turning conflicting signals into verified decisions — professional poker, then AI engineering since 2015.
+        I built the computer I needed to supervise my own agents and accelerate my own publishing. Structured as a technology-risk business;
+        product-led growth driven by the newspaper. No golf and martini lunches.
       </div>
       <div class="links">
         <a class="tag" href="https://github.com/yusefmosiah">github.com/yusefmosiah</a>
         <a class="tag" href="https://mosiah.org">mosiah.org</a>
       </div>
+      <div class="keyline" style="font-size:22px; margin-top:20px;">I built the computer <span class="em">I needed to exist.</span></div>
     </div>
     <img class="team-photo" src="Yusef_photo.jpeg" alt="Yusef Mosiah Nathanson">
   </div>
@@ -275,14 +282,13 @@
   <div class="kicker">The ask</div>
   <h2>Building the system<br>that needs to exist.</h2>
   <div class="rule"></div>
-  <div class="body">
-    This meeting is to explore a relationship and get your read.
-    Funding would accelerate production launch and distribution.
-    The honest state is early: pre-traction, pre-production.
+  <div class="body" style="font-size:22px; line-height:1.6; max-width:920px;">
+    Exploring a relationship and seeking your read on the architecture and category framing.
+    Funding accelerates production launch and distribution. The honest state is early: pre-traction, pre-production.
     The work continues either way.
   </div>
-  <div class="keyline">Milestone: <span class="em">production launch — then evidence of repeat use.</span></div>
-  <div style="margin-top:26px;">
+  <div class="keyline" style="margin-top:34px;">Milestone: <span class="em">production launch — then evidence of repeat use.</span></div>
+  <div style="margin-top:28px;">
     <a class="tag" href="https://choir.news">choir.news</a>
     <a class="tag" href="https://github.com/choir-hip/go-choir">github.com/choir-hip/go-choir</a>
   </div>
