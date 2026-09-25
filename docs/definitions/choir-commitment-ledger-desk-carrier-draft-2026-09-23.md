@@ -218,17 +218,23 @@ now:
     K (ontology kernel) gates the live-desk half; the ledger + carrier +
     verbs half may proceed in parallel.
   next_action: >-
-    In progress. DONE: (a) update_coagent consumer census — 40 files
-    classified migrate/keep/delete in
+    In progress — substrate landed (commits 60046751→f7df9213). DONE:
+    (a) update_coagent consumer census (40 files, migrate/keep/delete) —
     docs/evidence/r2-update-coagent-consumer-census-2026-09-25.md; (b)
-    commitment record schema — internal/types/commitment.go
-    (CommitmentRecord + DiscrepancyClass + sub-types) and the
-    choir.commitment_record OG kind registered in store/graph_store.go.
-    NEXT: the yaegi carrier generalization (per-desk module sets, desk
-    cells in killable subprocess) and the semantic-act verb surface
-    (choir.Cast/Report/Ask/Precommit/Resolve/Cancel/Escalate/Note). The
-    delegated-cast admission authority and the four-desk update_coagent
-    migration follow the verb surface.
+    commitment record schema — internal/types/commitment.go + OG kind
+    choir.commitment_record (graph_store.go) + append path
+    Store.AppendCommitmentRecord (store/commitment.go); (c) semantic-act
+    verb surface — StagedIntent kinds cast/ask/note/reply/cancel/escalate/
+    precommit/report/resolve + Tray methods + ChoirScope verbs + choir
+    module exports (yaegikernel/intent.go, choir.go); (d) reducer wiring —
+    validateSemanticActIntent + commitActIntent mint the ledger record and
+    mail addressed envelopes (rlm_reduce.go). NEXT (red-class core):
+    delegated-cast admission authority — a new admission path that opens an
+    engineering assignment without an owner revision, under a new identity
+    scheme (not choir:co-super-assignment:v3), with the reducer commit made
+    atomic and the one-live-assignment ledger enforced; then per-desk yaegi
+    module sets, the four-desk update_coagent migration, and the
+    execution_request verb/death.
 
 receipts: []
 ---
