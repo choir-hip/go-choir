@@ -322,6 +322,22 @@ now:
     (rlm_reduce_test.go). Remaining: update_coagent consumer migration, atomic
     commitment/OG commit inside the cursor (precondition 3), acceptance probes.
 
+  update_coagent_desk_cutover_2026_09_25: >-
+    Producer side landed (commit 63c4e411 + gofmt 0c7e6a82). update_coagent is
+    removed from the management + research registries (tool_profiles.go);
+    processor + reconciler keep it until their wire phase. Desk prompts now
+    name the carrier verbs (choir.Report / EscalateActions / Cast). ~20
+    desk-facing test call sites retargeted to agentprofile.Processor — the
+    packet machinery (decode, lifecycle persistence, source/claim validation)
+    is Report's body contract, not a deleted surface, so no tests were deleted.
+    Authority contract pins update_coagent absent on management/research.
+    REMAINING — the consumer path: texture's worker_updates_* reads
+    (texture_controller.go producerOccurrence*, evidenceSourceEntitiesFromWorker
+    Updates, ListAllPendingLifecycleUpdates) must migrate to commitment records;
+    management's buildPersistentManagementUpdatePrompt/worker_updates_injected
+    injection now reads a queue that only wire roles write. Then atomic
+    commitment/OG commit (precondition 3) and acceptance probes.
+
 receipts: []
 ---
 
