@@ -8,7 +8,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-
 func TestRecordTextureDecisionToolDescriptionKeepsDecisionsOffDocument(t *testing.T) {
 	tool := newRecordTextureDecisionTool(&Handler{})
 	if !strings.Contains(tool.Description, "outside the canonical document") ||
@@ -21,9 +20,6 @@ func TestRecordTextureDecisionToolDescriptionKeepsDecisionsOffDocument(t *testin
 		t.Fatalf("record_texture_decision schema missing decision_kind: %#v", tool.Parameters)
 	}
 }
-
-
-
 
 func TestTextureContentItemSourceEntityDefaultsToWholeResource(t *testing.T) {
 	// After the D3 cutover, content-item source entities are whole_resource by
@@ -48,7 +44,6 @@ func TestTextureContentItemSourceEntityDefaultsToWholeResource(t *testing.T) {
 		t.Fatalf("derived content item source entity = %#v", entity)
 	}
 }
-
 
 func TestInitialTextureToolChoiceOnlyConstrainsMechanicalContinuations(t *testing.T) {
 	tests := []struct {

@@ -250,14 +250,17 @@ func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert email agent: %v", err)
 	}
-	managementRun, err := rt.StartRunWithMetadata(context.Background(), "try direct email cast", "user-alice", map[string]any{
-		runMetadataAgentProfile: agentprofile.Management,
-		runMetadataAgentRole:    agentprofile.Management,
+	// R2: update_coagent moved off management/research to the carrier; the
+	// email-addressing guard lives in the tool's auth path, so exercise it on
+	// processor — the role that still serves the tool until its wire phase.
+	processorRun, err := rt.StartRunWithMetadata(context.Background(), "try direct email cast", "user-alice", map[string]any{
+		runMetadataAgentProfile: agentprofile.Processor,
+		runMetadataAgentRole:    agentprofile.Processor,
 	})
 	if err != nil {
-		t.Fatalf("create super run: %v", err)
+		t.Fatalf("create processor run: %v", err)
 	}
-	_, err = rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(managementRun)), "update_coagent", mustJSON(t, map[string]any{
+	_, err = rt.ToolRegistryForProfile(agentprofile.Processor).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(processorRun)), "update_coagent", mustJSON(t, map[string]any{
 		"schema_version": types.CoagentSourcePacketSchemaV1,
 		"agent_id":       persistentEmailAgentID("user-alice"),
 		"kind":           "evidence_update",

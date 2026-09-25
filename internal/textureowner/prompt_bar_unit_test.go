@@ -292,7 +292,6 @@ func waitForPromptBarUnitRunTerminal(t *testing.T, rt *Runtime, runID, ownerID s
 	return types.RunRecord{}
 }
 
-
 func TestHandlePromptBarStableCommandReplaysOneLifecycle(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	const ownerID = "user-command-replay"

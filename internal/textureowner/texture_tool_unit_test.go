@@ -799,7 +799,6 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 	}
 }
 
-
 func TestTextureSemanticMergeUsesProviderBackedJSON(t *testing.T) {
 	provider := &semanticMergeTestProvider{response: `{
 		"summary": ["Older version has a stronger client-control framing."],

@@ -230,7 +230,6 @@ func TestEvidenceRecordToSourceEntity_NoAddressableTargetSkipped(t *testing.T) {
 	}
 }
 
-
 func TestEvidenceSummaryEntityAllowsNativeCitationWithoutQuoteMatch(t *testing.T) {
 	rec := types.EvidenceRecord{
 		EvidenceID: "ev-summary",
@@ -879,10 +878,16 @@ func TestTextureProductionRegistryOmitsGenericUpdateCoagent(t *testing.T) {
 			t.Fatalf("Texture production registry missing %s", name)
 		}
 	}
-	if _, ok := core.ToolRegistryForProfile(agentprofile.Management).Lookup("update_coagent"); !ok {
-		t.Fatal("Management registry omitted update_coagent")
+	// R2: management reports through the carrier verbs (choir.Report/Report
+	// Packet/EscalateActions), not update_coagent; the tool survives only on
+	// processor/reconciler. report_to_texture remains management's handoff.
+	if _, ok := core.ToolRegistryForProfile(agentprofile.Management).Lookup("update_coagent"); ok {
+		t.Fatal("Management registry still exposed update_coagent after the carrier cutover")
 	}
 	if _, ok := core.ToolRegistryForProfile(agentprofile.Management).Lookup("report_to_texture"); !ok {
 		t.Fatal("Management registry omitted report_to_texture")
+	}
+	if _, ok := core.ToolRegistryForProfile(agentprofile.Processor).Lookup("update_coagent"); !ok {
+		t.Fatal("Processor registry omitted update_coagent (wire-role tool until its phase)")
 	}
 }
