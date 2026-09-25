@@ -169,3 +169,50 @@ and the three earlier fixes still pass. The eligible-run zombie is resolved by
 `actorWakeOutbox` comment. `coagent_result` re-arm of a consumed wake still
 drops on the tape dedup. These are recorded for the next boundary, not fixed
 here.
+
+## Update 2026-09-24 (recount consensus): SEND BACK — the sweeps re-fire, not just repair
+
+A convergent review panel (codex, gpt6-sol, claude, cursor;
+`.agentic-consensus/agentic-consensus-20260924-231458/`) reviewed the landed
+recount candidate `ba4f1881` and returned SEND BACK. The non-kernel actor path
+deletion was confirmed real (`internal/actor` is clean: no `Sweep`,
+`AgentsWithBacklog`, `NewRuntime`, or coalescer). Three defects were fixed in
+`40bda8dd` (emission `drain` not clearing → cumulative emissions; the new
+panic-recovery path skipping `RecordAttempt` → a panicking handler tight-loops
+past poison accounting; `Drain` ignoring its timeout).
+
+The blocking findings, and the adjudication they force:
+
+1. **Boot sweeps exceed the state-repair exception.** The sweeps do not only
+   mutate durable state — they mint wakes (`rt.activate` → `dispatchActor`,
+   `wakeUpdatedCoagent`, `reconcile*`) that cause actors to run. The panel's
+   position: a scan that *decides* a continuation occurs is a second
+   continuation authority even though the dispatcher is the sole *deliverer*.
+   The counter (this session's analysis): the sweeps are wake *producers* for
+   restart-recovery obligations the pending projection cannot express (a
+   restart mints no event), and every wake they mint is a canonical
+   `actor_update` the dispatcher delivers — so there is one delivery
+   authority. The two readings diverge on whether "produces a canonical event
+   by scanning" is inside or outside the one-authority invariant.
+2. **Wire debounce `time.AfterFunc` is a real lost continuation.** The batch
+   (`pendingDocIDs`/`pendingRevisionIDs`) lives only in
+   `wirePublishDebouncer` memory; a restart inside the 300s window drops the
+   reconciler run. `recoverOpenWirePublicationClaims` cancels open claims but
+   does not rebuild the batch. Fix direction: persist the batch + mint a
+   durable `not_before` event at the window deadline (the (b) pattern).
+3. **`context.AfterFunc` progress deadline — split verdict.** claude/cursor:
+   legitimate per-activation preemption (the durable `activation_budget_deadline`
+   is the backstop; serial-per-actor means the durable wake cannot preempt an
+   in-flight activation, so the in-process timer is the only preempting path).
+   codex/gpt6-sol: a second route to `terminalizeRun`. The durable backstop
+   exists; the question is whether in-process preemption is a violation.
+4. **`reconcileSelfDevelopmentMaterialization` (G11)** runs via `go` +
+   `ListByStates` on accept/rollback — unresolved; needs a tape wake or a
+   named exception.
+
+**Gate consequence:** the cluster recount cannot reach zero under the current
+charter text without either (a) a canonical `process_boot` event that the
+dispatcher folds into the repair scans (making restart recovery
+dispatcher-driven), or (b) an owner-ratified charter amendment naming the
+state-repair sweeps + the debounce/deadline timers as exceptions. This is an
+authority decision, not an implementation detail — recorded for the owner.
