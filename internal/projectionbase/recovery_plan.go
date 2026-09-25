@@ -95,7 +95,14 @@ func PlanRecovery(emptyStore bool, localSeq uint64, chainExists bool, watermarkS
 		plan.Reason = "recovery target sequence must be positive"
 		return plan, fmt.Errorf("%w: %s", ErrBaseRefused, plan.Reason)
 	}
-	if watermarkSeq == 0 {
+
+	// An advertised base is only required when the plan must materialize one:
+	// an empty/zero-head store (Install) or a retained store behind the
+	// watermark (Rebase). A retained store whose own head descends from the
+	// canonical chain resumes from localSeq and never reads the base, so a
+	// missing watermark must not strand it — that was the guest-restart fatal.
+	needsBase := emptyStore || localSeq == 0 || localSeq < watermarkSeq
+	if watermarkSeq == 0 && needsBase {
 		plan.Reason = "required base is missing for an existing chain"
 		return plan, fmt.Errorf("%w: %s", ErrBaseRefused, plan.Reason)
 	}

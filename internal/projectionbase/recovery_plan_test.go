@@ -62,6 +62,35 @@ func TestPlanRecoveryMissingBaseRefuses(t *testing.T) {
 	}
 }
 
+// A restarted computer with an intact retained store and no advertised base
+// must resume from its own head — the wm==0 refuse only applies where a base
+// is materialized (empty install / behind-watermark rebase), not resume.
+func TestPlanRecoveryRetainedStoreResumesWithoutAdvertisedBase(t *testing.T) {
+	plan, err := PlanRecovery(false, 148300, true, 0, 148333)
+	if err != nil {
+		t.Fatalf("retained store with no base must resume, got %v", err)
+	}
+	if plan.Action != RecoveryResume || plan.StartSequence != 148300 || plan.TailEvents != 33 {
+		t.Fatalf("want resume from local head, got %#v", plan)
+	}
+	// Caught-up store, nothing to replay.
+	plan, err = PlanRecovery(false, 148333, true, 0, 148333)
+	if err != nil {
+		t.Fatalf("caught-up retained store must resume, got %v", err)
+	}
+	if plan.Action != RecoveryResume || plan.TailEvents != 0 {
+		t.Fatalf("want resume with empty tail, got %#v", plan)
+	}
+	// Empty store still requires a base — refuse preserved.
+	if _, err := PlanRecovery(true, 0, true, 0, 42); !errors.Is(err, ErrBaseRefused) {
+		t.Fatalf("empty store with no base must refuse, got %v", err)
+	}
+	// Opened store with no events behaves like empty: needs a base.
+	if _, err := PlanRecovery(false, 0, true, 0, 42); !errors.Is(err, ErrBaseRefused) {
+		t.Fatalf("zero-head store with no base must refuse, got %v", err)
+	}
+}
+
 func TestPlanRecoveryWHIsZeroTailInstall(t *testing.T) {
 	plan, err := PlanRecovery(true, 0, true, 148333, 148333)
 	if err != nil || plan.Action != RecoveryInstall || plan.TailEvents != 0 {
