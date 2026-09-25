@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Choir: Strategic Context, Product Architecture & Market Foundation</title>
+<style>
+  @page {
+    size: letter;
+    margin: 18mm 18mm 20mm 18mm;
+    @bottom-right {
+      content: counter(page);
+    }
+  }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1a1a1e;
+    background: #ffffff;
+    line-height: 1.5;
+    font-size: 10pt;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .header-banner {
+    border-bottom: 2px solid #d4a94e;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+  }
+  .doc-kicker {
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #9c7320;
+    margin-bottom: 5px;
+  }
+  h1 {
+    font-size: 21pt;
+    font-weight: 750;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+    color: #0b0b0e;
+    margin: 0 0 8px 0;
+  }
+  .doc-sub {
+    font-size: 10.5pt;
+    color: #4a4a54;
+    line-height: 1.4;
+    margin-bottom: 10px;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    padding: 8px 12px;
+    background: #f7f7f9;
+    border-radius: 6px;
+    border: 1px solid #e5e5ea;
+    font-size: 8pt;
+    margin-top: 10px;
+  }
+  .meta-item strong { display: block; color: #6e6e78; text-transform: uppercase; font-size: 7pt; letter-spacing: 0.08em; }
+  
+  h2 {
+    font-size: 13.5pt;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: #0b0b0e;
+    border-bottom: 1px solid #e2e2e8;
+    padding-bottom: 4px;
+    margin-top: 22px;
+    margin-bottom: 10px;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  h3 {
+    font-size: 11pt;
+    font-weight: 650;
+    color: #1a1a24;
+    margin-top: 16px;
+    margin-bottom: 6px;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  p { margin: 0 0 9px 0; }
+  ul, ol { margin: 0 0 10px 0; padding-left: 20px; }
+  li { margin-bottom: 3px; }
+  
+  .callout {
+    background: #fcfbf7;
+    border-left: 3.5px solid #d4a94e;
+    padding: 10px 14px;
+    margin: 12px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .callout strong { color: #0b0b0e; }
+  
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 10px 0 14px 0;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .card {
+    background: #f9f9fb;
+    border: 1px solid #e5e5ed;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 9pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .card-title {
+    font-size: 8.5pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9c7320;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .chip {
+    background: #eeeef4;
+    color: #484854;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 7pt;
+    font-weight: 600;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 16px 0;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  th, td {
+    padding: 6px 9px;
+    text-align: left;
+    border-bottom: 1px solid #e2e2e8;
+  }
+  th {
+    background: #f2f2f6;
+    font-weight: 650;
+    color: #2c2c34;
+    border-top: 1px solid #d4d4dc;
+  }
+  tr:nth-child(even) td { background: #fafafc; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  
+  .page-break { page-break-before: always; break-before: always; }
+  
+  .diagram {
+    background: #111116;
+    color: #f2f2f7;
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-family: ui-monospace, Menlo, Monaco, "Cascadia Code", monospace;
+    font-size: 8pt;
+    line-height: 1.45;
+    margin: 10px 0 14px 0;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .diagram .hl { color: #e8c87a; font-weight: 600; }
+  
+  .quote-box {
+    border-left: 3px solid #3650c8;
+    background: #f4f6fc;
+    padding: 9px 13px;
+    margin: 10px 0;
+    font-style: italic;
+    font-size: 9pt;
+    color: #24305e;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  
+  .slide-box {
+    border: 1px solid #d8d8e2;
+    border-radius: 6px;
+    background: #ffffff;
+    padding: 9px 12px;
+    margin-bottom: 8px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .slide-header {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+    font-size: 8.5pt;
+    color: #3b3b44;
+    border-bottom: 1px solid #ededf4;
+    padding-bottom: 3px;
+    margin-bottom: 5px;
+  }
+  .slide-content { font-size: 8.5pt; color: #40404a; }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1: TITLE & EXECUTIVE SUMMARY -->
+<div class="header-banner">
+  <div class="doc-kicker">Choir Strategic Context &amp; Foundation Package · September 25, 2026</div>
+  <h1>CHOIR: Strategic Context, Product Architecture &amp; Market Opportunity</h1>
+  <div class="doc-sub">A comprehensive reference pack synthesizing the automatic computer, the media engine, precommitment records, market sizing (TAM), and the search for the apex problem/solution narrative.</div>
+  <div class="meta-grid">
+    <div class="meta-item"><strong>Founder / Author</strong>Yusef Mosiah Nathanson</div>
+    <div class="meta-item"><strong>Date</strong>September 25, 2026</div>
+    <div class="meta-item"><strong>Status</strong>Living Strategic Context</div>
+    <div class="meta-item"><strong>Target Audience</strong>Advisors, Investors &amp; Team</div>
+  </div>
+</div>
+
+<h2>1. Executive Summary &amp; The Core Thesis</h2>
+<p>
+<strong>Choir is the automatic computer</strong>: a persistent place where agents, tools, notes, sources, and decisions work together — and where <em>the work itself is the interface</em>.
+</p>
+<p>
+The generative AI industry is clustered around a single conceptual model: <em>the agent is a digital worker, the computer is its tool, and a conversational chat thread is its interface to the human.</em> Choir inverts this model: <strong>the multi-agent system is the computer</strong>. The objective is not to replace human workers with synthetic chatbots, but to build the computing environment required when autonomous intelligence runs continuously.
+</p>
+
+<div class="callout">
+  <strong>The Fundamental Tension:</strong> Computation now runs faster, longer, and across more parallel threads than any human can watch. Yet humans are still expected to supervise multi-agent runs through chat scrollbacks. Chat was designed for two humans taking turns; it completely collapses as a supervisory interface for autonomous, long-running agentic work.
+</div>
+
+<p>
+Choir resolves this tension through a singular architectural breakthrough: <strong>versioned, human-editable shared state as the control plane</strong>. Autonomous agents continuously update the authoritative document representing the state of the work. Humans read that state directly. When a human edits a line or paragraph, that edit is not a prompt or comment—it is a <strong>control action</strong> that creates a new version and steers subsequent agent trajectories.
+</p>
+
+<div class="quote-box">
+  "Language is for intent. The document is for steering. When the work itself is the interface, humans supervise hours of agentic execution at a glance."
+</div>
+
+<!-- PAGE 2: ARCHITECTURE & PRODUCTS -->
+<div class="page-break"></div>
+
+<h2>2. Product Architecture &amp; The Functional Hierarchy</h2>
+<p>
+Choir is structured as an immutable, causal core that projects multiple synchronized user-facing surfaces:
+</p>
+
+<div class="diagram">
+<span class="hl">1. THE EVENT TAPE</span>      Append-only immutable causal ledger. Every state mutation, prediction,
+                       approval, and message is recorded as a typed event with deterministic replay.
+        ↓
+<span class="hl">2. OBJECT GRAPH (OG)</span>   The living projection of authoritative current state. Agents and humans
+                       inspect, query, and modify this graph.
+        ↓
+<span class="hl">3. USER SURFACES</span>       Synchronized projections of the Object Graph:
+                       • <span class="hl">Texture</span>: Living, human-editable document surface (the workbench).
+                       • <span class="hl">Mail</span>: Permissioned agency in the real world (gated email actions).
+                       • <span class="hl">Automatic Newspaper</span>: Provenance-linked intelligence wire (scale).
+                       • <span class="hl">Automatic Radio</span>: 2-way spoken-word station &amp; voice steering (attention).
+</div>
+
+<h3>The Four Product Surfaces</h3>
+
+<div class="card-grid">
+  <div class="card">
+    <div class="card-title">Texture <span class="chip">On Staging</span></div>
+    <p><strong>The Living Work Surface.</strong> Work is represented as an authoritative, versioned document. Sources, transcripts, data tables, and agent draftings sit inline. A human inspects the document and edits text directly; agents read the new revision and adjust their active tasks.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Mail <span class="chip">On Staging</span></div>
+    <p><strong>Supervised Agency in the Real World.</strong> An email agent operating under strict capability boundaries. It reads incoming mail, drafts responses, and monitors threads. Consequential actions (such as sending mail outside the sandbox) are strictly gated by human owner approval.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Automatic Newspaper <span class="chip">In Refactor</span></div>
+    <p><strong>Scale &amp; Provenance (The World Wire).</strong> Continuous autonomous journalism tracking global developments. Every story is a Texture document backed by thousands of raw sources. Readers consume synthesized current state rather than raw agent chatter; every claim links to verifiable evidence.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Automatic Radio <span class="chip">In Development</span></div>
+    <p><strong>2-Way Participatory Voice Layer.</strong> An AI DJ mixing audio clips, YouTube segments, and text-to-speech summaries of the wire. Crucially, it is <em>bidirectional</em>: users listen, interrupt, contribute voice takes, and use spoken word to prompt 24/7 background agent workflows.</p>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>The Desktop Publishing Analogy:</strong> In 1985, desktop publishing (DTP) replaced physical typesetting by turning the computer screen into a direct WYSIWYG canvas. Choir does the same for autonomous AI: instead of managing agent swarms via command-line terminals or chat transcripts, the entire multi-agent computation is rendered into a familiar, editable desktop and document workspace.
+</div>
+
+<!-- PAGE 3: PRECOMMITMENT RECORDS -->
+<div class="page-break"></div>
+
+<h2>3. Precommitment Records: The Engine of Reliability &amp; Trust</h2>
+<p>
+Formerly designated as PICL (Predictive In-Context Learning), <strong>precommitment records</strong> represent Choir's core safety, alignment, and evaluation mechanism. In high-stakes work, black-box LLMs are liabilities because they act without committing to an explicit hypothesis or reasoning path.
+</p>
+
+<div class="diagram">
+<span class="hl">PRECOMMITMENT RECORD WORKFLOW:</span>
+1. PREDICT:   Before taking a consequential action, the agent writes an immutable record:
+              <em>"I predict action X will result in state Y because of evidence Z."</em>
+2. EXECUTE:   The action runs inside an isolated sandbox or capability-bounded capsule.
+3. ADJUDICATE: The actual outcome is compared against the precommitment record.
+4. RESOLVE:   The delta is logged to the tape. Correct predictions reinforce memory;
+              incorrect predictions update beliefs and lower the system's operational risk.
+</div>
+
+<p>
+Precommitment records serve three distinct functions across the product stack:
+</p>
+<ol>
+  <li><strong>In-Context Learning Without Retraining:</strong> The system accumulates empirical track records of what works and what fails across sessions, allowing prompt strategies and agent workflows to self-correct in context.</li>
+  <li><strong>Auditability for Regulated Enterprise:</strong> Banks, defense contractors, and healthcare organizations cannot deploy autonomous agents without deterministic audit logs. Precommitment records provide an unalterable proof of intent before execution.</li>
+  <li><strong>The "Box Score" Data Product:</strong> In public news and analysis, every forecast and factual statement is converted into a structured prediction with a resolution contract. Over months, this produces an ungameable, historical track record of institutional and speaker credibility.</li>
+</ol>
+
+<div class="callout">
+  <strong>Why Precommitment Records Beat Post-Hoc Explainability:</strong><br>
+  Post-hoc explanations ("Why did you do that?") are notoriously prone to rationalization and confabulation in LLMs. By forcing the system to <em>precommit</em> to its forecast, probability, and evidence before acting, Choir makes agent reasoning falsifiable and auditable in real time.
+</div>
+
+<!-- PAGE 4: MARKET & TAM -->
+<div class="page-break"></div>
+
+<h2>4. Market Opportunity &amp; Total Addressable Market (TAM)</h2>
+<p>
+A common pitch-deck flaw is inventing a speculative market or claiming a generic slice of global GDP. Choir grounds its market opportunity in <strong>three existing, high-willingness-to-pay enterprise and professional budgets</strong>, accelerated by AI-native velocity:
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Market Layer</th>
+      <th>Existing TAM</th>
+      <th>Target Buyer &amp; Pain Point</th>
+      <th>Pricing Model</th>
+      <th>Unit Economics / Target</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1. High-ACV News &amp; Alt-Data</strong><br>(Automatic Newspaper)</td>
+      <td><strong>$42.0B</strong> Market Data<br>($2.8B Alt-Data)</td>
+      <td>Hedge funds, asset managers, corporate intelligence. Need verifiable signal, audit trails, and long-tail coverage without hallucinations.</td>
+      <td><strong>$50,000 / year</strong><br>per fund/seat</td>
+      <td>100 funds = <strong>$5.0M ARR</strong><br>500 funds = <strong>$25.0M ARR</strong></td>
+    </tr>
+    <tr>
+      <td><strong>2. 2-Way Spoken Word &amp; Async</strong><br>(Automatic Radio)</td>
+      <td><strong>$50.8B</strong> Podcasting<br>($25.0B Knowledge)</td>
+      <td><strong>Prosumers:</strong> Analysts, creators, thinkers building brand &amp; speaking.<br><strong>Enterprise:</strong> Teams replacing Zoom fatigue with async voice desks.</td>
+      <td><strong>$35 / mo</strong> (Prosumer)<br><strong>$100 / seat / mo</strong> (Enterprise Async)</td>
+      <td>50k creators = <strong>$21.0M ARR</strong><br>15k enterprise seats = <strong>$18.0M ARR</strong></td>
+    </tr>
+    <tr>
+      <td><strong>3. Sovereign Enterprise OS</strong><br>(Autoputer &amp; FDE)</td>
+      <td><strong>$200B+</strong> Agentic AI<br>($86.8B Productivity)</td>
+      <td>Regulated enterprise (banking, defense, health). Cannot leak IP to model clouds; must self-host &amp; own private learning loops.</td>
+      <td><strong>$500k – $1.0M / yr</strong><br>FDE deployment + enterprise support</td>
+      <td>20 enterprises = <strong>$15.0M ARR</strong><br>50 enterprises = <strong>$37.5M ARR</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>Why Autoradio Carries High Willingness-to-Pay:</strong><br>
+  Autoradio is not passive podcast streaming. It is a <strong>bidirectional voice desk</strong>. Creators and professionals pay $35/month because they are <em>speakers</em>: they record takes, build public authority on the wire, and speak instructions that prompt 24/7 background agent research swarms. Enterprises pay $100/seat/month because a 2-minute asynchronous voice update directly triggers background agent workflows that research, draft, and calculate deliverables overnight.
+</div>
+
+<h3>AI-Native Velocity: Compressing the Growth Curve</h3>
+<p>
+Traditional B2B SaaS required 5 to 7 years to scale from zero to $50M ARR due to human-heavy sales cycles and slow product engineering. In 2026, AI-native architectures compress this timeline into <strong>12 to 36 months</strong>:
+</p>
+<ul>
+  <li><strong>Self-Distributing Flywheel:</strong> Every thought leader who records a take on Autoradio shares the link with their existing audience, acquiring listeners who convert into speakers at near-zero CAC.</li>
+  <li><strong>Immediate High-ACV Cash Flow:</strong> Selling curated data feeds at $50k/year to hedge funds provides non-dilutive working capital and immediate enterprise validation from Day 1.</li>
+  <li><strong>Autonomous Engineering:</strong> Because Choir's multi-agent runtime builds and tests its own software components, feature delivery and deployment cycles occur in days rather than quarters.</li>
+</ul>
+
+<!-- PAGE 5: BUSINESS MODEL & GTM -->
+<div class="page-break"></div>
+
+<h2>5. Business Model &amp; Sequencing: "Sell Data First"</h2>
+<p>
+The classic failure mode of deep-tech and developer-infrastructure startups is <strong>the platform-before-product trap</strong>: attempting to sell a horizontal platform to developers before proving immediate value on a specific workload. Choir executes a disciplined, three-phase go-to-market ladder:
+</p>
+
+<div class="diagram">
+<span class="hl">PHASE 1: CURATED DATA FEEDS (Day 1 Cash Flow)</span>
+• Sell curated Automatic Newspaper editions to hedge funds, family offices, and research desks @ $50k/yr.
+• Monetize high-value intelligence immediately. Validate provenance and precommitment records in production.
+        ↓
+<span class="hl">PHASE 2: PLATFORM &amp; VOICE SUBSCRIPTIONS (Scale &amp; Distribution)</span>
+• License the white-label publishing engine to organizations that want to build their own data products.
+• Roll out 2-way Autoradio ($35/mo prosumer speakers, $100/seat/mo enterprise async collaboration).
+        ↓
+<span class="hl">PHASE 3: SOVEREIGN ENTERPRISE &amp; FDE DEPLOYMENTS (The Enterprise Ceiling)</span>
+• Deploy open-source core into enterprise VPCs (Palantir FDE model).
+• Banks, defense contractors, and health networks pay $500k–$1M+ to run sovereign agent swarms on-prem.
+</div>
+
+<div class="callout">
+  <strong>The Open-Source Paradox Resolved:</strong><br>
+  Open source is neither charity nor a developer vanity metric. It is <strong>the deployment answer for data sovereignty</strong>. Global enterprises will not allow their most sensitive strategic documents and agent workflows to live on an external cloud. Open source builds the trust and distribution; curated data feeds, managed cloud convenience, and on-prem FDE contracts capture the revenue.
+</div>
+
+<h3>The Compounding Advantage (The Moat)</h3>
+<p>
+Code is not the moat—models and frameworks commoditize rapidly. The durable economic moat is <strong>accumulated, user-owned work history and verifiable citation graphs</strong>:
+</p>
+<ul>
+  <li><strong>Owned State:</strong> As models become faster and cheaper, the historical record of human edits, corrections, decisions, and precommitments becomes exponentially more valuable.</li>
+  <li><strong>The Network Effect:</strong> Each user-owned computer publishes verified claims into the network; other computers query and cite those claims via API/MCP. More computers = more verified state = a smarter network for everyone.</li>
+</ul>
+
+<!-- PAGE 6: DECK ARCHITECTURE (SLIDES 1-5) -->
+<div class="page-break"></div>
+
+<h2>6. The Pitch Deck Architecture (September 25, 2026 Edition)</h2>
+<p>
+The current pitch deck is an 10-slide, YC-compliant presentation designed for investor and advisor conversations. It avoids hype and maintains an honest, pre-traction posture:
+</p>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 01 · COVER</span><span>Lead with the Fundamental Question</span></div>
+  <div class="slide-content"><strong>Main:</strong> "How do humans supervise work at agentic scale?"<br><strong>Sub:</strong> CHOIR — the automatic computer. (September 2026 · open source)</div>
+</div>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 02 · PROBLEM</span><span>The Structural Failure of Chat</span></div>
+  <div class="slide-content"><strong>Title:</strong> Agentic work has outgrown the supervisory interface.<br><strong>Points:</strong> Work runs faster/longer than humans can watch; people wake up to answers they cannot inspect; chat cannot scale to multi-agent work.<br><strong>Keyline:</strong> A chat thread is not a workbench. <em>The interface is a live, updated state document.</em></div>
+</div>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 03 · SOLUTION</span><span>The Core Technical Invention</span></div>
+  <div class="slide-content"><strong>Title:</strong> The work itself is the interface.<br><strong>Body:</strong> Agents update a versioned document — the authoritative state of the work. Humans read and edit it directly. An edit is a new version and steers what happens next.<br><strong>Keyline:</strong> Language is for intent. <em>The document is for steering.</em></div>
+</div>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 04 · THE PRODUCT</span><span>Familiar Desktop &amp; Document UX</span></div>
+  <div class="slide-content"><strong>Title:</strong> Familiar desktop and document UX. Automated.<br><strong>Cards:</strong> Texture (The surface — versioned, editable document) · Mail (Proof agents can act under supervision — send gated by approval).<br><strong>Visual:</strong> Live Texture research document screenshot. Next: Newspaper · Radio.</div>
+</div>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 05 · CURRENT STATUS</span><span>Radical Transparency on Traction</span></div>
+  <div class="slide-content"><strong>Title:</strong> Live on staging. Honest about what's next.<br><strong>Visuals:</strong> Side-by-side screenshots of Mail app (staging) and Automatic Newspaper (in refactor).<br><strong>Keyline:</strong> Today: staging. Next: production launch, then evidence of repeat use.</div>
+</div>
+
+<!-- PAGE 7: DECK ARCHITECTURE (SLIDES 6-10) -->
+<div class="page-break"></div>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 06 · MARKET OPPORTUNITY</span><span>Three Existing Budgets &amp; TAM</span></div>
+  <div class="slide-content"><strong>Title:</strong> Three existing budgets. Compressed AI-native scale.<br><strong>Cards:</strong> News &amp; Alt-Data ($42B TAM @ $50k/yr) · 2-Way Voice ($50B TAM @ $35/mo &amp; $100/seat) · Sovereign OS ($200B+ TAM @ $750k FDE).<br><strong>Keyline:</strong> Capturing under 2% reaches $50M+ ARR. <em>AI-native velocity compresses a 7-year curve into 24 months.</em></div>
+</div>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 07 · BUSINESS MODEL</span><span>Sell Data First Ladder</span></div>
+  <div class="slide-content"><strong>Title:</strong> Sell curated data first. Expand into the platform.<br><strong>Cards:</strong> Curated Data (Day 1 cash flow) · Platform &amp; Voice (Scale) · Sovereign FDE (Enterprise ceiling).<br><strong>Keyline:</strong> Your computer should not belong to your model provider. <em>As intelligence gets cheaper, owned work history compounds.</em></div>
+</div>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 08 · POSITIONING</span><span>Why Incumbents Won't Build This</span></div>
+  <div class="slide-content"><strong>Title:</strong> Personal agents are here. They need somewhere to work.<br><strong>Cards:</strong> The Category (Muse, Instinct, Grok Bot, Town) · The Gap (State trapped in vendor silos) · Choir (Neutral workbench via API/MCP/skill).<br><strong>Keyline:</strong> Agents come and go. <em>The workbench stays yours.</em></div>
+</div>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 09 · WHY ME</span><span>Founder-Market Fit &amp; Background</span></div>
+  <div class="slide-content"><strong>Name:</strong> Yusef Mosiah Nathanson (Founder).<br><strong>Bio:</strong> Made a living turning conflicting signals into verified decisions — professional poker, then AI since 2015. Years of work across agent systems, interfaces, and provenance converged into Choir. I built the computer I needed to supervise my own agents.</div>
+</div>
+
+<div class="slide-box">
+  <div class="slide-header"><span>Slide 10 · THE ASK</span><span>Relationship &amp; Acceleration Posture</span></div>
+  <div class="slide-content"><strong>Title:</strong> Building the system that needs to exist.<br><strong>Body:</strong> Exploring a relationship and seeking your read. Funding accelerates production launch and distribution. The honest state is early: pre-traction, pre-production. The work continues either way.<br><strong>Milestone:</strong> Production launch — then evidence of repeat use.</div>
+</div>
+
+<!-- PAGE 8: THE DEEP FRAMING SYNTHESIS -->
+<div class="page-break"></div>
+
+<h2>7. The Deep Framing Synthesis: Reframing the Problem &amp; Opportunity</h2>
+<p>
+The central intellectual challenge currently facing the pitch narrative is <strong>how to frame the opening problem without diminishing the radical scope of the solution</strong>.
+</p>
+
+<h3>The "Feature Trap" vs. "The Computer"</h3>
+<p>
+In startup pitching, conventional advice demands framing the company around an acute, daily "hair-on-fire problem." However, for platform breakthroughs (like Xerox PARC's GUI, Apple's Mac, or Choir's Automatic Computer), framing the problem at the symptom level creates a fatal trap:
+</p>
+<ul>
+  <li>If the problem is framed as <em>"AI has amnesia,"</em> the listener expects a <strong>memory plugin</strong> (e.g., ChatGPT Memory or a vector database).</li>
+  <li>If the problem is framed as <em>"AI hallucinates citations,"</em> the listener expects a <strong>search widget</strong> (e.g., Perplexity).</li>
+  <li>If the problem is framed as <em>"reading long transcripts is tedious,"</em> the listener expects a <strong>collapsible chat UI</strong>.</li>
+</ul>
+
+<div class="quote-box">
+  "A small problem shrinks Choir into a feature on an existing chatbot. A problem that justifies an entirely new computer must be framed at the level of the machine itself."
+</div>
+
+<h3>The Four Paradigmatic Hook Formulations</h3>
+<p>
+To preserve the true magnitude of Choir while remaining grounded in felt human reality, the narrative can lean into one of four architectural framings:
+</p>
+
+<div class="card-grid">
+  <div class="card">
+    <div class="card-title">1. The Category Error</div>
+    <p><strong>"Why are we still using a messaging app to control autonomous intelligence?"</strong><br>
+    Chat was invented for two humans taking turns. Using chat to supervise autonomous multi-agent systems is like using a telegraph to operate a modern operating system. Autonomous work requires a persistent computer.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">2. The Fundamental Inversion</div>
+    <p><strong>"What if AI isn't an assistant you talk to, but the computer you think with?"</strong><br>
+    Managing an agent like an employee creates constant coordination friction. When the multi-agent system <em>is</em> the computer, living documents and audio streams are just native surfaces of that machine.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">3. The Scale Asymmetry</div>
+    <p><strong>"Computation outran human attention. What is the interface to govern it?"</strong><br>
+    When models run for 8 hours across 1,000 sources, human verification bandwidth is the absolute bottleneck. The winning interface must compress hours of agentic work into a 30-second inspection and steering gesture.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">4. The Stateless Trap</div>
+    <p><strong>"Why does intelligence get cheaper every month, but none of our work gets more permanent?"</strong><br>
+    Stateless chat traps work in disposable silos. Choir provides the persistent, user-owned state layer where accumulated work history, corrections, and precommitments compound in value over time.</p>
+  </div>
+</div>
+
+<h2>8. Strategic Conclusion &amp; Immediate Priorities</h2>
+<ol>
+  <li><strong>Refactor Completion:</strong> Land the active production refactors on the core runtime and Automatic Newspaper to transition the status from "staging" to "live production."</li>
+  <li><strong>First Curated Data Customer:</strong> Secure 3 to 5 pilot hedge funds / institutional researchers for the curated Newspaper data feed to establish commercial proof of high willingness-to-pay ($50k/year).</li>
+  <li><strong>Autoradio Private Alpha:</strong> Launch the 2-way participatory voice desk to select thought leaders to test the viral distribution flywheel.</li>
+  <li><strong>Narrative Discipline:</strong> Pitch the deck as an exploration of an authentic partnership. Avoid premature fundraising theater; lead with the structural inevitability of the automatic computer.</li>
+</ol>
+
+<div style="margin-top: 24px; padding-top: 10px; border-top: 1px solid #e2e2e8; font-size: 8pt; color: #767682; display: flex; justify-content: space-between;">
+  <span>Choir Platform Engineering &amp; Strategy · Confidential</span>
+  <span>choir.news · github.com/choir-hip/go-choir</span>
+</div>
+
+</body>
+</html>
