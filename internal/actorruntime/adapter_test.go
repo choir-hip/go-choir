@@ -2404,7 +2404,6 @@ func seedAdapterLifecycleManagementControl(t *testing.T, s *store.Store, rt *age
 	return *rec
 }
 
-
 func TestAdapterSQLitePreBindResearchRecoveryBindsAndExecutesWithoutSnapshot(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -2450,8 +2449,6 @@ func TestAdapterSQLitePreBindResearchRecoveryBindsAndExecutesWithoutSnapshot(t *
 		t.Fatalf("pre-bind recovery relied on snapshot memory=%q err=%v", memory, err)
 	}
 }
-
-
 
 func TestAdapterSQLiteStartAcknowledgesCancelledTextureDocumentRevisionOccurrenceWithoutMutation(t *testing.T) {
 	ctx := context.Background()

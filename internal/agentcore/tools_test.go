@@ -1048,7 +1048,7 @@ func TestBootTerminalRepairSynthesizesGenericChildrenThroughDurableOutbox(t *tes
 			RequestedByRunID: "parent-generic-terminal",
 			ChannelID:        channelID,
 			OwnerID:          ownerID,
-			ComputerID:        rt.TextureComputerID(),
+			ComputerID:       rt.TextureComputerID(),
 			AgentProfile:     agentprofile.Engineering,
 			AgentRole:        agentprofile.Engineering,
 			State:            types.RunCompleted,

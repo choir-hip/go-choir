@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -804,7 +805,11 @@ func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 		for _, obj := range objects {
 			_, outbox, err := actorWakeOutboxFromObject(obj, s.actorWakeResolverObjects(ctx, obj, objects))
 			if err != nil {
-				return minted, fmt.Errorf("migrate actor wake outbox: derive %s %s: %w", kind, obj.CanonicalID, err)
+				// One malformed/unmappable object must not abort the migration
+				// and strand every later pending packet — now that the boot
+				// wake-loop is removed this outbox is the only delivery path.
+				log.Printf("migrate actor wake outbox: skip %s %s: %v", kind, obj.CanonicalID, err)
+				continue
 			}
 			if outbox.CanonicalID == "" {
 				continue
