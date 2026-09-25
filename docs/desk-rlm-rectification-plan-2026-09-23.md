@@ -297,6 +297,15 @@ R4  Scores + surfacing + packs       [orange: score accrual, materiality
 R5  Durable vocabulary migration     [red: stratum B — event kinds, OG
                                       kinds, SQL, schemas, goldens;
                                       may be deferred or partial]
+
+  Hygiene interleave (orthogonal, no gate — run inside the K tail / before R2):
+1.4 Platform-computer park           [red, small — universal-wire-platform
+                                      computer is wedged pre-genesis and
+                                      spams; hold+hibernate parks it; needs
+                                      the IsHeld guard on the warm path]
+1.5 Test-signal purge                [yellow — delete low-signal unit tests,
+                                      prefer E2E; three authoring rules into
+                                      AGENTS.md; parallel subagents]
 …then M7 (skip the harness), M9a/b, M10, M11 (self-dev proof — the wire
 gate), then world-wire missions (processor/reconciler RLM-ify or delete).
 ```
@@ -306,7 +315,9 @@ Dependencies: R0 independent (land first). R1 ∥ R0. K before R3 (R3's
 on process-local wakes recreates the wrong-path cluster under clean names).
 R2 ∥ K partially (ledger schema doesn't need the kernel; desk wakes do).
 R3 after K + R2. R4 after R3. R5 anytime after R1, before or after R3 —
-it's independent but red.
+it's independent but red. 1.4/1.5 are orthogonal hygiene — they gate nothing
+and run inside the K tail or before R2; 1.5 precedes R2 only so R2's CI
+absorbs a quieter suite.
 
 ## 7. Open decisions (owner) — post-consensus
 
