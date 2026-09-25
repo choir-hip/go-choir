@@ -380,6 +380,27 @@ now:
     open+spawn on staging requires the Linux guest kernel and a live desk
     cell; it is the remaining deployed-proof item.
 
+  boundary_reconciliation_2026_09_25: >-
+    choir.Resolve now writes a real resolution record (5404d2c7): Discrepancy
+    verdict class + Observation + resolver CommitmentScore + ResolvedAt +
+    ParentID/RelatedIDs link, append-only — the "write-only scoreboard"
+    defect is repaired at the ledger substrate. REMAINING against
+    finish.acceptance (each overlaps R3/R4 scope): (a) all four desks live
+    on the cell carrier — today only engineering runs cells (InCellCarrier
+    gated on HostSelectsRLM, executed inside the bound capsule);
+    management/research/texture still execute via the provider tool-loop.
+    A host-side spawn of cmd/capsule-broker's sessionWorker is the substrate
+    for non-capsule desk cells — the R3 live-desks build, not a carrier
+    surface R2 can land alone; (b) texture worker_updates_* consumer
+    migrated to commitment records — ResolveTextureActorOccurrence/
+    producerOccurrence/ListAllPendingLifecycleUpdates are lifecycle-authority
+    machinery (producer-report resolution + authority-chain validation +
+    pending fencing); migrating them onto the ledger is the R3 "texture
+    writes doc revisions from the ledger under editorial discretion"
+    cutover, done dual-read for continuity; (c) score accrual is an R4
+    derived-view layer — R2 lands the resolution record shape it reads;
+    (d) deployed delegated-cast proof needs a live desk cell on staging (R3).
+
 receipts: []
 ---
 
@@ -390,6 +411,7 @@ receipts: []
 choir.Cast(desk, objective, spec)   -> Handle   // delegated admission
 choir.Ask(to, question)             -> Handle   // query; resolves on answer
 choir.Note(to, body)                -> Receipt  // raw transport, unscored
+
 choir.Cancel(handle) / Withdraw     -> Receipt  // retract a commitment
 choir.Escalate(to, issue)           -> Receipt  // to management or owner
 
