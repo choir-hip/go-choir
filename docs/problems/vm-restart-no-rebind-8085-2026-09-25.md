@@ -1,8 +1,43 @@
 # Guest VM does not rebind :8085 after SIGKILL + vmctl resolve-restart
 
-**Status:** open, reproduced twice (2026-09-25). Blocks mission K restart-resume proof.
-**Surface:** `red` — vmctl VM lifecycle + guest autoputer bind.
-**Mutation class of any fix:** red (vmctl/guest).
+**Status:** ROOT-CAUSED 2026-09-25. Guest autoputer fatals on restart: canonical
+chain exists but no ProjectionBase watermark is advertised (`watermarkSeq==0`),
+so the recovery planner correctly refuses and the process exits before the
+listener binds. Blocks mission K restart-resume proof. Fix needs owner call
+(substrate work: host-side base publication + admission fence).
+**Surface:** `red` — vmctl VM lifecycle + guest autoputer + projection base.
+**Mutation class of any fix:** red (vmctl/guest/projectionbase).
+
+## Root cause (confirmed via guest serial console in vmctl journal)
+
+Not a bind/tap/route failure. On the recovered VM, systemd *does* start the
+autoputer (`[OK] Started go-choir Autoputer Runtime`) — it is
+`wantedBy=multi-user.target` + `Restart=on-failure`, `SERVER_HOST=0.0.0.0`,
+no first-boot condition (`nix/autoputer-vm.nix:660-765`). The guest reaches its
+new host gateway, opens the retained store (`fresh=false`), then fatals:
+
+```
+autoputer: required projection base refused; refusing genesis fallback:
+  required base is missing for an existing chain
+```
+
+(`internal/autoputer/run.go:278-280`, before `s.Start()` at :550 — so :8085
+never binds). Causal chain:
+
+1. First boot has no canonical chain → genesis allowed.
+2. `BootstrapChain` publishes only the genesis event, **no checkpoint**
+   (`internal/agentcore/chain_bootstrap.go:22-26`).
+3. On next boot `materializeProjectionBaseIfNeeded` queries the watermark →
+   `PlanRecovery` (`internal/projectionbase/recovery_plan.go:98-100`)
+   **deliberately refuses any existing chain with `watermarkSeq==0`** → fatal.
+
+Fail-closed is correct; the missing piece is that nothing publishes a
+verified ProjectionBase at seq 1 after genesis. `cmd/choir-rebuild-base`
+(:20-31,82-125) already does the offline verified rebuild + advertise, but
+needs the platform-artifact root + computer privacy key + advertise cap — a
+host/platform worker must run it post-genesis, then fence run admission until
+W=1. Stale-tap delete warning (`vmmanager/manager.go:2516-2528` ignores delete
+errors) is a separate host-cleanup defect, not causal here.
 
 ## Symptom
 
