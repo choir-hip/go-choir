@@ -140,19 +140,19 @@ var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
 	// the filesystem (mutation is capsule-bound under engineering).
 	"management": {"Message", "Outcome", "Spawn", "Cast", "Ask", "Note", "Reply",
-		"CancelAct", "Escalate", "Precommit", "Report", "ResolveAct"},
+		"CancelAct", "Escalate", "EscalateActions", "Precommit", "Report", "ResolveAct"},
 	// Engineering mutates inside its capsule and reports fate.
 	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Outcome", "Spawn",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "Precommit", "Report", "ResolveAct"},
+		"Escalate", "EscalateActions", "Precommit", "Report", "ResolveAct"},
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
 	"research": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "Precommit", "Report", "ResolveAct"},
+		"Escalate", "EscalateActions", "Precommit", "Report", "ResolveAct"},
 	// Texture authors document revisions and escalates; artifact writes are
 	// texture controls, not capsule file ops.
 	"texture": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "Precommit", "Report", "ResolveAct"},
+		"Escalate", "EscalateActions", "Precommit", "Report", "ResolveAct"},
 }
 
 func (s *ChoirScope) deskModule(name string) bool {
@@ -180,22 +180,23 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Inbox":    reflect.ValueOf(s.Inbox),
 	}
 	verbs := map[string]func() reflect.Value{
-		"WriteFile": func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
-		"Exec":      func() reflect.Value { return reflect.ValueOf(s.Exec) },
-		"Assign":    func() reflect.Value { return reflect.ValueOf(s.Assign) },
-		"Message":   func() reflect.Value { return reflect.ValueOf(s.Message) },
-		"Outcome":   func() reflect.Value { return reflect.ValueOf(s.Outcome) },
-		"Spawn":     func() reflect.Value { return reflect.ValueOf(s.Spawn) },
-		"Complete":  func() reflect.Value { return reflect.ValueOf(s.Complete) },
-		"Freeze":    func() reflect.Value { return reflect.ValueOf(s.Freeze) },
-		"Cast":      func() reflect.Value { return reflect.ValueOf(s.Cast) },
-		"Ask":       func() reflect.Value { return reflect.ValueOf(s.Ask) },
-		"Note":      func() reflect.Value { return reflect.ValueOf(s.Note) },
-		"Reply":     func() reflect.Value { return reflect.ValueOf(s.Reply) },
-		"CancelAct": func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
-		"Escalate":  func() reflect.Value { return reflect.ValueOf(s.Escalate) },
-		"Precommit": func() reflect.Value { return reflect.ValueOf(s.Precommit) },
-		"Report":    func() reflect.Value { return reflect.ValueOf(s.Report) },
+		"WriteFile":       func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
+		"Exec":            func() reflect.Value { return reflect.ValueOf(s.Exec) },
+		"Assign":          func() reflect.Value { return reflect.ValueOf(s.Assign) },
+		"Message":         func() reflect.Value { return reflect.ValueOf(s.Message) },
+		"Outcome":         func() reflect.Value { return reflect.ValueOf(s.Outcome) },
+		"Spawn":           func() reflect.Value { return reflect.ValueOf(s.Spawn) },
+		"Complete":        func() reflect.Value { return reflect.ValueOf(s.Complete) },
+		"Freeze":          func() reflect.Value { return reflect.ValueOf(s.Freeze) },
+		"Cast":            func() reflect.Value { return reflect.ValueOf(s.Cast) },
+		"Ask":             func() reflect.Value { return reflect.ValueOf(s.Ask) },
+		"Note":            func() reflect.Value { return reflect.ValueOf(s.Note) },
+		"Reply":           func() reflect.Value { return reflect.ValueOf(s.Reply) },
+		"CancelAct":       func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
+		"Escalate":        func() reflect.Value { return reflect.ValueOf(s.Escalate) },
+		"EscalateActions": func() reflect.Value { return reflect.ValueOf(s.EscalateActions) },
+		"Precommit":       func() reflect.Value { return reflect.ValueOf(s.Precommit) },
+		"Report":          func() reflect.Value { return reflect.ValueOf(s.Report) },
 		"ResolveAct": func() reflect.Value {
 			return reflect.ValueOf(s.ResolveAct)
 		},
@@ -493,6 +494,19 @@ func (s *ChoirScope) Escalate(toDesk, issue string) (string, error) {
 		return "", err
 	}
 	return t.Escalate(toDesk, issue)
+}
+
+// EscalateActions surfaces a privileged-execution request to management: the
+// desk asks the target to run a set of guarded actions (the execution_request
+// packet kind on the carrier). actionsJSON is a JSON-encoded
+// []types.CoagentPacketAction with explicit per-action safety annotations; the
+// reducer validates the schema before the envelope mails.
+func (s *ChoirScope) EscalateActions(toDesk, issue, actionsJSON string) (string, error) {
+	t, err := s.boundTray("escalate")
+	if err != nil {
+		return "", err
+	}
+	return t.EscalateActions(toDesk, issue, actionsJSON)
 }
 
 // Precommit freezes a typed prediction on the commitment ledger.

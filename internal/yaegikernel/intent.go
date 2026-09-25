@@ -134,6 +134,11 @@ type StagedIntent struct {
 	OutcomeVal string `json:"outcome_val,omitempty"`
 	Statement  string `json:"statement,omitempty"`
 	Deadline   string `json:"deadline,omitempty"`
+	// Actions carries an Escalate's guarded action schema (the execution_request
+	// packet kind on the carrier): a desk requests management execute typed
+	// actions under explicit safety annotations. JSON-encoded
+	// []types.CoagentPacketAction; nil for a plain issue escalation.
+	Actions string `json:"actions,omitempty"`
 }
 
 // Tray stages one cell's outbound intents. It is not safe for concurrent use:
@@ -295,6 +300,22 @@ func (t *Tray) Escalate(toDesk, issue string) (string, error) {
 		return "", fmt.Errorf("tray: escalate requires a target and an issue")
 	}
 	return t.stage(StagedIntent{Kind: IntentEscalate, ToDesk: toDesk, Body: issue})
+}
+
+// EscalateActions stages a privileged-execution escalation: the desk asks
+// management to run a set of guarded actions (the execution_request packet
+// kind on the carrier). actionsJSON is a JSON-encoded
+// []types.CoagentPacketAction; each action must carry explicit safety
+// annotations (mutation_class, network, file_mutation). The reducer validates
+// the schema before mailing.
+func (t *Tray) EscalateActions(toDesk, issue, actionsJSON string) (string, error) {
+	if toDesk == "" || issue == "" {
+		return "", fmt.Errorf("tray: escalate_actions requires a target and an issue")
+	}
+	if strings.TrimSpace(actionsJSON) == "" {
+		return "", fmt.Errorf("tray: escalate_actions requires a non-empty actions array")
+	}
+	return t.stage(StagedIntent{Kind: IntentEscalate, ToDesk: toDesk, Body: issue, Actions: actionsJSON})
 }
 
 // Precommit freezes a typed prediction on the commitment ledger. statement is

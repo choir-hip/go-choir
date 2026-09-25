@@ -339,6 +339,56 @@ func TestReduceCellIntentsSequentialCellsAtSameCursor(t *testing.T) {
 	}
 }
 
+// TestCommitActIntentEscalateActionsRejectsUnsafeActions is the R2 carrier gate
+// for the privileged-execution verb: an escalate carrying an actions payload
+// must satisfy the same per-action safety contract the retired
+// execution_request packet enforced, or the cell reduces nothing.
+func TestCommitActIntentEscalateActionsRejectsUnsafeActions(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	scope.CellID = "cell-escalate-actions"
+	ctx := testReductionCtx(scope)
+
+	cases := []struct {
+		name      string
+		actions   string
+		wantError string
+	}{
+		{"malformed json", `[{`, "not a valid actions array"},
+		{"empty actions", `[]`, "at least one action"},
+		{"missing type", `[{"objective":"x","safety":{"mutation_class":"green","network":"forbidden","file_mutation":"forbidden"}}]`, "type"},
+		{"missing safety", `[{"type":"run_tests","objective":"x"}]`, "safety"},
+		{"bad mutation class", `[{"type":"run_tests","objective":"x","safety":{"mutation_class":"nonsense","network":"forbidden","file_mutation":"forbidden"}}]`, "mutation_class"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: scope}
+			_, err := reduction.commitActIntent(ctx, yaegikernel.StagedIntent{
+				LocalID: "esc-1", Kind: yaegikernel.IntentEscalate,
+				ToDesk: "management", Body: "need exec", Actions: tc.actions,
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("escalate_actions err = %v, want %q", err, tc.wantError)
+			}
+		})
+	}
+
+	// A fully-guarded actions payload reduces: the commitment mints and the
+	// escalation envelope mails to the target desk.
+	safe := `[{"type":"run_tests","objective":"re-run the failing shard","inputs":{"shard":"0"},"safety":{"mutation_class":"green","network":"forbidden","file_mutation":"forbidden"}}]`
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: scope}
+	seq, err := reduction.commitActIntent(ctx, yaegikernel.StagedIntent{
+		LocalID: "esc-ok", Kind: yaegikernel.IntentEscalate,
+		ToDesk: "management", Body: "re-run shard 0", Actions: safe,
+	})
+	if err != nil {
+		t.Fatalf("guarded escalate_actions: %v", err)
+	}
+	if seq == 0 {
+		t.Fatal("guarded escalate_actions mailed no envelope")
+	}
+}
+
 func TestReduceCellIntentsSequentialCellsDistinctDestinations(t *testing.T) {
 	rt, _ := testRuntime(t)
 	scope := testReductionScope()

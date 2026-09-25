@@ -631,6 +631,25 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 			}
 		}
 	}
+	// An escalate carrying an action payload is a privileged-execution request
+	// (the execution_request packet kind on the carrier): validate the guarded
+	// action schema — type/objective + explicit per-action safety — before the
+	// envelope mails. The safety contract is the same shape the retired
+	// update_coagent execution_request validation enforced.
+	if in.Kind == yaegikernel.IntentEscalate && strings.TrimSpace(in.Actions) != "" {
+		var actions []types.CoagentPacketAction
+		if err := json.Unmarshal([]byte(in.Actions), &actions); err != nil {
+			return 0, fmt.Errorf("reduce: escalate_actions payload is not a valid actions array: %w", err)
+		}
+		if len(actions) == 0 {
+			return 0, fmt.Errorf("reduce: escalate_actions requires at least one action")
+		}
+		for i, action := range actions {
+			if err := validateCoagentPacketAction(action, true); err != nil {
+				return 0, fmt.Errorf("reduce: escalate_actions actions[%d]: %w", i, err)
+			}
+		}
+	}
 	// Addressed acts mail their envelope so the target desk observes the act.
 	var seq uint64
 	switch in.Kind {

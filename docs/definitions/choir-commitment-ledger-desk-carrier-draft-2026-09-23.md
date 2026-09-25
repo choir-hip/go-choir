@@ -308,6 +308,20 @@ now:
     update_coagent consumer migration, execution_request verb/death (D13),
     acceptance probes.
 
+  execution_request_verb_2026_09_25: >-
+    D13 resolved: verb, not death. The execution_request packet kind (a desk
+    asking persistent management to run guarded commands) maps to
+    EscalateActions(toDesk, issue, actionsJSON) on Tray/ChoirScope, exported to
+    all four desk module sets. actionsJSON is a JSON-encoded
+    []types.CoagentPacketAction; commitActIntent validates the guarded-action
+    schema (type + objective + per-action mutation_class / network /
+    file_mutation) before the envelope mails — the same contract the retired
+    update_coagent execution_request validator enforced. The packet kind stays
+    in the update_coagent schema for processor/reconciler until their wire
+    phase. Test: TestCommitActIntentEscalateActionsRejectsUnsafeActions
+    (rlm_reduce_test.go). Remaining: update_coagent consumer migration, atomic
+    commitment/OG commit inside the cursor (precondition 3), acceptance probes.
+
 receipts: []
 ---
 
