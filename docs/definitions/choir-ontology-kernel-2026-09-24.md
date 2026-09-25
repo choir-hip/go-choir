@@ -297,6 +297,28 @@ receipts:
       sweep. The blocker is disposable-VM 8085 rebind, which needs a
       second attempt or a host-side in-process adapter proof.
     digest: mechanism exists; live proof blocked on guest rebind.
+
+  - id: k-restart-resume-proof-attempt2-2026-09-25
+    slice: restart-resume deployed proof (retry)
+    status: exercised, blocked (reproduced guest rebind failure)
+    ref: diagnostic guest computer-4333c73f967dbccc94638f7dbcac7342 /
+      vm-a6ccc8e7846f732e305745a5adddd7ca (ephemeral, cleaned up)
+    body: >-
+      Fresh disposable guest on 91c8fd9f repeated the identical failure:
+      healthy guest, bootstrap 201, real run b0d31112-a102-440e-9cef-
+      1bcb46a2f5c4 admitted 202, Firecracker SIGKILL, vmctl resolve ->
+      active epoch 12679 route 10.200.5.2:8085, but :8085 never bound
+      (curl (7) connect refused, health/run-status HTTP 000, resolve
+      readiness blocked). Two identical failures on fresh guests rule out
+      a one-off; this is a reproducible defect in disposable-guest restart
+      rebind, recorded as
+      docs/problems/vm-restart-no-rebind-8085-2026-09-25.md. Restart-resume
+      cannot be demonstrated end-to-end until a restarted disposable guest
+      actually serves. Mechanism still verified in source: dispatcher Run
+      re-reads SQLiteLog.PendingAgents/NextDue every poll (durable tape
+      projection, SIGKILL-safe).
+    digest: reproducible guest-rebind defect blocks live proof; mechanism
+      sound by source trace.
 ---
 
 ## What this mission is
