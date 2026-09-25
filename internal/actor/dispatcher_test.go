@@ -155,9 +155,20 @@ func TestDispatcherDeliversViaProjection(t *testing.T) {
 	if atomic.LoadInt32(&handled) == 0 {
 		t.Fatal("dispatcher did not deliver due event via projection")
 	}
-	// The event must be incorporated (in the state head).
-	exists, processed, err := l.UpdateStatus(ctx, "agent-d", "d1")
-	if err != nil || !exists || !processed {
+	// The event must be incorporated (in the state head). Incorporation is
+	// the fenced Commit that runs after HandleUpdate returns, so poll for it
+	// rather than asserting immediately after the handler ran.
+	incorporated := false
+	for time.Now().Before(deadline) {
+		exists, processed, err := l.UpdateStatus(ctx, "agent-d", "d1")
+		if err == nil && exists && processed {
+			incorporated = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !incorporated {
+		exists, processed, err := l.UpdateStatus(ctx, "agent-d", "d1")
 		t.Fatalf("event not incorporated: exists=%v processed=%v err=%v", exists, processed, err)
 	}
 }
