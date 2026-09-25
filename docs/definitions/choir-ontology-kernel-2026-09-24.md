@@ -273,6 +273,30 @@ receipts:
       ./internal/agentcore clean.
     digest: boot causes no work; committed obligations reach actors via the
       actor-wake outbox + dispatcher projection, not a boot wake.
+  - id: k-restart-resume-proof-attempt-2026-09-25
+    slice: restart-resume deployed proof
+    status: exercised, blocked (not proven end-to-end)
+    ref: diagnostic guest computer-ba9da4a7d5a96d9bfa6ca59520be59d7 /
+      vm-9eab5b2ba58c563a3ee7d7f1c4a54f5d (ephemeral, cleaned up)
+    body: >-
+      Deployed head 91c8fd9f on node-b. Provisioned a disposable
+      diagnostic guest (NOT the held wire platform), bootstrapped its
+      chain (201), admitted a real processor run
+      (run_id 61d4f020-9d64-4071-b590-7720f0aefe1e, HTTP 202; StartRun
+      commits the initial_dispatch actor_update to the tape), SIGKILLed
+      that VM's Firecracker, then vmctl resolve re-created the VM
+      (epoch 12677, 10.200.3.2:8085). The restarted guest autoputer
+      never accepted TCP on 8085 — resolve readiness blocked, health and
+      run-status both HTTP 000 — so no post-restart dispatcher delivery
+      was observable. Result: restart-resume NOT proven end-to-end on the
+      landed candidate; blocked at guest rebind, not at the deleted
+      mechanism. Source confirms the post-deletion recovery rule:
+      Adapter.Start -> flushBootDispatches (adapter.go:367) retries Send
+      on every pending initial_dispatch tape event until delivered;
+      StartKernel's pending projection is the recovery rule — no boot
+      sweep. The blocker is disposable-VM 8085 rebind, which needs a
+      second attempt or a host-side in-process adapter proof.
+    digest: mechanism exists; live proof blocked on guest rebind.
 ---
 
 ## What this mission is
