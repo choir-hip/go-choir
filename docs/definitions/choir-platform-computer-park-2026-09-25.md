@@ -121,7 +121,7 @@ now:
   status: complete
   slice: platform computer parked (held + stopped); hold-guard shipped
   source_ref: main@1566bbc7
-  deploy_identity: staging https://choir.news build.commit=1566bbc7
+  deploy_identity: staging https://choir.news build.commit=ce28e407
   candidate:
     id: platform-park-1
     state: landed
