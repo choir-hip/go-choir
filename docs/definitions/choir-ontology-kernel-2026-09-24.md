@@ -235,10 +235,13 @@ now:
     skips deploy-impact (non_docs is push-diff-scoped); deploy was forced
     via workflow_dispatch force_staging_deploy.
   next_action: >-
-    Deletion pass landed (commit 23c461b5 + receipt commits). Awaiting
-    staging deploy of head (forced run 36107191784), then the
-    restart-resume deployed proof (kill mid-task, restart, observe
-    tape-derived delivery), in-scope recount to zero, consensus gate.
+    Deletion pass landed and deployed (head 4daecd60, CI run 36110172609
+    green incl. actorruntime shard 6, Deploy to Staging success). Remaining:
+    restart-resume deployed proof (kill a live guest autoputer mid-task,
+    restart, observe tape-derived delivery), in-scope recount to zero,
+    consensus gate. Open risk: the 1.4-held platform VM resurrected on
+    deploy via active_vm_refresh (IsHeld gates the idle sweeper only), so
+    the proof target is the live wire platform — needs a proof-safe guest.
 
 receipts:
   - id: k-deletion-sweeps-timers-2026-09-25
