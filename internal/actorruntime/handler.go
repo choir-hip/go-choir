@@ -92,6 +92,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleActivationBudgetDeadline(ctx, u, memory)
 	case "assigned_engineering_fate_deadline":
 		return h.handleAssignedEngineeringFateDeadline(ctx, u, memory)
+	case "delegated_assignment_spawn_deadline":
+		return h.handleDelegatedAssignmentSpawnDeadline(ctx, u, memory)
 	case "fresh_mint_management_resume_deadline":
 		return h.handleFreshMintManagementResumeDeadline(ctx, u, memory)
 	case "reactivated_management_resume_deadline":
@@ -130,6 +132,20 @@ func (h *actorHandler) handleAssignedEngineeringFateDeadline(ctx context.Context
 	}
 	if err := h.rt.HandleAssignedEngineeringFateDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("actorruntime: assigned Engineering fate deadline: %w", err)
+	}
+	return memory, nil
+}
+
+// handleDelegatedAssignmentSpawnDeadline resolves the scoped caster mailbox and
+// re-drives a delegated cast's spawn/bind saga after its cell commit. The saga
+// inputs ride on the wake; the saga itself re-derives the committed digests.
+func (h *actorHandler) handleDelegatedAssignmentSpawnDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve delegated assignment spawn deadline scope: %w", err)
+	}
+	if err := h.rt.HandleDelegatedAssignmentSpawnDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("actorruntime: delegated assignment spawn deadline: %w", err)
 	}
 	return memory, nil
 }

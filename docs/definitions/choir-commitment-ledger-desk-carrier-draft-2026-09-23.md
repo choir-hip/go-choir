@@ -290,12 +290,23 @@ now:
     IN PROGRESS / NOT DONE — update_coagent consumer migration is a
     producer+consumer relocation, not a registry drop: removing
     RegisterCoagentUpdateTools from management+research breaks ~70
-    desk-facing tests that Execute the tool and (more important) the desks
-    report into a lifecycle-update table (worker_updates_*) whose consumers
-    must now read commitment records. choir.Report currently mints only a
-    commitment record; the packet→desk-consumption rewrite is the remaining
-    scoped increment before finish.acceptance, then execution_request
-    verb/death (D13), atomic reducer commit, and acceptance probes.
+    desk-facing tests that Execute the tool and the worker_updates_*
+    consumption path must migrate to commitment records. Next commit.
+
+  delegated_spawn_async_2026_09_25: >-
+    Consensus precondition (3) repaired: the delegated-cast spawn/bind/activate
+    saga no longer runs inside the cell reducer. openDelegatedCastAssignment
+    (engineering_assignment_runtime.go) now commits only the durable open —
+    record + binding + deterministic capability — and returns. commitActIntent
+    (rlm_reduce.go) arms delegated_assignment_spawn_deadline via
+    armDelegatedCastSpawn (continuation_schedule.go) under kernel mode; the
+    actorruntime dispatcher (handler.go case delegated_assignment_spawn_deadline
+    → HandleDelegatedAssignmentSpawnDeadline) re-drives
+    resumeDelegatedCastAssignment post-commit. The saga re-derives the
+    committed subject/capability digests fail-closed, so a replayed wake is a
+    no-op. Non-kernel test runtimes keep a synchronous fallback. Remaining:
+    update_coagent consumer migration, execution_request verb/death (D13),
+    acceptance probes.
 
 receipts: []
 ---

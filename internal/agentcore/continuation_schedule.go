@@ -14,16 +14,101 @@ import (
 )
 
 const (
-	activationBudgetDeadlineUpdateKind        = "activation_budget_deadline"
-	assignedEngineeringFateDeadlineUpdateKind = "assigned_engineering_fate_deadline"
-	freshMintManagementDeadlineUpdateKind     = "fresh_mint_management_resume_deadline"
-	reactivatedManagementDeadlineUpdateKind   = "reactivated_management_resume_deadline"
-	wireReconcilerPublishDeadlineUpdateKind   = "wire_reconciler_publish_deadline"
+	activationBudgetDeadlineUpdateKind         = "activation_budget_deadline"
+	assignedEngineeringFateDeadlineUpdateKind  = "assigned_engineering_fate_deadline"
+	delegatedAssignmentSpawnDeadlineUpdateKind = "delegated_assignment_spawn_deadline"
+	freshMintManagementDeadlineUpdateKind      = "fresh_mint_management_resume_deadline"
+	reactivatedManagementDeadlineUpdateKind    = "reactivated_management_resume_deadline"
+	wireReconcilerPublishDeadlineUpdateKind    = "wire_reconciler_publish_deadline"
 )
 
 type assignedEngineeringFateDeadline struct {
 	AssignmentID string `json:"assignment_id"`
 	Attempt      uint64 `json:"attempt"`
+}
+
+// delegatedAssignmentSpawnDeadline is the durable payload that carries a
+// delegated cast's spawn inputs to the post-commit wake. The binding stores
+// only digests and work-item IDs — not the objective text the bound run needs
+// as its prompt — so the saga inputs travel on the wake.
+type delegatedAssignmentSpawnDeadline struct {
+	AssignmentID string `json:"assignment_id"`
+	Attempt      uint64 `json:"attempt"`
+	Objective    string `json:"objective"`
+	CandidateID  string `json:"candidate_id,omitempty"`
+}
+
+// armDelegatedCastSpawn schedules the durable wake that resumes a delegated
+// cast's spawn/bind/activate saga after the cell commits. The commit path
+// (commitActIntent) performs only the durable open; running the saga inside
+// the reducer would hold the cell lock across capsule spawn (consensus
+// precondition). The wake is near-immediate — the saga is latency-sensitive —
+// and resumable: re-delivery re-derives the deterministic binding and replays.
+func (rt *Runtime) armDelegatedCastSpawn(assignment types.EngineeringAssignment, objective, candidateID string) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	binding := assignment.Binding
+	// Only a committed-but-unbound delegated open needs the deferred saga; a
+	// bound/terminal or non-delegated assignment is already resolved.
+	if binding.CastAuthority != types.EngineeringCastAuthorityDelegated ||
+		assignment.Disposition == types.EngineeringAssignmentBound ||
+		assignment.Disposition.Terminal() {
+		return
+	}
+	payload, err := json.Marshal(delegatedAssignmentSpawnDeadline{
+		AssignmentID: assignment.AssignmentID, Attempt: binding.Attempt,
+		Objective: objective, CandidateID: candidateID,
+	})
+	if err != nil {
+		log.Printf("runtime: encode delegated spawn deadline for %s: %v", assignment.AssignmentID, err)
+		return
+	}
+	rt.scheduleContinuation(context.Background(), binding.OwnerID, binding.ComputerID, binding.ParentAgentID,
+		delegatedAssignmentSpawnDeadlineUpdateKind, string(payload), binding.TrajectoryID, "", time.Now().UTC())
+}
+
+// HandleDelegatedAssignmentSpawnDeadline re-drives a delegated cast's
+// spawn/bind/activate saga from its committed-but-unbound open. The saga
+// re-derives the exact digests the binding committed (resumeDelegatedCast
+// Assignment verifies the subject/capability digests fail-closed), so a
+// replayed or duplicated wake is a safe no-op. A bound, terminal, or
+// non-delegated assignment returns without re-running.
+func (rt *Runtime) HandleDelegatedAssignmentSpawnDeadline(ctx context.Context, ownerID, computerID, agentID, content string) error {
+	if rt == nil || rt.store == nil {
+		return nil
+	}
+	var deadline delegatedAssignmentSpawnDeadline
+	if err := json.Unmarshal([]byte(content), &deadline); err != nil {
+		return fmt.Errorf("decode delegated assignment spawn deadline: %w", err)
+	}
+	deadline.AssignmentID = strings.TrimSpace(deadline.AssignmentID)
+	if deadline.AssignmentID == "" || deadline.Attempt == 0 {
+		return fmt.Errorf("delegated spawn deadline requires assignment_id and attempt")
+	}
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, deadline.AssignmentID, deadline.Attempt)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	binding := assignment.Binding
+	if binding.CastAuthority != types.EngineeringCastAuthorityDelegated || binding.ParentAgentID != agentID ||
+		assignment.Disposition == types.EngineeringAssignmentBound || assignment.Disposition.Terminal() {
+		return nil
+	}
+	req := DelegatedCastRequest{
+		Objective:           deadline.Objective,
+		Kind:                binding.Kind,
+		CandidateID:         deadline.CandidateID,
+		CommitmentControlID: binding.ParentControlID,
+		CasterAgentID:       binding.ParentAgentID,
+	}
+	if _, resumeErr := rt.resumeDelegatedCastAssignment(ctx, assignment, req); resumeErr != nil {
+		return fmt.Errorf("delegated spawn saga for %s: %w", deadline.AssignmentID, resumeErr)
+	}
+	return nil
 }
 
 func encodeAssignedEngineeringFateDeadline(assignmentID string, attempt uint64) (string, error) {

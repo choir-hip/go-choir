@@ -601,14 +601,16 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 			return 0, err
 		}
 	}
-	// A cast is admission, not just a message: open the engineering assignment
-	// under the delegated-cast authority (the caster's own live run/work), with
-	// the commitment record minted above as the parent control. The spawn/bind
-	// saga runs synchronously so a bound assignment, not an open-but-unbound
-	// one, is what the restart sweeper sees (it cancels unbound opens).
+	// A cast is admission, not just a message: durably OPEN the engineering
+	// assignment under the delegated-cast authority (the caster's own live
+	// run/work), with the commitment record minted above as the parent control.
+	// The spawn/bind/activate saga is deliberately NOT run inside the cell
+	// reducer (consensus precondition) — it resumes from the deferred
+	// delegated_assignment_spawn_deadline wake, or synchronously when kernel
+	// mode is off (test runtimes without the durable wake outbox).
 	if in.Kind == yaegikernel.IntentCast {
 		if rt := r.rt(); rt != nil && r.rec != nil && controlID != "" {
-			_, err = rt.startDelegatedCastAssignment(ctx, DelegatedCastRequest{
+			opened, openErr := rt.openDelegatedCastAssignment(ctx, DelegatedCastRequest{
 				Objective:           in.Objective,
 				Kind:                types.EngineeringAssignmentImplementation,
 				CommitmentControlID: controlID,
@@ -617,8 +619,15 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 				TargetDocID:         in.ToDesk,
 				ScopeDigestSeed:     r.scope.CellID + ":" + in.LocalID,
 			})
-			if err != nil {
-				return 0, fmt.Errorf("reduce: delegated cast admission: %w", err)
+			if openErr != nil {
+				return 0, fmt.Errorf("reduce: delegated cast admission: %w", openErr)
+			}
+			if rt.kernelMode && rt.scheduleActor != nil {
+				rt.armDelegatedCastSpawn(opened.Assignment, in.Objective, "")
+			} else if _, resumeErr := rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, DelegatedCastRequest{
+				Objective: in.Objective, Kind: opened.Assignment.Binding.Kind,
+			}); resumeErr != nil {
+				return 0, fmt.Errorf("reduce: delegated cast spawn (non-kernel): %w", resumeErr)
 			}
 		}
 	}

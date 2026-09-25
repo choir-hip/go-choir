@@ -302,7 +302,27 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 // cast's commitment record is the parent control. It is the delegated
 // counterpart to startAssignedEngineeringForDocument — same fate saga, a
 // different admission authority and identity scheme.
+//
+// Cell-commit callers must use openDelegatedCastAssignment + armDelegatedCastSpawn:
+// the durable open is the commit and the spawn/bind saga resumes from the
+// deferred delegated_assignment_spawn_deadline wake (consensus precondition —
+// no spawn work inside the cell reducer).
 func (rt *Runtime) startDelegatedCastAssignment(ctx context.Context, req DelegatedCastRequest) (AssignedEngineeringStart, error) {
+	opened, err := rt.openDelegatedCastAssignment(ctx, req)
+	if err != nil {
+		return AssignedEngineeringStart{}, err
+	}
+	return rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, req)
+}
+
+// openDelegatedCastAssignment commits only the durable open for a delegated
+// cast: it resolves the caster's open work item, mints the deterministic
+// binding, and persists the assignment as Open. The spawn/bind/activate saga
+// is deliberately NOT driven here — the caller schedules the deferred
+// delegated_assignment_spawn_deadline wake that resumes it post-commit. A
+// replayed call returns the existing assignment (bound/terminal replays;
+// open-but-unbound is handed back for resume).
+func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, req DelegatedCastRequest) (AssignedEngineeringStart, error) {
 	req.Objective, req.CandidateID = strings.TrimSpace(req.Objective), strings.TrimSpace(req.CandidateID)
 	if req.Objective == "" || req.CommitmentControlID == "" ||
 		(req.Kind != types.EngineeringAssignmentImplementation && req.Kind != types.EngineeringAssignmentVerification) {
@@ -421,9 +441,12 @@ func (rt *Runtime) startDelegatedCastAssignment(ctx context.Context, req Delegat
 	if err != nil {
 		return AssignedEngineeringStart{}, err
 	}
-	return rt.spawnBindActivateAssignment(ctx, opened.Assignment, preflight, opaque, OpenDocumentAssignmentRequest{
-		Objective: req.Objective, Kind: req.Kind, CandidateID: req.CandidateID,
-	})
+	// The durable open is committed. Do NOT run spawnBindActivate here — the
+	// cell-commit path arms a deferred delegated_assignment_spawn_deadline wake
+	// and the saga resumes post-commit (consensus precondition). The preflight
+	// and capability digests recorded on the binding let the wake re-derive and
+	// verify the exact spawn inputs.
+	return AssignedEngineeringStart{Assignment: opened.Assignment}, nil
 }
 
 // resumeDelegatedCastAssignment re-drives the spawn/bind saga for a delegated
