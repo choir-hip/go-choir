@@ -21,6 +21,18 @@ const (
 
 type EngineeringAssignmentKind string
 
+// EngineeringCastAuthority names which admission authority admitted the
+// assignment: an owner-authored document revision (owner cast, the M1 path)
+// or a desk-staged choir.Cast whose authority is the caster's own live
+// assignment (delegated cast, R2). Empty means owner cast for backward
+// compatibility with bindings minted before the field existed.
+type EngineeringCastAuthority string
+
+const (
+	EngineeringCastAuthorityOwner     EngineeringCastAuthority = "owner"
+	EngineeringCastAuthorityDelegated EngineeringCastAuthority = "delegated"
+)
+
 const (
 	EngineeringAssignmentImplementation EngineeringAssignmentKind = "implementation"
 	EngineeringAssignmentVerification   EngineeringAssignmentKind = "verification"
@@ -77,6 +89,11 @@ type EngineeringAssignmentBinding struct {
 	FilesystemMode             string                    `json:"filesystem_mode"`
 	CoordinationContractID     string                    `json:"coordination_contract_id,omitempty"`
 	CoordinationContractDigest string                    `json:"coordination_contract_digest,omitempty"`
+	// CastAuthority distinguishes owner-cast admission (a document revision
+	// is the parent authority) from delegated-cast admission (the caster's
+	// own live assignment/run is the parent authority). Empty or "owner" is
+	// the owner-cast path; "delegated" is the R2 desk-authored cast.
+	CastAuthority EngineeringCastAuthority `json:"cast_authority,omitempty"`
 }
 
 func (b EngineeringAssignmentBinding) Validate() error {

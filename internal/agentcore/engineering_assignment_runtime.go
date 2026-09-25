@@ -127,6 +127,20 @@ type OpenDocumentAssignmentRequest struct {
 	ModelPolicyOverlayID string
 }
 
+// DelegatedCastRequest is a desk-staged choir.Cast: one desk cell admits one
+// engineering assignment under the delegated-cast authority (R2). The parent
+// authority is the caster's own live run/work — not an owner revision.
+type DelegatedCastRequest struct {
+	Objective           string
+	Kind                types.EngineeringAssignmentKind
+	CandidateID         string // verification casts only
+	CommitmentControlID string // canonical ID of the cast's commitment record
+	CasterRun           types.RunRecord
+	CasterAgentID       string
+	TargetDocID         string // engineering-bound document the cast targets
+	ScopeDigestSeed     string // deterministic seed so a replayed cell re-derives the same scope digest
+}
+
 // startAssignedEngineeringForDocument opens one assignment whose parent authority is
 // the engineering desk agent bound to the document plus the owner-authored
 // revision that carried the cast. It replaces the retired Management-mediated
@@ -281,6 +295,155 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 		return AssignedEngineeringStart{}, err
 	}
 	return rt.spawnBindActivateAssignment(ctx, opened.Assignment, preflight, opaque, req)
+}
+
+// startDelegatedCastAssignment opens one assignment under the delegated-cast
+// authority (R2): the caster desk's own live run/work is the parent, and the
+// cast's commitment record is the parent control. It is the delegated
+// counterpart to startAssignedEngineeringForDocument — same fate saga, a
+// different admission authority and identity scheme.
+func (rt *Runtime) startDelegatedCastAssignment(ctx context.Context, req DelegatedCastRequest) (AssignedEngineeringStart, error) {
+	req.Objective, req.CandidateID = strings.TrimSpace(req.Objective), strings.TrimSpace(req.CandidateID)
+	if req.Objective == "" || req.CommitmentControlID == "" ||
+		(req.Kind != types.EngineeringAssignmentImplementation && req.Kind != types.EngineeringAssignmentVerification) {
+		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast requires objective, kind, and the commitment control")
+	}
+	if rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
+		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast: capsule authority unavailable")
+	}
+	run := req.CasterRun
+	ownerID, computerID := strings.TrimSpace(run.OwnerID), strings.TrimSpace(run.ComputerID)
+	trajectoryID := metadataStringValue(run.Metadata, "assignment_trajectory_id")
+	parentAgentID := strings.TrimSpace(req.CasterAgentID)
+	if ownerID == "" || computerID == "" || trajectoryID == "" || parentAgentID == "" {
+		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast requires a trajectory-bound caster run and agent")
+	}
+	// Parent work = the caster's open work item on this trajectory.
+	parentWorkID := ""
+	var parentWork *types.WorkItemRecord
+	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast: derive scope: %w", err)
+	}
+	for i := range snapshot.WorkItems {
+		work := snapshot.WorkItems[i]
+		if work.Status == types.WorkItemOpen && work.AssignedAgentID == parentAgentID {
+			if parentWorkID != "" {
+				return AssignedEngineeringStart{}, fmt.Errorf("delegated cast: caster holds multiple open work items")
+			}
+			parentWorkID = work.WorkItemID
+			copy := work
+			parentWork = &copy
+		}
+	}
+	if parentWork == nil {
+		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast: caster has no open work item on the trajectory")
+	}
+	attempt := uint64(1)
+	// Delegated assignment identity is deterministic on the caster's cast cell
+	// (recorded in the commitment control id), so a replayed cell replays the
+	// same assignment rather than minting a second one.
+	assignmentID := "delegated-" + objectgraph.SHA256([]byte(strings.Join([]string{
+		ownerID, computerID, trajectoryID, parentAgentID, req.CommitmentControlID, string(req.Kind),
+	}, "\x00")))[0:24]
+	requestDigest := objectgraph.SHA256([]byte(strings.Join([]string{
+		"choir:delegated-cast-request:v1", req.Objective, string(req.Kind), req.CandidateID,
+		parentWorkID, req.CommitmentControlID,
+	}, "\x00")))
+	if existing, getErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt); getErr == nil {
+		if existing.Binding.CastAuthority != types.EngineeringCastAuthorityDelegated ||
+			existing.Binding.ParentAgentID != parentAgentID || existing.Binding.ParentControlID != req.CommitmentControlID ||
+			existing.Binding.Kind != req.Kind || existing.Binding.RequestDigest != requestDigest {
+			return AssignedEngineeringStart{}, store.ErrEngineeringAssignmentCommandConflict
+		}
+		if existing.Disposition == types.EngineeringAssignmentBound || existing.Disposition.Terminal() {
+			return AssignedEngineeringStart{Assignment: existing, Replay: true}, nil
+		}
+		return rt.resumeDelegatedCastAssignment(ctx, existing, req)
+	} else if !errors.Is(getErr, store.ErrNotFound) {
+		return AssignedEngineeringStart{}, getErr
+	}
+	if err := rt.reclaimSupersededAssignmentCapsules(ctx, types.RunRecord{OwnerID: ownerID, ComputerID: computerID}, assignmentID); err != nil {
+		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast reclaim superseded capsules: %w", err)
+	}
+	parentDecisionID := "decision:" + objectgraph.SHA256([]byte(strings.Join([]string{
+		"choir:delegated-decision:v1", ownerID, computerID, parentAgentID, trajectoryID, parentWorkID,
+		req.CommitmentControlID, run.RunID,
+	}, "\x00")))
+	scopeBytes, err := json.Marshal(struct {
+		Intent string `json:"intent"`
+		Run    string `json:"run"`
+		Work   string `json:"work"`
+		Seed   string `json:"seed"`
+	}{req.Objective, run.RunID, parentWorkID, req.ScopeDigestSeed})
+	if err != nil {
+		return AssignedEngineeringStart{}, err
+	}
+	scopeDigest := objectgraph.SHA256(scopeBytes)
+	sourceArtifactRef := ""
+	if req.Kind == types.EngineeringAssignmentVerification {
+		candidate, candErr := rt.store.GetEngineeringSubjectCandidate(ctx, ownerID, computerID, req.CandidateID)
+		if candErr != nil || candidate.TrajectoryID != trajectoryID || candidate.ArtifactRef == "" {
+			return AssignedEngineeringStart{}, fmt.Errorf("delegated verification candidate is unavailable or outside exact trajectory authority")
+		}
+		sourceArtifactRef = candidate.ArtifactRef
+	}
+	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, sourceArtifactRef)
+	if err != nil {
+		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast preflight subject: %w", err)
+	}
+	subjectDigest := "sha256:" + strings.TrimPrefix(preflight.SubjectDigest, "sha256:")
+	opaque := deterministicDocumentAssignmentCapability(assignmentID, attempt)
+	binding := types.EngineeringAssignmentBinding{
+		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+		ParentAgentID: parentAgentID, ParentRunID: run.RunID, ParentDecisionID: parentDecisionID,
+		ParentControlID: req.CommitmentControlID, ParentWorkItemID: parentWorkID,
+		AssignedWorkItemID: "work:" + assignmentID, AssignedAgentID: agentprofile.Engineering + ":" + assignmentID,
+		Kind: req.Kind, Attempt: attempt,
+		ScopeDigest: scopeDigest, RequestDigest: requestDigest, CapabilityDigest: store.DigestEngineeringOpaqueCapability(opaque),
+		ExecutionHandleDigest: objectgraph.SHA256([]byte(opaque)), SubjectDigest: subjectDigest,
+		SourceArtifactRef: preflight.ArtifactRef, SourceCandidateID: req.CandidateID,
+		Writable: true, CapsuleID: "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-"),
+		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+		CastAuthority:  types.EngineeringCastAuthorityDelegated,
+	}
+	open := types.OpenEngineeringAssignmentRequest{
+		CommandID: "delegated-cast-open:" + assignmentID + fmt.Sprintf(":%d", attempt), AssignmentID: assignmentID, Binding: binding,
+		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: req.Objective},
+	}
+	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
+	if err != nil {
+		return AssignedEngineeringStart{}, err
+	}
+	opened, err := rt.store.OpenEngineeringAssignment(ctx, open)
+	if err != nil {
+		return AssignedEngineeringStart{}, err
+	}
+	return rt.spawnBindActivateAssignment(ctx, opened.Assignment, preflight, opaque, OpenDocumentAssignmentRequest{
+		Objective: req.Objective, Kind: req.Kind, CandidateID: req.CandidateID,
+	})
+}
+
+// resumeDelegatedCastAssignment re-drives the spawn/bind saga for a delegated
+// cast whose durable open committed but whose bind never landed.
+func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment types.EngineeringAssignment, req DelegatedCastRequest) (AssignedEngineeringStart, error) {
+	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, assignment.Binding.SourceArtifactRef)
+	if err != nil {
+		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast preflight resumed subject: %w", err)
+	}
+	if preflight.ArtifactRef != assignment.Binding.SourceArtifactRef ||
+		"sha256:"+strings.TrimPrefix(preflight.SubjectDigest, "sha256:") != assignment.Binding.SubjectDigest {
+		return AssignedEngineeringStart{}, fmt.Errorf("resumed delegated cast subject drifted from the committed binding")
+	}
+	opaque := deterministicDocumentAssignmentCapability(assignment.AssignmentID, assignment.Binding.Attempt)
+	if store.DigestEngineeringOpaqueCapability(opaque) != assignment.Binding.CapabilityDigest {
+		return AssignedEngineeringStart{}, fmt.Errorf("resumed delegated cast capability does not match the committed binding")
+	}
+	return rt.spawnBindActivateAssignment(ctx, assignment, preflight, opaque, OpenDocumentAssignmentRequest{
+		Objective: req.Objective, Kind: req.Kind, CandidateID: req.CandidateID,
+	})
 }
 
 // resumeAssignedEngineeringForDocument re-drives the spawn/bind saga for an

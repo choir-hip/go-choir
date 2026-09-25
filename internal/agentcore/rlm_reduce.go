@@ -593,14 +593,37 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.
 	rec := commitmentRecordForIntent(r.scope, in)
-	var seq uint64
+	var controlID string
 	var err error
 	if r.ledger != nil {
-		if _, rerr := r.ledger.AppendCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, rec); rerr != nil {
-			return 0, rerr
+		controlID, err = r.ledger.AppendCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, rec)
+		if err != nil {
+			return 0, err
+		}
+	}
+	// A cast is admission, not just a message: open the engineering assignment
+	// under the delegated-cast authority (the caster's own live run/work), with
+	// the commitment record minted above as the parent control. The spawn/bind
+	// saga runs synchronously so a bound assignment, not an open-but-unbound
+	// one, is what the restart sweeper sees (it cancels unbound opens).
+	if in.Kind == yaegikernel.IntentCast {
+		if rt := r.rt(); rt != nil && r.rec != nil && controlID != "" {
+			_, err = rt.startDelegatedCastAssignment(ctx, DelegatedCastRequest{
+				Objective:           in.Objective,
+				Kind:                types.EngineeringAssignmentImplementation,
+				CommitmentControlID: controlID,
+				CasterRun:           *r.rec,
+				CasterAgentID:       r.scope.FromAgentID,
+				TargetDocID:         in.ToDesk,
+				ScopeDigestSeed:     r.scope.CellID + ":" + in.LocalID,
+			})
+			if err != nil {
+				return 0, fmt.Errorf("reduce: delegated cast admission: %w", err)
+			}
 		}
 	}
 	// Addressed acts mail their envelope so the target desk observes the act.
+	var seq uint64
 	switch in.Kind {
 	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentNote,
 		yaegikernel.IntentReply, yaegikernel.IntentEscalate, yaegikernel.IntentReport:

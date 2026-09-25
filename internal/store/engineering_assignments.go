@@ -600,6 +600,9 @@ func (s *Store) requireEngineeringParentAuthority(ctx context.Context, binding t
 	if err := binding.Validate(); err != nil {
 		return engineeringAuthorityObjects{}, fmt.Errorf("%w: %v", ErrEngineeringAssignmentInvalid, err)
 	}
+	if binding.CastAuthority == types.EngineeringCastAuthorityDelegated {
+		return s.requireEngineeringDelegatedParentAuthority(ctx, binding, false)
+	}
 	if binding.ParentRunID == "" {
 		return s.requireEngineeringDocumentParentAuthority(ctx, binding, false)
 	}
@@ -660,6 +663,9 @@ func (s *Store) requireEngineeringParentAuthority(ctx context.Context, binding t
 func (s *Store) requireEngineeringHistoricalParentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding) (engineeringAuthorityObjects, error) {
 	if err := binding.Validate(); err != nil {
 		return engineeringAuthorityObjects{}, fmt.Errorf("%w: %v", ErrEngineeringAssignmentInvalid, err)
+	}
+	if binding.CastAuthority == types.EngineeringCastAuthorityDelegated {
+		return s.requireEngineeringDelegatedParentAuthority(ctx, binding, true)
 	}
 	if binding.ParentRunID == "" {
 		return s.requireEngineeringDocumentParentAuthority(ctx, binding, true)
@@ -797,6 +803,93 @@ func (s *Store) requireEngineeringDocumentParentAuthority(ctx context.Context, b
 	}
 	return engineeringAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj,
 		parentRevision: parentControlObj, parentWork: parentWorkObj}, nil
+}
+
+// requireEngineeringDelegatedParentAuthority authenticates a desk-staged
+// choir.Cast (mission R2). Unlike the document/run parents, there is no
+// owner revision and no delivered lifecycle_control_bindings update: the
+// cast's authority is the caster's own live assignment. The parent control is
+// the commitment record the cast minted (ParentControlID is its canonical
+// ID), which self-authenticates by carrying the caster as Provenance.AgentID.
+// The caster's run is a persistent Management (or desk) run bound to the same
+// trajectory; its parent work is the caster's open work item.
+func (s *Store) requireEngineeringDelegatedParentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding, historical bool) (engineeringAuthorityObjects, error) {
+	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, binding.OwnerID, binding.ComputerID, binding.TrajectoryID)
+	if err != nil {
+		return engineeringAuthorityObjects{}, err
+	}
+	if trajectory.OwnerID != binding.OwnerID || trajectory.ComputerID != binding.ComputerID ||
+		trajectory.TrajectoryID != binding.TrajectoryID {
+		return engineeringAuthorityObjects{}, ErrEngineeringAssignmentInvalid
+	}
+	if !historical && trajectory.Status != types.TrajectoryLive {
+		return engineeringAuthorityObjects{}, ErrEngineeringAssignmentInvalid
+	}
+	if historical && trajectory.Status != types.TrajectoryLive && trajectory.Status != types.TrajectorySettled && trajectory.Status != types.TrajectoryCancelled {
+		return engineeringAuthorityObjects{}, ErrEngineeringAssignmentInvalid
+	}
+	// Parent agent = the caster desk agent. It must be a persistent
+	// (non-lifecycle-versioned) management agent bound to the trajectory.
+	parentAgentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, binding.OwnerID, binding.ComputerID, binding.ParentAgentID)
+	if err != nil {
+		return engineeringAuthorityObjects{}, err
+	}
+	parentAgent, err := decodeLifecycleObject[types.AgentRecord](parentAgentObj)
+	if err != nil {
+		return engineeringAuthorityObjects{}, err
+	}
+	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID ||
+		parentAgent.AgentID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 ||
+		(parentAgent.ActiveRunID != "" && parentAgent.ActiveRunID != binding.ParentRunID) {
+		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: parent desk agent unavailable: %w", ErrEngineeringAssignmentInvalid)
+	}
+	// The caster's run is a live persistent run on the same trajectory.
+	parentRunObj, err := s.getRunObjectByOwnerOG(ctx, binding.OwnerID, binding.ParentRunID)
+	if err != nil {
+		return engineeringAuthorityObjects{}, err
+	}
+	parentRun, err := decodeLifecycleObject[types.RunRecord](parentRunObj)
+	if err != nil {
+		return engineeringAuthorityObjects{}, err
+	}
+	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
+		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID ||
+		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID {
+		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster run is not bound to this trajectory: %w", ErrEngineeringAssignmentInvalid)
+	}
+	if !historical && !persistentManagementRunStateAllowed(parentRun.State) {
+		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster run is not live: %w", ErrEngineeringAssignmentInvalid)
+	}
+	if historical && !parentRun.State.Valid() {
+		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster run is not valid: %w", ErrEngineeringAssignmentInvalid)
+	}
+	// Parent control = the commitment record the cast minted. It must exist
+	// and be authored by the caster agent; it binds the cast's identity.
+	controlObj, ctrlErr := s.lifecycleGraph().GetObject(ctx, binding.ParentControlID)
+	if ctrlErr != nil {
+		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: commitment control unavailable: %w", ctrlErr)
+	}
+	controlRec, decErr := decodeLifecycleObject[types.CommitmentRecord](controlObj)
+	if decErr != nil {
+		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: parent control is not a commitment record: %w", decErr)
+	}
+	if strings.TrimSpace(controlRec.Provenance.AgentID) != binding.ParentAgentID {
+		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: commitment control is not authored by the caster: %w", ErrEngineeringAssignmentInvalid)
+	}
+	// Parent work = the caster's open work item on this trajectory.
+	parentWorkObj, parentWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.ParentWorkItemID)
+	if err != nil {
+		return engineeringAuthorityObjects{}, err
+	}
+	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID ||
+		parentWork.TrajectoryID != binding.TrajectoryID || parentWork.AssignedAgentID != binding.ParentAgentID {
+		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster work item mismatch: %w", ErrEngineeringAssignmentInvalid)
+	}
+	if !historical && parentWork.Status != types.WorkItemOpen {
+		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster work item is not open: %w", ErrEngineeringAssignmentInvalid)
+	}
+	return engineeringAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj,
+		parentRun: parentRunObj, parentRevision: controlObj, parentWork: parentWorkObj}, nil
 }
 
 func (s *Store) requireEngineeringAssignmentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding) (engineeringAuthorityObjects, error) {
