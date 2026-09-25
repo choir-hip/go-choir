@@ -16,9 +16,10 @@ const (
 )
 
 // EnsureUniversalWirePlatformComputer boots or resumes the always-on platform
-// computer. It returns an error if the platform computer could not be made
-// ready. Dispatch routing is handled by the autoputer proxy (UDS) — callers
-// no longer need the autoputer URL directly.
+// computer unless its persisted ownership is under maintenance hold. A held
+// platform computer is intentionally left unchanged and treated as a skipped
+// automatic lifecycle action. Dispatch routing is handled by the autoputer
+// proxy (UDS) — callers no longer need the autoputer URL directly.
 func (r *OwnershipRegistry) EnsureUniversalWirePlatformComputer(ctx context.Context) error {
 	own, err := r.ensureUniversalWirePlatformOwnership(ctx)
 	if err != nil {
@@ -40,10 +41,8 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 	if !ok || own == nil || own.IsReady() {
 		return 0
 	}
-	// A held computer is never warm-resumed by the always-on policy - same
-	// guard as WarmAlwaysOnDesktops. The platform computer's resurrection loop
-	// must honor a maintenance hold so it can actually be parked.
 	if own.IsHeld() {
+		log.Printf("vmctl: platform computer vm=%s refused: held", own.VMID)
 		return 0
 	}
 	if own.State == VMStateStopped || own.State == VMStateHibernated {
@@ -58,6 +57,11 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 		r.mu.Lock()
 		own, ok = r.ownerships[key]
 		if !ok || own == nil || own.IsReady() {
+			r.mu.Unlock()
+			return 0
+		}
+		if own.IsHeld() {
+			log.Printf("vmctl: platform computer vm=%s refused: held", own.VMID)
 			r.mu.Unlock()
 			return 0
 		}
@@ -101,6 +105,11 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
 
 	r.mu.Lock()
+	if own, ok := r.ownerships[key]; ok && own.IsHeld() {
+		log.Printf("vmctl: platform computer vm=%s refused: held", own.VMID)
+		r.mu.Unlock()
+		return own, nil
+	}
 	if own, ok := r.ownerships[key]; ok {
 		switch {
 		case own.IsReady():

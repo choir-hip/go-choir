@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -107,6 +108,47 @@ func TestEnsureUniversalWirePlatformComputerBootsStableVM(t *testing.T) {
 	own := reg.ownerships[key]
 	if own == nil || own.WarmnessClass != WarmnessClassPublicPlatform {
 		t.Fatalf("expected public_platform ownership, got %#v", own)
+	}
+}
+
+func TestEnsureUniversalWirePlatformComputerHeldSkipsBoot(t *testing.T) {
+	var logs bytes.Buffer
+	previousLogWriter := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previousLogWriter)
+
+	mgr := &mockVMManager{}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mgr)
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	reg.ownerships[key] = &VMOwnership{
+		VMID:          UniversalWirePlatformVMID,
+		ComputerID:    UniversalWirePlatformComputerID,
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
+		Kind:          VMKindInteractive,
+		WarmnessClass: WarmnessClassPublicPlatform,
+		State:         VMStateStopped,
+		StoppedBy:     "recovery_failed",
+		HoldStatus:    &MaintenanceHold{Reason: "maintenance", HeldBy: "test"},
+	}
+	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
+
+	if err := reg.EnsureUniversalWirePlatformComputer(t.Context()); err != nil {
+		t.Fatalf("EnsureUniversalWirePlatformComputer held: %v", err)
+	}
+	if warmed := reg.WarmUniversalWirePlatformComputer(t.Context(), func(context.Context, string, string) error { return nil }); warmed != 0 {
+		t.Fatalf("held platform warm result = %d, want 0", warmed)
+	}
+	if len(mgr.boots) != 0 || len(mgr.recovers) != 0 || len(mgr.resumes) != 0 {
+		t.Fatalf("held platform computer must not launch: boots=%v recovers=%v resumes=%v", mgr.boots, mgr.recovers, mgr.resumes)
+	}
+	own := reg.GetOwnershipForDesktop(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	if own == nil || !own.IsHeld() || own.State != VMStateStopped || own.StoppedBy != "recovery_failed" {
+		t.Fatalf("held platform ownership changed: %#v", own)
+	}
+	if !strings.Contains(logs.String(), "platform computer vm="+UniversalWirePlatformVMID+" refused: held") {
+		t.Fatalf("held platform refusal was not logged: %q", logs.String())
 	}
 }
 
