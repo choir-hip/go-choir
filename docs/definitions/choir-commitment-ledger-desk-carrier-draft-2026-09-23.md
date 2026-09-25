@@ -252,6 +252,32 @@ now:
     the cell reducer. THEN per-desk yaegi module sets, the four-desk
     update_coagent migration, and the execution_request verb/death.
 
+  delegated_cast_landed_2026_09_25: >-
+    Delegated-cast admission authority landed (commit 09057831).
+    CastAuthority on EngineeringAssignmentBinding (types/engineering_assignment.go);
+    requireEngineeringDelegatedParentAuthority (store/engineering_assignments.go)
+    authenticates the caster's run + open work item and treats the cast's
+    commitment record (ParentControlID = its canonical ID, Provenance.AgentID
+    == caster) as the delegated parent control. startDelegatedCastAssignment
+    (engineering_assignment_runtime.go) mints the binding under
+    choir:delegated-decision:v1 / choir:delegated-cast-request:v1 and runs the
+    shared spawnBindActivateAssignment saga synchronously (the restart
+    sweeper cancels open-but-unbound opens). commitActIntent(IntentCast)
+    (rlm_reduce.go) mints the commitment record, opens the assignment, then
+    mails the cast envelope. Per-desk module sets landed (7dda0a26):
+    ChoirScope.desk + deskModuleSets; research gains message authority
+    (read-only world != read-only messaging). REMAINING before
+    finish.acceptance: (1) update_coagent cutover off the 4 desks —
+    RegisterCoagentUpdateTools removal from management+research registries
+    (tool_profiles.go) requires porting ~70 test call sites that Execute the
+    tool on desks (update_coagent_source_packet_test.go, survivor_contract,
+    cutover, authority, tools_test, rlm_replay_*) onto the staged choir verb
+    path, plus migrating texture's worker_updates_* metadata path; reverting
+    a bare registry drop leaves the suite red, so this is one scoped commit;
+    (2) execution_request verb/death (D13); (3) the reducers' commitment/OG
+    write inside commit must be made transactional with the cursor (atomic
+    commit — consensus precondition); (4) acceptance probes.
+
 receipts: []
 ---
 
