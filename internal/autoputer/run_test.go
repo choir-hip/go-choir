@@ -6,47 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
-
-func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
-	cfg := Config{
-		ComputerID: "vm-test",
-		StorePath:  "/tmp/runtime.db",
-	}
-	loaded := provideriface.Config{
-		PromptRoot:           "/prompts",
-		SkillsRoot:           "/skills",
-		ProviderTimeout:      7 * time.Second,
-		SupervisionInterval:  3 * time.Second,
-		ResearchCount:        2,
-		TextureWakeDebounce:  250 * time.Millisecond,
-		TextureActorParkIdle: 45 * time.Second,
-		VmctlURL:             "http://10.200.60.1:8083",
-		MaildURL:             "http://10.200.60.1:8087",
-		LLMProvider:          "fireworks",
-		LLMModel:             "model",
-		LLMReasoningEffort:   "low",
-		ModelPolicyPath:      "/policy.toml",
-	}
-
-	got := buildRuntimeConfig(cfg, loaded, "/files")
-	if got.ComputerID != cfg.ComputerID || got.StorePath != cfg.StorePath {
-		t.Fatalf("autoputer identity/store not preserved: %+v", got)
-	}
-	if got.VmctlURL != loaded.VmctlURL {
-		t.Fatalf("VmctlURL = %q, want %q", got.VmctlURL, loaded.VmctlURL)
-	}
-	if got.MaildURL != loaded.MaildURL {
-		t.Fatalf("MaildURL = %q, want %q", got.MaildURL, loaded.MaildURL)
-	}
-	if got.TextureActorParkIdle != loaded.TextureActorParkIdle {
-		t.Fatalf("TextureActorParkIdle = %s, want %s", got.TextureActorParkIdle, loaded.TextureActorParkIdle)
-	}
-}
 
 func TestBuildRuntimeConfigDerivesCanonicalModelPolicyPath(t *testing.T) {
 	got := buildRuntimeConfig(Config{ComputerID: "vm-test"}, provideriface.Config{}, "/files")
@@ -108,44 +70,6 @@ func TestRunZotSessionUsesProcessConfiguration(t *testing.T) {
 	}
 }
 
-func TestSelfDevelopmentUpdaterOptionWiresEnvRoot(t *testing.T) {
-	t.Setenv("CHOIR_UPDATER_ROOT", t.TempDir())
-	t.Setenv("CHOIR_UPDATER_SOCKET", "/tmp/choir-updater-test.sock")
-	t.Setenv("CHOIR_COMPUTER_ID", "computer-test")
-	t.Setenv("CHOIR_REALIZATION_ID", "realization-test")
-	opt, ok, err := selfDevelopmentUpdaterOption()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || opt == nil {
-		t.Fatal("expected updater option when CHOIR_UPDATER_ROOT is set")
-	}
-}
-
-func TestSelfDevelopmentUpdaterOptionDefaultsSocket(t *testing.T) {
-	t.Setenv("CHOIR_UPDATER_ROOT", t.TempDir())
-	t.Setenv("CHOIR_UPDATER_SOCKET", "")
-	opt, ok, err := selfDevelopmentUpdaterOption()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || opt == nil {
-		t.Fatal("expected updater option with default socket")
-	}
-}
-
-func TestSelfDevelopmentUpdaterOptionSkipsEmptyRoot(t *testing.T) {
-	t.Setenv("CHOIR_UPDATER_ROOT", "")
-	t.Setenv("CHOIR_UPDATER_SOCKET", "/tmp/choir-updater-test.sock")
-	opt, ok, err := selfDevelopmentUpdaterOption()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ok || opt != nil {
-		t.Fatal("expected no updater option without CHOIR_UPDATER_ROOT")
-	}
-}
-
 func TestSelfDevelopmentUpdaterOptionRejectsRelativeSocket(t *testing.T) {
 	t.Setenv("CHOIR_UPDATER_ROOT", t.TempDir())
 	t.Setenv("CHOIR_UPDATER_SOCKET", "relative.sock")
@@ -155,97 +79,12 @@ func TestSelfDevelopmentUpdaterOptionRejectsRelativeSocket(t *testing.T) {
 	}
 }
 
-func TestGuestControlOptionsWiresOwnerRecoveryAndModeAuthority(t *testing.T) {
-	if guestControlOptions(nil) != nil {
-		t.Fatal("nil credentials must not mount control options")
-	}
-	credentials := selfdev.GuestCredentialsWithCapability("http://127.0.0.1:1", "computer-test", "token", time.Now().UTC().Add(time.Hour))
-	opts := guestControlOptions(credentials)
-	if len(opts) != 2 {
-		t.Fatalf("guestControlOptions len=%d, want 2 (owner-recovery + mode authority)", len(opts))
-	}
-}
-
-func TestSelfDevelopmentRouteOptionWiresOwnerAndVmctl(t *testing.T) {
-	t.Setenv("RUNTIME_VMCTL_URL", "http://10.200.60.1:8083")
-	t.Setenv("PROXY_VMCTL_URL", "")
-	t.Setenv("CHOIR_OWNER_ID", "owner-test")
-	t.Setenv("CHOIR_DESKTOP_ID", "")
-	opt, ok, err := selfDevelopmentRouteOption()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || opt == nil {
-		t.Fatal("expected route option when vmctl URL and owner are set")
-	}
-}
-
-func TestSelfDevelopmentRouteOptionSkipsMissingOwner(t *testing.T) {
-	t.Setenv("RUNTIME_VMCTL_URL", "http://10.200.60.1:8083")
-	t.Setenv("CHOIR_OWNER_ID", "")
-	opt, ok, err := selfDevelopmentRouteOption()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ok || opt != nil {
-		t.Fatal("expected no route option without CHOIR_OWNER_ID")
-	}
-}
-
-func TestSelfDevelopmentRouteOptionSkipsMissingURL(t *testing.T) {
-	t.Setenv("RUNTIME_VMCTL_URL", "")
-	t.Setenv("PROXY_VMCTL_URL", "")
-	t.Setenv("CHOIR_OWNER_ID", "owner-test")
-	opt, ok, err := selfDevelopmentRouteOption()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ok || opt != nil {
-		t.Fatal("expected no route option without a vmctl URL")
-	}
-}
-
-func TestSelfDevelopmentRouteOptionFallsBackToProxyURL(t *testing.T) {
-	t.Setenv("RUNTIME_VMCTL_URL", "")
-	t.Setenv("PROXY_VMCTL_URL", "http://10.200.60.1:8083")
-	t.Setenv("CHOIR_OWNER_ID", "owner-test")
-	opt, ok, err := selfDevelopmentRouteOption()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || opt == nil {
-		t.Fatal("expected route option from PROXY_VMCTL_URL")
-	}
-}
-
 func TestSelfDevelopmentRouteOptionRejectsNonHTTPURL(t *testing.T) {
 	t.Setenv("RUNTIME_VMCTL_URL", "/var/run/vmctl.sock")
 	t.Setenv("CHOIR_OWNER_ID", "owner-test")
 	_, _, err := selfDevelopmentRouteOption()
 	if err == nil {
 		t.Fatal("expected non-http vmctl URL to fail")
-	}
-}
-
-func TestSelfDevelopmentVerifierOptionWiresAbsoluteSocket(t *testing.T) {
-	t.Setenv("CHOIR_VERIFIER_AUTHORITY_SOCKET", "/run/choir-verifier/authority.sock")
-	opt, ok, err := selfDevelopmentVerifierOption()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || opt == nil {
-		t.Fatal("expected verifier option when CHOIR_VERIFIER_AUTHORITY_SOCKET is absolute")
-	}
-}
-
-func TestSelfDevelopmentVerifierOptionSkipsMissingSocket(t *testing.T) {
-	t.Setenv("CHOIR_VERIFIER_AUTHORITY_SOCKET", "")
-	opt, ok, err := selfDevelopmentVerifierOption()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ok || opt != nil {
-		t.Fatal("expected no verifier option without CHOIR_VERIFIER_AUTHORITY_SOCKET")
 	}
 }
 

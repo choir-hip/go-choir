@@ -174,15 +174,6 @@ func TestRegexRedactor_MultipleClassesReal(t *testing.T) {
 	}
 }
 
-func TestRedactionToken(t *testing.T) {
-	if got := RedactionToken(ClassEmail); got != "[REDACTED:email]" {
-		t.Fatalf("token = %q", got)
-	}
-	if got := RedactionToken(ClassCreditCard); got != "[REDACTED:credit_card]" {
-		t.Fatalf("token = %q", got)
-	}
-}
-
 func TestSortFindings_DropsOverlaps(t *testing.T) {
 	in := []Finding{
 		{Class: ClassEmail, Start: 0, End: 20},

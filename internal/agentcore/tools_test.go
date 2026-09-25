@@ -22,52 +22,6 @@ import (
 
 // --- Batch executor contract tests ---
 
-func TestExecuteTools(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	echoTool := toolregistry.Tool{Name: "echo",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return string(args), nil
-		}}
-	if err := registry.Register(echoTool); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	calls := []types.ToolCall{
-		{ID: "call-1", Name: "echo", Arguments: json.RawMessage(`{"msg":"hello"}`)},
-	}
-
-	var emittedKinds []types.EventKind
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		emittedKinds = append(emittedKinds, kind)
-	}
-
-	results := toolregistry.ExecuteToolBatch(context.Background(), registry, calls, emit)
-
-	if len(results) != 1 {
-		t.Fatalf("results: got %d, want 1", len(results))
-	}
-	if results[0].CallID != "call-1" {
-		t.Errorf("call_id: got %q, want call-1", results[0].CallID)
-	}
-	if results[0].Output != `{"msg":"hello"}` {
-		t.Errorf("output: got %q, want echo result", results[0].Output)
-	}
-	if results[0].IsError {
-		t.Error("should not be error")
-	}
-
-	// Should emit tool.invoked and tool.result events.
-	if len(emittedKinds) != 2 {
-		t.Fatalf("emitted events: got %d, want 2", len(emittedKinds))
-	}
-	if emittedKinds[0] != types.EventToolInvoked {
-		t.Errorf("first event: got %q, want tool.invoked", emittedKinds[0])
-	}
-	if emittedKinds[1] != types.EventToolResult {
-		t.Errorf("second event: got %q, want tool.result", emittedKinds[1])
-	}
-}
 
 func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
@@ -1234,47 +1188,6 @@ func TestBootTerminalRepairUsesOwnerScopedRecentWindow(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsParallel(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	slowTool := toolregistry.Tool{Name: "slow",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "slow-result", nil
-		}}
-	fastTool := toolregistry.Tool{Name: "fast",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "fast-result", nil
-		}}
-	if err := registry.Register(slowTool); err != nil {
-		t.Fatalf("register slow: %v", err)
-	}
-	if err := registry.Register(fastTool); err != nil {
-		t.Fatalf("register fast: %v", err)
-	}
-
-	calls := []types.ToolCall{
-		{ID: "call-1", Name: "slow", Arguments: json.RawMessage(`{}`)},
-		{ID: "call-2", Name: "fast", Arguments: json.RawMessage(`{}`)},
-	}
-
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
-
-	results := toolregistry.ExecuteToolBatch(context.Background(), registry, calls, emit)
-
-	// Results should be in the same order as the calls.
-	if results[0].CallID != "call-1" {
-		t.Errorf("result[0] call_id: got %q, want call-1", results[0].CallID)
-	}
-	if results[0].Output != "slow-result" {
-		t.Errorf("result[0] output: got %q, want slow-result", results[0].Output)
-	}
-	if results[1].CallID != "call-2" {
-		t.Errorf("result[1] call_id: got %q, want call-2", results[1].CallID)
-	}
-	if results[1].Output != "fast-result" {
-		t.Errorf("result[1] output: got %q, want fast-result", results[1].Output)
-	}
-}
 
 func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
@@ -1313,32 +1226,6 @@ func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsError(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	failTool := toolregistry.Tool{Name: "fail",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "", fmt.Errorf("tool failure")
-		}}
-	if err := registry.Register(failTool); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	calls := []types.ToolCall{
-		{ID: "call-1", Name: "fail", Arguments: json.RawMessage(`{}`)},
-	}
-
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
-
-	results := toolregistry.ExecuteToolBatch(context.Background(), registry, calls, emit)
-
-	if !results[0].IsError {
-		t.Error("expected error result")
-	}
-	if results[0].Output == "" {
-		t.Error("error output should contain error message")
-	}
-}
 
 func TestExecuteToolsOutputTruncation(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()

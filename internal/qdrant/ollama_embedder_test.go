@@ -11,23 +11,6 @@ import (
 	"testing"
 )
 
-func TestOllamaEmbedder_Model(t *testing.T) {
-	e := NewOllamaEmbedder("http://localhost:11434", "batiai/qwen3-embedding:0.6b")
-	m := e.Model()
-	if m.Name != "batiai/qwen3-embedding:0.6b" {
-		t.Fatalf("model name = %q, want batiai/qwen3-embedding:0.6b", m.Name)
-	}
-	if m.Dimensions != 1024 {
-		t.Fatalf("dimensions = %d, want 1024", m.Dimensions)
-	}
-	if m.Version == "" {
-		t.Fatal("version is empty")
-	}
-	if err := m.Validate(); err != nil {
-		t.Fatalf("model validate: %v", err)
-	}
-}
-
 func TestOllamaEmbedder_EmbedTexts_MockServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

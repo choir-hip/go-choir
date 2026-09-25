@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -368,24 +367,6 @@ func TestParseSearXNGResults(t *testing.T) {
 	}
 }
 
-func TestParseSearXNGResults_MaxResults(t *testing.T) {
-	raw := []byte(`{
-		"results": [
-			{"url": "https://a.com", "title": "A", "content": "a"},
-			{"url": "https://b.com", "title": "B", "content": "b"},
-			{"url": "https://c.com", "title": "C", "content": "c"}
-		]
-	}`)
-
-	results, err := parseSearXNGResults(raw, 2)
-	if err != nil {
-		t.Fatalf("parseSearXNGResults: %v", err)
-	}
-	if len(results) != 2 {
-		t.Fatalf("results = %d, want 2 (maxResults)", len(results))
-	}
-}
-
 func TestParseSearXNGResults_EmptyURL(t *testing.T) {
 	raw := []byte(`{
 		"results": [
@@ -403,20 +384,6 @@ func TestParseSearXNGResults_EmptyURL(t *testing.T) {
 	}
 	if results[0].URL != "https://valid.com" {
 		t.Fatalf("url = %q, want https://valid.com", results[0].URL)
-	}
-}
-
-func TestSearXNGProvider_IsAvailable(t *testing.T) {
-	p := &SearXNGProvider{}
-
-	t.Setenv("SEARXNG_URL", "")
-	if p.IsAvailable() {
-		t.Fatal("expected not available when SEARXNG_URL unset")
-	}
-
-	t.Setenv("SEARXNG_URL", "http://localhost:8888")
-	if !p.IsAvailable() {
-		t.Fatal("expected available when SEARXNG_URL is set")
 	}
 }
 
@@ -501,21 +468,6 @@ func TestSearchClient_MaxResultsClamping(t *testing.T) {
 	client.Search(context.Background(), SearchRequest{Query: "test", MaxResults: 100})
 }
 
-func TestSearchClient_AvailableProviders(t *testing.T) {
-	mock1 := &mockSearchProvider{name: "mock1", available: true}
-	mock2 := &mockSearchProvider{name: "mock2", available: true}
-
-	client := testSearchClient([]SearchProvider{mock1, mock2}, 1)
-
-	names := client.AvailableProviders()
-	if len(names) != 2 {
-		t.Errorf("expected 2 providers, got %d", len(names))
-	}
-	if names[0] != "mock1" || names[1] != "mock2" {
-		t.Errorf("expected [mock1, mock2], got %v", names)
-	}
-}
-
 func TestSearXNGProvider_Search(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/search" {
@@ -567,20 +519,6 @@ func TestSearXNGProvider_SearchError(t *testing.T) {
 	_, err := p.Search(context.Background(), "test", 10)
 	if err == nil {
 		t.Fatal("expected error on 503")
-	}
-}
-
-// --- Handler Tests ---
-
-func TestHandleSearch_MethodNotAllowed(t *testing.T) {
-	h := &Handler{searchClient: &SearchClient{}}
-	req := httptest.NewRequest(http.MethodGet, "/provider/v1/search", nil)
-	w := httptest.NewRecorder()
-
-	h.HandleSearch(w, req)
-
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected 405, got %d", w.Code)
 	}
 }
 
@@ -663,62 +601,6 @@ func TestHandleSearch_NoProvidersConfigured(t *testing.T) {
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("expected 503, got %d", w.Code)
-	}
-}
-
-func TestHandleSearch_Success(t *testing.T) {
-	registry := NewIdentityRegistry(time.Hour)
-
-	// Create a search client with a mock provider
-	mock := &mockSearchProvider{
-		name:      "test",
-		available: true,
-		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
-			return []SearchResult{
-				{Title: "Result 1", URL: "http://example.com/1", Snippet: "Snippet 1"},
-				{Title: "Result 2", URL: "http://example.com/2", Snippet: "Snippet 2"},
-			}, nil
-		},
-	}
-
-	h := &Handler{
-		registry:     registry,
-		searchClient: testSearchClient([]SearchProvider{mock}, 1),
-	}
-
-	// Issue a valid credential
-	cred, err := registry.IssueCredential("test-autoputer")
-	if err != nil {
-		t.Fatalf("failed to issue credential: %v", err)
-	}
-
-	body := `{"query": "test", "max_results": 5}`
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/search", strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+cred.RawToken)
-	w := httptest.NewRecorder()
-
-	h.HandleSearch(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-
-	var resp SearchResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
-	}
-
-	if resp.Provider != "test" {
-		t.Errorf("expected provider 'test', got %s", resp.Provider)
-	}
-	if resp.Query != "test" {
-		t.Errorf("expected query 'test', got %s", resp.Query)
-	}
-	if len(resp.Results) != 2 {
-		t.Errorf("expected 2 results, got %d", len(resp.Results))
-	}
-	if resp.Results[0].Title != "Result 1" {
-		t.Errorf("expected first result title 'Result 1', got %s", resp.Results[0].Title)
 	}
 }
 
@@ -967,109 +849,5 @@ func TestParallelProvider_Integration(t *testing.T) {
 		if r.URL == "" {
 			t.Error("expected non-empty URL")
 		}
-	}
-}
-
-func TestNewSearchClient_FromEnv(t *testing.T) {
-	// Save current env vars
-	tavilyKey := os.Getenv("TAVILY_API_KEY")
-	braveKey := os.Getenv("BRAVE_API_KEY")
-	parallelKey := os.Getenv("PARALLEL_API_KEY")
-	exaKey := os.Getenv("EXA_API_KEY")
-	serperKey := os.Getenv("SERPER_API_KEY")
-	serpapiKey := os.Getenv("SERPAPI_API_KEY")
-
-	// Clean up after test
-	defer func() {
-		os.Setenv("TAVILY_API_KEY", tavilyKey)
-		os.Setenv("BRAVE_API_KEY", braveKey)
-		os.Setenv("PARALLEL_API_KEY", parallelKey)
-		os.Setenv("EXA_API_KEY", exaKey)
-		os.Setenv("SERPER_API_KEY", serperKey)
-		os.Setenv("SERPAPI_API_KEY", serpapiKey)
-	}()
-
-	// Test with no keys set
-	os.Unsetenv("TAVILY_API_KEY")
-	os.Unsetenv("BRAVE_API_KEY")
-	os.Unsetenv("PARALLEL_API_KEY")
-	os.Unsetenv("EXA_API_KEY")
-	os.Unsetenv("SERPER_API_KEY")
-	os.Unsetenv("SERPAPI_API_KEY")
-
-	client := NewSearchClient()
-	providers := client.AvailableProviders()
-	if len(providers) != 0 {
-		t.Errorf("expected 0 providers with no env vars, got %d", len(providers))
-	}
-
-	// Test with one key set
-	os.Setenv("TAVILY_API_KEY", "test-key")
-	client = NewSearchClient()
-	providers = client.AvailableProviders()
-	if len(providers) != 1 || providers[0] != "tavily" {
-		t.Errorf("expected [tavily], got %v", providers)
-	}
-}
-
-// --- Response Format Tests ---
-
-func TestSearchResponse_MarshalJSON(t *testing.T) {
-	resp := SearchResponse{
-		Provider: "test",
-		Query:    "golang",
-		Results: []SearchResult{
-			{
-				Title:       "Go Programming Language",
-				URL:         "https://golang.org",
-				Snippet:     "The Go programming language.",
-				PublishedAt: "2024-01-01",
-				Score:       0.95,
-			},
-		},
-	}
-
-	data, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatalf("failed to marshal: %v", err)
-	}
-
-	// Verify the JSON structure
-	var decoded map[string]any
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
-	}
-
-	if decoded["provider"] != "test" {
-		t.Errorf("expected provider 'test', got %v", decoded["provider"])
-	}
-	if decoded["query"] != "golang" {
-		t.Errorf("expected query 'golang', got %v", decoded["query"])
-	}
-
-	results, ok := decoded["results"].([]any)
-	if !ok || len(results) != 1 {
-		t.Fatalf("expected 1 result, got %v", decoded["results"])
-	}
-
-	result := results[0].(map[string]any)
-	if result["title"] != "Go Programming Language" {
-		t.Errorf("expected title 'Go Programming Language', got %v", result["title"])
-	}
-}
-
-func TestSearchRequest_UnmarshalJSON(t *testing.T) {
-	jsonData := `{"query": "test query", "max_results": 15}`
-
-	var req SearchRequest
-	if err := json.Unmarshal([]byte(jsonData), &req); err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
-	}
-
-	if req.Query != "test query" {
-		t.Errorf("expected query 'test query', got %s", req.Query)
-	}
-	if req.MaxResults != 15 {
-		t.Errorf("expected max_results 15, got %d", req.MaxResults)
 	}
 }

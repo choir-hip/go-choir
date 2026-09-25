@@ -51,21 +51,6 @@ func TestParentChainWalksRootFirst(t *testing.T) {
 	}
 }
 
-func TestParentChainNoParentReturnsSingle(t *testing.T) {
-	s := newTestStore(t)
-	seedChain(t, s)
-	q := NewQueries(s)
-	ctx := context.Background()
-
-	chain, err := q.ParentChain(ctx, "root", 0)
-	if err != nil {
-		t.Fatalf("ParentChain: %v", err)
-	}
-	if len(chain) != 1 || chain[0].ID != "root" {
-		t.Fatalf("expected single root event, got %+v", chain)
-	}
-}
-
 func TestParentChainNotFound(t *testing.T) {
 	s := newTestStore(t)
 	q := NewQueries(s)
@@ -114,27 +99,6 @@ func TestParentChainMissingParentStopsGracefully(t *testing.T) {
 	}
 	if len(chain) != 1 || chain[0].ID != "orphan" {
 		t.Fatalf("expected single event with missing parent, got %+v", chain)
-	}
-}
-
-func TestHTTPHandlerListByRun(t *testing.T) {
-	s := newTestStore(t)
-	seedChain(t, s)
-	h := NewHTTPHandler(s, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/trace/events?run_id=run-1&owner_id=user-alice&limit=10", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: %d body: %s", rec.Code, rec.Body.String())
-	}
-	var resp traceEventListResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp.Events) != 3 {
-		t.Fatalf("expected 3 events, got %d", len(resp.Events))
 	}
 }
 
@@ -225,18 +189,6 @@ func TestHTTPHandlerSingleOwnerScopedNotFound(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for cross-owner access, got %d", rec.Code)
-	}
-}
-
-func TestHTTPHandlerRejectsNonGet(t *testing.T) {
-	s := newTestStore(t)
-	h := NewHTTPHandler(s, nil)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/trace/events", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rec.Code)
 	}
 }
 

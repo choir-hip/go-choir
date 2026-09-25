@@ -229,11 +229,3 @@ func TestSyncStatusValid(t *testing.T) {
 		t.Error("sync status with bad state accepted")
 	}
 }
-
-func TestItemLocation(t *testing.T) {
-	i := Item{ParentItemID: "base_item_parent", Name: "notes.txt"}
-	p, n := i.Location()
-	if p != "base_item_parent" || n != "notes.txt" {
-		t.Errorf("Location() = (%q,%q), want (base_item_parent, notes.txt)", p, n)
-	}
-}

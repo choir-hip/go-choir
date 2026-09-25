@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/llmcost"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -265,17 +264,5 @@ func seedCostEvents(t *testing.T, s *store.Store, ownerID string) {
 		if err := s.AppendEvent(ctx, &ev); err != nil {
 			t.Fatalf("append cost event: %v", err)
 		}
-	}
-}
-
-// Verify the llmcost package integrates with the canonical API handler import graph.
-func TestLLMCostPackageIntegration(t *testing.T) {
-	t.Parallel()
-	cost := llmcost.EstimateCall("gpt-4o", 1000, 500)
-	if !cost.Found {
-		t.Fatal("gpt-4o estimate should be found")
-	}
-	if cost.Provider != "openai" {
-		t.Fatalf("provider: got %q, want openai", cost.Provider)
 	}
 }

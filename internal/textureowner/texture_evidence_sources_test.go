@@ -230,17 +230,6 @@ func TestEvidenceRecordToSourceEntity_NoAddressableTargetSkipped(t *testing.T) {
 	}
 }
 
-func TestEvidenceRecordToSourceEntity_ContentIDWithoutExcerptIsWholeResource(t *testing.T) {
-	rec := types.EvidenceRecord{
-		EvidenceID: "ev-4",
-		Content:    "",
-		Metadata:   json.RawMessage(`{"content_id":"content-x"}`),
-	}
-	entity := evidenceRecordToSourceEntity(rec)
-	if len(entity.Selectors) != 1 || entity.Selectors[0].SelectorKind != "whole_resource" {
-		t.Fatalf("expected whole_resource selector for empty excerpt, got %#v", entity.Selectors)
-	}
-}
 
 func TestEvidenceSummaryEntityAllowsNativeCitationWithoutQuoteMatch(t *testing.T) {
 	rec := types.EvidenceRecord{

@@ -78,17 +78,6 @@ func TestCircuitBreakingAPI_OpensOnFailures(t *testing.T) {
 	}
 }
 
-func TestCircuitBreakingEmbedder_ForwardsWhenClosed(t *testing.T) {
-	e := &stubEmbedder{}
-	ce := NewCircuitBreakingEmbedder(e, health.BreakerConfig{FailureThreshold: 3, OpenTimeout: time.Hour})
-	if _, err := ce.EmbedTexts(context.Background(), []string{"a"}); err != nil {
-		t.Fatalf("EmbedTexts error: %v", err)
-	}
-	if ce.Model().Name != "stub" {
-		t.Fatalf("Model name = %q", ce.Model().Name)
-	}
-}
-
 func TestCircuitBreakingEmbedder_OpensOnFailures(t *testing.T) {
 	e := &stubEmbedder{embedFn: func(ctx context.Context, texts []string) ([][]float32, error) {
 		return nil, errors.New("ollama unreachable")

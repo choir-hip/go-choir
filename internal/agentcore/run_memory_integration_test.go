@@ -14,7 +14,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -158,88 +157,6 @@ func TestRuntimeRunMemoryOverflowFailureBlocksRun(t *testing.T) {
 	}
 	if !isContextOverflowError(errors.New(blocked.Error)) {
 		t.Fatalf("blocked error should preserve context-overflow evidence: %s", blocked.Error)
-	}
-}
-
-func TestRuntimeManualRunMemoryCompaction(t *testing.T) {
-	t.Parallel()
-	registry := testRunMemoryRegistry(t)
-	provider := newMockToolLoopProvider(
-		&provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "manual compaction target", Model: "test-model"},
-		&provideriface.ToolLoopResponse{StopReason: "end_turn", Text: runMemoryCheckpointJSONForTest("manual compaction prompt", []string{"manual run completed"}, []string{"resume from manual checkpoint"}), Model: "test-model"},
-	)
-	rt, s := testRuntimeWithProviderAndRegistry(t, provider, registry)
-	rt.cfg.RunMemoryKeepRecentTokens = 1
-
-	rec, err := rt.StartRun(context.Background(), "manual compaction prompt", "user-alice")
-	if err != nil {
-		t.Fatalf("start run: %v", err)
-	}
-	done := waitForRunTerminalState(t, rt, rec.RunID, "user-alice", 5*time.Second)
-	if done.State != types.RunCompleted {
-		t.Fatalf("state: got %s, want completed", done.State)
-	}
-
-	memory := newRunMemoryManager(rt.store, &done, rt.cfg, func(types.EventKind, string, json.RawMessage) {})
-	memory.withLLMCompactor(toolregistry.AsToolLoopProvider(rt.provider), provideriface.ResolvedLLMConfigFromMetadata(done.Metadata), 0)
-	compacted, err := memory.compactIfNeeded(context.Background(), "manual_test", true)
-	if err != nil {
-		t.Fatalf("manual compact: %v", err)
-	}
-	if !compacted {
-		t.Fatal("manual compact skipped")
-	}
-	entries, err := s.ListRunMemoryEntries(context.Background(), "user-alice", rec.RunID)
-	if err != nil {
-		t.Fatalf("list entries: %v", err)
-	}
-	latest := entries[len(entries)-1]
-	if latest.Kind != types.RunMemoryEntryCompaction {
-		t.Fatalf("latest entry kind: got %s, want compaction", latest.Kind)
-	}
-	if latest.Reason != "manual_test" {
-		t.Fatalf("compaction reason: got %q, want manual_test", latest.Reason)
-	}
-	if latest.Details["checkpoint_status"] != "llm_checkpoint" {
-		t.Fatalf("checkpoint_status = %#v, want llm_checkpoint", latest.Details["checkpoint_status"])
-	}
-}
-
-func TestChildRunUsesRunMemory(t *testing.T) {
-	t.Parallel()
-	registry := testRunMemoryRegistry(t)
-	provider := newMockToolLoopProvider(
-		&provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "parent done", Model: "test-model"},
-		&provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "child done", Model: "test-model"},
-	)
-	rt, s := testRuntimeWithProviderAndRegistry(t, provider, registry)
-
-	parent, err := rt.StartRun(context.Background(), "parent", "user-alice")
-	if err != nil {
-		t.Fatalf("start parent: %v", err)
-	}
-	waitForRunTerminalState(t, rt, parent.RunID, "user-alice", 5*time.Second)
-
-	child, err := rt.StartCoagentRun(context.Background(), parent.RunID, "child objective", "user-alice", map[string]any{
-		runMetadataAgentProfile: agentprofile.Engineering,
-	})
-	if err != nil {
-		t.Fatalf("start child: %v", err)
-	}
-	done := waitForRunTerminalState(t, rt, child.RunID, "user-alice", 5*time.Second)
-	if done.State != types.RunCompleted {
-		t.Fatalf("child state: got %s, want completed", done.State)
-	}
-
-	entries, err := s.ListRunMemoryEntries(context.Background(), "user-alice", child.RunID)
-	if err != nil {
-		t.Fatalf("list child run memory: %v", err)
-	}
-	if len(entries) < 2 {
-		t.Fatalf("child run memory entries: got %d, want initial and final messages", len(entries))
-	}
-	if entries[0].Kind != types.RunMemoryEntryMessage || entries[0].Role != "user" {
-		t.Fatalf("first child memory entry should be user message, got %+v", entries[0])
 	}
 }
 

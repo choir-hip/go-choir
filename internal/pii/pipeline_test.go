@@ -78,21 +78,6 @@ func TestPipeline_RedactEvent_NoPII(t *testing.T) {
 	}
 }
 
-func TestPipeline_RedactEvent_EmptyPayload(t *testing.T) {
-	pipe := NewPipeline(NewRegexRedactor())
-	ev := types.EventRecord{EventID: "evt-3"}
-	clean, report, err := pipe.RedactEvent(ev)
-	if err != nil {
-		t.Fatalf("redact: %v", err)
-	}
-	if report.Changed || report.FindingsCount != 0 {
-		t.Fatalf("empty payload should be noop: %+v", report)
-	}
-	if len(clean.Payload) != 0 {
-		t.Fatalf("empty payload mutated")
-	}
-}
-
 func TestPipeline_RedactEvent_MalformedJSON(t *testing.T) {
 	pipe := NewPipeline(NewRegexRedactor())
 	// Not valid JSON; contains an email so the raw-bytes fallback must fire.

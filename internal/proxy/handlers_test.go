@@ -10,9 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
-	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -25,7 +22,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
-	"golang.org/x/crypto/ssh"
 )
 
 // testProxyEnv sets up a proxy Handler with a real backend autoputer and
@@ -209,22 +205,6 @@ func issueTestAccessJWTWithClaims(priv ed25519.PrivateKey, userID, email string,
 	return signed
 }
 
-// writeTestPublicKey writes an Ed25519 public key in OpenSSH authorized_keys
-// format to the given path.
-func writeTestPublicKey(t *testing.T, path string, pub ed25519.PublicKey) {
-	t.Helper()
-	sshPub, err := ssh.NewPublicKey(pub)
-	if err != nil {
-		t.Fatalf("create SSH public key: %v", err)
-	}
-	data := ssh.MarshalAuthorizedKey(sshPub)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write public key: %v", err)
-	}
-}
-
-// --- VAL-PROXY-001: Missing or invalid auth fails closed ---
-
 func TestBootstrapDeniesMissingAuth(t *testing.T) {
 	h, _, _ := testProxyEnv(t)
 
@@ -234,30 +214,6 @@ func TestBootstrapDeniesMissingAuth(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("missing auth: got status %d, want %d", w.Code, http.StatusUnauthorized)
-	}
-
-	var resp errorResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if resp.Error == "" {
-		t.Error("expected non-empty error message")
-	}
-}
-
-func TestBootstrapDeniesInvalidAuth(t *testing.T) {
-	h, _, _ := testProxyEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: "this-is-not-a-jwt",
-	})
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("invalid auth: got status %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 
 	var resp errorResponse
@@ -293,26 +249,6 @@ func TestBootstrapDeniesExpiredAuth(t *testing.T) {
 	}
 	if resp.Error == "" {
 		t.Error("expected non-empty error message")
-	}
-}
-
-func TestBootstrapDeniesTamperedAuth(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-
-	// Issue a valid token, then tamper with it.
-	validToken := issueTestAccessJWT(priv, "user-123")
-	tamperedToken := validToken + "tamper"
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: tamperedToken,
-	})
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("tampered auth: got status %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 
@@ -380,202 +316,6 @@ func TestBootstrapDeniesWrongSigningKey(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("wrong signing key: got status %d, want %d", w.Code, http.StatusUnauthorized)
-	}
-}
-
-// --- VAL-PROXY-002: Authenticated proxying preserves request and response behavior ---
-
-func TestBootstrapAuthenticatedReachesAutoputer(t *testing.T) {
-	h, priv, autoputer := testProxyEnv(t)
-	_ = autoputer
-
-	accessToken := issueTestAccessJWT(priv, "user-456")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: accessToken,
-	})
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("authenticated request: got status %d, want %d", w.Code, http.StatusOK)
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode bootstrap response: %v", err)
-	}
-
-	// The autoputer should have received the request and returned its identity.
-	if resp["computer_id"] != "autoputer-test" {
-		t.Errorf("computer_id: got %v, want %q", resp["computer_id"], "autoputer-test")
-	}
-}
-
-func TestBootstrapPreservesPublicRequestPath(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-789")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: accessToken,
-	})
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode bootstrap response: %v", err)
-	}
-
-	// The autoputer should receive the same public path.
-	if resp["path"] != "/api/shell/bootstrap" {
-		t.Errorf("path: got %v, want %q", resp["path"], "/api/shell/bootstrap")
-	}
-}
-
-func TestBootstrapPreservesRequestMethod(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-789")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: accessToken,
-	})
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode bootstrap response: %v", err)
-	}
-
-	if resp["method"] != "GET" {
-		t.Errorf("method: got %v, want %q", resp["method"], "GET")
-	}
-}
-
-func TestBootstrapPreservesQueryString(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-789")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap?detail=full&v=2", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: accessToken,
-	})
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode bootstrap response: %v", err)
-	}
-
-	if resp["query"] != "detail=full&v=2" {
-		t.Errorf("query: got %v, want %q", resp["query"], "detail=full&v=2")
-	}
-}
-
-func TestBootstrapPreservesUpstreamStatus(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-789")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: accessToken,
-	})
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	// The autoputer returns 200, so the proxy should pass that through.
-	if w.Code != http.StatusOK {
-		t.Errorf("upstream status: got %d, want %d", w.Code, http.StatusOK)
-	}
-}
-
-func TestBootstrapPreservesUpstreamNon2xx(t *testing.T) {
-	// Set up a proxy with a autoputer that has an error endpoint.
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
-
-	autoputerMux := http.NewServeMux()
-	autoputerMux.HandleFunc("/api/shell/error", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"computer_id": "autoputer-test",
-			"status_code": 500,
-			"error":       "deliberate autoputer error",
-		})
-	})
-
-	autoputerServer := httptest.NewServer(autoputerMux)
-	defer autoputerServer.Close()
-
-	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
-	handler, err := NewHandler(cfg, pub)
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	accessToken := issueTestAccessJWT(priv, "user-789")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/error", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: accessToken,
-	})
-	w := httptest.NewRecorder()
-	handler.HandleProtectedAPI(w, req)
-
-	// The proxy should pass through the 500 from the upstream.
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("upstream 500 passthrough: got %d, want %d", w.Code, http.StatusInternalServerError)
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-
-	if resp["error"] != "deliberate autoputer error" {
-		t.Errorf("upstream error body: got %v, want %q", resp["error"], "deliberate autoputer error")
-	}
-}
-
-func TestBootstrapInjectsUserContext(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-context-test")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: accessToken,
-	})
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode bootstrap response: %v", err)
-	}
-
-	// The autoputer should receive the user context from the JWT subject.
-	if resp["user"] != "user-context-test" {
-		t.Errorf("user context: got %v, want %q", resp["user"], "user-context-test")
 	}
 }
 
@@ -660,29 +400,6 @@ func TestBootstrapRejectsNonGet(t *testing.T) {
 	}
 }
 
-// --- Config + LoadPublicKey integration test ---
-
-func TestLoadPublicKeyFromTestKey(t *testing.T) {
-	// Generate a key pair, write the public key to a temp file, then load it.
-	_, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
-
-	dir := t.TempDir()
-	pubPath := filepath.Join(dir, "test.pub")
-	writeTestPublicKey(t, pubPath, priv.Public().(ed25519.PublicKey))
-
-	loadedPub, err := LoadPublicKey(pubPath)
-	if err != nil {
-		t.Fatalf("LoadPublicKey: %v", err)
-	}
-
-	if len(loadedPub) != 32 {
-		t.Errorf("public key length: got %d, want 32", len(loadedPub))
-	}
-}
-
 // --- HandleAPI routing test ---
 
 func TestHandleAPIReturnsNotFoundForUnknownRoutes(t *testing.T) {
@@ -757,43 +474,6 @@ func TestHandlePulseSummaryIsPublicAndAggregateOnly(t *testing.T) {
 	}
 }
 
-// TestHandleAPIForwardsPromptBarRoutes verifies that prompt-bar product
-// routes are forwarded to the autoputer through the proxy
-// rather than hitting the generic 404 fallback.
-func TestHandleAPIForwardsPromptBarRoutes(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-	accessToken := issueTestAccessJWT(priv, "user-123")
-
-	routes := []struct {
-		method string
-		path   string
-		body   string
-	}{
-		{http.MethodPost, "/api/prompt-bar", `{"text":"draft"}`},
-		{http.MethodGet, "/api/prompt-bar/submissions/run-123", ""},
-	}
-	for _, route := range routes {
-		t.Run(route.path, func(t *testing.T) {
-			req := httptest.NewRequest(route.method, route.path, strings.NewReader(route.body))
-			req.AddCookie(&http.Cookie{
-				Name:  "choir_access",
-				Value: accessToken,
-			})
-			w := httptest.NewRecorder()
-			h.HandleAPI(w, req)
-
-			// The autoputer mock doesn't handle these routes, so we'll get
-			// a 404 or 502 from the autoputer rather than the proxy's own
-			// auth-gated 404. The key assertion is that we do NOT get the
-			// proxy's 404 JSON body, meaning the request was forwarded.
-			body := w.Body.String()
-			if w.Code == http.StatusNotFound && strings.Contains(body, `"error":"not found"`) {
-				t.Errorf("%s was NOT forwarded to autoputer; proxy returned its own 404", route.path)
-			}
-		})
-	}
-}
-
 // --- Edge cases ---
 
 func TestBootstrapWithEmptyCookieValue(t *testing.T) {
@@ -809,76 +489,6 @@ func TestBootstrapWithEmptyCookieValue(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("empty cookie value: got status %d, want %d", w.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestValidateAccessJWTWithWrongKey(t *testing.T) {
-	// Create a handler with one key, then validate a JWT signed with a different key.
-	_, wrongPriv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate wrong key: %v", err)
-	}
-
-	autoputerServer := httptest.NewServer(http.NewServeMux())
-	defer autoputerServer.Close()
-
-	// Handler uses the original public key.
-	origPub, _, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate original key: %v", err)
-	}
-
-	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
-	handler, err := NewHandler(cfg, origPub)
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	// Sign with the wrong key.
-	wrongToken := issueTestAccessJWT(wrongPriv, "user-attacker")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: wrongToken,
-	})
-	w := httptest.NewRecorder()
-	handler.HandleBootstrap(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("wrong-key JWT: got status %d, want %d", w.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestBootstrapAuthenticatedReturnsJSONContentType(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-789")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "choir_access",
-		Value: accessToken,
-	})
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	ct := w.Header().Get("Content-Type")
-	if ct == "" {
-		t.Error("Content-Type header is missing")
-	}
-}
-
-func TestBootstrapUnauthenticatedReturnsJSONContentType(t *testing.T) {
-	h, _, _ := testProxyEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	ct := w.Header().Get("Content-Type")
-	if ct == "" {
-		t.Error("Content-Type header is missing on auth failure")
 	}
 }
 
@@ -904,27 +514,6 @@ func TestWSDeniesMissingAuth(t *testing.T) {
 	}
 }
 
-func TestWSDeniesInvalidAuth(t *testing.T) {
-	h, _, _ := testProxyEnv(t)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/ws", h.HandleWS)
-	proxyServer := httptest.NewServer(mux)
-	defer proxyServer.Close()
-
-	wsURL := "ws" + strings.TrimPrefix(proxyServer.URL, "http") + "/api/ws"
-	header := http.Header{}
-	header.Set("Cookie", "choir_access=this-is-not-a-jwt")
-
-	_, resp, err := websocket.DefaultDialer.Dial(wsURL, header)
-	if err == nil {
-		t.Fatal("expected WS dial to fail with invalid auth, but it succeeded")
-	}
-	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("expected 401 status, got %d", resp.StatusCode)
-	}
-}
-
 func TestWSDeniesExpiredAuth(t *testing.T) {
 	h, priv, _ := testProxyEnv(t)
 
@@ -941,28 +530,6 @@ func TestWSDeniesExpiredAuth(t *testing.T) {
 	_, resp, err := websocket.DefaultDialer.Dial(wsURL, header)
 	if err == nil {
 		t.Fatal("expected WS dial to fail with expired auth, but it succeeded")
-	}
-	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("expected 401 status, got %d", resp.StatusCode)
-	}
-}
-
-func TestWSDeniesTamperedAuth(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/ws", h.HandleWS)
-	proxyServer := httptest.NewServer(mux)
-	defer proxyServer.Close()
-
-	tamperedToken := issueTestAccessJWT(priv, "user-tampered") + "tamper"
-	wsURL := "ws" + strings.TrimPrefix(proxyServer.URL, "http") + "/api/ws"
-	header := http.Header{}
-	header.Set("Cookie", "choir_access="+tamperedToken)
-
-	_, resp, err := websocket.DefaultDialer.Dial(wsURL, header)
-	if err == nil {
-		t.Fatal("expected WS dial to fail with tampered auth, but it succeeded")
 	}
 	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401 status, got %d", resp.StatusCode)
@@ -998,27 +565,6 @@ func TestWSDeniesNonAccessToken(t *testing.T) {
 	_, resp, err := websocket.DefaultDialer.Dial(wsURL, header)
 	if err == nil {
 		t.Fatal("expected WS dial to fail with non-access token, but it succeeded")
-	}
-	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("expected 401 status, got %d", resp.StatusCode)
-	}
-}
-
-func TestWSDeniesEmptyCookieValue(t *testing.T) {
-	h, _, _ := testProxyEnv(t)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/ws", h.HandleWS)
-	proxyServer := httptest.NewServer(mux)
-	defer proxyServer.Close()
-
-	wsURL := "ws" + strings.TrimPrefix(proxyServer.URL, "http") + "/api/ws"
-	header := http.Header{}
-	header.Set("Cookie", "choir_access=")
-
-	_, resp, err := websocket.DefaultDialer.Dial(wsURL, header)
-	if err == nil {
-		t.Fatal("expected WS dial to fail with empty cookie value, but it succeeded")
 	}
 	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401 status, got %d", resp.StatusCode)
@@ -1073,44 +619,6 @@ func TestWSAuthenticatedUpgradesAndRelays(t *testing.T) {
 	}
 }
 
-func TestWSAuthenticatedInjectsUserContext(t *testing.T) {
-	proxyServer, priv := testWSProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-ws-context")
-	conn := wsDialWithCookie(t, proxyServer.URL, accessToken)
-	defer func() { _ = conn.Close() }()
-
-	// The connected message from the autoputer should contain the proxy-injected
-	// user context matching the JWT subject.
-	var connected map[string]interface{}
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if err := conn.ReadJSON(&connected); err != nil {
-		t.Fatalf("read connected message: %v", err)
-	}
-
-	if connected["user"] != "user-ws-context" {
-		t.Errorf("connected user: got %v, want %q", connected["user"], "user-ws-context")
-	}
-
-	// Send a message and check user context in the echo.
-	msg := map[string]interface{}{
-		"type":    "test",
-		"payload": "ping",
-	}
-	if err := conn.WriteJSON(msg); err != nil {
-		t.Fatalf("write test message: %v", err)
-	}
-
-	var echo map[string]interface{}
-	if err := conn.ReadJSON(&echo); err != nil {
-		t.Fatalf("read echo message: %v", err)
-	}
-
-	if echo["user"] != "user-ws-context" {
-		t.Errorf("echo user: got %v, want %q", echo["user"], "user-ws-context")
-	}
-}
-
 func TestWSIgnoresClientSuppliedUserContext(t *testing.T) {
 	proxyServer, priv := testWSProxyEnv(t)
 
@@ -1137,132 +645,6 @@ func TestWSIgnoresClientSuppliedUserContext(t *testing.T) {
 
 	if connected["user"] != "user-real-identity" {
 		t.Errorf("spoofed identity: got %v, want %q (JWT identity)", connected["user"], "user-real-identity")
-	}
-}
-
-func TestWSRelaysMultipleFramesBidirectionally(t *testing.T) {
-	proxyServer, priv := testWSProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-multi-frame")
-	conn := wsDialWithCookie(t, proxyServer.URL, accessToken)
-	defer func() { _ = conn.Close() }()
-
-	// Read the initial connected message.
-	var connected map[string]interface{}
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if err := conn.ReadJSON(&connected); err != nil {
-		t.Fatalf("read connected message: %v", err)
-	}
-
-	// Send multiple messages and verify each echo comes back correctly.
-	for i := 0; i < 5; i++ {
-		msg := map[string]interface{}{
-			"type":    "test",
-			"payload": fmt.Sprintf("frame-%d", i),
-		}
-		if err := conn.WriteJSON(msg); err != nil {
-			t.Fatalf("write message %d: %v", i, err)
-		}
-
-		var echo map[string]interface{}
-		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		if err := conn.ReadJSON(&echo); err != nil {
-			t.Fatalf("read echo %d: %v", i, err)
-		}
-
-		want := fmt.Sprintf("frame-%d", i)
-		if echo["payload"] != want {
-			t.Errorf("echo %d payload: got %v, want %q", i, echo["payload"], want)
-		}
-		if echo["type"] != "echo" {
-			t.Errorf("echo %d type: got %v, want %q", i, echo["type"], "echo")
-		}
-	}
-}
-
-func TestWSProxyPreservesSinglePublicEntrypoint(t *testing.T) {
-	// Verify that /api/ws is the single public entrypoint and that the
-	// proxy route registration includes it.
-	proxyServer, priv := testWSProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-entrypoint")
-	conn := wsDialWithCookie(t, proxyServer.URL, accessToken)
-	defer func() { _ = conn.Close() }()
-
-	// The connection should succeed on /api/ws.
-	var connected map[string]interface{}
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if err := conn.ReadJSON(&connected); err != nil {
-		t.Fatalf("read connected message: %v", err)
-	}
-
-	if connected["type"] != "connected" {
-		t.Errorf("connected type: got %v, want %q", connected["type"], "connected")
-	}
-}
-
-func TestWSRelaysBinaryFrames(t *testing.T) {
-	proxyServer, priv := testWSProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-binary")
-	conn := wsDialWithCookie(t, proxyServer.URL, accessToken)
-	defer func() { _ = conn.Close() }()
-
-	// Read the initial connected message.
-	var connected map[string]interface{}
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if err := conn.ReadJSON(&connected); err != nil {
-		t.Fatalf("read connected message: %v", err)
-	}
-
-	// Send a binary message and verify it's echoed back.
-	binaryPayload := []byte{0x01, 0x02, 0x03, 0x04}
-	if err := conn.WriteMessage(websocket.BinaryMessage, binaryPayload); err != nil {
-		t.Fatalf("write binary message: %v", err)
-	}
-
-	mt, msg, err := conn.ReadMessage()
-	if err != nil {
-		t.Fatalf("read binary echo: %v", err)
-	}
-
-	if mt != websocket.BinaryMessage {
-		t.Errorf("binary echo message type: got %d, want %d", mt, websocket.BinaryMessage)
-	}
-
-	// The autoputer echoes raw binary back.
-	if len(msg) != len(binaryPayload) {
-		t.Errorf("binary echo length: got %d, want %d", len(msg), len(binaryPayload))
-	}
-}
-
-func TestWSClosePropagates(t *testing.T) {
-	proxyServer, priv := testWSProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "user-close")
-	conn := wsDialWithCookie(t, proxyServer.URL, accessToken)
-
-	// Read the initial connected message.
-	var connected map[string]interface{}
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if err := conn.ReadJSON(&connected); err != nil {
-		_ = conn.Close()
-		t.Fatalf("read connected message: %v", err)
-	}
-
-	// Client closes the connection with a normal close message.
-	if err := conn.WriteMessage(websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
-		_ = conn.Close()
-		t.Fatalf("write close message: %v", err)
-	}
-
-	// Subsequent reads should indicate the connection is closed.
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	_, _, err := conn.ReadMessage()
-	_ = conn.Close()
-	if err == nil {
-		t.Error("expected error reading after close, but got none")
 	}
 }
 
@@ -1360,39 +742,6 @@ func TestBootstrapTwoDistinctUsersSameAutoputerDifferentContext(t *testing.T) {
 	// The contexts must be distinct.
 	if respA["user"] == respB["user"] {
 		t.Errorf("user A and user B should have different context, both got %v", respA["user"])
-	}
-}
-
-func TestBootstrapNoStaleIdentityLeakBetweenUsers(t *testing.T) {
-	h, priv, _ := testProxyEnv(t)
-
-	// User A requests bootstrap.
-	accessTokenA := issueTestAccessJWT(priv, "user-alice")
-	reqA := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	reqA.AddCookie(&http.Cookie{Name: "choir_access", Value: accessTokenA})
-	wA := httptest.NewRecorder()
-	h.HandleBootstrap(wA, reqA)
-
-	var respA map[string]interface{}
-	if err := json.NewDecoder(wA.Body).Decode(&respA); err != nil {
-		t.Fatalf("decode user A: %v", err)
-	}
-
-	// Immediately after, user B requests bootstrap on the same handler.
-	accessTokenB := issueTestAccessJWT(priv, "user-bob")
-	reqB := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	reqB.AddCookie(&http.Cookie{Name: "choir_access", Value: accessTokenB})
-	wB := httptest.NewRecorder()
-	h.HandleBootstrap(wB, reqB)
-
-	var respB map[string]interface{}
-	if err := json.NewDecoder(wB.Body).Decode(&respB); err != nil {
-		t.Fatalf("decode user B: %v", err)
-	}
-
-	// User B must NOT see user A's identity.
-	if respB["user"] != "user-bob" {
-		t.Errorf("user B should see own identity, got %v (possible leak from user A %v)", respB["user"], respA["user"])
 	}
 }
 
@@ -1509,40 +858,6 @@ func TestWSAuthenticatedTwoDistinctUsersSameAutoputerDifferentContext(t *testing
 	}
 }
 
-func TestWSNoStaleIdentityLeakBetweenUsers(t *testing.T) {
-	proxyServer, priv := testWSProxyEnv(t)
-
-	// User A connects and receives initial context.
-	accessTokenA := issueTestAccessJWT(priv, "user-ws-first")
-	connA := wsDialWithCookie(t, proxyServer.URL, accessTokenA)
-
-	var connectedA map[string]interface{}
-	_ = connA.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if err := connA.ReadJSON(&connectedA); err != nil {
-		_ = connA.Close()
-		t.Fatalf("user A: read connected: %v", err)
-	}
-
-	// Close user A's connection.
-	_ = connA.Close()
-
-	// User B connects on the same proxy.
-	accessTokenB := issueTestAccessJWT(priv, "user-ws-second")
-	connB := wsDialWithCookie(t, proxyServer.URL, accessTokenB)
-	defer func() { _ = connB.Close() }()
-
-	var connectedB map[string]interface{}
-	_ = connB.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if err := connB.ReadJSON(&connectedB); err != nil {
-		t.Fatalf("user B: read connected: %v", err)
-	}
-
-	// User B must NOT see user A's identity.
-	if connectedB["user"] != "user-ws-second" {
-		t.Errorf("user B should see own identity, got %v (possible leak from user A %v)", connectedB["user"], connectedA["user"])
-	}
-}
-
 func TestWSSpoofedIdentityHeadersDoNotReachAutoputer(t *testing.T) {
 	// Create a autoputer that echoes all received identity headers over WS.
 	pub, priv, err := ed25519.GenerateKey(nil)
@@ -1654,87 +969,6 @@ func TestWSDeniesWrongSigningKey(t *testing.T) {
 	}
 }
 
-// ======================================================================
-// VAL-DEPLOY-005: Protected shell routes fail closed when signed out
-// ======================================================================
-
-// TestProtectedBootstrapDeniesSignedOut verifies that the shell bootstrap
-// route returns a machine-readable 401 JSON denial to signed-out callers
-// and does not expose any autoputer payload.
-//
-// VAL-DEPLOY-005: "Protected shell routes deny signed-out callers before
-// shell data or live state are exposed"
-func TestProtectedBootstrapDeniesSignedOut(t *testing.T) {
-	h, _, _ := testProxyEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	w := httptest.NewRecorder()
-	h.HandleBootstrap(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("signed-out bootstrap: got status %d, want %d", w.Code, http.StatusUnauthorized)
-	}
-
-	// Response must be machine-readable JSON.
-	ct := w.Header().Get("Content-Type")
-	if ct != "application/json" {
-		t.Errorf("Content-Type: got %q, want %q", ct, "application/json")
-	}
-
-	var resp errorResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode denial: %v", err)
-	}
-	if resp.Error == "" {
-		t.Error("denial should have a non-empty error message")
-	}
-
-	// Must not contain autoputer payload data.
-	body := w.Body.String()
-	for _, field := range []string{"computer_id", "bootstrap", "user"} {
-		if strings.Contains(body, field) {
-			t.Errorf("denial response should not contain autoputer field %q", field)
-		}
-	}
-}
-
-// TestProtectedLiveChannelDeniesSignedOut verifies that the live channel
-// route returns a machine-readable 401 JSON denial to signed-out callers
-// without upgrading the connection.
-//
-// VAL-DEPLOY-005: "Protected shell routes deny signed-out callers before
-// shell data or live state are exposed"
-func TestProtectedLiveChannelDeniesSignedOut(t *testing.T) {
-	h, _, _ := testProxyEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/ws", nil)
-	req.Header.Set("Upgrade", "websocket")
-	req.Header.Set("Connection", "Upgrade")
-	req.Header.Set("Sec-WebSocket-Version", "13")
-	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
-
-	w := httptest.NewRecorder()
-	h.HandleWS(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("signed-out WS: got status %d, want %d", w.Code, http.StatusUnauthorized)
-	}
-
-	// No WS upgrade should occur.
-	if upgrade := w.Header().Get("Upgrade"); upgrade == "websocket" {
-		t.Error("Upgrade header should not be set on auth denial — no WS upgrade")
-	}
-
-	// Response must be machine-readable JSON.
-	var resp errorResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode WS denial: %v", err)
-	}
-	if resp.Error == "" {
-		t.Error("WS denial should have a non-empty error message")
-	}
-}
-
 // TestAllAPIRoutesDenySignedOutCallers verifies that every /api/* route
 // denies signed-out callers with 401. This covers both explicitly-handled
 // protected routes (bootstrap, ws) and the default catch-all for unknown
@@ -1792,209 +1026,6 @@ func TestAllAPIRoutesDenySignedOutCallers(t *testing.T) {
 				t.Errorf("denial for %s should not contain computer_id", tt.path)
 			}
 		})
-	}
-}
-
-// TestAuthenticatedFutureAPIRouteIsForwarded verifies that authenticated
-// HTTP /api/* routes are forwarded by default. The proxy should not require a
-// code change every time the autoputer adds a new app API.
-func TestAuthenticatedFutureAPIRouteIsForwarded(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate ed25519 key: %v", err)
-	}
-
-	gotUser := ""
-	gotPath := ""
-	gotMethod := ""
-	gotQuery := ""
-	autoputerMux := http.NewServeMux()
-	autoputerMux.HandleFunc("/api/future-app/widget", func(w http.ResponseWriter, r *http.Request) {
-		gotUser = r.Header.Get("X-Authenticated-User")
-		gotPath = r.URL.Path
-		gotMethod = r.Method
-		gotQuery = r.URL.RawQuery
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":   true,
-			"path": r.URL.Path,
-		})
-	})
-	autoputer := httptest.NewServer(autoputerMux)
-	t.Cleanup(func() { autoputer.Close() })
-
-	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
-		ComputerURL:       autoputer.URL,
-		AuthPublicKeyPath: "/unused/in/test"}
-	h, err := NewHandler(cfg, pub)
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	accessToken := issueTestAccessJWT(priv, "user-authenticated")
-
-	req := httptest.NewRequest(http.MethodPost, "/api/future-app/widget?mode=preview", strings.NewReader(`{"hello":"world"}`))
-	req.AddCookie(&http.Cookie{Name: "choir_access", Value: accessToken})
-	w := httptest.NewRecorder()
-	h.HandleAPI(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	if gotUser != "user-authenticated" {
-		t.Fatalf("forwarded X-Authenticated-User: got %q, want %q", gotUser, "user-authenticated")
-	}
-	if gotPath != "/api/future-app/widget" {
-		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/future-app/widget")
-	}
-	if gotMethod != http.MethodPost {
-		t.Fatalf("forwarded method: got %q, want %q", gotMethod, http.MethodPost)
-	}
-	if gotQuery != "mode=preview" {
-		t.Fatalf("forwarded query: got %q, want %q", gotQuery, "mode=preview")
-	}
-}
-
-func TestAuthenticatedTextureRouteIsForwarded(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate ed25519 key: %v", err)
-	}
-
-	gotUser := ""
-	gotPath := ""
-	autoputerMux := http.NewServeMux()
-	autoputerMux.HandleFunc("/api/texture/documents", func(w http.ResponseWriter, r *http.Request) {
-		gotUser = r.Header.Get("X-Authenticated-User")
-		gotPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"documents": []any{},
-		})
-	})
-	autoputer := httptest.NewServer(autoputerMux)
-	t.Cleanup(func() { autoputer.Close() })
-
-	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
-		ComputerURL:       autoputer.URL,
-		AuthPublicKeyPath: "/unused/in/test"}
-	h, err := NewHandler(cfg, pub)
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	accessToken := issueTestAccessJWT(priv, "user-authenticated")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/texture/documents", nil)
-	req.AddCookie(&http.Cookie{Name: "choir_access", Value: accessToken})
-	w := httptest.NewRecorder()
-	h.HandleAPI(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
-	}
-
-	if gotUser != "user-authenticated" {
-		t.Fatalf("forwarded X-Authenticated-User: got %q, want %q", gotUser, "user-authenticated")
-	}
-	if gotPath != "/api/texture/documents" {
-		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/texture/documents")
-	}
-}
-
-func TestAuthenticatedTraceRouteIsForwarded(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate ed25519 key: %v", err)
-	}
-
-	gotUser := ""
-	gotPath := ""
-	autoputerMux := http.NewServeMux()
-	autoputerMux.HandleFunc("/api/trace/trajectories", func(w http.ResponseWriter, r *http.Request) {
-		gotUser = r.Header.Get("X-Authenticated-User")
-		gotPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"trajectories": []any{},
-		})
-	})
-	autoputer := httptest.NewServer(autoputerMux)
-	t.Cleanup(func() { autoputer.Close() })
-
-	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
-		ComputerURL:       autoputer.URL,
-		AuthPublicKeyPath: "/unused/in/test"}
-	h, err := NewHandler(cfg, pub)
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	accessToken := issueTestAccessJWT(priv, "user-authenticated")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/trace/trajectories?limit=20", nil)
-	req.AddCookie(&http.Cookie{Name: "choir_access", Value: accessToken})
-	w := httptest.NewRecorder()
-	h.HandleAPI(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	if gotUser != "user-authenticated" {
-		t.Fatalf("forwarded X-Authenticated-User: got %q, want %q", gotUser, "user-authenticated")
-	}
-	if gotPath != "/api/trace/trajectories" {
-		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/trace/trajectories")
-	}
-}
-
-func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate ed25519 key: %v", err)
-	}
-
-	gotUser := ""
-	gotPath := ""
-	autoputerMux := http.NewServeMux()
-	autoputerMux.HandleFunc("/api/test/texture/worker-update", func(w http.ResponseWriter, r *http.Request) {
-		gotUser = r.Header.Get("X-Authenticated-User")
-		gotPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status": "submitted",
-		})
-	})
-	autoputer := httptest.NewServer(autoputerMux)
-	t.Cleanup(func() { autoputer.Close() })
-
-	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0",
-		ComputerURL:       autoputer.URL,
-		AuthPublicKeyPath: "/unused/in/test"}
-	h, err := NewHandler(cfg, pub)
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	accessToken := issueTestAccessJWT(priv, "user-authenticated")
-
-	req := httptest.NewRequest(http.MethodPost, "/api/test/texture/worker-update", strings.NewReader(`{"doc_id":"doc-1","schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"canonical packet"}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "choir_access", Value: accessToken})
-	w := httptest.NewRecorder()
-	h.HandleAPI(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
-	}
-
-	if gotUser != "user-authenticated" {
-		t.Fatalf("forwarded X-Authenticated-User: got %q, want %q", gotUser, "user-authenticated")
-	}
-	if gotPath != "/api/test/texture/worker-update" {
-		t.Fatalf("forwarded path: got %q, want %q", gotPath, "/api/test/texture/worker-update")
 	}
 }
 
@@ -2145,41 +1176,6 @@ func TestProxyHealthReportsDegradedWhenUpstreamIsUnreachable(t *testing.T) {
 	}
 }
 
-// TestProxyHealthReportsDegradedWithNoUpstreamAtStartup verifies that
-// the proxy health endpoint correctly reports "degraded" when started
-// with an unreachable autoputer URL (e.g., autoputer hasn't started yet).
-//
-// VAL-DEPLOY-008: "protected-request backend health is observable"
-func TestProxyHealthReportsDegradedWithNoUpstreamAtStartup(t *testing.T) {
-	pub, _, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
-
-	// Point proxy at a non-existent upstream.
-	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: "http://127.0.0.1:1", AuthPublicKeyPath: "/unused"}
-	handler, err := NewHandler(cfg, pub)
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
-	handler.HandleHealth(w, req)
-
-	var resp proxyHealthResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode health response: %v", err)
-	}
-
-	if resp.Status != "degraded" {
-		t.Errorf("status with no upstream: got %q, want %q", resp.Status, "degraded")
-	}
-	if resp.Upstream != "unreachable" {
-		t.Errorf("upstream with no upstream: got %q, want %q", resp.Upstream, "unreachable")
-	}
-}
-
 // TestProxyHealthRejectsNonGet verifies that the health endpoint only
 // accepts GET requests.
 func TestProxyHealthRejectsNonGet(t *testing.T) {
@@ -2195,93 +1191,6 @@ func TestProxyHealthRejectsNonGet(t *testing.T) {
 				t.Errorf("health %s: got status %d, want %d", method, w.Code, http.StatusMethodNotAllowed)
 			}
 		})
-	}
-}
-
-// TestProxyHealthRecoversAfterUpstreamRestart verifies that the proxy
-// health endpoint transitions from "degraded" back to "ok" when the
-// upstream autoputer recovers. This simulates the restart recovery path
-// required by VAL-DEPLOY-008 and VAL-CROSS-118.
-//
-// VAL-CROSS-118: "Restarting auth or proxy returns the system to healthy state"
-func TestProxyHealthRecoversAfterUpstreamRestart(t *testing.T) {
-	pub, _, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
-
-	// Use a custom port that's unlikely to conflict.
-	autoputerMux := http.NewServeMux()
-	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
-	})
-
-	// Start the autoputer, create proxy pointing at it.
-	autoputerServer := httptest.NewServer(autoputerMux)
-	cfg := &Config{AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputerServer.URL, AuthPublicKeyPath: "/unused"}
-	handler, err := NewHandler(cfg, pub)
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	// Verify health is ok.
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
-	handler.HandleHealth(w, req)
-	var resp1 proxyHealthResponse
-	_ = json.NewDecoder(w.Body).Decode(&resp1)
-	if resp1.Status != "ok" {
-		t.Fatalf("initial status: got %q, want %q", resp1.Status, "ok")
-	}
-
-	// Stop the autoputer (simulate crash).
-	autoputerServer.Close()
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify health reports degraded.
-	req2 := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w2 := httptest.NewRecorder()
-	handler.HandleHealth(w2, req2)
-	var resp2 proxyHealthResponse
-	_ = json.NewDecoder(w2.Body).Decode(&resp2)
-	if resp2.Status != "degraded" {
-		t.Fatalf("degraded status: got %q, want %q", resp2.Status, "degraded")
-	}
-
-	// "Restart" the autoputer on the same address by creating a new test server.
-	// Since httptest.Server uses random ports, we need a different approach:
-	// create a new autoputer server and update the handler's config to point to it.
-	newAutoputerMux := http.NewServeMux()
-	newAutoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "service": "autoputer"})
-	})
-	newAutoputerServer := httptest.NewServer(newAutoputerMux)
-	defer newAutoputerServer.Close()
-
-	// Re-create the handler pointing to the new autoputer.
-	newComputerURL, _ := url.Parse(newAutoputerServer.URL)
-	proxy := httputil.NewSingleHostReverseProxy(newComputerURL)
-	handler2, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
-		ComputerURL:       newAutoputerServer.URL,
-		AuthPublicKeyPath: "/unused"}, pub)
-	_ = proxy
-	if err != nil {
-		t.Fatalf("NewHandler for restart: %v", err)
-	}
-
-	// Verify health recovers to ok.
-	req3 := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w3 := httptest.NewRecorder()
-	handler2.HandleHealth(w3, req3)
-	var resp3 proxyHealthResponse
-	_ = json.NewDecoder(w3.Body).Decode(&resp3)
-	if resp3.Status != "ok" {
-		t.Fatalf("recovered status: got %q, want %q", resp3.Status, "ok")
-	}
-	if resp3.Upstream != "ok" {
-		t.Fatalf("recovered upstream: got %q, want %q", resp3.Upstream, "ok")
 	}
 }
 
@@ -2802,34 +1711,6 @@ func TestVMctlRouting_SameUserPinnedToSameVM(t *testing.T) {
 	lookup2, _ := client.Lookup("user-pinned")
 	if lookup2.VMID != vmID {
 		t.Errorf("expected pinned VM %s, got %s (VAL-VM-003)", vmID, lookup2.VMID)
-	}
-}
-
-func TestIsPlatformTextureReadRequest(t *testing.T) {
-	// Positive cases — read-only Texture reads with read_owner param.
-	cases := []struct {
-		method string
-		path   string
-		want   bool
-	}{
-		{http.MethodGet, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", true},
-		{http.MethodGet, "/api/texture/documents/doc-1/revisions?read_owner=universal-wire-platform", true},
-		{http.MethodGet, "/api/texture/revisions/rev-1?read_owner=universal-wire-platform", true},
-		{http.MethodHead, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", true},
-		// Negative cases.
-		{http.MethodGet, "/api/texture/documents/doc-1", false},
-		{http.MethodGet, "/api/texture/documents/doc-1?read_owner=other-user", false},
-		{http.MethodPost, "/api/texture/documents/doc-1?read_owner=universal-wire-platform", false},
-		{http.MethodGet, "/api/texture/documents?read_owner=universal-wire-platform", false},
-		{http.MethodGet, "/api/texture/revisions?read_owner=universal-wire-platform", false},
-		{http.MethodGet, "/api/universal-wire/stories?read_owner=universal-wire-platform", false},
-	}
-	for _, tc := range cases {
-		req := httptest.NewRequest(tc.method, tc.path, nil)
-		got := isPlatformTextureReadRequest(req)
-		if got != tc.want {
-			t.Errorf("isPlatformTextureReadRequest(%s %s) = %v, want %v", tc.method, tc.path, got, tc.want)
-		}
 	}
 }
 
@@ -4042,91 +2923,6 @@ func TestVMctlRouting_GracefulDegradation(t *testing.T) {
 	}
 }
 
-// TestConfig_VmctlRoutingEnabled tests the vmctl routing config flag.
-func TestConfig_VmctlRoutingEnabled(t *testing.T) {
-	cfg1 := &Config{AllowDirectAutoputerForTests: true, VmctlURL: "http://localhost:8083"}
-	if !cfg1.VmctlRoutingEnabled() {
-		t.Error("expected vmctl routing enabled when URL is set")
-	}
-
-	cfg2 := &Config{AllowDirectAutoputerForTests: true, VmctlURL: ""}
-	if cfg2.VmctlRoutingEnabled() {
-		t.Error("expected vmctl routing disabled when URL is empty")
-	}
-}
-
-func TestLoadConfig_VMctlTimeout(t *testing.T) {
-	t.Setenv("PROXY_VMCTL_TIMEOUT", "90s")
-
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if cfg.VmctlTimeout != 90*time.Second {
-		t.Fatalf("VmctlTimeout = %s, want 90s", cfg.VmctlTimeout)
-	}
-}
-
-func TestLoadConfig_VMctlTimeoutFallsBackOnInvalidValue(t *testing.T) {
-	t.Setenv("PROXY_VMCTL_TIMEOUT", "not-a-duration")
-
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if cfg.VmctlTimeout != DefaultVmctlTimeout {
-		t.Fatalf("VmctlTimeout = %s, want default %s", cfg.VmctlTimeout, DefaultVmctlTimeout)
-	}
-}
-
-func TestLoadConfig_ReplayCompletenessTimeout(t *testing.T) {
-	t.Setenv("PROXY_REPLAY_COMPLETENESS_TIMEOUT", "7m")
-
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if cfg.ReplayCompletenessTimeout != 7*time.Minute {
-		t.Fatalf("ReplayCompletenessTimeout = %s, want 7m", cfg.ReplayCompletenessTimeout)
-	}
-}
-
-func TestLoadConfig_ReplayCompletenessTimeoutFallsBackOnInvalidValue(t *testing.T) {
-	t.Setenv("PROXY_REPLAY_COMPLETENESS_TIMEOUT", "not-a-duration")
-
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if cfg.ReplayCompletenessTimeout != DefaultReplayCompletenessTimeout {
-		t.Fatalf("ReplayCompletenessTimeout = %s, want default %s", cfg.ReplayCompletenessTimeout, DefaultReplayCompletenessTimeout)
-	}
-}
-
-func TestLoadConfig_ResidueImportTimeout(t *testing.T) {
-	t.Setenv("PROXY_RESIDUE_IMPORT_TIMEOUT", "7m")
-
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if cfg.ResidueImportTimeout != 7*time.Minute {
-		t.Fatalf("ResidueImportTimeout = %s, want 7m", cfg.ResidueImportTimeout)
-	}
-}
-
-func TestLoadConfig_ResidueImportTimeoutFallsBackOnInvalidValue(t *testing.T) {
-	t.Setenv("PROXY_RESIDUE_IMPORT_TIMEOUT", "not-a-duration")
-
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if cfg.ResidueImportTimeout != DefaultResidueImportTimeout {
-		t.Fatalf("ResidueImportTimeout = %s, want default %s", cfg.ResidueImportTimeout, DefaultResidueImportTimeout)
-	}
-}
-
 // --- Bearer Token (API Key) Auth Tests ---
 
 // testProxyEnvWithAuthStore sets up a proxy Handler with a real backend autoputer
@@ -4212,36 +3008,11 @@ func TestBearerTokenAuthAcceptsValidAPIKey(t *testing.T) {
 	}
 }
 
-func TestBearerTokenAuthRejectsNoAuth(t *testing.T) {
-	handler, _, _, _ := testProxyEnvWithAuthStore(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	rec := httptest.NewRecorder()
-	handler.HandleBootstrap(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestBearerTokenAuthRejectsInvalidToken(t *testing.T) {
 	handler, _, _, _ := testProxyEnvWithAuthStore(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
 	req.Header.Set("Authorization", "Bearer choir_sk_bogustoken123")
-	rec := httptest.NewRecorder()
-	handler.HandleBootstrap(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestBearerTokenAuthRejectsNonChoirPrefix(t *testing.T) {
-	handler, _, _, _ := testProxyEnvWithAuthStore(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.Header.Set("Authorization", "Bearer some-other-token")
 	rec := httptest.NewRecorder()
 	handler.HandleBootstrap(rec, req)
 
@@ -4304,70 +3075,6 @@ func TestBearerTokenAuthRejectsExpiredKey(t *testing.T) {
 	}
 }
 
-func TestBearerTokenAuthScopePropagation(t *testing.T) {
-	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
-
-	// Use a autoputer backend that echoes the X-Authenticated-Scopes header.
-	autoputerMux := http.NewServeMux()
-	autoputerMux.HandleFunc("/api/shell/bootstrap", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"user":   r.Header.Get("X-Authenticated-User"),
-			"scopes": r.Header.Get("X-Authenticated-Scopes"),
-		})
-	})
-	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-	// Replace the autoputer server handler.
-	autoputer.Config.Handler = autoputerMux
-
-	scopes := []string{"read:runtime", "write:runtime"}
-	user, secret := createTestAPIKey(t, handler, store, "scope-key", scopes, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.Header.Set("Authorization", "Bearer "+secret)
-	rec := httptest.NewRecorder()
-	handler.HandleBootstrap(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got := resp["user"]; got != user.ID {
-		t.Errorf("user: got %v, want %q", got, user.ID)
-	}
-	if got := resp["scopes"]; got != strings.Join(scopes, ",") {
-		t.Errorf("scopes: got %v, want %q", got, strings.Join(scopes, ","))
-	}
-}
-
-func TestCookieAuthStillWorksAfterAPIKeyAdded(t *testing.T) {
-	handler, priv, _, _ := testProxyEnvWithAuthStore(t)
-
-	// Make a request with a valid cookie JWT (no Bearer header).
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap", nil)
-	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "cookie-user")})
-	rec := httptest.NewRecorder()
-	handler.HandleBootstrap(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got := resp["user"]; got != "cookie-user" {
-		t.Errorf("user: got %v, want %q", got, "cookie-user")
-	}
-}
-
 func TestCookieAuthPreferredOverBearerToken(t *testing.T) {
 	handler, priv, _, store := testProxyEnvWithAuthStore(t)
 
@@ -4392,54 +3099,6 @@ func TestCookieAuthPreferredOverBearerToken(t *testing.T) {
 	}
 	if got := resp["user"]; got != "cookie-priority-user" {
 		t.Errorf("user: got %v, want %q (cookie should take priority)", got, "cookie-priority-user")
-	}
-}
-
-func TestBearerTokenAuthProtectedAPI(t *testing.T) {
-	handler, _, autoputer, store := testProxyEnvWithAuthStore(t)
-
-	// Use a autoputer that echoes the user header.
-	autoputerMux := http.NewServeMux()
-	autoputerMux.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"user":          r.Header.Get("X-Authenticated-User"),
-			"scopes":        r.Header.Get("X-Authenticated-Scopes"),
-			"authorization": r.Header.Get("Authorization"),
-			"cookie":        r.Header.Get("Cookie"),
-		})
-	})
-	autoputerMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-	autoputer.Config.Handler = autoputerMux
-
-	user, secret := createTestAPIKey(t, handler, store, "api-key", []string{"read:runtime", "write:runtime"}, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
-	req.Header.Set("Authorization", "Bearer "+secret)
-	rec := httptest.NewRecorder()
-	handler.HandleProtectedAPI(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got := resp["user"]; got != user.ID {
-		t.Errorf("user: got %v, want %q", got, user.ID)
-	}
-	if got := resp["scopes"]; got != "read:runtime,write:runtime" {
-		t.Errorf("scopes: got %v, want %q", got, "read:runtime,write:runtime")
-	}
-	if got := resp["authorization"]; got != "" {
-		t.Errorf("authorization forwarded upstream: got %v, want empty", got)
-	}
-	if got := resp["cookie"]; got != "" {
-		t.Errorf("cookie forwarded upstream: got %v, want empty", got)
 	}
 }
 

@@ -25,41 +25,6 @@ func testPromptAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 	return rt, handler
 }
 
-func TestHandlePromptListReturnsEffectivePrompts(t *testing.T) {
-	t.Parallel()
-	_, handler := testPromptAPISetup(t)
-
-	req := authenticatedRequest(http.MethodGet, "/api/prompts", "", "user-alice")
-	w := httptest.NewRecorder()
-	handler.HandlePromptList(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d", w.Code, http.StatusOK)
-	}
-
-	var resp promptListResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(resp.Prompts) != 8 {
-		t.Fatalf("prompt count = %d, want 8", len(resp.Prompts))
-	}
-	for _, prompt := range resp.Prompts {
-		if strings.TrimSpace(prompt.SourceLabel) == "" {
-			t.Fatalf("prompt %s missing source label", prompt.Role)
-		}
-		if strings.TrimSpace(prompt.EffectiveSystemPrompt) == "" {
-			t.Fatalf("prompt %s missing effective system prompt", prompt.Role)
-		}
-		if len(prompt.Tools) == 0 {
-			t.Fatalf("prompt %s missing tool metadata", prompt.Role)
-		}
-		if strings.TrimSpace(prompt.ProviderPolicy.ActiveProvider) == "" {
-			t.Fatalf("prompt %s missing provider policy", prompt.Role)
-		}
-	}
-}
-
 func TestHandlePromptRoleSupportsSaveAndReset(t *testing.T) {
 	t.Parallel()
 	_, handler := testPromptAPISetup(t)

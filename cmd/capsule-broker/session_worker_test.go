@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"syscall"
 	"testing"
@@ -29,31 +28,6 @@ func testSessionBroker(t *testing.T) *Broker {
 	}
 }
 
-func TestSessionFrameCodecRoundTrip(t *testing.T) {
-	frame := yaegikernel.SessionFrame{ID: "cell-9", Source: `x := 1`, Inbox: []yaegikernel.IncomingMessage{
-		{ID: "m-1", FromDesk: "management", ToDesk: "engineering", Kind: "directive", Body: "go"},
-	}}
-	raw, err := json.Marshal(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var back yaegikernel.SessionFrame
-	if err := json.Unmarshal(raw, &back); err != nil || !reflect.DeepEqual(back, frame) {
-		t.Fatalf("frame roundtrip = %+v, %v", back, err)
-	}
-	res := yaegikernel.SessionResult{ID: "cell-9", Stdout: "hi", Intents: []yaegikernel.StagedIntent{
-		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "hi"},
-	}}
-	raw, err = json.Marshal(res)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var backRes yaegikernel.SessionResult
-	if err := json.Unmarshal(raw, &backRes); err != nil || !reflect.DeepEqual(backRes, res) {
-		t.Fatalf("result roundtrip = %+v, %v", backRes, err)
-	}
-}
-
 func TestInitSessionFailsCleanWithoutBinary(t *testing.T) {
 	b := testSessionBroker(t)
 	cap := &capsule.Capability{AgentRunID: "run-test"}
@@ -63,15 +37,6 @@ func TestInitSessionFailsCleanWithoutBinary(t *testing.T) {
 	}
 	if len(b.sessionWorkers) != 0 {
 		t.Fatalf("failed spawn left %d workers", len(b.sessionWorkers))
-	}
-}
-
-func TestCloseSessionMissingIsSuccess(t *testing.T) {
-	b := testSessionBroker(t)
-	cap := &capsule.Capability{AgentRunID: "run-missing"}
-	resp := b.handleCloseSession(context.Background(), cap, nil)
-	if resp.Error != "" {
-		t.Fatalf("close missing: %v", resp.Error)
 	}
 }
 

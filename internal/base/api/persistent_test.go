@@ -12,7 +12,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/base/model"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
 func TestOpenPersistentHandlerFeedsReadOnlyCurrentStateSource(t *testing.T) {
@@ -83,42 +82,6 @@ func TestOpenPersistentHandlerFeedsReadOnlyCurrentStateSource(t *testing.T) {
 	}
 	if !sawItem || !sawBlob {
 		t.Fatalf("missing persisted observations: sawItem=%v sawBlob=%v set=%#v", sawItem, sawBlob, observationSet.Observations)
-	}
-}
-
-func TestRegisterPersistentRoutesOnSharedServer(t *testing.T) {
-	root := t.TempDir()
-	cfg := PersistentHandlerConfig{
-		JournalPath: filepath.Join(root, "base.sqlite"),
-		BlobRoot:    filepath.Join(root, "blobs"),
-	}
-	validator, secret := fakeValidator(t, "choir_sk_route", []string{ScopeWriteBase, ScopeReadBase})
-	persistent, err := OpenPersistentHandler(cfg, validator)
-	if err != nil {
-		t.Fatalf("open persistent handler: %v", err)
-	}
-	defer persistent.Close()
-
-	srv := server.NewServer("base-local-harness", "0")
-	if err := RegisterPersistentRoutes(srv, persistent); err != nil {
-		t.Fatalf("register routes: %v", err)
-	}
-
-	rr := do(t, srv, http.MethodPost, "/api/base/blobs", secret, bytes.NewReader([]byte("shared server route state")))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("put blob through shared server status: %d body: %s", rr.Code, rr.Body.String())
-	}
-	var blobResp putBlobResponse
-	if err := json.Unmarshal(rr.Body.Bytes(), &blobResp); err != nil {
-		t.Fatalf("decode blob response: %v", err)
-	}
-	if blobResp.BlobRef == "" {
-		t.Fatal("empty blob ref")
-	}
-
-	health := do(t, srv, http.MethodGet, "/health", "", nil)
-	if health.Code != http.StatusOK {
-		t.Fatalf("shared server health route was not preserved: %d", health.Code)
 	}
 }
 

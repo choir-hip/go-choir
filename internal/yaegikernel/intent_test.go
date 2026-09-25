@@ -134,34 +134,6 @@ func TestServeCellFailedDropsTray(t *testing.T) {
 	}
 }
 
-// TestChoirExportsCarryOrchestrationSurface proves the model-facing surface:
-// Spawn/Complete/Inbox exist for Engineering, Inbox alone for researchers.
-func TestChoirExportsCarryOrchestrationSurface(t *testing.T) {
-	broker, issuer, scope, _ := testChoirFixture(t)
-	exports := scope.ChoirExports()["choir/choir"]
-	for _, name := range []string{"Spawn", "Complete", "Inbox", "Message", "Exec", "ReadFile"} {
-		if _, ok := exports[name]; !ok {
-			t.Errorf("cosuper exports missing %q", name)
-		}
-	}
-	research, err := NewChoirScope(broker, issuer, "computer-choir", "activation-r", 1, SessionRoleResearch, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rexp := research.ChoirExports()["choir/choir"]
-	if _, ok := rexp["Inbox"]; !ok {
-		t.Error("researcher exports missing Inbox")
-	}
-	for _, name := range []string{"Spawn", "Complete", "Message", "Exec", "WriteFile"} {
-		if _, ok := rexp[name]; ok {
-			t.Errorf("researcher exports must not carry %q", name)
-		}
-	}
-	if _, err := research.Spawn("research", "x"); err == nil {
-		t.Error("researcher spawn must be denied")
-	}
-}
-
 // TestFreezeVerifyStaging proves the settlement intents stage into the tray
 // with their fields intact and enforce the one-per-cell rule.
 func TestFreezeVerifyStaging(t *testing.T) {

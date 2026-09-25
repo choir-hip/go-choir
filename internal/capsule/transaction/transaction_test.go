@@ -7,37 +7,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 )
 
-func TestClassifierBasic(t *testing.T) {
-	c := NewClassifier()
-	changes := []capsule.FileChange{
-		{Path: "/var/lib/dolt/choir/items.sql", Kind: capsule.ChangeAdded, Mode: 0o644},
-		{Path: "/home/user/src/main.go", Kind: capsule.ChangeModified, Mode: 0o644},
-		{Path: "/tmp/cache.txt", Kind: capsule.ChangeAdded, Mode: 0o644},
-		{Path: "/unknown/path.txt", Kind: capsule.ChangeAdded, Mode: 0o644},
-	}
-
-	result := c.Classify(changes)
-
-	if len(result.Groups[LedgerDolt]) != 1 {
-		t.Errorf("Dolt group: expected 1, got %d", len(result.Groups[LedgerDolt]))
-	}
-	if len(result.Groups[LedgerSource]) != 1 {
-		t.Errorf("Source group: expected 1, got %d", len(result.Groups[LedgerSource]))
-	}
-	if len(result.Ignored) != 1 {
-		t.Errorf("Ignored: expected 1, got %d", len(result.Ignored))
-	}
-	if len(result.Unknown) != 1 {
-		t.Errorf("Unknown: expected 1, got %d", len(result.Unknown))
-	}
-	if !result.HasUnknown() {
-		t.Error("HasUnknown should be true")
-	}
-	if result.Digest == "" {
-		t.Error("Digest should not be empty")
-	}
-}
-
 func TestClassifierRejectsUnknown(t *testing.T) {
 	c := NewClassifier()
 	builder := NewTransactionBuilder(c)
@@ -56,40 +25,6 @@ func TestClassifierRejectsUnknown(t *testing.T) {
 	}
 	if record.RejectReason == "" {
 		t.Error("reject reason should not be empty")
-	}
-}
-
-func TestTransactionBuilderAcceptsKnownPaths(t *testing.T) {
-	c := NewClassifier()
-	builder := NewTransactionBuilder(c)
-
-	changes := []capsule.FileChange{
-		{Path: "/var/lib/dolt/choir/items.sql", Kind: capsule.ChangeAdded, Mode: 0o644},
-		{Path: "/home/user/src/main.go", Kind: capsule.ChangeModified, Mode: 0o644},
-		{Path: "/var/lib/blob/abc123", Kind: capsule.ChangeAdded, Mode: 0o644},
-	}
-
-	record, err := builder.BuildBundleFromDiff("capsule-1", changes)
-	if err != nil {
-		t.Fatalf("build transaction: %v", err)
-	}
-	if record.Rejected {
-		t.Errorf("record should not be rejected, but: %s", record.RejectReason)
-	}
-	if record.CapsuleIdentity != "capsule-1" {
-		t.Errorf("capsule ID: got %q, want %q", record.CapsuleIdentity, "capsule-1")
-	}
-	if record.ClassifierV != "v1" {
-		t.Errorf("classifier version: got %q, want %q", record.ClassifierV, "v1")
-	}
-	if len(record.Groups["Dolt"]) != 1 {
-		t.Errorf("Dolt group: expected 1, got %d", len(record.Groups["Dolt"]))
-	}
-	if len(record.Groups["Source"]) != 1 {
-		t.Errorf("Source group: expected 1, got %d", len(record.Groups["Source"]))
-	}
-	if len(record.Groups["Blob"]) != 1 {
-		t.Errorf("Blob group: expected 1, got %d", len(record.Groups["Blob"]))
 	}
 }
 

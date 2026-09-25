@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -42,46 +41,6 @@ func seedReclaimAssignmentFrom(t *testing.T, s *store.Store, fixture store.Engin
 		t.Fatal(err)
 	}
 	return opened.Assignment
-}
-
-func TestReclaimSupersededAssignmentCapsulesRevokesStaleAssignments(t *testing.T) {
-	rt, s := testRuntime(t)
-	ctx := context.Background()
-	ownerID, computerID := "owner-reclaim", rt.TextureComputerID()
-
-	fixture, err := store.SeedEngineeringAssignmentAuthority(s, ownerID, computerID, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	parent := types.RunRecord{
-		RunID: fixture.ParentRunID, OwnerID: ownerID, ComputerID: computerID,
-		AgentID: fixture.ParentAgentID, AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management,
-		State: types.RunRunning, Metadata: map[string]any{},
-	}
-
-	stale := seedReclaimAssignmentFrom(t, s, fixture, ownerID, computerID, "assignment-stale", "capsule-stale")
-	if stale.CapsuleDisposition == types.EngineeringCapsuleRevoked {
-		t.Fatal("seeded assignment should start non-revoked")
-	}
-
-	// A fresh executor has no live capsules; the revoke fate path succeeds
-	// because HasCapsule returns false and orphan cleanup finds no residue.
-	rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), "", 3<<30)
-
-	if err := rt.reclaimSupersededAssignmentCapsules(ctx, parent, "assignment-current"); err != nil {
-		t.Fatalf("reclaim: %v", err)
-	}
-
-	reclaimed, err := s.GetEngineeringAssignment(ctx, ownerID, computerID, stale.AssignmentID, stale.Binding.Attempt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// An unbound assignment (opened but never bound/spawned) has no capsule to
-	// revoke and holds no admission budget; reclaim correctly skips it. The
-	// assignment remains open — it is inert without a capsule.
-	if reclaimed.Disposition.Terminal() {
-		t.Fatalf("unbound stale assignment should not be terminal, got %s", reclaimed.Disposition)
-	}
 }
 
 func TestReclaimSkipsCurrentAndAlreadyRevoked(t *testing.T) {

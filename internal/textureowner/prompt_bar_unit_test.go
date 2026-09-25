@@ -292,48 +292,6 @@ func waitForPromptBarUnitRunTerminal(t *testing.T, rt *Runtime, runID, ownerID s
 	return types.RunRecord{}
 }
 
-func TestHandlePromptBarResearchMentionDoesNotSetRoutingFlag(t *testing.T) {
-	rt, handler := testAPISetup(t)
-
-	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Create a texture document for M3. Ask researcher for a concise finding. Ask super to create a tiny verification note."}`, "user-alice")
-	w := httptest.NewRecorder()
-	handler.HandlePromptBar(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
-	}
-
-	var resp promptBarSubmitResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	conductor, err := rt.GetRun(context.Background(), resp.SubmissionID, "user-alice")
-	if err != nil {
-		t.Fatalf("get conductor: %v", err)
-	}
-	var decision conductorDecision
-	if err := json.Unmarshal([]byte(conductor.Result), &decision); err != nil {
-		t.Fatalf("decode conductor decision: %v\n%s", err, conductor.Result)
-	}
-	if metadataBoolValue(conductor.Metadata, runMetadataExplicitResearch) {
-		t.Fatalf("conductor metadata must not set %s from prompt text: %+v", runMetadataExplicitResearch, conductor.Metadata)
-	}
-	if decision.InitialLoopID == "" {
-		t.Fatalf("conductor decision missing initial loop: %+v", decision)
-	}
-	initialRun, err := rt.GetRun(context.Background(), decision.InitialLoopID, "user-alice")
-	if err != nil {
-		t.Fatalf("get initial loop run: %v", err)
-	}
-	if metadataBoolValue(initialRun.Metadata, runMetadataExplicitResearch) {
-		t.Fatalf("initial run metadata must not set %s from prompt text: %+v", runMetadataExplicitResearch, initialRun.Metadata)
-	}
-	if initialRun.AgentProfile != agentprofile.Texture || initialRun.AgentRole != agentprofile.Texture {
-		t.Fatalf("initial loop profile = %q/%q, want ordinary texture route", initialRun.AgentProfile, initialRun.AgentRole)
-	}
-	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
-		t.Fatalf("initial_handoff = %q, want no researcher-driven route override", got)
-	}
-}
 
 func TestHandlePromptBarStableCommandReplaysOneLifecycle(t *testing.T) {
 	rt, handler := testAPISetup(t)

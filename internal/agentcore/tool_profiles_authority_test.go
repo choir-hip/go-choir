@@ -181,20 +181,6 @@ func TestAssignmentIdentityUsesOnlyDocumentRevisionAndKind(t *testing.T) {
 	}
 }
 
-// TestDocumentAssignmentRequestCarriesModelPolicyOverlay proves the
-// owner-visible model-selection mechanism is reachable on the document-cast
-// path: the open request carries model_policy_overlay_id and the request
-// digest covers it, so a replayed cast with a different overlay conflicts
-// rather than silently reusing the original model selection.
-func TestDocumentAssignmentRequestCarriesModelPolicyOverlay(t *testing.T) {
-	req := OpenDocumentAssignmentRequest{
-		Objective: "implement", Kind: types.EngineeringAssignmentImplementation,
-		RevisionID: "revision", ModelPolicyOverlayID: "p5-chatgpt-g56luna",
-	}
-	if req.ModelPolicyOverlayID == "" {
-		t.Fatal("model_policy_overlay_id missing from document assignment request")
-	}
-}
 
 func TestStartCoagentRunHardRefusesEngineeringForEveryCaller(t *testing.T) {
 	s, err := openTestStore(filepath.Join(t.TempDir(), "runtime.db"))

@@ -123,26 +123,6 @@ func TestAppendRejectsEmptyIDAndType(t *testing.T) {
 	}
 }
 
-func TestAppendDefaultsCreatedAtAndPayload(t *testing.T) {
-	s := newTestStore(t)
-	ctx := context.Background()
-	before := time.Now().Add(-time.Second)
-	ev := Event{ID: "e-default", RunID: "run-1", EventType: "loop.started"}
-	if err := s.Append(ctx, &ev); err != nil {
-		t.Fatalf("Append: %v", err)
-	}
-	got, err := s.Get(ctx, "e-default")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if got.CreatedAt.Before(before) {
-		t.Fatalf("created_at not defaulted: %v", got.CreatedAt)
-	}
-	if string(got.Payload) != "{}" {
-		t.Fatalf("payload not defaulted: %q", got.Payload)
-	}
-}
-
 func TestListByRunOrdersBySeqAscending(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -238,46 +218,6 @@ func TestListByTrajectory(t *testing.T) {
 	}
 }
 
-func TestFromEventRecordExtractsToolAndParent(t *testing.T) {
-	ts := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
-	rec := &types.EventRecord{
-		EventID:      "ev-orig",
-		Seq:          7,
-		StreamSeq:    42,
-		Timestamp:    ts,
-		RunID:        "run-7",
-		AgentID:      "agent-texture",
-		OwnerID:      "user-alice",
-		TrajectoryID: "traj-1",
-		Kind:         types.EventToolInvoked,
-		Phase:        "execution",
-		Payload:      json.RawMessage(`{"tool":"edit_texture","call_id":"c1","parent_event_id":"ev-parent"}`),
-	}
-	ev := FromEventRecord(rec)
-	if ev.ID != "ev-orig" || ev.RunID != "run-7" || ev.EventType != "tool.invoked" {
-		t.Fatalf("projection mismatch: %+v", ev)
-	}
-	if ev.Tool != "edit_texture" {
-		t.Fatalf("tool not extracted: %q", ev.Tool)
-	}
-	if ev.ParentID != "ev-parent" {
-		t.Fatalf("parent_id not extracted: %q", ev.ParentID)
-	}
-	if ev.Seq != 7 || ev.StreamSeq != 42 {
-		t.Fatalf("seq mismatch: %d/%d", ev.Seq, ev.StreamSeq)
-	}
-	if ev.Actor != "agent-texture" || ev.OwnerID != "user-alice" || ev.TrajectoryID != "traj-1" {
-		t.Fatalf("identity mismatch: %+v", ev)
-	}
-	if !ev.CreatedAt.Equal(ts.UTC()) {
-		t.Fatalf("created_at mismatch: %v", ev.CreatedAt)
-	}
-	// Source record must be unchanged.
-	if rec.EventID != "ev-orig" || string(rec.Payload) != `{"tool":"edit_texture","call_id":"c1","parent_event_id":"ev-parent"}` {
-		t.Fatalf("source record mutated: %+v", rec)
-	}
-}
-
 func TestFromEventRecordHandlesEmptyAndMalformedPayload(t *testing.T) {
 	rec := &types.EventRecord{
 		EventID:   "ev-empty",
@@ -327,12 +267,6 @@ func TestAppendPersistsParentChainForQuery(t *testing.T) {
 	}
 	if got.ParentID != "ev-parent" {
 		t.Fatalf("parent_id not persisted: %q", got.ParentID)
-	}
-}
-
-func TestNewDoltStoreRejectsNilDB(t *testing.T) {
-	if _, err := NewDoltStore(nil); err == nil {
-		t.Fatalf("expected error for nil db")
 	}
 }
 

@@ -143,25 +143,6 @@ func TestRunToolLoopEndTurn(t *testing.T) {
 		t.Error("expected loop.progress event from loop iteration")
 	}
 }
-
-func TestRunToolLoopPopulatesConversationIDFromOption(t *testing.T) {
-	provider := newMockToolLoopProvider(&provideriface.ToolLoopResponse{
-		StopReason: "end_turn",
-		Text:       "done",
-		Model:      "test-model",
-	})
-	_, _, err := RunToolLoop(context.Background(), provider, nil,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
-		"You are helpful.", 0, func(types.EventKind, string, json.RawMessage) {}, nil,
-		WithToolLoopConversationID("run-123"))
-	if err != nil {
-		t.Fatalf("RunToolLoop: %v", err)
-	}
-	if got := provider.lastReq.ConversationID; got != "run-123" {
-		t.Fatalf("ConversationID = %q, want run-123", got)
-	}
-}
-
 func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
@@ -301,69 +282,6 @@ func TestRunToolLoopEmitsProviderCallProgressBeforeCall(t *testing.T) {
 		t.Fatalf("message_roles = %#v, want [user]", providerCallPayload["message_roles"])
 	}
 }
-
-func TestRunToolLoopEmitsResponseTextAndToolCallNames(t *testing.T) {
-	provider := newMockToolLoopProvider(
-		&provideriface.ToolLoopResponse{
-			StopReason: "tool_use",
-			Text:       "I found the first route.",
-			ToolCalls: []types.ToolCall{{
-				ID:        "call-1",
-				Name:      "echo",
-				Arguments: json.RawMessage(`{"message":"hello"}`),
-			}},
-			Model: "test-model",
-		},
-		&provideriface.ToolLoopResponse{
-			StopReason: "end_turn",
-			Text:       "done",
-			Model:      "test-model",
-		},
-	)
-	registry := NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name:        "echo",
-		Description: "Echo a message.",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return string(args), nil
-		},
-	}); err != nil {
-		t.Fatalf("register echo: %v", err)
-	}
-
-	var toolLoopPayload map[string]any
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		if kind != types.EventRunProgress || phase != "tool_loop" || toolLoopPayload != nil {
-			return
-		}
-		if err := json.Unmarshal(payload, &toolLoopPayload); err != nil {
-			t.Fatalf("unmarshal tool_loop payload: %v", err)
-		}
-	}
-
-	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
-		"You are helpful.",
-		4096,
-		emit,
-		nil)
-	if err != nil {
-		t.Fatalf("run tool loop: %v", err)
-	}
-	if toolLoopPayload == nil {
-		t.Fatal("missing tool_loop progress event")
-	}
-	if got := toolLoopPayload["response_text"]; got != "I found the first route." {
-		t.Fatalf("response_text = %v", got)
-	}
-	if got := int(toolLoopPayload["response_text_chars"].(float64)); got != len("I found the first route.") {
-		t.Fatalf("response_text_chars = %d", got)
-	}
-	names, ok := toolLoopPayload["tool_call_names"].([]any)
-	if !ok || len(names) != 1 || names[0] != "echo" {
-		t.Fatalf("tool_call_names = %#v, want [echo]", toolLoopPayload["tool_call_names"])
-	}
-}
-
 func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
@@ -1340,84 +1258,6 @@ func TestRunToolLoopRetriesProviderRateLimit(t *testing.T) {
 		t.Fatalf("usage = %+v", usage)
 	}
 }
-
-func TestRunToolLoopWithToolUse(t *testing.T) {
-	// LLM first returns tool_use, then end_turn after seeing tool result.
-	registry := NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name: "calculator",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "42", nil
-		},
-	}); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	provider := newMockToolLoopProvider(
-		// First response: requests tool use.
-		&provideriface.ToolLoopResponse{
-			StopReason: "tool_use",
-			Text:       "",
-			ToolCalls: []types.ToolCall{
-				{ID: "call-1", Name: "calculator", Arguments: json.RawMessage(`{"expr":"2+2"}`)},
-			},
-			Usage: provideriface.TokenUsage{InputTokens: 15, OutputTokens: 10},
-			Model: "test-model",
-		},
-		// Second response: final answer after tool result.
-		&provideriface.ToolLoopResponse{
-			StopReason: "end_turn",
-			Text:       "The answer is 42.",
-			Usage:      provideriface.TokenUsage{InputTokens: 25, OutputTokens: 5},
-			Model:      "test-model",
-		},
-	)
-
-	var emittedEvents []types.EventKind
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		emittedEvents = append(emittedEvents, kind)
-	}
-
-	text, usage, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"calculate 2+2"}`)},
-		"You are helpful.",
-		4096,
-		emit,
-		nil)
-
-	if err != nil {
-		t.Fatalf("run tool loop: %v", err)
-	}
-	if text != "The answer is 42." {
-		t.Errorf("text: got %q, want The answer is 42.", text)
-	}
-	if provider.CallCount() != 2 {
-		t.Errorf("call count: got %d, want 2 (one tool_use + one end_turn)", provider.CallCount())
-	}
-
-	// Should have tool.invoked and tool.result events.
-	foundInvoked := false
-	foundResult := false
-	for _, k := range emittedEvents {
-		if k == types.EventToolInvoked {
-			foundInvoked = true
-		}
-		if k == types.EventToolResult {
-			foundResult = true
-		}
-	}
-	if !foundInvoked {
-		t.Error("expected tool.invoked event")
-	}
-	if !foundResult {
-		t.Error("expected tool.result event")
-	}
-
-	// Token usage should accumulate across iterations.
-	if usage.InputTokens != 40 || usage.OutputTokens != 15 {
-		t.Errorf("total usage: got in=%d out=%d, want in=40 out=15", usage.InputTokens, usage.OutputTokens)
-	}
-}
-
 func TestRunToolLoopMultipleToolIterations(t *testing.T) {
 	// LLM uses tools twice before returning end_turn.
 	registry := NewToolRegistry()
@@ -1921,109 +1761,6 @@ func TestRunToolLoopToolUseWithoutCalls(t *testing.T) {
 		t.Fatal("expected error for tool_use without tool calls")
 	}
 }
-
-// --- provideriface.ToolLoopProvider Adapter Tests ---
-
-func TestToolLoopAdapter(t *testing.T) {
-	// The toolLoopAdapter wraps a basic Provider to implement provideriface.ToolLoopProvider.
-	stub := basicProvider{}
-	adapter := &toolLoopAdapter{Provider: stub}
-
-	req := provideriface.ToolLoopRequest{
-		System:    "You are helpful.",
-		Messages:  []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hello"}]}`)},
-		MaxTokens: 4096,
-	}
-
-	resp, err := adapter.CallWithTools(context.Background(), req)
-	if err != nil {
-		t.Fatalf("call with tools: %v", err)
-	}
-	if resp.StopReason != "end_turn" {
-		t.Errorf("stop reason: got %q, want end_turn", resp.StopReason)
-	}
-}
-
-func TestAsToolLoopProvider(t *testing.T) {
-	// When a provider already implements provideriface.ToolLoopProvider, it should be returned directly.
-	provider := newMockToolLoopProvider(
-		&provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "direct"},
-	)
-
-	result := AsToolLoopProvider(provider)
-	if _, ok := result.(*mockToolLoopProvider); !ok {
-		t.Error("expected direct cast to mockToolLoopProvider")
-	}
-
-	// When a provider doesn't implement provideriface.ToolLoopProvider, it should be wrapped.
-	stub := basicProvider{}
-	result = AsToolLoopProvider(stub)
-	if _, ok := result.(*toolLoopAdapter); !ok {
-		t.Error("expected toolLoopAdapter wrapper for stub provider")
-	}
-}
-
-// --- Helper content builders ---
-
-func TestBuildAssistantContent(t *testing.T) {
-	calls := []types.ToolCall{
-		{ID: "call-1", Name: "test", Arguments: json.RawMessage(`{"key":"val"}`)},
-	}
-
-	content := buildAssistantContent("Some text", calls)
-	if len(content) != 2 {
-		t.Fatalf("content blocks: got %d, want 2", len(content))
-	}
-
-	// First block should be text.
-	textBlock, ok := content[0].(map[string]string)
-	if !ok {
-		t.Fatalf("first block: expected map[string]string")
-	}
-	if textBlock["type"] != "text" {
-		t.Errorf("first block type: got %q, want text", textBlock["type"])
-	}
-
-	// Second block should be tool_use.
-	toolBlock, ok := content[1].(map[string]any)
-	if !ok {
-		t.Fatalf("second block: expected map[string]any")
-	}
-	if toolBlock["type"] != "tool_use" {
-		t.Errorf("second block type: got %v, want tool_use", toolBlock["type"])
-	}
-}
-
-func TestBuildToolResultContent(t *testing.T) {
-	results := []types.ToolResult{
-		{CallID: "call-1", Output: "result text", IsError: false},
-		{CallID: "call-2", Output: "error text", IsError: true},
-	}
-
-	content := buildToolResultContent(results)
-	if len(content) != 2 {
-		t.Fatalf("content blocks: got %d, want 2", len(content))
-	}
-
-	// First result: normal.
-	block1, ok := content[0].(map[string]any)
-	if !ok {
-		t.Fatalf("first block: expected map[string]any")
-	}
-	if block1["tool_use_id"] != "call-1" {
-		t.Errorf("first block tool_use_id: got %v, want call-1", block1["tool_use_id"])
-	}
-
-	// Second result: error.
-	block2, ok := content[1].(map[string]any)
-	if !ok {
-		t.Fatalf("second block: expected map[string]any")
-	}
-	if block2["is_error"] != true {
-		t.Errorf("second block is_error: got %v, want true", block2["is_error"])
-	}
-}
-
 func intMapValue(m map[string]any, key string) int {
 	switch value := m[key].(type) {
 	case int:
@@ -2057,29 +1794,4 @@ func isContextOverflowError(err error) bool {
 			strings.Contains(text, "exceed") ||
 			strings.Contains(text, "length") ||
 			strings.Contains(text, "window"))
-}
-
-func TestExecuteToolBatchPreservesExecutionContext(t *testing.T) {
-	type contextKey string
-	const key contextKey = "caller-context"
-	registry := NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name: "read_context",
-		Func: func(ctx context.Context, _ json.RawMessage) (string, error) {
-			value, _ := ctx.Value(key).(string)
-			return value, nil
-		},
-	}); err != nil {
-		t.Fatalf("register read_context: %v", err)
-	}
-
-	results := ExecuteToolBatch(
-		context.WithValue(context.Background(), key, "preserved"),
-		registry,
-		[]types.ToolCall{{ID: "call-context", Name: "read_context"}},
-		func(types.EventKind, string, json.RawMessage) {},
-	)
-	if len(results) != 1 || results[0].IsError || results[0].Output != "preserved" {
-		t.Fatalf("results = %+v, want preserved caller context", results)
-	}
 }

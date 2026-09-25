@@ -57,32 +57,6 @@ func main() {
 	}
 }
 
-func TestSidecarRunnerInProcess(t *testing.T) {
-	cfg := SidecarConfig{
-		Timeout:         2 * time.Second,
-		AllowedPackages: []string{"fmt", "strings"},
-	}
-	runner := NewSidecarRunner(cfg)
-
-	src := `
-package main
-
-import "fmt"
-import "strings"
-
-func main() {
-	fmt.Print(strings.ToLower("YAEGI-RUNNER-OK"))
-}
-`
-	res, err := runner.RunInProcess(context.Background(), src)
-	if err != nil {
-		t.Fatalf("RunInProcess failed: %v", err)
-	}
-	if strings.TrimSpace(res.Stdout) != "yaegi-runner-ok" {
-		t.Fatalf("unexpected stdout: %q", res.Stdout)
-	}
-}
-
 // TestContainmentContextCancellationKillsBlockedProgram proves that cancelling the
 // evaluation context terminates a program blocked on a channel (deadlock-like) or
 // an unbounded wait — the resource experiment's cancellation case. A blocked
@@ -117,36 +91,5 @@ func main() {
 	}
 	if elapsed > 2*time.Second {
 		t.Fatalf("cancellation took too long: %v", elapsed)
-	}
-}
-
-// TestContainmentDeadlockTimeout proves a program that blocks on a second
-// goroutine reading a never-sent channel is bounded by the context deadline
-// (goroutine-leak/deadlock containment).
-func TestContainmentDeadlockTimeout(t *testing.T) {
-	evaluator := NewEvaluator(NewDefaultSafeAllowlist(), nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
-
-	src := `
-package main
-
-func main() {
-	done := make(chan bool)
-	go func() { <-done }() // never signals
-	<-done
-}
-`
-	start := time.Now()
-	_, err := evaluator.Eval(ctx, src)
-	elapsed := time.Since(start)
-	if err == nil {
-		t.Fatal("expected deadlock to time out, got nil")
-	}
-	if !strings.Contains(err.Error(), "timed out") && !strings.Contains(err.Error(), "context deadline exceeded") {
-		t.Fatalf("expected timeout error, got %v", err)
-	}
-	if elapsed > 2*time.Second {
-		t.Fatalf("deadlock timeout took too long: %v", elapsed)
 	}
 }

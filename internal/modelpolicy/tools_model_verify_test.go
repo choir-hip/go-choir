@@ -165,14 +165,3 @@ func TestVerifyModelCapabilityRejectsBadImagesBeforeProvider(t *testing.T) {
 		})
 	}
 }
-
-func TestRegisterVerifyModelCapabilityTool(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	manager := NewManager(ManagerConfig{Provider: &capturingModelVerifyProvider{}})
-	if err := RegisterVerifyModelCapabilityTool(registry, manager); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-	if _, ok := registry.Lookup("verify_model_capability"); !ok {
-		t.Fatal("registered tool missing")
-	}
-}

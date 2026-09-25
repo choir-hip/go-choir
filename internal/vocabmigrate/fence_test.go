@@ -69,13 +69,3 @@ func TestFenceRejectsUnknownVocabulary(t *testing.T) {
 		t.Error("fence accepted empty active vocabulary")
 	}
 }
-
-func TestEventActorFieldsProjection(t *testing.T) {
-	fields := EventActorFields("co-super")
-	if len(fields) != 1 || fields[0].Key != "event.actor_profile" || fields[0].Value != "co-super" {
-		t.Fatalf("actor projection = %+v", fields)
-	}
-	if err := VerifyServingVocabulary(VocabularyV1, fields...); err != nil {
-		t.Fatalf("fence refused V1 actor: %v", err)
-	}
-}

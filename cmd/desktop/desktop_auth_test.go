@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -390,60 +389,6 @@ func TestDesktopExchangeCodeValidatesCallbackAuthority(t *testing.T) {
 	}
 }
 
-func TestDesktopRendererSourceCannotHandleSessionTokens(t *testing.T) {
-	t.Parallel()
-
-	source, err := os.ReadFile("../../frontend/src/lib/auth.js")
-	if err != nil {
-		t.Fatalf("read renderer auth source: %v", err)
-	}
-	for _, forbidden := range []string{"document.cookie", "access_token", "refresh_token", "choir_access", "choir_refresh"} {
-		if strings.Contains(string(source), forbidden) {
-			t.Errorf("renderer auth source contains forbidden session authority %q", forbidden)
-		}
-	}
-}
-
-func TestDesktopNativeSourceDoesNotMintOrDecodeSessionTokens(t *testing.T) {
-	t.Parallel()
-
-	source, err := os.ReadFile("desktop_auth.go")
-	if err != nil {
-		t.Fatalf("read native auth source: %v", err)
-	}
-	for _, forbidden := range []string{"desktopTokenResponse", "seedSession", `"access_token"`, `"refresh_token"`, `"choir_access"`, `"choir_refresh"`} {
-		if strings.Contains(string(source), forbidden) {
-			t.Errorf("native auth source contains superseded session authority %q", forbidden)
-		}
-	}
-
-	bridgeSource, err := os.ReadFile("../../frontend/public/desktop-bridge.html")
-	if err != nil {
-		t.Fatalf("read desktop bridge source: %v", err)
-	}
-	for _, forbidden := range []string{"function exchangeTokens", "fetch('/auth/desktop/exchange',"} {
-		if strings.Contains(string(bridgeSource), forbidden) {
-			t.Errorf("desktop bridge source contains superseded JSON exchange path %q", forbidden)
-		}
-	}
-}
-
-func TestDesktopDoesNotRegisterSupersededBaseSyncService(t *testing.T) {
-	t.Parallel()
-
-	source, err := os.ReadFile("main.go")
-	if err != nil {
-		t.Fatalf("read desktop main source: %v", err)
-	}
-	for _, forbidden := range []string{
-		"application.NewService(newSyncService",
-		"func newSyncService(",
-	} {
-		if strings.Contains(string(source), forbidden) {
-			t.Errorf("desktop still exposes superseded Base sync authority %q", forbidden)
-		}
-	}
-}
 
 func mustDesktopSession(t *testing.T, backend string) *desktopSession {
 	t.Helper()

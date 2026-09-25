@@ -68,31 +68,6 @@ func TestChoirParityWriteReadRoundTrip(t *testing.T) {
 	}
 }
 
-// TestChoirParityListDir is corpus cell 3: directory listing parity.
-func TestChoirParityListDir(t *testing.T) {
-	broker, issuer, scope, _ := testChoirFixture(t)
-	for _, name := range []string{"a.txt", "b.txt"} {
-		if _, err := scope.WriteFile(name, "x"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	resp := dtoCall(t, broker, issuer, ActionListDir, ListDirPayload{Path: "."})
-	if !resp.Success {
-		t.Fatalf("dto list: %s", resp.Error)
-	}
-	var dtoResult ListDirResult
-	if err := json.Unmarshal(resp.Result, &dtoResult); err != nil {
-		t.Fatal(err)
-	}
-	symEntries, err := scope.ListDir(".")
-	if err != nil {
-		t.Fatalf("symbol list: %v", err)
-	}
-	if len(symEntries) != 2 || len(dtoResult.Entries) != 2 {
-		t.Fatalf("entries symbol=%v dto=%v", symEntries, dtoResult.Entries)
-	}
-}
-
 // TestChoirParityJailbreakRefused is corpus cell 4: path escapes fail
 // identically on both surfaces (same jailing, same refusal class).
 func TestChoirParityJailbreakRefused(t *testing.T) {

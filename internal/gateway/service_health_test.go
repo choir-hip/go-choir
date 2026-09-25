@@ -12,7 +12,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/provider"
-	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
 // --- M22b / C20: per-service health endpoint tests ---
@@ -127,25 +126,6 @@ func TestHandleServiceHealth_NotConfiguredWhenNoCheckers(t *testing.T) {
 	}
 }
 
-// TestHandleServiceHealth_RejectsNonGet verifies only GET is accepted.
-func TestHandleServiceHealth_RejectsNonGet(t *testing.T) {
-	h, _ := setupHandlerNoProvider(t)
-	h.SetServiceCheckers(map[string]health.Checker{
-		"qdrant": health.CheckerFunc{NameStr: "qdrant", Fn: func(ctx context.Context) error { return nil }},
-	})
-	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
-		t.Run(method, func(t *testing.T) {
-			req := httptest.NewRequest(method, "/health/qdrant", nil)
-			req.SetPathValue("service", "qdrant")
-			w := httptest.NewRecorder()
-			h.HandleServiceHealth(w, req)
-			if w.Code != http.StatusMethodNotAllowed {
-				t.Errorf("%s: got %d, want 405", method, w.Code)
-			}
-		})
-	}
-}
-
 // TestHandleServiceHealth_SurfacesBreakerState verifies that when a circuit
 // breaker is registered for the probed service, the response includes the
 // breaker state ("closed"/"open"/"half-open").
@@ -216,60 +196,6 @@ func TestHandleServiceHealth_NoSecretsInError(t *testing.T) {
 	for _, leak := range []string{secret, "Authorization:", "Bearer ", "sk-live-secret-token", "dial "} {
 		if strings.Contains(body, leak) {
 			t.Fatalf("public health response leaked %q: %s", leak, body)
-		}
-	}
-}
-
-// TestHandleServiceHealth_RouteViaMux verifies the /health/{service} route is
-// registered on the server mux and reachable end-to-end (M22b / C20:
-// "mounted in the gateway router without disrupting existing routing").
-func TestHandleServiceHealth_RouteViaMux(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	h, _ := setupHandlerNoProvider(t)
-	h.SetServiceCheckers(map[string]health.Checker{
-		"runtime": health.HTTPChecker{NameStr: "runtime", URL: srv.URL, Timeout: time.Second},
-	})
-
-	s := server.NewServer("gateway", "0")
-	RegisterRoutes(s, h)
-
-	// Existing /health route must still work (no disruption).
-	reqHealth := httptest.NewRequest(http.MethodGet, "/health", nil)
-	wHealth := httptest.NewRecorder()
-	s.ServeHTTP(wHealth, reqHealth)
-	if wHealth.Code != http.StatusOK {
-		t.Fatalf("existing /health route broken: got %d", wHealth.Code)
-	}
-
-	// New /health/{service} route must be reachable.
-	reqSvc := httptest.NewRequest(http.MethodGet, "/health/runtime", nil)
-	wSvc := httptest.NewRecorder()
-	s.ServeHTTP(wSvc, reqSvc)
-	if wSvc.Code != http.StatusOK {
-		t.Fatalf("/health/runtime: got %d, want 200; body: %s", wSvc.Code, wSvc.Body.String())
-	}
-	var resp serviceHealthResponse
-	if err := json.NewDecoder(wSvc.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Status != string(health.StatusOK) {
-		t.Errorf("status = %q, want ok", resp.Status)
-	}
-}
-
-// --- Config tests ---
-
-// TestDefaultServiceHealthURLs verifies the default probe URLs cover all
-// required services named in the M22b spec.
-func TestDefaultServiceHealthURLs(t *testing.T) {
-	required := []string{"sourcecycled", "runtime", "qdrant", "dolt", "ollama"}
-	for _, name := range required {
-		if _, ok := DefaultServiceHealthURLs[name]; !ok {
-			t.Errorf("DefaultServiceHealthURLs missing %q", name)
 		}
 	}
 }

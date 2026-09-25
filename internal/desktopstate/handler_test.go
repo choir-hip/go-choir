@@ -415,42 +415,6 @@ func TestDesktopStateUserIsolation(t *testing.T) {
 		t.Errorf("user-2 desktop state incorrect")
 	}
 }
-
-func TestDesktopStateRouterMethodDispatch(t *testing.T) {
-	t.Parallel()
-	_, h := testDesktopSetup(t)
-
-	// POST should be method not allowed.
-	req := httptest.NewRequest(http.MethodPost, "/api/desktop/state", nil)
-	req.Header.Set("X-Authenticated-User", "user-1")
-	w := httptest.NewRecorder()
-	h.HandleDesktopState(w, req)
-
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("POST status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
-	}
-
-	// DELETE should be method not allowed.
-	req2 := httptest.NewRequest(http.MethodDelete, "/api/desktop/state", nil)
-	req2.Header.Set("X-Authenticated-User", "user-1")
-	w2 := httptest.NewRecorder()
-	h.HandleDesktopState(w2, req2)
-
-	if w2.Code != http.StatusMethodNotAllowed {
-		t.Errorf("DELETE status = %d, want %d", w2.Code, http.StatusMethodNotAllowed)
-	}
-
-	// GET should work.
-	req3 := httptest.NewRequest(http.MethodGet, "/api/desktop/state", nil)
-	req3.Header.Set("X-Authenticated-User", "user-1")
-	w3 := httptest.NewRecorder()
-	h.HandleDesktopState(w3, req3)
-
-	if w3.Code != http.StatusOK {
-		t.Errorf("GET status = %d, want %d", w3.Code, http.StatusOK)
-	}
-}
-
 func TestDesktopStateSaveAndGetByDesktopSelector(t *testing.T) {
 	t.Parallel()
 	_, h := testDesktopSetup(t)

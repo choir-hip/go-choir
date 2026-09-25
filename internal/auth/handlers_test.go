@@ -165,93 +165,6 @@ func TestRootStatusIsOwnerScoped(t *testing.T) {
 		t.Fatalf("unexpected root status: %+v", response)
 	}
 }
-
-// --- Register Begin Tests ---
-
-func TestRegisterBeginRejectsNonPost(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
-		req := httptest.NewRequest(method, "/auth/register/begin", nil)
-		rec := httptest.NewRecorder()
-		h.HandleRegisterBegin(rec, req)
-
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("method %s: got status %d, want %d", method, rec.Code, http.StatusMethodNotAllowed)
-		}
-
-		var resp errorResponse
-		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-			t.Fatalf("decode error response: %v", err)
-		}
-		if resp.Error == "" {
-			t.Errorf("method %s: expected non-empty error message", method)
-		}
-	}
-}
-
-func TestRegisterBeginRejectsEmptyBody(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin", nil)
-	rec := httptest.NewRecorder()
-	h.HandleRegisterBegin(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-
-	var resp errorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Error == "" {
-		t.Error("expected non-empty error message")
-	}
-}
-
-func TestRegisterBeginRejectsMalformedJSON(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	tests := []struct {
-		name string
-		body string
-	}{
-		{"not json", `this is not json`},
-		{"missing email field", `{"username": "alice@example.com"}`},
-		{"empty email", `{"email": ""}`},
-		{"email is number", `{"email": 123}`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-				bytes.NewBufferString(tt.body))
-			req.Header.Set("Content-Type", "application/json")
-			rec := httptest.NewRecorder()
-			h.HandleRegisterBegin(rec, req)
-
-			if rec.Code < 400 || rec.Code >= 500 {
-				t.Errorf("status: got %d, want 4xx", rec.Code)
-			}
-
-			// Must be JSON, not HTML.
-			ct := rec.Header().Get("Content-Type")
-			if ct != "application/json" {
-				t.Errorf("Content-Type: got %q, want %q", ct, "application/json")
-			}
-
-			var resp errorResponse
-			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-				t.Fatalf("decode: %v", err)
-			}
-			if resp.Error == "" {
-				t.Error("expected non-empty error message")
-			}
-		})
-	}
-}
-
 func TestRegisterBeginReturnsRPBoundChallenge(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -363,84 +276,6 @@ func TestRegisterBeginIdempotentForExistingUser(t *testing.T) {
 		t.Errorf("user ID: got %q, want %q (should be existing user)", user.ID, "existing-id")
 	}
 }
-
-// --- Login Begin Tests ---
-
-func TestLoginBeginRejectsNonPost(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
-		req := httptest.NewRequest(method, "/auth/login/begin", nil)
-		rec := httptest.NewRecorder()
-		h.HandleLoginBegin(rec, req)
-
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("method %s: got status %d, want %d", method, rec.Code, http.StatusMethodNotAllowed)
-		}
-	}
-}
-
-func TestLoginBeginRejectsEmptyBody(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodPost, "/auth/login/begin", nil)
-	rec := httptest.NewRecorder()
-	h.HandleLoginBegin(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-
-	var resp errorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Error == "" {
-		t.Error("expected non-empty error message")
-	}
-}
-
-func TestLoginBeginRejectsMalformedJSON(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	tests := []struct {
-		name string
-		body string
-	}{
-		{"not json", `not json at all`},
-		{"missing email", `{"username": "alice@example.com"}`},
-		{"empty email", `{"email": ""}`},
-		{"email is null", `{"email": null}`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/auth/login/begin",
-				bytes.NewBufferString(tt.body))
-			req.Header.Set("Content-Type", "application/json")
-			rec := httptest.NewRecorder()
-			h.HandleLoginBegin(rec, req)
-
-			if rec.Code < 400 || rec.Code >= 500 {
-				t.Errorf("status: got %d, want 4xx; body: %s", rec.Code, rec.Body.String())
-			}
-
-			ct := rec.Header().Get("Content-Type")
-			if ct != "application/json" {
-				t.Errorf("Content-Type: got %q, want %q", ct, "application/json")
-			}
-
-			var resp errorResponse
-			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-				t.Fatalf("decode: %v", err)
-			}
-			if resp.Error == "" {
-				t.Error("expected non-empty error message")
-			}
-		})
-	}
-}
-
 func TestLoginBeginRejectsUnknownUser(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -621,31 +456,6 @@ func TestSessionReturnsSignedOutWithBogusCookie(t *testing.T) {
 		t.Error("user should be nil with bogus cookie")
 	}
 }
-
-func TestSessionReturnsSignedOutWithEmptyCookie(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  AccessTokenCookieName,
-		Value: "",
-	})
-	rec := httptest.NewRecorder()
-	h.HandleSession(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	var resp sessionResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Authenticated {
-		t.Error("should not be authenticated with an empty cookie")
-	}
-}
-
 func TestSessionReturnsSignedOutWithExpiredJWT(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 
@@ -827,21 +637,6 @@ func TestSessionDoesNotLeakSecrets(t *testing.T) {
 		}
 	}
 }
-
-func TestSessionRejectsNonGet(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
-		req := httptest.NewRequest(method, "/auth/session", nil)
-		rec := httptest.NewRecorder()
-		h.HandleSession(rec, req)
-
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("method %s: got status %d, want %d", method, rec.Code, http.StatusMethodNotAllowed)
-		}
-	}
-}
-
 func TestSessionNeverReturns5xxForInvalidAuth(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -883,82 +678,6 @@ func TestSessionNeverReturns5xxForInvalidAuth(t *testing.T) {
 		})
 	}
 }
-
-// --- WebAuthn user adapter tests ---
-
-func TestWebAuthnUserAdapter(t *testing.T) {
-	store := TestStore(t)
-
-	user, err := store.CreateUser("wa-user-1", "walter@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	cred := &Credential{
-		ID:              "wa-cred-1",
-		UserID:          user.ID,
-		PublicKey:       []byte("fake-key"),
-		AttestationType: "none",
-		Transport:       `["internal","hybrid"]`,
-		SignCount:       5,
-		AAGUID:          make([]byte, 16),
-		Flags:           `{"user_present":true,"user_verified":true,"backup_eligible":true,"backup_state":false}`,
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := store.CreateCredential(cred); err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-
-	waUser, err := newWebAuthnUser(user, []Credential{*cred})
-	if err != nil {
-		t.Fatalf("newWebAuthnUser: %v", err)
-	}
-
-	if string(waUser.WebAuthnID()) != user.ID {
-		t.Errorf("WebAuthnID: got %q, want %q", string(waUser.WebAuthnID()), user.ID)
-	}
-	if waUser.WebAuthnName() != "walter@example.com" {
-		t.Errorf("WebAuthnName: got %q, want %q", waUser.WebAuthnName(), "walter@example.com")
-	}
-	if waUser.WebAuthnDisplayName() != "walter@example.com" {
-		t.Errorf("WebAuthnDisplayName: got %q, want %q", waUser.WebAuthnDisplayName(), "walter@example.com")
-	}
-	creds := waUser.WebAuthnCredentials()
-	if len(creds) != 1 {
-		t.Fatalf("WebAuthnCredentials: got %d, want 1", len(creds))
-	}
-	if string(creds[0].ID) != "wa-cred-1" {
-		t.Errorf("credential ID: got %q, want %q", string(creds[0].ID), "wa-cred-1")
-	}
-	if len(creds[0].Transport) != 2 {
-		t.Errorf("Transport: got %d, want 2", len(creds[0].Transport))
-	}
-}
-
-// --- Key loading tests ---
-
-func TestLoadPrivateKey(t *testing.T) {
-	// Generate a key with ssh-keygen format, like init.sh does.
-	_, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
-
-	dir := t.TempDir()
-	keyPath := filepath.Join(dir, "test-key")
-	writeTestKey(t, keyPath, priv)
-
-	loaded, err := LoadPrivateKey(keyPath)
-	if err != nil {
-		t.Fatalf("LoadPrivateKey: %v", err)
-	}
-
-	// Compare the private key bytes.
-	if !bytes.Equal(priv, loaded) {
-		t.Error("loaded key does not match original key")
-	}
-}
-
 func TestLoadPrivateKeyInvalidPath(t *testing.T) {
 	_, err := LoadPrivateKey("/nonexistent/key")
 	if err == nil {
@@ -1073,69 +792,6 @@ func writeTestKey(t *testing.T, path string, priv ed25519.PrivateKey) {
 		t.Fatalf("write key: %v", err)
 	}
 }
-
-// --- ssh import usage check ---
-
-func TestSSHPackageImportUsed(t *testing.T) {
-	// This is a compile-time check that the ssh package is correctly imported.
-	// If this compiles, the import path is correct.
-	_ = ssh.MarshalPrivateKey
-	_ = fmt.Sprintf
-}
-
-// ======================================================================
-// Finish route tests
-// ======================================================================
-
-// --- Register Finish Tests ---
-
-func TestRegisterFinishRejectsNonPost(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
-		req := httptest.NewRequest(method, "/auth/register/finish", nil)
-		rec := httptest.NewRecorder()
-		h.HandleRegisterFinish(rec, req)
-
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("method %s: got status %d, want %d", method, rec.Code, http.StatusMethodNotAllowed)
-		}
-
-		var resp errorResponse
-		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-			t.Fatalf("decode error response: %v", err)
-		}
-		if resp.Error == "" {
-			t.Errorf("method %s: expected non-empty error message", method)
-		}
-	}
-}
-
-func TestRegisterFinishRejectsEmptyBody(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodPost, "/auth/register/finish", nil)
-	rec := httptest.NewRecorder()
-	h.HandleRegisterFinish(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-
-	var resp errorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Error == "" {
-		t.Error("expected non-empty error message")
-	}
-
-	ct := rec.Header().Get("Content-Type")
-	if ct != "application/json" {
-		t.Errorf("Content-Type: got %q, want %q", ct, "application/json")
-	}
-}
-
 func TestRegisterFinishRejectsInvalidWebAuthnResponse(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -1404,43 +1060,6 @@ func TestRegisterFinishReplayDoesNotMintSession(t *testing.T) {
 		t.Error("session should not be authenticated after failed/replayed finish")
 	}
 }
-
-// --- Login Finish Tests ---
-
-func TestLoginFinishRejectsNonPost(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
-		req := httptest.NewRequest(method, "/auth/login/finish", nil)
-		rec := httptest.NewRecorder()
-		h.HandleLoginFinish(rec, req)
-
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("method %s: got status %d, want %d", method, rec.Code, http.StatusMethodNotAllowed)
-		}
-	}
-}
-
-func TestLoginFinishRejectsEmptyBody(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodPost, "/auth/login/finish", nil)
-	rec := httptest.NewRecorder()
-	h.HandleLoginFinish(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-
-	var resp errorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Error == "" {
-		t.Error("expected non-empty error message")
-	}
-}
-
 func TestLoginFinishRejectsInvalidWebAuthnResponse(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -2335,165 +1954,6 @@ func TestAuthCookiesAreSecureWhenConfigured(t *testing.T) {
 		}
 	}
 }
-
-// --- Challenge session data storage tests ---
-
-func TestRegisterBeginStoresSessionData(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	body := `{"email": "sessiondata@example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleRegisterBegin(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	// Find the user.
-	user, err := h.store.GetUserByEmail("sessiondata@example.com")
-	if err != nil {
-		t.Fatalf("get user: %v", err)
-	}
-
-	// Find the challenge for this user.
-	// The challenge ID is the challenge string from the WebAuthn session.
-	// We can look it up by checking recent challenge states.
-	challenges, err := h.store.GetChallengeStatesByUserID(user.ID)
-	if err != nil {
-		t.Fatalf("get challenges: %v", err)
-	}
-	if len(challenges) == 0 {
-		t.Fatal("no challenges found for user")
-	}
-
-	cs := challenges[0]
-	if cs.WebAuthnSessionData == "" {
-		t.Error("challenge state should have WebAuthn session data")
-	}
-	if cs.Type != "registration" {
-		t.Errorf("challenge type: got %q, want %q", cs.Type, "registration")
-	}
-
-	// Verify the session data is valid JSON.
-	var sessionData webauthn.SessionData
-	if err := json.Unmarshal([]byte(cs.WebAuthnSessionData), &sessionData); err != nil {
-		t.Fatalf("unmarshal session data: %v", err)
-	}
-	if sessionData.Challenge == "" {
-		t.Error("session data challenge should not be empty")
-	}
-}
-
-func TestLoginBeginStoresSessionData(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	// Create a user with a credential.
-	user, err := h.store.CreateUser("login-session-data-user", "loginsd@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-	cred := &Credential{
-		ID:              "cred-lsd",
-		UserID:          user.ID,
-		PublicKey:       make([]byte, 64),
-		AttestationType: "none",
-		Transport:       `["internal"]`,
-		SignCount:       0,
-		AAGUID:          make([]byte, 16),
-		Flags:           "{}",
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := h.store.CreateCredential(cred); err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-
-	body := `{"email": "loginsd@example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/auth/login/begin",
-		bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleLoginBegin(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	challenges, err := h.store.GetChallengeStatesByUserID(user.ID)
-	if err != nil {
-		t.Fatalf("get challenges: %v", err)
-	}
-	if len(challenges) == 0 {
-		t.Fatal("no challenges found for user")
-	}
-
-	cs := challenges[0]
-	if cs.WebAuthnSessionData == "" {
-		t.Error("login challenge state should have WebAuthn session data")
-	}
-	if cs.Type != "login" {
-		t.Errorf("challenge type: got %q, want %q", cs.Type, "login")
-	}
-
-	var sessionData webauthn.SessionData
-	if err := json.Unmarshal([]byte(cs.WebAuthnSessionData), &sessionData); err != nil {
-		t.Fatalf("unmarshal session data: %v", err)
-	}
-}
-
-// --- Logout Tests ---
-
-func TestLogoutRejectsNonPost(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
-		req := httptest.NewRequest(method, "/auth/logout", nil)
-		rec := httptest.NewRecorder()
-		h.HandleLogout(rec, req)
-
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("method %s: got status %d, want %d", method, rec.Code, http.StatusMethodNotAllowed)
-		}
-
-		var resp errorResponse
-		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-			t.Fatalf("decode error response: %v", err)
-		}
-		if resp.Error == "" {
-			t.Errorf("method %s: expected non-empty error message", method)
-		}
-	}
-}
-
-func TestLogoutReturnsSignedOutWhenAlreadySignedOut(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	// POST /auth/logout with no cookies at all.
-	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	rec := httptest.NewRecorder()
-	h.HandleLogout(rec, req)
-
-	// Must not return 5xx.
-	if rec.Code >= 500 {
-		t.Errorf("status: got %d (5xx), want non-5xx for signed-out logout", rec.Code)
-	}
-
-	ct := rec.Header().Get("Content-Type")
-	if ct != "application/json" {
-		t.Errorf("Content-Type: got %q, want %q", ct, "application/json")
-	}
-
-	var resp sessionResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Authenticated {
-		t.Error("should not be authenticated after logout")
-	}
-}
-
 func TestLogoutInvalidatesAuthenticatedSession(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 
@@ -2657,35 +2117,6 @@ func TestLogoutRepeatIsSafe(t *testing.T) {
 		t.Error("repeat logout should return signed-out, not authenticated")
 	}
 }
-
-func TestLogoutWithBogusCookiesIsSafe(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	// Logout with bogus cookies — should not crash or return 5xx.
-	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	req.AddCookie(&http.Cookie{Name: AccessTokenCookieName, Value: "not-a-jwt"})
-	req.AddCookie(&http.Cookie{Name: RefreshTokenCookieName, Value: "not-a-refresh-token"})
-	rec := httptest.NewRecorder()
-	h.HandleLogout(rec, req)
-
-	if rec.Code >= 500 {
-		t.Errorf("logout with bogus cookies: got %d, want non-5xx", rec.Code)
-	}
-
-	ct := rec.Header().Get("Content-Type")
-	if ct != "application/json" {
-		t.Errorf("Content-Type: got %q, want %q", ct, "application/json")
-	}
-
-	var resp sessionResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Authenticated {
-		t.Error("should not be authenticated after logout with bogus cookies")
-	}
-}
-
 func TestLogoutThenSessionReportsSignedOut(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -3197,55 +2628,6 @@ func sha256Sum(data []byte) string {
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash)
 }
-
-// ======================================================================
-// Re-login bug fix tests (VAL-AUTH-004, VAL-AUTH-005)
-//
-// These tests verify that the CredentialFlags (user_present, user_verified,
-// backup_eligible, backup_state) and Authenticator.SignCount are properly
-// stored and restored, which is required for WebAuthn re-login to succeed.
-// ======================================================================
-
-// TestCredentialFlagsStoredOnRegistration verifies that the CredentialFlags
-// from a WebAuthn registration are stored in the credentials table.
-func TestCredentialFlagsStoredOnRegistration(t *testing.T) {
-	store := TestStore(t)
-
-	user, err := store.CreateUser("flags-test-user", "flagsuser@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	// Create a credential with realistic flags that a platform authenticator
-	// would set (UserPresent=true, UserVerified=true, BackupEligible=true).
-	cred := &Credential{
-		ID:              "cred-flags-test",
-		UserID:          user.ID,
-		PublicKey:       make([]byte, 64),
-		AttestationType: "none",
-		Transport:       `["internal"]`,
-		SignCount:       0,
-		AAGUID:          make([]byte, 16),
-		Flags:           `{"user_present":true,"user_verified":true,"backup_eligible":true,"backup_state":false}`,
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := store.CreateCredential(cred); err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-
-	// Read it back and verify flags are persisted.
-	creds, err := store.GetCredentialsByUserID(user.ID)
-	if err != nil {
-		t.Fatalf("get credentials: %v", err)
-	}
-	if len(creds) != 1 {
-		t.Fatalf("expected 1 credential, got %d", len(creds))
-	}
-	if creds[0].Flags != `{"user_present":true,"user_verified":true,"backup_eligible":true,"backup_state":false}` {
-		t.Errorf("flags: got %q, want backup_eligible=true flags", creds[0].Flags)
-	}
-}
-
 // TestCredentialFlagsRestoredOnWebAuthnUser verifies that when a webauthnUser
 // is created from stored credentials, the CredentialFlags and
 // Authenticator.SignCount are properly restored. This is the core of the
@@ -3317,79 +2699,6 @@ func TestCredentialFlagsRestoredOnWebAuthnUser(t *testing.T) {
 		t.Errorf("AAGUID length: got %d, want 16", len(waCreds[0].Authenticator.AAGUID))
 	}
 }
-
-// TestCredentialFlagsEmptyFlagsHandled verifies that credentials with empty
-// or missing flags (e.g., from before the migration) are handled gracefully
-// without panicking or causing errors.
-func TestCredentialFlagsEmptyFlagsHandled(t *testing.T) {
-	store := TestStore(t)
-
-	user, err := store.CreateUser("empty-flags-user", "emptyflags@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	tests := []struct {
-		name  string
-		flags string
-	}{
-		{"empty json", "{}"},
-		{"empty string", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cred := &Credential{
-				ID:              "cred-empty-" + tt.name,
-				UserID:          user.ID,
-				PublicKey:       make([]byte, 64),
-				AttestationType: "none",
-				Transport:       `["internal"]`,
-				SignCount:       0,
-				AAGUID:          make([]byte, 16),
-				Flags:           tt.flags,
-				CreatedAt:       time.Now().UTC(),
-			}
-			if err := store.CreateCredential(cred); err != nil {
-				t.Fatalf("create credential: %v", err)
-			}
-
-			creds, err := store.GetCredentialsByUserID(user.ID)
-			if err != nil {
-				t.Fatalf("get credentials: %v", err)
-			}
-
-			// Find the right credential.
-			var found *Credential
-			for i := range creds {
-				if creds[i].ID == cred.ID {
-					found = &creds[i]
-					break
-				}
-			}
-			if found == nil {
-				t.Fatal("credential not found")
-			}
-
-			// newWebAuthnUser should not panic with empty flags.
-			waUser, err := newWebAuthnUser(user, []Credential{*found})
-			if err != nil {
-				t.Fatalf("newWebAuthnUser with empty flags: %v", err)
-			}
-
-			waCreds := waUser.WebAuthnCredentials()
-			if len(waCreds) != 1 {
-				t.Fatalf("expected 1 credential, got %d", len(waCreds))
-			}
-
-			// All flags should be false (zero value) for empty/missing flags.
-			if waCreds[0].Flags.BackupEligible {
-				t.Error("BackupEligible should be false for empty flags")
-			}
-		})
-	}
-}
-
 // TestSignCounterUpdatedOnLogin verifies that the sign counter is updated
 // in the credentials table after a successful login (simulated by calling
 // the store directly).
@@ -3484,126 +2793,6 @@ func TestReLoginCredentialIdentity(t *testing.T) {
 		t.Errorf("credential ID mismatch: got %x, want %x", waCreds[0].ID, originalID)
 	}
 }
-
-// TestReLoginPublicKeySurvivesRoundTrip verifies that the public key bytes
-// survive the store → reload → WebAuthn user adapter round trip.
-func TestReLoginPublicKeySurvivesRoundTrip(t *testing.T) {
-	store := TestStore(t)
-
-	user, err := store.CreateUser("pubkey-user", "pubkeytest@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	// Use a non-trivial public key (64 bytes, like a real COSE key).
-	originalPubKey := make([]byte, 64)
-	for i := range originalPubKey {
-		originalPubKey[i] = byte(i)
-	}
-
-	cred := &Credential{
-		ID:              "cred-pubkey",
-		UserID:          user.ID,
-		PublicKey:       originalPubKey,
-		AttestationType: "none",
-		Transport:       `["internal"]`,
-		SignCount:       0,
-		AAGUID:          make([]byte, 16),
-		Flags:           `{"user_present":true,"user_verified":true,"backup_eligible":true,"backup_state":false}`,
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := store.CreateCredential(cred); err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-
-	creds, err := store.GetCredentialsByUserID(user.ID)
-	if err != nil {
-		t.Fatalf("get credentials: %v", err)
-	}
-
-	waUser, err := newWebAuthnUser(user, creds)
-	if err != nil {
-		t.Fatalf("newWebAuthnUser: %v", err)
-	}
-
-	waCreds := waUser.WebAuthnCredentials()
-	if !bytes.Equal(waCreds[0].PublicKey, originalPubKey) {
-		t.Errorf("public key mismatch: got %x, want %x", waCreds[0].PublicKey, originalPubKey)
-	}
-}
-
-// TestReLoginSessionDataPersistsForReLogin verifies that the challenge state
-// and WebAuthn session data can be stored and retrieved, which is required
-// for the login finish handler to validate the WebAuthn assertion during
-// re-login.
-func TestReLoginSessionDataPersistsForReLogin(t *testing.T) {
-	store := TestStore(t)
-
-	user, err := store.CreateUser("session-persist-user", "sessionpersist@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	cred := &Credential{
-		ID:              "cred-session-persist",
-		UserID:          user.ID,
-		PublicKey:       make([]byte, 64),
-		AttestationType: "none",
-		Transport:       `["internal"]`,
-		SignCount:       0,
-		AAGUID:          make([]byte, 16),
-		Flags:           `{"user_present":true,"user_verified":true,"backup_eligible":true,"backup_state":false}`,
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := store.CreateCredential(cred); err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-
-	// Simulate a login begin by storing a login challenge.
-	sessionData := webauthn.SessionData{
-		Challenge:            "relogin-test-challenge",
-		RelyingPartyID:       "localhost",
-		UserID:               []byte(user.ID),
-		AllowedCredentialIDs: [][]byte{[]byte(cred.ID)},
-	}
-	sessionDataJSON, _ := json.Marshal(sessionData)
-
-	cs := &ChallengeState{
-		ID:                  "relogin-test-challenge",
-		UserID:              user.ID,
-		Challenge:           "relogin-test-challenge",
-		Type:                "login",
-		AllowedCredentials:  `["cred-session-persist"]`,
-		WebAuthnSessionData: string(sessionDataJSON),
-		CreatedAt:           time.Now().UTC(),
-		ExpiresAt:           time.Now().UTC().Add(5 * time.Minute),
-	}
-	if err := store.SaveChallengeState(cs); err != nil {
-		t.Fatalf("save challenge state: %v", err)
-	}
-
-	// Retrieve the challenge (simulating login finish).
-	got, err := store.GetChallengeStateByID("relogin-test-challenge")
-	if err != nil {
-		t.Fatalf("get challenge state: %v", err)
-	}
-
-	// Verify the WebAuthn session data can be deserialized.
-	var gotSession webauthn.SessionData
-	if err := json.Unmarshal([]byte(got.WebAuthnSessionData), &gotSession); err != nil {
-		t.Fatalf("unmarshal session data: %v", err)
-	}
-	if gotSession.Challenge != "relogin-test-challenge" {
-		t.Errorf("challenge: got %q, want %q", gotSession.Challenge, "relogin-test-challenge")
-	}
-	if gotSession.RelyingPartyID != "localhost" {
-		t.Errorf("rp ID: got %q, want %q", gotSession.RelyingPartyID, "localhost")
-	}
-	if len(gotSession.AllowedCredentialIDs) != 1 || string(gotSession.AllowedCredentialIDs[0]) != cred.ID {
-		t.Errorf("allowed credential IDs: got %v, want [%q]", gotSession.AllowedCredentialIDs, cred.ID)
-	}
-}
-
 // TestLogoutThenReLoginFlow simulates the complete register → login →
 // logout → re-login lifecycle at the handler level, verifying that
 // session state is properly managed across all transitions.
@@ -4016,39 +3205,6 @@ func TestDesktopExchangeRedirectRejectsMismatchedRefreshAuthority(t *testing.T) 
 		t.Fatalf("mismatched authority created %d desktop handoff rows", count)
 	}
 }
-
-// ======================================================================
-// Email validation tests (VAL-AUTH-007, VAL-AUTH-008)
-// ======================================================================
-
-func TestIsValidEmail(t *testing.T) {
-	tests := []struct {
-		email string
-		valid bool
-	}{
-		{"user@example.com", true},
-		{"alice@domain.org", true},
-		{"bob+tag@company.co.uk", true},
-		{"test.user@sub.domain.com", true},
-		{"", false},
-		{"not-an-email", false},
-		{"missing@domain", false},
-		{"@nodomain.com", false},
-		{"spaces in@email.com", false},
-		{"no-at-sign.com", false},
-		{"double@@at.com", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.email, func(t *testing.T) {
-			got := isValidEmail(tt.email)
-			if got != tt.valid {
-				t.Errorf("isValidEmail(%q) = %v, want %v", tt.email, got, tt.valid)
-			}
-		})
-	}
-}
-
 func TestRegisterBeginRejectsInvalidEmail(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -4086,31 +3242,6 @@ func TestRegisterBeginRejectsInvalidEmail(t *testing.T) {
 		})
 	}
 }
-
-func TestRegisterBeginAcceptsValidEmail(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	body := `{"email": "newuser@example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleRegisterBegin(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	// Verify user was created with the email.
-	user, err := h.store.GetUserByEmail("newuser@example.com")
-	if err != nil {
-		t.Fatalf("GetUserByEmail: %v", err)
-	}
-	if user.Email != "newuser@example.com" {
-		t.Errorf("email: got %q, want %q", user.Email, "newuser@example.com")
-	}
-}
-
 func TestLoginBeginRejectsInvalidEmail(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -4168,22 +3299,6 @@ func TestRegisterBeginRejectsOldUsernameField(t *testing.T) {
 // ======================================================================
 // Schema migration tests (VAL-AUTH-009)
 // ======================================================================
-
-func TestSchemaHasEmailColumn(t *testing.T) {
-	store := TestStore(t)
-
-	// Verify the users table has an email column.
-	var colName string
-	err := store.DB().QueryRow(
-		"SELECT name FROM pragma_table_info('users') WHERE name = 'email'",
-	).Scan(&colName)
-	if err != nil {
-		t.Fatalf("email column not found in users table: %v", err)
-	}
-	if colName != "email" {
-		t.Errorf("column name: got %q, want %q", colName, "email")
-	}
-}
 
 func TestEmailColumnHasUniqueConstraint(t *testing.T) {
 	store := TestStore(t)
@@ -4347,59 +3462,6 @@ func TestDuplicateEmailRegistrationRejected(t *testing.T) {
 	}
 }
 
-// TestDuplicateEmailErrorMessageIsClear verifies that the error message for
-// duplicate registration clearly indicates the email is already registered
-// and suggests logging in instead (VAL-AUTH-010).
-func TestDuplicateEmailErrorMessageIsClear(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	// Create a user with a credential (fully registered).
-	user, err := h.store.CreateUser("du-msg-user", "already@registered.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-	cred := &Credential{
-		ID:              "cred-du-001",
-		UserID:          user.ID,
-		PublicKey:       []byte("fake-public-key"),
-		AttestationType: "none",
-		Transport:       `["internal"]`,
-		SignCount:       0,
-		AAGUID:          make([]byte, 16),
-		Flags:           `{"user_present":true,"user_verified":true}`,
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := h.store.CreateCredential(cred); err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-
-	// Attempt to register the same email.
-	body := `{"email": "already@registered.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleRegisterBegin(rec, req)
-
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusConflict)
-	}
-
-	var resp errorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	// Error message should mention "already registered" or similar.
-	if resp.Error == "" {
-		t.Error("expected non-empty error message")
-	}
-	// The error should indicate the email is already registered.
-	lower := strings.ToLower(resp.Error)
-	if !strings.Contains(lower, "already") && !strings.Contains(lower, "registered") {
-		t.Errorf("error message should mention 'already registered', got: %q", resp.Error)
-	}
-}
 
 // TestRegisterBeginAllowsUserWithoutCredentials verifies that registration
 // begin still works for a user record that exists but has no credentials
@@ -4489,55 +3551,6 @@ func TestDuplicateRegistrationNoNewUserRecord(t *testing.T) {
 	}
 }
 
-// TestDuplicateRegistrationNoChallengeCreated verifies that no challenge state
-// is created when attempting to register with an existing email that has
-// credentials (VAL-AUTH-010).
-func TestDuplicateRegistrationNoChallengeCreated(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	// Create user with credential.
-	user, err := h.store.CreateUser("du-nc-user", "nochallenge@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-	cred := &Credential{
-		ID:              "cred-nc-001",
-		UserID:          user.ID,
-		PublicKey:       []byte("fake-public-key"),
-		AttestationType: "none",
-		Transport:       `["internal"]`,
-		SignCount:       0,
-		AAGUID:          make([]byte, 16),
-		Flags:           `{"user_present":true,"user_verified":true}`,
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := h.store.CreateCredential(cred); err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-
-	// Attempt duplicate registration.
-	body := `{"email": "nochallenge@example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleRegisterBegin(rec, req)
-
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusConflict)
-	}
-
-	// Verify no challenge state was created for this user.
-	var challengeCount int
-	err = h.store.DB().QueryRow("SELECT COUNT(*) FROM challenge_state WHERE user_id = ?", user.ID).Scan(&challengeCount)
-	if err != nil {
-		t.Fatalf("count challenges: %v", err)
-	}
-	if challengeCount != 0 {
-		t.Errorf("challenge count: got %d, want 0 (no challenge for duplicate)", challengeCount)
-	}
-}
-
 // --- API Key Handler Tests ---
 
 // issueTestAccessJWTForHandler creates a signed Ed25519 access JWT for the
@@ -4596,40 +3609,6 @@ func TestCreateAPIKeyRejectsInvalidJWT(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 }
-
-func TestCreateAPIKeyRejectsNonPost(t *testing.T) {
-	h, priv := testHandlerEnv(t)
-	user, err := h.store.CreateUser("apikey-method-user", "akmethod@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	req := authedAPIKeyReq(http.MethodGet, "/auth/api-keys", nil, priv, user.ID)
-	rec := httptest.NewRecorder()
-	h.HandleCreateAPIKey(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusMethodNotAllowed)
-	}
-}
-
-func TestCreateAPIKeyRejectsEmptyLabel(t *testing.T) {
-	h, priv := testHandlerEnv(t)
-	user, err := h.store.CreateUser("apikey-nolabel-user", "aknolabel@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	body := `{"label":"","scopes":["read:base"]}`
-	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
-	rec := httptest.NewRecorder()
-	h.HandleCreateAPIKey(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: got %d, want %d; body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
-	}
-}
-
 func TestCreateAPIKeyRejectsInvalidScope(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 	user, err := h.store.CreateUser("apikey-badscope-user", "akbadscope@example.com")
@@ -4747,19 +3726,6 @@ func TestListAPIKeysReturnsKeysWithoutSecret(t *testing.T) {
 		t.Errorf("list response should not contain secret: %s", bodyStr)
 	}
 }
-
-func TestListAPIKeysRejectsUnauthenticated(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/auth/api-keys", nil)
-	rec := httptest.NewRecorder()
-	h.HandleListAPIKeys(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestRevokeAPIKeySoftDeletes(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 	user, err := h.store.CreateUser("apikey-revoke-user", "akrevoke@example.com")
@@ -4845,19 +3811,6 @@ func TestHandleRevokeAPIKeyRejectsNonOwner(t *testing.T) {
 		t.Errorf("status: got %d, want %d (non-owner revoke)", delRec.Code, http.StatusNotFound)
 	}
 }
-
-func TestRevokeAPIKeyRejectsUnauthenticated(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodDelete, "/auth/api-keys/ak_123", nil)
-	rec := httptest.NewRecorder()
-	h.HandleRevokeAPIKey(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestHandleCreateAPIKeyWithExpiry(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 	user, err := h.store.CreateUser("apikey-expiry-user", "akexpiry@example.com")

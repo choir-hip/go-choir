@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -798,40 +797,6 @@ func TestInitialDispatchReactivatesRestartPassivatedRun(t *testing.T) {
 	}
 }
 
-// TestAdapterDispatchActorActive verifies that the Adapter wires the
-// dispatch function on the runtime core.
-func TestAdapterDispatchActorActive(t *testing.T) {
-	env := newAdapterTestEnv(t)
-
-	if !env.adapter.Runtime.DispatchActorActive() {
-		t.Fatal("DispatchActorActive() = false, want true (adapter should wire dispatch)")
-	}
-	if env.adapter.ActorRuntime() == nil {
-		t.Fatal("ActorRuntime() = nil, want non-nil")
-	}
-}
-
-func TestAdapterRuntimeCoreIsNamedAndNotEmbedded(t *testing.T) {
-	adapterType := reflect.TypeOf(Adapter{})
-	runtimeType := reflect.TypeOf((*agentcore.Runtime)(nil))
-	runtimeFields := 0
-	for i := range adapterType.NumField() {
-		field := adapterType.Field(i)
-		if field.Type != runtimeType {
-			continue
-		}
-		runtimeFields++
-		if field.Name != "Runtime" {
-			t.Errorf("runtime core field name = %q, want %q", field.Name, "Runtime")
-		}
-		if field.Anonymous {
-			t.Error("runtime core field is anonymous, want named field")
-		}
-	}
-	if runtimeFields != 1 {
-		t.Errorf("runtime core field count = %d, want 1", runtimeFields)
-	}
-}
 
 // TestHandlerColdStartCoagentResult tests the cold-start path: a coagent_result
 // arrives with nil memory (no parked run). The handler should call

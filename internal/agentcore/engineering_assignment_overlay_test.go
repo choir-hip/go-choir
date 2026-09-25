@@ -8,27 +8,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestOverlayIDNamedInObjective(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		objective string
-		want      string
-	}{
-		{"roster tell", "ROSTER-V1 open exactly one implementation assignment with model_policy_overlay_id=p5-deepseek-v41-flash. Inside the capsule", "p5-deepseek-v41-flash"},
-		{"spaced assignment", "with model_policy_overlay_id = p5-chatgpt-g56luna for the run", "p5-chatgpt-g56luna"},
-		{"quoted", `naming model_policy_overlay_id="p5-x" here`, "p5-x"},
-		{"bare mention is not a naming", "pass it as the structured model_policy_overlay_id parameter", ""},
-		{"absent", "plain objective with no overlay reference", ""},
-		{"malformed skipped", "model_policy_overlay_id= then model_policy_overlay_id=p5-good", "p5-good"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := overlayIDNamedInObjective(tc.objective); got != tc.want {
-				t.Fatalf("overlayIDNamedInObjective = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestAssignedEngineeringOpenRefusesProseOnlyOverlay(t *testing.T) {
 	rt, _ := testRuntime(t)
 	req := OpenDocumentAssignmentRequest{

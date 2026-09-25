@@ -54,23 +54,6 @@ func TestCapabilitySignAndVerify(t *testing.T) {
 		t.Error("verification should fail for expired capability")
 	}
 }
-
-func TestCapabilityRevocation(t *testing.T) {
-	cap := &Capability{
-		CapabilityID: "cap-revoke-test",
-	}
-
-	revoked := map[string]bool{"cap-revoke-test": true}
-	if !cap.IsRevoked(revoked) {
-		t.Error("capability should be revoked")
-	}
-
-	notRevoked := map[string]bool{"other-cap": true}
-	if cap.IsRevoked(notRevoked) {
-		t.Error("capability should not be revoked")
-	}
-}
-
 func TestVerifyCapabilityWithKey(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 

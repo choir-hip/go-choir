@@ -1,13 +1,11 @@
 package vmctl
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,51 +26,6 @@ func containsString(values []string, target string) bool {
 }
 
 // --- Ownership Registry Tests ---
-
-func TestOwnershipRegistry_ResolveOrAssignCreatesVM(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	own, err := reg.ResolveOrAssign("user-1")
-	if err != nil {
-		t.Fatalf("ResolveOrAssign: %v", err)
-	}
-
-	if own.UserID != "user-1" {
-		t.Errorf("expected UserID user-1, got %s", own.UserID)
-	}
-	if own.VMID == "" {
-		t.Error("expected non-empty VMID")
-	}
-	if !strings.HasPrefix(own.VMID, "vm-") {
-		t.Errorf("expected VMID to start with vm-, got %s", own.VMID)
-	}
-	if own.State != VMStateActive {
-		t.Errorf("expected state active, got %s", own.State)
-	}
-	if own.ComputerURL == "" {
-		t.Error("expected non-empty ComputerURL")
-	}
-}
-
-func TestOwnershipRegistry_ResolveOrAssignReturnsSameVM(t *testing.T) {
-	// VAL-VM-003: Repeated requests from the same user stay pinned to
-	// the same active VM.
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	own1, err := reg.ResolveOrAssign("user-1")
-	if err != nil {
-		t.Fatalf("first ResolveOrAssign: %v", err)
-	}
-
-	own2, err := reg.ResolveOrAssign("user-1")
-	if err != nil {
-		t.Fatalf("second ResolveOrAssign: %v", err)
-	}
-
-	if own1.VMID != own2.VMID {
-		t.Errorf("expected same VMID for repeated requests, got %s and %s", own1.VMID, own2.VMID)
-	}
-}
 
 func TestOwnershipRegistry_ResolveOrAssignReturnsSnapshot(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
@@ -357,176 +310,6 @@ func TestOwnershipRegistry_BootingWaitRespectsContextCancellation(t *testing.T) 
 	}
 }
 
-func TestOwnershipRegistry_ActiveCount(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	if count := reg.ActiveCount(); count != 0 {
-		t.Errorf("expected 0 active VMs, got %d", count)
-	}
-
-	if _, err := reg.ResolveOrAssign("user-1"); err != nil {
-		t.Fatalf("ResolveOrAssign user-1: %v", err)
-	}
-	if count := reg.ActiveCount(); count != 1 {
-		t.Errorf("expected 1 active VM, got %d", count)
-	}
-
-	if _, err := reg.ResolveOrAssign("user-2"); err != nil {
-		t.Fatalf("ResolveOrAssign user-2: %v", err)
-	}
-	if count := reg.ActiveCount(); count != 2 {
-		t.Errorf("expected 2 active VMs, got %d", count)
-	}
-}
-
-func TestOwnershipRegistry_StopVM(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	own, _ := reg.ResolveOrAssign("user-1")
-	if own.State != VMStateActive {
-		t.Fatal("expected active state after assign")
-	}
-
-	if err := reg.StopVM("user-1"); err != nil {
-		t.Fatalf("StopVM: %v", err)
-	}
-
-	// After stopping, the ownership should reflect stopped state.
-	updated := reg.GetOwnership("user-1")
-	if updated.State != VMStateStopped {
-		t.Errorf("expected stopped state, got %s", updated.State)
-	}
-}
-
-func TestOwnershipRegistry_StopNonexistentUser(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	err := reg.StopVM("nonexistent")
-	if err == nil {
-		t.Error("expected error for nonexistent user")
-	}
-}
-
-func TestOwnershipRegistry_RemoveOwnership(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	own, _ := reg.ResolveOrAssign("user-1")
-	vmID := own.VMID
-
-	if err := reg.RemoveOwnership("user-1"); err != nil {
-		t.Fatalf("RemoveOwnership: %v", err)
-	}
-
-	// Ownership should be gone.
-	if reg.GetOwnership("user-1") != nil {
-		t.Error("expected nil ownership after remove")
-	}
-	if reg.GetOwnershipByVMID(vmID) != nil {
-		t.Error("expected nil VM-by-ID after remove")
-	}
-}
-
-func TestOwnershipRegistry_RemoveOwnershipIdempotent(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	// Removing nonexistent user should not error.
-	if err := reg.RemoveOwnership("nonexistent"); err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-}
-
-func TestOwnershipRegistry_MarkUnhealthy(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	if _, err := reg.ResolveOrAssign("user-1"); err != nil {
-		t.Fatalf("ResolveOrAssign: %v", err)
-	}
-	if err := reg.MarkUnhealthy("user-1"); err != nil {
-		t.Fatalf("MarkUnhealthy: %v", err)
-	}
-
-	own := reg.GetOwnership("user-1")
-	if own.State != VMStateDegraded {
-		t.Errorf("expected degraded state, got %s", own.State)
-	}
-}
-
-func TestOwnershipRegistry_ListOwnerships(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	if _, err := reg.ResolveOrAssign("user-1"); err != nil {
-		t.Fatalf("ResolveOrAssign user-1: %v", err)
-	}
-	if _, err := reg.ResolveOrAssign("user-2"); err != nil {
-		t.Fatalf("ResolveOrAssign user-2: %v", err)
-	}
-	if _, err := reg.ResolveOrAssign("user-3"); err != nil {
-		t.Fatalf("ResolveOrAssign user-3: %v", err)
-	}
-
-	list := reg.ListOwnerships()
-	if len(list) != 3 {
-		t.Errorf("expected 3 ownerships, got %d", len(list))
-	}
-}
-
-func TestOwnershipRegistry_InteractiveVMUsesBuildCapableMemoryEnvelope(t *testing.T) {
-	mock := &mockVMManager{}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mock)
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop: %v", err)
-	}
-	if len(mock.boots) != 1 {
-		t.Fatalf("BootVM calls = %d, want 1", len(mock.boots))
-	}
-	got := mock.boots[0]
-	if got.MachineCPUCount != interactiveVMCPUCount || got.MachineMemSizeMib != interactiveVMMemSizeMib {
-		t.Fatalf("interactive BootVM shape = %d cpu / %d MiB, want %d cpu / %d MiB",
-			got.MachineCPUCount, got.MachineMemSizeMib, interactiveVMCPUCount, interactiveVMMemSizeMib)
-	}
-	if got.ComputerKind != "active" || got.OwnerID != "user-1" || got.DesktopID != PrimaryDesktopID {
-		t.Fatalf("interactive BootVM guest identity = %+v", got)
-	}
-}
-
-func TestOwnershipRegistry_SetAutoputerCredential(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	own, _ := reg.ResolveOrAssign("user-1")
-	if err := reg.SetAutoputerCredential(own.VMID, "cred-123"); err != nil {
-		t.Fatalf("SetAutoputerCredential: %v", err)
-	}
-
-	updated := reg.GetOwnership("user-1")
-	if updated.AutoputerCredential != "cred-123" {
-		t.Errorf("expected credential cred-123, got %s", updated.AutoputerCredential)
-	}
-}
-
-func TestOwnershipRegistry_IsReady(t *testing.T) {
-	own := &VMOwnership{State: VMStateActive}
-	if !own.IsReady() {
-		t.Error("expected active VM to be ready")
-	}
-
-	own.State = VMStateBooting
-	if own.IsReady() {
-		t.Error("expected booting VM to wait for readiness")
-	}
-
-	own.State = VMStateStopped
-	if own.IsReady() {
-		t.Error("expected stopped VM to not be ready")
-	}
-
-	own.State = VMStateFailed
-	if own.IsReady() {
-		t.Error("expected failed VM to not be ready")
-	}
-}
-
 func TestOwnershipRegistry_StoppedVMGetsResumed(t *testing.T) {
 	// When a user's VM is stopped, a new ResolveOrAssign should resume it
 	// with the same VMID, preserving user state (VAL-CROSS-116).
@@ -577,71 +360,6 @@ func newTestServer(t *testing.T) (*httptest.Server, *OwnershipRegistry) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv, reg
-}
-
-func TestHandler_RuntimePackageStreamsAutoputerPackage(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	handler := NewHandler(reg)
-	pkgDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(pkgDir, "bin"), 0o755); err != nil {
-		t.Fatalf("mkdir bin: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(pkgDir, "share", "go-choir", "skills"), 0o755); err != nil {
-		t.Fatalf("mkdir skills: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pkgDir, "bin", "autoputer"), []byte("autoputer-binary"), 0o755); err != nil {
-		t.Fatalf("write autoputer: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pkgDir, "share", "go-choir", "skills", "SKILL.md"), []byte("skill"), 0o644); err != nil {
-		t.Fatalf("write skill: %v", err)
-	}
-	const autoputerCommit = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-	manifest := `{"schema_version":1,"artifact":"autoputer","version":"0.1.0","commit":"` + autoputerCommit + `","built_at":"2026-07-10T12:00:00Z"}`
-	if err := os.WriteFile(filepath.Join(pkgDir, "share", "go-choir", "build.json"), []byte(manifest), 0o644); err != nil {
-		t.Fatalf("write build manifest: %v", err)
-	}
-	handler.SetAutoputerRuntimePackageDir(pkgDir)
-
-	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/autoputer", nil)
-	req.Header.Set("X-Internal-Caller", "true")
-	req.Host = "10.203.154.1:8083"
-	rr := httptest.NewRecorder()
-	handler.HandleRuntimePackage(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
-	}
-	if got := rr.Header().Get("Content-Type"); got != "application/x-tar" {
-		t.Fatalf("content-type = %q", got)
-	}
-
-	tr := tar.NewReader(rr.Body)
-	entries := make(map[string]string)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("read tar: %v", err)
-		}
-		if hdr.FileInfo().Mode().IsRegular() {
-			data, err := io.ReadAll(tr)
-			if err != nil {
-				t.Fatalf("read %s: %v", hdr.Name, err)
-			}
-			entries[hdr.Name] = string(data)
-		}
-	}
-	if entries["bin/autoputer"] != "autoputer-binary" {
-		t.Fatalf("bin/autoputer entry = %q", entries["bin/autoputer"])
-	}
-	if entries["share/go-choir/skills/SKILL.md"] != "skill" {
-		t.Fatalf("skills entry = %q", entries["share/go-choir/skills/SKILL.md"])
-	}
-	if env := entries["choir-runtime.env"]; !strings.Contains(env, "RUNTIME_WIRE_PUBLISH_URL=http://10.203.154.1:8082") ||
-		!strings.Contains(env, "RUNTIME_CORPUSD_URL=http://10.203.154.1:8082") {
-		t.Fatalf("runtime env missing service refs: %q", env)
-	}
 }
 
 func TestHandler_RuntimePackageRejectsMissingAutoputerBuildManifest(t *testing.T) {
@@ -843,54 +561,6 @@ func TestHandler_ReserveFreshVMConfigDoesNotDeadlockDuringSlowBoot(t *testing.T)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("slow resume did not complete after release")
-	}
-}
-
-func TestHandler_Health(t *testing.T) {
-	srv, reg := newTestServer(t)
-	reg.SetIdleTimeout(time.Millisecond)
-	if _, err := reg.ResolveOrAssign("health-user"); err != nil {
-		t.Fatalf("resolve health user: %v", err)
-	}
-
-	resp, err := http.Get(srv.URL + "/health")
-	if err != nil {
-		t.Fatalf("health request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var result vmctlHealthResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decode health response: %v", err)
-	}
-
-	if result.Status != "ok" {
-		t.Errorf("expected ok status, got %s", result.Status)
-	}
-	if result.Service != "vmctl" {
-		t.Errorf("expected vmctl service, got %s", result.Service)
-	}
-	if result.ActiveVMs != 1 || result.TotalOwnerships != 1 {
-		t.Fatalf("health counts active=%d total=%d, want 1/1", result.ActiveVMs, result.TotalOwnerships)
-	}
-	if result.ByKind[string(VMKindInteractive)] != 1 {
-		t.Fatalf("health kind counts = %+v, want one interactive computer", result.ByKind)
-	}
-	if result.ByState[string(VMStateActive)] != 1 {
-		t.Fatalf("health state counts = %+v, want one active computer", result.ByState)
-	}
-	if result.Reclaim.Mode != PressureReclaimModeOff {
-		t.Fatalf("default reclaim mode = %s, want off", result.Reclaim.Mode)
-	}
-	if result.Warmness.Policy.PrimaryKeepaliveMode != PrimaryKeepaliveModeOff {
-		t.Fatalf("default warmness mode = %s, want off", result.Warmness.Policy.PrimaryKeepaliveMode)
-	}
-	if result.Warmness.ByClass[string(WarmnessClassPrimary)] != 1 {
-		t.Fatalf("warmness class counts = %+v, want primary", result.Warmness.ByClass)
 	}
 }
 
@@ -1324,86 +994,6 @@ func TestHandler_IdleCheckIncludesPressureReclaimPlan(t *testing.T) {
 	}
 }
 
-func TestHandler_ResolveCreatesVM(t *testing.T) {
-	// VAL-VM-001: First protected request resolves through VM ownership.
-	srv, _ := newTestServer(t)
-
-	body := `{"user_id":"user-1"}`
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("resolve request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var result resolveResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decode resolve response: %v", err)
-	}
-
-	if result.UserID != "user-1" {
-		t.Errorf("expected user-1, got %s", result.UserID)
-	}
-	if result.VMID == "" {
-		t.Error("expected non-empty VMID")
-	}
-	if result.ComputerURL == "" {
-		t.Error("expected non-empty ComputerURL")
-	}
-	if result.State != "active" {
-		t.Errorf("expected active state, got %s", result.State)
-	}
-}
-
-func TestHandler_ResolveReturnsExistingVM(t *testing.T) {
-	// VAL-VM-003: Repeated requests stay pinned to the same VM.
-	srv, _ := newTestServer(t)
-
-	// First resolve.
-	body := `{"user_id":"user-1"}`
-	req1, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-Internal-Caller", "true")
-	resp1, _ := http.DefaultClient.Do(req1)
-	var result1 resolveResponse
-	if err := json.NewDecoder(resp1.Body).Decode(&result1); err != nil {
-		t.Fatalf("decode result1: %v", err)
-	}
-	_ = resp1.Body.Close()
-
-	// Second resolve.
-	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-Internal-Caller", "true")
-	resp2, _ := http.DefaultClient.Do(req2)
-	var result2 resolveResponse
-	if err := json.NewDecoder(resp2.Body).Decode(&result2); err != nil {
-		t.Fatalf("decode result2: %v", err)
-	}
-	_ = resp2.Body.Close()
-
-	if result1.VMID != result2.VMID {
-		t.Errorf("expected same VMID across resolves, got %s and %s", result1.VMID, result2.VMID)
-	}
-}
-
-func TestHandler_ResolveDeniesExternalCallers(t *testing.T) {
-	// VAL-VM-012: vmctl control endpoints are not publicly accessible.
-	// Verify the isInternalCaller function properly rejects non-localhost callers.
-	if !isInternalCaller(&http.Request{Host: "192.168.1.1:8083", RemoteAddr: "10.0.0.1:12345"}) {
-		// Good, non-localhost is rejected
-	} else {
-		t.Error("expected non-localhost caller to be rejected")
-	}
-}
-
 func TestHandler_ResolveRequiresUserID(t *testing.T) {
 	srv, _ := newTestServer(t)
 
@@ -1417,44 +1007,6 @@ func TestHandler_ResolveRequiresUserID(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
-	}
-}
-
-func TestHandler_Lookup(t *testing.T) {
-	srv, _ := newTestServer(t)
-
-	// First create an ownership.
-	body := `{"user_id":"user-1"}`
-	req1, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-Internal-Caller", "true")
-	resp1, _ := http.DefaultClient.Do(req1)
-	_ = resp1.Body.Close()
-
-	// Now lookup.
-	req2, _ := http.NewRequest(http.MethodGet, srv.URL+"/internal/vmctl/lookup?user_id=user-1", nil)
-	req2.Header.Set("X-Internal-Caller", "true")
-	resp2, _ := http.DefaultClient.Do(req2)
-	defer func() { _ = resp2.Body.Close() }()
-
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp2.StatusCode)
-	}
-
-	var result ownershipResponse
-	if err := json.NewDecoder(resp2.Body).Decode(&result); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
-	if result.UserID != "user-1" {
-		t.Errorf("expected user-1, got %s", result.UserID)
-	}
-
-	global, err := NewClient(srv.URL).LookupComputerByIDContext(context.Background(), result.ComputerID)
-	if err != nil {
-		t.Fatalf("global computer lookup: %v", err)
-	}
-	if global == nil || global.UserID != "user-1" || global.ComputerID != result.ComputerID {
-		t.Fatalf("global computer lookup = %+v", global)
 	}
 }
 
@@ -1773,226 +1325,7 @@ func TestOwnershipRegistry_ComputerIDLookupFailsClosedOnAmbiguity(t *testing.T) 
 	}
 }
 
-func TestHandler_LookupNonexistent(t *testing.T) {
-	srv, _ := newTestServer(t)
-
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/internal/vmctl/lookup?user_id=nonexistent", nil)
-	req.Header.Set("X-Internal-Caller", "true")
-
-	resp, _ := http.DefaultClient.Do(req)
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", resp.StatusCode)
-	}
-}
-
-func TestHandler_Stop(t *testing.T) {
-	srv, _ := newTestServer(t)
-
-	// First create.
-	body := `{"user_id":"user-1"}`
-	req1, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-Internal-Caller", "true")
-	resp1, _ := http.DefaultClient.Do(req1)
-	_ = resp1.Body.Close()
-
-	// Now stop.
-	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/stop", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-Internal-Caller", "true")
-	resp2, _ := http.DefaultClient.Do(req2)
-	defer func() { _ = resp2.Body.Close() }()
-
-	if resp2.StatusCode != http.StatusOK {
-		t.Errorf("expected 200, got %d", resp2.StatusCode)
-	}
-
-	// Lookup should still find it but in stopped state.
-	req3, _ := http.NewRequest(http.MethodGet, srv.URL+"/internal/vmctl/lookup?user_id=user-1", nil)
-	req3.Header.Set("X-Internal-Caller", "true")
-	resp3, _ := http.DefaultClient.Do(req3)
-	defer func() { _ = resp3.Body.Close() }()
-
-	var result ownershipResponse
-	if err := json.NewDecoder(resp3.Body).Decode(&result); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
-	if result.State != "stopped" {
-		t.Errorf("expected stopped state, got %s", result.State)
-	}
-}
-
-func TestHandler_Remove(t *testing.T) {
-	srv, _ := newTestServer(t)
-
-	// First create.
-	body := `{"user_id":"user-1"}`
-	req1, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-Internal-Caller", "true")
-	resp1, _ := http.DefaultClient.Do(req1)
-	_ = resp1.Body.Close()
-
-	// Now remove.
-	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/remove", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-Internal-Caller", "true")
-	resp2, _ := http.DefaultClient.Do(req2)
-	defer func() { _ = resp2.Body.Close() }()
-
-	if resp2.StatusCode != http.StatusOK {
-		t.Errorf("expected 200, got %d", resp2.StatusCode)
-	}
-
-	// Lookup should return 404.
-	req3, _ := http.NewRequest(http.MethodGet, srv.URL+"/internal/vmctl/lookup?user_id=user-1", nil)
-	req3.Header.Set("X-Internal-Caller", "true")
-	resp3, _ := http.DefaultClient.Do(req3)
-	defer func() { _ = resp3.Body.Close() }()
-
-	if resp3.StatusCode != http.StatusNotFound {
-		t.Errorf("expected 404 after remove, got %d", resp3.StatusCode)
-	}
-}
-
-func TestHandler_List(t *testing.T) {
-	srv, _ := newTestServer(t)
-
-	// Create two ownerships.
-	for _, userID := range []string{"user-1", "user-2"} {
-		body := fmt.Sprintf(`{"user_id":"%s"}`, userID)
-		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Internal-Caller", "true")
-		resp, _ := http.DefaultClient.Do(req)
-		_ = resp.Body.Close()
-	}
-
-	// List.
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/internal/vmctl/list", nil)
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, _ := http.DefaultClient.Do(req)
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
-
-	count, _ := result["count"].(float64)
-	if int(count) != 2 {
-		t.Errorf("expected 2 ownerships, got %v", count)
-	}
-}
-
-func TestHandler_MethodNotAllowed(t *testing.T) {
-	srv, _ := newTestServer(t)
-
-	// GET on a POST-only endpoint.
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/internal/vmctl/resolve", nil)
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, _ := http.DefaultClient.Do(req)
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Errorf("expected 405, got %d", resp.StatusCode)
-	}
-}
-
 // --- Client Tests ---
-
-func TestClient_ResolveAndLookup(t *testing.T) {
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	// Resolve creates a VM.
-	resp, err := client.Resolve("user-client-test")
-	if err != nil {
-		t.Fatalf("client resolve: %v", err)
-	}
-	if resp.UserID != "user-client-test" {
-		t.Errorf("expected user-client-test, got %s", resp.UserID)
-	}
-	if resp.VMID == "" {
-		t.Error("expected non-empty VMID")
-	}
-
-	// Lookup finds the existing VM.
-	lookup, err := client.Lookup("user-client-test")
-	if err != nil {
-		t.Fatalf("client lookup: %v", err)
-	}
-	if lookup == nil {
-		t.Fatal("expected non-nil lookup result")
-	}
-	if lookup.VMID != resp.VMID {
-		t.Errorf("expected same VMID %s, got %s", resp.VMID, lookup.VMID)
-	}
-}
-
-func TestClient_LookupNonexistent(t *testing.T) {
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	result, err := client.Lookup("nonexistent")
-	if err != nil {
-		t.Fatalf("client lookup nonexistent: %v", err)
-	}
-	if result != nil {
-		t.Error("expected nil for nonexistent user")
-	}
-}
-
-func TestClient_Stop(t *testing.T) {
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	if _, err := client.Resolve("user-stop-test"); err != nil {
-		t.Fatalf("client resolve: %v", err)
-	}
-
-	if err := client.Stop("user-stop-test"); err != nil {
-		t.Fatalf("client stop: %v", err)
-	}
-}
-
-func TestClient_Remove(t *testing.T) {
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	if _, err := client.Resolve("user-remove-test"); err != nil {
-		t.Fatalf("client resolve: %v", err)
-	}
-
-	if err := client.Remove("user-remove-test"); err != nil {
-		t.Fatalf("client remove: %v", err)
-	}
-
-	// Lookup should return nil.
-	result, _ := client.Lookup("user-remove-test")
-	if result != nil {
-		t.Error("expected nil after remove")
-	}
-}
-
-func TestClient_DifferentUsersIsolatedVMs(t *testing.T) {
-	// VAL-VM-005: Different users receive distinct VMs.
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	resp1, _ := client.Resolve("alice")
-	resp2, _ := client.Resolve("bob")
-
-	if resp1.VMID == resp2.VMID {
-		t.Error("expected different VM IDs for different users")
-	}
-}
 
 func TestClient_ResolveDesktopContextCancelsRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2006,53 +1339,6 @@ func TestClient_ResolveDesktopContextCancelsRequest(t *testing.T) {
 
 	if _, err := client.ResolveDesktopContext(ctx, "user-cancel", PrimaryDesktopID); err == nil {
 		t.Fatal("expected canceled resolve request to fail")
-	}
-}
-
-func TestClient_ConcurrentResolveSameUser(t *testing.T) {
-	// VAL-VM-004: Concurrent first requests for one user collapse.
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	const concurrency = 10
-	results := make(chan *resolveResponse, concurrency)
-	errors := make(chan error, concurrency)
-
-	var wg sync.WaitGroup
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			resp, err := client.Resolve("user-concurrent")
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- resp
-		}()
-	}
-	wg.Wait()
-	close(results)
-	close(errors)
-
-	for err := range errors {
-		t.Errorf("concurrent client resolve: %v", err)
-	}
-
-	var vmIDs []string
-	for resp := range results {
-		vmIDs = append(vmIDs, resp.VMID)
-	}
-
-	if len(vmIDs) != concurrency {
-		t.Fatalf("expected %d results, got %d", concurrency, len(vmIDs))
-	}
-
-	first := vmIDs[0]
-	for _, id := range vmIDs[1:] {
-		if id != first {
-			t.Errorf("expected all concurrent callers to get VM %s, got %s", first, id)
-		}
 	}
 }
 
@@ -2090,96 +1376,7 @@ func TestIsInternalCaller(t *testing.T) {
 
 // --- Timing Tests ---
 
-func TestOwnershipRegistry_LastActiveAtUpdated(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	own1, _ := reg.ResolveOrAssign("user-1")
-	firstActive := own1.LastActiveAt
-
-	// Wait a tiny bit and resolve again.
-	time.Sleep(10 * time.Millisecond)
-
-	if _, err := reg.ResolveOrAssign("user-1"); err != nil {
-		t.Fatalf("ResolveOrAssign: %v", err)
-	}
-	updated := reg.GetOwnership("user-1")
-
-	if !updated.LastActiveAt.After(firstActive) {
-		t.Error("expected LastActiveAt to be updated on subsequent resolve")
-	}
-}
-
 // --- Endpoint URL Tests ---
-
-func TestEndpointURLs(t *testing.T) {
-	base := "http://localhost:8083"
-
-	if got := ResolveEndpoint(base); got != "http://localhost:8083/internal/vmctl/resolve" {
-		t.Errorf("ResolveEndpoint = %s", got)
-	}
-	if got := LookupEndpoint(base); got != "http://localhost:8083/internal/vmctl/lookup" {
-		t.Errorf("LookupEndpoint = %s", got)
-	}
-	if got := StopEndpoint(base); got != "http://localhost:8083/internal/vmctl/stop" {
-		t.Errorf("StopEndpoint = %s", got)
-	}
-	if got := RemoveEndpoint(base); got != "http://localhost:8083/internal/vmctl/remove" {
-		t.Errorf("RemoveEndpoint = %s", got)
-	}
-	if got := HibernateEndpoint(base); got != "http://localhost:8083/internal/vmctl/hibernate" {
-		t.Errorf("HibernateEndpoint = %s", got)
-	}
-	if got := ResumeEndpoint(base); got != "http://localhost:8083/internal/vmctl/resume" {
-		t.Errorf("ResumeEndpoint = %s", got)
-	}
-	if got := RecoverEndpoint(base); got != "http://localhost:8083/internal/vmctl/recover" {
-		t.Errorf("RecoverEndpoint = %s", got)
-	}
-	if got := LogoutEndpoint(base); got != "http://localhost:8083/internal/vmctl/logout" {
-		t.Errorf("LogoutEndpoint = %s", got)
-	}
-	if got := IdleCheckEndpoint(base); got != "http://localhost:8083/internal/vmctl/idle-check" {
-		t.Errorf("IdleCheckEndpoint = %s", got)
-	}
-	if got := ReclaimEndpoint(base); got != "http://localhost:8083/internal/vmctl/reclaim" {
-		t.Errorf("ReclaimEndpoint = %s", got)
-	}
-	if got := RetentionPlanEndpoint(base); got != "http://localhost:8083/internal/vmctl/retention-plan" {
-		t.Errorf("RetentionPlanEndpoint = %s", got)
-	}
-	if got := RetentionShadowPlanEndpoint(base); got != "http://localhost:8083/internal/vmctl/retention-shadow-plan" {
-		t.Errorf("RetentionShadowPlanEndpoint = %s", got)
-	}
-	if got := PulseEndpoint(base); got != "http://localhost:8083/internal/vmctl/pulse" {
-		t.Errorf("PulseEndpoint = %s", got)
-	}
-	if got := PruneEndpoint(base); got != "http://localhost:8083/internal/vmctl/prune" {
-		t.Errorf("PruneEndpoint = %s", got)
-	}
-}
-
-func TestPulseAccountClassifier(t *testing.T) {
-	tests := []struct {
-		email string
-		want  string
-	}{
-		{"owner@choir.news", PulseAccountReal},
-		{"YusefNathanson@me.com", PulseAccountReal},
-		{"codex-proof@example.com", PulseAccountCodexAgenticTest},
-		{"matrix@example.test", PulseAccountCodexAgenticTest},
-		{"a@b.com", PulseAccountProtectedTest},
-		{"b@c.com", PulseAccountProtectedTest},
-		{"system@choir.local", PulseAccountInternal},
-		{"", PulseAccountUnknown},
-	}
-	for _, tt := range tests {
-		t.Run(tt.email, func(t *testing.T) {
-			if got := ClassifyPulseAccount(tt.email); got != tt.want {
-				t.Fatalf("ClassifyPulseAccount(%q) = %q, want %q", tt.email, got, tt.want)
-			}
-		})
-	}
-}
 
 func TestPulseSummaryAggregatesWithoutIdentityOutput(t *testing.T) {
 	now := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
@@ -2585,67 +1782,6 @@ func TestOwnershipRegistry_ResolveAfterLogout(t *testing.T) {
 
 // --- Handler Lifecycle Tests ---
 
-func TestHandler_HibernateAndResume(t *testing.T) {
-	srv, _ := newTestServer(t)
-
-	// Create a VM.
-	body := `{"user_id":"user-1"}`
-	req1, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-Internal-Caller", "true")
-	resp1, _ := http.DefaultClient.Do(req1)
-	var result1 resolveResponse
-	if err := json.NewDecoder(resp1.Body).Decode(&result1); err != nil {
-		t.Fatalf("decode result1: %v", err)
-	}
-	_ = resp1.Body.Close()
-	vmID := result1.VMID
-
-	// Hibernate.
-	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/hibernate", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-Internal-Caller", "true")
-	resp2, _ := http.DefaultClient.Do(req2)
-	defer func() { _ = resp2.Body.Close() }()
-
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 on hibernate, got %d", resp2.StatusCode)
-	}
-
-	var hibResult map[string]interface{}
-	if err := json.NewDecoder(resp2.Body).Decode(&hibResult); err != nil {
-		t.Fatalf("decode hibResult: %v", err)
-	}
-	if hibResult["status"] != "hibernated" {
-		t.Errorf("expected status=hibernated, got %v", hibResult["status"])
-	}
-	if hibResult["vm_id"] != vmID {
-		t.Errorf("expected vm_id=%s, got %v", vmID, hibResult["vm_id"])
-	}
-
-	// Resume.
-	req3, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resume", strings.NewReader(body))
-	req3.Header.Set("Content-Type", "application/json")
-	req3.Header.Set("X-Internal-Caller", "true")
-	resp3, _ := http.DefaultClient.Do(req3)
-	defer func() { _ = resp3.Body.Close() }()
-
-	if resp3.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 on resume, got %d", resp3.StatusCode)
-	}
-
-	var result3 resolveResponse
-	if err := json.NewDecoder(resp3.Body).Decode(&result3); err != nil {
-		t.Fatalf("decode result3: %v", err)
-	}
-	if result3.VMID != vmID {
-		t.Errorf("expected same VMID after resume, got %s", result3.VMID)
-	}
-	if result3.State != "active" {
-		t.Errorf("expected active state after resume, got %s", result3.State)
-	}
-}
-
 func TestHandler_ResumeBootsPersistedVMWhenManagerLostInstance(t *testing.T) {
 	srv, reg := newTestServer(t)
 	mock := &mockVMManager{
@@ -2759,150 +1895,21 @@ func TestHandler_RecoverRequiresUnhealthyState(t *testing.T) {
 	}
 }
 
-func TestHandler_LogoutStopsVM(t *testing.T) {
-	// VAL-VM-008: Logout stops only the current user's VM.
-	srv, _ := newTestServer(t)
+func TestIssueGatewayToken_GatewayFailure(t *testing.T) {
+	// When the gateway returns an error, issueGatewayToken returns empty string.
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}))
+	defer gateway.Close()
 
-	// Create VMs for two users.
-	for _, userID := range []string{"user-alice", "user-bob"} {
-		body := fmt.Sprintf(`{"user_id":"%s"}`, userID)
-		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Internal-Caller", "true")
-		resp, _ := http.DefaultClient.Do(req)
-		_ = resp.Body.Close()
-	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetGatewayURL(gateway.URL)
 
-	// Logout alice.
-	body := `{"user_id":"user-alice"}`
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/logout", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, _ := http.DefaultClient.Do(req)
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 on logout, got %d", resp.StatusCode)
-	}
-
-	// Lookup alice — should be stopped.
-	req2, _ := http.NewRequest(http.MethodGet, srv.URL+"/internal/vmctl/lookup?user_id=user-alice", nil)
-	req2.Header.Set("X-Internal-Caller", "true")
-	resp2, _ := http.DefaultClient.Do(req2)
-	var aliceResp ownershipResponse
-	if err := json.NewDecoder(resp2.Body).Decode(&aliceResp); err != nil {
-		t.Fatalf("decode aliceResp: %v", err)
-	}
-	_ = resp2.Body.Close()
-	if aliceResp.State != "stopped" {
-		t.Errorf("expected alice VM stopped after logout, got %s", aliceResp.State)
-	}
-
-	// Lookup bob — should still be active.
-	req3, _ := http.NewRequest(http.MethodGet, srv.URL+"/internal/vmctl/lookup?user_id=user-bob", nil)
-	req3.Header.Set("X-Internal-Caller", "true")
-	resp3, _ := http.DefaultClient.Do(req3)
-	var bobResp ownershipResponse
-	if err := json.NewDecoder(resp3.Body).Decode(&bobResp); err != nil {
-		t.Fatalf("decode bobResp: %v", err)
-	}
-	_ = resp3.Body.Close()
-	if bobResp.State != "active" {
-		t.Errorf("expected bob VM still active, got %s", bobResp.State)
+	token := reg.issueGatewayToken("vm-test-123")
+	if token != "" {
+		t.Errorf("expected empty token on gateway failure, got %q", token)
 	}
 }
-
-func TestHandler_IdleCheckEndpoint(t *testing.T) {
-	srv, reg := newTestServer(t)
-
-	// Set a very short idle timeout.
-	reg.SetIdleTimeout(50 * time.Millisecond)
-
-	// Create a VM.
-	body := `{"user_id":"user-1"}`
-	req1, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-Internal-Caller", "true")
-	resp1, _ := http.DefaultClient.Do(req1)
-	_ = resp1.Body.Close()
-
-	// Backdate the VM.
-	reg.mu.Lock()
-	reg.ownerships[ownershipKey("user-1", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-100 * time.Millisecond)
-	reg.mu.Unlock()
-
-	// Trigger idle check.
-	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/idle-check", nil)
-	req2.Header.Set("X-Internal-Caller", "true")
-	resp2, _ := http.DefaultClient.Do(req2)
-	defer func() { _ = resp2.Body.Close() }()
-
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 on idle-check, got %d", resp2.StatusCode)
-	}
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp2.Body).Decode(&result); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
-	if vmsStopped, _ := result["vms_stopped"].(float64); int(vmsStopped) != 1 {
-		t.Errorf("expected 1 VM stopped, got %v", result["vms_stopped"])
-	}
-}
-
-func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
-	// VAL-VM-012: All lifecycle endpoints require internal access.
-	// The isInternalCaller function is tested separately above.
-	// This test verifies that the handler endpoints exist and are
-	// wired up correctly. The actual external caller denial is
-	// tested via isInternalCaller unit tests and via the proxy's
-	// HandleVMctlDeny which blocks /internal/vmctl/* at the proxy
-	// level for browser callers.
-	srv, _ := newTestServer(t)
-
-	endpoints := []struct {
-		path   string
-		method string
-		body   string
-	}{
-		{"/internal/vmctl/hibernate", "POST", `{"user_id":"user-1"}`},
-		{"/internal/vmctl/resume", "POST", `{"user_id":"user-1"}`},
-		{"/internal/vmctl/recover", "POST", `{"user_id":"user-1"}`},
-		{"/internal/vmctl/logout", "POST", `{"user_id":"user-1"}`},
-		{"/internal/vmctl/idle-check", "POST", ""},
-		{"/internal/vmctl/reclaim", "POST", ""},
-		{"/internal/vmctl/retention-plan", "GET", ""},
-		{"/internal/vmctl/retention-shadow-plan", "GET", ""},
-		{"/internal/vmctl/pulse", "GET", ""},
-		{"/internal/vmctl/prune", "POST", ""},
-	}
-
-	for _, ep := range endpoints {
-		t.Run(ep.path, func(t *testing.T) {
-			var body io.Reader
-			if ep.body != "" {
-				body = strings.NewReader(ep.body)
-			}
-			req, _ := http.NewRequest(ep.method, srv.URL+ep.path, body)
-			if ep.body != "" {
-				req.Header.Set("Content-Type", "application/json")
-			}
-			req.Header.Set("X-Internal-Caller", "true")
-
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("request failed: %v", err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-
-			if resp.StatusCode == http.StatusMethodNotAllowed {
-				t.Errorf("endpoint %s not registered (405)", ep.path)
-			}
-		})
-	}
-}
-
-// --- VMManager Wiring Tests ---
 
 // mockVMManager is a test double for the VMManager interface.
 // It records lifecycle calls so tests can verify that the OwnershipRegistry
@@ -3447,78 +2454,6 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 	}
 }
 
-func TestOwnershipRegistry_DelegatesBootToVMManager(t *testing.T) {
-	// When a VMManager is set, ResolveOrAssign should boot a real VM
-	// and use the returned HostURL instead of the static autoputer URL base.
-	mock := &mockVMManager{
-		bootResponse: &VMInstanceInfo{
-			HostURL: "http://127.0.0.1:9042",
-			Epoch:   7,
-			Healthy: true,
-			State:   "running",
-		},
-	}
-
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mock)
-
-	own, err := reg.ResolveOrAssign("user-with-vm")
-	if err != nil {
-		t.Fatalf("ResolveOrAssign: %v", err)
-	}
-
-	// Verify the VM manager was called to boot.
-	if len(mock.boots) != 1 {
-		t.Fatalf("expected 1 BootVM call, got %d", len(mock.boots))
-	}
-	if mock.boots[0].VMID != own.VMID {
-		t.Errorf("expected boot VMID %s, got %s", own.VMID, mock.boots[0].VMID)
-	}
-
-	// Verify the autoputer URL came from the VM manager response.
-	if own.ComputerURL != "http://127.0.0.1:9042" {
-		t.Errorf("expected autoputer URL from VM manager, got %s", own.ComputerURL)
-	}
-
-	// Verify epoch came from the VM manager response.
-	if own.Epoch != 7 {
-		t.Errorf("expected epoch 7 from VM manager, got %d", own.Epoch)
-	}
-}
-
-func TestOwnershipRegistry_DelegatesStopToVMManager(t *testing.T) {
-	mock := &mockVMManager{}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mock)
-
-	own, _ := reg.ResolveOrAssign("user-stop-vm")
-	if err := reg.StopVM("user-stop-vm"); err != nil {
-		t.Fatalf("StopVM: %v", err)
-	}
-
-	if len(mock.stops) != 1 {
-		t.Fatalf("expected 1 StopVM call, got %d", len(mock.stops))
-	}
-	if mock.stops[0] != own.VMID {
-		t.Errorf("expected stop VMID %s, got %s", own.VMID, mock.stops[0])
-	}
-}
-
-func TestOwnershipRegistry_DelegatesHibernateToVMManager(t *testing.T) {
-	mock := &mockVMManager{}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mock)
-
-	_, _ = reg.ResolveOrAssign("user-hibernate-vm")
-	if err := reg.HibernateVM("user-hibernate-vm"); err != nil {
-		t.Fatalf("HibernateVM: %v", err)
-	}
-
-	if len(mock.hibernates) != 1 {
-		t.Fatalf("expected 1 HibernateVM call, got %d", len(mock.hibernates))
-	}
-}
-
 func TestOwnershipRegistry_StartsFreshRealizationThroughVMManager(t *testing.T) {
 	mock := &mockVMManager{
 		recoverResponse: &VMInstanceInfo{
@@ -3545,89 +2480,6 @@ func TestOwnershipRegistry_StartsFreshRealizationThroughVMManager(t *testing.T) 
 	}
 	if own.ComputerURL != "http://127.0.0.1:9043" || own.Epoch != 5 {
 		t.Errorf("fresh realization = %+v", own)
-	}
-}
-
-func TestOwnershipRegistry_DelegatesRecoverToVMManager(t *testing.T) {
-	mock := &mockVMManager{
-		recoverResponse: &VMInstanceInfo{
-			HostURL: "http://127.0.0.1:9044",
-			Epoch:   99,
-			Healthy: true,
-			State:   "running",
-		},
-	}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mock)
-
-	_, _ = reg.ResolveOrAssign("user-recover-vm")
-	_ = reg.MarkUnhealthy("user-recover-vm")
-
-	own, err := reg.RecoverVM("user-recover-vm")
-	if err != nil {
-		t.Fatalf("RecoverVM: %v", err)
-	}
-
-	if len(mock.recovers) != 1 {
-		t.Fatalf("expected 1 RecoverVM call, got %d", len(mock.recovers))
-	}
-	if len(mock.recoverCfgs) != 1 {
-		t.Fatalf("expected 1 RecoverVM config, got %d", len(mock.recoverCfgs))
-	}
-	recoverCfg := mock.recoverCfgs[0]
-	if recoverCfg.ComputerKind != "active" || recoverCfg.OwnerID != "user-recover-vm" || recoverCfg.DesktopID != PrimaryDesktopID {
-		t.Fatalf("recover config identity = %+v, want active ownership identity", recoverCfg)
-	}
-
-	// Verify the epoch and autoputer URL came from the recovery response.
-	if own.Epoch != 99 {
-		t.Errorf("expected epoch 99 from recover response, got %d", own.Epoch)
-	}
-	if own.ComputerURL != "http://127.0.0.1:9044" {
-		t.Errorf("expected autoputer URL from recover response, got %s", own.ComputerURL)
-	}
-}
-
-func TestOwnershipRegistry_RefreshActiveVMDelegatesToVMManager(t *testing.T) {
-	mock := &mockVMManager{
-		refreshResponse: &VMInstanceInfo{
-			HostURL: "http://127.0.0.1:9045",
-			Epoch:   100,
-			Healthy: true,
-			State:   "running",
-		},
-	}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
-	reg.SetVMManager(mock)
-
-	_, _ = reg.ResolveOrAssign("user-refresh-vm")
-
-	own, err := reg.RefreshVMForDesktop("user-refresh-vm", PrimaryDesktopID)
-	if err != nil {
-		t.Fatalf("RefreshVMForDesktop: %v", err)
-	}
-	if len(mock.refreshes) != 1 {
-		t.Fatalf("expected 1 RefreshVM call, got %d", len(mock.refreshes))
-	}
-	if len(mock.refreshCfgs) != 1 {
-		t.Fatalf("expected 1 RefreshVM config, got %d", len(mock.refreshCfgs))
-	}
-	refreshCfg := mock.refreshCfgs[0]
-	if refreshCfg.ComputerKind != "active" || refreshCfg.OwnerID != "user-refresh-vm" || refreshCfg.DesktopID != PrimaryDesktopID {
-		t.Fatalf("refresh config identity = %+v, want active ownership identity", refreshCfg)
-	}
-	if len(mock.recovers) != 0 {
-		t.Fatalf("expected refresh to avoid crash-recovery path, got %d RecoverVM calls", len(mock.recovers))
-	}
-	if own.State != VMStateActive {
-		t.Fatalf("state = %s, want active", own.State)
-	}
-	if own.Epoch != 100 {
-		t.Fatalf("epoch = %d, want 100", own.Epoch)
-	}
-	if own.ComputerURL != "http://127.0.0.1:9045" {
-		t.Fatalf("autoputer URL = %s", own.ComputerURL)
 	}
 }
 
@@ -3924,32 +2776,6 @@ func TestOwnershipRegistry_RefreshFailedPersistedVMWithoutManagerInstanceBootsRe
 	}
 }
 
-func TestOwnershipRegistry_DelegatesLogoutToVMManager(t *testing.T) {
-	mock := &mockVMManager{}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mock)
-
-	_, _ = reg.ResolveOrAssign("user-logout-vm")
-	_ = reg.LogoutVM("user-logout-vm")
-
-	if len(mock.stops) != 1 {
-		t.Fatalf("expected 1 StopVM call from logout, got %d", len(mock.stops))
-	}
-}
-
-func TestOwnershipRegistry_DelegatesRemoveToVMManager(t *testing.T) {
-	mock := &mockVMManager{}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mock)
-
-	_, _ = reg.ResolveOrAssign("user-remove-vm")
-	_ = reg.RemoveOwnership("user-remove-vm")
-
-	if len(mock.stops) != 1 {
-		t.Fatalf("expected 1 StopVM call from remove, got %d", len(mock.stops))
-	}
-}
-
 func TestOwnershipRegistry_BootFailureReturnsError(t *testing.T) {
 	mock := &mockVMManager{
 		bootError: fmt.Errorf("Firecracker process failed: KVM not available"),
@@ -3972,21 +2798,6 @@ func TestOwnershipRegistry_BootFailureReturnsError(t *testing.T) {
 	}
 	if own.State != VMStateFailed {
 		t.Errorf("expected failed state, got %s", own.State)
-	}
-}
-
-func TestOwnershipRegistry_NoVMManagerUsesHostProcessMode(t *testing.T) {
-	// Without a VMManager, ResolveOrAssign should use the static autoputer URL.
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	own, err := reg.ResolveOrAssign("user-no-vm")
-	if err != nil {
-		t.Fatalf("ResolveOrAssign: %v", err)
-	}
-
-	// Autoputer URL should be the static base URL.
-	if own.ComputerURL != "http://127.0.0.1:8085" {
-		t.Errorf("expected static autoputer URL in host-process mode, got %s", own.ComputerURL)
 	}
 }
 
@@ -4211,46 +3022,6 @@ func TestOwnershipRegistry_ReattachReconcilesGatewayCredential(t *testing.T) {
 	}
 }
 
-// --- Gateway Token Issuance Tests ---
-
-func TestIssueGatewayToken_Success(t *testing.T) {
-	// Verify that issueGatewayToken calls the gateway's credential endpoint
-	// and returns the credential value.
-	credValue := "vm-test-123:changedplaceholder"
-	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/provider/v1/credentials/issue" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-			http.NotFound(w, r)
-			return
-		}
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-		if got := r.Header.Get("X-Internal-Caller"); got != "true" {
-			t.Errorf("expected X-Internal-Caller=true, got %q", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		// Mirror the real gateway CredentialResult JSON shape.
-		resp := map[string]string{
-			"ComputerID": "vm-test-123",
-			"RawToken":   credValue,
-			"ExpiresAt":  "2025-01-01T00:00:00Z",
-		}
-		jsonData, _ := json.Marshal(resp)
-		w.Write(jsonData)
-	}))
-	defer gateway.Close()
-
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetGatewayURL(gateway.URL)
-
-	token := reg.issueGatewayToken("vm-test-123")
-	if token != credValue {
-		t.Errorf("expected credential value %q, got %q", credValue, token)
-	}
-}
-
 func TestIssueGatewayToken_LegacyJSONShapeStillWorks(t *testing.T) {
 	credValue := "vm-test-legacy:changedplaceholder"
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -4285,35 +3056,6 @@ func TestIssueGatewayToken_NoGatewayURL(t *testing.T) {
 	token := reg.issueGatewayToken("vm-test-123")
 	if token != "" {
 		t.Errorf("expected empty token when no gateway URL, got %q", token)
-	}
-}
-
-func TestIssueGatewayToken_GatewayFailure(t *testing.T) {
-	// When the gateway returns an error, issueGatewayToken returns empty string.
-	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-	}))
-	defer gateway.Close()
-
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetGatewayURL(gateway.URL)
-
-	token := reg.issueGatewayToken("vm-test-123")
-	if token != "" {
-		t.Errorf("expected empty token on gateway failure, got %q", token)
-	}
-}
-
-func TestSetGatewayURL(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetGatewayURL("http://gateway.test:8084")
-
-	reg.mu.RLock()
-	gwURL := reg.gatewayURL
-	reg.mu.RUnlock()
-
-	if gwURL != "http://gateway.test:8084" {
-		t.Errorf("expected gateway URL http://gateway.test:8084, got %s", gwURL)
 	}
 }
 

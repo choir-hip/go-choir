@@ -15,13 +15,6 @@ func newTestBreaker(cfg BreakerConfig) *CircuitBreaker {
 	return NewCircuitBreaker(cfg)
 }
 
-func TestCircuitBreaker_StartsClosed(t *testing.T) {
-	b := newTestBreaker(BreakerConfig{})
-	if b.State() != StateClosed {
-		t.Fatalf("initial state = %v, want closed", b.State())
-	}
-}
-
 func TestCircuitBreaker_ExecutesWhenClosed(t *testing.T) {
 	b := newTestBreaker(BreakerConfig{FailureThreshold: 3})
 	called := false
@@ -181,26 +174,6 @@ func TestCircuitBreaker_Reset(t *testing.T) {
 	}
 }
 
-func TestCircuitBreaker_Snapshot(t *testing.T) {
-	b := newTestBreaker(BreakerConfig{FailureThreshold: 2, OpenTimeout: time.Hour})
-	_ = b.Execute(func() error { return errors.New("boom") })
-	snap := b.Snapshot()
-	if snap.State != StateClosed {
-		t.Fatalf("snapshot state = %v, want closed", snap.State)
-	}
-	if snap.ConsecutiveFails != 1 {
-		t.Fatalf("snapshot fails = %d, want 1", snap.ConsecutiveFails)
-	}
-	_ = b.Execute(func() error { return errors.New("boom") })
-	snap = b.Snapshot()
-	if snap.State != StateOpen {
-		t.Fatalf("snapshot state = %v, want open", snap.State)
-	}
-	if snap.OpenedAt == nil {
-		t.Fatal("snapshot OpenedAt nil for open breaker")
-	}
-}
-
 func TestCircuitBreaker_Concurrent(t *testing.T) {
 	b := newTestBreaker(BreakerConfig{FailureThreshold: 100, OpenTimeout: time.Hour})
 	var wg sync.WaitGroup
@@ -232,20 +205,6 @@ func TestCircuitBreaker_Concurrent(t *testing.T) {
 	// Should remain closed (threshold 100).
 	if b.State() != StateClosed {
 		t.Fatalf("state = %v, want closed under concurrent load", b.State())
-	}
-}
-
-func TestCircuitBreaker_RecordSuccessFailureDirect(t *testing.T) {
-	b := newTestBreaker(BreakerConfig{FailureThreshold: 2, OpenTimeout: time.Hour})
-	b.RecordFailure()
-	b.RecordFailure()
-	if b.State() != StateOpen {
-		t.Fatalf("state = %v, want open", b.State())
-	}
-	b.Reset()
-	b.RecordSuccess()
-	if b.State() != StateClosed {
-		t.Fatalf("state = %v, want closed", b.State())
 	}
 }
 

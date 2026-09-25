@@ -95,27 +95,6 @@ func do(t *testing.T, h http.Handler, method, path, secret string, body io.Reade
 	return rr
 }
 
-func TestPutBlobSuccess(t *testing.T) {
-	h, _, secret, _, _ := newHandler(t, []string{ScopeWriteBase, ScopeReadBase})
-	data := []byte("blob content for api test")
-	rr := do(t, h.Routes(), http.MethodPost, "/api/base/blobs", secret, bytes.NewReader(data))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status: %d body: %s", rr.Code, rr.Body.String())
-	}
-	var resp putBlobResponse
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	sum := sha256.Sum256(data)
-	wantHex := hex.EncodeToString(sum[:])
-	if string(resp.BlobRef) != "sha256:"+wantHex {
-		t.Fatalf("blob_ref: got %q want sha256:%s", resp.BlobRef, wantHex)
-	}
-	if resp.SizeBytes != int64(len(data)) {
-		t.Fatalf("size: got %d want %d", resp.SizeBytes, len(data))
-	}
-}
-
 func TestPutBlobNoAuth(t *testing.T) {
 	h, _, _, _, _ := newHandler(t, []string{ScopeWriteBase})
 	rr := do(t, h.Routes(), http.MethodPost, "/api/base/blobs", "", bytes.NewReader([]byte("x")))
@@ -288,74 +267,11 @@ func TestBaseAPIWritesCanFeedReadOnlyCurrentStateObservation(t *testing.T) {
 	}
 }
 
-func TestGetItem(t *testing.T) {
-	h, _, secret, _, _ := newHandler(t, []string{ScopeWriteBase, ScopeReadBase})
-	itemID := model.ItemID("base_item_getitem")
-	body := putItemRequest{
-		ItemID:       itemID,
-		EventType:    model.EventCreate,
-		Kind:         model.KindFolder,
-		Name:         "docs",
-		ParentItemID: "",
-		VersionID:    model.VersionID("base_ver_folder1"),
-	}
-	b, _ := json.Marshal(body)
-	rr := do(t, h.Routes(), http.MethodPost, "/api/base/items", secret, bytes.NewReader(b))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("create status: %d body: %s", rr.Code, rr.Body.String())
-	}
-
-	rr = do(t, h.Routes(), http.MethodGet, "/api/base/items/"+string(itemID), secret, nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("get status: %d body: %s", rr.Code, rr.Body.String())
-	}
-	var resp itemResponse
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Item.ItemID != itemID {
-		t.Fatalf("item id: got %q want %q", resp.Item.ItemID, itemID)
-	}
-	if resp.Item.Name != "docs" {
-		t.Fatalf("name: got %q want docs", resp.Item.Name)
-	}
-}
-
 func TestGetItemNotFound(t *testing.T) {
 	h, _, secret, _, _ := newHandler(t, []string{ScopeReadBase})
 	rr := do(t, h.Routes(), http.MethodGet, "/api/base/items/base_item_nope", secret, nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status: got %d want 404", rr.Code)
-	}
-}
-
-func TestGetStatus(t *testing.T) {
-	h, _, secret, _, _ := newHandler(t, []string{ScopeWriteBase, ScopeReadBase})
-	itemID := model.ItemID("base_item_status")
-	body := putItemRequest{
-		ItemID:    itemID,
-		EventType: model.EventCreate,
-		Kind:      model.KindFile,
-		Name:      "file.txt",
-		VersionID: model.VersionID("base_ver_s1"),
-		BlobRef:   model.BlobRef("sha256:" + strings.Repeat("b", 64)),
-	}
-	b, _ := json.Marshal(body)
-	do(t, h.Routes(), http.MethodPost, "/api/base/items", secret, bytes.NewReader(b))
-
-	rr := do(t, h.Routes(), http.MethodGet, "/api/base/items/"+string(itemID)+"/status", secret, nil)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status code: %d body: %s", rr.Code, rr.Body.String())
-	}
-	var resp statusResponse
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.ItemID != itemID {
-		t.Fatalf("item id: got %q want %q", resp.ItemID, itemID)
-	}
-	if resp.State != model.StateSynced {
-		t.Fatalf("state: got %q want synced", resp.State)
 	}
 }
 

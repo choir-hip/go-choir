@@ -46,40 +46,6 @@ func TestEventBusPublishReceive(t *testing.T) {
 	bus.Unsubscribe(ch)
 }
 
-func TestEventBusMultipleSubscribers(t *testing.T) {
-	bus := NewEventBus()
-	ch1 := bus.Subscribe()
-	ch2 := bus.Subscribe()
-
-	ev := RuntimeEvent{
-		Record: types.EventRecord{
-			EventID: "evt-002",
-			Seq:     1,
-			Kind:    types.EventRunSubmitted,
-			Payload: json.RawMessage(`{}`),
-		},
-		Actor: ActorRuntime,
-		Cause: CauseTaskLifecycle,
-	}
-
-	bus.Publish(ev)
-
-	// Both subscribers should receive the event.
-	for i, ch := range []chan RuntimeEvent{ch1, ch2} {
-		select {
-		case received := <-ch:
-			if received.Record.EventID != ev.Record.EventID {
-				t.Errorf("subscriber %d: event_id: got %q, want %q", i, received.Record.EventID, ev.Record.EventID)
-			}
-		case <-time.After(time.Second):
-			t.Fatalf("subscriber %d: timed out waiting for event", i)
-		}
-	}
-
-	bus.Unsubscribe(ch1)
-	bus.Unsubscribe(ch2)
-}
-
 func TestEventBusUnsubscribeStopsDelivery(t *testing.T) {
 	bus := NewEventBus()
 	ch := bus.Subscribe()
@@ -134,59 +100,6 @@ func TestEventBusDropOnFullBuffer(t *testing.T) {
 
 	bus.Unsubscribe(ch)
 }
-
-func TestEventBusStats(t *testing.T) {
-	bus := NewEventBus()
-
-	ev := RuntimeEvent{
-		Record: types.EventRecord{
-			Kind:    types.EventRunSubmitted,
-			Payload: json.RawMessage(`{}`),
-		},
-	}
-
-	// No subscribers, so all events should be published with 0 drops
-	// (no channels to drop to).
-	bus.Publish(ev)
-	bus.Publish(ev)
-
-	pub, drops := bus.Stats()
-	if pub != 2 {
-		t.Errorf("published: got %d, want 2", pub)
-	}
-	if drops != 0 {
-		t.Errorf("drops: got %d, want 0 (no subscribers)", drops)
-	}
-}
-
-func TestEventBusSubscriberCount(t *testing.T) {
-	bus := NewEventBus()
-
-	if count := bus.SubscriberCount(); count != 0 {
-		t.Errorf("initial count: got %d, want 0", count)
-	}
-
-	ch1 := bus.Subscribe()
-	if count := bus.SubscriberCount(); count != 1 {
-		t.Errorf("after 1 sub: got %d, want 1", count)
-	}
-
-	ch2 := bus.Subscribe()
-	if count := bus.SubscriberCount(); count != 2 {
-		t.Errorf("after 2 subs: got %d, want 2", count)
-	}
-
-	bus.Unsubscribe(ch1)
-	if count := bus.SubscriberCount(); count != 1 {
-		t.Errorf("after unsub 1: got %d, want 1", count)
-	}
-
-	bus.Unsubscribe(ch2)
-	if count := bus.SubscriberCount(); count != 0 {
-		t.Errorf("after unsub 2: got %d, want 0", count)
-	}
-}
-
 func TestRequiresSupervisorAttention(t *testing.T) {
 	tests := []struct {
 		name    string

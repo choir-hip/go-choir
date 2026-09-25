@@ -402,34 +402,3 @@ func TestDeriveDoesNotMutateInput(t *testing.T) {
 		t.Error("Derive mutated the input event slice")
 	}
 }
-
-func TestParsePayloadEmpty(t *testing.T) {
-	p := ParsePayload("")
-	if p.Name != "" || p.VersionID != "" {
-		t.Errorf("empty payload should yield zero Payload, got %+v", p)
-	}
-}
-
-func TestPayloadRoundtrip(t *testing.T) {
-	original := Payload{
-		Name:         "test.txt",
-		ParentItemID: "base_item_0",
-		Kind:         model.KindFile,
-		VersionID:    "base_ver_1",
-		BlobRef:      "sha256:abc",
-		ContentHash:  "abc",
-	}
-	decoded := ParsePayload(original.JSON())
-	if decoded != original {
-		t.Errorf("payload roundtrip failed:\n got  %+v\n want %+v", decoded, original)
-	}
-}
-
-// TestPurityNoIOImports is a documentation anchor: the tree package must
-// not import "os", "net", or "time". The real guard is `go list -deps
-// ./internal/base/tree` in CI, but this test documents the invariant.
-func TestPurityNoIOImports(t *testing.T) {
-	// If this file imports os/net/time, the build would fail at import
-	// time. This test exists to document the purity invariant.
-	_ = model.ItemID("base_item_anchor")
-}

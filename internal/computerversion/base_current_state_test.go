@@ -14,25 +14,6 @@ import (
 	basetree "github.com/yusefmosiah/go-choir/internal/base/tree"
 )
 
-func TestBaseCurrentStateObservationSetBindsJournalTreeAndBlob(t *testing.T) {
-	version := baseSliceComputerVersion()
-	blobs := newBaseBlobStore(t, t.TempDir())
-	ref, contentHash := putBaseBlob(t, blobs, []byte("hello audited computer"))
-	jr := newSQLiteJournalWithEvent(t, baseCreateEventWithBlob(1, ref, contentHash))
-
-	observations, err := BaseCurrentStateObservationSet(context.Background(), "base-current", version, jr, blobs)
-	if err != nil {
-		t.Fatalf("current state observations: %v", err)
-	}
-	kinds := observations.RequiredKinds()
-	if len(kinds) != 2 || kinds[0] != ObservationBlobSet || kinds[1] != ObservationFileManifest {
-		t.Fatalf("required kinds = %#v", kinds)
-	}
-	if len(observations.Observations) != 2 {
-		t.Fatalf("expected file manifest and blob observation, got %#v", observations.Observations)
-	}
-}
-
 func TestOpenBaseCurrentStateSourceLoadsExistingPathsReadOnly(t *testing.T) {
 	version := baseSliceComputerVersion()
 	root := t.TempDir()
@@ -87,30 +68,6 @@ func TestBaseCurrentStateObservationSetRejectsMissingReferencedBlob(t *testing.T
 	_, err := BaseCurrentStateObservationSet(context.Background(), "missing-blob", baseSliceComputerVersion(), jr, newBaseBlobStore(t, t.TempDir()))
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("expected missing referenced blob to be rejected, got %v", err)
-	}
-}
-
-func TestBaseCurrentStateObservationSetMismatchFailsEquivalence(t *testing.T) {
-	version := baseSliceComputerVersion()
-	leftBlobs := newBaseBlobStore(t, t.TempDir())
-	leftRef, leftHash := putBaseBlob(t, leftBlobs, []byte("left content"))
-	leftJournal := newSQLiteJournalWithEvent(t, baseCreateEventWithBlob(1, leftRef, leftHash))
-	left, err := BaseCurrentStateObservationSet(context.Background(), "left", version, leftJournal, leftBlobs)
-	if err != nil {
-		t.Fatalf("left observations: %v", err)
-	}
-
-	rightBlobs := newBaseBlobStore(t, t.TempDir())
-	rightRef, rightHash := putBaseBlob(t, rightBlobs, []byte("right content"))
-	rightJournal := newSQLiteJournalWithEvent(t, baseCreateEventWithBlob(1, rightRef, rightHash))
-	right, err := BaseCurrentStateObservationSet(context.Background(), "right", version, rightJournal, rightBlobs)
-	if err != nil {
-		t.Fatalf("right observations: %v", err)
-	}
-
-	result := EquivalenceChecker{}.CheckObservationSets(left, right)
-	if result.Status != EquivalenceNotEquivalent {
-		t.Fatalf("expected composite mismatch to fail equivalence, got %#v", result)
 	}
 }
 

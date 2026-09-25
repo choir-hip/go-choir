@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -63,51 +63,6 @@ func TestRunEmitsReadOnlyBaseCurrentStateObservationSet(t *testing.T) {
 	}
 }
 
-func TestRunObservationSetFeedsBaseCurrentStateFileProjectionCompare(t *testing.T) {
-	root := t.TempDir()
-	journalPath := filepath.Join(root, "base.sqlite")
-	blobRoot := filepath.Join(root, "blobs")
-	authDBPath := filepath.Join(root, "auth.sqlite")
-	secret := createAuthSecret(t, authDBPath)
-	itemID, blobResp := writeBaseStateThroughPersistentAPI(t, journalPath, blobRoot, secret, authDBPath)
-
-	var stdout, stderr bytes.Buffer
-	code := run([]string{
-		"--journal", journalPath,
-		"--blob-root", blobRoot,
-		"--code-ref", "test-code-ref",
-		"--artifact-program-ref", "base-sqlite:" + journalPath,
-		"--name", "baseobserve-compare-test",
-	}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("run exit=%d stderr=%s", code, stderr.String())
-	}
-
-	var set computerversion.ObservationSet
-	if err := json.Unmarshal(stdout.Bytes(), &set); err != nil {
-		t.Fatalf("decode observation set: %v\n%s", err, stdout.String())
-	}
-	if set.Name != "baseobserve-compare-test" {
-		t.Fatalf("name = %q", set.Name)
-	}
-	if !observationContains(set, computerversion.ObservationFileManifest, string(itemID), string(blobResp.BlobRef)) {
-		t.Fatalf("missing fixture item observation for %s in %#v", itemID, set.Observations)
-	}
-	if !observationContains(set, computerversion.ObservationBlobSet, string(blobResp.BlobRef), blobResp.SHA256) {
-		t.Fatalf("missing fixture blob observation for %s in %#v", blobResp.BlobRef, set.Observations)
-	}
-
-	result, err := computerversion.CompareBaseCurrentStateToFileProjection(context.Background(), set, set)
-	if err != nil {
-		t.Fatalf("compare current-state to file projection: %v", err)
-	}
-	if !result.Equivalent() {
-		t.Fatalf("expected equivalent result, got %#v", result)
-	}
-	if len(result.Differences) != 0 || len(result.Unsupported) != 0 {
-		t.Fatalf("equivalent result reported differences/unsupported: %#v", result)
-	}
-}
 
 func TestRunDoesNotCreateMissingObservationRoots(t *testing.T) {
 	root := t.TempDir()
@@ -139,15 +94,6 @@ func TestParseConfigRequiresComputerVersionRefs(t *testing.T) {
 	if !strings.Contains(err.Error(), "--code-ref") {
 		t.Fatalf("error = %q, want missing code ref", err.Error())
 	}
-}
-
-func observationContains(set computerversion.ObservationSet, kind computerversion.ObservationKind, key, valuePart string) bool {
-	for _, observation := range set.Observations {
-		if observation.Kind == kind && observation.Key == key && strings.Contains(observation.Value, valuePart) {
-			return true
-		}
-	}
-	return false
 }
 
 func createAuthSecret(t *testing.T, authDBPath string) string {

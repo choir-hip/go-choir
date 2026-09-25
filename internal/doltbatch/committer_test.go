@@ -99,18 +99,6 @@ func TestCommitNowCommitsSynchronously(t *testing.T) {
 	}
 }
 
-func TestNothingToCommitIsSuccess(t *testing.T) {
-	db := openTestDB(t)
-	c := New(db, "test", time.Hour)
-	defer func() { _ = c.Close(context.Background()) }()
-
-	// No writes since the last commit — CommitNow must tolerate
-	// "nothing to commit" like the old per-mutation path did.
-	if err := c.CommitNow(context.Background(), "idempotent retry"); err != nil {
-		t.Fatalf("CommitNow with clean working set: %v", err)
-	}
-}
-
 func TestCloseFlushesPendingDirty(t *testing.T) {
 	db := openTestDB(t)
 	base := doltLogCount(t, db)

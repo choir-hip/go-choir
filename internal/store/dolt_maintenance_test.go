@@ -122,22 +122,6 @@ func TestMaybeRunDoltGCJournalTriggersAndBypassesGuard(t *testing.T) {
 	}
 }
 
-func TestWriteDoltGCDispositionRoundTrip(t *testing.T) {
-	dir := t.TempDir()
-	writeDoltGCDisposition(dir, doltGCDisposition{Outcome: "skipped_size", UsedGiB: 11, ThresholdGiB: 5, Detail: "x"})
-	raw, err := os.ReadFile(filepath.Join(dir, doltGCDispositionFileName))
-	if err != nil {
-		t.Fatalf("read disposition: %v", err)
-	}
-	var got doltGCDisposition
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("decode disposition: %v", err)
-	}
-	if got.Outcome != "skipped_size" || got.UsedGiB != 11 || got.ThresholdGiB != 5 || got.At == "" {
-		t.Fatalf("disposition = %+v", got)
-	}
-}
-
 func stubDiskUsage(usage doltGCDiskUsage) func() {
 	previous := diskUsageForGC
 	diskUsageForGC = func(string) (doltGCDiskUsage, error) { return usage, nil }

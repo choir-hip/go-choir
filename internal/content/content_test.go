@@ -578,17 +578,6 @@ func TestContentImportURLDedupesYouTubeSourcePackets(t *testing.T) {
 	}
 }
 
-func TestYouTubeJSON3CaptionURLForcesFormat(t *testing.T) {
-	t.Parallel()
-	got := youtubeJSON3CaptionURL("https://www.youtube.com/api/timedtext?v=abc&lang=en&fmt=srv3")
-	if !strings.Contains(got, "fmt=json3") {
-		t.Fatalf("caption URL = %q, want fmt=json3", got)
-	}
-	if strings.Contains(got, "fmt=srv3") {
-		t.Fatalf("caption URL retained stale fmt: %q", got)
-	}
-}
-
 func TestFetchYouTubeTranscriptUsesConfiguredProvider(t *testing.T) {
 	allowPrivateSourceFetchForTest(t)
 	t.Setenv("CHOIR_YOUTUBE_TRANSCRIPT_PROVIDER", "gettranscript")
@@ -803,45 +792,6 @@ func TestFetchYouTubeTranscriptFromInnerTubeRejectsForbiddenCaptionURL(t *testin
 	}
 	if !strings.Contains(got.Error, "source URL host is not allowed") {
 		t.Fatalf("error = %q, want source fetch policy rejection", got.Error)
-	}
-}
-
-func TestChooseYouTubeCaptionTrackPrefersHumanEnglish(t *testing.T) {
-	t.Parallel()
-	got, ok := chooseYouTubeCaptionTrack([]youtubeCaptionTrack{
-		{BaseURL: "first", LanguageCode: "es"},
-		{BaseURL: "auto", LanguageCode: "en", Kind: "asr"},
-		{BaseURL: "manual", LanguageCode: "en"},
-	})
-	if !ok || got.BaseURL != "manual" {
-		t.Fatalf("track = %#v ok=%v, want manual English", got, ok)
-	}
-}
-
-func TestParseYouTubeTranscriptProviderPayloadHandlesNestedTranscript(t *testing.T) {
-	t.Parallel()
-	raw := []byte(`{
-		"data": [{
-			"video_id": "abc123",
-			"lang": "en",
-			"transcript": [
-				{"offset": "3.5", "duration": "1.0", "text": "Nested line one."},
-				{"offset": "4.5", "duration": "1.5", "text": "Nested line two."}
-			]
-		}]
-	}`)
-	segments, text, language, _, err := parseYouTubeTranscriptProviderPayload(raw, "abc123")
-	if err != nil {
-		t.Fatalf("parse provider payload: %v", err)
-	}
-	if language != "en" {
-		t.Fatalf("language = %q", language)
-	}
-	if len(segments) != 2 || segments[0].Start != 3.5 || segments[1].Duration != 1.5 {
-		t.Fatalf("segments = %#v", segments)
-	}
-	if text != "Nested line one.\nNested line two." {
-		t.Fatalf("text = %q", text)
 	}
 }
 

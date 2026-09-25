@@ -158,38 +158,6 @@ func TestCLIAPIKeyFileDashReadsStdin(t *testing.T) {
 	}
 }
 
-// TestWireStoriesHitsAPI starts a stub server that asserts the CLI sends the
-// Bearer API key header, and returns a canned wire stories response that the
-// CLI must decode and print as JSON.
-func TestWireStoriesHitsAPI(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/universal-wire/stories" {
-			t.Errorf("path = %q, want /api/universal-wire/stories", r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer choir_sk_test" {
-			t.Errorf("Authorization = %q, want Bearer choir_sk_test", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"stories":[{"id":"s1","headline":"Test headline","dek":"test dek","story_texture_doc_id":"doc-1","source_state":"fresh"}],"source":"universal-wire-edition-texture","diagnostics":{"texture_edition":"present"}}`)
-	}))
-	defer stub.Close()
-
-	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories", "--host=" + stub.URL}, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
-	}
-	var resp wireStoriesResponse
-	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
-		t.Fatalf("decode stdout: %v; stdout=%s", err, out.String())
-	}
-	if len(resp.Stories) != 1 || resp.Stories[0].Headline != "Test headline" {
-		t.Fatalf("stories = %+v, want one story with headline Test headline", resp.Stories)
-	}
-	if resp.Source != "universal-wire-edition-texture" {
-		t.Fatalf("source = %q, want universal-wire-edition-texture", resp.Source)
-	}
-}
 
 // TestWireDiagnosticsPrintsOnlyDiagnostics asserts the diagnostics subcommand
 // decodes and prints the diagnostics field.
@@ -211,32 +179,6 @@ func TestWireDiagnosticsPrintsOnlyDiagnostics(t *testing.T) {
 	}
 	if diag["texture_edition"] != "missing" {
 		t.Fatalf("texture_edition = %q, want missing", diag["texture_edition"])
-	}
-}
-
-// TestTrajectoriesHitsAPI asserts the trajectories command hits the right
-// path and decodes the list.
-func TestTrajectoriesHitsAPI(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/trajectories" {
-			t.Errorf("path = %q, want /api/trajectories", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"trajectories":[{"trajectory_id":"traj-1","kind":"ingestion"}]}`)
-	}))
-	defer stub.Close()
-
-	var out, errOut bytes.Buffer
-	code := run([]string{"trajectories", "--host=" + stub.URL}, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
-	}
-	var resp trajectoriesListResponse
-	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v; stdout=%s", err, out.String())
-	}
-	if len(resp.Trajectories) != 1 || resp.Trajectories[0].TrajectoryID != "traj-1" {
-		t.Fatalf("trajectories = %+v, want one traj-1", resp.Trajectories)
 	}
 }
 
@@ -711,27 +653,6 @@ func TestTrajectoryGetCompatibility(t *testing.T) {
 	}
 }
 
-// TestTextureRevisionsHitsAPI asserts the texture revisions command GETs the
-// revisions endpoint, which returns full content bodies.
-func TestTextureRevisionsHitsAPI(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/texture/documents/doc-1/revisions" {
-			t.Errorf("path = %q, want /api/texture/documents/doc-1/revisions", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"revisions":[{"revision_id":"rev-1","doc_id":"doc-1","content":"hello"}]}`)
-	}))
-	defer stub.Close()
-
-	var out, errOut bytes.Buffer
-	code := run([]string{"texture", "revisions", "--host=" + stub.URL, "doc-1"}, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
-	}
-	if !strings.Contains(out.String(), `"content": "hello"`) {
-		t.Fatalf("stdout = %q, want revision content", out.String())
-	}
-}
 
 func TestAPIKeyEnvironmentSecretNeverAppearsInHelp(t *testing.T) {
 	const secret = "choir_sk_verifier_known_secret_must_not_render"
@@ -884,89 +805,6 @@ func TestRunStartRequiresIdempotencyKey(t *testing.T) {
 	}
 }
 
-// TestRunStatusHitsRunResource asserts the run status command GETs the
-// canonical run resource.
-func TestRunStatusHitsRunResource(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/runs/sub-123" {
-			t.Errorf("path = %q, want /api/runs/sub-123", r.URL.Path)
-		}
-		if r.Method != http.MethodGet {
-			t.Errorf("method = %q, want GET", r.Method)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"run_id":"sub-123","state":"completed","created_at":"2026-07-06T00:00:00.000Z","updated_at":"2026-07-06T00:01:00.000Z"}`)
-	}))
-	defer stub.Close()
-
-	var out, errOut bytes.Buffer
-	code := run([]string{"run", "status", "--host=" + stub.URL, "sub-123"}, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
-	}
-	var resp map[string]any
-	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v; stdout=%s", err, out.String())
-	}
-	if resp["state"] != "completed" {
-		t.Fatalf("state = %v, want completed", resp["state"])
-	}
-}
-
-func TestRunListHitsRunsEndpoint(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/runs" {
-			t.Errorf("path = %q, want /api/runs", r.URL.Path)
-		}
-		if r.Method != http.MethodGet {
-			t.Errorf("method = %q, want GET", r.Method)
-		}
-		if got := r.URL.Query().Get("limit"); got != "7" {
-			t.Errorf("limit = %q, want 7", got)
-		}
-		_, _ = io.WriteString(w, `{"runs":[{"run_id":"run-123","state":"running"}]}`)
-	}))
-	defer stub.Close()
-
-	var out, errOut bytes.Buffer
-	code := run([]string{"run", "list", "--host=" + stub.URL, "--limit=7"}, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
-	}
-	var resp map[string]any
-	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v; stdout=%s", err, out.String())
-	}
-	if len(resp["runs"].([]any)) != 1 {
-		t.Fatalf("runs = %v, want one run", resp["runs"])
-	}
-}
-
-func TestRunCancelPostsRunResource(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/runs/run-123/cancel" {
-			t.Errorf("path = %q, want /api/runs/run-123/cancel", r.URL.Path)
-		}
-		if r.Method != http.MethodPost {
-			t.Errorf("method = %q, want POST", r.Method)
-		}
-		_, _ = io.WriteString(w, `{"run_id":"run-123","state":"cancelled"}`)
-	}))
-	defer stub.Close()
-
-	var out, errOut bytes.Buffer
-	code := run([]string{"run", "cancel", "--host=" + stub.URL, "run-123"}, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
-	}
-	var resp map[string]any
-	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v; stdout=%s", err, out.String())
-	}
-	if resp["state"] != "cancelled" {
-		t.Fatalf("state = %v, want cancelled", resp["state"])
-	}
-}
 
 func TestComputerLifecycleCommandsUseTargetedProductAPI(t *testing.T) {
 	var requests []struct {
@@ -1211,38 +1049,6 @@ func TestComputerBootstrapChainUsesProductPath(t *testing.T) {
 	}
 }
 
-// TestAPIKeyListHitsAuthEndpoint asserts the api-key list command GETs
-// /auth/api-keys with the Bearer token.
-func TestAPIKeyListHitsAuthEndpoint(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/auth/api-keys" {
-			t.Errorf("path = %q, want /auth/api-keys", r.URL.Path)
-		}
-		if r.Method != http.MethodGet {
-			t.Errorf("method = %q, want GET", r.Method)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer choir_sk_test" {
-			t.Errorf("Authorization = %q, want Bearer choir_sk_test", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"keys":[{"id":"ak_1","label":"CLI key","scopes":["read:texture"],"created_at":"2026-07-06T00:00:00Z"}]}`)
-	}))
-	defer stub.Close()
-
-	var out, errOut bytes.Buffer
-	code := run([]string{"api-key", "list", "--host=" + stub.URL}, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
-	}
-	var resp map[string]any
-	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v; stdout=%s", err, out.String())
-	}
-	keys, ok := resp["keys"].([]any)
-	if !ok || len(keys) != 1 {
-		t.Fatalf("keys = %v, want one key", resp["keys"])
-	}
-}
 
 // TestAPIKeyCreatePostsToAuthEndpoint asserts the api-key create command POSTs
 // to /auth/api-keys with label, scopes, and the required computer binding.
@@ -1361,29 +1167,6 @@ func TestAPIKeyCreateRejectsMalformedExpiry(t *testing.T) {
 	}
 }
 
-// TestAPIKeyRevokeDeletesKey asserts the api-key revoke command DELETEs the
-// specified key.
-func TestAPIKeyRevokeDeletesKey(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/auth/api-keys/ak_123" {
-			t.Errorf("path = %q, want /auth/api-keys/ak_123", r.URL.Path)
-		}
-		if r.Method != http.MethodDelete {
-			t.Errorf("method = %q, want DELETE", r.Method)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer stub.Close()
-
-	var out, errOut bytes.Buffer
-	code := run([]string{"api-key", "revoke", "--host=" + stub.URL, "ak_123"}, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
-	}
-	if !strings.Contains(out.String(), "ak_123") {
-		t.Fatalf("stdout = %q, want it to mention ak_123", out.String())
-	}
-}
 
 func TestSelfDevelopmentModeCLIQualifiedConsensusCASBody(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

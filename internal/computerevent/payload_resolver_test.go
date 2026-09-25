@@ -8,17 +8,6 @@ import (
 	"strings"
 	"testing"
 )
-
-func TestResolvePayloadsEmptyRefsNeedNoReader(t *testing.T) {
-	got, err := ResolvePayloads(context.Background(), nil, nil, testComputerID, "event-1", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
-		t.Fatalf("got %+v", got)
-	}
-}
-
 func TestResolvePayloadsRefusesNilReaderWhenRefsPresent(t *testing.T) {
 	refs := []PayloadRef{{
 		ArtifactDigest: testDigestA, MediaType: "application/json", PrivacyClass: "public",

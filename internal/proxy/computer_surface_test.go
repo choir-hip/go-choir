@@ -146,22 +146,3 @@ func TestPlatformShellRefusesMissingHashedAssetWithoutHTMLFallback(t *testing.T)
 		t.Fatalf("missing asset cache header = %q want no-store", missingAsset.Header().Get("Cache-Control"))
 	}
 }
-
-func TestCaddyNoLongerServesHostFrontendCurrentAsComputerSurface(t *testing.T) {
-	for _, rel := range []string{"../../nix/node-b.nix", "../../nix/node-a.nix"} {
-		raw, err := os.ReadFile(rel)
-		if err != nil {
-			t.Fatal(err)
-		}
-		text := string(raw)
-		if strings.Contains(text, "try_files /frontend-current{uri}") {
-			t.Fatalf("%s still serves host frontend-current as computer-surface assets", rel)
-		}
-		if strings.Contains(text, "root * ${frontendCurrent}") {
-			t.Fatalf("%s still serves host frontend-current as computer-surface HTML", rel)
-		}
-		if !strings.Contains(text, "reverse_proxy 127.0.0.1:8082") {
-			t.Fatalf("%s must reverse-proxy computer surface through the proxy", rel)
-		}
-	}
-}

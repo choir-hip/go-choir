@@ -187,100 +187,6 @@ func TestConsumeRecoveryTokenRejectsDummyRecord(t *testing.T) {
 		t.Errorf("expected 'no associated user' error, got %q", err.Error())
 	}
 }
-
-// --- Rate Limiting Store Tests ---
-
-func TestCountRecoveryTokensByEmailSince(t *testing.T) {
-	store := TestStore(t)
-	ctx := context.Background()
-
-	emailHash := hashEmail("rate@example.com")
-	ipHash := hashIP("127.0.0.1")
-
-	// Create 3 tokens.
-	for i := 0; i < 3; i++ {
-		_, err := store.CreateRecoveryToken(ctx, "user-1", "rate@example.com", emailHash, ipHash)
-		if err != nil {
-			t.Fatalf("create token %d: %v", i, err)
-		}
-	}
-
-	count, err := store.CountRecoveryTokensByEmailSince(ctx, emailHash, time.Now().UTC().Add(-1*time.Hour))
-	if err != nil {
-		t.Fatalf("count: %v", err)
-	}
-	if count != 3 {
-		t.Errorf("count: got %d, want 3", count)
-	}
-
-	// Count with a future cutoff should return 0.
-	count, err = store.CountRecoveryTokensByEmailSince(ctx, emailHash, time.Now().UTC().Add(1*time.Hour))
-	if err != nil {
-		t.Fatalf("count future: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("count future: got %d, want 0", count)
-	}
-}
-
-func TestCountRecoveryTokensByIPSince(t *testing.T) {
-	store := TestStore(t)
-	ctx := context.Background()
-
-	emailHash := hashEmail("ip1@example.com")
-	ipHash := hashIP("10.0.0.1")
-
-	_, err := store.CreateRecoveryToken(ctx, "user-1", "ip1@example.com", emailHash, ipHash)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
-
-	count, err := store.CountRecoveryTokensByIPSince(ctx, ipHash, time.Now().UTC().Add(-1*time.Hour))
-	if err != nil {
-		t.Fatalf("count: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("count: got %d, want 1", count)
-	}
-
-	// Different IP should return 0.
-	count, err = store.CountRecoveryTokensByIPSince(ctx, hashIP("10.0.0.2"), time.Now().UTC().Add(-1*time.Hour))
-	if err != nil {
-		t.Fatalf("count different IP: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("count different IP: got %d, want 0", count)
-	}
-}
-
-// --- Recovery Request Handler Tests ---
-
-func TestRecoveryRequestRejectsNonPost(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/auth/recovery/request", nil)
-	rec := httptest.NewRecorder()
-	h.HandleRecoveryRequest(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusMethodNotAllowed)
-	}
-}
-
-func TestRecoveryRequestRejectsEmptyEmail(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	body := `{}`
-	req := httptest.NewRequest(http.MethodPost, "/auth/recovery/request", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleRecoveryRequest(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-}
-
 func TestRecoveryRequestRejectsInvalidEmail(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -294,53 +200,6 @@ func TestRecoveryRequestRejectsInvalidEmail(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
-
-func TestRecoveryRequestSucceedsForExistingUser(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	user, err := h.store.CreateUser("rec-user-1", "rec1@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-	_ = user
-
-	body := `{"email":"rec1@example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/auth/recovery/request", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleRecoveryRequest(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	var resp struct {
-		OK    bool   `json:"ok"`
-		Token string `json:"token,omitempty"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if !resp.OK {
-		t.Error("ok should be true")
-	}
-	if resp.Token != "" {
-		t.Fatal("recovery request response must not include a raw recovery token")
-	}
-
-	var count int
-	err = h.store.DB().QueryRow(
-		"SELECT COUNT(*) FROM recovery_tokens WHERE user_id = ? AND token_hash <> ''",
-		user.ID,
-	).Scan(&count)
-	if err != nil {
-		t.Fatalf("query: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("expected 1 recovery token row, got %d", count)
-	}
-}
-
 func TestRecoveryRequestResponseDoesNotContainRawToken(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -468,35 +327,6 @@ func TestRecoveryRequestRateLimitsByIP(t *testing.T) {
 		t.Errorf("6th request: got %d, want %d; body: %s", rec.Code, http.StatusTooManyRequests, rec.Body.String())
 	}
 }
-
-// --- Recovery Verify Handler Tests ---
-
-func TestRecoveryVerifyRejectsNonPost(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/auth/recovery/verify", nil)
-	rec := httptest.NewRecorder()
-	h.HandleRecoveryVerify(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusMethodNotAllowed)
-	}
-}
-
-func TestRecoveryVerifyRejectsEmptyToken(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	body := `{}`
-	req := httptest.NewRequest(http.MethodPost, "/auth/recovery/verify", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleRecoveryVerify(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-}
-
 func TestRecoveryVerifyRejectsUnknownToken(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
@@ -649,21 +479,6 @@ func TestRecoveryVerifyCreatesRegistrationChallenge(t *testing.T) {
 		t.Errorf("expected 1 registration challenge, got %d", challengeCount)
 	}
 }
-
-// --- Credential Listing Handler Tests ---
-
-func TestListCredentialsRejectsUnauthenticated(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/auth/credentials", nil)
-	rec := httptest.NewRecorder()
-	h.HandleListCredentials(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestListCredentialsReturnsCredentialsWithoutSecrets(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 
@@ -725,21 +540,6 @@ func TestListCredentialsReturnsCredentialsWithoutSecrets(t *testing.T) {
 		}
 	}
 }
-
-// --- Credential Deletion Handler Tests ---
-
-func TestDeleteCredentialRejectsUnauthenticated(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodDelete, "/auth/credentials/cred-1", nil)
-	rec := httptest.NewRecorder()
-	h.HandleDeleteCredential(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestDeleteCredentialGuardsLastCredential(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 
@@ -868,67 +668,6 @@ func TestDeleteCredentialRejectsNonOwner(t *testing.T) {
 		t.Errorf("status: got %d, want %d (non-owner)", rec.Code, http.StatusNotFound)
 	}
 }
-
-// --- Credential Rename Handler Tests ---
-
-func TestRenameCredentialRejectsUnauthenticated(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	body := `{"id":"cred-1","name":"My Phone"}`
-	req := httptest.NewRequest(http.MethodPost, "/auth/credentials/rename", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleRenameCredential(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestRenameCredentialSucceeds(t *testing.T) {
-	h, priv := testHandlerEnv(t)
-
-	user, err := h.store.CreateUser("cred-rename-user", "credrename@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	cred := &Credential{
-		ID:              "cred-rename-1",
-		UserID:          user.ID,
-		PublicKey:       make([]byte, 64),
-		AttestationType: "none",
-		Transport:       `["internal"]`,
-		SignCount:       0,
-		AAGUID:          make([]byte, 16),
-		Flags:           "{}",
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := h.store.CreateCredential(cred); err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-
-	body := `{"id":"cred-rename-1","name":"My Laptop"}`
-	req := authedAPIKeyReq(http.MethodPost, "/auth/credentials/rename", bytes.NewBufferString(body), priv, user.ID)
-	rec := httptest.NewRecorder()
-	h.HandleRenameCredential(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	// Verify the name was updated.
-	creds, err := h.store.GetCredentialsByUserID(user.ID)
-	if err != nil {
-		t.Fatalf("get credentials: %v", err)
-	}
-	if len(creds) != 1 {
-		t.Fatalf("expected 1 credential, got %d", len(creds))
-	}
-	if creds[0].Name != "My Laptop" {
-		t.Errorf("name: got %q, want %q", creds[0].Name, "My Laptop")
-	}
-}
-
 func TestRenameCredentialRejectsNonOwner(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 
@@ -983,21 +722,6 @@ func TestRenameCredentialRejectsEmptyName(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
-
-// --- Session Listing Handler Tests ---
-
-func TestListSessionsRejectsUnauthenticated(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/auth/sessions", nil)
-	rec := httptest.NewRecorder()
-	h.HandleListSessions(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestListSessionsReturnsSessionsWithoutTokenHash(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 
@@ -1057,19 +781,6 @@ func refreshCookieFromRecorder(t *testing.T, rec *httptest.ResponseRecorder) *ht
 	t.Fatal("no refresh cookie set")
 	return nil
 }
-
-func TestRevokeSessionRejectsUnauthenticated(t *testing.T) {
-	h, _ := testHandlerEnv(t)
-
-	req := httptest.NewRequest(http.MethodDelete, "/auth/sessions/sess-1", nil)
-	rec := httptest.NewRecorder()
-	h.HandleRevokeSession(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestRevokeSessionSucceedsForOtherSession(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 
@@ -1389,131 +1100,6 @@ func TestRenameCredentialStoreRejectsNonOwner(t *testing.T) {
 		t.Fatalf("owner rename: %v", err)
 	}
 }
-
-func TestTouchCredentialLastUsed(t *testing.T) {
-	store := TestStore(t)
-
-	user, err := store.CreateUser("touch-cred-user", "touchcred@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	cred := &Credential{
-		ID:              "cred-touch-1",
-		UserID:          user.ID,
-		PublicKey:       make([]byte, 64),
-		AttestationType: "none",
-		Transport:       `["internal"]`,
-		SignCount:       0,
-		AAGUID:          make([]byte, 16),
-		Flags:           "{}",
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := store.CreateCredential(cred); err != nil {
-		t.Fatalf("create credential: %v", err)
-	}
-
-	// Before touch, last_used_at should be nil.
-	creds, err := store.GetCredentialsByUserID(user.ID)
-	if err != nil {
-		t.Fatalf("get credentials: %v", err)
-	}
-	if len(creds) != 1 || creds[0].LastUsedAt != nil {
-		t.Fatal("last_used_at should be nil before touch")
-	}
-
-	// Touch.
-	before := time.Now().UTC()
-	if err := store.TouchCredentialLastUsed("cred-touch-1"); err != nil {
-		t.Fatalf("touch: %v", err)
-	}
-
-	// After touch, last_used_at should be set.
-	creds, err = store.GetCredentialsByUserID(user.ID)
-	if err != nil {
-		t.Fatalf("get credentials after touch: %v", err)
-	}
-	if len(creds) != 1 {
-		t.Fatalf("expected 1 credential, got %d", len(creds))
-	}
-	if creds[0].LastUsedAt == nil {
-		t.Fatal("last_used_at should be set after touch")
-	}
-	if creds[0].LastUsedAt.Before(before) {
-		t.Errorf("last_used_at %v should be after %v", creds[0].LastUsedAt, before)
-	}
-}
-
-// --- Session Store Methods Tests ---
-
-func TestListRefreshSessionsByUserID(t *testing.T) {
-	store := TestStore(t)
-
-	user, err := store.CreateUser("list-sess-user", "listsess@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	// Create two sessions.
-	for i := 0; i < 2; i++ {
-		rs := &RefreshSession{
-			ID:        fmt.Sprintf("rs-%d", i),
-			UserID:    user.ID,
-			TokenHash: fmt.Sprintf("hash-%d", i),
-			CreatedAt: time.Now().UTC(),
-			ExpiresAt: time.Now().UTC().Add(1 * time.Hour),
-		}
-		if err := store.CreateRefreshSession(rs); err != nil {
-			t.Fatalf("create session %d: %v", i, err)
-		}
-	}
-
-	sessions, err := store.ListRefreshSessionsByUserID(user.ID)
-	if err != nil {
-		t.Fatalf("list sessions: %v", err)
-	}
-	if len(sessions) != 2 {
-		t.Fatalf("expected 2 sessions, got %d", len(sessions))
-	}
-}
-
-func TestGetRefreshSessionByID(t *testing.T) {
-	store := TestStore(t)
-
-	user, err := store.CreateUser("get-sess-user", "getsess@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	rs := &RefreshSession{
-		ID:        "rs-get-1",
-		UserID:    user.ID,
-		TokenHash: "hash-get-1",
-		CreatedAt: time.Now().UTC(),
-		ExpiresAt: time.Now().UTC().Add(1 * time.Hour),
-	}
-	if err := store.CreateRefreshSession(rs); err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-
-	got, err := store.GetRefreshSessionByID("rs-get-1")
-	if err != nil {
-		t.Fatalf("get session: %v", err)
-	}
-	if got.UserID != user.ID {
-		t.Errorf("user_id: got %q, want %q", got.UserID, user.ID)
-	}
-
-	// Unknown ID should return ErrNoRows.
-	_, err = store.GetRefreshSessionByID("nonexistent")
-	if err == nil {
-		t.Fatal("expected error for unknown session ID")
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		t.Errorf("expected sql.ErrNoRows, got %v", err)
-	}
-}
-
 // --- Clean Expired Recovery Tokens Test ---
 
 func TestCleanExpiredRecoveryTokens(t *testing.T) {

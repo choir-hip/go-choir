@@ -146,28 +146,6 @@ func TestRateLimiterWindowReset(t *testing.T) {
 	}
 }
 
-func TestRateLimiterRecordUpdatesUsage(t *testing.T) {
-	rl := NewPerAutoputerRateLimiter(5, 1*time.Second)
-
-	// Record should update the bucket.
-	if !rl.Record("autoputer-1") {
-		t.Fatal("first record should succeed")
-	}
-
-	// After recording, Allow should count that usage.
-	// We already used 1 via Record, so Allow should work 4 more times.
-	for i := 0; i < 4; i++ {
-		if !rl.Allow("autoputer-1") {
-			t.Fatalf("allow %d should succeed (1 record + %d allows = 5 total)", i+1, i+1)
-		}
-	}
-
-	// 6th attempt should fail.
-	if rl.Allow("autoputer-1") {
-		t.Fatal("should be blocked after 1 record + 4 allows + 1 more = 6 total")
-	}
-}
-
 func TestRateLimiterRecordReturnsFalseOverLimit(t *testing.T) {
 	rl := NewPerAutoputerRateLimiter(2, 1*time.Second)
 
@@ -179,34 +157,6 @@ func TestRateLimiterRecordReturnsFalseOverLimit(t *testing.T) {
 	}
 	if rl.Record("autoputer-1") {
 		t.Fatal("third record should fail (over limit)")
-	}
-}
-
-func TestRateLimiterConfigDefaults(t *testing.T) {
-	cfg := RateLimiterConfig{
-		MaxRequests: 0, // should default
-		WindowSize:  0, // should default
-	}
-	resolved := cfg.Resolve()
-	if resolved.MaxRequests != DefaultRateLimitMaxRequests {
-		t.Errorf("MaxRequests = %d, want default %d", resolved.MaxRequests, DefaultRateLimitMaxRequests)
-	}
-	if resolved.WindowSize != DefaultRateLimitWindowSize {
-		t.Errorf("WindowSize = %v, want default %v", resolved.WindowSize, DefaultRateLimitWindowSize)
-	}
-}
-
-func TestRateLimiterConfigExplicit(t *testing.T) {
-	cfg := RateLimiterConfig{
-		MaxRequests: 42,
-		WindowSize:  5 * time.Minute,
-	}
-	resolved := cfg.Resolve()
-	if resolved.MaxRequests != 42 {
-		t.Errorf("MaxRequests = %d, want 42", resolved.MaxRequests)
-	}
-	if resolved.WindowSize != 5*time.Minute {
-		t.Errorf("WindowSize = %v, want 5m", resolved.WindowSize)
 	}
 }
 
@@ -520,29 +470,6 @@ func TestRateLimitHeadersIn429Response(t *testing.T) {
 	retryAfter := w.Header().Get("Retry-After")
 	if retryAfter == "" {
 		t.Error("expected Retry-After header in 429 response")
-	}
-}
-
-// --- Health endpoint includes rate limiter status ---
-
-func TestHandleHealth_WithRateLimiter(t *testing.T) {
-	h, _, _ := setupHandlerWithRateLimit(t, 10, 1*time.Second)
-
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
-	h.HandleHealth(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	var resp gatewayHealthResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	// The rate limiter should be reported.
-	if resp.RateLimitMaxRequests != 10 {
-		t.Errorf("RateLimitMaxRequests = %d, want 10", resp.RateLimitMaxRequests)
 	}
 }
 

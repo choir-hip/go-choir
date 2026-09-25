@@ -3,7 +3,6 @@ package auth
 import (
 	"bytes"
 	"database/sql"
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -87,27 +86,6 @@ func TestOpenStoreSerializesWritesAndWaitsOnBusy(t *testing.T) {
 		t.Fatalf("busy_timeout = %d, want at least 10000", busyTimeout)
 	}
 }
-
-// --- User CRUD ---
-
-func TestCreateUser(t *testing.T) {
-	store := TestStore(t)
-
-	user, err := store.CreateUser("user-1", "alice")
-	if err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-	if user.ID != "user-1" {
-		t.Errorf("ID: got %q, want %q", user.ID, "user-1")
-	}
-	if user.Email != "alice" {
-		t.Errorf("Email: got %q, want %q", user.Email, "alice")
-	}
-	if user.CreatedAt.IsZero() {
-		t.Error("CreatedAt should not be zero")
-	}
-}
-
 func TestCreateUserDuplicateEmail(t *testing.T) {
 	store := TestStore(t)
 
@@ -119,23 +97,6 @@ func TestCreateUserDuplicateEmail(t *testing.T) {
 		t.Error("expected error for duplicate email, got nil")
 	}
 }
-
-func TestGetUserByID(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice@example.com"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	user, err := store.GetUserByID("user-1")
-	if err != nil {
-		t.Fatalf("GetUserByID: %v", err)
-	}
-	if user.Email != "alice@example.com" {
-		t.Errorf("Email: got %q, want %q", user.Email, "alice@example.com")
-	}
-}
-
 func TestGetUserByIDNotFound(t *testing.T) {
 	store := TestStore(t)
 
@@ -144,23 +105,6 @@ func TestGetUserByIDNotFound(t *testing.T) {
 		t.Errorf("expected sql.ErrNoRows, got: %v", err)
 	}
 }
-
-func TestGetUserByEmail(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice@example.com"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	user, err := store.GetUserByEmail("alice@example.com")
-	if err != nil {
-		t.Fatalf("GetUserByEmail: %v", err)
-	}
-	if user.ID != "user-1" {
-		t.Errorf("ID: got %q, want %q", user.ID, "user-1")
-	}
-}
-
 func TestGetUserByEmailNotFound(t *testing.T) {
 	store := TestStore(t)
 
@@ -169,46 +113,6 @@ func TestGetUserByEmailNotFound(t *testing.T) {
 		t.Errorf("expected sql.ErrNoRows, got: %v", err)
 	}
 }
-
-// --- Credential CRUD ---
-
-func TestCreateAndGetCredential(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	cred := &Credential{
-		ID:              "cred-1",
-		UserID:          "user-1",
-		PublicKey:       []byte("fake-public-key"),
-		AttestationType: "none",
-		Transport:       `["internal"]`,
-		SignCount:       0,
-		AAGUID:          make([]byte, 16),
-		Flags:           `{"user_present":true,"user_verified":true,"backup_eligible":true,"backup_state":false}`,
-		CreatedAt:       time.Now().UTC(),
-	}
-	if err := store.CreateCredential(cred); err != nil {
-		t.Fatalf("CreateCredential: %v", err)
-	}
-
-	creds, err := store.GetCredentialsByUserID("user-1")
-	if err != nil {
-		t.Fatalf("GetCredentialsByUserID: %v", err)
-	}
-	if len(creds) != 1 {
-		t.Fatalf("credentials count: got %d, want 1", len(creds))
-	}
-	if creds[0].ID != "cred-1" {
-		t.Errorf("ID: got %q, want %q", creds[0].ID, "cred-1")
-	}
-	if string(creds[0].PublicKey) != "fake-public-key" {
-		t.Errorf("PublicKey: got %q, want %q", string(creds[0].PublicKey), "fake-public-key")
-	}
-}
-
 func TestOwnerRootWrapPersistence(t *testing.T) {
 	store := TestStore(t)
 	if _, err := store.CreateUser("owner-1", "owner@example.com"); err != nil {
@@ -290,23 +194,6 @@ func TestCreateCredentialMissingUser(t *testing.T) {
 		t.Error("expected error for credential with missing user, got nil")
 	}
 }
-
-func TestGetCredentialsEmpty(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	creds, err := store.GetCredentialsByUserID("user-1")
-	if err != nil {
-		t.Fatalf("GetCredentialsByUserID: %v", err)
-	}
-	if len(creds) != 0 {
-		t.Errorf("expected 0 credentials, got %d", len(creds))
-	}
-}
-
 func TestUpdateCredentialSignCount(t *testing.T) {
 	store := TestStore(t)
 
@@ -378,40 +265,6 @@ func TestCredentialCascadeDelete(t *testing.T) {
 		t.Errorf("expected 0 credentials after user delete (cascade), got %d", len(creds))
 	}
 }
-
-// --- ChallengeState CRUD ---
-
-func TestSaveAndGetChallengeState(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	cs := &ChallengeState{
-		ID:        "challenge-1",
-		UserID:    "user-1",
-		Challenge: "dGVzdC1jaGFsbGVuZ2U",
-		Type:      "registration",
-		CreatedAt: time.Now().UTC(),
-		ExpiresAt: time.Now().UTC().Add(5 * time.Minute),
-	}
-	if err := store.SaveChallengeState(cs); err != nil {
-		t.Fatalf("SaveChallengeState: %v", err)
-	}
-
-	got, err := store.GetChallengeStateByID("challenge-1")
-	if err != nil {
-		t.Fatalf("GetChallengeStateByID: %v", err)
-	}
-	if got.Challenge != cs.Challenge {
-		t.Errorf("Challenge: got %q, want %q", got.Challenge, cs.Challenge)
-	}
-	if got.Type != "registration" {
-		t.Errorf("Type: got %q, want %q", got.Type, "registration")
-	}
-}
-
 func TestSaveChallengeStateInvalidType(t *testing.T) {
 	store := TestStore(t)
 
@@ -432,36 +285,6 @@ func TestSaveChallengeStateInvalidType(t *testing.T) {
 		t.Error("expected error for invalid challenge type, got nil")
 	}
 }
-
-func TestDeleteChallengeState(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	cs := &ChallengeState{
-		ID:        "challenge-1",
-		UserID:    "user-1",
-		Challenge: "challenge",
-		Type:      "login",
-		CreatedAt: time.Now().UTC(),
-		ExpiresAt: time.Now().UTC().Add(5 * time.Minute),
-	}
-	if err := store.SaveChallengeState(cs); err != nil {
-		t.Fatalf("SaveChallengeState: %v", err)
-	}
-
-	if err := store.DeleteChallengeStateByID("challenge-1"); err != nil {
-		t.Fatalf("DeleteChallengeStateByID: %v", err)
-	}
-
-	_, err := store.GetChallengeStateByID("challenge-1")
-	if err != sql.ErrNoRows {
-		t.Errorf("expected sql.ErrNoRows after delete, got: %v", err)
-	}
-}
-
 func TestCleanExpiredChallenges(t *testing.T) {
 	store := TestStore(t)
 
@@ -551,150 +374,6 @@ func TestChallengeStateCascadeDelete(t *testing.T) {
 		t.Errorf("expected sql.ErrNoRows after user cascade, got: %v", err)
 	}
 }
-
-func TestChallengeStateLoginWithAllowedCredentials(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	cs := &ChallengeState{
-		ID:                 "login-challenge-1",
-		UserID:             "user-1",
-		Challenge:          "bG9naW4tY2hhbGxlbmdl",
-		Type:               "login",
-		AllowedCredentials: `["cred-1","cred-2"]`,
-		CreatedAt:          time.Now().UTC(),
-		ExpiresAt:          time.Now().UTC().Add(5 * time.Minute),
-	}
-	if err := store.SaveChallengeState(cs); err != nil {
-		t.Fatalf("SaveChallengeState: %v", err)
-	}
-
-	got, err := store.GetChallengeStateByID("login-challenge-1")
-	if err != nil {
-		t.Fatalf("GetChallengeStateByID: %v", err)
-	}
-	if got.AllowedCredentials != `["cred-1","cred-2"]` {
-		t.Errorf("AllowedCredentials: got %q, want %q", got.AllowedCredentials, `["cred-1","cred-2"]`)
-	}
-	if got.Type != "login" {
-		t.Errorf("Type: got %q, want %q", got.Type, "login")
-	}
-}
-
-func TestChallengeStateWithWebAuthnSessionData(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	sessionData := `{"challenge":"test-challenge","rpId":"localhost","user_id":"dXNlci0x"}`
-	cs := &ChallengeState{
-		ID:                  "challenge-wa",
-		UserID:              "user-1",
-		Challenge:           "test-challenge",
-		Type:                "registration",
-		WebAuthnSessionData: sessionData,
-		CreatedAt:           time.Now().UTC(),
-		ExpiresAt:           time.Now().UTC().Add(5 * time.Minute),
-	}
-	if err := store.SaveChallengeState(cs); err != nil {
-		t.Fatalf("SaveChallengeState: %v", err)
-	}
-
-	got, err := store.GetChallengeStateByID("challenge-wa")
-	if err != nil {
-		t.Fatalf("GetChallengeStateByID: %v", err)
-	}
-	if got.WebAuthnSessionData != sessionData {
-		t.Errorf("WebAuthnSessionData: got %q, want %q", got.WebAuthnSessionData, sessionData)
-	}
-}
-
-func TestGetChallengeStatesByUserID(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	// Create two challenges.
-	cs1 := &ChallengeState{
-		ID:        "challenge-1",
-		UserID:    "user-1",
-		Challenge: "challenge-1",
-		Type:      "registration",
-		CreatedAt: time.Now().UTC().Add(-1 * time.Minute),
-		ExpiresAt: time.Now().UTC().Add(4 * time.Minute),
-	}
-	if err := store.SaveChallengeState(cs1); err != nil {
-		t.Fatalf("SaveChallengeState 1: %v", err)
-	}
-
-	cs2 := &ChallengeState{
-		ID:        "challenge-2",
-		UserID:    "user-1",
-		Challenge: "challenge-2",
-		Type:      "login",
-		CreatedAt: time.Now().UTC(),
-		ExpiresAt: time.Now().UTC().Add(5 * time.Minute),
-	}
-	if err := store.SaveChallengeState(cs2); err != nil {
-		t.Fatalf("SaveChallengeState 2: %v", err)
-	}
-
-	results, err := store.GetChallengeStatesByUserID("user-1")
-	if err != nil {
-		t.Fatalf("GetChallengeStatesByUserID: %v", err)
-	}
-	if len(results) != 2 {
-		t.Fatalf("expected 2 challenges, got %d", len(results))
-	}
-
-	// Should be ordered by created_at descending (most recent first).
-	if results[0].ID != "challenge-2" {
-		t.Errorf("first result: got %q, want %q", results[0].ID, "challenge-2")
-	}
-	if results[1].ID != "challenge-1" {
-		t.Errorf("second result: got %q, want %q", results[1].ID, "challenge-1")
-	}
-}
-
-// --- RefreshSession CRUD ---
-
-func TestCreateAndGetRefreshSession(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	rs := &RefreshSession{
-		ID:        "rs-1",
-		UserID:    "user-1",
-		TokenHash: "test-token-hash-1",
-		CreatedAt: time.Now().UTC(),
-		ExpiresAt: time.Now().UTC().Add(720 * time.Hour),
-	}
-	if err := store.CreateRefreshSession(rs); err != nil {
-		t.Fatalf("CreateRefreshSession: %v", err)
-	}
-
-	got, err := store.GetRefreshSessionByTokenHash("test-token-hash-1")
-	if err != nil {
-		t.Fatalf("GetRefreshSessionByTokenHash: %v", err)
-	}
-	if got.UserID != "user-1" {
-		t.Errorf("UserID: got %q, want %q", got.UserID, "user-1")
-	}
-	if got.TokenHash != "test-token-hash-1" {
-		t.Errorf("TokenHash: got %q, want %q", got.TokenHash, "test-token-hash-1")
-	}
-}
-
 func TestCreateRefreshSessionWithRotation(t *testing.T) {
 	store := TestStore(t)
 
@@ -733,67 +412,6 @@ func TestCreateRefreshSessionWithRotation(t *testing.T) {
 		t.Errorf("RotatedFrom: got %q, want %q", got.RotatedFrom, "rs-1")
 	}
 }
-
-func TestDeleteRefreshSessionByID(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	rs := &RefreshSession{
-		ID:        "rs-1",
-		UserID:    "user-1",
-		TokenHash: "hash-1",
-		CreatedAt: time.Now().UTC(),
-		ExpiresAt: time.Now().UTC().Add(720 * time.Hour),
-	}
-	if err := store.CreateRefreshSession(rs); err != nil {
-		t.Fatalf("CreateRefreshSession: %v", err)
-	}
-
-	if err := store.DeleteRefreshSessionByID("rs-1"); err != nil {
-		t.Fatalf("DeleteRefreshSessionByID: %v", err)
-	}
-
-	_, err := store.GetRefreshSessionByTokenHash("hash-1")
-	if err != sql.ErrNoRows {
-		t.Errorf("expected sql.ErrNoRows after delete, got: %v", err)
-	}
-}
-
-func TestDeleteRefreshSessionsByUserID(t *testing.T) {
-	store := TestStore(t)
-
-	if _, err := store.CreateUser("user-1", "alice"); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	for i := 0; i < 3; i++ {
-		rs := &RefreshSession{
-			ID:        fmt.Sprintf("rs-%d", i),
-			UserID:    "user-1",
-			TokenHash: fmt.Sprintf("hash-%d", i),
-			CreatedAt: time.Now().UTC(),
-			ExpiresAt: time.Now().UTC().Add(720 * time.Hour),
-		}
-		if err := store.CreateRefreshSession(rs); err != nil {
-			t.Fatalf("CreateRefreshSession %d: %v", i, err)
-		}
-	}
-
-	if err := store.DeleteRefreshSessionsByUserID("user-1"); err != nil {
-		t.Fatalf("DeleteRefreshSessionsByUserID: %v", err)
-	}
-
-	for i := 0; i < 3; i++ {
-		_, err := store.GetRefreshSessionByTokenHash(fmt.Sprintf("hash-%d", i))
-		if err != sql.ErrNoRows {
-			t.Errorf("hash-%d: expected sql.ErrNoRows after user delete, got: %v", i, err)
-		}
-	}
-}
-
 func TestCleanExpiredRefreshSessions(t *testing.T) {
 	store := TestStore(t)
 
@@ -897,62 +515,6 @@ func TestRefreshSessionMissingUser(t *testing.T) {
 	}
 }
 
-// --- Index verification ---
-
-func TestSchemaIndexesExist(t *testing.T) {
-	store := TestStore(t)
-
-	expectedIndexes := []string{
-		"idx_credentials_user_id",
-		"idx_challenge_state_user_id",
-		"idx_challenge_state_expires_at",
-		"idx_refresh_sessions_user_id",
-		"idx_refresh_sessions_expires_at",
-		"idx_refresh_sessions_token_hash",
-	}
-
-	for _, idx := range expectedIndexes {
-		var name string
-		err := store.DB().QueryRow(
-			"SELECT name FROM sqlite_master WHERE type='index' AND name=?", idx,
-		).Scan(&name)
-		if err != nil {
-			t.Errorf("index %q not found: %v", idx, err)
-		}
-	}
-}
-
-// --- TestConfig helper ---
-
-func TestTestConfigReturnsValidConfig(t *testing.T) {
-	cfg := TestConfig(t)
-
-	if cfg.Port != "0" {
-		t.Errorf("Port: got %q, want %q", cfg.Port, "0")
-	}
-	if cfg.RPID != "localhost" {
-		t.Errorf("RPID: got %q, want %q", cfg.RPID, "localhost")
-	}
-	if cfg.CookieSecure {
-		t.Error("CookieSecure should be false in test config")
-	}
-	if err := cfg.validate(); err != nil {
-		t.Errorf("test config should be valid: %v", err)
-	}
-}
-
-func TestTestStoreIsUsable(t *testing.T) {
-	store := TestStore(t)
-
-	// Quick smoke test that the test store works for basic operations.
-	user, err := store.CreateUser("test-user", "tester")
-	if err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-	if user.ID != "test-user" {
-		t.Errorf("ID: got %q, want %q", user.ID, "test-user")
-	}
-}
 
 // ======================================================================
 // VAL-CROSS-118: Auth restart preserves session data

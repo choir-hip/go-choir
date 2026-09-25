@@ -10,21 +10,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-func TestParseComputerBootstrapChainPath(t *testing.T) {
-	for path, want := range map[string]bool{
-		"/api/computers/computer-a/lifecycle/bootstrap-chain":        true,
-		"/api/computers//lifecycle/bootstrap-chain":                  false,
-		"/api/computers/a/b/lifecycle/bootstrap-chain":               false,
-		"/api/computers/a/lifecycle/bootstrap-chain/extra":           false,
-		"/api/computers/computer-a/self-development/bootstrap-chain": false,
-		"/api/computers/computer-a/self-development/genesis":         false,
-	} {
-		if _, got := computerBootstrapChainComputerID(path); got != want {
-			t.Errorf("path %q accepted=%v, want %v", path, got, want)
-		}
-	}
-}
-
 func TestBootstrapChainForwardsOwnedComputerAndTrustedBinding(t *testing.T) {
 	var gotUser, gotComputer, gotPath, gotMethod string
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

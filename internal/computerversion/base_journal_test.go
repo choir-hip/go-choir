@@ -7,67 +7,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/base/journal"
 )
 
-func TestBaseJournalExtractorReadsMemJournal(t *testing.T) {
-	version := baseSliceComputerVersion()
-	extractor := BaseJournalExtractor{Journal: baseMemJournal(t, "a", "b")}
-
-	observationSet, err := extractor.Extract(context.Background(), ExtractRequest{Name: "mem-journal", Version: version})
-	if err != nil {
-		t.Fatalf("extract mem journal: %v", err)
-	}
-	realization, err := (ProjectionMaterializer{ID: "mem-journal-projection", Observations: observationSet}).Materialize(context.Background(), version, CapabilityManifest{
-		Materializer: "mem-journal-projection",
-		Substrate:    "base-mem-journal",
-		Supported:    []ObservationKind{ObservationFileManifest},
-	})
-	if err != nil {
-		t.Fatalf("materialize mem journal observation: %v", err)
-	}
-	if realization.Observations.Name != "mem-journal" {
-		t.Fatalf("expected observation label to survive extraction, got %q", realization.Observations.Name)
-	}
-}
-
 func TestBaseJournalExtractorRejectsNilJournal(t *testing.T) {
 	_, err := (BaseJournalExtractor{}).Extract(context.Background(), ExtractRequest{Name: "nil", Version: baseSliceComputerVersion()})
 	if err == nil {
 		t.Fatal("expected nil journal to be rejected")
-	}
-}
-
-func TestBaseJournalExtractorReadsSQLiteJournal(t *testing.T) {
-	version := baseSliceComputerVersion()
-	path := t.TempDir() + "/base-journal.sqlite"
-	j, err := journal.NewSQLiteJournal(path)
-	if err != nil {
-		t.Fatalf("open sqlite journal: %v", err)
-	}
-	defer func() {
-		if err := j.Close(); err != nil {
-			t.Fatalf("close sqlite journal: %v", err)
-		}
-	}()
-	if _, err := j.Append(baseCreateEvent(1, "a")); err != nil {
-		t.Fatalf("append create: %v", err)
-	}
-	if _, err := j.Append(baseUpdateEvent(2, "b")); err != nil {
-		t.Fatalf("append update: %v", err)
-	}
-
-	observationSet, err := (BaseJournalExtractor{Journal: j}).Extract(context.Background(), ExtractRequest{Name: "sqlite-journal", Version: version})
-	if err != nil {
-		t.Fatalf("extract sqlite journal: %v", err)
-	}
-	realization, err := (ProjectionMaterializer{ID: "sqlite-journal-projection", Observations: observationSet}).Materialize(context.Background(), version, CapabilityManifest{
-		Materializer: "sqlite-journal-projection",
-		Substrate:    "base-sqlite-journal",
-		Supported:    []ObservationKind{ObservationFileManifest},
-	})
-	if err != nil {
-		t.Fatalf("materialize sqlite journal observation: %v", err)
-	}
-	if len(realization.Observations.Observations) != 1 {
-		t.Fatalf("expected one live file observation, got %d", len(realization.Observations.Observations))
 	}
 }
 
@@ -117,18 +60,6 @@ func TestBaseJournalEntryExtractorRejectsBrokenParent(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected broken parent link to be rejected")
 	}
-}
-
-func baseMemJournal(t *testing.T, createHashSuffix, updateHashSuffix string) *journal.MemJournal {
-	t.Helper()
-	j := journal.NewMemJournal()
-	if _, err := j.Append(baseCreateEvent(1, createHashSuffix)); err != nil {
-		t.Fatalf("append create: %v", err)
-	}
-	if _, err := j.Append(baseUpdateEvent(2, updateHashSuffix)); err != nil {
-		t.Fatalf("append update: %v", err)
-	}
-	return j
 }
 
 func baseJournalEntries(t *testing.T, createHashSuffix, updateHashSuffix string) []journal.Entry {

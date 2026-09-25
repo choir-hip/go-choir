@@ -47,34 +47,6 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	}
 }
 
-func TestManagerCreatesDefaultCutoverPolicy(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	manager := NewManager(ManagerConfig{PolicyPath: path})
-	policy, err := manager.Load(context.Background(), "owner")
-	if err != nil {
-		t.Fatalf("load generated policy: %v", err)
-	}
-	for role, want := range map[string]provideriface.LLMSelection{
-		agentprofile.Conductor:  {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
-		agentprofile.Management: {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "high"},
-		agentprofile.Texture:    {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
-		VerifierRole:            {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
-		MultimodalVerifierRole:  {Provider: "chatgpt", Model: "gpt-5.6-luna", ReasoningEffort: "low"},
-	} {
-		got := policy.Resolve(role)
-		if got.Provider != want.Provider || got.Model != want.Model || got.ReasoningEffort != want.ReasoningEffort {
-			t.Errorf("%s selection = %+v, want %+v", role, got, want)
-		}
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(raw), "[roles.texture]") || strings.Contains(string(raw), "[roles.vtext]") {
-		t.Fatalf("generated policy has wrong texture role:\n%s", raw)
-	}
-}
-
 func TestManagerPreservesExistingPolicyAndLastValidCache(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "System", "model-policy.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

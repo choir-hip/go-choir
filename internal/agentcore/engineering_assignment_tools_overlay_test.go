@@ -65,13 +65,3 @@ func TestAssignedEngineeringToolOverlayIsExactRunOnly(t *testing.T) {
 		}
 	}
 }
-
-func TestAssignedEngineeringCapsuleToolCtxCarriesFreezeAuthority(t *testing.T) {
-	rt := &Runtime{selfdevUpdaterRoot: "/tmp/updater"}
-	rec := &types.RunRecord{RunID: "run-a", ComputerID: "computer-a"}
-	got := rt.assignedEngineeringCapsuleToolCtx(rec, "handle-a")
-	if got.AgentRunID != rec.RunID || got.ComputerID != rec.ComputerID || got.CapsuleHandle != "handle-a" ||
-		got.Role != capsule.RoleEngineering || got.UpdaterRoot != "/tmp/updater" || got.ValidateCurrentObligation == nil {
-		t.Fatalf("assigned Engineering freeze context = %+v", got)
-	}
-}

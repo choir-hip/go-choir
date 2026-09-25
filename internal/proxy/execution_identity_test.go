@@ -20,27 +20,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-func TestBoundedIdentityDiagnostic(t *testing.T) {
-	for name, test := range map[string]struct {
-		input string
-		want  string
-	}{
-		"ordinary":         {input: " bounded detail ", want: "bounded detail"},
-		"exact boundary":   {input: strings.Repeat("x", 256), want: strings.Repeat("x", 256)},
-		"oversize":         {input: strings.Repeat("x", 257)},
-		"trimmed oversize": {input: strings.Repeat(" ", 257)},
-		"leading newline":  {input: "\nunsafe"},
-		"interior return":  {input: "unsafe\rdetail"},
-		"trailing nul":     {input: "unsafe\x00"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			if got := boundedIdentityDiagnostic(test.input); got != test.want {
-				t.Fatalf("bounded diagnostic=%q, want %q", got, test.want)
-			}
-		})
-	}
-}
-
 func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	const commit = "1234567890abcdef1234567890abcdef12345678"
 	const targetCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

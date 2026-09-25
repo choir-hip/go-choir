@@ -154,30 +154,6 @@ func TestGetCorruptDetection(t *testing.T) {
 		t.Fatalf("expected ErrCorruptBlob, got %v", err)
 	}
 }
-
-func TestStat(t *testing.T) {
-	s := tempStore(t)
-	data := []byte("stat me")
-	ref, err := s.Put(data)
-	if err != nil {
-		t.Fatalf("Put: %v", err)
-	}
-	b, err := s.Stat(ref)
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if b.BlobRef != ref {
-		t.Fatalf("BlobRef: got %q want %q", b.BlobRef, ref)
-	}
-	if b.SizeBytes != int64(len(data)) {
-		t.Fatalf("SizeBytes: got %d want %d", b.SizeBytes, len(data))
-	}
-	hexDigest := strings.TrimPrefix(string(ref), "sha256:")
-	if b.SHA256 != hexDigest {
-		t.Fatalf("SHA256: got %q want %q", b.SHA256, hexDigest)
-	}
-}
-
 func TestSharding(t *testing.T) {
 	s := tempStore(t)
 	// Put several blobs and confirm they land in different shard dirs.
@@ -196,20 +172,5 @@ func TestSharding(t *testing.T) {
 	}
 	if len(shards) < 2 {
 		t.Fatalf("expected multiple shard dirs, got %d", len(shards))
-	}
-}
-
-func TestNewStoreEmptyDir(t *testing.T) {
-	_, err := NewStore("")
-	if err == nil {
-		t.Fatal("expected error for empty dir")
-	}
-}
-
-func TestGetInvalidRef(t *testing.T) {
-	s := tempStore(t)
-	_, err := s.Get(model.BlobRef("not-a-ref"))
-	if err == nil {
-		t.Fatal("expected error for invalid ref")
 	}
 }

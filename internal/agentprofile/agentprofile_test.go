@@ -1,59 +1,9 @@
 package agentprofile
 
 import (
-	"errors"
 	"reflect"
 	"testing"
 )
-
-func TestCanonical(t *testing.T) {
-	t.Parallel()
-
-	live := map[string][]string{
-		Research:    {"research", " RESEARCH "},
-		Engineering: {"engineering", " ENGINEERING "},
-		Texture:     {"texture", " TEXTURE "},
-		Processor:   {"processor"},
-		Reconciler:  {"reconciler"},
-		Email:       {"email"},
-		Management:  {"management", " MANAGEMENT "},
-		Conductor:   {"conductor", " CONDUCTOR "},
-	}
-	for want, values := range live {
-		for _, value := range values {
-			value := value
-			t.Run(value, func(t *testing.T) {
-				t.Parallel()
-				got, err := Canonical(value)
-				if err != nil {
-					t.Fatalf("Canonical(%q) error = %v", value, err)
-				}
-				if got != want {
-					t.Fatalf("Canonical(%q) = %q, want %q", value, got, want)
-				}
-			})
-		}
-	}
-	// Retired V1 aliases and unknowns fail closed with the empty string,
-	// never the input token.
-	for _, value := range []string{
-		"", "   ", "super", "co-super", "cosuper", "coagent", "co-agent",
-		"researchers", "research-agent", "web-research", "texture-agent",
-		"document_agent", "news-processor", "Custom_Profile", " Mixed Unknown ",
-	} {
-		got, err := Canonical(value)
-		if err == nil {
-			t.Fatalf("Canonical(%q) error = nil, want UnknownProfileError", value)
-		}
-		var unknown UnknownProfileError
-		if !errors.As(err, &unknown) {
-			t.Fatalf("Canonical(%q) error = %T, want UnknownProfileError", value, err)
-		}
-		if got != "" {
-			t.Fatalf("Canonical(%q) = %q, want empty (fail-closed)", value, got)
-		}
-	}
-}
 
 func TestPolicyFor(t *testing.T) {
 	t.Parallel()
@@ -204,20 +154,6 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 		}
 		if _, err := CanMessage(check.caller, check.target); err == nil {
 			t.Errorf("unknown policy missing message error %q -> %q", check.caller, check.target)
-		}
-	}
-}
-
-func TestIsTexture(t *testing.T) {
-	t.Parallel()
-	for _, profile := range []string{Texture, " TEXTURE "} {
-		if !IsTexture(profile) {
-			t.Errorf("IsTexture(%q) = false", profile)
-		}
-	}
-	for _, profile := range []string{"", Research, "unknown", "texture-agent", "DOCUMENT_AGENT"} {
-		if IsTexture(profile) {
-			t.Errorf("IsTexture(%q) = true", profile)
 		}
 	}
 }

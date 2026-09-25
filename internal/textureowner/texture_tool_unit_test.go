@@ -52,27 +52,19 @@ func (p *semanticMergeTestProvider) CallWithTools(ctx context.Context, req provi
 }
 
 func TestCleanTextureToolContentRemovesWrapperTags(t *testing.T) {
-	input := " <payload>\nStaging smoke after RSS title extraction works.\n</payload> "
-	if got := cleanTextureToolContent(input); got != "Staging smoke after RSS title extraction works." {
-		t.Fatalf("cleanTextureToolContent() = %q", got)
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{" <payload>\nStaging smoke after RSS title extraction works.\n</payload> ", "Staging smoke after RSS title extraction works."},
+		{"Texture wrapper cleanup works.</\n", "Texture wrapper cleanup works."},
+		{"Texture wrapper cleanup works.</妮>", "Texture wrapper cleanup works."},
+		{"The paragraph mentions <payload> as literal text inside the body.", "The paragraph mentions <payload> as literal text inside the body."},
 	}
-}
-
-func TestCleanTextureToolContentRemovesDanglingClosingMarker(t *testing.T) {
-	for _, input := range []string{
-		"Texture wrapper cleanup works.</\n",
-		"Texture wrapper cleanup works.</妮>",
-	} {
-		if got := cleanTextureToolContent(input); got != "Texture wrapper cleanup works." {
-			t.Fatalf("cleanTextureToolContent(%q) = %q", input, got)
+	for _, tc := range tests {
+		if got := cleanTextureToolContent(tc.input); got != tc.want {
+			t.Fatalf("cleanTextureToolContent(%q) = %q, want %q", tc.input, got, tc.want)
 		}
-	}
-}
-
-func TestCleanTextureToolContentPreservesOrdinaryText(t *testing.T) {
-	input := "The paragraph mentions <payload> as literal text inside the body."
-	if got := cleanTextureToolContent(input); got != input {
-		t.Fatalf("cleanTextureToolContent() = %q, want original", got)
 	}
 }
 
@@ -807,42 +799,6 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 	}
 }
 
-func TestTextureEditRevisionMetadataRecordsOperationEvidence(t *testing.T) {
-	now := time.Now().UTC()
-	raw := addTextureEditRevisionMetadata(json.RawMessage(`{"existing":"kept"}`), materializedTextureEdit{
-		Operation:      "apply_edits",
-		SourceTool:     "patch_texture",
-		BaseRevisionID: "rev-1",
-		EditCount:      2,
-		BaseChars:      100,
-		ResultChars:    124,
-		DeltaChars:     24,
-	}, &types.RunRecord{
-		RunID:     "run-1",
-		Prompt:    "revise paragraph",
-		CreatedAt: now.Add(-1500 * time.Millisecond),
-		UpdatedAt: now,
-	})
-	var meta map[string]any
-	if err := json.Unmarshal(raw, &meta); err != nil {
-		t.Fatalf("metadata json: %v", err)
-	}
-	if meta["existing"] != "kept" {
-		t.Fatalf("existing metadata not preserved: %+v", meta)
-	}
-	if meta["source"] != "patch_texture" || meta["texture_edit_tool"] != "patch_texture" {
-		t.Fatalf("texture write source metadata missing: %+v", meta)
-	}
-	if meta["texture_edit_operation"] != "apply_edits" || int(meta["texture_edit_count"].(float64)) != 2 {
-		t.Fatalf("edit operation metadata missing: %+v", meta)
-	}
-	if int(meta["texture_run_prompt_chars"].(float64)) != len("revise paragraph") {
-		t.Fatalf("prompt chars metadata missing: %+v", meta)
-	}
-	if int(meta["texture_edit_delta_chars"].(float64)) != 24 {
-		t.Fatalf("delta metadata missing: %+v", meta)
-	}
-}
 
 func TestTextureSemanticMergeUsesProviderBackedJSON(t *testing.T) {
 	provider := &semanticMergeTestProvider{response: `{

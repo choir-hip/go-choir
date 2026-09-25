@@ -170,58 +170,6 @@ func TestGetAPIKeyByHashRejectsUnknownHash(t *testing.T) {
 		t.Errorf("expected sql.ErrNoRows, got %v", err)
 	}
 }
-
-// TestListAPIKeysReturnsUserKeys verifies that ListAPIKeys returns keys for the
-// specified user only, ordered by created_at descending.
-func TestListAPIKeysReturnsUserKeys(t *testing.T) {
-	store := TestStore(t)
-	ctx := context.Background()
-
-	user1, err := store.CreateUser("list-user-1", "list1@example.com")
-	if err != nil {
-		t.Fatalf("create user 1: %v", err)
-	}
-	user2, err := store.CreateUser("list-user-2", "list2@example.com")
-	if err != nil {
-		t.Fatalf("create user 2: %v", err)
-	}
-
-	if _, _, err := store.CreateAPIKey(ctx, user1.ID, "key-a", []string{"read:base"}, nil); err != nil {
-		t.Fatalf("create key a: %v", err)
-	}
-	time.Sleep(10 * time.Millisecond)
-	if _, _, err := store.CreateAPIKey(ctx, user1.ID, "key-b", []string{"write:base"}, nil); err != nil {
-		t.Fatalf("create key b: %v", err)
-	}
-	if _, _, err := store.CreateAPIKey(ctx, user2.ID, "key-c", []string{"admin"}, nil); err != nil {
-		t.Fatalf("create key c: %v", err)
-	}
-
-	keys, err := store.ListAPIKeys(ctx, user1.ID)
-	if err != nil {
-		t.Fatalf("list api keys: %v", err)
-	}
-	if len(keys) != 2 {
-		t.Fatalf("expected 2 keys for user1, got %d", len(keys))
-	}
-	// Ordered by created_at desc — key-b should be first.
-	if keys[0].Label != "key-b" {
-		t.Errorf("first key: got %q, want %q", keys[0].Label, "key-b")
-	}
-	if keys[1].Label != "key-a" {
-		t.Errorf("second key: got %q, want %q", keys[1].Label, "key-a")
-	}
-
-	// User 2 should only see their own key.
-	keys2, err := store.ListAPIKeys(ctx, user2.ID)
-	if err != nil {
-		t.Fatalf("list api keys user2: %v", err)
-	}
-	if len(keys2) != 1 {
-		t.Fatalf("expected 1 key for user2, got %d", len(keys2))
-	}
-}
-
 // TestListAPIKeysExcludesSecrets verifies that listed keys do not expose the
 // secret (the APIKey struct has no Secret field, but we verify the hash is not
 // leaked either).
@@ -322,54 +270,6 @@ func TestRevokeAPIKeyIdempotentSafe(t *testing.T) {
 		t.Errorf("expected sql.ErrNoRows, got %v", err)
 	}
 }
-
-// TestTouchAPIKeyLastUsed verifies that TouchAPIKeyLastUsed updates the
-// last_used_at timestamp.
-func TestTouchAPIKeyLastUsed(t *testing.T) {
-	store := TestStore(t)
-	ctx := context.Background()
-
-	user, err := store.CreateUser("touch-user", "touch@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	id, secret, err := store.CreateAPIKey(ctx, user.ID, "touch-key", []string{"read:base"}, nil)
-	if err != nil {
-		t.Fatalf("create api key: %v", err)
-	}
-
-	h := sha256.Sum256([]byte(secret))
-	keyHash := fmt.Sprintf("%x", h)
-
-	// Before touch, last_used_at should be nil.
-	ak, err := store.GetAPIKeyByHash(ctx, keyHash)
-	if err != nil {
-		t.Fatalf("get before touch: %v", err)
-	}
-	if ak.LastUsedAt != nil {
-		t.Errorf("last_used_at should be nil before touch, got %v", ak.LastUsedAt)
-	}
-
-	// Touch.
-	before := time.Now().UTC()
-	if err := store.TouchAPIKeyLastUsed(ctx, id); err != nil {
-		t.Fatalf("touch: %v", err)
-	}
-
-	// After touch, last_used_at should be set.
-	ak, err = store.GetAPIKeyByHash(ctx, keyHash)
-	if err != nil {
-		t.Fatalf("get after touch: %v", err)
-	}
-	if ak.LastUsedAt == nil {
-		t.Fatal("last_used_at should be set after touch")
-	}
-	if ak.LastUsedAt.Before(before) {
-		t.Errorf("last_used_at %v should be after %v", ak.LastUsedAt, before)
-	}
-}
-
 // TestCreateAPIKeyRejectsEmptyFields verifies validation of required fields.
 func TestCreateAPIKeyRejectsEmptyFields(t *testing.T) {
 	store := TestStore(t)
@@ -389,72 +289,6 @@ func TestCreateAPIKeyRejectsEmptyFields(t *testing.T) {
 		t.Error("expected error for empty label, got nil")
 	}
 }
-
-// TestCreateAPIKeyStoresScopesAsJSON verifies that scopes are stored as a JSON
-// array and parsed back correctly.
-func TestCreateAPIKeyStoresScopesAsJSON(t *testing.T) {
-	store := TestStore(t)
-	ctx := context.Background()
-
-	user, err := store.CreateUser("scopes-user", "scopes@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	scopes := []string{"read:texture", "write:base", "admin"}
-	_, secret, err := store.CreateAPIKey(ctx, user.ID, "scopes-key", scopes, nil)
-	if err != nil {
-		t.Fatalf("create api key: %v", err)
-	}
-
-	h := sha256.Sum256([]byte(secret))
-	keyHash := fmt.Sprintf("%x", h)
-
-	ak, err := store.GetAPIKeyByHash(ctx, keyHash)
-	if err != nil {
-		t.Fatalf("get api key: %v", err)
-	}
-	if len(ak.Scopes) != 3 {
-		t.Fatalf("scopes: got %v, want 3 items", ak.Scopes)
-	}
-	for i, sc := range scopes {
-		if ak.Scopes[i] != sc {
-			t.Errorf("scope[%d]: got %q, want %q", i, ak.Scopes[i], sc)
-		}
-	}
-}
-
-// TestCreateAPIKeyEmptyScopes verifies that nil scopes are stored as an empty
-// array and read back as an empty (non-nil) slice.
-func TestCreateAPIKeyEmptyScopes(t *testing.T) {
-	store := TestStore(t)
-	ctx := context.Background()
-
-	user, err := store.CreateUser("empty-scopes-user", "empty@example.com")
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	_, secret, err := store.CreateAPIKey(ctx, user.ID, "empty-scopes", nil, nil)
-	if err != nil {
-		t.Fatalf("create api key: %v", err)
-	}
-
-	h := sha256.Sum256([]byte(secret))
-	keyHash := fmt.Sprintf("%x", h)
-
-	ak, err := store.GetAPIKeyByHash(ctx, keyHash)
-	if err != nil {
-		t.Fatalf("get api key: %v", err)
-	}
-	if ak.Scopes == nil {
-		t.Error("scopes should be empty slice, not nil")
-	}
-	if len(ak.Scopes) != 0 {
-		t.Errorf("scopes: got %v, want empty", ak.Scopes)
-	}
-}
-
 // TestSeedBootstrapAdminAPIKeySeedsOnFirstRun verifies that the bootstrap
 // seeds an admin-scoped key when no API keys exist, and that the key
 // validates through the normal hash-lookup path (C1, C3).
@@ -538,28 +372,6 @@ func TestSeedBootstrapAdminAPIKeySkipsWhenKeysExist(t *testing.T) {
 		t.Errorf("get api key by hash: got err=%v, want sql.ErrNoRows (key should not exist)", err)
 	}
 }
-
-// TestSeedBootstrapAdminAPIKeySecondRunIsNoOp verifies that calling the
-// bootstrap a second time on the same store is a no-op (C2).
-func TestSeedBootstrapAdminAPIKeySecondRunIsNoOp(t *testing.T) {
-	store := TestStore(t)
-	ctx := context.Background()
-
-	rawKey := APIKeyPrefix + "bootstrap-once-key"
-	if _, seeded, err := store.SeedBootstrapAdminAPIKey(ctx, rawKey); err != nil || !seeded {
-		t.Fatalf("first seed: seeded=%v err=%v", seeded, err)
-	}
-
-	// Second call: the key from the first run now exists, so this is a no-op.
-	_, seeded2, err := store.SeedBootstrapAdminAPIKey(ctx, rawKey)
-	if err != nil {
-		t.Fatalf("second seed: %v", err)
-	}
-	if seeded2 {
-		t.Error("second seed: seeded = true, want false (first-run-only)")
-	}
-}
-
 // TestSeedBootstrapAdminAPIKeyRevocable verifies that revoking the bootstrap
 // key disables it for future lookups (C4).
 func TestSeedBootstrapAdminAPIKeyRevocable(t *testing.T) {

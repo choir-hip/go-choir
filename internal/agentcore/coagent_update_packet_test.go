@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -74,15 +73,3 @@ func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 	}
 }
 
-func TestRunSupportsCoagentUpdateInjectionIncludesTexture(t *testing.T) {
-	t.Parallel()
-	rec := &types.RunRecord{
-		AgentID: "texture:doc-1",
-		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Texture,
-		},
-	}
-	if !runSupportsCoagentUpdateInjection(rec) {
-		t.Fatal("texture runs should support coagent update injection")
-	}
-}

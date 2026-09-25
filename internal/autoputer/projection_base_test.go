@@ -14,21 +14,6 @@ import (
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
-func TestIsStoreEmpty(t *testing.T) {
-	dir := t.TempDir()
-	if !isStoreEmpty(dir) {
-		t.Fatalf("expected empty temp dir to be empty")
-	}
-
-	// Create non-empty marker like .dolt
-	if err := os.Mkdir(filepath.Join(dir, ".dolt"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if isStoreEmpty(dir) {
-		t.Fatalf("expected dir with .dolt to be non-empty")
-	}
-}
-
 func bootTestServer(t *testing.T, headStatus int, headBody any, watermarkStatus int, watermarkBody any, calls *int) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

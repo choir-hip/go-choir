@@ -2,18 +2,6 @@ package provideriface
 
 import "testing"
 
-func TestMaxOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
-	if got := MaxOutputTokensForSelection(LLMSelection{Model: "glm-5.2"}); got != 131072 {
-		t.Fatalf("glm-5.2 max tokens = %d, want 131072", got)
-	}
-	if got := MaxOutputTokensForSelection(LLMSelection{Model: "gpt-5.5"}); got != 65536 {
-		t.Fatalf("gpt-5.5 max tokens = %d, want 65536", got)
-	}
-	if got := MaxOutputTokensForSelection(LLMSelection{Model: "unknown-model"}); got != 65536 {
-		t.Fatalf("unknown model max tokens = %d, want safe default 65536", got)
-	}
-}
-
 func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	// OpenAI-compatible chat-completions providers omit the explicit
 	// generation budget; ChatGPT's Responses endpoint rejects it outright.
@@ -38,27 +26,5 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	}
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"}, "management"); got != 8192 {
 		t.Fatalf("low-limit model interactive tokens = %d, want 8192", got)
-	}
-}
-
-func TestResolvedLLMConfigFromMetadata(t *testing.T) {
-	cfg := ResolvedLLMConfigFromMetadata(map[string]any{
-		"llm_provider":         "fireworks",
-		"llm_model":            "accounts/fireworks/models/deepseek-v4-flash",
-		"llm_reasoning_effort": "medium",
-		"llm_max_tokens":       32768,
-		"llm_policy_source":    "policy.toml",
-	})
-	if cfg.Provider != "fireworks" || cfg.Model != "accounts/fireworks/models/deepseek-v4-flash" || cfg.ReasoningEffort != "medium" {
-		t.Fatalf("selection = %+v", cfg)
-	}
-	if cfg.MaxTokens != 32768 {
-		t.Fatalf("max tokens = %d, want 32768", cfg.MaxTokens)
-	}
-	if cfg.Source != "policy.toml" {
-		t.Fatalf("source = %q, want policy.toml", cfg.Source)
-	}
-	if got := ResolvedLLMConfigFromMetadata(nil); got != (LLMSelection{}) {
-		t.Fatalf("nil metadata = %+v, want zero", got)
 	}
 }

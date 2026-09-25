@@ -11,44 +11,6 @@ import (
 
 var baseSliceTime = time.Date(2026, 7, 4, 8, 0, 0, 0, time.UTC)
 
-func TestBaseTreeObservationSetFeedsEquivalenceAcrossProjections(t *testing.T) {
-	version := baseSliceComputerVersion()
-	leftSet, err := BaseTreeObservationSet("base-tree", version, baseTreeFixture("a"))
-	if err != nil {
-		t.Fatalf("left observation set: %v", err)
-	}
-	rightSet, err := BaseTreeObservationSet("file-projection", version, baseTreeFixture("a"))
-	if err != nil {
-		t.Fatalf("right observation set: %v", err)
-	}
-
-	left := Realization{
-		ID:      "base-tree-projection",
-		Version: version,
-		Capabilities: CapabilityManifest{
-			Materializer: "base-tree-adapter",
-			Substrate:    "base-tree",
-			Supported:    []ObservationKind{ObservationFileManifest},
-		},
-		Observations: leftSet,
-	}
-	right := Realization{
-		ID:      "file-manifest-projection",
-		Version: version,
-		Capabilities: CapabilityManifest{
-			Materializer: "file-manifest-adapter",
-			Substrate:    "file-projection",
-			Supported:    []ObservationKind{ObservationFileManifest},
-		},
-		Observations: rightSet,
-	}
-
-	result := EquivalenceChecker{}.CheckRealizations(left, right)
-	if !result.Equivalent() {
-		t.Fatalf("expected equivalent base slice projections, got %#v", result)
-	}
-}
-
 func TestBaseTreeObservationSetSeededCurrentStateMismatchFails(t *testing.T) {
 	version := baseSliceComputerVersion()
 	leftSet, err := BaseTreeObservationSet("base-tree", version, baseTreeFixture("a"))

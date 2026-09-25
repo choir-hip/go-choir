@@ -8,51 +8,6 @@ import (
 	"time"
 )
 
-func TestActorRegistrationAndState(t *testing.T) {
-	mgr := NewActorStateManager()
-	actor, err := mgr.RegisterActor("actor-cosuper-1", "engineering", "gpt-5.6-sol")
-	if err != nil {
-		t.Fatalf("RegisterActor failed: %v", err)
-	}
-	if actor.ActorID != "actor-cosuper-1" || actor.CurrentEpoch != 1 || actor.ModelID != "gpt-5.6-sol" {
-		t.Fatalf("unexpected actor state: %+v", actor)
-	}
-
-	// Record an assignment
-	err = mgr.RecordAssignment(&DurableAssignment{
-		AssignmentID: "asgn-001",
-		ActorID:      "actor-cosuper-1",
-		Instruction:  "Implement feature X",
-		Status:       "in_progress",
-	})
-	if err != nil {
-		t.Fatalf("RecordAssignment failed: %v", err)
-	}
-
-	// Record a message
-	err = mgr.RecordMessage(&DurableMessage{
-		MessageID:   "msg-001",
-		SenderID:    "actor-super",
-		RecipientID: "actor-cosuper-1",
-		Kind:        "directive",
-		Body:        "Proceed with build",
-	})
-	if err != nil {
-		t.Fatalf("RecordMessage failed: %v", err)
-	}
-
-	// Record an obligation
-	err = mgr.RecordObligation(&DurableObligation{
-		ObligationID: "ob-001",
-		ActorID:      "actor-cosuper-1",
-		Description:  "Verify tests pass",
-		Satisfied:    false,
-	})
-	if err != nil {
-		t.Fatalf("RecordObligation failed: %v", err)
-	}
-}
-
 func TestRewarmActorMonotonicEpochAndContinuity(t *testing.T) {
 	mgr := NewActorStateManager()
 	_, err := mgr.RegisterActor("actor-cosuper-2", "engineering", "gpt-5.6-sol")

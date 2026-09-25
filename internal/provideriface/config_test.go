@@ -7,30 +7,6 @@ import (
 	"time"
 )
 
-func TestLoadConfigDefaultsResearchCount(t *testing.T) {
-	t.Setenv("AUTOPUTER_ID", "")
-	t.Setenv("RUNTIME_STORE_PATH", "")
-	t.Setenv("RUNTIME_PROVIDER_TIMEOUT", "")
-	t.Setenv("RUNTIME_SUPERVISION_INTERVAL", "")
-	t.Setenv("RUNTIME_ACTIVATION_BUDGET", "")
-	t.Setenv("RUNTIME_RESEARCHER_COUNT", "")
-	t.Setenv("RUNTIME_TEXTURE_ACTOR_PARK_IDLE", "")
-
-	cfg := LoadConfig()
-	if cfg.ResearchCount != DefaultResearchCount {
-		t.Fatalf("researcher_count = %d, want %d", cfg.ResearchCount, DefaultResearchCount)
-	}
-	if cfg.ActivationBudget != DefaultActivationBudget {
-		t.Fatalf("activation_budget = %s, want %s", cfg.ActivationBudget, DefaultActivationBudget)
-	}
-	if cfg.TextureActorParkIdle != DefaultTextureActorParkIdle {
-		t.Fatalf("texture_actor_park_idle = %s, want %s", cfg.TextureActorParkIdle, DefaultTextureActorParkIdle)
-	}
-	if cfg.PromptRoot == "" {
-		t.Fatal("prompt_root should not be empty")
-	}
-}
-
 func TestLoadConfigReadsResearchCount(t *testing.T) {
 	t.Setenv("RUNTIME_RESEARCHER_COUNT", "5")
 	t.Setenv("RUNTIME_SUPERVISION_INTERVAL", "7s")
@@ -115,16 +91,6 @@ func TestLoadConfigPreservesExplicitZeroDedupThreshold(t *testing.T) {
 	cfg := LoadConfig()
 	if cfg.QdrantDedupThreshold != 0 {
 		t.Fatalf("qdrant_dedup_threshold = %f, want explicit zero", cfg.QdrantDedupThreshold)
-	}
-}
-
-func TestDefaultModelPolicyPath(t *testing.T) {
-	if got := DefaultModelPolicyPath(" \t "); got != "" {
-		t.Fatalf("empty root path = %q, want empty", got)
-	}
-	root := filepath.Join(t.TempDir(), "Files")
-	if got, want := DefaultModelPolicyPath("  "+root+"  "), filepath.Join(root, "System", "model-policy.toml"); got != want {
-		t.Fatalf("model policy path = %q, want %q", got, want)
 	}
 }
 

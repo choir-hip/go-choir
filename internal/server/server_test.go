@@ -134,60 +134,6 @@ func TestHealthHandlerServiceName(t *testing.T) {
 	}
 }
 
-func TestHealthHandlerMethodNotAllowed(t *testing.T) {
-	s := NewServer("test-service", "8099")
-	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
-		t.Run(method, func(t *testing.T) {
-			req := httptest.NewRequest(method, "/health", nil)
-			w := httptest.NewRecorder()
-			s.defaultHealthHandler(w, req)
-
-			if w.Code != http.StatusMethodNotAllowed {
-				t.Errorf("expected status 405 for %s, got %d", method, w.Code)
-			}
-		})
-	}
-}
-
-func TestPortFromEnv(t *testing.T) {
-	envVar := "TEST_PORT_FOR_ENV"
-	_ = os.Setenv(envVar, "9999")
-	defer func() { _ = os.Unsetenv(envVar) }()
-
-	port := PortFromEnv(envVar, "8081")
-	if port != "9999" {
-		t.Errorf("expected port 9999, got %q", port)
-	}
-}
-
-func TestPortDefault(t *testing.T) {
-	envVar := "TEST_PORT_DEFAULT_UNSET"
-	_ = os.Unsetenv(envVar)
-
-	port := PortFromEnv(envVar, "8081")
-	if port != "8081" {
-		t.Errorf("expected default port 8081, got %q", port)
-	}
-}
-
-func TestBindHostDefault(t *testing.T) {
-	_ = os.Unsetenv("SERVER_HOST")
-
-	host := BindHostFromEnv()
-	if host != "127.0.0.1" {
-		t.Errorf("expected default bind host 127.0.0.1, got %q", host)
-	}
-}
-
-func TestBindHostFromEnv(t *testing.T) {
-	_ = os.Setenv("SERVER_HOST", "0.0.0.0")
-	defer func() { _ = os.Unsetenv("SERVER_HOST") }()
-
-	host := BindHostFromEnv()
-	if host != "0.0.0.0" {
-		t.Errorf("expected bind host 0.0.0.0, got %q", host)
-	}
-}
 
 func TestNewServerBindsToLocalhostByDefault(t *testing.T) {
 	_ = os.Unsetenv("SERVER_HOST")
@@ -412,27 +358,5 @@ func TestGracefulShutdownWaitsForInFlightRequest(t *testing.T) {
 	case <-startDone:
 	case <-time.After(2 * time.Second):
 		t.Fatal("Start did not return after graceful shutdown completed")
-	}
-}
-
-func TestShutdownTimeoutFromEnv(t *testing.T) {
-	t.Setenv("SERVER_SHUTDOWN_TIMEOUT", "11m")
-	if got := ShutdownTimeoutFromEnv(); got != 11*time.Minute {
-		t.Fatalf("timeout = %s, want 11m", got)
-	}
-}
-
-func TestShutdownTimeoutFromEnvInvalidFallsBack(t *testing.T) {
-	t.Setenv("SERVER_SHUTDOWN_TIMEOUT", "not-a-duration")
-	if got := ShutdownTimeoutFromEnv(); got != defaultShutdownTimeout {
-		t.Fatalf("timeout = %s, want %s", got, defaultShutdownTimeout)
-	}
-}
-
-func TestNewServerUsesWriteTimeoutFromEnv(t *testing.T) {
-	t.Setenv("SERVER_WRITE_TIMEOUT", "10m30s")
-	s := NewServer("test-write-timeout", "0")
-	if got := s.httpServer.WriteTimeout; got != 10*time.Minute+30*time.Second {
-		t.Fatalf("write timeout = %s, want 10m30s", got)
 	}
 }

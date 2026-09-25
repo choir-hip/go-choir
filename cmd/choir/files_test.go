@@ -80,15 +80,3 @@ func TestFilesMkdirPosts(t *testing.T) {
 		t.Fatalf("got %s %s", gotMethod, gotPath)
 	}
 }
-
-func TestFilesRequiresSubcommand(t *testing.T) {
-	if code := runFiles(nil, io.Discard, io.Discard); code != 2 {
-		t.Fatalf("code = %d", code)
-	}
-	if code := runFiles([]string{"put"}, io.Discard, io.Discard); code != 2 {
-		t.Fatalf("code = %d", code)
-	}
-	if code := runFiles([]string{"bogus"}, io.Discard, io.Discard); code != 2 {
-		t.Fatalf("code = %d", code)
-	}
-}

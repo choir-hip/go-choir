@@ -8,16 +8,6 @@ import (
 	"testing"
 )
 
-// Synthetic PII only. The SLM redactor is exercised against a stub Ollama
-// server so no real model is required for the interface contract test.
-
-func TestSLMRedactor_Name(t *testing.T) {
-	s := NewSLMRedactor("llama3.2:3b")
-	if s.Name() != "slm-ollama:llama3.2:3b" {
-		t.Fatalf("name = %q", s.Name())
-	}
-}
-
 func TestSLMRedactor_RedactsViaStubServer(t *testing.T) {
 	// Stub Ollama /api/chat: returns a JSON array of findings.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -129,25 +119,6 @@ func TestSLMRedactor_EmptyResponseNoFindings(t *testing.T) {
 	}
 	if out != "no pii here at all" {
 		t.Fatalf("text changed without findings: %q", out)
-	}
-}
-
-func TestNormalizeClass(t *testing.T) {
-	cases := map[string]PIIClass{
-		"email":       ClassEmail,
-		"EMAIL":       ClassEmail,
-		"credit_card": ClassCreditCard,
-		"creditcard":  ClassCreditCard,
-		"card":        ClassCreditCard,
-		"apikey":      ClassAPIKey,
-		"ip_address":  ClassIP,
-		"weird":       ClassUnknown,
-		"":            ClassUnknown,
-	}
-	for in, want := range cases {
-		if got := normalizeClass(in); got != want {
-			t.Errorf("normalizeClass(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
 

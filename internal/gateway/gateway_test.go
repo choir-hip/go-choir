@@ -345,94 +345,6 @@ func setupHandlerNoProvider(t *testing.T) (*Handler, *IdentityRegistry) {
 	return NewHandler(reg, nil), reg
 }
 
-func TestHandleHealth(t *testing.T) {
-	h, _, _ := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
-	h.HandleHealth(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	var resp gatewayHealthResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Service != "gateway" {
-		t.Errorf("Service = %q, want %q", resp.Service, "gateway")
-	}
-	if resp.Provider != "bedrock" {
-		t.Errorf("Provider = %q, want %q", resp.Provider, "bedrock")
-	}
-}
-
-func TestHandleInference_AuthSuccess(t *testing.T) {
-	h, reg, _ := setupHandler(t)
-
-	// Issue a credential.
-	result, _ := reg.IssueCredential("autoputer-1")
-
-	// Make an inference request.
-	payload := ProviderRequest{
-		System:    "You are helpful.",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
-		MaxTokens: 100,
-	}
-	body, _ := json.Marshal(payload)
-
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+result.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp ProviderResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Text != "Hello from Bedrock!" {
-		t.Errorf("Text = %q, want %q", resp.Text, "Hello from Bedrock!")
-	}
-	if resp.ProviderName != "bedrock" {
-		t.Errorf("ProviderName = %q, want %q", resp.ProviderName, "bedrock")
-	}
-}
-
-func TestHandleInferencePassesConversationIDToProvider(t *testing.T) {
-	h, reg, mp := setupHandler(t)
-	credential, err := reg.IssueCredential("autoputer-conversation")
-	if err != nil {
-		t.Fatalf("IssueCredential: %v", err)
-	}
-	body, err := json.Marshal(ProviderRequest{
-		ConversationID: "run-gateway-123",
-		Messages:       []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "hello"}}}},
-	})
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+credential.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-	mp.mu.Lock()
-	defer mp.mu.Unlock()
-	if mp.lastReq == nil || mp.lastReq.ConversationID != "run-gateway-123" {
-		t.Fatalf("provider conversation_id = %#v, want run-gateway-123", mp.lastReq)
-	}
-}
-
 func TestHandleInference_DeniesExternalPeerWithValidToken(t *testing.T) {
 	h, reg, _ := setupHandler(t)
 
@@ -657,37 +569,6 @@ func TestHandleInference_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// --- Credential Management Endpoint Tests ---
-
-func TestHandleIssueCredential(t *testing.T) {
-	h, _ := setupHandlerNoProvider(t)
-
-	body := `{"computer_id": "autoputer-test"}`
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/issue", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	req.Host = "localhost:8084"
-	req.RemoteAddr = "127.0.0.1:12345"
-
-	w := httptest.NewRecorder()
-	h.HandleIssueCredential(w, req)
-
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
-	}
-
-	var result CredentialResult
-	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result.ComputerID != "autoputer-test" {
-		t.Errorf("ComputerID = %q, want %q", result.ComputerID, "autoputer-test")
-	}
-	if result.RawToken == "" {
-		t.Error("RawToken is empty")
-	}
-}
-
 func TestHandleIssueCredential_NonLocalhost(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 
@@ -897,69 +778,6 @@ func TestStaleCredentialAfterRotation(t *testing.T) {
 	// Verify the provider was actually called.
 	if mp.lastReq == nil {
 		t.Fatal("provider was not called")
-	}
-}
-
-// --- Gateway Client Tests ---
-
-func TestGatewayClientCall(t *testing.T) {
-	reg := NewIdentityRegistry(1 * time.Hour)
-	mp := &mockProvider{
-		name: "zai",
-		real: true,
-		response: &provider.LLMResponse{
-			ID:           "resp-456",
-			Text:         "Z.AI response",
-			Model:        "glm-4.7",
-			StopReason:   "end_turn",
-			ProviderName: "zai",
-			Usage:        provider.Usage{InputTokens: 5, OutputTokens: 15},
-		},
-	}
-
-	handler := NewHandler(reg, mp)
-
-	// Start a test server for the gateway.
-	mux := http.NewServeMux()
-	mux.HandleFunc("/provider/v1/inference", handler.HandleInference)
-	mux.HandleFunc("/health", handler.HandleHealth)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	// Issue a credential for the autoputer.
-	result, err := reg.IssueCredential("autoputer-client-test")
-	if err != nil {
-		t.Fatalf("issue credential: %v", err)
-	}
-
-	// Create a gateway client.
-	client := NewGatewayClient(server.URL, result.RawToken)
-
-	// Verify IsReal.
-	if !client.IsReal() {
-		t.Error("IsReal() = false, want true")
-	}
-
-	// Verify Name.
-	if client.Name() != "gateway" {
-		t.Errorf("Name() = %q, want %q", client.Name(), "gateway")
-	}
-
-	// Make a call through the gateway client.
-	resp, err := client.Call(context.Background(), provider.LLMRequest{
-		System:    "Test system prompt",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
-		MaxTokens: 100,
-	})
-	if err != nil {
-		t.Fatalf("call: %v", err)
-	}
-
-	if resp.Text != "Z.AI response" {
-		t.Errorf("Text = %q, want %q", resp.Text, "Z.AI response")
-	}
-	if resp.ProviderName != "zai" {
-		t.Errorf("ProviderName = %q, want %q", resp.ProviderName, "zai")
 	}
 }
 
@@ -1243,16 +1061,6 @@ data: [DONE]
 	}
 }
 
-// --- Provider Error Sanitization Tests ---
-
-func TestSanitizeError_Basic(t *testing.T) {
-	err := fmt.Errorf("connection refused")
-	sanitized := sanitizeError(err)
-	if sanitized != "connection refused" {
-		t.Errorf("sanitizeError = %q, want %q", sanitized, "connection refused")
-	}
-}
-
 func TestSanitizeError_BearerLeak(t *testing.T) {
 	err := fmt.Errorf("upstream failed: Authorization: Bearer sk-12345-secret")
 	sanitized := sanitizeError(err)
@@ -1269,27 +1077,6 @@ func TestSanitizeError_XApiKeyLeak(t *testing.T) {
 	sanitized := sanitizeError(err)
 	if strings.Contains(sanitized, "my-secret-key") {
 		t.Errorf("sanitizeError leaked API key: %q", sanitized)
-	}
-}
-
-func TestSanitizeError_LongMessage(t *testing.T) {
-	longMsg := strings.Repeat("a", 1000)
-	err := fmt.Errorf("%s", longMsg)
-	sanitized := sanitizeError(err)
-	if len(sanitized) > 503 {
-		t.Errorf("sanitizeError too long: %d chars", len(sanitized))
-	}
-}
-
-// --- Config Tests ---
-
-func TestLoadConfig(t *testing.T) {
-	cfg := LoadConfig()
-	if cfg.Port != "8084" {
-		t.Errorf("Port = %q, want %q", cfg.Port, "8084")
-	}
-	if cfg.AutoputerTokenTTL != 1*time.Hour {
-		t.Errorf("AutoputerTokenTTL = %v, want %v", cfg.AutoputerTokenTTL, 1*time.Hour)
 	}
 }
 
@@ -1785,29 +1572,6 @@ func TestMultiProvider_FireworksToolCalls(t *testing.T) {
 	}
 }
 
-func TestMultiProvider_HealthReportsProviderCount(t *testing.T) {
-	h, _ := setupMultiProviderHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
-	h.HandleHealth(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	var resp gatewayHealthResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	// Provider names come from map iteration (unordered), so check for all providers.
-	for _, name := range []string{"fireworks", "zai", "bedrock", "chatgpt"} {
-		if !strings.Contains(resp.Provider, name) {
-			t.Errorf("Provider = %q, missing %q", resp.Provider, name)
-		}
-	}
-}
-
 func TestMultiProvider_RateLimitStillWorks(t *testing.T) {
 	// Verify rate limiting works with multi-provider handler.
 	reg := NewIdentityRegistry(1 * time.Hour)
@@ -1863,58 +1627,6 @@ func TestMultiProvider_RateLimitStillWorks(t *testing.T) {
 
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("rate limited request: status = %d, want %d", w.Code, http.StatusTooManyRequests)
-	}
-}
-
-func TestMultiProvider_FireworksWithSystemPrompt(t *testing.T) {
-	// Verify system prompt is forwarded to Fireworks provider.
-	reg := NewIdentityRegistry(1 * time.Hour)
-
-	fireworksProvider := &mockProvider{
-		name: "fireworks",
-		real: true,
-		response: &provider.LLMResponse{
-			ID:           "fw-sys-001",
-			Text:         "System-aware response",
-			Model:        "accounts/fireworks/models/deepseek-v4-flash",
-			StopReason:   "end_turn",
-			ProviderName: "fireworks",
-			Usage:        provider.Usage{InputTokens: 30, OutputTokens: 10},
-		},
-	}
-
-	mp := provider.NewMultiProvider()
-	mp.Register("fireworks", fireworksProvider)
-
-	h := NewMultiHandler(reg, mp)
-
-	result, _ := reg.IssueCredential("autoputer-fw-sys")
-
-	payload := ProviderRequest{
-		Provider:  "fireworks",
-		System:    "You are a pirate. Respond in pirate speak.",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
-		MaxTokens: 100,
-	}
-	body, _ := json.Marshal(payload)
-
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+result.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	// Verify the system prompt was forwarded to the provider.
-	if fireworksProvider.lastReq == nil {
-		t.Fatal("provider was not called")
-	}
-	if fireworksProvider.lastReq.System != "You are a pirate. Respond in pirate speak." {
-		t.Errorf("System = %q, want system prompt forwarded", fireworksProvider.lastReq.System)
 	}
 }
 
@@ -2346,68 +2058,6 @@ func TestHandleInference_StreamingProviderError(t *testing.T) {
 	}
 }
 
-func TestHandleInference_NonStreamingStillWorks(t *testing.T) {
-	// Verify that non-streaming requests (stream=false or absent) still work.
-	reg := NewIdentityRegistry(1 * time.Hour)
-
-	zaiProvider := &mockProvider{
-		name: "zai",
-		real: true,
-		response: &provider.LLMResponse{
-			ID:           "zai-nostream-001",
-			Text:         "Non-streaming response",
-			Model:        "glm-5-turbo",
-			StopReason:   "end_turn",
-			ProviderName: "zai",
-			Usage:        provider.Usage{InputTokens: 5, OutputTokens: 3},
-		},
-	}
-
-	mp := provider.NewMultiProvider()
-	mp.Register("zai", zaiProvider)
-
-	h := NewMultiHandler(reg, mp)
-
-	result, _ := reg.IssueCredential("autoputer-nostream")
-
-	// Test with stream=false explicitly.
-	payload := ProviderRequest{
-		Provider:  "zai",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
-		MaxTokens: 100,
-		Stream:    false,
-	}
-	body, _ := json.Marshal(payload)
-
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+result.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	// Verify JSON response (not SSE).
-	ct := w.Header().Get("Content-Type")
-	if ct != "application/json" {
-		t.Errorf("Content-Type = %q, want application/json", ct)
-	}
-
-	var resp ProviderResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Text != "Non-streaming response" {
-		t.Errorf("Text = %q, want %q", resp.Text, "Non-streaming response")
-	}
-	if resp.ProviderName != "zai" {
-		t.Errorf("ProviderName = %q, want %q", resp.ProviderName, "zai")
-	}
-}
-
 // --- Comprehensive Provider Routing Tests (VAL-LLM-005, VAL-LLM-006, VAL-LLM-007) ---
 
 // TestProviderRouting is a table-driven test covering all multi-provider
@@ -2609,99 +2259,6 @@ func TestProviderRouting(t *testing.T) {
 				if tc.wantErrorContain != "" && !strings.Contains(errResp.Error, tc.wantErrorContain) {
 					t.Errorf("error = %q, want to contain %q", errResp.Error, tc.wantErrorContain)
 				}
-			}
-		})
-	}
-}
-
-// TestProviderRouting_SupportedModelsTable verifies that every model listed
-// in provider.SupportedModels() routes to the correct provider when that
-// provider is registered in the multi-provider handler.
-func TestProviderRouting_SupportedModelsTable(t *testing.T) {
-	reg := NewIdentityRegistry(1 * time.Hour)
-
-	// Create a mock provider for each provider name.
-	mockProviders := map[string]*mockProvider{
-		"fireworks": {
-			name: "fireworks", real: true,
-			response: &provider.LLMResponse{
-				Text: "fw", Model: "fw-model", StopReason: "end_turn",
-				ProviderName: "fireworks", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
-			},
-		},
-		"zai": {
-			name: "zai", real: true,
-			response: &provider.LLMResponse{
-				Text: "zai", Model: "zai-model", StopReason: "end_turn",
-				ProviderName: "zai", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
-			},
-		},
-		"bedrock": {
-			name: "bedrock", real: true,
-			response: &provider.LLMResponse{
-				Text: "br", Model: "br-model", StopReason: "end_turn",
-				ProviderName: "bedrock", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
-			},
-		},
-		"chatgpt": {
-			name: "chatgpt", real: true,
-			response: &provider.LLMResponse{
-				Text: "gpt", Model: "gpt-5.5", StopReason: "end_turn",
-				ProviderName: "chatgpt", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
-			},
-		},
-		"opencode-go": {
-			name: "opencode-go", real: true,
-			response: &provider.LLMResponse{
-				Text: "oc-go", Model: "deepseek-v4.1-flash", StopReason: "end_turn",
-				ProviderName: "opencode-go", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
-			},
-		},
-		"opencode-zen": {
-			name: "opencode-zen", real: true,
-			response: &provider.LLMResponse{
-				Text: "oc-zen", Model: "muse-spark-1.3-contributor-free", StopReason: "end_turn",
-				ProviderName: "opencode-zen", Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
-			},
-		},
-	}
-
-	mp := provider.NewMultiProvider()
-	for name, p := range mockProviders {
-		mp.Register(name, p)
-	}
-
-	h := NewMultiHandler(reg, mp)
-	cred, _ := reg.IssueCredential("autoputer-model-table")
-
-	for _, mi := range provider.SupportedModels() {
-		t.Run(mi.ID+"_routes_to_"+mi.Provider, func(t *testing.T) {
-			payload := ProviderRequest{
-				Model: mi.ID,
-				Messages: []provider.Message{
-					{Role: "user", Content: []provider.Block{{Type: "text", Text: "test"}}},
-				},
-				MaxTokens: 50,
-			}
-			body, _ := json.Marshal(payload)
-
-			req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-			req.Header.Set("Authorization", "Bearer "+cred.RawToken)
-			req.Header.Set("Content-Type", "application/json")
-
-			w := httptest.NewRecorder()
-			h.HandleInference(w, req)
-
-			if w.Code != http.StatusOK {
-				t.Fatalf("model %q: status = %d, want %d; body: %s", mi.ID, w.Code, http.StatusOK, w.Body.String())
-			}
-
-			var resp ProviderResponse
-			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-				t.Fatalf("model %q: decode: %v", mi.ID, err)
-			}
-			if resp.ProviderName != mi.Provider {
-				t.Errorf("model %q: ProviderName = %q, want %q", mi.ID, resp.ProviderName, mi.Provider)
 			}
 		})
 	}

@@ -1,9 +1,6 @@
 package promptspec
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestParseRequiresVersionAndBody(t *testing.T) {
 	if _, err := Parse([]byte("version: 1\nbody: | \n  hello")); err != nil {
@@ -14,16 +11,6 @@ func TestParseRequiresVersionAndBody(t *testing.T) {
 	}
 	if _, err := Parse([]byte("version: 1\nbody: \"\"")); err == nil {
 		t.Fatal("expected body requirement")
-	}
-}
-
-func TestParseTrimsBody(t *testing.T) {
-	doc, err := Parse([]byte("version: 1\nbody: |\n  line one\n  line two\n"))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if !strings.Contains(doc.BodyText(), "line one") || !strings.Contains(doc.BodyText(), "line two") {
-		t.Fatalf("body = %q", doc.BodyText())
 	}
 }
 

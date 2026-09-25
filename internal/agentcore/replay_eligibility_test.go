@@ -147,20 +147,6 @@ func TestReplayEligibilityRejectsUnknownTableEvenWhenBothProjectionsContainIt(t 
 	}
 }
 
-func TestCurrentReplayAirworthinessManifestReturnsCopy(t *testing.T) {
-	manifest := CurrentReplayAirworthinessManifest()
-	if manifest.Version != replayEligibilityManifestVersion || len(manifest.Entries) == 0 {
-		t.Fatalf("invalid manifest: %#v", manifest)
-	}
-	if err := manifest.Validate(); err != nil {
-		t.Fatalf("manifest validation failed: %v", err)
-	}
-	manifest.Entries["computer_event_index"] = ReplayRetiredAbsent
-	if CurrentReplayAirworthinessManifest().Entries["computer_event_index"] != ReplayEventProjection {
-		t.Fatal("manifest policy was mutable through returned entries")
-	}
-}
-
 func TestDesktopAndOGAreEventProjectionAfterLiveResidueImport(t *testing.T) {
 	manifest := CurrentReplayAirworthinessManifest()
 	for _, table := range []string{

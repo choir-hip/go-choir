@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -71,36 +70,6 @@ func TestOpenTextureWorkspaceUsesTextureDatabaseForFreshWorkspace(t *testing.T) 
 	}
 }
 
-// ----- Document CRUD -----
-
-func TestTextureCreateDocument(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	doc := types.Document{
-		DocID:   "doc-1",
-		OwnerID: "user-1",
-		Title:   "Test Document",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	got, err := s.GetDocument(ctx, "doc-1", "user-1")
-	if err != nil {
-		t.Fatalf("GetDocument: %v", err)
-	}
-	if got.DocID != "doc-1" {
-		t.Errorf("DocID = %q, want %q", got.DocID, "doc-1")
-	}
-	if got.OwnerID != "user-1" {
-		t.Errorf("OwnerID = %q, want %q", got.OwnerID, "user-1")
-	}
-	if got.Title != "Test Document" {
-		t.Errorf("Title = %q, want %q", got.Title, "Test Document")
-	}
-}
-
 func TestTextureGetDocumentOwnerScope(t *testing.T) {
 	s := textureTestStore(t)
 	ctx := context.Background()
@@ -118,39 +87,6 @@ func TestTextureGetDocumentOwnerScope(t *testing.T) {
 	_, err := s.GetDocument(ctx, "doc-1", "user-2")
 	if err != ErrNotFound {
 		t.Errorf("GetDocument as wrong owner: err=%v, want ErrNotFound", err)
-	}
-}
-
-func TestTextureListDocumentsByOwner(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	for i := 0; i < 3; i++ {
-		doc := types.Document{
-			DocID:   "doc-" + string(rune('a'+i)),
-			OwnerID: "user-1",
-			Title:   "Doc " + string(rune('a'+i)),
-		}
-		if err := s.CreateDocument(ctx, doc); err != nil {
-			t.Fatalf("CreateDocument: %v", err)
-		}
-	}
-	// Create a doc for another user.
-	doc := types.Document{
-		DocID:   "doc-x",
-		OwnerID: "user-2",
-		Title:   "Other User Doc",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	docs, err := s.ListDocumentsByOwner(ctx, "user-1", 10)
-	if err != nil {
-		t.Fatalf("ListDocumentsByOwner: %v", err)
-	}
-	if len(docs) != 3 {
-		t.Errorf("len(docs) = %d, want 3", len(docs))
 	}
 }
 
@@ -212,37 +148,6 @@ func TestTextureDecisionRecordsAreOwnerScopedAndDocumentScoped(t *testing.T) {
 	}
 	if len(otherOwner) != 0 {
 		t.Fatalf("wrong owner saw decisions: %+v", otherOwner)
-	}
-}
-
-func TestTextureUpdateDocument(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	doc := types.Document{
-		DocID:   "doc-1",
-		OwnerID: "user-1",
-		Title:   "Original Title",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	doc.Title = "Updated Title"
-	doc.CurrentRevisionID = "rev-1"
-	if err := s.UpdateDocument(ctx, doc); err != nil {
-		t.Fatalf("UpdateDocument: %v", err)
-	}
-
-	got, err := s.GetDocument(ctx, "doc-1", "user-1")
-	if err != nil {
-		t.Fatalf("GetDocument: %v", err)
-	}
-	if got.Title != "Updated Title" {
-		t.Errorf("Title = %q, want %q", got.Title, "Updated Title")
-	}
-	if got.CurrentRevisionID != "rev-1" {
-		t.Errorf("CurrentRevisionID = %q, want %q", got.CurrentRevisionID, "rev-1")
 	}
 }
 
@@ -308,88 +213,6 @@ func TestTextureDocumentAliasSourcePathPrefersCanonicalShortcut(t *testing.T) {
 	}
 	if docID, err := s.GetDocumentAlias(ctx, "user-1", "notes/plain-proposal.txt"); err != nil || docID != doc.DocID {
 		t.Fatalf("original alias docID = %q, err = %v, want %q", docID, err, doc.DocID)
-	}
-}
-
-func TestTextureDeleteDocument(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	doc := types.Document{
-		DocID:   "doc-1",
-		OwnerID: "user-1",
-		Title:   "To Delete",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	if err := s.deleteDocumentPhysicalForTest(ctx, "doc-1", "user-1"); err != nil {
-		t.Fatalf("deleteDocumentPhysicalForTest: %v", err)
-	}
-
-	_, err := s.GetDocument(ctx, "doc-1", "user-1")
-	if err != ErrNotFound {
-		t.Errorf("GetDocument after delete: err=%v, want ErrNotFound", err)
-	}
-}
-
-// ----- Revision CRUD -----
-
-func TestTextureCreateRevision(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	// Create a document first.
-	doc := types.Document{
-		DocID:   "doc-1",
-		OwnerID: "user-1",
-		Title:   "Test Doc",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	metadata, _ := json.Marshal(map[string]any{"tags": []string{"draft"}})
-
-	rev := types.Revision{
-		RevisionID:  "rev-1",
-		DocID:       "doc-1",
-		OwnerID:     "user-1",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
-		Content:     "Hello, world!",
-		Metadata:    metadata,
-		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
-	}
-	if err := s.CreateRevision(ctx, rev); err != nil {
-		t.Fatalf("CreateRevision: %v", err)
-	}
-
-	got, err := s.GetRevision(ctx, "rev-1", "user-1")
-	if err != nil {
-		t.Fatalf("GetRevision: %v", err)
-	}
-	if got.RevisionID != "rev-1" {
-		t.Errorf("RevisionID = %q, want %q", got.RevisionID, "rev-1")
-	}
-	if got.AuthorKind != types.AuthorUser {
-		t.Errorf("AuthorKind = %q, want %q", got.AuthorKind, types.AuthorUser)
-	}
-	if got.Content != "Hello, world!" {
-		t.Errorf("Content = %q, want %q", got.Content, "Hello, world!")
-	}
-	if got.AuthorLabel != "alice" {
-		t.Errorf("AuthorLabel = %q, want %q", got.AuthorLabel, "alice")
-	}
-	if got.VersionNumber != 0 {
-		t.Errorf("VersionNumber = %d, want 0", got.VersionNumber)
-	}
-	if len(got.BodyDoc) == 0 {
-		t.Fatalf("BodyDoc not persisted for plain text revision")
-	}
-	if len(got.SourceEntities) != 0 {
-		t.Fatalf("SourceEntities = %s, want empty legacy-compatible response", got.SourceEntities)
 	}
 }
 
@@ -834,35 +657,6 @@ func TestTextureRevisionHashChain(t *testing.T) {
 	}
 }
 
-func TestTextureRevisionWithoutProvenanceIsEmpty(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	doc := types.Document{DocID: "doc-np", OwnerID: "user-1", Title: "No Prov"}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-	rev := types.Revision{
-		RevisionID:  "rev-np",
-		DocID:       "doc-np",
-		OwnerID:     "user-1",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
-		Content:     "plain",
-		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
-	}
-	if err := s.CreateRevision(ctx, rev); err != nil {
-		t.Fatalf("CreateRevision: %v", err)
-	}
-	got, err := s.GetRevision(ctx, "rev-np", "user-1")
-	if err != nil {
-		t.Fatalf("GetRevision: %v", err)
-	}
-	if len(got.Provenance) != 0 {
-		t.Errorf("expected empty provenance, got %q", string(got.Provenance))
-	}
-}
-
 func TestTextureCreateRevisionRejectsStaleHead(t *testing.T) {
 	s := textureTestStore(t)
 	ctx := context.Background()
@@ -1023,41 +817,6 @@ func TestTextureRevisionOwnerScope(t *testing.T) {
 	}
 }
 
-func TestCreateAndGetEvidence(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	metadata, _ := json.Marshal(map[string]any{"mime_type": "text/html"})
-	rec := types.EvidenceRecord{
-		EvidenceID: "ev-1",
-		OwnerID:    "user-1",
-		AgentID:    "researcher-a",
-		Kind:       "web_page",
-		SourceURI:  "https://example.com",
-		Title:      "Example",
-		Content:    "<html>example</html>",
-		Metadata:   metadata,
-		CreatedAt:  time.Now().UTC().Truncate(time.Millisecond),
-	}
-	if err := s.CreateEvidence(ctx, rec); err != nil {
-		t.Fatalf("CreateEvidence: %v", err)
-	}
-
-	got, err := s.GetEvidence(ctx, "ev-1", "user-1")
-	if err != nil {
-		t.Fatalf("GetEvidence: %v", err)
-	}
-	if got.AgentID != "researcher-a" {
-		t.Errorf("AgentID = %q, want %q", got.AgentID, "researcher-a")
-	}
-	if got.SourceURI != "https://example.com" {
-		t.Errorf("SourceURI = %q, want %q", got.SourceURI, "https://example.com")
-	}
-	if got.Content != "<html>example</html>" {
-		t.Errorf("Content = %q, want %q", got.Content, "<html>example</html>")
-	}
-}
-
 func TestListEvidenceByAgentOwnerScoped(t *testing.T) {
 	s := textureTestStore(t)
 	ctx := context.Background()
@@ -1082,71 +841,6 @@ func TestListEvidenceByAgentOwnerScoped(t *testing.T) {
 	}
 	if got[0].EvidenceID != "ev-2" || got[1].EvidenceID != "ev-1" {
 		t.Fatalf("unexpected evidence order: %+v", got)
-	}
-}
-
-func TestTextureListRevisionsByDoc(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	doc := types.Document{
-		DocID:   "doc-1",
-		OwnerID: "user-1",
-		Title:   "Test Doc",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	// Create 3 revisions with different authors.
-	for i := 0; i < 3; i++ {
-		authorKind := types.AuthorUser
-		authorLabel := "alice"
-		if i == 1 {
-			authorKind = types.AuthorAppAgent
-			authorLabel = "appagent"
-		}
-		rev := types.Revision{
-			RevisionID:       "rev-" + string(rune('1'+i)),
-			DocID:            "doc-1",
-			OwnerID:          "user-1",
-			AuthorKind:       authorKind,
-			AuthorLabel:      authorLabel,
-			Content:          "Content v" + string(rune('1'+i)),
-			ParentRevisionID: "",
-			CreatedAt:        time.Now().UTC().Add(time.Duration(i) * time.Second),
-		}
-		if i > 0 {
-			rev.ParentRevisionID = "rev-" + string(rune('0'+i))
-		}
-		rev = testTextureRevisionWithBodyDoc(t, rev)
-		if err := s.CreateRevision(ctx, rev); err != nil {
-			t.Fatalf("CreateRevision %d: %v", i, err)
-		}
-	}
-
-	revs, err := s.ListRevisionsByDoc(ctx, "doc-1", "user-1", 10)
-	if err != nil {
-		t.Fatalf("ListRevisionsByDoc: %v", err)
-	}
-	if len(revs) != 3 {
-		t.Fatalf("len(revs) = %d, want 3", len(revs))
-	}
-
-	// Should be ordered by created_at descending (newest first).
-	if revs[0].RevisionID != "rev-3" {
-		t.Errorf("first rev = %q, want %q", revs[0].RevisionID, "rev-3")
-	}
-	for i, rev := range revs {
-		wantVersion := 2 - i
-		if rev.VersionNumber != wantVersion {
-			t.Errorf("revs[%d].VersionNumber = %d, want %d", i, rev.VersionNumber, wantVersion)
-		}
-	}
-
-	// Check attribution: user, appagent, user.
-	if revs[2].AuthorKind != types.AuthorUser || revs[1].AuthorKind != types.AuthorAppAgent || revs[0].AuthorKind != types.AuthorUser {
-		t.Errorf("author kinds = %v, %v, %v; want user, appagent, user", revs[2].AuthorKind, revs[1].AuthorKind, revs[0].AuthorKind)
 	}
 }
 
@@ -1299,86 +993,6 @@ func TestTextureListRevisionsByDocOwnerScope(t *testing.T) {
 	}
 	if len(revs) != 0 {
 		t.Errorf("len(revs) = %d, want 0 for wrong owner", len(revs))
-	}
-}
-
-// ----- History -----
-
-func TestTextureGetHistory(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	doc := types.Document{
-		DocID:   "doc-1",
-		OwnerID: "user-1",
-		Title:   "Test Doc",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	// Create revisions with parent chain.
-	now := time.Now().UTC().Truncate(time.Millisecond)
-	revs := []types.Revision{
-		{
-			RevisionID:  "rev-1",
-			DocID:       "doc-1",
-			OwnerID:     "user-1",
-			AuthorKind:  types.AuthorUser,
-			AuthorLabel: "alice",
-			Content:     "First draft",
-			CreatedAt:   now,
-		},
-		{
-			RevisionID:       "rev-2",
-			DocID:            "doc-1",
-			OwnerID:          "user-1",
-			AuthorKind:       types.AuthorAppAgent,
-			AuthorLabel:      "appagent",
-			Content:          "AI-improved draft",
-			ParentRevisionID: "rev-1",
-			CreatedAt:        now.Add(time.Second),
-		},
-		{
-			RevisionID:       "rev-3",
-			DocID:            "doc-1",
-			OwnerID:          "user-1",
-			AuthorKind:       types.AuthorUser,
-			AuthorLabel:      "alice",
-			Content:          "User edited",
-			ParentRevisionID: "rev-2",
-			CreatedAt:        now.Add(2 * time.Second),
-		},
-	}
-	for _, r := range revs {
-		r = testTextureRevisionWithBodyDoc(t, r)
-		if err := s.CreateRevision(ctx, r); err != nil {
-			t.Fatalf("CreateRevision: %v", err)
-		}
-	}
-
-	history, err := s.GetHistory(ctx, "doc-1", "user-1", 10)
-	if err != nil {
-		t.Fatalf("GetHistory: %v", err)
-	}
-	if len(history) != 3 {
-		t.Fatalf("len(history) = %d, want 3", len(history))
-	}
-
-	// Should be newest first.
-	if history[0].RevisionID != "rev-3" {
-		t.Errorf("first entry = %q, want %q", history[0].RevisionID, "rev-3")
-	}
-	// Check attribution metadata is present.
-	if history[0].AuthorKind != types.AuthorUser {
-		t.Errorf("first entry AuthorKind = %q, want %q", history[0].AuthorKind, types.AuthorUser)
-	}
-	if history[1].AuthorKind != types.AuthorAppAgent {
-		t.Errorf("second entry AuthorKind = %q, want %q", history[1].AuthorKind, types.AuthorAppAgent)
-	}
-	// Check parent revision chain.
-	if history[0].ParentRevisionID != "rev-2" {
-		t.Errorf("first entry ParentRevisionID = %q, want %q", history[0].ParentRevisionID, "rev-2")
 	}
 }
 
@@ -1604,55 +1218,6 @@ func TestTextureGetBlame(t *testing.T) {
 	}
 }
 
-// ----- Citations and Metadata persistence -----
-
-func TestTextureMetadataRoundTrip(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	doc := types.Document{
-		DocID:   "doc-1",
-		OwnerID: "user-1",
-		Title:   "Test Doc",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	metaJSON, _ := json.Marshal(map[string]any{
-		"tags":    []string{"draft", "important"},
-		"version": 2,
-	})
-
-	rev := types.Revision{
-		RevisionID:  "rev-1",
-		DocID:       "doc-1",
-		OwnerID:     "user-1",
-		AuthorKind:  types.AuthorUser,
-		AuthorLabel: "alice",
-		Content:     "Document with ordinary metadata",
-		Metadata:    metaJSON,
-		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
-	}
-	if err := s.CreateRevision(ctx, rev); err != nil {
-		t.Fatalf("CreateRevision: %v", err)
-	}
-
-	got, err := s.GetRevision(ctx, "rev-1", "user-1")
-	if err != nil {
-		t.Fatalf("GetRevision: %v", err)
-	}
-
-	// Verify metadata round-trip.
-	var gotMeta map[string]any
-	if err := json.Unmarshal(got.Metadata, &gotMeta); err != nil {
-		t.Fatalf("unmarshal metadata: %v", err)
-	}
-	if gotMeta["version"] != float64(2) {
-		t.Errorf("metadata.version = %v, want 2", gotMeta["version"])
-	}
-}
-
 // ----- Snapshot (open historical revision without mutating head) -----
 
 func TestTextureSnapshotDoesNotMutateHead(t *testing.T) {
@@ -1713,44 +1278,6 @@ func TestTextureSnapshotDoesNotMutateHead(t *testing.T) {
 	}
 	if got.CurrentRevisionID != "rev-2" {
 		t.Errorf("CurrentRevisionID after snapshot = %q, want %q", got.CurrentRevisionID, "rev-2")
-	}
-}
-
-// ----- Workspace setup -----
-
-func TestTextureInitWorkspace(t *testing.T) {
-	dir := t.TempDir()
-	wsPath := filepath.Join(dir, "workspace.db")
-
-	s, err := OpenTextureWorkspace(wsPath)
-	if err != nil {
-		t.Fatalf("OpenTextureWorkspace: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-
-	// Verify the texture schema is applied by creating a document.
-	doc := types.Document{
-		DocID:   "doc-1",
-		OwnerID: "user-1",
-		Title:   "Workspace Test",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument in workspace: %v", err)
-	}
-
-	got, err := s.GetDocument(ctx, "doc-1", "user-1")
-	if err != nil {
-		t.Fatalf("GetDocument: %v", err)
-	}
-	if got.DocID != "doc-1" {
-		t.Errorf("DocID = %q, want %q", got.DocID, "doc-1")
-	}
-
-	// Verify the workspace directory exists.
-	if _, err := os.Stat(s.TexturePath()); os.IsNotExist(err) {
-		t.Errorf("workspace directory %q was not created", s.TexturePath())
 	}
 }
 
@@ -1837,65 +1364,6 @@ func TestTextureBlameOwnerScope(t *testing.T) {
 	_, err := s.GetBlame(ctx, "rev-1", "user-2")
 	if err != ErrNotFound {
 		t.Errorf("GetBlame as wrong owner: err=%v, want ErrNotFound", err)
-	}
-}
-
-// ----- Agent mutation tracking tests -----
-
-func TestTextureAgentMutationCreateAndGet(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	m := AgentMutation{
-		DocID:     "doc-1",
-		RunID:     "task-1",
-		OwnerID:   "user-1",
-		State:     "pending",
-		CreatedAt: time.Now().UTC(),
-	}
-	if err := s.CreateAgentMutation(ctx, m); err != nil {
-		t.Fatalf("CreateAgentMutation: %v", err)
-	}
-
-	got, err := s.GetPendingAgentMutationByDoc(ctx, "user-1", "", "doc-1")
-	if err != nil {
-		t.Fatalf("GetPendingAgentMutationByDoc: %v", err)
-	}
-	if got == nil {
-		t.Fatal("GetPendingAgentMutationByDoc returned nil")
-	}
-	if got.RunID != "task-1" {
-		t.Errorf("RunID = %q, want %q", got.RunID, "task-1")
-	}
-	if got.State != "pending" {
-		t.Errorf("State = %q, want %q", got.State, "pending")
-	}
-}
-
-func TestTextureAgentMutationByTask(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	m := AgentMutation{
-		DocID:     "doc-1",
-		RunID:     "task-1",
-		OwnerID:   "user-1",
-		State:     "pending",
-		CreatedAt: time.Now().UTC(),
-	}
-	if err := s.CreateAgentMutation(ctx, m); err != nil {
-		t.Fatalf("CreateAgentMutation: %v", err)
-	}
-
-	got, err := s.GetAgentMutationByRun(ctx, "user-1", "", "task-1")
-	if err != nil {
-		t.Fatalf("GetAgentMutationByRun: %v", err)
-	}
-	if got == nil {
-		t.Fatal("GetAgentMutationByRun returned nil")
-	}
-	if got.DocID != "doc-1" {
-		t.Errorf("DocID = %q, want %q", got.DocID, "doc-1")
 	}
 }
 

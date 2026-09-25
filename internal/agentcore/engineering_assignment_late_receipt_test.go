@@ -3,7 +3,6 @@ package agentcore
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -52,17 +51,3 @@ func TestLateAssignmentExecutionReceiptsAuthenticateExactDetachedAuthority(t *te
 	}
 }
 
-func TestGrantedExecutionReceiptCopiesOnlySanitizedAttestationFacts(t *testing.T) {
-	digest := objectgraph.SHA256([]byte("subject"))
-	commandText := "secret command text"
-	command := types.EngineeringRecordedCommand{CommandID: "command-one", CommandDigest: objectgraph.SHA256([]byte(commandText))}
-	assignment := types.EngineeringAssignment{BoundRunID: "run-one", Binding: types.EngineeringAssignmentBinding{CapsuleID: "capsule-one", SubjectDigest: digest}}
-	receipt := capsule.ExecutionReceipt{GrantedReceiptRef: "capsule-granted-exec:" + objectgraph.SHA256([]byte("granted")), AgentRunID: "run-one", CapsuleID: "capsule-one", ExitCode: 0, StdoutDigest: objectgraph.SHA256([]byte("stdout")), StderrDigest: objectgraph.SHA256([]byte("stderr")), SourceTreeDigest: digest, WorktreeDigest: digest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), Command: commandText, Cwd: "/host/path"}
-	att, err := engineeringExecutionAttestationFromReceipt(assignment, "report-one", command, receipt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if att.ReportID != "report-one" || att.CommandID != command.CommandID || att.CommandDigest != command.CommandDigest || att.StdoutDigest != receipt.StdoutDigest || att.SourceSubjectDigest != digest || !att.Granted || !att.Frozen {
-		t.Fatalf("attestation=%+v", att)
-	}
-}

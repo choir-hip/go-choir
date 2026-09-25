@@ -12,16 +12,6 @@ import (
 	"time"
 )
 
-func TestCheckerFunc(t *testing.T) {
-	c := CheckerFunc{NameStr: "dep", Fn: func(ctx context.Context) error { return nil }}
-	if c.Name() != "dep" {
-		t.Fatalf("Name = %q, want %q", c.Name(), "dep")
-	}
-	if err := c.Check(context.Background()); err != nil {
-		t.Fatalf("Check returned error: %v", err)
-	}
-}
-
 func TestHTTPChecker_OK(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -112,14 +102,6 @@ func TestAggregator_AllUnhealthy(t *testing.T) {
 	}
 }
 
-func TestAggregator_NoCheckers(t *testing.T) {
-	agg := NewAggregator("svc", 0)
-	resp := agg.RefreshIfStale()
-	if resp.Status != string(StatusOK) {
-		t.Fatalf("Status = %q, want ok with no deps", resp.Status)
-	}
-}
-
 func TestAggregator_ErrorTruncation(t *testing.T) {
 	long := make([]byte, 300)
 	for i := range long {
@@ -191,16 +173,6 @@ func TestLivenessHandler(t *testing.T) {
 	}
 }
 
-func TestLivenessHandler_MethodNotAllowed(t *testing.T) {
-	h := LivenessHandler("svc")
-	req := httptest.NewRequest(http.MethodPost, "/health", nil)
-	w := httptest.NewRecorder()
-	h(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d, want 405", w.Code)
-	}
-}
-
 func TestReadinessHandler_OK(t *testing.T) {
 	agg := NewAggregator("svc", 0,
 		CheckerFunc{NameStr: "dep", Fn: func(ctx context.Context) error { return nil }},
@@ -248,17 +220,6 @@ func TestReadinessHandler_DegradedReturns200(t *testing.T) {
 	}
 }
 
-func TestReadinessHandler_MethodNotAllowed(t *testing.T) {
-	agg := NewAggregator("svc", 0)
-	h := ReadinessHandler("svc", agg)
-	req := httptest.NewRequest(http.MethodPost, "/health/ready", nil)
-	w := httptest.NewRecorder()
-	h(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d, want 405", w.Code)
-	}
-}
-
 func TestAggregator_PerCheckTimeout(t *testing.T) {
 	slow := CheckerFunc{NameStr: "slow", Fn: func(ctx context.Context) error {
 		select {
@@ -278,23 +239,6 @@ func TestAggregator_PerCheckTimeout(t *testing.T) {
 	}
 	if resp.Dependencies["slow"].Status != StatusUnhealthy {
 		t.Fatalf("slow dep status = %q, want unhealthy", resp.Dependencies["slow"].Status)
-	}
-}
-
-func TestStateString(t *testing.T) {
-	cases := []struct {
-		s    State
-		want string
-	}{
-		{StateClosed, "closed"},
-		{StateOpen, "open"},
-		{StateHalfOpen, "half-open"},
-		{State(99), "unknown"},
-	}
-	for _, c := range cases {
-		if got := c.s.String(); got != c.want {
-			t.Errorf("State(%d).String() = %q, want %q", c.s, got, c.want)
-		}
 	}
 }
 

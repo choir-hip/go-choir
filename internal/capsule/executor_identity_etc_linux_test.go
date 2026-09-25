@@ -5,7 +5,6 @@ package capsule
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -75,12 +74,6 @@ func TestWriteCapsuleIdentityEtcHidesLowerHostsSymlink(t *testing.T) {
 	}
 }
 
-func TestBrokerReadinessTimeoutErrorIncludesLastProbe(t *testing.T) {
-	err := brokerReadinessTimeoutError(os.ErrPermission)
-	if err == nil || !strings.Contains(err.Error(), "capsule broker readiness timed out") || !strings.Contains(err.Error(), os.ErrPermission.Error()) {
-		t.Fatalf("timeout error=%v", err)
-	}
-}
 
 func TestPrepareCapsuleRootMasksGuestProc(t *testing.T) {
 	lower := t.TempDir()

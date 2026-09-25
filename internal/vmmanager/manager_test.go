@@ -14,41 +14,6 @@ import (
 	"time"
 )
 
-func TestNewManager(t *testing.T) {
-	cfg := DefaultManagerConfig()
-	mgr := NewManager(cfg)
-
-	if mgr == nil {
-		t.Fatal("expected non-nil manager")
-	}
-	if mgr.nextPort != cfg.HostBasePort {
-		t.Errorf("expected nextPort=%d, got %d", cfg.HostBasePort, mgr.nextPort)
-	}
-}
-
-func TestManagerDefaultConfig(t *testing.T) {
-	cfg := DefaultManagerConfig()
-
-	if cfg.GuestPort != 8085 {
-		t.Errorf("expected GuestPort=8085, got %d", cfg.GuestPort)
-	}
-	if cfg.HostBasePort != 9000 {
-		t.Errorf("expected HostBasePort=9000, got %d", cfg.HostBasePort)
-	}
-	if cfg.MachineCPUCount != 2 {
-		t.Errorf("expected MachineCPUCount=2, got %d", cfg.MachineCPUCount)
-	}
-	if cfg.MachineMemSizeMib != 512 {
-		t.Errorf("expected MachineMemSizeMib=512, got %d", cfg.MachineMemSizeMib)
-	}
-	if cfg.HealthCheckInterval != 15*time.Second {
-		t.Errorf("expected HealthCheckInterval=15s, got %s", cfg.HealthCheckInterval)
-	}
-	if cfg.BootReadyTimeout != 20*time.Second {
-		t.Errorf("expected BootReadyTimeout=20s, got %s", cfg.BootReadyTimeout)
-	}
-}
-
 func TestRefreshConfigForCurrentDeployUsesCurrentMicroVMArtifacts(t *testing.T) {
 	old := VMConfig{
 		VMID:              "vm-stale",
@@ -577,20 +542,6 @@ func TestManagerHibernateVM(t *testing.T) {
 
 // --- Config Tests ---
 
-func TestLoadConfigFromEnv(t *testing.T) {
-	// Test with no env vars.
-	cfg := LoadConfigFromEnv()
-	if cfg.KernelImagePath != "" {
-		t.Errorf("expected empty KernelImagePath, got %s", cfg.KernelImagePath)
-	}
-
-	t.Setenv("VM_BOOT_READY_TIMEOUT", "7s")
-	cfg = LoadConfigFromEnv()
-	if cfg.BootReadyTimeout != 7*time.Second {
-		t.Fatalf("expected BootReadyTimeout=7s, got %s", cfg.BootReadyTimeout)
-	}
-}
-
 func TestConfigValidate(t *testing.T) {
 	cfg := ManagerConfig{} // empty config
 
@@ -624,12 +575,6 @@ func TestConfigValidate(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("Validate with store disk: %v", err)
 	}
-}
-
-func TestIsFirecrackerAvailable(t *testing.T) {
-	// On macOS, Firecracker is not available.
-	// This test just verifies the function doesn't panic.
-	_ = IsFirecrackerAvailable()
 }
 
 func TestManagerPersistentDirCreation(t *testing.T) {

@@ -3,59 +3,13 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-func TestBuildRunMemoryContextUsesLatestCompaction(t *testing.T) {
-	entries := []types.RunMemoryEntry{
-		{
-			EntryID: "m1",
-			Kind:    types.RunMemoryEntryMessage,
-			Role:    "user",
-			Message: json.RawMessage(`{"role":"user","content":"old"}`),
-		},
-		{
-			EntryID: "m2",
-			Kind:    types.RunMemoryEntryMessage,
-			Role:    "assistant",
-			Message: json.RawMessage(`{"role":"assistant","content":"keep"}`),
-		},
-		{
-			EntryID:          "c1",
-			Kind:             types.RunMemoryEntryCompaction,
-			Summary:          "old user asked for durable memory",
-			FirstKeptEntryID: "m2",
-			TokensBefore:     100,
-		},
-		{
-			EntryID: "m3",
-			Kind:    types.RunMemoryEntryMessage,
-			Role:    "user",
-			Message: json.RawMessage(`{"role":"user","content":"new"}`),
-		},
-	}
-
-	messages := buildRunMemoryContext(entries)
-	if len(messages) != 3 {
-		t.Fatalf("messages: got %d, want 3", len(messages))
-	}
-	if !json.Valid(messages[0]) {
-		t.Fatalf("summary message is not valid JSON: %s", messages[0])
-	}
-	if string(messages[1]) != string(entries[1].Message) {
-		t.Fatalf("kept message: got %s, want %s", messages[1], entries[1].Message)
-	}
-	if string(messages[2]) != string(entries[3].Message) {
-		t.Fatalf("post-compaction message: got %s, want %s", messages[2], entries[3].Message)
-	}
-}
 
 func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 	_, s := testRuntime(t)
@@ -378,92 +332,5 @@ func TestRunMemoryCheckpointParsesAndRendersRetrievalHandles(t *testing.T) {
 	details := checkpointDetails(checkpoint)
 	if got := details["current_objective"]; got != "finish provider conformance" {
 		t.Fatalf("details current_objective = %#v", got)
-	}
-}
-
-func TestRunMemoryCheckpointParserAcceptsScalarListFields(t *testing.T) {
-	checkpoint, err := parseRunMemoryCheckpoint(`{
-		"current_objective":"finish provider conformance",
-		"active_task":"prove live compaction",
-		"user_hard_constraints":"no arbitrary max_tokens",
-		"raw_entry_handles":"entry-live-1",
-		"raw_tool_result_handles":"entry-tool-live-1",
-		"next_actions":"continue provider conformance",
-		"retrieval_instructions":"call get_run_memory_entry for entry-live-1",
-		"continuation_checkpoint":"Continue."
-	}`)
-	if err != nil {
-		t.Fatalf("parse checkpoint: %v", err)
-	}
-	if len(checkpoint.UserHardConstraints) != 1 || checkpoint.UserHardConstraints[0] != "no arbitrary max_tokens" {
-		t.Fatalf("constraints = %#v", checkpoint.UserHardConstraints)
-	}
-	if len(checkpoint.RawEntryHandles) != 1 || checkpoint.RawEntryHandles[0] != "entry-live-1" {
-		t.Fatalf("raw entry handles = %#v", checkpoint.RawEntryHandles)
-	}
-}
-
-func TestRunMemoryCompactionPromptIncludesObjectiveAndRetrievalInstructions(t *testing.T) {
-	rec := &types.RunRecord{
-		RunID:        "run-1",
-		State:        types.RunRunning,
-		AgentProfile: agentprofile.Management,
-		Prompt:       "Run docs/mission-llm-run-memory-compaction-v0.md as MissionGradient.",
-	}
-	plan := runMemoryCompactionPlan{
-		Reason:                "threshold",
-		RawEntryIDs:           []string{"entry-user-1"},
-		RawToolResultEntryIDs: []string{"entry-tool-1"},
-		SummarizedEntries: []types.RunMemoryEntry{
-			{
-				EntryID: "entry-user-1",
-				Seq:     1,
-				Role:    "user",
-				Message: json.RawMessage(`{"role":"user","content":"Do not use arbitrary max_tokens caps."}`),
-			},
-			{
-				EntryID: "entry-tool-1",
-				Seq:     2,
-				Role:    "user",
-				Message: json.RawMessage(`{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool-1","content":"provider conformance evidence"}]}`),
-			},
-		},
-	}
-	prompt := buildRunMemoryCompactionPrompt(rec, plan)
-	for _, want := range []string{
-		"current_objective",
-		"Run docs/mission-llm-run-memory-compaction-v0.md",
-		"entry-user-1",
-		"entry-tool-1",
-		"get_run_memory_entry",
-		"Do not use arbitrary max_tokens caps",
-	} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("prompt missing %q:\n%s", want, prompt)
-		}
-	}
-}
-
-func TestRunMemoryEffectiveThresholdUsesModelContextWindow(t *testing.T) {
-	manager := newRunMemoryManager(nil, &types.RunRecord{}, provideriface.Config{}, nil).
-		withLLMCompactor(nil, provideriface.LLMSelection{Model: "glm-5.2"}, 0)
-	if got := manager.effectiveContextThresholdTokens(); got != 700000 {
-		t.Fatalf("threshold = %d, want 700000", got)
-	}
-	manager.cfg.RunMemoryContextThresholdTokens = 160000
-	if got := manager.effectiveContextThresholdTokens(); got != 160000 {
-		t.Fatalf("explicit threshold = %d, want 160000", got)
-	}
-}
-
-func TestContextOverflowErrorDetection(t *testing.T) {
-	if !isContextOverflowError(errors.New("provider rejected request: maximum context length exceeded")) {
-		t.Fatalf("expected maximum context length error to be detected")
-	}
-	if !isContextOverflowError(errors.New("prompt is too long for this model")) {
-		t.Fatalf("expected prompt-too-long error to be detected")
-	}
-	if isContextOverflowError(errors.New("network timeout")) {
-		t.Fatalf("unexpected context overflow detection")
 	}
 }

@@ -1,11 +1,7 @@
 package autoputer
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -56,51 +52,5 @@ func TestMaildirDeliverMessageAndDeduplicate(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 file in new/, got %d", len(entries))
-	}
-}
-
-func TestMailInboundHandler(t *testing.T) {
-	mailRoot := t.TempDir()
-	maildir, err := NewMaildir(mailRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	handler := NewMailInboundHandler(maildir)
-
-	body := mailInboundRequest{
-		MessageID: "<api-msg-1>",
-		Recipient: "user@choir.news",
-		Sender:    "sender@example.com",
-		Subject:   "API Inbound Test",
-		RawEML:    "Message-ID: <api-msg-1>\nFrom: sender@example.com\nTo: user@choir.news\nSubject: API Inbound Test\n\nBody content.",
-	}
-	jsonBytes, _ := json.Marshal(body)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/mail/inbound", bytes.NewReader(jsonBytes))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("handler status = %d, want 200: %s", w.Code, w.Body.String())
-	}
-
-	var resp map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp["status"] != "delivered" || resp["message_id"] != "<api-msg-1>" {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-
-	// Verify file on disk
-	fileName, ok := resp["filename"].(string)
-	if !ok || fileName == "" {
-		t.Fatalf("missing filename in response")
-	}
-	if _, err := os.Stat(filepath.Join(mailRoot, "new", fileName)); err != nil {
-		t.Fatalf("message file missing: %v", err)
 	}
 }

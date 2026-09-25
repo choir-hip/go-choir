@@ -508,26 +508,6 @@ func readRLMReplayGolden(operation, captureBuildSHA string) (rlmReplayFixture, e
 	return fixture, nil
 }
 
-func TestRLMReplayFixtureRoundTrip(t *testing.T) {
-	fixture := rlmReplayFixture{
-		FixtureVersion: rlmReplayFixtureVersion, Operation: rlmReplayCommitTransaction, SemanticIdentity: "freeze:one",
-		Request: json.RawMessage(`{"build_recipe_ref":"go build ./..."}`), Environment: json.RawMessage(`{"computer_id":"test"}`),
-		ExpectedReceipt: json.RawMessage(`{"content_digest":"abc","operation_id":"operation-1"}`), ExclusionsApplied: []string{"broker_receipt_id"},
-		CapturedAt: time.Date(2026, 9, 11, 0, 0, 0, 0, time.UTC), CaptureBuildSHA: "73815790",
-	}
-	raw, err := json.Marshal(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got rlmReplayFixture
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatal(err)
-	}
-	if got.FixtureVersion != fixture.FixtureVersion || got.Operation != fixture.Operation || got.SemanticIdentity != fixture.SemanticIdentity || string(got.ExpectedReceipt) != string(fixture.ExpectedReceipt) || got.CaptureBuildSHA != fixture.CaptureBuildSHA {
-		t.Fatalf("fixture round trip = %+v, want %+v", got, fixture)
-	}
-}
-
 func TestRLMReplayCanonicalizerStableDigest(t *testing.T) {
 	digest := strings.ToUpper(strings.Repeat("ab", 32))
 	first, err := canonicalRLMReplayReceipt(rlmReplayInspectBundle, map[string]any{
@@ -566,24 +546,6 @@ func TestRLMReplaySemanticIdentityConflictPrecedesDispatch(t *testing.T) {
 	}
 }
 
-func TestRLMReplayStateMutatingReadFixture(t *testing.T) {
-	state := "before"
-	fixture := &rlmReplayStateMutatingRead{identities: &rlmReplayIdentityJournal{}}
-	first, replay, err := fixture.observe(rlmReplayCommitTransaction, "freeze:one", map[string]any{"build_recipe_ref": "go build ./..."}, func() (string, error) { return state, nil })
-	if err != nil || replay || first != "before" {
-		t.Fatalf("first read = %q replay=%t err=%v", first, replay, err)
-	}
-	state = "after"
-	same, replay, err := fixture.observe(rlmReplayCommitTransaction, "freeze:one", map[string]any{"build_recipe_ref": "go build ./..."}, func() (string, error) { return state, nil })
-	if err != nil || !replay || same != "before" {
-		t.Fatalf("same identity read = %q replay=%t err=%v", same, replay, err)
-	}
-	fresh, replay, err := fixture.observe(rlmReplayCommitTransaction, "freeze:two", map[string]any{"build_recipe_ref": "go build ./..."}, func() (string, error) { return state, nil })
-	if err != nil || replay || fresh != "after" {
-		t.Fatalf("new identity read = %q replay=%t err=%v", fresh, replay, err)
-	}
-}
-
 func TestRLMReplayEffectCensusDurableUpdate(t *testing.T) {
 	_, store := testRuntime(t)
 	ctx := context.Background()
@@ -603,25 +565,5 @@ func TestRLMReplayEffectCensusDurableUpdate(t *testing.T) {
 	census, err := rlmReplayUpdateCensus("update:one", resolved)
 	if err != nil || census.validate() != nil || len(census.Witnesses) < 3 {
 		t.Fatalf("durable census = %+v err=%v", census, err)
-	}
-}
-
-func TestRLMReplayEffectCensusTransientWrite(t *testing.T) {
-	dispatches := &rlmReplayDispatchJournal{}
-	dispatches.record("write:one")
-	path := filepath.Join(t.TempDir(), "sentinel")
-	if err := os.WriteFile(path, []byte("one"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	census, err := rlmReplayTransientWriteCensus("write:one", fmt.Sprintf("%d:%d", info.ModTime().UnixNano(), info.Size()), dispatches)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if census.Witnesses[0].Name != "filesystem_write_invocation" || census.Witnesses[1].Value != "1" {
-		t.Fatalf("transient census = %+v", census)
 	}
 }

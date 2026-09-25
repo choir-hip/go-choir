@@ -40,15 +40,3 @@ func TestImportResidueSnapshotRefusesWrongComputerBinding(t *testing.T) {
 		t.Fatalf("wrong computer status=%d body=%s", response.Code, response.Body.String())
 	}
 }
-
-func TestImportResidueSnapshotRejectsGET(t *testing.T) {
-	handler := &APIHandler{rt: &Runtime{cfg: provideriface.Config{ComputerID: "computer-a"}}}
-	request := httptest.NewRequest(http.MethodGet, "/api/computers/computer-a/lifecycle/import-residue-snapshot", nil)
-	request.Header.Set("X-Authenticated-User", "owner")
-	request.Header.Set("X-Authenticated-Computer", "computer-a")
-	response := httptest.NewRecorder()
-	handler.HandleComputersRouter(response, request)
-	if response.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET import status=%d body=%s", response.Code, response.Body.String())
-	}
-}

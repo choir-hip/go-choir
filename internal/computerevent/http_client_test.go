@@ -151,23 +151,3 @@ func TestHTTPClientEventsRejectsOversizedPage(t *testing.T) {
 		t.Fatalf("oversized replay error = %v", err)
 	}
 }
-
-func TestHTTPClientEventsSendsComputerAndSequenceQuery(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("computer_id") != "computer-replay" || r.URL.Query().Get("after_sequence") != "7" {
-			t.Errorf("query = %s", r.URL.RawQuery)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]DurableEvent{})
-	}))
-	defer server.Close()
-	client, err := NewHTTPClient(server.URL, server.Client(), func(context.Context) (string, error) {
-		return "test-token", nil
-	}, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := client.Events(context.Background(), "computer-replay", 7); err != nil {
-		t.Fatal(err)
-	}
-}

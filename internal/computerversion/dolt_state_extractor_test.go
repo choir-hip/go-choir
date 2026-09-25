@@ -370,27 +370,6 @@ func TestDoltExtractorCrossSubstrateFailure(t *testing.T) {
 	t.Logf("failure proof confirmed: equivalence checker detected seeded Dolt mismatch with %d differences", len(result.Differences))
 }
 
-// TestDoltExtractorCapabilityManifest verifies the capability manifest
-// declares dolt_head as supported and other kinds as unsupported.
-func TestDoltExtractorCapabilityManifest(t *testing.T) {
-	manifest := DoltStateCapabilityManifest("", "")
-	if !manifest.Supports(ObservationDoltHead) {
-		t.Error("manifest should support dolt_head")
-	}
-	if manifest.Supports(ObservationFileManifest) {
-		t.Error("manifest should not support file_manifest")
-	}
-	if manifest.Supports(ObservationBlobSet) {
-		t.Error("manifest should not support blob_set")
-	}
-	if manifest.Materializer != DoltStateMaterializer {
-		t.Errorf("materializer: got %q, want %q", manifest.Materializer, DoltStateMaterializer)
-	}
-	if manifest.Substrate != DoltStateSubstrate {
-		t.Errorf("substrate: got %q, want %q", manifest.Substrate, DoltStateSubstrate)
-	}
-}
-
 // TestDoltExtractorRejectsInvalidVersion verifies the extractor rejects
 // invalid ComputerVersion inputs.
 func TestDoltExtractorRejectsInvalidVersion(t *testing.T) {

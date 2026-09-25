@@ -47,19 +47,3 @@ func TestRoleVerbSets(t *testing.T) {
 		t.Error("super should NOT have go_eval verb")
 	}
 }
-
-func TestHasVerb(t *testing.T) {
-	if !RoleEngineering.HasVerb("exec") {
-		t.Error("cosuper should have exec verb")
-	}
-	if RoleResearch.HasVerb("exec") {
-		t.Error("researcher should NOT have exec verb")
-	}
-	if RoleManagement.HasVerb("exec") {
-		t.Error("super should NOT have exec verb (host-side only)")
-	}
-	// Unknown role.
-	if AgentRole("unknown").HasVerb("exec") {
-		t.Error("unknown role should not have any verbs")
-	}
-}

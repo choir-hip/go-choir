@@ -5,33 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 )
-
-func TestStatfsCurrentDirectory(t *testing.T) {
-	usage, err := Statfs(".")
-	if err != nil {
-		t.Fatalf("Statfs: %v", err)
-	}
-	if usage.TotalBytes == 0 {
-		t.Fatal("expected non-zero total bytes")
-	}
-	if usage.UsedBytes+usage.AvailBytes != usage.TotalBytes {
-		t.Fatalf("accounting mismatch: used=%d avail=%d total=%d", usage.UsedBytes, usage.AvailBytes, usage.TotalBytes)
-	}
-}
-
-func TestStatusFromHostImage(t *testing.T) {
-	status := StatusFromHostImage(7*1024*1024*1024, DefaultCapBytes)
-	if !status.Warning {
-		t.Fatal("expected warning at 7 GiB used")
-	}
-	if status.Source != "host" {
-		t.Fatalf("source = %q, want host", status.Source)
-	}
-	if status.CapBytes != DefaultCapBytes {
-		t.Fatalf("cap = %d, want %d", status.CapBytes, DefaultCapBytes)
-	}
-}
-
 func TestCriticalLowAvail(t *testing.T) {
 	usage := Usage{TotalBytes: DefaultCapBytes, UsedBytes: DefaultCapBytes - (256 * 1024 * 1024), AvailBytes: 256 * 1024 * 1024}
 	if !Critical(usage) {

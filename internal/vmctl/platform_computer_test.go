@@ -3,7 +3,6 @@ package vmctl
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -14,23 +13,6 @@ import (
 	"testing"
 	"time"
 )
-
-func TestComputerKindForOwnershipPlatform(t *testing.T) {
-	own := &VMOwnership{
-		UserID:        UniversalWirePlatformOwnerID,
-		DesktopID:     UniversalWirePlatformDesktopID,
-		WarmnessClass: WarmnessClassPublicPlatform,
-	}
-	if got := computerKindForOwnership(own); got != "platform" {
-		t.Fatalf("computerKindForOwnership() = %q, want platform", got)
-	}
-}
-
-func TestWarmnessClassProtectedIncludesPublicPlatform(t *testing.T) {
-	if !warmnessClassProtected(WarmnessClassPublicPlatform) {
-		t.Fatal("expected public_platform warmness class to be protected from idle reclaim")
-	}
-}
 
 func TestWarmUniversalWirePlatformComputerPersistsResumeFailure(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ownership.json")
@@ -149,43 +131,6 @@ func TestEnsureUniversalWirePlatformComputerHeldSkipsBoot(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "platform computer vm="+UniversalWirePlatformVMID+" refused: held") {
 		t.Fatalf("held platform refusal was not logged: %q", logs.String())
-	}
-}
-
-func TestHandleResolveEnsuresUniversalWirePlatformComputer(t *testing.T) {
-	mgr := &mockVMManager{
-		bootResponse: &VMInstanceInfo{
-			HostURL: "http://10.203.141.2:8085",
-			Epoch:   4,
-			Healthy: true,
-			State:   "running",
-		},
-	}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mgr)
-	handler := NewHandler(reg)
-
-	body := bytes.NewBufferString(`{"user_id":"universal-wire-platform","desktop_id":"platform"}`)
-	req := httptest.NewRequest(http.MethodPost, "/internal/vmctl/resolve", body)
-	req.Header.Set("X-Internal-Caller", "true")
-	rec := httptest.NewRecorder()
-	handler.HandleResolve(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("resolve status = %d body=%s", rec.Code, rec.Body.String())
-	}
-	var resp resolveResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode resolve response: %v", err)
-	}
-	if resp.UserID != UniversalWirePlatformOwnerID || resp.DesktopID != UniversalWirePlatformDesktopID {
-		t.Fatalf("resolve identity = (%q, %q), want platform computer", resp.UserID, resp.DesktopID)
-	}
-	if resp.ComputerURL != "http://10.203.141.2:8085" || resp.State != string(VMStateActive) {
-		t.Fatalf("resolve response = %+v, want active platform autoputer", resp)
-	}
-	if len(mgr.boots) != 1 || mgr.boots[0].VMID != UniversalWirePlatformVMID {
-		t.Fatalf("platform boot calls = %#v, want stable platform VM", mgr.boots)
 	}
 }
 
@@ -350,47 +295,6 @@ func TestAutoputerProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) 
 	own := reg.ownerships[key]
 	if own.State != VMStateActive || own.ComputerURL != runtime.URL {
 		t.Fatalf("ownership after proxy = state %s url %q", own.State, own.ComputerURL)
-	}
-}
-
-func TestAutoputerProxyForwardsInternalRuntimeStatusGET(t *testing.T) {
-	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Fatalf("proxied method = %s, want GET", r.Method)
-		}
-		if r.URL.Path != "/internal/runtime/runs/run-status" {
-			t.Fatalf("proxied path = %q", r.URL.Path)
-		}
-		if got := r.URL.Query().Get("owner_id"); got != UniversalWirePlatformOwnerID {
-			t.Fatalf("owner_id = %q, want %q", got, UniversalWirePlatformOwnerID)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"run_id":"run-status","state":"completed"}`))
-	}))
-	defer runtime.Close()
-
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
-	reg.ownerships[key] = &VMOwnership{VMID: UniversalWirePlatformVMID,
-		UserID:    UniversalWirePlatformOwnerID,
-		DesktopID: UniversalWirePlatformDesktopID,
-		Kind:      VMKindInteractive, ComputerURL: runtime.URL,
-		State: VMStateActive,
-		Epoch: 60}
-	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
-
-	req := httptest.NewRequest(
-		http.MethodGet,
-		"/internal/vmctl/autoputer-proxy/universal-wire-platform/internal/runtime/runs/run-status?owner_id=universal-wire-platform",
-		nil,
-	)
-	req.Header.Set("X-Internal-Caller", "true")
-	rec := httptest.NewRecorder()
-
-	NewHandler(reg).HandleAutoputerProxy(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
 

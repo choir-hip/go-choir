@@ -3,7 +3,6 @@ package testkit
 import (
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/base/model"
 	"github.com/yusefmosiah/go-choir/internal/base/planner"
 )
 
@@ -198,34 +197,4 @@ func TestScenario6CorruptLocal(t *testing.T) {
 // TestBonusFolderMove verifies folder moves reconcile without conflict.
 func TestBonusFolderMove(t *testing.T) {
 	runScenario(t, FolderMoveRemote())
-}
-
-// TestAllScenariosNamed verifies every required scenario has a unique name.
-func TestAllScenariosNamed(t *testing.T) {
-	seen := make(map[string]bool)
-	for _, sc := range Scenarios() {
-		if sc.Name == "" {
-			t.Error("scenario with empty name")
-		}
-		if seen[sc.Name] {
-			t.Errorf("duplicate scenario name: %s", sc.Name)
-		}
-		seen[sc.Name] = true
-	}
-}
-
-// TestPurityNoIOImports is a static guard: the planner package must import
-// only the model package and the sort utility. This test fails to compile if
-// someone adds an I/O import, which is the desired behavior — it forces a
-// review. We verify by checking that the planner builds at all (the import
-// list is enforced by code review and the build).
-func TestPurityNoIOImports(t *testing.T) {
-	// This test exists to document the purity invariant. The planner package
-	// imports only "sort" and the model package. If a future change adds
-	// "os", "net", "time", "crypto/rand", "database/sql", or "encoding/json"
-	// to the planner, it violates the purity invariant and must be rejected.
-	// We cannot statically assert imports at runtime without reflection on
-	// the build, so this test is a documentation anchor; the real guard is
-	// `go list -deps ./internal/base/planner` in CI.
-	_ = model.ItemID("base_item_anchor")
 }

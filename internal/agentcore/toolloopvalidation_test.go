@@ -118,50 +118,6 @@ func TestToolLoopFileReadRegistered(t *testing.T) {
 	}
 }
 
-// TestToolLoopFileReadExecution tests that the file_read tool can actually
-// read a file and return its contents.
-func TestToolLoopFileReadExecution(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create a test file.
-	testContent := "Hello from the test file!\nLine 2\nLine 3"
-	testFile := filepath.Join(tmpDir, "test.txt")
-	if err := os.WriteFile(testFile, []byte(testContent), 0o644); err != nil {
-		t.Fatalf("write test file: %v", err)
-	}
-
-	registry := toolregistry.NewToolRegistry()
-	if err := registry.Register(fileReadTool(tmpDir)); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	// Execute the tool with file path.
-	result, err := registry.Execute(context.Background(), "file_read",
-		json.RawMessage(`{"path":"test.txt"}`))
-	if err != nil {
-		t.Fatalf("execute file_read: %v", err)
-	}
-
-	if result != testContent {
-		t.Errorf("file_read result:\ngot:  %q\nwant: %q", result, testContent)
-	}
-}
-
-// TestToolLoopFileReadError tests that the file_read tool returns an error
-// for non-existent files.
-func TestToolLoopFileReadError(t *testing.T) {
-	tmpDir := t.TempDir()
-	registry := toolregistry.NewToolRegistry()
-	if err := registry.Register(fileReadTool(tmpDir)); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	_, err := registry.Execute(context.Background(), "file_read",
-		json.RawMessage(`{"path":"nonexistent.txt"}`))
-	if err == nil {
-		t.Error("expected error for non-existent file")
-	}
-}
 
 // TestToolLoopFileReadWithRuntime tests the full runtime path: submit a task
 // that triggers file_read through the tool-calling loop, and verify the

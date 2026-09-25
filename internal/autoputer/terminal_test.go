@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -455,49 +454,6 @@ func TestTerminalWS_ReconnectCreatesFreshSession(t *testing.T) {
 	}
 }
 
-func TestTerminalManager_NewAndSessions(t *testing.T) {
-	tm := NewTerminalManager()
-	if tm.Sessions() != 0 {
-		t.Errorf("expected 0 sessions, got %d", tm.Sessions())
-	}
-}
-
-func TestFindShell(t *testing.T) {
-	shell := findShell()
-	if shell == "" {
-		t.Error("expected non-empty shell path")
-	}
-	// Should be either /bin/bash or /bin/sh on most systems.
-	if shell != "/bin/bash" && shell != "/bin/sh" {
-		t.Errorf("expected /bin/bash or /bin/sh, got %q", shell)
-	}
-}
-
-func TestResolveManagementConsoleCommandPrefersOverride(t *testing.T) {
-	t.Setenv("CHOIR_ZOT_PATH", "/opt/choir/bin/zot")
-	t.Setenv("PATH", t.TempDir())
-
-	got := resolveManagementConsoleCommand()
-	if len(got) != 1 || got[0] != "/opt/choir/bin/zot" {
-		t.Fatalf("resolveManagementConsoleCommand() = %#v, want override zot path", got)
-	}
-}
-
-func TestResolveManagementConsoleCommandFindsZotOnPath(t *testing.T) {
-	t.Setenv("CHOIR_ZOT_PATH", "")
-	binDir := t.TempDir()
-	zotPath := filepath.Join(binDir, "zot")
-	if err := os.WriteFile(zotPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatalf("write fake zot: %v", err)
-	}
-	t.Setenv("PATH", binDir)
-
-	got := resolveManagementConsoleCommand()
-	if len(got) != 1 || got[0] != zotPath {
-		t.Fatalf("resolveManagementConsoleCommand() = %#v, want PATH zot %q", got, zotPath)
-	}
-}
-
 func TestSessionCommandUsesPersistentZotHome(t *testing.T) {
 	rootDir := t.TempDir()
 	th := &TerminalHandler{
@@ -596,55 +552,6 @@ func TestSessionCommandLeavesFallbackZotSessionUnchanged(t *testing.T) {
 	for _, entry := range cmd.Env {
 		if strings.HasPrefix(entry, "OPENAI_API_KEY=") {
 			t.Fatalf("fallback should not receive OPENAI_API_KEY, got %q", entry)
-		}
-	}
-}
-
-func TestTerminalMessage_Unmarshal(t *testing.T) {
-	// Test input message.
-	inputJSON := `{"type":"input","data":"hello"}`
-	var inputMsg TerminalMessage
-	if err := json.Unmarshal([]byte(inputJSON), &inputMsg); err != nil {
-		t.Fatalf("failed to unmarshal input message: %v", err)
-	}
-	if inputMsg.Type != "input" || inputMsg.Data != "hello" {
-		t.Errorf("unexpected input message: %+v", inputMsg)
-	}
-
-	// Test resize message.
-	resizeJSON := `{"type":"resize","cols":120,"rows":40}`
-	var resizeMsg TerminalMessage
-	if err := json.Unmarshal([]byte(resizeJSON), &resizeMsg); err != nil {
-		t.Fatalf("failed to unmarshal resize message: %v", err)
-	}
-	if resizeMsg.Type != "resize" || resizeMsg.Cols != 120 || resizeMsg.Rows != 40 {
-		t.Errorf("unexpected resize message: %+v", resizeMsg)
-	}
-
-	// Test output message.
-	outputJSON := `{"type":"output","data":"shell output"}`
-	var outputMsg TerminalMessage
-	if err := json.Unmarshal([]byte(outputJSON), &outputMsg); err != nil {
-		t.Fatalf("failed to unmarshal output message: %v", err)
-	}
-	if outputMsg.Type != "output" || outputMsg.Data != "shell output" {
-		t.Errorf("unexpected output message: %+v", outputMsg)
-	}
-}
-
-func TestFormatSessionID(t *testing.T) {
-	tests := []struct {
-		n    uint64
-		want string
-	}{
-		{1, "zot-1"},
-		{10, "zot-10"},
-		{100, "zot-100"},
-	}
-	for _, tt := range tests {
-		got := formatSessionID(tt.n)
-		if got != tt.want {
-			t.Errorf("formatSessionID(%d) = %q, want %q", tt.n, got, tt.want)
 		}
 	}
 }

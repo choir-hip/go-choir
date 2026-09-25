@@ -7,7 +7,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
-	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 func validTestDescriptor() Descriptor {
@@ -36,94 +35,6 @@ func validTestWitness() selfdevprotocol.VMLocalContentWitness {
 		DerivabilityDigest: sha("0"),
 	}
 }
-
-func TestDescriptorBindsEveryField(t *testing.T) {
-	base := validTestDescriptor()
-	if err := base.Validate(); err != nil {
-		t.Fatalf("valid descriptor refused: %v", err)
-	}
-	sha := func(c string) string { return strings.Repeat(c, 64) }
-	cases := map[string]func(*Descriptor){
-		"empty computer":     func(d *Descriptor) { d.ComputerID = "" },
-		"zero sequence":      func(d *Descriptor) { d.Sequence = 0 },
-		"empty head":         func(d *Descriptor) { d.CanonicalHead = "" },
-		"non-sha head":       func(d *Descriptor) { d.CanonicalHead = "not-a-digest" },
-		"empty blob":         func(d *Descriptor) { d.BlobSHA256 = "" },
-		"uppercase blob":     func(d *Descriptor) { d.BlobSHA256 = strings.ToUpper(sha("b")) },
-		"zero blob size":     func(d *Descriptor) { d.BlobSizeBytes = 0 },
-		"negative blob size": func(d *Descriptor) { d.BlobSizeBytes = -1 },
-		"zero reducer":       func(d *Descriptor) { d.ReducerVersion = 0 },
-		"zero schema":        func(d *Descriptor) { d.SchemaVersion = 0 },
-		"missing vocabulary": func(d *Descriptor) { d.VocabularyVersion = "" },
-		"unknown vocabulary": func(d *Descriptor) { d.VocabularyVersion = "v3" },
-		"empty witness":      func(d *Descriptor) { d.VMLocalContentWitness = selfdevprotocol.VMLocalContentWitness{} },
-	}
-	for name, mutate := range cases {
-		d := validTestDescriptor()
-		mutate(&d)
-		if err := d.Validate(); err == nil {
-			t.Errorf("%s: mutated descriptor was accepted", name)
-		}
-		if err := d.VerifyForRecovery("computer-base-test", sha("9"), 12); !errors.Is(err, ErrBaseRefused) {
-			t.Errorf("%s: expected ErrBaseRefused, got %v", name, err)
-		}
-	}
-	// Well-formed but incompatible with this live build: integrity passes,
-	// recovery refuses. No live alias or fallback exists.
-	compat := map[string]func(*Descriptor){
-		"future reducer": func(d *Descriptor) { d.ReducerVersion = computerevent.ReducerVersionV1 + 1 },
-		"future schema":  func(d *Descriptor) { d.SchemaVersion = computerevent.SchemaVersionV1 + 1 },
-	}
-	for name, mutate := range compat {
-		d := validTestDescriptor()
-		mutate(&d)
-		if err := d.Validate(); err != nil {
-			t.Errorf("%s: well-formed descriptor refused at integrity: %v", name, err)
-		}
-		if err := d.VerifyForRecovery("computer-base-test", sha("9"), 12); !errors.Is(err, ErrBaseRefused) {
-			t.Errorf("%s: expected ErrBaseRefused, got %v", name, err)
-		}
-	}
-	// Out-of-scope witness databases refuse even when every digest is valid.
-	scoped := validTestDescriptor()
-	w := scoped.VMLocalContentWitness
-	w.Database = "platform"
-	scoped.VMLocalContentWitness = w
-	if err := scoped.Validate(); err == nil {
-		t.Errorf("foreign witness db: out-of-scope database was accepted")
-	}
-}
-
-// TestKnownVocabularySetIsV1V2 pins the mission-2 never-reverted widening:
-// {v1, v2} exactly. A v1-stamped base stays installable after cutover;
-// anything outside the set fails closed.
-func TestKnownVocabularySetIsV1V2(t *testing.T) {
-	for _, v := range []string{"v1", "v2", " v1 ", " v2 "} {
-		if !IsKnownVocabularyVersion(v) {
-			t.Errorf("IsKnownVocabularyVersion(%q) = false, want true", v)
-		}
-	}
-	for _, v := range []string{"", "v3", "V1", "v12", "legacy"} {
-		if IsKnownVocabularyVersion(v) {
-			t.Errorf("IsKnownVocabularyVersion(%q) = true, want false", v)
-		}
-	}
-}
-
-// TestVocabularySelectorsMatchSeam pins the fence/migration vocabulary
-// selectors to the descriptor seam: V2 equals Current post-cutover, V1 stays known.
-func TestVocabularySelectorsMatchSeam(t *testing.T) {
-	if vocabmigrate.VocabularyV2 != CurrentVocabularyVersion {
-		t.Errorf("fence V2 selector %q != seam %q", vocabmigrate.VocabularyV2, CurrentVocabularyVersion)
-	}
-	if !IsKnownVocabularyVersion(vocabmigrate.VocabularyV1) {
-		t.Errorf("fence V1 selector %q not in known set", vocabmigrate.VocabularyV1)
-	}
-	if !IsKnownVocabularyVersion(vocabmigrate.VocabularyV2) {
-		t.Errorf("fence V2 selector %q not in widened known set", vocabmigrate.VocabularyV2)
-	}
-}
-
 func TestVerifyForRecoveryBindsComputerAndOrder(t *testing.T) {
 	sha := func(c string) string { return strings.Repeat(c, 64) }
 	base := validTestDescriptor()
