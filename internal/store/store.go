@@ -98,6 +98,7 @@ const defaultFinalizeCheckpointEvery = 100
 
 type Store struct {
 	db               *sql.DB
+	readDB           *sql.DB
 	path             string
 	textureDB        *sql.DB
 	texturePath      string
@@ -846,11 +847,10 @@ func Open(dbPath string) (*Store, error) {
 	}
 	log.Printf("store: open phase=workspace-open status=complete")
 
-	// The embedded Dolt engine is not safe for concurrent connections: a read
-	// and a write on two pools over one connector race on shared engine state
-	// (e.g. unescapeHTMLCodepoints mutating a shared JSON buffer). Route all
-	// access through the single serialized db connection (MaxOpenConns=1).
-	s := &Store{db: db, path: dbPath, texturePath: workspacePath, doltConnector: connector}
+	readDB := sql.OpenDB(connector)
+	configureEmbeddedDoltDB(readDB)
+
+	s := &Store{db: db, readDB: readDB, path: dbPath, texturePath: workspacePath, doltConnector: connector}
 	log.Printf("store: open phase=runtime-schema status=starting")
 	if err := s.bootstrap(); err != nil {
 		_ = s.Close()
@@ -873,9 +873,11 @@ func Open(dbPath string) (*Store, error) {
 	if rep, err := s.loadVocabMigrationReport(); err == nil && rep != nil {
 		s.vocabCutover.Store(true)
 	}
-	// OG reads share the serialized write connection: a second pool would race
-	// the engine's shared internal state. ogReadStore aliases ogStore.
-	s.ogReadStore = ogDoltStore
+	// Create a read-only DoltStore using the read connection pool so OG
+	// reads don't block during write transactions on the main connection.
+	if readDB != nil {
+		s.ogReadStore = objectgraph.NewDoltStore(readDB)
+	}
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,
 	})
@@ -1110,6 +1112,7 @@ func (s *Store) Reopen(path string) error {
 		return err
 	}
 	s.db = live.db
+	s.readDB = live.readDB
 	s.path = live.path
 	s.textureDB = live.textureDB
 	s.texturePath = live.texturePath
@@ -1137,6 +1140,11 @@ func (s *Store) Close() error {
 			}
 		}()
 	}
+	if db := s.readDB; db != nil {
+		if closeErr := db.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}
 	if db := s.db; db != nil {
 		if closeErr := db.Close(); closeErr != nil && err == nil {
 			err = closeErr
@@ -1153,6 +1161,13 @@ func (s *Store) Close() error {
 // Path returns the database file path.
 func (s *Store) Path() string {
 	return s.path
+}
+
+func (s *Store) queryDB() *sql.DB {
+	if s.readDB != nil {
+		return s.readDB
+	}
+	return s.db
 }
 
 // TexturePath returns the filesystem path backing the embedded texture workspace.
