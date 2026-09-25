@@ -245,6 +245,9 @@ var textureControlAuthorityFields = map[string]bool{
 	"network_mode": true, "filesystem_mode": true, "writable": true,
 	"coordination_contract_id": true, "coordination_contract_digest": true,
 	"capsule_disposition": true, "capsule_intent_ref": true, "capsule_ack_ref": true,
+	// R2 delegated-cast: cast_authority records who admitted the assignment
+	// (owner revision vs delegated desk); runtime-owned, never model-authored.
+	"cast_authority": true,
 }
 
 // action.inputs is intentionally an open data bag, so it cannot reject unknown
@@ -2161,7 +2164,7 @@ func trimTrailingClosingMarkupFragment(content string) string {
 	}
 	suffix := cleaned[idx:]
 	fragment := strings.TrimPrefix(suffix, "</")
-	if len([]rune(suffix)) > 32 || strings.ContainsAny(fragment, " \t\r\n<") {
+	if len([]rune(suffix)) > 32 || strings.ContainsAny(fragment, " 	\r\n<") {
 		return cleaned
 	}
 	return strings.TrimSpace(cleaned[:idx])
