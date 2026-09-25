@@ -230,9 +230,10 @@ now:
     obligations reach actors via the actor-wake outbox + dispatcher, not a
     boot wake. Remaining blocker: wire debounce durable conversion.
   next_action: >-
-    Land the wire-debounce durable continuation; run the (b)/(d)/(e)
-    acceptance greps to zero for in-scope classes; the restart-resume
-    deployed proof (kill mid-task, restart, observe tape-derived delivery);
+    Deletion pass landed (commit 23c461b5, goal receipt b4c88622): five
+    resumption sweeps + progress AfterFunc deleted, wire debounce durable.
+    Remaining: staging restart-resume deployed proof (kill mid-task,
+    restart, observe tape-derived delivery), in-scope recount to zero,
     then the consensus gate.
 
 receipts:
