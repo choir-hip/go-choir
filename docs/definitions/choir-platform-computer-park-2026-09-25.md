@@ -118,14 +118,14 @@ boundaries:
     - VM state dir /var/lib/go-choir/vm-state/candidate-fleet-d03dacaa...
 
 now:
-  status: working
-  slice: hold-guard code fix + park the platform computer
-  source_ref: main@daa7a216
-  deploy_identity: staging https://choir.news (daa7a216 live; hold-guard pending deploy)
+  status: complete
+  slice: platform computer parked (held + stopped); hold-guard shipped
+  source_ref: main@1566bbc7
+  deploy_identity: staging https://choir.news build.commit=1566bbc7
   candidate:
     id: platform-park-1
-    state: rehearsing
-    ref: /Users/wiz/go-choir internal/vmctl/platform_computer.go (uncommitted)
+    state: landed
+    ref: main@1566bbc7
     base: main@daa7a216
     digest: none
     scope: [internal/vmctl/platform_computer.go]
@@ -147,8 +147,9 @@ now:
     scope_if_supported: >-
       the universal-wire-platform computer specifically; the hold-guard
       pattern generalizes to any always-on ownership
-    status: active
-    evidence_refs: []
+    status: supported
+    evidence_refs:
+      - 'node-b vmctl: ownership held=true state=stopped stopped_by=recovery_failed; firecracker proc absent; journalctl -u go-choir-vmctl pre-genesis count=0 post-park'
   decision:
     what: >-
       Park (hold + hibernate) the wedged platform computer; ship the missing
@@ -172,11 +173,25 @@ now:
   blocker_or_risk: >-
     The hold guard must deploy before hold+hibernate, else the sweeper
     re-launches the held VM. Deploy ordering: ship guard -> hold -> hibernate.
-  next_action: >-
-    Commit + push the platform_computer.go hold guard; wait for deploy; then
-    POST hold + hibernate and verify the park holds.
+    POST hold -> set held=true; wait for the wedged booting VM to reach a
+    stoppable state; POST stop -> state=stopped, process down; confirm no
+    resurrection (IsHeld now blocks the warm path) and zero pre-genesis lines.
 
-receipts: []
+receipts:
+  - id: platform-park-landed
+    boundary: terminal
+    identity: main@1566bbc7
+    proof_refs:
+      - 'vmctl /internal/vmctl/list: universal-wire-platform state=stopped held=true; no firecracker proc'
+      - 'journalctl -u go-choir-vmctl: 0 pre-genesis refusals after park'
+    rollback_ref: 'POST /internal/vmctl/unhold + /internal/vmctl/resume (universal-wire-platform)'
+    disposition: parked (held + stopped); durable state preserved
+    landing:
+      source_commit: 1566bbc7
+      ci_ref: run 36100438871 (deploy step succeeded; run cancelled post-deploy)
+      deploy_ref: 'Node B deploy landed deployed_commit=1566bbc7'
+      environment_identity: 'choir.news build.commit=1566bbc7'
+      deployed_acceptance: 'hold+stop on node-b; platform VM parked, spam stopped'
 ---
 
 ## Residual risk (out of scope)
