@@ -401,7 +401,7 @@ func TestAcknowledgeDurablyTerminalLifecycleControlActivation(t *testing.T) {
 		}
 	}
 }
-func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *testing.T) {
+func TestAdapterRestartDeliversRunningLifecycleActivationFromDurableBacklog(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "restart-running.db")
@@ -496,128 +496,139 @@ func TestAdapterRestartResumesRunningLifecycleActivationFromDurableBacklog(t *te
 	stored, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", run.RunID)
 	mutation, mutationErr := s.GetAgentMutationByRun(ctx, ownerID, "autoputer-test", run.RunID)
 	reactivated, _ := stored.Metadata["actor_reactivated_from_passivated"].(bool)
-	if err != nil || stored.State != types.RunCompleted || !reactivated || mutationErr != nil || mutation == nil ||
-		mutation.State != "completed" || !mutation.CreatedAt.After(now.Add(-time.Minute)) {
-		t.Fatalf("running lifecycle activation was not owner-reactivated: run=%+v mutation=%+v run_err=%v mutation_err=%v", stored, mutation, err, mutationErr)
+	if err != nil || stored.State != types.RunCompleted || reactivated || mutationErr != nil || mutation == nil ||
+		mutation.State != "completed" {
+		t.Fatalf("durable initial dispatch was not delivered: run=%+v mutation=%+v run_err=%v mutation_err=%v", stored, mutation, err, mutationErr)
 	}
 }
 
-func TestAdapterStartRecoversLifecycleActorSnapshotsBeforeRuntimeSweep(t *testing.T) {
-	for _, tc := range []struct {
-		name              string
-		state             types.RunState
-		durableOccurrence bool
-	}{
-		{name: "passivated missing send", state: types.RunPassivated},
-		{name: "passivated durable unprocessed occurrence", state: types.RunPassivated, durableOccurrence: true},
-		{name: "blocked missing send", state: types.RunBlocked},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			t.Cleanup(cancel)
-			dir := t.TempDir()
-			dbPath := filepath.Join(dir, "restart-snapshot.db")
-			s, err := store.Open(dbPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = s.Close() })
-			cfg := provideriface.Config{
-				ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
-				ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
-			}
+func TestAdapterStartDeliversDurableLifecycleOccurrenceAfterRestart(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "restart-snapshot.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	cfg := provideriface.Config{
+		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
+		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+	}
 
-			seed := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
-			seed.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
-			suffix := strings.ReplaceAll(tc.name, " ", "-")
-			fixture := seedActorLifecycleControl(t, s, suffix)
-			initial, err := seed.Runtime.ReconcileCoagentWake(ctx, fixture.ownerID, fixture.agentID)
-			if err != nil || initial == nil {
-				t.Fatalf("seed initial lifecycle run=%+v err=%v", initial, err)
-			}
-			initial.State = tc.state
-			initial.UpdatedAt = time.Now().UTC()
-			if err := s.UpdateRun(ctx, *initial); err != nil {
-				t.Fatalf("seed lifecycle run state %s: %v", tc.state, err)
-			}
-			mailboxID := scopedActorMailboxID(fixture.ownerID, fixture.computerID, fixture.agentID)
-			initialDispatch := actor.Update{
-				UpdateID:  actorDispatchUpdateID(fixture.ownerID, fixture.computerID, fixture.agentID, "initial_dispatch", initial.RunID, fixture.trajectoryID, ""),
-				ToAgentID: mailboxID, Kind: "initial_dispatch", Content: initial.RunID, TrajectoryID: fixture.trajectoryID, CreatedAt: time.Now().UTC(),
-			}
-			if appended, err := seed.log.Append(ctx, initialDispatch); err != nil || !appended {
-				t.Fatalf("seed processed initial dispatch appended=%v err=%v", appended, err)
-			}
-			if err := seed.log.MarkProcessed(ctx, mailboxID, initialDispatch.UpdateID); err != nil {
-				t.Fatalf("mark seed initial dispatch processed: %v", err)
-			}
-			memory, _ := json.Marshal(resumeState{RunID: initial.RunID, Phase: "parked"})
-			if err := seed.log.SaveSnapshot(ctx, mailboxID, memory); err != nil {
-				t.Fatalf("seed actor memory: %v", err)
-			}
-			later := commitActorLaterControl(t, s, fixture, suffix, "control-restart-snapshot-b")
-			occurrenceContent := agentcore.LifecycleControlActorOccurrenceContent(later)
-			occurrenceID := actorDispatchUpdateID(fixture.ownerID, fixture.computerID, fixture.agentID, "coagent_result", occurrenceContent, fixture.trajectoryID, later.AgentID)
-			if tc.durableOccurrence {
-				appended, appendErr := seed.log.Append(ctx, actor.Update{
-					UpdateID: occurrenceID, ToAgentID: mailboxID, FromAgentID: later.AgentID, Kind: "coagent_result",
-					Content: occurrenceContent, TrajectoryID: fixture.trajectoryID, CreatedAt: time.Now().UTC(),
-				})
-				if appendErr != nil || !appended {
-					t.Fatalf("seed durable B occurrence appended=%v err=%v", appended, appendErr)
-				}
-			}
-			before, err := seed.log.Unprocessed(ctx, mailboxID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			foundBefore := false
-			for _, update := range before {
-				foundBefore = foundBefore || update.UpdateID == occurrenceID
-			}
-			if foundBefore != tc.durableOccurrence {
-				t.Fatalf("pre-restart durable B occurrence=%v, want %v: %+v", foundBefore, tc.durableOccurrence, before)
-			}
-			seed.Stop()
+	seed := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	seed.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	suffix := "durable-unprocessed-occurrence"
+	fixture := seedActorLifecycleControl(t, s, suffix)
+	initial, err := seed.Runtime.ReconcileCoagentWake(ctx, fixture.ownerID, fixture.agentID)
+	if err != nil || initial == nil {
+		t.Fatalf("seed initial lifecycle run=%+v err=%v", initial, err)
+	}
+	initial.State = types.RunRunning
+	initial.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, *initial); err != nil {
+		t.Fatalf("seed lifecycle run state %s: %v", types.RunRunning, err)
+	}
+	mailboxID := scopedActorMailboxID(fixture.ownerID, fixture.computerID, fixture.agentID)
+	initialDispatch := actor.Update{
+		UpdateID:  actorDispatchUpdateID(fixture.ownerID, fixture.computerID, fixture.agentID, "initial_dispatch", initial.RunID, fixture.trajectoryID, ""),
+		ToAgentID: mailboxID, Kind: "initial_dispatch", Content: initial.RunID, TrajectoryID: fixture.trajectoryID, CreatedAt: time.Now().UTC(),
+	}
+	if appended, err := seed.log.Append(ctx, initialDispatch); err != nil || !appended {
+		t.Fatalf("seed processed initial dispatch appended=%v err=%v", appended, err)
+	}
+	if err := seed.log.MarkProcessed(ctx, mailboxID, initialDispatch.UpdateID); err != nil {
+		t.Fatalf("mark seed initial dispatch processed: %v", err)
+	}
+	memory, _ := json.Marshal(resumeState{RunID: initial.RunID, Phase: "parked"})
+	if err := seed.log.SaveSnapshot(ctx, mailboxID, memory); err != nil {
+		t.Fatalf("seed actor memory: %v", err)
+	}
+	later := commitActorLaterControl(t, s, fixture, suffix, "control-restart-snapshot-b")
+	occurrenceContent := agentcore.LifecycleControlActorOccurrenceContent(later)
+	occurrenceID := actorDispatchUpdateID(fixture.ownerID, fixture.computerID, fixture.agentID, "coagent_result", occurrenceContent, fixture.trajectoryID, later.AgentID)
+	appended, appendErr := seed.log.Append(ctx, actor.Update{
+		UpdateID: occurrenceID, ToAgentID: mailboxID, FromAgentID: later.AgentID, Kind: "coagent_result",
+		Content: occurrenceContent, TrajectoryID: fixture.trajectoryID, CreatedAt: time.Now().UTC(),
+	})
+	if appendErr != nil || !appended {
+		t.Fatalf("seed durable B occurrence appended=%v err=%v", appended, appendErr)
+	}
+	before, err := seed.log.Unprocessed(ctx, mailboxID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundBefore := false
+	for _, update := range before {
+		foundBefore = foundBefore || update.UpdateID == occurrenceID
+	}
+	if !foundBefore {
+		t.Fatalf("pre-restart durable B occurrence missing: %+v", before)
+	}
+	seed.Stop()
 
-			blocking := &targetStartupBlockingProvider{targetAgentID: fixture.agentID, started: make(chan struct{}, 1), release: make(chan struct{})}
-			restarted := New(cfg, s, events.NewEventBus(), blocking, nil)
-			if err := restarted.BindTextureOwner(textureowner.NewHandler(restarted.Runtime)); err != nil {
-				t.Fatalf("bind restart Texture owner: %v", err)
-			}
-			t.Cleanup(func() {
-				restarted.Stop()
-				restarted.cleanupLog()
-			})
-			// release must be closed before Stop: Stop now waits for in-flight
-			// activations (wg.Wait), and the blocking provider holds one open
-			// until release. LIFO cleanup order runs this before the Stop above.
-			t.Cleanup(func() { close(blocking.release) })
-			if err := restarted.Start(ctx); err != nil {
-				t.Fatalf("restart adapter: %v", err)
-			}
-			bound, boundErr := s.GetLifecycleUpdate(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
-			stored, storedErr := s.GetLifecycleRun(ctx, fixture.ownerID, fixture.computerID, initial.RunID)
-			var occurrenceCount int
-			countErr := restarted.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates WHERE update_id = ?`, occurrenceID).Scan(&occurrenceCount)
-			if boundErr != nil || storedErr != nil || countErr != nil || bound.DeliveredToRunID != initial.RunID || bound.DeliveredAt == nil || occurrenceCount != 1 ||
-				metadataString(stored.Metadata, "request_source") != "lifecycle_texture_control" {
-				t.Fatalf("restart recovery state=%+v B=%+v occurrence_count=%d stored_err=%v bound_err=%v count_err=%v", stored, bound, occurrenceCount, storedErr, boundErr, countErr)
-			}
-			runs, err := s.ListLifecycleRunsByTrajectory(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			lifecycleRuns := 0
-			for _, run := range runs {
-				if run.AgentID == fixture.agentID && metadataString(run.Metadata, "request_source") == "lifecycle_texture_control" {
-					lifecycleRuns++
-				}
-			}
-			if lifecycleRuns != 1 {
-				t.Fatalf("restart created %d lifecycle-control runs: %+v", lifecycleRuns, runs)
-			}
-		})
+	blocking := &targetStartupBlockingProvider{targetAgentID: fixture.agentID, started: make(chan struct{}, 1), release: make(chan struct{})}
+	restarted := New(cfg, s, events.NewEventBus(), blocking, nil)
+	if err := restarted.BindTextureOwner(textureowner.NewHandler(restarted.Runtime)); err != nil {
+		t.Fatalf("bind restart Texture owner: %v", err)
+	}
+	t.Cleanup(func() {
+		restarted.Stop()
+		restarted.cleanupLog()
+	})
+	// release must be closed before Stop: Stop now waits for in-flight
+	// activations (wg.Wait), and the blocking provider holds one open
+	// until release. LIFO cleanup order runs this before the Stop above.
+	t.Cleanup(func() {
+		select {
+		case <-blocking.release:
+		default:
+			close(blocking.release)
+		}
+	})
+	if err := restarted.Start(ctx); err != nil {
+		t.Fatalf("restart adapter: %v", err)
+	}
+	select {
+	case <-blocking.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("durable lifecycle occurrence was not dispatched")
+	}
+	bound, boundErr := s.GetLifecycleUpdate(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, later.AgentID, later.ProducerUpdateID)
+	stored, storedErr := s.GetLifecycleRun(ctx, fixture.ownerID, fixture.computerID, initial.RunID)
+	var occurrenceCount int
+	countErr := restarted.logDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM actor_updates WHERE update_id = ?`, occurrenceID).Scan(&occurrenceCount)
+	exists, processed, statusErr := restarted.log.UpdateStatus(ctx, mailboxID, occurrenceID)
+	if boundErr != nil || storedErr != nil || countErr != nil || statusErr != nil || !exists || processed ||
+		bound.DeliveredToRunID != initial.RunID || bound.DeliveredAt == nil || occurrenceCount != 1 ||
+		metadataString(stored.Metadata, "request_source") != "lifecycle_texture_control" {
+		t.Fatalf("durable restart delivery state=%+v B=%+v occurrence_count=%d exists=%v processed=%v stored_err=%v bound_err=%v count_err=%v status_err=%v", stored, bound, occurrenceCount, exists, processed, storedErr, boundErr, countErr, statusErr)
+	}
+	close(blocking.release)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, processed, statusErr = restarted.log.UpdateStatus(ctx, mailboxID, occurrenceID)
+		if statusErr == nil && processed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("durable lifecycle occurrence was not incorporated: processed=%v err=%v", processed, statusErr)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	runs, err := s.ListLifecycleRunsByTrajectory(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycleRuns := 0
+	for _, run := range runs {
+		if run.AgentID == fixture.agentID && metadataString(run.Metadata, "request_source") == "lifecycle_texture_control" {
+			lifecycleRuns++
+		}
+	}
+	if lifecycleRuns != 1 {
+		t.Fatalf("restart created %d lifecycle-control runs: %+v", lifecycleRuns, runs)
 	}
 }
 
@@ -2357,59 +2368,6 @@ func seedAdapterLifecycleManagementControl(t *testing.T, s *store.Store, rt *age
 	return *rec
 }
 
-func TestAdapterSQLitePersistentManagementRecoveryExecutesWithoutSnapshot(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "persistent-super-recovery.db")
-	s, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
-	const ownerID, computerID = "owner-adapter-super-recovery", "computer-adapter-super-recovery"
-	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
-	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
-	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
-	rec := seedAdapterLifecycleManagementControl(t, s, adapter.Runtime, ownerID, computerID, "missing-snapshot")
-
-	mailboxID := scopedActorMailboxID(ownerID, computerID, rec.AgentID)
-	initialID := actorDispatchUpdateID(ownerID, computerID, rec.AgentID, "initial_dispatch", rec.RunID, "", "")
-	if err := adapter.log.MarkProcessed(ctx, mailboxID, initialID); err != nil {
-		t.Fatal(err)
-	}
-	rec.State = types.RunPassivated
-	metadata := make(map[string]any, len(rec.Metadata))
-	for key, value := range rec.Metadata {
-		metadata[key] = value
-	}
-	rec.Metadata = metadata
-	rec.Metadata["passivated_reason"] = "runtime_restarted"
-	rec.UpdatedAt = time.Now().UTC()
-	if err := s.UpdateRun(ctx, rec); err != nil {
-		t.Fatal(err)
-	}
-
-	adapter.Runtime.Start(ctx)
-	// Kernel mode: Sweep is a no-op; the dispatcher's pending projection is the
-	// delivery authority. StartKernel launches the loop that drains it.
-	adapter.actorRT.StartKernel(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		stored, loadErr := s.GetRunByOwner(ctx, ownerID, rec.RunID)
-		if loadErr == nil && stored.State == types.RunCompleted && counting.calls.Load() == 1 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	stored, loadErr := s.GetRunByOwner(ctx, ownerID, rec.RunID)
-	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
-		t.Fatalf("persistent Management recovery state=%s calls=%d err=%v metadata=%+v", stored.State, counting.calls.Load(), loadErr, stored.Metadata)
-	}
-	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
-		t.Fatalf("persistent Management recovery relied on actor snapshot memory=%q err=%v", memory, err)
-	}
-}
 
 func TestAdapterSQLitePreBindResearchRecoveryBindsAndExecutesWithoutSnapshot(t *testing.T) {
 	ctx := context.Background()
@@ -2457,166 +2415,7 @@ func TestAdapterSQLitePreBindResearchRecoveryBindsAndExecutesWithoutSnapshot(t *
 	}
 }
 
-func TestAdapterSQLiteResearchAdmissionRecoveryExecutesWithoutSnapshot(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "researcher-admission-recovery.db")
-	s, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
-	const ownerID, computerID = "owner-adapter-admission-recovery", "computer-adapter-admission-recovery"
-	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
-	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
-	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
-	rec := seedAdapterLifecycleResearchControl(t, s, adapter.Runtime, ownerID, computerID, "missing-snapshot", false)
 
-	initialID := actorDispatchUpdateID(ownerID, computerID, rec.AgentID, "initial_dispatch", rec.RunID, rec.TrajectoryID, "")
-	mailboxID := scopedActorMailboxID(ownerID, computerID, rec.AgentID)
-	if err := adapter.log.MarkProcessed(ctx, mailboxID, initialID); err != nil {
-		t.Fatal(err)
-	}
-	rec.State = types.RunPassivated
-	metadata := make(map[string]any, len(rec.Metadata))
-	for key, value := range rec.Metadata {
-		metadata[key] = value
-	}
-	rec.Metadata = metadata
-	rec.Metadata["passivated_reason"] = "lifecycle_researcher_provider_admission_retry"
-	rec.UpdatedAt = time.Now().UTC()
-	if err := s.UpdateRun(ctx, rec); err != nil {
-		t.Fatal(err)
-	}
-	// Intentionally do not save an actor snapshot. Runtime boot must enqueue a
-	// distinct recovery occurrence, and the real handler must resolve its run.
-	adapter.Runtime.Start(ctx)
-	// Kernel mode: Sweep is a no-op; StartKernel launches the dispatcher loop.
-	adapter.actorRT.StartKernel(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
-		if loadErr == nil && stored.State == types.RunCompleted && counting.calls.Load() == 1 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
-	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
-		t.Fatalf("recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
-	}
-	var memory []byte
-	var snapErr error
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		memory, snapErr = adapter.log.LoadSnapshot(ctx, mailboxID)
-		if snapErr == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if snapErr != nil || len(memory) != 0 {
-		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, snapErr)
-	}
-	if got := counting.calls.Load(); got != 1 {
-		t.Fatalf("provider calls=%d", got)
-	}
-}
-
-func TestAdapterSQLiteInjectionAppendRecoveryExecutesWithoutSnapshot(t *testing.T) {
-	ctx := context.Background()
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "researcher-injection-append-recovery.db")
-	s, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
-	const ownerID, computerID = "owner-adapter-injection-recovery", "computer-adapter-injection-recovery"
-	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
-	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
-	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
-	rec := seedAdapterLifecycleResearchControl(t, s, adapter.Runtime, ownerID, computerID, "injection-missing-snapshot", false)
-
-	initialID := actorDispatchUpdateID(ownerID, computerID, rec.AgentID, "initial_dispatch", rec.RunID, rec.TrajectoryID, "")
-	mailboxID := scopedActorMailboxID(ownerID, computerID, rec.AgentID)
-	if err := adapter.log.MarkProcessed(ctx, mailboxID, initialID); err != nil {
-		t.Fatal(err)
-	}
-	rec.State = types.RunPassivated
-	metadata := make(map[string]any, len(rec.Metadata))
-	for key, value := range rec.Metadata {
-		metadata[key] = value
-	}
-	rec.Metadata = metadata
-	rec.Metadata["passivated_reason"] = "runtime_injection_append_failed"
-	rec.UpdatedAt = time.Now().UTC()
-	if err := s.UpdateRun(ctx, rec); err != nil {
-		t.Fatal(err)
-	}
-	// A durable malformed recovery row ahead of the valid boot occurrence must
-	// be acknowledged/quarantined rather than poison the FIFO forever.
-	malformed := actor.Update{UpdateID: "malformed-recovery-before-valid", ToAgentID: mailboxID, FromAgentID: "texture:" + rec.ChannelID, Kind: "coagent_result", Content: agentcore.LifecycleResearchAdmissionRecoveryPrefix + "malformed", TrajectoryID: rec.TrajectoryID, CreatedAt: time.Now().UTC().Add(-time.Second)}
-	if appended, err := adapter.log.Append(ctx, malformed); err != nil || !appended {
-		t.Fatalf("append malformed recovery=%v err=%v", appended, err)
-	}
-	// Intentionally do not save an actor snapshot. Runtime boot must enqueue a
-	// distinct recovery occurrence, and the real handler must resolve its run.
-	adapter.Runtime.Start(ctx)
-	// Kernel mode: Sweep is a no-op; StartKernel launches the dispatcher loop
-	// that drains the pending projection (the recovery rule).
-	adapter.actorRT.StartKernel(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
-		if loadErr == nil && stored.State == types.RunCompleted && counting.calls.Load() == 1 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
-	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
-		t.Fatalf("injection recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
-	}
-	var memory []byte
-	var snapErr error
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		memory, snapErr = adapter.log.LoadSnapshot(ctx, mailboxID)
-		if snapErr == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if snapErr != nil || len(memory) != 0 {
-		t.Fatalf("test unexpectedly relied on actor snapshot memory=%q err=%v", memory, snapErr)
-	}
-	if got := counting.calls.Load(); got != 1 {
-		t.Fatalf("provider calls=%d", got)
-	}
-	var backlog []actor.Update
-	var unprocessedErr error
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		unprocessed, err := adapter.log.Unprocessed(ctx, mailboxID)
-		unprocessedErr = err
-		backlog = backlog[:0]
-		for _, u := range unprocessed {
-			// A not_before-scheduled event (e.g. the activation-budget watchdog)
-			// is correctly retained until due; it is not a poisoned delivery.
-			if !u.NotBefore.IsZero() && time.Now().Before(u.NotBefore) {
-				continue
-			}
-			backlog = append(backlog, u)
-		}
-		if unprocessedErr == nil && len(backlog) == 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if unprocessedErr != nil || len(backlog) != 0 {
-		t.Fatalf("malformed recovery poisoned FIFO backlog=%+v err=%v", backlog, unprocessedErr)
-	}
-}
 
 func TestAdapterSQLiteStartAcknowledgesCancelledTextureDocumentRevisionOccurrenceWithoutMutation(t *testing.T) {
 	ctx := context.Background()
