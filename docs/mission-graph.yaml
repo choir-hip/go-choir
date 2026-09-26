@@ -1015,7 +1015,7 @@ nodes:
     title: Management Live + Cast (R3c, station)
     path: docs/definitions/choir-management-live-cast-2026-09-26.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -1023,10 +1023,10 @@ nodes:
       - choir-desk-cell-carrier-2026-09-25
     enables: []
     note: >-
-      Live station under the spine meta-goal — management desk on cells;
-      choir.Cast(engineering) opens+binds+executes an assignment (the
-      R2-deferred deployed proof); report_to_texture retires to the staged
-      path. Proof: management cell Cast → engineering assignment → Report
-      resolves the cast record; restart resumes from the tape.
+      LANDED 2026-09-26 (deployed build b7ae7596): management is live on the
+      host desk-cell carrier — desk_go_eval + typed lifecycle controls, cast
+      reaches delegated admission on the canonical ledger (staging completes
+      the R2 spawn saga). report_to_texture stays as a typed control path;
+      the unstructured report flow stages via Report/ReportPacket.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md

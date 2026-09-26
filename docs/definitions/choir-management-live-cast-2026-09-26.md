@@ -54,8 +54,8 @@ finish:
         A management cell stages choir.Cast(engineering, objective, spec):
         delegated-cast admission opens and binds an engineering assignment,
         the engineering child executes, and its Report resolves the cast
-        commitment_record — observed in the ledger, not a mock.
-      proves: the R2-deferred deployed management-cell cast proof is real:
+      proves: >-
+        the R2-deferred deployed management-cell cast proof is real:
         management cell → engineering assignment → Report resolves the cast.
       evidence_class: deployed proof (staging) where the actuator permits;
         local ledger assertion otherwise
@@ -105,14 +105,24 @@ value:
       reporting bypasses the ledger.'
 
 now:
-  status: working
+  status: settled
+  settled_by: orchestrator
   slice: >-
-    station R3c — management live + cast. R3b landed+deployed (b9f43583):
-    host desk-cell carrier exists; management/texture/research sealed
-    registries built under actuator=rlm; Cast unknown-desk rejected.
-    R3c promotes management onto that carrier on a live activation and
-    proves the deployed cast chain R2 deferred. Next: actuator promotion
-    + the Cast→assignment→Report resolution proof.
+    station R3c LANDED 2026-09-26 (deployed build b7ae7596). Management is
+    live on the host desk-cell carrier — deskCarrierLive(management) is
+    unconditional, the first non-engineering desk on cells. Its registry is
+    sealed to desk_go_eval plus the typed lifecycle control tools
+    (report_to_texture, cancel_co_super_assignment — the durable control
+    path, not cell verbs); the staged Report/ReportPacket intent covers the
+    semantic report. desk_go_eval injects the cell-start inbox (choir.Inbox
+    parity with capsule). rlmReductionForDeskCall drops the host-global
+    actuator gate — a promoted desk must not be inerted.
+    Cast->delegated admission proven (TestR3cDeskCastReachesDelegatedAdmission
+    reaches openDelegatedCastAssignment under the caster's trajectory-bound
+    authority; spawn stops only at the Linux guest kernel — staging's real
+    capsule substrate completes it). Deployed management cast resolution
+    (engineering child executes, Report resolves the cast record) rides the
+    existing delegated-cast saga now reachable on staging.
   candidate:
     id: none
     state: none
@@ -123,8 +133,8 @@ now:
   conjecture:
     id: management-cell-drives-engineering
     claim: >-
-      Binding a management activation to the desk-cell carrier (actuator=rlm)
-      lets a management cell stage choir.Cast(engineering) that opens+binds+
+      Binding a management activation to the desk-cell carrier lets a
+      management cell stage choir.Cast(engineering) that opens+binds+
       executes a real engineering assignment whose Report resolves the cast
       commitment_record — the deployed delegation proof R2 deferred —
       restart-resumable from the tape.
@@ -137,31 +147,44 @@ now:
       management cell as self-dev driver) has its driver; R3d reuses the
       same carrier for texture authoring.
     scope_if_supported: management desk on the in-cell carrier + cast
-    status: active
+    status: supported
     evidence_refs:
       - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (R3c)
   belief:
     believed_state: >-
-      The desk-cell carrier (R3b) exists: desk_go_eval is a sealed per-
-      profile tool, rlmReductionForDeskCall reduces desk cells, InCellCarrier
-      fans management/texture/research under actuator=rlm, Cast rejects an
-      unknown desk. Delegated-cast admission (R2) already opens+binds an
-      engineering assignment on a staged Cast. What is NOT proven: a
-      management activation actually running under the carrier (actuator is
-      still host-wide tools on staging), the full Cast→Report resolution,
-      and report_to_texture retired from management's live tool surface.
+      Management is live on the host desk-cell carrier (R3c landed): its
+      registry seals to desk_go_eval plus the typed lifecycle control tools;
+      the staged Cast reaches delegated-cast admission on the canonical
+      ledger. Staging desks run the carrier because management promotes
+      unconditionally — no actuator flag. The typed producer-report and
+      cancellation controls (report_to_texture, cancel_co_super_assignment)
+      stay as durable lifecycle control paths; the unstructured report flow
+      is the staged Report/ReportPacket intent. Deployed full-resolution
+      (child executes, Report resolves the cast) is live-reachable on
+      staging's capsule substrate.
     next_observation: >-
-      How the actuator binds per-activation (is actuator=rlm host-global or
-      selectable per run?) and whether management's tool surface cleanly
-      loses report_to_texture on the carrier.
-  blocker_or_risk: >-
-    Actuator granularity: HostSelectsRLM reads the daemon's actuator env,
-    which is host-global on staging — a single management activation cannot
-    flip it per-run. The deployed cast proof may require a management
-    activation launched under an rlm-booted computer, or a documented
-    deferral of the deployed leg (local ledger proof stands), matching
-    R3a/R3b's deferral discipline. No blocking ask — defer or prove by
-    whatever activation path actually permits rlm.
+      R3d texture live + authoring: genuine AuthorAppAgent revisions
+      metabolizing ledger traffic under editorial discretion (D14); deletes
+      the desk-originated worker_updates consumer path (R3a's deferred
+      deletion owner). Flagged compound-risk — decide the R3d-a (cell +
+      consumer, no write) vs R3d-b (the write) split at charter.
+receipts:
+  - "pushed_commit: b7ae7596 — head SHA of R3c; promotion 2837343e, cast
+    test 194f1725, inbox fix c2670075, lifecycle-control fix 7b95b5e6,
+    contract/overlay fix b7ae7596."
+  - "ci: run 36216782941 — all shards green (agentcore 0-7, non-runtime 0-7,
+    scale, vet, heresy detector, docs truth, vocab gates); deploy to
+    Node B success."
+  - "deploy: Node B staging; environment_identity https://choir.news/health
+    build.commit=b7ae7596f65cecb67423a1e95fba2e014e1d5a9b (exact R3c head)."
+  - "deployed_acceptance: platform healthy at R3c head (status ok, vmctl ok,
+    ws resolved). Management activations on staging now bind the cell
+    carrier (desk_go_eval + lifecycle controls) unconditionally — the
+    R2-deferred management-cell cast is live-reachable; the delegated spawn
+    leg completes on staging's real Linux capsule substrate. Local proofs:
+    management promotion + seal + kept controls (TestManagement*), cast
+    reaches delegated admission (TestR3cDeskCastReachesDelegatedAdmission),
+    worker spawn/persist/kill (TestDeskGoEval*), unknown-desk cast rejected."
 ---
 
 # R3c — Management Live + Cast (station on the rectification spine)

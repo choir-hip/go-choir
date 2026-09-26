@@ -108,16 +108,16 @@ boundaries:
 now:
   status: working
   slice: >-
-    station R3c — management live + cast. R3b landed+deployed 2026-09-26
-    (b9f43583): the host desk-cell carrier runs non-capsule desk cells in a
-    killable host subprocess (desk_go_eval sealed per profile, canonical
-    ledger reduction, InCellCarrier fan under actuator=rlm, unknown-desk
-    cast rejected). R3c promotes management onto that carrier on a live
-    activation and proves the Cast→engineering→Report deployed chain R2
-    deferred. Next station goal:
-    docs/definitions/choir-management-live-cast-2026-09-26.md
-  source_ref: main@c39ba0c3
-  deploy_identity: staging https://choir.news build.commit=b9f43583
+    station R3c LANDED 2026-09-26 (deployed build b7ae7596): management is
+    live on the host desk-cell carrier — desk_go_eval + typed lifecycle
+    controls (report_to_texture, cancel_co_super_assignment), sealed
+    registry, cast reaches delegated admission on the canonical ledger
+    (deployed resolution rides the R2 cast saga on staging's capsule
+    substrate). Staging desks run the carrier unconditionally — no actuator
+    flag. Next station R3d — texture live + authoring (compound-risk:
+    decide R3d-a cell+consumer vs R3d-b write split at charter).
+  source_ref: main@b7ae7596
+  deploy_identity: staging https://choir.news build.commit=b7ae7596
   candidate:
     id: none
     state: none
@@ -155,15 +155,16 @@ now:
     status: settled
     evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md §11
     believed_state: >-
-      R0, R2, R2x, R3a, and R3b landed; K's substrate is landed; the
-      restructured spine is ratified; R3c is the live station. The host
-      desk-cell carrier is built and deployed — non-capsule desk cells run
-      in a killable host subprocess on the canonical ledger, gated on
-      actuator=rlm. The next lift is R3c — promote management onto that
-      carrier and prove the deployed Cast→engineering→Report chain.
+      R0, R2, R2x, R3a, R3b, and R3c landed; K's substrate is landed; the
+      restructured spine is ratified; R3d is the live station. Management
+      is on the host desk-cell carrier unconditionally — staging desks run
+      desk_go_eval + typed lifecycle controls, cast reaches delegated
+      admission on the canonical ledger. The next lift is R3d — texture
+      live + authoring (the compound-risk station).
     next_observation: >-
-      R3c actuator promotion: whether actuator=rlm binds per-activation or
-      is host-global, and the deployed cast-resolution path it permits.
+      R3d: how desk-originated AuthorAppAgent revisions metabolize ledger
+      traffic under editorial discretion (D14); the R3d-a (cell + consumer,
+      no write) vs R3d-b (the write) split.
   blocker_or_risk: >-
     Station pointer must be rewritten at every terminal receipt (the /goal
     string stays constant — this file is the entrypoint). Owner directive
@@ -172,10 +173,16 @@ now:
     documented deferral — not a blocking ask. PR 67 (CI build-cache + race
     compile fix) pending integration at the next station landing.
   next_action: >-
-    Charter R3c (management live + cast) goal file; actuator promotion +
-    Cast→assignment→Report deployed proof.
+    Charter R3d (texture live + authoring) goal file; decide the R3d-a
+    (cell + consumer, no write) vs R3d-b (the write) split at charter.
 
 receipts:
+  - "R3c terminal 2026-09-26: landed+deployed b7ae7596 (ci 36216782941,
+    staging build.commit=b7ae7596); goal docs/definitions/
+    choir-management-live-cast-2026-09-26.md now.status=settled. Management
+    on the carrier unconditionally; lifecycle controls kept beside
+    desk_go_eval; deployed full-resolution rides the R2 cast saga on
+    staging's substrate. now.slice -> R3d."
   - "R3b terminal 2026-09-26: landed+deployed b9f43583 (ci 36214084659,
     staging build.commit=b9f43583); goal docs/definitions/
     choir-desk-cell-carrier-2026-09-25.md now.status=settled. Live-desk
@@ -205,7 +212,7 @@ and points at a dedicated throughline `/goal` file for the current mission.
   outcomes live in `docs/desk-rlm-rectification-plan-2026-09-23.md` §11 —
   read it before chartering the next station.
 
-**Current station:** R3c → management live + cast. R3b landed+deployed
-(`b9f43583`, host desk-cell carrier on cells); deployed live-desk acceptance
-deferred here (actuator=rlm promotion). Next station goal:
-`docs/definitions/choir-management-live-cast-2026-09-26.md`.
+**Current station:** R3d → texture live + authoring. R3c landed+deployed
+(`b7ae7596`, management on the desk-cell carrier; lifecycle controls kept;
+cast reaches delegated admission). The compound-risk station: decide the
+R3d-a (cell + consumer, no write) vs R3d-b (the write) split at charter.
