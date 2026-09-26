@@ -212,14 +212,19 @@ func ExecuteWorkerSessionStdin(cfg SessionWorkerConfig) {
 // It exits 2 when the worker cannot prove it will serve cells correctly:
 // spawn success is not readiness.
 func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope) {
+	fail := func(step string, err error) (*Session, *Broker, *ChoirScope) {
+		fmt.Fprintf(os.Stderr, "session worker build: %s: %v\n", step, err)
+		os.Exit(2)
+		return nil, nil, nil
+	}
 	allowlist := NewAllowlist(cfg.AllowedPackages...)
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
-		os.Exit(2)
+		return fail("secret", err)
 	}
 	issuer, err := NewHandleIssuer(secret)
 	if err != nil {
-		os.Exit(2)
+		return fail("issuer", err)
 	}
 	root := cfg.AllowedRoot
 	if root == "" {
@@ -231,15 +236,15 @@ func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope
 	}
 	broker, err := NewBroker(BrokerConfig{ComputerID: computerID, CurrentEpoch: cfg.Epoch, AllowedRoot: root}, issuer)
 	if err != nil {
-		os.Exit(2)
+		return fail("broker", err)
 	}
 	scope, err := NewChoirScope(broker, issuer, computerID, cfg.ActivationID, cfg.Epoch, cfg.Role, cfg.Slot)
 	if err != nil {
-		os.Exit(2)
+		return fail("choirscope", err)
 	}
 	sess, err := NewSession(allowlist, scope.ChoirExports())
 	if err != nil {
-		os.Exit(2)
+		return fail("session", err)
 	}
 	return sess, broker, scope
 }
