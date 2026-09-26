@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"net/http"
 	"strings"
 	"sync"
-
-	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/routeledger"
 )
 
 type RouteResolution struct {
@@ -141,49 +142,75 @@ func (a *RouteAuthority) constructedOwnershipIdentity(ctx context.Context, owner
 	}
 
 	var execution constructedRouteExecution
-	if err := json.Unmarshal(gate.Payload, &execution); err != nil ||
-		strings.TrimSpace(execution.CandidateID) == "" ||
-		strings.TrimSpace(execution.OwnerApprovalRef) == "" {
-		return nil, "", false, fmt.Errorf("ownership %s has unrecognized route execution evidence", vmID)
-	}
-	ownerApproval, err := a.ledger.ResolveAuthorizationEvidence(ctx, execution.OwnerApprovalRef)
-	if err != nil {
-		return nil, "", false, fmt.Errorf("resolve constructed owner approval evidence: %w", err)
-	}
-	if ownerApproval.Kind != routeledger.AuthorizationEvidenceApproval ||
-		ownerApproval.Ref != execution.OwnerApprovalRef ||
-		ownerApproval.RouteSlotID != slot.ID ||
-		!routeledger.SameVersion(ownerApproval.ComputerVersion, slot.Current) {
-		return nil, "", false, fmt.Errorf("constructed ownership %s owner approval join failed", vmID)
+	if err := json.Unmarshal(gate.Payload, &execution); err == nil &&
+		strings.TrimSpace(execution.CandidateID) != "" &&
+		strings.TrimSpace(execution.OwnerApprovalRef) != "" {
+		ownerApproval, err := a.ledger.ResolveAuthorizationEvidence(ctx, execution.OwnerApprovalRef)
+		if err != nil {
+			return nil, "", false, fmt.Errorf("resolve constructed owner approval evidence: %w", err)
+		}
+		if ownerApproval.Kind != routeledger.AuthorizationEvidenceApproval ||
+			ownerApproval.Ref != execution.OwnerApprovalRef ||
+			ownerApproval.RouteSlotID != slot.ID ||
+			!routeledger.SameVersion(ownerApproval.ComputerVersion, slot.Current) {
+			return nil, "", false, fmt.Errorf("constructed ownership %s owner approval join failed", vmID)
+		}
+
+		var bootstrap constructedBootstrapCertificate
+		if err := json.Unmarshal(certificate.Payload, &bootstrap); err == nil && bootstrap.Kind == "verified_route_bootstrap" {
+			if bootstrap.RouteSlotID != slot.ID ||
+				bootstrap.ApprovalRef != execution.OwnerApprovalRef ||
+				bootstrap.Verification != execution.Verification {
+				return nil, "", false, fmt.Errorf("constructed ownership %s bootstrap certificate join failed", vmID)
+			}
+		} else {
+			var promotion constructedPromotionCertificate
+			if err := json.Unmarshal(certificate.Payload, &promotion); err != nil ||
+				promotion.RouteSlot != slot.ID ||
+				!routeledger.SameVersion(promotion.Candidate, slot.Current) ||
+				promotion.EvidenceRef != execution.Verification.ID ||
+				!promotion.OwnerApproved {
+				return nil, "", false, fmt.Errorf("constructed ownership %s promotion certificate join failed", vmID)
+			}
+		}
+		verification := execution.Verification
+		if strings.TrimSpace(verification.ID) == "" ||
+			verification.Verifier != "independent-production-realization-verifier" ||
+			!routeledger.SameVersion(verification.Version, slot.Current) ||
+			strings.TrimSpace(verification.DiskReceiptID) == "" ||
+			strings.TrimSpace(verification.VMID) != strings.TrimSpace(vmID) {
+			return nil, "", false, fmt.Errorf("constructed ownership %s verification join failed", vmID)
+		}
+		version := slot.Current
+		return &version, verification.DiskReceiptID, true, nil
 	}
 
-	var bootstrap constructedBootstrapCertificate
-	if err := json.Unmarshal(certificate.Payload, &bootstrap); err == nil && bootstrap.Kind == "verified_route_bootstrap" {
-		if bootstrap.RouteSlotID != slot.ID ||
-			bootstrap.ApprovalRef != execution.OwnerApprovalRef ||
-			bootstrap.Verification != execution.Verification {
-			return nil, "", false, fmt.Errorf("constructed ownership %s bootstrap certificate join failed", vmID)
-		}
-	} else {
-		var promotion constructedPromotionCertificate
-		if err := json.Unmarshal(certificate.Payload, &promotion); err != nil ||
-			promotion.RouteSlot != slot.ID ||
-			!routeledger.SameVersion(promotion.Candidate, slot.Current) ||
-			promotion.EvidenceRef != execution.Verification.ID ||
-			!promotion.OwnerApproved {
-			return nil, "", false, fmt.Errorf("constructed ownership %s promotion certificate join failed", vmID)
-		}
+	// Platform-follow evidence class: the gate payload is an
+	// AcceptedEventAuthorizationEvidence (accepted applied event joins old ->
+	// new version under the platform-follow scope), the certificate payload is
+	// a PromotionJoinEvidence (checkpoint + materialization receipt join).
+	// There is no disk-receipt construction verification on this route —
+	// ownership is the apply-time registry binding, so the join returns the
+	// slot version with no receipt id.
+	var accepted selfdevprotocol.AcceptedEventAuthorizationEvidence
+	if err := json.Unmarshal(gate.Payload, &accepted); err != nil ||
+		accepted.Version != 1 || accepted.ComputerID == "" ||
+		accepted.DecisionActor != selfdevprotocol.PlatformUpdateFollowActor ||
+		accepted.DecisionScope != selfdevprotocol.PlatformUpdateFollowScope ||
+		!computerevent.IsSHA256(accepted.AcceptedOrRollbackEventDigest) ||
+		!routeledger.SameVersion(accepted.NewComputerVersion, slot.Current) ||
+		!routeledger.SameVersion(accepted.OldComputerVersion, receipt.Old) {
+		return nil, "", false, fmt.Errorf("ownership %s has unrecognized route execution evidence", vmID)
 	}
-	verification := execution.Verification
-	if strings.TrimSpace(verification.ID) == "" ||
-		verification.Verifier != "independent-production-realization-verifier" ||
-		!routeledger.SameVersion(verification.Version, slot.Current) ||
-		strings.TrimSpace(verification.DiskReceiptID) == "" ||
-		strings.TrimSpace(verification.VMID) != strings.TrimSpace(vmID) {
-		return nil, "", false, fmt.Errorf("constructed ownership %s verification join failed", vmID)
+	var promotion selfdevprotocol.PromotionJoinEvidence
+	if err := json.Unmarshal(certificate.Payload, &promotion); err != nil ||
+		promotion.Version != 1 || promotion.ComputerID != accepted.ComputerID ||
+		!computerevent.IsSHA256(promotion.CheckpointReceiptDigest) ||
+		!routeledger.SameVersion(promotion.NewComputerVersion, slot.Current) {
+		return nil, "", false, fmt.Errorf("ownership %s platform-follow certificate join failed", vmID)
 	}
 	version := slot.Current
-	return &version, verification.DiskReceiptID, true, nil
+	return &version, "", true, nil
 }
 
 func (a *RouteAuthority) resolveVersionInputs(ctx context.Context, version computerversion.ComputerVersion) (computerversion.CodeClosure, computerversion.ArtifactProgram, error) {
