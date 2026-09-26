@@ -135,3 +135,28 @@ addressed, re-verified against the request digest at write) and points
 closure/program URIs at that path. The guest still receives payload bytes
 in the offer; vmctl's store is populated by the mint, matching the selfdev
 shape (event-payload artifacts live under the same root on Node B).
+
+## Problem 5 — the route classifier only knows the selfdev evidence shape
+
+Discovered by: probe run on deployed `c61be3f1`
+(update upd-m9a-platform-update-1790462978529-a). Route promoted gen 1 —
+then `/api/computers/{id}/lifecycle/checkpoint` refused `computer
+ownership required` and vmctl's `/internal/vmctl/list` 503'd:
+`classify immutable active ownership vm-…: ownership vm-… has
+unrecognized route execution evidence`.
+
+`constructedOwnershipIdentity` (`internal/vmctl/route_authority.go`) is
+the join that proves a route slot belongs to the realized ownership. It
+unmarshals the approval evidence payload as the selfdev constructed
+shape (`candidate_id` + `owner_approval_ref` + disk-receipt
+verification). The platform-follow gate payload is
+`AcceptedEventAuthorizationEvidence`; the shape mismatches → the whole
+ownership listing and every product checkpoint/restore endpoint
+refuses. Blast radius: one promoted computer 503s vmctl's list for ALL
+owners — the classifier walks every active ownership.
+
+Fix direction: the classifier recognizes both evidence classes.
+Platform-follow joins the gate's accepted/new/old joins against
+`slot.Current`/`receipt.Old` and returns the slot version with no disk
+receipt (none exists on that route — ownership is the apply-time
+registry binding), `constructed=true` preserved.
