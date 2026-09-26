@@ -283,6 +283,104 @@ func TestCommitAdvancesOnlyInboxHighWater(t *testing.T) {
 	}
 }
 
+func TestCommitRecoversPartialActTray(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	scope.CellID = "cell-partial-act-recovery"
+	scope.ComputerID = rt.TextureComputerID()
+	ctx := testReductionCtx(scope)
+	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "management", "management", "snapshot-mail"); err != nil {
+		t.Fatal(err)
+	}
+	intent := yaegikernel.StagedIntent{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "is the cast ready?"}
+
+	// Model a process death after the append-only ledger mint and before the
+	// envelope/cursor writes.
+	if _, err := rt.store.AppendCommitmentRecord(ctx, scope.OwnerID, scope.ComputerID, commitmentRecordForIntent(scope, intent)); err != nil {
+		t.Fatalf("stage commitment record: %v", err)
+	}
+	reduction := &rlmCallReduction{
+		active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, highWater: 1,
+	}
+	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{intent}); err != nil {
+		t.Fatalf("recover partial act commit: %v", err)
+	}
+	if !reduction.receipt.Committed || reduction.receipt.Cursor != 1 {
+		t.Fatalf("recovery receipt = %+v", reduction.receipt)
+	}
+	if cursor, err := LoadInboxCursor(ctx, rt.store, scope.OwnerID, scope.RunID, scope.ChannelID); err != nil || cursor != 1 {
+		t.Fatalf("recovered cursor = %d, %v; want 1", cursor, err)
+	}
+	to, content, mailed, err := stagedIntentEnvelope(scope, intent)
+	if err != nil || !mailed {
+		t.Fatalf("recovery envelope = (%q, %q, %t, %v)", to, content, mailed, err)
+	}
+	key := intentIdempotencyKey(scope, intent.LocalID, to, content)
+	messages, _, err := rt.ChannelRead(scope.ChannelID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matched := 0
+	for _, message := range messages {
+		if message.IdempotencyKey == key {
+			matched++
+		}
+	}
+	if matched != 1 {
+		t.Fatalf("recovered envelope count = %d, want 1", matched)
+	}
+
+	// Retrying the same post-crash tray converges without duplicate mail.
+	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{intent}); err != nil {
+		t.Fatalf("replay recovered tray: %v", err)
+	}
+	messages, _, err = rt.ChannelRead(scope.ChannelID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matched = 0
+	for _, message := range messages {
+		if message.IdempotencyKey == key {
+			matched++
+		}
+	}
+	if matched != 1 {
+		t.Fatalf("replayed recovered envelope count = %d, want 1", matched)
+	}
+}
+
+func TestCommitRecoversUnmailedActWithoutInboxAdvance(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	scope.CellID = "cell-unmailed-act-recovery"
+	scope.ComputerID = rt.TextureComputerID()
+	ctx := testReductionCtx(scope)
+	intent := yaegikernel.StagedIntent{LocalID: "note-1", Kind: yaegikernel.IntentNote, ToDesk: "management", Body: "recover this mail"}
+
+	if _, err := rt.store.AppendCommitmentRecord(ctx, scope.OwnerID, scope.ComputerID, commitmentRecordForIntent(scope, intent)); err != nil {
+		t.Fatalf("stage commitment record: %v", err)
+	}
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope}
+	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{intent}); err != nil {
+		t.Fatalf("recover unmailed act: %v", err)
+	}
+	to, content, mailed, err := stagedIntentEnvelope(scope, intent)
+	if err != nil || !mailed {
+		t.Fatalf("recovery envelope = (%q, %q, %t, %v)", to, content, mailed, err)
+	}
+	key := intentIdempotencyKey(scope, intent.LocalID, to, content)
+	messages, _, err := rt.ChannelRead(scope.ChannelID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range messages {
+		if message.IdempotencyKey == key {
+			return
+		}
+	}
+	t.Fatal("partial act recovery did not mail the missing envelope")
+}
+
 func TestReduceCellIntentsIdempotentReplay(t *testing.T) {
 	rt, _ := testRuntime(t)
 	scope := testReductionScope()

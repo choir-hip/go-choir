@@ -289,11 +289,10 @@ func ReduceCellIntents(ctx context.Context, mb rlmMailbox, scope ReductionScope,
 	return receipt, nil
 }
 
-// castStagedIntent mails one envelope-eligible intent to its durable channel
-// target. Freeze and verify intents never mail: their effects land through
-// the reduction's own commit path, not the channel log.
-func castStagedIntent(ctx context.Context, mb rlmMailbox, scope ReductionScope, in yaegikernel.StagedIntent) (uint64, error) {
-	var to, content string
+// stagedIntentEnvelope builds the durable envelope for an intent. Keeping the
+// exact envelope derivation available to recovery makes the mailbox
+// idempotency key a stable witness of whether an interrupted act was mailed.
+func stagedIntentEnvelope(scope ReductionScope, in yaegikernel.StagedIntent) (to, content string, mailed bool, err error) {
 	switch in.Kind {
 	case yaegikernel.IntentMessage:
 		to = in.ToDesk
@@ -332,9 +331,20 @@ func castStagedIntent(ctx context.Context, mb rlmMailbox, scope ReductionScope, 
 	case yaegikernel.IntentResolve, yaegikernel.IntentCancel, yaegikernel.IntentPrecommit:
 		// Resolved purely on the ledger path: the act lands on the target
 		// commitment record, not a desk mailbox. Handled by commitActIntent.
-		return 0, nil
+		return "", "", false, nil
 	default:
-		return 0, fmt.Errorf("intent kind %q has no envelope path", in.Kind)
+		return "", "", false, fmt.Errorf("intent kind %q has no envelope path", in.Kind)
+	}
+	return to, content, true, nil
+}
+
+// castStagedIntent mails one envelope-eligible intent to its durable channel
+// target. Freeze and verify intents never mail: their effects land through
+// the reduction's own commit path, not the channel log.
+func castStagedIntent(ctx context.Context, mb rlmMailbox, scope ReductionScope, in yaegikernel.StagedIntent) (uint64, error) {
+	to, content, mailed, err := stagedIntentEnvelope(scope, in)
+	if err != nil || !mailed {
+		return 0, err
 	}
 	return mb.CastEnvelope(ctx, scope.ChannelID, to, scope.FromAgentID, scope.FromRole, content, intentIdempotencyKey(scope, in.LocalID, to, content))
 }
@@ -515,6 +525,72 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 	if err := validateCellIntents(r.scope, intents); err != nil {
 		return err
 	}
+	highWater := r.highWater
+	if highWater < r.scope.Cursor {
+		highWater = r.scope.Cursor
+	}
+	if recovered, err := r.recoverPartialActCommit(ctx, intents, highWater); err != nil {
+		return err
+	} else if recovered {
+		return nil
+	}
+	return r.commitTray(ctx, intents, highWater)
+}
+
+// recoverPartialActCommit is the named crash-recovery path for the reducer's
+// cross-store act commit. The object graph, channel log, and run-memory cursor
+// do not expose one shared transaction. A pre-existing deterministic
+// commitment record therefore witnesses a possible crash after ledger mint.
+// If the inbox acknowledgement is behind its snapshot or the addressed
+// envelope is absent, replay the complete tray. Both ledger minting and
+// envelope mail use deterministic idempotency identities, so this converges
+// without double-minting a record or duplicating mail.
+func (r *rlmCallReduction) recoverPartialActCommit(ctx context.Context, intents []yaegikernel.StagedIntent, highWater uint64) (bool, error) {
+	if r.ledger == nil {
+		return false, nil
+	}
+	cursor, err := LoadInboxCursor(ctx, r.st, r.scope.OwnerID, r.scope.RunID, r.scope.ChannelID)
+	if err != nil {
+		return false, fmt.Errorf("recover partial act commit: load inbox cursor: %w", err)
+	}
+	for _, in := range intents {
+		if !isSemanticActKind(in.Kind) {
+			continue
+		}
+		exists, err := r.ledger.CommitmentRecordExists(ctx, r.scope.OwnerID, r.scope.ComputerID, commitmentRecordForIntent(r.scope, in).RecordID)
+		if err != nil {
+			return false, fmt.Errorf("recover partial act commit: inspect %s: %w", in.LocalID, err)
+		}
+		if !exists {
+			continue
+		}
+		if cursor < highWater {
+			return true, r.commitTray(ctx, intents, highWater)
+		}
+		to, content, mailed, err := stagedIntentEnvelope(r.scope, in)
+		if err != nil {
+			return false, err
+		}
+		if !mailed {
+			continue
+		}
+		messages, _, err := r.mb.ChannelRead(r.scope.ChannelID, 0)
+		if err != nil {
+			return false, fmt.Errorf("recover partial act commit: inspect envelope %s: %w", in.LocalID, err)
+		}
+		key := intentIdempotencyKey(r.scope, in.LocalID, to, content)
+		for _, message := range messages {
+			if message.IdempotencyKey == key {
+				goto nextIntent
+			}
+		}
+		return true, r.commitTray(ctx, intents, highWater)
+	nextIntent:
+	}
+	return false, nil
+}
+
+func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel.StagedIntent, highWater uint64) error {
 	receipt := ReductionReceipt{Cursor: r.scope.Cursor}
 	for _, in := range intents {
 		var seq uint64
@@ -575,10 +651,6 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 			return fmt.Errorf("reduce: persist %s: %w", in.LocalID, err)
 		}
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: seq, Kind: in.Kind})
-	}
-	highWater := r.highWater
-	if highWater < r.scope.Cursor {
-		highWater = r.scope.Cursor
 	}
 	if err := CommitInboxCursor(ctx, r.st, r.scope.OwnerID, r.scope.RunID, r.scope.ChannelID, highWater); err != nil {
 		return err

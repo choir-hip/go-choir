@@ -474,51 +474,6 @@ func (rt *Runtime) reconcileEngineeringAssignmentCapsulesAfterRestart(ctx contex
 	}
 }
 
-// enforceEngineeringAssignmentDeadlines fails closed on bound assignments that
-// outlive coManagementAssignmentDeadline without reaching a terminal disposition
-// (I26 scheduling contract). Deadline expiry cancels the assignment through
-// the same fate path a Management-initiated cancel uses — capsule revoke receipt,
-// durable cancel, run terminalization — so the one-live-slot invariant is
-// never held hostage by a wedged capsule. The underlying execution request is
-// untouched: it stays pending in the Texture trajectory and remains retryable
-// by a later admission cycle.
-func (rt *Runtime) enforceEngineeringAssignmentDeadlines(ctx context.Context) {
-	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
-		return
-	}
-	computerID := strings.TrimSpace(rt.TextureComputerID())
-	if computerID == "" {
-		return
-	}
-	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
-	if err != nil {
-		log.Printf("runtime: assignment deadline sweep list: %v", err)
-		return
-	}
-	for _, assignment := range assignments {
-		if assignment.Disposition.Terminal() || assignment.BoundRunID == "" || assignment.CreatedAt.IsZero() {
-			continue
-		}
-		if time.Since(assignment.CreatedAt) < engineeringAssignmentDeadline {
-			continue
-		}
-		parent := types.RunRecord{
-			RunID: assignment.Binding.ParentRunID, OwnerID: assignment.Binding.OwnerID,
-			ComputerID: assignment.Binding.ComputerID, AgentID: assignment.Binding.ParentAgentID,
-		}
-		result, cancelErr := rt.cancelAssignedEngineering(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
-			fmt.Sprintf("assignment deadline expired after %s; request remains pending and retryable", engineeringAssignmentDeadline))
-		if cancelErr != nil {
-			log.Printf("runtime: assignment %s deadline cancellation: %v", assignment.AssignmentID, cancelErr)
-			continue
-		}
-		if !result.Replay {
-			log.Printf("runtime: assignment %s failed closed at deadline (attempt %d); request stays pending",
-				assignment.AssignmentID, assignment.Binding.Attempt)
-		}
-	}
-}
-
 func (rt *Runtime) recordAssignedEngineeringReport(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.EngineeringAssignmentReport) (types.EngineeringAssignmentCommandResult, error) {
 	var lastErr error
 	for attempt := 0; attempt < 4; attempt++ {
@@ -886,9 +841,8 @@ func assignedEngineeringFatePending(assignment types.EngineeringAssignment) bool
 // committed disposition leaves pending fate work, a delayed re-drive confirms
 // the strand predicate and finishes the saga. If the in-flight commit landed
 // first the re-read resolves terminal or active and the watchdog no-ops; a
-// process death before firing is covered by the boot reconcile's resume
-// branch. Fire-and-forget: no lost timer can jam the one-live slot beyond
-// the deadline sweep backstop.
+// process death before firing is covered by boot reconciliation. The
+// kernel-scheduled bound deadline separately protects an active assignment.
 func (rt *Runtime) armAssignedEngineeringFateWatchdog(assignment types.EngineeringAssignment) {
 	if rt == nil || !assignedEngineeringFatePending(assignment) {
 		return
@@ -992,42 +946,6 @@ func (rt *Runtime) resumeStrandedFrozenAssignmentCommit(ctx context.Context, ass
 	}
 	_, err := rt.recordAssignedEngineeringReport(ctx, rec, "resume:"+assignment.AssignmentID+":"+fmt.Sprint(assignment.Binding.Attempt), proposal.Report)
 	return err
-}
-
-// resumeStrandedFrozenAssignmentCommits sweeps every computer-wide assignment
-// for the stranded frozen-proposal signature and resumes its terminal commit.
-// It runs on the Management selection path (next to the deadline sweep) so a
-// mid-saga failure inside a running process recovers without a restart, and
-// the boot reconcile covers the restart window through
-// ReconcileEngineeringAssignmentsForTrajectory.
-func (rt *Runtime) resumeStrandedFrozenAssignmentCommits(ctx context.Context) {
-	if rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
-		return
-	}
-	computerID := strings.TrimSpace(rt.TextureComputerID())
-	if computerID == "" {
-		return
-	}
-	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
-	if err != nil {
-		log.Printf("runtime: stranded frozen assignment sweep list: %v", err)
-		return
-	}
-	for _, assignment := range assignments {
-		if assignment.Disposition != types.EngineeringAssignmentBound || assignment.PendingProposal == nil {
-			continue
-		}
-		switch assignment.CapsuleDisposition {
-		case types.EngineeringCapsuleFreezeRequested, types.EngineeringCapsuleFrozen, types.EngineeringCapsuleRevokeRequested, types.EngineeringCapsuleRevoked:
-		default:
-			continue
-		}
-		if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
-			log.Printf("runtime: assignment %s stranded frozen proposal resume: %v", assignment.AssignmentID, resumeErr)
-		} else {
-			log.Printf("runtime: assignment %s terminal fate resumed from stranded frozen proposal", assignment.AssignmentID)
-		}
-	}
 }
 
 func engineeringExecutionAttestationFromReceipt(assignment types.EngineeringAssignment, reportID string, command types.EngineeringRecordedCommand, receipt capsule.ExecutionReceipt) (types.EngineeringExecutionAttestation, error) {

@@ -48,3 +48,27 @@ func (s *Store) AppendCommitmentRecord(ctx context.Context, ownerID, computerID 
 	}
 	return obj.CanonicalID, nil
 }
+
+// CommitmentRecordExists reports whether the deterministic commitment-record
+// identity is already durable. Reducer crash recovery uses this as the
+// cross-store prepare witness before it idempotently replays the tray.
+func (s *Store) CommitmentRecordExists(ctx context.Context, ownerID, computerID, recordID string) (bool, error) {
+	if recordID == "" {
+		return false, fmt.Errorf("commitment record requires a record_id")
+	}
+	canonicalID, err := lifecycleCanonicalID(ogKindCommitmentRecord, ownerID, computerID, recordID)
+	if err != nil {
+		return false, err
+	}
+	if s == nil || s.ogStore == nil {
+		return false, fmt.Errorf("commitment record lookup: object graph not initialized")
+	}
+	obj, err := s.ogStore.GetObject(ctx, canonicalID)
+	if errors.Is(err, objectgraph.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !obj.Tombstone && obj.ObjectKind == ogKindCommitmentRecord, nil
+}

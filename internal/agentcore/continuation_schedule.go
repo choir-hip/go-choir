@@ -131,6 +131,70 @@ func decodeAssignedEngineeringFateDeadline(content string) (assignedEngineeringF
 	return deadline, nil
 }
 
+// armAssignedEngineeringDeadline makes the I26 bound-assignment deadline
+// derivable from the assignment's durable creation receipt. Delegated casts
+// arm it when their durable open lands; every bind path arms it again, so an
+// open that takes longer than the deadline to bind still receives an immediate
+// expiry wake once it becomes live. The handler is deliberately the predicate
+// authority: an unbound, terminal, or pending-fate assignment is a no-op.
+func (rt *Runtime) armAssignedEngineeringDeadline(assignment types.EngineeringAssignment) {
+	if rt == nil || assignment.Disposition.Terminal() || assignment.CreatedAt.IsZero() {
+		return
+	}
+	content, err := encodeAssignedEngineeringFateDeadline(assignment.AssignmentID, assignment.Binding.Attempt)
+	if err != nil {
+		log.Printf("runtime: encode assignment %s deadline: %v", assignment.AssignmentID, err)
+		return
+	}
+	rt.scheduleContinuation(context.Background(), assignment.Binding.OwnerID, assignment.Binding.ComputerID,
+		assignment.Binding.ParentAgentID, assignedEngineeringFateDeadlineUpdateKind, content,
+		assignment.Binding.TrajectoryID, "", assignment.CreatedAt.Add(engineeringAssignmentDeadline))
+}
+
+// HandleAssignedEngineeringFateDeadline either resumes a still-pending fate
+// saga or fails closed a bound, active assignment whose durable deadline has
+// elapsed. Both paths re-read durable state, so duplicate delivery is a no-op.
+func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ownerID, computerID, agentID, content string) error {
+	deadline, err := decodeAssignedEngineeringFateDeadline(content)
+	if err != nil {
+		return fmt.Errorf("decode assigned Engineering fate deadline: %w", err)
+	}
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, deadline.AssignmentID, deadline.Attempt)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if assignment.Binding.ParentAgentID != agentID {
+		return nil
+	}
+	if assignedEngineeringFatePending(assignment) {
+		return rt.resumeStrandedFateAssignmentIfPending(ctx, ownerID, computerID, deadline.AssignmentID, deadline.Attempt)
+	}
+	if assignment.Disposition != types.EngineeringAssignmentBound ||
+		assignment.CapsuleDisposition != types.EngineeringCapsuleActive ||
+		strings.TrimSpace(assignment.BoundRunID) == "" ||
+		assignment.CreatedAt.IsZero() ||
+		time.Now().UTC().Before(assignment.CreatedAt.Add(engineeringAssignmentDeadline)) {
+		return nil
+	}
+	parent := types.RunRecord{
+		RunID: assignment.Binding.ParentRunID, OwnerID: assignment.Binding.OwnerID,
+		ComputerID: assignment.Binding.ComputerID, AgentID: assignment.Binding.ParentAgentID,
+	}
+	result, err := rt.cancelAssignedEngineering(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
+		fmt.Sprintf("assignment deadline expired after %s; request remains pending and retryable", engineeringAssignmentDeadline))
+	if err != nil {
+		return fmt.Errorf("cancel expired assignment %s: %w", assignment.AssignmentID, err)
+	}
+	if !result.Replay {
+		log.Printf("runtime: assignment %s failed closed at deadline (attempt %d); request stays pending",
+			assignment.AssignmentID, assignment.Binding.Attempt)
+	}
+	return nil
+}
+
 // scheduleContinuation mints the kernel's durable backup for a process-local
 // continuation. Legacy delivery still owns the live timer until WithKernelMode
 // is the write-fence cutover, so a scheduling failure never disables that timer.
@@ -155,26 +219,6 @@ func (rt *Runtime) HandleActivationBudgetDeadline(ctx context.Context, ownerID, 
 		return err
 	}
 	return nil
-}
-
-// HandleAssignedEngineeringFateDeadline resumes a still-pending fate saga.
-// The saga's durable predicate makes a second delivery a no-op.
-func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ownerID, computerID, agentID, content string) error {
-	deadline, err := decodeAssignedEngineeringFateDeadline(content)
-	if err != nil {
-		return fmt.Errorf("decode assigned Engineering fate deadline: %w", err)
-	}
-	assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, deadline.AssignmentID, deadline.Attempt)
-	if errors.Is(err, store.ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if assignment.Binding.ParentAgentID != agentID {
-		return nil
-	}
-	return rt.resumeStrandedFateAssignmentIfPending(ctx, ownerID, computerID, deadline.AssignmentID, deadline.Attempt)
 }
 
 // HandleFreshMintManagementResumeDeadline re-drives only the exact durable

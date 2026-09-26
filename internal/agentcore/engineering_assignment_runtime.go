@@ -441,6 +441,7 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, req Delegate
 	if err != nil {
 		return AssignedEngineeringStart{}, err
 	}
+	rt.armAssignedEngineeringDeadline(opened.Assignment)
 	// The durable open is committed. Do NOT run spawnBindActivate here — the
 	// cell-commit path arms a deferred delegated_assignment_spawn_deadline wake
 	// and the saga resumes post-commit (consensus precondition). The preflight
@@ -680,6 +681,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	if err != nil {
 		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("bind assigned Engineering activation: %w", err))
 	}
+	rt.armAssignedEngineeringDeadline(bound.Assignment)
 	// The lifecycle Bind receipt is durable before this actor wake. No generic
 	// lifecycle-Management refusal is removed and no pre-cutover mailbox is written.
 	rt.activate(&run)

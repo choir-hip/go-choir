@@ -293,13 +293,6 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 	}
 
 	computerID := strings.TrimSpace(rt.TextureComputerID())
-	// I26 scheduling contract: fail closed on assignments past their deadline
-	// before selecting fresh work, so an expired holder releases the slot.
-	// The stranded-frozen resume runs in the same gate: a Complete reduce
-	// that failed mid-terminal-saga must release its slot through the fate
-	// it already staged, not sit frozen until the deadline cancels it.
-	rt.resumeStrandedFrozenAssignmentCommits(ctx)
-	rt.enforceEngineeringAssignmentDeadlines(ctx)
 	updates, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, agentID, 100)
 	if err != nil {
 		return nil, err
