@@ -9,14 +9,15 @@ Palettes and textures are taken verbatim from `frontend/src/lib/theme.ts`:
 - **Carbon Fiber Kintsugi** (dark): bg `#0B0C0D`, fg `#F2EFE7`, muted `#B2AA98`,
   subtle `#766F62`, accent `#FFD86B`, accent2 `#FFF1BC`, border
   `rgba(255,216,107,0.18)`, borderStrong `rgba(255,241,188,0.48)`, tetramark
-  `#FFE18A`. Texture: 45° diagonal weave plus a 115° pale-gold bloom.
+  `#FFE18A`.
 - **London Salmon** (light): bg `#FDF1EE`, fg `#3A1517`, muted `#755B56`, subtle
   `#AD9088`, accent `#9C5852`, accent2 `#244F4A`, border `rgba(156,88,82,0.16)`,
   borderStrong `rgba(91,28,31,0.2)`, tetramark `#682A28`. Texture: ruled paper
   (1px lines every 28px) plus a 1px margin rule.
 
 The tetramark (`TETRA_MARK_PATHS` in `frontend/src/lib/tetramark.ts`) appears on
-the first and last slides of both editions.
+the first and last slides of both editions. Slides use flat theme paper — the
+product themes' background textures (carbon weave, ruled paper) are omitted.
 
 Source of truth for this file: `docs/deck/choir-seed-deck-2026-09-25-carbon-kintsugi.html`
 and `...-london-salmon.html`.
