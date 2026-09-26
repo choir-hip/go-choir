@@ -526,7 +526,11 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 // mailbox, same cursor, same commitTray path — the ledger sees no difference.
 func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction {
 	inert := &rlmCallReduction{}
-	if rt == nil || !capsule.HostSelectsRLM() {
+	// No HostSelectsRLM gate: desk_go_eval only exists on the sealed desk-cell
+	// registry, which the carrier installs only for a promoted desk — reaching
+	// this reduction means the desk is already on cells. Management promotes
+	// unconditionally (R3c), so the host-global actuator must not inert it.
+	if rt == nil || rt.store == nil {
 		return inert
 	}
 	execCtx := toolregistry.ExecutionContextFrom(ctx)

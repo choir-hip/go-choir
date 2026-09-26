@@ -255,7 +255,11 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString(runtimeprompts.ReconcilerRuntimeOverlay())
 	}
 	if profile == agentprofile.Management {
-		b.WriteString(runtimeprompts.ManagementRuntimeOverlay())
+		if deskCarrierLive(agentprofile.Management) {
+			b.WriteString(runtimeprompts.RLMManagementOverlay())
+		} else {
+			b.WriteString(runtimeprompts.ManagementRuntimeOverlay())
+		}
 	}
 	if profile == agentprofile.Engineering {
 		if capsule.HostSelectsRLM() {
@@ -305,7 +309,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		RequesterAgentID:       requesterAgentID,
 		TextureDeliveryAgentID: textureDeliveryAgentID,
 		ChannelID:              channelID,
-		InCellCarrier:          (deskInCellCarrierProfile(profile) || profile == agentprofile.Engineering) && capsule.HostSelectsRLM(),
+		InCellCarrier:          deskCarrierLive(profile) || (profile == agentprofile.Engineering && capsule.HostSelectsRLM()),
 		NoReportChannel:        profile == agentprofile.Engineering && !capsule.HostSelectsRLM(),
 	}))
 	return b.String(), nil
@@ -357,14 +361,18 @@ func buildRLMAssignedEngineeringRegistry(rt *Runtime) (*toolregistry.ToolRegistr
 	return registry, nil
 }
 
-// deskInCellCarrierProfiles are the non-capsule desks that get a sealed
-// desk-cell registry (sole desk_go_eval) under actuator=rlm — the InCellCarrier
-// fan of mission R3b. Engineering is already capsule-bound via
-// buildRLMAssignedEngineeringRegistry and is not in this set.
-func deskInCellCarrierProfile(profile string) bool {
+// deskCarrierLive reports whether a non-capsule desk profile currently runs
+// on the host desk-cell carrier (sealed desk_go_eval registry). R3c promotes
+// management live — unconditionally, the first non-engineering desk on the
+// in-cell carrier; texture and research remain behind actuator=rlm until
+// R3d/R3r promote them. The predicate is per-profile so a desk promotion
+// never drags an unpromoted desk onto cells.
+func deskCarrierLive(profile string) bool {
 	switch profile {
-	case agentprofile.Management, agentprofile.Texture, agentprofile.Research:
-		return true
+	case agentprofile.Management:
+		return true // R3c: management is live on the cell carrier
+	case agentprofile.Texture, agentprofile.Research:
+		return capsule.HostSelectsRLM() // R3d/R3r promotion
 	default:
 		return false
 	}
@@ -466,15 +474,17 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		return err
 	}
 
-	// R3b InCellCarrier fan: under actuator=rlm, the non-capsule desk profiles
-	// get a sealed desk-cell registry (sole desk_go_eval); under tools they
-	// keep their live host-tool registries until R3c/R3d promote them.
+	// InCellCarrier fan: a non-capsule desk runs on the cell carrier when
+	// deskCarrierLive(profile) promotes it — management is live (R3c);
+	// texture/research stay behind actuator=rlm until R3d/R3r. Unpromoted
+	// desks keep their live host-tool registries.
 	var deskCellRegistries = map[string]*toolregistry.ToolRegistry{}
-	if capsule.HostSelectsRLM() {
-		for _, deskProfile := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research} {
-			if deskReg, derr := buildDeskCellRegistry(rt, deskProfile); derr == nil {
-				deskCellRegistries[deskProfile] = deskReg
-			}
+	for _, deskProfile := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research} {
+		if !deskCarrierLive(deskProfile) {
+			continue
+		}
+		if deskReg, derr := buildDeskCellRegistry(rt, deskProfile); derr == nil {
+			deskCellRegistries[deskProfile] = deskReg
 		}
 	}
 	processorPolicy, err := agentprofile.PolicyFor(agentprofile.Processor)
