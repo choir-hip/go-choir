@@ -339,9 +339,11 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 		}
 		verifierDigest = request.VerifierCertificateDigest
 	} else {
-		// Verifier certificate over the platform-attached evidence — same
-		// signer domain the selfdev path uses; the offer's verifier refs are
-		// the input.
+		// Platform-follow evidence class: the update's authority is the
+		// platform-signed offer + the applied event on the tape — there is no
+		// verifier run for a tracking fast-forward. The checkpoint binds the
+		// applied head, the apply receipt, the release, and the live witness;
+		// corpusd verifies head/receipt/event-kind joins server-side.
 		reconstructionDigest, digestErr := selfdevprotocol.Digest(struct {
 			Version       computerversion.ComputerVersion `json:"computer_version"`
 			EffectiveHead string                          `json:"effective_event_head"`
@@ -350,21 +352,6 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 		if digestErr != nil {
 			return report, digestErr
 		}
-		verifierCertificate, signErr := rt.selfdevVerifier.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
-			Version: 1, ComputerID: computerID, OperationID: operationID,
-			BundleDigest: offerDigest, VerificationEventDigest: offer.VerifierRefs[0],
-			VerifierEvidenceRefs: offer.VerifierRefs, DecisionEventHead: acceptedDigest,
-			CodeRef: string(version.CodeRef), ArtifactProgramRef: string(version.ArtifactProgramRef),
-			ReleaseDigest: result.ReleaseDigest, Decision: "pass",
-		})
-		if signErr != nil {
-			return report, fmt.Errorf("platform update: verifier certificate refused: %w", signErr)
-		}
-		verifierJSON, marshalErr := computerevent.CanonicalJSON(verifierCertificate.Certificate)
-		if marshalErr != nil {
-			return report, marshalErr
-		}
-		verifierDigest = computerevent.DigestBytes(verifierJSON)
 		pinned, _, readErr := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, result.ReleaseDigest)
 		if readErr != nil {
 			return report, fmt.Errorf("platform update: applied release unavailable: %w", readErr)
@@ -378,8 +365,8 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 			ComputerVersion: version, AcceptedEventHead: appliedEventHead, EffectiveEventHead: head.EffectiveEventHead,
 			EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: appliedReceipt.ReceiptID,
 			ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
-			MaterializationReceiptDigest: receiptDigest, VerifierCertificateDigest: verifierDigest,
-			VerifierCertificate: verifierCertificate, ReducerVersion: head.ReducerVersion,
+			MaterializationReceiptDigest: receiptDigest,
+			PlatformFollow: true, ReducerVersion: head.ReducerVersion,
 			VMLocalContentWitness: witness, FrontendIdentity: frontend,
 		})
 		if publishErr != nil {

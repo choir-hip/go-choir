@@ -68,19 +68,30 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	if json.Unmarshal([]byte(storedReceipt), &eventReceipt) != nil || eventReceipt.ReceiptID != request.EventHeadReceiptID {
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: accepted event receipt binding failed")
 	}
-	if request.OwnerRecovery {
-		// Owner-recovery evidence class: no verifier run exists for this
-		// checkpoint. The platform still verifies server-side what it owns: the
-		// head row, the head receipt binding, and the accepted event digest the
-		// receipt names. The VM-local witness is attested by the guest; restore
-		// enforces its truth by reconstructing from the tape and comparing
-		// content before any visibility flip.
-		if request.VerifierTrustBootstrap || request.VerifierCertificateDigest != "" || request.MaterializationReceiptDigest != "" {
-			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: owner-recovery checkpoint must not present verifier evidence")
+	if request.OwnerRecovery || request.PlatformFollow {
+		// Non-verifier evidence classes: no verifier run exists for these
+		// checkpoints. The platform verifies server-side what it owns: the head
+		// row, the head receipt binding, and the accepted event digest the
+		// receipt names. Owner-recovery's witness is attested by the guest and
+		// enforced by restore-time reconstruction; platform-follow's authority
+		// is the platform-signed update offer on the same event chain.
+		if request.OwnerRecovery == request.PlatformFollow ||
+			request.VerifierTrustBootstrap || request.VerifierCertificateDigest != "" ||
+			(request.OwnerRecovery && request.MaterializationReceiptDigest != "") {
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: non-verifier checkpoint must present exactly one evidence class and no verifier evidence")
 		}
 		var headEventDigest string
 		if err := a.cas.store.db.QueryRowContext(ctx, `SELECT event_digest FROM computer_event_append_receipts WHERE computer_id=? AND event_head_receipt_id=?`, request.ComputerID, request.EventHeadReceiptID).Scan(&headEventDigest); err != nil || headEventDigest != request.AcceptedEventHead {
-			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: owner-recovery head receipt does not bind the accepted head")
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: non-verifier head receipt does not bind the accepted head")
+		}
+		if request.PlatformFollow {
+			var eventKind string
+			if err := a.cas.store.db.QueryRowContext(ctx, `SELECT event_kind FROM computer_event_append_receipts WHERE computer_id=? AND event_digest=?`, request.ComputerID, request.AcceptedEventHead).Scan(&eventKind); err != nil || eventKind != string(computerevent.EventMaterializationApplied) {
+				return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: platform-follow checkpoint requires an applied-event head")
+			}
+			if !computerevent.IsSHA256(request.MaterializationReceiptDigest) {
+				return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: platform-follow checkpoint requires the applied-event receipt binding")
+			}
 		}
 	} else if err := a.verifyVerifierEvidence(ctx, request); err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
@@ -90,7 +101,7 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	var storedVerifierKeyID string
 	var storedVerifierKey []byte
 	var keyLookupErr error
-	if !request.OwnerRecovery {
+	if !request.OwnerRecovery && !request.PlatformFollow {
 		var keyErr error
 		verifierKey, keyErr = base64.RawStdEncoding.DecodeString(request.VerifierCertificate.PublicKey)
 		if len(request.VerifierCertificate.Certificate.RequiredSigners) != 1 {

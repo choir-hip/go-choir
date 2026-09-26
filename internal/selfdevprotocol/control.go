@@ -86,6 +86,13 @@ type CheckpointRequest struct {
 	VerifierCertificate          VerifierCertificateResponse     `json:"verifier_certificate"`
 	VerifierTrustBootstrap       bool                            `json:"verifier_trust_bootstrap"`
 	OwnerRecovery                bool                            `json:"owner_recovery,omitempty"`
+	// PlatformFollow marks a checkpoint minted under the platform-update
+	// evidence class: the accepted event is a platform-signed apply
+	// (materialization_applied with a platform-update-* idempotency key), not
+	// a verifier run, so verifier fields must be absent — same non-blending
+	// rule as OwnerRecovery. Unlike owner-recovery it may authorize route
+	// projection: the platform-follow scope is the routing decision record.
+	PlatformFollow               bool                            `json:"platform_follow,omitempty"`
 	ReducerVersion               int                             `json:"reducer_version"`
 	VMLocalContentWitness        VMLocalContentWitness           `json:"vm_local_content_witness"`
 	FrontendIdentity             FrontendIdentity                `json:"frontend_identity"`
@@ -186,19 +193,30 @@ func CheckpointFromRequest(request CheckpointRequest) (Checkpoint, []byte, error
 		request.ReducerVersion == 0 {
 		return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: complete accepted/effective bindings are required")
 	}
-	if request.OwnerRecovery {
-		// Owner-recovery checkpoints are a distinct evidence class. They bind the
-		// canonical head as the restore target and the effective head as the
-		// projection head; the tape-only reconstruction gate at restore time, not
-		// a verifier run, is the enforcement that the attested witness is true.
-		// Verifier-evidence fields must be absent: presenting verifier evidence on
-		// this route is refused so the two evidence classes cannot be blended.
+	if request.OwnerRecovery || request.PlatformFollow {
+		// Non-verifier evidence classes. Owner-recovery binds the canonical head
+		// as a restore target (tape-only reconstruction enforces the witness at
+		// restore time); platform-follow binds the platform-signed applied event
+		// as the routing decision record. Both refuse verifier evidence so the
+		// classes cannot be blended.
+		if request.OwnerRecovery && request.PlatformFollow {
+			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: evidence classes are exclusive")
+		}
 		emptyCertificate, emptyErr := computerevent.CanonicalJSON(VerifierCertificateResponse{})
 		gotCertificate, certErr := computerevent.CanonicalJSON(request.VerifierCertificate)
 		if !computerevent.IsSHA256(request.EffectiveEventHead) || request.VerifierTrustBootstrap ||
-			request.VerifierCertificateDigest != "" || request.MaterializationReceiptDigest != "" ||
+			request.VerifierCertificateDigest != "" ||
 			emptyErr != nil || certErr != nil || !bytes.Equal(emptyCertificate, gotCertificate) {
+			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: non-verifier checkpoint must not present verifier evidence")
+		}
+		if request.OwnerRecovery && request.MaterializationReceiptDigest != "" {
 			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: owner-recovery checkpoint must not present verifier evidence")
+		}
+		// Platform-follow keeps a materialization receipt binding: the promoted
+		// release is the applied event's effect, joined by the promotion
+		// evidence. Owner-recovery has no materializer step.
+		if request.PlatformFollow && !computerevent.IsSHA256(request.MaterializationReceiptDigest) {
+			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: platform-follow checkpoint requires the applied-event receipt binding")
 		}
 	} else {
 		if request.AcceptedEventHead != request.EffectiveEventHead ||
