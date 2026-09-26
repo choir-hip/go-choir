@@ -199,9 +199,9 @@ receipts:
       doc evidence input absent a packet — is deferred: minting such a
       record needs a report-cast act against a doc desk (no external API;
       R3b/M2 territory). Honest boundary per problem-documentation-first.
+      now.slice handed to R3b: drive a doc desk report-cast (sub-RLM) so a
+      reducer-minted record exists, then re-run this acceptance on staging.
     proof_refs:
-      - TestCommitmentLedgerDualReadParity (record+packet -> same entity, 0 div)
-      - TestCommitmentLedgerDualReadDetectsRecordOnlySource (record_only surfaced)
 ---
 
 # R3a — Texture Ledger Consumer (station on the rectification spine)
