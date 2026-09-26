@@ -205,14 +205,22 @@ func (g *GuestCredentials) StartBackgroundRenewal(ctx context.Context) {
 
 // GuestCredentialsWithCapability holds an already-exchanged platform capability
 // for mode and checkpoint calls. Production boot still uses ExchangeGuestCredential.
-func GuestCredentialsWithCapability(baseURL, computerID, token string, expiresAt time.Time) *GuestCredentials {
-	return &GuestCredentials{
+// platformPublicKey is the platform-control authority signing key the returned
+// credential verifies checkpoint and route-projection receipts against; the
+// credential exchange normally populates it from the bootstrap envelope, so
+// only callers that construct a capability off-exchange (tests) pass it here.
+func GuestCredentialsWithCapability(baseURL, computerID, token string, expiresAt time.Time, platformPublicKey ...ed25519.PublicKey) *GuestCredentials {
+	credentials := &GuestCredentials{
 		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		computerID: strings.TrimSpace(computerID),
 		http:       &http.Client{Timeout: 15 * time.Second},
 		token:      token,
 		expiresAt:  expiresAt,
 	}
+	if len(platformPublicKey) > 0 {
+		credentials.publicKey = platformPublicKey[0]
+	}
+	return credentials
 }
 
 func (g *GuestCredentials) SelfDevelopmentMode(ctx context.Context) (platform.SelfDevelopmentMode, error) {

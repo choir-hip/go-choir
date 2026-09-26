@@ -188,12 +188,13 @@ now:
       caller — the product's own event substrate never wakes the
       reconciler. The gap is a trigger, not reconciliation logic.
     next_observation: >-
-      Local proof landed: TestSelfDevReconcileBoundaryMintsManagementObservation
-      — canonical append -> post-commit observer -> coalesced drain ->
-      reconcile -> management-addressed boundary record, zero API calls;
-      TestAppenderPostCommitObserverFiresOnlyOnCommit pins commit-only
-      firing. Next: staging health + deployed commit identity, then a
-      live selfdev op if reachable.
+      Local seeded-op proof landed
+      (selfdev_derivable_materialize_test.go): canonical decision append
+      -> observer -> drain -> op materialized to Applied with
+      checkpoint + route promotion on a real ledger, zero API calls;
+      crash mid-materialize parks at Materializing and the same
+      reconciler completes the apply idempotently after control
+      returns. Next: landing loop -> staging probe.
   blocker_or_risk: >-
     Authority risk: the owner decision step must never be synthesized
     by the loop — the continuation path must stop exactly at the
@@ -202,9 +203,9 @@ now:
     surface is already live). Scope risk: M9a's push signing could drag
     into this station; keep M7 to the advance trigger only.
   next_action: >-
-    Local seeded-op proof that an op reaches a materializable-advance
-    with no post-decision API call, crash/recovery leg, then landing
-    loop (commit -> push -> CI -> deploy -> staging probe).
+    Landing loop: commit -> push -> CI -> Node B deploy -> staging
+    health + deployed-commit identity; live selfdev op on staging was
+    already qualified unreachable on the api-key computer.
 
 receipts:
   - "charter: M7 = skip the harness per plan §11 (on spine, after R3c).
@@ -240,6 +241,20 @@ receipts:
     (Node B) success for CI run 36236447989; selfdev API surface
     answers ('effects are disabled' on the api-key computer — a real
     op was not reachable, qualified per goal)."
+  - "local proof 2026-09-26 (materialize leg): seeded op at
+    AwaitingApproval -> canonical EffectAccepted append -> post-commit
+    observer -> coalesced drain -> recoverSelfDevelopmentDecision ->
+    materializeSelfDevelopmentOperation -> Applied with
+    materialization/checkpoint/route events exactly once and ledger
+    promoted to the new version — no API call after the decision
+    (TestSelfDevReconcileMaterializesDerivably). Crash leg: op parked
+    at Materializing with control down, restored by re-running the
+    same reconciler — updater journal replays identical receipts, all
+    events idempotent, Applied with unchanged decision binding
+    (TestSelfDevReconcileRecoversMaterializingOperation). Fixture
+    binds the op store to the projection tape as production does, so
+    every op mutation is a canonical batch event — the derivable wake
+    under test, not a test-side drive loop."
 ---
 
 
