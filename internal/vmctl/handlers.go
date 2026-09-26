@@ -1262,7 +1262,10 @@ func (h *Handler) HandleAutoputerProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	desktopID := UniversalWirePlatformDesktopID
+	desktopID := strings.TrimSpace(r.URL.Query().Get("desktop"))
+	if desktopID == "" {
+		desktopID = UniversalWirePlatformDesktopID
+	}
 	if err := h.requireComputerVersionRoute(r.Context(), ownerID, desktopID); err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return

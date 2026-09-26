@@ -68,13 +68,13 @@ function mintOffer(mintRequest) {
     JSON.stringify(mintRequest),
   );
 }
-
 function pushOffer(ownerID, offer) {
   return nodeBJSON(
-    `curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" --data-binary @- 'http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${ownerID}/internal/runtime/platform-update'`,
+    `curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" --data-binary @- 'http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${ownerID}/internal/runtime/platform-update?desktop=primary'`,
     JSON.stringify({ offer }),
   );
 }
+
 
 function resolveRoute(ownerID) {
   return nodeBJSON(
@@ -142,6 +142,14 @@ try {
   result.computer_id = computerID;
   result.realization_id = realization;
 
+
+  // Product genesis: an owner POST bootstraps the event chain (idempotent —
+  // 201 on first append, 200 when already bootstrapped).
+  const boot = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/bootstrap-chain`, {});
+  result.bootstrap_chain = boot.json ?? boot.text;
+  if (boot.status !== 200 && boot.status !== 201) {
+    throw new Error(`bootstrap-chain refused: ${JSON.stringify(result.bootstrap_chain)}`);
+  }
   const routeBefore = resolveRoute(ownerID);
   result.route_before = routeBefore;
   const generationBefore = (routeBefore && !routeBefore.route_absent)
