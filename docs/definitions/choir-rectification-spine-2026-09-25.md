@@ -108,15 +108,17 @@ boundaries:
 now:
   status: working
   slice: >-
-    station M7 SETTLED 2026-09-26 — derivable selfdev continuations
-    landed + deployed (722b49bf): canonical decision append ->
-    post-commit observer -> coalesced drain -> reconciler drives ops
-    Accepted -> Materializing -> Applied with checkpoint + route
-    promotion, zero API calls after the owner decision; mid-materialize
-    crash recovers via the same reconciler (goal docs/definitions/
-    choir-selfdev-derivable-continuations-2026-09-26.md
-    now.status=settled). M9a is unblocked — M7 produces a signable
-    materialized change; R5a must land before M11.
+    station M9a CHARTERED 2026-09-26 — platform-signed update push +
+    restore to a pinned head (goal docs/definitions/
+    choir-platform-update-push-restore-2026-09-26.md). M7 terminal
+    2026-09-26 (deployed build 722b49bf): derivable selfdev
+    continuations landed — post-commit observer + coalesced drain
+    drive ops through materialization with no API driver;
+    mid-materialize crash recovers derivably. M9a boundary probe:
+    no platform->computer update channel exists; signed offer +
+    guest apply endpoint over the vmctl proxy + canonical head
+    binding + platform-follow route evidence; restore edge = the
+    existing checkpoint/tape path. R5a still required before M11.
   source_ref: main@722b49bf
   deploy_identity: staging https://choir.news build.commit=722b49bf
   candidate:
@@ -179,9 +181,12 @@ now:
     compile fix) integrated: merged as 7d8e455 and already an ancestor of
     main at R3d's landing.
   next_action: >-
-    Charter the next station: M9a (sign + push a real materialized
-    change) is unblocked by M7; R5a must land before M11. Choose
-    ordering at handoff — M9a in parallel is safe, R5a gates M11.
+    Execute M9a (goal docs/definitions/
+    choir-platform-update-push-restore-2026-09-26.md): signed offer +
+    guest apply endpoint first, then canonical/route binding, local
+    proofs, landing loop. R5a still gates M11 — charter it after M9a
+    or in parallel if a free lane exists.
+receipts:
   - "M7 terminal 2026-09-26: landed+deployed 722b49bf (ci 36241357497,
     staging build.commit=722b49bf); goal docs/definitions/
     choir-selfdev-derivable-continuations-2026-09-26.md

@@ -1094,7 +1094,7 @@ nodes:
     title: Skip the Harness — Derivable Selfdev Continuations (M7, station)
     path: docs/definitions/choir-selfdev-derivable-continuations-2026-09-26.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
     entrypoint: false
     enables: []
@@ -1110,3 +1110,27 @@ nodes:
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
       - docs/Precommitment Records — Engineering Memo.md
+  - id: choir-platform-update-push-restore-2026-09-26
+    title: Platform-Signed Update Push + Restore (M9a, station)
+    path: docs/definitions/choir-platform-update-push-restore-2026-09-26.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    enables: []
+
+    note: >-
+      M9a (on spine, after M7): a platform-control-signed update offer
+      reaches the guest over the vmctl autoputer-proxy transport, the
+      guest verifies signature/binding/epoch/policy, stages the payload
+      into the updater's trusted incoming store, applies under a
+      canonical head binding, and promotes the route slot under a
+      platform-follow evidence class; restore to a pinned head uses the
+      existing checkpoint/tape edge. Proof: staging computer applies a
+      pushed update and restores to a pinned commit. Boundaries:
+      platform updates never mint owner decisions; divergent/pinned
+      lineage is refused; updater trust + route CAS mechanics
+      unchanged.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/reports/choir-platform-update-system-consensus-2026-09-08.md

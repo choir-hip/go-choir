@@ -82,8 +82,8 @@ live one.
 - **R3r landed+deployed** (`3b56c34e`: research on the desk-cell carrier — `desk_go_eval` + typed research/evidence/memory surface under a per-activation egress budget and 8GiB worker cap; generic host tools retired; D2 discharged). — goal file: [`definitions/choir-research-live-cell-2026-09-26.md`](definitions/choir-research-live-cell-2026-09-26.md).
 - **R4 landed+deployed** (`68a2e023`: commitment ledger read surface — derived accrual views, falsification-visible materiality projection feeding `textureAvailableSourceEntities`, score-free acting packs on the cell frame via `choir.Pack`, learning-claims gate on the selfdev verification payload). — goal file: [`definitions/choir-commitment-scores-packs-2026-09-26.md`](definitions/choir-commitment-scores-packs-2026-09-26.md).
 - **R5a** vocab decoders + seed freeze — gates M11; keep `choir:co-super-assignment:v3`. **R5b** rename-migrate deferred indefinitely.
-- **M7** skip the harness — selfdev ops advance to materialization on derivable continuations driven by the management cell; chartered under the meta-goal: [`definitions/choir-selfdev-derivable-continuations-2026-09-26.md`](definitions/choir-selfdev-derivable-continuations-2026-09-26.md).
-- **M9a** platform push + restore — on M11's restore edge.
+- **M7 landed+deployed** (`722b49bf`: derivable selfdev continuations — post-commit observer + coalesced drain advance an op through materialization with no API driver; mid-materialize crash recovers derivably; parked ops mint management-addressed boundary records). — goal file: [`definitions/choir-selfdev-derivable-continuations-2026-09-26.md`](definitions/choir-selfdev-derivable-continuations-2026-09-26.md).
+- **M9a** platform push + restore — on M11's restore edge; chartered under the meta-goal: [`definitions/choir-platform-update-push-restore-2026-09-26.md`](definitions/choir-platform-update-push-restore-2026-09-26.md).
 - **M11** self-dev gate — receipts are scored commitment_records readable in the live Texture doc (owner ruling: the doc is the gate's supervision surface).
 - **M9b/M10** after M11.
 
