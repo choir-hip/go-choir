@@ -118,11 +118,15 @@ value:
       the continuation is not derivable.'
 
 now:
-  status: working
+  status: settled
   slice: >-
-    station M7 WORKING 2026-09-26 — boundary probe recorded;
-    derivable-continuation substrate committed 3377ba91 (CI/deploy
-    in flight). Probe: the reconciler ran only from two HTTP sites;
+    station M7 SETTLED 2026-09-26 — derivable-continuation substrate
+    landed + deployed (722b49bf): canonical decision append ->
+    post-commit observer -> coalesced drain -> reconciler drives the
+    op through Accepted -> Materializing -> Applied with checkpoint +
+    route promotion, zero API calls after the owner decision; a
+    mid-materialize crash recovers via the same reconciler. Probe:
+    the reconciler ran only from two HTTP sites;
     nothing in the canonical event chain woke it, and a crash
     mid-Materializing required the same external call. Named seams
     chosen: (1) a post-commit observer on
@@ -203,9 +207,9 @@ now:
     surface is already live). Scope risk: M9a's push signing could drag
     into this station; keep M7 to the advance trigger only.
   next_action: >-
-    Landing loop: commit -> push -> CI -> Node B deploy -> staging
-    health + deployed-commit identity; live selfdev op on staging was
-    already qualified unreachable on the api-key computer.
+    none — station complete. Spine advances to the next chartered
+    station (M9a signing is unblocked: M7 now produces a signable
+    materialized change).
 
 receipts:
   - "charter: M7 = skip the harness per plan §11 (on spine, after R3c).
@@ -255,6 +259,14 @@ receipts:
     binds the op store to the projection tape as production does, so
     every op mutation is a canonical batch event — the derivable wake
     under test, not a test-side drive loop."
+  - "landed 2026-09-26 (722b49bf): CI run 36241357497 success (all
+    lanes incl. agentcore/textureowner race shards); Node B deploy
+    deployed_commit=722b49bff0353a84d4463e88685de5736886aa17,
+    choir.news/health status=ok vmctl_status=ok. Deployed acceptance:
+    staging identity + health verified; a live selfdev op remains
+    qualified unreachable on the api-key computer — behavioral proof is
+    the local seeded-op materialize + crash-recovery tests per the
+    goal's evidence classes (local test)."
 ---
 
 
