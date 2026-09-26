@@ -166,7 +166,7 @@ boundaries:
     - vmctl proxy authorization (internal caller gating)
 
 now:
-  status: working
+  status: settled
   slice: >-
     station M9a IMPLEMENTED 2026-09-26 — local proofs green. Built
     exactly per the boundary-probe seams: (1)
@@ -193,10 +193,19 @@ now:
     TestPlatformUpdateRefusals (bad signature, wrong computer, expired
     window, pinned/divergent lineage, stale base head, tampered payload,
     wrong receipt kind — all refused before any canonical mutation).
-    Staging probe scripts/m9a_platform_update_probe.mjs awaits the
-    landing loop.
+    Staging probe scripts/m9a_platform_update_probe.mjs green 2026-09-26
+    on deployed 44e4169e — see receipts and
+    docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md.
+    The landing peeled four real substrate gaps (documented first in
+    docs/problems/platform-update-stranded-tail-and-baseless-checkpoint-2026-09-26.md):
+    stranded post-applied tail + baseless-computer checkpoint refusal
+    (resumable tail + sweep + fetch-by-key + bounded genesis replay),
+    no checkpoint evidence class for platform updates (new
+    platform_follow class), no artifact intake into platform-artifacts
+    (mint stages sha256/platform-update/<digest>), and the route
+    classifier rejecting platform-follow evidence shapes.
   source_ref: main@87259816
-  deploy_identity: staging https://choir.news build.commit=722b49bf
+  deploy_identity: staging https://choir.news build.commit=44e4169e
   candidate:
     id: none
     state: none
@@ -280,10 +289,10 @@ now:
     windows (authorization window truncates to the minute) must not
     collide under retry.
   next_action: >-
-    Construct the signed offer type + guest apply endpoint
-    (verification-first: signature, computer/realization binding,
-    lineage policy, expiry), wire the canonical desired-state append +
-    apply + promotion sequence, then local proofs, then landing loop.
+    none — station settled. Spine advances to the next chartered
+    station (M9b computer->computer publish or the next ratified slice
+    per plan §11; the platform-follow update path + restore edge now
+    proven on staging is what M11's restore and update legs consume).
 
 receipts:
   - "boundary probe 2026-09-26: no platform->computer update channel
@@ -301,6 +310,24 @@ receipts:
     reused. Restore edge exists and is reused unchanged: checkpoint/
     AcceptedEventHead tape rematerialization + RestagePinnedRelease.
     Verifier domain name is verifier-control."
+  - "deployed landing 2026-09-26: five-strand failure cascade peeled by
+    the deployed probe (docs/problems/platform-update-stranded-tail-and-baseless-checkpoint-2026-09-26.md);
+    fix chain 4153b5e4 -> 1d967302 -> b920c85a -> c61be3f1 -> 44e4169e.
+    Final state on c61be3f1: applied->checkpoint->route promoted gen 1,
+    then lifecycle/checkpoint refused ownership because the route
+    classifier rejected platform-follow evidence — classifier fixed in
+    44e4169e; full green probe on that build: tape genesis..accepted..
+    materialization_applied..checkpoint_published..route_projection_
+    updated..restore_requested; restore = tape_reconstruct base_sequence
+    0, 6 tail events, witness_matched, frontend_restaged. Evidence:
+    docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md."
+  - "settled 2026-09-26: CI runs 36271885607 (1d967302), 36274533664
+    (b920c85a), 36276769293 (c61be3f1), 36277989883 (44e4169e) all
+    green; Node B deploys confirmed via embedded_commit manifests
+    (pr-20260926-44e4169e final). Deployed acceptance:
+    scripts/m9a_platform_update_probe.mjs predicate satisfied on
+    https://choir.news — a tracking computer applies a platform-signed
+    push and restores to the pinned head through the product path."
 ---
 
 # M9a — Platform-Signed Update Push + Restore (station on the rectification spine)
