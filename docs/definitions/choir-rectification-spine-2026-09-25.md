@@ -117,9 +117,10 @@ now:
     restore to the pinned head on a baseless computer. The landing
     peeled five substrate strands
     (docs/problems/platform-update-stranded-tail-and-baseless-checkpoint-2026-09-26.md).
-    Next station: R5a — vocab decoders + seed freeze; M11's proof tape
-    must fold under frozen decoders, and M11 depends on M7 + M9a + R3d
-    + R4 + R5a.
+    Next station: R5a — chartered at
+    docs/definitions/choir-vocab-decoders-seed-freeze-2026-09-26.md;
+    M11's proof tape must fold under frozen decoders, and M11 depends
+    on M7 + M9a + R3d + R4 + R5a.
   source_ref: main@5fb58654
   deploy_identity: staging https://choir.news build.commit=44e4169e
   candidate:
@@ -182,11 +183,11 @@ now:
     compile fix) integrated: merged as 7d8e455 and already an ancestor of
     main at R3d's landing.
   next_action: >-
-    Charter R5a (vocab decoders + seed freeze) — the last gate before
-    M11: per-family frozen decoders + V1→V2 profile normalization +
-    explicit keep-choir:co-super-assignment:v3 decision; proof target
-    is a pre-migration tape folding identically. Author the R5a goal
-    file, then this file's now.slice points at it.
+    Execute R5a per
+    docs/definitions/choir-vocab-decoders-seed-freeze-2026-09-26.md —
+    per-family frozen decoders + one normalization point + seed pin +
+    pre-migration fold proof. On its terminal receipt, now.slice points
+    at M11 (the self-development gate) — the last station.
 receipts:
   - "M7 terminal 2026-09-26: landed+deployed 722b49bf (ci 36241357497,
     staging build.commit=722b49bf); goal docs/definitions/
