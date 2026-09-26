@@ -21,17 +21,26 @@ func TestManagementPromotedToDeskCellCarrier(t *testing.T) {
 }
 
 func TestManagementCellRegistryIsSealed(t *testing.T) {
-	rt := &Runtime{}
+	rt := &Runtime{capsuleExecutor: capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)}
 	reg, err := buildDeskCellRegistry(rt, agentprofile.Management)
 	if err != nil {
 		t.Fatalf("build desk cell registry: %v", err)
 	}
+	// The cell doorway must be present.
 	if _, ok := reg.Lookup("desk_go_eval"); !ok {
 		t.Fatal("sealed management registry must expose desk_go_eval")
 	}
-	// The whole point of the seal: no second doorway. report_to_texture —
-	// the host report path R3c retires — must not be reachable on cells.
-	for _, banned := range []string{"report_to_texture", "cancel_co_super_assignment"} {
+	// R3c keeps the typed lifecycle control surface on the cell registry:
+	// report_to_texture (producer report) and cancel_co_super_assignment are
+	// the durable control path — orthogonal to the cell-eval seal.
+	for _, kept := range []string{"report_to_texture", "cancel_co_super_assignment"} {
+		if _, ok := reg.Lookup(kept); !ok {
+			t.Fatalf("management cell registry must keep lifecycle control %q", kept)
+		}
+	}
+	// The seal forbids the generic host tools a tool-loop desk would have:
+	// no file/exec/research host doorway alongside desk_go_eval.
+	for _, banned := range []string{"read_file", "write_file", "exec", "glob", "grep"} {
 		if _, ok := reg.Lookup(banned); ok {
 			t.Fatalf("carrier registry must not expose host tool %q", banned)
 		}

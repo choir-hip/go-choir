@@ -379,15 +379,26 @@ func deskCarrierLive(profile string) bool {
 }
 
 // buildDeskCellRegistry is the host-cell sealed overlay for a non-capsule desk
-// (R3b): desk_go_eval is the sole JSON envelope — the desk's only tool. Every
-// other affordance is a typed in-cell choir function staged and reduced by the
-// canonical reducer, exactly as Engineering's capsule_go_eval registry works.
-// Live desk tools remain for actuator=tools; the cell carrier activates only
-// under the rlm actuator until R3c/R3d promote each desk live.
+// (R3b): desk_go_eval is the cell doorway. For management (R3c) it
+// additionally carries the typed producer-report and cancellation control
+// tools — report_to_texture and cancel_co_super_assignment are the lifecycle
+// control surface, orthogonal to the cell-eval seal; "retire to the staged
+// path" retires the unstructured report flow, not these typed controls.
+// Texture/research get desk_go_eval only.
 func buildDeskCellRegistry(rt *Runtime, deskRole string) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	if err := registry.Register(newDeskGoEvalTool(rt, rt.deskSessionWorkers(), deskRole)); err != nil {
 		return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
+	}
+	if deskRole == agentprofile.Management {
+		if err := RegisterPersistentManagementReportTools(registry, rt); err != nil {
+			return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
+		}
+		if rt.capsuleExecutor != nil {
+			if err := RegisterAssignedEngineeringTools(registry, rt); err != nil {
+				return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
+			}
+		}
 	}
 	return registry, nil
 }
