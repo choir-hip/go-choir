@@ -156,7 +156,11 @@ func main() {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid apply request"})
 			return
 		}
-		result, err := engine.Apply(r.Context(), request)
+		// The apply mutates guest services and commonly kills its own caller
+		// (autoputer restart). The journal, not the HTTP request, owns the
+		// lifecycle — run it detached from the request context so the probe
+		// and recovery steps still complete after the caller dies.
+		result, err := engine.Apply(context.WithoutCancel(r.Context()), request)
 		if err != nil {
 			if result.RecoveryReceipt != nil {
 				writeJSON(w, http.StatusConflict, struct {

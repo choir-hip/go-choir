@@ -571,7 +571,10 @@ func (h *APIHandler) HandleInternalPlatformUpdate(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid platform update offer"})
 		return
 	}
-	report, err := h.rt.ApplyPlatformUpdate(r.Context(), request.Offer)
+	// The apply self-restarts this guest — the push's connection dies with it.
+	// The event chain owns the outcome; run the apply detached from the request
+	// context so the tail (applied → checkpoint → route projection) completes.
+	report, err := h.rt.ApplyPlatformUpdate(context.WithoutCancel(r.Context()), request.Offer)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, ErrPlatformUpdateStaleHead) {
