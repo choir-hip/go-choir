@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"sync"
 	"reflect"
 	"strings"
 	"testing"
@@ -924,5 +925,57 @@ func TestAppenderDryRunPassesHealthyBatch(t *testing.T) {
 	}
 	if projection.dryRunSeen != 1 || len(cas.records) == 0 {
 		t.Fatalf("dry-run consulted %d times, CAS records %d; want 1 and >0", projection.dryRunSeen, len(cas.records))
+	}
+}
+
+// M7: the post-commit observer is the derivable-continuation seam — it must
+// fire exactly on durable commits and never on refused appends, because the
+// reconciler treats each firing as a settlement boundary.
+func TestAppenderPostCommitObserverFiresOnlyOnCommit(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	projection := &memoryProjection{}
+	cas := &memoryCAS{signer: signer}
+	appender, err := NewComputerEventAppender(testComputerID, memoryPinner{signer: signer}, projection, cas, EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	fired := []EventKind{}
+	appender.SetPostCommitObserver(func(kind EventKind) {
+		mu.Lock()
+		defer mu.Unlock()
+		fired = append(fired, kind)
+	})
+
+	genesis := testEvent(t, nil, EventGenesisImported)
+	genesis.ResultingEffectiveCommitment = testDigestA
+	if _, err := appender.AppendNew(context.Background(), genesis, TransitionInput{TargetStateCommitment: testDigestA}, nil); err != nil {
+		t.Fatalf("append genesis: %v", err)
+	}
+	stale := testEvent(t, nil, EventEffectProposed)
+	stale.RequireExpectedHead = true
+	stale.PreviousHead = testDigestB // wrong head -> refused
+	if _, err := appender.AppendNew(context.Background(), stale, TransitionInput{}, nil); err == nil {
+		t.Fatal("stale append accepted")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(fired)
+		mu.Unlock()
+		if n >= 1 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(fired) != 1 || fired[0] != EventGenesisImported {
+		t.Fatalf("observer fired %v, want exactly [%s]", fired, EventGenesisImported)
 	}
 }

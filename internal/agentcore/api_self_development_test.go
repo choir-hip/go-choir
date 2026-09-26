@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
@@ -1042,5 +1043,105 @@ func decisionpolicyValidInput(t *testing.T) (*decisionpolicy.Store, decisionpoli
 			sign("b-verifier", "capsule-verifier", "verification", "signer-verifier"),
 			sign("b-reviewer", "independent-reviewer", "verification", "signer-reviewer"),
 		},
+	}
+}
+
+// M7: a selfdev op parked at AwaitingApproval must surface on the management
+// desk without any API poll — the coalesced reconcile trigger drains, lists
+// the op, and mints one idempotent commitment record addressed to the
+// persistent management agent. This is the "management observes op state"
+// leg of the derivable-continuation mission.
+func TestSelfDevReconcileBoundaryMintsManagementObservation(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-m7-boundary"
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signingKey := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "test"}, PrivateKey: privateKey}
+	appender, err := computerevent.NewComputerEventAppender(computerID, rollbackTestPinner{signingKey}, productStore, rollbackTestCAS{key: signingKey, projection: productStore}, rollbackTestReceiptVerifier{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesisID, _ := computerevent.NewEventID()
+	genesis := computerevent.Event{SchemaVersion: 1, EventID: genesisID, ComputerID: computerID, EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("a", 64), ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: 1}
+	if _, err := appender.AppendNew(ctx, genesis, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("a", 64)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updaterClient, err := updater.NewClient(filepath.Join(t.TempDir(), "updater.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifierClient, err := receiptsigner.NewClient(filepath.Join(t.TempDir(), "verifier.sock"), receiptsigner.ModeGuestCore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computerID}, store: productStore, eventAppender: appender, selfdevOperations: operations}
+	WithSelfDevelopmentUpdater(updaterClient, t.TempDir(), computerID, "realization-m7")(rt)
+	WithSelfDevelopmentVerifier(verifierClient)(rt)
+	WithSelfDevelopmentControl(selfdev.GuestCredentialsWithCapability("http://127.0.0.1:1", computerID, "unused", time.Now().UTC().Add(time.Hour)))(rt)
+	WithSelfDevelopmentRoute(vmctl.NewClient("http://127.0.0.1:1"), "owner", "primary")(rt)
+
+	// Seed an op at the owner-decision boundary through the legal chain.
+	operation, err := operations.Start(ctx, selfdev.StartRequest{ComputerID: computerID, IdempotencyKey: "op-m7", PromptArtifactRef: "artifact:sha256:" + strings.Repeat("d", 64)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range [][2]string{{selfdev.StateRequested, selfdev.StateExecuting}, {selfdev.StateExecuting, selfdev.StateFrozen}, {selfdev.StateFrozen, selfdev.StateVerified}, {selfdev.StateVerified, selfdev.StateAwaitingApproval}} {
+		operation, err = operations.Transition(ctx, computerID, operation.OperationID, step[0], step[1], nil)
+		if err != nil {
+			t.Fatalf("transition %s->%s: %v", step[0], step[1], err)
+		}
+	}
+
+	// The canonical derivable wake: the post-commit observer fires the
+	// coalesced trigger; no API call happens.
+	appender.SetPostCommitObserver(func(computerevent.EventKind) { rt.triggerSelfDevelopmentReconcile() })
+	updateID, _ := computerevent.NewEventID()
+	update := computerevent.Event{SchemaVersion: 1, EventID: updateID, ComputerID: computerID, EventKind: computerevent.EventResearchUpdate, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "wake", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("0", 64), ResultingEffectiveCommitment: strings.Repeat("f", 64), ReducerVersion: 1}
+	if _, err := appender.AppendNew(ctx, update, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("f", 64)}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	wantRecordID := "selfdev-observation:" + operation.OperationID + ":awaiting-decision"
+	wantAddressee := persistentManagementAgentID("owner")
+	deadline := time.Now().Add(5 * time.Second)
+	var records []types.CommitmentRecord
+	for {
+		records, _ = productStore.ListCommitmentRecords(ctx, "owner", computerID, wantAddressee, 8)
+		seen := false
+		for _, rec := range records {
+			if rec.RecordID == wantRecordID {
+				seen = true
+			}
+		}
+		if seen || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	seen := false
+	for _, rec := range records {
+		if rec.RecordID == wantRecordID {
+			seen = true
+			if rec.Addressee != wantAddressee {
+				t.Fatalf("boundary record addressee=%q, want %q", rec.Addressee, wantAddressee)
+			}
+			if rec.Discrepancy != types.DiscrepancyUnresolved {
+				t.Fatalf("boundary record discrepancy=%q, want unresolved", rec.Discrepancy)
+			}
+		}
+	}
+	if !seen {
+		t.Fatalf("reconcile drain minted no boundary record; records=%v", records)
 	}
 }

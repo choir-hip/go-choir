@@ -125,7 +125,13 @@ type ComputerEventAppender struct {
 	// observation with a single branch per site; recovery evidence, not
 	// control flow — the observer can never alter replay.
 	replayObserver ReplayObserver
-	mu             sync.Mutex
+	// postCommitObserver receives each committed event kind after the head
+	// CAS + receipt verification + projection finalize succeed (M7): the
+	// canonical derivable-continuation seam. It runs detached — the
+	// append never waits and the observer can never block or alter the
+	// event commit.
+	postCommitObserver func(kind EventKind)
+	mu                 sync.Mutex
 	// Replay progress snapshot (guarded by mu) so the guest health surface can
 	// report a replay in progress with its sequence to the host wait-for-ready
 	// probe without racing the replay goroutine.
@@ -151,6 +157,18 @@ func (a *ComputerEventAppender) SetReplayObserver(observer ReplayObserver) {
 		return
 	}
 	a.replayObserver = observer
+}
+
+// SetPostCommitObserver installs the derivable-continuation observer
+// (M7): it receives each event's kind exactly once, after the commit is
+// durable (head CAS + receipt verify + projection finalize). The call is
+// detached — implementors must be non-blocking and must not append back
+// into the same appender synchronously. Nil disables.
+func (a *ComputerEventAppender) SetPostCommitObserver(observer func(kind EventKind)) {
+	if a == nil {
+		return
+	}
+	a.postCommitObserver = observer
 }
 
 // ReplaySnapshot describes the durable replay progress for the liveness probe.
@@ -646,6 +664,9 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 	}
 	if err := a.finalizeProjection(ctx, event, digest, receipt); err != nil {
 		return Receipt{}, fmt.Errorf("%w: finalize embedded projection: %w", ErrNeedsProjectionRepair, ClassifyProjectionFailure(err))
+	}
+	if a.postCommitObserver != nil {
+		go a.postCommitObserver(event.EventKind)
 	}
 	return receipt, nil
 }

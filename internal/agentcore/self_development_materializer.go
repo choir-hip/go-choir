@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -33,8 +35,32 @@ func (r updaterReceiptKeyResolver) ResolveReceiptKey(domain, _ string, keyID str
 	return append(ed25519.PublicKey(nil), r.key...), nil
 }
 
+// triggerSelfDevelopmentReconcile is the M7 derivable-continuation wake: the
+// appender's post-commit observer calls it once per committed canonical
+// event. The pending flag coalesces bursts — the first trigger launches the
+// drain, later triggers only leave the flag set, and the drain loops until a
+// pass completes with the flag clear. The reconciler's own ListByStates
+// query is the sole state gate.
+func (rt *Runtime) triggerSelfDevelopmentReconcile() {
+	if rt == nil || rt.selfdevOperations == nil || rt.eventAppender == nil || rt.selfdevComputerID == "" {
+		return
+	}
+	if rt.selfdevReconcilePending.CompareAndSwap(false, true) {
+		go rt.selfdevReconcileDrain()
+	}
+}
+
+// selfdevReconcileDrain runs the reconciler until the pending flag stays
+// clear — each pass covers every commit that preceded its state listing,
+// so one drain collapses a commit burst into one settlement boundary.
+func (rt *Runtime) selfdevReconcileDrain() {
+	for rt.selfdevReconcilePending.Swap(false) {
+		rt.reconcileSelfDevelopmentMaterialization(context.Background())
+	}
+}
+
 func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) {
-	if rt == nil || rt.selfdevUpdater == nil || rt.selfdevVerifier == nil || rt.selfdevControl == nil || rt.selfdevRoute == nil || rt.selfdevRouteOwnerID == "" || rt.selfdevRouteDesktopID == "" || rt.selfdevComputerID == "" || rt.selfdevOperations == nil || rt.eventAppender == nil || rt.store == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || strings.TrimSpace(rt.selfdevRealizationID) == "" {
+	if rt == nil || rt.maintenanceHeld() || rt.selfdevUpdater == nil || rt.selfdevVerifier == nil || rt.selfdevControl == nil || rt.selfdevRoute == nil || rt.selfdevRouteOwnerID == "" || rt.selfdevRouteDesktopID == "" || rt.selfdevComputerID == "" || rt.selfdevOperations == nil || rt.eventAppender == nil || rt.store == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || strings.TrimSpace(rt.selfdevRealizationID) == "" {
 		return
 	}
 	rt.selfdevMaterializeMu.Lock()
@@ -47,6 +73,11 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 		if operation.State == selfdev.StateAwaitingApproval {
 			recovered, found, recoveryErr := rt.recoverSelfDevelopmentDecision(ctx, operation)
 			if recoveryErr != nil || !found {
+				// Still at the owner-decision boundary (M7): mint the
+				// observation claim addressed to the management desk so its
+				// acting pack shows the op awaiting decision without an API
+				// poll. Idempotent on the deterministic record id.
+				rt.notifySelfDevelopmentDecisionBoundary(ctx, operation)
 				continue
 			}
 			operation = recovered
@@ -558,4 +589,46 @@ func bundleDigestFromRelease(releaseDigest, fallback string) string {
 		return releaseDigest
 	}
 	return fallback
+}
+
+// selfdevBoundaryObserverAgentID is the committing-agent identity stamped on
+// reconciler-minted boundary records — system-committed acts addressed to the
+// management desk, distinct from any cell-authored provenance.
+const selfdevBoundaryObserverAgentID = "selfdev-reconciler"
+
+// notifySelfDevelopmentDecisionBoundary mints the management observation of
+// an op parked at the owner-decision boundary (M7): a score-free commitment
+// record addressed to the computer's management desk so its acting pack
+// shows the pending decision without an API poll. The deterministic record
+// id makes re-emission a no-op; emission is observational — a ledger failure
+// is logged, never fatal to the reconcile pass.
+func (rt *Runtime) notifySelfDevelopmentDecisionBoundary(ctx context.Context, operation selfdev.Operation) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	rec := types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    fmt.Sprintf("selfdev-observation:%s:awaiting-decision", operation.OperationID),
+		Discrepancy: types.DiscrepancyUnresolved,
+		Prediction: types.CommitmentPrediction{
+			Hypothesis:  fmt.Sprintf("self-development operation %s (trajectory %s, capsule %s) is verified and awaits the owner decision boundary", operation.OperationID, operation.TrajectoryID, operation.CapsuleID),
+			CommittedAt: now,
+		},
+		Observation: types.CommitmentObservation{
+			Excerpt:    fmt.Sprintf("operation %s verified frozen bundle %s; no decided transition projected yet", operation.OperationID, operation.BundleDigest),
+			SourceRef:  operation.OperationID,
+			ObservedAt: now,
+		},
+		Provenance: types.CommitmentProvenance{
+			AgentID:     selfdevBoundaryObserverAgentID,
+			ContextRef:  operation.TrajectoryID,
+			CommittedAt: now,
+		},
+		Addressee:    persistentManagementAgentID(rt.selfdevRouteOwnerID),
+		EvidenceRefs: []string{operation.OperationID},
+	}
+	if _, err := rt.store.AppendCommitmentRecord(ctx, rt.selfdevRouteOwnerID, operation.ComputerID, rec); err != nil {
+		log.Printf("selfdev reconcile: decision-boundary observation for %s: %v", operation.OperationID, err)
+	}
 }

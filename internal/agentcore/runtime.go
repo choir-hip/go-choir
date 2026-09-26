@@ -171,6 +171,10 @@ type Runtime struct {
 	// re-entrant).
 	managementReconcileMu sync.Mutex
 	selfdevMaterializeMu  sync.Mutex
+	// selfdevReconcilePending is the M7 derivable-continuation signal: the
+	// canonical post-commit observer sets it and a single drain loop
+	// collapses bursts into one reconcile per settlement boundary.
+	selfdevReconcilePending atomic.Bool
 	// restoreBaseSource overrides verified-base resolution for recovery
 	// (rematerialize, restore, replay-completeness). Nil builds a platform
 	// source from CorpusdURL plus guest credentials per call; tests inject
@@ -655,6 +659,18 @@ func (rt *Runtime) Start(ctx context.Context) {
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
 	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
+	bootPhase("selfdev_materialization_reconcile", func() { rt.triggerSelfDevelopmentReconcile() })
+	// M7 derivable continuations: every committed canonical event may carry
+	// a self-development settlement boundary (verification -> approval,
+	// decision -> materialization, rollback request -> rollback). The
+	// appender fires this observer once per committed event; the trigger
+	// drains under a coalesced pending flag, and the reconciler's state
+	// query is the gate — no external API call is needed to advance an op.
+	if rt.eventAppender != nil {
+		rt.eventAppender.SetPostCommitObserver(func(computerevent.EventKind) {
+			rt.triggerSelfDevelopmentReconcile()
+		})
+	}
 	// Boot does not directly deliver work. Restart-resumption sweeps that
 	// re-fired committed work (lifecycle rewarm, persistent-Management resume,
 	// passivated spawned work, open work items, mailbox backlog) are deleted

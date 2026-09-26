@@ -120,17 +120,37 @@ value:
 now:
   status: working
   slice: >-
-    station M7 CHARTERED 2026-09-26. Substrate (re-verified at
-    charter): reconcileSelfDevelopmentMaterialization runs only from
-    two HTTP API sites (api_self_development.go:1013 decision path,
-    :1297 rollback path) — today every lifecycle advance rides an
-    external caller; the reconciler itself already re-derives per-op
-    continuation from durable state (recoverSelfDevelopmentDecision +
-    materializeSelfDevelopmentOperation), so the missing piece is a
-    canonical trigger, not new reconciliation logic. Management is on
-    the carrier (R3c) and can observe + act; R4 packs/materiality give
-    it scored supervision. M9a unblocks once M7 produces something
-    signable.
+    station M7 WORKING 2026-09-26 — boundary probe recorded,
+    derivable-continuation substrate built locally (uncommitted).
+    Probe: the reconciler ran only from two HTTP sites
+    (api_self_development.go decision + rollback paths); nothing in the
+    canonical event chain woke it, and a crash mid-Materializing
+    required the same external call. Named seams chosen: (1) a
+    post-commit observer on ComputerEventAppender.appendLocked — the
+    sole event-commit choke point, replay bypasses it — firing the
+    coalesced reconciler trigger on every committed kind; firing on all
+    kinds is required because the Verified->AwaitingApproval transition
+    is an in-cell operation-store write, not a canonical event — the
+    cell's own subsequent events guarantee a later fire, and the
+    reconciler's ListByStates is the sole state gate. Derivable
+    advances: decision-recovery (AwaitingApproval->Accepted/Rejected),
+    materialization, rollback — all ride canonical decision/rollback
+    event commits (ActorProfile management, owner authority_ref).
+    Never derivable: the decision itself — reconcile stops at the gate
+    and waits for the real effect_accepted/rejected commit. (2) Boot
+    phase selfdev_materialization_reconcile covers the crash leg. (3)
+    Management observation: ops parked at AwaitingApproval mint an
+    idempotent commitment_record addressed to
+    persistentManagementAgentID — lands in the management desk's
+    score-free acting pack (packEligible via Addressee). Rejected
+    alternatives: hooking every API append site (drifts per-writer),
+    QueueLifecycleUpdate control packets (needs a control-binding and
+    run/work-item chain the reconciler doesn't own), filtering the
+    observer to selfdev kinds (misses the in-cell AwaitingApproval
+    transition). maintenanceHeld() added to the reconciler guard —
+    wake-when-held must not mutate. M9a still unblocks once M7
+    produces something signable.
+
   candidate:
     id: none
     state: none
@@ -168,9 +188,13 @@ now:
       caller — the product's own event substrate never wakes the
       reconciler. The gap is a trigger, not reconciliation logic.
     next_observation: >-
-      Boundary probe: which event heads (selfdev transitions, capsule
-      freezes, verification records) should wake the reconciler, and
-      how the management cell's pack/inbox should carry operation state.
+      Boundary probe complete 2026-09-26 — derivable seam is
+      appendLocked post-commit (all kinds; in-cell transitions are not
+      events); derivable legs: decision-recovery, materialization,
+      rollback, crash-restart; the decision itself never synthesizes —
+      reconcile waits at AwaitingApproval with a management-addressed
+      commitment record. Next: local seeded-op proof that the loop
+      advances with no post-decision API call, then staging.
   blocker_or_risk: >-
     Authority risk: the owner decision step must never be synthesized
     by the loop — the continuation path must stop exactly at the
@@ -179,10 +203,9 @@ now:
     surface is already live). Scope risk: M9a's push signing could drag
     into this station; keep M7 to the advance trigger only.
   next_action: >-
-    Boundary probe (reconciler trigger seam + management observation
-    surface), then: (1) event-head-triggered reconcile; (2) management
-    carrier observation of op state; (3) crash/recovery proof; (4)
-    tests; (5) landing loop.
+    Local seeded-op proof that an op reaches a materializable-advance
+    with no post-decision API call, crash/recovery leg, then landing
+    loop (commit -> push -> CI -> deploy -> staging probe).
 
 receipts:
   - "charter: M7 = skip the harness per plan §11 (on spine, after R3c).
@@ -194,7 +217,19 @@ receipts:
     loop; the derivable trigger is additive (API path stays); rollback
     is revert+redeploy. Boundary probe on the trigger seam and the
     management observation surface runs before implementation."
+  - "boundary probe 2026-09-26: derivable seam = ComputerEventAppender
+    appendLocked post-commit observer on every committed kind (in-cell
+    Verified->AwaitingApproval is an op-store write, not an event — all-
+    kinds firing + coalesced drain is required; ListByStates is the sole
+    state gate). Derivable: decision-recovery, materialization, rollback,
+    crash-restart via boot phase. Never derivable: the owner decision —
+    reconcile parks at AwaitingApproval and mints an idempotent
+    selfdev-observation commitment_record addressed to
+    persistentManagementAgentID (lands in the desk acting pack via
+    Addressee eligibility). Rejected: per-API-site hooks (drift), control
+    packets (wrong surface), kind-filtering (misses in-cell transition)."
 ---
+
 
 # M7 — Skip the Harness: Derivable Selfdev Continuations (station on the rectification spine)
 

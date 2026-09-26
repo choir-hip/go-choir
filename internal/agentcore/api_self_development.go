@@ -1006,11 +1006,29 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		return nil
 	})
 	if err != nil {
+		// M7 derivable continuations: the post-commit observer may have
+		// raced this transition — the drain's recoverSelfDevelopmentDecision
+		// applies the same finalized decision. If the durable operation now
+		// carries this exact decision, the request already succeeded.
+		if errors.Is(err, selfdev.ErrConflict) {
+			if current, getErr := h.rt.selfdevOperations.Get(r.Context(), computerID, operation.OperationID); getErr == nil &&
+				current.DecisionEvent == eventDigest && current.DecisionReceipt == transition.Receipt.ReceiptID &&
+				selfDevelopmentDecisionStateDescends(current.State, nextState) {
+				if _, verifyErr := verifyFinalizedSelfDevelopmentDecision(current, transition); verifyErr == nil {
+					operation = current
+					if operation.State == selfdev.StateAccepted {
+						h.rt.triggerSelfDevelopmentReconcile()
+					}
+					writeAPIJSON(w, http.StatusOK, operation)
+					return
+				}
+			}
+		}
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 		return
 	}
 	if operation.State == selfdev.StateAccepted {
-		go h.rt.reconcileSelfDevelopmentMaterialization(context.Background())
+		h.rt.triggerSelfDevelopmentReconcile()
 	}
 	writeAPIJSON(w, http.StatusOK, operation)
 }
@@ -1294,7 +1312,7 @@ func (h *APIHandler) startSelfDevelopmentRollback(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 		return
 	}
-	go h.rt.reconcileSelfDevelopmentMaterialization(context.Background())
+	h.rt.triggerSelfDevelopmentReconcile()
 	writeAPIJSON(w, http.StatusCreated, operation)
 }
 
