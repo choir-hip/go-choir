@@ -69,10 +69,12 @@ function mintOffer(mintRequest) {
   );
 }
 function pushOffer(ownerID, offer) {
-  return nodeBJSON(
-    `curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" --data-binary @- 'http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${ownerID}/internal/runtime/platform-update?desktop=primary'`,
+  // No -f: capture the refusal body — the guest's error string is the oracle.
+  const raw = nodeB(
+    `curl -sS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" --data-binary @- 'http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${ownerID}/internal/runtime/platform-update?desktop=primary'`,
     JSON.stringify({ offer }),
   );
+  try { return JSON.parse(raw); } catch { return { error: raw }; }
 }
 
 

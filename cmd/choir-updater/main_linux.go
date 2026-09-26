@@ -162,7 +162,7 @@ func main() {
 				writeJSON(w, http.StatusConflict, struct {
 					Result updater.ApplyResult `json:"result"`
 					Error  string              `json:"error"`
-				}{result, "materialization failed and prior release was restored"})
+				}{result, fmt.Sprintf("materialization failed and prior release was restored: %v", err)})
 				return
 			}
 			status := http.StatusBadRequest
