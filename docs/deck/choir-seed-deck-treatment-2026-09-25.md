@@ -11,9 +11,9 @@ Choir is the automatic computer: a persistent place where agents, tools, sources
 ## 1. Cover
 
 **Header:** September 2026 · open source
+**Lead:** A new species of computer.
 **Title (Word):** CHOIR
 **Main line:** The automatic computer.
-**Support line:** A persistent place where agents, tools, sources, and decisions work together.
 **Link:** choir.news · 01
 
 **Purpose:** Clean category claim. No rhetorical questions or unneeded philosophy. Direct and obvious.

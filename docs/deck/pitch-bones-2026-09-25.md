@@ -8,9 +8,9 @@ Adheres to YC Seed Deck standards: Legible, Simple, Obvious. One idea per slide.
 ## Slide 01 · Cover
 
 **Kicker:** September 2026 · open source
+**Lead:** A new species of computer.
 **Title (Word):** CHOIR
 **Main:** The automatic computer.
-**Sub:** A persistent place where agents, tools, sources, and decisions work together.
 **Foot:** choir.news · 01
 
 ---
