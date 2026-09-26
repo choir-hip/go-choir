@@ -73,7 +73,8 @@ The owner ratified the spine as a whole; each mission still runs under its
 own throughline `/goal` file. `/goal`-station rule (AGENTS.md): after each
 terminal receipt, set the next mission's goal — the entrypoint below is the
 live one.
-- **R2x** [`definitions/choir-carrier-substrate-integrity-2026-09-25.md`](definitions/choir-carrier-substrate-integrity-2026-09-25.md) — substrate-integrity repair: atomic act commit + fate-sweep ungating (deletes `management_controller.go:301-302` after a derivable-wake coverage audit). **The live entrypoint** — `/goal docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md` (plan §11 owner-ratified 2026-09-25).
+- **Spine meta-goal** [`definitions/choir-rectification-spine-2026-09-25.md`](definitions/choir-rectification-spine-2026-09-25.md) — **the durable `/goal` entrypoint** for the whole spine (`/goal docs/definitions/choir-rectification-spine-2026-09-25.md`). Its `now.slice` carries the live station pointer and is rewritten at each terminal receipt.
+- **R2x** [`definitions/choir-carrier-substrate-integrity-2026-09-25.md`](definitions/choir-carrier-substrate-integrity-2026-09-25.md) — **live station** under the meta-goal: atomic act commit + fate-sweep ungating (deletes `management_controller.go:301-302` after a derivable-wake coverage audit).
 - **R3a** texture ledger consumer — occurrence/evidence resolves desk acts from `choir.commitment_record`, dual-read vs `worker_updates_*`.
 - **R3b** host desk-cell carrier — host-side `sessionWorker` for non-capsule desks; `InCellCarrier` fanned per profile; Cast validates target.
 - **R3c** management live + cast — management cell `choir.Cast(engineering)` opens+binds+executes; `report_to_texture` retires.

@@ -936,9 +936,9 @@ nodes:
       half the panel rejected).
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
-  - id: choir-carrier-substrate-integrity-2026-09-25
-    title: Carrier Substrate Integrity (R2x, draft)
-    path: docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md
+  - id: choir-rectification-spine-2026-09-25
+    title: Rectification Spine — durable meta-goal
+    path: docs/definitions/choir-rectification-spine-2026-09-25.md
     ledger: ''
     status: working
     kind: spine
@@ -948,10 +948,26 @@ nodes:
       - choir-commitment-ledger-desk-carrier-draft-2026-09-23
     enables: []
     note: >-
-      Next live station after R2 — atomic act commit + fate-sweep
-      ungating (delete management_controller.go:301-302 after a
-      derivable-wake coverage audit). Authored 2026-09-25 under the
-      restructure (plan §11); owner-ratified 2026-09-25. The live
-      entrypoint.
+      The single durable /goal entrypoint for the post-R2 spine. Its
+      now.slice carries the live station pointer (R2x) and is rewritten at
+      every terminal receipt (AGENTS.md Goal-Station Handoff). Owner-
+      ratified 2026-09-25. Covers the whole spine to M11.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+  - id: choir-carrier-substrate-integrity-2026-09-25
+    title: Carrier Substrate Integrity (R2x, station)
+    path: docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-commitment-ledger-desk-carrier-draft-2026-09-23
+    enables: []
+    note: >-
+      Live station under the spine meta-goal — atomic act commit +
+      fate-sweep ungating (delete management_controller.go:301-302 after a
+      derivable-wake coverage audit). Pointed at by the spine's now.slice.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
