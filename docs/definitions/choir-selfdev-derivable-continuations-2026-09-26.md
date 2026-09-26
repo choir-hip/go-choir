@@ -120,20 +120,20 @@ value:
 now:
   status: working
   slice: >-
-    station M7 WORKING 2026-09-26 — boundary probe recorded,
-    derivable-continuation substrate built locally (uncommitted).
-    Probe: the reconciler ran only from two HTTP sites
-    (api_self_development.go decision + rollback paths); nothing in the
-    canonical event chain woke it, and a crash mid-Materializing
-    required the same external call. Named seams chosen: (1) a
-    post-commit observer on ComputerEventAppender.appendLocked — the
-    sole event-commit choke point, replay bypasses it — firing the
-    coalesced reconciler trigger on every committed kind; firing on all
-    kinds is required because the Verified->AwaitingApproval transition
-    is an in-cell operation-store write, not a canonical event — the
-    cell's own subsequent events guarantee a later fire, and the
-    reconciler's ListByStates is the sole state gate. Derivable
-    advances: decision-recovery (AwaitingApproval->Accepted/Rejected),
+    station M7 WORKING 2026-09-26 — boundary probe recorded;
+    derivable-continuation substrate committed 3377ba91 (CI/deploy
+    in flight). Probe: the reconciler ran only from two HTTP sites;
+    nothing in the canonical event chain woke it, and a crash
+    mid-Materializing required the same external call. Named seams
+    chosen: (1) a post-commit observer on
+    ComputerEventAppender.appendLocked — the sole event-commit choke
+    point, replay bypasses it — firing the coalesced reconciler
+    trigger on every committed kind; firing on all kinds is required
+    because the Verified->AwaitingApproval transition is an in-cell
+    operation-store write, not a canonical event — the cell's own
+    subsequent events guarantee a later fire, and the reconciler's
+    ListByStates is the sole state gate. Derivable advances:
+    decision-recovery (AwaitingApproval->Accepted/Rejected),
     materialization, rollback — all ride canonical decision/rollback
     event commits (ActorProfile management, owner authority_ref).
     Never derivable: the decision itself — reconcile stops at the gate
@@ -142,14 +142,14 @@ now:
     Management observation: ops parked at AwaitingApproval mint an
     idempotent commitment_record addressed to
     persistentManagementAgentID — lands in the management desk's
-    score-free acting pack (packEligible via Addressee). Rejected
-    alternatives: hooking every API append site (drifts per-writer),
-    QueueLifecycleUpdate control packets (needs a control-binding and
-    run/work-item chain the reconciler doesn't own), filtering the
-    observer to selfdev kinds (misses the in-cell AwaitingApproval
-    transition). maintenanceHeld() added to the reconciler guard —
-    wake-when-held must not mutate. M9a still unblocks once M7
-    produces something signable.
+    score-free acting pack (packEligible via Addressee). Race
+    discovered + fixed: the drain can recover AwaitingApproval before
+    the decision API's own Transition — ErrConflict now re-checks the
+    durable op for the exact decision binding instead of 409ing.
+    Rejected alternatives: per-API-site hooks (drift), control packets
+    (wrong surface), kind-filtering (misses in-cell transition).
+    maintenanceHeld() added to the reconciler guard. M9a still
+    unblocks once M7 produces something signable.
 
   candidate:
     id: none
@@ -188,13 +188,12 @@ now:
       caller — the product's own event substrate never wakes the
       reconciler. The gap is a trigger, not reconciliation logic.
     next_observation: >-
-      Boundary probe complete 2026-09-26 — derivable seam is
-      appendLocked post-commit (all kinds; in-cell transitions are not
-      events); derivable legs: decision-recovery, materialization,
-      rollback, crash-restart; the decision itself never synthesizes —
-      reconcile waits at AwaitingApproval with a management-addressed
-      commitment record. Next: local seeded-op proof that the loop
-      advances with no post-decision API call, then staging.
+      Local proof landed: TestSelfDevReconcileBoundaryMintsManagementObservation
+      — canonical append -> post-commit observer -> coalesced drain ->
+      reconcile -> management-addressed boundary record, zero API calls;
+      TestAppenderPostCommitObserverFiresOnlyOnCommit pins commit-only
+      firing. Next: staging health + deployed commit identity, then a
+      live selfdev op if reachable.
   blocker_or_risk: >-
     Authority risk: the owner decision step must never be synthesized
     by the loop — the continuation path must stop exactly at the
@@ -228,6 +227,19 @@ receipts:
     persistentManagementAgentID (lands in the desk acting pack via
     Addressee eligibility). Rejected: per-API-site hooks (drift), control
     packets (wrong surface), kind-filtering (misses in-cell transition)."
+  - "local proof 2026-09-26 (3377ba91): canonical decision-event append
+    -> post-commit observer -> coalesced drain -> op recovered to
+    Accepted with exact decision binding — decide handler never
+    invoked (TestSelfDevReconcileRecoversDecisionDerivably); parked op
+    mints management-addressed boundary record, zero API calls
+    (TestSelfDevReconcileBoundaryMintsManagementObservation); observer
+    fires only on durable commit
+    (TestAppenderPostCommitObserverFiresOnlyOnCommit)."
+  - "deployed identity 2026-09-26: choir.news/health status=ok,
+    vmctl_status=ok, deployed_commit=3377ba91 — Deploy to Staging
+    (Node B) success for CI run 36236447989; selfdev API surface
+    answers ('effects are disabled' on the api-key computer — a real
+    op was not reachable, qualified per goal)."
 ---
 
 

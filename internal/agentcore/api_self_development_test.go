@@ -1145,3 +1145,122 @@ func TestSelfDevReconcileBoundaryMintsManagementObservation(t *testing.T) {
 		t.Fatalf("reconcile drain minted no boundary record; records=%v", records)
 	}
 }
+
+// M7: a committed effect_accepted event recovers the parked operation through
+// the derivable wake alone — the decide HTTP handler is never invoked, so the
+// advance rides the canonical event chain end to end.
+func TestSelfDevReconcileRecoversDecisionDerivably(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-m7-derivable"
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signingKey := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "test"}, PrivateKey: privateKey}
+	appender, err := computerevent.NewComputerEventAppender(computerID, rollbackTestPinner{signingKey}, productStore, rollbackTestCAS{key: signingKey, projection: productStore}, rollbackTestReceiptVerifier{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesisID, _ := computerevent.NewEventID()
+	genesis := computerevent.Event{SchemaVersion: 1, EventID: genesisID, ComputerID: computerID, EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("a", 64), ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: 1}
+	if _, err := appender.AppendNew(ctx, genesis, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("a", 64)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updaterClient, err := updater.NewClient(filepath.Join(t.TempDir(), "updater.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifierClient, err := receiptsigner.NewClient(filepath.Join(t.TempDir(), "verifier.sock"), receiptsigner.ModeGuestCore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computerID}, store: productStore, eventAppender: appender, selfdevOperations: operations}
+	WithSelfDevelopmentUpdater(updaterClient, t.TempDir(), computerID, "realization-m7")(rt)
+	WithSelfDevelopmentVerifier(verifierClient)(rt)
+	WithSelfDevelopmentControl(selfdev.GuestCredentialsWithCapability("http://127.0.0.1:1", computerID, "unused", time.Now().UTC().Add(time.Hour)))(rt)
+	WithSelfDevelopmentRoute(vmctl.NewClient("http://127.0.0.1:1"), "owner", "primary")(rt)
+	appender.SetPostCommitObserver(func(computerevent.EventKind) { rt.triggerSelfDevelopmentReconcile() })
+
+	operation, err := operations.Start(ctx, selfdev.StartRequest{ComputerID: computerID, IdempotencyKey: "op-derivable", PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundleDigest := strings.Repeat("d", 64)
+	if operation, err = operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateRequested, selfdev.StateExecuting, func(next *selfdev.Operation) error {
+		next.CapsuleID = "capsule-derivable"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if operation, err = operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
+		next.BundleDigest = bundleDigest
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if operation, err = operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateFrozen, selfdev.StateVerified, func(next *selfdev.Operation) error {
+		next.VerifierRefs = []string{strings.Repeat("e", 64)}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if operation, err = operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateVerified, selfdev.StateAwaitingApproval, nil); err != nil {
+		t.Fatal(err)
+	}
+	head, err := productStore.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatal("head unavailable")
+	}
+	decisionID, _ := computerevent.NewEventID()
+	decision := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: decisionID, ComputerID: computerID,
+		EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "derivable-decision", RequestCommitment: computerevent.ZeroHead,
+		TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, PreviousHead: head.CanonicalEventHead,
+		ParentEventID: operation.OperationID,
+		ActorProfile:  "management", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
+		ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
+		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
+		RequireExpectedHead: true, PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: bundleDigest,
+		DecisionRef: strings.Repeat("d", 64), VerifierRefs: []string{strings.Repeat("e", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+		InputArtifactRefs: []string{"artifact:sha256:" + strings.Repeat("f", 64)},
+	}
+	target, err := computerevent.CanonicalJSON(map[string]string{"base_head": operation.BaseHead, "bundle_digest": bundleDigest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := appender.AppendNew(ctx, decision, computerevent.TransitionInput{TargetStateCommitment: computerevent.DigestBytes(target)}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// The observer drain — not the decide handler — recovers the op.
+	deadline := time.Now().Add(5 * time.Second)
+	var got selfdev.Operation
+	for {
+		got, err = operations.Get(ctx, computerID, operation.OperationID)
+		if err == nil && got.State == selfdev.StateAccepted && got.DecisionEvent != "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("operation state=%s decision_event=%q — derivable recovery did not run", got.State, got.DecisionEvent)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	storedDecision, found, err := productStore.EventByIdempotency(ctx, computerID, decision.IdempotencyKey)
+	if err != nil || !found {
+		t.Fatalf("stored decision unavailable: found=%v err=%v", found, err)
+	}
+	decisionDigest, _ := storedDecision.Digest()
+	if got.DecisionEvent != decisionDigest || got.DecisionActor != "owner" || got.DecisionReceipt == "" {
+		t.Fatalf("recovered operation = %+v", got)
+	}
+}
