@@ -569,7 +569,8 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 		// accepts the platform-follow actor/scope on promote commands.
 		if request.Projection.DecisionScope != selfdevprotocol.PlatformUpdateFollowScope ||
 			request.Projection.DecisionActor != selfdevprotocol.PlatformUpdateFollowActor ||
-			request.Projection.Command.Kind != routeledger.TransitionPromote {
+			(request.Projection.Command.Kind != routeledger.TransitionPromote &&
+				request.Projection.Command.Kind != routeledger.TransitionBootstrap) {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "platform-follow promote scope is required"})
 			return

@@ -238,6 +238,53 @@ func TestPlatformUpdateRefusals(t *testing.T) {
 	})
 }
 
+// TestPlatformUpdateBootstrapsAbsentRoute proves the fresh-computer path:
+// production computers carry no route slot until a committed transition, so
+// the first platform update bootstraps the slot at generation 1 instead of
+// promoting over a baseline.
+func TestPlatformUpdateBootstrapsAbsentRoute(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-platform-update-boot")
+	ctx := context.Background()
+
+	// Drop the seeded baseline bootstrap: a fresh ledger resolves
+	// ErrSlotNotFound -> route_absent, matching a new production computer.
+	fx.ledger = routeledger.NewMemoryLedger()
+	fx.closures = map[string]computerversion.CodeClosure{}
+	fx.programs = map[string]computerversion.ArtifactProgram{}
+
+	offer := fx.mintPlatformUpdateOffer(t, "update-boot", "<html>boot</html>", fx.currentHead(t))
+	report, err := fx.rt.ApplyPlatformUpdate(ctx, offer)
+	if err != nil {
+		t.Fatalf("absent-route update refused: %v", err)
+	}
+	if report.RouteGeneration != 1 {
+		t.Fatalf("absent-route generation = %d, want 1 (bootstrap)", report.RouteGeneration)
+	}
+	slot, latestReceipt, err := fx.ledger.Resolve(ctx, mustRouteSlotID(t))
+	if err != nil {
+		t.Fatalf("route resolve: %v", err)
+	}
+	if slot.Generation != 1 || latestReceipt.Kind != routeledger.TransitionBootstrap {
+		t.Fatalf("route slot: gen=%d kind=%s, want generation-1 bootstrap", slot.Generation, latestReceipt.Kind)
+	}
+
+	// A second update promotes on top of the bootstrapped slot.
+	offerB := fx.mintPlatformUpdateOffer(t, "update-boot-2", "<html>boot-2</html>", fx.currentHead(t))
+	reportB, err := fx.rt.ApplyPlatformUpdate(ctx, offerB)
+	if err != nil {
+		t.Fatalf("post-bootstrap update refused: %v", err)
+	}
+	if reportB.RouteGeneration != 2 {
+		t.Fatalf("post-bootstrap generation = %d, want 2 (promote)", reportB.RouteGeneration)
+	}
+
+	// Replay of the bootstrapping offer stays a no-op across the boundary.
+	replay, err := fx.rt.ApplyPlatformUpdate(ctx, offer)
+	if err != nil || !replay.Replayed {
+		t.Fatalf("bootstrap replay: %v %+v", err, replay)
+	}
+}
+
 func mustRouteSlotID(t *testing.T) string {
 	t.Helper()
 	slotID, err := routeledger.RouteSlotID("owner", "primary")

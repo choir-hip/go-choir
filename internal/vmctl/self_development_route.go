@@ -15,7 +15,8 @@ import (
 )
 
 func (a *RouteAuthority) ApplySelfDevelopmentProjection(ctx context.Context, registry *OwnershipRegistry, request selfdevprotocol.ApplyRouteProjectionRequest, now time.Time) (RouteResolution, error) {
-	if !strings.HasPrefix(request.Projection.DecisionScope, "computer:self_development:") {
+	if !strings.HasPrefix(request.Projection.DecisionScope, "computer:self_development:") ||
+		request.Projection.Command.Kind == routeledger.TransitionBootstrap {
 		return RouteResolution{}, fmt.Errorf("vmctl self-development projection: owner-decision scope is required")
 	}
 	return a.applySignedProjection(ctx, registry, request, now, "vmctl self-development projection")
@@ -29,7 +30,7 @@ func (a *RouteAuthority) ApplySelfDevelopmentProjection(ctx context.Context, reg
 func (a *RouteAuthority) ApplyPlatformFollowRouteProjection(ctx context.Context, registry *OwnershipRegistry, request selfdevprotocol.ApplyRouteProjectionRequest, now time.Time) (RouteResolution, error) {
 	if request.Projection.DecisionScope != selfdevprotocol.PlatformUpdateFollowScope ||
 		request.Projection.DecisionActor != selfdevprotocol.PlatformUpdateFollowActor ||
-		request.Projection.Command.Kind != routeledger.TransitionPromote {
+		(request.Projection.Command.Kind != routeledger.TransitionPromote && request.Projection.Command.Kind != routeledger.TransitionBootstrap) {
 		return RouteResolution{}, fmt.Errorf("vmctl platform-follow projection: platform-follow promote scope is required")
 	}
 	return a.applySignedProjection(ctx, registry, request, now, "vmctl platform-follow projection")
@@ -77,13 +78,19 @@ func (a *RouteAuthority) applySignedProjection(ctx context.Context, registry *Ow
 	if expiryErr != nil || !now.UTC().Before(expiresAt) {
 		return RouteResolution{}, fmt.Errorf("%s: certificate expired", errPrefix)
 	}
-	if current.Slot.Current != projection.Command.Old || current.Slot.Generation != projection.Command.ExpectedGeneration || current.Slot.LatestReceiptID == "" {
+	stale := false
+	if projection.Command.Kind == routeledger.TransitionBootstrap {
+		stale = !current.RouteAbsent
+	} else if current.RouteAbsent || current.Slot.Current != projection.Command.Old || current.Slot.Generation != projection.Command.ExpectedGeneration || current.Slot.LatestReceiptID == "" {
+		stale = true
+	}
+	if stale {
 		return RouteResolution{}, routeledger.ErrStaleTransition
 	}
 	if projection.Command.Kind == routeledger.TransitionRollback && projection.Command.RollbackTargetReceiptID == "" {
 		return RouteResolution{}, fmt.Errorf("%s: rollback target receipt is required", errPrefix)
 	}
-	if projection.Command.Kind != routeledger.TransitionPromote && projection.Command.Kind != routeledger.TransitionRollback {
+	if projection.Command.Kind != routeledger.TransitionPromote && projection.Command.Kind != routeledger.TransitionRollback && projection.Command.Kind != routeledger.TransitionBootstrap {
 		return RouteResolution{}, fmt.Errorf("%s: only promote or rollback projections are accepted", errPrefix)
 	}
 	if _, err := a.PinCode(ctx, projection.CodeClosure); err != nil {

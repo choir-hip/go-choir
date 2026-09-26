@@ -1,6 +1,11 @@
+import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { chromium } from '../frontend/node_modules/playwright/index.mjs';
+
+// Playwright ships to this repo via frontend's @playwright/test; resolve
+// chromium through the frontend manifest so pnpm's layout stays hidden.
+const requireFrontend = createRequire(new URL('../frontend/package.json', import.meta.url));
+const { chromium } = requireFrontend('@playwright/test');
 import { registerPasskey } from '../frontend/tests/helpers/auth.js';
 import {
   setupVirtualAuthenticator,
@@ -120,11 +125,12 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
   await waitForDesktopReady(page);
 
-  // Resolve the live computer: the desktop boot report carries owner+computer.
+  const session = await fetchJSON(page, '/auth/session');
+  const ownerID = session.json?.user?.id;
+  if (!ownerID) throw new Error(`owner id not derivable from /auth/session: ${JSON.stringify(session)}`);
+  result.session_user = session.json?.user;
   const status = await fetchJSON(page, '/api/compute/status');
   result.compute_status = status.json ?? status.text;
-  const ownerID = status.json?.owner_id || status.json?.user_id;
-  if (!ownerID) throw new Error(`owner id not derivable from /api/compute/status: ${JSON.stringify(status)}`);
 
   const ownership = vmctlOwnership(ownerID);
   result.ownership = ownership;
@@ -138,9 +144,9 @@ try {
 
   const routeBefore = resolveRoute(ownerID);
   result.route_before = routeBefore;
-  if (!routeBefore || routeBefore.route_absent) {
-    throw new Error('route slot absent — missing_oracle: computer has no immutable ComputerVersion route');
-  }
+  const generationBefore = (routeBefore && !routeBefore.route_absent)
+    ? (routeBefore.slot?.generation ?? 0)
+    : 0;
 
   const head = corpusdEventHead(computerID, ownerID);
   result.head_before = head;
@@ -169,6 +175,12 @@ try {
   result.update_a = pushA;
   if (!pushA?.release_digest || !pushA?.checkpoint_digest || !pushA?.checkpoint?.checkpoint) {
     throw new Error(`update A refused or incomplete: ${JSON.stringify(pushA)}`);
+  }
+
+  const routeAfterA = resolveRoute(ownerID);
+  result.route_after_a = routeAfterA;
+  if (routeAfterA?.route_absent || !routeAfterA?.slot || routeAfterA.slot.generation !== generationBefore + 1) {
+    throw new Error(`route slot did not promote after update A: ${JSON.stringify(routeAfterA)}`);
   }
   // Restore edge: return to the update-A pinned head via the product path.
   // updater.Apply restarts the guest service — retry the restore POST across

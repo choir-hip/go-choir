@@ -338,16 +338,24 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	if err != nil {
 		return report, err
 	}
-	currentRoute, err := rt.selfdevRoute.ResolveComputerVersionRoute(ctx, routeSlotID)
+	currentRoute, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, routeSlotID)
 	if err != nil {
 		return report, err
 	}
 	routeIdempotency := routeledger.IdempotencyKey("idempotency:platform-update-route:" + offer.UpdateID)
+	transitionKind := routeledger.TransitionPromote
 	oldVersion, expectedGeneration := currentRoute.Slot.Current, currentRoute.Slot.Generation
-	if currentRoute.Slot.Current == version {
+	switch {
+	case currentRoute.RouteAbsent:
+		// Fresh computers carry no route slot yet; the first platform update
+		// bootstraps the slot (gen 1) with this update's pinned version.
+		transitionKind = routeledger.TransitionBootstrap
+		oldVersion, expectedGeneration = computerversion.ComputerVersion{}, 0
+	case currentRoute.Slot.Current == version:
 		if currentRoute.LatestReceipt.IdempotencyKey != routeIdempotency || currentRoute.LatestReceipt.New != version {
 			return report, fmt.Errorf("platform update: current route already changed by another transition")
 		}
+		transitionKind = currentRoute.LatestReceipt.Kind
 		oldVersion, expectedGeneration = currentRoute.LatestReceipt.Old, currentRoute.LatestReceipt.ExpectedGeneration
 	}
 	createdAt := checkpoint.Receipt.IssuedAt
@@ -383,7 +391,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 		return report, err
 	}
 	command := routeledger.TransitionCommand{
-		RouteSlotID: routeSlotID, Kind: routeledger.TransitionPromote, Old: oldVersion, New: version,
+		RouteSlotID: routeSlotID, Kind: transitionKind, Old: oldVersion, New: version,
 		ExpectedGeneration: expectedGeneration, ApprovalRef: routeledger.ApprovalRef(approvalEvidence.Ref),
 		PromotionCertificateRef: routeledger.PromotionCertificateRef(promotionEvidence.Ref),
 		IdempotencyKey:          routeIdempotency,
