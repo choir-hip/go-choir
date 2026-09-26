@@ -240,7 +240,7 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 		return ApplyResult{}, fmt.Errorf("updater: invalid operation journal phase %q", journal.Phase)
 	}
 	failure := errors.New(journal.Failure)
-	recoveryReceipt, recoveryErr := u.restorePrior(ctx, request, journal.PriorReleaseTarget, journal.PriorReleaseDigest, releaseDigest, failure, completedAt)
+	recoveryReceipt, recoveryErr := u.restorePrior(ctx, request, journal.PriorReleaseTarget, journal.PriorReleaseDigest, releaseDigest, failure, completedAt, &journal, journalPath)
 	result := ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: journal.PriorReleaseDigest, Outcome: "failed", RecoveryReceipt: recoveryReceipt}
 	if recoveryErr != nil {
 		return result, errors.Join(failure, recoveryErr)
@@ -630,16 +630,30 @@ func swapCurrentPointer(root, releaseDir string) error {
 	return syncDir(root)
 }
 
-func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorTarget, priorDigest, failedDigest string, cause error, completedAt time.Time) (*computerevent.Receipt, error) {
+func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorTarget, priorDigest, failedDigest string, cause error, completedAt time.Time, journal *operationJournal, journalPath string) (*computerevent.Receipt, error) {
 	if priorTarget == "" {
 		return nil, fmt.Errorf("updater: initial release failed and no prior release exists: %w", cause)
 	}
-	if err := u.swapCurrent(priorTarget); err != nil {
-		return nil, fmt.Errorf("updater: restore prior pointer: %w", err)
+	if !journal.RecoverySwapped {
+		if err := u.swapCurrent(priorTarget); err != nil {
+			return nil, fmt.Errorf("updater: restore prior pointer: %w", err)
+		}
+		journal.RecoverySwapped = true
+		if err := writeJournal(journalPath, *journal); err != nil {
+			return nil, err
+		}
 	}
-	if err := u.service.RecoveryRestart(ctx); err != nil {
-		return nil, fmt.Errorf("updater: restart restored release: %w", err)
+	if !journal.RecoveryRestartPublished {
+		if err := u.service.RecoveryRestart(ctx); err != nil {
+			return nil, fmt.Errorf("updater: restart restored release: %w", err)
+		}
+		journal.RecoveryRestartPublished = true
+		if err := writeJournal(journalPath, *journal); err != nil {
+			return nil, err
+		}
 	}
+	// Resumed after publish: the prior release is already restarting — just
+	// probe it. Republishing would kill the guest mid-recovery forever.
 	priorManifest, err := readReleaseManifest(priorTarget)
 	if err != nil {
 		return nil, fmt.Errorf("updater: read restored release manifest: %w", err)
@@ -691,10 +705,15 @@ type operationJournal struct {
 	// the service manager. Without it a resume cannot distinguish "restart
 	// published, journal write lost" from "crashed before publish" and would
 	// either re-restart a healthy guest or never restart at all.
-	RestartPublished bool        `json:"restart_published,omitempty"`
-	StartedAt        time.Time   `json:"started_at"`
-	Failure          string      `json:"failure,omitempty"`
-	Result           ApplyResult `json:"result"`
+	RestartPublished bool `json:"restart_published,omitempty"`
+	// RecoverySwapped / RecoveryRestartPublished dedup the recovery path the
+	// same way: a resumed apply while recovering must not swap or re-publish
+	// the recovery restart — the prior caller's recovery is already in flight.
+	RecoverySwapped          bool        `json:"recovery_swapped,omitempty"`
+	RecoveryRestartPublished bool        `json:"recovery_restart_published,omitempty"`
+	StartedAt                time.Time   `json:"started_at"`
+	Failure                  string      `json:"failure,omitempty"`
+	Result                   ApplyResult `json:"result"`
 }
 
 func readJournal(path string) (operationJournal, bool, error) {
