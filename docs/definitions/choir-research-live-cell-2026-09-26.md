@@ -206,10 +206,12 @@ receipts:
     source_search, fetch_url (call + response bytes), import_url_content,
     import_document_content on both the cell and host research paths;
     SessionWorkerConfig.MemoryLimitBytes plumbed through the spawn env to
-    ApplyWorkerMemoryLimit (RLIMIT_AS 1GiB Linux; unsupported-kernel
-    platforms degrade to uncapped, containment stays the subprocess+package
-    boundary). Note: ingress reliability for Cast sub-agents is unchanged —
-    the budget meters the desk's own host-mediated network calls."
+    ApplyWorkerMemoryLimit (RLIMIT_AS 8GiB Linux — the autoputer worker
+    binary's linked baseline exceeds 1GiB at spawn, so the cap binds
+    growth over baseline; unsupported-kernel platforms degrade to
+    uncapped, containment stays the subprocess+package boundary).
+    Note: ingress reliability for Cast sub-agents is unchanged — the
+    budget meters the desk's own host-mediated network calls."
 ---
 
 # R3r — Research Live Cell (station on the rectification spine)
