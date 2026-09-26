@@ -96,12 +96,18 @@ value:
       never reaches management/texture/research.'
 
 now:
-  status: working
+  status: settled
+  settled_by: orchestrator
   slice: >-
-    station R3b — host desk-cell carrier. R3a landed: ledger evidence
-    dual-read; deployed live-record acceptance deferred to a doc desk
-    report-cast (which this station's carrier enables once it can drive a
-    desk report). R3b spawns a host sessionWorker for non-capsule desks.
+    station R3b LANDED 2026-09-26 (deployed build b9f43583, + design receipt
+    e505680a). Host desk-cell carrier built: autoputer `desk-session`
+    re-execs the daemon; desk_go_eval is the sealed per-profile eval tool;
+    rlmReductionForDeskCall reduces desk cells on the canonical ledger
+    (commitTray path, toolCtx=nil); InCellCarrier fans management/texture/
+    research under actuator=rlm; Cast rejects an unknown desk. Deployed
+    live-desk acceptance deferred to R3c — staging desks run actuator=tools;
+    the carrier activates only under actuator=rlm, promotion is R3c/R3d's
+    decision (same deferral shape as R3a).
   candidate:
     id: none
     state: none
@@ -165,7 +171,23 @@ now:
       Pdeathsig is Linux-only — staging proves; Darwin relies on broker
       reap.
 
-receipts: []
+receipts:
+  - "pushed_commit: b9f43583 (agentcore desk_go_eval carrier + kill test) —
+    head SHA of R3b; 1ce02337 (yaegikernel host spawn) landed earlier."
+  - "ci: run 36214084659 — all shards green (agentcore 0-7, non-runtime,
+    docs truth, deploy-impact); deploy to Node B success."
+  - "deploy: Node B staging, deployed 2026-09-26T03:26:10Z."
+  - "environment_identity: staging https://choir.news/health
+    build.commit = b9f4358384182dce49eac564a263b6ee63ecd4bf (exact R3b head)."
+  - "deployed_acceptance: Staging proves deploy-clean + platform healthy
+    (status ok, vmctl ok, ws resolved) at R3b head. The desk-cell carrier is
+    inactive on staging — it activates only under actuator=rlm
+    (choir.actuator boot param / CHOIR_ACTUATOR env); staging desks run
+    actuator=tools. Live-desk acceptance deferred to R3c actuator
+    promotion, as R3a deferred its live-record proof. Local acceptance
+    (TestDeskGoEval*): separate-PID worker spawn+eval, worker persists
+    across cells, kill mid-cell respawns clean with no state leak, empty
+    source rejected, cast to an unknown desk rejected — all pass."
 ---
 
 # R3b — Host Desk-Cell Carrier (station on the rectification spine)
