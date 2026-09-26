@@ -86,3 +86,29 @@ the whole chain reproduces live state rather than trusting a base snapshot.
   `MaxRecoveryTailEvents` — the existing cap that "publication must keep W
   close to H". Identical refusal posture for long chains; fresh computers
   gain checkpoint/restore/update.
+
+## Problem 3 — no checkpoint evidence class fits a platform update
+
+Discovered by: probe run on deployed `1d967302`
+(computer-1b2ae7642fdbf86d3993d109004d4590, update
+upd-m9a-platform-update-1790457951452-a). The resumed tail ran on schedule —
+guest log `platform update resume: re-driving update` — then died on
+`checkpoint refused with status 400`.
+
+Root cause: the tail mints a verifier-evidence checkpoint
+(`internal/agentcore/platform_update.go`), but `CheckpointAuthority.Publish`
+(`internal/platform/checkpoints.go`) requires a pinned `verifier-control` key
+in `control_key_history`, which only `recordGenesisBaseline` writes — the
+owner self-dev genesis ceremony a probe computer never runs. Even with the
+key pinned, `verifyVerifierEvidence` demands the certificate's
+`VerificationEventDigest` name a `verification_recorded` tape event; a
+platform update never produces one. The verifier checkpoint leg was never
+executable for this path.
+
+Fix direction: a third evidence class, `platform_follow`. Verifier fields
+absent (non-blending rule same as owner-recovery), materialization receipt
+binding kept (the promoted release is the applied event's effect), and —
+unlike owner-recovery — it may authorize route projection under the
+platform-follow scope. Corpusd enforces `AcceptedEventHead` names a
+`materialization_applied` event. Restores accept it because the restore
+surface consumes head + witness + release bindings, not verifier fields.
