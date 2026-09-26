@@ -1072,7 +1072,7 @@ nodes:
     title: Commitment Scores + Surfacing + Context Packs (R4, station)
     path: docs/definitions/choir-commitment-scores-packs-2026-09-26.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -1080,12 +1080,33 @@ nodes:
       - choir-texture-live-authoring-2026-09-26
     enables: []
     note: >-
-      R4 (on spine, after R3d): derived accrual views over the
-      append-only score stamps, falsification-visible materiality
-      projection, context packs with the own-score epistemic exclusion,
-      learning-claims gate bound to scored records. Proof: a falsified
-      commitment stays visible in the doc; the acting desk's pack
-      contains zero own-score fields.
+      LANDED 2026-09-26 (deployed build 68a2e023): the commitment
+      ledger's read surface — derived accrual (per-agent/per-doc, no
+      mutation), a falsification-visible materiality projection feeding
+      textureAvailableSourceEntities, score-free acting packs on the
+      cell frame (choir.Pack — the type carries no score fields), and
+      the learning-claims gate (claim_gate backed|unbacked on the
+      selfdev verification payload).
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/Precommitment Records — Engineering Memo.md
+  - id: choir-selfdev-derivable-continuations-2026-09-26
+    title: Skip the Harness — Derivable Selfdev Continuations (M7, station)
+    path: docs/definitions/choir-selfdev-derivable-continuations-2026-09-26.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    enables: []
+
+    note: >-
+      M7 (on spine, after R3c): selfdev operations advance to
+      materialization on derivable continuations driven by the
+      management cell — the materializer reconciler fires on canonical
+      event heads, not only API calls. Proof: an op reaches a
+      materialized change with no external driver. Boundaries: the
+      owner decision is never synthesized by the loop; API path stays;
+      revert+redeploy restores API-driven advance.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
       - docs/Precommitment Records — Engineering Memo.md

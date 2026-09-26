@@ -131,14 +131,11 @@ value:
       still narration.'
 
 now:
-  status: working
+  status: settled
   slice: >-
-    station R4 WORKING 2026-09-26 — boundary probe complete (see receipts).
-    Seams: materiality feeds textureAvailableSourceEntitiesKey via
-    evidenceSourceEntitiesFromCommitmentRecords; pack rides the desk
-    cell frame like R3d's Doc snapshot; gate binds on the selfdev
-    verification event payload. Implementing: accrual + projection +
-    packs in internal/types/commitment_views.go.
+    Station complete 2026-09-26. Next: R5a (vocab decoders + seed freeze
+    per spine) or the spine's next chartered station — M11's live-doc
+    gate now has the doc surface it was ratified to require.
   candidate:
     id: none
     state: none
@@ -227,6 +224,25 @@ receipts:
     falsified records on staging requires real desk traffic; no seeded
     doc render is provable this station — deployed acceptance scopes to
     platform health + identity + texture-revision path only."
+  - "landed: types/commitment_views.go — ResolveCommitments (latest
+    resolution governs, disagreement preserved), AccrualByAgent /
+    AccrualByDoc, ProjectMateriality (falsified/overdue/top_claim),
+    BuildActingPack (score-free type — boundary by construction),
+    BuildSupervisionPack (score-carrying), GateLearningClaim; wired:
+    materiality entities into textureAvailableSourceEntities, pack onto
+    SessionFrame + choir.Pack(), claim_gate onto the selfdev
+    verification payload (excluded from idempotency digest — derived
+    field, pre-R4 events dedupe), CommittedAt stamped on new records."
+  - "pushed_commit: 68a2e023e515edbd4d398f1dd9a3f0c784fab573"
+  - "ci: run 36233806473 — all gates green on 68a2e023."
+  - "deploy: Node B Deploy to Staging success; staging build.commit
+    =68a2e023 (502 mid-cutover recovered)."
+  - "environment_identity: health status=ok, deployed_commit=68a2e023e515."
+  - "deployed_acceptance: /health ok at R4 head; api-key list
+    authenticates; computer computer-0333…f9e6 active (epoch 946). Live
+    doc render with seeded falsified records not provable on staging
+    this station (probe finding d — no seed path without real desk
+    traffic); local tests cover the seeded projection/pack/gate legs."
 ---
 
 # R4 — Commitment Scores + Surfacing + Context Packs (station on the rectification spine)

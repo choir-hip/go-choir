@@ -108,16 +108,19 @@ boundaries:
 now:
   status: working
   slice: >-
-    station R4 CHARTERED 2026-09-26 — commitment scores + surfacing +
-    packs (goal docs/definitions/choir-commitment-scores-packs-2026-09-26.md).
-    R3r terminal 2026-09-26 (deployed build 3b56c34e): research is a
-    full-RLM desk on the cell carrier — desk_go_eval + typed
-    research/evidence/memory surface under a per-activation egress
-    budget (calls + fetched bytes) and an 8GiB RLIMIT_AS worker cap;
-    generic host tools retired. Every non-wire desk is on the carrier;
-    D2 discharged. M7 remains unblocked in parallel (after R3c).
-  source_ref: main@3b56c34e
-  deploy_identity: staging https://choir.news build.commit=3b56c34e
+    station M7 CHARTERED 2026-09-26 — skip the harness: selfdev
+    operations advance to materialization on derivable continuations,
+    driven by the management cell (goal docs/definitions/
+    choir-selfdev-derivable-continuations-2026-09-26.md). R4 terminal
+    2026-09-26 (deployed build 68a2e023): the ledger read surface is
+    live — derived accrual, falsification-visible materiality
+    projection feeding the texture doc's evidence surface, score-free
+    acting-desk packs on the cell frame (choir.Pack), and the
+    learning-claims gate (flag posture) on the selfdev verification
+    event. M9a unblocks in parallel once M7 produces something
+    signable; R5a before M11.
+  source_ref: main@68a2e023
+  deploy_identity: staging https://choir.news build.commit=68a2e023
   candidate:
     id: none
     state: none
@@ -151,24 +154,23 @@ now:
       pointer tracks the live mission. Each station is a separate
       throughline /goal file authored at handoff; this file's `now` is
       rewritten to point at it (AGENTS.md Goal-Station Handoff).
-    kind: operational
-    status: settled
-    evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md §11
     believed_state: >-
-      R0, R2, R2x, R3a, R3b, R3c, R3d, and R3r landed; K's substrate is
-      landed; the restructured spine is ratified; R4 is the live station.
-      Every non-wire desk (engineering/management/texture/research) is on
-      the cell carrier; D2 is discharged — research cells run in
-      memory-capped workers with a per-activation egress budget on all
-      host-mediated network calls. The next lift is R4 — derived accrual,
-      materiality projection, context packs, learning-claims gate (on
-      spine); M7 remains unblocked in parallel.
+      R0, R2, R2x, R3a, R3b, R3c, R3d, R3r, and R4 landed; K's substrate
+      is landed; the restructured spine is ratified; M7 is the live
+      station. Every non-wire desk is on the cell carrier; D2 is
+      discharged; the commitment ledger has its read surface — derived
+      accrual, falsification-visible materiality on the texture doc,
+      score-free acting packs, and the learning-claims gate. The next
+      lift is M7 — derivable selfdev continuations driven by the
+      management cell (on spine); M9a unblocks in parallel once M7
+      produces something signable; R5a before M11.
     next_observation: >-
-      R4 boundary probe: which texture evidence-surface fields the
-      materiality projection feeds and whether a live doc render is
-      observable on staging; then the four local proofs (accrual,
-      falsification-visible projection, own-score-free packs, claims
-      gate).
+      M7 boundary probe: which event heads (selfdev transitions, capsule
+      freezes, verification records) should wake the materializer
+      reconciler, and how the management cell's pack/inbox surfaces
+      carry operation state; then the advance-without-driver and
+      crash/recovery proofs.
+
   blocker_or_risk: >-
     Station pointer must be rewritten at every terminal receipt (the /goal
     string stays constant — this file is the entrypoint). Owner directive
@@ -178,11 +180,22 @@ now:
     compile fix) integrated: merged as 7d8e455 and already an ancestor of
     main at R3d's landing.
   next_action: >-
-    Execute R4 (goal docs/definitions/choir-commitment-scores-packs-2026-09-26.md):
-    boundary probe first, then accrual view, materiality projection,
-    own-score-free context packs, learning-claims gate. M7 remains
-    unblocked for parallel charter.
+    Execute M7 (goal docs/definitions/
+    choir-selfdev-derivable-continuations-2026-09-26.md): boundary
+    probe first, then event-head-triggered reconcile, management
+    carrier observation of op state, crash/recovery proof. M9a
+    unblocks in parallel once M7 produces something signable; R5a
+    must land before M11.
 receipts:
+  - "R4 terminal 2026-09-26: landed+deployed 68a2e023 (ci 36233806473,
+    staging build.commit=68a2e023); goal docs/definitions/
+    choir-commitment-scores-packs-2026-09-26.md now.status=settled.
+    The ledger read surface is live: derived accrual views, a
+    falsification-visible materiality projection feeding
+    textureAvailableSourceEntities, score-free acting packs on the
+    cell frame (choir.Pack), learning-claims gate (flag posture) on
+    the selfdev verification payload. now.slice -> M7."
+
   - "R3r terminal 2026-09-26: landed+deployed 3b56c34e (dispatch run
     36230314065, staging build.commit=3b56c34e); goal docs/definitions/
     choir-research-live-cell-2026-09-26.md now.status=settled. Research
@@ -233,10 +246,9 @@ and points at a dedicated throughline `/goal` file for the current mission.
   outcomes live in `docs/desk-rlm-rectification-plan-2026-09-23.md` §11 —
   read it before chartering the next station.
 
-**Current station:** R3r → research cell (off spine; D2 network/memory cap
-policy residual). R3d landed+deployed (`119e0edd`, texture full-RLM:
-desk_go_eval only, cell-authored ApplyTextureTurn commits; typed tools +
-worker_updates deleted). R3r code pushed (head `dc340620`, landing loop
-in flight). Next station chartered: R4 →
-`choir-commitment-scores-packs-2026-09-26.md`. Also unblocked: M7 (after
-R3c).
+**Current station:** M7 → skip the harness (selfdev ops advance on
+derivable continuations driven by the management cell). R4 landed+deployed
+(`68a2e023`, ledger read surface: accrual, falsification-visible
+materiality, score-free acting packs, learning-claims gate). Station goal:
+`choir-selfdev-derivable-continuations-2026-09-26.md`. Also unblocked:
+M9a (once M7 produces something signable); R5a before M11.
