@@ -666,7 +666,13 @@ func (rt *Runtime) Start(ctx context.Context) {
 	}
 	bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
-	bootPhase("platform_update_resume", func() { rt.resumePendingPlatformUpdate(ctx) })
+	bootPhase("platform_update_resume", func() {
+		// Spawn only — the sweep itself must not run inside Start: the resumed
+		// apply self-restarts this guest and the daemon health-probes /health,
+		// which stays gated until Start returns. resumePendingPlatformUpdate
+		// AfterReady waits out boot before re-driving the pending transition.
+		go rt.resumePendingPlatformUpdateAfterReady(ctx)
+	})
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
 	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
 	bootPhase("selfdev_materialization_reconcile", func() { rt.triggerSelfDevelopmentReconcile() })

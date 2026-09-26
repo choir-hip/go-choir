@@ -636,3 +636,22 @@ func (rt *Runtime) resumePendingPlatformUpdate(ctx context.Context) {
 		log.Printf("runtime: platform update resume: %v", applyErr)
 	}
 }
+
+// resumePendingPlatformUpdateAfterReady defers the sweep until Start's boot
+// phases finish (bootInProgress drops on Start's return, immediately before
+// the serving gate opens). Inside Start the sweep would deadlock: the resumed
+// apply's daemon probe needs this guest servable, and servability requires
+// Start to have returned.
+func (rt *Runtime) resumePendingPlatformUpdateAfterReady(ctx context.Context) {
+	for rt != nil && rt.bootInProgress.Load() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	if ctx.Err() != nil {
+		return
+	}
+	rt.resumePendingPlatformUpdate(ctx)
+}
