@@ -108,19 +108,17 @@ boundaries:
 now:
   status: working
   slice: >-
-    station M7 CHARTERED 2026-09-26 — skip the harness: selfdev
-    operations advance to materialization on derivable continuations,
-    driven by the management cell (goal docs/definitions/
-    choir-selfdev-derivable-continuations-2026-09-26.md). R4 terminal
-    2026-09-26 (deployed build 68a2e023): the ledger read surface is
-    live — derived accrual, falsification-visible materiality
-    projection feeding the texture doc's evidence surface, score-free
-    acting-desk packs on the cell frame (choir.Pack), and the
-    learning-claims gate (flag posture) on the selfdev verification
-    event. M9a unblocks in parallel once M7 produces something
-    signable; R5a before M11.
-  source_ref: main@68a2e023
-  deploy_identity: staging https://choir.news build.commit=68a2e023
+    station M7 SETTLED 2026-09-26 — derivable selfdev continuations
+    landed + deployed (722b49bf): canonical decision append ->
+    post-commit observer -> coalesced drain -> reconciler drives ops
+    Accepted -> Materializing -> Applied with checkpoint + route
+    promotion, zero API calls after the owner decision; mid-materialize
+    crash recovers via the same reconciler (goal docs/definitions/
+    choir-selfdev-derivable-continuations-2026-09-26.md
+    now.status=settled). M9a is unblocked — M7 produces a signable
+    materialized change; R5a must land before M11.
+  source_ref: main@722b49bf
+  deploy_identity: staging https://choir.news build.commit=722b49bf
   candidate:
     id: none
     state: none
@@ -155,21 +153,22 @@ now:
       throughline /goal file authored at handoff; this file's `now` is
       rewritten to point at it (AGENTS.md Goal-Station Handoff).
     believed_state: >-
-      R0, R2, R2x, R3a, R3b, R3c, R3d, R3r, and R4 landed; K's substrate
-      is landed; the restructured spine is ratified; M7 is the live
-      station. Every non-wire desk is on the cell carrier; D2 is
-      discharged; the commitment ledger has its read surface — derived
-      accrual, falsification-visible materiality on the texture doc,
-      score-free acting packs, and the learning-claims gate. The next
-      lift is M7 — derivable selfdev continuations driven by the
-      management cell (on spine); M9a unblocks in parallel once M7
-      produces something signable; R5a before M11.
+      R0, R2, R2x, R3a, R3b, R3c, R3d, R3r, R4, and M7 landed; K's
+      substrate is landed; the restructured spine is ratified. Every
+      non-wire desk is on the cell carrier; D2 is discharged; the
+      commitment ledger has its read surface — derived accrual,
+      falsification-visible materiality on the texture doc, score-free
+      acting packs, and the learning-claims gate. Selfdev continuations
+      are derivable: the management cell's event substrate advances an
+      op from a recorded owner decision through materialization with no
+      external driver, and a mid-advance crash recovers on the same
+      reconciler. The next lifts are M9a (sign/push a materialized
+      change — unblocked) and R5a (before M11).
     next_observation: >-
-      M7 boundary probe: which event heads (selfdev transitions, capsule
-      freezes, verification records) should wake the materializer
-      reconciler, and how the management cell's pack/inbox surfaces
-      carry operation state; then the advance-without-driver and
-      crash/recovery proofs.
+      M9a probe: the signing/push surface for a materialized change —
+      which authority holds the push credential and how the signed
+      artifact binds the canonical event chain; then R5a scoping ahead
+      of M11.
 
   blocker_or_risk: >-
     Station pointer must be rewritten at every terminal receipt (the /goal
@@ -180,13 +179,20 @@ now:
     compile fix) integrated: merged as 7d8e455 and already an ancestor of
     main at R3d's landing.
   next_action: >-
-    Execute M7 (goal docs/definitions/
-    choir-selfdev-derivable-continuations-2026-09-26.md): boundary
-    probe first, then event-head-triggered reconcile, management
-    carrier observation of op state, crash/recovery proof. M9a
-    unblocks in parallel once M7 produces something signable; R5a
-    must land before M11.
-receipts:
+    Charter the next station: M9a (sign + push a real materialized
+    change) is unblocked by M7; R5a must land before M11. Choose
+    ordering at handoff — M9a in parallel is safe, R5a gates M11.
+  - "M7 terminal 2026-09-26: landed+deployed 722b49bf (ci 36241357497,
+    staging build.commit=722b49bf); goal docs/definitions/
+    choir-selfdev-derivable-continuations-2026-09-26.md
+    now.status=settled. Derivable selfdev continuations are live:
+    post-commit observer on the appender -> coalesced drain -> op
+    materializes with no API driver; mid-materialize crash recovers
+    derivably; parked ops mint management-addressed boundary records.
+    Local proofs: decision-recovery, boundary observation,
+    materialization to Applied, crash recovery — all canonical.
+    now.slice -> next station (M9a unblocked; R5a before M11)."
+
   - "R4 terminal 2026-09-26: landed+deployed 68a2e023 (ci 36233806473,
     staging build.commit=68a2e023); goal docs/definitions/
     choir-commitment-scores-packs-2026-09-26.md now.status=settled.
