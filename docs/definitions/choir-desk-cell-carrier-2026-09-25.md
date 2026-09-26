@@ -149,8 +149,21 @@ now:
       like Engineering). Plan §11 says "InCellCarrier fanned per profile",
       which implies the latter; the lift-vs-build fork is the design risk.
     next_observation: >-
-      Decide the carrier shape (cell-tool vs whole-turn-cell); then the
-      host worker binary entrypoint and the per-profile allowlist.
+      Carrier shape DECIDED (agentic-consensus 20260925-224851; claude,
+      codex, gpt6-sol, gemini, grok, glm, luna, cursor — 8/9 landed): build
+      the Engineering-shaped host carrier — a per-profile sealed registry
+      whose sole tool is a host `desk_go_eval` spawning a host
+      sessionWorker (socketpair+FramedConn+Setpgid/Pdeathsig+ready).
+      Consensus correction: Engineering's InCellCarrier is NOT a whole-turn
+      cell — it's a ToolLoop sealed to one eval tool; "fan InCellCarrier
+      per profile" means seal each desk registry to `desk_go_eval` behind
+      the actuator flag. NOT a peer tool beside existing tools (dual
+      channel, Goodharts containment). Live desk turn behavior stays
+      R3c/R3d; R3b ships the carrier + a management-profiled activation
+      proof. Host worker = autoputer self-exec `desk-session` ->
+      yaegikernel.ExecuteWorkerSessionConn; spawn pattern lifted host-side.
+      Pdeathsig is Linux-only — staging proves; Darwin relies on broker
+      reap.
 
 receipts: []
 ---
