@@ -7,8 +7,8 @@ draft: false
 start:
   captured_at: '2026-09-25T00:00:00Z'
   source:
-    canonical_ref: main@79d0b52b
-    deploy_identity: staging https://choir.news build.commit=537fce04
+    canonical_ref: main@77f22ced
+    deploy_identity: staging https://choir.news build.commit=53035642
   worktrees:
     - path: /Users/wiz/go-choir
       status: clean
@@ -113,8 +113,8 @@ now:
     deployed-cancel proof is deferred (documented in the R2x goal's
     blocker_or_risk). Next station goal:
     docs/definitions/choir-texture-ledger-consumer-2026-09-25.md
-  source_ref: main@79d0b52b
-  deploy_identity: staging https://choir.news build.commit=537fce04
+  source_ref: main@77f22ced
+  deploy_identity: staging https://choir.news build.commit=53035642
   candidate:
     id: none
     state: none

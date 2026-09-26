@@ -958,7 +958,7 @@ nodes:
     title: Carrier Substrate Integrity (R2x, station)
     path: docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md
     ledger: ''
-    status: working
+    status: landed
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -966,8 +966,26 @@ nodes:
       - choir-commitment-ledger-desk-carrier-draft-2026-09-23
     enables: []
     note: >-
-      Live station under the spine meta-goal — atomic act commit +
-      fate-sweep ungating (delete management_controller.go:301-302 after a
-      derivable-wake coverage audit). Pointed at by the spine's now.slice.
+      Landed 2026-09-25 (ebdaef45, 53035642): deadline wake armed at
+      open+bind, both selection sweeps deleted, commit self-heals via
+      recoverPartialActCommit. Deployed-cancel proof deferred — lever
+      CHOIR_ASSIGNMENT_DEADLINE committed.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+  - id: choir-texture-ledger-consumer-2026-09-25
+    title: Texture Ledger Consumer (R3a, station)
+    path: docs/definitions/choir-texture-ledger-consumer-2026-09-25.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-carrier-substrate-integrity-2026-09-25
+    enables: []
+    note: >-
+      Live station under the spine meta-goal — desk-act evidence/occurrence
+      resolution reads choir.commitment_record, dual-read vs
+      worker_updates_*. Packet-path deletion is R3d's.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
