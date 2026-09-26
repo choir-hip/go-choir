@@ -40,6 +40,19 @@ const (
 	assignedEngineeringFateWatchdogDelay = 5 * time.Minute
 )
 
+// assignedEngineeringDeadline returns the I26 fail-closed bound-assignment
+// deadline. CHOIR_ASSIGNMENT_DEADLINE (a Go duration) overrides the default for
+// staging probes and focused testing; it must be constant for a process's
+// lifetime so the arm-time not-before and the fire-time expiry check agree.
+func assignedEngineeringDeadline() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("CHOIR_ASSIGNMENT_DEADLINE")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return engineeringAssignmentDeadline
+}
+
 type assignmentCapsuleRuntime interface {
 	Spawn(context.Context, capsule.SpawnSpec) (*capsule.Capsule, error)
 	MintCapabilityHandle(string, capsule.AgentRole, string, string, time.Duration, string) (*capsule.Capability, error)

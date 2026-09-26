@@ -539,3 +539,120 @@ func TestAssignedEngineeringTerminalRevokeIntentRoundTrip(t *testing.T) {
 		t.Fatal("attempt must be part of the intent identity")
 	}
 }
+
+// The bound-assignment deadline is a derivable wake, not a selection-gated
+// sweep: when the armed assigned_engineering_fate_deadline fires on an expired
+// bound+active assignment, the dispatcher handler cancels it with no
+// management-desk selection. A not-yet-expired assignment must no-op.
+func TestDeadlineWakeCancelsExpiredBoundAssignmentWithoutManagementSelection(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	rt.assignmentRuntime = absentAssignmentCapsule{}
+	rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)
+
+	// Two live assignments on one trajectory collide on the lifecycle
+	// optimistic-concurrency lock, so each case gets its own seed/trajectory.
+	openAndBind := func(owner string, assignmentID string) (types.EngineeringAssignmentBinding, error) {
+		seed, err := store.SeedEngineeringAssignmentAuthority(s, owner, rt.TextureComputerID(), 1)
+		if err != nil {
+			return types.EngineeringAssignmentBinding{}, err
+		}
+		open := types.OpenEngineeringAssignmentRequest{
+			CommandID: "command-open-" + assignmentID, AssignmentID: assignmentID,
+			Binding: types.EngineeringAssignmentBinding{
+				OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
+				ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
+				ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
+				ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
+				Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
+				ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
+				CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-" + assignmentID), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID)),
+				SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
+				SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
+				Writable:          true, CapsuleID: "capsule-" + assignmentID,
+				NetworkMode: types.EngineeringCapsuleNetworkForbidden, FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+			},
+			AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
+			AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "deadline expiry"},
+		}
+		open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
+		if err != nil {
+			return types.EngineeringAssignmentBinding{}, err
+		}
+		if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+			return types.EngineeringAssignmentBinding{}, err
+		}
+		runID := "run:" + assignmentID
+		run := types.RunRecord{
+			RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
+			RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
+			AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+			State: types.RunPending, Prompt: open.AssignedWork.Objective,
+			Metadata: map[string]any{
+				"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
+				"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
+				"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
+				"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
+				"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
+				"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
+				"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
+				"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
+			},
+		}
+		bind := types.BindEngineeringAssignmentRequest{
+			CommandID: "command-bind-" + assignmentID, OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+			AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
+			OpaqueCapability: "cap-" + assignmentID, CapsuleID: open.Binding.CapsuleID,
+		}
+		bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
+		if err != nil {
+			return types.EngineeringAssignmentBinding{}, err
+		}
+		if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
+			return types.EngineeringAssignmentBinding{}, err
+		}
+		return open.Binding, nil
+	}
+
+	// Fresh assignment: deadline not reached, handler must no-op.
+	freshBinding, err := openAndBind("owner-deadline-fresh", "assignment-deadline-live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := s.GetEngineeringAssignment(ctx, freshBinding.OwnerID, freshBinding.ComputerID, "assignment-deadline-live", 1)
+	if err != nil || fresh.Disposition != types.EngineeringAssignmentBound || fresh.CapsuleDisposition != types.EngineeringCapsuleActive {
+		t.Fatalf("fresh bound+active assignment: %+v err=%v", fresh, err)
+	}
+	content, err := encodeAssignedEngineeringFateDeadline("assignment-deadline-live", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.HandleAssignedEngineeringFateDeadline(ctx, freshBinding.OwnerID, freshBinding.ComputerID, freshBinding.ParentAgentID, content); err != nil {
+		t.Fatalf("live assignment handler: %v", err)
+	}
+	if after, _ := s.GetEngineeringAssignment(ctx, freshBinding.OwnerID, freshBinding.ComputerID, "assignment-deadline-live", 1); after.Disposition != types.EngineeringAssignmentBound {
+		t.Fatalf("not-yet-due assignment was touched: %+v", after)
+	}
+
+	// Expired assignment: the same wake cancels it — no management reconcile ran.
+	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "1ms")
+	expiredBinding, err := openAndBind("owner-deadline-expired", "assignment-deadline-expired")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	expiredContent, err := encodeAssignedEngineeringFateDeadline("assignment-deadline-expired", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.HandleAssignedEngineeringFateDeadline(ctx, expiredBinding.OwnerID, expiredBinding.ComputerID, expiredBinding.ParentAgentID, expiredContent); err != nil {
+		t.Fatalf("expired assignment handler: %v", err)
+	}
+	done, err := s.GetEngineeringAssignment(ctx, expiredBinding.OwnerID, expiredBinding.ComputerID, "assignment-deadline-expired", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Disposition != types.EngineeringAssignmentCancelled {
+		t.Fatalf("expired assignment not cancelled by derivable wake: %+v", done)
+	}
+}

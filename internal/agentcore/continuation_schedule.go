@@ -148,7 +148,7 @@ func (rt *Runtime) armAssignedEngineeringDeadline(assignment types.EngineeringAs
 	}
 	rt.scheduleContinuation(context.Background(), assignment.Binding.OwnerID, assignment.Binding.ComputerID,
 		assignment.Binding.ParentAgentID, assignedEngineeringFateDeadlineUpdateKind, content,
-		assignment.Binding.TrajectoryID, "", assignment.CreatedAt.Add(engineeringAssignmentDeadline))
+		assignment.Binding.TrajectoryID, "", assignment.CreatedAt.Add(assignedEngineeringDeadline()))
 }
 
 // HandleAssignedEngineeringFateDeadline either resumes a still-pending fate
@@ -176,7 +176,7 @@ func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ow
 		assignment.CapsuleDisposition != types.EngineeringCapsuleActive ||
 		strings.TrimSpace(assignment.BoundRunID) == "" ||
 		assignment.CreatedAt.IsZero() ||
-		time.Now().UTC().Before(assignment.CreatedAt.Add(engineeringAssignmentDeadline)) {
+		time.Now().UTC().Before(assignment.CreatedAt.Add(assignedEngineeringDeadline())) {
 		return nil
 	}
 	parent := types.RunRecord{
@@ -184,7 +184,7 @@ func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ow
 		ComputerID: assignment.Binding.ComputerID, AgentID: assignment.Binding.ParentAgentID,
 	}
 	result, err := rt.cancelAssignedEngineering(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
-		fmt.Sprintf("assignment deadline expired after %s; request remains pending and retryable", engineeringAssignmentDeadline))
+		fmt.Sprintf("assignment deadline expired after %s; request remains pending and retryable", assignedEngineeringDeadline()))
 	if err != nil {
 		return fmt.Errorf("cancel expired assignment %s: %w", assignment.AssignmentID, err)
 	}
