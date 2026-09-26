@@ -125,15 +125,15 @@ type Runtime struct {
 	// only in kernel mode, where NotBefore is interpreted by the dispatcher.
 	scheduleActor func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
 
-	desktopState             *desktopstate.Handler
-	content                  *contentowner.Service
-	capsuleExecutor          *capsule.Executor
+	desktopState    *desktopstate.Handler
+	content         *contentowner.Service
+	capsuleExecutor *capsule.Executor
 	// textureCellAuthorizer commits a staged texture-authoring cell intent
 	// (R3d: choir.ApplyTexture) through the canonical ApplyTextureTurn
 	// transaction. Bound by autoputer to the texture lifecycle owner —
 	// the desk-cell carrier cannot import the owner, so this is an
 	// interface seam (same shape as the actor-dispatch hooks).
-	textureCellAuthorizer TextureCellAuthorizer
+	textureCellAuthorizer    TextureCellAuthorizer
 	assignmentHandleResolver interface {
 		AssignmentHandle(string, string) (string, error)
 	}
@@ -239,8 +239,6 @@ type TextureCellAuthorizer interface {
 func (rt *Runtime) SetTextureCellAuthorizer(a TextureCellAuthorizer) {
 	rt.textureCellAuthorizer = a
 }
-
-
 
 // SetScheduleActor sets the kernel-only hook for durable not-before events.
 // The adapter owns the actor tape and binds this alongside dispatchActor.

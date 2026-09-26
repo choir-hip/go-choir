@@ -43,7 +43,7 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 			"web_search",
 			"get_run_memory_entry", "list_evidence", "read_evidence", "save_evidence",
 		},
-		agentprofile.Texture:     {"desk_go_eval"},
+		agentprofile.Texture: {"desk_go_eval"},
 		agentprofile.Processor: append(append(slices.Clone(ordinary), "update_coagent"),
 			"record_wire_processor_decision"),
 		agentprofile.Reconciler: append(slices.Clone(ordinary), "update_coagent"),

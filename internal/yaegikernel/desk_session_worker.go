@@ -176,13 +176,13 @@ func SessionWorkerConfigFromEnv(getenv func(string) string, prefix string) Sessi
 		fmt.Sscanf(v, "%d", &epoch)
 	}
 	return SessionWorkerConfig{
-		AllowedPackages: splitCSV(getenv(prefix + "ALLOWED_PACKAGES")),
-		ComputerID:      getenv(prefix + "COMPUTER_ID"),
-		ActivationID:    getenv(prefix + "ACTIVATION"),
-		Epoch:           epoch,
-		AllowedRoot:     getenv(prefix + "ALLOWED_ROOT"),
-		Role:            getenv(prefix + "ROLE"),
-		Slot:            getenv(prefix + "SLOT"),
+		AllowedPackages:  splitCSV(getenv(prefix + "ALLOWED_PACKAGES")),
+		ComputerID:       getenv(prefix + "COMPUTER_ID"),
+		ActivationID:     getenv(prefix + "ACTIVATION"),
+		Epoch:            epoch,
+		AllowedRoot:      getenv(prefix + "ALLOWED_ROOT"),
+		Role:             getenv(prefix + "ROLE"),
+		Slot:             getenv(prefix + "SLOT"),
 		MemoryLimitBytes: parseUint64Env(getenv(prefix + "MEMORY_LIMIT_BYTES")),
 	}
 }
