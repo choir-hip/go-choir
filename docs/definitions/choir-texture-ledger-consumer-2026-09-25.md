@@ -183,7 +183,25 @@ now:
     Drive evidence-seam consumers (revision metadata, occurrence resolve) off
     the merged read; packet-path deletion remains R3d's.
 
-receipts: []
+receipts:
+  - id: r3a-dualread-implemented
+    boundary: evidence-seam dual-read wired
+    commit_or_artifact: 4cf82057
+    pushed_commit: 4cf82057 (main)
+    ci: run 36210785088 success
+    deploy: staging build.commit 4cf82057ef2e83776fd81a5dcb2892b79f0aa10b
+    environment_identity: computer-03335285269bdba4f94377e56879f9e6
+      (active, realization_epoch 945)
+    deployed_acceptance: >-
+      Partial. Live doc 2b0cc2bb + owner-revise + desk run exercised the
+      seam on the deployed binary (revision fddaacef turn committed). The
+      strict live-record criterion — a reducer-minted record appearing in
+      doc evidence input absent a packet — is deferred: minting such a
+      record needs a report-cast act against a doc desk (no external API;
+      R3b/M2 territory). Honest boundary per problem-documentation-first.
+    proof_refs:
+      - TestCommitmentLedgerDualReadParity (record+packet -> same entity, 0 div)
+      - TestCommitmentLedgerDualReadDetectsRecordOnlySource (record_only surfaced)
 ---
 
 # R3a — Texture Ledger Consumer (station on the rectification spine)
