@@ -507,9 +507,14 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 			researchtools.DefaultResearchEgressMaxFetchedBytes,
 		)
 	}
-	researchRegistry, err := rt.buildRegistryForRole(researchPolicy, cwd, searchClient, sourceClient, httpClient)
-	if err != nil {
-		return err
+	// The host research registry is the off-carrier fallback only — with
+	// R3r unconditional, the fan below replaces it; skip building a
+	// registry that would be discarded.
+	var researchRegistry *toolregistry.ToolRegistry
+	if !deskCarrierLive(agentprofile.Research) {
+		if researchRegistry, err = rt.buildRegistryForRole(researchPolicy, cwd, searchClient, sourceClient, httpClient); err != nil {
+			return err
+		}
 	}
 	// InCellCarrier fan: a non-capsule desk runs on the cell carrier when
 	// deskCarrierLive(profile) promotes it — management (R3c), texture
