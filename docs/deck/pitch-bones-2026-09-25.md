@@ -1,137 +1,132 @@
-# Pitch Bones — Choir (September 25, 2026 Revision)
+# Pitch Bones — Choir (Broadsheet redesign, September 25, 2026)
 
-The textual skeleton for the 10-slide seed pitch deck.
-Adheres to YC Seed Deck standards: Legible, Simple, Obvious. One idea per slide.
+The deck is set as a newspaper, in two editions — Morning (cream) and Night (ink).
+Same type, same copy, different paper. Type: Didot masthead, Iowan Old Style for
+headlines/deks/body, SF Mono for rails, labels, and contacts.
 
----
-
-## Slide 01 · Cover
-
-**Kicker:** September 2026 · open source
-**Lead:** A new species of computer.
-**Title (Word):** CHOIR
-**Main:** The automatic computer.
-**Foot:** choir.news · 01
+Source of truth for this file: `docs/deck/choir-seed-deck-2026-09-25-broadsheet.html`
+and `...-broadsheet-night.html`.
 
 ---
 
-## Slide 02 · Problem
+## 01 · Masthead (cover)
 
-**Kicker:** Problem
-**Title:** The world moves at machine speed.<br>Human synthesis is broken.
-**Rule**
-**Points:**
-- Information moves faster than any individual or team can track.
-- Chat threads and algorithmic feeds prey on attention and produce noise.
-- Every organization needs a publishing voice; most lack the resources to own it.
-**Keyline:** A chat thread is not a workbench. <span class="em">A feed is not a perspective.</span>
-**Foot:** choir — the automatic computer · 02
+**Rail:** Vol. I · No. 1  |  September 2026 · open source
+**Overline (gold, letterspaced):** A new species of computer
+**Masthead:** CHOIR
+**Dek (italic):** The automatic computer.
+**Foot note:** choir.news · one machine that reads the world, keeps the record, and publishes
 
 ---
 
-## Slide 03 · Solution
+## 02 · The problem
 
-**Kicker:** Solution
-**Title:** The work itself<br>is the interface.
-**Rule**
-**Body:** Agents continuously update a living, versioned document representing the current state of truth. Humans read it and edit it directly.
-**Points:**
-- Editing is steering: an edit creates a new version and redirects agent trajectories.
-- Precommitment records make autonomous execution trustworthy and auditable.
-**Keyline:** Language is for intent. <span class="em">The document is for steering.</span>
-**Foot:** choir — the automatic computer · 03
-
----
-
-## Slide 04 · The Product
-
-**Kicker:** The product
-**Title:** The autonomous<br>publishing computer.
-**Rule**
-**Layout:** 2-column: description on left, live Texture document screenshot on right.
-**Cards:**
-- **Ingest & Synthesize:** Continuous monitoring of global sources with verified citations.
-- **Steer & Publish:** Edit living documents to steer; publish as articles or authentic voice.
-**Keyline:** Generate the visuals. <span class="em">Preserve the voice.</span>
-**Foot:** choir — the automatic computer · 04
+**Section:** THE PROBLEM
+**Headline:** Information outruns attention.
+**Dek:** The world now produces more than any person — or any team — can read, verify, and answer.
+**Columns (two, with rule):**
+- Models work for hours across thousands of sources. What returns is a transcript, a feed, a folder of drafts — nothing a person can absorb, trust, or answer to.
+- The scarce resource is no longer intelligence. It is attention, judgment, and voice. The bottleneck moved. The tools did not.
+- Every team needs a voice and a record. Most rent their distribution, and keep their memory inside someone else's product.
+**Pull quote (bottom-anchored):** A chat thread is not a workbench. *A feed is not a perspective.*
 
 ---
 
-## Slide 05 · Progress & Proof
+## 03 · The fix
 
-**Kicker:** Progress
-**Title:** It runs.<br>Live on staging today.
-**Rule**
-**Layout:** 2 side-by-side screenshots: Mail app (staging) and Automatic Newspaper (staging/refactor).
-**Captions:**
-- Mail — autonomous email agent with sends gated by owner approval.
-- Automatic Newspaper — live, provenance-linked continuous publication.
-**Body:** Provenance-linked continuous generation running today. Next milestone: production launch.
-**Foot:** choir — the automatic computer · 05
+**Section:** THE FIX
+**Statement (centered, 66px):** The work itself is the interface.
+**Dek:** Agents maintain a living document — the authoritative state of the work. You read it, you edit it, and the edit steers what happens next.
+**Rule line (mono, gold):** v1 —— your edit ——▶ v2 ——▶ next actions
+**Note (italic):** Precommitment records make every autonomous run auditable and self-improving. Models and agents are swappable. The state is yours.
 
 ---
 
-## Slide 06 · The Category
+## 04 · The product
 
-**Kicker:** The category
-**Title:** Every person, team, and organization<br>gets an automatic computer.
-**Rule**
-**Grid 3:**
-- **Atomic Unit:** One persistent, self-driving computer per person, team, org, or autonomous agent.
-- **Generations:** Mainframes (thousands) → PCs (~2B) → Smartphones (~4.5B) → Automatic Computers (>1B near term, 10B+ long term).
-- **Category Math:** 50k prosumer publishers + 15k team seats = $54M ARR from a fraction of target adopters.
-**Keyline:** We don't need to own the category. <span class="em">We need to be the default neutral workbench.</span>
-**Foot:** choir — the automatic computer · 06
+**Section:** THE PRODUCT
+**Headline:** The autonomous publishing computer.
+**Lead photo:** Texture — a living research document. Every claim carries its source.
+**Side columns:**
+- READS THE WORLD — Continuous ingest, verification, and synthesis across global sources.
+- KEEPS THE RECORD — Living documents you steer by editing — published as articles or spoken word.
+**Pull quote (bottom-anchored):** Generate the visuals. *Preserve the voice.*
 
 ---
 
-## Slide 07 · Business Model
+## 05 · The record
 
-**Kicker:** Business model
-**Title:** Open-source core.<br>The network is the business.
-**Rule**
-**Grid 3:**
-- **Open-Source Core:** Free self-host. Builds developer trust, distribution, and non-negotiable enterprise data sovereignty.
-- **Hosted Convenience:** $35/mo prosumer publishers; $100/seat/mo team async meeting desks that steer 24/7 agents.
-- **The Network Asset:** Publishing network (paywall take-rates) + permissioned API access to the aggregate, provenance-linked corpus.
-**Keyline:** We don't sell computers. <span class="em">We build the network where perspectives compound.</span>
-**Foot:** choir — the automatic computer · 07
+**Section:** THE RECORD
+**Headline:** It runs.
+**Dek:** Live on staging today — reading, drafting, and publishing on its own.
+**Photo pair:**
+- Mail — autonomous correspondence. Every send gated by owner approval.
+- Automatic Newspaper — a provenance-linked wire, updated continuously.
+**Bottom rail (mono):** Next — production launch, then evidence of repeat use
 
 ---
 
-## Slide 08 · Positioning
+## 06 · The category
 
-**Kicker:** Positioning
-**Title:** Personal agents are here.<br>They need somewhere to work.
-**Rule**
-**Grid 3:**
-- **The Category:** Muse, Instinct, Grok Bot, Town, OpenAI Aeon — personal agents running in vendor clouds.
-- **The Gap:** Every agent traps memory and state in its proprietary silo. Built for digital chores, not compounding IP.
-- **Choir:** The neutral workbench any agent can drive — API, MCP, skill, or code. State the user permanently owns.
-**Keyline:** Agents come and go. <span class="em">The workbench stays yours.</span>
-**Foot:** choir — the automatic computer · 08
-
----
-
-## Slide 09 · Why Me
-
-**Kicker:** Why me
-**Wrap:** Text left, founder portrait photo right.
-**Name:** Yusef Mosiah Nathanson
-**Role:** Founder
-**Bio:** Made a living turning conflicting signals into verified decisions — professional poker, then AI engineering since 2015. I built the computer I needed to supervise my own agents and accelerate my own publishing. Structured as a technology-risk business; product-led growth driven by the newspaper. No golf and martini lunches.
-**Links:** github.com/yusefmosiah · mosiah.org
-**Keyline:** I built the computer <span class="em">I needed to exist.</span>
-**Foot:** choir — the automatic computer · 09
+**Section:** THE CATEGORY
+**Headline:** A new generation of the machine.
+**Dek:** Every person, team, and organization gets an automatic computer.
+**By the numbers (four columns):**
+- 1975 — 10³ — mainframes
+- 1995 — 2×10⁹ — personal computers
+- 2007 — 4.5×10⁹ — smartphones
+- Now — >10⁹ — automatic computers; 10¹⁰+ with agents
+**Note:** Installed base by computing generation. Software-defined computers can outnumber their owners.
+**Pull quote (bottom-anchored):** 50,000 publishers + 15,000 team seats = $54M ARR. *We don't need to own the category — only to be the default workbench.*
 
 ---
 
-## Slide 10 · The Ask
+## 07 · The business
 
-**Kicker:** The ask
-**Title:** Building the system<br>that needs to exist.
-**Rule**
-**Body:** Raising seed capital to complete production launch, scale our first cohort of creators and organizational publishers, and expand the network.
-**Keyline:** Milestone: <span class="em">production launch — then evidence of repeat use.</span>
-**Links:** choir.news · github.com/choir-hip/go-choir
-**Foot:** choir — the automatic computer · 10
+**Section:** THE BUSINESS
+**Headline:** Give away the computer. / Sell the network.
+**Dek:** Open source is how a sovereign machine earns trust. The network is how it earns revenue.
+**Three columns (with rules):**
+- THE CORE — Free and self-hosted. Auditable, portable, and yours.
+- THE CONVENIENCE — $35 a month for publishers. $100 a seat for teams whose meetings steer agents.
+- THE NETWORK — Subscriptions, citations, paywalls, and permissioned queries over the corpus.
+**Pull quote (bottom-anchored):** We don't sell computers. *We build the network where perspectives compound.*
+
+---
+
+## 08 · The position
+
+**Section:** THE POSITION
+**Headline:** Personal agents need somewhere to work.
+**Dek:** This year's assistants all run in someone else's cloud. The work should outlive the agent.
+**Standings table:** Agent / Runs in / Owns your state
+- Muse, Instinct, Grok Bot, Town, Aeon — vendor cloud — no
+- Choir — your machine — yes
+**Note (bottom-anchored):** Chat-based agents make the assistant persistent. Choir makes the work persistent. Agents come and go — the workbench stays yours.
+
+---
+
+## 09 · The founder
+
+**Section:** THE FOUNDER
+**Headline:** Built by the person who needed it.
+**Byline:** By Yusef Mosiah Nathanson — founder
+**Body:** I made a living turning conflicting signals into verified decisions — professional poker, then AI engineering since 2015. Choir is the computer I needed to supervise my agents and publish at machine speed. It is a technology-risk company, and its own newspaper is the marketing.
+**Note:** Product-led growth. No golf. No martini lunches.
+**Portrait cutline:** Yusef Mosiah Nathanson, founder.
+**Contacts:** github.com/yusefmosiah · mosiah.org
+
+---
+
+## 10 · The ask
+
+**Section:** THE ASK
+**Headline:** Building the system that needs to exist.
+**Dek:** We are raising a seed round.
+**Three columns (with rules):**
+- SHIP — Finish production launch of the computer and the newspaper.
+- SEED THE COHORT — Bring on the first publishers, individual and organizational.
+- OPEN THE NETWORK — Turn on subscriptions, citations, and the shared corpus.
+**Boxed milestone:** Production launch, then evidence of repeat use.
+**Closing note:** The work continues either way.
+**Contacts:** choir.news · github.com/choir-hip/go-choir

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CHOIR — Morning Edition</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --paper: #F6F2E7; --ink: #17140C; --muted: #6E6654; --rule: #D8D0BB; --gold: #96700F;
+    --display: "Iowan Old Style", "Hoefler Text", Palatino, "Times New Roman", serif;
+    --mast: "Didot", "Hoefler Text", "Iowan Old Style", serif;
+    --mono: "SF Mono", Menlo, Monaco, monospace;
+  }
+  body { font-family: var(--display); background: var(--paper); color: var(--ink);
+         -webkit-font-smoothing: antialiased; font-feature-settings: "onum" 1, "liga" 1; }
+  .slide { width:1280px; height:720px; page-break-after:always; position:relative; overflow:hidden;
+           background:var(--paper); padding:44px 88px 60px; display:flex; flex-direction:column; }
+  .slide:last-child { page-break-after:auto; }
+
+  .rail { display:flex; justify-content:space-between; align-items:baseline; font-family:var(--mono);
+          font-size:9.5px; letter-spacing:0.17em; text-transform:uppercase; color:var(--muted); }
+  .rail .g { color:var(--gold); }
+  .hair { height:1px; background:var(--rule); margin-top:12px; }
+  .folio { position:absolute; bottom:26px; left:88px; right:88px; display:flex; justify-content:space-between;
+           font-family:var(--mono); font-size:9.5px; letter-spacing:0.17em; text-transform:uppercase; color:var(--muted); }
+  .body-area { flex:1; padding-top:34px; display:flex; flex-direction:column; min-height:0; }
+  .tail { margin-top:auto; }
+
+  .sect { font-family:var(--mono); font-size:10px; letter-spacing:0.24em; text-transform:uppercase;
+          color:var(--gold); margin-bottom:16px; }
+  h1.head { font-family:var(--display); font-weight:600; font-size:57px; line-height:1.06;
+            letter-spacing:-0.012em; margin-bottom:14px; text-wrap:balance; }
+  .dek { font-style:italic; font-size:23px; color:var(--muted); line-height:1.4; max-width:900px; text-wrap:balance; }
+  .body { font-size:16px; line-height:1.62; }
+  .body.dim { color:var(--muted); }
+  .pull { font-style:italic; font-weight:600; font-size:29px; line-height:1.25; color:var(--ink);
+          border-top:2px solid var(--ink); border-bottom:1px solid var(--rule); padding:14px 0 12px; max-width:1080px; }
+  .pull .g { color:var(--gold); }
+  .note { font-size:14px; font-style:italic; color:var(--muted); line-height:1.5; }
+
+  /* cover */
+  .flag { margin-top:62px; border-top:3px solid var(--ink); border-bottom:1px solid var(--ink); padding:22px 0 20px; text-align:center; }
+  .overline { font-family:var(--mono); font-size:11px; letter-spacing:0.34em; text-transform:uppercase;
+              color:var(--gold); margin-bottom:14px; }
+  .mast { font-family:var(--mast); font-weight:400; font-size:172px; line-height:0.92; letter-spacing:0.015em; }
+  .cover-dek { text-align:center; font-style:italic; font-size:30px; margin-top:26px; }
+  .cover-note { text-align:center; font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+                text-transform:uppercase; color:var(--muted); margin-top:auto; }
+
+  /* structure */
+  .cols2 { column-count:2; column-gap:44px; column-rule:1px solid var(--rule); margin-top:24px; }
+  .cols3 { display:grid; grid-template-columns:1fr 1fr 1fr; margin-top:26px; }
+  .cols3 > div { padding:0 26px; }
+  .cols3 > div + div { border-left:1px solid var(--rule); }
+  .cols3 > div:first-child { padding-left:0; }
+  .cols3 > div:last-child { padding-right:0; }
+  .colhead { font-family:var(--mono); font-size:10px; letter-spacing:0.2em; text-transform:uppercase;
+             color:var(--gold); margin-bottom:9px; }
+
+  figure { margin:0; }
+  figure img { display:block; border:1px solid var(--rule); width:100%; height:auto; }
+  figcaption { font-size:13.5px; font-style:italic; color:var(--muted); line-height:1.4; margin-top:8px; max-width:520px; }
+  .photo-pair { display:grid; grid-template-columns:1fr 1fr; gap:34px; margin-top:26px; }
+  .photo-pair img { height:258px; object-fit:cover; object-position:top center; }
+  .lead { display:grid; grid-template-columns:500px 1fr; gap:52px; margin-top:20px; align-items:start; }
+  .lead-side { display:flex; flex-direction:column; height:392px; }
+
+  .figs { display:grid; grid-template-columns:repeat(4,1fr); margin-top:34px; }
+  .figs > div { padding:0 26px; border-left:1px solid var(--rule); }
+  .figs > div:first-child { padding-left:0; border-left:none; }
+  .figs > div:last-child { padding-right:0; }
+  .fig-era { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase; color:var(--muted); }
+  .fig-n { font-weight:600; font-size:46px; line-height:1.1; margin:8px 0 6px; letter-spacing:-0.01em; }
+  .fig-n.g { color:var(--gold); }
+  .fig-l { font-size:14.5px; color:var(--muted); line-height:1.4; }
+
+  table.stand { width:100%; border-collapse:collapse; margin-top:24px; }
+  table.stand th { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase;
+                   color:var(--muted); font-weight:400; text-align:left; padding:0 0 8px; }
+  table.stand td { font-size:17px; padding:9px 0; border-top:1px solid var(--rule); }
+  table.stand tr.win td { border-top:2px solid var(--ink); font-weight:600; }
+  table.stand td.no { color:var(--muted); }
+  table.stand td.yes { color:var(--gold); font-weight:600; }
+
+  .byline-wrap { display:grid; grid-template-columns:1fr 300px; gap:54px; margin-top:24px; align-items:start; }
+  .byline { font-family:var(--mono); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
+            color:var(--muted); margin-bottom:14px; }
+  .portrait img { width:100%; border:1px solid var(--rule); }
+
+  .ask-grid { display:grid; grid-template-columns:1.05fr 1fr; gap:52px; margin-top:26px; align-items:start; }
+  .askbox { border:2px solid var(--ink); padding:18px 22px; max-width:860px; }
+  .askbox .k { font-family:var(--mono); font-size:9.5px; letter-spacing:0.22em; text-transform:uppercase;
+               color:var(--gold); margin-bottom:7px; }
+  .askbox .v { font-size:22px; font-style:italic; }
+  .contacts { font-family:var(--mono); font-size:11px; letter-spacing:0.14em; color:var(--muted); text-transform:uppercase; }
+  a { color:inherit; text-decoration:none; }
+  .rule-thin { height:1px; background:var(--rule); }
+</style>
+</head>
+<body>
+
+<!-- 01 · MASTHEAD -->
+<section class="slide">
+  <div class="rail"><span>Vol. I &middot; No. 1</span><span class="g">September 2026 &middot; open source</span></div>
+  <div class="flag">
+    <div class="overline">A new species of computer</div>
+    <div class="mast">CHOIR</div>
+  </div>
+  <div class="cover-dek">The automatic computer.</div>
+  <div class="cover-note">choir.news &nbsp;&middot;&nbsp; one machine that reads the world, keeps the record, and publishes</div>
+</section>
+
+<!-- 02 · THE PROBLEM -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">02 / 10</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The problem</div>
+    <h1 class="head">Information outruns attention.</h1>
+    <div class="dek">The world now produces more than any person &mdash; or any team &mdash; can read, verify, and answer.</div>
+    <div class="cols2 body dim">
+      <p>Models work for hours across thousands of sources. What returns is a transcript, a feed, a folder of drafts &mdash; nothing a person can absorb, trust, or answer to.</p>
+      <p>The scarce resource is no longer intelligence. It is attention, judgment, and voice. The bottleneck moved. The tools did not.</p>
+      <p>Every team needs a voice and a record. Most rent their distribution, and keep their memory inside someone else's product.</p>
+    </div>
+    <div class="pull tail">A chat thread is not a workbench. <span class="g">A feed is not a perspective.</span></div>
+  </div>
+  <div class="folio"><span>Choir</span><span>02</span></div>
+</section>
+
+<!-- 03 · THE FIX -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">03 / 10</span></div>
+  <div class="hair"></div>
+  <div class="body-area" style="justify-content:center; align-items:center; text-align:center;">
+    <div class="sect">The fix</div>
+    <h1 class="head" style="font-size:66px; max-width:1010px;">The work itself is the interface.</h1>
+    <div class="dek" style="max-width:790px; margin-top:8px;">Agents maintain a living document &mdash; the authoritative state of the work. You read it, you edit it, and the edit steers what happens next.</div>
+    <div style="font-family:var(--mono); font-size:12.5px; letter-spacing:0.1em; color:var(--gold); margin-top:38px;">v1 &nbsp;&mdash;&mdash; your edit &mdash;&mdash;&#9654;&nbsp; v2 &nbsp;&mdash;&mdash;&#9654;&nbsp; next actions</div>
+    <div class="note" style="max-width:780px; margin-top:40px;">Precommitment records make every autonomous run auditable and self-improving. Models and agents are swappable. The state is yours.</div>
+  </div>
+  <div class="folio"><span>Choir</span><span>03</span></div>
+</section>
+
+<!-- 04 · THE PRODUCT -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">04 / 10</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The product</div>
+    <h1 class="head">The autonomous publishing computer.</h1>
+    <div class="lead">
+      <figure>
+        <img src="shot-texture.png" alt="Texture — the living document">
+        <figcaption>Texture &mdash; a living research document. Every claim carries its source.</figcaption>
+      </figure>
+      <div class="lead-side">
+        <div class="colhead">Reads the world</div>
+        <div class="body dim" style="margin-bottom:22px;">Continuous ingest, verification, and synthesis across global sources.</div>
+        <div class="colhead">Keeps the record</div>
+        <div class="body dim">Living documents you steer by editing &mdash; published as articles or spoken word.</div>
+        <div class="pull tail" style="font-size:23px; padding:12px 0 10px;">Generate the visuals. <span class="g">Preserve the voice.</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="folio"><span>Choir</span><span>04</span></div>
+</section>
+
+<!-- 05 · THE RECORD -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">05 / 10</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The record</div>
+    <h1 class="head">It runs.</h1>
+    <div class="dek">Live on staging today &mdash; reading, drafting, and publishing on its own.</div>
+    <div class="photo-pair">
+      <figure>
+        <img src="shot-mail.png" alt="Mail">
+        <figcaption>Mail &mdash; autonomous correspondence. Every send gated by owner approval.</figcaption>
+      </figure>
+      <figure>
+        <img src="shot-worldwire.png" alt="Automatic Newspaper">
+        <figcaption>Automatic Newspaper &mdash; a provenance-linked wire, updated continuously.</figcaption>
+      </figure>
+    </div>
+    <div class="tail">
+      <div class="rule-thin"></div>
+      <div style="font-family:var(--mono); font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--muted); margin-top:12px;">Next &mdash; production launch, then evidence of repeat use</div>
+    </div>
+  </div>
+  <div class="folio"><span>Choir</span><span>05</span></div>
+</section>
+
+<!-- 06 · THE CATEGORY -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">06 / 10</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The category</div>
+    <h1 class="head">A new generation of the machine.</h1>
+    <div class="dek">Every person, team, and organization gets an automatic computer.</div>
+    <div class="figs">
+      <div><div class="fig-era">1975</div><div class="fig-n">10&sup3;</div><div class="fig-l">mainframes</div></div>
+      <div><div class="fig-era">1995</div><div class="fig-n">2&times;10&#8313;</div><div class="fig-l">personal computers</div></div>
+      <div><div class="fig-era">2007</div><div class="fig-n">4.5&times;10&#8313;</div><div class="fig-l">smartphones</div></div>
+      <div><div class="fig-era">Now</div><div class="fig-n g">&gt;10&#8313;</div><div class="fig-l">automatic computers &mdash; 10&sup1;&#8304;+ with agents</div></div>
+    </div>
+    <div class="note" style="margin-top:22px;">Installed base by computing generation. Software-defined computers can outnumber their owners.</div>
+    <div class="pull tail" style="font-size:26px;">50,000 publishers + 15,000 team seats = $54M ARR. <span class="g">We don't need to own the category &mdash; only to be the default workbench.</span></div>
+  </div>
+  <div class="folio"><span>Choir</span><span>06</span></div>
+</section>
+
+<!-- 07 · THE BUSINESS -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">07 / 10</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The business</div>
+    <h1 class="head">Give away the computer.<br>Sell the network.</h1>
+    <div class="dek">Open source is how a sovereign machine earns trust. The network is how it earns revenue.</div>
+    <div class="cols3">
+      <div><div class="colhead">The core</div><div class="body dim">Free and self-hosted. Auditable, portable, and yours.</div></div>
+      <div><div class="colhead">The convenience</div><div class="body dim">$35 a month for publishers. $100 a seat for teams whose meetings steer agents.</div></div>
+      <div><div class="colhead">The network</div><div class="body dim">Subscriptions, citations, paywalls, and permissioned queries over the corpus.</div></div>
+    </div>
+    <div class="pull tail">We don't sell computers. <span class="g">We build the network where perspectives compound.</span></div>
+  </div>
+  <div class="folio"><span>Choir</span><span>07</span></div>
+</section>
+
+<!-- 08 · THE POSITION -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">08 / 10</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The position</div>
+    <h1 class="head">Personal agents need somewhere to work.</h1>
+    <div class="dek">This year's assistants all run in someone else's cloud. The work should outlive the agent.</div>
+    <table class="stand">
+      <tr><th style="width:40%;">Agent</th><th style="width:38%;">Runs in</th><th>Owns your state</th></tr>
+      <tr><td>Muse</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
+      <tr><td>Instinct</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
+      <tr><td>Grok Bot</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
+      <tr><td>Town</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
+      <tr><td>Aeon</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
+      <tr class="win"><td>Choir</td><td>your machine</td><td class="yes">yes</td></tr>
+    </table>
+    <div class="note tail">Chat-based agents make the assistant persistent. Choir makes the work persistent. Agents come and go &mdash; the workbench stays yours.</div>
+  </div>
+  <div class="folio"><span>Choir</span><span>08</span></div>
+</section>
+
+<!-- 09 · THE FOUNDER -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">09 / 10</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The founder</div>
+    <h1 class="head">Built by the person who needed it.</h1>
+    <div class="byline-wrap">
+      <div style="display:flex; flex-direction:column; height:430px;">
+        <div class="byline">By Yusef Mosiah Nathanson &mdash; founder</div>
+        <div class="body" style="font-size:17.5px;">I made a living turning conflicting signals into verified decisions &mdash; professional poker, then AI engineering since 2015. Choir is the computer I needed to supervise my agents and publish at machine speed. It is a technology-risk company, and its own newspaper is the marketing.</div>
+        <div class="note" style="margin-top:22px;">Product-led growth. No golf. No martini lunches.</div>
+        <div class="contacts tail">github.com/yusefmosiah &nbsp;&middot;&nbsp; mosiah.org</div>
+      </div>
+      <figure class="portrait">
+        <img src="Yusef_photo.jpeg" alt="Yusef Mosiah Nathanson">
+        <figcaption>Yusef Mosiah Nathanson, founder.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="folio"><span>Choir</span><span>09</span></div>
+</section>
+
+<!-- 10 · THE ASK -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">10 / 10</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The ask</div>
+    <h1 class="head">Building the system that needs to exist.</h1>
+    <div class="dek" style="margin-top:12px;">We are raising a seed round.</div>
+    <div class="cols3">
+      <div><div class="colhead">Ship</div><div class="body dim">Finish production launch of the computer and the newspaper.</div></div>
+      <div><div class="colhead">Seed the cohort</div><div class="body dim">Bring on the first publishers, individual and organizational.</div></div>
+      <div><div class="colhead">Open the network</div><div class="body dim">Turn on subscriptions, citations, and the shared corpus.</div></div>
+    </div>
+    <div class="tail">
+      <div class="askbox">
+        <div class="k">Milestone</div>
+        <div class="v">Production launch, then evidence of repeat use.</div>
+      </div>
+      <div class="note" style="margin-top:26px;">The work continues either way.</div>
+      <div class="contacts" style="margin-top:12px;">choir.news &nbsp;&middot;&nbsp; github.com/choir-hip/go-choir</div>
+    </div>
+  </div>
+  <div class="folio"><span>Choir</span><span>10</span></div>
+</section>
+
+</body>
+</html>
