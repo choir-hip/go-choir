@@ -128,10 +128,14 @@ boundaries:
     - management reconcile path (sweep removal)
 
 now:
-  status: working
-  slice: audit done — build deadline wake at bind; atomic-commit repair
-  source_ref: main@173ba26a
-  deploy_identity: staging https://choir.news build.commit=537fce04
+  status: landed
+  slice: >-
+    landed — repairs merged (ebdaef45, 53035642): deadline wake armed at
+    open+bind, both selection sweeps deleted, commit self-heals via
+    recoverPartialActCommit. Deployed-cancel proof deferred (see
+    blocker_or_risk).
+  source_ref: main@53035642
+  deploy_identity: staging https://choir.news build.commit=53035642
   candidate:
     id: none
     state: none
@@ -188,12 +192,17 @@ now:
     next_observation: >-
       A store transaction primitive for the commit triple, else the
       partial-commit recovery design.
-  blocker_or_risk: none — audit done, two repairs chartered
-  next_action: >-
-    Arm assigned_engineering_fate_deadline (or a sibling wake kind) at
-    BindEngineeringAssignment for the 6h deadline; extend the handler to
-    cancel expired bound+active assignments; delete both selection-path
-    sweeps; then make commit() atomic-or-recovering.
+  blocker_or_risk: >-
+    Deployed proof deferred: no env passthrough to the guest (kernel-cmdline
+    allowlist in autoputer-vm.nix) and no public wake-append route, so a
+    "short deadline" on staging needs a choir.assignment_deadline cmdline
+    param + VM package deploy. CHOIR_ASSIGNMENT_DEADLINE env override is
+    committed as the lever; local test
+    (TestDeadlineWakeCancelsExpiredBoundAssignmentWithoutManagementSelection)
+    proves wake->cancel with no management selection. Follow-up: plumb the
+    cmdline param, run the deployed probe, or fold into a later station.
+    Per owner directive (No Blocking Asks): defer, do not ask.
+  next_action: hand station pointer to R3a (texture ledger consumer)
 
 receipts: []
 ---

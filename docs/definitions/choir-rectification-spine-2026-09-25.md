@@ -108,11 +108,11 @@ boundaries:
 now:
   status: working
   slice: >-
-    station R2x — carrier substrate integrity. Wake-coverage audit done:
-    stranded-frozen sweep is redundant (watchdog + boot reconcile cover it);
-    deadline-cancel needs a new wake armed at bind. Atomic-commit repair
-    still open. Live station goal:
-    docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md
+    station R3a — texture ledger consumer (dual-read). R2x landed:
+    deadline wake armed at bind + sweeps deleted + commit recovery; the
+    deployed-cancel proof is deferred (documented in the R2x goal's
+    blocker_or_risk). Next station goal:
+    docs/definitions/choir-texture-ledger-consumer-2026-09-25.md
   source_ref: main@79d0b52b
   deploy_identity: staging https://choir.news build.commit=537fce04
   candidate:
@@ -164,14 +164,17 @@ now:
       a lift or a build — the sharpest execution risk the panel named; the
       wake-coverage audit (R2x) bounds the fate-deletion side meanwhile.
     next_observation: >-
-      R2x's wake-coverage audit is done — now watching the deadline-wake
-      build and the commit-atomicity decision (transaction vs recovery).
+      R3a dual-read start: which desk surfaces still bypass the texture
+      ledger for engineering evidence, and the first consumer wired to it.
   blocker_or_risk: >-
     Station pointer must be rewritten at every terminal receipt (the /goal
-    string itself stays constant — this file is the entrypoint). Stale
-    stations are the named failure mode the Goal-Station Handoff guards.
+    string stays constant — this file is the entrypoint). Owner directive
+    (No Blocking Asks, in AGENTS.md): on non-obvious decisions prefer
+    cognitive transforms / agentic-consensus / conservative default /
+    documented deferral — not a blocking ask. PR 67 (CI build-cache + race
+    compile fix) pending integration at the next station landing.
   next_action: >-
-    Run R2x: deadline-wake at bind + sweep deletions + atomic commit.
+    Charter R3a (texture ledger consumer) goal file; dual-read path.
 
 receipts: []
 ---
@@ -194,6 +197,6 @@ and points at a dedicated throughline `/goal` file for the current mission.
   outcomes live in `docs/desk-rlm-rectification-plan-2026-09-23.md` §11 —
   read it before chartering the next station.
 
-**Current station:** R2x →
-[`choir-carrier-substrate-integrity-2026-09-25.md`](choir-carrier-substrate-integrity-2026-09-25.md)
-— atomic act commit + fate-sweep ungating.
+**Current station:** R3a → texture ledger consumer (dual-read). R2x landed
+(repairs merged `ebdaef45`+`53035642`; deployed-cancel proof deferred —
+see its goal's `blocker_or_risk`). Charter R3a's `/goal` file next.

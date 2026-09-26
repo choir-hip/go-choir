@@ -50,8 +50,20 @@ mission roadmap from here to World Wire live is
 the product mechanism is precommitment records
 (`docs/Precommitment Records — Engineering Memo.md`). For multi-agent review
 panels used at definition or phase gates, see
-[skills/agentic-consensus/SKILL.md](skills/agentic-consensus/SKILL.md). Load those
-on demand.
+[skills/agentic-consensus/SKILL.md](skills/agentic-consensus/SKILL.md). Load those on demand.
+
+## No Blocking Asks
+
+When autonomous work hits a decision that lacks an obvious single correct
+answer, do NOT pause the goal to ask the owner. Prefer, in order: run the
+relevant cognitive transforms (`skills/cognitive-transform-portfolio`), run
+the agentic-consensus panel (`skills/agentic-consensus`), take the most
+conservative/standard option and state the choice, land a temporary or
+partial solution with a documented deferral in the goal's `now` card, or
+record the open decision as a named residual and continue. Reserve a blocking
+ask for a genuinely irreversible or destructive step with no safe default —
+a deploy-shape tradeoff or a credential/authority question, not a design
+branch. This rule is standing: it survives session compaction.
 
 ## Default Environment
 
