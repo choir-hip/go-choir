@@ -777,6 +777,12 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 			AgentID:    scope.FromAgentID,
 			ContextRef: scope.ChannelID,
 		},
+		// Addressee is the ledger-side target-desk binding the packet envelope
+		// would otherwise carry; EvidenceRefs preserve the act's typed
+		// evidence/execution references so an evidence reader can scope and
+		// materialize sources from the record alone.
+		Addressee:    commitmentIntentAddressee(in),
+		EvidenceRefs: commitmentIntentEvidenceRefs(in),
 	}
 	switch in.Kind {
 	case yaegikernel.IntentPrecommit:
@@ -786,6 +792,17 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 		// claim body; a thin report uses the claim text.
 		if strings.TrimSpace(in.Packet) != "" {
 			rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Packet}
+			// A packet-bodied report also lifts each source's target URI into
+			// the typed EvidenceRefs so the ledger evidence resolver can
+			// materialize entities without decoding the opaque packet body.
+			var packet types.CoagentSourcePacketPayload
+			if err := json.Unmarshal([]byte(in.Packet), &packet); err == nil {
+				for _, src := range packet.Sources {
+					if uri := strings.TrimSpace(src.Target.URI); uri != "" {
+						rec.EvidenceRefs = append(rec.EvidenceRefs, uri)
+					}
+				}
+			}
 		} else {
 			rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Claim}
 		}
@@ -816,6 +833,27 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 		rec.ParentID = in.TargetRef
 	}
 	return rec
+}
+
+// commitmentIntentAddressee returns the desk/actor the act is addressed to —
+// the ledger-side analogue of the packet envelope's target_agent_id. ToDesk
+// wins (a cast/report addressed to a desk); ResolverID is the fallback for a
+// report that names the actor expected to resolve it.
+func commitmentIntentAddressee(in yaegikernel.StagedIntent) string {
+	if s := strings.TrimSpace(in.ToDesk); s != "" {
+		return s
+	}
+	return strings.TrimSpace(in.ResolverID)
+}
+
+// commitmentIntentEvidenceRefs collects the act's typed evidence and execution
+// references verbatim. Packet-bodied reports additionally lift each source's
+// target URI in the IntentReport branch.
+func commitmentIntentEvidenceRefs(in yaegikernel.StagedIntent) []string {
+	refs := make([]string, 0, len(in.EvidenceRefs)+len(in.ExecutionRefs))
+	refs = append(refs, in.EvidenceRefs...)
+	refs = append(refs, in.ExecutionRefs...)
+	return refs
 }
 
 // resolveOutcomeDiscrepancy maps a resolver's free-form outcome verdict onto

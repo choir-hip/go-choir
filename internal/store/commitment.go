@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -71,4 +72,40 @@ func (s *Store) CommitmentRecordExists(ctx context.Context, ownerID, computerID,
 		return false, err
 	}
 	return !obj.Tombstone && obj.ObjectKind == ogKindCommitmentRecord, nil
+}
+
+// ListCommitmentRecords lists commitment records for one owner/computer,
+// optionally scoped to a single addressee (the ledger-side target-desk
+// binding). addressee=="" returns all records. Used by the Texture
+// evidence-seam dual-read; ordering is by canonical record id (stable,
+// content-derived), newest-first by object update time is not meaningful for
+// append-only records.
+func (s *Store) ListCommitmentRecords(ctx context.Context, ownerID, computerID, addressee string, limit int) ([]types.CommitmentRecord, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID, computerID, addressee = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(addressee)
+	if ownerID == "" || computerID == "" {
+		return nil, fmt.Errorf("commitment record list requires owner and computer")
+	}
+	matches := []objectgraph.JSONFieldMatch{}
+	if addressee != "" {
+		matches = append(matches, objectgraph.JSONFieldMatch{JSONPath: "$.addressee", Value: addressee})
+	}
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, matches, limit)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]types.CommitmentRecord, 0, len(objs))
+	for _, obj := range objs {
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.CommitmentRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, fmt.Errorf("commitment record decode %s: %w", obj.CanonicalID, err)
+		}
+		records = append(records, rec)
+	}
+	return records, nil
 }

@@ -891,3 +891,124 @@ func TestTextureProductionRegistryOmitsGenericUpdateCoagent(t *testing.T) {
 		t.Fatal("Processor registry omitted update_coagent (wire-role tool until its phase)")
 	}
 }
+
+// TestCommitmentLedgerDualReadParity: an act minted as a commitment record
+// (Addressee bound, packet-bodied hypothesis preserved) produces the same
+// source entities as the equivalent pending packet update — the ledger read
+// reproduces the packet path with no divergence.
+func TestCommitmentLedgerDualReadParity(t *testing.T) {
+	t.Parallel()
+	_, handler := testAPISetup(t)
+	s := handler.Store
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := "user-dualread"
+	computerID := handler.Core.TextureComputerID()
+	targetAgentID := "texture:doc-dualread"
+
+	if err := s.CreateContentItem(ctx, types.ContentItem{
+		ContentID:   "content-dualread",
+		OwnerID:     ownerID,
+		SourceType:  "extracted_url",
+		MediaType:   "text/html",
+		Title:       "Dualread Brief",
+		SourceURL:   "https://example.test/dualread",
+		TextContent: "Ledger and packet paths agree.",
+		ContentHash: "hash-dualread",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		t.Fatalf("CreateContentItem: %v", err)
+	}
+
+	sources := coagentSourcesFromTypedEvidenceRefs([]string{"content_id:content-dualread"})
+	packetPayload := newCoagentPacket("evidence_update", "dualread sources ready",
+		coagentClaimsFromTexts([]string{"Ledger parity."}, sources), sources, nil, nil, nil)
+	packetJSON, err := json.Marshal(packetPayload)
+	if err != nil {
+		t.Fatalf("marshal packet: %v", err)
+	}
+
+	// Packet side: dispatch the update so the pending-update path sees it.
+	update := types.CoagentSourcePacket{
+		UpdateID:      "update-dualread",
+		OwnerID:       ownerID,
+		AgentID:       "research:dual",
+		TargetAgentID: targetAgentID,
+		ChannelID:     "doc-dualread",
+		Packet:        packetPayload,
+		Content:       "dualread sources ready",
+		CreatedAt:     now,
+	}
+	message := types.ChannelMessage{
+		ChannelID:   update.ChannelID,
+		FromAgentID: update.AgentID,
+		ToAgentID:   update.TargetAgentID,
+		Content:     update.Content,
+		Timestamp:   now,
+	}
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("DispatchWorkerUpdate: %v", err)
+	}
+
+	// Ledger side: mint the commitment record the reduction would have written
+	// for a packet-bodied report — Addressee bound to the desk, the packet JSON
+	// preserved as the hypothesis.
+	rec := types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    "run1:0:report:local1",
+		Discrepancy: types.DiscrepancyUnresolved,
+		Provenance:  types.CommitmentProvenance{AgentID: "research:dual", ContextRef: "doc-dualread"},
+		Addressee:   targetAgentID,
+		Prediction:  types.CommitmentPrediction{Hypothesis: string(packetJSON)},
+		EvidenceRefs: []string{"content_id:content-dualread"},
+	}
+	if _, err := s.AppendCommitmentRecord(ctx, ownerID, computerID, rec); err != nil {
+		t.Fatalf("AppendCommitmentRecord: %v", err)
+	}
+
+	entities, rejections, divergences := handler.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, targetAgentID, 10)
+	if len(divergences) != 0 {
+		t.Fatalf("expected zero dual-read divergences, got %#v", divergences)
+	}
+	if !hasSourceEntity(entities, "content_item", "", "content-dualread") {
+		t.Fatalf("missing content entity in merged read: %#v (rejections %#v)", entities, rejections)
+	}
+}
+
+// TestCommitmentLedgerDualReadDetectsRecordOnlySource: a source that exists only
+// in the commitment record (no packet counterpart) surfaces as a record_only
+// divergence rather than being silently dropped or preferred.
+func TestCommitmentLedgerDualReadDetectsRecordOnlySource(t *testing.T) {
+	t.Parallel()
+	_, handler := testAPISetup(t)
+	s := handler.Store
+	ctx := context.Background()
+	ownerID := "user-dualread2"
+	computerID := handler.Core.TextureComputerID()
+	targetAgentID := "texture:doc-dualread2"
+
+	rec := types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    "run2:0:report:local2",
+		Discrepancy: types.DiscrepancyUnresolved,
+		Provenance:  types.CommitmentProvenance{AgentID: "research:dual2", ContextRef: "doc-dualread2"},
+		Addressee:   targetAgentID,
+		Prediction:  types.CommitmentPrediction{Hypothesis: "plain claim, no packet"},
+		EvidenceRefs: []string{"https://example.test/record-only"},
+	}
+	if _, err := s.AppendCommitmentRecord(ctx, ownerID, computerID, rec); err != nil {
+		t.Fatalf("AppendCommitmentRecord: %v", err)
+	}
+
+	_, _, divergences := handler.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, targetAgentID, 10)
+	var recordOnly bool
+	for _, d := range divergences {
+		if d.Side == "record_only" {
+			recordOnly = true
+		}
+	}
+	if !recordOnly {
+		t.Fatalf("expected a record_only divergence, got %#v", divergences)
+	}
+}

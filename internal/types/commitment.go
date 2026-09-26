@@ -120,15 +120,29 @@ type CommitmentRecord struct {
 	// canonical-id suffix.
 	RecordID string `json:"record_id"`
 
-	Prediction  CommitmentPrediction  `json:"prediction"`
-	Observation CommitmentObservation `json:"observation"`
-	Scores      []CommitmentScore     `json:"scores"`
-	Discrepancy DiscrepancyClass      `json:"discrepancy"`
-	Provenance  CommitmentProvenance  `json:"provenance"`
-
+	Prediction   CommitmentPrediction    `json:"prediction"`
+	Observation  CommitmentObservation   `json:"observation"`
+	Scores       []CommitmentScore       `json:"scores"`
+	Discrepancy  DiscrepancyClass        `json:"discrepancy"`
+	Provenance   CommitmentProvenance    `json:"provenance"`
 	Revision     CommitmentRevision      `json:"revision,omitempty"`
 	Action       *CommitmentAction       `json:"action,omitempty"`
 	Consequences []CommitmentConsequence `json:"consequences,omitempty"`
+
+	// Addressee is the desk/actor this act is addressed to (StagedIntent
+	// ToDesk, falling back to ResolverID). It is the ledger-side analogue of
+	// the packet envelope's target_agent_id for pending/evidence queries —
+	// typed here so a ledger reader can scope records to the desk without a
+	// packet envelope. Proposed vocabulary for R5a to ratify/rename.
+	Addressee string `json:"addressee,omitempty"`
+	// EvidenceRefs are the typed evidence/source references the act carries
+	// (StagedIntent EvidenceRefs + ExecutionRefs, plus packet source URIs for
+	// packet-bodied reports). Each ref is the raw typed/URL/execution string
+	// the evidence resolver materializes into a source entity — kept verbatim
+	// (not the packet's richer Source structure) so the record stays additive
+	// and never becomes a packet-envelope duplicate.
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+
 	// ParentID / ChildIDs carry nested-commitment provenance edges;
 	// RelatedIDs links records; RetrievedByIDs records later decisions that
 	// pulled this record into context.

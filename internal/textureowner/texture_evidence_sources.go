@@ -3,6 +3,7 @@ package textureowner
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -825,18 +826,18 @@ func isHTTPURL(value string) bool {
 // researcher-prose scraping: sources (and their text_quote excerpts) come from
 // structured researcher evidence, not from parsing message text.
 func (rt *Handler) evidenceSourceEntitiesFromPendingUpdates(ctx context.Context, ownerID, textureAgentID string, limit int) []textureSourceEntity {
-	entities, _ := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, textureAgentID, limit)
+	entities, _, _ := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, textureAgentID, limit)
 	return entities
 }
 
-func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx context.Context, ownerID, textureAgentID string, limit int) ([]textureSourceEntity, []coagentSourceRejection) {
+func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx context.Context, ownerID, textureAgentID string, limit int) ([]textureSourceEntity, []coagentSourceRejection, []commitmentSourceDivergence) {
 	if rt == nil || rt.Store == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	textureAgentID = strings.TrimSpace(textureAgentID)
 	ownerID = strings.TrimSpace(ownerID)
 	if textureAgentID == "" || ownerID == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	computerID := ""
 	if rt.Core != nil {
@@ -860,9 +861,184 @@ func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx con
 		}
 	}
 	if err != nil || len(updates) == 0 {
+		return rt.dualReadCommitmentEvidence(ctx, ownerID, computerID, textureAgentID, limit, nil, nil)
+	}
+	entities, rejections := rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
+	return rt.dualReadCommitmentEvidence(ctx, ownerID, computerID, textureAgentID, limit, entities, rejections)
+}
+
+// commitmentSourceDivergence names one dual-read mismatch between the packet
+// evidence path and the commitment-ledger path. It is parity telemetry, not a
+// packet-source rejection: surfaced (never silently preferred) so the packet
+// write path can be deleted on evidence it is redundant.
+type commitmentSourceDivergence struct {
+	EntityKey string `json:"entity_key"`
+	RecordID  string `json:"record_id,omitempty"`
+	UpdateID  string `json:"update_id,omitempty"`
+	Side      string `json:"side"` // "packet_only" | "record_only" | "field_mismatch"
+	Reason    string `json:"reason"`
+}
+
+const textureSourceDivergencesKey = "texture_source_divergences"
+
+// dualReadCommitmentEvidence computes the ledger-side entity set for the same
+// desk evidence scope and merges it with the packet-derived set, emitting a
+// typed divergence for each side the other cannot reproduce. The merged set is
+// packet-first so existing consumers see identical entities; record-only
+// entities are appended so coverage gaps are visible rather than lossy.
+func (rt *Handler) dualReadCommitmentEvidence(ctx context.Context, ownerID, computerID, textureAgentID string, limit int, packetEntities []textureSourceEntity, rejections []coagentSourceRejection) ([]textureSourceEntity, []coagentSourceRejection, []commitmentSourceDivergence) {
+	ledgerEntities, _ := rt.evidenceSourceEntitiesFromCommitmentRecords(ctx, ownerID, computerID, textureAgentID, limit)
+	if len(packetEntities) == 0 && len(ledgerEntities) == 0 {
+		return packetEntities, rejections, nil
+	}
+
+	ledgerKeys := map[string]bool{}
+	for _, e := range ledgerEntities {
+		if key := sourceEntityKey(e); key != "" {
+			ledgerKeys[key] = true
+		}
+	}
+	packetKeys := map[string]bool{}
+	for _, e := range packetEntities {
+		if key := sourceEntityKey(e); key != "" {
+			packetKeys[key] = true
+		}
+	}
+	var divergences []commitmentSourceDivergence
+	merged := append([]textureSourceEntity{}, packetEntities...)
+	seen := packetKeys
+	for _, e := range packetEntities {
+		if key := sourceEntityKey(e); key != "" && !ledgerKeys[key] {
+			divergences = append(divergences, commitmentSourceDivergence{EntityKey: key, Side: "packet_only", Reason: "packet source has no commitment-record counterpart"})
+		}
+	}
+	for _, e := range ledgerEntities {
+		key := sourceEntityKey(e)
+		if key == "" {
+			continue
+		}
+		if !packetKeys[key] {
+			divergences = append(divergences, commitmentSourceDivergence{EntityKey: key, Side: "record_only", Reason: "commitment record source has no packet counterpart"})
+		}
+		if !seen[key] {
+			seen[key] = true
+			merged = append(merged, e)
+		}
+	}
+	if len(divergences) > 0 {
+		log.Printf("texture evidence dual-read: %d divergence(s) for desk %s (packet=%d record=%d)", len(divergences), textureAgentID, len(packetEntities), len(ledgerEntities))
+	}
+	return merged, rejections, divergences
+}
+
+// mergeCommitmentSourceDivergencesIntoMetadata persists the dual-read parity
+// divergences under texture_source_divergences so a later reader can audit
+// where the ledger and packet evidence paths disagree.
+func mergeCommitmentSourceDivergencesIntoMetadata(metadata map[string]any, incoming []commitmentSourceDivergence) bool {
+	if metadata == nil || len(incoming) == 0 {
+		return false
+	}
+	existing := decodeCommitmentSourceDivergences(metadata[textureSourceDivergencesKey])
+	seen := map[string]bool{}
+	out := existing[:0]
+	for _, d := range existing {
+		k := d.EntityKey + "\x00" + d.Side
+		seen[k] = true
+		out = append(out, d)
+	}
+	changed := false
+	for _, d := range incoming {
+		k := d.EntityKey + "\x00" + d.Side
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, d)
+		changed = true
+	}
+	if len(out) > 0 {
+		metadata[textureSourceDivergencesKey] = out
+	}
+	return changed
+}
+
+func decodeCommitmentSourceDivergences(value any) []commitmentSourceDivergence {
+	if value == nil {
+		return nil
+	}
+	var out []commitmentSourceDivergence
+	switch typed := value.(type) {
+	case []commitmentSourceDivergence:
+		out = typed
+	case []any:
+		raw, err := json.Marshal(typed)
+		if err != nil {
+			return nil
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return nil
+		}
+	}
+	return out
+}
+
+// evidenceSourceEntitiesFromCommitmentRecords materializes the source entities
+// a desk's pending commitment records carry: packet-bodied report hypotheses
+// (Prediction.Hypothesis holds the opaque packet JSON) and typed EvidenceRefs.
+// Only unresolved records count — a resolved act is settled evidence, matching
+// the packet path's pending-update selection.
+func (rt *Handler) evidenceSourceEntitiesFromCommitmentRecords(ctx context.Context, ownerID, computerID, textureAgentID string, limit int) ([]textureSourceEntity, []coagentSourceRejection) {
+	if rt == nil || rt.Store == nil || computerID == "" {
 		return nil, nil
 	}
-	return rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
+	records, err := rt.Store.ListCommitmentRecords(ctx, ownerID, computerID, textureAgentID, limit)
+	if err != nil {
+		log.Printf("texture evidence dual-read: commitment record list: %v", err)
+		return nil, nil
+	}
+	var entities []textureSourceEntity
+	var rejections []coagentSourceRejection
+	seen := map[string]bool{}
+	for _, rec := range records {
+		if rec.Discrepancy != types.DiscrepancyUnresolved {
+			continue // resolved records are settled, not pending evidence
+		}
+		syntheticUpdate := types.CoagentSourcePacket{OwnerID: ownerID, AgentID: rec.Provenance.AgentID}
+		appendSource := func(source types.CoagentPacketSource) {
+			entity := sourceEntityFromCoagentPacketSource(ctx, rt, ownerID, source, syntheticUpdate)
+			key := sourceEntityKey(entity)
+			if entity.EntityID == "" || key == "" {
+				rej := coagentSourceRejectionFromPacketSource(syntheticUpdate, source)
+				rej.UpdateID = rec.RecordID
+				if rk := sourceRejectionKey(rej); rk != "" {
+					rejections = append(rejections, rej)
+				}
+				return
+			}
+			if !seen[key] {
+				seen[key] = true
+				entities = append(entities, entity)
+			}
+		}
+		// Packet-bodied report: decode the preserved packet for its sources.
+		var packet types.CoagentSourcePacketPayload
+		if hypothesis := strings.TrimSpace(rec.Prediction.Hypothesis); hypothesis != "" && strings.HasPrefix(hypothesis, "{") {
+			if err := json.Unmarshal([]byte(hypothesis), &packet); err == nil {
+				for _, source := range packet.Sources {
+					appendSource(source)
+				}
+			}
+		}
+		// Typed evidence refs (all act kinds).
+		for _, ref := range rec.EvidenceRefs {
+			ref = strings.TrimSpace(ref)
+			if ref == "" {
+				continue
+			}
+			appendSource(types.CoagentPacketSource{Kind: "reference", Target: types.CoagentPacketSourceTarget{URI: ref}})
+		}
+	}
+	return entities, rejections
 }
 
 func selfDevelopmentJoinFromPacketSources(sources []types.CoagentPacketSource) map[string]string {

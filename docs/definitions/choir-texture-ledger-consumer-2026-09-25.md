@@ -165,16 +165,23 @@ now:
       limited to packet-bodied Reports and leave the authority path on
       worker_updates_* until R5a/R3d.
     next_observation: >-
-      Consensus ruling on record-schema extension vs. parity-limited
-      dual-read, then wire the evidence-seam resolver.
+      Consensus panel (claude + omp-gpt-5sus convergent, codex/opus/terra
+      failed) decided **(c)**: keep dual-read parity but extend the
+      CommitmentRecord with `Addressee` + typed `EvidenceRefs` so the ledger
+      read is honest, not parity-faked. Implemented: `commitmentIntent
+      RecordForIntent` now stamps `Addressee` (from ToDesk/ResolverID) and
+      `EvidenceRefs` (packet source URIs lifted for packet-bodied reports);
+      `Store.ListCommitmentRecords(ownerID, computerID, addressee)` filters
+      on `$.addressee`; `dualReadCommitmentEvidence` merges the ledger entity
+      set and emits typed `commitmentSourceDivergence` (packet_only |
+      record_only) persisted under `texture_source_divergences`.
   blocker_or_risk: >-
-    Substrate fork, deferred per No Blocking Asks: run agentic-consensus on
-    (a) extend commitment_record with typed source/evidence fields now vs.
-    (b) dual-read parity over packet-bodied Reports only, authority path
-    stays on packets until R5a/R3d. Do not silently narrow scope.
+    Record schema touched (additive, V1-compatible). Residual: pending-packet
+    vs unresolved-record selection is intentionally a different cover set —
+    divergences are surfaced, not suppressed.
   next_action: >-
-    Run agentic-consensus on the record-schema fork; wire
-    evidenceSourceEntitiesAndRejectionsFromPendingUpdates to dual-read.
+    Drive evidence-seam consumers (revision metadata, occurrence resolve) off
+    the merged read; packet-path deletion remains R3d's.
 
 receipts: []
 ---
