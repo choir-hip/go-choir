@@ -108,19 +108,20 @@ boundaries:
 now:
   status: working
   slice: >-
-    station M9a CHARTERED 2026-09-26 — platform-signed update push +
-    restore to a pinned head (goal docs/definitions/
-    choir-platform-update-push-restore-2026-09-26.md). M7 terminal
-    2026-09-26 (deployed build 722b49bf): derivable selfdev
-    continuations landed — post-commit observer + coalesced drain
-    drive ops through materialization with no API driver;
-    mid-materialize crash recovers derivably. M9a boundary probe:
-    no platform->computer update channel exists; signed offer +
-    guest apply endpoint over the vmctl proxy + canonical head
-    binding + platform-follow route evidence; restore edge = the
-    existing checkpoint/tape path. R5a still required before M11.
-  source_ref: main@722b49bf
-  deploy_identity: staging https://choir.news build.commit=722b49bf
+    station M9a SETTLED 2026-09-26 — platform-signed update push +
+    pinned-head restore proven on staging (deployed 44e4169e, evidence
+    docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md).
+    The push surface now exists end to end: signed offer mint at corpusd,
+    guest apply under verification + canonical head binding, platform-
+    follow checkpoint class, route promotion, and a tape-reconstruct
+    restore to the pinned head on a baseless computer. The landing
+    peeled five substrate strands
+    (docs/problems/platform-update-stranded-tail-and-baseless-checkpoint-2026-09-26.md).
+    Next station: R5a — vocab decoders + seed freeze; M11's proof tape
+    must fold under frozen decoders, and M11 depends on M7 + M9a + R3d
+    + R4 + R5a.
+  source_ref: main@5fb58654
+  deploy_identity: staging https://choir.news build.commit=44e4169e
   candidate:
     id: none
     state: none
@@ -167,10 +168,10 @@ now:
       reconciler. The next lifts are M9a (sign/push a materialized
       change — unblocked) and R5a (before M11).
     next_observation: >-
-      M9a probe: the signing/push surface for a materialized change —
-      which authority holds the push credential and how the signed
-      artifact binds the canonical event chain; then R5a scoping ahead
-      of M11.
+      M9a probe settled on staging 2026-09-26 (predicate satisfied):
+      a fresh tracking computer applied the platform-signed push and
+      restored to the pinned head. Now: R5a scoping ahead of M11 —
+      the tape-fold proof under frozen decoders.
 
   blocker_or_risk: >-
     Station pointer must be rewritten at every terminal receipt (the /goal
@@ -181,11 +182,11 @@ now:
     compile fix) integrated: merged as 7d8e455 and already an ancestor of
     main at R3d's landing.
   next_action: >-
-    Execute M9a (goal docs/definitions/
-    choir-platform-update-push-restore-2026-09-26.md): signed offer +
-    guest apply endpoint first, then canonical/route binding, local
-    proofs, landing loop. R5a still gates M11 — charter it after M9a
-    or in parallel if a free lane exists.
+    Charter R5a (vocab decoders + seed freeze) — the last gate before
+    M11: per-family frozen decoders + V1→V2 profile normalization +
+    explicit keep-choir:co-super-assignment:v3 decision; proof target
+    is a pre-migration tape folding identically. Author the R5a goal
+    file, then this file's now.slice points at it.
 receipts:
   - "M7 terminal 2026-09-26: landed+deployed 722b49bf (ci 36241357497,
     staging build.commit=722b49bf); goal docs/definitions/
@@ -196,7 +197,20 @@ receipts:
     derivably; parked ops mint management-addressed boundary records.
     Local proofs: decision-recovery, boundary observation,
     materialization to Applied, crash recovery — all canonical.
-    now.slice -> next station (M9a unblocked; R5a before M11)."
+    now.slice -> R5a (M9a settled; R5a is the last gate before M11)."
+
+  - "M9a terminal 2026-09-26: landed+deployed 44e4169e (ci 36277989883,
+    staging pr-20260926-44e4169e); goal docs/definitions/
+    choir-platform-update-push-restore-2026-09-26.md now.status=settled.
+    Deployed probe satisfied: fresh tracking computer accepted +
+    applied the signed push, minted a platform_follow checkpoint,
+    promoted the route slot gen 1, and restored to the pinned head via
+    tape_reconstruct (base_sequence 0, witness matched, frontend
+    restaged). Five substrate strata peeled: resumable post-applied
+    tail, bounded baseless replay, platform_follow checkpoint class,
+    platform-artifacts intake at mint, and the route classifier's
+    platform-follow evidence shape. Evidence:
+    docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md."
 
   - "R4 terminal 2026-09-26: landed+deployed 68a2e023 (ci 36233806473,
     staging build.commit=68a2e023); goal docs/definitions/
