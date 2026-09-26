@@ -253,12 +253,19 @@ func (w *DeskSessionWorker) awaitReady(timeout time.Duration) error {
 // cell, transport error, or timeout marks the worker dead — the caller
 // respawns rather than reusing poisoned state.
 func (w *DeskSessionWorker) Eval(ctx context.Context, source string) (SessionResult, error) {
+	return w.EvalInbox(ctx, source, nil)
+}
+
+// EvalInbox runs one cell and injects the cell-start inbox snapshot into the
+// session frame so choir.Inbox() inside the cell reads delivered acts
+// without a network roundtrip — the desk analogue of GoEvalRequest.Inbox.
+func (w *DeskSessionWorker) EvalInbox(ctx context.Context, source string, inbox []IncomingMessage) (SessionResult, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.dead {
 		return SessionResult{}, fmt.Errorf("desk session worker dead")
 	}
-	frame := SessionFrame{ID: nextDeskSessionFrameID(), Source: source}
+	frame := SessionFrame{ID: nextDeskSessionFrameID(), Source: source, Inbox: inbox}
 	raw, err := json.Marshal(frame)
 	if err != nil {
 		return SessionResult{}, fmt.Errorf("desk eval marshal: %w", err)

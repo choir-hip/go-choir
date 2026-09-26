@@ -132,7 +132,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				evalCtx, cancel = context.WithTimeout(ctx, time.Duration(input.TimeoutMS)*time.Millisecond)
 				defer cancel()
 			}
-			res, evalErr := w.Eval(evalCtx, input.Source)
+			res, evalErr := w.EvalInbox(evalCtx, input.Source, reduction.inbox)
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
 				if w.Dead() {
