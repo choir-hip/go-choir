@@ -24,6 +24,11 @@ import (
 
 const deskWorkerArg = "desk-session"
 
+// deskWorkerMemoryLimitBytes is the D2 memory cap applied to every desk
+// session worker via RLIMIT_AS (R3r): a model-authored cell cannot grow
+// its address space past this and OOM the daemon.
+const deskWorkerMemoryLimitBytes uint64 = 1 << 30 // 1 GiB
+
 // deskSessionWorkers owns one host session worker per desk activation. A
 // worker is lazily spawned on first eval and persists for the activation; a
 // dead/poisoned worker is dropped and respawned on the next eval.
@@ -119,7 +124,8 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					ActivationID:    activationID,
 					Epoch:           deskWorkerEpoch(execCtx),
 					AllowedRoot:     deskWorkerRoot(execCtx),
-					Role:            deskRole,
+					Role:             deskRole,
+					MemoryLimitBytes: deskWorkerMemoryLimitBytes,
 				},
 				ProcessGroup: true,
 			}

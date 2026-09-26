@@ -168,9 +168,9 @@ now:
       through researchtools.Dependencies and an RLIMIT_AS plumbed through
       SessionWorkerConfig into the desk-session entrypoint.
     next_observation: >-
-      Local proofs: sealed-registry contract test pins research's exact
-      tool surface; budget tests trip on calls and bytes; Report mints a
-      commitment_record; worker spawn carries the cap.
+      CI + staging deploy for the R3r head; deployed acceptance = platform
+      healthy at the R3r head with research activations binding the cell
+      carrier and the capped typed surface.
   blocker_or_risk: >-
     Egress budget keyed per activation (RunRecord-derived), not per call:
     a persistent desk accumulates its budget across cells of one
@@ -179,10 +179,9 @@ now:
     must survive worker respawn — they are host-side in the Runtime, not
     worker memory.
   next_action: >-
-    Implement: (1) deskCarrierLive(research)=true; (2) research cell
-    registry = desk_go_eval + capped typed surface; (3) egress budget in
-    researchtools deps; (4) RLIMIT_AS plumbing; (5) overlay/prompt update;
-    (6) tests; (7) landing loop.
+    Landing loop: push, monitor CI + Node B deploy, verify staging
+    environment identity at the pushed SHA, record deployed acceptance,
+    settle; then charter the next spine station (R4, spine after R3d).
 
 receipts:
   - "charter: R3r = research on cells with the D2 network/memory cap
@@ -190,6 +189,27 @@ receipts:
     research/evidence/memory surface (R3c precedent for typed authority
     tools); generic host tools removed; per-activation egress budget on
     every host-mediated network tool; RLIMIT_AS on desk workers."
+  - "local proofs (pre-push): build clean for agentcore/researchtools/
+    yaegikernel/runtimeprompts/autoputer; focused shard 38 tests green —
+    TestResearchCellRegistryIsSealed (desk_go_eval + the 13-tool typed
+    surface, no generic host tools), TestR3rResearchCellReportMintsCommitmentUnderCap
+    (Report + ReportPacket mint commitment_records),
+    TestR3rResearchEgressChargedOnNetworkTools (fetch_url charges calls +
+    bytes; second call past cap refuses honestly), TestEgressBudget*
+    (call cap, byte cap, per-activation key independence, refusal does not
+    charge), TestDeskSessionWorkerEnvRoundTrip (cap crosses the spawn env
+    contract), TestResearchOverlaySwitchesToCellCarrier,
+    TestDefaultProfileRegistriesExactAuthorityContract/research (exact
+    14-tool surface)."
+  - "cap boundary landed: deskCarrierLive(research) unconditional; egress
+    ledger installed before registry builds and charged by web_search,
+    source_search, fetch_url (call + response bytes), import_url_content,
+    import_document_content on both the cell and host research paths;
+    SessionWorkerConfig.MemoryLimitBytes plumbed through the spawn env to
+    ApplyWorkerMemoryLimit (RLIMIT_AS 1GiB Linux; unsupported-kernel
+    platforms degrade to uncapped, containment stays the subprocess+package
+    boundary). Note: ingress reliability for Cast sub-agents is unchanged —
+    the budget meters the desk's own host-mediated network calls."
 ---
 
 # R3r — Research Live Cell (station on the rectification spine)

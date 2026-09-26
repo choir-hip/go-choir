@@ -179,6 +179,10 @@ type SessionWorkerConfig struct {
 	// verified capability; the choir scope reports it through Context and
 	// gates the verifier-only affordances on it.
 	Slot string
+	// MemoryLimitBytes is the worker's address-space cap (RLIMIT_AS), applied
+	// by the worker entrypoint before it serves cells — the D2 memory cap so
+	// model-authored Go cannot OOM the daemon. 0 = uncapped.
+	MemoryLimitBytes uint64
 }
 
 // ExecuteWorkerSessionStdin serves framed eval cells on stdin/stdout with one

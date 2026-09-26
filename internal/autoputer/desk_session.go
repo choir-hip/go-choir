@@ -24,6 +24,10 @@ func RunDeskSessionWorker() int {
 	if len(cfg.AllowedPackages) == 0 {
 		cfg.AllowedPackages = yaegikernel.DefaultSafeStdlibPackagesList()
 	}
+	if err := yaegikernel.ApplyWorkerMemoryLimit(cfg.MemoryLimitBytes); err != nil {
+		fmt.Fprintf(os.Stderr, "desk-session: memory cap unavailable: %v\n", err)
+		return 2
+	}
 	yaegikernel.ExecuteWorkerSessionConn(conn, cfg)
 	return 0
 }

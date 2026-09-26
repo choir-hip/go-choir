@@ -85,6 +85,15 @@ func ResearchRuntimeOverlay() string {
 	return mustRenderOverlay("research_runtime", nil)
 }
 
+// RLMResearchOverlay is the sealed-Go variant served when the research desk
+// is live on the host cell carrier (R3r): desk_go_eval is the cell doorway,
+// the typed research surface stays for host-mediated world access, and the
+// egress budget names its own backpressure. The legacy catalog text is
+// replaced, not amended.
+func RLMResearchOverlay() string {
+	return mustRenderOverlay("rlm_research_runtime", nil)
+}
+
 func RunContextOverlay(opts RunContextOptions) string {
 	return mustRenderOverlay("run_context", opts)
 }

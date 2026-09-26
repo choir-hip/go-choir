@@ -111,6 +111,7 @@ func TestDeskSessionWorkerEnvRoundTrip(t *testing.T) {
 	cfg := DeskSessionWorkerConfig{EnvPrefix: "CHOIR_DESK_SESSION_", Session: SessionWorkerConfig{
 		AllowedPackages: []string{"fmt", "strings"}, ComputerID: "c1", ActivationID: "a1",
 		Epoch: 7, AllowedRoot: "/x", Role: "texture", Slot: "impl",
+		MemoryLimitBytes: 1 << 30, // D2 cap must survive the spawn env contract
 	}}
 	env := cfg.sessionEnv()
 	got := map[string]string{}
@@ -121,7 +122,8 @@ func TestDeskSessionWorkerEnvRoundTrip(t *testing.T) {
 	}
 	back := SessionWorkerConfigFromEnv(func(k string) string { return got[k] }, "")
 	if back.ComputerID != "c1" || back.ActivationID != "a1" || back.Epoch != 7 ||
-		back.AllowedRoot != "/x" || back.Role != "texture" || back.Slot != "impl" {
+		back.AllowedRoot != "/x" || back.Role != "texture" || back.Slot != "impl" ||
+		back.MemoryLimitBytes != 1<<30 {
 		t.Fatalf("env round-trip mismatch: %#v", back)
 	}
 	if len(back.AllowedPackages) != 2 || back.AllowedPackages[0] != "fmt" {

@@ -33,7 +33,16 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 		agentprofile.Conductor:   {"cancel_agent"},
 		agentprofile.Management:  {"desk_go_eval", "cancel_co_super_assignment", "report_to_texture"},
 		agentprofile.Engineering: {},
-		agentprofile.Research:    slices.Clone(ordinary),
+		// R3r: research is on the cell carrier — desk_go_eval plus the typed
+		// research/evidence/memory surface; generic host tools removed.
+		agentprofile.Research: {
+			"desk_go_eval",
+			"fetch_url", "import_document_content", "import_url_content",
+			"list_content_item_selectors", "read_content_item",
+			"read_content_item_selector", "search_wire_corpus", "source_search",
+			"web_search",
+			"get_run_memory_entry", "list_evidence", "read_evidence", "save_evidence",
+		},
 		agentprofile.Texture:     {"desk_go_eval"},
 		agentprofile.Processor: append(append(slices.Clone(ordinary), "update_coagent"),
 			"record_wire_processor_decision"),

@@ -34,6 +34,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/qdrant"
+	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -103,6 +104,10 @@ type Runtime struct {
 	// in-cell carrier (R3b). Lazy; nil until the first desk_go_eval call.
 	deskWorkers   *deskSessionWorkers
 	deskWorkersMu sync.Mutex
+	// researchEgress is the shared per-activation network-call budget ledger
+	// for desk-carrier research (R3r/D2). Lazy; installed by
+	// InstallDefaultAgentTools, charged by every host-mediated network tool.
+	researchEgress *researchtools.EgressBudgetLedger
 
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex

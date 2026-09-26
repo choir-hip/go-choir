@@ -294,7 +294,11 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}
 	}
 	if profile == agentprofile.Research {
-		b.WriteString(runtimeprompts.ResearchRuntimeOverlay())
+		if deskCarrierLive(agentprofile.Research) {
+			b.WriteString(runtimeprompts.RLMResearchOverlay())
+		} else {
+			b.WriteString(runtimeprompts.ResearchRuntimeOverlay())
+		}
 	}
 	requesterAgentID := ""
 	textureDeliveryAgentID := ""
@@ -374,7 +378,7 @@ func deskCarrierLive(profile string) bool {
 	case agentprofile.Texture:
 		return true // R3d-a: texture is live on the cell carrier
 	case agentprofile.Research:
-		return capsule.HostSelectsRLM() // R3r promotion
+		return true // R3r: research is live on the cell carrier (D2 caps resolved)
 	default:
 		return false
 	}
@@ -388,7 +392,7 @@ func deskCarrierLive(profile string) bool {
 // registry stays sealed at desk_go_eval: authoring is the staged
 // choir.ApplyTexture cell intent committed through ApplyTextureTurn, not a
 // registered tool. Texture/research get desk_go_eval only.
-func buildDeskCellRegistry(rt *Runtime, deskRole string) (*toolregistry.ToolRegistry, error) {
+func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchtools.Dependencies) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	if err := registry.Register(newDeskGoEvalTool(rt, rt.deskSessionWorkers(), deskRole)); err != nil {
 		return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
@@ -401,6 +405,21 @@ func buildDeskCellRegistry(rt *Runtime, deskRole string) (*toolregistry.ToolRegi
 			if err := RegisterAssignedEngineeringTools(registry, rt); err != nil {
 				return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
 			}
+		}
+	}
+	if deskRole == agentprofile.Research {
+		// R3r: the desk keeps its typed research surface beside desk_go_eval
+		// (R3c precedent: typed authority tools stay). Generic host tools —
+		// read_file/glob/grep, verify_model_capability, spawn_agent,
+		// cancel_agent — drop; evidence/memory domain tools stay typed.
+		if err := researchtools.Register(registry, researchDeps); err != nil {
+			return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
+		}
+		if err := RegisterEvidenceTools(registry, rt); err != nil {
+			return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
+		}
+		if err := RegisterRunMemoryTools(registry, rt); err != nil {
+			return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
 		}
 	}
 	return registry, nil
@@ -416,6 +435,7 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 	if spec.AllowResearchTools {
 		if err := researchtools.Register(registry, researchtools.Dependencies{
 			Store: rt.store, Content: rt.content, Search: searchClient, Source: sourceClient, HTTP: httpClient,
+			Egress: rt.researchEgress, // same activation-scoped budget; nil-ledger stays open (tests only)
 		}); err != nil {
 			return nil, err
 		}
@@ -474,33 +494,42 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterPersistentManagementReportTools(managementRegistry, rt); err != nil {
 		return err
 	}
-	if rt.capsuleExecutor != nil {
-		if err := RegisterAssignedEngineeringTools(managementRegistry, rt); err != nil {
-			return err
-		}
-	}
 	researchPolicy, err := agentprofile.PolicyFor(agentprofile.Research)
 	if err != nil {
 		return err
+	}
+	// The D2 cap boundary is installed before any registry build so both the
+	// host research path and the cell-carrier desk charge the same
+	// activation-scoped egress ledger.
+	if rt.researchEgress == nil {
+		rt.researchEgress = researchtools.NewEgressBudgetLedger(
+			researchtools.DefaultResearchEgressMaxCalls,
+			researchtools.DefaultResearchEgressMaxFetchedBytes,
+		)
 	}
 	researchRegistry, err := rt.buildRegistryForRole(researchPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
-
 	// InCellCarrier fan: a non-capsule desk runs on the cell carrier when
-	// deskCarrierLive(profile) promotes it — management is live (R3c);
-	// texture/research stay behind actuator=rlm until R3d/R3r. Unpromoted
-	// desks keep their live host-tool registries.
+	// deskCarrierLive(profile) promotes it — management (R3c), texture
+	// (R3d), and research (R3r) are live unconditionally. The research desk
+	// carries the D2 cap boundary: every host-mediated network tool charges
+	// the shared activation-scoped egress ledger.
+	researchDeps := researchtools.Dependencies{
+		Store: rt.store, Content: rt.content, Search: searchClient,
+		Source: sourceClient, HTTP: httpClient, Egress: rt.researchEgress,
+	}
 	var deskCellRegistries = map[string]*toolregistry.ToolRegistry{}
 	for _, deskProfile := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research} {
 		if !deskCarrierLive(deskProfile) {
 			continue
 		}
-		if deskReg, derr := buildDeskCellRegistry(rt, deskProfile); derr == nil {
+		if deskReg, derr := buildDeskCellRegistry(rt, deskProfile, researchDeps); derr == nil {
 			deskCellRegistries[deskProfile] = deskReg
 		}
 	}
+
 	processorPolicy, err := agentprofile.PolicyFor(agentprofile.Processor)
 	if err != nil {
 		return err

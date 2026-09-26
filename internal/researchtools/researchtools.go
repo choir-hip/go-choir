@@ -230,6 +230,10 @@ type Dependencies struct {
 	Search  search.Client
 	Source  SourceSearchClient
 	HTTP    *http.Client
+	// Egress is the per-activation network-call budget (D2/R3r). Every
+	// host-mediated network tool charges it before calling out; nil means
+	// unbudgeted (tests only — the Runtime always installs a ledger).
+	Egress *EgressBudgetLedger
 }
 
 func Register(registry *toolregistry.ToolRegistry, deps Dependencies) error {
@@ -284,6 +288,9 @@ func newImportDocumentContentTool(deps Dependencies) toolregistry.Tool {
 			var item types.ContentItem
 			var err error
 			if urlValue != "" {
+				if err := deps.chargeEgressCall(ctx, "import_document_content"); err != nil {
+					return "", err
+				}
 				item, err = deps.Content.ImportURL(ctx, ownerID, urlValue, strings.TrimSpace(in.Query))
 			} else {
 				item, err = deps.Content.ImportFile(ctx, ownerID, filePath)
@@ -333,6 +340,9 @@ func newSourceSearchTool(sourceClient SourceSearchClient, deps Dependencies) too
 			if strings.TrimSpace(in.Query) == "" {
 				return "", fmt.Errorf("query must not be empty")
 			}
+			if err := deps.chargeEgressCall(ctx, "source_search"); err != nil {
+				return "", err
+			}
 			resp, err := sourceClient.SearchSources(ctx, strings.TrimSpace(in.Query), in.MaxResults)
 			if err != nil {
 				return "", err
@@ -371,6 +381,9 @@ func newImportURLContentTool(deps Dependencies) toolregistry.Tool {
 			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("import_url_content missing owner context")
+			}
+			if err := deps.chargeEgressCall(ctx, "import_url_content"); err != nil {
+				return "", err
 			}
 			item, err := deps.Content.ImportURL(ctx, ownerID, strings.TrimSpace(in.URL), strings.TrimSpace(in.Query))
 			if err != nil {
@@ -656,6 +669,9 @@ func newWebSearchTool(searchClient search.Client, deps Dependencies) toolregistr
 			if strings.TrimSpace(in.Query) == "" {
 				return "", fmt.Errorf("query must not be empty")
 			}
+			if err := deps.chargeEgressCall(ctx, "web_search"); err != nil {
+				return "", err
+			}
 			// Agent retrieval breadth floor: models routinely self-cap max_results
 			// at ~10 (a human result page), which collapses the router's merge
 			// target back down. Floor every search to the broad agent default so a
@@ -783,6 +799,9 @@ func newFetchURLTool(httpClient *http.Client, deps Dependencies) toolregistry.To
 			if target == "" {
 				return "", fmt.Errorf("url must not be empty")
 			}
+			if err := deps.chargeEgressCall(ctx, "fetch_url"); err != nil {
+				return "", err
+			}
 			client := httpClient
 			if client == nil {
 				client = &http.Client{Timeout: 30 * time.Second}
@@ -799,6 +818,9 @@ func newFetchURLTool(httpClient *http.Client, deps Dependencies) toolregistry.To
 
 			data, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
 			if err != nil {
+				return "", err
+			}
+			if err := deps.chargeEgressBytes(ctx, "fetch_url", len(data)); err != nil {
 				return "", err
 			}
 			maxChars := in.MaxChars

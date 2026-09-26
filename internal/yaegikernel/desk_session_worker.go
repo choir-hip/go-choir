@@ -153,6 +153,7 @@ func (c DeskSessionWorkerConfig) sessionEnv() []string {
 		prefix + "ROLE=" + c.Session.Role,
 		prefix + "SLOT=" + c.Session.Slot,
 		prefix + "SOCK_FD=3",
+		prefix + "MEMORY_LIMIT_BYTES=" + fmt.Sprintf("%d", c.Session.MemoryLimitBytes),
 	}
 	if len(c.Session.AllowedPackages) > 0 {
 		env = append(env, prefix+"ALLOWED_PACKAGES="+joinCSV(c.Session.AllowedPackages))
@@ -182,7 +183,18 @@ func SessionWorkerConfigFromEnv(getenv func(string) string, prefix string) Sessi
 		AllowedRoot:     getenv(prefix + "ALLOWED_ROOT"),
 		Role:            getenv(prefix + "ROLE"),
 		Slot:            getenv(prefix + "SLOT"),
+		MemoryLimitBytes: parseUint64Env(getenv(prefix + "MEMORY_LIMIT_BYTES")),
 	}
+}
+
+// parseUint64Env parses a numeric env value; malformed input reads as 0
+// (uncapped) rather than silently inheriting a bogus bound.
+func parseUint64Env(v string) uint64 {
+	var n uint64
+	if v != "" {
+		_, _ = fmt.Sscanf(v, "%d", &n)
+	}
+	return n
 }
 
 // SessionWorkerSockFD reads the inherited session socket fd (3) into a
