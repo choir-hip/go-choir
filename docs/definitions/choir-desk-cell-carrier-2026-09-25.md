@@ -133,28 +133,24 @@ now:
     believed_state: >-
       The capsule-broker sessionWorker (cmd/capsule-broker/session_worker.go,
       unix socketpair + FramedConn + Setpgid/Pdeathsig + ready handshake) is
-      the proven killable-subprocess pattern, today reachable only inside the
-      guest for Engineering+actuator=rlm. Non-capsule desks run cells in the
-      host process (no subprocess boundary). yaegikernel already exposes
+      the proven killable-subprocess pattern, today reachable only inside
+      the guest for Engineering+actuator=rlm. yaegikernel already exposes
       ExecuteWorkerSessionConn/SessionWorkerConfig/FramedConn; the desk
-      module set (choir.go deskModuleSet) already bounds per-role verbs.
+      module set (choir.go deskModuleSet) bounds per-role staged verbs.
+      Census finding: non-capsule desks run a toolregistry.ToolLoop
+      (patch_texture et al.) — they do NOT eval yaegi cells or produce
+      StagedIntents today. So R3b is a BUILD (a new desk cell carrier +
+      host sessionWorker + cell admission), not a lift: the spawn pattern
+      transfers, the desk wiring is new.
     main_uncertainty: >-
-      Whether host-side spawn is a lift of the existing pattern or a build:
-      the worker binary entrypoint (--isolation-stage exec-go-session) is a
-      capsule-broker cmd; a host equivalent must be reachable. The derivable
-      wake on kill is the second unknown — the R2x deadline-wake machinery
-      may already cover it.
+      The carrier shape: whether a desk gets a host `go_eval`-style cell
+      tool inside its existing tool loop (minimal — one new tool per
+      profile), or its whole turn becomes a yaegi cell (full InCellCarrier
+      like Engineering). Plan §11 says "InCellCarrier fanned per profile",
+      which implies the latter; the lift-vs-build fork is the design risk.
     next_observation: >-
-      Where the non-capsule desk activation actually evals its cell today,
-      and the smallest seam to route it through a host sessionWorker.
-  blocker_or_risk: >-
-    Sharpest execution risk in the spine (per panel): host spawn for
-    non-capsule desks. Decompose before patching — do not special-case a
-    single desk. No Blocking Asks applies: fork decisions go to
-    agentic-consensus or a conservative default documented here.
-  next_action: >-
-    Locate the non-capsule desk cell-eval entrypoint; decide lift-vs-build
-    for the host sessionWorker spawn; wire a host worker binary + spawn.
+      Decide the carrier shape (cell-tool vs whole-turn-cell); then the
+      host worker binary entrypoint and the per-profile allowlist.
 
 receipts: []
 ---
