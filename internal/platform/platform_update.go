@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -72,6 +73,25 @@ func (h *Handler) HandlePlatformUpdateOfferMint(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
+	// Persist payload bytes into platform-artifacts: vmctl's route-apply
+	// verifier resolves artifact+sha256 URIs against the same shared root, so
+	// the mint must stage each file under its content digest.
+	for _, file := range offer.Files {
+		raw, decErr := base64.StdEncoding.DecodeString(file.Bytes)
+		if decErr != nil {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("platform update mint: payload %q does not decode", file.Path)})
+			return
+		}
+		sum := sha256.Sum256(raw)
+		if hex.EncodeToString(sum[:]) != file.SHA256 {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("platform update mint: payload %q digest mismatch", file.Path)})
+			return
+		}
+		if writeErr := h.checkpointAuthority.service.writeBlob(filepath.Join("sha256", "platform-update", file.SHA256), raw); writeErr != nil {
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: fmt.Sprintf("platform update mint: stage artifact: %v", writeErr)})
+			return
+		}
+	}
 	offerDigest, err := offer.Digest()
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "platform update offer is not digestible"})
@@ -126,14 +146,14 @@ func buildPlatformUpdateOffer(request platformUpdateOfferMintRequest, now time.T
 	for _, file := range payloadFiles {
 		codeArtifacts = append(codeArtifacts, computerversion.CodeArtifact{
 			Name: file.Path, SHA256: file.SHA256,
-			URI: "artifact+sha256://" + file.SHA256 + "/" + file.Path,
+			URI: "artifact+sha256://" + file.SHA256 + "/sha256/platform-update/" + file.SHA256,
 		})
 	}
 	closure, err := computerversion.NewCodeClosure(request.CodeCommit, codeArtifacts, now)
 	if err != nil {
 		return selfdevprotocol.PlatformUpdateOffer{}, err
 	}
-	programURI := "artifact+sha256://" + payloadFiles[0].SHA256 + "/" + payloadFiles[0].Path
+	programURI := "artifact+sha256://" + payloadFiles[0].SHA256 + "/sha256/platform-update/" + payloadFiles[0].SHA256
 	program, err := computerversion.NewArtifactProgram([]computerversion.ArtifactProgramEntry{{
 		Kind: "platform_update_release", ContentSHA256: payloadFiles[0].SHA256, ArtifactURI: programURI,
 	}}, now)
