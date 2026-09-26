@@ -1,35 +1,36 @@
-# Choir Seed Deck Treatment (September 25, 2026)
+# Choir Seed Deck Treatment (September 25, 2026 Revision)
 
-YC-style seed deck. Simple, legible, obvious. One idea per slide. Large type. No clever jargon. The goal is to get the next conversation, establish clear category leadership, and show high willingness-to-pay across existing budgets.
+YC-style seed deck. Simple, legible, obvious. One idea per slide. Large type. No clever jargon. Designed for venture-scale clarity.
 
 ## Core sentence
 
-Choir is the automatic computer: a persistent place where agents, tools, notes, sources, and decisions work together — where the work itself is the interface.
+Choir is the automatic computer: a persistent place where agents, tools, sources, and decisions work together.
 
 ---
 
 ## 1. Cover
 
 **Header:** September 2026 · open source
-**Main question:** How do humans supervise work at agentic scale?
-**Secondary line:** CHOIR — the automatic computer.
+**Title (Word):** CHOIR
+**Main line:** The automatic computer.
+**Support line:** A persistent place where agents, tools, sources, and decisions work together.
 **Link:** choir.news · 01
 
-**Purpose:** Lead with the fundamental question of the agentic era. Not another chatbot, not another coding assistant. A new computing paradigm where humans can supervise work that outruns human attention.
+**Purpose:** Clean category claim. No rhetorical questions or unneeded philosophy. Direct and obvious.
 
 ---
 
 ## 2. Problem
 
 **Kicker:** Problem
-**Slide title:** Agentic work has outgrown the supervisory interface.
-**Bullets:**
-- Work now runs faster and longer than a human can watch.
-- People wake up to answers they cannot inspect.
-- Chat does not scale to many agents, many people, continuous work.
-**Key line:** A chat thread is not a workbench. The interface is a live, updated state document.
+**Slide title:** The world moves at machine speed. Human synthesis is broken.
+**Points:**
+- Information moves faster than any individual or organization can track.
+- Chat threads and algorithmic feeds prey on attention and produce noise.
+- Every team needs an authentic publishing voice; most lack the resources to own it.
+**Keyline:** A chat thread is not a workbench. A feed is not a perspective.
 
-**Purpose:** Make the supervision bottleneck visceral and structural. The problem is not model intelligence; it is that chat cannot supervise asynchronous, multi-agent computation.
+**Purpose:** Shift from an engineer's complaint about "supervising tokens" to the human and organizational reality: the world moves at machine speed, feeds are engagement traps, and people/teams cannot maintain perspective or publish.
 
 ---
 
@@ -37,67 +38,69 @@ Choir is the automatic computer: a persistent place where agents, tools, notes, 
 
 **Kicker:** Solution
 **Slide title:** The work itself is the interface.
-**Support line:** Agents update a versioned document — the authoritative state of the work. Humans read it and edit it. An edit is a new version, and steers what happens next.
-**Bullet:** Models and agents are swappable. The state is yours.
-**Key line:** Language is for intent. The document is for steering.
+**Body:** Agents continuously update a living, versioned document representing the current state of truth. Humans read it and edit it directly.
+**Points:**
+- Editing is steering: an edit creates a new version and redirects agent trajectories.
+- Precommitment records make autonomous execution trustworthy and auditable.
+**Keyline:** Language is for intent. The document is for steering.
 
-**Purpose:** Deliver the core invention simply: versioned, human-editable state as the control plane. Editing the document is a control action.
+**Purpose:** Deliver the core invention simply: versioned, human-editable state as the control plane. Editing the document directly steers background agent swarms.
 
 ---
 
 ## 4. The Product
 
 **Kicker:** The product
-**Slide title:** Familiar desktop and document UX. Automated.
-**Layout:** 2-column split — product cards on left, live Texture screenshot on right.
+**Slide title:** The autonomous publishing computer.
+**Layout:** 2-column: description cards on left, live Texture research document screenshot on right.
 **Cards:**
-- **Texture (on staging):** The surface — work as a versioned, editable document.
-- **Mail (on staging):** Proof agents can act under supervision — send gated by owner approval.
-**Sub-row:** Next: Newspaper (in refactor) · Radio (in development)
+- **Ingest & Synthesize:** Autonomous agents continuously monitor global sources, verify claims, and build living research records.
+- **Steer & Publish:** Edit the living document to steer; publish as provenance-linked articles or authentic two-way voice.
+**Keyline:** Generate the visuals. Preserve the voice.
 
-**Purpose:** Show that Choir combines the familiarity of a desktop operating system with autonomous agent capabilities. The screenshot grounds the product as a real, working system.
+**Purpose:** Pitch ONE coherent product (the autonomous publishing computer) rather than a confusing list of four separate surfaces. Visuals can be algorithmic; authentic human voice is the irreducible human layer.
 
 ---
 
-## 5. Current Status
+## 5. Progress & Proof
 
-**Kicker:** Current status
-**Slide title:** Live on staging. Honest about what's next.
-**Layout:** Two side-by-side screenshots: Mail app (staging) and Automatic Newspaper (in refactor).
+**Kicker:** Progress
+**Slide title:** It runs. Live on staging today.
+**Layout:** Two side-by-side screenshots: Mail app (staging) and Automatic Newspaper (staging).
 **Captions:**
-- Mail — send gated by owner approval. (staging)
-- Automatic Newspaper — prototype → production. (in refactor)
-**Footer line:** Today: staging. Next: production launch, then evidence of repeat use.
+- Mail — autonomous agent with sends gated by owner approval.
+- Automatic Newspaper — live, provenance-linked continuous publication.
+**Body:** Provenance-linked continuous generation running today. Next milestone: production launch.
 
-**Purpose:** Total credibility through radical transparency. Clearly distinguish what is live on staging today from what is actively being refactored to production.
+**Purpose:** Show what works today with conviction. Drop apologetic "honest about what's next" language. Investors know seed companies are early; present working software clearly.
 
 ---
 
-## 6. Market Opportunity (TAM)
+## 6. The Category
 
-**Kicker:** Market opportunity
-**Slide title:** Three existing budgets. Compressed AI-native scale.
-**Three Cards:**
-1. **News & Alt-Data ($42B TAM):** Automatic Newspaper editions sold to funds & desks @ $50k/yr. Provenance + precommitment records replace black-box summaries.
-2. **2-Way Voice ($50B TAM):** Automatic Radio: users speak, build brand, and prompt 24/7 agents. $35/mo power speakers; $100/seat/mo async team meetings.
-3. **Sovereign OS ($200B+ TAM):** Autoputer platform: open-source self-hosting + Forward-Deployed Engineer (FDE) model. Banks, defense, and healthcare own their private learning loops on-prem.
-**Key line:** Capturing under 2% of beachhead accounts reaches $50M+ ARR. AI-native velocity compresses a 7-year curve into 24 months.
+**Kicker:** The category
+**Slide title:** Every person, team, and organization gets an automatic computer.
+**Grid 3:**
+- **Atomic Unit:** One persistent, self-driving computer per person, team, organization, or autonomous agent process.
+- **Generations:** Mainframes (thousands) → PCs (~2B) → Smartphones (~4.5B) → Automatic Computers (>1B near term, 10B+ long term).
+- **Category Math:** 50k prosumer publishers + 15k team seats = $54M ARR from a microscopic fraction of global instances.
+**Keyline:** We don't need to own the category. We need to be the default neutral workbench.
 
-**Purpose:** Ground TAM in existing budgets rather than vague hand-waving. Frame the 2-way audio dynamic ($35/mo creator / $100/seat enterprise async meetings) and sovereign enterprise FDE upside. Emphasize compressed AI-native timelines.
+**Purpose:** Sizing a new computing generation by atomic units and installed-base analogies rather than speculative top-down TAM calculations.
 
 ---
 
 ## 7. Business Model
 
 **Kicker:** Business model
-**Slide title:** Sell curated data first. Expand into the platform.
-**Three Cards:**
-- **Curated Data (Day 1):** Sell high-signal Newspaper editions to funds & desks @ $50k/yr. Provenance and precommitment records deliver immediate cash flow.
-- **Platform & Voice (Scale):** License the engine so orgs can publish their own data products. 2-way Autoradio: $35/mo power speakers, $100/seat/mo async team desks.
-- **Sovereign FDE (Enterprise):** Open-source core deployed on customer VPC. Forward-Deployed Engineers build on-prem pipelines so enterprises own their learning loops ($500k+).
-**Keyline:** Your computer should not belong to your model provider. As intelligence gets cheaper, owned work history compounds.
+**Slide title:** Open-source core. The network is the business.
+**Grid 3:**
+- **Open-Source Core:** Free self-host. Builds developer trust, distribution, and non-negotiable enterprise data sovereignty.
+- **Hosted Convenience:** $35/mo prosumer publishers; $100/seat/mo team async meeting desks that steer 24/7 background agents.
+- **The Network Asset:** Publishing network (paywall take-rates) + permissioned API queries over the aggregate, provenance-linked corpus.
+**Keyline:** We don't sell computers. We build the network where perspectives compound.
 
-**Purpose:** Avoid the classic "platform before product" trap. Monetize proven intelligence immediately with high-ACV data buyers, expand into platform and 2-way voice subscriptions, and capture enterprise sovereign budgets via the Palantir FDE model.
+**Purpose:** Show how open source establishes distribution and sovereignty, hosted tiers generate high-margin SaaS cash flow, and the network captures the compounding asset value.
 
 ---
 
@@ -105,14 +108,13 @@ Choir is the automatic computer: a persistent place where agents, tools, notes, 
 
 **Kicker:** Positioning
 **Slide title:** Personal agents are here. They need somewhere to work.
-**Three Cards:**
-- **The category:** Muse, Instinct, Grok Bot, Town — agents with their own computers. OpenAI and Anthropic next.
-- **The gap:** Every agent's work lives in its vendor's silo. Nothing the human owns.
-- **Choir:** The workbench any agent can use — API, MCP, skill. State the user owns.
-**Body:** Why won't model vendors build this? Your state must work across whichever agents and models you choose — theirs can't.
-**Key line:** Agents come and go. The workbench stays yours.
+**Grid 3:**
+- **The Category:** Muse, Instinct, Grok Bot, Town, OpenAI Aeon — personal agents running inside vendor cloud silos.
+- **The Gap:** Every agent traps memory and state in its proprietary silo. Built for digital chores, not compounding IP.
+- **Choir:** The neutral workbench any agent can drive — API, MCP, skill, or code. State the user permanently owns.
+**Keyline:** Agents come and go. The workbench stays yours.
 
-**Purpose:** Answer the classic "why won't OpenAI build this" question. Position Choir as the neutral workbench that benefits from the explosion of personal agents.
+**Purpose:** Address Big Tech head-on. Show that personal agents actually drive demand for Choir as the sovereign, neutral workbench.
 
 ---
 
@@ -120,11 +122,11 @@ Choir is the automatic computer: a persistent place where agents, tools, notes, 
 
 **Kicker:** Why me
 **Name & Role:** Yusef Mosiah Nathanson · Founder
-**Bio:** Made a living turning conflicting signals into verified decisions — professional poker, then AI since 2015. Years of work across agent systems, interfaces, provenance, and media converged into Choir. I built the computer I needed to supervise my own agents.
+**Bio:** Made a living turning conflicting signals into verified decisions — professional poker, then AI engineering since 2015. I built the computer I needed to supervise my own agents and accelerate my own publishing. Structured as a technology-risk business; product-led growth driven by the newspaper. No golf and martini lunches.
 **Links:** github.com/yusefmosiah · mosiah.org
-**Visual:** Founder portrait photo.
+**Keyline:** I built the computer I needed to exist.
 
-**Purpose:** Connect nontraditional founder background directly to founder-market fit: poker is decision-making under uncertainty with real risk, exactly what supervising autonomous agents requires.
+**Purpose:** Connect founder background directly to authentic technical capability and high-stakes decision discipline. Highlight technology-risk and product-led growth.
 
 ---
 
@@ -132,8 +134,8 @@ Choir is the automatic computer: a persistent place where agents, tools, notes, 
 
 **Kicker:** The ask
 **Slide title:** Building the system that needs to exist.
-**Body:** This meeting is to explore a relationship and get your read. Funding would accelerate production launch and distribution. The honest state is early: pre-traction, pre-production. The work continues either way.
-**Key line:** Milestone: production launch — then evidence of repeat use.
+**Body:** Raising seed capital to complete production launch, scale our first cohort of creators and organizational publishers, and expand the network.
+**Keyline:** Milestone: production launch — then evidence of repeat use.
 **Links:** choir.news · github.com/choir-hip/go-choir
 
-**Purpose:** Maintain the authentic pre-traction, pre-production posture. Open to investment to accelerate velocity, but demonstrating relentless founder momentum.
+**Purpose:** Clear, confident seed ask with runway tied directly to the production launch milestone and early repeat-use evidence.
