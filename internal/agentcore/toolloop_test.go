@@ -7,12 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -93,82 +91,6 @@ func (p *capturingToolChoiceProvider) CallWithTools(ctx context.Context, req pro
 	return p.responses[idx], nil
 }
 
-func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	var edited int
-	if err := registry.Register(toolregistry.Tool{
-		Name:        "patch_texture",
-		Description: "Edit the Texture document.",
-		Parameters:  map[string]any{"type": "object"},
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			edited++
-			return `{"status":"stored","revision_id":"rev-2"}`, nil
-		},
-	}); err != nil {
-		t.Fatalf("register patch_texture: %v", err)
-	}
-
-	var choices []string
-	provider := &capturingToolChoiceProvider{responses: []*provideriface.ToolLoopResponse{{
-		StopReason: "tool_use",
-		ToolCalls: []types.ToolCall{
-			{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"first"}`)},
-			{ID: "call-edit-2", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"second"}`)},
-		},
-		Usage: provideriface.TokenUsage{InputTokens: 1, OutputTokens: 1},
-		Model: "test-model",
-	}}, choices: &choices}
-
-	var retrySeen bool
-	var duplicateNoticeSeen bool
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		if kind == types.EventRunRetry && phase == "initial_tool_choice" {
-			retrySeen = true
-		}
-		if kind != types.EventToolResult {
-			return
-		}
-		var decoded map[string]any
-		if err := json.Unmarshal(payload, &decoded); err != nil {
-			t.Fatalf("decode tool result: %v", err)
-		}
-		if decoded["call_id"] == "call-edit-2" && strings.Contains(fmt.Sprint(decoded["output"]), "duplicate Texture write tool patch_texture") {
-			duplicateNoticeSeen = true
-		}
-	}
-
-	run := &types.RunRecord{
-		RunID:        "run-texture",
-		OwnerID:      "owner-1",
-		AgentProfile: agentprofile.Texture,
-		AgentRole:    agentprofile.Texture,
-	}
-	text, _, err := toolregistry.RunToolLoop(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"write v1"}`)},
-		"You are a Texture appagent.",
-		0,
-		emit,
-		nil,
-		toolregistry.WithInitialToolChoice("function:patch_texture"),
-		toolregistry.WithTerminalToolSuccesses("patch_texture"))
-	if err != nil {
-		t.Fatalf("run tool loop: %v", err)
-	}
-	if text != "" {
-		t.Fatalf("text = %q, want empty terminal tool result", text)
-	}
-	if edited != 1 {
-		t.Fatalf("patch_texture executed %d times, want 1", edited)
-	}
-	if retrySeen {
-		t.Fatal("same-tool duplicate response must not trigger initial tool-choice retry")
-	}
-	if !duplicateNoticeSeen {
-		t.Fatal("missing duplicate patch_texture notice for second call")
-	}
-	if len(choices) != 1 || choices[0] != "function:patch_texture" {
-		t.Fatalf("tool choices = %#v, want one exact initial patch_texture choice", choices)
-	}
-}
 
 // --- Integration: Runtime with Tool Registry ---
 

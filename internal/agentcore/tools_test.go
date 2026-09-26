@@ -3,7 +3,6 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,127 +21,6 @@ import (
 
 // --- Batch executor contract tests ---
 
-func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	var executed int
-	if err := registry.Register(toolregistry.Tool{Name: "patch_texture",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			executed++
-			return `{"status":"stored","revision_id":"rev-2"}`, nil
-		}}); err != nil {
-		t.Fatalf("register patch_texture: %v", err)
-	}
-
-	run := &types.RunRecord{
-		RunID:        "run-texture",
-		OwnerID:      "owner-1",
-		AgentProfile: agentprofile.Texture,
-		AgentRole:    agentprofile.Texture,
-	}
-	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
-		{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1"}`)},
-		{ID: "call-edit-2", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"again"}`)},
-	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
-
-	if executed != 1 {
-		t.Fatalf("executed patch_texture %d times, want 1", executed)
-	}
-	if len(results) != 2 {
-		t.Fatalf("results = %d, want 2", len(results))
-	}
-	if results[0].IsError {
-		t.Fatalf("first edit result = %#v, want success", results[0])
-	}
-	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate Texture write tool patch_texture") {
-		t.Fatalf("second edit result = %#v, want non-error duplicate notice", results[1])
-	}
-}
-
-func TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	var executed int
-	if err := registry.Register(toolregistry.Tool{Name: "patch_texture",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			executed++
-			if strings.Contains(string(args), "bad") {
-				return "", fmt.Errorf("edit 0: find text not present")
-			}
-			return `{"status":"stored","revision_id":"rev-2"}`, nil
-		}}); err != nil {
-		t.Fatalf("register patch_texture: %v", err)
-	}
-
-	run := &types.RunRecord{
-		RunID:        "run-texture",
-		OwnerID:      "owner-1",
-		AgentProfile: agentprofile.Texture,
-		AgentRole:    agentprofile.Texture,
-	}
-	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
-		{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"bad"}`)},
-		{ID: "call-edit-2", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"good"}`)},
-	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
-
-	if executed != 2 {
-		t.Fatalf("executed patch_texture %d times, want 2", executed)
-	}
-	if len(results) != 2 {
-		t.Fatalf("results = %d, want 2", len(results))
-	}
-	if !results[0].IsError {
-		t.Fatalf("first edit result = %#v, want error", results[0])
-	}
-	if results[1].IsError || !strings.Contains(results[1].Output, `"status":"stored"`) {
-		t.Fatalf("second edit result = %#v, want stored success", results[1])
-	}
-}
-
-func TestExecuteToolsSkipsDuplicateTextureResearchSpawnInSameTurn(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	var executed []string
-	if err := registry.Register(toolregistry.Tool{Name: "spawn_agent",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			var in struct {
-				Role      string `json:"role"`
-				Objective string `json:"objective"`
-			}
-			if err := json.Unmarshal(args, &in); err != nil {
-				return "", err
-			}
-			executed = append(executed, in.Role+":"+in.Objective)
-			return in.Role, nil
-		}}); err != nil {
-		t.Fatalf("register spawn_agent: %v", err)
-	}
-
-	run := &types.RunRecord{
-		RunID:        "run-texture",
-		OwnerID:      "owner-1",
-		AgentProfile: agentprofile.Texture,
-		AgentRole:    agentprofile.Texture,
-	}
-	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
-		{ID: "research-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"research","channel_id":"doc-1","objective":"research current scores"}`)},
-		{ID: "research-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"research","channel_id":"doc-1","objective":"research   current   scores"}`)},
-		{ID: "research-3", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"research","channel_id":"doc-1","objective":"research injury notes"}`)},
-	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
-
-	if len(executed) != 2 {
-		t.Fatalf("executed spawns = %#v, want duplicate skipped but distinct objective allowed", executed)
-	}
-	if len(results) != 3 {
-		t.Fatalf("results = %d, want 3", len(results))
-	}
-	if results[0].IsError || results[0].Output != agentprofile.Research {
-		t.Fatalf("first spawn result = %#v, want success", results[0])
-	}
-	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate texture researcher spawn") {
-		t.Fatalf("second spawn result = %#v, want non-error duplicate notice", results[1])
-	}
-	if results[2].IsError || results[2].Output != agentprofile.Research {
-		t.Fatalf("third spawn result = %#v, want distinct-objective success", results[2])
-	}
-}
 
 func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()

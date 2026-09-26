@@ -48,13 +48,17 @@ func TestManagementCellRegistryIsSealed(t *testing.T) {
 }
 
 func TestUnpromotedDesksStayOffCarrier(t *testing.T) {
-	// Under actuator=tools (staging default) texture and research keep their
-	// live host-tool registries; only management is promoted by R3c.
+	// Under actuator=tools (staging default) management (R3c) and texture
+	// (R3d) are unconditionally on the cell carrier; research keeps its live
+	// host-tool registry until R3r promotes it.
 	if capsule.HostSelectsRLM() {
 		t.Skip("actuator=rlm promotes all desks; nothing to assert here")
 	}
-	if deskCarrierLive(agentprofile.Texture) {
-		t.Fatal("texture must stay off the carrier until R3d promotes it")
+	if !deskCarrierLive(agentprofile.Management) {
+		t.Fatal("management must be on the carrier (R3c)")
+	}
+	if !deskCarrierLive(agentprofile.Texture) {
+		t.Fatal("texture must be on the carrier (R3d)")
 	}
 	if deskCarrierLive(agentprofile.Research) {
 		t.Fatal("research must stay off the carrier until R3r promotes it")
