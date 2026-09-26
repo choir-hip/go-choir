@@ -112,3 +112,26 @@ unlike owner-recovery — it may authorize route projection under the
 platform-follow scope. Corpusd enforces `AcceptedEventHead` names a
 `materialization_applied` event. Restores accept it because the restore
 surface consumes head + witness + release bindings, not verifier fields.
+
+## Problem 4 — vmctl route apply cannot resolve update artifacts
+
+Discovered by: probe run on deployed `b920c85a`
+(update upd-m9a-platform-update-1790460917187-a). Checkpoint minted cleanly
+under the new platform-follow class; route promotion then failed:
+`route promotion failed: ... open immutable artifact: open
+/var/lib/go-choir/platform-artifacts/frontend/index.html: no such file`.
+
+`PinCode`/`PinArtifactProgram` (`internal/vmctl/route_authority.go` +
+`computerversion.LocalArtifactContentVerifier`) resolve
+`artifact+sha256://<digest>/<path>` URIs to `<VMCTL_ARTIFACTS_ROOT>/<path>`
+and hash-verify the bytes. The offer mint built URIs
+`/<file.Path>` and never wrote the payload anywhere vmctl could see: no
+artifact-intake endpoint exists on vmctl, and the mint handler only
+packaged bytes into the offer body.
+
+Fix direction: corpusd mint stages each payload file into the shared
+`platform-artifacts` root as `sha256/platform-update/<digest>` (content-
+addressed, re-verified against the request digest at write) and points
+closure/program URIs at that path. The guest still receives payload bytes
+in the offer; vmctl's store is populated by the mint, matching the selfdev
+shape (event-payload artifacts live under the same root on Node B).
