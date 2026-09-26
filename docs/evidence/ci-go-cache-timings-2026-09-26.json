@@ -1,0 +1,2594 @@
+{
+  "scope": "GitHub job elapsed seconds, excluding runner queue; baseline versus first candidate (mixed cold/warm)",
+  "runs": [
+    {
+      "run": "36193752882",
+      "jobs": [
+        {
+          "id": 108264717512,
+          "name": "Plan CI Lanes",
+          "seconds": 6,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Classify changed paths and deterministic race sample",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Select standard or Race Go matrices",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go for CI contract tests",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Test CI classifiers and differential SBOM reuse",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264757927,
+          "name": "Go Test (scale, isolated load-sensitive tests)",
+          "seconds": 164,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test quarantined scale tests with one retry",
+              "seconds": 151,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758065,
+          "name": "Vocabulary Gates",
+          "seconds": 6,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run V1 writer-purity gate",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run decode-roots guard",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run test hang guard",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758078,
+          "name": "Go Test (race, agentcore/textureowner shard 3)",
+          "seconds": 481,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 465,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758094,
+          "name": "Detect Staging Deploy Impact",
+          "seconds": 9,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 4,
+              "conclusion": "success"
+            },
+            {
+              "name": "Test deploy impact classifier",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Detect deployed artifact changes",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758103,
+          "name": "Go Test (race, agentcore/textureowner shard 5)",
+          "seconds": 362,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 344,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758116,
+          "name": "Go Test (race, agentcore/textureowner shard 0)",
+          "seconds": 448,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 435,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758117,
+          "name": "Go Vet + Build",
+          "seconds": 235,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 14,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go vet",
+              "seconds": 181,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go build",
+              "seconds": 34,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758137,
+          "name": "Go Test (race, agentcore/textureowner shard 6)",
+          "seconds": 466,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 448,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758140,
+          "name": "Go Test (race, agentcore/textureowner shard 1)",
+          "seconds": 478,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 4,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 12,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 451,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 6,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758185,
+          "name": "Go Test (race, non-runtime shard 6)",
+          "seconds": 313,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 297,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758191,
+          "name": "Go Test (race, non-runtime shard 4)",
+          "seconds": 439,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 425,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758222,
+          "name": "Go Test (race, non-runtime shard 3)",
+          "seconds": 441,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 422,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758229,
+          "name": "Go Test (race, non-runtime shard 2)",
+          "seconds": 423,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 404,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758240,
+          "name": "Go Test (race, agentcore/textureowner shard 7)",
+          "seconds": 440,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 425,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758245,
+          "name": "Go Test (race, agentcore/textureowner shard 4)",
+          "seconds": 468,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 452,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758247,
+          "name": "Go Test (race, non-runtime shard 0)",
+          "seconds": 427,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 413,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758262,
+          "name": "Go Test (race, non-runtime shard 5)",
+          "seconds": 447,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 12,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 427,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758319,
+          "name": "Go Test (race, non-runtime shard 1)",
+          "seconds": 441,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 424,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 1,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758364,
+          "name": "Go Test (race, non-runtime shard 7)",
+          "seconds": 223,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 7,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 209,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758365,
+          "name": "Docs Truth Check",
+          "seconds": 24,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run doccheck",
+              "seconds": 6,
+              "conclusion": "success"
+            },
+            {
+              "name": "Confirm reports were produced",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload doccheck reports",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264758403,
+          "name": "Go Test (race, agentcore/textureowner shard 2)",
+          "seconds": 448,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 430,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264759083,
+          "name": "Heresy Detector",
+          "seconds": 18,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Install ripgrep",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Report discovery counts and enforce promoted families",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload heresy detector report",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108264811852,
+          "name": "Prebuild Deploy Artifacts (Node B)",
+          "seconds": 722,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Setup SSH",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Prebuild selected Nix artifacts on Node B",
+              "seconds": 716,
+              "conclusion": "success"
+            },
+            {
+              "name": "Cleanup SSH",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108266954670,
+          "name": "Go Vet + Test + Build",
+          "seconds": 3,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Confirm selected CI gates passed",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108266976510,
+          "name": "Publish Rolling Flake",
+          "seconds": 81,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run DeterminateSystems/determinate-nix-action@v3",
+              "seconds": 15,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run DeterminateSystems/flakehub-push@main",
+              "seconds": 59,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run DeterminateSystems/determinate-nix-action@v3",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108266976599,
+          "name": "Deploy to Staging (Node B)",
+          "seconds": 369,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Setup SSH",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Deploy to staging",
+              "seconds": 361,
+              "conclusion": "success"
+            },
+            {
+              "name": "Cleanup SSH",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "run": "36207153276",
+      "jobs": [
+        {
+          "id": 108305962902,
+          "name": "Plan CI Lanes",
+          "seconds": 37,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Classify changed paths and deterministic race sample",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Select standard or Race Go matrices",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go for CI contract tests",
+              "seconds": 16,
+              "conclusion": "success"
+            },
+            {
+              "name": "Test CI classifiers and differential SBOM reuse",
+              "seconds": 15,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go for CI contract tests",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306181971,
+          "name": "Docs Truth Check",
+          "seconds": 28,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run doccheck",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Confirm reports were produced",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload doccheck reports",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306181992,
+          "name": "Go Vet + Build",
+          "seconds": 234,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go vet",
+              "seconds": 173,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go build",
+              "seconds": 34,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182048,
+          "name": "Vocabulary Gates",
+          "seconds": 5,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run V1 writer-purity gate",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run decode-roots guard",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run test hang guard",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182050,
+          "name": "Go Test (scale, isolated load-sensitive tests)",
+          "seconds": 226,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 13,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test quarantined scale tests with one retry",
+              "seconds": 195,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 12,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182086,
+          "name": "Heresy Detector",
+          "seconds": 21,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Install ripgrep",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Report discovery counts and enforce promoted families",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload heresy detector report",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182087,
+          "name": "Go Test (race, agentcore/textureowner shard 1)",
+          "seconds": 320,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 289,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 6,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182119,
+          "name": "Go Test (race, agentcore/textureowner shard 3)",
+          "seconds": 313,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 289,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 1,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182142,
+          "name": "Go Test (race, agentcore/textureowner shard 2)",
+          "seconds": 234,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 12,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 206,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182154,
+          "name": "Go Test (race, agentcore/textureowner shard 6)",
+          "seconds": 309,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 285,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 7,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182165,
+          "name": "Go Test (race, agentcore/textureowner shard 0)",
+          "seconds": 299,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 275,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182174,
+          "name": "Go Test (race, agentcore/textureowner shard 7)",
+          "seconds": 296,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 272,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182180,
+          "name": "Go Test (race, agentcore/textureowner shard 4)",
+          "seconds": 128,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 21,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 101,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182196,
+          "name": "Go Test (race, non-runtime shard 7)",
+          "seconds": 346,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 319,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182202,
+          "name": "Go Test (race, non-runtime shard 6)",
+          "seconds": 277,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 256,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 7,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182215,
+          "name": "Go Test (race, non-runtime shard 4)",
+          "seconds": 248,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 222,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 1,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182217,
+          "name": "Go Test (race, non-runtime shard 1)",
+          "seconds": 296,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 274,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182224,
+          "name": "Go Test (race, non-runtime shard 5)",
+          "seconds": 229,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 206,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 6,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182226,
+          "name": "Go Test (race, agentcore/textureowner shard 5)",
+          "seconds": 273,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard",
+              "seconds": 252,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test integration-tagged smoke",
+              "seconds": 0,
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 7,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182271,
+          "name": "Go Test (race, non-runtime shard 0)",
+          "seconds": 111,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 21,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 84,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 1,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182289,
+          "name": "Go Test (race, non-runtime shard 3)",
+          "seconds": 94,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 33,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 54,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108306182312,
+          "name": "Go Test (race, non-runtime shard 2)",
+          "seconds": 81,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 28,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard",
+              "seconds": 46,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108307772562,
+          "name": "Go Vet + Test + Build",
+          "seconds": 3,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Confirm selected CI gates passed",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "run": "36207153265",
+      "jobs": [
+        {
+          "id": 108305962671,
+          "name": "Go Test (non-runtime race shard 0)",
+          "seconds": 466,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 12,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard with -race",
+              "seconds": 437,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108305962761,
+          "name": "Go Test (non-runtime race shard 2)",
+          "seconds": 333,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 12,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard with -race",
+              "seconds": 301,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 13,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108305962812,
+          "name": "Go Test (agentcore/textureowner race shard 3)",
+          "seconds": 381,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard with -race",
+              "seconds": 355,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108305962814,
+          "name": "Go Test (agentcore/textureowner race shard 1)",
+          "seconds": 415,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 12,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard with -race",
+              "seconds": 388,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 9,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108305962825,
+          "name": "Go Test (agentcore/textureowner race shard 0)",
+          "seconds": 378,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard with -race",
+              "seconds": 354,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108305962826,
+          "name": "Go Test (agentcore/textureowner race shard 2)",
+          "seconds": 376,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test agentcore/textureowner shard with -race",
+              "seconds": 350,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108305962852,
+          "name": "Go Test (non-runtime race shard 3)",
+          "seconds": 349,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 3,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 10,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard with -race",
+              "seconds": 322,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 0,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 108305962856,
+          "name": "Go Test (non-runtime race shard 1)",
+          "seconds": 454,
+          "conclusion": "success",
+          "steps": [
+            {
+              "name": "Set up job",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v6",
+              "seconds": 2,
+              "conclusion": "success"
+            },
+            {
+              "name": "Set up Go",
+              "seconds": 11,
+              "conclusion": "success"
+            },
+            {
+              "name": "Go test non-runtime shard with -race",
+              "seconds": 428,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Set up Go",
+              "seconds": 8,
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@v6",
+              "seconds": 1,
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "seconds": 0,
+              "conclusion": "success"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
