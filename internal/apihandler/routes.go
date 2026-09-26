@@ -48,6 +48,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
 	s.HandleFunc("/internal/runtime/platform-update", h.HandleInternalPlatformUpdate)
+	s.HandleFunc("/internal/self-development/restart-handoff", h.HandleSelfDevelopmentRestartHandoff)
 	s.HandleFunc("/internal/texture/documents/", texture.HandleInternalTextureDocument)
 	s.HandleFunc("/internal/texture/revisions/", texture.HandleInternalTextureRevision)
 	// R3d: /internal/texture/proposals removed - the desk-originated
