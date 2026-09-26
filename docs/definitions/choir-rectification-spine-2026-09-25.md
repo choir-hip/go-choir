@@ -108,18 +108,16 @@ boundaries:
 now:
   status: working
   slice: >-
-    station R3r code LANDED on main 2026-09-26 (head dc340620; CI/deploy
-    landing loop in flight): research is a full-RLM desk on the cell
-    carrier — desk_go_eval + the typed research/evidence/memory surface,
-    generic host tools retired — under the resolved D2 cap boundary: a
-    per-activation egress budget (calls + fetched bytes) charged by every
-    host-mediated network tool, and a 1GiB RLIMIT_AS worker address cap
-    plumbed through the desk-session spawn env. Every non-wire desk is on
-    the carrier. Next station R4 — commitment scores + surfacing + packs
-    (goal file choir-commitment-scores-packs-2026-09-26.md chartered).
-    M7 remains unblocked in parallel (after R3c).
-  source_ref: main@dc340620
-  deploy_identity: staging https://choir.news build.commit=<pending R3r deploy>
+    station R4 CHARTERED 2026-09-26 — commitment scores + surfacing +
+    packs (goal docs/definitions/choir-commitment-scores-packs-2026-09-26.md).
+    R3r terminal 2026-09-26 (deployed build 3b56c34e): research is a
+    full-RLM desk on the cell carrier — desk_go_eval + typed
+    research/evidence/memory surface under a per-activation egress
+    budget (calls + fetched bytes) and an 8GiB RLIMIT_AS worker cap;
+    generic host tools retired. Every non-wire desk is on the carrier;
+    D2 discharged. M7 remains unblocked in parallel (after R3c).
+  source_ref: main@3b56c34e
+  deploy_identity: staging https://choir.news build.commit=3b56c34e
   candidate:
     id: none
     state: none
@@ -185,24 +183,27 @@ now:
     own-score-free context packs, learning-claims gate. M7 remains
     unblocked for parallel charter.
 receipts:
-  - "R3r interim 2026-09-26: code landed on main (0683fd5d R3r surface +
-    993bc30e linux-import fix + dc340620 gofmt); landing loop in flight —
-    first CI attempt 36227464447 died on a linux-only unused-import vet
-    failure (fixed at 993bc30e); superseded runs cancelled; head run
-    36228104321. Terminal receipt (ci + deploy + env identity + deployed
-    acceptance) lands with the R3r settle commit."
-  - "R3c terminal 2026-09-26: landed+deployed b7ae7596 (ci 36216782941,
-    staging build.commit=b7ae7596); goal docs/definitions/
-    choir-management-live-cast-2026-09-26.md now.status=settled. Management
-    on the carrier unconditionally; lifecycle controls kept beside
-    desk_go_eval; deployed full-resolution rides the R2 cast saga on
-    staging's substrate. now.slice -> R3d."
+  - "R3r terminal 2026-09-26: landed+deployed 3b56c34e (dispatch run
+    36230314065, staging build.commit=3b56c34e); goal docs/definitions/
+    choir-research-live-cell-2026-09-26.md now.status=settled. Research
+    on the carrier unconditionally: desk_go_eval + 13-tool typed surface,
+    per-activation egress budget on all host-mediated network calls,
+    8GiB RLIMIT_AS worker cap (1GiB OOM'd the autoputer baseline — the
+    cap binds growth over baseline). Two superseded CI failures:
+    linux-only unused-import vet (0683fd5d) and race-shard worker OOM at
+    1GiB (759e66a4). now.slice -> R4."
   - "R3d terminal 2026-09-26: landed+deployed 119e0edd (ci 36222906276,
     staging build.commit=119e0edd); goal docs/definitions/
     choir-texture-live-authoring-2026-09-26.md now.status=settled. Texture
     full-RLM: desk_go_eval only, cell-authored ApplyTextureTurn commits
     mint AuthorAppAgent revisions citing ledger records, typed tools +
     worker_updates consumer deleted. now.slice -> R3r."
+  - "R3c terminal 2026-09-26: landed+deployed b7ae7596 (ci 36216782941,
+    staging build.commit=b7ae7596); goal docs/definitions/
+    choir-management-live-cast-2026-09-26.md now.status=settled. Management
+    on the carrier unconditionally; lifecycle controls kept beside
+    desk_go_eval; deployed full-resolution rides the R2 cast saga on
+    staging's substrate. now.slice -> R3d."
   - "R3b terminal 2026-09-26: landed+deployed b9f43583 (ci 36214084659,
     staging build.commit=b9f43583); goal docs/definitions/
     choir-desk-cell-carrier-2026-09-25.md now.status=settled. Live-desk

@@ -1053,7 +1053,7 @@ nodes:
     title: Research Live Cell (R3r, station)
     path: docs/definitions/choir-research-live-cell-2026-09-26.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -1061,9 +1061,11 @@ nodes:
       - choir-desk-cell-carrier-2026-09-25
     enables: []
     note: >-
-      R3r (off spine): research on cells with the network/memory cap
-      policy resolved (D2 residual, contained here). Proof: research cell
-      Report mints a record under its cap boundary.
+      LANDED 2026-09-26 (deployed build 3b56c34e): research is a full-RLM
+      desk on the cell carrier — desk_go_eval + typed
+      research/evidence/memory surface under a per-activation egress
+      budget (calls + fetched bytes) and an 8GiB RLIMIT_AS worker cap;
+      generic host tools retired; D2 discharged.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-commitment-scores-packs-2026-09-26

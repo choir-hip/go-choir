@@ -118,7 +118,7 @@ value:
       the proof is a projection.'
 
 now:
-  status: working
+  status: settled
   slice: >-
     station R3r CHARTERED 2026-09-26. Research already carries the full
     semantic cell-verb set (Cast/Ask/Note/Reply/CancelAct/Escalate/
@@ -179,9 +179,9 @@ now:
     must survive worker respawn — they are host-side in the Runtime, not
     worker memory.
   next_action: >-
-    Landing loop: push, monitor CI + Node B deploy, verify staging
-    environment identity at the pushed SHA, record deployed acceptance,
-    settle; then charter the next spine station (R4, spine after R3d).
+    Station complete 2026-09-26. Next: R4 (goal docs/definitions/
+    choir-commitment-scores-packs-2026-09-26.md) — the spine's live
+    station.
 
 receipts:
   - "charter: R3r = research on cells with the D2 network/memory cap
@@ -212,6 +212,35 @@ receipts:
     uncapped, containment stays the subprocess+package boundary).
     Note: ingress reliability for Cast sub-agents is unchanged — the
     budget meters the desk's own host-mediated network calls."
+  - "pushed_commit: 3b56c34e — head SHA of R3r (0683fd5d surface +
+    993bc30e linux-import fix + dc340620 gofmt + 759e66a4 dead-registry
+    cut + 5de819d5 cap raise + 3b56c34e receipt correction)."
+  - "ci: workflow_dispatch run 36230314065 — all gates green on head
+    3b56c34e (vet+build, docs truth, heresy detector, vocab gates, TLA+,
+    standard+race shards across agentcore/textureowner/non-runtime,
+    scale lane, differential SBOM). Prior push runs 36227464447
+    (linux-only unused-import vet failure — fixed 993bc30e),
+    36229043295 (race shard-3 worker OOM under the 1GiB cap — fixed
+    5de819d5), 36230157390 (superseded/cancelled mid-flight), plus
+    queued/dispatch 36228885402 (deploy cancelled by superseding run)."
+  - "deploy: Node B staging via run 36230314065 — Prebuild + Deploy to
+    Staging (Node B) success 2026-09-26T09:03:56Z."
+  - "environment_identity: https://choir.news/health — status ok,
+    build.deployed_commit=3b56c34ec61be0ac2c75465f33e1c97187efc658,
+    vmctl ok, lifecycle stages resolved."
+  - "deployed_acceptance: platform healthy at R3r head; choir api-key
+    list authenticates against the deployed head; choir computer status
+    --computer computer-03335285269bdba4f94377e56879f9e6 returns
+    state=active (realization_epoch 946). Research activations on staging
+    now bind the cell carrier unconditionally — desk_go_eval + typed
+    research/evidence/memory surface under the activation egress budget;
+    desk-session workers spawn under the 8GiB RLIMIT_AS cap (Linux).
+    Local proofs: TestResearchCellRegistryIsSealed,
+    TestR3rResearchCellReportMintsCommitmentUnderCap,
+    TestR3rResearchEgressChargedOnNetworkTools, TestEgressBudget*,
+    TestDeskSessionWorkerEnvRoundTrip (cap in spawn env),
+    TestResearchOverlaySwitchesToCellCarrier, authority-contract
+    exact-surface pin; 38-test focused shard green."
 ---
 
 # R3r — Research Live Cell (station on the rectification spine)

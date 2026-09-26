@@ -6,8 +6,8 @@ execution_mode: mission_orchestrator
 start:
   captured_at: '2026-09-26T08:10:00Z'
   source:
-    canonical_ref: main@dc340620
-    deploy_identity: staging https://choir.news build.commit=<pending R3r deploy>
+    canonical_ref: main@3b56c34e
+    deploy_identity: staging https://choir.news build.commit=3b56c34e
     worktrees:
       - path: /Users/wiz/go-choir
         status: clean
@@ -18,12 +18,13 @@ start:
   predecessor:
     mission: choir-research-live-cell-2026-09-26
     disposition: >-
-      R3r landed+deployed 2026-09-26. Research is a full-RLM desk on the
-      cell carrier: desk_go_eval + the typed research/evidence/memory
-      surface under a per-activation egress budget (calls + fetched bytes)
-      and a 1GiB worker address-space cap; generic host tools retired.
-      Every non-wire desk is on the carrier; only processor/reconciler
-      (D4-deferred) remain on the tool loop.
+      R3r landed+deployed 2026-09-26 (3b56c34e, dispatch run
+      36230314065). Research is a full-RLM desk on the cell carrier:
+      desk_go_eval + the typed research/evidence/memory surface under a
+      per-activation egress budget (calls + fetched bytes) and an 8GiB
+      RLIMIT_AS worker cap; generic host tools retired. Every non-wire
+      desk is on the carrier; only processor/reconciler (D4-deferred)
+      remain on the tool loop.
     evidence_ref: docs/definitions/choir-research-live-cell-2026-09-26.md
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: R4
