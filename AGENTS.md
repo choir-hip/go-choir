@@ -245,6 +245,18 @@ If a behavior-changing commit is pushed:
 - If you must test a system in isolation, first write down all the ways it
   could fail, then write the code.
 
+## Goal-Station Handoff
+
+The `/goal` string goes stale the moment a station closes. After every
+mission terminal receipt — land, close, or supersedure — **drop the landed
+goal and set the next mission's goal** before stopping: update
+`docs/ACTIVE.md`, repoint `docs/mission-graph.yaml`, and author the next
+station's throughline `/goal` file. Delete superseded draft `/goal` files
+outright (a stale draft is not a receipt — keep landed receipts and
+in-flight candidates only). Never leave `docs/ACTIVE.md` /
+`docs/mission-graph.yaml` / `docs/definitions/` pointing at a `blocked`
+draft whose `start.source` anchors a pre-landing ref.
+
 ## Safety
 
 Assume the worktree may contain user or other-agent changes. Do not revert

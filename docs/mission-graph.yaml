@@ -772,10 +772,10 @@ nodes:
       - docs/world-wire-mission-stack-2026-09-22.md
       - docs/archive/choir-rlm-engineering-carrier-2026-09-11.md
   - id: choir-ontology-kernel-draft-2026-09-22
-    title: Ontology Kernel (M3, draft)
-    path: docs/definitions/choir-ontology-kernel-draft-2026-09-22.md
+    title: Ontology Kernel (K, landed substrate)
+    path: docs/definitions/choir-ontology-kernel-2026-09-24.md
     ledger: ''
-    status: blocked
+    status: working
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -783,11 +783,11 @@ nodes:
       - choir-sub-rlm-document-channel-2026-09-22
     enables: []
     note: >-
-      Draft successor — M3 of the ordered mission list. The ratified ontology
+      K — substrate landed + boot/doom fixes deployed (main@66981cef);
+      deletion pass pending owner sweep ruling. The ratified ontology
       cutover kernel: derivable continuations, fenced atomic commit,
-      serial-per-actor, dispatcher as sole consumer, write-fenced migration;
-      deletes wrong-path sub-classes (b)-(e). Blocked on M1/M2. Not
-      executable until promoted.
+      serial-per-actor, dispatcher as sole consumer, write-fenced
+      migration. Its 2026-09-22 draft duplicate was deleted 2026-09-25.
     sources:
       - docs/world-wire-mission-stack-2026-09-22.md
       - docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
@@ -829,115 +829,128 @@ nodes:
     title: Strand-2 Freeze-Order Patch (R0)
     path: docs/definitions/choir-strand2-freeze-order-patch-2026-09-23.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: []
     enables: []
     note: >-
-      R0 of the rectification sequence — the adjudicated strand-2 fix:
-      freeze validates selfdev authority before any executor effect;
-      prompt gate; Quiesce/WithoutCancel/watchdog coverage. Independent
-      of the desk rebuild; promotable immediately.
+      R0 — landed 2026-09-24 (deployed commit 64468db2). The adjudicated
+      strand-2 fix: freeze validates selfdev authority before any executor
+      effect; prompt gate; Quiesce/WithoutCancel/watchdog coverage.
+      Archived receipt.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
       - docs/problems/document-cast-stray-complete-settlement-2026-09-23.md
   - id: choir-desk-vocabulary-docs-cutover-draft-2026-09-23
-    title: Desk Vocabulary + Docs Cutover (R1, draft)
-    path: docs/definitions/choir-desk-vocabulary-docs-cutover-draft-2026-09-23.md
+    title: Desk Vocabulary + Docs Cutover (R1, superseded draft)
+    path: docs/desk-rlm-rectification-plan-2026-09-23.md
     ledger: ''
-    status: blocked
+    status: superseded
     kind: spine
     entrypoint: false
-    execution_mode: mission_orchestrator
+    execution_mode: superseded_non_executable
     depends_on: []
     enables: []
     note: >-
-      R1 of the rectification sequence — live-vocabulary stratum only:
-      Go identifiers, prompts, CLI, frontend, doctrine docs, AGENTS.md,
-      mission-stack rewrite. Durable strings are R5's scope.
+      Superseded 2026-09-25 by the post-R2 restructure (plan §11). The
+      stratum-A sweep survives as re-authored work; this draft's goal file
+      was deleted (stale anchor main@b0adf6f7 / deploy 4de7fdf9).
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-commitment-ledger-desk-carrier-draft-2026-09-23
-    title: Commitment Ledger + Desk Carrier + Verbs (R2, draft)
+    title: Commitment Ledger + Desk Carrier + Verbs (R2)
     path: docs/definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md
     ledger: ''
-    status: blocked
+    status: settled
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
       - choir-ontology-kernel-draft-2026-09-22
-    enables:
-      - choir-live-desks-supervision-loop-draft-2026-09-23
+    enables: []
     note: >-
-      R2 of the rectification sequence — the commitment record (OG object,
-      never a third store), the yaegi carrier generalized to all desks
-      (subprocess, restricted stdlib), the semantic-act verb surface,
-      delegated-cast admission authority, update_coagent migration for the
-      four desks. Partial dependency on K: ledger+carrier may parallel;
-      desk wakes need the kernel.
+      R2 — closed on substrate 2026-09-25 (landed+deployed 537fce04,
+      resolve 5404d2c7; now.status=complete). Delivered the commitment
+      record (OG object), the engineering-cell carrier, semantic-act
+      verbs, delegated-cast admission. Deployed desk-cell cast proof
+      deferred into R3c of the restructure (plan §11).
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
       - docs/Precommitment Records — Engineering Memo.md
   - id: choir-live-desks-supervision-loop-draft-2026-09-23
-    title: Live Desks + Supervision Loop (R3, draft)
-    path: docs/definitions/choir-live-desks-supervision-loop-draft-2026-09-23.md
+    title: Live Desks + Supervision Loop (R3, superseded draft)
+    path: docs/desk-rlm-rectification-plan-2026-09-23.md
     ledger: ''
-    status: blocked
+    status: superseded
     kind: spine
     entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-ontology-kernel-draft-2026-09-22
-      - choir-commitment-ledger-desk-carrier-draft-2026-09-23
-    enables:
-      - choir-commitment-scores-surfacing-draft-2026-09-23
+    execution_mode: superseded_non_executable
+    depends_on: []
+    enables: []
     note: >-
-      R3 of the rectification sequence — desks become live root RLMs on
-      derivable wakes; management casts engineering; texture writes
-      AuthorAppAgent revisions from the ledger under editorial discretion;
-      super_controller replaced; fate sweeps move to the kernel timer.
-      The product-point mission: owner sees a live-updating doc.
+      Superseded 2026-09-25 by the post-R2 restructure (plan §11). Split
+      into R3a (texture ledger consumer) + R3b (host desk-cell carrier) +
+      R3c (management live + cast) + R3d (texture authoring) + R3r
+      (research). Its draft imported R4 scores/materiality — the
+      not-reachable-alone defect. Goal file deleted (stale anchor +
+      dead super_controller.go citation).
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
       - docs/texture-live-supervision-architecture.md
       - docs/why-texture-2026-06-15.md
   - id: choir-commitment-scores-surfacing-draft-2026-09-23
-    title: Commitment Scores + Surfacing + Context Packs (R4, draft)
-    path: docs/definitions/choir-commitment-scores-surfacing-draft-2026-09-23.md
+    title: Commitment Scores + Surfacing + Context Packs (R4, superseded draft)
+    path: docs/desk-rlm-rectification-plan-2026-09-23.md
     ledger: ''
-    status: blocked
+    status: superseded
     kind: spine
     entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-live-desks-supervision-loop-draft-2026-09-23
+    execution_mode: superseded_non_executable
+    depends_on: []
     enables: []
     note: >-
-      R4 of the rectification sequence — score accrual (full memo schema,
-      derived scalar views), the materiality projection, ledger-derived
-      context packs, the learning-claims gate (epistemic boundary).
-      Subsumes old M6/M8.
+      Superseded 2026-09-25 by the post-R2 restructure (plan §11). Survives
+      as R4 in the new spine — derived accrual, materiality, context packs,
+      epistemic gate — now strictly after R3d, with R3's smuggled
+      score scope removed. Goal file deleted (stale anchor).
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
       - docs/Precommitment Records — Engineering Memo.md
   - id: choir-durable-vocabulary-migration-draft-2026-09-23
-    title: Durable Vocabulary Migration (R5, draft)
-    path: docs/definitions/choir-durable-vocabulary-migration-draft-2026-09-23.md
+    title: Durable Vocabulary Migration (R5, superseded draft)
+    path: docs/desk-rlm-rectification-plan-2026-09-23.md
     ledger: ''
-    status: blocked
+    status: superseded
     kind: spine
     entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-desk-vocabulary-docs-cutover-draft-2026-09-23
+    execution_mode: superseded_non_executable
+    depends_on: []
     enables: []
     note: >-
-      R5 of the rectification sequence — durable vocabulary stratum:
-      event kinds, OG kinds, SQL tables, schema strings, JSON fields,
-      replay goldens, V1→V2 profile normalization. Per-family migrate or
-      frozen-decode; identity seeds likely permanent. Deferrable; red.
+      Superseded 2026-09-25 by the post-R2 restructure (plan §11). Split
+      into R5a (frozen decoders + keep choir:co-super-assignment:v3, gates
+      M11) and R5b (rename-migrate, deferred indefinitely). Goal file
+      deleted (stale anchor; its finish.acceptance forced the migrate
+      half the panel rejected).
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+  - id: choir-carrier-substrate-integrity-2026-09-25
+    title: Carrier Substrate Integrity (R2x, draft)
+    path: docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-commitment-ledger-desk-carrier-draft-2026-09-23
+    enables: []
+    note: >-
+      Next live station after R2 — atomic act commit + fate-sweep
+      ungating (delete management_controller.go:301-302 after a
+      derivable-wake coverage audit). Authored 2026-09-25 under the
+      restructure (plan §11); proposal until owner ratifies the plan.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md

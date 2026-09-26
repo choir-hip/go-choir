@@ -16,12 +16,23 @@ executes after the refusal) and `choir.Complete` lands the fate saga to
 `ForceDestroy`) surfaced during acceptance and is fixed in the same deploy.
 This is an archived receipt, not a working entrypoint.
 
-The remaining desk-RLM rectification sequence (R1–R5 drafts + the K
-ontology kernel) is governed by the
-[`desk-rlm-rectification-plan-2026-09-23.md`](desk-rlm-rectification-plan-2026-09-23.md).
-They are proposed, non-executable successors rather than a schedule; each can
-promote only through its stated predecessor and terminal receipt. The draft
-successors are listed below.
+The desk-RLM rectification spine was **restructured 2026-09-25** after R2
+closed on substrate. The current mission graph is
+[`desk-rlm-rectification-plan-2026-09-23.md` §11](desk-rlm-rectification-plan-2026-09-23.md)
+and the restructured-spine section below. The 2026-09-23 draft successors
+were deleted; new throughline `/goal` files are authored per mission.
+
+## Archived Receipt — Commitment Ledger + Desk Carrier (R2)
+
+[`definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md`](definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md)
+**closed on substrate 2026-09-25** (`now.status=complete`; carrier landed +
+deployed `537fce04`, `choir.Resolve` `5404d2c7` on main). Delivered the
+OG `choir.commitment_record`, the engineering in-cell carrier, the
+semantic-act verb surface, and delegated-cast admission. Deferred to the
+restructure (plan §11): the deployed management-cell cast proof, texture's
+ledger consumer, the `commit`+cursor atomic-commit repair, and the
+fate-sweep ungating residue. This is an archived receipt, not a working
+entrypoint.
 
 ## Archived Receipt — Texture Owner Input Cutover (M1)
 
@@ -50,22 +61,31 @@ is archived historical evidence. Its remaining in-cell carrier, R7/R9
 retirement, and canonical-run scope is addressed only through the desk-RLM
 rectification sequence.
 
-## Draft Successors — Not Executable (desk-RLM rectification sequence)
+## Restructured Spine — Proposed, Not Executable (post-R2, 2026-09-25)
 
-Draft `/goal` files authored 2026-09-23 under
-[`desk-rlm-rectification-plan-2026-09-23.md`](desk-rlm-rectification-plan-2026-09-23.md)
-(proposed, under owner review). Blocked hypotheses, not schedules or
-implementation authority; each promotes only after its predecessor's
-terminal receipt. The 2026-09-22 M4/M5 drafts are superseded by this
-sequence; the M3 ontology-kernel draft stands as mission K.
+The 2026-09-23 draft `/goal` files were **deleted 2026-09-25** (stale
+anchors `main@b0adf6f7`/`4de7fdf9`, dead `super_controller.go` citations,
+and R3's smuggled R4 scope). The rectification spine was restructured by a
+divergent+convergent consensus panel; the current mission graph is
+**[`desk-rlm-rectification-plan-2026-09-23.md` §11](desk-rlm-rectification-plan-2026-09-23.md)**.
+Nothing below is executable authority until a fresh throughline `/goal`
+file is authored for it and the owner ratifies the plan.
 
-- **R0** landed 2026-09-24 (archived receipt above) — [`choir-strand2-freeze-order-patch-2026-09-23.md`](definitions/choir-strand2-freeze-order-patch-2026-09-23.md).
-- **R1** [`choir-desk-vocabulary-docs-cutover-draft-2026-09-23.md`](definitions/choir-desk-vocabulary-docs-cutover-draft-2026-09-23.md) — live-vocabulary stratum: Go identifiers, prompts, docs, AGENTS.md, mission-stack rewrite.
-- **K** [`choir-ontology-kernel-draft-2026-09-22.md`](definitions/choir-ontology-kernel-draft-2026-09-22.md) — derivable-continuation kernel (unchanged M3 draft); gates R3.
-- **R2** [`choir-commitment-ledger-desk-carrier-draft-2026-09-23.md`](definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md) — commitment ledger (OG object) + yaegi carrier to all desks + semantic-act verbs + delegated-cast admission + update_coagent migration.
-- **R3** [`choir-live-desks-supervision-loop-draft-2026-09-23.md`](definitions/choir-live-desks-supervision-loop-draft-2026-09-23.md) — live desk actors; management→engineering cast; texture writes doc revisions; super_controller replaced. The product-point mission.
-- **R4** [`choir-commitment-scores-surfacing-draft-2026-09-23.md`](definitions/choir-commitment-scores-surfacing-draft-2026-09-23.md) — scores, materiality projection, context packs, learning-claims gate.
-- **R5** [`choir-durable-vocabulary-migration-draft-2026-09-23.md`](definitions/choir-durable-vocabulary-migration-draft-2026-09-23.md) — durable vocabulary stratum (event kinds, OG kinds, SQL, seeds, goldens); deferrable; red.
+- **R2x** [`definitions/choir-carrier-substrate-integrity-2026-09-25.md`](definitions/choir-carrier-substrate-integrity-2026-09-25.md) — substrate-integrity repair: atomic act commit + fate-sweep ungating (deletes `management_controller.go:301-302` after a derivable-wake coverage audit). **Next station — the entrypoint** (`/goal docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md`), pending owner ratification of plan §11.
+- **R3a** texture ledger consumer — occurrence/evidence resolves desk acts from `choir.commitment_record`, dual-read vs `worker_updates_*`.
+- **R3b** host desk-cell carrier — host-side `sessionWorker` for non-capsule desks; `InCellCarrier` fanned per profile; Cast validates target.
+- **R3c** management live + cast — management cell `choir.Cast(engineering)` opens+binds+executes; `report_to_texture` retires.
+- **R3d** texture live + authoring — genuine `AuthorAppAgent` revisions metabolizing ledger traffic (D14); deletes the desk-originated worker-updates path. Compound-risk mission; split point flagged in §11.
+- **R3r** research cell — off spine; network/memory caps.
+- **R4** scores + surfacing + packs — derived accrual, materiality, context packs, learning-claims gate.
+- **R5a** vocab decoders + seed freeze — gates M11; keep `choir:co-super-assignment:v3`. **R5b** rename-migrate deferred indefinitely.
+- **M7** skip the harness — after R3c; the management cell is the driver (owner ruling).
+- **M9a** platform push + restore — on M11's restore edge.
+- **M11** self-dev gate — receipts are scored commitment_records readable in the live Texture doc (owner ruling: the doc is the gate's supervision surface).
+- **M9b/M10** after M11.
+
+**K** [`definitions/choir-ontology-kernel-2026-09-24.md`](definitions/choir-ontology-kernel-2026-09-24.md) — landed substrate (main@66981cef); its `now.status=working` only for a pending owner deletion-sweep ruling.
+
 
 ## Completed Definition — Private Programmable Go Actor Kernel
 

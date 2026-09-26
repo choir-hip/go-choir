@@ -430,15 +430,31 @@ documents:
     claim_scope: current
     is_root: []
     is_evidence: false
-    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: living, entrypoint: true}
+    annotations: {doc_role: definition, authority: mission_receipt, lifecycle: frozen, entrypoint: false}
     depends_on: []
     witnesses: [docs/desk-rlm-rectification-plan-2026-09-23.md, docs/problems/document-cast-stray-complete-settlement-2026-09-23.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: [mission_state_change, deployment_identity_change, deployed_acceptance, registry_closure]
-  - path: docs/definitions/choir-ontology-kernel-draft-2026-09-22.md
+    refresh_triggers: []
+  - path: docs/definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md
     claim_scope: current
     is_root: []
     is_evidence: false
-    annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: blocked, entrypoint: false}
+    annotations: {doc_role: definition, authority: mission_receipt, lifecycle: frozen, entrypoint: false}
+    depends_on: [docs/definitions/choir-ontology-kernel-2026-09-24.md]
+    witnesses: [docs/desk-rlm-rectification-plan-2026-09-23.md, docs/Precommitment Records — Engineering Memo.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: []
+  - path: docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: blocked, entrypoint: true}
+    depends_on: [docs/definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md]
+    witnesses: [docs/desk-rlm-rectification-plan-2026-09-23.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, registry_closure]
+  - path: docs/definitions/choir-ontology-kernel-2026-09-24.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: living, entrypoint: false}
     depends_on: [docs/archive/choir-sub-rlm-document-channel-2026-09-22.md]
     witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md, docs/problems/root-cause-wrong-path-cluster-2026-09-22.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [predecessor_completion, registry_promotion]
@@ -447,7 +463,7 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: frozen, entrypoint: false}
-    depends_on: [docs/definitions/choir-ontology-kernel-draft-2026-09-22.md]
+    depends_on: [docs/definitions/choir-ontology-kernel-2026-09-24.md]
     witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/problems/root-cause-wrong-path-cluster-2026-09-22.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [predecessor_completion, registry_promotion]
   - path: docs/archive/choir-precommitment-record-ledger-draft-2026-09-22.md
@@ -455,7 +471,7 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: frozen, entrypoint: false}
-    depends_on: [docs/definitions/choir-ontology-kernel-draft-2026-09-22.md]
+    depends_on: [docs/definitions/choir-ontology-kernel-2026-09-24.md]
     witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/Precommitment Records — Engineering Memo.md, docs/Precommitment Records Theory and Implications.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [predecessor_completion, registry_promotion]
 

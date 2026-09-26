@@ -236,13 +236,16 @@ Only after the computer demonstrably develops itself (Phase 3 gate).
 
 ## The ordered mission list (consensus 2026-09-22)
 
-> **Superseded in part 2026-09-23.** The M2-tail…M8 region is replaced by
-> the desk-RLM rectification sequence
+> **Superseded in part 2026-09-23, revised 2026-09-25.** The M2-tail…M8
+> region is replaced by the desk-RLM rectification sequence
 > ([`desk-rlm-rectification-plan-2026-09-23.md`](desk-rlm-rectification-plan-2026-09-23.md),
-> proposed under owner review): R0 strand-2 patch → R1 vocabulary/docs →
-> K ontology kernel → R2 commitment ledger + carrier + verbs → R3 live desks
-> + supervision loop → R4 scores/surfacing/packs → R5 durable vocabulary.
-> M8 is subsumed by R4; M7 and M9a/b–M16 retain their downstream positions.
+> proposed under owner review). R0 and R2 landed; R3/R4/R5's 2026-09-23
+> drafts were deleted 2026-09-25 and the spine restructured by consensus —
+> see **§11** of that plan for the current mission list: R2x substrate
+> repair → R3a texture ledger consumer → R3b host desk-cell carrier → R3c
+> management live + cast → R3d texture authoring → R4 scores/packs →
+> M7 → M9a → M11 (the gate). M9b/M10 move after M11; M8 stays subsumed by
+> R4; R5 splits into R5a (decoders, gates M11) + R5b (deferred).
 
 Synthesized from a 9-agent convergent panel:
 
@@ -267,10 +270,12 @@ M15 Editorial and publication transaction
 M16 World Wire live
 ```
 
-**The spine:** R0 ∥ R1 → K → R2 → R3 → R4 → M7 → M11 → M14 → M15 → M16.
-R5 is independent after R1 and must land before consumers of durable vocabulary;
-M8 is paid by R4. M9a/b and M10 overlap the self-development path; M12–M16
-remain the World Wire sequence.
+**The spine (restructured 2026-09-25, plan §11):**
+`R2x ∥ R3a → R3b → R3c → R3d → R4 → M7 → M9a → M11 → M14 → M15 → M16`.
+R3r (research cell) ∥ R3c; R5a anywhere before M11; M9b/M10 after M11.
+Owner rulings 2026-09-25: the live Texture doc gates M11 (R3d + R4 are
+upstream of the gate), and M7 runs after R3c with the management cell as
+driver. M12–M16 remain the World Wire sequence.
 
 **Not missions:** 1a (closed — the evidence floor is M2), 1b (folded into M3),
 Phase 0 remainder, box score, `install_frontend_pointer` (platform-shell

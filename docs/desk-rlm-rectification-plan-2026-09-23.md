@@ -2,7 +2,11 @@
 
 **Date:** 2026-09-23 (v3 — adjudicated against a 9-agent consensus review,
 `.agentic-consensus/agentic-consensus-20260923-201519`; D1 and D4 ratified
-by owner same-day)
+by owner same-day). **Revised 2026-09-25** — R2 closed on substrate; a
+second consensus pass restructured the spine. See **§11** for the current
+mission graph, verified substrate corrections, and owner rulings. §§1–10
+are retained as the adjudicated base; where §11 names a contradiction it
+governs.
 **Status:** proposed — under owner review, **not ratified**. Nothing here is
 executable authority until the owner signs off; it then rewrites the mission
 stack (`docs/world-wire-mission-stack-2026-09-22.md`) and amends
@@ -399,3 +403,195 @@ desk-RLM substrate: the wire roles (`processor`, `reconciler`, possibly
 `email`, `conductor`) RLM-ify or delete, and the wire becomes
 precommitment-records-native. Explicitly deferred — do not design now;
 recorded so the stack doesn't read as settled.
+
+## 11. Restructure 2026-09-25 — post-R2 consensus revision
+
+**Status:** proposed, under owner review — supersedes §6's mission list and
+amends §7's joins where named. Provenance: a divergent panel
+(`.agentic-consensus/agentic-consensus-20260925-192348`, 5 usable routes:
+claude, cursor, gemini38, grok46, glm53-flash) generated the option space;
+a convergent panel (`.agentic-consensus/agentic-consensus-20260925-193232`,
+same 6 routes + devin) adjudicated it. All substrate claims below were
+re-verified against `main` after the panel returned.
+
+### 11.1 Verified substrate corrections (vs. what §1–§6 claim)
+
+These are facts the restructure is built on; the §§ they contradict are
+marked stale, not silently rewritten:
+
+- **`super_controller.go` is gone** — renamed to
+  `internal/agentcore/management_controller.go` (commit `66981cef`). The
+  fate sweeps §5/§11's "kernel timer" wants relocated live at
+  `management_controller.go:301-302`
+  (`resumeStrandedFrozenAssignmentCommits`,
+  `enforceEngineeringAssignmentDeadlines`). Every draft citing
+  `super_controller.go:333` is stale.
+- **D11 is residual, not a build.** The derivable wake already exists:
+  `armAssignedEngineeringFateWatchdog` arms `assigned_engineering_fate_deadline`
+  at assignment-open and on bound+pending-fate states
+  (`engineering_assignment_fate.go:720,851,892-908`), dispatched via
+  `actorruntime/handler.go:93`. The residue is the **computer-wide**
+  deadline-cancel scan and stranded-freeze scan — those still run only
+  inside management reconcile. There is no periodic-timer symbol; the
+  correct mechanism is an armed `NotBefore` wake on the dispatcher
+  due-index, not a ticker.
+- **The in-cell carrier is engineering-only.** `InCellCarrier` is
+  `profile == Engineering && capsule.HostSelectsRLM()`
+  (`tool_profiles.go:308`); `executeActivation` still takes the tool loop
+  when the registry is non-empty (`runtime.go:3065`). `spawnSessionWorker`
+  lives in `cmd/capsule-broker/session_worker.go` and is reached only from
+  the broker (`handleInitSession`/`sessionFor`), not the host runtime — so
+  a host desk-cell is a **build**, not a lift-and-flag.
+- **`IntentCast` bypasses the desk policy table.** `commitActIntent` on
+  `IntentCast` mints a record and calls `openDelegatedCastAssignment`
+  (`rlm_reduce.go:621-636`) with no `AllowedSpawnTargets` check; it
+  hard-codes `Kind: EngineeringAssignmentImplementation` and passes
+  `in.ToDesk` as the target doc id, so every Cast opens an engineering
+  assignment regardless of target. `agentprofile.go:115-116`'s
+  `{Research}`/`{Texture,Research}` policy binds only the tool-loop desk —
+  it is dead policy for the cell path, not the real blocker.
+- **`commit()` is sequential, not atomic.** Record → envelope →
+  `CommitInboxCursor` (`rlm_reduce.go` ~560-612). A crash mid-commit leaves
+  a partial state — the strand-2 shape R2 was chartered to close.
+- **Scores are a stamp, not an accrual.** `choir.Resolve` writes one
+  `CommitmentScore` onto the linked resolution record
+  (`rlm_reduce.go:735-739`). Derived accrual, materiality, and context
+  packs do not exist.
+- **Management still feeds the worker-update queue.** `report_to_texture`
+  → `QueueLifecycleUpdate` (`tools_engineering_assignment.go`); the R2
+  receipts' "only wire roles write" framing is wrong while management is
+  tool-loop.
+- **`deskModuleSets` still exports the demoted verbs.** `Message`,
+  `Outcome`, `Spawn`, `Assign` sit beside the semantic-act verbs
+  (`yaegikernel/choir.go:139-155`); R2's own artifact item said Outcome
+  folds into Report, Assign into Cast, Message demotes to Note — undone.
+- **Staging runs `537fce04`; `choir.Resolve` (`5404d2c7`) is post-deploy.**
+  Nothing on staging can prove resolution records until that SHA is
+  deployed.
+- **All three live drafts anchor stale** (`main@b0adf6f7`, staging
+  `4de7fdf9`) and cite the dead `super_controller.go`.
+- **The R3 draft imports R4 scope** — "desk scores"/"materiality" appear in
+  its `finish.deliver` (`:53,:62`) and acceptance (`:89,:170-171`) while
+  `boundaries.excluded` says packs are R4. This is the exact
+  "not-reachable-alone" defect that broke R2.
+- **There is no `desk-rlm-rectification-plan-2026-09-25.md`** — some panel
+  briefs referenced a `-09-25` file that does not exist; the live plan is
+  this `-09-23` file.
+
+### 11.2 Restructured mission graph (proposed)
+
+Spine (rectification → self-dev gate). Each `finish.acceptance` names only
+its own observable; no mission's acceptance may name a later mission's
+deliverable (the R2 boundary rule, bidirectional — also: no
+`start.observed_artifact` may cite a nonexistent file).
+
+```text
+R2x   substrate-integrity repair          [red, small]
+        atomic act commit (record+envelope+cursor transactional or named
+        partial-commit recovery) + fate-sweep ungating: delete
+        management_controller.go:301-302 after a coverage audit of the
+        derivable wakes. Proof: crash mid-commit leaves all-or-nothing;
+        a past-deadline assignment cancels while management is unselected.
+R3a   texture ledger consumer             [red]
+        ResolveTextureActorOccurrence + producerOccurrence* +
+        evidenceSourceEntitiesFromWorkerUpdates + the
+        ListAllPendingLifecycleUpdates desk-evidence branch resolve desk
+        acts from commitment records; dual-read against worker_updates_*.
+        Proof: a reducer-minted Report/Resolve record appears in Texture's
+        evidence input; processor/reconciler (D4) unaffected.
+R3b   host desk-cell carrier              [red]
+        host-side spawn of the sessionWorker pattern for non-capsule
+        desks; restricted stdlib; InCellCarrier fanned per profile; Cast
+        validates target desk + kind. Proof: a management-profiled
+        activation runs a yaegi eval in a killable host subprocess; kill
+        mid-cell → derivable wake re-fires.
+R3c   management live + cast              [red]
+        management desk on cells; choir.Cast(engineering) opens+binds+
+        executes an assignment (the R2-deferred deployed proof);
+        report_to_texture retires to the staged path. Proof: a management
+        cell Cast → engineering assignment → Report resolves the cast
+        record; restart mid-episode resumes from the tape.
+R3d   texture live + authoring            [red]  — split point flagged
+        texture desk on cells; genuine AuthorAppAgent revisions
+        metabolizing ledger traffic under editorial discretion (D14);
+        deletes the desk-originated worker_updates consumer path. Proof:
+        doc head advances mid-task via a texture-cell authoring turn
+        citing a record id — not a per-milestone projection.
+R3r   research cell                       [red, off spine]
+        research on cells with the network/memory cap policy resolved
+        (D2 residual, contained here). Proof: research cell Report mints
+        a record under its cap boundary.
+R4    scores + surfacing + packs          [orange]
+        derived accrual views, materiality projection, context packs,
+        learning-claims gate. Proof: a falsified commitment stays visible
+        in the doc; the acting desk's pack contains zero own-score fields.
+R5a   vocab decoders + seed freeze        [yellow/orange, off spine]
+        per-family frozen decoders + V1→V2 profile normalization +
+        explicit keep-choir:co-super-assignment:v3 decision. Proof: a
+        pre-migration tape folds identically. Must precede M11 (M11's
+        proof tape must be readable under frozen decoders).
+
+M7    skip the harness                    [orange]
+        selfdev operations advance to materialization on derivable
+        continuations, driven by the management cell — no external
+        OMP/CLI stepping process. Proof: a self-dev op reaches a
+        materialized change with no external driver.
+M9a   platform→computer push + restore    [red]
+        platform-signed update push + restore to a pinned head. Proof:
+        staging computer applies a pushed update and restores to a pinned
+        commit. On M11's restore edge.
+M11   self-development gate               [red/black]
+        the reversible-selfdev-v1 episode: expected on material actions,
+        qualified consensus, promotion, live-play, candidate-B
+        falsification, restore. Receipts are scored commitment_records
+        readable in the live Texture doc. Depends: M7 + M9a + R3d + R4 +
+        R5a.
+M9b   computer→computer publish           [orange, after M11]
+M10   choir→microVMs                      [red, after M11]
+R5b   kind/SQL rename-migrate             [deferred indefinitely]
+```
+
+Parallel structure: `R2x ∥ R3a` after closed R2; `R3b` after R2x; `R3c`
+after R3b(+R3a); `R3d` after R3a+R3b(+R3c for real traffic); `R3r ∥ R3c`
+after R3b; `M7` after R3c; `R4` after R3d; `R5a` anywhere before M11;
+`M9a` in parallel once M7 produces something signable.
+
+### 11.3 Owner rulings captured 2026-09-25
+
+- **The live Texture doc gates M11** — owner: "texture doc as live
+  supervision is extremely important … it is the delivery and UX for both
+  the agent control plane and world wire articles — living documents."
+  Therefore R3d + R4 are upstream of the gate; records-only supervision is
+  rejected.
+- **M7 sits after R3c** — the management cell is the driver; the
+  engineering-cell-alone variant (phantom driver) is rejected.
+
+### 11.4 Contested joins — rulings (with dissent)
+
+- **Fate-sweep relocation:** folded into R2x, on the spine — not a free
+  mission (two call sites + a coverage audit), not dropped (the residue is
+  real: the computer-wide scans have no derivable wake). *Dissent:* claude,
+  glm53, cursor would give it its own small mission to keep R2x's
+  acceptance singular.
+- **R5 split:** R5a (decoders + freeze + keep-v3) gates M11; R5b (rename)
+  deferred indefinitely. No agent kept R5 whole on the spine. *Dissent:*
+  none material.
+- **Texture consumer ordering:** read (R3a) precedes authoring (R3d);
+  dual-read is the admit state, not a permanent second authority —
+  deletion of the desk-evidence branch is R3d's acceptance item, and R3a
+  names R3d as the deletion owner (not a calendar date). *Dissent:* none.
+- **Compound-vs-seam:** compound product-atom (merge R3+R4) rejected — it
+  repeats R2's defect; R3d is still the compound-risk mission and is
+  flagged with a split point (R3d-a = cell + consumer, no write; R3d-b =
+  the write) to decide at charter, not mid-flight.
+
+### 11.5 Residuals carried (unassigned, not dropped)
+
+- `deskModuleSets` demoted verbs (`Message`/`Outcome`/`Spawn`/`Assign`)
+  must be cut or deferred — assigned to R3b/R3c.
+- The `commit`+`CommitInboxCursor` atomicity gap is R2x scope (cursor).
+- `engineering:{docID}` desk agent "never runs"
+  (`engineering_desk.go:18-19`) — still true; do not write acceptance as
+  if that parent executes.
+- `docs/desk-rlm-rectification-plan-2026-09-25.md` does not exist — a few
+  panel briefs cited it; the live plan is this file.
