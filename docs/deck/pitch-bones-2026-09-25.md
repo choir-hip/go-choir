@@ -114,10 +114,13 @@ and `...-london-salmon.html`.
 **Section:** THE POSITION
 **Headline:** Personal agents need somewhere to work.
 **Dek:** This year's assistants all run in someone else's cloud. The work should outlive the agent.
-**Standings table:** Agent / Runs in / Owns your state
-- Muse, Instinct, Grok Bot, Town, Aeon — vendor cloud — no
-- Choir — your machine — yes
-**Note (bottom-anchored):** Chat-based agents make the assistant persistent. Choir makes the work persistent. Agents come and go — the workbench stays yours.
+**Two-row comparison (left label column, then copy):**
+- THE CHAT AGENTS — Muse, Instinct, Grok Bot, Town, Aeon — each holds your memory inside its vendor's cloud. Change the agent, start the work over.
+- CHOIR — two shapes, one owner:
+  - **Self-hosted** — Free and open source. Runs on your machine.
+  - **Managed** — Paid and hosted. Runs on ours.
+  - Your state, either way — portable, mountable, and never the vendor's.
+**Pull quote (bottom-anchored):** Agents come and go. *The workbench stays yours.*
 
 ---
 

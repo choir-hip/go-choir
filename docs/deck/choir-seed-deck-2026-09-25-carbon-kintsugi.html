@@ -99,6 +99,9 @@
   table.stand td.no { color:var(--muted); }
   table.stand td.yes { color:var(--accent2); font-weight:600; }
 
+  .pos-row { display:grid; grid-template-columns:186px 1fr; gap:36px; align-items:start; }
+  .pos-shapes { display:grid; grid-template-columns:1fr 1fr; gap:36px; }
+  .shape-name { font-size:19px; font-weight:600; margin-bottom:4px; }
   .byline-wrap { display:grid; grid-template-columns:1fr 300px; gap:54px; margin-top:24px; align-items:start; }
   .byline { font-family:var(--mono); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
             color:var(--muted); margin-bottom:14px; }
@@ -257,16 +260,32 @@
     <div class="sect">The position</div>
     <h1 class="head">Personal agents need somewhere to work.</h1>
     <div class="dek">This year's assistants all run in someone else's cloud. The work should outlive the agent.</div>
-    <table class="stand">
-      <tr><th style="width:40%;">Agent</th><th style="width:38%;">Runs in</th><th>Owns your state</th></tr>
-      <tr><td>Muse</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
-      <tr><td>Instinct</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
-      <tr><td>Grok Bot</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
-      <tr><td>Town</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
-      <tr><td>Aeon</td><td class="no">vendor cloud</td><td class="no">no</td></tr>
-      <tr class="win"><td>Choir</td><td>your machine</td><td class="yes">yes</td></tr>
-    </table>
-    <div class="note tail">Chat-based agents make the assistant persistent. Choir makes the work persistent. Agents come and go &mdash; the workbench stays yours.</div>
+
+    <div class="pos-row" style="margin-top:34px;">
+      <div class="colhead">The chat agents</div>
+      <div class="body dim">Muse, Instinct, Grok Bot, Town, Aeon &mdash; each holds your memory inside its vendor's cloud. Change the agent, start the work over.</div>
+    </div>
+
+    <div class="rule-thin" style="margin:28px 0 24px;"></div>
+
+    <div class="pos-row">
+      <div class="colhead">Choir</div>
+      <div>
+        <div class="pos-shapes">
+          <div>
+            <div class="shape-name">Self-hosted</div>
+            <div class="body dim">Free and open source. Runs on your machine.</div>
+          </div>
+          <div>
+            <div class="shape-name">Managed</div>
+            <div class="body dim">Paid and hosted. Runs on ours.</div>
+          </div>
+        </div>
+        <div class="body" style="margin-top:18px;">Your state, either way &mdash; portable, mountable, and never the vendor's.</div>
+      </div>
+    </div>
+
+    <div class="pull tail">Agents come and go. <span class="g">The workbench stays yours.</span></div>
   </div>
   <div class="folio"><span>Choir</span><span>08</span></div>
 </section>
