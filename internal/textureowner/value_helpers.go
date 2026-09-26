@@ -133,7 +133,7 @@ func coagentSourceFromTypedEvidenceRef(ref string) (types.CoagentPacketSource, b
 	if ref == "" {
 		return types.CoagentPacketSource{}, false
 	}
-	key, value := splitTypedWorkerUpdateRef(ref)
+	key, value := splitTypedEvidenceRef(ref)
 	uri := ref
 	if key == "" && isHTTPURL(ref) {
 		return coagentSourceFromURI("src-"+sanitizeExportPart(ref), "web_url", ref, ""), true

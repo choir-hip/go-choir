@@ -59,7 +59,14 @@ const (
 	IntentReport = "report"
 	// IntentResolve is the named resolver's act closing a Report/Ask.
 	IntentResolve = "resolve"
+	// IntentTextureApply stages a full-RLM texture authoring turn (R3d):
+	// the texture cell edits its bound document and the reducer commits the
+	// staged edit as an AuthorAppAgent revision through the atomic
+	// ApplyTextureTurn transaction. It is not a semantic act and mints no
+	// mailbox envelope — the commit lands on the lifecycle/document head.
+	IntentTextureApply = "texture_apply"
 )
+
 
 // Completion results for IntentComplete.
 const (
@@ -362,6 +369,20 @@ func (t *Tray) Resolve(targetRef, outcome string) (string, error) {
 	return t.stage(StagedIntent{Kind: IntentResolve, TargetRef: targetRef, OutcomeVal: outcome})
 }
 
+// ApplyTexture stages a full-RLM texture authoring turn (R3d): editJSON is the
+// JSON-encoded texture edit — {doc_id?, base_revision_id, content? or edits?,
+// update_dispositions?, controls?, work_disposition?, rationale?} — the same
+// field set the retired patch_texture/rewrite_texture tools decoded. The
+// reducer commits it as an AuthorAppAgent revision through the atomic
+// ApplyTextureTurn transaction. Doc bodies may exceed the message cap, so
+// this kind is bound by the aggregate tray quota, not MaxIntentBody.
+func (t *Tray) ApplyTexture(editJSON string) (string, error) {
+	if strings.TrimSpace(editJSON) == "" {
+		return "", fmt.Errorf("tray: apply_texture requires a non-empty edit body")
+	}
+	return t.stage(StagedIntent{Kind: IntentTextureApply, Body: editJSON})
+}
+
 func (t *Tray) stage(in StagedIntent) (string, error) {
 	if len(t.intents) >= MaxIntentsPerCell {
 		return "", fmt.Errorf("tray: cell intent quota exceeded (%d)", MaxIntentsPerCell)
@@ -374,7 +395,7 @@ func (t *Tray) stage(in StagedIntent) (string, error) {
 			size += len(ref)
 		}
 	}
-	if len(in.Body) > MaxIntentBody {
+	if in.Kind != IntentTextureApply && len(in.Body) > MaxIntentBody {
 		return "", fmt.Errorf("tray: message body %d bytes exceeds %d", len(in.Body), MaxIntentBody)
 	}
 	if t.bytes+size > MaxTrayBytes {

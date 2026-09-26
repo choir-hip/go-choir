@@ -39,7 +39,6 @@ import (
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -49,6 +48,13 @@ var (
 	textureSectionUpdatePrefixRE = regexp.MustCompile(`\bSECTION\s+\d+\s+UPDATE:`)
 	textureSHA256RequirementRE   = regexp.MustCompile(`\b[a-fA-F0-9]{64}\b`)
 )
+
+func requireInternalRuntimeCaller(r *http.Request) error {
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		return fmt.Errorf("missing internal caller marker")
+	}
+	return nil
+}
 
 // ----- Request/Response types -----
 
@@ -2183,129 +2189,4 @@ func (h *Handler) HandleTextureBlame(w http.ResponseWriter, r *http.Request) {
 
 // ----- Texture revise -----
 
-type testTextureWorkerUpdateRequest struct {
-	DocID string `json:"doc_id"`
-	Role  string `json:"role,omitempty"`
-	types.CoagentSourcePacketPayload
-}
 
-// HandleTestTextureWorkerUpdate is a local-only dry-run browser test seam that
-// routes through the real structured worker-update tool. It is not product
-// proof and stays disabled unless RUNTIME_ENABLE_TEST_APIS is set.
-func (h *Handler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *http.Request) {
-	if h.Core == nil || !h.Core.TextureTestAPIsEnabled() {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "test endpoint not found"})
-		return
-	}
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	var req testTextureWorkerUpdateRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-	req.DocID = strings.TrimSpace(req.DocID)
-	if req.DocID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "doc_id is required"})
-		return
-	}
-
-	if _, err := h.getTextureDocument(r.Context(), ownerID, req.DocID); err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-		return
-	}
-	targetAgentID := currentTextureAgentID(req.DocID)
-	if h.Core == nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer identity unavailable"})
-		return
-	}
-	if _, err := h.Store.GetAgentByScope(r.Context(), ownerID, h.Core.TextureComputerID(), targetAgentID); err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "Texture agent is not initialized for this document"})
-		return
-	}
-
-	runs, err := h.Core.ListRunsByChannel(r.Context(), ownerID, req.DocID, 50)
-	if err != nil {
-		log.Printf("texture test api: list channel runs for worker update: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to resolve texture agent"})
-		return
-	}
-
-	var parent *types.RunRecord
-	for i := len(runs) - 1; i >= 0; i-- {
-		if agentProfileForRun(&runs[i]) == agentprofile.Texture {
-			parent = &runs[i]
-			break
-		}
-	}
-	if parent == nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "texture agent has no run context for this document"})
-		return
-	}
-
-	role := strings.TrimSpace(req.Role)
-	if role == "" {
-		role = agentprofile.Management
-	}
-	switch role {
-	case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
-	default:
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "role must be research, management, or engineering"})
-		return
-	}
-
-	workerRun, err := h.Core.StartCoagentRun(r.Context(), parent.RunID, "Browser test: submit structured worker update", ownerID, map[string]any{
-		runMetadataAgentProfile: role,
-		runMetadataAgentRole:    role,
-		runMetadataAgentID:      role + ":test:" + req.DocID,
-		runMetadataChannelID:    req.DocID,
-		"doc_id":                req.DocID,
-	})
-	if err != nil {
-		log.Printf("texture test api: start worker update run: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create worker context"})
-		return
-	}
-
-	registry := h.Core.ToolRegistryForProfile(role)
-	if registry == nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "worker tools are unavailable"})
-		return
-	}
-
-	rawArgs, err := json.Marshal(submitCoagentUpdateArgs{
-		AgentID:                    targetAgentID,
-		ChannelID:                  req.DocID,
-		CoagentSourcePacketPayload: req.CoagentSourcePacketPayload,
-	})
-	if err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-
-	raw, err := registry.Execute(toolregistry.WithExecutionContext(r.Context(), toolExecutionContextForRun(workerRun)), "update_coagent", rawArgs)
-	if err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-		return
-	}
-
-	var resp map[string]any
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		log.Printf("texture test api: decode worker update response: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to encode worker update response"})
-		return
-	}
-	resp["loop_id"] = workerRun.RunID
-	writeAPIJSON(w, http.StatusAccepted, resp)
-}

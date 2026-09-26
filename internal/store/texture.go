@@ -1998,12 +1998,6 @@ type AgentMutation struct {
 	CompletedAt         *time.Time `json:"completed_at,omitempty"`
 }
 
-type TextureControllerCheckpoint struct {
-	DocID                string
-	OwnerID              string
-	IntegratedMessageSeq int64
-	UpdatedAt            time.Time
-}
 
 func textureMutationProjection(m AgentMutation) computerevent.TextureAgentMutationProjection {
 	var completedAt *string
@@ -2278,49 +2272,6 @@ func (s *Store) DeferAgentMutation(ctx context.Context, ownerID, computerID, run
 	return nil
 }
 
-func (s *Store) GetTextureControllerCheckpoint(ctx context.Context, docID, ownerID string) (*TextureControllerCheckpoint, error) {
-	row := s.textureHandle().QueryRowContext(ctx,
-		`SELECT doc_id, owner_id, integrated_message_seq, updated_at
-		   FROM texture_controller_checkpoints
-		  WHERE doc_id = ? AND owner_id = ?`,
-		docID, ownerID,
-	)
-	var checkpoint TextureControllerCheckpoint
-	var updatedAt string
-	if err := row.Scan(&checkpoint.DocID, &checkpoint.OwnerID, &checkpoint.IntegratedMessageSeq, &updatedAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("query texture controller checkpoint: %w", err)
-	}
-	ts, err := time.Parse(time.RFC3339Nano, updatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("parse texture controller checkpoint updated_at: %w", err)
-	}
-	checkpoint.UpdatedAt = ts
-	return &checkpoint, nil
-}
-
-func (s *Store) UpsertTextureControllerCheckpoint(ctx context.Context, checkpoint TextureControllerCheckpoint) error {
-	if checkpoint.UpdatedAt.IsZero() {
-		checkpoint.UpdatedAt = time.Now().UTC()
-	}
-	_, err := s.textureHandle().ExecContext(ctx,
-		`INSERT INTO texture_controller_checkpoints (doc_id, owner_id, integrated_message_seq, updated_at)
-		 VALUES (?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   integrated_message_seq = VALUES(integrated_message_seq),
-		   updated_at = VALUES(updated_at)`,
-		checkpoint.DocID,
-		checkpoint.OwnerID,
-		checkpoint.IntegratedMessageSeq,
-		checkpoint.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("upsert texture controller checkpoint: %w", err)
-	}
-	return nil
-}
 
 // FailAgentMutation marks an agent mutation as failed.
 func (s *Store) FailAgentMutation(ctx context.Context, ownerID, computerID, runID string) error {

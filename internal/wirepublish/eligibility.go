@@ -103,7 +103,7 @@ func RevisionIsPublishableWireArticle(meta map[string]any) bool {
 
 func isTextureEditSource(source string) bool {
 	switch source {
-	case patchTextureSource, rewriteTextureSource, editTextureSource:
+	case patchTextureSource, rewriteTextureSource, editTextureSource, "texture_cell":
 		return true
 	default:
 		return false

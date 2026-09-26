@@ -260,12 +260,18 @@ func (w *DeskSessionWorker) Eval(ctx context.Context, source string) (SessionRes
 // session frame so choir.Inbox() inside the cell reads delivered acts
 // without a network roundtrip — the desk analogue of GoEvalRequest.Inbox.
 func (w *DeskSessionWorker) EvalInbox(ctx context.Context, source string, inbox []IncomingMessage) (SessionResult, error) {
+	return w.EvalCell(ctx, source, inbox, nil)
+}
+
+// EvalCell runs one cell with the full frame payload: the inbox snapshot plus,
+// for a texture desk, the bound document's head (choir.ReadDoc()).
+func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox []IncomingMessage, doc *DocSnapshot) (SessionResult, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.dead {
 		return SessionResult{}, fmt.Errorf("desk session worker dead")
 	}
-	frame := SessionFrame{ID: nextDeskSessionFrameID(), Source: source, Inbox: inbox}
+	frame := SessionFrame{ID: nextDeskSessionFrameID(), Source: source, Inbox: inbox, Doc: doc}
 	raw, err := json.Marshal(frame)
 	if err != nil {
 		return SessionResult{}, fmt.Errorf("desk eval marshal: %w", err)

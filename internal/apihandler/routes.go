@@ -49,11 +49,13 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
 	s.HandleFunc("/internal/texture/documents/", texture.HandleInternalTextureDocument)
 	s.HandleFunc("/internal/texture/revisions/", texture.HandleInternalTextureRevision)
-	s.HandleFunc("/internal/texture/proposals", texture.HandleInternalTextureProposalDelivery)
+	// R3d: /internal/texture/proposals removed - the desk-originated
+	// worker_updates channel is deleted; children report through the ledger.
 	if enableTestAPIs {
 		s.HandleFunc("/api/prompts", h.HandlePromptList)
 		s.HandleFunc("/api/prompts/", h.HandlePromptRole)
-		s.HandleFunc("/api/test/texture/worker-update", texture.HandleTestTextureWorkerUpdate)
+		// R3d: /api/test/texture/worker-update removed with the
+		// worker_updates channel.
 	}
 
 	// Texture document/revision/history/diff/blame APIs.

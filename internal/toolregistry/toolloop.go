@@ -96,10 +96,12 @@ type toolLoopOptions struct {
 	conversationID string
 
 	initialToolChoice   string
-	terminalTools       map[string]bool
-	terminalToolResults map[string]func(string) bool
-	passivatingTools    map[string]bool
-	requiredWriteTools  map[string]bool
+	terminalTools           map[string]bool
+	terminalToolResults     map[string]func(string) bool
+	passivatingTools        map[string]bool
+	passivatingToolResults  map[string]func(string) bool
+	requiredWriteTools      map[string]bool
+	requiredWriteToolResults map[string]func(string) bool
 	completionGuard     ToolLoopCompletionGuardFunc
 	parkWaiter          ToolLoopParkWaiterFunc
 
@@ -217,6 +219,22 @@ func WithPassivatingToolSuccesses(names ...string) ToolLoopOption {
 	}
 }
 
+// WithPassivatingToolResult passivates this activation when a successful call
+// to name produces structured output the predicate accepts (e.g. a desk_go_eval
+// result whose receipts carry a committed texture_apply intent). Unlike
+// WithPassivatingToolSuccesses the decision reads the result payload, not just
+// the tool name.
+func WithPassivatingToolResult(name string, predicate func(output string) bool) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		if trimmed := strings.TrimSpace(name); trimmed != "" && predicate != nil {
+			if opts.passivatingToolResults == nil {
+				opts.passivatingToolResults = make(map[string]func(string) bool)
+			}
+			opts.passivatingToolResults[trimmed] = predicate
+		}
+	}
+}
+
 // WithRequiredWriteTools specifies tools that must succeed when the initial
 // tool choice is "required" (not an exact tool name). After the first tool
 // turn, if none of the configured durable-transition tools succeeded, the loop
@@ -235,6 +253,21 @@ func WithRequiredWriteTools(names ...string) ToolLoopOption {
 			if name != "" {
 				opts.requiredWriteTools[name] = true
 			}
+		}
+	}
+}
+
+// WithRequiredWriteToolResult requires a call to name whose structured output
+// the predicate accepts when the initial tool choice is "required". Use for
+// carrier desks whose durable transition is a committed cell intent: the bare
+// tool name only proves the cell ran; the predicate proves it authored.
+func WithRequiredWriteToolResult(name string, predicate func(output string) bool) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		if trimmed := strings.TrimSpace(name); trimmed != "" && predicate != nil {
+			if opts.requiredWriteToolResults == nil {
+				opts.requiredWriteToolResults = make(map[string]func(string) bool)
+			}
+			opts.requiredWriteToolResults[trimmed] = predicate
 		}
 	}
 }
@@ -645,16 +678,16 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				// For "required" (non-exact) initial tool choice, verify a
 				// required write tool succeeded. This prevents the model from
 				// ending the turn after calling only non-write tools.
-				if len(options.requiredWriteTools) > 0 && !requiredWriteToolSucceeded(options.requiredWriteTools, resp.ToolCalls, toolResults) {
+				if (len(options.requiredWriteTools) > 0 || len(options.requiredWriteToolResults) > 0) && !requiredWriteToolSucceeded(options.requiredWriteTools, options.requiredWriteToolResults, resp.ToolCalls, toolResults) {
 					initialToolChoiceAttempts++
 					if initialToolChoiceAttempts > maxRequiredNextToolRetries {
 						return "", totalUsage, fmt.Errorf("tool loop: required write tool did not succeed after %d retries", maxRequiredNextToolRetries)
 					}
 					reason := "required_write_tool_not_called"
-					if requiredWriteToolCalled(options.requiredWriteTools, resp.ToolCalls) {
+					if requiredWriteToolCalled(options.requiredWriteTools, options.requiredWriteToolResults, resp.ToolCalls) {
 						reason = "required_write_tool_failed"
 					}
-					reminder := requiredWriteToolReminderText(options.requiredWriteTools, reason)
+					reminder := requiredWriteToolReminderText(options.requiredWriteTools, options.requiredWriteToolResults, reason)
 					reminderMsg, _ := json.Marshal(map[string]any{
 						"role": "user",
 						"content": []map[string]any{{
@@ -668,7 +701,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					forceInitialToolChoiceRetry = true
 					if emit != nil {
 						payload, _ := json.Marshal(map[string]any{
-							"required_write_tools": requiredWriteToolNames(options.requiredWriteTools),
+							"required_write_tools": requiredWriteToolNames(options.requiredWriteTools, options.requiredWriteToolResults),
 							"called_tools":         toolCallNames(resp.ToolCalls),
 							"reason":               reason,
 							"attempt":              initialToolChoiceAttempts,
@@ -743,7 +776,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				return combinedFinalText(resp.Text), totalUsage, nil
 			}
 			if requiredNextTool == nil {
-				if passivatingTools := successfulTerminalToolNames(resp.ToolCalls, toolResults, options.passivatingTools); len(passivatingTools) > 0 {
+				if passivatingTools := successfulTerminalToolNamesWithResults(resp.ToolCalls, toolResults, options.passivatingTools, options.passivatingToolResults); len(passivatingTools) > 0 {
 					if emit != nil {
 						payload, _ := json.Marshal(map[string]any{
 							"iteration": i + 1,
@@ -786,7 +819,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				// For "required" (non-exact) initial tool choice, the model
 				// ended the turn without calling any tool. If required write
 				// tools are configured, retry with a targeted reminder.
-				if len(options.requiredWriteTools) > 0 && len(toolDefs) > 0 {
+				if (len(options.requiredWriteTools) > 0 || len(options.requiredWriteToolResults) > 0) && len(toolDefs) > 0 {
 					initialToolChoiceAttempts++
 					if initialToolChoiceAttempts > maxRequiredNextToolRetries {
 						return "", totalUsage, fmt.Errorf("tool loop: required write tool was not called after %d retries", maxRequiredNextToolRetries)
@@ -794,7 +827,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
 						return "", totalUsage, fmt.Errorf("tool loop persist assistant text before write-tool retry: %w", err)
 					}
-					reminder := requiredWriteToolReminderText(options.requiredWriteTools, "model_ended_turn_without_required_write_tool")
+					reminder := requiredWriteToolReminderText(options.requiredWriteTools, options.requiredWriteToolResults, "model_ended_turn_without_required_write_tool")
 					reminderMsg, _ := json.Marshal(map[string]any{
 						"role": "user",
 						"content": []map[string]any{{
@@ -808,7 +841,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					forceInitialToolChoiceRetry = true
 					if emit != nil {
 						payload, _ := json.Marshal(map[string]any{
-							"required_write_tools": requiredWriteToolNames(options.requiredWriteTools),
+							"required_write_tools": requiredWriteToolNames(options.requiredWriteTools, options.requiredWriteToolResults),
 							"reason":               "model_ended_turn_without_required_write_tool",
 							"attempt":              initialToolChoiceAttempts,
 						})
@@ -1431,10 +1464,11 @@ func toolCallNames(calls []types.ToolCall) []string {
 	return names
 }
 
-// requiredWriteToolSucceeded returns true if at least one of the required write
-// tools was called and succeeded in this batch.
-func requiredWriteToolSucceeded(writeTools map[string]bool, calls []types.ToolCall, results []types.ToolResult) bool {
-	if len(writeTools) == 0 {
+// requiredWriteToolSucceeded returns true if at least one required write was
+// satisfied in this batch: a name-listed tool succeeded, or a
+// predicate-listed tool produced output its predicate accepts.
+func requiredWriteToolSucceeded(writeTools map[string]bool, writeResults map[string]func(string) bool, calls []types.ToolCall, results []types.ToolResult) bool {
+	if len(writeTools) == 0 && len(writeResults) == 0 {
 		return true
 	}
 	limit := len(calls)
@@ -1442,7 +1476,14 @@ func requiredWriteToolSucceeded(writeTools map[string]bool, calls []types.ToolCa
 		limit = len(results)
 	}
 	for i := 0; i < limit; i++ {
-		if writeTools[strings.TrimSpace(calls[i].Name)] && !results[i].IsError {
+		if results[i].IsError {
+			continue
+		}
+		name := strings.TrimSpace(calls[i].Name)
+		if writeTools[name] {
+			return true
+		}
+		if pred, ok := writeResults[name]; ok && pred(results[i].Output) {
 			return true
 		}
 	}
@@ -1450,24 +1491,36 @@ func requiredWriteToolSucceeded(writeTools map[string]bool, calls []types.ToolCa
 }
 
 // requiredWriteToolCalled returns true if at least one of the required write
-// tools was called in this batch (regardless of success).
-func requiredWriteToolCalled(writeTools map[string]bool, calls []types.ToolCall) bool {
-	if len(writeTools) == 0 {
+// tools (by name or by predicate key) was called in this batch regardless of
+// outcome.
+func requiredWriteToolCalled(writeTools map[string]bool, writeResults map[string]func(string) bool, calls []types.ToolCall) bool {
+	if len(writeTools) == 0 && len(writeResults) == 0 {
 		return true
 	}
 	for _, call := range calls {
-		if writeTools[strings.TrimSpace(call.Name)] {
+		name := strings.TrimSpace(call.Name)
+		if writeTools[name] {
+			return true
+		}
+		if _, ok := writeResults[name]; ok {
 			return true
 		}
 	}
 	return false
 }
 
-// requiredWriteToolNames returns the sorted names of required write tools for
-// use in reminder messages.
-func requiredWriteToolNames(writeTools map[string]bool) []string {
-	names := make([]string, 0, len(writeTools))
+// requiredWriteToolNames returns the sorted union of name-listed and
+// predicate-listed required write tools for use in reminder messages.
+func requiredWriteToolNames(writeTools map[string]bool, writeResults map[string]func(string) bool) []string {
+	seen := make(map[string]bool, len(writeTools)+len(writeResults))
 	for name := range writeTools {
+		seen[name] = true
+	}
+	for name := range writeResults {
+		seen[name] = true
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -1477,15 +1530,18 @@ func requiredWriteToolNames(writeTools map[string]bool) []string {
 // requiredWriteToolReminderText returns a targeted reminder when the model did
 // not produce a successful write-tool call. It differentiates between "called
 // a write tool but it failed" and "did not call any write tool at all".
-func requiredWriteToolReminderText(writeTools map[string]bool, reason string) string {
-	names := requiredWriteToolNames(writeTools)
+func requiredWriteToolReminderText(writeTools map[string]bool, writeResults map[string]func(string) bool, reason string) string {
+	names := requiredWriteToolNames(writeTools, writeResults)
 	listed := strings.Join(names, " or ")
-	if writeTools["record_texture_decision"] {
+	// Desk-cell carrier: the durable transition is a committed cell intent
+	// (choir.ApplyTexture stages revision, children controls, and decision in
+	// one turn), not a named write tool.
+	if _, cellCarrier := writeResults["desk_go_eval"]; cellCarrier {
 		switch reason {
 		case "required_write_tool_failed":
-			return fmt.Sprintf("The previous durable transition (%s) failed. Review the tool error and retry with the current base revision. Use patch_texture or rewrite_texture for a real semantic edit, or record_texture_decision for an honest no-change, wait, or block outcome.", listed)
+			return fmt.Sprintf("The previous durable transition (%s) did not commit a texture_apply intent. Review the cell error or the reduction rejection and retry against the current document head. Stage choir.ApplyTexture for a real semantic revision, children controls, or an honest no-change, wait, or block decision.", listed)
 		default:
-			return fmt.Sprintf("You must call %s to commit this activation's durable transition before it can park. Use patch_texture or rewrite_texture only for a real semantic edit; use record_texture_decision for an honest no-change, wait, or block outcome.", listed)
+			return fmt.Sprintf("A %s cell must stage choir.ApplyTexture to commit this activation's durable transition before it can park. ApplyTexture carries a real semantic revision, atomic children controls, or an honest no-change, wait, or block decision.", listed)
 		}
 	}
 	switch reason {

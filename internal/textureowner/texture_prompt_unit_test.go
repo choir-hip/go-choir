@@ -8,18 +8,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestRecordTextureDecisionToolDescriptionKeepsDecisionsOffDocument(t *testing.T) {
-	tool := newRecordTextureDecisionTool(&Handler{})
-	if !strings.Contains(tool.Description, "outside the canonical document") ||
-		!strings.Contains(tool.Description, "owner explicitly asks Texture to record an off-document decision note") ||
-		!strings.Contains(tool.Description, "Do not use it for ordinary sentence-level edits") ||
-		!strings.Contains(tool.Description, "do not put agent process rationale into document text") {
-		t.Fatalf("record_texture_decision description is too weak: %q", tool.Description)
-	}
-	if _, ok := tool.Parameters["properties"].(map[string]any)["decision_kind"]; !ok {
-		t.Fatalf("record_texture_decision schema missing decision_kind: %#v", tool.Parameters)
-	}
-}
 
 func TestTextureContentItemSourceEntityDefaultsToWholeResource(t *testing.T) {
 	// After the D3 cutover, content-item source entities are whole_resource by

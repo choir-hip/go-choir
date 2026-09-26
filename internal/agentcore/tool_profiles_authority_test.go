@@ -34,7 +34,7 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 		agentprofile.Management:  {"desk_go_eval", "cancel_co_super_assignment", "report_to_texture"},
 		agentprofile.Engineering: {},
 		agentprofile.Research:    slices.Clone(ordinary),
-		agentprofile.Texture:     {"get_run_memory_entry"},
+		agentprofile.Texture:     {"desk_go_eval"},
 		agentprofile.Processor: append(append(slices.Clone(ordinary), "update_coagent"),
 			"record_wire_processor_decision"),
 		agentprofile.Reconciler: append(slices.Clone(ordinary), "update_coagent"),

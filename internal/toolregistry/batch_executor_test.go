@@ -110,25 +110,6 @@ func TestExecuteToolBatchSequentialPolicy(t *testing.T) {
 	}
 }
 
-func TestExecuteToolBatchTextureOneSuccessfulWrite(t *testing.T) {
-	registry := NewToolRegistry()
-	var attempts int
-	if err := registry.Register(Tool{Name: "patch_texture", Func: func(context.Context, json.RawMessage) (string, error) {
-		attempts++
-		if attempts == 1 {
-			return "", errors.New("stale")
-		}
-		return `{"status":"stored"}`, nil
-	}}); err != nil {
-		t.Fatal(err)
-	}
-	ctx := WithExecutionContext(context.Background(), ExecutionContext{Profile: agentprofile.Texture})
-	results := ExecuteToolBatch(ctx, registry, []types.ToolCall{{ID: "1", Name: "patch_texture"}, {ID: "2", Name: "patch_texture"}, {ID: "3", Name: "patch_texture"}}, func(types.EventKind, string, json.RawMessage) {})
-	if attempts != 2 || !results[0].IsError || results[1].IsError || results[2].IsError || !strings.Contains(results[2].Output, "one canonical document mutation") {
-		t.Fatalf("attempts=%d results=%#v", attempts, results)
-	}
-}
-
 func TestExecuteToolBatchSideEffectSkipPolicies(t *testing.T) {
 	tests := []struct {
 		name, profile, tool, args string
@@ -137,7 +118,6 @@ func TestExecuteToolBatchSideEffectSkipPolicies(t *testing.T) {
 		{"super bash", agentprofile.Management, "bash", `{"command":"echo x"}`, false},
 		{"cosuper bash", agentprofile.Engineering, "bash", `{"command":"echo x"}`, false},
 		{"super co-super spawn", agentprofile.Management, "spawn_agent", `{"profile":"engineering","slot":"implementation","channel_id":"c"}`, false},
-		{"texture researcher", agentprofile.Texture, "spawn_agent", `{"profile":"research","channel_id":"c","objective":"find facts"}`, true},
 		{"update", agentprofile.Research, "update_coagent", `{"summary":"x"}`, false},
 	}
 	for _, tc := range tests {

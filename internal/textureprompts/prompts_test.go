@@ -31,17 +31,23 @@ func TestRunOverlayIncludesArticleAndProbeGuidance(t *testing.T) {
 	}
 }
 
-func TestRevisionPolicyOverlayIncludesPatchExample(t *testing.T) {
+func TestRevisionPolicyOverlayIncludesApplyTextureExample(t *testing.T) {
 	prompt := RevisionPolicyOverlay(RevisionPolicyOptions{
 		DocID:      "doc-1",
 		RevisionID: "rev-1",
 	})
-	if !strings.Contains(prompt, `"doc_id":"doc-1"`) || !strings.Contains(prompt, `"base_revision_id":"rev-1"`) {
-		t.Fatalf("revision policy missing patch example: %q", prompt)
+	for _, want := range []string{
+		"choir.ApplyTexture",
+		`"op":"apply"`,
+		`"base_revision_id":"rev-1"`,
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("revision policy missing cell-authoring guidance %q: %q", want, prompt)
+		}
 	}
 }
 
-func TestRunOverlayHasNoWireBranch(t *testing.T) {
+func TestRunOverlayUsesCellVerbs(t *testing.T) {
 	overlay := RunOverlay()
 	if strings.Contains(overlay, "Universal Wire article revision runs") {
 		t.Fatalf("overlay should not include removed Wire branch: %q", overlay)
@@ -49,10 +55,23 @@ func TestRunOverlayHasNoWireBranch(t *testing.T) {
 	if strings.Contains(overlay, "Source ids only in source inventories") {
 		t.Fatalf("overlay should not include removed negative phrasing: %q", overlay)
 	}
-	if strings.Contains(overlay, "mark_source_unused") {
-		// mark_source_unused is expected in the overlay now.
-	} else {
-		t.Fatalf("overlay missing mark_source_unused guidance: %q", overlay)
+	for _, want := range []string{"choir.ApplyTexture", "ReadDoc()", "Inbox()", "choir.Message", "choir.Note"} {
+		if !strings.Contains(overlay, want) {
+			t.Fatalf("overlay missing cell-verb guidance %q: %q", want, overlay)
+		}
+	}
+	for _, retired := range []string{
+		"patch" + "_texture",
+		"rewrite" + "_texture",
+		"record" + "_texture_decision",
+		"request" + "_email_draft",
+		"spawn" + "_agent",
+		"update" + "_coagent",
+		"mark" + "_source_unused",
+	} {
+		if strings.Contains(overlay, retired) {
+			t.Fatalf("overlay retains retired authoring vocabulary %q: %q", retired, overlay)
+		}
 	}
 }
 
@@ -71,9 +90,9 @@ func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentManagementCapsules(
 	}
 	for name, prompt := range prompts {
 		for _, want := range []string{
+			"choir.ApplyTexture",
 			"open_persistent_super=true",
 			"valid execution_request",
-			"patch_texture, rewrite_texture, or record_texture_decision",
 			"never directly opens, requests, or spawns Engineering",
 			"networkless disposable capsule",
 			"durable execution or capsule evidence",
@@ -87,15 +106,14 @@ func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentManagementCapsules(
 	for _, prompt := range []string{prompts["run"], prompts["revision"]} {
 		for _, want := range []string{
 			"Protected host, self-development, event, checkpoint, materialization, acceptance, route, VM, and SSH effects are unavailable",
-			"generic agent and execution spawn",
-			"Probe morphisms (spawn_agent research) gather world knowledge",
+			"Probe morphisms (research opened atomically in an ApplyTexture controls entry) gather world knowledge",
 		} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("prompt missing protected boundary or preserved research behavior %q:\n%s", want, prompt)
 			}
 		}
 	}
-	if !strings.Contains(prompts["revision"], "call request_email_draft") {
+	if !strings.Contains(prompts["revision"], `"op":"email"`) {
 		t.Fatalf("revision prompt lost email draft handoff behavior:\n%s", prompts["revision"])
 	}
 

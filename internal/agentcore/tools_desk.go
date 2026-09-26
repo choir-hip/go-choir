@@ -9,7 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -126,13 +128,20 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				return "", fmt.Errorf("desk_go_eval: spawn worker: %w", err)
 			}
 			reduction := rlmReductionForDeskCall(ctx, rt)
+			// R3d: a texture cell reads its bound document's head via
+			// choir.ReadDoc(); inject the cell-start snapshot on the same
+			// frame as the inbox so authoring is a genuine turn, not blind.
+			var docSnapshot *yaegikernel.DocSnapshot
+			if deskRole == agentprofile.Texture && execCtx.RunRecord != nil {
+				docSnapshot = textureDocSnapshotForRun(ctx, rt, execCtx.RunRecord)
+			}
 			evalCtx := ctx
 			if input.TimeoutMS > 0 {
 				var cancel context.CancelFunc
 				evalCtx, cancel = context.WithTimeout(ctx, time.Duration(input.TimeoutMS)*time.Millisecond)
 				defer cancel()
 			}
-			res, evalErr := w.EvalInbox(evalCtx, input.Source, reduction.inbox)
+			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot)
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
 				if w.Dead() {
@@ -162,6 +171,52 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			})
 			return string(out), nil
 		},
+	}
+}
+
+// textureDocSnapshotForRun loads the bound texture document's head for a
+// texture desk cell (R3d) — the current revision id + content injected as the
+// cell-start ReadDoc snapshot. The doc id resolves the same way the authoring
+// commit does (run metadata doc_id, else the texture channel). Returns nil
+// when the run is not doc-bound or the doc cannot be read; the cell still
+// sees the doc on its prompt in that case.
+func textureDocSnapshotForRun(ctx context.Context, rt *Runtime, rec *types.RunRecord) *yaegikernel.DocSnapshot {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	docID := strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))
+	if docID == "" {
+		docID = strings.TrimSpace(rec.ChannelID)
+	}
+	if docID == "" {
+		return nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	computerID := strings.TrimSpace(rec.ComputerID)
+	var doc types.Document
+	var err error
+	if subject, subErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, rec.AgentID); subErr == nil && subject.LifecycleVersion > 0 {
+		doc, err = rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	} else {
+		doc, err = rt.store.GetDocument(ctx, docID, ownerID)
+	}
+	if err != nil || strings.TrimSpace(doc.CurrentRevisionID) == "" {
+		return nil
+	}
+	var rev types.Revision
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		rev, err = rt.store.GetLifecycleRevision(ctx, ownerID, computerID, doc.CurrentRevisionID)
+	} else {
+		rev, err = rt.store.GetRevision(ctx, doc.CurrentRevisionID, ownerID)
+	}
+	if err != nil {
+		return nil
+	}
+	return &yaegikernel.DocSnapshot{
+		DocID:      docID,
+		RevisionID: rev.RevisionID,
+		AuthorKind: string(rev.AuthorKind),
+		Content:    rev.Content,
 	}
 }
 

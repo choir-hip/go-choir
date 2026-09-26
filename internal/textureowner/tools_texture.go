@@ -6,35 +6,19 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 	"unicode"
+	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func RegisterTools(registry *toolregistry.ToolRegistry, h *Handler) error {
-	for _, tool := range []toolregistry.Tool{
-		newPatchTextureTool(h),
-		newRewriteTextureTool(h),
-		newRecordTextureDecisionTool(h),
-		newRequestEmailDraftTool(h),
-	} {
-		if err := registry.Register(tool); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 type textureStructuredEdit struct {
 	Op             string                   `json:"op"`
@@ -84,86 +68,6 @@ type editTextureArgs struct {
 	ToolCallID            string                     `json:"-"`
 }
 
-func decodeTextureEditArgs(toolName string, raw json.RawMessage) (editTextureArgs, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return editTextureArgs{}, fmt.Errorf("decode %s args: %w", toolName, err)
-	}
-	allowed := map[string]bool{
-		"doc_id": true, "base_revision_id": true, "rationale": true, "work_disposition": true, "update_dispositions": true, "controls": true,
-	}
-	if toolName == "patch_texture" {
-		allowed["edits"] = true
-	} else {
-		allowed["content"] = true
-	}
-	for key := range fields {
-		if !allowed[key] {
-			return editTextureArgs{}, fmt.Errorf("%s unknown field %q", toolName, key)
-		}
-	}
-	var in editTextureArgs
-	if err := json.Unmarshal(raw, &in); err != nil {
-		return editTextureArgs{}, fmt.Errorf("decode %s args: %w", toolName, err)
-	}
-	if rawDisposition, present := fields["work_disposition"]; present {
-		var value any
-		if err := json.Unmarshal(rawDisposition, &value); err != nil {
-			return editTextureArgs{}, fmt.Errorf("decode %s work_disposition: %w", toolName, err)
-		}
-		disposition, ok := value.(string)
-		if !ok || strings.TrimSpace(disposition) == "" {
-			return editTextureArgs{}, fmt.Errorf("%s work_disposition must be open or completed when present", toolName)
-		}
-		in.WorkDisposition = disposition
-	}
-	if rawDecisions, present := fields["update_dispositions"]; present {
-		var value any
-		if err := json.Unmarshal(rawDecisions, &value); err != nil {
-			return editTextureArgs{}, fmt.Errorf("decode %s update_dispositions: %w", toolName, err)
-		}
-		if _, ok := value.([]any); !ok {
-			return editTextureArgs{}, fmt.Errorf("%s update_dispositions must be an array when present", toolName)
-		}
-		var decisions []map[string]json.RawMessage
-		if err := json.Unmarshal(rawDecisions, &decisions); err != nil {
-			return editTextureArgs{}, fmt.Errorf("decode %s update_dispositions: %w", toolName, err)
-		}
-		for _, decision := range decisions {
-			for key := range decision {
-				if key != "update_id" && key != "disposition" && key != "reason" {
-					return editTextureArgs{}, fmt.Errorf("%s update_dispositions unknown field %q", toolName, key)
-				}
-			}
-		}
-	}
-	seenUpdateIDs := map[string]bool{}
-	for i := range in.UpdateDispositions {
-		decision := &in.UpdateDispositions[i]
-		decision.UpdateID = strings.TrimSpace(decision.UpdateID)
-		decision.Disposition = strings.TrimSpace(decision.Disposition)
-		decision.Reason = strings.TrimSpace(decision.Reason)
-		if decision.UpdateID == "" || (decision.Disposition != "incorporated" && decision.Disposition != "rejected") {
-			return editTextureArgs{}, fmt.Errorf("%s update_dispositions require update_id and disposition incorporated or rejected", toolName)
-		}
-		if seenUpdateIDs[decision.UpdateID] {
-			return editTextureArgs{}, fmt.Errorf("%s update_dispositions duplicate update_id %q", toolName, decision.UpdateID)
-		}
-		seenUpdateIDs[decision.UpdateID] = true
-		if decision.Disposition == "rejected" && decision.Reason == "" {
-			return editTextureArgs{}, fmt.Errorf("%s rejected update disposition requires reason", toolName)
-		}
-	}
-	if rawControls, present := fields["controls"]; present {
-		if err := validateRawTextureControls(toolName, rawControls); err != nil {
-			return editTextureArgs{}, err
-		}
-	}
-	if err := validateTextureControls(toolName, in.Controls); err != nil {
-		return editTextureArgs{}, err
-	}
-	return in, nil
-}
 func validateTextureControls(toolName string, controls []textureControlArgs) error {
 	for i := range controls {
 		control := &controls[i]
@@ -189,172 +93,6 @@ func validateTextureControls(toolName string, controls []textureControlArgs) err
 	return nil
 }
 
-func validateRawTextureControls(toolName string, raw json.RawMessage) error {
-	var controls []map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &controls); err != nil {
-		return fmt.Errorf("decode %s controls: %w", toolName, err)
-	}
-	allowedControl := map[string]bool{"target_work_item_id": true, "open_persistent_super": true, "open_researcher": true, "objective": true, "packet": true}
-	for i, control := range controls {
-		for key := range control {
-			if !allowedControl[key] {
-				return fmt.Errorf("%s controls[%d] unknown or authority-owned field %q", toolName, i, key)
-			}
-		}
-		rawPacket, ok := control["packet"]
-		if !ok {
-			return fmt.Errorf("%s controls[%d] packet is required", toolName, i)
-		}
-		// DisallowUnknownFields is recursive for every typed packet object,
-		// including claims, sources/targets/selectors/evidence/snapshots, actions,
-		// expected_sources, and safety. Plain json.Unmarshal would silently drop
-		// model-authored fields at any of those authority boundaries.
-		if err := rejectNullTextureControlPacketNodes(rawPacket, fmt.Sprintf("%s controls[%d].packet", toolName, i)); err != nil {
-			return err
-		}
-		var packet types.CoagentSourcePacketPayload
-		decoder := json.NewDecoder(strings.NewReader(string(rawPacket)))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&packet); err != nil {
-			return fmt.Errorf("decode %s controls[%d] packet strictly: %w", toolName, i, err)
-		}
-		for actionIndex, action := range packet.Actions {
-			if err := rejectTextureControlAuthorityFields(action.Inputs, fmt.Sprintf("%s controls[%d].packet.actions[%d].inputs", toolName, i, actionIndex)); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-var textureControlAuthorityFields = map[string]bool{
-	"owner_id": true, "computer_id": true, "trajectory_id": true,
-	"agent_id": true, "target_agent_id": true, "channel_id": true,
-	"command_id": true, "command_digest": true, "control_id": true,
-	"update_id": true, "producer_update_id": true, "request_id": true, "instruction_id": true,
-	"run_id": true, "source_run_id": true, "target_work_item_id": true, "producer_work_item_id": true, "work_item_id": true,
-	"direction": true, "message_seq": true, "payload_digest": true, "lifecycle_version": true, "reducer_seq": true,
-	"disposition": true, "disposition_ref": true, "delivered_to_loop_id": true, "delivered_to_run_id": true, "delivered_at": true,
-	// Persistent-Management assignment/capsule bindings and terminal outcome
-	// witnesses are trusted-runtime outputs, never model-authored action input.
-	"control_binding_id": true, "assignment_id": true, "assignment_attempt": true, "assignment_kind": true, "attempt": true,
-	"loop_id": true, "decision_id": true,
-	"capsule_id": true, "capsule_identity": true, "capability_id": true, "capability_digest": true,
-	"execution_handle": true, "execution_handle_digest": true, "subject_digest": true, "scope_digest": true, "request_digest": true,
-	"candidate_id": true, "source_candidate_id": true, "source_artifact_ref": true, "source_outcome_sha256": true,
-	"network_mode": true, "filesystem_mode": true, "writable": true,
-	"coordination_contract_id": true, "coordination_contract_digest": true,
-	"capsule_disposition": true, "capsule_intent_ref": true, "capsule_ack_ref": true,
-	// R2 delegated-cast: cast_authority records who admitted the assignment
-	// (owner revision vs delegated desk); runtime-owned, never model-authored.
-	"cast_authority": true,
-}
-
-// action.inputs is intentionally an open data bag, so it cannot reject unknown
-// domain keys. It must still recursively refuse envelope/control authority that
-// the runtime derives from the authenticated run and exact work binding.
-func rejectTextureControlAuthorityFields(value any, path string) error {
-	switch typed := value.(type) {
-	case map[string]any:
-		for key, nested := range typed {
-			canonicalKey := textureControlFieldKey(key)
-			for authorityKey := range textureControlAuthorityFields {
-				canonicalAuthority := textureControlFieldKey(authorityKey)
-				if canonicalKey == canonicalAuthority || strings.HasSuffix(canonicalKey, canonicalAuthority) {
-					return fmt.Errorf("%s contains authority-owned field %q", path, key)
-				}
-			}
-			if err := rejectTextureControlAuthorityFields(nested, path+"."+key); err != nil {
-				return err
-			}
-		}
-	case []any:
-		for i, nested := range typed {
-			if err := rejectTextureControlAuthorityFields(nested, fmt.Sprintf("%s[%d]", path, i)); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func textureControlFieldKey(key string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			return unicode.ToLower(r)
-		}
-		return -1
-	}, strings.TrimSpace(key))
-}
-
-func rejectNullTextureControlPacketNodes(raw json.RawMessage, path string) error {
-	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return fmt.Errorf("decode %s: %w", path, err)
-	}
-	var walk func(any, string) error
-	walk = func(node any, nodePath string) error {
-		if node == nil {
-			return fmt.Errorf("%s must not be null", nodePath)
-		}
-		switch typed := node.(type) {
-		case map[string]any:
-			for key, nested := range typed {
-				if err := walk(nested, nodePath+"."+key); err != nil {
-					return err
-				}
-			}
-		case []any:
-			for i, nested := range typed {
-				if err := walk(nested, fmt.Sprintf("%s[%d]", nodePath, i)); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	return walk(value, path)
-}
-
-func textureControlsSchema() map[string]any {
-	return map[string]any{
-		"type":        "array",
-		"description": "Ordered controls. Continue an exact bound work item by target_work_item_id, atomically open a runtime-derived Research with open_researcher and objective, or atomically open the owner's one persistent Management with open_persistent_super and objective. Target actor, direction, command/control/update identities, and opener agent/work identities are runtime-derived.",
-		"items": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"target_work_item_id":   map[string]any{"type": "string"},
-				"open_persistent_super": map[string]any{"type": "boolean"},
-				"open_researcher":       map[string]any{"type": "boolean"},
-				"objective":             map[string]any{"type": "string"},
-				"packet": func() map[string]any {
-					schema := agentcore.CoagentSourcePacketPayloadSchema()
-					schema["description"] = "Typed coagent_source_packet.v1 payload. Research controls normally use kind=question with questions; persistent-Management openers require kind=execution_request with at least one action. Target and delivery envelope authority are runtime-derived and must not appear here."
-					return schema
-				}(),
-			},
-			"required":             []string{"packet"},
-			"additionalProperties": false,
-		},
-	}
-}
-
-func textureUpdateDispositionsSchema() map[string]any {
-	return map[string]any{
-		"type":        "array",
-		"description": "Explicit native decisions for addressed update packets used by this revision. Name each update_id from the injected packet. Incorporated means its evidence affected this revision; rejected requires an owner-readable reason. Omitted updates remain pending.",
-		"items": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"update_id":   map[string]any{"type": "string"},
-				"disposition": map[string]any{"type": "string", "enum": []string{"incorporated", "rejected"}},
-				"reason":      map[string]any{"type": "string"},
-			},
-			"required":             []string{"update_id", "disposition"},
-			"additionalProperties": false,
-		},
-	}
-}
 
 type materializedTextureEdit struct {
 	Content               string
@@ -373,161 +111,16 @@ type materializedTextureEdit struct {
 
 func isTextureWriteToolName(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "patch_texture", "rewrite_texture":
+	case "texture_cell":
 		return true
 	default:
 		return false
 	}
 }
 
-func newPatchTextureTool(rt *Handler) toolregistry.Tool {
-	return toolregistry.Tool{Name: "patch_texture",
-		Description: "Apply validated structured operations to the current Texture document BodyDoc and store the next canonical version. Use update_block_text, insert_block, append_block, delete_node, insert_source_ref, and mark_source_unused. insert_source_ref with display_mode numbered_ref is the default inline citation; use display_mode expanded_ref only when a visible block excerpt is editorially required. Do not send raw document JSON, markdown source links, find/replace patches, or metadata source sidecars.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"doc_id":              map[string]any{"type": "string"},
-			"base_revision_id":    map[string]any{"type": "string"},
-			"rationale":           map[string]any{"type": "string"},
-			"work_disposition":    map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native work consequence for this revision; omission preserves assigned lifecycle work as open. Use completed only when this revision fully satisfies the assigned work."},
-			"update_dispositions": textureUpdateDispositionsSchema(),
-			"controls":            textureControlsSchema(),
-			"edits": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"op":               map[string]any{"type": "string", "enum": []string{"update_block_text", "insert_block", "append_block", "delete_node", "insert_source_ref", "mark_source_unused"}},
-						"block_id":         map[string]any{"type": "string"},
-						"node_id":          map[string]any{"type": "string"},
-						"after_block_id":   map[string]any{"type": "string"},
-						"text":             map[string]any{"type": "string", "description": "For update_block_text: replacement text for a single block. For append_block/insert_block: text for one paragraph or heading block. Do not include multiple paragraphs separated by blank lines — call append_block once per paragraph instead."},
-						"block_type":       map[string]any{"type": "string", "enum": []string{"paragraph", "heading"}},
-						"heading_level":    map[string]any{"type": "integer"},
-						"source_entity_id": map[string]any{"type": "string"},
-						"display_mode":     map[string]any{"type": "string", "enum": []string{"numbered_ref", "expanded_ref"}},
-						"offset":           map[string]any{"type": "integer"},
-						"rationale":        map[string]any{"type": "string", "description": "Required for mark_source_unused: short owner-readable reason the source is not cited in the body."},
-						"source_entity": map[string]any{
-							"type":        "object",
-							"description": "Optional SourceEntity target/selectors/display/evidence payload for a new runtime-minted source. Omit source_entity_id or leave it blank; runtime assigns the canonical source_entity_id.",
-						},
-					},
-					"required":             []string{"op"},
-					"additionalProperties": false,
-				},
-			},
-		}, []string{"doc_id", "base_revision_id", "edits"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			in, err := decodeTextureEditArgs("patch_texture", raw)
-			if err != nil {
-				return "", err
-			}
-			in.Operation = "apply_edits"
-			in.Content = ""
-			in.SourceTool = "patch_texture"
-			return rt.executeTextureEditTool(ctx, "patch_texture", in)
-		}}
-}
 
-func newRewriteTextureTool(rt *Handler) toolregistry.Tool {
-	return toolregistry.Tool{Name: "rewrite_texture",
-		Description: "Exceptionally rewrite the whole Texture document from plain prose through server-owned StructuredTextureDoc conversion and validation. Use only for explicit recovery rewrites or owner-requested full transformations after auditing source/ref loss. Rationale is required.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"doc_id":              map[string]any{"type": "string"},
-			"base_revision_id":    map[string]any{"type": "string"},
-			"content":             map[string]any{"type": "string"},
-			"rationale":           map[string]any{"type": "string"},
-			"work_disposition":    map[string]any{"type": "string", "enum": []string{"open", "completed"}, "description": "Optional native work consequence for this revision; omission preserves assigned lifecycle work as open. Use completed only when this revision fully satisfies the assigned work."},
-			"update_dispositions": textureUpdateDispositionsSchema(),
-			"controls":            textureControlsSchema(),
-		}, []string{"doc_id", "base_revision_id", "content", "rationale"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			in, err := decodeTextureEditArgs("rewrite_texture", raw)
-			if err != nil {
-				return "", err
-			}
-			if strings.TrimSpace(in.Rationale) == "" {
-				return "", fmt.Errorf("rewrite_texture requires rationale")
-			}
-			in.Operation = "replace_all"
-			in.SourceTool = "rewrite_texture"
-			return rt.executeTextureEditTool(ctx, "rewrite_texture", in)
-		}}
-}
 
-func (rt *Handler) executeTextureEditTool(ctx context.Context, toolName string, in editTextureArgs) (string, error) {
-	if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Texture {
-		return "", fmt.Errorf("%s is only available to Texture agents", toolName)
-	}
-	execution := toolregistry.ExecutionContextFrom(ctx)
-	rec := execution.RunRecord
-	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
-		return "", fmt.Errorf("%s requires a Texture agent revision run", toolName)
-	}
-	if execution.RunID != rec.RunID || execution.AgentID != rec.AgentID || execution.OwnerID != rec.OwnerID || execution.ComputerID != rec.ComputerID {
-		return "", fmt.Errorf("%s execution identity does not match authenticated Texture run", toolName)
-	}
-	workDisposition := strings.TrimSpace(in.WorkDisposition)
-	if workDisposition != "" && workDisposition != "open" && workDisposition != "completed" {
-		return "", fmt.Errorf("%s work_disposition must be open or completed", toolName)
-	}
-	in.WorkDisposition = workDisposition
-	in.ToolCallID = strings.TrimSpace(execution.ToolCallID)
-	rev, err := rt.commitTextureToolEdit(context.Background(), rec, in)
-	if err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(rev.TrajectoryID) != "" && in.WorkDisposition == "" {
-		in.WorkDisposition = string(types.WorkItemOpen)
-	}
-	result := map[string]any{
-		"doc_id":           rev.DocID,
-		"revision_id":      rev.RevisionID,
-		"base_revision_id": rev.ParentRevisionID,
-		"status":           "stored",
-		"work_disposition": in.WorkDisposition,
-	}
-	return toolregistry.ResultJSON(result)
-}
 
-func newRequestEmailDraftTool(rt *Handler) toolregistry.Tool {
-	return toolregistry.Tool{Name: "request_email_draft",
-		Description: "Texture-only handoff to the Email appagent. Creates a Trace-visible versioned email draft request; it never sends mail.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"doc_id":              map[string]any{"type": "string", "description": "Canonical Texture document id that owns the email content."},
-			"revision_id":         map[string]any{"type": "string", "description": "Exact Texture revision id containing the email artifact."},
-			"source_content_hash": map[string]any{"type": "string", "description": "Hash of the exact Texture source artifact/version being handed to Email."},
-			"from_alias":          map[string]any{"type": "string", "description": "Owned numeric Choir email alias. Empty means Email appagent must choose the owner default."},
-			"to_addresses":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"cc_addresses":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"bcc_addresses":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"subject":             map[string]any{"type": "string"},
-			"body_text":           map[string]any{"type": "string"},
-			"source_refs":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"approval_mode":       map[string]any{"type": "string", "enum": []string{"owner_click", "owner_click_or_email_reply"}, "description": "How the owner may approve this exact draft version."},
-		}, []string{"doc_id", "revision_id", "to_addresses", "subject", "body_text"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			draftProfile := toolregistry.ExecutionContextFrom(ctx).Profile
-			if draftProfile != agentprofile.Texture {
-				return "", fmt.Errorf("request_email_draft is only available to texture agents")
-			}
-			rec := toolregistry.ExecutionContextFrom(ctx).RunRecord
-			if rec == nil {
-				return "", fmt.Errorf("request_email_draft requires a run context")
-			}
-			if rt == nil || rt.Core == nil {
-				return "", fmt.Errorf("runtime unavailable")
-			}
-			var in agentcore.TextureEmailDraftRequest
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode request_email_draft args: %w", err)
-			}
-			result, err := rt.Core.RecordTextureEmailDraftRequest(ctx, rec, in)
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(result)
-		}}
-}
 
 type recordTextureDecisionArgs struct {
 	DocID              string                     `json:"doc_id,omitempty"`
@@ -540,193 +133,7 @@ type recordTextureDecisionArgs struct {
 	Controls           []textureControlArgs       `json:"controls,omitempty"`
 }
 
-func decodeRecordTextureDecisionArgs(raw json.RawMessage) (recordTextureDecisionArgs, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return recordTextureDecisionArgs{}, fmt.Errorf("decode record_texture_decision args: %w", err)
-	}
-	allowed := map[string]bool{"doc_id": true, "base_revision_id": true, "decision_kind": true, "reason": true, "evidence_refs": true, "next_action": true, "update_dispositions": true, "controls": true}
-	for key := range fields {
-		if !allowed[key] {
-			return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision unknown or authority-owned field %q", key)
-		}
-	}
-	var in recordTextureDecisionArgs
-	if err := json.Unmarshal(raw, &in); err != nil {
-		return recordTextureDecisionArgs{}, fmt.Errorf("decode record_texture_decision args: %w", err)
-	}
-	if rawDecisions, present := fields["update_dispositions"]; present {
-		var decisions []map[string]json.RawMessage
-		if err := json.Unmarshal(rawDecisions, &decisions); err != nil {
-			return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision update_dispositions must be an array: %w", err)
-		}
-		for _, decision := range decisions {
-			for key := range decision {
-				if key != "update_id" && key != "disposition" && key != "reason" {
-					return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision update_dispositions unknown field %q", key)
-				}
-			}
-		}
-	}
-	seen := map[string]bool{}
-	for i := range in.UpdateDispositions {
-		decision := &in.UpdateDispositions[i]
-		decision.UpdateID, decision.Disposition, decision.Reason = strings.TrimSpace(decision.UpdateID), strings.TrimSpace(decision.Disposition), strings.TrimSpace(decision.Reason)
-		if decision.UpdateID == "" || (decision.Disposition != "incorporated" && decision.Disposition != "rejected") || seen[decision.UpdateID] {
-			return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision update_dispositions require unique update_id and incorporated or rejected disposition")
-		}
-		seen[decision.UpdateID] = true
-		if decision.Disposition == "rejected" && decision.Reason == "" {
-			return recordTextureDecisionArgs{}, fmt.Errorf("record_texture_decision rejected update disposition requires reason")
-		}
-	}
-	if rawControls, present := fields["controls"]; present {
-		if err := validateRawTextureControls("record_texture_decision", rawControls); err != nil {
-			return recordTextureDecisionArgs{}, err
-		}
-	}
-	if err := validateTextureControls("record_texture_decision", in.Controls); err != nil {
-		return recordTextureDecisionArgs{}, err
-	}
-	return in, nil
-}
 
-func newRecordTextureDecisionTool(rt *Handler) toolregistry.Tool {
-	allowedKinds := []string{
-		"delegation_opened",
-		"delegation_skipped",
-		"delegation_deferred",
-		"wait_for_evidence",
-		"blocker",
-		"no_worker_needed",
-	}
-	return toolregistry.Tool{Name: "record_texture_decision",
-		Description: "Record an audit-worthy Texture decision outside the canonical document. Use this for reasoned delegation choices, waits, blockers, or no-worker decisions that reviewers may need later. If the owner explicitly asks Texture to record an off-document decision note and the requested record is truthful and within Texture authority, call this tool. Do not use it for ordinary sentence-level edits, and do not put agent process rationale into document text.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"doc_id": map[string]any{
-				"type":        "string",
-				"description": "The Texture document id. Omit only when the current Texture run is already scoped to the document.",
-			},
-			"base_revision_id": map[string]any{"type": "string", "description": "Required expected canonical head for lifecycle no-change, wait, or block turns."},
-			"decision_kind": map[string]any{
-				"type":        "string",
-				"enum":        allowedKinds,
-				"description": "Typed decision category.",
-			},
-			"reason": map[string]any{
-				"type":        "string",
-				"description": "Short owner-readable reason. Keep it about the coordination decision, not document prose.",
-			},
-			"evidence_refs": map[string]any{
-				"type":        "array",
-				"items":       map[string]any{"type": "string"},
-				"description": "Optional evidence, run, finding, source, or revision refs that support this decision.",
-			},
-			"next_action": map[string]any{
-				"type":        "string",
-				"description": "Optional concise next action or blocker discriminator.",
-			},
-			"update_dispositions": textureUpdateDispositionsSchema(),
-			"controls":            textureControlsSchema(),
-		}, []string{"decision_kind", "reason"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			execution := toolregistry.ExecutionContextFrom(ctx)
-			if execution.Profile != agentprofile.Texture {
-				return "", fmt.Errorf("record_texture_decision is only available to Texture agents")
-			}
-			rec := execution.RunRecord
-			if rec == nil {
-				return "", fmt.Errorf("record_texture_decision missing run context")
-			}
-			if execution.RunID != rec.RunID || execution.AgentID != rec.AgentID || execution.OwnerID != rec.OwnerID || execution.ComputerID != rec.ComputerID {
-				return "", fmt.Errorf("record_texture_decision execution identity does not match authenticated Texture run")
-			}
-			in, err := decodeRecordTextureDecisionArgs(raw)
-			if err != nil {
-				return "", err
-			}
-			decisionKind := strings.TrimSpace(in.DecisionKind)
-			if !validTextureDecisionKind(decisionKind) {
-				return "", fmt.Errorf("decision_kind must be one of delegation_opened, delegation_skipped, delegation_deferred, wait_for_evidence, blocker, no_worker_needed")
-			}
-			reason := strings.TrimSpace(in.Reason)
-			if reason == "" {
-				return "", fmt.Errorf("reason must not be empty")
-			}
-			docID := strings.TrimSpace(in.DocID)
-			if docID == "" {
-				docID = strings.TrimSpace(firstNonEmpty(
-					metadataStringValue(rec.Metadata, "doc_id"),
-					rec.ChannelID,
-				))
-			}
-			if docID == "" {
-				return "", fmt.Errorf("doc_id is required when the Texture run is not document-scoped")
-			}
-			if subject, subjectErr := rt.Store.GetAgentByScope(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID); subjectErr == nil && subject.LifecycleVersion > 0 {
-				in.DocID = docID
-				result, err := rt.commitTextureNonRevisionTurn(context.Background(), rec, in, execution.ToolCallID)
-				if err != nil {
-					return "", err
-				}
-				return toolregistry.ResultJSON(map[string]any{
-					"doc_id": docID, "status": "stored", "outcome": result.TextureTurn.Outcome,
-					"head_revision_id": result.TextureTurn.HeadRevisionID, "command_id": result.Receipt.CommandID,
-					"control_update_ids": result.TextureTurn.ControlUpdateIDs, "replay": result.Replay,
-				})
-			} else if subjectErr != nil && metadataStringValue(rec.Metadata, "lifecycle_work_item_id") != "" {
-				return "", fmt.Errorf("load scoped lifecycle Texture subject: %w", subjectErr)
-			}
-			if len(in.Controls) > 0 || len(in.UpdateDispositions) > 0 {
-				return "", fmt.Errorf("record_texture_decision controls and dispositions require durable lifecycle authority")
-			}
-			if _, err := rt.getTextureDocument(ctx, rec.OwnerID, docID); err != nil {
-				return "", fmt.Errorf("get texture document for decision: %w", err)
-			}
-			// One decision record per (run, kind, reason). The deterministic initial
-			// decision recorder may already have stored an equivalent note before the
-			// loop, and the model may also call this tool; recording the identical
-			// decision twice in one run is never useful, so dedupe idempotently.
-			if existing, err := rt.Store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100); err == nil {
-				for _, prior := range existing {
-					if prior.RunID == rec.RunID && prior.DecisionKind == decisionKind && prior.Reason == reason {
-						return toolregistry.ResultJSON(map[string]any{
-							"decision_id":   prior.DecisionID,
-							"doc_id":        prior.DocID,
-							"decision_kind": prior.DecisionKind,
-							"status":        "recorded",
-							"created_at":    prior.CreatedAt.Format(time.RFC3339Nano),
-						})
-					}
-				}
-			}
-			now := time.Now().UTC()
-			decision := types.TextureDecisionRecord{
-				DecisionID:   uuid.NewString(),
-				OwnerID:      rec.OwnerID,
-				DocID:        docID,
-				RunID:        rec.RunID,
-				TrajectoryID: trajectoryIDForRun(rec),
-				ActorID:      rec.AgentID,
-				DecisionKind: decisionKind,
-				Reason:       reason,
-				EvidenceRefs: trimNonEmpty(in.EvidenceRefs),
-				NextAction:   strings.TrimSpace(in.NextAction),
-				CreatedAt:    now,
-			}
-			if err := rt.Store.CreateTextureDecision(ctx, decision); err != nil {
-				return "", err
-			}
-			rt.emitTextureDecisionRecordedEvent(ctx, rec, decision)
-			return toolregistry.ResultJSON(map[string]any{
-				"decision_id":   decision.DecisionID,
-				"doc_id":        decision.DocID,
-				"decision_kind": decision.DecisionKind,
-				"status":        "recorded",
-				"created_at":    decision.CreatedAt.Format(time.RFC3339Nano),
-			})
-		}}
-}
 
 func validTextureDecisionKind(kind string) bool {
 	switch kind {
@@ -864,6 +271,9 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	if !durableLifecycle && (len(in.Controls) > 0 || len(in.UpdateDispositions) > 0) {
 		return types.Revision{}, fmt.Errorf("Texture controls and lifecycle dispositions require durable lifecycle authority")
 	}
+	if err := validateTextureControls("texture_cell", in.Controls); err != nil {
+		return types.Revision{}, err
+	}
 	var doc types.Document
 	if durableLifecycle {
 		doc, err = rt.Store.GetLifecycleDocument(ctx, rec.OwnerID, computerID, docID)
@@ -923,13 +333,9 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 			return types.Revision{}, fmt.Errorf("ensure canonical texture projection path: %w", err)
 		}
 	}
-	consumedThroughSeq := rt.textureWorkerUpdateCommitSeq(ctx, rec, doc.DocID, mutation)
-	revMeta := addTextureEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation, consumedThroughSeq), materialized, rec)
+	revMeta := addTextureEditRevisionMetadata(rt.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation, 0), materialized, rec)
 	if materialized.Content == currentRevision.Content {
 		meta := decodeRevisionMetadata(revMeta)
-		if consumedThroughSeq > 0 && len(in.UpdateDispositions) == 0 {
-			return types.Revision{}, fmt.Errorf("worker update revision must explicitly decide at least one addressed update or change Texture content")
-		}
 		if metadataBoolValue(meta, "model_prior_interim") || metadataStringValue(meta, "revision_grounding") == "model_prior" {
 			return types.Revision{}, fmt.Errorf("initial model-prior Texture revision must change prompt content before first paint is stored")
 		}
@@ -1025,19 +431,6 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	// legacy run-completion projection and must not make durable success appear
 	// failed; restart reconciliation can derive them from the committed head.
 	_ = rt.Store.RecordAgentMutationRevision(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID, rev.RevisionID)
-	if consumedThroughSeq > 0 && !durableLifecycle {
-		if err := rt.Store.UpsertTextureControllerCheckpoint(ctx, store.TextureControllerCheckpoint{
-			DocID:                docID,
-			OwnerID:              rec.OwnerID,
-			IntegratedMessageSeq: consumedThroughSeq,
-			UpdatedAt:            time.Now().UTC(),
-		}); err != nil {
-			return types.Revision{}, fmt.Errorf("update texture controller checkpoint: %w", err)
-		}
-		if err := rt.markTextureWorkerUpdatesDelivered(ctx, rec, docID, consumedThroughSeq); err != nil {
-			return types.Revision{}, fmt.Errorf("mark texture worker updates delivered: %w", err)
-		}
-	}
 
 	rt.emitTextureDocumentRevisionEventForRun(ctx, rec, storedRev)
 	completedPayload, _ := json.Marshal(map[string]string{
@@ -1377,7 +770,7 @@ func materializeTextureToolEdit(edit editTextureArgs, current types.Revision) (m
 	operation := strings.TrimSpace(edit.Operation)
 	sourceTool := strings.TrimSpace(edit.SourceTool)
 	if sourceTool == "" {
-		sourceTool = "patch_texture"
+		sourceTool = "texture_cell"
 	}
 	doc, entities, err := structuredRevisionForTextureToolEdit(edit, current)
 	if err != nil {
@@ -1532,7 +925,7 @@ func plainStructuredTextureToolDoc(docID, revisionID, content string) texturedoc
 func structuredTextureToolDocFromMarkdown(docID, revisionID, content string) (texturedoc.StructuredTextureDoc, error) {
 	parseInline := func(text string) ([]texturedoc.Node, error) {
 		if markdownLineageSourceLinkOrMarkerRE.MatchString(text) {
-			return nil, fmt.Errorf("rewrite_texture content must not contain markdown source links or numeric citation markers; use patch_texture insert_source_ref for native citations")
+			return nil, fmt.Errorf("Texture content must not contain markdown source links or numeric citation markers; use structured source_ref operations for native citations")
 		}
 		return plainTextureToolInlineNodes(text), nil
 	}
@@ -1556,7 +949,7 @@ func structuredTextureToolDocFromMarkdown(docID, revisionID, content string) (te
 		return texturedoc.StructuredTextureDoc{}, err
 	}
 	if len(blocks) == 0 {
-		return texturedoc.StructuredTextureDoc{}, fmt.Errorf("rewrite_texture content must not be empty")
+		return texturedoc.StructuredTextureDoc{}, fmt.Errorf("Texture content must not be empty")
 	}
 	return texturedoc.StructuredTextureDoc{
 		Schema: texturedoc.SchemaV1,
@@ -1627,7 +1020,7 @@ func applyStructuredTextureEdit(doc *texturedoc.StructuredTextureDoc, entities *
 			return fmt.Errorf("update_block_text supports paragraph or heading blocks, got %q", block.Type)
 		}
 		if textureToolTextLooksLikeMarkdownDocument(edit.Text) {
-			return fmt.Errorf("update_block_text is a single-block operation and cannot accept multi-paragraph or markdown-formatted text. For a full-document draft, call rewrite_texture instead. For new sections, call append_block once per paragraph")
+			return fmt.Errorf("update_block_text is a single-block operation and cannot accept multi-paragraph or markdown-formatted text. For a full-document draft, use a replace_all operation instead. For new sections, call append_block once per paragraph")
 		}
 		preservedRefs := collectDirectSourceRefNodes(block.Content)
 		block.Content = append(plainTextureToolInlineNodes(cleanTextureToolContent(edit.Text)), preservedRefs...)
@@ -2177,7 +1570,7 @@ func addTextureEditRevisionMetadata(raw json.RawMessage, edit materializedTextur
 	}
 	sourceTool := strings.TrimSpace(edit.SourceTool)
 	if sourceTool == "" {
-		sourceTool = "patch_texture"
+		sourceTool = "texture_cell"
 	}
 	meta["source"] = sourceTool
 	meta["texture_edit_tool"] = sourceTool

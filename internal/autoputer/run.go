@@ -440,9 +440,11 @@ func Run() {
 		log.Fatalf("autoputer: bind Texture lifecycle owner: %v", err)
 	}
 	if toolsEnabled {
-		if err := textureowner.RegisterTools(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture), textureHandler); err != nil {
-			log.Fatalf("autoputer: register Texture tools: %v", err)
-		}
+		// R3d: texture is a full-RLM desk — its registry is desk_go_eval only;
+		// authoring is a choir.* cell verb committed by the bound owner via
+		// ApplyTextureTurn. Do NOT register the retired typed texture tools
+		// (patch/rewrite/decision/email-draft) onto the sealed cell registry.
+		rt.Runtime.SetTextureCellAuthorizer(textureHandler)
 		for _, profile := range []string{
 			agentprofile.Conductor,
 			agentprofile.Management,
@@ -452,6 +454,12 @@ func Run() {
 			agentprofile.Processor,
 			agentprofile.Reconciler,
 		} {
+			// Full-RLM desks (management R3c, texture R3d) are sealed to
+			// desk_go_eval: no spawn_agent tool. They open children via the
+			// choir.Spawn/choir.Cast cell verbs, not a registry tool.
+			if profile == agentprofile.Management || profile == agentprofile.Texture {
+				continue
+			}
 			spawnPolicy, policyErr := agentprofile.PolicyFor(profile)
 			if policyErr != nil {
 				log.Fatalf("autoputer: spawn policy for %s: %v", profile, policyErr)

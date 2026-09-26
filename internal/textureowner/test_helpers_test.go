@@ -99,9 +99,6 @@ func testAPISetupWithOptions(t *testing.T, optionsForStore func(*store.Store, st
 		t.Fatalf("install generic core tools: %v", err)
 	}
 	handler := NewHandler(core)
-	if err := RegisterTools(core.ToolRegistryForProfile("texture"), handler); err != nil {
-		t.Fatalf("register Texture owner tools: %v", err)
-	}
 	t.Cleanup(func() {
 		core.Stop()
 		_ = s.Close()

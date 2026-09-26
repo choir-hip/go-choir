@@ -5,74 +5,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestRecordTextureDecisionToolPersistsAndEmitsReadableEvent(t *testing.T) {
-	ctx := context.Background()
-	s, _, registry := textureToolCommitRuntime(t)
-	docID := seedTextureDecisionDocument(t, s)
-	run := seedTextureDecisionRun(t, s, docID)
-
-	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, textureToolExecutionContext(run)), "record_texture_decision", json.RawMessage(`{
-		"decision_kind":"delegation_skipped",
-		"reason":"The owner supplied the source excerpt, so this revision can proceed without researcher.",
-		"evidence_refs":["rev-owner-source","source:owner-excerpt"],
-		"next_action":"Use patch_texture for the reader-facing revision."
-	}`))
-	if err != nil {
-		t.Fatalf("record_texture_decision: %v", err)
-	}
-	var resp map[string]any
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if resp["status"] != "recorded" || resp["doc_id"] != docID || resp["decision_kind"] != "delegation_skipped" {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-
-	decisions, err := s.ListTextureDecisionsByDocument(ctx, "user-1", docID, 10)
-	if err != nil {
-		t.Fatalf("list decisions: %v", err)
-	}
-	if len(decisions) != 1 {
-		t.Fatalf("decisions len = %d, want 1", len(decisions))
-	}
-	if decisions[0].RunID != run.RunID || decisions[0].ActorID != run.AgentID || decisions[0].TrajectoryID != trajectoryIDForRun(run) {
-		t.Fatalf("decision linkage = %+v, run = %+v", decisions[0], run)
-	}
-	if len(decisions[0].EvidenceRefs) != 2 || decisions[0].EvidenceRefs[1] != "source:owner-excerpt" {
-		t.Fatalf("evidence refs = %#v", decisions[0].EvidenceRefs)
-	}
-
-	events, err := s.ListEventsByOwner(ctx, "user-1", 20)
-	if err != nil {
-		t.Fatalf("list events: %v", err)
-	}
-	found := false
-	for _, ev := range events {
-		if ev.Kind != types.EventTextureDecisionRecorded {
-			continue
-		}
-		found = true
-		if !strings.Contains(string(ev.Payload), "delegation_skipped") || !strings.Contains(string(ev.Payload), "owner supplied the source excerpt") {
-			t.Fatalf("decision event payload not readable: %s", ev.Payload)
-		}
-	}
-	if !found {
-		t.Fatal("missing Texture decision event")
-	}
-}
 
 func TestTextureDiagnosisAndTraceLogsIncludeDecisionRecords(t *testing.T) {
 	ctx := context.Background()
-	s, h, _ := textureToolCommitRuntime(t)
+	_, h := testAPISetup(t)
+	s := h.Store
 	docID := seedTextureDecisionDocument(t, s)
 	run := seedTextureDecisionRun(t, s, docID)
 	decision := types.TextureDecisionRecord{

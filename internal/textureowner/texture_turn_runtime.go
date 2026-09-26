@@ -258,13 +258,22 @@ func (h *Handler) commitTextureNonRevisionTurn(ctx context.Context, rec *types.R
 	}
 	h.textureEditMu.Lock()
 	defer h.textureEditMu.Unlock()
+	if !validTextureDecisionKind(strings.TrimSpace(in.DecisionKind)) {
+		return types.LifecycleResult{}, fmt.Errorf("decision_kind must be one of delegation_opened, delegation_skipped, delegation_deferred, wait_for_evidence, blocker, no_worker_needed")
+	}
+	if strings.TrimSpace(in.Reason) == "" {
+		return types.LifecycleResult{}, fmt.Errorf("decision reason must not be empty")
+	}
+	if err := validateTextureControls("texture_cell", in.Controls); err != nil {
+		return types.LifecycleResult{}, err
+	}
 	computerID := strings.TrimSpace(rec.ComputerID)
 	docID := strings.TrimSpace(in.DocID)
 	if docID == "" {
 		docID = strings.TrimSpace(firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID))
 	}
 	if docID == "" || docID != strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id")) || rec.ChannelID != docID {
-		return types.LifecycleResult{}, fmt.Errorf("record_texture_decision does not match authenticated Texture document")
+		return types.LifecycleResult{}, fmt.Errorf("texture cell decision does not match authenticated Texture document")
 	}
 	mutation, err := h.Store.GetAgentMutationByRun(ctx, rec.OwnerID, computerID, rec.RunID)
 	if err != nil || mutation == nil || mutation.State != "pending" || mutation.DocID != docID {
@@ -278,7 +287,7 @@ func (h *Handler) commitTextureNonRevisionTurn(ctx context.Context, rec *types.R
 		if err != nil {
 			return types.LifecycleResult{}, fmt.Errorf("load scoped lifecycle Texture subject: %w", err)
 		}
-		return types.LifecycleResult{}, fmt.Errorf("record_texture_decision requires exact lifecycle Texture caller")
+		return types.LifecycleResult{}, fmt.Errorf("texture cell decision requires exact lifecycle Texture caller")
 	}
 	doc, err := h.Store.GetLifecycleDocument(ctx, rec.OwnerID, computerID, docID)
 	if err != nil {

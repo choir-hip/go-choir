@@ -197,7 +197,7 @@ func texturePromptExplicitlyRequestsDecisionNote(prompt string) bool {
 	if text == "" {
 		return false
 	}
-	if strings.Contains(text, "record_texture_decision") {
+	if strings.Contains(text, "choir.applytexture") {
 		return true
 	}
 	if strings.Contains(text, "decision_kind") && strings.Contains(text, "off-document") && strings.Contains(text, "decision") {

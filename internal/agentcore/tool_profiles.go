@@ -245,7 +245,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == agentprofile.Texture {
 		b.WriteString(textureprompts.RunOverlay())
 		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
-			b.WriteString("\n\nLifecycle Texture control authority:\nDo not call spawn_agent. Open each new Research atomically inside the successful patch_texture, rewrite_texture, or record_texture_decision transition: add one controls item with open_researcher=true, an objective, and the first typed downward packet. Continue an existing bound Research only by target_work_item_id. Agent/work/control/update/target identities and direction are runtime-derived; never author them in packet fields.")
+			b.WriteString("\n\nLifecycle Texture control authority:\nTexture is a full-RLM desk: you author the document and open children inside one staged choir.ApplyTexture turn. Open each new Research atomically in that turn's controls array — one controls entry with open_researcher=true, an objective, and the first typed downward packet. Open the persistent Management similarly with open_persistent_super=true and a valid execution_request packet. Continue an existing bound child only by target_work_item_id. Agent/work/control/update/target identities and direction are runtime-derived; never author them in packet fields.")
 		}
 	}
 	if profile == agentprofile.Processor {
@@ -363,16 +363,18 @@ func buildRLMAssignedEngineeringRegistry(rt *Runtime) (*toolregistry.ToolRegistr
 
 // deskCarrierLive reports whether a non-capsule desk profile currently runs
 // on the host desk-cell carrier (sealed desk_go_eval registry). R3c promotes
-// management live — unconditionally, the first non-engineering desk on the
-// in-cell carrier; texture and research remain behind actuator=rlm until
-// R3d/R3r promote them. The predicate is per-profile so a desk promotion
-// never drags an unpromoted desk onto cells.
+// management live and R3d-a promotes texture live — both unconditional;
+// research remains behind actuator=rlm until R3r promotes it. The predicate
+// is per-profile so a desk promotion never drags an unpromoted desk onto
+// cells.
 func deskCarrierLive(profile string) bool {
 	switch profile {
 	case agentprofile.Management:
 		return true // R3c: management is live on the cell carrier
-	case agentprofile.Texture, agentprofile.Research:
-		return capsule.HostSelectsRLM() // R3d/R3r promotion
+	case agentprofile.Texture:
+		return true // R3d-a: texture is live on the cell carrier
+	case agentprofile.Research:
+		return capsule.HostSelectsRLM() // R3r promotion
 	default:
 		return false
 	}
@@ -382,9 +384,10 @@ func deskCarrierLive(profile string) bool {
 // (R3b): desk_go_eval is the cell doorway. For management (R3c) it
 // additionally carries the typed producer-report and cancellation control
 // tools — report_to_texture and cancel_co_super_assignment are the lifecycle
-// control surface, orthogonal to the cell-eval seal; "retire to the staged
-// path" retires the unstructured report flow, not these typed controls.
-// Texture/research get desk_go_eval only.
+// control surface, orthogonal to the cell-eval seal. For texture (R3d) the
+// registry stays sealed at desk_go_eval: authoring is the staged
+// choir.ApplyTexture cell intent committed through ApplyTextureTurn, not a
+// registered tool. Texture/research get desk_go_eval only.
 func buildDeskCellRegistry(rt *Runtime, deskRole string) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	if err := registry.Register(newDeskGoEvalTool(rt, rt.deskSessionWorkers(), deskRole)); err != nil {

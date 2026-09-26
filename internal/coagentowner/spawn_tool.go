@@ -82,7 +82,7 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			if callerProfile == agentprofile.Texture && exec.RunRecord != nil &&
 				strings.TrimSpace(exec.RunRecord.TrajectoryID) != "" &&
 				metadataString(exec.RunRecord.Metadata, "lifecycle_work_item_id") != "" {
-				return "", fmt.Errorf("lifecycle Texture cannot use spawn_agent; atomically open a Research with open_researcher, objective, and its first typed control in patch_texture, rewrite_texture, or record_texture_decision controls")
+				return "", fmt.Errorf("lifecycle Texture cannot use spawn_agent; atomically open a Research with open_researcher, objective, and its first typed control in the choir.ApplyTexture controls array")
 			}
 			canSpawn, err := agentprofile.CanSpawn(callerProfile, profile)
 			if err != nil {

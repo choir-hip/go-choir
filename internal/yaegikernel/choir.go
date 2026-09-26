@@ -39,6 +39,9 @@ type ChoirScope struct {
 	// owns binding lifetime: exactly one cell binds at a time.
 	tray  *Tray
 	inbox []IncomingMessage
+	// doc is the cell-start texture document snapshot (R3d) a texture cell
+	// reads via ReadDoc(): the bound doc's current revision id + content.
+	doc *DocSnapshot
 }
 
 // SessionRoleResearch is the read-only role: sessions bound to it observe
@@ -88,6 +91,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 		Begin: func(frame SessionFrame) {
 			s.tray = &Tray{}
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
+			s.doc = frame.Doc
 		},
 		End: func() []StagedIntent {
 			var out []StagedIntent
@@ -96,6 +100,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 				s.tray = nil
 			}
 			s.inbox = nil
+			s.doc = nil
 			return out
 		},
 	}
@@ -150,9 +155,13 @@ var deskModuleSets = map[string][]string{
 	"research": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct"},
 	// Texture authors document revisions and escalates; artifact writes are
-	// texture controls, not capsule file ops.
-	"texture": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct"},
+	// the staged ApplyTexture intent (committed through ApplyTextureTurn),
+	// not capsule file ops. Children (research probes, persistent management)
+	// open atomically inside the turn via the edit's controls arg — texture
+	// never free-spawns or casts.
+	"texture": {"Message", "Outcome", "Ask", "Note", "Reply", "CancelAct",
+		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct",
+		"ReadDoc", "ApplyTexture"},
 }
 
 func (s *ChoirScope) deskModule(name string) bool {
@@ -198,6 +207,8 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Precommit":       func() reflect.Value { return reflect.ValueOf(s.Precommit) },
 		"Report":          func() reflect.Value { return reflect.ValueOf(s.Report) },
 		"ReportPacket":    func() reflect.Value { return reflect.ValueOf(s.ReportPacket) },
+		"ReadDoc":         func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
+		"ApplyTexture":    func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
 		"ResolveAct": func() reflect.Value {
 			return reflect.ValueOf(s.ResolveAct)
 		},
@@ -404,6 +415,31 @@ func (s *ChoirScope) Context() map[string]string {
 		"activation_id": s.activationID,
 		"co_super_slot": s.slot,
 	}
+}
+
+// ReadDoc returns the cell-start texture document snapshot for a texture desk
+// cell (R3d): the bound document's current revision id — the base_revision_id
+// a staged ApplyTexture must cite — plus its full content. Side-effect-free
+// inside the cell; the snapshot is injected by autoputer at cell launch.
+// Empty for non-texture scopes.
+func (s *ChoirScope) ReadDoc() DocSnapshot {
+	if s == nil || s.doc == nil {
+		return DocSnapshot{}
+	}
+	return *s.doc
+}
+
+// ApplyTexture stages a full-RLM texture authoring turn (R3d): editJSON is the
+// JSON-encoded texture edit {doc_id?, base_revision_id, content? or edits?,
+// update_dispositions?, controls?, work_disposition?, rationale?}. The reducer
+// commits it as an AuthorAppAgent revision through the atomic ApplyTextureTurn
+// transaction — the genuine authoring turn, not a projection.
+func (s *ChoirScope) ApplyTexture(editJSON string) (string, error) {
+	t, err := s.boundTray("apply_texture")
+	if err != nil {
+		return "", err
+	}
+	return t.ApplyTexture(editJSON)
 }
 
 // Outcome records the cell's outcome as a durable self-report message to the

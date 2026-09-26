@@ -58,7 +58,6 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/internal/runtime/runs/run-1",
 		"/internal/texture/documents/document-1",
 		"/internal/texture/revisions/revision-1",
-		"/internal/texture/proposals",
 		"/api/texture/documents",
 		"/api/texture/documents/document-1",
 	} {
@@ -93,7 +92,6 @@ func TestRegisterRoutesGatesTestAPIs(t *testing.T) {
 	for _, path := range []string{
 		"/api/prompts",
 		"/api/prompts/role-1",
-		"/api/test/texture/worker-update",
 	} {
 		disabled := server.NewServer("apihandler-routes-test-disabled", "0")
 		registerRoutesForTest(t, disabled, false)

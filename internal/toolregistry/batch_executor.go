@@ -36,17 +36,8 @@ func ExecuteToolBatch(ctx context.Context, registry *ToolRegistry, calls []types
 	skipped := plannedToolSkips(ctx, calls)
 
 	if shouldExecuteToolsSequentially(calls) {
-		profile := ExecutionContextFrom(ctx).Profile
-		successfulTextureEditCallID := ""
 		for i, call := range calls {
-			skipReason := skipped[i]
-			if skipReason == "" && profile == agentprofile.Texture && isTextureWriteToolName(call.Name) && successfulTextureEditCallID != "" {
-				skipReason = fmt.Sprintf("tool_notice:duplicate Texture write tool %s in this Texture turn skipped after call %s; one canonical document mutation is allowed per revision run", call.Name, successfulTextureEditCallID)
-			}
-			results[i] = executeOneTool(ctx, registry, call, skipReason, emit)
-			if skipReason == "" && profile == agentprofile.Texture && isTextureWriteToolName(call.Name) && !results[i].IsError && IsStructuredToolSuccess(results[i].Output) {
-				successfulTextureEditCallID = call.ID
-			}
+			results[i] = executeOneTool(ctx, registry, call, skipped[i], emit)
 		}
 		return results
 	}
@@ -137,16 +128,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "update_coagent", "save_evidence", "capsule_go_eval":
-		return true
-	default:
-		return false
-	}
-}
-
-func isTextureWriteToolName(name string) bool {
-	switch strings.TrimSpace(name) {
-	case "patch_texture", "rewrite_texture":
+	case "bash", "write_file", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "update_coagent", "save_evidence", "capsule_go_eval", "desk_go_eval":
 		return true
 	default:
 		return false
@@ -211,11 +193,9 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 	seenManagementSpawn := map[string]int{}
 	seenCoagentUpdate := map[string]int{}
 	seenBash := map[string]int{}
-	seenTextureResearchSpawn := map[string]int{}
 
 	for i, call := range calls {
 		switch call.Name {
-		case "patch_texture", "rewrite_texture":
 		case "bash":
 			if profile != agentprofile.Management && profile != agentprofile.Engineering {
 				continue
@@ -230,18 +210,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 			}
 			seenBash[key] = i
 		case "spawn_agent":
-			switch profile {
-			case agentprofile.Texture:
-				key, ok := toolCallTextureResearchSpawnKey(call)
-				if !ok {
-					continue
-				}
-				if previous, exists := seenTextureResearchSpawn[key]; exists {
-					setSkip(i, fmt.Sprintf("tool_notice: duplicate texture researcher spawn for %s already planned in this turn at call %s; one researcher for this exact objective is enough", key, calls[previous].ID))
-					continue
-				}
-				seenTextureResearchSpawn[key] = i
-			case agentprofile.Management:
+			if profile == agentprofile.Management {
 				key, ok := toolCallManagementEngineeringSpawnKey(call)
 				if !ok {
 					continue
@@ -290,30 +259,6 @@ func toolCallManagementEngineeringSpawnKey(call types.ToolCall) (string, bool) {
 	return profile + ":" + slot + ":" + strings.TrimSpace(in.ChannelID), true
 }
 
-func toolCallTextureResearchSpawnKey(call types.ToolCall) (string, bool) {
-	var in struct {
-		Role      string `json:"role"`
-		Profile   string `json:"profile"`
-		ChannelID string `json:"channel_id"`
-		Objective string `json:"objective"`
-	}
-	if err := json.Unmarshal(call.Arguments, &in); err != nil {
-		return "", false
-	}
-	profile, _ := agentprofile.Canonical(in.Profile)
-	if profile == "" {
-		profile, _ = agentprofile.Canonical(in.Role)
-	}
-	if profile != agentprofile.Research {
-		return "", false
-	}
-	channelID := strings.TrimSpace(in.ChannelID)
-	objective := strings.Join(strings.Fields(strings.TrimSpace(in.Objective)), " ")
-	if objective == "" {
-		return "", false
-	}
-	return profile + ":" + channelID + ":" + objective, true
-}
 
 func normalizedToolCallArgs(call types.ToolCall) string {
 	raw := strings.TrimSpace(string(call.Arguments))

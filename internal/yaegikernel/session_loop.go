@@ -19,6 +19,20 @@ type SessionFrame struct {
 	Source string            `json:"source,omitempty"`
 	Close  bool              `json:"close,omitempty"`
 	Inbox  []IncomingMessage `json:"inbox,omitempty"`
+	// Doc carries the cell-start document snapshot for a texture desk cell
+	// (R3d): the bound doc's current revision id + content, so the cell
+	// reads it via choir.ReadDoc() without a network roundtrip.
+	Doc *DocSnapshot `json:"doc,omitempty"`
+}
+
+// DocSnapshot is the bound texture document's head a cell authors against:
+// the current revision id (the base_revision_id a staged ApplyTexture must
+// cite) and its full content.
+type DocSnapshot struct {
+	DocID      string `json:"doc_id"`
+	RevisionID string `json:"revision_id"`
+	AuthorKind string `json:"author_kind,omitempty"`
+	Content    string `json:"content"`
 }
 
 // SessionResult is one newline-delimited JSON response. Value-carrying cells

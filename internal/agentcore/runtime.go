@@ -123,6 +123,12 @@ type Runtime struct {
 	desktopState             *desktopstate.Handler
 	content                  *contentowner.Service
 	capsuleExecutor          *capsule.Executor
+	// textureCellAuthorizer commits a staged texture-authoring cell intent
+	// (R3d: choir.ApplyTexture) through the canonical ApplyTextureTurn
+	// transaction. Bound by autoputer to the texture lifecycle owner —
+	// the desk-cell carrier cannot import the owner, so this is an
+	// interface seam (same shape as the actor-dispatch hooks).
+	textureCellAuthorizer TextureCellAuthorizer
 	assignmentHandleResolver interface {
 		AssignmentHandle(string, string) (string, error)
 	}
@@ -206,6 +212,30 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error) {
 	rt.dispatchActor = fn
 }
+
+// TextureCellAuthorizer commits a staged full-RLM texture authoring intent
+// (R3d: a choir texture cell act) through the canonical Texture turn
+// transaction. autoputer binds the texture lifecycle owner; the desk-cell
+// reducer calls it — the desk carrier never imports the owner package, so
+// this is the structural seam.
+type TextureCellAuthorizer interface {
+	// CommitCellTextureAuthor commits bodyJSON — the staged texture act
+	// {"op": "apply"|"decide"|"email", ...args} — for the desk activation
+	// run rec, through the same atomic ApplyTextureTurn / lifecycle commit
+	// the retired typed tools used. revisionIdentity is the deterministic
+	// per-cell idempotency identity the reducer derives so a replayed cell
+	// replays the same commit rather than minting a second head. Returns a
+	// JSON receipt describing the commit (revision_id/command/result).
+	CommitCellTextureAuthor(ctx context.Context, rec *types.RunRecord, bodyJSON string, revisionIdentity string) (string, error)
+}
+
+// SetTextureCellAuthorizer binds the texture lifecycle owner's cell-authoring
+// commit path (R3d). autoputer calls it after building the owner handler.
+func (rt *Runtime) SetTextureCellAuthorizer(a TextureCellAuthorizer) {
+	rt.textureCellAuthorizer = a
+}
+
+
 
 // SetScheduleActor sets the kernel-only hook for durable not-before events.
 // The adapter owns the actor tape and binds this alongside dispatchActor.
@@ -3195,17 +3225,21 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if runHasProfile(rec, agentprofile.Texture) {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithInitialToolChoice(initialTextureToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolLoopBudget(textureActorToolLoopBudget(rec)))
+		// R3d: texture's durable transition is a committed texture_apply cell
+		// intent (choir.ApplyTexture), committed by the bound authorizer inside
+		// ApplyTextureTurn. desk_go_eval receipts carry it as rlm:texture_apply.
+		textureAuthored := func(output string) bool { return strings.Contains(output, "rlm:texture_apply:") }
 		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
-			// One successful lifecycle tool commits the activation's durable
-			// transition. A canonical revision and an explicit no-change/wait/block
-			// decision are equally valid; park the resident run instead of turning
-			// either outcome into terminal run completion.
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithPassivatingToolSuccesses("patch_texture", "rewrite_texture", "record_texture_decision"))
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteTools("patch_texture", "rewrite_texture", "record_texture_decision"))
+			// One committed authoring turn is the activation's durable
+			// transition — a canonical revision, atomic children controls, or
+			// an explicit no-change/wait/block decision are equally valid; park
+			// the resident run instead of turning it terminal.
+			toolLoopOptions = append(toolLoopOptions, toolregistry.WithPassivatingToolResult("desk_go_eval", textureAuthored))
+			toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteToolResult("desk_go_eval", textureAuthored))
 		} else {
 			// Pre-lifecycle Texture tasks retain their single-write terminal contract.
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolSuccesses("patch_texture", "rewrite_texture"))
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteTools("patch_texture", "rewrite_texture"))
+			toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolResult("desk_go_eval", textureAuthored))
+			toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteToolResult("desk_go_eval", textureAuthored))
 		}
 	}
 
@@ -3749,9 +3783,9 @@ func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDec
 // blocker without hidden exact-tool choreography.
 //
 // For update_coagent continuations (worker evidence arrived), the model must
-// produce a document revision but may choose patch_texture for small deltas or
-// rewrite_texture for full-document drafts (especially v0→v1 and v1→v2). The
-// post-turn required-write-tool check ensures a revision actually lands.
+// produce a document revision in its next cell — choir.ApplyTexture carries the
+// apply body for targeted or full-document drafts (especially v0→v1 and v1→v2).
+// The post-turn required-write check ensures a texture_apply intent commits.
 func initialTextureToolChoice(rec *types.RunRecord) string {
 	if rec == nil || !runHasProfile(rec, agentprofile.Texture) {
 		return ""

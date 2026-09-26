@@ -361,7 +361,7 @@ func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTe
 		} else {
 			b.WriteString("y")
 		}
-		b.WriteString(" in reader-facing article prose through structured patch_texture insert_source_ref operations placed after the supported sentence or clause. Use display_mode expanded_ref only when a block excerpt is editorially required. If a source is immaterial, use mark_source_unused with a short rationale. Every material source must appear as a source_ref in the body; no source is silently ignored.")
+		b.WriteString(" in reader-facing article prose through structured choir.ApplyTexture insert_source_ref operations placed after the supported sentence or clause. Use display_mode expanded_ref only when a block excerpt is editorially required. If a source is immaterial, use mark_source_unused with a short rationale. Every material source must appear as a source_ref in the body; no source is silently ignored.")
 		b.WriteString("\n\nSource briefs (excerpt text for synthesis):\n")
 		for _, entity := range sourceEntities {
 			if strings.TrimSpace(entity.EntityID) == "" {
@@ -385,7 +385,7 @@ func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTe
 		}
 	}
 	b.WriteString("\n\nHard requirements:")
-	b.WriteString("\n- Use patch_texture to write the canonical Texture revision; do not leave the article only in the run result.")
+	b.WriteString("\n- Use choir.ApplyTexture to write the canonical Texture revision; do not leave the article only in the run result.")
 	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
 	b.WriteString("\n- Preserve source entities and use native Texture source_ref operations inside article prose; do not replace them with ordinary clickable links, markdown source links, Source: lines, a plain source manifest, or an inventory section.")

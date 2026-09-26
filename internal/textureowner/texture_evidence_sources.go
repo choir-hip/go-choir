@@ -123,8 +123,8 @@ func evidenceRecordToSourceEntity(rec types.EvidenceRecord) textureSourceEntity 
 	return entity
 }
 
-func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Handler, ownerID, ref string) textureSourceEntity {
-	key, value := splitTypedWorkerUpdateRef(ref)
+func sourceEntityFromEvidenceRef(ctx context.Context, rt *Handler, ownerID, ref string) textureSourceEntity {
+	key, value := splitTypedEvidenceRef(ref)
 	if key == "" || value == "" {
 		return textureSourceEntity{}
 	}
@@ -159,51 +159,14 @@ func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Handler, ownerID, 
 	}
 }
 
-func (rt *Handler) evidenceSourceEntitiesFromWorkerUpdates(ctx context.Context, ownerID string, updates []types.CoagentSourcePacket) []textureSourceEntity {
-	entities, _ := rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
-	return entities
-}
 
-func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx context.Context, ownerID string, updates []types.CoagentSourcePacket) ([]textureSourceEntity, []coagentSourceRejection) {
-	if len(updates) == 0 {
-		return nil, nil
-	}
-	entities := []textureSourceEntity{}
-	rejections := []coagentSourceRejection{}
-	seenEntity := map[string]bool{}
-	seenRejection := map[string]bool{}
-	for _, update := range updates {
-		if ownerID != "" && strings.TrimSpace(update.OwnerID) != strings.TrimSpace(ownerID) {
-			continue
-		}
-		for _, packetSource := range update.Packet.Sources {
-			entity := sourceEntityFromCoagentPacketSource(ctx, rt, ownerID, packetSource, update)
-			key := sourceEntityKey(entity)
-			if entity.EntityID == "" || key == "" {
-				rejection := coagentSourceRejectionFromPacketSource(update, packetSource)
-				rejectionKey := sourceRejectionKey(rejection)
-				if rejectionKey != "" && !seenRejection[rejectionKey] {
-					seenRejection[rejectionKey] = true
-					rejections = append(rejections, rejection)
-				}
-				continue
-			}
-			if seenEntity[key] {
-				continue
-			}
-			seenEntity[key] = true
-			entities = append(entities, entity)
-		}
-	}
-	return entities, rejections
-}
 
 func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Handler, ownerID string, source types.CoagentPacketSource, update types.CoagentSourcePacket) textureSourceEntity {
 	uri := strings.TrimSpace(source.Target.URI)
 	kind := strings.TrimSpace(source.Kind)
 	var entity textureSourceEntity
 	if uri != "" {
-		entity = sourceEntityFromWorkerUpdateRef(ctx, rt, ownerID, uri)
+		entity = sourceEntityFromEvidenceRef(ctx, rt, ownerID, uri)
 		if entity.EntityID == "" && isHTTPURL(uri) {
 			entity = textureSourceEntity{
 				EntityID:  stableSourceEntityID("content_item", uri),
@@ -274,7 +237,7 @@ func coagentPacketSourceTitleUsable(title string) bool {
 	if title == "" {
 		return false
 	}
-	key, value := splitTypedWorkerUpdateRef(title)
+	key, value := splitTypedEvidenceRef(title)
 	if key != "" && value != "" {
 		return false
 	}
@@ -416,40 +379,6 @@ func pruneEmptyMap(values map[string]any) map[string]any {
 	return values
 }
 
-func (rt *Handler) evidenceSourceEntitiesFromWorkerUpdateIDs(ctx context.Context, ownerID, targetAgentID string, updateIDs []string, limit int) []textureSourceEntity {
-	if rt == nil || rt.Store == nil || len(updateIDs) == 0 {
-		return nil
-	}
-	ownerID = strings.TrimSpace(ownerID)
-	targetAgentID = strings.TrimSpace(targetAgentID)
-	if ownerID == "" || targetAgentID == "" {
-		return nil
-	}
-	if limit <= 0 || limit > len(updateIDs) {
-		limit = len(updateIDs)
-	}
-	updates := make([]types.CoagentSourcePacket, 0, limit)
-	seen := map[string]bool{}
-	for _, updateID := range updateIDs {
-		updateID = strings.TrimSpace(updateID)
-		if updateID == "" || seen[updateID] {
-			continue
-		}
-		seen[updateID] = true
-		update, err := rt.Store.GetWorkerUpdate(ctx, ownerID, updateID)
-		if err != nil {
-			continue
-		}
-		if strings.TrimSpace(update.TargetAgentID) != targetAgentID {
-			continue
-		}
-		updates = append(updates, update)
-		if len(updates) >= limit {
-			break
-		}
-	}
-	return rt.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, updates)
-}
 
 func coagentSourceRejectionFromPacketSource(update types.CoagentSourcePacket, source types.CoagentPacketSource) coagentSourceRejection {
 	reason := "packet source did not materialize into a Texture source entity"
@@ -635,14 +564,14 @@ func formatCoagentSourceRejectionsForPrompt(rejections []coagentSourceRejection)
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func splitTypedWorkerUpdateRef(ref string) (string, string) {
+func splitTypedEvidenceRef(ref string) (string, string) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return "", ""
 	}
 	for _, sep := range []string{":", "="} {
 		if before, after, ok := strings.Cut(ref, sep); ok {
-			key := normalizeWorkerUpdateRefKey(before)
+			key := normalizeTypedEvidenceRefKey(before)
 			value := strings.TrimSpace(after)
 			if key == "" || value == "" || strings.ContainsAny(value, " \t\r\n") {
 				return "", ""
@@ -653,7 +582,7 @@ func splitTypedWorkerUpdateRef(ref string) (string, string) {
 	return "", ""
 }
 
-func normalizeWorkerUpdateRefKey(key string) string {
+func normalizeTypedEvidenceRefKey(key string) string {
 	switch strings.ToLower(strings.TrimSpace(key)) {
 	case "source_service_item", "source_item", "item_id":
 		return "source_service_item"
@@ -693,10 +622,10 @@ func normalizeWorkerUpdateRefKey(key string) string {
 }
 
 func executionEvidenceTarget(rec types.EvidenceRecord) (string, string) {
-	if key, value := splitTypedWorkerUpdateRef(rec.SourceURI); key != "" && executionTargetKind(key) {
+	if key, value := splitTypedEvidenceRef(rec.SourceURI); key != "" && executionTargetKind(key) {
 		return key, value
 	}
-	kind := normalizeWorkerUpdateRefKey(rec.Kind)
+	kind := normalizeTypedEvidenceRefKey(rec.Kind)
 	if !executionTargetKind(kind) {
 		return "", ""
 	}
@@ -704,7 +633,7 @@ func executionEvidenceTarget(rec types.EvidenceRecord) (string, string) {
 	if identity == "" {
 		return "", ""
 	}
-	if key, value := splitTypedWorkerUpdateRef(identity); key != "" && executionTargetKind(key) {
+	if key, value := splitTypedEvidenceRef(identity); key != "" && executionTargetKind(key) {
 		return key, value
 	}
 	return kind, identity
@@ -820,167 +749,6 @@ func isHTTPURL(value string) bool {
 	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
 }
 
-// evidenceSourceEntitiesFromPendingUpdates collates source entities from the
-// typed evidence records attached to the pending update_coagent records addressed
-// to a Texture coagent. This is the typed replacement for the deleted regex
-// researcher-prose scraping: sources (and their text_quote excerpts) come from
-// structured researcher evidence, not from parsing message text.
-func (rt *Handler) evidenceSourceEntitiesFromPendingUpdates(ctx context.Context, ownerID, textureAgentID string, limit int) []textureSourceEntity {
-	entities, _, _ := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, textureAgentID, limit)
-	return entities
-}
-
-func (rt *Handler) evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx context.Context, ownerID, textureAgentID string, limit int) ([]textureSourceEntity, []coagentSourceRejection, []commitmentSourceDivergence) {
-	if rt == nil || rt.Store == nil {
-		return nil, nil, nil
-	}
-	textureAgentID = strings.TrimSpace(textureAgentID)
-	ownerID = strings.TrimSpace(ownerID)
-	if textureAgentID == "" || ownerID == "" {
-		return nil, nil, nil
-	}
-	computerID := ""
-	if rt.Core != nil {
-		computerID = strings.TrimSpace(rt.Core.TextureComputerID())
-	}
-	subject, subjectErr := rt.Store.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
-	var updates []types.CoagentSourcePacket
-	var err error
-	if subjectErr == nil && subject.LifecycleVersion > 0 {
-		updates, err = rt.Store.ListPendingLifecycleUpdates(ctx, ownerID, computerID, textureAgentID, limit)
-	} else {
-		updates, err = rt.Store.ListCoagentMailboxBacklog(ctx, ownerID, textureAgentID, limit)
-		if err == nil {
-			legacy := updates[:0]
-			for _, update := range updates {
-				if update.LifecycleVersion <= 0 {
-					legacy = append(legacy, update)
-				}
-			}
-			updates = legacy
-		}
-	}
-	if err != nil || len(updates) == 0 {
-		return rt.dualReadCommitmentEvidence(ctx, ownerID, computerID, textureAgentID, limit, nil, nil)
-	}
-	entities, rejections := rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, updates)
-	return rt.dualReadCommitmentEvidence(ctx, ownerID, computerID, textureAgentID, limit, entities, rejections)
-}
-
-// commitmentSourceDivergence names one dual-read mismatch between the packet
-// evidence path and the commitment-ledger path. It is parity telemetry, not a
-// packet-source rejection: surfaced (never silently preferred) so the packet
-// write path can be deleted on evidence it is redundant.
-type commitmentSourceDivergence struct {
-	EntityKey string `json:"entity_key"`
-	RecordID  string `json:"record_id,omitempty"`
-	UpdateID  string `json:"update_id,omitempty"`
-	Side      string `json:"side"` // "packet_only" | "record_only" | "field_mismatch"
-	Reason    string `json:"reason"`
-}
-
-const textureSourceDivergencesKey = "texture_source_divergences"
-
-// dualReadCommitmentEvidence computes the ledger-side entity set for the same
-// desk evidence scope and merges it with the packet-derived set, emitting a
-// typed divergence for each side the other cannot reproduce. The merged set is
-// packet-first so existing consumers see identical entities; record-only
-// entities are appended so coverage gaps are visible rather than lossy.
-func (rt *Handler) dualReadCommitmentEvidence(ctx context.Context, ownerID, computerID, textureAgentID string, limit int, packetEntities []textureSourceEntity, rejections []coagentSourceRejection) ([]textureSourceEntity, []coagentSourceRejection, []commitmentSourceDivergence) {
-	ledgerEntities, _ := rt.evidenceSourceEntitiesFromCommitmentRecords(ctx, ownerID, computerID, textureAgentID, limit)
-	if len(packetEntities) == 0 && len(ledgerEntities) == 0 {
-		return packetEntities, rejections, nil
-	}
-
-	ledgerKeys := map[string]bool{}
-	for _, e := range ledgerEntities {
-		if key := sourceEntityKey(e); key != "" {
-			ledgerKeys[key] = true
-		}
-	}
-	packetKeys := map[string]bool{}
-	for _, e := range packetEntities {
-		if key := sourceEntityKey(e); key != "" {
-			packetKeys[key] = true
-		}
-	}
-	var divergences []commitmentSourceDivergence
-	merged := append([]textureSourceEntity{}, packetEntities...)
-	seen := packetKeys
-	for _, e := range packetEntities {
-		if key := sourceEntityKey(e); key != "" && !ledgerKeys[key] {
-			divergences = append(divergences, commitmentSourceDivergence{EntityKey: key, Side: "packet_only", Reason: "packet source has no commitment-record counterpart"})
-		}
-	}
-	for _, e := range ledgerEntities {
-		key := sourceEntityKey(e)
-		if key == "" {
-			continue
-		}
-		if !packetKeys[key] {
-			divergences = append(divergences, commitmentSourceDivergence{EntityKey: key, Side: "record_only", Reason: "commitment record source has no packet counterpart"})
-		}
-		if !seen[key] {
-			seen[key] = true
-			merged = append(merged, e)
-		}
-	}
-	if len(divergences) > 0 {
-		log.Printf("texture evidence dual-read: %d divergence(s) for desk %s (packet=%d record=%d)", len(divergences), textureAgentID, len(packetEntities), len(ledgerEntities))
-	}
-	return merged, rejections, divergences
-}
-
-// mergeCommitmentSourceDivergencesIntoMetadata persists the dual-read parity
-// divergences under texture_source_divergences so a later reader can audit
-// where the ledger and packet evidence paths disagree.
-func mergeCommitmentSourceDivergencesIntoMetadata(metadata map[string]any, incoming []commitmentSourceDivergence) bool {
-	if metadata == nil || len(incoming) == 0 {
-		return false
-	}
-	existing := decodeCommitmentSourceDivergences(metadata[textureSourceDivergencesKey])
-	seen := map[string]bool{}
-	out := existing[:0]
-	for _, d := range existing {
-		k := d.EntityKey + "\x00" + d.Side
-		seen[k] = true
-		out = append(out, d)
-	}
-	changed := false
-	for _, d := range incoming {
-		k := d.EntityKey + "\x00" + d.Side
-		if seen[k] {
-			continue
-		}
-		seen[k] = true
-		out = append(out, d)
-		changed = true
-	}
-	if len(out) > 0 {
-		metadata[textureSourceDivergencesKey] = out
-	}
-	return changed
-}
-
-func decodeCommitmentSourceDivergences(value any) []commitmentSourceDivergence {
-	if value == nil {
-		return nil
-	}
-	var out []commitmentSourceDivergence
-	switch typed := value.(type) {
-	case []commitmentSourceDivergence:
-		out = typed
-	case []any:
-		raw, err := json.Marshal(typed)
-		if err != nil {
-			return nil
-		}
-		if err := json.Unmarshal(raw, &out); err != nil {
-			return nil
-		}
-	}
-	return out
-}
 
 // evidenceSourceEntitiesFromCommitmentRecords materializes the source entities
 // a desk's pending commitment records carry: packet-bodied report hypotheses
@@ -1041,26 +809,6 @@ func (rt *Handler) evidenceSourceEntitiesFromCommitmentRecords(ctx context.Conte
 	return entities, rejections
 }
 
-func selfDevelopmentJoinFromPacketSources(sources []types.CoagentPacketSource) map[string]string {
-	out := map[string]string{}
-	for _, source := range sources {
-		key, value := splitTypedWorkerUpdateRef(strings.TrimSpace(source.Target.URI))
-		if value == "" {
-			continue
-		}
-		switch key {
-		case "operation":
-			out[textureJoinOperationID] = value
-		case "capsule_bundle":
-			out[textureJoinBundleDigest] = value
-		case "receipt":
-			out[textureJoinReceiptID] = value
-		case "event_head":
-			out[textureJoinEventHead] = value
-		}
-	}
-	return out
-}
 
 func selfDevelopmentJoinFromSourceEntities(entities []textureSourceEntity) map[string]string {
 	out := map[string]string{}
@@ -1083,17 +831,6 @@ func selfDevelopmentJoinFromSourceEntities(entities []textureSourceEntity) map[s
 	return out
 }
 
-func selfDevelopmentJoinFromWorkerUpdates(updates []types.CoagentSourcePacket) map[string]string {
-	out := map[string]string{}
-	for _, update := range updates {
-		for key, value := range selfDevelopmentJoinFromPacketSources(update.Packet.Sources) {
-			if strings.TrimSpace(out[key]) == "" {
-				out[key] = value
-			}
-		}
-	}
-	return out
-}
 
 func mergeSelfDevelopmentJoinIntoMetadata(meta map[string]any, join map[string]string) {
 	if meta == nil {

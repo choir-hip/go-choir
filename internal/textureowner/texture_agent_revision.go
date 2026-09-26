@@ -357,14 +357,13 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		return nil, err
 	}
 	sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
-	evidenceEntities, sourceRejections, sourceDivergences := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12)
+	evidenceEntities, sourceRejections := rt.evidenceSourceEntitiesFromCommitmentRecords(ctx, ownerID, strings.TrimSpace(doc.ComputerID), currentTextureAgentID(doc.DocID), 12)
 	if len(evidenceEntities) > 0 {
 		var changedEvidenceEntities bool
 		sourceEntities, changedEvidenceEntities = mergeTextureSourceEntities(sourceEntities, evidenceEntities)
 		changedSourceEntities = changedSourceEntities || changedEvidenceEntities
 	}
 	mergeCoagentSourceRejectionsIntoMetadata(metadata, sourceRejections)
-	mergeCommitmentSourceDivergencesIntoMetadata(metadata, sourceDivergences)
 	if len(sourceEntities) > 0 {
 		metadata[textureAvailableSourceEntitiesKey] = sourceEntities
 		if changedSourceEntities || addedMediaSourceEntities {
@@ -663,7 +662,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\n\nFocused current-head context for this long user-authored draft:\n---\n")
 		b.WriteString(summarizeFocusedUserEditContext(current, previous))
 		b.WriteString("\n---\n")
-		b.WriteString("\nThe complete current document is intentionally not preloaded in this ordinary long-document revise turn. Use the exact changed regions above and the user edit diff to call patch_texture with structured operations against the current base revision. Retrieve prior versions, source context, or broader document context only when the edit cannot be safely resolved from the changed regions.")
+		b.WriteString("\nThe complete current document is intentionally not preloaded in this ordinary long-document revise turn. Use the exact changed regions above and the user edit diff to stage a choir.ApplyTexture structured edit against the current base revision. Retrieve prior versions, source context, or broader document context only when the edit cannot be safely resolved from the changed regions.")
 	} else {
 		b.WriteString("\n\nCurrent canonical document content:\n---\n")
 		if current.Content != "" {
@@ -674,7 +673,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\n---\n")
 	}
 	if outline := formatTextureBodyDocOutlineForPrompt(current.BodyDoc); outline != "" {
-		b.WriteString("\n\nStructured document outline for patch_texture block/node ids:\n")
+		b.WriteString("\n\nStructured document outline for choir.ApplyTexture block/node ids:\n")
 		b.WriteString(outline)
 	}
 	hardRequirements := textureHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content)
@@ -692,7 +691,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString(requirement)
 			b.WriteString("\n")
 		}
-		b.WriteString("Treat this checklist as acceptance criteria for any rewrite_texture call; preserve these prefixes, labels, values, and headings verbatim unless the user explicitly changed them.\n")
+		b.WriteString("Treat this checklist as acceptance criteria for the next choir.ApplyTexture revision; preserve these prefixes, labels, values, and headings verbatim unless the user explicitly changed them.\n")
 	}
 	b.WriteString(textureprompts.RevisionPolicyOverlay(textureprompts.RevisionPolicyOptions{
 		OwnerPromptRequestRevision: ownerPromptRequestRevision,

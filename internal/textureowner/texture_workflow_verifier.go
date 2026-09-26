@@ -147,7 +147,6 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if err != nil {
 		return report, fmt.Errorf("list worker updates: %w", err)
 	}
-	textureUpdates := workerUpdatesForTextureDoc(updates, doc.DocID)
 	if opts.RequireResearchUpdates {
 		researchUpdateCount := 0
 		for _, update := range updates {
@@ -186,31 +185,16 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 		}
 		guarantee("execution workers emitted structured artifacts/tests/results")
 	}
-	if opts.RequireArtifactWriteEvent {
-		if err := verifyArtifactWritesCoverWorkerUpdates(events, textureUpdates); err != nil {
-			return report, err
-		}
-		guarantee("artifact write result matches a structured worker artifact")
-	}
-	if opts.RequireVerificationCmdEvent {
-		if err := verifyBashCoversWorkerUpdateTests(events, textureUpdates); err != nil {
-			return report, err
-		}
-		guarantee("verification command result matches structured worker tests")
-	}
 
 	revisions, err := rt.listTextureRevisions(ctx, ownerID, doc.DocID, 200)
 	if err != nil {
 		return report, fmt.Errorf("list Texture revisions: %w", err)
 	}
-	if err := verifyTextureRevisionCausality(revisions, events, textureUpdates, opts.RequireWorkerConsumption); err != nil {
+	if err := verifyTextureRevisionCausality(revisions); err != nil {
 		return report, err
 	}
 	guarantee("Texture revisions have valid causal parents")
 	guarantee("Texture appagent revisions support N:1 loop-to-revision causality through Texture write tools")
-	if opts.RequireWorkerConsumption {
-		guarantee("Texture consumed worker update message sequences in a later revision")
-	}
 
 	return report, nil
 }
@@ -249,15 +233,6 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 	return nil
 }
 
-func workerUpdatesForTextureDoc(updates []types.CoagentSourcePacket, docID string) []types.CoagentSourcePacket {
-	out := []types.CoagentSourcePacket{}
-	for _, update := range updates {
-		if textureAgentIDMatchesDoc(update.TargetAgentID, docID) && update.ChannelID == docID && update.MessageSeq > 0 {
-			out = append(out, update)
-		}
-	}
-	return out
-}
 
 func verifyPersistentManagementPath(ownerID string, runs []types.RunRecord) error {
 	wantAgentID := persistentManagementAgentID(ownerID)
@@ -388,106 +363,11 @@ func eventsContainSuccessfulBashVerification(events []types.EventRecord) bool {
 	return false
 }
 
-func verifyArtifactWritesCoverWorkerUpdates(events []types.EventRecord, updates []types.CoagentSourcePacket) error {
-	artifacts := workerUpdateArtifacts(updates)
-	if len(artifacts) == 0 {
-		return fmt.Errorf("artifact write required but no structured worker artifact was reported")
-	}
-	written := []string{}
-	for _, tool := range []string{"write_file", "edit_file"} {
-		for _, payload := range successfulToolResultPayloads(events, tool) {
-			var output struct {
-				Path string `json:"path"`
-			}
-			if err := json.Unmarshal([]byte(toolPayloadOutput(payload)), &output); err == nil && strings.TrimSpace(output.Path) != "" {
-				written = append(written, output.Path)
-			}
-		}
-	}
-	for _, artifact := range artifacts {
-		for _, path := range written {
-			if pathMatchesArtifact(path, artifact) {
-				return nil
-			}
-		}
-	}
-	return fmt.Errorf("successful file write paths %v do not match reported artifacts %v", written, artifacts)
-}
 
-func verifyBashCoversWorkerUpdateTests(events []types.EventRecord, updates []types.CoagentSourcePacket) error {
-	tests := workerUpdateTests(updates)
-	artifacts := workerUpdateArtifacts(updates)
-	for _, payload := range successfulToolResultPayloads(events, "bash") {
-		var output struct {
-			Command  string `json:"command"`
-			ExitCode int    `json:"exit_code"`
-		}
-		if err := json.Unmarshal([]byte(toolPayloadOutput(payload)), &output); err != nil || output.ExitCode != 0 {
-			continue
-		}
-		command := strings.TrimSpace(output.Command)
-		for _, test := range tests {
-			if test != "" && strings.Contains(command, test) {
-				return nil
-			}
-		}
-		for _, artifact := range artifacts {
-			if artifact != "" && strings.Contains(command, artifact) {
-				return nil
-			}
-		}
-	}
-	if len(tests) == 0 && len(artifacts) == 0 {
-		return nil
-	}
-	return fmt.Errorf("successful bash commands do not cover reported tests/artifacts")
-}
 
-func workerUpdateArtifacts(updates []types.CoagentSourcePacket) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, update := range updates {
-		for _, artifact := range coagentPacketSourceURIs(update.Packet, "file_artifact", "patch", "screenshot", "video_artifact", "benchmark_log") {
-			artifact = strings.TrimSpace(filepathSlash(artifact))
-			if key, value := splitTypedWorkerUpdateRef(artifact); key != "" {
-				artifact = value
-			}
-			if artifact != "" && !seen[artifact] {
-				seen[artifact] = true
-				out = append(out, artifact)
-			}
-		}
-	}
-	return out
-}
 
-func workerUpdateTests(updates []types.CoagentSourcePacket) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, update := range updates {
-		for _, test := range coagentPacketSourceURIs(update.Packet, "test_run") {
-			test = strings.TrimSpace(test)
-			if key, value := splitTypedWorkerUpdateRef(test); key != "" {
-				test = value
-			}
-			if test != "" && !seen[test] {
-				seen[test] = true
-				out = append(out, test)
-			}
-		}
-	}
-	return out
-}
 
-func pathMatchesArtifact(path, artifact string) bool {
-	path = filepathSlash(strings.TrimSpace(path))
-	artifact = filepathSlash(strings.TrimSpace(artifact))
-	return path == artifact || strings.HasSuffix(path, "/"+artifact)
-}
 
-func filepathSlash(path string) string {
-	return strings.ReplaceAll(path, "\\", "/")
-}
 
 func successfulToolResultPayloads(events []types.EventRecord, tool string) []map[string]any {
 	var out []map[string]any
@@ -544,7 +424,7 @@ func toolResultOutputLoopID(events []types.EventRecord, runID, tool, loopID stri
 	return false
 }
 
-func verifyTextureRevisionCausality(revisions []types.Revision, events []types.EventRecord, updates []types.CoagentSourcePacket, requireWorkerConsumption bool) error {
+func verifyTextureRevisionCausality(revisions []types.Revision) error {
 	if len(revisions) == 0 {
 		return fmt.Errorf("texture document has no revisions")
 	}
@@ -567,50 +447,13 @@ func verifyTextureRevisionCausality(revisions []types.Revision, events []types.E
 			return fmt.Errorf("appagent revision %s source = %q, want Texture write tool", revision.RevisionID, source)
 		}
 		loopID := metadataString(meta, "loop_id")
-		if loopID == "" || len(successfulToolResultPayloadsForRun(events, loopID, source)) == 0 {
-			return fmt.Errorf("appagent revision %s missing successful %s tool result for loop %q", revision.RevisionID, source, loopID)
-		}
-	}
-	if requireWorkerConsumption {
-		needed := map[int64]bool{}
-		for _, update := range updates {
-			if update.MessageSeq > 0 {
-				needed[update.MessageSeq] = false
-			}
-		}
-		for _, revision := range revisions {
-			meta := decodeRevisionMetadata(revision.Metadata)
-			for _, seq := range consumedWorkerSeqs(meta) {
-				if _, ok := needed[seq]; ok {
-					needed[seq] = true
-				}
-			}
-		}
-		for seq, found := range needed {
-			if !found {
-				return fmt.Errorf("worker update message seq %d was not consumed by a Texture revision", seq)
-			}
+		if loopID == "" {
+			return fmt.Errorf("appagent revision %s is missing its authoring loop id", revision.RevisionID)
 		}
 	}
 	return nil
 }
 
-func consumedWorkerSeqs(meta map[string]any) []int64 {
-	raw, _ := meta["worker_updates_consumed"].([]any)
-	seqs := []int64{}
-	for _, item := range raw {
-		entry, _ := item.(map[string]any)
-		switch seq := entry["seq"].(type) {
-		case float64:
-			seqs = append(seqs, int64(seq))
-		case int64:
-			seqs = append(seqs, seq)
-		case int:
-			seqs = append(seqs, int64(seq))
-		}
-	}
-	return seqs
-}
 
 func coagentPacketPayloadEmpty(packet types.CoagentSourcePacketPayload) bool {
 	return len(packet.Claims) == 0 &&
