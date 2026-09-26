@@ -140,4 +140,21 @@ if grep -Eq 'prebuild' <<<"$check_segment"; then
   exit 1
 fi
 
+# Heavy caches must have independent workloads and a refreshable source key.
+cache_action="$root/.github/actions/setup-go-build-cache/action.yml"
+require "$cache_action" 'cache: false'
+require "$cache_action" 'uses: actions/cache@v6'
+require "$cache_action" '${{ steps.go.outputs.go-version }}-${{ inputs.lane }}'
+require "$cache_action" "hashFiles('**/*.go'"
+require "$cache_action" 'restore-keys:'
+reject "$cache_action" 'cache-hit'
+require "$ci" '.github/scripts/go-shard-discovery-test'
+require "$ci" 'lane: vet-build'
+require "$ci" 'lane: runtime-${{ needs.plan.outputs.race_selected'
+require "$ci" 'lane: non-runtime-${{ needs.plan.outputs.race_selected'
+require "$ci" 'lane: scale-standard'
+require "$race" 'lane: runtime-race'
+require "$race" 'lane: non-runtime-race-'
+reject "$race" 'go-build-v2-'
+
 echo "ci-workflow-contract: all tests passed"

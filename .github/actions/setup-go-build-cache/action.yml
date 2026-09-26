@@ -1,0 +1,28 @@
+name: Set up Go with workload build cache
+description: Refresh compiled Go work without letting lightweight jobs seed heavy caches
+inputs:
+  lane:
+    description: Workload and build mode; only jobs compiling the same packages may share
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v6
+      id: go
+      with:
+        go-version-file: go.mod
+        cache: false
+    - id: image
+      shell: bash
+      run: echo "os=${ImageOS:?hosted runner image required}" >> "$GITHUB_OUTPUT"
+    # Source changes rotate immutable entries. Prefix restore retains unchanged
+    # dependencies; Go validates cached objects and all tests still execute.
+    # Keep the OS image and actual compiler in the prefix (including cgo ABI).
+    - uses: actions/cache@v6
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: choir-go-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.os }}-${{ steps.go.outputs.go-version }}-${{ inputs.lane }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ hashFiles('**/*.go', '**/*.s', '**/*.c', '**/*.h', 'scripts/go-test-*', '.github/actions/setup-go-build-cache/action.yml') }}
+        restore-keys: |
+          choir-go-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.os }}-${{ steps.go.outputs.go-version }}-${{ inputs.lane }}-${{ hashFiles('go.mod', 'go.sum') }}-

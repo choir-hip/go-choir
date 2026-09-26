@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+python3 - <<'PY'
+import json, os, pathlib, subprocess, tempfile
+
+# Exercise the actual shard runners; fake only the expensive Go toolchain.
+with tempfile.TemporaryDirectory() as directory:
+    root = pathlib.Path(directory)
+    fake = root / 'go'
+    fake.write_text('''#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+with open(os.environ['GO_CALLS'], 'a') as f: f.write(json.dumps(args) + '\\n')
+if args[0] == 'list':
+ print('github.com/yusefmosiah/go-choir/internal/store')
+ print('github.com/yusefmosiah/go-choir/internal/other')
+elif '-list' in args:
+ print('\\n'.join('TestCase%02d' % i for i in range(12)))
+ if os.environ.get('FAIL_DISCOVERY'): sys.exit(7)
+elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
+''')
+    fake.chmod(0o755)
+    calls = root / 'calls'
+    env = dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'],
+               GO_CALLS=str(calls), TOTAL_SHARDS='4', SHARD_INDEX='0')
+    env.pop('QUARANTINE_FILE', None)
+    def run(script, **extra):
+        calls.write_text('')
+        result = subprocess.run(['bash', script, '-race', '-tags=ci_probe'],
+                                env=dict(env, **extra), capture_output=True, text=True)
+        return result, [json.loads(s) for s in calls.read_text().splitlines()]
+    for script in ['scripts/go-test-runtime-shards', 'scripts/go-test-non-runtime-shards']:
+        selections = {}
+        shards = 4 if 'runtime-shards' in script and 'non-runtime' not in script else 2
+        for shard in range(shards):
+            result, invocations = run(script, SHARD_INDEX=str(shard))
+            assert result.returncode == 0, result.stderr
+            for call in invocations:
+                if call[0] != 'test': continue
+                assert '-race' in call and '-tags=ci_probe' in call, call
+                if '-run' in call:
+                    package = next(x for x in call if x.startswith('./internal/'))
+                    selected = call[call.index('-run') + 1][2:-2].split('|')
+                    selections.setdefault(package, []).extend(selected)
+        for names in selections.values():
+            assert sorted(names) == ['TestCase%02d' % i for i in range(12)], names
+        assert selections
+        result, invocations = run(script, FAIL_DISCOVERY='1')
+        assert result.returncode != 0, 'partial failed discovery must fail closed'
+        assert not any('-run' in call for call in invocations), invocations
+        result, _ = run(script, FAIL_EXECUTION='1')
+        assert result.returncode != 0, 'test failure must propagate'
+        result, _ = run(script, SHARD_INDEX='4')
+        assert result.returncode != 0, 'out-of-range shard must fail'
+    quarantine = root / 'quarantine'
+    quarantine.write_text('^TestCase00$\n')
+    result, invocations = run('scripts/go-test-runtime-shards', QUARANTINE_FILE=str(quarantine))
+    assert result.returncode == 0
+    for call in invocations:
+        if '-run' in call: assert 'TestCase00' not in call[call.index('-run') + 1]
+print('go-shard-discovery: all tests passed')
+PY
