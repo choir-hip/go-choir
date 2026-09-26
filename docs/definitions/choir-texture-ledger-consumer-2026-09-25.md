@@ -151,12 +151,14 @@ now:
       Commitment records are minted at cell commit (R2x); the packet path
       is the redundant twin.
     census_findings: >-
-      Census done. The evidence-materialization seam is dual-readable from
-      commitment_record only for packet-bodied Report acts
-      (commitmentRecordForIntent preserves Sources only there); thin Report
-      and all other acts lose EvidenceRefs/Sources. The occurrence/authority
-      path cannot move to the ledger until the record gains typed
-      delivery/lifecycle fields — a vocabulary decision, not a consumer edit.
+      Two surfaces. (1) Evidence materialization: packet.Sources ->
+      textureSourceEntity; the record preserves Sources only in
+      packet-bodied Report hypotheses, AND TargetAgentID/desk scoping lives
+      on the dropped envelope — so even a Report-only ledger read cannot
+      faithfully scope to the desk. (2) Occurrence/authority: needs typed
+      lifecycle identity the record lacks. Both gaps point the same way:
+      the record needs a typed source+target binding to be a faithful
+      evidence substrate.
     main_uncertainty: >-
       Whether to extend the commitment record with typed source/evidence
       fields (touches the R5a vocabulary freeze) or keep dual-read parity
