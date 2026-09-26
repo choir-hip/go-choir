@@ -129,7 +129,7 @@ boundaries:
 
 now:
   status: working
-  slice: wake-coverage audit -> two repairs (atomic commit + fate ungating)
+  slice: audit done — build deadline wake at bind; atomic-commit repair
   source_ref: main@173ba26a
   deploy_identity: staging https://choir.news build.commit=537fce04
   candidate:
@@ -173,24 +173,27 @@ now:
     owner_ratification_ref: owner 2026-09-25 — plan §11 + this goal ratified
   belief:
     believed_state: >-
-      The derivable-wake machinery exists and is already used per-assignment;
-      the residual is coverage (which states lack an armed wake) + deleting
-      two selection-path call sites. Commit atomicity is a real gap, not a
-      renaming.
+      Audit result: resumeStrandedFrozenAssignmentCommits is fully covered
+      by the fate watchdog (armed at every pending-fate transition,
+      fate.go:720/:851) + boot reconcile (runtime.go:618) — safe to delete.
+      enforceEngineeringAssignmentDeadlines is NOT covered: a healthy
+      bound+active assignment never arms the watchdog, so a new wake armed
+      at bind (fires at CreatedAt+engineeringAssignmentDeadline=6h) is
+      required before deletion. commit() non-atomicity still open.
     main_uncertainty: >-
-      Whether any assignment can be created/left in a state with no armed
-      wake (pre-K rows, replayed, hand-opened) — that set bounds whether
-      the sweeps can be fully deleted or must degrade to a rare boot-scan.
+      Whether a store-level transaction can wrap record+envelope+cursor,
+      or the mission lands a named partial-commit recovery; and whether a
+      deadline wake handler must cancel non-pending bound assignments
+      (extending resumeStrandedFateAssignmentIfPending's contract).
     next_observation: >-
-      The coverage audit output: enumerate assignment lifecycle states and
-      map each to its wake source.
-  blocker_or_risk: >-
-    Atomic-commit may require a store-level transaction that does not exist —
-    if so, the mission lands the named partial-commit recovery instead and
-    records the tradeoff.
+      A store transaction primitive for the commit triple, else the
+      partial-commit recovery design.
+  blocker_or_risk: none — audit done, two repairs chartered
   next_action: >-
-    Write the wake-coverage audit (list every assignment lifecycle state vs.
-    its wake source), then charter the two repairs.
+    Arm assigned_engineering_fate_deadline (or a sibling wake kind) at
+    BindEngineeringAssignment for the 6h deadline; extend the handler to
+    cancel expired bound+active assignments; delete both selection-path
+    sweeps; then make commit() atomic-or-recovering.
 
 receipts: []
 ---

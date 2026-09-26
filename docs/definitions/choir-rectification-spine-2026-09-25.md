@@ -108,8 +108,10 @@ boundaries:
 now:
   status: working
   slice: >-
-    station R2x — carrier substrate integrity: atomic act commit +
-    fate-sweep ungating. Live station goal:
+    station R2x — carrier substrate integrity. Wake-coverage audit done:
+    stranded-frozen sweep is redundant (watchdog + boot reconcile cover it);
+    deadline-cancel needs a new wake armed at bind. Atomic-commit repair
+    still open. Live station goal:
     docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md
   source_ref: main@79d0b52b
   deploy_identity: staging https://choir.news build.commit=537fce04
@@ -131,10 +133,7 @@ now:
     test: >-
       The M11 episode on staging: a self-dev operation promotes a candidate
       under reversible-selfdev consensus, falsifies candidate B, restores to
-      the pinned head — and the owner reads every step in the live doc.
-    edge: frame_lock — the spine could complete each mission's acceptance
-      while the owner still cannot supervise the whole arc from one doc
-      (per-mission greens, no product-level supervision loop). That is why
+      the pinned head — and the owner reads every step in the live doc;
       the M11 acceptance binds the live doc, not only the ledger.
     delta_o: >-
       R3d+R4 land idea-level doc state before the gate, so the observer can
@@ -165,15 +164,14 @@ now:
       a lift or a build — the sharpest execution risk the panel named; the
       wake-coverage audit (R2x) bounds the fate-deletion side meanwhile.
     next_observation: >-
-      R2x's wake-coverage audit output — the set of assignment states with
-      no armed derivable wake.
+      R2x's wake-coverage audit is done — now watching the deadline-wake
+      build and the commit-atomicity decision (transaction vs recovery).
   blocker_or_risk: >-
     Station pointer must be rewritten at every terminal receipt (the /goal
     string itself stays constant — this file is the entrypoint). Stale
     stations are the named failure mode the Goal-Station Handoff guards.
   next_action: >-
-    Run the R2x wake-coverage audit: enumerate every assignment lifecycle
-    state vs. its derivable-wake source, then charter the two repairs.
+    Run R2x: deadline-wake at bind + sweep deletions + atomic commit.
 
 receipts: []
 ---
