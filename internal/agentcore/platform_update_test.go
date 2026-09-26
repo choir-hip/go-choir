@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/platformrelease"
@@ -283,6 +284,103 @@ func TestPlatformUpdateBootstrapsAbsentRoute(t *testing.T) {
 	if err != nil || !replay.Replayed {
 		t.Fatalf("bootstrap replay: %v %+v", err, replay)
 	}
+}
+
+// TestPlatformUpdateResumesPendingTransition proves the restart-resume
+// contract: an update whose accepted event committed but whose apply died
+// with the guest restart (pending transition still open) may re-drive the
+// same offer to completion, while an offer bound to a different pending
+// transition is still stale.
+func TestPlatformUpdateResumesPendingTransition(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-platform-update-resume")
+	ctx := context.Background()
+
+	offer := fx.mintPlatformUpdateOffer(t, "update-resume", "<html>resume</html>", fx.currentHead(t))
+	offerDigest := mustOfferDigest(t, offer)
+
+	// Simulate the killed flight: commit only the accepted event, leaving the
+	// pending transition open — the state a re-pushed offer observes after the
+	// guest restarts.
+	targetCommitment, err := selfdevprotocol.Digest(struct {
+		ComputerID    string `json:"computer_id"`
+		UpdateID      string `json:"update_id"`
+		OfferDigest   string `json:"offer_digest"`
+		ContentDigest string `json:"content_digest"`
+	}{fx.computerID, offer.UpdateID, offerDigest, offer.Manifest.ContentDigest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := fx.store.Head(ctx, fx.computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v", err)
+	}
+	acceptedEventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	acceptedEvent := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: acceptedEventID, ComputerID: fx.computerID,
+		EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "platform-update-accepted-" + offer.UpdateID,
+		ActorProfile:   agentprofile.Management, AuthorityRef: "platform-control:update",
+		PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
+		ProposedEffectRef: offer.Manifest.ContentDigest, DecisionRef: offerDigest,
+		VerifierRefs:                     offer.VerifierRefs,
+		RequireExpectedHead:              true,
+		PreviousHead:                     head.CanonicalEventHead,
+		ExpectedDesiredEventHead:         head.DesiredEventHead,
+		ExpectedEffectiveEventHead:       head.EffectiveEventHead,
+		ExpectedDesiredStateCommitment:   head.DesiredStateCommitment,
+		ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
+		ReducerVersion:                   computerevent.ReducerVersionV1,
+	}
+	if _, err := fx.appender.AppendNew(ctx, acceptedEvent, computerevent.TransitionInput{TargetStateCommitment: targetCommitment}, nil); err != nil {
+		t.Fatalf("seed accepted event: %v", err)
+	}
+
+	// A different update is stale while this transition is pending.
+	staleOffer := fx.mintPlatformUpdateOffer(t, "update-other", "<html>other</html>", fx.currentHead(t))
+	if _, err := fx.rt.ApplyPlatformUpdate(ctx, staleOffer); err != ErrPlatformUpdateStaleHead {
+		t.Fatalf("foreign-pending offer: got %v, want ErrPlatformUpdateStaleHead", err)
+	}
+
+	// Re-pushing the same offer resumes the pending transition to completion.
+	report, err := fx.rt.ApplyPlatformUpdate(ctx, offer)
+	if err != nil {
+		t.Fatalf("resume refused: %v", err)
+	}
+	if report.ReleaseDigest == "" || report.CheckpointDigest == "" || report.Replayed {
+		t.Fatalf("resume report incomplete: %+v", report)
+	}
+
+	// The accepted event was not duplicated; the update's event set is
+	// exactly one of each phase.
+	kinds := fx.countEventKinds()
+	for _, kind := range []computerevent.EventKind{
+		computerevent.EventEffectAccepted, computerevent.EventMaterializationStarted,
+		computerevent.EventMaterializationApplied, computerevent.EventCheckpointPublished,
+		computerevent.EventRouteProjectionUpdated,
+	} {
+		if kinds[kind] != 1 {
+			t.Fatalf("event %s count = %d, want 1", kind, kinds[kind])
+		}
+	}
+	slot, latestReceipt, err := fx.ledger.Resolve(ctx, mustRouteSlotID(t))
+	if err != nil {
+		t.Fatalf("route resolve: %v", err)
+	}
+	if slot.Generation != 2 || latestReceipt.Kind != routeledger.TransitionPromote {
+		t.Fatalf("resumed route: gen=%d kind=%s, want generation-2 promote", slot.Generation, latestReceipt.Kind)
+	}
+}
+
+func mustOfferDigest(t *testing.T, offer selfdevprotocol.PlatformUpdateOffer) string {
+	t.Helper()
+	digest, err := offer.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return digest
 }
 
 func mustRouteSlotID(t *testing.T) string {

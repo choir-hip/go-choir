@@ -100,73 +100,104 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	if err != nil || head == nil {
 		return report, fmt.Errorf("platform update: canonical head unavailable")
 	}
-	if head.CanonicalEventHead != offer.BaseEventHead || head.PendingTransitionRef != "" {
+	// Resume gate: a platform update restarts its own guest, killing this
+	// handler mid-flight after the accepted event commits. A re-pushed
+	// identical offer may continue only when the pending transition is this
+	// update's own accepted event — any other pending transition is stale.
+	acceptedKey := platformUpdateIdempotencyKey("accepted", offer.UpdateID)
+	var acceptedDigest string
+	resuming := false
+	if head.PendingTransitionRef != "" {
+		pendingEvent, found, evErr := rt.store.EventByIdempotency(ctx, computerID, acceptedKey)
+		if evErr != nil {
+			return report, evErr
+		}
+		if !found {
+			return report, ErrPlatformUpdateStaleHead
+		}
+		pendingDigest, digestErr := pendingEvent.Digest()
+		if digestErr != nil {
+			return report, digestErr
+		}
+		if pendingDigest != head.PendingTransitionRef {
+			return report, ErrPlatformUpdateStaleHead
+		}
+		acceptedDigest = pendingDigest
+		resuming = true
+	} else if head.CanonicalEventHead != offer.BaseEventHead {
 		return report, ErrPlatformUpdateStaleHead
 	}
 
-	// Target commitment: what the accepted event binds the desired state to.
-	// Deterministic over the offer — both verifier and auditor recompute it.
-	targetCommitment, err := selfdevprotocol.Digest(struct {
-		ComputerID    string `json:"computer_id"`
-		UpdateID      string `json:"update_id"`
-		OfferDigest   string `json:"offer_digest"`
-		ContentDigest string `json:"content_digest"`
-	}{computerID, offer.UpdateID, offerDigest, offer.Manifest.ContentDigest})
-	if err != nil {
-		return report, err
-	}
+	if !resuming {
+		// Target commitment: what the accepted event binds the desired state to.
+		// Deterministic over the offer — both verifier and auditor recompute it.
+		targetCommitment, targetErr := selfdevprotocol.Digest(struct {
+			ComputerID    string `json:"computer_id"`
+			UpdateID      string `json:"update_id"`
+			OfferDigest   string `json:"offer_digest"`
+			ContentDigest string `json:"content_digest"`
+		}{computerID, offer.UpdateID, offerDigest, offer.Manifest.ContentDigest})
+		if targetErr != nil {
+			return report, targetErr
+		}
 
-	// Canonical binding: the accepted event commits desired state BEFORE the
-	// updater mutates anything. AcceptedEventHead must be a real head.
-	acceptedEventID, err := computerevent.NewEventID()
-	if err != nil {
-		return report, err
+		// Canonical binding: the accepted event commits desired state BEFORE the
+		// updater mutates anything. AcceptedEventHead must be a real head.
+		acceptedEventID, idErr := computerevent.NewEventID()
+		if idErr != nil {
+			return report, idErr
+		}
+		acceptedEvent := computerevent.Event{
+			SchemaVersion: computerevent.SchemaVersionV1, EventID: acceptedEventID, ComputerID: computerID,
+			EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+			IdempotencyKey: acceptedKey,
+			ActorProfile:   agentprofile.Management, AuthorityRef: "platform-control:update",
+			PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
+			ProposedEffectRef: offer.Manifest.ContentDigest, DecisionRef: offerDigest,
+			VerifierRefs:                     offer.VerifierRefs,
+			RequireExpectedHead:              true,
+			PreviousHead:                     head.CanonicalEventHead,
+			ExpectedDesiredEventHead:         head.DesiredEventHead,
+			ExpectedEffectiveEventHead:       head.EffectiveEventHead,
+			ExpectedDesiredStateCommitment:   head.DesiredStateCommitment,
+			ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
+			ReducerVersion:                   computerevent.ReducerVersionV1,
+		}
+		if _, appendErr := rt.eventAppender.AppendNew(ctx, acceptedEvent, computerevent.TransitionInput{TargetStateCommitment: targetCommitment}, nil); appendErr != nil {
+			return report, fmt.Errorf("platform update: accepted event refused: %w", appendErr)
+		}
+		head, err = rt.store.Head(ctx, computerID)
+		if err != nil || head == nil || head.PendingTransitionRef == "" {
+			return report, fmt.Errorf("platform update: accepted head projection unavailable")
+		}
+		acceptedDigest = head.CanonicalEventHead
 	}
-	acceptedEvent := computerevent.Event{
-		SchemaVersion: computerevent.SchemaVersionV1, EventID: acceptedEventID, ComputerID: computerID,
-		EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: platformUpdateIdempotencyKey("accepted", offer.UpdateID),
-		ActorProfile:   agentprofile.Management, AuthorityRef: "platform-control:update",
-		PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
-		ProposedEffectRef: offer.Manifest.ContentDigest, DecisionRef: offerDigest,
-		VerifierRefs:                     offer.VerifierRefs,
-		RequireExpectedHead:              true,
-		PreviousHead:                     head.CanonicalEventHead,
-		ExpectedDesiredEventHead:         head.DesiredEventHead,
-		ExpectedEffectiveEventHead:       head.EffectiveEventHead,
-		ExpectedDesiredStateCommitment:   head.DesiredStateCommitment,
-		ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
-		ReducerVersion:                   computerevent.ReducerVersionV1,
-	}
-	if _, err = rt.eventAppender.AppendNew(ctx, acceptedEvent, computerevent.TransitionInput{TargetStateCommitment: targetCommitment}, nil); err != nil {
-		return report, fmt.Errorf("platform update: accepted event refused: %w", err)
-	}
-	head, err = rt.store.Head(ctx, computerID)
-	if err != nil || head == nil || head.PendingTransitionRef == "" {
-		return report, fmt.Errorf("platform update: accepted head projection unavailable")
-	}
-	acceptedDigest := head.CanonicalEventHead
 	report.AcceptedEventHead = acceptedDigest
 
 	// Materialization started — mirrors the selfdev event surface so tapes
-	// carry the same transition shape for updates and owner decisions.
-	startedEventID, err := computerevent.NewEventID()
-	if err != nil {
-		return report, err
+	// carry the same transition shape for updates and owner decisions. On a
+	// resume the event already committed; dedup on the idempotency key.
+	startedKey := platformUpdateIdempotencyKey("started", offer.UpdateID)
+	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, computerID, startedKey); lookupErr != nil {
+		return report, lookupErr
+	} else if !found {
+		startedEventID, idErr := computerevent.NewEventID()
+		if idErr != nil {
+			return report, idErr
+		}
+		startedEvent := computerevent.Event{
+			SchemaVersion: computerevent.SchemaVersionV1, EventID: startedEventID, ComputerID: computerID,
+			EventKind: computerevent.EventMaterializationStarted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+			IdempotencyKey: startedKey,
+			ActorProfile:   agentprofile.Management, AuthorityRef: "guest-core:choir-updater",
+			PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
+			ProposedEffectRef: offerDigest, DecisionRef: acceptedDigest,
+			ReducerVersion: computerevent.ReducerVersionV1,
+		}
+		if _, appendErr := rt.eventAppender.AppendNew(ctx, startedEvent, computerevent.TransitionInput{}, nil); appendErr != nil {
+			return report, fmt.Errorf("platform update: materialization-start refused: %w", appendErr)
+		}
 	}
-	startedEvent := computerevent.Event{
-		SchemaVersion: computerevent.SchemaVersionV1, EventID: startedEventID, ComputerID: computerID,
-		EventKind: computerevent.EventMaterializationStarted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: platformUpdateIdempotencyKey("started", offer.UpdateID),
-		ActorProfile:   agentprofile.Management, AuthorityRef: "guest-core:choir-updater",
-		PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
-		ProposedEffectRef: offerDigest, DecisionRef: acceptedDigest,
-		ReducerVersion: computerevent.ReducerVersionV1,
-	}
-	if _, err = rt.eventAppender.AppendNew(ctx, startedEvent, computerevent.TransitionInput{}, nil); err != nil {
-		return report, fmt.Errorf("platform update: materialization-start refused: %w", err)
-	}
-
 	// Finalize the manifest with the real accepted head, then stage payload
 	// into the updater's trusted incoming store.
 	manifest := offer.Manifest
