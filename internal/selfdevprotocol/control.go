@@ -307,7 +307,7 @@ func (r AuthorityReceipt) signingPayload() ([]byte, error) {
 }
 
 func NewAuthorityReceipt(kind, computerID, requestCommitment, artifactDigest, issuer string, signer computerevent.SigningKey, issuedAt time.Time) (AuthorityReceipt, error) {
-	if (kind != ReceiptKindCheckpoint && kind != ReceiptKindRouteProjection) || strings.TrimSpace(computerID) == "" || !computerevent.IsSHA256(requestCommitment) || !computerevent.IsSHA256(artifactDigest) || strings.TrimSpace(issuer) == "" || len(signer.PrivateKey) != ed25519.PrivateKeySize || signer.SignerDomain != "platform-control" || signer.KeyID == "" || issuedAt.IsZero() {
+	if (kind != ReceiptKindCheckpoint && kind != ReceiptKindRouteProjection && kind != ReceiptKindPlatformUpdate) || strings.TrimSpace(computerID) == "" || !computerevent.IsSHA256(requestCommitment) || !computerevent.IsSHA256(artifactDigest) || strings.TrimSpace(issuer) == "" || len(signer.PrivateKey) != ed25519.PrivateKeySize || signer.SignerDomain != "platform-control" || signer.KeyID == "" || issuedAt.IsZero() {
 		return AuthorityReceipt{}, fmt.Errorf("self-development authority receipt: complete platform-control bindings are required")
 	}
 	receipt := AuthorityReceipt{Kind: kind, ComputerID: computerID, RequestCommitment: requestCommitment, ArtifactDigest: artifactDigest, Issuer: issuer, Signer: signer.SignerRef, IssuedAt: issuedAt.UTC()}

@@ -133,6 +133,23 @@ func (c *Client) ApplySelfDevelopmentRouteProjection(ctx context.Context, reques
 	return resolution, nil
 }
 
+// ApplyPlatformFollowRouteProjection posts the signed projection to the
+// platform-follow endpoint — the platform-update evidence class, gated to
+// promote commands under the platform-follow scope.
+func (c *Client) ApplyPlatformFollowRouteProjection(ctx context.Context, request selfdevprotocol.ApplyRouteProjectionRequest) (RouteResolution, error) {
+	var resolution RouteResolution
+	if err := c.postComputerVersionControl(ctx, ApplyPlatformFollowRouteProjectionEndpoint(c.baseURL), request, &resolution); err != nil {
+		return RouteResolution{}, err
+	}
+	if err := validateRouteResolution(request.Projection.Command.RouteSlotID, resolution); err != nil {
+		return RouteResolution{}, err
+	}
+	if resolution.TransitionReceipt == nil || !routeledger.ReceiptMatchesCommand(*resolution.TransitionReceipt, request.Projection.Command) {
+		return RouteResolution{}, fmt.Errorf("vmctl client: platform-follow route receipt failed command join")
+	}
+	return resolution, nil
+}
+
 func (c *Client) postComputerVersionControl(ctx context.Context, endpoint string, input, output any) error {
 	if c == nil || c.httpClient == nil {
 		return fmt.Errorf("vmctl client: route client is not configured")

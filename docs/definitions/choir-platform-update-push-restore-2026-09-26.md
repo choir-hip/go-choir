@@ -168,26 +168,33 @@ boundaries:
 now:
   status: working
   slice: >-
-    station M9a WORKING 2026-09-26 — boundary probe complete.
-    Gap confirmed: no platform->computer update channel exists;
-    PlatformRelease/ComputerLineage are unconsumed schema; the only
-    updater.Apply callers are selfdev materialize/rollback. Chosen
-    seams: (1) signed update offer minted by platform-control —
-    computer/realization/idempotency/release/content digests +
-    lineage policy + expiry; (2) guest apply endpoint reached via the
-    existing vmctl autoputer-proxy transport, verifying signature +
-    computer binding + epoch + policy before staging payload into the
-    updater incoming store; (3) canonical binding — a platform-authorized
-    desired-state event commits before Apply so AcceptedEventHead is a
-    real head, then applied event + checkpoint + route promotion under
-    a new platform-follow evidence class (TransitionPromote mechanics,
-    distinct evidence payloads — not the owner self-dev endpoint);
-    (4) restore edge = existing checkpoint/tape rematerialization
-    (AcceptedEventHead pinning + RestagePinnedRelease). Rejected:
-    guest poller (push is the mandate; poll adds a second authority to
-    tune), self-dev route reuse (wrong evidence contract — would forge
-    owner-decision evidence), unversioned apply (breaks restore
-    binding).
+    station M9a IMPLEMENTED 2026-09-26 — local proofs green. Built
+    exactly per the boundary-probe seams: (1)
+    selfdevprotocol.PlatformUpdateOffer + ReceiptKindPlatformUpdate
+    minted by corpusd POST /internal/computers/platform-updates/offer
+    (platform-control signed; closure/program/manifest derived
+    server-side — requesters never hand-compute content refs);
+    (2) guest POST /internal/runtime/platform-update via the existing
+    vmctl autoputer-proxy, verification-first (signature, computer +
+    realization binding, lineage auto/tracking/non-divergent, expiry,
+    base-head) before staging payload into the updater incoming store;
+    (3) canonical binding — effect_accepted (AuthorityRef
+    platform-control:update, DecisionRef = signed offer digest) commits
+    desired state before updater.Apply, then materialization_started /
+    materialization_applied, verifier certificate, checkpoint publish,
+    and TransitionPromote through the NEW platform-follow endpoint
+    /internal/vmctl/computer-version-routes/apply-platform-follow
+    (scope-gated to platform + computer:platform_follow:update; the
+    self-dev endpoint now refuses non-selfdev scopes); (4) restore edge
+    reused unchanged — RematerializeFromTape + RestagePinnedRelease on
+    the update's published checkpoint. Local proofs:
+    TestPlatformUpdatePushAppliesAndRestores (push A -> promote ->
+    push B -> restore to A's pinned head serves release A again) and
+    TestPlatformUpdateRefusals (bad signature, wrong computer, expired
+    window, pinned/divergent lineage, stale base head, tampered payload,
+    wrong receipt kind — all refused before any canonical mutation).
+    Staging probe scripts/m9a_platform_update_probe.mjs awaits the
+    landing loop.
   source_ref: main@87259816
   deploy_identity: staging https://choir.news build.commit=722b49bf
   candidate:

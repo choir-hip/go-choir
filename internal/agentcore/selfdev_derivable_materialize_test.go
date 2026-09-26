@@ -158,8 +158,34 @@ type liveBaseSource struct {
 
 	mu         sync.Mutex
 	rebuiltSeq int
+	pinnedHead string
 	descriptor projectionbase.Descriptor
 	blob       []byte
+}
+
+// pinAtHead freezes the advertised base at a historical chain head so the
+// watermark can advertise an earlier restore point while the live chain keeps
+// advancing past it.
+func (s *liveBaseSource) pinAtHead(ctx context.Context, targetHead string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var pinned []computerevent.DurableEvent
+	var pinSeq int
+	for _, record := range s.cas.snapshot() {
+		pinned = append(pinned, record)
+		if record.Request.Next.CanonicalEventHead == targetHead {
+			pinSeq = len(pinned)
+			break
+		}
+	}
+	if pinSeq == 0 {
+		return fmt.Errorf("test base source: %s is not on the live chain", targetHead)
+	}
+	if err := s.rebuildAt(ctx, pinned, targetHead); err != nil {
+		return err
+	}
+	s.pinnedHead = targetHead
+	return nil
 }
 
 func (s *liveBaseSource) Watermark(ctx context.Context, computerID string) (uint64, string, error) {
@@ -200,13 +226,22 @@ func (s *liveBaseSource) TailPage(_ context.Context, _ string, afterSequence uin
 
 func (s *liveBaseSource) ensure(ctx context.Context) error {
 	events := s.cas.snapshot()
-	if len(events) == 0 || len(events) == s.rebuiltSeq {
+	if len(events) == 0 || s.pinnedHead != "" || len(events) == s.rebuiltSeq {
 		return nil
 	}
 	head, err := s.cas.Head(ctx, s.computerID)
 	if err != nil || head == nil {
 		return fmt.Errorf("test base source: live head unavailable: %v", err)
 	}
+	if err := s.rebuildAt(ctx, events, head.CanonicalEventHead); err != nil {
+		return err
+	}
+	s.rebuiltSeq = len(events)
+	return nil
+}
+
+func (s *liveBaseSource) rebuildAt(ctx context.Context, events []computerevent.DurableEvent, targetHead string) error {
+	head := &events[len(events)-1].Request.Next
 	chain := &payloadChainSource{
 		memChainSource: &memChainSource{events: events, head: head, computerID: s.computerID},
 		pinner:         s.pinner,
@@ -216,9 +251,9 @@ func (s *liveBaseSource) ensure(ctx context.Context) error {
 		keyMaterial[i] = byte(i + 23)
 	}
 	rebuilder, err := projectionbase.NewRebuilder(projectionbase.Config{
-		ComputerID: s.computerID, TargetHead: head.CanonicalEventHead,
-		ArtifactsRoot: filepath.Join(s.tempRoot, fmt.Sprintf("artifacts-%d", len(events))),
-		ScratchDir:    filepath.Join(s.tempRoot, fmt.Sprintf("scratch-%d", len(events))),
+		ComputerID: s.computerID, TargetHead: targetHead,
+		ArtifactsRoot: filepath.Join(s.tempRoot, fmt.Sprintf("artifacts-%d-%s", len(events), targetHead[:8])),
+		ScratchDir:    filepath.Join(s.tempRoot, fmt.Sprintf("scratch-%d-%s", len(events), targetHead[:8])),
 		KeyMaterial:   keyMaterial, BatchSize: 100, MemoryLimitRSS: 512 * 1024 * 1024,
 	})
 	if err != nil {
@@ -226,17 +261,16 @@ func (s *liveBaseSource) ensure(ctx context.Context) error {
 	}
 	result, err := rebuilder.Run(ctx, chain)
 	if err != nil {
-		return fmt.Errorf("test base source: rebuild at seq %d: %w", head.Sequence, err)
+		return fmt.Errorf("test base source: rebuild at %s: %w", targetHead[:12], err)
 	}
 	blob, err := os.ReadFile(result.BlobPath)
 	if err != nil {
 		return err
 	}
-	s.descriptor, s.blob, s.rebuiltSeq = result.Descriptor, blob, len(events)
+	s.descriptor, s.blob = result.Descriptor, blob
 	return nil
 }
 
-// derivable service-manager and health-prober satisfy the updater engine's
 // collaborators; the receipt signer signs guest-core receipts for the updater
 // exactly like cmd/choir-updater's signer proxy.
 type derivableServiceManager struct{ restarts int }
@@ -280,6 +314,8 @@ type derivableSelfDevFixture struct {
 	controlFail *atomic.Bool
 	updaterRoot string
 	service     *derivableServiceManager
+	platformKey ed25519.PrivateKey
+	baseSource  *liveBaseSource
 }
 
 // shortSockDir makes a short-named temp dir because unix socket paths cap at
@@ -421,6 +457,7 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 	if err != nil {
 		t.Fatal(err)
 	}
+	fx.platformKey = platformKey
 	authorityKey := computerevent.SigningKey{
 		SignerRef:  computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "authority-test"},
 		PrivateKey: platformKey,
@@ -521,6 +558,37 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 			CodeClosure: request.Projection.CodeClosure, ArtifactProgram: request.Projection.ArtifactProgram,
 		})
 	})
+	vmctlMux.HandleFunc("/internal/vmctl/computer-version-routes/apply-platform-follow", func(w http.ResponseWriter, r *http.Request) {
+		raw, ok := readBody(r.Body)
+		var request selfdevprotocol.ApplyRouteProjectionRequest
+		if !ok || json.Unmarshal(raw, &request) != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// Mirror production scope gating: the platform-follow endpoint only
+		// accepts the platform-follow actor/scope on promote commands.
+		if request.Projection.DecisionScope != selfdevprotocol.PlatformUpdateFollowScope ||
+			request.Projection.DecisionActor != selfdevprotocol.PlatformUpdateFollowActor ||
+			request.Projection.Command.Kind != routeledger.TransitionPromote {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "platform-follow promote scope is required"})
+			return
+		}
+		command := request.Projection.Command
+		slot, receipt, err := fx.ledger.TransitionWithEvidence(r.Context(), command,
+			[]routeledger.AuthorizationEvidence{request.Projection.ApprovalEvidence, request.Projection.PromotionEvidence})
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		fx.closures[string(slot.Current.CodeRef)] = request.Projection.CodeClosure
+		fx.programs[string(slot.Current.ArtifactProgramRef)] = request.Projection.ArtifactProgram
+		_ = json.NewEncoder(w).Encode(vmctl.RouteResolution{
+			Slot: slot, LatestReceipt: receipt, TransitionReceipt: &receipt,
+			CodeClosure: request.Projection.CodeClosure, ArtifactProgram: request.Projection.ArtifactProgram,
+		})
+	})
 	vmctlServer := httptest.NewServer(vmctlMux)
 	t.Cleanup(vmctlServer.Close)
 
@@ -537,7 +605,8 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 	}
 	operations.BindProjectionSink(productStore)
 	rt.selfdevOperations = operations
-	rt.restoreBaseSource = &liveBaseSource{computerID: computerID, cas: fx.cas, pinner: fx.pinner, tempRoot: t.TempDir()}
+	fx.baseSource = &liveBaseSource{computerID: computerID, cas: fx.cas, pinner: fx.pinner, tempRoot: t.TempDir()}
+	rt.restoreBaseSource = fx.baseSource
 	WithSelfDevelopmentUpdater(updaterClient, updaterRoot, computerID, "realization-derivable")(rt)
 	WithSelfDevelopmentVerifier(verifierClient)(rt)
 	WithSelfDevelopmentControl(selfdev.GuestCredentialsWithCapability(platformServer.URL, computerID, "capability", time.Now().UTC().Add(time.Hour), platformKey.Public().(ed25519.PublicKey)))(rt)

@@ -386,3 +386,7 @@ func ResolveComputerVersionRouteEndpoint(baseURL string) string {
 func ApplySelfDevelopmentRouteProjectionEndpoint(baseURL string) string {
 	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/apply-self-development"
 }
+
+func ApplyPlatformFollowRouteProjectionEndpoint(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/apply-platform-follow"
+}
