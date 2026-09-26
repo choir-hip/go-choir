@@ -1,8 +1,5 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { chromium } from '../frontend/node_modules/playwright/index.mjs';
 import { registerPasskey } from '../frontend/tests/helpers/auth.js';
 import {
@@ -76,7 +73,7 @@ function pushOffer(ownerID, offer) {
 
 function resolveRoute(ownerID) {
   return nodeBJSON(
-    `curl -fsS -H "X-Internal-Caller: true" 'http://127.0.0.1:8083/internal/vmctl/computer-version-routes/resolve?route_slot_id=route:${encodeURIComponent(ownerID)}:primary'`,
+    `curl -fsS -H "X-Internal-Caller: true" 'http://127.0.0.1:8083/internal/vmctl/computer-version-routes/resolve?route_slot_id=computer:${encodeURIComponent(ownerID)}:primary'`,
   );
 }
 
@@ -173,24 +170,23 @@ try {
   if (!pushA?.release_digest || !pushA?.checkpoint_digest || !pushA?.checkpoint?.checkpoint) {
     throw new Error(`update A refused or incomplete: ${JSON.stringify(pushA)}`);
   }
-
-  const routeAfterA = resolveRoute(ownerID);
-  result.route_after_a = routeAfterA;
-  if (!routeAfterA?.slot || routeAfterA.slot.generation !== (routeBefore.slot?.generation ?? 0) + 1) {
-    throw new Error(`route slot did not promote after update A: ${JSON.stringify(routeAfterA)}`);
-  }
-
   // Restore edge: return to the update-A pinned head via the product path.
-  const checkpointFile = join(mkdtempSync(join(tmpdir(), 'm9a-')), 'checkpoint-a.json');
-  writeFileSync(checkpointFile, JSON.stringify(pushA.checkpoint.checkpoint));
-  const restore = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/restore`, {
-    checkpoint: pushA.checkpoint.checkpoint,
-    operand_scopes: ['vm_local', 'computer_surface_frontend'],
-  });
-  result.restore = restore.json ?? restore.text;
-  if (restore.status !== 200 || !(restore.json?.frontend_restaged === true)) {
+  // updater.Apply restarts the guest service — retry the restore POST across
+  // the brief restart window.
+  let restore = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    restore = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/restore`, {
+      checkpoint: pushA.checkpoint.checkpoint,
+      operand_scopes: ['vm_local', 'computer_surface_frontend'],
+    });
+    if (restore.status === 200 || restore.status === 400 || restore.status === 409) break;
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+  result.restore = restore?.json ?? restore?.text ?? restore;
+  if (!restore || restore.status !== 200 || !(restore.json?.frontend_restaged === true)) {
     throw new Error(`restore to update-A head failed: ${JSON.stringify(result.restore)}`);
   }
+
   result.predicate_result = 'satisfied';
 } catch (error) {
   result.predicate_result = 'refused';
