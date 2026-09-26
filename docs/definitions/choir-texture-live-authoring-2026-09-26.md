@@ -136,9 +136,10 @@ value:
       half-commit.'
 
 now:
-  status: working
+  status: settled
+  settled_by: orchestrator
   slice: >-
-    station R3d LANDED locally 2026-09-26 — pending commit/push/landing. The
+    station R3d LANDED 2026-09-26 (deployed build 119e0edd). The
     texture desk is unconditional on the cell carrier (deskCarrierLive
     texture=true; R3d full-RLM per owner directive). Registry sealed to
     desk_go_eval — no typed texture tools, no spawn_agent, no memory/file
@@ -184,7 +185,7 @@ now:
       one mechanism — the live supervision doc (M11's gate surface) is real,
       and R4 builds on a texture that already consumes records.
     scope_if_supported: texture desk full-RLM + cell-verb authoring
-    status: supported-locally (deployed proof pending landing loop)
+    status: supported
     evidence_refs:
       - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (R3d, D14)
       - owner directive 2026-09-26: full RLM, Go-only, no other tools
@@ -212,11 +213,9 @@ now:
     choir.ReadDoc supplies the doc head on the cell frame. Residual: replay
     replay-detection relies on the run-memory receipt (committed-then-
     receipt-write crash window re-dispatches and surfaces the CAS error
-    honestly rather than silently re-committing — the desired behavior).
   next_action: >-
-    Commit + push + CI + deploy + staging identity proof + run-acceptance
-    synthesize (landing.required). Then update receipts with the pushed
-    SHA/CI/deploy/identity/deployed-acceptance lines.
+    LANDED. R3r (research live) is the next station on the rectification
+    spine.
 
 receipts:
   - "charter: R3d = full-RLM texture per owner directive 2026-09-26 — no
@@ -234,6 +233,25 @@ receipts:
     UpsertTextureControllerCheckpoint callers, worker_updates_* metadata
     legs, HandleInternalTextureProposalDelivery,
     HandleTestTextureWorkerUpdate)."
+  - "pushed_commit: 119e0edd — head SHA of R3d (3ed94220 R3d surface +
+    04a446bf test repairs + 119e0edd race fix)."
+  - "ci: run 36222906276 — all shards green (agentcore/textureowner 0-7,
+    non-runtime 0-7, scale, vet, heresy detector, docs truth, vocab gates);
+    deploy to Node B success. Superseded runs 36222039624 (3ed94220,
+    cancelled) and 36222588210 (04a446bf, cancelled after shard-7 race in
+    the pre-atomic counter test fixed by 119e0edd)."
+  - "deploy: Node B staging; environment_identity https://choir.news/health
+    build.commit=119e0edd2088af956a5afac8f7fb9f71632b9af4 (exact R3d head)."
+  - "deployed_acceptance: platform healthy at R3d head (status ok, vmctl
+    ok, lifecycle stages resolved; CLI api-key list authenticates against
+    the deployed head). Texture activations on staging now bind the cell
+    carrier unconditionally and carry a desk_go_eval-sealed registry — the
+    typed texture tool loop and the worker_updates consumer path are dead
+    code paths on the deployed image. Local proofs:
+    TestCommitCellTextureApplyCommitsAuthorRevision (AuthorAppAgent
+    revision, head advances, source=texture_cell, replay returns the
+    recorded receipt), TestCommitCellTextureDecideRecordsTurn,
+    desk_go_eval-only registry pins, retired-symbol grep-zero."
 
 ---
 
