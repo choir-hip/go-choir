@@ -57,7 +57,14 @@ run_shard() {
     if (( shard_index < store_shards )); then
       # Shards 0..(store_shards-1): Run sub-shard of internal/store by test name.
       local -a store_tests=()
-      mapfile -t store_tests < <(go test "$store_package" -list '^(Test|Example)' | grep -E '^(Test|Example)' || true)
+      # Match execution's build mode (especially -race) so discovery warms
+      # the right cache. Capture first: process substitution hides failures.
+      local listing
+      if ! listing=$(go test "$store_package" "$@" -list '^(Test|Example)'); then
+        echo "Test discovery failed for $store_package" >&2
+        return 1
+      fi
+      mapfile -t store_tests < <(grep -E '^(Test|Example)' <<<"$listing" || true)
       if (( ${#store_tests[@]} == 0 )); then
         echo "No store tests found"
         return 0

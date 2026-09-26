@@ -110,6 +110,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          .github/scripts/go-shard-discovery-test
           .github/scripts/ci-impact-classify-test
           .github/scripts/sbom-semantic-fingerprint-test
           .github/scripts/build-sboms-differential-test
@@ -129,10 +130,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: ./.github/actions/setup-go-build-cache
         with:
-          go-version-file: go.mod
-          cache: true
+          lane: vet-build
 
       - name: Go vet
         run: go vet ./...
@@ -180,10 +180,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: ./.github/actions/setup-go-build-cache
         with:
-          go-version-file: go.mod
-          cache: true
+          lane: non-runtime-${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}-${{ matrix.shard < 6 && 'store' || matrix.shard }}
 
       - name: Go test non-runtime shard
         shell: bash
@@ -213,10 +212,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: ./.github/actions/setup-go-build-cache
         with:
-          go-version-file: go.mod
-          cache: true
+          lane: runtime-${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}
 
       - name: Go test agentcore/textureowner shard
         env:
@@ -254,10 +252,9 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: ./.github/actions/setup-go-build-cache
         with:
-          go-version-file: go.mod
-          cache: true
+          lane: scale-standard
 
       - name: Go test quarantined scale tests with one retry
         shell: bash

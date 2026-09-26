@@ -16,7 +16,14 @@ run_shard() {
 
   for package in "${packages[@]}"; do
     local -a tests=()
-    mapfile -t tests < <(go test "$package" -list '^(Test|Example)' | grep -E '^(Test|Example)' || true)
+    # Match execution's build mode (especially -race) so discovery warms
+    # the right cache. Capture first: process substitution hides failures.
+    local listing
+    if ! listing=$(go test "$package" "$@" -list '^(Test|Example)'); then
+      echo "Test discovery failed for $package" >&2
+      return 1
+    fi
+    mapfile -t tests < <(grep -E '^(Test|Example)' <<<"$listing" || true)
     if (( ${#tests[@]} == 0 )); then
       echo "No ${package} tests found"
       continue
