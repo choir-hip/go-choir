@@ -109,3 +109,28 @@ func (s *Store) ListCommitmentRecords(ctx context.Context, ownerID, computerID, 
 	}
 	return records, nil
 }
+
+// GetCommitmentRecord returns the stored record body for one record id,
+// or nil when absent. Read-only — used by the learning-claims gate to
+// check whether a verifier ref names a scored record.
+func (s *Store) GetCommitmentRecord(ctx context.Context, ownerID, computerID, recordID string) (*types.CommitmentRecord, error) {
+	ownerID, computerID, recordID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(recordID)
+	if ownerID == "" || computerID == "" || recordID == "" {
+		return nil, nil
+	}
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, []objectgraph.JSONFieldMatch{{JSONPath: "$.record_id", Value: recordID}}, 1)
+	if err != nil {
+		return nil, err
+	}
+	for _, obj := range objs {
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.CommitmentRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, fmt.Errorf("commitment record decode %s: %w", obj.CanonicalID, err)
+		}
+		return &rec, nil
+	}
+	return nil, nil
+}

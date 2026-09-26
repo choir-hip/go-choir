@@ -73,7 +73,8 @@ func (rt *Runtime) assignedEngineeringToolOverlay(ctx context.Context, rec *type
 func (rt *Runtime) assignedEngineeringCapsuleToolCtx(rec *types.RunRecord, handle string) *CapsuleToolCtx {
 	toolCtx := &CapsuleToolCtx{
 		Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rec.ComputerID,
-		Role: capsule.RoleEngineering, CapsuleHandle: handle,
+		OwnerID: rec.OwnerID,
+		Role:    capsule.RoleEngineering, CapsuleHandle: handle,
 		EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 		OperationStore: rt.selfdevOperations, UpdaterRoot: rt.selfdevUpdaterRoot,
 		ValidateCurrentObligation: func(callCtx context.Context) error {
@@ -82,7 +83,9 @@ func (rt *Runtime) assignedEngineeringCapsuleToolCtx(rec *types.RunRecord, handl
 	}
 	if rt != nil && rt.store != nil {
 		toolCtx.EventProjection = rt.store
+		toolCtx.Ledger = rt.store // R4 learning-claims gate lookups
 	}
+
 	return toolCtx
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -141,13 +142,18 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			if deskRole == agentprofile.Texture && execCtx.RunRecord != nil {
 				docSnapshot = textureDocSnapshotForRun(ctx, rt, execCtx.RunRecord)
 			}
+			// R4: the acting desk's commitment pack rides the same frame —
+			// score-free by construction (types.ActingPack), so the
+			// epistemic boundary holds on the wire.
+			pack := actingCommitmentPackForDesk(ctx, rt, execCtx)
 			evalCtx := ctx
 			if input.TimeoutMS > 0 {
 				var cancel context.CancelFunc
 				evalCtx, cancel = context.WithTimeout(ctx, time.Duration(input.TimeoutMS)*time.Millisecond)
 				defer cancel()
 			}
-			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot)
+			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack)
+
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
 				if w.Dead() {
@@ -269,4 +275,33 @@ func deskWorkerRoot(execCtx toolregistry.ExecutionContext) string {
 		return wd
 	}
 	return os.TempDir()
+}
+
+// actingPackMaxItems bounds the commitment pack injected into a desk cell
+// frame: enough to cover a working set without flooding model context.
+const actingPackMaxItems = 16
+
+// actingCommitmentPackForDesk builds the acting desk's score-free
+// commitment pack (R4) from the commitment ledger: the desk's own
+// committed acts plus acts addressed to it, joined with their resolution
+// observations and discrepancies. The pack rides the cell frame so
+// choir.Pack() reads it inside the worker without a network roundtrip.
+// Nil on any ledger failure — the pack is context, never a gate.
+func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) *types.ActingPack {
+	if rt == nil || rt.store == nil {
+		return nil
+	}
+	agentID := strings.TrimSpace(execCtx.AgentID)
+	ownerID := strings.TrimSpace(execCtx.OwnerID)
+	computerID := strings.TrimSpace(execCtx.ComputerID)
+	if agentID == "" || ownerID == "" || computerID == "" {
+		return nil
+	}
+	records, err := rt.store.ListCommitmentRecords(ctx, ownerID, computerID, "", 256)
+	if err != nil {
+		log.Printf("desk pack: commitment record list for %s: %v", agentID, err)
+		return nil
+	}
+	pack := types.BuildActingPack(records, agentID, actingPackMaxItems)
+	return &pack
 }

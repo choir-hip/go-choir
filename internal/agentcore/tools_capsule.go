@@ -43,6 +43,12 @@ type CapsuleToolCtx struct {
 	// ValidateCurrentObligation rejoins durable run/work/trajectory/assignment
 	// fate immediately before every readable or writable capsule execution.
 	ValidateCurrentObligation func(context.Context) error
+	// OwnerID + Ledger wire the R4 learning-claims gate: a verifier's refs
+	// resolve to commitment records only through the owner-scoped store.
+	OwnerID string
+	Ledger  interface {
+		GetCommitmentRecord(context.Context, string, string, string) (*types.CommitmentRecord, error)
+	}
 }
 
 type capsuleCtxKey struct{}
@@ -391,21 +397,32 @@ func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleTool
 	if operation.BundleDigest != bundleDigest {
 		return nil, fmt.Errorf("verification does not bind the frozen bundle content")
 	}
-	if operation.State == selfdev.StateFailed && decision == "fail" {
-		return map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "verifier_ref": firstString(operation.VerifierRefs)}, nil
-	}
-	if operation.State != selfdev.StateFrozen && operation.State != selfdev.StateVerified {
-		return nil, fmt.Errorf("self-development operation is %s, expected frozen verification state", operation.State)
-	}
 	record := map[string]any{
 		"schema_version": 1, "operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest,
 		"decision": decision, "verifier_refs": verifierRefs, "verifier_run_id": toolCtx.AgentRunID,
+		// R4 learning-claims gate: a self-development outcome claim (this
+		// verification) must cite scored commitment evidence. The gate
+		// flags rather than refuses — an unbacked claim stays
+		// distinguishable on the durable event instead of breaking
+		// verifier flows predating the ledger.
+		"claim_gate": learningClaimGate(ctx, toolCtx, verifierRefs),
 	}
 	payload, err := computerevent.CanonicalJSON(record)
 	if err != nil {
 		return nil, err
 	}
-	eventIdempotency := computerevent.DigestBytes(append([]byte("selfdev-verification-v1\x00"), payload...))
+	// claim_gate is a pure derivation of verifier_refs — it never enters
+	// the idempotency input, so an event appended before this field
+	// existed still dedupes and a replayed cell replays the same event.
+	idempotencyRecord := map[string]any{
+		"schema_version": 1, "operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest,
+		"decision": decision, "verifier_refs": verifierRefs, "verifier_run_id": toolCtx.AgentRunID,
+	}
+	idempotencyPayload, err := computerevent.CanonicalJSON(idempotencyRecord)
+	if err != nil {
+		return nil, err
+	}
+	eventIdempotency := computerevent.DigestBytes(append([]byte("selfdev-verification-v1\x00"), idempotencyPayload...))
 	verificationEvent, found, lookupErr := toolCtx.EventProjection.EventByIdempotency(ctx, toolCtx.ComputerID, eventIdempotency)
 	if lookupErr != nil {
 		return nil, lookupErr
@@ -450,6 +467,27 @@ func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleTool
 		return nil, err
 	}
 	return map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "decision": decision, "verifier_ref": verifierRef}, nil
+}
+
+// learningClaimGate applies the R4 learning-claims gate to a verification's
+// cited refs: "backed" when at least one ref names a stored commitment
+// record that carries a verdict (resolved discrepancy) or a score stamp —
+// the scored evidence the claim must stand on. The check tolerates scheme-
+// prefixed and canonical-id refs. A nil ledger (management capsule ctx, or
+// a desk without the store wired) yields "unbacked" — the gate never
+// fails open by omission.
+func learningClaimGate(ctx context.Context, toolCtx *CapsuleToolCtx, refs []string) string {
+	if toolCtx == nil || toolCtx.Ledger == nil || toolCtx.OwnerID == "" {
+		return types.LearningClaimUnbacked
+	}
+	ownerID, computerID := toolCtx.OwnerID, toolCtx.ComputerID
+	return types.GateLearningClaim(refs, func(recordID string) bool {
+		rec, err := toolCtx.Ledger.GetCommitmentRecord(ctx, ownerID, computerID, recordID)
+		if err != nil || rec == nil {
+			return false
+		}
+		return rec.Discrepancy != types.DiscrepancyUnresolved || len(rec.Scores) > 0
+	})
 }
 
 func finalizeVerifiedCapsuleBundle(ctx context.Context, toolCtx *CapsuleToolCtx, operation selfdev.Operation, verifierRef string) (selfdev.Operation, error) {

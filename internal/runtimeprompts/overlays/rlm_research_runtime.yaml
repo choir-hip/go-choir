@@ -13,7 +13,7 @@ body: |
   Send at most one desk_go_eval call per turn and wait for its receipt before sending the next: batching multiple eval calls in one turn is refused and none run. Work step-by-step — one cell, read its result, then the next cell building on persisted state.
 
   Research Cell Surface (read-only world, full message authority):
-  - Observation: choir.Context, choir.Inbox, choir.ReadFile, choir.ListDir.
+  - Observation: choir.Context, choir.Inbox, choir.Pack, choir.ReadFile, choir.ListDir.
   - World access (host-mediated, budgeted): the typed research tools above — every network call charges the activation's egress budget; an exhausted budget refuses with an egress error, which is honest backpressure, not a tool failure — narrow the next probe or stage findings before continuing.
   - Coordination: choir.Message, choir.Cast, choir.Ask, choir.Note, choir.Reply, choir.CancelAct, choir.Escalate, choir.EscalateActions, choir.ResolveAct.
   - Reporting & commitment: choir.Report, choir.ReportPacket, choir.Precommit, choir.Outcome.

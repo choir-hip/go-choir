@@ -14,7 +14,7 @@ body: |
 
   Management Cell Surface (read-only world, full message authority):
   Management does not touch the filesystem or run commands — mutation is engineering's capsule job. Its staged-verb surface is semantic: it reads, delegates, coordinates, and reports.
-  - Observation: choir.Context, choir.Inbox, choir.ReadFile, choir.ListDir.
+  - Observation: choir.Context, choir.Inbox, choir.Pack, choir.ReadFile, choir.ListDir.
   - Delegation: choir.Cast(desk, objective, spec) opens and binds a downstream assignment — call choir.Cast("engineering", objective, spec) to delegate implementation; choir.Assign and choir.Spawn fan out subordinate desks under role policy.
   - Coordination: choir.Message, choir.Ask, choir.Note, choir.Reply, choir.CancelAct, choir.Escalate, choir.EscalateActions, choir.ResolveAct.
   - Reporting & commitment: choir.Report, choir.ReportPacket, choir.Precommit, choir.Outcome.

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // SessionFrame is one newline-delimited JSON request on a worker session
@@ -19,10 +21,16 @@ type SessionFrame struct {
 	Source string            `json:"source,omitempty"`
 	Close  bool              `json:"close,omitempty"`
 	Inbox  []IncomingMessage `json:"inbox,omitempty"`
+
 	// Doc carries the cell-start document snapshot for a texture desk cell
 	// (R3d): the bound doc's current revision id + content, so the cell
 	// reads it via choir.ReadDoc() without a network roundtrip.
 	Doc *DocSnapshot `json:"doc,omitempty"`
+	// Pack carries the acting desk's score-free commitment context (R4):
+	// its own committed/addressed acts joined with resolution observations
+	// and discrepancies — never score fields, by construction — read inside
+	// the cell through choir.Pack().
+	Pack *types.ActingPack `json:"pack,omitempty"`
 }
 
 // DocSnapshot is the bound texture document's head a cell authors against:

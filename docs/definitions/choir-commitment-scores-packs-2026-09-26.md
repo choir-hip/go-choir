@@ -133,16 +133,12 @@ value:
 now:
   status: working
   slice: >-
-    station R4 CHARTERED 2026-09-26. Substrate (re-verified at charter):
-    choir.Resolve writes one CommitmentScore stamp on a linked record
-    (commitmentRecordForIntent IntentResolve branch, rlm_reduce.go) —
-    accrual does not exist; the CommitmentRecord body (v1) already
-    carries TypedQuestion probabilities, Consequence weights (materiality
-    = likelihood x impact x relevance), Scores plural, Provenance; OG
-    objects are append-only so derived views read bodies without write
-    authority. Texture desk evidence surface exists post-R3d (ledger
-    dual-read R3a); the projection feeds through that surface, not a new
-    store. Boundary probe item 5 runs before implementation.
+    station R4 WORKING 2026-09-26 — boundary probe complete (see receipts).
+    Seams: materiality feeds textureAvailableSourceEntitiesKey via
+    evidenceSourceEntitiesFromCommitmentRecords; pack rides the desk
+    cell frame like R3d's Doc snapshot; gate binds on the selfdev
+    verification event payload. Implementing: accrual + projection +
+    packs in internal/types/commitment_views.go.
   candidate:
     id: none
     state: none
@@ -209,9 +205,32 @@ receipts:
     carry zero own-score fields; gate binds claims to scored records.
     Boundary probe on the texture evidence feed + live-render
     observability runs before implementation."
+  - "probe: boundary probe 2026-09-26. (a) Evidence-surface feed fields:
+    the projection feeds metadata['texture_available_source_entities']
+    — rt.evidenceSourceEntitiesFromCommitmentRecords already lists
+    ALL commitment records per texture doc (texture_evidence_sources.go
+    :758) and merges entities via mergeTextureSourceEntities into
+    metadata at texture_agent_revision.go:360-372; the desk sees them
+    through buildAgentRevisionRequest's source-entity rendering. The
+    projection appends commitment_materiality entities there — falsified
+    stays visible because the entity set is rebuilt from the full record
+    list each turn, resolved records never filtered. (b) Pack seam: the
+    acting desk's pack rides the desk cell frame (SessionFrame.Pack,
+    same injection shape as R3d's Doc/ReadDoc) — built in tools_desk.go
+    from execCtx.OwnerID/AgentID, read via choir.Pack() (observation
+    tier). (c) Gate seam: the only live selfdev outcome-claim write is
+    recordSelfDevelopmentVerification's verification event (verifier
+    slot + IntentVerify path); 'flagged' (not refused) is the enforced
+    posture — claim_gate=unbacked stamps the durable event payload so
+    unbacked claims are distinguishable on the wire, refusal is the
+    owner-tightenable follow-up. (d) Live-render observability: seeding
+    falsified records on staging requires real desk traffic; no seeded
+    doc render is provable this station — deployed acceptance scopes to
+    platform health + identity + texture-revision path only."
 ---
 
 # R4 — Commitment Scores + Surfacing + Context Packs (station on the rectification spine)
+
 
 Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
 Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11

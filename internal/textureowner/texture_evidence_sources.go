@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
@@ -158,8 +159,6 @@ func sourceEntityFromEvidenceRef(ctx context.Context, rt *Handler, ownerID, ref 
 		return textureSourceEntity{}
 	}
 }
-
-
 
 func sourceEntityFromCoagentPacketSource(ctx context.Context, rt *Handler, ownerID string, source types.CoagentPacketSource, update types.CoagentSourcePacket) textureSourceEntity {
 	uri := strings.TrimSpace(source.Target.URI)
@@ -378,7 +377,6 @@ func pruneEmptyMap(values map[string]any) map[string]any {
 	}
 	return values
 }
-
 
 func coagentSourceRejectionFromPacketSource(update types.CoagentSourcePacket, source types.CoagentPacketSource) coagentSourceRejection {
 	reason := "packet source did not materialize into a Texture source entity"
@@ -749,7 +747,6 @@ func isHTTPURL(value string) bool {
 	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
 }
 
-
 // evidenceSourceEntitiesFromCommitmentRecords materializes the source entities
 // a desk's pending commitment records carry: packet-bodied report hypotheses
 // (Prediction.Hypothesis holds the opaque packet JSON) and typed EvidenceRefs.
@@ -767,6 +764,15 @@ func (rt *Handler) evidenceSourceEntitiesFromCommitmentRecords(ctx context.Conte
 	var entities []textureSourceEntity
 	var rejections []coagentSourceRejection
 	seen := map[string]bool{}
+	// R4: the materiality projection renders the FULL record set — a
+	// falsified claim stays visible because the projection is rebuilt each
+	// turn and resolved records are never filtered from the entity class.
+	for _, e := range materialitySourceEntities(records) {
+		if key := sourceEntityKey(e); key != "" && !seen[key] {
+			seen[key] = true
+			entities = append(entities, e)
+		}
+	}
 	for _, rec := range records {
 		if rec.Discrepancy != types.DiscrepancyUnresolved {
 			continue // resolved records are settled, not pending evidence
@@ -809,7 +815,6 @@ func (rt *Handler) evidenceSourceEntitiesFromCommitmentRecords(ctx context.Conte
 	return entities, rejections
 }
 
-
 func selfDevelopmentJoinFromSourceEntities(entities []textureSourceEntity) map[string]string {
 	out := map[string]string{}
 	for _, entity := range entities {
@@ -831,7 +836,6 @@ func selfDevelopmentJoinFromSourceEntities(entities []textureSourceEntity) map[s
 	return out
 }
 
-
 func mergeSelfDevelopmentJoinIntoMetadata(meta map[string]any, join map[string]string) {
 	if meta == nil {
 		return
@@ -841,4 +845,76 @@ func mergeSelfDevelopmentJoinIntoMetadata(meta map[string]any, join map[string]s
 			meta[key] = value
 		}
 	}
+}
+
+// commitmentMaterialityKind is the source-entity kind for the R4
+// materiality projection: one entity per projected supervision entry.
+const commitmentMaterialityKind = "commitment_materiality"
+
+// commitmentOverdueAfter bounds open-claim staleness for the doc feed:
+// an unresolved act older than this surfaces as "overdue" (distinct from
+// a merely open top-level claim). Records committed before R4 stamped
+// Provenance.CommittedAt carry no timestamp and never go overdue — their
+// true age is unknowable.
+const commitmentOverdueAfter = 72 * time.Hour
+
+// materialitySourceEntities renders the R4 materiality projection as
+// source entities on the texture doc's evidence surface: falsified claims
+// first (never dropped — supervision does not airbrush the log), then
+// overdue, then top-level open claims. The entities are rebuilt from the
+// full record list every turn, so a claim's visible class moves with its
+// ledger state and nothing material to supervision is filtered.
+func materialitySourceEntities(records []types.CommitmentRecord) []textureSourceEntity {
+	if len(records) == 0 {
+		return nil
+	}
+	entries := types.ProjectMateriality(records, time.Now().UTC(), commitmentOverdueAfter)
+	entities := make([]textureSourceEntity, 0, len(entries))
+	for _, e := range entries {
+		label := materialityLabel(e)
+		entity := textureSourceEntity{
+			EntityID: stableSourceEntityID(commitmentMaterialityKind, e.RecordID+":"+e.Materiality),
+			Kind:     commitmentMaterialityKind,
+			Label:    label,
+			Target: textureSourceEntityTarget{
+				TargetKind: "commitment_record",
+				ItemID:     e.RecordID + ":" + e.Materiality,
+				URL:        "commitment://" + e.RecordID,
+			},
+			Display: textureSourceEntityDisplay{
+				InlineMode:   "reference",
+				ExpandedMode: "card",
+				OpenSurface:  sourcecontract.OpenSurfaceSourceWindow,
+			},
+			Evidence: textureSourceEntityEvidence{
+				State:    materialityEvidenceState(e.Materiality),
+				BodyKind: "commitment_record",
+			},
+			Provenance: textureSourceEntityProvenance{CreatedBy: "commitment_materiality"},
+		}
+		entities = append(entities, entity)
+	}
+	return entities
+}
+
+func materialityLabel(e types.CommitmentMaterialityEntry) string {
+	claim := e.Claim
+	if len(claim) > 160 {
+		claim = claim[:157] + "..."
+	}
+	switch e.Materiality {
+	case types.MaterialityFalsified:
+		return "Falsified commitment: " + claim
+	case types.MaterialityOverdue:
+		return "Overdue commitment: " + claim
+	default:
+		return "Open claim: " + claim
+	}
+}
+
+func materialityEvidenceState(class string) string {
+	if class == types.MaterialityFalsified {
+		return "available"
+	}
+	return "pending"
 }

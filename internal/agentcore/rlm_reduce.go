@@ -878,8 +878,13 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 		RecordID:    fmt.Sprintf("%s:%s:%s", scope.CellID, in.Kind, in.LocalID),
 		Discrepancy: types.DiscrepancyUnresolved,
 		Provenance: types.CommitmentProvenance{
-			AgentID:    scope.FromAgentID,
-			ContextRef: scope.ChannelID,
+			AgentID: scope.FromAgentID,
+			// CommittedAt is stamped here (R4): the required provenance
+			// field the materiality projection derives open-claim age
+			// from. Pre-R4 records carry an empty stamp and are never
+			// overdue — their true age is unknowable.
+			CommittedAt: time.Now().UTC().Format(time.RFC3339Nano),
+			ContextRef:  scope.ChannelID,
 		},
 		// Addressee is the ledger-side target-desk binding the packet envelope
 		// would otherwise carry; EvidenceRefs preserve the act's typed

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/traefik/yaegi/interp"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // ChoirScope binds the prebound choir modules to one activation: the broker
@@ -42,6 +43,10 @@ type ChoirScope struct {
 	// doc is the cell-start texture document snapshot (R3d) a texture cell
 	// reads via ReadDoc(): the bound doc's current revision id + content.
 	doc *DocSnapshot
+	// pack is the acting desk's cell-start commitment context (R4): its
+	// committed/addressed acts joined with resolution observations —
+	// score-free by construction (types.ActingPack has no score fields).
+	pack *types.ActingPack
 }
 
 // SessionRoleResearch is the read-only role: sessions bound to it observe
@@ -92,6 +97,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.tray = &Tray{}
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc
+			s.pack = frame.Pack
 		},
 		End: func() []StagedIntent {
 			var out []StagedIntent
@@ -101,6 +107,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			}
 			s.inbox = nil
 			s.doc = nil
+			s.pack = nil
 			return out
 		},
 	}
@@ -187,6 +194,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"ListDir":  reflect.ValueOf(s.ListDir),
 		"Context":  reflect.ValueOf(s.Context),
 		"Inbox":    reflect.ValueOf(s.Inbox),
+		"Pack":     reflect.ValueOf(s.Pack),
 	}
 	verbs := map[string]func() reflect.Value{
 		"WriteFile":       func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
@@ -427,6 +435,20 @@ func (s *ChoirScope) ReadDoc() DocSnapshot {
 		return DocSnapshot{}
 	}
 	return *s.doc
+}
+
+// Pack returns the acting desk's cell-start commitment pack (R4): its own
+// committed/addressed acts joined with resolution observations and
+// discrepancies — score-free by construction (types.ActingPack carries no
+// score fields, so the epistemic boundary holds on the wire, not by
+// instruction). Side-effect-free inside the cell; the snapshot is
+// injected by autoputer at cell launch. Unbound scopes observe an empty
+// pack.
+func (s *ChoirScope) Pack() types.ActingPack {
+	if s == nil || s.pack == nil {
+		return types.ActingPack{Items: []types.ActingPackItem{}}
+	}
+	return *s.pack
 }
 
 // ApplyTexture stages a full-RLM texture authoring turn (R3d): editJSON is the
