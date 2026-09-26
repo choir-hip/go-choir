@@ -976,7 +976,7 @@ nodes:
     title: Texture Ledger Consumer (R3a, station)
     path: docs/definitions/choir-texture-ledger-consumer-2026-09-25.md
     ledger: ''
-    status: working
+    status: landed
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -984,8 +984,49 @@ nodes:
       - choir-carrier-substrate-integrity-2026-09-25
     enables: []
     note: >-
-      Live station under the spine meta-goal — desk-act evidence/occurrence
-      resolution reads choir.commitment_record, dual-read vs
-      worker_updates_*. Packet-path deletion is R3d's.
+      Landed 2026-09-25 (4cf82057): desk-act evidence/occurrence resolution
+      reads choir.commitment_record, dual-read vs worker_updates_*.
+      Deployed live-record proof deferred to a doc desk report-cast (R3c);
+      packet-path deletion is R3d's.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+  - id: choir-desk-cell-carrier-2026-09-25
+    title: Host Desk-Cell Carrier (R3b, station)
+    path: docs/definitions/choir-desk-cell-carrier-2026-09-25.md
+    ledger: ''
+    status: landed
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-texture-ledger-consumer-2026-09-25
+    enables:
+      - choir-management-live-cast-2026-09-26
+    note: >-
+      Landed+deployed 2026-09-26 (b9f43583): host desk-cell carrier —
+      autoputer desk-session re-execs the daemon; desk_go_eval sealed per
+      profile; rlmReductionForDeskCall reduces desk cells on the canonical
+      ledger; InCellCarrier fans management/texture/research under
+      actuator=rlm; Cast rejects an unknown desk. Kill mid-cell respawns
+      clean. Deployed live-desk acceptance deferred to R3c (actuator).
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+  - id: choir-management-live-cast-2026-09-26
+    title: Management Live + Cast (R3c, station)
+    path: docs/definitions/choir-management-live-cast-2026-09-26.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-desk-cell-carrier-2026-09-25
+    enables: []
+    note: >-
+      Live station under the spine meta-goal — management desk on cells;
+      choir.Cast(engineering) opens+binds+executes an assignment (the
+      R2-deferred deployed proof); report_to_texture retires to the staged
+      path. Proof: management cell Cast → engineering assignment → Report
+      resolves the cast record; restart resumes from the tape.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md

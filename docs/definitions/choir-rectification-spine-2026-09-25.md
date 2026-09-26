@@ -108,13 +108,16 @@ boundaries:
 now:
   status: working
   slice: >-
-    station R3b — host desk-cell carrier. R3a landed: ledger evidence
-    dual-read over commitment_record (Addressee+EvidenceRefs, typed
-    divergence surfacing); deployed live-record acceptance deferred to a
-    doc desk report-cast this station enables. Next station goal:
-    docs/definitions/choir-desk-cell-carrier-2026-09-25.md
-  source_ref: main@2493dc36
-  deploy_identity: staging https://choir.news build.commit=4cf82057
+    station R3c — management live + cast. R3b landed+deployed 2026-09-26
+    (b9f43583): the host desk-cell carrier runs non-capsule desk cells in a
+    killable host subprocess (desk_go_eval sealed per profile, canonical
+    ledger reduction, InCellCarrier fan under actuator=rlm, unknown-desk
+    cast rejected). R3c promotes management onto that carrier on a live
+    activation and proves the Cast→engineering→Report deployed chain R2
+    deferred. Next station goal:
+    docs/definitions/choir-management-live-cast-2026-09-26.md
+  source_ref: main@c39ba0c3
+  deploy_identity: staging https://choir.news build.commit=b9f43583
   candidate:
     id: none
     state: none
@@ -151,18 +154,16 @@ now:
     kind: operational
     status: settled
     evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md §11
-    owner_ratification_ref: owner 2026-09-25 — ratified the spine; asked for
-      one durable /goal file updated per station
-  belief:
     believed_state: >-
-      R0, R2, R2x, and R3a landed; K's substrate is landed; the restructured
-      spine is ratified; R3b is the live station. Ledger evidence dual-read
-      is wired (commitment_record + Addressee/EvidenceRefs; packet path
-      preserved until R3d deletes it). The next substrate lift is R3b —
-      host-side sessionWorker spawn for non-capsule desks.
+      R0, R2, R2x, R3a, and R3b landed; K's substrate is landed; the
+      restructured spine is ratified; R3c is the live station. The host
+      desk-cell carrier is built and deployed — non-capsule desk cells run
+      in a killable host subprocess on the canonical ledger, gated on
+      actuator=rlm. The next lift is R3c — promote management onto that
+      carrier and prove the deployed Cast→engineering→Report chain.
     next_observation: >-
-      R3b host-spawn start: lift-vs-build on the sessionWorker pattern and
-      where non-capsule desk cells eval today.
+      R3c actuator promotion: whether actuator=rlm binds per-activation or
+      is host-global, and the deployed cast-resolution path it permits.
   blocker_or_risk: >-
     Station pointer must be rewritten at every terminal receipt (the /goal
     string stays constant — this file is the entrypoint). Owner directive
@@ -171,9 +172,19 @@ now:
     documented deferral — not a blocking ask. PR 67 (CI build-cache + race
     compile fix) pending integration at the next station landing.
   next_action: >-
-    Charter R3b (host desk-cell carrier) goal file; host sessionWorker spawn.
+    Charter R3c (management live + cast) goal file; actuator promotion +
+    Cast→assignment→Report deployed proof.
 
-receipts: []
+receipts:
+  - "R3b terminal 2026-09-26: landed+deployed b9f43583 (ci 36214084659,
+    staging build.commit=b9f43583); goal docs/definitions/
+    choir-desk-cell-carrier-2026-09-25.md now.status=settled. Live-desk
+    deployed acceptance deferred to R3c (actuator=rlm not live on staging
+    desks — same deferral discipline as R3a). now.slice -> R3c."
+  - "R3a terminal 2026-09-25: landed 4cf82057 (ledger evidence dual-read
+    over commitment_record); deployed live-record proof deferred to a doc
+    desk report-cast. now.slice -> R3b."
+
 ---
 
 # Rectification Spine — durable meta-goal
@@ -194,7 +205,7 @@ and points at a dedicated throughline `/goal` file for the current mission.
   outcomes live in `docs/desk-rlm-rectification-plan-2026-09-23.md` §11 —
   read it before chartering the next station.
 
-**Current station:** R3b → host desk-cell carrier. R3a landed (ledger
-evidence dual-read `4cf82057`; deployed live-record proof deferred to this
-station's doc desk report-cast). Next station goal:
-`docs/definitions/choir-desk-cell-carrier-2026-09-25.md`.
+**Current station:** R3c → management live + cast. R3b landed+deployed
+(`b9f43583`, host desk-cell carrier on cells); deployed live-desk acceptance
+deferred here (actuator=rlm promotion). Next station goal:
+`docs/definitions/choir-management-live-cast-2026-09-26.md`.
