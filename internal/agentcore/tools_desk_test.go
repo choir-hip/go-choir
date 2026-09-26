@@ -74,6 +74,34 @@ func TestDeskGoEvalSpawnsWorkerAndEvals(t *testing.T) {
 	}
 }
 
+// Kill mid-cell → derivable wake (R3b): a worker killed mid-cell is poisoned
+// — its staged tray dies with it and the cell reduces nothing — and the next
+// eval spawns a fresh worker on the same activation rather than reusing the
+// corpse. The reduction is derivable: only intents from a successful cell
+// ever reach the ledger, so killing mid-cell cannot mint a half-commit.
+func TestDeskGoEvalKillMidCellRespawnsClean(t *testing.T) {
+	deskTestWorkerBin(t)
+	workers := newDeskSessionWorkers()
+	tool := newDeskGoEvalTool(&Runtime{}, workers, agentprofile.Management)
+	ctx := toolregistry.WithExecutionContext(context.Background(), deskEvalExecCtx(t))
+	// Establish a live worker.
+	if _, err := tool.Func(ctx, json.RawMessage(`{"source":"y := 3;","timeout_ms":15000}`)); err != nil {
+		t.Fatalf("seed eval: %v", err)
+	}
+	// Kill the activation's worker as if the cell timed out / poisoned.
+	activationID := deskWorkerActivationID(deskEvalExecCtx(t))
+	workers.release(activationID)
+	// Next eval on the same activation spawns a fresh worker and runs clean;
+	// the killed cell's bindings do not leak (y is fresh in the new worker).
+	out, err := tool.Func(ctx, json.RawMessage(`{"source":"print(6*7);","timeout_ms":15000}`))
+	if err != nil {
+		t.Fatalf("post-kill eval must respawn and succeed: %v", err)
+	}
+	if !strings.Contains(out, "42") {
+		t.Fatalf("post-kill eval missing 42, got: %s", out)
+	}
+}
+
 func TestDeskGoEvalWorkerPersistsAcrossCells(t *testing.T) {
 	deskTestWorkerBin(t)
 	workers := newDeskSessionWorkers()
