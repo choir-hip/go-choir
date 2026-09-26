@@ -172,13 +172,28 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			return ApplyResult{}, err
 		}
 	}
-	if journal.Phase == "pointer_swapped" {
+	if journal.Phase == "pointer_swapped" && !journal.RestartPublished {
+		// Publish the restart first, then mark it durably. A crash between
+		// the two leaves RestartPublished=false; the next apply re-publishes
+		// (restart is idempotent). The inverse order would lose the restart
+		// silently on a crash in the same window.
 		if restartErr := u.service.Restart(ctx); restartErr != nil {
 			journal.Phase = "recovering"
 			journal.Failure = fmt.Sprintf("updater: restart target release: %v", restartErr)
 		} else {
+			journal.RestartPublished = true
+			if err := writeJournal(journalPath, journal); err != nil {
+				return ApplyResult{}, err
+			}
 			journal.Phase = "restart_requested"
 		}
+		if err := writeJournal(journalPath, journal); err != nil {
+			return ApplyResult{}, err
+		}
+	} else if journal.Phase == "pointer_swapped" {
+		// Resumed: the restart already published before the prior caller died.
+		// Advance past it so the probe runs; never restart the guest twice.
+		journal.Phase = "restart_requested"
 		if err := writeJournal(journalPath, journal); err != nil {
 			return ApplyResult{}, err
 		}
@@ -667,14 +682,19 @@ func (u *Updater) signHealthReceipt(ctx context.Context, request ApplyRequest, r
 }
 
 type operationJournal struct {
-	RequestCommitment   string      `json:"request_commitment"`
-	Phase               string      `json:"phase"`
-	PriorReleaseDigest  string      `json:"prior_release_digest,omitempty"`
-	PriorReleaseTarget  string      `json:"prior_release_target,omitempty"`
-	TargetReleaseDigest string      `json:"target_release_digest"`
-	StartedAt           time.Time   `json:"started_at"`
-	Failure             string      `json:"failure,omitempty"`
-	Result              ApplyResult `json:"result"`
+	RequestCommitment   string `json:"request_commitment"`
+	Phase               string `json:"phase"`
+	PriorReleaseDigest  string `json:"prior_release_digest,omitempty"`
+	PriorReleaseTarget  string `json:"prior_release_target,omitempty"`
+	TargetReleaseDigest string `json:"target_release_digest"`
+	// RestartPublished records that the guest-restart request actually reached
+	// the service manager. Without it a resume cannot distinguish "restart
+	// published, journal write lost" from "crashed before publish" and would
+	// either re-restart a healthy guest or never restart at all.
+	RestartPublished bool        `json:"restart_published,omitempty"`
+	StartedAt        time.Time   `json:"started_at"`
+	Failure          string      `json:"failure,omitempty"`
+	Result           ApplyResult `json:"result"`
 }
 
 func readJournal(path string) (operationJournal, bool, error) {

@@ -299,6 +299,53 @@ func makeTreeWritable(root string) {
 	})
 }
 
+func TestUpdaterResumeSkipsPublishedRestart(t *testing.T) {
+	// A platform-update apply kills its own guest mid-flight: the journal is
+	// left at pointer_swapped with the restart already published. The resumed
+	// apply must advance to the probe WITHOUT publishing a second restart —
+	// each re-published restart kills the guest again and the journal never
+	// reaches restart_requested (the push-loop failure this repair closes).
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	service := &fakeServiceManager{}
+	updater, err := New(root, "computer-test", "realization-test", service, fakeHealthProber{}, testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "operation-resume", "idem-resume", "resumed release")
+	// Simulate the killed first apply: pointer swapped, restart published,
+	// journal write for restart_requested never landed.
+	releaseDir := filepath.Join(root, "releases", request.Manifest.ContentDigest)
+	if err := updater.stageRelease(request.SourceDir, releaseDir, request.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := updater.swapCurrent(releaseDir); err != nil {
+		t.Fatal(err)
+	}
+	journal := operationJournal{
+		RequestCommitment: request.RequestCommitment, Phase: "pointer_swapped",
+		TargetReleaseDigest: request.Manifest.ContentDigest, RestartPublished: true,
+		StartedAt: time.Now().UTC().Truncate(time.Microsecond),
+	}
+	if err := writeJournal(filepath.Join(root, "operations", safeName(request.IdempotencyKey)+".json"), journal); err != nil {
+		t.Fatal(err)
+	}
+	result, err := updater.Apply(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != "applied" {
+		t.Fatalf("resumed apply outcome = %+v", result)
+	}
+	if service.restarts != 0 {
+		t.Fatalf("resume re-published %d restarts; want 0", service.restarts)
+	}
+}
+
 func TestUpdaterImportsImmutableBaselineOnce(t *testing.T) {
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

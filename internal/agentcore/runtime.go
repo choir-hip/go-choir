@@ -143,13 +143,17 @@ type Runtime struct {
 	assignmentLookup interface {
 		GetEngineeringAssignment(context.Context, string, string, string, uint64) (types.EngineeringAssignment, error)
 	}
-	assignmentRuntime           assignmentCapsuleRuntime
-	bootLog                     *bootLogRing
-	capsuleBuilder              *transaction.TransactionBuilder
-	eventAppender               *computerevent.ComputerEventAppender
-	selfdevOperations           *selfdev.Store
-	privateArtifactCipher       *computerevent.PrivateArtifactCipher
-	selfdevUpdater              *updater.Client
+	assignmentRuntime     assignmentCapsuleRuntime
+	bootLog               *bootLogRing
+	capsuleBuilder        *transaction.TransactionBuilder
+	eventAppender         *computerevent.ComputerEventAppender
+	selfdevOperations     *selfdev.Store
+	privateArtifactCipher *computerevent.PrivateArtifactCipher
+	selfdevUpdater        *updater.Client
+	// eventPayloadReader fetches event payloads by digest (corpusd CAS). The
+	// platform-update boot sweep needs it: an accepted event pins its offer,
+	// and resuming that update after the self-restart reads it back.
+	eventPayloadReader          computerevent.ArtifactReader
 	selfdevVerifier             *receiptsigner.Client
 	selfdevControl              *selfdev.GuestCredentials
 	ownerRecoveryControl        *selfdev.GuestCredentials
@@ -586,6 +590,11 @@ func WithPrivateArtifactCipher(cipher *computerevent.PrivateArtifactCipher) Runt
 	}
 }
 
+// WithEventPayloadReader installs the event-payload fetcher (corpusd CAS
+// reader). Required for the post-restart platform-update resume sweep.
+func WithEventPayloadReader(reader computerevent.ArtifactReader) RuntimeOption {
+	return func(rt *Runtime) { rt.eventPayloadReader = reader }
+}
 func WithSelfDevelopmentUpdater(client *updater.Client, root, computerID, realizationID string) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.selfdevUpdater = client
@@ -657,6 +666,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	}
 	bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
+	bootPhase("platform_update_resume", func() { rt.resumePendingPlatformUpdate(ctx) })
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
 	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
 	bootPhase("selfdev_materialization_reconcile", func() { rt.triggerSelfDevelopmentReconcile() })

@@ -612,6 +612,7 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 	WithSelfDevelopmentVerifier(verifierClient)(rt)
 	WithSelfDevelopmentControl(selfdev.GuestCredentialsWithCapability(platformServer.URL, computerID, "capability", time.Now().UTC().Add(time.Hour), platformKey.Public().(ed25519.PublicKey)))(rt)
 	WithSelfDevelopmentRoute(vmctl.NewClient(vmctlServer.URL), "owner", "primary")(rt)
+	WithEventPayloadReader(&payloadChainSource{pinner: fx.pinner})(rt)
 	appender.SetPostCommitObserver(func(computerevent.EventKind) { rt.triggerSelfDevelopmentReconcile() })
 	fx.rt = rt
 	fx.operations = operations

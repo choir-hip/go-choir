@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -152,7 +153,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 			EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 			IdempotencyKey: acceptedKey,
 			ActorProfile:   agentprofile.Management, AuthorityRef: "platform-control:update",
-			PrivacyClass: "owner", PayloadCommitment: computerevent.ZeroHead,
+			PrivacyClass:      "owner",
 			ProposedEffectRef: offer.Manifest.ContentDigest, DecisionRef: offerDigest,
 			VerifierRefs:                     offer.VerifierRefs,
 			RequireExpectedHead:              true,
@@ -163,7 +164,14 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 			ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 			ReducerVersion:                   computerevent.ReducerVersionV1,
 		}
-		if _, appendErr := rt.eventAppender.AppendNew(ctx, acceptedEvent, computerevent.TransitionInput{TargetStateCommitment: targetCommitment}, nil); appendErr != nil {
+		// Pin the offer as the accepted event's payload: the apply restarts this
+		// guest mid-call, so the tape (not the caller's HTTP request) must carry
+		// everything a post-restart resume needs.
+		offerBytes, marshalErr := json.Marshal(offer)
+		if marshalErr != nil {
+			return report, marshalErr
+		}
+		if _, _, appendErr := rt.eventAppender.AppendNewPayload(ctx, acceptedEvent, computerevent.TransitionInput{TargetStateCommitment: targetCommitment}, offerBytes, "application/vnd.choir.platform-update-offer+json", "owner"); appendErr != nil {
 			return report, fmt.Errorf("platform update: accepted event refused: %w", appendErr)
 		}
 		head, err = rt.store.Head(ctx, computerID)
@@ -573,4 +581,58 @@ func (h *APIHandler) HandleInternalPlatformUpdate(w http.ResponseWriter, r *http
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, report)
+}
+
+// resumePendingPlatformUpdate re-drives a platform update whose apply killed
+// this guest mid-flight: the accepted event committed (opening the pending
+// transition), the guest restarted, and the runtime tail (applied →
+// checkpoint → route projection) never ran. The tape alone is the resume
+// substrate — the accepted event pins its offer as a payload.
+//
+// Predicate: head still carries a pending transition AND that pending event is
+// an update-accepted event AND neither `applied` nor `failed` committed for
+// that update. A committed `failed` means the update already lost — resuming
+// it would mask a real failure; a different pending transition means the
+// update already cleared and something else owns it.
+func (rt *Runtime) resumePendingPlatformUpdate(ctx context.Context) {
+	if rt == nil || rt.store == nil || rt.eventAppender == nil || rt.eventPayloadReader == nil || rt.selfdevUpdater == nil {
+		return
+	}
+	head, err := rt.store.Head(ctx, rt.selfdevComputerID)
+	if err != nil || head == nil || head.PendingTransitionRef == "" {
+		return // no pending transition — nothing to resume
+	}
+	// PendingTransitionRef is the accepted event's digest: it stays bound until
+	// the transition closes (applied/failed). materialization_started committing
+	// between them is the normal mid-flight shape — not a reason to skip.
+	pendingEvent, found, evErr := rt.store.EventByDigest(ctx, rt.selfdevComputerID, head.PendingTransitionRef)
+	if evErr != nil || !found || pendingEvent.EventKind != computerevent.EventEffectAccepted {
+		return // pending transition is not an update-accepted event
+	}
+	if !computerevent.IsSHA256(pendingEvent.PayloadCommitment) {
+		log.Printf("runtime: platform update resume: accepted event pins no offer payload — transition %s orphaned", head.PendingTransitionRef[:12])
+		return
+	}
+	raw, fetchErr := rt.eventPayloadReader.FetchPayload(ctx, rt.selfdevComputerID, pendingEvent.PayloadCommitment)
+	if fetchErr != nil {
+		log.Printf("runtime: platform update resume: offer payload fetch: %v", fetchErr)
+		return
+	}
+	var offer selfdevprotocol.PlatformUpdateOffer
+	if err := json.Unmarshal(raw, &offer); err != nil {
+		log.Printf("runtime: platform update resume: offer payload decode: %v", err)
+		return
+	}
+	appliedKey := platformUpdateIdempotencyKey("applied", offer.UpdateID)
+	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, rt.selfdevComputerID, appliedKey); lookupErr != nil || found {
+		return // applied committed (or store error) — tail done or in flight
+	}
+	failedKey := platformUpdateIdempotencyKey("failed", offer.UpdateID)
+	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, rt.selfdevComputerID, failedKey); lookupErr != nil || found {
+		return // failed committed — the update already lost; do not retry
+	}
+	log.Printf("runtime: platform update resume: re-driving update %s after guest restart", offer.UpdateID)
+	if _, applyErr := rt.ApplyPlatformUpdate(ctx, offer); applyErr != nil {
+		log.Printf("runtime: platform update resume: %v", applyErr)
+	}
 }

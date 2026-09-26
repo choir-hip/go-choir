@@ -62,6 +62,19 @@ function corpusdEventHead(computerID, ownerID) {
   );
 }
 
+function corpusdEvents(computerID, ownerID, limit = 40) {
+  // Guest event chain as replayed to corpusd — the tape is the apply oracle,
+  // not the push response (the callee restarts mid-request).
+  return nodeBJSON(
+    `curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/replay?computer_id=${computerID}&limit=${limit}'`,
+  );
+}
+
+function eventKinds(events) {
+  return (events ?? []).map((e) => e?.request?.event?.event_kind).filter(Boolean);
+}
+
+
 function mintOffer(mintRequest) {
   return nodeBJSON(
     'curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" --data-binary @- http://127.0.0.1:8086/internal/computers/platform-updates/offer',
@@ -77,6 +90,22 @@ function pushOffer(ownerID, offer) {
   try { return JSON.parse(raw); } catch { return { error: raw }; }
 }
 
+function guestHealth(ownerID) {
+  // Proxy-wrapped guest health — the transport's reachability oracle.
+  const raw = nodeB(
+    `curl -sS -m 8 -o /dev/null -w '%{http_code}' -H "X-Internal-Caller: true" 'http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${ownerID}/health?desktop=primary'`,
+  );
+  return raw.trim() === '200';
+}
+
+function waitGuestUp(ownerID, timeoutSec = 240) {
+  const deadline = Date.now() + timeoutSec * 1000;
+  while (Date.now() < deadline) {
+    if (guestHealth(ownerID)) return true;
+    execFileSync('sleep', ['5']);
+  }
+  return false;
+}
 
 function resolveRoute(ownerID) {
   return nodeBJSON(
@@ -181,7 +210,18 @@ try {
   if (!mintA?.authorization?.signature) {
     throw new Error(`mint refused: ${JSON.stringify(mintA)}`);
   }
-  const pushA = pushOffer(ownerID, mintA);
+  // updater.Apply restarts the guest service mid-request — the proxied push
+  // dies empty. Wait for the restarted guest, then re-push the same offer:
+  // resume on the pending accepted event, or replay the completed outcome.
+  let pushA = pushOffer(ownerID, mintA);
+  for (let attempt = 0; attempt < 8 && !(pushA?.release_digest && pushA?.checkpoint_digest); attempt++) {
+    const recoverable = pushA?.error === '' ||
+      /materialization failed|canonical head unavailable/.test(pushA?.error ?? '');
+    if (!recoverable) break;
+    result.push_attempts = (result.push_attempts ?? 0) + 1;
+    if (!waitGuestUp(ownerID)) break; // guest never came back — transport dead
+    pushA = pushOffer(ownerID, mintA);
+  }
   result.update_a = pushA;
   if (!pushA?.release_digest || !pushA?.checkpoint_digest || !pushA?.checkpoint?.checkpoint) {
     throw new Error(`update A refused or incomplete: ${JSON.stringify(pushA)}`);

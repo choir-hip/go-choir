@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -364,6 +365,79 @@ func TestPlatformUpdateResumesPendingTransition(t *testing.T) {
 		if kinds[kind] != 1 {
 			t.Fatalf("event %s count = %d, want 1", kind, kinds[kind])
 		}
+	}
+	slot, latestReceipt, err := fx.ledger.Resolve(ctx, mustRouteSlotID(t))
+	if err != nil {
+		t.Fatalf("route resolve: %v", err)
+	}
+	if slot.Generation != 2 || latestReceipt.Kind != routeledger.TransitionPromote {
+		t.Fatalf("resumed route: gen=%d kind=%s, want generation-2 promote", slot.Generation, latestReceipt.Kind)
+	}
+}
+
+// TestPlatformUpdateBootSweepResumesPending proves the restart-resume
+// contract end-to-end: an accepted event pinning its offer commits, the guest
+// restarts before the apply tail lands, and the boot sweep reconstructs the
+// apply from the tape alone — no caller re-push required.
+func TestPlatformUpdateBootSweepResumesPending(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-platform-update-sweep")
+	ctx := context.Background()
+
+	offer := fx.mintPlatformUpdateOffer(t, "update-sweep", "<html>sweep</html>", fx.currentHead(t))
+	offerDigest := mustOfferDigest(t, offer)
+
+	// Simulate the killed in-flight apply: only the accepted event committed,
+	// offer pinned as its payload, pending transition still open.
+	targetCommitment, err := selfdevprotocol.Digest(struct {
+		ComputerID    string `json:"computer_id"`
+		UpdateID      string `json:"update_id"`
+		OfferDigest   string `json:"offer_digest"`
+		ContentDigest string `json:"content_digest"`
+	}{offer.ComputerID, offer.UpdateID, offerDigest, offer.Manifest.ContentDigest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := fx.store.Head(ctx, fx.computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v", err)
+	}
+	acceptedEventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	acceptedEvent := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: acceptedEventID, ComputerID: offer.ComputerID,
+		EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "platform-update-accepted-" + offer.UpdateID,
+		ActorProfile:   agentprofile.Management, AuthorityRef: "platform-control:update",
+		PrivacyClass:      "owner",
+		ProposedEffectRef: offer.Manifest.ContentDigest, DecisionRef: offerDigest,
+		VerifierRefs:                     offer.VerifierRefs,
+		RequireExpectedHead:              true,
+		PreviousHead:                     head.CanonicalEventHead,
+		ExpectedDesiredEventHead:         head.DesiredEventHead,
+		ExpectedEffectiveEventHead:       head.EffectiveEventHead,
+		ExpectedDesiredStateCommitment:   head.DesiredStateCommitment,
+		ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
+		ReducerVersion:                   computerevent.ReducerVersionV1,
+	}
+	offerBytes, err := json.Marshal(offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := fx.rt.eventAppender.AppendNewPayload(ctx, acceptedEvent, computerevent.TransitionInput{TargetStateCommitment: targetCommitment}, offerBytes, "application/vnd.choir.platform-update-offer+json", "owner"); err != nil {
+		t.Fatalf("seed accepted+offer event: %v", err)
+	}
+	head, err = fx.store.Head(ctx, fx.computerID)
+	if err != nil || head == nil || head.PendingTransitionRef == "" {
+		t.Fatalf("pending transition did not open: %v %#v", err, head)
+	}
+
+	// Boot: the sweep resumes the update entirely from the tape.
+	fx.rt.resumePendingPlatformUpdate(ctx)
+
+	if count := fx.countEventKinds()[computerevent.EventMaterializationApplied]; count != 1 {
+		t.Fatalf("materialization_applied count = %d, want 1", count)
 	}
 	slot, latestReceipt, err := fx.ledger.Resolve(ctx, mustRouteSlotID(t))
 	if err != nil {

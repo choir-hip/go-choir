@@ -338,7 +338,7 @@ func Run() {
 				return head.Sequence, nil
 			}, appender)
 		}
-		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher))
+		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher), agentcore.WithEventPayloadReader(eventClient))
 		if credentials != nil {
 			credentials.StartBackgroundRenewal(context.Background())
 			coreOpts = append(coreOpts, guestControlOptions(credentials)...)
