@@ -7,10 +7,10 @@ second consensus pass restructured the spine. See **§11** for the current
 mission graph, verified substrate corrections, and owner rulings. §§1–10
 are retained as the adjudicated base; where §11 names a contradiction it
 governs.
-**Status:** proposed — under owner review, **not ratified**. Nothing here is
-executable authority until the owner signs off; it then rewrites the mission
-stack (`docs/world-wire-mission-stack-2026-09-22.md`) and amends
-`AGENTS.md` + the doctrine docs where they conflict.
+**Status:** **ratified 2026-09-25 by the owner** ("yes, i ratify and give
+permission for the whole thing"). §11 (the post-R2 restructure) is now
+executable authority for the mission spine; it governs over §§1–10 where
+they conflict. §§1–10 remain the adjudicated base record.
 **Authority:** inherits `docs/choir-doctrine.md`, `docs/why-texture-2026-06-15.md`,
 `docs/texture-live-supervision-architecture.md`, `AGENTS.md`, and the
 precommitment-records direction (`docs/Precommitment Records — Engineering Memo.md`).
@@ -406,7 +406,7 @@ recorded so the stack doesn't read as settled.
 
 ## 11. Restructure 2026-09-25 — post-R2 consensus revision
 
-**Status:** proposed, under owner review — supersedes §6's mission list and
+**Status:** **ratified 2026-09-25 by the owner** — supersedes §6's mission list and
 amends §7's joins where named. Provenance: a divergent panel
 (`.agentic-consensus/agentic-consensus-20260925-192348`, 5 usable routes:
 claude, cursor, gemini38, grok46, glm53-flash) generated the option space;

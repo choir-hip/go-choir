@@ -61,17 +61,19 @@ is archived historical evidence. Its remaining in-cell carrier, R7/R9
 retirement, and canonical-run scope is addressed only through the desk-RLM
 rectification sequence.
 
-## Restructured Spine — Proposed, Not Executable (post-R2, 2026-09-25)
+## Restructured Spine — Ratified 2026-09-25 (post-R2)
 
 The 2026-09-23 draft `/goal` files were **deleted 2026-09-25** (stale
 anchors `main@b0adf6f7`/`4de7fdf9`, dead `super_controller.go` citations,
 and R3's smuggled R4 scope). The rectification spine was restructured by a
-divergent+convergent consensus panel; the current mission graph is
+divergent+convergent consensus panel and **ratified by the owner
+2026-09-25**; the current mission graph is
 **[`desk-rlm-rectification-plan-2026-09-23.md` §11](desk-rlm-rectification-plan-2026-09-23.md)**.
-Nothing below is executable authority until a fresh throughline `/goal`
-file is authored for it and the owner ratifies the plan.
-
-- **R2x** [`definitions/choir-carrier-substrate-integrity-2026-09-25.md`](definitions/choir-carrier-substrate-integrity-2026-09-25.md) — substrate-integrity repair: atomic act commit + fate-sweep ungating (deletes `management_controller.go:301-302` after a derivable-wake coverage audit). **Next station — the entrypoint** (`/goal docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md`), pending owner ratification of plan §11.
+The owner ratified the spine as a whole; each mission still runs under its
+own throughline `/goal` file. `/goal`-station rule (AGENTS.md): after each
+terminal receipt, set the next mission's goal — the entrypoint below is the
+live one.
+- **R2x** [`definitions/choir-carrier-substrate-integrity-2026-09-25.md`](definitions/choir-carrier-substrate-integrity-2026-09-25.md) — substrate-integrity repair: atomic act commit + fate-sweep ungating (deletes `management_controller.go:301-302` after a derivable-wake coverage audit). **The live entrypoint** — `/goal docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md` (plan §11 owner-ratified 2026-09-25).
 - **R3a** texture ledger consumer — occurrence/evidence resolves desk acts from `choir.commitment_record`, dual-read vs `worker_updates_*`.
 - **R3b** host desk-cell carrier — host-side `sessionWorker` for non-capsule desks; `InCellCarrier` fanned per profile; Cast validates target.
 - **R3c** management live + cast — management cell `choir.Cast(engineering)` opens+binds+executes; `report_to_texture` retires.

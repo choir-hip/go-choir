@@ -2,7 +2,7 @@
 definition_version: 3
 definition_id: choir-carrier-substrate-integrity-2026-09-25
 execution_mode: mission_orchestrator
-draft: true
+draft: false
 
 start:
   captured_at: '2026-09-25T00:00:00Z'
@@ -128,8 +128,8 @@ boundaries:
     - management reconcile path (sweep removal)
 
 now:
-  status: blocked_incomplete
-  slice: awaiting plan ratification + charter
+  status: working
+  slice: wake-coverage audit -> two repairs (atomic commit + fate ungating)
   source_ref: main@173ba26a
   deploy_identity: staging https://choir.news build.commit=537fce04
   candidate:
@@ -159,7 +159,7 @@ now:
       without an armed wake (pre-K rows, hand-opened, replayed), so the
       deletion is proven against the full state set, not the happy path.
     scope_if_supported: all desk assignments, including management's own
-    status: proposed
+    status: active
     evidence_refs:
       - docs/desk-rlm-rectification-plan-2026-09-23.md §11
   decision:
@@ -168,9 +168,9 @@ now:
       fate sweeps become derivable wakes (not a new timer), commit becomes
       atomic-or-recovering.
     kind: operational
-    status: proposal
+    status: settled
     evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md §11.2/§11.4
-    owner_ratification_ref: required — restructure under owner review
+    owner_ratification_ref: owner 2026-09-25 — plan §11 + this goal ratified
   belief:
     believed_state: >-
       The derivable-wake machinery exists and is already used per-assignment;
@@ -185,13 +185,12 @@ now:
       The coverage audit output: enumerate assignment lifecycle states and
       map each to its wake source.
   blocker_or_risk: >-
-    The restructure plan (§11) is proposed, not ratified; this goal is
-    proposal-shaped until the owner signs off. Atomic-commit may require a
-    store-level transaction that does not exist — if so, the mission lands
-    the named partial-commit recovery instead and records the tradeoff.
+    Atomic-commit may require a store-level transaction that does not exist —
+    if so, the mission lands the named partial-commit recovery instead and
+    records the tradeoff.
   next_action: >-
-    On ratification: write the wake-coverage audit (list every assignment
-    state vs. its wake source), then charter the two repairs.
+    Write the wake-coverage audit (list every assignment lifecycle state vs.
+    its wake source), then charter the two repairs.
 
 receipts: []
 ---

@@ -446,8 +446,7 @@ documents:
     claim_scope: current
     is_root: []
     is_evidence: false
-    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: blocked, entrypoint: true}
-    depends_on: [docs/definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md]
+    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: living, entrypoint: true}
     witnesses: [docs/desk-rlm-rectification-plan-2026-09-23.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, registry_closure]
   - path: docs/definitions/choir-ontology-kernel-2026-09-24.md

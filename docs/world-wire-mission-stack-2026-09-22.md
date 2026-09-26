@@ -1,8 +1,9 @@
 # The Mission Stack: From Here to World Wire Live
 
 Date: 2026-09-22 (revised same-day after owner review)
-Status: **proposed roadmap, under owner review — not ratified.** Supersedes the
-ordering rationale of
+Status: **proposed roadmap — the R-series spine ratified 2026-09-25**
+(desk-rlm-rectification-plan §11 owner-ratified); the M9+/world-wire tail
+stays under owner review. Supersedes the
 [`reports/choir-rlm-missions-overview-2026-09-09.md`](reports/choir-rlm-missions-overview-2026-09-09.md).
 Mission state lives in `ACTIVE.md` + `mission-graph.yaml`; this document
 supplies the corrected scope and ordering. The owner's situation brief is
