@@ -113,13 +113,13 @@ and `...-london-salmon.html`.
 
 **Section:** THE POSITION
 **Headline:** Personal agents need somewhere to work.
-**Dek:** This year's assistants all run in someone else's cloud. The work should outlive the agent.
-**Two-row comparison (left label column, then copy):**
-- THE CHAT AGENTS — Muse, Instinct, Grok Bot, Town, Aeon — each holds your memory inside its vendor's cloud. Change the agent, start the work over.
-- CHOIR — two shapes, one owner:
-  - **Self-hosted** — Free and open source. Runs on your machine.
-  - **Managed** — Paid and hosted. Runs on ours.
-  - Your state, either way — portable, mountable, and never the vendor's.
+**Dek:** Choir is not another assistant. It is the computer underneath — reached by web, desktop, mobile, or any agent you choose.
+**Four entries (columns with rules):**
+- WEB — choir.news — Responsive, in any browser.
+- DESKTOP — Mac · Windows · Linux — The app, wrapped native.
+- MOBILE — Autoradio — Native app, planned.
+- AGENT — Any chat agent — Claude, ChatGPT, Muse, Aeon — over CLI, API, and MCP.
+**Base bar (2px rule):** Choir — one state for all four — self-hosted or managed, yours.
 **Pull quote (bottom-anchored):** Agents come and go. *The workbench stays yours.*
 
 ---

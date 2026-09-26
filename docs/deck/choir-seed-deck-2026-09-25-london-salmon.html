@@ -99,9 +99,15 @@
   table.stand td.no { color:var(--muted); }
   table.stand td.yes { color:var(--accent2); font-weight:600; }
 
-  .pos-row { display:grid; grid-template-columns:186px 1fr; gap:36px; align-items:start; }
-  .pos-shapes { display:grid; grid-template-columns:1fr 1fr; gap:36px; }
-  .shape-name { font-size:19px; font-weight:600; margin-bottom:4px; }
+  .entries { display:grid; grid-template-columns:repeat(4,1fr); margin-top:36px; }
+  .entries > div { padding:0 24px; border-left:1px solid var(--rule); }
+  .entries > div:first-child { padding-left:0; border-left:none; }
+  .entries > div:last-child { padding-right:0; }
+  .entry-name { font-size:19px; font-weight:600; margin:8px 0 6px; letter-spacing:-0.005em; }
+  .entry-sub { font-size:14.5px; color:var(--muted); line-height:1.45; }
+  .base { border-top:2px solid var(--ink); margin-top:38px; padding-top:20px; display:flex; align-items:baseline; gap:24px; }
+  .comp-name { font-size:40px; font-weight:600; letter-spacing:-0.012em; }
+  .comp-sub { font-size:16px; font-style:italic; color:var(--muted); }
   .byline-wrap { display:grid; grid-template-columns:1fr 300px; gap:54px; margin-top:24px; align-items:start; }
   .byline { font-family:var(--mono); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
             color:var(--muted); margin-bottom:14px; }
@@ -259,30 +265,34 @@
   <div class="body-area">
     <div class="sect">The position</div>
     <h1 class="head">Personal agents need somewhere to work.</h1>
-    <div class="dek">This year's assistants all run in someone else's cloud. The work should outlive the agent.</div>
+    <div class="dek">Choir is not another assistant. It is the computer underneath &mdash; reached by web, desktop, mobile, or any agent you choose.</div>
 
-    <div class="pos-row" style="margin-top:34px;">
-      <div class="colhead">The chat agents</div>
-      <div class="body dim">Muse, Instinct, Grok Bot, Town, Aeon &mdash; each holds your memory inside its vendor's cloud. Change the agent, start the work over.</div>
+    <div class="entries">
+      <div>
+        <div class="colhead">Web</div>
+        <div class="entry-name">choir.news</div>
+        <div class="entry-sub">Responsive, in any browser.</div>
+      </div>
+      <div>
+        <div class="colhead">Desktop</div>
+        <div class="entry-name">Mac &middot; Windows &middot; Linux</div>
+        <div class="entry-sub">The app, wrapped native.</div>
+      </div>
+      <div>
+        <div class="colhead">Mobile</div>
+        <div class="entry-name">Autoradio</div>
+        <div class="entry-sub">Native app, planned.</div>
+      </div>
+      <div>
+        <div class="colhead">Agent</div>
+        <div class="entry-name">Any chat agent</div>
+        <div class="entry-sub">Claude, ChatGPT, Muse, Aeon &mdash; over CLI, API, and MCP.</div>
+      </div>
     </div>
 
-    <div class="rule-thin" style="margin:28px 0 24px;"></div>
-
-    <div class="pos-row">
-      <div class="colhead">Choir</div>
-      <div>
-        <div class="pos-shapes">
-          <div>
-            <div class="shape-name">Self-hosted</div>
-            <div class="body dim">Free and open source. Runs on your machine.</div>
-          </div>
-          <div>
-            <div class="shape-name">Managed</div>
-            <div class="body dim">Paid and hosted. Runs on ours.</div>
-          </div>
-        </div>
-        <div class="body" style="margin-top:18px;">Your state, either way &mdash; portable, mountable, and never the vendor's.</div>
-      </div>
+    <div class="base">
+      <span class="comp-name">Choir</span>
+      <span class="comp-sub">one state for all four &mdash; self-hosted or managed, yours</span>
     </div>
 
     <div class="pull tail">Agents come and go. <span class="g">The workbench stays yours.</span></div>
