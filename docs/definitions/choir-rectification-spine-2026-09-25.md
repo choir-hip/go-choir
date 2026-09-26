@@ -108,13 +108,13 @@ boundaries:
 now:
   status: working
   slice: >-
-    station R3a — texture ledger consumer (dual-read). R2x landed:
-    deadline wake armed at bind + sweeps deleted + commit recovery; the
-    deployed-cancel proof is deferred (documented in the R2x goal's
-    blocker_or_risk). Next station goal:
-    docs/definitions/choir-texture-ledger-consumer-2026-09-25.md
-  source_ref: main@77f22ced
-  deploy_identity: staging https://choir.news build.commit=53035642
+    station R3b — host desk-cell carrier. R3a landed: ledger evidence
+    dual-read over commitment_record (Addressee+EvidenceRefs, typed
+    divergence surfacing); deployed live-record acceptance deferred to a
+    doc desk report-cast this station enables. Next station goal:
+    docs/definitions/choir-desk-cell-carrier-2026-09-25.md
+  source_ref: main@2493dc36
+  deploy_identity: staging https://choir.news build.commit=4cf82057
   candidate:
     id: none
     state: none
@@ -155,17 +155,14 @@ now:
       one durable /goal file updated per station
   belief:
     believed_state: >-
-      R0 and R2 landed; K's substrate is landed with only a deletion-sweep
-      ruling pending; the restructured spine is ratified; R2x is the live
-      station. The two substrate seams R2x repairs (non-atomic commit,
-      selection-gated fate) are real and verified.
-    main_uncertainty: >-
-      Whether host-side sessionWorker spawn for non-capsule desks (R3b) is
-      a lift or a build — the sharpest execution risk the panel named; the
-      wake-coverage audit (R2x) bounds the fate-deletion side meanwhile.
+      R0, R2, R2x, and R3a landed; K's substrate is landed; the restructured
+      spine is ratified; R3b is the live station. Ledger evidence dual-read
+      is wired (commitment_record + Addressee/EvidenceRefs; packet path
+      preserved until R3d deletes it). The next substrate lift is R3b —
+      host-side sessionWorker spawn for non-capsule desks.
     next_observation: >-
-      R3a dual-read start: which desk surfaces still bypass the texture
-      ledger for engineering evidence, and the first consumer wired to it.
+      R3b host-spawn start: lift-vs-build on the sessionWorker pattern and
+      where non-capsule desk cells eval today.
   blocker_or_risk: >-
     Station pointer must be rewritten at every terminal receipt (the /goal
     string stays constant — this file is the entrypoint). Owner directive
@@ -174,7 +171,7 @@ now:
     documented deferral — not a blocking ask. PR 67 (CI build-cache + race
     compile fix) pending integration at the next station landing.
   next_action: >-
-    Charter R3a (texture ledger consumer) goal file; dual-read path.
+    Charter R3b (host desk-cell carrier) goal file; host sessionWorker spawn.
 
 receipts: []
 ---
@@ -197,6 +194,7 @@ and points at a dedicated throughline `/goal` file for the current mission.
   outcomes live in `docs/desk-rlm-rectification-plan-2026-09-23.md` §11 —
   read it before chartering the next station.
 
-**Current station:** R3a → texture ledger consumer (dual-read). R2x landed
-(repairs merged `ebdaef45`+`53035642`; deployed-cancel proof deferred —
-see its goal's `blocker_or_risk`). Charter R3a's `/goal` file next.
+**Current station:** R3b → host desk-cell carrier. R3a landed (ledger
+evidence dual-read `4cf82057`; deployed live-record proof deferred to this
+station's doc desk report-cast). Next station goal:
+`docs/definitions/choir-desk-cell-carrier-2026-09-25.md`.
