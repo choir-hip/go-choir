@@ -625,13 +625,13 @@ func TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool(t *testing.T
 
 func TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool(t *testing.T) {
 	registry := NewToolRegistry()
-	var edited int
+	var edited atomic.Int64
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
 		Description: "Edit the Texture document.",
 		Parameters:  map[string]any{"type": "object"},
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			edited++
+			edited.Add(1)
 			if strings.Contains(string(args), "bad-find") {
 				return "", fmt.Errorf("edit 0: find text not present")
 			}
@@ -699,8 +699,8 @@ func TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool(t *testing.T
 	if text != "done" {
 		t.Fatalf("text = %q, want done", text)
 	}
-	if edited != 3 {
-		t.Fatalf("patch_texture executed %d times, want both failed attempts plus retry", edited)
+	if got := edited.Load(); got != 3 {
+		t.Fatalf("patch_texture executed %d times, want both failed attempts plus retry", got)
 	}
 	if len(choices) != 3 || choices[0] != "function:patch_texture" || choices[1] != "function:patch_texture" || choices[2] != "" {
 		t.Fatalf("tool choices = %#v, want exact retry then unconstrained final", choices)
