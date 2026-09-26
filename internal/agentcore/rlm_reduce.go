@@ -170,9 +170,16 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 // rejects anything else. Each act needs the field it names; an unrecognized
 // kind is still rejected.
 func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
+	// needTo requires a non-empty destination desk that resolves to a known
+	// canonical profile — the R3b reject: an unknown desk is not a cast
+	// target, fail closed before the ledger mints anything.
 	needTo := func() error {
-		if in.ToDesk == "" {
+		to := strings.TrimSpace(in.ToDesk)
+		if to == "" {
 			return fmt.Errorf("reduce: %s %s missing destination desk", in.Kind, in.LocalID)
+		}
+		if _, err := agentprofile.Canonical(to); err != nil {
+			return fmt.Errorf("reduce: %s %s targets unknown desk %q", in.Kind, in.LocalID, in.ToDesk)
 		}
 		return nil
 	}
@@ -497,6 +504,64 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 		scope: ReductionScope{
 			FromAgentID: execCtx.AgentID,
 			FromRole:    string(toolCtx.Role),
+			ChannelID:   channel,
+			RunID:       execCtx.RunID,
+			OwnerID:     execCtx.OwnerID,
+			ComputerID:  execCtx.ComputerID,
+			ReturnTo:    requester,
+			Cursor:      cursor,
+			CellID:      fmt.Sprintf("%s:%d", execCtx.RunID, cursor),
+		},
+		ledger:    rt.store,
+		inbox:     inbox,
+		highWater: highWater,
+	}
+}
+
+// rlmReductionForDeskCall is the host desk-cell analogue of
+// rlmReductionForCall: a non-capsule desk (management/texture/research) runs
+// model-authored cells in a host session worker via desk_go_eval; there is no
+// CapsuleToolCtx — FromRole comes from the run's profile, toolCtx is nil
+// (capsule-only fate paths are unreachable for desk intents). Same channel
+// mailbox, same cursor, same commitTray path — the ledger sees no difference.
+func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction {
+	inert := &rlmCallReduction{}
+	if rt == nil || !capsule.HostSelectsRLM() {
+		return inert
+	}
+	execCtx := toolregistry.ExecutionContextFrom(ctx)
+	channel := channelIDForRun(execCtx.RunRecord)
+	if channel == "" {
+		channel = execCtx.ChannelID
+	}
+	if channel == "" || execCtx.RunID == "" {
+		return inert
+	}
+	cursor, err := LoadInboxCursor(ctx, rt.store, execCtx.OwnerID, execCtx.RunID, channel)
+	if err != nil {
+		return inert
+	}
+	inbox, highWater, err := AssembleCellInbox(ctx, rt, channel, cursor)
+	if err != nil {
+		return inert
+	}
+	requester := ""
+	if execCtx.RunRecord != nil {
+		requester = metadataStringValue(execCtx.RunRecord.Metadata, "requested_by_agent_id")
+	}
+	role := strings.TrimSpace(execCtx.Role)
+	if role == "" && execCtx.RunRecord != nil {
+		role = agentProfileForRun(execCtx.RunRecord)
+	}
+	return &rlmCallReduction{
+		active:  true,
+		mb:      rt,
+		st:      rt.store,
+		rec:     execCtx.RunRecord,
+		toolCtx: nil, // non-capsule desk — no capsule tool context
+		scope: ReductionScope{
+			FromAgentID: execCtx.AgentID,
+			FromRole:    role,
 			ChannelID:   channel,
 			RunID:       execCtx.RunID,
 			OwnerID:     execCtx.OwnerID,

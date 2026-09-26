@@ -305,7 +305,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		RequesterAgentID:       requesterAgentID,
 		TextureDeliveryAgentID: textureDeliveryAgentID,
 		ChannelID:              channelID,
-		InCellCarrier:          profile == agentprofile.Engineering && capsule.HostSelectsRLM(),
+		InCellCarrier:          (deskInCellCarrierProfile(profile) || profile == agentprofile.Engineering) && capsule.HostSelectsRLM(),
 		NoReportChannel:        profile == agentprofile.Engineering && !capsule.HostSelectsRLM(),
 	}))
 	return b.String(), nil
@@ -353,6 +353,33 @@ func buildRLMAssignedEngineeringRegistry(rt *Runtime) (*toolregistry.ToolRegistr
 	registry := toolregistry.MustNewToolRegistry()
 	if err := registry.Register(newCapsuleGoEvalTool(rt)); err != nil {
 		return nil, fmt.Errorf("build RLM assigned co-super registry: %w", err)
+	}
+	return registry, nil
+}
+
+// deskInCellCarrierProfiles are the non-capsule desks that get a sealed
+// desk-cell registry (sole desk_go_eval) under actuator=rlm — the InCellCarrier
+// fan of mission R3b. Engineering is already capsule-bound via
+// buildRLMAssignedEngineeringRegistry and is not in this set.
+func deskInCellCarrierProfile(profile string) bool {
+	switch profile {
+	case agentprofile.Management, agentprofile.Texture, agentprofile.Research:
+		return true
+	default:
+		return false
+	}
+}
+
+// buildDeskCellRegistry is the host-cell sealed overlay for a non-capsule desk
+// (R3b): desk_go_eval is the sole JSON envelope — the desk's only tool. Every
+// other affordance is a typed in-cell choir function staged and reduced by the
+// canonical reducer, exactly as Engineering's capsule_go_eval registry works.
+// Live desk tools remain for actuator=tools; the cell carrier activates only
+// under the rlm actuator until R3c/R3d promote each desk live.
+func buildDeskCellRegistry(rt *Runtime, deskRole string) (*toolregistry.ToolRegistry, error) {
+	registry := toolregistry.MustNewToolRegistry()
+	if err := registry.Register(newDeskGoEvalTool(rt, rt.deskSessionWorkers(), deskRole)); err != nil {
+		return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
 	}
 	return registry, nil
 }
@@ -408,6 +435,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		}
 		cwd = wd
 	}
+	engineeringRegistry := toolregistry.MustNewToolRegistry()
 
 	searchClient := search.NewGatewayClientFromEnv()
 	sourceClient := researchtools.NewSourceClientFromEnv()
@@ -429,7 +457,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 			return err
 		}
 	}
-	engineeringRegistry := toolregistry.MustNewToolRegistry()
 	researchPolicy, err := agentprofile.PolicyFor(agentprofile.Research)
 	if err != nil {
 		return err
@@ -437,6 +464,18 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	researchRegistry, err := rt.buildRegistryForRole(researchPolicy, cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
+	}
+
+	// R3b InCellCarrier fan: under actuator=rlm, the non-capsule desk profiles
+	// get a sealed desk-cell registry (sole desk_go_eval); under tools they
+	// keep their live host-tool registries until R3c/R3d promote them.
+	var deskCellRegistries = map[string]*toolregistry.ToolRegistry{}
+	if capsule.HostSelectsRLM() {
+		for _, deskProfile := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research} {
+			if deskReg, derr := buildDeskCellRegistry(rt, deskProfile); derr == nil {
+				deskCellRegistries[deskProfile] = deskReg
+			}
+		}
 	}
 	processorPolicy, err := agentprofile.PolicyFor(agentprofile.Processor)
 	if err != nil {
@@ -501,6 +540,12 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	rt.toolProfiles[agentprofile.Reconciler] = reconcilerRegistry
 	rt.toolProfiles[agentprofile.Texture] = textureRegistry
 	rt.toolProfiles[agentprofile.Email] = emailRegistry
+	// R3b: swap in the sealed desk-cell registry for each desk profile the
+	// InCellCarrier fan built — actuator=rlm puts the desk on the cell
+	// carrier; actuator=tools leaves its live host-tool registry in place.
+	for deskProfile, deskReg := range deskCellRegistries {
+		rt.toolProfiles[deskProfile] = deskReg
+	}
 	return nil
 }
 

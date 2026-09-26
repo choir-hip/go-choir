@@ -99,6 +99,10 @@ type Runtime struct {
 	wg           sync.WaitGroup
 	toolRegistry *toolregistry.ToolRegistry
 	toolProfiles map[string]*toolregistry.ToolRegistry
+	// deskWorkers owns the host session workers for non-capsule desks on the
+	// in-cell carrier (R3b). Lazy; nil until the first desk_go_eval call.
+	deskWorkers   *deskSessionWorkers
+	deskWorkersMu sync.Mutex
 
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex
