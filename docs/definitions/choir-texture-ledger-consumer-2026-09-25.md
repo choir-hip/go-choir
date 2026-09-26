@@ -148,23 +148,31 @@ now:
       the next station under the meta-goal
   belief:
     believed_state: >-
-      Commitment records (choir.commitment_record) are already minted at
-      cell commit (R2x) and carry the act's identity + result; the evidence
-      path (CoagentSourcePacket -> textureSourceEntity) is the redundant
-      twin. The census will confirm coverage.
+      Commitment records are minted at cell commit (R2x); the packet path
+      is the redundant twin.
+    census_findings: >-
+      Census done. The evidence-materialization seam is dual-readable from
+      commitment_record only for packet-bodied Report acts
+      (commitmentRecordForIntent preserves Sources only there); thin Report
+      and all other acts lose EvidenceRefs/Sources. The occurrence/authority
+      path cannot move to the ledger until the record gains typed
+      delivery/lifecycle fields — a vocabulary decision, not a consumer edit.
     main_uncertainty: >-
-      Whether every packet kind maps to a commitment record shape, or some
-      (research cards, producer reports) carry packet-only fields a record
-      cannot express — that bounds whether R3a is a pure dual-read or needs
-      a record-field extension.
+      Whether to extend the commitment record with typed source/evidence
+      fields (touches the R5a vocabulary freeze) or keep dual-read parity
+      limited to packet-bodied Reports and leave the authority path on
+      worker_updates_* until R5a/R3d.
     next_observation: >-
-      The packet->record coverage census across the evidence-source
-      consumers.
-  blocker_or_risk: none — chartered; begin with the surface census
+      Consensus ruling on record-schema extension vs. parity-limited
+      dual-read, then wire the evidence-seam resolver.
+  blocker_or_risk: >-
+    Substrate fork, deferred per No Blocking Asks: run agentic-consensus on
+    (a) extend commitment_record with typed source/evidence fields now vs.
+    (b) dual-read parity over packet-bodied Reports only, authority path
+    stays on packets until R5a/R3d. Do not silently narrow scope.
   next_action: >-
-    Census evidence-source consumers of worker_updates_*/CoagentSourcePacket
-    vs. commitment-record coverage; wire the ledger resolver behind
-    dual-read.
+    Run agentic-consensus on the record-schema fork; wire
+    evidenceSourceEntitiesAndRejectionsFromPendingUpdates to dual-read.
 
 receipts: []
 ---
