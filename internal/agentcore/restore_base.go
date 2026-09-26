@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
@@ -32,6 +33,19 @@ func (rt *Runtime) resolveRestoreBaseSource() (projectionbase.BaseSource, error)
 		return nil, fmt.Errorf("%w: restore base authority is not configured", ErrRematerializeUnavailable)
 	}
 	return projectionbase.NewHTTPSource(baseURL, projectionbase.CapabilityFunc(creds.Capability)), nil
+}
+
+// advertisedBaseAbsent reports whether the platform has never published a
+// replay base for this computer — the fresh-computer state. Both absence
+// shapes count: ErrBaseRefused from a missing/empty watermark row and a
+// zero-sequence empty response. Stale or corrupt bases (descriptor/target
+// mismatches) are NOT absent — they must stay refused.
+func advertisedBaseAbsent(ctx context.Context, src projectionbase.BaseSource, computerID string) bool {
+	seq, ref, err := src.Watermark(ctx, computerID)
+	if err != nil {
+		return errors.Is(err, projectionbase.ErrBaseRefused)
+	}
+	return seq == 0 || strings.TrimSpace(ref) == ""
 }
 
 // resolveRecoveryTarget proves the recovery target is the advertised

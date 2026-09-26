@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -102,24 +103,55 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	if err != nil {
 		return report, err
 	}
+	var staged *choirstore.Store
+	var descriptor projectionbase.Descriptor
 	targetSequence, err := resolveRecoveryTarget(ctx, src, computerID, targetHead)
-	if err != nil {
+	if errors.Is(err, projectionbase.ErrBaseRefused) {
+		// The refusal could name a stale or corrupt base, which must stay
+		// refused. Only an absent advertised base permits the bounded genesis
+		// replay below.
+		if !advertisedBaseAbsent(ctx, src, computerID) {
+			return report, err
+		}
+		// No advertised base: no ops base exists for this computer, so there is
+		// nothing to install — replay the full tape into the staged store.
+		// ResolveTargetSequence from zero proves the target is on the canonical
+		// chain (immutable tape) where a base descriptor would have; the tail
+		// bound keeps the refusal posture the base exists to protect.
+		targetSequence, err = projectionbase.ResolveTargetSequence(ctx, src, computerID, targetHead, 0, "")
+		if err != nil {
+			_ = os.RemoveAll(stagingRoot)
+			return report, fmt.Errorf("rematerialize: recovery target is not on the canonical chain: %w", err)
+		}
+		if targetSequence > projectionbase.MaxRecoveryTailEvents {
+			_ = os.RemoveAll(stagingRoot)
+			return report, fmt.Errorf("%w: no advertised base and recovery target %d exceeds the %d-event replay bound", projectionbase.ErrBaseRefused, targetSequence, projectionbase.MaxRecoveryTailEvents)
+		}
+		staged, err = choirstore.OpenFresh(filepath.Join(stagingRoot, filepath.Base(stagedMarker)))
+		if err != nil {
+			_ = os.RemoveAll(stagingRoot)
+			return report, fmt.Errorf("rematerialize: open staged workspace: %w", err)
+		}
+	} else if err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		return report, err
-	}
-	staged, descriptor, err := installStagedBase(ctx, src, stagingRoot, filepath.Base(stagedMarker), computerID, targetHead, targetSequence)
-	if err != nil {
-		_ = os.RemoveAll(stagingRoot)
-		return report, err
+	} else {
+		staged, descriptor, err = installStagedBase(ctx, src, stagingRoot, filepath.Base(stagedMarker), computerID, targetHead, targetSequence)
+		if err != nil {
+			_ = os.RemoveAll(stagingRoot)
+			return report, err
+		}
+		// The install plan is the base-path gate: an empty staged store must
+		// resolve to RecoveryInstall with a tail inside the bound.
+		if _, err := projectionbase.PlanRecovery(true, descriptor.Sequence, true, descriptor.Sequence, targetSequence); err != nil {
+			_ = staged.Close()
+			_ = os.RemoveAll(stagingRoot)
+			return report, err
+		}
 	}
 	report.BaseSequence = descriptor.Sequence
 	report.BaseBlobSHA256 = descriptor.BlobSHA256
 	report.TailTargetSequence = targetSequence
-	if _, err := projectionbase.PlanRecovery(true, 0, true, descriptor.Sequence, targetSequence); err != nil {
-		_ = staged.Close()
-		_ = os.RemoveAll(stagingRoot)
-		return report, err
-	}
 	request.StagedWorkspacePath = staged.TexturePath()
 	if err := selfdevprotocol.RematerializeFromRequest(request); err != nil {
 		_ = staged.Close()

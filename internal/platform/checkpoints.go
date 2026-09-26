@@ -455,12 +455,37 @@ func (h *Handler) HandlePlatformControlPublicKey(w http.ResponseWriter, r *http.
 }
 
 func (h *Handler) HandleComputerCheckpoint(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
 	if h == nil || h.checkpointAuthority == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "checkpoint authority unavailable"})
+		return
+	}
+	if r.Method == http.MethodGet {
+		// Idempotent-lookup surface: a resumed update tail must recover the
+		// minted checkpoint instead of re-minting — the verifier certificate
+		// carries server time, so a second mint under the same key conflicts.
+		computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
+		idempotencyKey := strings.TrimSpace(r.URL.Query().Get("idempotency_key"))
+		if computerID == "" || idempotencyKey == "" {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "computer_id and idempotency_key are required"})
+			return
+		}
+		if !h.authorizeComputerEvent(w, r, computerID, "event:read") {
+			return
+		}
+		response, found, err := h.checkpointAuthority.lookup(r.Context(), computerID, idempotencyKey)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: "checkpoint lookup failed"})
+			return
+		}
+		if !found {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusOK, response)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
 	var request selfdevprotocol.CheckpointRequest

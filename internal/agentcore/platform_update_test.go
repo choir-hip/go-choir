@@ -448,6 +448,57 @@ func TestPlatformUpdateBootSweepResumesPending(t *testing.T) {
 	}
 }
 
+// TestPlatformUpdateStrandedTailResumes proves the post-applied strand is
+// recoverable: `applied` commits and clears the pending transition, the tail
+// dies (here: control plane down at checkpoint mint), and the next push or
+// boot sweep drives the missing checkpoint+route events — without
+// duplicating the applied event or re-minting the checkpoint.
+func TestPlatformUpdateStrandedTailResumes(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-platform-update-strand")
+	ctx := context.Background()
+
+	offer := fx.mintPlatformUpdateOffer(t, "update-strand", "<html>strand</html>", fx.currentHead(t))
+
+	// Kill the control plane mid-update: `applied` commits, then checkpoint
+	// mint is refused and the tail dies with the transition already closed.
+	fx.controlFail.Store(true)
+	_, err := fx.rt.ApplyPlatformUpdate(ctx, offer)
+	fx.controlFail.Store(false)
+	if err == nil {
+		t.Fatal("update with dead control plane should fail")
+	}
+	kinds := fx.countEventKinds()
+	if kinds[computerevent.EventMaterializationApplied] != 1 || kinds[computerevent.EventCheckpointPublished] != 0 {
+		t.Fatalf("expected applied-without-checkpoint strand, got %v", kinds)
+	}
+	head, err := fx.store.Head(ctx, fx.computerID)
+	if err != nil || head == nil || head.PendingTransitionRef != "" {
+		t.Fatalf("strand must close pending: %v %#v", err, head)
+	}
+
+	// Boot sweep path: no pending transition, but the latest applied event
+	// lacks its route sibling — the sweep must see and drive it.
+	fx.rt.resumePendingPlatformUpdate(ctx)
+
+	slot, latestReceipt, err := fx.ledger.Resolve(ctx, mustRouteSlotID(t))
+	if err != nil {
+		t.Fatalf("route resolve: %v", err)
+	}
+	if slot.Generation != 2 || latestReceipt.Kind != routeledger.TransitionPromote {
+		t.Fatalf("resumed strand route: gen=%d kind=%s, want generation-2 promote", slot.Generation, latestReceipt.Kind)
+	}
+	kinds = fx.countEventKinds()
+	for _, kind := range []computerevent.EventKind{
+		computerevent.EventEffectAccepted, computerevent.EventMaterializationStarted,
+		computerevent.EventMaterializationApplied, computerevent.EventCheckpointPublished,
+		computerevent.EventRouteProjectionUpdated,
+	} {
+		if kinds[kind] != 1 {
+			t.Fatalf("event %s count = %d, want exactly 1 (no duplicated tail)", kind, kinds[kind])
+		}
+	}
+}
+
 func mustOfferDigest(t *testing.T, offer selfdevprotocol.PlatformUpdateOffer) string {
 	t.Helper()
 	digest, err := offer.Digest()

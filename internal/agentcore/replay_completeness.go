@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -324,9 +325,12 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 }
 
 // openProbeReplayStore builds the disposable replay projection for the probe.
-// A live chain replays from its verified base (tail-only); an empty store
-// probes the explicit bootstrap path without one. The caller closes the store
-// and removes the temp root.
+// A live chain replays from its verified base (tail-only) when a base is
+// advertised; absent one, the probe replays the full tape from genesis —
+// the tape is the truth, a base is only a cost bound, and the refusal
+// posture for unbounded replay is preserved by MaxRecoveryTailEvents. An
+// empty store probes the explicit bootstrap path without one. The caller
+// closes the store and removes the temp root.
 func (rt *Runtime) openProbeReplayStore(ctx context.Context, computerID, tempRoot string, liveHead *computerevent.Head) (*choirstore.Store, uint64, string, uint64, *restoreReplayObserver, error) {
 	observer := &restoreReplayObserver{}
 	if liveHead == nil || liveHead.Sequence == 0 {
@@ -339,6 +343,21 @@ func (rt *Runtime) openProbeReplayStore(ctx context.Context, computerID, tempRoo
 	src, err := rt.resolveRestoreBaseSource()
 	if err != nil {
 		return nil, 0, "", 0, nil, err
+	}
+	if advertisedBaseAbsent(ctx, src, computerID) {
+		// No advertised base: the platform has never published one for this
+		// computer (fresh probe computers in particular). Replay the whole
+		// chain — deterministic reduction makes the full replay the strongest
+		// completeness evidence — but keep the invariant the base exists to
+		// protect: refuse chains longer than the recovery tail bound.
+		if liveHead.Sequence > projectionbase.MaxRecoveryTailEvents {
+			return nil, 0, "", 0, nil, fmt.Errorf("%w: no advertised base and chain length %d exceeds the %d-event replay bound", projectionbase.ErrBaseRefused, liveHead.Sequence, projectionbase.MaxRecoveryTailEvents)
+		}
+		replayStore, freshErr := choirstore.OpenFresh(filepath.Join(tempRoot, "runtime.db"))
+		if freshErr != nil {
+			return nil, 0, "", 0, nil, fmt.Errorf("replay completeness: open disposable workspace: %w", freshErr)
+		}
+		return replayStore, 0, "", liveHead.Sequence, observer, nil
 	}
 	targetSequence, err := resolveRecoveryTarget(ctx, src, computerID, liveHead.CanonicalEventHead)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -89,13 +90,30 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	}
 	computerID := offer.ComputerID
 	appliedKey := platformUpdateIdempotencyKey("applied", offer.UpdateID)
-	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, computerID, appliedKey); lookupErr != nil {
+	appliedEvent, appliedFound, lookupErr := rt.store.EventByIdempotency(ctx, computerID, appliedKey)
+	if lookupErr != nil {
 		return report, lookupErr
-	} else if found {
-		// Replay: the update already committed. Return the recorded outcome —
-		// the event chain is the receipt; we do not re-apply.
-		report.Replayed = true
-		return report, nil
+	}
+	if appliedFound {
+		// The apply already committed — the event chain, not the HTTP body, is
+		// the receipt. `applied` clears PendingTransitionRef, so the boot sweep
+		// and replayed pushes can strand here: re-drive the tail (checkpoint →
+		// route) when its last event never landed, else report the recorded
+		// outcome. Every tail step dedupes on its own idempotency key.
+		_, routeDone, routeErr := rt.store.EventByIdempotency(ctx, computerID, platformUpdateIdempotencyKey("route-projection-updated", offer.UpdateID))
+		if routeErr != nil {
+			return report, routeErr
+		}
+		if _, failedFound, failedErr := rt.store.EventByIdempotency(ctx, computerID, platformUpdateIdempotencyKey("failed", offer.UpdateID)); failedErr != nil {
+			return report, failedErr
+		} else if failedFound {
+			return report, fmt.Errorf("platform update: applied and failed events both committed — tape is contradictory")
+		}
+		if routeDone {
+			report.Replayed = true
+			return report, nil
+		}
+		return rt.resumePlatformUpdateTail(ctx, offer, offerDigest, appliedEvent, report)
 	}
 	head, err := rt.store.Head(ctx, computerID)
 	if err != nil || head == nil {
@@ -259,7 +277,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 		return report, err
 	}
 	resultPayload, _ := json.Marshal(result)
-	appliedEvent := computerevent.Event{
+	appliedEvent = computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: appliedEventID, ComputerID: computerID,
 		EventKind: computerevent.EventMaterializationApplied, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: appliedKey,
@@ -279,67 +297,102 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	appliedEventHead := head.CanonicalEventHead
 	report.AppliedEventHead = appliedEventHead
 
+	return rt.drivePlatformUpdateTail(ctx, offer, offerDigest, acceptedDigest, result, appliedEventHead, applyRequest.OperationID, report)
+}
+
+// drivePlatformUpdateTail commits the post-apply half of a platform update:
+// checkpoint mint → checkpoint-published event → route projection →
+// route-projection-updated event. Every step dedupes on its own idempotency
+// key so a replayed offer, a restarted sweep, and the original in-flight call
+// all converge on the same tape shape. The minted checkpoint is recovered by
+// key (never re-minted: the verifier certificate carries server time, so a
+// second mint under the same key produces a conflicting request commitment).
+func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, offerDigest, acceptedDigest string, result updater.ApplyResult, appliedEventHead, operationID string, report PlatformUpdateReport) (PlatformUpdateReport, error) {
+	computerID := offer.ComputerID
+	appliedKey := platformUpdateIdempotencyKey("applied", offer.UpdateID)
+	head, err := rt.store.Head(ctx, computerID)
+	if err != nil || head == nil {
+		return report, fmt.Errorf("platform update: post-apply head unavailable")
+	}
 	appliedReceipt, found, err := rt.store.EventReceiptByIdempotency(ctx, computerID, appliedKey)
 	if err != nil || !found {
 		return report, fmt.Errorf("platform update: applied event receipt unavailable")
 	}
+
+	version := computerversion.ComputerVersion{CodeRef: offer.CodeClosure.Ref, ArtifactProgramRef: offer.ArtifactProgram.Ref}
 	receiptDigest, err := selfdevprotocol.Digest(result.MaterializationReceipt)
 	if err != nil {
 		return report, err
 	}
-
-	// Verifier certificate over the platform-attached evidence — same signer
-	// domain the selfdev path uses; the offer's verifier refs are the input.
-	version := computerversion.ComputerVersion{CodeRef: offer.CodeClosure.Ref, ArtifactProgramRef: offer.ArtifactProgram.Ref}
-	reconstructionDigest, err := selfdevprotocol.Digest(struct {
-		Version       computerversion.ComputerVersion `json:"computer_version"`
-		EffectiveHead string                          `json:"effective_event_head"`
-		ReleaseDigest string                          `json:"release_digest"`
-	}{version, head.EffectiveEventHead, result.ReleaseDigest})
-	if err != nil {
-		return report, err
+	checkpointKey := "platform-update-checkpoint-" + offer.UpdateID
+	var checkpoint selfdevprotocol.CheckpointResponse
+	var verifierDigest string
+	if fetched, fetchErr := rt.selfdevControl.FetchCheckpoint(ctx, computerID, checkpointKey); fetchErr != nil {
+		return report, fmt.Errorf("platform update: checkpoint fetch refused: %w", fetchErr)
+	} else if fetched != nil {
+		// Tail resume: the checkpoint already minted. Re-minting would bind a
+		// fresh verifier certificate under the same key and conflict server-side.
+		checkpoint = *fetched
+		request := checkpoint.Checkpoint.Request
+		if request.AcceptedEventHead != appliedEventHead || request.ReleaseDigest != result.ReleaseDigest || request.ComputerVersion != version {
+			return report, fmt.Errorf("platform update: fetched checkpoint does not bind this update")
+		}
+		verifierDigest = request.VerifierCertificateDigest
+	} else {
+		// Verifier certificate over the platform-attached evidence — same
+		// signer domain the selfdev path uses; the offer's verifier refs are
+		// the input.
+		reconstructionDigest, digestErr := selfdevprotocol.Digest(struct {
+			Version       computerversion.ComputerVersion `json:"computer_version"`
+			EffectiveHead string                          `json:"effective_event_head"`
+			ReleaseDigest string                          `json:"release_digest"`
+		}{version, head.EffectiveEventHead, result.ReleaseDigest})
+		if digestErr != nil {
+			return report, digestErr
+		}
+		verifierCertificate, signErr := rt.selfdevVerifier.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
+			Version: 1, ComputerID: computerID, OperationID: operationID,
+			BundleDigest: offerDigest, VerificationEventDigest: offer.VerifierRefs[0],
+			VerifierEvidenceRefs: offer.VerifierRefs, DecisionEventHead: acceptedDigest,
+			CodeRef: string(version.CodeRef), ArtifactProgramRef: string(version.ArtifactProgramRef),
+			ReleaseDigest: result.ReleaseDigest, Decision: "pass",
+		})
+		if signErr != nil {
+			return report, fmt.Errorf("platform update: verifier certificate refused: %w", signErr)
+		}
+		verifierJSON, marshalErr := computerevent.CanonicalJSON(verifierCertificate.Certificate)
+		if marshalErr != nil {
+			return report, marshalErr
+		}
+		verifierDigest = computerevent.DigestBytes(verifierJSON)
+		pinned, _, readErr := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, result.ReleaseDigest)
+		if readErr != nil {
+			return report, fmt.Errorf("platform update: applied release unavailable: %w", readErr)
+		}
+		witness, frontend, bindErr := rt.checkpointRestoreBindings(ctx, computerID, result.ReleaseDigest, pinned.Files)
+		if bindErr != nil {
+			return report, bindErr
+		}
+		published, publishErr := rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
+			ComputerID: computerID, IdempotencyKey: checkpointKey,
+			ComputerVersion: version, AcceptedEventHead: appliedEventHead, EffectiveEventHead: head.EffectiveEventHead,
+			EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: appliedReceipt.ReceiptID,
+			ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
+			MaterializationReceiptDigest: receiptDigest, VerifierCertificateDigest: verifierDigest,
+			VerifierCertificate: verifierCertificate, ReducerVersion: head.ReducerVersion,
+			VMLocalContentWitness: witness, FrontendIdentity: frontend,
+		})
+		if publishErr != nil {
+			return report, fmt.Errorf("platform update: checkpoint refused: %w", publishErr)
+		}
+		checkpoint = published
 	}
-	verifierCertificate, err := rt.selfdevVerifier.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
-		Version: 1, ComputerID: computerID, OperationID: applyRequest.OperationID,
-		BundleDigest: offerDigest, VerificationEventDigest: offer.VerifierRefs[0],
-		VerifierEvidenceRefs: offer.VerifierRefs, DecisionEventHead: acceptedDigest,
-		CodeRef: string(version.CodeRef), ArtifactProgramRef: string(version.ArtifactProgramRef),
-		ReleaseDigest: result.ReleaseDigest, Decision: "pass",
-	})
-	if err != nil {
-		return report, fmt.Errorf("platform update: verifier certificate refused: %w", err)
-	}
-	verifierJSON, err := computerevent.CanonicalJSON(verifierCertificate.Certificate)
-	if err != nil {
-		return report, err
-	}
-	verifierDigest := computerevent.DigestBytes(verifierJSON)
 	report.VerifierCertificateDigest = verifierDigest
-
-	pinned, _, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, result.ReleaseDigest)
-	if err != nil {
-		return report, fmt.Errorf("platform update: applied release unavailable: %w", err)
-	}
-	witness, frontend, err := rt.checkpointRestoreBindings(ctx, computerID, result.ReleaseDigest, pinned.Files)
-	if err != nil {
-		return report, err
-	}
-	checkpoint, err := rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
-		ComputerID: computerID, IdempotencyKey: "platform-update-checkpoint-" + offer.UpdateID,
-		ComputerVersion: version, AcceptedEventHead: appliedEventHead, EffectiveEventHead: head.EffectiveEventHead,
-		EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: appliedReceipt.ReceiptID,
-		ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
-		MaterializationReceiptDigest: receiptDigest, VerifierCertificateDigest: verifierDigest,
-		VerifierCertificate: verifierCertificate, ReducerVersion: head.ReducerVersion,
-		VMLocalContentWitness: witness, FrontendIdentity: frontend,
-	})
-	if err != nil {
-		return report, fmt.Errorf("platform update: checkpoint refused: %w", err)
-	}
 	report.CheckpointDigest = checkpoint.Checkpoint.Digest
 	report.Checkpoint = &checkpoint
 
 	// Checkpoint-published causal event — needed for the promotion join's
+
 	// event-head receipt, same as the selfdev path.
 	checkpointEventIdempotency := platformUpdateIdempotencyKey("checkpoint-published", offer.UpdateID)
 	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, computerID, checkpointEventIdempotency); lookupErr != nil {
@@ -479,6 +532,48 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	}
 	return report, nil
 }
+// resumePlatformUpdateTail re-drives the post-apply tail for an update whose
+// materialization committed but whose checkpoint/route events never landed —
+// the tail dies when the guest restarts under apply, and before this path
+// nothing could ever reach it again (applied already cleared the pending
+// transition, and the applied-exists replay returned early). All inputs are
+// tape-recoverable: the applied event pins ApplyResult as its payload and
+// names the accepted event in DecisionRef.
+func (rt *Runtime) resumePlatformUpdateTail(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, offerDigest string, appliedEvent computerevent.Event, report PlatformUpdateReport) (PlatformUpdateReport, error) {
+	if rt.eventPayloadReader == nil {
+		return report, fmt.Errorf("platform update: tail resume needs the event payload reader")
+	}
+	appliedDigest, err := appliedEvent.Digest()
+	if err != nil {
+		return report, err
+	}
+	if !computerevent.IsSHA256(appliedEvent.PayloadCommitment) {
+		return report, fmt.Errorf("platform update: applied event pins no result payload")
+	}
+	raw, err := rt.eventPayloadReader.FetchPayload(ctx, offer.ComputerID, appliedEvent.PayloadCommitment)
+	if err != nil {
+		return report, fmt.Errorf("platform update: applied result payload fetch: %w", err)
+	}
+	var result updater.ApplyResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return report, fmt.Errorf("platform update: applied result payload decode: %w", err)
+	}
+	if result.Outcome != "applied" {
+		return report, fmt.Errorf("platform update: applied event payload outcome %q is not applied", result.Outcome)
+	}
+	ref, publicKey, keyErr := rt.selfdevUpdater.PublicKey(ctx)
+	if keyErr != nil {
+		return report, keyErr
+	}
+	resolver := updaterReceiptKeyResolver{ref: ref, key: publicKey}
+	if result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
+		return report, fmt.Errorf("platform update: invalid applied receipts")
+	}
+	report.AppliedEventHead = appliedDigest
+	report.ReleaseDigest = result.ReleaseDigest
+	report.PriorReleaseDigest = result.PriorReleaseDigest
+	return rt.drivePlatformUpdateTail(ctx, offer, offerDigest, appliedEvent.DecisionRef, result, appliedDigest, "platform-update-"+offer.UpdateID, report)
+}
 
 // stagePlatformUpdatePayload writes the signed offer's files into the
 // updater's root-owned incoming store under the finalized release digest.
@@ -592,18 +687,30 @@ func (h *APIHandler) HandleInternalPlatformUpdate(w http.ResponseWriter, r *http
 // checkpoint → route projection) never ran. The tape alone is the resume
 // substrate — the accepted event pins its offer as a payload.
 //
-// Predicate: head still carries a pending transition AND that pending event is
-// an update-accepted event AND neither `applied` nor `failed` committed for
-// that update. A committed `failed` means the update already lost — resuming
-// it would mask a real failure; a different pending transition means the
-// update already cleared and something else owns it.
+// Two resumable shapes:
+//   - pending-bound: head still carries a pending transition AND that pending
+//     event is an update-accepted event AND neither `applied` nor `failed`
+//     committed for that update. A committed `failed` means the update already
+//     lost — resuming it would mask a real failure; a different pending
+//     transition means the update already cleared and something else owns it.
+//   - stranded tail: `applied` committed (pending closed) but the route event
+//     never landed. The pending gate alone cannot see this; the tape scan
+//     finds the latest platform-update-applied event and re-drives when its
+//     route-projection-updated sibling is absent.
 func (rt *Runtime) resumePendingPlatformUpdate(ctx context.Context) {
 	if rt == nil || rt.store == nil || rt.eventAppender == nil || rt.eventPayloadReader == nil || rt.selfdevUpdater == nil {
 		return
 	}
 	head, err := rt.store.Head(ctx, rt.selfdevComputerID)
-	if err != nil || head == nil || head.PendingTransitionRef == "" {
-		return // no pending transition — nothing to resume
+	if err != nil || head == nil {
+		return
+	}
+	if head.PendingTransitionRef == "" {
+		// No pending transition — but an applied event whose tail never
+		// committed is still a strand: applied clears the pending ref, so
+		// the pending gate is blind to it.
+		rt.resumeStrandedPlatformUpdateTail(ctx)
+		return
 	}
 	// PendingTransitionRef is the accepted event's digest: it stays bound until
 	// the transition closes (applied/failed). materialization_started committing
@@ -635,6 +742,54 @@ func (rt *Runtime) resumePendingPlatformUpdate(ctx context.Context) {
 		return // failed committed — the update already lost; do not retry
 	}
 	log.Printf("runtime: platform update resume: re-driving update %s after guest restart", offer.UpdateID)
+	if _, applyErr := rt.ApplyPlatformUpdate(ctx, offer); applyErr != nil {
+		log.Printf("runtime: platform update resume: %v", applyErr)
+	}
+}
+
+// resumeStrandedPlatformUpdateTail finds the newest platform update whose
+// `applied` event committed without its `route-projection-updated` sibling
+// and re-pushes its pinned offer through ApplyPlatformUpdate — which detects
+// the strand and drives only the missing tail. A committed `failed` sibling
+// ends the update; nothing resumes a lost transition.
+func (rt *Runtime) resumeStrandedPlatformUpdateTail(ctx context.Context) {
+	appliedEvent, found, err := rt.store.LatestComputerEventByIdempotencyPrefix(ctx, rt.selfdevComputerID, "platform-update-applied-")
+	if err != nil || !found {
+		return // no update has ever applied
+	}
+	updateID := strings.TrimPrefix(appliedEvent.IdempotencyKey, "platform-update-applied-")
+	if updateID == "" || updateID == appliedEvent.IdempotencyKey {
+		return
+	}
+	if _, routeFound, routeErr := rt.store.EventByIdempotency(ctx, rt.selfdevComputerID, platformUpdateIdempotencyKey("route-projection-updated", updateID)); routeErr != nil || routeFound {
+		return // tail done (or store error — retry next boot)
+	}
+	if _, failedFound, failedErr := rt.store.EventByIdempotency(ctx, rt.selfdevComputerID, platformUpdateIdempotencyKey("failed", updateID)); failedErr != nil || failedFound {
+		return // the update already lost
+	}
+	if !computerevent.IsSHA256(appliedEvent.DecisionRef) {
+		log.Printf("runtime: platform update resume: applied event %s binds no accepted decision — tail stranded", appliedEvent.IdempotencyKey)
+		return
+	}
+	acceptedEvent, found, evErr := rt.store.EventByDigest(ctx, rt.selfdevComputerID, appliedEvent.DecisionRef)
+	if evErr != nil || !found || acceptedEvent.EventKind != computerevent.EventEffectAccepted {
+		return // accepted event absent — the tape shape is not an update
+	}
+	if !computerevent.IsSHA256(acceptedEvent.PayloadCommitment) {
+		log.Printf("runtime: platform update resume: accepted event pins no offer payload — tail %s orphaned", appliedEvent.IdempotencyKey)
+		return
+	}
+	raw, fetchErr := rt.eventPayloadReader.FetchPayload(ctx, rt.selfdevComputerID, acceptedEvent.PayloadCommitment)
+	if fetchErr != nil {
+		log.Printf("runtime: platform update resume: stranded offer payload fetch: %v", fetchErr)
+		return
+	}
+	var offer selfdevprotocol.PlatformUpdateOffer
+	if err := json.Unmarshal(raw, &offer); err != nil {
+		log.Printf("runtime: platform update resume: stranded offer payload decode: %v", err)
+		return
+	}
+	log.Printf("runtime: platform update resume: re-driving stranded tail for update %s", updateID)
 	if _, applyErr := rt.ApplyPlatformUpdate(ctx, offer); applyErr != nil {
 		log.Printf("runtime: platform update resume: %v", applyErr)
 	}

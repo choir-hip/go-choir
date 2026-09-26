@@ -321,6 +321,48 @@ func (g *GuestCredentials) PublishCheckpoint(ctx context.Context, checkpoint sel
 	return result, nil
 }
 
+// FetchCheckpoint returns the checkpoint published under an idempotency key,
+// or nil when none exists. Tail-resume uses this to recover a minted
+// checkpoint rather than re-minting: the verifier certificate carries server
+// time, so a second mint under the same key produces a conflicting request
+// commitment and is refused.
+func (g *GuestCredentials) FetchCheckpoint(ctx context.Context, computerID, idempotencyKey string) (*selfdevprotocol.CheckpointResponse, error) {
+	if g == nil || computerID != g.computerID || strings.TrimSpace(idempotencyKey) == "" {
+		return nil, fmt.Errorf("guest credential: checkpoint fetch computer binding mismatch")
+	}
+	token, err := g.Capability(ctx)
+	if err != nil {
+		return nil, err
+	}
+	query := url.Values{"computer_id": {computerID}, "idempotency_key": {idempotencyKey}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, g.baseURL+"/internal/computers/checkpoints?"+query.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := g.http.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("guest credential: fetch checkpoint: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("guest credential: checkpoint fetch refused with status %d", response.StatusCode)
+	}
+	var result selfdevprotocol.CheckpointResponse
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 256<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&result); err != nil {
+		return nil, fmt.Errorf("guest credential: decode checkpoint: %w", err)
+	}
+	if result.Checkpoint.Request.ComputerID != computerID || result.Checkpoint.Request.IdempotencyKey != idempotencyKey || result.Receipt.Kind != selfdevprotocol.ReceiptKindCheckpoint || result.Receipt.ComputerID != computerID || result.Receipt.ArtifactDigest != result.Checkpoint.Digest || result.Receipt.Verify(g.PublicKey()) != nil {
+		return nil, fmt.Errorf("guest credential: fetched checkpoint binding failed")
+	}
+	return &result, nil
+}
+
 func (g *GuestCredentials) PublishRouteProjection(ctx context.Context, projection selfdevprotocol.RouteProjectionRequest) (selfdevprotocol.RouteProjectionResponse, error) {
 	if g == nil || projection.ComputerID != g.computerID {
 		return selfdevprotocol.RouteProjectionResponse{}, fmt.Errorf("guest credential: route projection computer binding mismatch")

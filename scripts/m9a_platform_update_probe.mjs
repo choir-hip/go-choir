@@ -90,6 +90,19 @@ function pushOffer(ownerID, offer) {
   try { return JSON.parse(raw); } catch { return { error: raw }; }
 }
 
+function waitForRoute(ownerID, wantGeneration, timeoutSec = 300) {
+  const deadline = Date.now() + timeoutSec * 1000;
+  let last;
+  while (Date.now() < deadline) {
+    try {
+      last = resolveRoute(ownerID);
+      if (last?.slot?.generation === wantGeneration) return last;
+    } catch { /* ledger momentarily unavailable */ }
+    execFileSync('sleep', ['5']);
+  }
+  return last;
+}
+
 function guestHealth(ownerID) {
   // Proxy-wrapped guest health — the transport's reachability oracle.
   const raw = nodeB(
@@ -223,15 +236,33 @@ try {
     pushA = pushOffer(ownerID, mintA);
   }
   result.update_a = pushA;
-  if (!pushA?.release_digest || !pushA?.checkpoint_digest || !pushA?.checkpoint?.checkpoint) {
-    throw new Error(`update A refused or incomplete: ${JSON.stringify(pushA)}`);
+  // Tape, not the push body, is the oracle: the apply self-restarts the guest
+  // mid-request, so a dead HTTP response is normal even on success. The apply
+  // is complete iff the route slot promoted one generation (the last tail
+  // event commit). Failed updates record materialization_failed instead.
+  let routeAfterA = waitForRoute(ownerID, generationBefore + 1);
+  if (routeAfterA?.slot?.generation !== generationBefore + 1) {
+    const kinds = eventKinds(corpusdEvents(computerID, ownerID));
+    if (kinds.includes('materialization_failed')) {
+      throw new Error(`update A failed on the tape: ${JSON.stringify(kinds)}`);
+    }
+    routeAfterA = waitForRoute(ownerID, generationBefore + 1, 300);
   }
-
-  const routeAfterA = resolveRoute(ownerID);
   result.route_after_a = routeAfterA;
   if (routeAfterA?.route_absent || !routeAfterA?.slot || routeAfterA.slot.generation !== generationBefore + 1) {
     throw new Error(`route slot did not promote after update A: ${JSON.stringify(routeAfterA)}`);
   }
+  // The checkpoint operand: mint a restore-set checkpoint on the post-update
+  // head via the product path — the apply's own checkpoint response died with
+  // the push, but the checkpoint mint is idempotent authority work.
+  const ckptResponse = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/checkpoint`, {});
+  result.checkpoint_bind = ckptResponse?.json ?? ckptResponse?.text ?? ckptResponse;
+  const boundCheckpoint = ckptResponse?.json?.published_checkpoint?.checkpoint ?? ckptResponse?.json?.checkpoint;
+  if (ckptResponse?.status !== 200 || !boundCheckpoint) {
+    throw new Error(`restore-set checkpoint mint failed: ${JSON.stringify(result.checkpoint_bind)}`);
+  }
+  pushA = pushA ?? {};
+  pushA.checkpoint = { checkpoint: boundCheckpoint };
   // Restore edge: return to the update-A pinned head via the product path.
   // updater.Apply restarts the guest service — retry the restore POST across
   // the brief restart window.

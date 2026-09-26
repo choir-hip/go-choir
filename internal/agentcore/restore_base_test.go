@@ -189,6 +189,35 @@ func seedRestoreBase(t *testing.T, ctx context.Context, rt *Runtime, cas *replay
 
 var _ projectionbase.BaseSource = (*restoreBaseFake)(nil)
 
+// TestReplayCompletenessBaselessChain proves a computer with no advertised
+// base still produces a witness: the probe replays the full tape into a
+// disposable store and compares live vs replayed state. Fresh machines must
+// be able to checkpoint; long chains still refuse through
+// MaxRecoveryTailEvents in openProbeReplayStore.
+func TestReplayCompletenessBaselessChain(t *testing.T) {
+	computerID := "computer-replay-baseless"
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	live, err := choirstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = live.Close() }()
+	rt, cas, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
+	rt.restoreBaseSource = restoreBaseFakeFor(projectionbase.Descriptor{}, nil, cas.events)
+	rt.restoreBaseSource.(*restoreBaseFake).emptyWatermark = true
+
+	report, err := rt.ReplayCompleteness(context.Background(), computerID)
+	if err != nil {
+		t.Fatalf("baseless replay completeness refused: %v", err)
+	}
+	if report.BaseSequence != 0 || report.BaseBlobSHA256 != "" {
+		t.Fatalf("baseless probe reported a base: seq=%d blob=%s", report.BaseSequence, report.BaseBlobSHA256)
+	}
+	if !report.Result.Equivalent() {
+		t.Fatalf("baseless full replay was not equivalent: %#v", report.Result)
+	}
+}
+
 func restoreBaseFakeFor(descriptor projectionbase.Descriptor, blob []byte, events []computerevent.DurableEvent) *restoreBaseFake {
 	return &restoreBaseFake{descriptor: descriptor, blob: blob, events: events}
 }
@@ -233,17 +262,19 @@ func rematerializeSeededWithFrontend(t *testing.T, computerID string) (*Runtime,
 
 func TestRematerializeRefusesFailureClasses(t *testing.T) {
 	ctx := context.Background()
-	t.Run("missing watermark", func(t *testing.T) {
-		rt, fake, checkpoint, storePath := rematerializeSeededWithFrontend(t, "computer-refuse-missing")
+	t.Run("absent watermark replays the bounded tape", func(t *testing.T) {
+		// No advertised base is the fresh-computer state, not corruption: the
+		// tape is the truth and a bounded genesis replay is allowed. Stale or
+		// corrupt bases — the failures a watermark exists to catch — still
+		// refuse in the subtests below.
+		rt, fake, checkpoint, _ := rematerializeSeededWithFrontend(t, "computer-refuse-missing")
 		fake.emptyWatermark = true
-		if _, err := rt.RematerializeFromTape(ctx, "computer-refuse-missing", checkpoint); !errors.Is(err, projectionbase.ErrBaseRefused) {
-			t.Fatalf("missing base did not refuse: %v", err)
+		result, err := rt.RematerializeFromTape(ctx, "computer-refuse-missing", checkpoint)
+		if err != nil {
+			t.Fatalf("baseless rematerialize refused: %v", err)
 		}
-		if rt.store == nil {
-			t.Fatal("refusal closed the original realization")
-		}
-		if _, err := os.Stat(storePath); err != nil {
-			t.Fatalf("original marker moved on refusal: %v", err)
+		if result.BaseSequence != 0 || result.BaseBlobSHA256 != "" {
+			t.Fatalf("baseless replay reported a base: seq=%d blob=%s", result.BaseSequence, result.BaseBlobSHA256)
 		}
 	})
 	t.Run("watermark outage is not a refusal", func(t *testing.T) {

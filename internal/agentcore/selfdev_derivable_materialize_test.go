@@ -316,6 +316,7 @@ type derivableSelfDevFixture struct {
 	service     *derivableServiceManager
 	platformKey ed25519.PrivateKey
 	baseSource  *liveBaseSource
+	checkpoints map[string]selfdevprotocol.CheckpointResponse
 }
 
 // shortSockDir makes a short-named temp dir because unix socket paths cap at
@@ -331,8 +332,7 @@ func shortSockDir(t *testing.T) string {
 }
 
 func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfDevFixture {
-	t.Helper()
-	fx := &derivableSelfDevFixture{computerID: computerID, controlFail: &atomic.Bool{}}
+	fx := &derivableSelfDevFixture{computerID: computerID, controlFail: &atomic.Bool{}, checkpoints: map[string]selfdevprotocol.CheckpointResponse{}}
 	sockDir := shortSockDir(t)
 
 	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
@@ -468,10 +468,31 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
+		if r.Method == http.MethodGet {
+			key := r.URL.Query().Get("idempotency_key")
+			response, ok := fx.checkpoints[key]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(response)
+			return
+		}
 		raw, ok := readBody(r.Body)
 		var request selfdevprotocol.CheckpointRequest
 		if !ok || selfdevprotocol.DecodeStrict(raw, &request) != nil {
 			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if existing, ok := fx.checkpoints[request.IdempotencyKey]; ok {
+			commitment, _ := selfdevprotocol.Digest(request)
+			if commitment == existing.Receipt.RequestCommitment {
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(existing)
+				return
+			}
+			w.WriteHeader(http.StatusConflict)
 			return
 		}
 		checkpoint, _, checkpointErr := selfdevprotocol.CheckpointFromRequest(request)
@@ -486,8 +507,10 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		response := selfdevprotocol.CheckpointResponse{Checkpoint: checkpoint, Receipt: receipt}
+		fx.checkpoints[request.IdempotencyKey] = response
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(selfdevprotocol.CheckpointResponse{Checkpoint: checkpoint, Receipt: receipt})
+		_ = json.NewEncoder(w).Encode(response)
 	})
 	platformMux.HandleFunc("/internal/computers/route-projection-certificates", func(w http.ResponseWriter, r *http.Request) {
 		if fx.controlFail.Load() {

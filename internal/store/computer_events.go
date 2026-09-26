@@ -303,6 +303,36 @@ func (s *Store) EventByDigest(ctx context.Context, computerID, eventDigest strin
 	return event, true, nil
 }
 
+// LatestComputerEventByIdempotencyPrefix returns the most recent finalized
+// event whose idempotency key starts with prefix — the sweep surface for
+// transition families that key each phase as <prefix><id>. A missing row is
+// absence, never an error.
+func (s *Store) LatestComputerEventByIdempotencyPrefix(ctx context.Context, computerID, prefix string) (computerevent.Event, bool, error) {
+	if s == nil || s.db == nil {
+		return computerevent.Event{}, false, fmt.Errorf("computer event projection: nil store")
+	}
+	var raw string
+	err := s.db.QueryRowContext(ctx, `SELECT event_json FROM computer_event_index WHERE computer_id=? AND status='finalized' AND idempotency_key LIKE ? ESCAPE '\\' ORDER BY sequence DESC LIMIT 1`, computerID, escapeLikePrefix(prefix)+"%").Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return computerevent.Event{}, false, nil
+	}
+	if err != nil {
+		return computerevent.Event{}, false, fmt.Errorf("computer event projection: read latest event by idempotency prefix: %w", err)
+	}
+	event, err := computerevent.DecodeHistoricEvent([]byte(raw))
+	if err != nil {
+		return computerevent.Event{}, false, fmt.Errorf("computer event projection: decode event: %w", err)
+	}
+	return event, true, nil
+}
+
+// escapeLikePrefix quotes LIKE metacharacters so the caller's prefix is a
+// literal, never a pattern.
+func escapeLikePrefix(prefix string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return replacer.Replace(prefix)
+}
+
 func (s *Store) EventReceiptByIdempotency(ctx context.Context, computerID, idempotencyKey string) (computerevent.Receipt, bool, error) {
 	if s == nil || s.db == nil {
 		return computerevent.Receipt{}, false, fmt.Errorf("computer event projection: nil store")
