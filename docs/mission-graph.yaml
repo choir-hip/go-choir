@@ -1066,3 +1066,24 @@ nodes:
       Report mints a record under its cap boundary.
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
+  - id: choir-commitment-scores-packs-2026-09-26
+    title: Commitment Scores + Surfacing + Context Packs (R4, station)
+    path: docs/definitions/choir-commitment-scores-packs-2026-09-26.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-texture-live-authoring-2026-09-26
+    enables: []
+    note: >-
+      R4 (on spine, after R3d): derived accrual views over the
+      append-only score stamps, falsification-visible materiality
+      projection, context packs with the own-score epistemic exclusion,
+      learning-claims gate bound to scored records. Proof: a falsified
+      commitment stays visible in the doc; the acting desk's pack
+      contains zero own-score fields.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/Precommitment Records — Engineering Memo.md

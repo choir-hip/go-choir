@@ -80,7 +80,7 @@ live one.
 - **R3c landed+deployed** (`b7ae7596`: management on the desk-cell carrier — `desk_go_eval` + typed lifecycle controls, cast reaches delegated admission on the canonical ledger). — goal file: [`definitions/choir-management-live-cast-2026-09-26.md`](definitions/choir-management-live-cast-2026-09-26.md).
 - **R3d landed+deployed** (`119e0edd`: texture full-RLM — `desk_go_eval` only; cell-authored `ApplyTextureTurn` commits mint `AuthorAppAgent` revisions; typed texture tools + `worker_updates` consumer deleted). — goal file: [`definitions/choir-texture-live-authoring-2026-09-26.md`](definitions/choir-texture-live-authoring-2026-09-26.md).
 - **R3r** research cell — **live station** under the meta-goal: research on cells with the network/memory cap policy resolved (D2 residual). Proof: research cell Report mints a record under its cap boundary. Off spine.
-- **R4** scores + surfacing + packs — derived accrual, materiality, context packs, learning-claims gate.
+- **R4** scores + surfacing + packs — derived accrual, materiality, context packs, learning-claims gate. Chartered under the meta-goal: [`definitions/choir-commitment-scores-packs-2026-09-26.md`](definitions/choir-commitment-scores-packs-2026-09-26.md).
 - **R5a** vocab decoders + seed freeze — gates M11; keep `choir:co-super-assignment:v3`. **R5b** rename-migrate deferred indefinitely.
 - **M7** skip the harness — after R3c; the management cell is the driver (owner ruling).
 - **M9a** platform push + restore — on M11's restore edge.

@@ -108,19 +108,18 @@ boundaries:
 now:
   status: working
   slice: >-
-    station R3d LANDED 2026-09-26 (deployed build 119e0edd): texture is a
-    full-RLM desk — desk_go_eval only; cell-authored choir.ApplyTexture
-    intents commit through the atomic ApplyTextureTurn as AuthorAppAgent
-    revisions citing ledger evidence; the typed texture tools
-    (patch_texture/rewrite_texture/record_texture_decision/
-    request_email_draft) and the desk-originated worker_updates consumer
-    path are deleted. A run-memory texture_cell_author_receipt makes a
-    replayed cell replay its committed turn. Next station R3r — research
-    cell (research on cells with the network/memory cap policy resolved;
-    off-spine, D2 residual contained there). M7 and R4 are also unblocked:
-    M7 after R3c, R4 after R3d.
-  source_ref: main@119e0edd
-  deploy_identity: staging https://choir.news build.commit=119e0edd
+    station R3r code LANDED on main 2026-09-26 (head dc340620; CI/deploy
+    landing loop in flight): research is a full-RLM desk on the cell
+    carrier — desk_go_eval + the typed research/evidence/memory surface,
+    generic host tools retired — under the resolved D2 cap boundary: a
+    per-activation egress budget (calls + fetched bytes) charged by every
+    host-mediated network tool, and a 1GiB RLIMIT_AS worker address cap
+    plumbed through the desk-session spawn env. Every non-wire desk is on
+    the carrier. Next station R4 — commitment scores + surfacing + packs
+    (goal file choir-commitment-scores-packs-2026-09-26.md chartered).
+    M7 remains unblocked in parallel (after R3c).
+  source_ref: main@dc340620
+  deploy_identity: staging https://choir.news build.commit=<pending R3r deploy>
   candidate:
     id: none
     state: none
@@ -158,17 +157,20 @@ now:
     status: settled
     evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md §11
     believed_state: >-
-      R0, R2, R2x, R3a, R3b, R3c, and R3d landed; K's substrate is landed;
-      the restructured spine is ratified; R3r is the live station. Texture
-      is a full-RLM desk on the cell carrier — desk_go_eval only, cell-
-      authored ApplyTextureTurn commits mint AuthorAppAgent revisions,
-      worker_updates machinery deleted. The next lift is R3r — research on
-      cells with the D2 network/memory cap policy resolved (off spine);
-      M7 and R4 are unblocked in parallel.
+      R0, R2, R2x, R3a, R3b, R3c, R3d, and R3r landed; K's substrate is
+      landed; the restructured spine is ratified; R4 is the live station.
+      Every non-wire desk (engineering/management/texture/research) is on
+      the cell carrier; D2 is discharged — research cells run in
+      memory-capped workers with a per-activation egress budget on all
+      host-mediated network calls. The next lift is R4 — derived accrual,
+      materiality projection, context packs, learning-claims gate (on
+      spine); M7 remains unblocked in parallel.
     next_observation: >-
-      R3r: the network/memory cap policy for research cells (D2 residual)
-      and the research-cell Report minting a record under its cap
-      boundary.
+      R4 boundary probe: which texture evidence-surface fields the
+      materiality projection feeds and whether a live doc render is
+      observable on staging; then the four local proofs (accrual,
+      falsification-visible projection, own-score-free packs, claims
+      gate).
   blocker_or_risk: >-
     Station pointer must be rewritten at every terminal receipt (the /goal
     string stays constant — this file is the entrypoint). Owner directive
@@ -178,11 +180,17 @@ now:
     compile fix) integrated: merged as 7d8e455 and already an ancestor of
     main at R3d's landing.
   next_action: >-
-    Charter R3r (research cell) goal file: the network/memory cap policy
-    (D2 residual) + research-cell Report minting a record under its cap
-    boundary. M7 and R4 remain unblocked for parallel charter.
-
+    Execute R4 (goal docs/definitions/choir-commitment-scores-packs-2026-09-26.md):
+    boundary probe first, then accrual view, materiality projection,
+    own-score-free context packs, learning-claims gate. M7 remains
+    unblocked for parallel charter.
 receipts:
+  - "R3r interim 2026-09-26: code landed on main (0683fd5d R3r surface +
+    993bc30e linux-import fix + dc340620 gofmt); landing loop in flight —
+    first CI attempt 36227464447 died on a linux-only unused-import vet
+    failure (fixed at 993bc30e); superseded runs cancelled; head run
+    36228104321. Terminal receipt (ci + deploy + env identity + deployed
+    acceptance) lands with the R3r settle commit."
   - "R3c terminal 2026-09-26: landed+deployed b7ae7596 (ci 36216782941,
     staging build.commit=b7ae7596); goal docs/definitions/
     choir-management-live-cast-2026-09-26.md now.status=settled. Management
@@ -227,5 +235,7 @@ and points at a dedicated throughline `/goal` file for the current mission.
 **Current station:** R3r → research cell (off spine; D2 network/memory cap
 policy residual). R3d landed+deployed (`119e0edd`, texture full-RLM:
 desk_go_eval only, cell-authored ApplyTextureTurn commits; typed tools +
-worker_updates deleted). Also unblocked: M7 (after R3c) and R4 (after
-R3d).
+worker_updates deleted). R3r code pushed (head `dc340620`, landing loop
+in flight). Next station chartered: R4 →
+`choir-commitment-scores-packs-2026-09-26.md`. Also unblocked: M7 (after
+R3c).
