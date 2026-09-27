@@ -164,12 +164,16 @@ value:
       history mints new assignment IDs.'
 
 now:
-  status: working
+  status: settled
   slice: >-
-    Implementation landed locally 2026-09-26: per-family frozen tables +
-    routed decoders + normalization point + seed pins + coverage/fold
-    tests, all green. Landing loop next: full store/agentcore suites,
-    commit, CI, deploy identity, health probe.
+    SETTLED 2026-09-27. Landed+deployed bc58fa8f (ci 36283101087 — all
+    gating jobs green, deploy job success; staging build.commit=bc58fa8f,
+    health ok). Every stratum-B family has a frozen decoder table routed
+    at its interpretation boundary; NormalizeHistoricProfile is the
+    single stratum-C point and repaired the two latent compare-site
+    gaps; the v3 seed and five neighbors are pinned constants; the
+    pre-migration fixture folds identically. Next station: M11 — the
+    self-development gate (last on the spine).
   candidate:
     id: none
     state: none
@@ -275,6 +279,29 @@ receipts:
     TestFinalizedDecisionBindingAcceptsV1ActorProfileSpelling
     (actor_profile \"super\" binds; \"not-a-desk\" refuses) — the
     latent-bug reproduction now passes post-fix."
+  - "pushed_commit: bc58fa8f2db22d98f4f74917f8a1aa282e0bc2b5"
+  - "ci: run 36283101087 — all gating jobs green (plan lanes, vocabulary
+    gates, heresy detector, go vet+build, all race shards incl.
+    agentcore/textureowner and scale tests); trailing Accept
+    Differential SBOMs non-gating."
+  - "deploy: Node B Deploy to Staging success; staging build.commit
+    =bc58fa8f, health ok."
+  - "environment_identity: staging https://choir.news build.commit=
+    bc58fa8f2db22d98f4f74917f8a1aa282e0bc2b5."
+  - "deployed_acceptance: boundary probe per acceptance item 5 —
+    decode-side station: every frozen decoder is identity-preserving on
+    V1 bytes (fold test) and staging stores are already fenced V2
+    (MigrateAndFenceServingVocabulary live at boot), so no deployed V1
+    row's decode changes. Verified: /health ok at head, API-key auth
+    path live (401 unauthenticated, keys list authorized), computer
+    surface up. Local tests carry the behavioral proof: coverage-by-
+    source-scan, fold-identical fixture, normalization matrix, decode-
+    boundary refusal, V1-spelled decision-binding regression."
+  - "heresy_delta: repaired — the two ActorProfile normalization gaps
+    (checkpoints verifier witness, selfdev decision binding) were latent
+    heresies discovered at census; pre-cutover V1-spelled verification/
+    decision events would have failed on replay. Discovered+repaired in
+    one station, documented in the charter."
 ---
 
 # R5a — Vocabulary Decoders + Seed Freeze (last station before M11)

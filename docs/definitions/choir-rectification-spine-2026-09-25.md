@@ -111,18 +111,15 @@ now:
     station M9a SETTLED 2026-09-26 — platform-signed update push +
     pinned-head restore proven on staging (deployed 44e4169e, evidence
     docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md).
-    The push surface now exists end to end: signed offer mint at corpusd,
-    guest apply under verification + canonical head binding, platform-
-    follow checkpoint class, route promotion, and a tape-reconstruct
-    restore to the pinned head on a baseless computer. The landing
-    peeled five substrate strands
-    (docs/problems/platform-update-stranded-tail-and-baseless-checkpoint-2026-09-26.md).
-    Next station: R5a — chartered at
-    docs/definitions/choir-vocab-decoders-seed-freeze-2026-09-26.md;
-    M11's proof tape must fold under frozen decoders, and M11 depends
-    on M7 + M9a + R3d + R4 + R5a.
-  source_ref: main@5fb58654
-  deploy_identity: staging https://choir.news build.commit=44e4169e
+    R5a SETTLED 2026-09-27 — vocab decoders + seed freeze landed+deployed
+    (bc58fa8f, ci 36283101087): per-family frozen decoders routed at
+    interpretation boundaries, one stratum-C normalization point
+    (repaired two latent compare gaps), keep-v3 pinned, pre-migration
+    fold proven identical. Next station: M11 — the self-development
+    gate, last on the spine. M11's dependencies are all settled:
+    M7 + M9a + R3d + R4 + R5a.
+  source_ref: main@bc58fa8f
+  deploy_identity: staging https://choir.news build.commit=bc58fa8f
   candidate:
     id: none
     state: none
@@ -183,12 +180,24 @@ now:
     compile fix) integrated: merged as 7d8e455 and already an ancestor of
     main at R3d's landing.
   next_action: >-
-    Execute R5a per
-    docs/definitions/choir-vocab-decoders-seed-freeze-2026-09-26.md —
-    per-family frozen decoders + one normalization point + seed pin +
-    pre-migration fold proof. On its terminal receipt, now.slice points
-    at M11 (the self-development gate) — the last station.
+    Execute M11 per
+    docs/definitions/choir-selfdev-gate-2026-09-27.md — the
+    reversible-selfdev-v1 episode on staging: expected-heads, qualified
+    consensus, promotion, live-play, candidate-B falsification, pinned-
+    head restore; receipts as scored commitment_records in the live
+    Texture doc. Boundary probe settles the staging-reachable steps
+    first. On its terminal receipt the spine is complete.
+
 receipts:
+  - "R5a terminal 2026-09-27: landed+deployed bc58fa8f (ci 36283101087 —
+    all gating lanes green; staging build.commit=bc58fa8f); goal
+    docs/definitions/choir-vocab-decoders-seed-freeze-2026-09-26.md
+    now.status=settled. Per-family frozen decoders routed at
+    interpretation boundaries (lifecycle kinds in decodeLifecycleObject,
+    OG kinds in ogRekey, schema consts, seeds pinned); one stratum-C
+    normalization point repaired both latent ActorProfile compare gaps;
+    keep-v3 decided; pre-migration fold proven identical. now.slice ->
+    M11."
   - "M7 terminal 2026-09-26: landed+deployed 722b49bf (ci 36241357497,
     staging build.commit=722b49bf); goal docs/definitions/
     choir-selfdev-derivable-continuations-2026-09-26.md
