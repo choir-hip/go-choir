@@ -298,6 +298,12 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
 		return nil
 	}
+	// The same saga mutex guards the open/spawn/bind critical section: an
+	// assignment committed by the durable open is legitimately Open+Unbound
+	// while its saga spawns — without the lock this reconciler would reap a
+	// live saga's pre-bind window as "stranded".
+	rt.engineeringAssignmentOpenMu.Lock()
+	defer rt.engineeringAssignmentOpenMu.Unlock()
 	exec := rt.assignedCapsule()
 	assignments, err := rt.store.ListEngineeringAssignments(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
