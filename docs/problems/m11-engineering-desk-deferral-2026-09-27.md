@@ -142,6 +142,21 @@ saga is now unreachable within one runtime (mutex), but a cast cancelled by
 an external path still cannot auto-reopen. A future reopen path needs a
 new supersede kind (`retry_after_block` with a cancelled-attempt receipt).
 
+## Third wedge (2026-09-27, build 1bd014bd): reaper races the live saga
+
+Even with resume-ref and converge fixes, bind still failed bare
+`co-super assignment invalid transition`. Root cause: the durable open's
+`work_opened` event wakes `ReconcileLifecycleWorkAssignment`, which calls
+`ReconcileEngineeringAssignmentsForTrajectory` outside the saga mutex. The
+reaper saw the live saga's `Open`+`Unbound` window as stranded, persisted
+its own revoke intent, and cancelled the assignment while the saga was
+binding. Cancellation is terminal; attempt>1 requires a supersede tuple
+naming a recorded prior report — which a never-bound attempt cannot carry
+— so the cast became permanently unopenable.
+
+Fix (commit `ed8f471e`): `ReconcileEngineeringAssignmentsForTrajectory`
+runs under `engineeringAssignmentOpenMu`, the same mutex the saga holds.
+
 
 Known candidates inside the deferring call:
 
