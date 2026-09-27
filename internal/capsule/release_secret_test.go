@@ -3,6 +3,7 @@
 package capsule
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -256,7 +257,9 @@ func TestStageGrantedReleaseAdmitsBinaryStringBlob(t *testing.T) {
 		t.Fatalf("staged release files=%+v path=%q", files, staged)
 	}
 
-	// A structural secret embedded in binary content still refuses.
+	// A structural secret embedded in binary content still refuses — including
+	// one straddling the 64KiB chunk boundary (regression: the carry must
+	// prepend, not overwrite).
 	badBinary := append([]byte{0x7f, 'E', 'L', 'F', 0}, []byte("data\x00-----BEGIN PRIVATE KEY-----\nmore")...)
 	if err := os.WriteFile(filepath.Join(upper, "var/lib/artifact/release/bin/autoputer"), badBinary, 0o755); err != nil {
 		t.Fatal(err)
@@ -266,6 +269,20 @@ func TestStageGrantedReleaseAdmitsBinaryStringBlob(t *testing.T) {
 	}
 	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming); err == nil || !strings.Contains(err.Error(), "refuses secret") {
 		t.Fatalf("secret-bearing binary release error = %v", err)
+	}
+
+	// Boundary straddle: pad so the token's start lands 4 bytes before the
+	// 64KiB read boundary; only the carry window contains the whole token.
+	pad := bytes.Repeat([]byte{0}, 64<<10-4)
+	straddler := append(append(append([]byte{0x7f, 'E', 'L', 'F'}, pad...), []byte("ghp_abcdefghijklmnop1234")...), 0)
+	if err := os.WriteFile(filepath.Join(upper, "var/lib/artifact/release/bin/autoputer"), straddler, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(merged, "var/lib/artifact/release/bin/autoputer"), straddler, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming); err == nil || !strings.Contains(err.Error(), "refuses secret") {
+		t.Fatalf("boundary-straddling secret release error = %v", err)
 	}
 }
 

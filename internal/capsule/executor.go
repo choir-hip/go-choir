@@ -1446,7 +1446,9 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			var carry []byte
 			for {
 				nr, chunkErr := input.Read(chunk)
-				window := append(carry[:0], chunk[:nr]...)
+				window := make([]byte, 0, len(carry)+nr)
+				window = append(window, carry...)
+				window = append(window, chunk[:nr]...)
 				if findings := computerevent.DetectBinarySecrets(window); len(findings) != 0 {
 					_ = input.Close()
 					return nil, "", fmt.Errorf("capsule release refuses secret content in %q", change.Path)
@@ -1459,9 +1461,9 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 					return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, chunkErr)
 				}
 				if nr > 512 {
-					carry = append(carry[:0], chunk[nr-512:nr]...)
+					carry = append([]byte(nil), chunk[nr-512:nr]...)
 				} else {
-					carry = append(carry[:0], chunk[:nr]...)
+					carry = append([]byte(nil), chunk[:nr]...)
 				}
 			}
 		} else {
