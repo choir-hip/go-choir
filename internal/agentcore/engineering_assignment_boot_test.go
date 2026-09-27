@@ -801,3 +801,239 @@ func TestRestartCancelledCastRecastsAtNextAttempt(t *testing.T) {
 		t.Fatal("deliberate cancel must not be restart-recast admissible")
 	}
 }
+
+// TestRevokedAssignmentResumeCommitsStagedProposalEvidence pins the
+// post-revoke terminal resume: when a bound report's commit fails after the
+// saga revoked the capsule (e.g. a transient validation or CAS failure), the
+// retry must commit the staged pending proposal — the granted executor
+// evidence minted while the capsule was frozen — rather than re-binding the
+// raw execution receipts through the late path. Raw receipts lack granted
+// refs, so a late-bound commit cannot satisfy the timely evidence contract;
+// the staged proposal is the only evidence-bearing resume source.
+// Regression: m11-recast-desk-terminal-report-uncommittable-2026-09-27.
+func TestRevokedAssignmentResumeCommitsStagedProposalEvidence(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	rt.assignmentRuntime = absentAssignmentCapsule{}
+	rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-resume-proposal", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignmentID := "assignment-resume-proposal"
+	open := types.OpenEngineeringAssignmentRequest{
+		CommandID: "command-open-" + assignmentID, AssignmentID: assignmentID,
+		Binding: types.EngineeringAssignmentBinding{
+			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
+			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
+			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
+			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
+			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-" + assignmentID), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID)),
+			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
+			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
+			Writable:          true, CapsuleID: "capsule-" + assignmentID,
+			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+		},
+		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "resume staged proposal"},
+	}
+	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	runID := "run:" + assignmentID
+	run := types.RunRecord{
+		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
+		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
+		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		State: types.RunPending, Prompt: open.AssignedWork.Objective,
+		Metadata: map[string]any{
+			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
+			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
+			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
+			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
+			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
+			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
+			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
+			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
+		},
+	}
+	bind := types.BindEngineeringAssignmentRequest{
+		CommandID: "command-bind-" + assignmentID,
+		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
+		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
+		OpaqueCapability: "cap-" + assignmentID, CapsuleID: open.Binding.CapsuleID,
+	}
+	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound, err := s.BindEngineeringAssignment(ctx, bind)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The desk mutated the subject: the frozen digest differs from the binding
+	// subject, so the proposal carries a subject_bytes mutation overlay.
+	frozenDigest := objectgraph.SHA256([]byte("frozen-subject:" + assignmentID))
+	command := types.EngineeringRecordedCommand{
+		CommandID: "observed-command", CommandDigest: objectgraph.SHA256([]byte("mutating command")),
+		ExecutionRef: "capsule-exec:sha256:" + strings.Repeat("1", 64), ExitCode: 0,
+	}
+	bareReport := types.EngineeringAssignmentReport{
+		Result: types.EngineeringResultCompleted, Verdict: types.EngineeringVerdictNone, Summary: "mutating desk work",
+		Commands: []types.EngineeringRecordedCommand{command},
+	}
+	propositionDigest, err := store.ComputeTerminalPropositionDigest(open.Binding.SubjectDigest,
+		bareReport.Result, bareReport.Verdict, bareReport.Commands, bareReport.Outputs, bareReport.EvidenceRefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportID := store.TerminalReportID(open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1, propositionDigest)
+
+	// The staged proposal is the shape the live saga persists while frozen:
+	// the authored report plus granted executor evidence bound at freeze time.
+	// ObservedSubjectDigest stays the authored (binding) digest — the
+	// subject-change overlay lives on Mutations.
+	grantedRef := "capsule-granted-exec:sha256:" + strings.Repeat("2", 64)
+	stagedReport := bareReport
+	stagedReport.ReportID = reportID
+	stagedReport.PropositionDigest = propositionDigest
+	stagedReport.ExecutorReceiptRefs = []string{grantedRef}
+	stagedReport.Mutations = []types.EngineeringRecordedMutation{{
+		MutationID: "assignment-overlay:test", Kind: "assignment_overlay",
+		BeforeDigest: open.Binding.SubjectDigest, AfterDigest: frozenDigest,
+		EvidenceRef: "capsule-diff:test", SubjectBytesChanged: true,
+	}}
+	stagedReport.CandidateArtifactRef = "capsule-subject:" + frozenDigest
+
+	freezeIntentRef := "capsule-freeze-intent:" + propositionDigest
+	freeze := types.SetEngineeringCapsuleDispositionRequest{
+		CommandID: "command-freeze-" + assignmentID, OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: bound.Assignment.LifecycleVersion,
+		Disposition: types.EngineeringCapsuleFreezeRequested, IntentRef: freezeIntentRef,
+		PendingProposal: &types.EngineeringPendingProposal{
+			PropositionDigest: propositionDigest, Report: stagedReport,
+			FreezeIntentRef: freezeIntentRef, CreatedAt: time.Now().UTC(),
+		},
+	}
+	freeze.CommandDigest, err = store.ComputeSetEngineeringCapsuleDispositionDigest(freeze)
+	if err != nil {
+		t.Fatal(err)
+	}
+	freezeResult, err := s.SetEngineeringCapsuleDisposition(ctx, freeze)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozenAck := freeze
+	frozenAck.CommandID, frozenAck.ExpectedLifecycleVersion = "command-frozen-"+assignmentID, freezeResult.Assignment.LifecycleVersion
+	frozenAck.Disposition, frozenAck.AckRef = types.EngineeringCapsuleFrozen, "capsule-fate:sha256:"+strings.Repeat("3", 64)
+	frozenAck.PendingProposal = freezeResult.Assignment.PendingProposal
+	frozenAck.CommandDigest, err = store.ComputeSetEngineeringCapsuleDispositionDigest(frozenAck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozenResult, err := s.SetEngineeringCapsuleDisposition(ctx, frozenAck)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The saga's terminal revoke: the assignment reaches revoked with the
+	// staged proposal still pending — the state a first commit failure leaves.
+	revokeIntent := assignedEngineeringTerminalRevokeIntent(frozenResult.Assignment)
+	revoke := types.SetEngineeringCapsuleDispositionRequest{
+		CommandID: "command-revoke-req-" + assignmentID, OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: frozenResult.Assignment.LifecycleVersion,
+		Disposition: types.EngineeringCapsuleRevokeRequested, IntentRef: revokeIntent,
+	}
+	revoke.CommandDigest, err = store.ComputeSetEngineeringCapsuleDispositionDigest(revoke)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revokeReqResult, err := s.SetEngineeringCapsuleDisposition(ctx, revoke)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revokeAck := revoke
+	revokeAck.CommandID, revokeAck.ExpectedLifecycleVersion = "command-revoked-"+assignmentID, revokeReqResult.Assignment.LifecycleVersion
+	revokeAck.Disposition, revokeAck.AckRef = types.EngineeringCapsuleRevoked, "capsule-revoke:sha256:"+strings.Repeat("4", 64)
+	revokeAck.CommandDigest, err = store.ComputeSetEngineeringCapsuleDispositionDigest(revokeAck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revokedResult, err := s.SetEngineeringCapsuleDisposition(ctx, revokeAck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revokedResult.Assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked || revokedResult.Assignment.PendingProposal == nil {
+		t.Fatalf("assignment did not reach revoked-with-pending-proposal: %+v", revokedResult.Assignment)
+	}
+
+	// The retry submits the bare report (the worker's authored claims) — the
+	// resume must substitute the staged proposal's granted evidence, not the
+	// late raw-receipt path.
+	result, err := rt.recordAssignedEngineeringReport(ctx, &run, "tool-call:complete", bareReport)
+	if err != nil {
+		t.Fatalf("revoked resume refused staged proposal evidence: %v", err)
+	}
+	if result.Report == nil || result.Report.Late {
+		t.Fatalf("resumed report committed late: %+v", result.Report)
+	}
+	if len(result.Report.ExecutorReceiptRefs) != 1 || result.Report.ExecutorReceiptRefs[0] != grantedRef {
+		t.Fatalf("resumed report lost granted executor evidence: %+v", result.Report.ExecutorReceiptRefs)
+	}
+	if result.Report.ObservedSubjectDigest != frozenDigest {
+		t.Fatalf("resumed report observed subject = %s, want frozen %s", result.Report.ObservedSubjectDigest, frozenDigest)
+	}
+	if result.Assignment.Disposition != types.EngineeringAssignmentCompleted {
+		t.Fatalf("resumed assignment disposition = %s, want completed", result.Assignment.Disposition)
+	}
+}
+
+// TestExecutionAttestationPinsFrozenFinalSubject pins the certified-subject
+// contract: an execution attestation binds each command to the granted
+// receipt's certified *final* subject (the frozen worktree digest), never the
+// receipt's per-command post-tree. A mutating multi-command run legitimately
+// records earlier worktree states on intermediate receipts; the attestation
+// must still certify the frozen final subject. Per-command post-trees remain
+// on the raw execution receipts.
+// Regression: m11-recast-desk-terminal-report-uncommittable-2026-09-27.
+func TestExecutionAttestationPinsFrozenFinalSubject(t *testing.T) {
+	subject := objectgraph.SHA256([]byte("binding-subject"))
+	frozen := objectgraph.SHA256([]byte("frozen-final"))
+	intermediate := objectgraph.SHA256([]byte("intermediate-worktree"))
+	commandText := "echo out && write file"
+	assignment := types.EngineeringAssignment{
+		AssignmentID: "assignment-att", BoundRunID: "run-att",
+		Binding: types.EngineeringAssignmentBinding{CapsuleID: "capsule-att", SubjectDigest: subject},
+	}
+	receipt := capsule.ExecutionReceipt{
+		AgentRunID: "run-att", CapsuleID: "capsule-att", Command: commandText,
+		GrantedReceiptRef: "capsule-granted-exec:sha256:" + strings.Repeat("5", 64),
+		SourceTreeDigest:  subject, WorktreeDigest: intermediate,
+		StdoutDigest: objectgraph.SHA256([]byte("out")), StderrDigest: objectgraph.SHA256([]byte("")),
+		OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	command := types.EngineeringRecordedCommand{
+		CommandID: "cmd-1", CommandDigest: objectgraph.SHA256([]byte(commandText)), ExecutionRef: "capsule-exec:sha256:x",
+	}
+	att, err := engineeringExecutionAttestationFromReceipt(assignment, "report-x", command, receipt, frozen)
+	if err != nil {
+		t.Fatalf("attestation mint: %v", err)
+	}
+	if att.FinalSubjectDigest != frozen || att.WorktreeDigest != frozen {
+		t.Fatalf("attestation certifies per-command worktree %s instead of frozen final %s", att.WorktreeDigest, frozen)
+	}
+	if att.SourceSubjectDigest != subject {
+		t.Fatalf("attestation source = %s, want binding subject %s", att.SourceSubjectDigest, subject)
+	}
+	if att.WorktreeDigest == intermediate {
+		t.Fatal("attestation WorktreeDigest retained the per-command post-tree")
+	}
+}

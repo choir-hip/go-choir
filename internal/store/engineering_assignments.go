@@ -430,20 +430,51 @@ func validateExecutionAttestations(atts []types.EngineeringExecutionAttestation,
 	seen := map[string]bool{}
 	for i, att := range atts {
 		command := report.Commands[i]
-		if att.Schema != types.EngineeringExecutionAttestationSchemaV1 || att.AssignmentID != assignment.AssignmentID || att.Attempt != assignment.Binding.Attempt ||
-			att.OwnerID != assignment.Binding.OwnerID || att.ComputerID != assignment.Binding.ComputerID || att.TrajectoryID != assignment.Binding.TrajectoryID ||
-			att.RunID != assignment.BoundRunID || att.CapsuleID != assignment.Binding.CapsuleID || att.ReportID != report.ReportID ||
-			att.CommandID != command.CommandID || att.CommandDigest != command.CommandDigest || att.ExitCode != command.ExitCode ||
-			att.GrantedReceiptRef != report.ExecutorReceiptRefs[i] || !validTypedDigestRef(att.GrantedReceiptRef, "capsule-granted-exec:") || !att.Granted || !att.Frozen ||
-			!types.ValidSHA256Digest(att.StdoutDigest) || !types.ValidSHA256Digest(att.StderrDigest) ||
-			att.SourceSubjectDigest != assignment.Binding.SubjectDigest || att.FinalSubjectDigest != report.ObservedSubjectDigest ||
-			att.WorktreeDigest != att.FinalSubjectDigest || !validCanonicalTime(att.OccurredAt) || strings.TrimSpace(att.ReportCommandID) == "" ||
-			att.ReportEventID != att.ReportCommandID+":1" || att.ReducerSeq <= 0 || !validCanonicalTime(att.RecordedAt) || seen[att.AttestationRef] {
-			return fmt.Errorf("co-super assignment: invalid runtime execution attestation: %w", ErrEngineeringAssignmentInvalid)
+		nameErr := func(field string) error {
+			return fmt.Errorf("co-super assignment: invalid runtime execution attestation (command %d/%d %s): %w", i, len(atts)-1, field, ErrEngineeringAssignmentInvalid)
+		}
+		if att.Schema != types.EngineeringExecutionAttestationSchemaV1 {
+			return nameErr("schema")
+		}
+		if att.AssignmentID != assignment.AssignmentID || att.Attempt != assignment.Binding.Attempt {
+			return nameErr("assignment/attempt")
+		}
+		if att.OwnerID != assignment.Binding.OwnerID || att.ComputerID != assignment.Binding.ComputerID || att.TrajectoryID != assignment.Binding.TrajectoryID {
+			return nameErr("owner/computer/trajectory")
+		}
+		if att.RunID != assignment.BoundRunID || att.CapsuleID != assignment.Binding.CapsuleID || att.ReportID != report.ReportID {
+			return nameErr("run/capsule/report")
+		}
+		if att.CommandID != command.CommandID || att.CommandDigest != command.CommandDigest || att.ExitCode != command.ExitCode {
+			return nameErr("command binding")
+		}
+		if att.GrantedReceiptRef != report.ExecutorReceiptRefs[i] || !validTypedDigestRef(att.GrantedReceiptRef, "capsule-granted-exec:") {
+			return nameErr("granted receipt ref")
+		}
+		if !att.Granted || !att.Frozen {
+			return nameErr("granted/frozen flags")
+		}
+		if !types.ValidSHA256Digest(att.StdoutDigest) || !types.ValidSHA256Digest(att.StderrDigest) {
+			return nameErr("output digests")
+		}
+		if att.SourceSubjectDigest != assignment.Binding.SubjectDigest {
+			return nameErr("source subject digest")
+		}
+		if att.FinalSubjectDigest != report.ObservedSubjectDigest || att.WorktreeDigest != att.FinalSubjectDigest {
+			return nameErr("final subject digest")
+		}
+		if !validCanonicalTime(att.OccurredAt) || strings.TrimSpace(att.ReportCommandID) == "" {
+			return nameErr("occurred_at/report command")
+		}
+		if att.ReportEventID != att.ReportCommandID+":1" || att.ReducerSeq <= 0 || !validCanonicalTime(att.RecordedAt) {
+			return nameErr("report event/seq")
+		}
+		if seen[att.AttestationRef] {
+			return nameErr("duplicate attestation ref")
 		}
 		want, err := executionAttestationRef(att)
 		if err != nil || att.AttestationRef != want {
-			return fmt.Errorf("co-super assignment: execution attestation digest mismatch: %w", ErrEngineeringAssignmentInvalid)
+			return fmt.Errorf("co-super assignment: execution attestation digest mismatch (command %d): %w", i, ErrEngineeringAssignmentInvalid)
 		}
 		seen[att.AttestationRef] = true
 	}
