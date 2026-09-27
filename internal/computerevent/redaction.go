@@ -46,6 +46,13 @@ var binarySecretPatterns = []secretPattern{
 	privateSecretPatterns[6],
 }
 
+
+// DetectBinarySecrets reports the secret kinds found in binary payload
+// content using the refusal-safe structural subset.
+func DetectBinarySecrets(payload []byte) []string {
+	return detectSecrets(payload, binarySecretPatterns)
+}
+
 func DetectPrivateSecrets(payload []byte) []string {
 	return detectSecrets(payload, privateSecretPatterns)
 }
