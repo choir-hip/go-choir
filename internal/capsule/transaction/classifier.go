@@ -139,6 +139,11 @@ func NewClassifier() *Classifier {
 			{Prefix: "/etc/group"},
 			{Prefix: "/etc/nsswitch.conf"},
 			{Prefix: "/etc/resolv.conf"},
+			// Go toolchain noise: invoking `go` inside a capsule
+			// (HOME=/root) writes local telemetry state that can never be
+			// ledger content and would otherwise reject every such cell's
+			// commit with unknown paths.
+			{Prefix: "/root/.config/go/telemetry"},
 			{Glob: "*.cache"},
 			{Glob: "*.tmp"},
 			{Glob: "*.log"},

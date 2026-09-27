@@ -197,6 +197,75 @@ func TestStageGrantedReleaseRefusesMissingFrontend(t *testing.T) {
 	}
 }
 
+// Regression: the release gate refused genuine compiled artifacts when the
+// redaction-grade detector ran as a refusal predicate over binary payloads —
+// `credential_assignment` matched the string-blob adjacency `token: %v`
+// + `WebIdentityCredentials` and `openai_key` matched Go symbol names like
+// sk-session…. Binary content scans with the structural subset only.
+func TestStageGrantedReleaseAdmitsBinaryStringBlob(t *testing.T) {
+	fakeBinary := append([]byte{
+		0x7f, 'E', 'L', 'F', 2, 1, 1, 0, // ELF magic + NUL (binary heuristic)
+	},
+		[]byte("token: %v\x00WebIdentityCredentials\x00sk-session\x00sk-Idx-oss-worm-id\x00")...)
+	merged := t.TempDir()
+	upper := t.TempDir()
+	for _, root := range []string{merged, upper} {
+		path := filepath.Join(root, "var/lib/artifact/release/bin/autoputer")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, fakeBinary, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		frontend := filepath.Join(root, "var/lib/artifact/release/frontend/index.html")
+		if err := os.MkdirAll(filepath.Dir(frontend), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(frontend, []byte("<html>computer</html>"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := &Capability{
+		CapabilityID: "cap-binary", Handle: "grant-binary", CapsuleID: "capsule-binary",
+		TargetCapsule: "capsule-binary", AgentRunID: "cosuper-binary", AgentRole: RoleEngineering,
+		Verbs: RoleVerbSets[RoleEngineering], ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
+		t.Fatal(err)
+	}
+	executor := &Executor{
+		capsules: map[string]*Capsule{"capsule-binary": {
+			ID: "capsule-binary", State: StateFrozen, UpperDir: upper, MergedDir: merged, MemoryMax: 16 << 20,
+		}},
+		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-binary", Handle: "grant-binary"}: capability},
+		revokedCaps:  map[string]bool{}, publicKey: publicKey,
+	}
+	files, staged, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", t.TempDir())
+	if err != nil {
+		t.Fatalf("genuine binary release refused: %v", err)
+	}
+	if len(files) != 2 || staged == "" {
+		t.Fatalf("staged release files=%+v path=%q", files, staged)
+	}
+
+	// A structural secret embedded in binary content still refuses.
+	badBinary := append([]byte{0x7f, 'E', 'L', 'F', 0}, []byte("data\x00-----BEGIN PRIVATE KEY-----\nmore")...)
+	if err := os.WriteFile(filepath.Join(upper, "var/lib/artifact/release/bin/autoputer"), badBinary, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(merged, "var/lib/artifact/release/bin/autoputer"), badBinary, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", t.TempDir()); err == nil || !strings.Contains(err.Error(), "refuses secret") {
+		t.Fatalf("secret-bearing binary release error = %v", err)
+	}
+}
+
+
 func TestExtractGrantedFreezesBeforeDiff(t *testing.T) {
 	upper := t.TempDir()
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)

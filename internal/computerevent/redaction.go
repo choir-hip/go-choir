@@ -29,9 +29,35 @@ var privateSecretPatterns = []secretPattern{
 	{kind: "google_api_key", expression: regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{20,}\b`)},
 }
 
+// binarySecretPatterns is the refusal-safe subset for binary payloads.
+// DetectPrivateSecrets is a redaction-grade detector: over-matching only
+// costs extra encryption. Used as a refusal predicate (capsule release
+// staging) on binary content it rejects genuine compiled artifacts —
+// keyword regexes match adjacent literals in linker string blobs and Go
+// symbol names like sk-session…. Binary content therefore scans only with
+// the structural patterns whose byte-level specificity survives
+// compilation artifacts.
+var binarySecretPatterns = []secretPattern{
+	privateSecretPatterns[0],
+	privateSecretPatterns[1],
+	privateSecretPatterns[2],
+	privateSecretPatterns[5],
+	privateSecretPatterns[6],
+}
+
+// DetectBinarySecrets reports the secret kinds found in binary payload
+// content using the refusal-safe structural subset.
+func DetectBinarySecrets(payload []byte) []string {
+	return detectSecrets(payload, binarySecretPatterns)
+}
+
 func DetectPrivateSecrets(payload []byte) []string {
+	return detectSecrets(payload, privateSecretPatterns)
+}
+
+func detectSecrets(payload []byte, patterns []secretPattern) []string {
 	kinds := make(map[string]struct{})
-	for _, pattern := range privateSecretPatterns {
+	for _, pattern := range patterns {
 		if pattern.expression.Match(payload) {
 			kinds[pattern.kind] = struct{}{}
 		}

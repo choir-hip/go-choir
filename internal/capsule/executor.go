@@ -1417,10 +1417,29 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			_ = input.Close()
 			return nil, "", fmt.Errorf("capsule release refuses secret-bearing path %q", change.Path)
 		}
+		// Content peek: text payloads scan with the full redaction-grade
+		// pattern set; binary payloads (NUL byte in the initial chunk, the
+		// standard content heuristic) scan with the structural subset that
+		// survives linker string blobs and symbol names. A redaction
+		// detector reused as a refusal predicate rejected genuine compiled
+		// artifacts; the refusal contract only admits patterns that cannot
+		// match benign compiled content.
+		var initial [8192]byte
+		n, readErr := input.Read(initial[:])
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			_ = input.Close()
+			return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, readErr)
+		}
+		binary := bytes.IndexByte(initial[:n], 0) >= 0
 		scanner := bufio.NewScanner(&contextReader{ctx: ctx, reader: input})
 		scanner.Buffer(make([]byte, 64<<10), 1<<20)
 		for scanner.Scan() {
-			if findings := computerevent.DetectPrivateSecrets(scanner.Bytes()); len(findings) != 0 {
+			line := scanner.Bytes()
+			findings := computerevent.DetectPrivateSecrets(line)
+			if binary {
+				findings = computerevent.DetectBinarySecrets(line)
+			}
+			if len(findings) != 0 {
 				_ = input.Close()
 				return nil, "", fmt.Errorf("capsule release refuses secret content in %q", change.Path)
 			}
