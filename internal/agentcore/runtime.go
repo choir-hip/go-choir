@@ -96,6 +96,11 @@ type Runtime struct {
 	// replacement so concurrent product-path calls cannot interleave
 	// quarantine and OpenFresh.
 	workspaceReplaceMu sync.Mutex
+	// engineeringAssignmentOpenMu serializes the per-runtime open/spawn/bind
+	// saga so a duplicate revision wake cannot drive a second saga against an
+	// in-flight durable open (each delivery's cleanup would otherwise write
+	// divergent fate intents on the same deterministic command identity).
+	engineeringAssignmentOpenMu sync.Mutex
 
 	wg           sync.WaitGroup
 	toolRegistry *toolregistry.ToolRegistry

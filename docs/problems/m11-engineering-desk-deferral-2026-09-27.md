@@ -73,6 +73,76 @@ Diagnosis (added 2026-09-27): `source snapshot git diff --quiet -- failed
 (exit 128): fatal: cannot change to '/mnt/persistent/files/Source/platform':
 No such file or directory`.
 
+## Second failure cluster (2026-09-27, seeded build 382c6844 on computer-ff406316)
+
+After the Source seed fix deployed, the probe's fresh computer progressed past
+preflight-with-missing-dir into a NEW defer cluster on desk agent
+`engineering:be7a90af-…` — three distinct causes across successive deliveries
+of the same cast:
+
+1. `open cast: bind assigned Engineering activation: co-super assignment
+   invalid transition (persist pre-bind capsule revoke intent: lifecycle
+   command digest conflict)` — a prior delivery's `cleanupCapsule` wrote a
+   `capsule-revoke-intent:` fate command carrying `ExpectedLifecycleVersion`
+   inside its digest; the next delivery's bind sees `RevokeRequested`
+   disposition (`invalid transition`), its own cleanup retry conflicts on the
+   stable CommandID because the version field moved the digest. One stranded
+   saga permanently poisons the assignment.
+2. `open cast: preflight immutable assignment subject: capsule subject
+   artifact ref is invalid` — `PreflightSourceSnapshot` only parses
+   `capsule-subject:sha256:` refs (`internal/capsule/executor.go:117`), but
+   implementation opens durably store `capsule-source-git:<commit>:sha256:`
+   (blessed in `types/engineering_assignment.go:154`). Any open that survives
+   to a second wake (resume path
+   `resumeAssignedEngineeringForDocument`) wedges forever.
+3. `reconcile lifecycle work assignment: lifecycle command digest conflict`
+   — a concurrent `ReconcileLifecycleWorkAssignment` →
+   `ReconcileEngineeringAssignmentsForTrajectory` open raced the revision-cast
+   open for the same deterministic assignmentID; identical CommandID,
+   mismatching binding payload → conflict. There is no per-assignment
+   serialization across the two reconcile entry points (the
+   `lifecycleWorkReconcileMu` only covers `reconcileAssignedWorkItemActor`,
+   not the engineering path).
+
+Adjacent latent defect observed on fleet computers: boot engineering-desk
+reconcile fails with `lifecycle: unknown frozen event kind
+"owner_instruction_queued"` — the M1-deleted kind still exists in pre-M1
+computers' frozen tapes; the decoder has no tombstone mapping. Pre-M11,
+affects old computers only.
+
+## Interleaving hypothesis (evidence: three distinct causes, all within ~1s)
+
+The join's explicit `DispatchActor` and the commit-path
+`dispatchTextureRevisionWake` deliver the same revision occurrence; the first
+delivery's saga stranded after durable open (cause unproven — possibly the
+concurrent open race itself, where the loser ran `cleanupCapsule` on the
+winner's in-flight assignment). Every subsequent delivery then fails at a
+different defense: resume-preflight ref rejection, or bind refusing the
+poisoned `RevokeRequested` disposition.
+
+## Cluster fix (2026-09-27, second commit)
+
+- `capsule.PreflightSourceSnapshot` accepts `capsule-source-git:` refs and
+  re-derives the subject digest from the pinned commit — resume no longer
+  wedges on implementation-open bindings.
+- `ReconcileEngineeringAssignmentsForTrajectory` converges on the recorded
+  durable intent instead of requiring its own computed intent; fate/cancel
+  writes tolerate `ErrLifecycleCommandConflict`/`ErrEngineeringAssignmentInvalid`
+  by reloading and adopting an already-recorded state.
+- `startAssignedEngineeringForDocument` holds `engineeringAssignmentOpenMu`
+  for the open/spawn/bind saga so duplicate wakes cannot interleave
+  divergent fate intents on one deterministic assignment identity.
+- `owner_instruction_queued` tombstoned into the frozen event-kind table
+  (decode-only; pre-M1 computers' tapes still carry it).
+
+Residual (documented, not fixed): an assignment cancelled pre-bind is
+terminal; attempt>1 requires a supersede tuple naming a recorded prior
+report — which a never-bound attempt cannot have. Cancellation of a live
+saga is now unreachable within one runtime (mutex), but a cast cancelled by
+an external path still cannot auto-reopen. A future reopen path needs a
+new supersede kind (`retry_after_block` with a cancelled-attempt receipt).
+
+
 Known candidates inside the deferring call:
 
 1. `reconcileEngineeringCast` rejects the revision

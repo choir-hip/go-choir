@@ -114,8 +114,30 @@ func (e *Executor) subjectArtifactPath(ref string) (string, string, error) {
 // source before assignment Open. A candidate ref selects that exact prior
 // artifact; empty selects the current clean committed source tree.
 func (e *Executor) PreflightSourceSnapshot(ctx context.Context, candidateRef string) (SourcePreflight, error) {
-	if strings.TrimSpace(candidateRef) != "" {
-		root, digest, err := e.subjectArtifactPath(strings.TrimSpace(candidateRef))
+	candidateRef = strings.TrimSpace(candidateRef)
+	if strings.HasPrefix(candidateRef, "capsule-source-git:") {
+		// Resume path: a committed open pins its subject as
+		// capsule-source-git:<commit>:sha256:<digest>. Re-derive the digest
+		// from the pinned commit — the live tree may have moved since the
+		// durable open; the commit identity is what the binding recorded.
+		raw := strings.TrimPrefix(candidateRef, "capsule-source-git:")
+		separator := strings.Index(raw, ":sha256:")
+		if separator <= 0 {
+			return SourcePreflight{}, fmt.Errorf("capsule source artifact ref is invalid")
+		}
+		commit, digest := raw[:separator], raw[separator+len(":sha256:"):]
+		decodedCommit, decodeErr := hex.DecodeString(commit)
+		if decodeErr != nil || (len(decodedCommit) != 20 && len(decodedCommit) != 32) {
+			return SourcePreflight{}, fmt.Errorf("capsule source artifact commit is invalid")
+		}
+		actual, digestErr := canonicalImmutableCommitDigest(ctx, e.sourceDir, commit)
+		if digestErr != nil || actual != digest {
+			return SourcePreflight{}, fmt.Errorf("capsule source artifact is unavailable or corrupt")
+		}
+		return SourcePreflight{SubjectDigest: digest, ArtifactRef: candidateRef}, nil
+	}
+	if candidateRef != "" {
+		root, digest, err := e.subjectArtifactPath(candidateRef)
 		if err != nil {
 			return SourcePreflight{}, err
 		}
@@ -123,7 +145,7 @@ func (e *Executor) PreflightSourceSnapshot(ctx context.Context, candidateRef str
 		if err != nil || actual != digest {
 			return SourcePreflight{}, fmt.Errorf("capsule candidate artifact is unavailable or corrupt")
 		}
-		return SourcePreflight{SubjectDigest: digest, ArtifactRef: strings.TrimSpace(candidateRef)}, nil
+		return SourcePreflight{SubjectDigest: digest, ArtifactRef: candidateRef}, nil
 	}
 	commit, err := immutableGitCommitIdentity(ctx, e.sourceDir)
 	if err != nil {

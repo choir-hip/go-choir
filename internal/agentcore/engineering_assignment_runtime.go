@@ -160,6 +160,8 @@ type DelegatedCastRequest struct {
 // revision that carried the cast. It replaces the retired Management-mediated
 // assign_co_super opener: the revision event IS the admission.
 func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc types.Document, revision types.Revision, req OpenDocumentAssignmentRequest) (AssignedEngineeringStart, error) {
+	rt.engineeringAssignmentOpenMu.Lock()
+	defer rt.engineeringAssignmentOpenMu.Unlock()
 	req.Objective, req.CandidateID, req.RevisionID = strings.TrimSpace(req.Objective), strings.TrimSpace(req.CandidateID), strings.TrimSpace(req.RevisionID)
 	if req.Objective == "" || req.RevisionID == "" ||
 		(req.Kind != types.EngineeringAssignmentImplementation && req.Kind != types.EngineeringAssignmentVerification) {
@@ -517,7 +519,14 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 			cancel := types.CancelEngineeringAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
 				AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: cause.Error()}
 			cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
-			_, _ = rt.store.CancelEngineeringAssignment(context.Background(), cancel)
+			if _, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel); cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {
+				// A concurrent reconciler already cancelled or advanced the
+				// assignment; terminal/adopted state is convergence.
+				if reloaded, reloadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt); reloadErr == nil && reloaded.Disposition.Terminal() {
+					return cause
+				}
+				return fmt.Errorf("%w (cancel stranded open: %v)", cause, cancelErr)
+			}
 		}
 		return cause
 	}
@@ -576,9 +585,27 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 			return fmt.Errorf("%w (load opened assignment for capsule cleanup: %v)", cause, loadErr)
 		}
 		intent := "capsule-revoke-intent:" + objectgraph.SHA256([]byte(current.AssignmentID+"\x00pre-bind\x00"+cause.Error()))
-		requested, fateErr := rt.store.SetEngineeringCapsuleDisposition(context.Background(), engineeringFateRequest(current, types.EngineeringCapsuleRevokeRequested, intent, ""))
-		if fateErr != nil {
-			return fmt.Errorf("%w (persist pre-bind capsule revoke intent: %v)", cause, fateErr)
+		requested := current
+		if current.CapsuleDisposition != types.EngineeringCapsuleRevokeRequested && current.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+			var fateErr error
+			result, fateErr := rt.store.SetEngineeringCapsuleDisposition(context.Background(), engineeringFateRequest(current, types.EngineeringCapsuleRevokeRequested, intent, ""))
+			if fateErr != nil {
+				if !errors.Is(fateErr, store.ErrLifecycleCommandConflict) && !errors.Is(fateErr, store.ErrEngineeringAssignmentInvalid) {
+					return fmt.Errorf("%w (persist pre-bind capsule revoke intent: %v)", cause, fateErr)
+				}
+				// A competing cleanup already recorded a revoke intent; the
+				// recorded intent is the durable authority — adopt it.
+				reloaded, reloadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
+				if reloadErr != nil || reloaded.CapsuleDisposition != types.EngineeringCapsuleRevokeRequested && reloaded.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+					return fmt.Errorf("%w (persist pre-bind capsule revoke intent: %v)", cause, fateErr)
+				}
+				requested = reloaded
+				intent = strings.TrimSpace(reloaded.CapsuleIntentRef)
+			} else {
+				requested = result.Assignment
+			}
+		} else if existing := strings.TrimSpace(current.CapsuleIntentRef); existing != "" {
+			intent = existing
 		}
 		_ = rt.capsuleExecutor.RevokeCapability(runID, opaque)
 		if rt.capsuleExecutor.HasCapsule(capsuleID) {
@@ -589,23 +616,44 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		if rt.capsuleExecutor.HasCapsule(capsuleID) {
 			return fmt.Errorf("%w (pre-bind capsule continued after executor acknowledgement)", cause)
 		}
-		receipt, receiptErr := rt.capsuleExecutor.PersistRevocationReceipt(runID, requested.Assignment.Binding.CapabilityDigest, capsuleID, intent)
-		if receiptErr != nil {
-			return fmt.Errorf("%w (persist structured pre-bind revoke acknowledgement: %v)", cause, receiptErr)
+		acked := requested
+		if requested.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+			receipt, receiptErr := rt.capsuleExecutor.PersistRevocationReceipt(runID, requested.Binding.CapabilityDigest, capsuleID, intent)
+			if receiptErr != nil {
+				return fmt.Errorf("%w (persist structured pre-bind revoke acknowledgement: %v)", cause, receiptErr)
+			}
+			fateAck, fateAckErr := engineeringFateAckRequest(requested, types.EngineeringCapsuleRevoked, intent, receipt.ReceiptRef, "", "", receipt.OccurredAt, receipt.CapsuleAbsent)
+			if fateAckErr != nil {
+				return fmt.Errorf("%w (invalid revoke receipt occurred_at: %v)", cause, fateAckErr)
+			}
+			result, fateErr := rt.store.SetEngineeringCapsuleDisposition(context.Background(), fateAck)
+			if fateErr != nil {
+				if !errors.Is(fateErr, store.ErrLifecycleCommandConflict) && !errors.Is(fateErr, store.ErrEngineeringAssignmentInvalid) {
+					return fmt.Errorf("%w (persist pre-bind capsule revoke acknowledgement: %v)", cause, fateErr)
+				}
+				reloaded, reloadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
+				if reloadErr != nil || reloaded.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+					return fmt.Errorf("%w (persist pre-bind capsule revoke acknowledgement: %v)", cause, fateErr)
+				}
+				acked = reloaded
+			} else {
+				acked = result.Assignment
+			}
 		}
-		fateAck, fateAckErr := engineeringFateAckRequest(requested.Assignment, types.EngineeringCapsuleRevoked, intent, receipt.ReceiptRef, "", "", receipt.OccurredAt, receipt.CapsuleAbsent)
-		if fateAckErr != nil {
-			return fmt.Errorf("%w (invalid revoke receipt occurred_at: %v)", cause, fateAckErr)
-		}
-		acked, fateErr := rt.store.SetEngineeringCapsuleDisposition(context.Background(), fateAck)
-		if fateErr != nil {
-			return fmt.Errorf("%w (persist pre-bind capsule revoke acknowledgement: %v)", cause, fateErr)
+		if acked.Disposition.Terminal() {
+			return cause
 		}
 		cancel := types.CancelEngineeringAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
-			AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: acked.Assignment.LifecycleVersion, Reason: cause.Error()}
+			AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: acked.LifecycleVersion, Reason: cause.Error()}
 		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 		if _, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel); cancelErr != nil {
-			return fmt.Errorf("%w (cancel pre-bind assignment after revoke ack: %v)", cause, cancelErr)
+			if !errors.Is(cancelErr, store.ErrLifecycleCommandConflict) && !errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid) {
+				return fmt.Errorf("%w (cancel pre-bind assignment after revoke ack: %v)", cause, cancelErr)
+			}
+			reloaded, reloadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
+			if reloadErr != nil || !reloaded.Disposition.Terminal() {
+				return fmt.Errorf("%w (cancel pre-bind assignment after revoke ack: %v)", cause, cancelErr)
+			}
 		}
 		return cause
 	}

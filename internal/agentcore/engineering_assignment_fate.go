@@ -349,16 +349,25 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			continue
 		}
 		if assignment.BoundRunID == "" {
-			intent := "capsule-revoke-intent:" + objectgraph.SHA256([]byte(assignment.AssignmentID+"\x00restart-pre-bind"))
 			if assignment.CapsuleDisposition == types.EngineeringCapsuleUnbound {
+				intent := "capsule-revoke-intent:" + objectgraph.SHA256([]byte(assignment.AssignmentID+"\x00restart-pre-bind"))
 				requested, fateErr := rt.store.SetEngineeringCapsuleDisposition(ctx, engineeringFateRequest(assignment, types.EngineeringCapsuleRevokeRequested, intent, ""))
-				if fateErr != nil {
+				if fateErr != nil && (errors.Is(fateErr, store.ErrLifecycleCommandConflict) || errors.Is(fateErr, store.ErrEngineeringAssignmentInvalid)) {
+					// A cleanup path may have recorded a different revoke intent
+					// first; the recorded intent is the durable authority, so
+					// reload and adopt it rather than conflicting forever.
+					if current, loadErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignment.AssignmentID, assignment.Binding.Attempt); loadErr == nil {
+						assignment = current
+					}
+				} else if fateErr != nil {
 					return fateErr
+				} else {
+					assignment = requested.Assignment
 				}
-				assignment = requested.Assignment
 			}
 			if assignment.CapsuleDisposition == types.EngineeringCapsuleRevokeRequested {
-				if assignment.CapsuleIntentRef != intent {
+				intent := strings.TrimSpace(assignment.CapsuleIntentRef)
+				if intent == "" {
 					return store.ErrEngineeringAssignmentCommandConflict
 				}
 				if exec.HasCapsule(assignment.Binding.CapsuleID) {
@@ -379,10 +388,17 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 					return fmt.Errorf("invalid revoke receipt occurred_at: %w", fateAckErr)
 				}
 				acked, fateErr := rt.store.SetEngineeringCapsuleDisposition(ctx, fateAck)
-				if fateErr != nil {
+				if fateErr != nil && (errors.Is(fateErr, store.ErrLifecycleCommandConflict) || errors.Is(fateErr, store.ErrEngineeringAssignmentInvalid)) {
+					if current, loadErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignment.AssignmentID, assignment.Binding.Attempt); loadErr == nil && current.CapsuleDisposition == types.EngineeringCapsuleRevoked {
+						assignment = current
+					} else {
+						return fateErr
+					}
+				} else if fateErr != nil {
 					return fateErr
+				} else {
+					assignment = acked.Assignment
 				}
-				assignment = acked.Assignment
 			}
 			if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 				return fmt.Errorf("restart open assignment has ambiguous capsule fate %s", assignment.CapsuleDisposition)
@@ -394,6 +410,14 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			}
 			cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 			cancelled, cancelErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
+			if cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {
+				// Another reconciler may have cancelled or advanced the
+				// assignment first; terminal/adopted state is convergence.
+				if current, loadErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignment.AssignmentID, assignment.Binding.Attempt); loadErr == nil && current.Disposition.Terminal() {
+					continue
+				}
+				return cancelErr
+			}
 			if cancelErr != nil {
 				return cancelErr
 			}
@@ -430,6 +454,12 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 		}
 		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 		cancelled, cancelErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
+		if cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {
+			if current, loadErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignment.AssignmentID, assignment.Binding.Attempt); loadErr == nil && current.Disposition.Terminal() {
+				continue
+			}
+			return cancelErr
+		}
 		if cancelErr != nil {
 			return cancelErr
 		}

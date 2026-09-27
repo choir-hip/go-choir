@@ -66,6 +66,11 @@ const (
 	LifecycleEngineeringCapsuleDispositionSet LifecycleEventKind = "co_super_capsule_disposition_set"
 	LifecycleRunTerminalized                  LifecycleEventKind = "run_terminalized"
 	LifecycleRunReactivated                   LifecycleEventKind = "run_reactivated"
+	// Retired kinds remain decodable: computers whose tapes were written
+	// before the kind was deleted still carry these events, and the decode
+	// boundary refuses anything absent from the frozen table. Tombstones are
+	// decode-only — no writer may emit them.
+	LifecycleOwnerInstructionQueued LifecycleEventKind = "owner_instruction_queued" // M1-deleted 2026-09-23
 )
 
 type StartLifecycleRequest struct {

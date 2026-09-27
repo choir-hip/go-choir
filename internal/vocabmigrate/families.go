@@ -94,6 +94,10 @@ var frozenLifecycleEventKinds = map[types.LifecycleEventKind]bool{
 	types.LifecycleEngineeringCapsuleDispositionSet: true, // V1 "co_super_capsule_disposition_set"
 	types.LifecycleRunTerminalized:                  true,
 	types.LifecycleRunReactivated:                   true,
+	// Tombstone: retired by M1's owner-input cutover (2026-09-23). Pre-M1
+	// computers' frozen tapes still carry it; the decode boundary must accept
+	// it so boot reconcile on those computers does not fail closed.
+	types.LifecycleOwnerInstructionQueued: true,
 }
 
 // DecodeLifecycleCommandKind interprets a persisted lifecycle command kind

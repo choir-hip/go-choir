@@ -194,6 +194,37 @@ func TestPreflightSourceSnapshotIsReadOnlyAndCommitPinned(t *testing.T) {
 	}
 }
 
+func TestPreflightSourceSnapshotResumesPinnedGitRef(t *testing.T) {
+	source := t.TempDir()
+	mustRunGit(t, source, "init")
+	mustRunGit(t, source, "config", "user.name", "Capsule Test")
+	mustRunGit(t, source, "config", "user.email", "capsule@test.invalid")
+	if err := os.WriteFile(filepath.Join(source, "tracked"), []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunGit(t, source, "add", ".")
+	mustRunGit(t, source, "commit", "-m", "first")
+	e := &Executor{stateDir: filepath.Join(t.TempDir(), "state"), sourceDir: source}
+	opened, err := e.PreflightSourceSnapshot(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The durable open stores the git-form ref; a later wake must re-derive the
+	// same digest from the pinned commit even after the worktree advances.
+	if err := os.WriteFile(filepath.Join(source, "tracked"), []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunGit(t, source, "add", ".")
+	mustRunGit(t, source, "commit", "-m", "second")
+	resumed, err := e.PreflightSourceSnapshot(context.Background(), opened.ArtifactRef)
+	if err != nil {
+		t.Fatalf("resume preflight of committed git ref: %v", err)
+	}
+	if resumed != opened {
+		t.Fatalf("resumed preflight %v != opened %v", resumed, opened)
+	}
+}
+
 func TestPersistGrantedCandidateIsReconstructableAndReusable(t *testing.T) {
 	state := t.TempDir()
 	merged := filepath.Join(t.TempDir(), "root")
