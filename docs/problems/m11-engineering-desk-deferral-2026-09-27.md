@@ -30,22 +30,48 @@ So the `coagent_result`/`DocumentRevisionOccurrence` wake reaches the desk
 agent `engineering:{docID}` inside the guest; the handler in
 `actorruntime/handler.go` (engineering branch) calls
 `ReconcileEngineeringRevisionCast`, which returns a non-`ErrNotFound` error
-that is wrapped in `ErrDeferUnprocessed`. The dispatcher logs `deferred`
-without the cause (`internal/actor/dispatcher.go:353` before af788403), so the
-concrete failure was invisible from host observability.
+that is wrapped in `ErrDeferUnprocessed` and logged without the cause
+(`internal/actor/dispatcher.go:353` before af788403), so the concrete
+failure was invisible from host observability.
 
-`StartLifecycle` succeeded: the desk agent row exists (`LifecycleVersion=1`,
-`ChannelID=docID`), the work item `work:engineering` exists
-(`AssignedAgentID=engineering:{docID}`, `AuthorityProfile=engineering`), and
-the initial revision committed with `AuthorKind=user`. So the deferral is
-downstream of durable creation — inside `reconcileEngineeringCast` or
-`startAssignedEngineeringForDocument` (store write `OpenEngineeringAssignment`,
-preflight `PreflightSourceSnapshot`, or an identity/authority invariant).
+## Diagnosed cause (2026-09-27, staging `6529641d` with cause= logging)
+
+`PreflightSourceSnapshot("")` on the guest runs `git -C
+/mnt/persistent/files/Source/platform diff --quiet` — and **the directory
+does not exist on a virgin computer**. Nothing in the guest image, genesis
+import, or bootstrap chain creates `files/Source/platform`. Prior
+self-development evidence (M9a et al.) all ran on Node B's long-lived
+computer whose Source tree was populated manually on 2026-09-05 by an
+operator rsync onto a mounted data.img
+(`docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md:51-66`) — the
+same "does not exist" failure, fixed by hand and never productized.
+`docs/archive/mission-super-console-source-mount-promotion-v0.md` already
+recorded "no sandbox startup path creates stable Source/platform".
+
+So `startAssignedEngineeringForDocument` fails at
+`preflight immutable assignment subject: source snapshot git diff --quiet --
+failed (exit 128) ... No such file or directory`, the occurrence wraps it in
+`ErrDeferUnprocessed`, the dispatcher's defer-attempt rollback pins the
+backoff at 500ms, and the desk hot-loops on the cast wake forever.
+
+## Fix (this mission)
+
+`internal/vmmanager`: `createDataImage` seeds `files/Source/platform` into
+the staging tree `mkfs.ext4 -d` copies into a fresh data.img. The seed is a
+`git clone` of the host's deployed checkout (`VM_SOURCE_SEED_REPO`,
+defaulting to `/opt/go-choir` when its `.git` exists) checked out to the
+vmctl binary's `buildinfo.Commit`, with `core.filemode=false` so ext4 seeding
+noise can't read as dirt. Virgin computers then satisfy the assignment
+subject preflight; existing computers with populated Source are untouched
+(the seed only runs on `createDataImage`, i.e. absent data.img).
 
 ## Failure signature
 
 Symptom: operation stays `executing` forever; the assignment never opens; the
 tape sees no `engineering_assignment_opened`/`trajectory_*` advancement.
+Diagnosis (added 2026-09-27): `source snapshot git diff --quiet -- failed
+(exit 128): fatal: cannot change to '/mnt/persistent/files/Source/platform':
+No such file or directory`.
 
 Known candidates inside the deferring call:
 

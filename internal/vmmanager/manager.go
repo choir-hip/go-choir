@@ -44,6 +44,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 )
 
@@ -269,6 +270,16 @@ type ManagerConfig struct {
 	// the boot (B5/B10). It must comfortably exceed a payload page fetch + a
 	// Dolt checkpoint commit plus a guest process restart window.
 	ReplayStallTimeout time.Duration
+
+	// SourceSeedRepoPath seeds files/Source/platform in a newly created
+	// per-VM data image. The engineering desk's assignment preflight
+	// (capsule.Executor.PreflightSourceSnapshot) requires that path to be a
+	// clean git checkout; without it the desk hot-loops ErrDeferUnprocessed
+	// on the cast occurrence and self-development operations can never reach
+	// awaiting_approval. Set to the host's deployed source checkout
+	// (/opt/go-choir on Node B); empty disables seeding (legacy behavior —
+	// the guest then must obtain Source some other way).
+	SourceSeedRepoPath string
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -2117,7 +2128,58 @@ func (m *Manager) createDataImage(path string, sizeMB int) error {
 	if mkfsBin == "" || mkfsBin == "mkfs.ext4" {
 		mkfsBin = findBinary("mkfs.ext4", "/run/current-system/sw/bin/mkfs.ext4")
 	}
-	return createSparseDataImage(path, sizeMB, mkfsBin)
+	staging, cleanup, seedErr := m.sourceSeedStagingRoot()
+	if seedErr != nil {
+		return fmt.Errorf("seed data image source checkout: %w", seedErr)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	return createSparseDataImageSeeded(path, sizeMB, mkfsBin, staging)
+}
+
+// sourceSeedStagingRoot returns a staging directory containing
+// files/Source/platform as a clean git checkout at the commit this vmctl
+// binary was built from (the deployed source identity). The capsule
+// executor's PreflightSourceSnapshot requires a clean git tree with a HEAD;
+// without a seed, the engineering desk's cast reconcile fails forever on a
+// virgin computer. Returns ("", nil, nil) when seeding is disabled or the
+// configured repo path is absent — the image then ships an empty Source dir.
+func (m *Manager) sourceSeedStagingRoot() (staging string, cleanup func(), err error) {
+	repo := strings.TrimSpace(m.cfg.SourceSeedRepoPath)
+	if repo == "" {
+		return "", nil, nil
+	}
+	info, statErr := os.Stat(filepath.Join(repo, ".git"))
+	if statErr != nil || !info.IsDir() {
+		return "", nil, nil
+	}
+	dir, mkErr := os.MkdirTemp("", "choir-source-seed-*")
+	if mkErr != nil {
+		return "", nil, mkErr
+	}
+	cleanup = func() { _ = os.RemoveAll(dir) }
+	target := filepath.Join(dir, "files", "Source", "platform")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return "", cleanup, err
+	}
+	commit := strings.TrimSpace(buildinfo.Commit)
+	args := []string{"clone", "--quiet", repo, target}
+	if out, cloneErr := exec.Command("git", args...).CombinedOutput(); cloneErr != nil {
+		return "", cleanup, fmt.Errorf("git clone %s: %w (%s)", repo, cloneErr, strings.TrimSpace(string(out)))
+	}
+	if commit != "" && commit != "local" && commit != "dirty" && len(commit) >= 7 {
+		if out, coErr := exec.Command("git", "-C", target, "checkout", "--quiet", commit).CombinedOutput(); coErr != nil {
+			return "", cleanup, fmt.Errorf("git checkout %s in seeded source: %w (%s)", commit, coErr, strings.TrimSpace(string(out)))
+		}
+	}
+	// The capsule preflight rejects a dirty tree. filemode/ctime noise across
+	// mkfs seeding must not read as dirt; untracked preexisting host files
+	// (.envrc.local et al.) stay untracked and invisible to `git diff --quiet`.
+	if out, cfgErr := exec.Command("git", "-C", target, "config", "core.filemode", "false").CombinedOutput(); cfgErr != nil {
+		return "", cleanup, fmt.Errorf("seeded source config: %w (%s)", cfgErr, strings.TrimSpace(string(out)))
+	}
+	return dir, cleanup, nil
 }
 
 // CreateSparseDataImage creates the default-sized ext4 data image used by a
@@ -2128,6 +2190,10 @@ func CreateSparseDataImage(path string) error {
 }
 
 func createSparseDataImage(path string, sizeMB int, mkfsBin string) (err error) {
+	return createSparseDataImageSeeded(path, sizeMB, mkfsBin, "")
+}
+
+func createSparseDataImageSeeded(path string, sizeMB int, mkfsBin string, stagingDir string) (err error) {
 	if sizeMB <= 0 {
 		return fmt.Errorf("data image size must be positive")
 	}
@@ -2154,7 +2220,12 @@ func createSparseDataImage(path string, sizeMB int, mkfsBin string) (err error) 
 	if err != nil {
 		return fmt.Errorf("size data image %s: %w", path, err)
 	}
-	cmd := exec.Command(mkfsBin, "-F", "-L", "go-choir-data", path)
+	args := []string{"-F", "-L", "go-choir-data"}
+	if strings.TrimSpace(stagingDir) != "" {
+		args = append(args, "-d", stagingDir)
+	}
+	args = append(args, path)
+	cmd := exec.Command(mkfsBin, args...)
 	if output, commandErr := cmd.CombinedOutput(); commandErr != nil {
 		return fmt.Errorf("mkfs.ext4 data image %s: %w (%s)", path, commandErr, string(output))
 	}
