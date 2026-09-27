@@ -11,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -286,7 +287,44 @@ func (rt *Runtime) cancelBoundEngineeringRun(ctx context.Context, rec types.RunR
 		return true, err
 	}
 	_, err = rt.persistSystemEngineeringCancellation(ctx, assignment, reason)
+	if err == nil {
+		// A bound desk run that terminalizes without a committed fate leaves
+		// its self-development operation in `executing` forever unless the
+		// cancellation reaches the op store — the wedge the completion guard
+		// now surfaces must resolve to `failed`, not sit silent. Best-effort:
+		// an op lookup miss or a state-conflict on an already-terminal op is
+		// convergence, not failure.
+		rt.failBoundSelfdevOperation(ctx, rec.ComputerID, trajectoryIDForRun(&rec), reason)
+	}
 	return true, err
+}
+
+// failBoundSelfdevOperation transitions the trajectory-bound self-development
+// operation to `failed` when a bound desk run dies mid-executing. It loops
+// over the lawful pre-terminal states because the desk can die anywhere in
+// executing->frozen->verified->awaiting_approval; an already-terminal op or a
+// trajectory with no bound op is a no-op.
+func (rt *Runtime) failBoundSelfdevOperation(ctx context.Context, computerID, trajectoryID, reason string) {
+	if rt == nil || rt.selfdevOperations == nil || strings.TrimSpace(computerID) == "" || strings.TrimSpace(trajectoryID) == "" {
+		return
+	}
+	operation, err := rt.selfdevOperations.GetByTrajectory(ctx, computerID, trajectoryID)
+	if err != nil {
+		return
+	}
+	trimmedReason := strings.TrimSpace(reason)
+	for _, from := range []string{selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateRequested} {
+		_, transErr := rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, from, selfdev.StateFailed, func(next *selfdev.Operation) error {
+			next.TerminalError = trimmedReason
+			return nil
+		})
+		if transErr == nil {
+			return
+		}
+		if errors.Is(transErr, selfdev.ErrInvalidTransition) || !errors.Is(transErr, selfdev.ErrConflict) {
+			return
+		}
+	}
 }
 
 // ReconcileEngineeringAssignmentsForTrajectory closes restart gaps without a
