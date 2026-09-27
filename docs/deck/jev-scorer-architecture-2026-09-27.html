@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CHOIR — Jev Scorer Integration — Architecture Review — September 27</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --paper: #0B0C0D;
+    --ink: #F2EFE7;
+    --muted: #B2AA98;
+    --subtle: #766F62;
+    --accent: #FFD86B;
+    --accent2: #FFF1BC;
+    --rule: rgba(255,216,107,0.18);
+    --rule-strong: rgba(255,241,188,0.48);
+    --mark: #FFE18A;
+    --paper-font: "Iowan Old Style", "Hoefler Text", Palatino, "Times New Roman", serif;
+    --mast-font: "Didot", "Hoefler Text", "Iowan Old Style", serif;
+    --ui-font: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  body { font-family: var(--paper-font); background: var(--paper); color: var(--ink);
+         -webkit-font-smoothing: antialiased; font-feature-settings: "onum" 1, "liga" 1; }
+  .slide { width:1280px; height:720px; page-break-after:always; position:relative; overflow:hidden;
+           background-color: var(--paper); padding:44px 88px 60px; display:flex; flex-direction:column; }
+  .slide:last-child { page-break-after:auto; }
+  .rail { display:flex; justify-content:space-between; align-items:baseline; font-family:var(--mono);
+          font-size:9.5px; letter-spacing:0.17em; text-transform:uppercase; color:var(--muted); }
+  .rail .g { color:var(--accent); }
+  .hair { height:1px; background:var(--rule); margin-top:12px; }
+  .folio { position:absolute; bottom:26px; left:88px; right:88px; display:flex; justify-content:space-between;
+           font-family:var(--mono); font-size:9.5px; letter-spacing:0.17em; text-transform:uppercase; color:var(--subtle); }
+  .body-area { flex:1; padding-top:28px; display:flex; flex-direction:column; min-height:0; }
+  .tail { margin-top:auto; }
+  .sect { font-family:var(--mono); font-size:10px; letter-spacing:0.24em; text-transform:uppercase;
+          color:var(--accent); margin-bottom:14px; }
+  h1.head { font-family:var(--paper-font); font-weight:600; font-size:52px; line-height:1.06;
+            letter-spacing:-0.012em; margin-bottom:12px; text-wrap:balance; }
+  h1.head.sm { font-size:40px; }
+  .dek { font-style:italic; font-size:21px; color:var(--muted); line-height:1.4; max-width:960px; text-wrap:balance; }
+  .body { font-size:15px; line-height:1.58; }
+  .body.dim { color:var(--muted); }
+  .note { font-size:13px; font-style:italic; color:var(--muted); line-height:1.5; }
+  .flag { margin-top:40px; border-top:3px solid var(--ink); border-bottom:1px solid var(--ink); padding:22px 0; text-align:center; }
+  .overline { font-family:var(--mono); font-size:11px; letter-spacing:0.34em; text-transform:uppercase;
+              color:var(--accent); margin-bottom:12px; }
+  .mast { font-family:var(--mast-font); font-weight:400; font-size:120px; line-height:0.92; letter-spacing:0.015em; }
+  .cover-dek { text-align:center; font-style:italic; font-size:26px; margin-top:22px; }
+  .cover-note { text-align:center; font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+                text-transform:uppercase; color:var(--muted); margin-top:auto; }
+
+  .kv { display:grid; grid-template-columns:190px 1fr; gap:6px 20px; font-size:14px; line-height:1.5; margin-top:20px; }
+  .kv dt { font-family:var(--mono); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); padding-top:3px; }
+  .kv dd { color:var(--ink); }
+
+  table.grid { width:100%; border-collapse:collapse; font-size:13.5px; line-height:1.45; margin-top:18px; }
+  table.grid th { font-family:var(--mono); font-size:9.5px; letter-spacing:0.18em; text-transform:uppercase;
+                  color:var(--accent); text-align:left; padding:8px 14px 8px 0; border-bottom:1px solid var(--rule-strong); }
+  table.grid td { vertical-align:top; padding:9px 14px 9px 0; border-bottom:1px solid var(--rule); color:var(--ink); }
+  table.grid td.dim { color:var(--muted); }
+  .tag { font-family:var(--mono); font-size:10px; letter-spacing:0.12em; padding:2px 8px; border:1px solid var(--rule-strong); border-radius:2px; }
+  .tag.new { color:var(--accent); border-color:var(--accent); }
+  .tag.dead { color:var(--subtle); border-color:var(--subtle); text-decoration:line-through; }
+  .tag.ok { color:var(--ink); }
+  .x { color:var(--accent); font-weight:600; }
+  .no { color:var(--subtle); }
+
+  .box { border:1px solid var(--rule-strong); padding:14px 18px; margin-top:16px; }
+  .box .bt { font-family:var(--mono); font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+</style>
+</head>
+<body>
+
+<!-- ============ SLIDE 1 · COVER ============ -->
+<section class="slide">
+  <div class="rail"><span>CHOIR</span><span class="g">JEV INTEGRATION · ARCHITECTURE REVIEW</span><span>SEP 27 2026</span></div>
+  <div class="flag">
+    <div class="overline">PRE COMMITMENT RECORDS</div>
+    <div class="mast">Independent Scoring</div>
+  </div>
+  <p class="cover-dek">Jev as the System One evaluator — authored contract, runtime settlement, supervision-only results.</p>
+  <div class="kv" style="margin-top:34px;">
+    <dt>Mutation class</dt><dd><span class="x">RED</span> — provider routing, gateway credentials, evidence/evidence-adjacent surfaces</dd>
+    <dt>Sequencing</dt><dd>After M11 episode completes (gate already unblocked at <code>f8e3692e</code>, deployed)</dd>
+    <dt>Panel evidence</dt><dd>Two rounds: convergent verdict panel (7/13) + divergent dialectic (7/13) — outputs in <code>.agentic-consensus/</code></dd>
+    <dt>Contract impact</dt><dd>Memo <code>Resolve(id,obs)→(Score,error)</code> is amended: async settlement receipt, not a returned Score</dd>
+  </div>
+  <p class="cover-note">Awaiting owner approval before docs/mission updates</p>
+  <div class="folio"><span>CHOIR · JEV SCORER</span><span>1</span></div>
+</section>
+
+<!-- ============ SLIDE 2 · THE CONVERGED FLOW ============ -->
+<section class="slide">
+  <div class="rail"><span>CONVERGED ARCHITECTURE</span><span class="g">AUTHORED LIFECYCLE · MANDATORY SETTLEMENT · PARTITIONED VISIBILITY</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <svg viewBox="0 0 1104 430" width="1104" height="430" style="display:block;margin-top:6px">
+      <defs>
+        <marker id="ah" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L9,3.5 L0,7 Z" fill="#FFD86B"/>
+        </marker>
+        <marker id="am" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <path d="M0,0 L9,3.5 L0,7 Z" fill="#766F62"/>
+        </marker>
+      </defs>
+
+      <!-- microvm boundary -->
+      <rect x="8" y="10" width="640" height="410" fill="none" stroke="#766F62" stroke-dasharray="5 5" stroke-width="1"/>
+      <text x="20" y="30" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="2" fill="#B2AA98">MICROVM · guest nixos · embedded Dolt ObjectGraph</text>
+      <!-- host boundary -->
+      <rect x="700" y="10" width="396" height="250" fill="none" stroke="#766F62" stroke-dasharray="5 5" stroke-width="1"/>
+      <text x="712" y="30" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="2" fill="#B2AA98">HOST · bare metal · holds ALL provider creds</text>
+
+      <!-- cell -->
+      <rect x="28" y="56" width="252" height="118" fill="none" stroke="#FFF1BC" stroke-width="1.4"/>
+      <text x="44" y="80" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.5" fill="#FFD86B">YAEGI CELL · desk Go code</text>
+      <text x="44" y="102" font-family="Iowan Old Style,serif" font-size="13.5" fill="#F2EFE7">precommit.Commit(Prediction)</text>
+      <text x="44" y="122" font-family="Iowan Old Style,serif" font-size="13.5" fill="#F2EFE7">precommit.Resolve(id, Observation)</text>
+      <text x="44" y="142" font-family="Iowan Old Style,serif" font-size="12" fill="#B2AA98">stages Tray intents · μs · no network</text>
+      <text x="44" y="162" font-family="Iowan Old Style,serif" font-size="12" fill="#B2AA98">sees: receipt + admission status only</text>
+
+      <!-- reducer -->
+      <rect x="28" y="216" width="252" height="88" fill="none" stroke="#FFF1BC" stroke-width="1.4"/>
+      <text x="44" y="240" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.5" fill="#FFD86B">rlm_reduce</text>
+      <text x="44" y="262" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">commit tray: resolution + score</text>
+      <text x="44" y="280" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">obligation, one atomic append</text>
+
+      <!-- OG -->
+      <rect x="330" y="56" width="290" height="158" fill="none" stroke="#FFD86B" stroke-width="1.6"/>
+      <text x="346" y="80" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.5" fill="#FFD86B">OBJECTGRAPH · immutable tape</text>
+      <text x="346" y="104" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">choir.commitment_record</text>
+      <text x="346" y="124" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">choir.commitment_score_request</text>
+      <text x="346" y="144" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">choir.commitment_score</text>
+      <text x="346" y="164" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">choir.commitment_score_attempt</text>
+      <text x="346" y="188" font-family="Iowan Old Style,serif" font-size="11.5" fill="#B2AA98">deterministic IDs · conditional append</text>
+
+      <!-- reconciler -->
+      <rect x="330" y="252" width="290" height="92" fill="none" stroke="#FFF1BC" stroke-width="1.4"/>
+      <text x="346" y="276" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.5" fill="#FFD86B">SCORER WORKER · guest-side</text>
+      <text x="346" y="298" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">sweep obligations · bounded retry</text>
+      <text x="346" y="316" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">restart reconciles from ledger</text>
+
+      <!-- gateway -->
+      <rect x="724" y="56" width="180" height="80" fill="none" stroke="#FFF1BC" stroke-width="1.4"/>
+      <text x="738" y="80" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.5" fill="#FFD86B">HOST GATEWAY :8084</text>
+      <text x="738" y="102" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">POST /provider/v1/judgments</text>
+      <text x="738" y="122" font-family="Iowan Old Style,serif" font-size="12" fill="#B2AA98">per-VM bearer · per-computer limiter</text>
+
+      <!-- typesafe -->
+      <rect x="954" y="56" width="130" height="80" fill="none" stroke="#FFD86B" stroke-width="1.6"/>
+      <text x="966" y="80" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.5" fill="#FFD86B">TYPESAFE</text>
+      <text x="966" y="102" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">Jev /v1/systemone</text>
+      <text x="966" y="122" font-family="Iowan Old Style,serif" font-size="12" fill="#B2AA98">pinned served model</text>
+
+      <!-- texture -->
+      <rect x="330" y="368" width="290" height="44" fill="none" stroke="#FFF1BC" stroke-width="1.4"/>
+      <text x="346" y="395" font-family="Iowan Old Style,serif" font-size="13" fill="#F2EFE7">Texture supervision + publishable articles</text>
+
+      <!-- flows -->
+      <line x1="154" y1="174" x2="154" y2="216" stroke="#FFD86B" stroke-width="1.4" marker-end="url(#ah)"/>
+      <line x1="280" y1="135" x2="330" y2="135" stroke="#FFD86B" stroke-width="1.4" marker-end="url(#ah)"/>
+      <line x1="280" y1="260" x2="330" y2="200" stroke="#FFD86B" stroke-width="1.4" marker-end="url(#ah)"/>
+      <line x1="475" y1="252" x2="475" y2="214" stroke="#766F62" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#am)"/>
+      <line x1="620" y1="298" x2="724" y2="96" stroke="#FFD86B" stroke-width="1.4" marker-end="url(#ah)"/>
+      <line x1="904" y1="96" x2="954" y2="96" stroke="#FFD86B" stroke-width="1.4" marker-end="url(#ah)"/>
+      <line x1="475" y1="214" x2="475" y2="368" stroke="#766F62" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#am)"/>
+
+      <!-- annotations -->
+      <text x="164" y="200" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#B2AA98">tray</text>
+      <text x="284" y="127" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#B2AA98">append</text>
+      <text x="484" y="234" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#B2AA98">eligible</text>
+      <text x="640" y="180" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#B2AA98">bearer</text>
+      <text x="484" y="300" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#B2AA98">supervision only</text>
+    </svg>
+
+    <div class="box tail">
+      <div class="bt">The invariants this drawing encodes</div>
+      <div class="body" style="font-size:13px">
+        Agent's own Go code authors the lifecycle (precommit + resolve are module verbs — satisfies the steer)
+        · resolve's commit <em>is</em> the obligation — scoring can never be skipped, no selection bias
+        · cell never blocks on Jev, never sees answers — only receipts/status
+        · microVM worker → host gateway → TypeSafe: credentials never enter the guest
+        · score records can never join as governing resolutions
+      </div>
+    </div>
+  </div>
+  <div class="folio"><span>CHOIR · JEV SCORER</span><span>2</span></div>
+</section>
+
+<!-- ============ SLIDE 3 · LEDGER ONTOLOGY + VISIBILITY ============ -->
+<section class="slide">
+  <div class="rail"><span>LEDGER ONTOLOGY</span><span class="g">WHO SEES WHAT</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">RECORD KINDS — deterministic identity bound to immutable inputs</div>
+    <table class="grid">
+      <tr><th style="width:250px">Kind</th><th style="width:96px">Status</th><th>Contents / identity</th></tr>
+      <tr>
+        <td><code>choir.commitment_record</code></td><td><span class="tag ok">EXISTING</span></td>
+        <td><b>Prediction gains:</b> frozen <code>TypedQuestion[]</code> (stable qID, kind noul/choice/score, criteria, agent's own probabilities) — rejects bare hypothesis strings.<br>
+            <b>Resolution gains:</b> required <code>EvidenceRefs</code> (immutable refs; a verdict word alone resolves nothing).</td>
+      </tr>
+      <tr>
+        <td><code>choir.commitment_score_request</code></td><td><span class="tag new">NEW</span></td>
+        <td>Scoring obligation; appended atomically with the resolution. ID = H(resolutionID, questionDigest, scorerPin, specVersion). <b>Runtime-stamped — the cell cannot pin scorer or version.</b></td>
+      </tr>
+      <tr>
+        <td><code>choir.commitment_score_attempt</code></td><td><span class="tag new">NEW</span></td>
+        <td>Durable failure evidence (429/529/auth/refusal). Pending = eligible request minus result minus terminal attempt.</td>
+      </tr>
+      <tr>
+        <td><code>choir.commitment_score</code></td><td><span class="tag new">NEW</span></td>
+        <td>Result: answers by qID, <b>full distributions</b>, served model identity, state/question digests, raw artifact refs. Same deterministic ID family — replay/restore cannot mint a duplicate.</td>
+      </tr>
+    </table>
+
+    <div class="sect" style="margin-top:30px">VISIBILITY PARTITION</div>
+    <table class="grid">
+      <tr><th style="width:250px">Surface</th><th style="width:110px">Scores?</th><th>Rule</th></tr>
+      <tr><td><code>ActingPack</code> (acting desk context)</td><td><span class="no">NEVER</span></td>
+          <td>Shape-level impossible — type gains no score fields. <code>Disagreement</code> splits: resolution-verdict conflict stays; scorer disagreement is supervision-only.</td></tr>
+      <tr><td><code>SupervisionPack</code> · owner API · Texture render</td><td><span class="x">FULL</span></td>
+          <td>Distributions, served model, attempt log, digests. Published articles cite immutable score refs (doc opt-in).</td></tr>
+      <tr><td>channel.message to acting desk</td><td><span class="no">NEVER</span></td>
+          <td>No answer-bearing wake. Operational events may carry status only (pending / scored / terminal_unscored).</td></tr>
+      <tr><td>Research desk (autoresearch reads)</td><td><span class="x">FULL</span></td>
+          <td>Reads historical scores for calibration tuning — read access, never write.</td></tr>
+      <tr><td>Texture <em>model context</em> during render</td><td><span class="no">GATED</span></td>
+          <td>Codex objection: Texture's model context is also an acting context — render owner-facing scores, don't echo them into the doc's own model frame. Named constraint.</td></tr>
+    </table>
+  </div>
+  <div class="folio"><span>CHOIR · JEV SCORER</span><span>3</span></div>
+</section>
+
+<!-- ============ SLIDE 4 · THE DIALECTIC ============ -->
+<section class="slide">
+  <div class="rail"><span>DIALECTIC → CONVERGENCE</span><span class="g">TWO PANELS · 14 RESPONSES</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <h1 class="head sm">The fault line was never transport</h1>
+    <p class="dek">Every position runs the same wire (microVM → gateway → TypeSafe). What differed: <b>obligation ownership</b> — does the ledger owe a score (automatic) or does the agent owe the act (discretionary)?</p>
+
+    <table class="grid" style="margin-top:22px">
+      <tr><th style="width:200px">Position</th><th style="width:88px">Verdict</th><th>Core claim / fatal flaw</th></tr>
+      <tr><td><b>A — harness outbox</b><br><span class="dim">hidden reconciler</span></td><td><span class="tag">COMPONENT</span></td>
+          <td>Complete coverage, structural isolation — but invisible: self-development can't see or tune the mechanism it must improve. <i>Survives as the settlement mechanism, not the contract.</i></td></tr>
+      <tr><td><b>B — cell calls <code>Score()</code></b><br><span class="dim">agent discretion</span></td><td><span class="tag dead">REJECTED</span></td>
+          <td>Optional scoring = selection-biased calibration corpus; cheapest winning strategy is never calling it. Every panel member rejected result-visibility; the verb itself is redundant with resolve's obligation.</td></tr>
+      <tr><td><b>C — authored lifecycle,<br>runtime settlement</b></td><td><span class="tag new">ENDORSED</span></td>
+          <td>Agent authors typed precommits + evidence-bearing resolves (module verbs = the RLM contract, per owner's steer); the resolve commit mints the obligation automatically; results partition supervision-only. Unanimous composition across sol, luna, claude, codex, glm, gemini.</td></tr>
+      <tr><td>D — scorer is a desk</td><td><span class="tag">LATER</span></td>
+          <td>Cross-desk prediction markets (monitor desk precommits on executor) — the memo's own supervision topology, but a fifth desk is not a minimal slice. Reserved for the M-series.</td></tr>
+      <tr><td>E — offline batch eval</td><td><span class="tag">LATER</span></td>
+          <td>Scores computed from ledger snapshots by autoresearch — no live signal for Texture. A complement, not the spine.</td></tr>
+    </table>
+
+    <div class="box">
+      <div class="bt">Resolved sub-decisions</div>
+      <div class="body" style="font-size:13px">
+        <b>Obligation representation:</b> durable immutable <code>score_request</code> record (deterministic ID, atomic with resolution) over a derived sweep — ledger scans cap at 200 records and can't fence lost wakes.
+        <b>Blocking prerequisite (unanimous):</b> typed questions at commit + evidence refs at resolve — today's hypothesis-string + verdict-word would let Jev score the agent's label, not evidence.
+        <b>Restore honesty:</b> late results bind to their original resolution ID, never the latest; a restored history keeps its own scores.
+        <b>Billing limit:</b> exactly-once persistence ≠ exactly-once provider billing — crash-after-response may repeat a paid call; recorded as a named residual.
+      </div>
+    </div>
+  </div>
+  <div class="folio"><span>CHOIR · JEV SCORER</span><span>4</span></div>
+</section>
+
+<!-- ============ SLIDE 5 · SCOPE + ACCEPTANCE ============ -->
+<section class="slide">
+  <div class="rail"><span>FIRST-MISSION SCOPE</span><span class="g">STAGING ACCEPTANCE</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">MINIMAL SLICE — one typed path, advisory scoring, no backfill/fallback/gating</div>
+    <table class="grid">
+      <tr><th style="width:250px">Change</th><th>Acceptance on choir.news</th></tr>
+      <tr><td><code>Prediction.Questions</code> typed + frozen at commit</td>
+          <td>Freeze order: prediction committed before evidence-bearing action; reject bare-string precommit.</td></tr>
+      <tr><td><code>ResolveAct(target, outcome, evidenceRefs)</code> — evidence required</td>
+          <td>Resolution records immutable refs; resolve succeeds <b>while Jev is down</b> — scorer never blocks outcomes.</td></tr>
+      <tr><td><code>score_request</code> minted atomically at resolve commit</td>
+          <td>Deterministic ID; cell replays and restarts yield exactly one obligation.</td></tr>
+      <tr><td>Guest reconciler + <code>POST /provider/v1/judgments</code></td>
+          <td>Per-VM bearer auth observed; pinned served model recorded (never <code>jev-latest</code>); capsule holds no TypeSafe credential.</td></tr>
+      <tr><td>Result kinds + view partition</td>
+          <td>ActingPack object-shape check (no score fields); SupervisionPack carries full distributions; <code>Disagreement</code> split verified in both packs.</td></tr>
+      <tr><td>Crash matrix</td>
+          <td>Restart before dispatch / after response / before append / after append → one durable score; restart-re-resolve yields two resolutions, two scores, latest governs.</td></tr>
+      <tr><td>Failure taxonomy</td>
+          <td>429/529 → pending+backoff; auth/config → suspend + visible; invalid/refusal → terminal_unscored. Never fabricated, never self-scored fallback.</td></tr>
+      <tr><td>Jev jaggedness battery</td>
+          <td>Literal wording, adversarial state, numeric/date predicates, exact 0/1 outputs exercised; <code>confidence</code> never gates; numeric comparisons stay in code.</td></tr>
+    </table>
+    <p class="note" style="margin-top:18px">Deferred deliberately: PII adjudication, conductor routing, management judgments, sampled/delayed score delivery to cells (default-off knob; knob changes themselves get precommitment-gated), offline batch eval. History: orchestrator-authored precommitment scoring contract — owner ratification pending on this deck.</p>
+  </div>
+  <div class="folio"><span>CHOIR · JEV SCORER</span><span>5</span></div>
+</section>
+
+</body>
+</html>
