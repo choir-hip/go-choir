@@ -403,10 +403,8 @@ try {
     idempotency_key: `${marker}:actuator-rlm`,
     actuator: 'rlm',
   });
-  result.actuator_arm = actuatorArm.json ?? actuatorArm.text;
-  if (actuatorArm.status !== 200) throw new Error(`actuator rlm arm refused: ${JSON.stringify(result.actuator_arm)}`);
-  // The refresh re-serves the computer on a new guest realization; wait for
-  // the desktop to come back before arming mode or opening operations.
+  result.actuator_arm = { status: actuatorArm.status, ...(actuatorArm.json ?? { text: actuatorArm.text }) };
+  if (actuatorArm.status < 200 || actuatorArm.status >= 300) throw new Error(`actuator rlm arm refused: ${JSON.stringify(result.actuator_arm)}`);
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
   await waitForDesktopReady(page);
   mark('actuator_rlm_armed');
