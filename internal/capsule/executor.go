@@ -1431,6 +1431,10 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, readErr)
 		}
 		binary := bytes.IndexByte(initial[:n], 0) >= 0
+		if _, err := input.Seek(0, io.SeekStart); err != nil {
+			_ = input.Close()
+			return nil, "", err
+		}
 		scanner := bufio.NewScanner(&contextReader{ctx: ctx, reader: input})
 		scanner.Buffer(make([]byte, 64<<10), 1<<20)
 		for scanner.Scan() {

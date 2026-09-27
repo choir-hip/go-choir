@@ -244,7 +244,11 @@ func TestStageGrantedReleaseAdmitsBinaryStringBlob(t *testing.T) {
 		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-binary", Handle: "grant-binary"}: capability},
 		revokedCaps:  map[string]bool{}, publicKey: publicKey,
 	}
-	files, staged, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", t.TempDir())
+	incoming := t.TempDir()
+	if err := os.Chmod(incoming, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	files, staged, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming)
 	if err != nil {
 		t.Fatalf("genuine binary release refused: %v", err)
 	}
@@ -264,7 +268,6 @@ func TestStageGrantedReleaseAdmitsBinaryStringBlob(t *testing.T) {
 		t.Fatalf("secret-bearing binary release error = %v", err)
 	}
 }
-
 
 func TestExtractGrantedFreezesBeforeDiff(t *testing.T) {
 	upper := t.TempDir()
