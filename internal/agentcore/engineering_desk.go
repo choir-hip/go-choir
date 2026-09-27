@@ -3,14 +3,12 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -48,22 +46,26 @@ const restartCancelledAssignmentReason = "restart revoked absent assignment caps
 // guest restart — the only class that may re-execute under a bumped attempt.
 // Returns the latest attempt row and true when a recast is admissible.
 func latestCancelledForRestartRecast(assignments []types.EngineeringAssignment, assignmentID string) (types.EngineeringAssignment, bool) {
-	var latest types.EngineeringAssignment
-	found := false
-	for _, a := range assignments {
-		if a.AssignmentID != assignmentID {
-			continue
-		}
-		if !found || a.Binding.Attempt > latest.Binding.Attempt {
-			latest = a
-			found = true
-		}
-	}
+	latest, found := latestAssignmentAttempt(assignments, assignmentID)
 	if !found || !latest.Disposition.Terminal() {
 		return types.EngineeringAssignment{}, false
 	}
 	return latest, latest.Disposition == types.EngineeringAssignmentCancelled &&
 		strings.TrimSpace(latest.DispositionReason) == restartCancelledAssignmentReason
+}
+
+// latestAssignmentAttempt returns the highest-attempt recorded row for one
+// assignment identity; found=false when the identity has never been opened.
+func latestAssignmentAttempt(assignments []types.EngineeringAssignment, assignmentID string) (types.EngineeringAssignment, bool) {
+	var latest types.EngineeringAssignment
+	found := false
+	for _, a := range assignments {
+		if a.AssignmentID == assignmentID && (!found || a.Binding.Attempt > latest.Binding.Attempt) {
+			latest = a
+			found = true
+		}
+	}
+	return latest, found
 }
 
 // restartRecastReportRef resolves the prior attempt's cancel report ID — the
@@ -196,22 +198,16 @@ func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Docum
 	if listErr != nil {
 		return nil, fmt.Errorf("engineering desk reconcile: %w", listErr)
 	}
-	var latest types.EngineeringAssignment
-	existingFound := false
-	for _, a := range attempts {
-		if a.AssignmentID == assignmentID && (!existingFound || a.Binding.Attempt > latest.Binding.Attempt) {
-			latest = a
-			existingFound = true
-		}
-	}
+	latest, existingFound := latestAssignmentAttempt(attempts, assignmentID)
 	// Restart-recast: the newest attempt was cancelled because a guest restart
 	// revoked its capsule — system fate, not an owner/management decision. The
 	// document's cast intent is still live (the revision is still the head, the
 	// desk work item is still open), so the reconcile re-opens the cast at the
 	// next attempt with a retry_after_block supersede tuple. Deliberate cancels
 	// carry a different reason and remain terminal.
-	if latest, restartCancelled := latestCancelledForRestartRecast(attempts, assignmentID); restartCancelled &&
+	if latestCancelled, restartCancelled := latestCancelledForRestartRecast(attempts, assignmentID); restartCancelled &&
 		revision.RevisionID == snapshot.Document.CurrentRevisionID {
+		latest = latestCancelled
 		reportRef := rt.restartRecastReportRef(ctx, latest)
 		if reportRef == "" {
 			return nil, fmt.Errorf("engineering desk reconcile: restart-cancelled attempt %d has no cancel report receipt", latest.Binding.Attempt)
@@ -254,7 +250,7 @@ func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Docum
 		return &started.Assignment, nil
 	}
 	if latest.Disposition == types.EngineeringAssignmentCompleted {
-		if verification, verr := rt.reconcileEngineeringVerification(ctx, doc, snapshot, latest); verr != nil {
+		if verification, verr := rt.reconcileEngineeringVerification(ctx, doc, snapshot, latest, attempts); verr != nil {
 			return nil, verr
 		} else if verification != nil {
 			return verification, nil
@@ -266,7 +262,7 @@ func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Docum
 // reconcileEngineeringVerification opens the verification assignment for a
 // completed implementation when the bound self-development operation is
 // frozen. Host-side: no model turn mediates it.
-func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc types.Document, snapshot types.LifecycleSnapshot, implementation types.EngineeringAssignment) (*types.EngineeringAssignment, error) {
+func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc types.Document, snapshot types.LifecycleSnapshot, implementation types.EngineeringAssignment, attempts []types.EngineeringAssignment) (*types.EngineeringAssignment, error) {
 	if rt.selfdevOperations == nil {
 		return nil, nil
 	}
@@ -296,22 +292,48 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 	}
 	verificationID := deterministicDocumentAssignmentIdentity(implementation.Binding.OwnerID, implementation.Binding.ComputerID,
 		doc.TrajectoryID, implementation.Binding.ParentControlID, types.EngineeringAssignmentVerification, candidateID)
-	if existing, getErr := rt.store.GetEngineeringAssignment(ctx, implementation.Binding.OwnerID, implementation.Binding.ComputerID, verificationID, 1); getErr == nil {
-		if existing.Disposition == types.EngineeringAssignmentBound || existing.Disposition.Terminal() {
-			return &existing, nil
-		}
-	} else if !errors.Is(getErr, store.ErrNotFound) {
-		return nil, fmt.Errorf("engineering desk reconcile: %w", getErr)
-	}
+	vLatest, vFound := latestAssignmentAttempt(attempts, verificationID)
 	revision, revErr := rt.store.GetLifecycleRevision(ctx, implementation.Binding.OwnerID, implementation.Binding.ComputerID, implementation.Binding.ParentControlID)
 	if revErr != nil {
 		return nil, fmt.Errorf("engineering desk reconcile: load admitting revision: %w", revErr)
+	}
+	// Restart-recast mirrors the implementation branch: a restart-cancelled
+	// verification must not strand a frozen/awaiting-approval operation.
+	if vFound && vLatest.Disposition == types.EngineeringAssignmentCancelled &&
+		strings.TrimSpace(vLatest.DispositionReason) == restartCancelledAssignmentReason {
+		reportRef := rt.restartRecastReportRef(ctx, vLatest)
+		if reportRef == "" {
+			return nil, fmt.Errorf("engineering desk reconcile: restart-cancelled verification attempt %d has no cancel report receipt", vLatest.Binding.Attempt)
+		}
+		nextAttempt := vLatest.Binding.Attempt + 1
+		deltaDigest := objectgraph.SHA256([]byte(strings.Join([]string{
+			"retry_after_block", verificationID,
+			fmt.Sprint(vLatest.Binding.Attempt), fmt.Sprint(nextAttempt), restartCancelledAssignmentReason,
+		}, "\x00")))
+		objective := "Verify the frozen self-development bundle for operation " + operation.OperationID +
+			" against the implementation assignment's candidate artifact."
+		started, openErr := rt.startAssignedEngineeringForDocument(ctx, doc, revision, OpenDocumentAssignmentRequest{
+			Objective: objective, Kind: types.EngineeringAssignmentVerification, CandidateID: candidateID,
+			RevisionID: implementation.Binding.ParentControlID, Attempt: nextAttempt,
+			Supersedes: &types.EngineeringSupersedeTuple{
+				SupersedesAssignmentID: verificationID, SupersedesAttempt: vLatest.Binding.Attempt,
+				PriorReceiptRef: reportRef, SupersedeKind: types.EngineeringSupersedeRetryAfterBlock,
+				ReasonEnum: "restart_passivation", DeltaDigest: deltaDigest,
+			},
+		})
+		if openErr != nil {
+			return nil, fmt.Errorf("engineering desk reconcile: verification recast: %w", openErr)
+		}
+		return &started.Assignment, nil
+	}
+	if vFound && (vLatest.Disposition == types.EngineeringAssignmentBound || vLatest.Disposition.Terminal()) {
+		return &vLatest, nil
 	}
 	objective := "Verify the frozen self-development bundle for operation " + operation.OperationID +
 		" against the implementation assignment's candidate artifact."
 	started, openErr := rt.startAssignedEngineeringForDocument(ctx, doc, revision, OpenDocumentAssignmentRequest{
 		Objective: objective, Kind: types.EngineeringAssignmentVerification, CandidateID: candidateID,
-		RevisionID: implementation.Binding.ParentControlID,
+		RevisionID: implementation.Binding.ParentControlID, Attempt: vLatest.Binding.Attempt,
 	})
 	if openErr != nil {
 		return nil, fmt.Errorf("engineering desk reconcile: open verification: %w", openErr)
