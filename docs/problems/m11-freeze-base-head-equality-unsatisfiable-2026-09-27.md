@@ -3,7 +3,11 @@
 **Date:** 2026-09-27
 **Class:** red (self-development transition authority — the freeze leg decides
 what the computer's canonical event chain binds)
-**Status:** open, blocking M11 episode leg `executing -> frozen`.
+**Status:** repaired 2026-09-27 (commit 3812ec3e): freeze now asserts the
+pinned projection surface (desired/effective heads, empty pending
+transition) instead of canonical-head equality; regression test
+`TestFreezeAcceptsAdvancedBookkeepingHead` covers both directions.
+**Deployed proof pending** — episode probe rerun required.
 **First observed:** probe `M11_SELFDEV_EPISODE_1790532595839`, staging
 `19e2c256` (RLM-only desk deployed), computer
 `computer-330816470b1eb4386fd680e03a3dca3d`, operation
