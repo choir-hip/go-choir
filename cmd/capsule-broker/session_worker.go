@@ -346,7 +346,7 @@ func (b *Broker) handleInitSession(_ context.Context, cap *capsule.Capability, _
 	if err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("init_session: %v", err)}
 	}
-	raw, err := json.Marshal(map[string]any{"route": string(b.effectiveRoute()), "session": true, "pid": w.pid})
+	raw, err := json.Marshal(map[string]any{"session": true, "pid": w.pid})
 	if err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("init_session response: %v", err)}
 	}
@@ -369,11 +369,10 @@ func (b *Broker) handleCloseSession(_ context.Context, cap *capsule.Capability, 
 // handleGoEvalSession evaluates one cell on the activation's persistent
 // worker. A dead or poisoned worker is dropped and reported (never silently
 // retried: the cell may have partially executed). When no session worker can
-// start, the cell is not executed anywhere: the broker returns a typed
-// session diagnostic (unsafe-to-reuse/worker) instead of diverting to the
-// one-shot tools worker, which serves only explicit actuator=tools calls.
-// The cell deadline never exceeds the parent RPC deadline: a model-supplied
-// TimeoutMS cannot extend the activation budget.
+// start, the cell is not executed anywhere: the broker returns a typed session
+// diagnostic (unsafe-to-reuse/worker). The cell deadline never exceeds the
+// parent RPC deadline: a model-supplied TimeoutMS cannot extend the activation
+// budget.
 func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	var p capsule.GoEvalRequest
 	if err := json.Unmarshal(params, &p); err != nil {

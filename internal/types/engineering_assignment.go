@@ -676,3 +676,19 @@ type SetEngineeringCapsuleDispositionRequest struct {
 	FateStep                 *EngineeringCapsuleFateStep   `json:"fate_step,omitempty"`
 	PendingProposal          *EngineeringPendingProposal   `json:"pending_proposal,omitempty"`
 }
+
+// EmitEngineeringProgressObservationRequest commits one deduplicated
+// progress-overdue observation packet to the assignment's supervision target.
+// SilenceSinceUnixNano pins the exact silence window: re-arming on each
+// accepted report changes the value, so an older deadline replay or a window
+// that a fresher report already superseded resolves to the same command id
+// only when it is an exact retry.
+type EmitEngineeringProgressObservationRequest struct {
+	CommandID            string `json:"command_id"`
+	CommandDigest        string `json:"command_digest"`
+	OwnerID              string `json:"owner_id"`
+	ComputerID           string `json:"computer_id"`
+	AssignmentID         string `json:"assignment_id"`
+	Attempt              uint64 `json:"attempt"`
+	SilenceSinceUnixNano int64  `json:"silence_since_unix_nano"`
+}

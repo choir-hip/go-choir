@@ -1101,7 +1101,12 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 			return zero, "", producerAgentErr
 		}
 		producerProfile, _ := agentprofile.Canonical(producerAgent.Profile)
-		if producerAgent.OwnerID != o.OwnerID || producerAgent.ComputerID != o.ComputerID || producerAgent.ChannelID != o.DocumentID ||
+		// Doc-bound producers carry the document channel; self-channeled
+		// producers (Engineering assignments, persistent Management) carry
+		// their own agent id — the channel is the scope, not the document.
+		producerChannelMatches := producerAgent.ChannelID == o.DocumentID ||
+			(producerProfile != agentprofile.Research && producerAgent.ChannelID == producerAgent.AgentID)
+		if producerAgent.OwnerID != o.OwnerID || producerAgent.ComputerID != o.ComputerID || !producerChannelMatches ||
 			(producerProfile != agentprofile.Research && producerProfile != agentprofile.Management && producerProfile != agentprofile.Engineering) ||
 			(producerProfile == agentprofile.Management && producerAgent.AgentID != persistentManagementAgentID(o.OwnerID)) ||
 			(producerProfile != agentprofile.Management && producerAgent.LifecycleVersion <= 0) {
@@ -1131,7 +1136,13 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		}
 		producerRunProfile, _ := agentprofile.Canonical(producerRun.AgentProfile)
 		producerRunRole, _ := agentprofile.Canonical(producerRun.AgentRole)
-		if producerRun.RunID != canonical.SourceRunID || producerRun.OwnerID != o.OwnerID || producerRun.ComputerID != o.ComputerID || producerRun.AgentID != o.ProducerAgentID || !trajectoryBound || producerRun.ChannelID != o.DocumentID || producerRunProfile != producerProfile || producerRunRole != producerProfile {
+		// Doc-bound producer runs carry the document channel; Engineering
+		// assignment runs are self-channeled (ChannelID == AgentID) and
+		// Management runs carry the persistent agent's channel.
+		runChannelMatches := producerRun.ChannelID == o.DocumentID ||
+			(producerProfile == agentprofile.Engineering && producerRun.ChannelID == producerRun.AgentID) ||
+			(producerProfile == agentprofile.Management && producerRun.ChannelID == producerAgent.ChannelID)
+		if producerRun.RunID != canonical.SourceRunID || producerRun.OwnerID != o.OwnerID || producerRun.ComputerID != o.ComputerID || producerRun.AgentID != o.ProducerAgentID || !trajectoryBound || !runChannelMatches || producerRunProfile != producerProfile || producerRunRole != producerProfile {
 			return zero, "", invalidTextureOccurrence("Texture producer source run authority mismatch")
 		}
 		if authorityErr := rt.Core.ValidateLifecycleProducerReportAuthority(ctx, canonical); authorityErr != nil {

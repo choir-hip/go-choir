@@ -17,9 +17,9 @@ import (
 )
 
 // desk_go_eval (R3b): the host desk-cell carrier's sole tool for a non-capsule
-// desk under actuator=rlm. It evaluates model-authored Go source in a killable
-// host session worker — never in the daemon's address space — and reduces the
-// cell's staged intents through the same ledger path capsule_go_eval uses.
+// desk. It evaluates model-authored Go source in a killable host session worker
+// — never in the daemon's address space — and reduces the cell's staged intents
+// through the same ledger path capsule_go_eval uses.
 // The worker is re-executed from the daemon binary (autoputer desk-session);
 // SpawnDeskSessionWorker supplies the socketpair + process-group hardening.
 

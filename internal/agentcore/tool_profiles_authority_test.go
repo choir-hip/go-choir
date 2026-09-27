@@ -212,7 +212,6 @@ func TestStartCoagentRunHardRefusesEngineeringForEveryCaller(t *testing.T) {
 }
 
 func TestAssignedEngineeringPromptNamesExactKindWithoutFutureToolLie(t *testing.T) {
-	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
 	rt := &Runtime{}
 	for _, kind := range []types.EngineeringAssignmentKind{types.EngineeringAssignmentImplementation, types.EngineeringAssignmentVerification} {
 		rec := &types.RunRecord{RunID: "assigned", AgentID: "engineering:assigned", AgentProfile: agentprofile.Engineering, AgentRole: agentprofile.Engineering, Metadata: map[string]any{"assignment_id": "assignment", "assignment_kind": string(kind), "subject_digest": "sha256:subject", "source_candidate_id": "candidate"}}
@@ -253,18 +252,13 @@ func TestPersistentManagementReportToolDoesNotDependOnCapsuleExecutor(t *testing
 	}
 }
 
-// TestRLMAssignedEngineeringOverlayIsSealedGo is Def 2 item 4 schema derivation:
-// under the RLM route the assigned Engineering model schema keeps capsule_go_eval
-// as the sole capsule-effect entry plus host reconciliation channels, with
-// the JSON exec/file tools removed (subsumed by in-cell choir ops).
-func TestRLMAssignedEngineeringOverlayIsSealedGo(t *testing.T) {
-	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
-	if !capsule.HostSelectsRLM() {
-		t.Fatal("host route authority did not select RLM")
-	}
+// TestAssignedEngineeringOverlayIsSealedGo verifies the assigned Engineering
+// schema keeps capsule_go_eval as the sole capsule-effect entry plus host
+// reconciliation channels, with JSON exec/file tools removed.
+func TestAssignedEngineeringOverlayIsSealedGo(t *testing.T) {
 	registry, err := buildAssignedEngineeringRegistry(nil)
 	if err != nil {
-		t.Fatalf("build RLM assigned registry: %v", err)
+		t.Fatalf("build assigned registry: %v", err)
 	}
 	want := []string{"capsule_go_eval"}
 	if got := registryToolNames(registry); !slices.Equal(got, want) {

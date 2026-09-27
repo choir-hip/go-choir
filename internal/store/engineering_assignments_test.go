@@ -1795,3 +1795,241 @@ func TestRecordEngineeringOrphanObservation(t *testing.T) {
 		t.Fatalf("orphan retry replay = %+v, want replay of report %s", retry, result.Report.ReportID)
 	}
 }
+
+// seedDocCastEngineeringAuthority installs the document-parent authority the
+// engineering desk binds against: a live trajectory carrying doc_id, the
+// engineering:<doc> desk agent, an owner-authored revision (the parent
+// control), and the desk's open work item. Returns the binding inputs a
+// doc-cast OpenEngineeringAssignmentRequest needs.
+func seedDocCastEngineeringAuthority(t *testing.T, s *Store, ownerID, computerID string) (trajectoryID, docID, revisionID, deskAgentID, deskWorkID string) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	trajectoryID, docID, revisionID = "trajectory-doc-cast", "doc-cast-doc", "revision-doc-cast"
+	deskAgentID, deskWorkID = "engineering:"+docID, "work-engineering-doc-cast"
+	trajectory := types.TrajectoryRecord{
+		TrajectoryID: trajectoryID, OwnerID: ownerID, ComputerID: computerID,
+		Kind: types.TrajectoryKindTask, Status: types.TrajectoryLive,
+		SubjectRefs:      map[string]string{"doc_id": docID},
+		LifecycleVersion: 1, ReducerSeq: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	document := types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, Title: "Doc-cast authority", CurrentRevisionID: revisionID, CreatedAt: now, UpdatedAt: now}
+	revision := types.Revision{RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: "owner", Content: "owner revision", CreatedAt: now}
+	deskAgent := types.AgentRecord{
+		AgentID: deskAgentID, OwnerID: ownerID, ComputerID: computerID,
+		Profile: "engineering", Role: "engineering", ChannelID: docID,
+		LifecycleVersion: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	deskWork := types.WorkItemRecord{
+		WorkItemID: deskWorkID, TrajectoryID: trajectoryID, OwnerID: ownerID, ComputerID: computerID,
+		Objective: "desk supervision", AuthorityProfile: "engineering", Status: types.WorkItemOpen,
+		AssignedAgentID: deskAgentID, LifecycleVersion: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	trajObj, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, trajectoryID, trajectory, lifecycleMetadata("trajectory_id", trajectoryID, computerID, trajectoryID, 1), now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	docObj, err := lifecycleObject(ogKindTexDoc, ownerID, computerID, docID, document, map[string]any{"doc_id": docID, "computer_id": computerID}, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revObj, err := lifecycleObject(ogKindTexRev, ownerID, computerID, revisionID, revision, map[string]any{"revision_id": revisionID, "doc_id": docID, "computer_id": computerID}, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentObj, err := lifecycleObject(ogKindAgent, ownerID, computerID, deskAgentID, deskAgent, lifecycleMetadata("agent_id", deskAgentID, computerID, trajectoryID, 1), now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workObj, err := lifecycleObject(ogKindWorkItem, ownerID, computerID, deskWorkID, deskWork, lifecycleMetadata("work_item_id", deskWorkID, computerID, trajectoryID, 1), now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: []objectgraph.Object{trajObj, docObj, revObj, agentObj, workObj}}); err != nil {
+		t.Fatal(err)
+	}
+	return trajectoryID, docID, revisionID, deskAgentID, deskWorkID
+}
+
+func docCastEngineeringOpenRequest(ownerID, computerID, trajectoryID, revisionID, deskAgentID, deskWorkID, assignmentID string) types.OpenEngineeringAssignmentRequest {
+	binding := types.EngineeringAssignmentBinding{
+		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
+		ParentAgentID: deskAgentID, ParentRunID: "",
+		ParentDecisionID: "decision:" + objectgraph.SHA256([]byte("decision-"+assignmentID)),
+		ParentControlID:  revisionID,
+		ParentWorkItemID: deskWorkID, AssignedWorkItemID: "work-cast-" + assignmentID, AssignedAgentID: "engineering:" + assignmentID,
+		Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
+		ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
+		CapabilityDigest: DigestEngineeringOpaqueCapability("cap-" + assignmentID), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID)),
+		SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
+		SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
+		Writable:          true, CapsuleID: "capsule-" + assignmentID,
+		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+	}
+	req := types.OpenEngineeringAssignmentRequest{
+		CommandID: "command-open-" + assignmentID, AssignmentID: assignmentID, Binding: binding,
+		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: "doc-cast assignment"},
+	}
+	req.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(req)
+	return req
+}
+
+// TestDocCastEngineeringReportMintsTextureSubject pins the supervision surface
+// for document casts: the report packet is retargeted to the document's
+// Texture agent and work item, and both are minted in the same commit so the
+// producer-report occurrence path resolves.
+func TestDocCastEngineeringReportMintsTextureSubject(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	ownerID, computerID := "owner-doc-cast", "computer-doc-cast"
+	trajectoryID, docID, revisionID, deskAgentID, deskWorkID := seedDocCastEngineeringAuthority(t, s, ownerID, computerID)
+	if trajectoryID == "" || docID == "" || revisionID == "" || deskAgentID == "" || deskWorkID == "" {
+		t.Fatal("seed returned empty identity")
+	}
+
+	open := docCastEngineeringOpenRequest(ownerID, computerID, trajectoryID, revisionID, deskAgentID, deskWorkID, "assignment-doc-cast")
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatalf("open doc-cast assignment: %v", err)
+	}
+	bind := types.BindEngineeringAssignmentRequest{
+		CommandID: "command-bind-doc-cast", OwnerID: ownerID, ComputerID: computerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
+		RunID: "run-doc-cast",
+		Run: types.RunRecord{
+			RunID: "run-doc-cast", AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
+			RequestedByRunID: "", TrajectoryID: trajectoryID,
+			AgentProfile: "engineering", AgentRole: "engineering", OwnerID: ownerID, ComputerID: computerID,
+			State: types.RunPending, Prompt: open.AssignedWork.Objective,
+			Metadata: map[string]any{
+				"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
+				"requested_by_agent_id": deskAgentID, "requested_by_profile": "engineering",
+				"assignment_id": open.AssignmentID, "assignment_attempt": open.Binding.Attempt, "assignment_kind": string(open.Binding.Kind),
+				"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": deskWorkID,
+				"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
+				"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
+				"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
+				"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
+			},
+		},
+		OpaqueCapability: "cap-" + open.AssignmentID, CapsuleID: open.Binding.CapsuleID,
+	}
+	bind.CommandDigest, _ = ComputeBindEngineeringAssignmentDigest(bind)
+	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
+		t.Fatalf("bind doc-cast assignment: %v", err)
+	}
+
+	report := assignmentReportRequest(open, 2, "report-doc-cast", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
+	if _, err := s.RecordEngineeringAssignmentReport(ctx, report); err != nil {
+		t.Fatalf("record doc-cast report: %v", err)
+	}
+
+	textureAgentID := "texture:" + docID
+	agent, err := s.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
+	if err != nil {
+		t.Fatalf("texture subject missing after report: %v", err)
+	}
+	if agent.Profile != "texture" || agent.ChannelID != docID || agent.LifecycleVersion <= 0 {
+		t.Fatalf("minted texture subject malformed: %+v", agent)
+	}
+	work, err := s.GetLifecycleWorkItem(ctx, ownerID, computerID, "work:texture-supervision:"+docID)
+	if err != nil {
+		t.Fatalf("texture supervision work missing after report: %v", err)
+	}
+	if work.AssignedAgentID != textureAgentID || work.AuthorityProfile != "texture" || work.Status != types.WorkItemOpen {
+		t.Fatalf("minted supervision work malformed: %+v", work)
+	}
+	updates, err := s.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("pending texture updates = %d, want 1", len(updates))
+	}
+	update := updates[0]
+	if update.TargetAgentID != textureAgentID || update.TargetWorkItemID != work.WorkItemID ||
+		update.ChannelID != docID || update.TrajectoryID != trajectoryID || update.AgentID != open.Binding.AssignedAgentID {
+		t.Fatalf("retargeted update malformed: %+v", update)
+	}
+}
+
+// TestDocCastProgressObservation emits the derivable progress-overdue
+// observation on a bound, silent doc-cast assignment: the packet retargets to
+// the texture subject, replay dedupes, and a superseded silence anchor skips.
+func TestDocCastProgressObservation(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	ownerID, computerID := "owner-doc-cast", "computer-doc-cast"
+	trajectoryID, docID, revisionID, deskAgentID, deskWorkID := seedDocCastEngineeringAuthority(t, s, ownerID, computerID)
+
+	open := docCastEngineeringOpenRequest(ownerID, computerID, trajectoryID, revisionID, deskAgentID, deskWorkID, "assignment-obs")
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	bind := types.BindEngineeringAssignmentRequest{
+		CommandID: "command-bind-obs", OwnerID: ownerID, ComputerID: computerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
+		RunID: "run-obs",
+		Run: types.RunRecord{
+			RunID: "run-obs", AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
+			RequestedByRunID: "", TrajectoryID: trajectoryID,
+			AgentProfile: "engineering", AgentRole: "engineering", OwnerID: ownerID, ComputerID: computerID,
+			State: types.RunPending, Prompt: open.AssignedWork.Objective,
+			Metadata: map[string]any{
+				"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
+				"requested_by_agent_id": deskAgentID, "requested_by_profile": "engineering",
+				"assignment_id": open.AssignmentID, "assignment_attempt": open.Binding.Attempt, "assignment_kind": string(open.Binding.Kind),
+				"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": deskWorkID,
+				"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
+				"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
+				"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
+				"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
+			},
+		},
+		OpaqueCapability: "cap-" + open.AssignmentID, CapsuleID: open.Binding.CapsuleID,
+	}
+	bind.CommandDigest, _ = ComputeBindEngineeringAssignmentDigest(bind)
+	bound, err := s.BindEngineeringAssignment(ctx, bind)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+
+	silenceSince := bound.Assignment.UpdatedAt.UnixNano()
+	emit := types.EmitEngineeringProgressObservationRequest{
+		CommandID: fmt.Sprintf("progress-overdue:%s:1:%d", open.AssignmentID, silenceSince),
+		OwnerID:   ownerID, ComputerID: computerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, SilenceSinceUnixNano: silenceSince,
+	}
+	emit.CommandDigest, _ = ComputeEmitEngineeringProgressObservationDigest(emit)
+	result, err := s.EmitEngineeringProgressObservation(ctx, emit)
+	if err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	if result.Update == nil {
+		t.Fatal("emit returned no observation packet")
+	}
+	textureAgentID := "texture:" + docID
+	if result.Update.TargetAgentID != textureAgentID || result.Update.TargetWorkItemID != "work:texture-supervision:"+docID ||
+		result.Update.Direction != types.LifecyclePacketDirectionProducerReport || result.Update.Disposition != types.UpdatePending {
+		t.Fatalf("observation packet malformed: %+v", result.Update)
+	}
+
+	// Exact retry replays without minting a second packet.
+	replay, err := s.EmitEngineeringProgressObservation(ctx, emit)
+	if err != nil || !replay.Replay {
+		t.Fatalf("replay: %+v, %v", replay, err)
+	}
+	// A superseded silence anchor (fresher UpdatedAt) emits nothing.
+	stale := emit
+	stale.CommandID = fmt.Sprintf("progress-overdue:%s:1:%d", open.AssignmentID, silenceSince-1)
+	stale.SilenceSinceUnixNano = silenceSince - 1
+	stale.CommandDigest, _ = ComputeEmitEngineeringProgressObservationDigest(stale)
+	staleResult, err := s.EmitEngineeringProgressObservation(ctx, stale)
+	if err != nil {
+		t.Fatalf("stale emit: %v", err)
+	}
+	if staleResult.Update != nil {
+		t.Fatalf("stale anchor emitted packet %+v", staleResult.Update)
+	}
+}

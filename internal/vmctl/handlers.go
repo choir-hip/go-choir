@@ -43,9 +43,6 @@ type vmctlHealthResponse struct {
 type resolveRequest struct {
 	UserID    string `json:"user_id"`
 	DesktopID string `json:"desktop_id,omitempty"`
-	// Actuator is an optional owner-scoped route write (tools|rlm).
-	// Omitted on refresh preserves the stored value.
-	Actuator string `json:"actuator,omitempty"`
 	// Force bypasses divergence protection on refresh.
 	Force bool `json:"force,omitempty"`
 }
@@ -717,10 +714,9 @@ func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 
 // HandleRefresh handles POST /internal/vmctl/refresh.
 // It force-reboots an active computer onto the current guest image while
-// preserving persistent state. This endpoint is internal deploy machinery
-// and the actuator behind owner-scoped guest-boot refresh. Global deploy
-// still excludes constructed-computer-version realizations; owner-scoped
-// refresh of a named computer is a distinct authority.
+// preserving persistent state. This endpoint is internal deploy machinery.
+// Global deploy still excludes constructed-computer-version realizations;
+// owner-scoped refresh of a named computer is a distinct authority.
 func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
@@ -748,12 +744,6 @@ func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
-	}
-	if strings.TrimSpace(req.Actuator) != "" {
-		if err := h.registry.SetActuatorForDesktop(req.UserID, req.DesktopID, req.Actuator); err != nil {
-			writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
-			return
-		}
 	}
 
 	existing := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)

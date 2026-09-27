@@ -94,6 +94,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleAssignedEngineeringFateDeadline(ctx, u, memory)
 	case "delegated_assignment_spawn_deadline":
 		return h.handleDelegatedAssignmentSpawnDeadline(ctx, u, memory)
+	case "engineering_progress_overdue_deadline":
+		return h.handleEngineeringProgressDeadline(ctx, u, memory)
 	case "fresh_mint_management_resume_deadline":
 		return h.handleFreshMintManagementResumeDeadline(ctx, u, memory)
 	case "reactivated_management_resume_deadline":
@@ -146,6 +148,20 @@ func (h *actorHandler) handleDelegatedAssignmentSpawnDeadline(ctx context.Contex
 	}
 	if err := h.rt.HandleDelegatedAssignmentSpawnDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("actorruntime: delegated assignment spawn deadline: %w", err)
+	}
+	return memory, nil
+}
+
+// handleEngineeringProgressDeadline resolves the scoped supervisor mailbox and
+// evaluates the derivable progress-overdue wake. The handler re-reads durable
+// state, so replayed or superseded wakes are no-ops.
+func (h *actorHandler) handleEngineeringProgressDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve engineering progress deadline scope: %w", err)
+	}
+	if err := h.rt.HandleEngineeringProgressOverdueDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("actorruntime: engineering progress deadline: %w", err)
 	}
 	return memory, nil
 }
@@ -434,6 +450,12 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		log.Printf("actorruntime: persistent Management live occurrence received agent=%s trajectory=%s from=%s", agentID, u.TrajectoryID, u.FromAgentID)
 		rec, terminal, liveErr := h.rt.ResolvePersistentManagementLiveOccurrence(ctx, ownerID, computerID, agentID, u.Content, u.TrajectoryID, u.FromAgentID)
 		if liveErr != nil {
+			if errors.Is(liveErr, agentcore.ErrPersistentManagementReportOccurrence) {
+				// A producer report: never mint execution. Fall through to the
+				// generic park-resume path — it reactivates the parked run and
+				// injectUserTurns delivers the queued packet.
+				goto resumeGeneric
+			}
 			if errors.Is(liveErr, agentcore.ErrInvalidPersistentManagementRecovery) {
 				log.Printf("actorruntime: persistent Management live occurrence discarded as invalid agent=%s: %v", agentID, liveErr)
 				return nil, nil
@@ -549,6 +571,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		}
 		return h.memoryFromRunState(rec)
 	}
+resumeGeneric:
 	rs, err := decodeResumeState(memory)
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: decode resume state for coagent_result: %w", err)

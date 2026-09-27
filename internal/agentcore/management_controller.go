@@ -2622,6 +2622,13 @@ func (rt *Runtime) ResolvePersistentManagementLiveOccurrence(ctx context.Context
 		found = true
 	}
 	if !found {
+		reportPending, reportErr := rt.persistentManagementReportOccurrencePending(ctx, ownerID, computerID, agentID, content, trajectoryID, fromAgentID)
+		if reportErr != nil {
+			return nil, false, reportErr
+		}
+		if reportPending {
+			return nil, false, ErrPersistentManagementReportOccurrence
+		}
 		return nil, true, nil
 	}
 	rec, err := rt.reconcilePersistentManagementActorLocked(ctx, ownerID, agentID, matched.UpdateID)
@@ -2632,6 +2639,46 @@ func (rt *Runtime) ResolvePersistentManagementLiveOccurrence(ctx context.Context
 		return nil, true, nil
 	}
 	return rec, false, nil
+}
+
+// ErrPersistentManagementReportOccurrence marks a live occurrence whose hashed
+// content matches a pending producer report rather than a control. The actor
+// handler resumes the parked Management run through the generic path on this
+// signal — reports carry no execution authority, so the control resolver must
+// not mint or bind from them (Definition 1 / storm receipt 3654d925).
+var ErrPersistentManagementReportOccurrence = errors.New("persistent Management producer report occurrence")
+
+// persistentManagementReportOccurrencePending reports whether the hashed live
+// occurrence names a pending producer report addressed to this persistent
+// Management. Called only after the control scan fails to match.
+func (rt *Runtime) persistentManagementReportOccurrencePending(ctx context.Context, ownerID, computerID, agentID, content, trajectoryID, fromAgentID string) (bool, error) {
+	// Pending reports exist in two halves: undelivered (ListAllPendingLifecycleUpdates)
+	// and already-delivered to a run that is parked rather than executing
+	// (ListDeliveredPendingProducerReports). Either requires a wake to inject.
+	pending, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+	if err != nil {
+		return false, err
+	}
+	delivered, err := rt.store.ListDeliveredPendingProducerReports(ctx, ownerID, computerID, "")
+	if err != nil {
+		return false, err
+	}
+	for _, update := range append(pending, delivered...) {
+		if update.Direction != types.LifecyclePacketDirectionProducerReport {
+			continue
+		}
+		if lifecycleControlActorOccurrenceContent(update) != content {
+			continue
+		}
+		if trajectoryID != "" && strings.TrimSpace(update.TrajectoryID) != trajectoryID {
+			continue
+		}
+		if fromAgentID != "" && strings.TrimSpace(update.AgentID) != fromAgentID {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 // LifecycleControlActorOccurrenceContent returns the deterministic actor-log
@@ -2654,7 +2701,18 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 		return
 	}
 	if target == persistentManagementAgentID(update.OwnerID) && update.Direction == types.LifecyclePacketDirectionProducerReport {
-		return
+		resident, found, err := rt.activeRunByAgent(ctx, update.OwnerID, target)
+		if err != nil {
+			log.Printf("runtime: resolve resident Management for producer report wake: %v", err)
+			return
+		}
+		if !found || resident.State.Terminal() {
+			// No live Management run: the packet stays durable pending until an
+			// independent control opens Management and injects the mailbox.
+			// Dispatching without a run would mint one — the storm this gate
+			// exists to prevent (receipt 3654d925).
+			return
+		}
 	}
 	if update.Direction == types.LifecyclePacketDirectionControl {
 		if resident, found, err := rt.activeRunByAgent(ctx, update.OwnerID, target); err != nil {

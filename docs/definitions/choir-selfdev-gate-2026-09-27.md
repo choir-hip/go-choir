@@ -157,12 +157,17 @@ now:
     restart-cancelled cast recast 301fcc21; verification-cast recast
     530fcdb2; recast desk terminal-report uncommittable -> staged
     proposal commits 88419f88). Iteration cap deleted per owner ruling
-    (61bd89fc): runaway detection is management/texture's job. Remaining
-    substrate blocker: actuator=tools still defaults on fresh computers
-    (docs/problems/m11-tools-actuator-strands-choir-required-desk-2026-
-    09-27.md) and desk progress flows do not reach management/texture —
-    owner reprioritized M11 onto full-RLM cutover + information-flow
-    wiring before the episode leg.
+    (61bd89fc): runaway detection is management/texture's job. 2026-09-27
+    second session: actuator=tools deleted end to end (ownership field,
+    vmctl API, broker one-shot/legacy dispatch, HostSelectsRLM gate,
+    guest cmdline/env route) and the three supervision edges wired per
+    docs/problems/m11-supervision-blind-desk-progress-2026-09-27.md:
+    reports wake a resident parked Management run and stay durable
+    otherwise; document-cast reports retarget to texture:<doc> with the
+    supervision subject minted atomically at first report; a derivable
+    engineering_progress_overdue_deadline wake emits one observation
+    packet per silence window. Next: the episode leg on a fresh RLM
+    computer.
   candidate:
     id: none
     state: none
@@ -206,24 +211,19 @@ now:
       The reachable surface: selfdev API routes on choir.news, the
       decision-binding path (owner vs qualified-consensus receipt), the
       candidate-B path, and whether a live doc render of the episode's
-      records is observable this station.
   blocker_or_risk: >-
-    actuator=tools is the last live non-RLM route for the four desks:
-    fresh ownership omits Actuator -> fail-closed tools -> Engineering
-    gets a choir-less one-shot interpreter. Information flow is
-    half-built: Engineering->Management producer reports are durable but
-    never wake Management (management_controller.go:2648-2657);
-    document-cast reports die in the non-running desk mailbox;
-    Engineering->Texture is indirect-only. Processor/Reconciler/email/
-    conductor deferred to the world-wire phase per owner 2026-09-27.
+    Resolved in-worktree 2026-09-27: actuator=tools deleted end to end;
+    the three supervision edges repaired (management wake on resident
+    run, doc-cast texture retarget + atomic subject mint, derivable
+    progress-overdue observation). Residual risk: progress window (30m)
+    may be slow for stalled-desk detection inside one staging episode;
+    Processor/Reconciler/email/conductor deferred to world-wire phase
+    per owner 2026-09-27.
   next_action: >-
-    (1) Adjudicate the agentic-consensus plan for actuator deletion +
-    information-flow wiring (.agentic-consensus/full-rlm-info-flow-
-    20260927/); (2) delete actuator=tools end to end (ownership field,
-    boot param, HostSelectsRLM gate, broker one-shot/legacy, owner API);
-    (3) wire progress visibility (producer-report wake / doc-channel
-    routing per adjudication); (4) rerun the episode on a fresh RLM
-    computer: consensus->apply->verify->falsify->restore->report.
+    (1) Commit + land the full-RLM cutover and information-flow wiring
+    done in this worktree (actuator deletion + three supervision edges);
+    (2) rerun the episode on a fresh RLM computer:
+    consensus->apply->verify->falsify->restore->report.
 
 receipts:
   - "charter: M11 = self-development gate per plan §11.2 + stack 3e —

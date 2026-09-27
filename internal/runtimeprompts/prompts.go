@@ -31,9 +31,6 @@ type RunContextOptions struct {
 	// InCellCarrier is true when the run's desk lives on the in-cell carrier:
 	// peer coordination is choir.Message, not a JSON tool.
 	InCellCarrier bool
-	// NoReportChannel is true when the desk has no peer-coordination tool at
-	// all (tools-actuator assigned Engineering): the prompt must not name one.
-	NoReportChannel bool
 }
 
 func TemporalContext(opts TemporalContextOptions) string {
@@ -65,14 +62,9 @@ func RLMManagementOverlay() string {
 	return mustRenderOverlay("rlm_management_runtime", nil)
 }
 
-func EngineeringRuntimeOverlay() string {
-	return mustRenderOverlay("engineering_runtime", nil)
-}
-
-// RLMEngineeringOverlay is the sealed-Go variant served when actuator=rlm:
+// RLMEngineeringOverlay is the sealed-Go Engineering overlay:
 // capsule_go_eval is the sole capsule doorway and the choir package subsumes
-// the JSON file/exec tools. The legacy catalog sentence is replaced, not
-// amended, so the model never sees two authorities.
+// JSON file and exec operations so the model sees one authority.
 type RLMEngineeringOverlayOptions struct {
 	HasSelfDevelopmentOperation bool
 }

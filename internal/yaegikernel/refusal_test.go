@@ -161,11 +161,10 @@ func TestCannotExpandPackagesPastServerAllowlist(t *testing.T) {
 	}
 }
 
-// TestExecuteWorkerStdinRoundTrip verifies the --isolation-stage=exec-go-stdin
-// worker contract end-to-end: feeding a SidecarRequest JSON on stdin produces a
+// TestExecuteWorkerStdinRoundTrip verifies the standalone worker contract
+// end-to-end: feeding a SidecarRequest JSON on stdin produces a
 // SidecarResponse JSON on stdout with the evaluated program output. It re-execs
-// the test binary as a subprocess running ExecuteWorkerStdin (the worker entry
-// point), mirroring how cmd/capsule-broker launches --isolation-stage exec-go-stdin.
+// the test binary as a subprocess running ExecuteWorkerStdin.
 func TestExecuteWorkerStdinRoundTrip(t *testing.T) {
 	if os.Getenv("YAEGI_WORKER_EXEC") == "1" {
 		ExecuteWorkerStdin()

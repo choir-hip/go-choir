@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ const (
 	activationBudgetDeadlineUpdateKind         = "activation_budget_deadline"
 	assignedEngineeringFateDeadlineUpdateKind  = "assigned_engineering_fate_deadline"
 	delegatedAssignmentSpawnDeadlineUpdateKind = "delegated_assignment_spawn_deadline"
+	engineeringProgressDeadlineUpdateKind      = "engineering_progress_overdue_deadline"
 	freshMintManagementDeadlineUpdateKind      = "fresh_mint_management_resume_deadline"
 	reactivatedManagementDeadlineUpdateKind    = "reactivated_management_resume_deadline"
 	wireReconcilerPublishDeadlineUpdateKind    = "wire_reconciler_publish_deadline"
@@ -193,6 +195,76 @@ func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ow
 			assignment.AssignmentID, assignment.Binding.Attempt)
 	}
 	return nil
+}
+
+// HandleEngineeringProgressOverdueDeadline evaluates one derivable
+// progress-overdue wake: re-reads the assignment, skips when fresher progress
+// superseded the silence anchor or the assignment left the bound/active
+// state, and commits exactly one observation packet to the supervisor when
+// the window elapsed in silence. The packet rides the producer-report surface
+// — Texture for document casts, persistent Management for delegated casts —
+// so the supervisor observes "wedged" identically to observing a report.
+func (rt *Runtime) HandleEngineeringProgressOverdueDeadline(ctx context.Context, ownerID, computerID, agentID, content string) error {
+	if rt == nil || rt.store == nil {
+		return fmt.Errorf("runtime store unavailable")
+	}
+	var payload struct {
+		AssignmentID         string `json:"assignment_id"`
+		Attempt              uint64 `json:"attempt"`
+		SilenceSinceUnixNano int64  `json:"silence_since_unix_nano"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err != nil {
+		return fmt.Errorf("decode engineering progress deadline: %w", err)
+	}
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, payload.AssignmentID, payload.Attempt)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if assignment.Binding.ParentAgentID != agentID ||
+		assignment.Disposition != types.EngineeringAssignmentBound ||
+		assignment.PendingProposal != nil ||
+		assignment.CapsuleDisposition != types.EngineeringCapsuleActive ||
+		strings.TrimSpace(assignment.BoundRunID) == "" {
+		return nil
+	}
+	silenceSince := time.Unix(0, payload.SilenceSinceUnixNano).UTC()
+	if assignment.UpdatedAt.After(silenceSince) || time.Now().UTC().Before(silenceSince.Add(engineeringProgressReviewWindow())) {
+		return nil
+	}
+	req := types.EmitEngineeringProgressObservationRequest{
+		CommandID: fmt.Sprintf("progress-overdue:%s:%d:%d", payload.AssignmentID, payload.Attempt, payload.SilenceSinceUnixNano),
+		OwnerID:   ownerID, ComputerID: computerID,
+		AssignmentID: payload.AssignmentID, Attempt: payload.Attempt,
+		SilenceSinceUnixNano: payload.SilenceSinceUnixNano,
+	}
+	req.CommandDigest, err = store.ComputeEmitEngineeringProgressObservationDigest(req)
+	if err != nil {
+		return err
+	}
+	result, err := rt.store.EmitEngineeringProgressObservation(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !result.Replay && result.Update != nil {
+		rt.wakeUpdatedCoagent(ctx, *result.Update)
+	}
+	return nil
+}
+
+// engineeringProgressReviewWindow returns the bound-assignment silence window.
+// CHOIR_PROGRESS_DEADLINE (a Go duration) overrides the default for staging
+// probes and focused tests; it must be constant for a process's lifetime so
+// the outbox's derived not-before and the fire-time predicate agree.
+func engineeringProgressReviewWindow() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("CHOIR_PROGRESS_DEADLINE")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return store.EngineeringProgressReviewWindow
 }
 
 // scheduleContinuation mints the kernel's durable backup for a process-local

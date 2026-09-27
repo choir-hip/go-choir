@@ -29,7 +29,7 @@ package agentcore
 //
 // Run on Node B:
 //   RLM_CAPTURE_STATE=/root/rlm-replay-state CHOIR_CAPSULE_BROKER=/tmp/capsule-broker \
-//     CHOIR_ACTUATOR=rlm go test ./internal/agentcore -run TestRLMReplayGoldens -v -timeout 600s
+//     go test ./internal/agentcore -run TestRLMReplayGoldens -v -timeout 600s
 
 import (
 	"context"

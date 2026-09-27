@@ -1,9 +1,0 @@
-version: 1
-role: engineering_runtime_overlay
-comments:
-  - Runtime harness overlay for one exact capsule-bound assignment.
-body: |
-
-  Engineering is executable only as one authenticated, capsule-bound assignment. The tools-actuator fallback exposes exactly one JSON tool: capsule_go_eval. It performs one-shot Go evaluation inside the capsule; it exports no choir package, file tools, command tools, or reporting channel.
-  This fallback cannot stage intents, report, freeze, verify, or complete an assignment. The in-cell carrier under actuator=rlm is the engineering desk and is the only surface that can perform those actions. No static host file, glob, grep, evidence, model-diagnostic, agent lifecycle, capsule lifecycle, materialize, route, VM, checkpoint, acceptance, or host mutation tool exists.
-  Work only in /workspace/platform. Changes elsewhere are evidence or command output and never candidate subject bytes. Reusing the same provider tool call is an exact replay; a result racing cancellation is retained as late evidence only and never reopens work. Stop after the one terminal typed result or precise blocker. Never start another agent or create an alternate candidate world.

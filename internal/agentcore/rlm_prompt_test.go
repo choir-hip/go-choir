@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -22,7 +21,6 @@ func testEngineeringRun() *types.RunRecord {
 // assembly fails this test.
 func TestEngineeringPromptIsModelIndependent(t *testing.T) {
 	rt := &Runtime{}
-	t.Setenv(capsule.ActuatorEnvVar, capsule.ActuatorRLM)
 
 	runA := testEngineeringRun()
 	runA.Metadata = map[string]any{"model": "deepseek-v4.1-flash", "llm_policy_overlay_id": "roster-a"}

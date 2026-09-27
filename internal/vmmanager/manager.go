@@ -45,7 +45,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
-	"github.com/yusefmosiah/go-choir/internal/capsule"
 )
 
 // VMState represents the lifecycle state of a Firecracker VM.
@@ -158,11 +157,6 @@ type VMConfig struct {
 	// without starting the runtime, reconciling, or appending (authorized
 	// recovery boot only).
 	RecoveryReplayOnly bool
-
-	// Actuator is the durable guest execution route (tools|rlm). Rendered
-	// every boot as choir.actuator= in runtimeArgs, never stuffed into the
-	// wiped KernelParams blob. Empty fails closed to tools.
-	Actuator string
 }
 
 // VMInstance represents a running or stopped Firecracker VM.
@@ -1316,11 +1310,6 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	// RUNTIME_MAINTENANCE_HOLD=1). Every caller sets these explicitly.
 	cfg.MaintenanceHold = overrides.MaintenanceHold
 	cfg.RecoveryReplayOnly = overrides.RecoveryReplayOnly
-	// Actuator is durable across unflagged refresh: omit preserves the stored
-	// value; an explicit tools/rlm write is rollback or cutover.
-	if strings.TrimSpace(overrides.Actuator) != "" {
-		cfg.Actuator = capsule.ParseActuator(overrides.Actuator)
-	}
 	return cfg
 }
 
@@ -1455,7 +1444,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		if cfg.MaintenanceHold {
 			runtimeArgs = append(runtimeArgs, "choir.runtime_maintenance_hold=1")
 		}
-		runtimeArgs = append(runtimeArgs, actuatorKernelParam(cfg))
 		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
 		// Legacy approach with custom init script. Keep the same runtime service
@@ -1486,7 +1474,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		if cfg.GatewayToken != "" {
 			bootArgs += fmt.Sprintf(" choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken))
 		}
-		bootArgs += " " + actuatorKernelParam(cfg)
 	}
 
 	// Build boot-source config. If an initrd is available, include it
@@ -1526,9 +1513,6 @@ func sourceServiceRuntimeOwnerID(cfg VMConfig) string {
 		return ownerID
 	}
 	return "universal-wire-platform"
-}
-func actuatorKernelParam(cfg VMConfig) string {
-	return capsule.BootActuatorParam + "=" + capsule.ParseActuator(cfg.Actuator)
 }
 
 func guestIdentityKernelParams(cfg VMConfig) []string {

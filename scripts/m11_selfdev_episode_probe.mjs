@@ -28,7 +28,6 @@ const result = {
     fresh_owner: false,
     bootstrap_chain: false,
     pre_episode_checkpoint: false,
-    actuator_rlm_armed: false,
     propose_only_armed: false,
     primary_started: false,
     awaiting_approval: false,
@@ -389,25 +388,7 @@ try {
 
   // Pin the pre-episode head: the M9a restore target. The checkpoint mint is
   // idempotent authority work on the canonical head (rematerialize.go
-  // bindComputerCheckpoint -> published_checkpoint.checkpoint). It must run
-  // after the actuator refresh below so the pinned head is the realization
-  // the episode actually executes on.
-  // A fresh computer's ownership carries no actuator write, so the guest
-  // capsule broker resolves choir.actuator=tools and capsule_go_eval runs on
-  // the one-shot worker with no choir scope bound — the desk can never reach
-  // choir.Freeze/choir.Complete (M11 run 2026-09-27 op selfdev-8142089:
-  // 46 cells of undefined: choir, completion-guard strand). The episode's
-  // desk work requires the RLM carrier, so arm the owner-scoped actuator
-  // write through the product lifecycle path before any selfdev operation.
-  const actuatorArm = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/refresh`, {
-    idempotency_key: `${marker}:actuator-rlm`,
-    actuator: 'rlm',
-  });
-  result.actuator_arm = { status: actuatorArm.status, ...(actuatorArm.json ?? { text: actuatorArm.text }) };
-  if (actuatorArm.status < 200 || actuatorArm.status >= 300) throw new Error(`actuator rlm arm refused: ${JSON.stringify(result.actuator_arm)}`);
-  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
-  await waitForDesktopReady(page);
-  mark('actuator_rlm_armed');
+  // bindComputerCheckpoint -> published_checkpoint.checkpoint).
 
   const checkpointBind = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/checkpoint`, {});
   result.pre_episode_checkpoint_bind = checkpointBind.json ?? checkpointBind.text;

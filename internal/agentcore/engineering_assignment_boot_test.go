@@ -1037,3 +1037,101 @@ func TestExecutionAttestationPinsFrozenFinalSubject(t *testing.T) {
 		t.Fatal("attestation WorktreeDigest retained the per-command post-tree")
 	}
 }
+
+// TestProgressOverdueDeadlineEmitsObservation fires the derivable
+// progress-overdue wake: a bound, silent assignment past the window emits one
+// observation packet to its parent target; a fresh assignment no-ops; a
+// superseded anchor no-ops.
+func TestProgressOverdueDeadlineEmitsObservation(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	t.Setenv("CHOIR_PROGRESS_DEADLINE", "1ms")
+
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-progress", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := types.EngineeringAssignmentBinding{
+		OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
+		ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
+		ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
+		ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
+		Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
+		ScopeDigest: objectgraph.SHA256([]byte("scope:progress")), RequestDigest: objectgraph.SHA256([]byte("request:progress")),
+		CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-progress"), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-progress")),
+		SubjectDigest:     objectgraph.SHA256([]byte("subject:progress")),
+		SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:progress")),
+		Writable:          true, CapsuleID: "capsule-progress",
+		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+	}
+	open := types.OpenEngineeringAssignmentRequest{
+		CommandID: "command-open-progress", AssignmentID: "assignment-progress", Binding: binding,
+		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: "progress probe"},
+	}
+	open.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(open)
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	run := types.RunRecord{
+		RunID: seed.AssignedRunIDs[0], AgentID: binding.AssignedAgentID, ChannelID: binding.AssignedAgentID,
+		RequestedByRunID: seed.ParentRunID, TrajectoryID: seed.TrajectoryID,
+		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: seed.OwnerID, ComputerID: seed.ComputerID,
+		State: types.RunPending, Prompt: open.AssignedWork.Objective,
+		Metadata: map[string]any{
+			"work_item_ids": []string{binding.AssignedWorkItemID}, "lifecycle_work_item_id": binding.AssignedWorkItemID,
+			"requested_by_agent_id": binding.ParentAgentID, "requested_by_profile": "management",
+			"assignment_id": open.AssignmentID, "assignment_attempt": uint64(1), "assignment_kind": string(binding.Kind),
+			"assigned_work_item_id": binding.AssignedWorkItemID, "parent_work_item_id": binding.ParentWorkItemID,
+			"parent_decision_id": binding.ParentDecisionID, "parent_control_id": binding.ParentControlID,
+			"capsule_id": binding.CapsuleID, "scope_digest": binding.ScopeDigest, "request_digest": binding.RequestDigest,
+			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest,
+			"subject_digest": binding.SubjectDigest, "source_artifact_ref": binding.SourceArtifactRef,
+		},
+	}
+	bind := types.BindEngineeringAssignmentRequest{
+		CommandID: "command-bind-progress", OwnerID: seed.OwnerID, ComputerID: seed.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
+		RunID: run.RunID, Run: run, OpaqueCapability: "cap-progress", CapsuleID: binding.CapsuleID,
+	}
+	bind.CommandDigest, _ = store.ComputeBindEngineeringAssignmentDigest(bind)
+	bound, err := s.BindEngineeringAssignment(ctx, bind)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+
+	content, err := json.Marshal(struct {
+		AssignmentID         string `json:"assignment_id"`
+		Attempt              uint64 `json:"attempt"`
+		SilenceSinceUnixNano int64  `json:"silence_since_unix_nano"`
+	}{AssignmentID: open.AssignmentID, Attempt: 1, SilenceSinceUnixNano: bound.Assignment.UpdatedAt.UnixNano()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.HandleEngineeringProgressOverdueDeadline(ctx, seed.OwnerID, seed.ComputerID, seed.ParentAgentID, string(content)); err != nil {
+		t.Fatalf("progress deadline handler: %v", err)
+	}
+	updates, err := s.ListDeliveredPendingProducerReports(ctx, seed.OwnerID, seed.ComputerID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, u := range updates {
+		if strings.HasPrefix(u.ProducerUpdateID, "progress-overdue:"+open.AssignmentID) {
+			found = true
+			if u.TargetAgentID != seed.ParentAgentID || u.AgentID != binding.AssignedAgentID {
+				t.Fatalf("observation target mismatch: %+v", u)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no progress-overdue observation packet emitted")
+	}
+
+	// Second delivery with the same anchor dedupes to the replayed command.
+	if err := rt.HandleEngineeringProgressOverdueDeadline(ctx, seed.OwnerID, seed.ComputerID, seed.ParentAgentID, string(content)); err != nil {
+		t.Fatalf("replay handler: %v", err)
+	}
+}

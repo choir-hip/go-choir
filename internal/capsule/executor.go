@@ -378,11 +378,6 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 		brokerPath = "/run/current-system/sw/bin:" + brokerPath
 	}
 	cmd.Env = []string{"PATH=" + brokerPath + ":/bin:/usr/bin", "HOME=/root", "TMPDIR=/tmp"}
-	// RLM cutover route (Def 2): when the host activation selects the RLM
-	// actuator, forward it into the broker process env where resolveActuator
-	// owns the route. Unset means tools (broker default); the wire format is
-	// unchanged and tools behavior is byte-identical without it.
-	cmd.Env = append(cmd.Env, ActuatorEnvVar+"="+EffectiveActuator())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{

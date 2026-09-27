@@ -567,7 +567,10 @@ func (rt *Runtime) ValidateLifecycleProducerReportAuthority(ctx context.Context,
 	if profile == agentprofile.Management {
 		trajectoryBound = run.TrajectoryID == "" && metadataStringValue(run.Metadata, "assignment_trajectory_id") == report.TrajectoryID
 	}
-	if run.RunID != report.SourceRunID || run.OwnerID != report.OwnerID || run.ComputerID != report.ComputerID || run.AgentID != report.AgentID || !trajectoryBound || run.ChannelID != report.ChannelID || !lifecycleControlWorkIDsForRun(run)[report.ProducerWorkItemID] {
+	runChannelBound := run.ChannelID == report.ChannelID ||
+		(profile == agentprofile.Engineering && run.ChannelID == run.AgentID) ||
+		(profile == agentprofile.Management && run.ChannelID == run.AgentID)
+	if run.RunID != report.SourceRunID || run.OwnerID != report.OwnerID || run.ComputerID != report.ComputerID || run.AgentID != report.AgentID || !trajectoryBound || !runChannelBound || !lifecycleControlWorkIDsForRun(run)[report.ProducerWorkItemID] {
 		return invalidLifecycleProducerReportAuthority("producer report source run authority mismatch")
 	}
 	if profile == agentprofile.Management {

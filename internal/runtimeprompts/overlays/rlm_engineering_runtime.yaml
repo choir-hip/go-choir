@@ -1,8 +1,8 @@
 version: 1
 role: rlm_engineering_runtime_overlay
 comments:
-  - "Sealed-Go overlay for one exact capsule-bound assignment under actuator=rlm."
-  - "Replaces the JSON tool catalog: capsule_go_eval is the sole doorway."
+  - "Sealed-Go overlay for one exact capsule-bound assignment."
+  - "capsule_go_eval is the sole doorway."
 body: |
 
   Engineering Authority & The Capsule Doorway:

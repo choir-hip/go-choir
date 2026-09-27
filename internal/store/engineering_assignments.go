@@ -304,6 +304,14 @@ func ComputeCancelEngineeringAssignmentDigest(req types.CancelEngineeringAssignm
 	return computeEngineeringCommandDigest(req)
 }
 
+// ComputeEmitEngineeringProgressObservationDigest binds the observation to the
+// exact silence window it reports: the assignment + silence-since timestamp.
+// Re-delivery of the same arming replays; a later arming mints a new command.
+func ComputeEmitEngineeringProgressObservationDigest(req types.EmitEngineeringProgressObservationRequest) (string, error) {
+	req.CommandDigest = ""
+	return computeEngineeringCommandDigest(req)
+}
+
 func ComputeSetEngineeringCapsuleDispositionDigest(req types.SetEngineeringCapsuleDispositionRequest) (string, error) {
 	req.CommandDigest = ""
 	if req.FateStep != nil {
@@ -1663,7 +1671,10 @@ func buildEngineeringReturnPacket(now time.Time, seq int64, assignment types.Eng
 	updateID := "assignment-report:" + report.ReportID
 	deliveredRunID := ""
 	var deliveredAt *time.Time
-	if !parentRun.State.Terminal() {
+	// Delivery marks only a live parent run receiving the packet. Document
+	// casts have no parent run: the packet stays undelivered and reaches
+	// Texture through the pending-update fallback scan + occurrence resolver.
+	if assignment.Binding.ParentRunID != "" && !parentRun.State.Terminal() {
 		deliveredRunID = assignment.Binding.ParentRunID
 		deliveredAt = &now
 	}
@@ -1679,11 +1690,68 @@ func buildEngineeringReturnPacket(now time.Time, seq int64, assignment types.Eng
 		Packet: packetPayload, Content: content, CreatedAt: now,
 		DeliveredToRunID: deliveredRunID, DeliveredAt: deliveredAt,
 	}
+	// Document casts (ParentRunID == "") target the durable Engineering desk
+	// agent, which never runs — the report would die in its mailbox. Retarget
+	// to the document's owning Texture agent so the existing producer-report
+	// occurrence path wakes Texture on the assignment's progress.
+	if strings.TrimSpace(assignment.Binding.ParentRunID) == "" && strings.HasPrefix(assignment.Binding.ParentAgentID, agentprofile.Engineering+":") {
+		docID := strings.TrimPrefix(assignment.Binding.ParentAgentID, agentprofile.Engineering+":")
+		if docID != "" {
+			update.TargetAgentID = agentprofile.Texture + ":" + docID
+			update.TargetWorkItemID = "work:texture-supervision:" + docID
+		}
+	}
 	key := update.TrajectoryID + "\x00" + update.TargetAgentID + "\x00" + update.AgentID + "\x00" + update.ProducerUpdateID
 	meta := lifecycleMetadata("update_id", update.UpdateID, update.ComputerID, update.TrajectoryID, seq)
 	meta["producer_update_id"], meta["target_agent_id"] = update.ProducerUpdateID, update.TargetAgentID
 	obj, err := lifecycleObject(ogKindWorkerUpdate, update.OwnerID, update.ComputerID, key, update, meta, now, now)
 	return update, obj, err
+}
+
+// textureSupervisionSubject derives the durable texture:<docID> subject and
+// its open supervision work item for a document-cast assignment. Both are
+// minted inside the report/cancel commit so the retargeted producer-report
+// packet resolves an existing Texture occurrence authority; the commit uses
+// not-exists conditions so the objects never overwrite an existing subject.
+func (s *Store) textureSupervisionSubject(ctx context.Context, ownerID, computerID string, binding types.EngineeringAssignmentBinding, seq int64, now time.Time) (agentObj, workObj objectgraph.Object, err error) {
+	if strings.TrimSpace(binding.ParentRunID) != "" || !strings.HasPrefix(binding.ParentAgentID, agentprofile.Engineering+":") {
+		return agentObj, workObj, nil
+	}
+	docID := strings.TrimSpace(strings.TrimPrefix(binding.ParentAgentID, agentprofile.Engineering+":"))
+	if docID == "" {
+		return agentObj, workObj, nil
+	}
+	agentID := agentprofile.Texture + ":" + docID
+	if existing, getErr := s.GetAgentByScope(ctx, ownerID, computerID, agentID); getErr == nil && existing.AgentID == agentID {
+		return agentObj, workObj, nil
+	} else if getErr != nil && !errors.Is(getErr, ErrNotFound) {
+		return agentObj, workObj, getErr
+	}
+	agent := types.AgentRecord{
+		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID,
+		LifecycleVersion: 1, LastReducerSeq: seq, CreatedAt: now, UpdatedAt: now,
+	}
+	agentMeta := lifecycleMetadata("agent_id", agent.AgentID, computerID, binding.TrajectoryID, seq)
+	agentMeta["channel_id"] = agent.ChannelID
+	agentObj, err = lifecycleObject(ogKindAgent, ownerID, computerID, agent.AgentID, agent, agentMeta, agent.CreatedAt, now)
+	if err != nil {
+		return objectgraph.Object{}, objectgraph.Object{}, err
+	}
+	work := types.WorkItemRecord{
+		WorkItemID: "work:texture-supervision:" + docID, OwnerID: ownerID, ComputerID: computerID,
+		TrajectoryID: binding.TrajectoryID, AssignedAgentID: agent.AgentID,
+		Objective: "Supervise the engineering desk's assignment reports for this document",
+		Reason:    "document-cast engineering supervision surface", AuthorityProfile: agentprofile.Texture,
+		Status: types.WorkItemOpen, CreatedByRunID: binding.ParentRunID,
+		LifecycleVersion: 1, LastReducerSeq: seq, CreatedAt: now, UpdatedAt: now,
+	}
+	workObj, err = lifecycleObject(ogKindWorkItem, ownerID, computerID, work.WorkItemID, work,
+		lifecycleMetadata("work_item_id", work.WorkItemID, computerID, binding.TrajectoryID, seq), now, now)
+	if err != nil {
+		return objectgraph.Object{}, objectgraph.Object{}, err
+	}
+	return agentObj, workObj, nil
 }
 
 // coManagementParentReturnTarget resolves the return-packet parent run and channel
@@ -2119,6 +2187,16 @@ func (s *Store) RecordEngineeringAssignmentReport(ctx context.Context, req types
 		update = &created
 		objects = append(objects, updateObj)
 		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID})
+		supervisionAgentObj, supervisionWorkObj, mintErr := s.textureSupervisionSubject(ctx, req.OwnerID, req.ComputerID, assignment.Binding, transition.seq, now)
+		if mintErr != nil {
+			return types.EngineeringAssignmentCommandResult{}, mintErr
+		}
+		if supervisionAgentObj.CanonicalID != "" {
+			objects = append(objects, supervisionAgentObj, supervisionWorkObj)
+			conditions = append(conditions,
+				objectgraph.ObjectCondition{CanonicalID: supervisionAgentObj.CanonicalID},
+				objectgraph.ObjectCondition{CanonicalID: supervisionWorkObj.CanonicalID})
+		}
 	}
 	if assignment.Disposition.Terminal() && !report.Late {
 		projectionObjects, projectionConditions, projectionErr := s.projectEngineeringTerminal(ctx, assignment, transition.seq, now, report.ReportID, assignment.DispositionReason)
@@ -2244,8 +2322,20 @@ func (s *Store) CancelEngineeringAssignment(ctx context.Context, req types.Cance
 	}
 	objects := []objectgraph.Object{updatedObj, reportObj, updateObj}
 	objects = append(objects, projectionObjects...)
+	supervisionAgentObj, supervisionWorkObj, mintErr := s.textureSupervisionSubject(ctx, req.OwnerID, req.ComputerID, assignment.Binding, transition.seq, now)
+	if mintErr != nil {
+		return types.EngineeringAssignmentCommandResult{}, mintErr
+	}
+	if supervisionAgentObj.CanonicalID != "" {
+		objects = append(objects, supervisionAgentObj, supervisionWorkObj)
+	}
 	conditions := append(engineeringParentAuthorityConditions(parentAuthority), engineeringObjectCondition(assignmentObj),
 		objectgraph.ObjectCondition{CanonicalID: reportObj.CanonicalID}, objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID})
+	if supervisionAgentObj.CanonicalID != "" {
+		conditions = append(conditions,
+			objectgraph.ObjectCondition{CanonicalID: supervisionAgentObj.CanonicalID},
+			objectgraph.ObjectCondition{CanonicalID: supervisionWorkObj.CanonicalID})
+	}
 	conditions = append(conditions, projectionConditions...)
 	return s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleCancelEngineeringAssignment, types.LifecycleEngineeringAssignmentCancelled,
 		req.CommandID, req.CommandDigest, assignment, &report, nil, report.ReportID, req.Reason, objects,
@@ -2486,4 +2576,92 @@ func (s *Store) RecordEngineeringOrphanObservation(ctx context.Context, obs type
 	}
 	req.CommandDigest, _ = ComputeRecordEngineeringAssignmentReportDigest(req)
 	return s.RecordEngineeringAssignmentReport(ctx, req)
+}
+
+// EmitEngineeringProgressObservation commits one deduplicated
+// progress-overdue observation packet for a bound assignment that has stayed
+// silent past its arming window. The command is the reducer-side predicate:
+// it refuses a terminal or unbound assignment and a stale silence anchor,
+// mints the ProducerReport-shaped packet through the same return-packet path
+// real reports use (including the document-cast retarget to the document's
+// Texture subject and the supervision-subject mint), and deduplicates by
+// CommandID so replayed deadline deliveries emit one packet.
+func (s *Store) EmitEngineeringProgressObservation(ctx context.Context, req types.EmitEngineeringProgressObservationRequest) (types.EngineeringAssignmentCommandResult, error) {
+	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
+	req.OwnerID, req.ComputerID, req.AssignmentID = strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID), strings.TrimSpace(req.AssignmentID)
+	if err := validateEngineeringCommand(req.CommandID, req.CommandDigest, req.AssignmentID, req.Attempt); err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
+	}
+	if req.SilenceSinceUnixNano <= 0 {
+		return types.EngineeringAssignmentCommandResult{}, ErrEngineeringAssignmentInvalid
+	}
+	computedDigest, digestErr := ComputeEmitEngineeringProgressObservationDigest(req)
+	if err := requireEngineeringCommandDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
+	}
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+	if replay, found, err := s.replayEngineeringAssignmentCommand(ctx, req.OwnerID, req.ComputerID, req.CommandID, req.CommandDigest, req.AssignmentID, req.Attempt, ""); found || err != nil {
+		return replay, err
+	}
+	_, assignment, err := s.getEngineeringAssignmentObject(ctx, req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
+	}
+	// The observation is only meaningful while the assignment is live and
+	// bound; terminal or never-bound assignments resolve silently.
+	if assignment.Disposition != types.EngineeringAssignmentBound || strings.TrimSpace(assignment.BoundRunID) == "" {
+		return types.EngineeringAssignmentCommandResult{}, nil
+	}
+	silenceSince := time.Unix(0, req.SilenceSinceUnixNano).UTC()
+	if assignment.UpdatedAt.After(silenceSince) {
+		// A report or disposition change after the arming superseded this
+		// window; the fresher arming owns the observation.
+		return types.EngineeringAssignmentCommandResult{}, nil
+	}
+	parentAuthority, err := s.requireEngineeringParentAuthority(ctx, assignment.Binding)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
+	}
+	if parentAuthority.trajectoryRec.Status != types.TrajectoryLive {
+		return types.EngineeringAssignmentCommandResult{}, nil
+	}
+	now := time.Now().UTC()
+	transition, err := s.prepareEngineeringLifecycleTransition(ctx, parentAuthority.trajectory, parentAuthority.trajectoryRec, now)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
+	}
+	parentRun, parentChannelID, decodeErr := engineeringParentReturnTarget(parentAuthority, assignment.Binding)
+	if decodeErr != nil {
+		return types.EngineeringAssignmentCommandResult{}, decodeErr
+	}
+	observationReport := types.EngineeringAssignmentReport{
+		ReportID:     fmt.Sprintf("progress-overdue:%s:%d:%d", assignment.AssignmentID, assignment.Binding.Attempt, req.SilenceSinceUnixNano),
+		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
+		Result: types.EngineeringResultBlocked, Verdict: types.EngineeringVerdictNone,
+		ObservedSubjectDigest: assignment.Binding.SubjectDigest,
+		Summary: fmt.Sprintf("progress overdue: bound assignment %s attempt %d silent since %s (last durable progress %s)",
+			assignment.AssignmentID, assignment.Binding.Attempt, silenceSince.Format(time.RFC3339), assignment.UpdatedAt.Format(time.RFC3339)),
+		CreatedAt: now,
+	}
+	update, updateObj, err := buildEngineeringReturnPacket(now, transition.seq, assignment, observationReport, parentRun, parentChannelID, false)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
+	}
+	objects := []objectgraph.Object{updateObj}
+	conditions := append(engineeringParentAuthorityConditions(parentAuthority),
+		objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID})
+	supervisionAgentObj, supervisionWorkObj, mintErr := s.textureSupervisionSubject(ctx, req.OwnerID, req.ComputerID, assignment.Binding, transition.seq, now)
+	if mintErr != nil {
+		return types.EngineeringAssignmentCommandResult{}, mintErr
+	}
+	if supervisionAgentObj.CanonicalID != "" {
+		objects = append(objects, supervisionAgentObj, supervisionWorkObj)
+		conditions = append(conditions,
+			objectgraph.ObjectCondition{CanonicalID: supervisionAgentObj.CanonicalID},
+			objectgraph.ObjectCondition{CanonicalID: supervisionWorkObj.CanonicalID})
+	}
+	return s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleQueueUpdate, types.LifecycleUpdateQueued,
+		req.CommandID, req.CommandDigest, assignment, nil, nil, observationReport.ReportID, "progress_overdue", objects,
+		conditions, nil, &update, nil)
 }

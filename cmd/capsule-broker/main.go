@@ -46,37 +46,7 @@ type Broker struct {
 	authorizedPeerUID  uint32
 	listener           net.Listener
 	brokerBin          string // path to this broker binary (for go_eval worker spawn)
-	actuator           actuatorRoute
-	sessionWorkerReady bool // session worker manager ships with Def 2 item 3
-}
-
-// actuatorRoute selects the execution route for an activation. Tools is the
-// legacy JSON-verb dispatcher; RLM routes model work through model-written Go
-// in the persistent session interpreter.
-type actuatorRoute string
-
-const (
-	actuatorTools actuatorRoute = actuatorRoute(capsule.ActuatorTools)
-	actuatorRLM   actuatorRoute = actuatorRoute(capsule.ActuatorRLM)
-)
-
-// resolveActuatorRoute is the dispatch side of the route authority: the guest
-// kernel command line (machine boot setting choir.actuator=) wins, the
-// forwarded broker env CHOIR_ACTUATOR is the fallback, and anything else
-// fails closed to tools. The model-facing schema side lives in the host
-// overlay builder (agentcore derives it from the host env); get_actuator
-// only advertises this broker's resolved route for diagnosis.
-func resolveActuatorRoute() actuatorRoute {
-	return actuatorRoute(capsule.EffectiveActuator())
-}
-
-// effectiveRoute applies session-worker readiness: RLM requested but not
-// ready falls back to tools with an observable receipt (Def 2 fallback).
-func (b *Broker) effectiveRoute() actuatorRoute {
-	if b != nil && b.actuator == actuatorRLM && b.sessionWorkerReady {
-		return actuatorRLM
-	}
-	return actuatorTools
+	sessionWorkerReady bool
 }
 
 // Session represents a long-lived shell session.
@@ -139,13 +109,6 @@ func main() {
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
-	}
-	if isolationStage == "exec-go-stdin" {
-		// Standalone activation worker: read a SidecarRequest on stdin and
-		// write a SidecarResponse on stdout. This is the killable process PG
-		// boundary for model-authored Go evaluation inside the capsule.
-		yaegikernel.ExecuteWorkerStdin()
-		return
 	}
 	if isolationStage == "exec-go-session" {
 		cfg := yaegikernel.SessionWorkerConfig{
@@ -252,10 +215,9 @@ func main() {
 		sessionWorkers:     make(map[string]*sessionWorker),
 		revokedCaps:        make(map[string]bool),
 		brokerBin:          "/run/capsule/broker",
-		actuator:           resolveActuatorRoute(),
 		sessionWorkerReady: true,
 	}
-	log.Printf("capsule-broker: actuator route=%s (CHOIR_ACTUATOR; session worker ready=%v)", broker.actuator, broker.sessionWorkerReady)
+	log.Printf("capsule-broker: session worker ready=%v", broker.sessionWorkerReady)
 
 	// Handle signals for clean shutdown.
 	sigCh := make(chan os.Signal, 1)
@@ -419,8 +381,6 @@ func (b *Broker) handleRPC(req BrokerRPCRequest) BrokerRPCResponse {
 		return b.handleKillSession(ctx, &cap, req.Params)
 	case "go_eval":
 		return b.handleGoEval(ctx, &cap, req.Params)
-	case "get_actuator":
-		return b.handleGetActuator(ctx, &cap, req.Params)
 	case "init_session":
 		return b.handleInitSession(ctx, &cap, req.Params)
 	case "close_session":
@@ -430,43 +390,7 @@ func (b *Broker) handleRPC(req BrokerRPCRequest) BrokerRPCResponse {
 	}
 }
 
-// handleGetActuator advertises the activation route: the requested actuator,
-// the effective route after session-worker readiness (fallback to tools when
-// RLM is requested but unready), and session readiness itself. The host reads
-// this when building the model-facing tool schema so schema and dispatcher
-// cannot disagree.
-func (b *Broker) handleGetActuator(_ context.Context, _ *capsule.Capability, _ json.RawMessage) BrokerRPCResponse {
-	requested := actuatorTools
-	ready := false
-	if b != nil {
-		requested = b.actuator
-		if requested == "" {
-			requested = actuatorTools
-		}
-		ready = b.sessionWorkerReady
-	}
-	route := b.effectiveRoute()
-	if requested == actuatorRLM && route == actuatorTools {
-		log.Printf("capsule-broker: actuator fallback to tools (RLM requested, session worker not ready)")
-	}
-	raw, err := json.Marshal(map[string]string{
-		"requested":     string(requested),
-		"route":         string(route),
-		"session_ready": map[bool]string{true: "true", false: "false"}[ready],
-	})
-	if err != nil {
-		return BrokerRPCResponse{Error: fmt.Sprintf("failed to marshal actuator route: %v", err)}
-	}
-	return BrokerRPCResponse{Result: raw}
-}
-
-// handleExec executes a command in the capsule.
-//
-// Direct-argv is canonical: when params carry a non-empty args vector, the
-// binary runs with no shell, a strict environment allowlist, and its own
-// process group (SIGKILL reaped within execKillReapGrace). An empty args
-// vector selects the frozen legacy shell path, kept only for rollback of
-// legacy JSON tools and unreachable in RLM mode.
+// handleExec executes a direct-argv command in the capsule.
 func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
 	var p capsule.ExecRequest
 	if err := json.Unmarshal(params, &p); err != nil {
@@ -490,10 +414,10 @@ func (b *Broker) handleExec(ctx context.Context, cap *capsule.Capability, params
 	evalCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	if len(p.Args) > 0 {
-		return b.handleExecDirect(evalCtx, cwdPath, p)
+	if len(p.Args) == 0 {
+		return BrokerRPCResponse{Error: "exec_args_required: direct args vector is required"}
 	}
-	return b.handleExecLegacyShell(evalCtx, cwdPath, p)
+	return b.handleExecDirect(evalCtx, cwdPath, p)
 }
 
 // execKillReapGrace bounds process-group reaping after SIGKILL: a timed-out
@@ -605,215 +529,13 @@ func (b *Broker) handleExecDirect(ctx context.Context, cwdPath string, p capsule
 	}
 }
 
-// handleExecLegacyShell is the frozen rollback path for legacy JSON tools
-// (sh -c string execution). It is unreachable in RLM mode: RLM callers must
-// supply an args vector. Preserved byte-identical for mechanical rollback.
-func (b *Broker) handleExecLegacyShell(ctx context.Context, cwdPath string, p capsule.ExecRequest) BrokerRPCResponse {
-	shell := "sh"
-	shellArgs := []string{"-c", p.Command}
-	if _, err := exec.LookPath("sh"); err != nil {
-		if path, err := exec.LookPath("bash"); err == nil {
-			shell = path
-			shellArgs = []string{"--noprofile", "--norc", "-c", p.Command}
-		} else {
-			shell = "/bin/sh"
-		}
-	}
-	cmd := exec.CommandContext(ctx, shell, shellArgs...)
-	cmd.Dir = cwdPath
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: false}
-	brokerEnv := os.Environ()
-	hasPath := false
-	for _, env := range brokerEnv {
-		if strings.HasPrefix(env, "PATH=") {
-			hasPath = true
-			break
-		}
-	}
-	if !hasPath {
-		brokerEnv = append(brokerEnv, "PATH=/run/current-system/sw/bin:/bin:/usr/bin")
-	}
-	cmd.Env = append(brokerEnv, p.Env...)
-
-	var stdout, stderr cappedBuffer
-	stdout.max = goEvalMaxOutputBytes
-	stderr.max = goEvalMaxOutputBytes
-	var execErr error
-	if p.Stdin != "" {
-		stdin, pipeErr := cmd.StdinPipe()
-		if pipeErr != nil {
-			return BrokerRPCResponse{Error: fmt.Sprintf("failed to create stdin pipe: %v", pipeErr)}
-		}
-		go func() {
-			stdin.Write([]byte(p.Stdin))
-			stdin.Close()
-		}()
-	}
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	execErr = cmd.Run()
-
-	result := capsule.ExecResult{
-		ExitCode:  0,
-		SessionID: p.SessionID,
-		Duration:  0,
-		Stdout:    stdout.String(),
-		Stderr:    stderr.String(),
-	}
-	if execErr != nil {
-		if exitErr, ok := execErr.(*exec.ExitError); ok {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			return BrokerRPCResponse{Error: fmt.Sprintf("exec failed: %v", execErr)}
-		}
-	}
-
-	resultBytes, _ := json.Marshal(result)
-	return BrokerRPCResponse{Result: resultBytes}
-}
-
-// handleGoEval evaluates model-authored Go source inside the capsule's
-// restricted Yaegi interpreter, dispatching on the actuator route.
+// handleGoEval evaluates model-authored Go source in the activation's
+// persistent session interpreter.
 func (b *Broker) handleGoEval(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
-	// RLM route serves cells on the activation's persistent session worker;
-	// tools route keeps the one-shot worker. The route is resolved once per
-	// call so an unhold/flag change takes effect without reboot.
-	if b.actuator == actuatorRLM {
-		if !b.sessionWorkerReady {
-			// Post-cutover the RLM desk is the in-cell carrier only: degrading
-			// to the one-shot worker would serve a desk with no choir scope
-			// and no terminal authority. Fail the call with a typed session
-			// diagnostic instead of silently degrading.
-			return BrokerRPCResponse{Error: "session_unavailable: actuator=rlm requested but the session worker is not ready"}
-		}
-		return b.handleGoEvalSession(ctx, cap, params)
+	if !b.sessionWorkerReady {
+		return BrokerRPCResponse{Error: "session_unavailable: session worker is not ready"}
 	}
-	return b.handleGoEvalOneShot(ctx, cap, params)
-}
-
-// handleGoEvalOneShot spawns this same broker binary in --exec-go-stdin
-// worker mode as a separate killable process group, so a runaway interpreter
-// is SIGKILLed on timeout and never runs in guest core. It serves only
-// explicit actuator=tools calls via route dispatch above; the RLM session
-// path never diverts here (a session start failure returns a typed session
-// diagnostic instead).
-func (b *Broker) handleGoEvalOneShot(ctx context.Context, cap *capsule.Capability, params json.RawMessage) BrokerRPCResponse {
-	var p capsule.GoEvalRequest
-	if err := json.Unmarshal(params, &p); err != nil {
-		return BrokerRPCResponse{Error: fmt.Sprintf("failed to parse go_eval params: %v", err)}
-	}
-
-	// Resolve cwd safely within the merged dir.
-	cwd := p.Cwd
-	if cwd == "" {
-		cwd = "/"
-	}
-	cwdPath, err := resolveWithin(b.mergedDir, cwd)
-	if err != nil {
-		return BrokerRPCResponse{Error: fmt.Sprintf("invalid cwd: %v", err)}
-	}
-
-	timeout := 60 * time.Second
-	if p.TimeoutMS > 0 {
-		timeout = time.Duration(p.TimeoutMS) * time.Millisecond
-	}
-
-	// Server-side package allowlist, NEVER model-controlled. The model's
-	// allowed_packages is ignored: the effective allowlist is derived from the
-	// verified capability's AgentRole, so an actor cannot authorize its own
-	// package deputies or otherwise expand its authority. This is the
-	// assignment-scoped authority boundary, not a request-trusted vocabulary.
-	allowed := yaegikernel.DefaultSafeStdlibPackages
-	if cap.AgentRole == capsule.RoleEngineering {
-		// Engineering may additionally use the narrow set needed for authoring,
-		// but it is still a fixed server-owned set, not caller input.
-		allowed = yaegikernel.DefaultSafeStdlibPackages
-	}
-	allowedList := make([]string, 0, len(allowed))
-	for pkg := range allowed {
-		allowedList = append(allowedList, pkg)
-	}
-
-	// Spawn the worker as a sibling child of the broker in its own process
-	// group so a timeout can SIGKILL the whole group.
-	req := yaegikernel.SidecarRequest{
-		Source:          p.Source,
-		AllowedPackages: allowedList,
-	}
-	reqData, err := json.Marshal(req)
-	if err != nil {
-		return BrokerRPCResponse{Error: fmt.Sprintf("failed to marshal go_eval request: %v", err)}
-	}
-
-	bin := "/run/capsule/broker"
-	if b.brokerBin != "" {
-		bin = b.brokerBin
-	}
-	evalCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(evalCtx, bin, "--isolation-stage", "exec-go-stdin")
-	cmd.Dir = cwdPath
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL} // new group; worker dies if broker dies
-	// Sanitized worker environment: the worker must not inherit broker-injected
-	// credentials, CANONICAL paths, or control-socket variables. Only a minimal
-	// PATH/TMPDIR is provided inside the capsule.
-	cmd.Env = []string{"PATH=/run/current-system/sw/bin:/bin:/usr/bin", "TMPDIR=/tmp"}
-	cmd.Stdin = bytes.NewReader(reqData)
-	stdoutCap := &cappedBuffer{max: goEvalMaxOutputBytes}
-	stderrCap := &cappedBuffer{max: goEvalMaxOutputBytes}
-	cmd.Stdout = stdoutCap
-	cmd.Stderr = stderrCap
-
-	start := time.Now()
-	err = cmd.Start()
-	if err != nil {
-		return BrokerRPCResponse{Error: fmt.Sprintf("failed to start go_eval worker: %v", err)}
-	}
-
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-
-	result := capsule.GoEvalResult{ExitCode: 0}
-	select {
-	case <-evalCtx.Done():
-		// Kill the whole worker process group, then REAP it with a bounded
-		// grace period so no zombie or lingering cmd.Wait goroutine survives.
-		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-			_ = cmd.Process.Kill()
-		}
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			// Worker not reaped in grace; it is already SIGKILLed as a group.
-		}
-		result.Stdout = stdoutCap.String()
-		result.Stderr = stderrCap.String()
-		result.Error = "go_eval evaluation timed out"
-		result.ExitCode = 1 // a timed-out attempt must never look successful
-		result.Duration = time.Since(start)
-		resultBytes, _ := json.Marshal(result)
-		return BrokerRPCResponse{Result: resultBytes}
-	case waitErr := <-done:
-		result.Stdout = stdoutCap.String()
-		result.Stderr = stderrCap.String()
-		result.Duration = time.Since(start)
-		if stdoutCap.overflow || stderrCap.overflow {
-			result.Error = "go_eval output exceeded limit (truncated)"
-			if waitErr == nil {
-				result.ExitCode = 1
-			}
-		}
-		if waitErr != nil {
-			if exitErr, ok := waitErr.(*exec.ExitError); ok {
-				result.ExitCode = exitErr.ExitCode()
-			}
-			result.Error = waitErr.Error()
-		}
-		resultBytes, _ := json.Marshal(result)
-		return BrokerRPCResponse{Result: resultBytes}
-	}
+	return b.handleGoEvalSession(ctx, cap, params)
 }
 
 // handleReadFile reads a file from the capsule.

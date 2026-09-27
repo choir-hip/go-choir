@@ -23,8 +23,15 @@ func testSessionBroker(t *testing.T) *Broker {
 		sessionWorkers:     make(map[string]*sessionWorker),
 		revokedCaps:        make(map[string]bool),
 		brokerBin:          "/nonexistent/broker",
-		actuator:           actuatorRLM,
 		sessionWorkerReady: true,
+	}
+}
+
+func TestGoEvalRejectsUnavailableSessionWorker(t *testing.T) {
+	b := &Broker{sessionWorkerReady: false}
+	resp := b.handleGoEval(context.Background(), &capsule.Capability{}, nil)
+	if resp.Error != "session_unavailable: session worker is not ready" {
+		t.Fatalf("unavailable session response = %+v", resp)
 	}
 }
 

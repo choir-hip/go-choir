@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/search"
@@ -262,20 +261,16 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}
 	}
 	if profile == agentprofile.Engineering {
-		if capsule.HostSelectsRLM() {
-			hasSelfDevelopmentOperation := false
-			if rt != nil && rt.selfdevOperations != nil && rec != nil && strings.TrimSpace(rec.ComputerID) != "" {
-				if trajectoryID := trajectoryIDForRun(rec); trajectoryID != "" {
-					_, err := rt.selfdevOperations.GetByTrajectory(context.Background(), rec.ComputerID, trajectoryID)
-					hasSelfDevelopmentOperation = err == nil
-				}
+		hasSelfDevelopmentOperation := false
+		if rt != nil && rt.selfdevOperations != nil && rec != nil && strings.TrimSpace(rec.ComputerID) != "" {
+			if trajectoryID := trajectoryIDForRun(rec); trajectoryID != "" {
+				_, err := rt.selfdevOperations.GetByTrajectory(context.Background(), rec.ComputerID, trajectoryID)
+				hasSelfDevelopmentOperation = err == nil
 			}
-			b.WriteString(runtimeprompts.RLMEngineeringOverlay(runtimeprompts.RLMEngineeringOverlayOptions{
-				HasSelfDevelopmentOperation: hasSelfDevelopmentOperation,
-			}))
-		} else {
-			b.WriteString(runtimeprompts.EngineeringRuntimeOverlay())
 		}
+		b.WriteString(runtimeprompts.RLMEngineeringOverlay(runtimeprompts.RLMEngineeringOverlayOptions{
+			HasSelfDevelopmentOperation: hasSelfDevelopmentOperation,
+		}))
 		kind := metadataStringValue(rec.Metadata, "assignment_kind")
 		if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {
 			b.WriteString("\n\nExact authenticated assignment: assignment_id=")
@@ -313,8 +308,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		RequesterAgentID:       requesterAgentID,
 		TextureDeliveryAgentID: textureDeliveryAgentID,
 		ChannelID:              channelID,
-		InCellCarrier:          deskCarrierLive(profile) || (profile == agentprofile.Engineering && capsule.HostSelectsRLM()),
-		NoReportChannel:        profile == agentprofile.Engineering && !capsule.HostSelectsRLM(),
+		InCellCarrier:          deskCarrierLive(profile) || profile == agentprofile.Engineering,
 	}))
 	return b.String(), nil
 }
@@ -342,14 +336,7 @@ type registryToolInstaller func(*toolregistry.ToolRegistry) error
 // belong in this input type, so the delegated registry cannot receive their
 // backing callbacks by configuration accident.
 func buildAssignedEngineeringRegistry(rt *Runtime) (*toolregistry.ToolRegistry, error) {
-	if capsule.HostSelectsRLM() {
-		return buildRLMAssignedEngineeringRegistry(rt)
-	}
-	registry := toolregistry.MustNewToolRegistry()
-	if err := RegisterCapsuleLocalTools(registry, rt); err != nil {
-		return nil, fmt.Errorf("build assigned co-super registry: %w", err)
-	}
-	return registry, nil
+	return buildRLMAssignedEngineeringRegistry(rt)
 }
 
 // buildRLMAssignedEngineeringRegistry is the sealed-Go overlay (Def 2 item 4):
@@ -366,11 +353,8 @@ func buildRLMAssignedEngineeringRegistry(rt *Runtime) (*toolregistry.ToolRegistr
 }
 
 // deskCarrierLive reports whether a non-capsule desk profile currently runs
-// on the host desk-cell carrier (sealed desk_go_eval registry). R3c promotes
-// management live and R3d-a promotes texture live — both unconditional;
-// research remains behind actuator=rlm until R3r promotes it. The predicate
-// is per-profile so a desk promotion never drags an unpromoted desk onto
-// cells.
+// on the host desk-cell carrier (sealed desk_go_eval registry). The predicate
+// is per-profile so each desk owns its promoted carrier state.
 func deskCarrierLive(profile string) bool {
 	switch profile {
 	case agentprofile.Management:
@@ -466,9 +450,8 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 // InstallDefaultAgentTools installs role-bound registries. Management receives only
 // the persistent assignment/cancel authority; capsule effects are runtime-owned.
 // Engineering has an empty static registry. An exact assigned run receives a fresh
-// closed capsule-local registry; under actuator=rlm the desk is the in-cell
-// carrier (capsule_go_eval only), under actuator=tools it is capsule effects
-// only. Reporting, freeze, and verification are in-cell affordances.
+// closed capsule-local registry with capsule_go_eval as its sole capsule-effect
+// entry. Reporting, freeze, and verification are in-cell affordances.
 func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if strings.TrimSpace(cwd) == "" {
 		wd, err := os.Getwd()
@@ -494,27 +477,13 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterPersistentManagementReportTools(managementRegistry, rt); err != nil {
 		return err
 	}
-	researchPolicy, err := agentprofile.PolicyFor(agentprofile.Research)
-	if err != nil {
-		return err
-	}
-	// The D2 cap boundary is installed before any registry build so both the
-	// host research path and the cell-carrier desk charge the same
-	// activation-scoped egress ledger.
+	// The D2 cap boundary charges every cell-carrier research request against
+	// the same activation-scoped egress ledger.
 	if rt.researchEgress == nil {
 		rt.researchEgress = researchtools.NewEgressBudgetLedger(
 			researchtools.DefaultResearchEgressMaxCalls,
 			researchtools.DefaultResearchEgressMaxFetchedBytes,
 		)
-	}
-	// The host research registry is the off-carrier fallback only — with
-	// R3r unconditional, the fan below replaces it; skip building a
-	// registry that would be discarded.
-	var researchRegistry *toolregistry.ToolRegistry
-	if !deskCarrierLive(agentprofile.Research) {
-		if researchRegistry, err = rt.buildRegistryForRole(researchPolicy, cwd, searchClient, sourceClient, httpClient); err != nil {
-			return err
-		}
 	}
 	// InCellCarrier fan: a non-capsule desk runs on the cell carrier when
 	// deskCarrierLive(profile) promotes it — management (R3c), texture
@@ -593,14 +562,11 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	rt.toolProfiles[agentprofile.Conductor] = conductorRegistry
 	rt.toolProfiles[agentprofile.Management] = managementRegistry
 	rt.toolProfiles[agentprofile.Engineering] = engineeringRegistry
-	rt.toolProfiles[agentprofile.Research] = researchRegistry
 	rt.toolProfiles[agentprofile.Processor] = processorRegistry
 	rt.toolProfiles[agentprofile.Reconciler] = reconcilerRegistry
 	rt.toolProfiles[agentprofile.Texture] = textureRegistry
 	rt.toolProfiles[agentprofile.Email] = emailRegistry
-	// R3b: swap in the sealed desk-cell registry for each desk profile the
-	// InCellCarrier fan built — actuator=rlm puts the desk on the cell
-	// carrier; actuator=tools leaves its live host-tool registry in place.
+	// Install the sealed desk-cell registry for every promoted desk profile.
 	for deskProfile, deskReg := range deskCellRegistries {
 		rt.toolProfiles[deskProfile] = deskReg
 	}

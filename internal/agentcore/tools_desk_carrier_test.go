@@ -12,9 +12,8 @@ import (
 
 // R3c — management is live on the host desk-cell carrier. The promotion is
 // per-profile and unconditional: management's registry seals to a sole
-// desk_go_eval, report_to_texture leaves its live surface, and the prompt
-// overlay switches to the in-cell authority. Texture and research stay
-// behind actuator=rlm until their own stations promote them.
+// desk_go_eval, and the prompt overlay switches to the in-cell authority.
+// Texture and research are likewise promoted at their own stations.
 
 func TestManagementPromotedToDeskCellCarrier(t *testing.T) {
 	if !deskCarrierLive(agentprofile.Management) {
@@ -78,21 +77,11 @@ func TestResearchCellRegistryIsSealed(t *testing.T) {
 	}
 }
 
-func TestUnpromotedDesksStayOffCarrier(t *testing.T) {
-	// Under actuator=tools (staging default) management (R3c), texture
-	// (R3d), and research (R3r) are unconditionally on the cell carrier;
-	// every desk is promoted — nothing remains gated behind actuator=rlm.
-	if capsule.HostSelectsRLM() {
-		t.Skip("actuator=rlm promotes all desks; nothing to assert here")
-	}
-	if !deskCarrierLive(agentprofile.Management) {
-		t.Fatal("management must be on the carrier (R3c)")
-	}
-	if !deskCarrierLive(agentprofile.Texture) {
-		t.Fatal("texture must be on the carrier (R3d)")
-	}
-	if !deskCarrierLive(agentprofile.Research) {
-		t.Fatal("research must be on the carrier (R3r)")
+func TestPromotedDesksUseCarrier(t *testing.T) {
+	for _, profile := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research} {
+		if !deskCarrierLive(profile) {
+			t.Fatalf("%s must be on the carrier", profile)
+		}
 	}
 }
 

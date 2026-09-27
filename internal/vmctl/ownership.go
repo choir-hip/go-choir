@@ -36,7 +36,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
@@ -136,11 +135,6 @@ type VMOwnership struct {
 	// It is set and cleared only by an authorized owner/recovery operation.
 	HoldStatus *MaintenanceHold `json:"hold_status,omitempty"`
 
-	// Actuator is the durable guest execution route (tools|rlm). Empty
-	// fails closed to tools at boot. An unflagged refresh preserves this
-	// field; an explicit write is cutover or rollback.
-	Actuator string `json:"actuator,omitempty"`
-
 	// DivergenceStatus classifies the computer's divergence from platform baseline:
 	// "tracking" (clean baseline, can auto-fast-forward non-breaking platform updates)
 	// "divergent" (has diverged ledgers/packages; updates require rebase/proposal)
@@ -238,20 +232,6 @@ func (r *OwnershipRegistry) SetDivergenceStatus(computerID, status, platformBase
 	return r.writePersistenceLocked()
 }
 
-// SetActuatorForDesktop persists an explicit owner-scoped actuator write.
-// Omit-on-refresh is the caller not invoking this: the stored value is kept.
-func (r *OwnershipRegistry) SetActuatorForDesktop(userID, desktopID, actuator string) error {
-	key := ownershipKey(userID, desktopID)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	own, ok := r.ownerships[key]
-	if !ok {
-		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
-	}
-	own.Actuator = capsule.ParseActuator(actuator)
-	return r.writePersistenceLocked()
-}
-
 // VMManager is the interface the OwnershipRegistry uses to manage real
 // Firecracker VM lifecycles. When Firecracker is available on the host,
 // the registry delegates VM boot/stop/resume/recover operations to the
@@ -332,8 +312,6 @@ type VMManagerConfig struct {
 	// (RUNTIME_RECOVERY_REPLAY_ONLY=1): materialize to head, then exit
 	// without starting the runtime or appending.
 	RecoveryReplayOnly bool
-	// Actuator is the durable guest execution route (tools|rlm).
-	Actuator string
 }
 
 // VMInstanceInfo holds the information returned by the VM manager
@@ -1078,7 +1056,6 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 		RealizationID:     realizationIDFor(own.VMID, own.Epoch),
 		Epoch:             own.Epoch,
 		MaintenanceHold:   own.IsHeld(),
-		Actuator:          own.Actuator,
 	}
 	return cfg
 }
@@ -1941,9 +1918,9 @@ func (r *OwnershipRegistry) StopVMForDesktop(userID, desktopID string) error {
 		return err
 	}
 
-	// Every product stop is a fresh realization boundary. Propagate actuator
-	// failure whenever the manager still tracks an instance, even if durable
-	// ownership state is stale and says stopped.
+	// Every product stop is a fresh realization boundary. Propagate manager
+	// failures whenever it still tracks an instance, even if durable ownership
+	// state is stale and says stopped.
 	if r.vmManager != nil && (own.State == VMStateActive || own.State == VMStateDegraded || r.vmManager.GetVM(own.VMID) != nil) {
 		if err := r.vmManager.StopVM(own.VMID); err != nil {
 			return fmt.Errorf("stop VM %s: %w", own.VMID, err)

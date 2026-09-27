@@ -93,7 +93,6 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 	}
 	var request struct {
 		IdempotencyKey string `json:"idempotency_key"`
-		Actuator       string `json:"actuator"`
 	}
 	if action != "status" {
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
@@ -153,11 +152,7 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 			}
 		}
 	case "refresh":
-		if strings.TrimSpace(request.Actuator) != "" {
-			_, err = h.vmctlClient.RefreshDesktopContextWithActuator(opCtx, ownership.UserID, ownership.DesktopID, request.Actuator)
-		} else {
-			_, err = h.vmctlClient.RefreshDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
-		}
+		_, err = h.vmctlClient.RefreshDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 	case "recover":
 		// Owner-directed recovery on the general product path (no per-user
 		// special-casing): clear the maintenance hold (authorised, idempotent
