@@ -165,9 +165,17 @@ now:
     reports wake a resident parked Management run and stay durable
     otherwise; document-cast reports retarget to texture:<doc> with the
     supervision subject minted atomically at first report; a derivable
-    engineering_progress_overdue_deadline wake emits one observation
-    packet per silence window. Next: the episode leg on a fresh RLM
-    computer.
+    progress_overdue_deadline wake emits one observation
+    packet per silence window. Episode leg on a fresh RLM computer
+    (probe M11_SELFDEV_EPISODE_1790532595839, computer
+    computer-330816470b…): the desk authored + verified the evidence
+    artifact across 48 cells, then both choir.Freeze cells refused —
+    CanonicalEventHead==BaseHead is unsatisfiable once the op's own
+    trajectory_started + continuous projection_batch_recorded advance
+    the head past the pin. Documented
+    docs/problems/m11-freeze-base-head-equality-unsatisfiable-2026-09-27.md.
+    Fix: freeze asserts the pinned projection surface (desired/effective
+    heads, no pending transition), not canonical-head equality.
   candidate:
     id: none
     state: none

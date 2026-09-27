@@ -259,7 +259,17 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 		return nil, fmt.Errorf("self-development operation is %s, expected %s", operation.State, selfdev.StateExecuting)
 	}
 	headBefore, err := toolCtx.EventProjection.Head(ctx, toolCtx.ComputerID)
-	if err != nil || headBefore == nil || headBefore.PendingTransitionRef != "" || headBefore.CanonicalEventHead != operation.BaseHead {
+	// The pin is a state surface, not a head digest: trajectory_started and
+	// projection_batch_recorded advance canonical_event_head continuously
+	// without moving desired/effective state (reducer pass-through kinds).
+	// A competing transition is what staleness must catch — effect_accepted,
+	// materialization_*, rollback_*, or researcher_update — and every one of
+	// those moves desired/effective/pending. The operation row persists the
+	// pin's surface at Start (selfdev.operations.go); compare against that.
+	if err != nil || headBefore == nil || headBefore.PendingTransitionRef != "" ||
+		operation.DesiredHead == "" || operation.EffectiveHead == "" ||
+		headBefore.DesiredEventHead != operation.DesiredHead ||
+		headBefore.EffectiveEventHead != operation.EffectiveHead {
 		return nil, fmt.Errorf("self-development base head unavailable, stale, or pending")
 	}
 	capsuleID, err := toolCtx.Executor.ResolveGrantedCapsuleID(toolCtx.AgentRunID, handle)
