@@ -125,8 +125,11 @@ func (rt *Runtime) validateAssignedEngineeringExecution(ctx context.Context, rec
 		return fmt.Errorf("assignment capsule capability is absent: %w", err)
 	}
 	diagnostics, err := rt.capsuleExecutor.InspectCapsuleRaw(assignment.Binding.CapsuleID)
-	if err != nil || diagnostics.ID != assignment.Binding.CapsuleID || diagnostics.State != capsule.StateActive {
-		return fmt.Errorf("assignment capsule is not active: %w", err)
+	if err != nil {
+		return fmt.Errorf("assignment capsule inspect failed: %w", err)
+	}
+	if diagnostics.ID != assignment.Binding.CapsuleID || diagnostics.State != capsule.StateActive {
+		return fmt.Errorf("assignment capsule %s is not active (state=%s)", diagnostics.ID, diagnostics.State)
 	}
 	return nil
 }

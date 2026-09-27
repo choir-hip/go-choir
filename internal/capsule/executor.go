@@ -1157,7 +1157,34 @@ func (e *Executor) ExtractGranted(ctx context.Context, agentRunID, handle string
 	default:
 		return nil, fmt.Errorf("capsule granted diff unavailable in state %s", state)
 	}
-	return caps.Diff(ctx)
+	changes, err := caps.Diff(ctx)
+	if err != nil && state == StateActive {
+		// Quiesce succeeded but the diff failed: leave the capsule usable —
+		// a frozen-but-never-thawed capsule strands every later cell.
+		if thawErr := caps.Thaw(ctx); thawErr != nil {
+			return nil, errors.Join(err, fmt.Errorf("thaw after failed diff: %w", thawErr))
+		}
+	}
+	return changes, err
+}
+func (e *Executor) ThawGranted(ctx context.Context, agentRunID, handle string) error {
+	capability, err := e.ResolveCapability(agentRunID, handle)
+	if err != nil || capability.AgentRole != RoleEngineering {
+		return fmt.Errorf("capsule granted thaw unavailable")
+	}
+	e.mu.RLock()
+	caps := e.capsules[capability.TargetCapsule]
+	e.mu.RUnlock()
+	if caps == nil {
+		return fmt.Errorf("capsule granted thaw unavailable")
+	}
+	caps.mu.RLock()
+	state := caps.State
+	caps.mu.RUnlock()
+	if state != StateFrozen {
+		return nil // already active (or destroyed — nothing to thaw)
+	}
+	return caps.Thaw(ctx)
 }
 
 func (e *Executor) ResolveGrantedCapsuleID(agentRunID, handle string) (string, error) {

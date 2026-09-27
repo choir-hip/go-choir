@@ -108,3 +108,38 @@ no downstream CAS needs to change.
 head past `BaseHead`. A unit test replays the invariant: head advanced by
 projection batches + the op's own trajectory event → freeze passes; head
 advanced by a competing `effect_accepted` → freeze refuses.
+
+## Second defect in the same leg (2026-09-27, deployed `1d60d2ad`)
+
+Probe `M11_SELFDEV_EPISODE_1790537156070`, computer
+`computer-8835bbd1b770ca8e61644b80403bdea3`, op
+`selfdev-95d58528e935481c5daefe059e3cbd26`: with the head gate fixed, the
+desk's `choir.Freeze` reached the bundle build and failed on
+`capsule release contains no frozen runtime artifacts`
+(`capsule/executor.go:1431` — `StageGrantedRelease` requires
+`var/lib/artifact/release/` carrying executable `bin/autoputer` plus
+`frontend/` artifacts; the desk had produced a source-only diff). Every
+subsequent cell then returned `assigned capsule obligation is no longer
+executable: assignment capsule is not active: %!w(<nil>)`.
+
+Two substrate bugs:
+
+1. **Freeze never thaws.** `ExtractGranted` quiesces the capsule to
+   `StateFrozen` (`executor.go:1152`) and `Capsule.Thaw` had zero callers.
+   A refused freeze — or a *successful* one — permanently stranded the
+   desk: the obligation gate requires `StateActive`, so no retry, no
+   `choir.Complete`, and the run ends by completion-guard exhaustion.
+2. **`%!w(<nil>)`.** `validateAssignedEngineeringExecution` wrapped a nil
+   error when the capsule was non-active but inspectable, hiding the real
+   state from the failure string.
+
+Fix (this session): `capsule.Executor.ThawGranted` (role-gated, linux;
+stubbed elsewhere) + a deferred best-effort thaw inside
+`freezeCapsuleEffectBundle` after `ExtractGranted` succeeds — every
+Frozen-dependent read (diff, release stage, snapshot digest, bindings,
+receipts) completes before the deferred thaw fires. The terminal fate
+path (`fate.go` freeze-intent freeze) is untouched: it re-quiesces on
+`StateActive`. The overlay prompt now names the release-tree precondition
+so the desk builds `bin/autoputer` + `frontend/` in-capsule before
+calling Freeze.
+

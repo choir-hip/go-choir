@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -280,6 +281,20 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if err != nil {
 		return nil, err
 	}
+	// ExtractGranted quiesced the capsule (StateFrozen) to take the diff.
+	// Every Frozen-dependent read (diff, release stage, source snapshot,
+	// freeze bindings, execution receipts) happens below; the deferred thaw
+	// restores the capsule so the desk can finish — Complete and any freeze
+	// retry both require StateActive. The terminal fate path (fate.go)
+	// re-quiesces when the capsule disposition carries a freeze intent;
+	// leaving the capsule active here only permits the desk's next cell.
+	defer func() {
+		thawCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		if thawErr := toolCtx.Executor.ThawGranted(thawCtx, toolCtx.AgentRunID, handle); thawErr != nil {
+			log.Printf("agentcore: thaw capsule after freeze intent %s failed (run %s): %v", handle, toolCtx.AgentRunID, thawErr)
+		}
+		cancel()
+	}()
 	evidenceRefs := append([]string{buildRecipeRef}, testReceipts...)
 	evidenceRefs = append(evidenceRefs, dependencyToolchainRefs...)
 	executionReceipts, err := toolCtx.Executor.ResolveGrantedExecutionReceipts(ctx, toolCtx.AgentRunID, handle, evidenceRefs)

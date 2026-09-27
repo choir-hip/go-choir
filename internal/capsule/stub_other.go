@@ -34,6 +34,9 @@ func (e *Executor) ControlHandle(string, string) (string, error)       { return 
 func (e *Executor) GrantEngineering(string, string, string, time.Duration) (string, error) {
 	return "", stubErr("grant")
 }
+func (e *Executor) ThawGranted(context.Context, string, string) error {
+	return stubErr("thaw")
+}
 func (e *Executor) DestroyOwned(context.Context, string, string, bool) error {
 	return stubErr("destroy")
 }
