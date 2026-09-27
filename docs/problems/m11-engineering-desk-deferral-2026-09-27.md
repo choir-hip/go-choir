@@ -191,6 +191,14 @@ reminder (`maxCompletionGuardRetries`), then errors the run loudly —
 `handleExecutionError` → `terminalizeRun` joins assignment fate rather than
 stranding the operation.
 
+Ops note from the same window: the `5cff1633` deploy's NixOS switch +
+service restarts (05:33–05:35) briefly stopped all `go-choir-*` units —
+guest file-sync logged `connect: connection refused` at 05:33:15 — and
+hibernated the probe VM (`vm-cedfe962…`, pressure reclaim at 05:34:47).
+The deploy reported success and health-checked every service; the outage
+was the switch/restart window itself, not a stuck unit. Future probes
+should expect a per-deploy interruption of in-flight ops and plan retries.
+
 
 Known candidates inside the deferring call:
 
