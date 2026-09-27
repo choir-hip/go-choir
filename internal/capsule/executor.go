@@ -1435,22 +1435,48 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			_ = input.Close()
 			return nil, "", err
 		}
-		scanner := bufio.NewScanner(&contextReader{ctx: ctx, reader: input})
-		scanner.Buffer(make([]byte, 64<<10), 1<<20)
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			findings := computerevent.DetectPrivateSecrets(line)
-			if binary {
-				findings = computerevent.DetectBinarySecrets(line)
+		if binary {
+			// Binary payloads have no meaningful line structure and can
+			// contain NUL-free regions far larger than any scanner token
+			// budget (embedded data in a genuine autoputer build exceeds
+			// 1MiB). Scan fixed-size chunks, carrying the tail of the
+			// previous chunk so a secret straddling a boundary is still
+			// detected; every binary-set pattern fits inside the carry.
+			chunk := make([]byte, 64<<10)
+			var carry []byte
+			for {
+				nr, chunkErr := input.Read(chunk)
+				window := append(carry[:0], chunk[:nr]...)
+				if findings := computerevent.DetectBinarySecrets(window); len(findings) != 0 {
+					_ = input.Close()
+					return nil, "", fmt.Errorf("capsule release refuses secret content in %q", change.Path)
+				}
+				if chunkErr != nil {
+					if errors.Is(chunkErr, io.EOF) {
+						break
+					}
+					_ = input.Close()
+					return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, chunkErr)
+				}
+				if nr > 512 {
+					carry = append(carry[:0], chunk[nr-512:nr]...)
+				} else {
+					carry = append(carry[:0], chunk[:nr]...)
+				}
 			}
-			if len(findings) != 0 {
+		} else {
+			scanner := bufio.NewScanner(&contextReader{ctx: ctx, reader: input})
+			scanner.Buffer(make([]byte, 64<<10), 1<<20)
+			for scanner.Scan() {
+				if findings := computerevent.DetectPrivateSecrets(scanner.Bytes()); len(findings) != 0 {
+					_ = input.Close()
+					return nil, "", fmt.Errorf("capsule release refuses secret content in %q", change.Path)
+				}
+			}
+			if scanErr := scanner.Err(); scanErr != nil {
 				_ = input.Close()
-				return nil, "", fmt.Errorf("capsule release refuses secret content in %q", change.Path)
+				return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, scanErr)
 			}
-		}
-		if scanErr := scanner.Err(); scanErr != nil {
-			_ = input.Close()
-			return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, scanErr)
 		}
 		if _, err := input.Seek(0, io.SeekStart); err != nil {
 			_ = input.Close()
