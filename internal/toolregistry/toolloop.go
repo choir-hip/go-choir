@@ -272,6 +272,16 @@ func WithRequiredWriteToolResult(name string, predicate func(output string) bool
 	}
 }
 
+// WithCompletionGuard installs an app-level completion obligation evaluated
+// each time the model ends its turn. Returning Continue keeps the loop alive
+// with a reminder (bounded by maxCompletionGuardRetries, then the run errors);
+// returning Continue=false accepts the turn as the run's result.
+func WithCompletionGuard(guard ToolLoopCompletionGuardFunc) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.completionGuard = guard
+	}
+}
+
 // WithParkWaiter lets a caller suspend normal completion until a durable signal
 // or idle deadline. The waiter must not call the provider; on Continue=true the
 // loop injects runtime-owned user turns and resumes provider calls only after

@@ -3258,6 +3258,22 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			}
 			return json.Unmarshal([]byte(output), &decoded) == nil && decoded.FateTerminal
 		}))
+		// The desk's only tool is capsule_go_eval; its durable transition is a
+		// committed terminal fate (freeze/verify for selfdev casts). An
+		// end_turn without one used to close the run with prose and strand the
+		// self-development operation in `executing` forever — the probe wedge
+		// recorded in docs/problems/m11-engineering-desk-deferral-2026-09-27.md
+		// (fourth wedge). The guard rejects narrative-only endings: retry with
+		// a bounded reminder, then fail the run so assignment fate joins.
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithCompletionGuard(func(ctx context.Context, state toolregistry.ToolLoopCompletionState) (toolregistry.ToolLoopCompletionGuardResult, error) {
+			if engineeringOverlayTerminalFateCommitted(state.Messages) {
+				return toolregistry.ToolLoopCompletionGuardResult{}, nil
+			}
+			return toolregistry.ToolLoopCompletionGuardResult{
+				Continue:    true,
+				Instruction: "The turn ended without a committed terminal fate. Finish the assignment inside a capsule_go_eval cell: call choir.Freeze when a self-development bundle is bound, then choir.Complete once with execution_refs — or commit the corresponding terminal failure fate — before ending the turn. Narrative text alone does not end the run.",
+			}, nil
+		}))
 	}
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
@@ -3841,6 +3857,48 @@ func initialTextureToolChoice(rec *types.RunRecord) string {
 		return "required"
 	}
 	return ""
+}
+
+// engineeringOverlayTerminalFateCommitted reports whether any persisted
+// tool_result block in the run's message log carries a capsule_go_eval output
+// with fate_terminal=true — the same predicate the terminal-tool check applies
+// per batch, extended across the whole cell history for the completion guard.
+// Tool results persist as user messages whose content is a list of
+// {type:"tool_result", content:<eval output JSON string>} blocks.
+func engineeringOverlayTerminalFateCommitted(messages []json.RawMessage) bool {
+	var msg struct {
+		Content json.RawMessage `json:"content"`
+	}
+	var blocks []struct {
+		Type    string `json:"type"`
+		Content string `json:"content"`
+	}
+	var eval struct {
+		FateTerminal bool `json:"fate_terminal"`
+	}
+	for _, raw := range messages {
+		msg.Content = nil
+		if err := json.Unmarshal(raw, &msg); err != nil || len(msg.Content) == 0 {
+			continue
+		}
+		blocks = blocks[:0]
+		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+			continue
+		}
+		for _, block := range blocks {
+			if block.Type != "tool_result" || block.Content == "" {
+				continue
+			}
+			eval.FateTerminal = false
+			if err := json.Unmarshal([]byte(block.Content), &eval); err != nil {
+				continue
+			}
+			if eval.FateTerminal {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 const (

@@ -157,6 +157,40 @@ naming a recorded prior report — which a never-bound attempt cannot carry
 Fix (commit `ed8f471e`): `ReconcileEngineeringAssignmentsForTrajectory`
 runs under `engineeringAssignmentOpenMu`, the same mutex the saga holds.
 
+Adjacent defect seen during the same window (veteran computer
+03335285…, pre-M1 tape): `activation occurrence must remain unprocessed:
+persistent Management slot occupied by run b05f42a6-…` — a non-terminal
+management run blocks all fresh wakes on that computer; out of M11 scope
+but recorded so it is not lost.
+
+## Fourth wedge (2026-09-27, build ed8f471e): desk ends its turn with prose; operation never leaves `executing`
+
+Fresh-computer probe (marker `M11_SELFDEV_EPISODE_1790485385506`,
+computer `40ca2130…`, operation `selfdev-d478fd1f…`) reached the desk: the
+guest ran 27 `capsule_go_eval` cells in ~3.5 minutes
+(`jcvk9drr…-go-choir-run-autoputer-runtime[677]` tool-loop lines
+05:03:31–05:06:38, gateway `vm-cedfe962…` inference log). At iteration 28 the
+model returned `stop=end_turn`, `tool_calls=0`, `text_len=3789`
+(gateway provider log 05:06:48) — a narrative close instead of a
+`capsule_go_eval` commit. The tool loop accepted it because the assigned
+Engineering overlay wires `WithTerminalToolResult("capsule_go_eval",
+fate_terminal)` but no completion obligation: no `initialToolChoice`, no
+`requiredWriteTools`, no `completionGuard`. `end_turn` is plain completion,
+the run ends clean, and the operation sits in `executing` until the probe's
+`waitForOperation` deadline — the canonical tape (178 events) carries only
+`trajectory_started` + `projection_batch_recorded`; zero tool/effect events.
+
+The host-side evidence is decisive because guest tool-loop output is not
+log-forwarded: every provider call round-trips `choir.gateway_url`, so the
+gateway's `stop=`/`tool_calls=` fields are the iteration ledger.
+
+Fix (this commit): wire a `completionGuard` for `assignedEngineeringOverlay`
+runs that scans persisted `tool_result` blocks for a `capsule_go_eval`
+`fate_terminal` output. `end_turn` without one retries with a bounded
+reminder (`maxCompletionGuardRetries`), then errors the run loudly —
+`handleExecutionError` → `terminalizeRun` joins assignment fate rather than
+stranding the operation.
+
 
 Known candidates inside the deferring call:
 
@@ -170,7 +204,13 @@ Known candidates inside the deferring call:
    lifecycle, parent revision author-kind, parent work assignment).
 4. `PreflightSourceSnapshot("")` fails in the guest capsule executor
    (no sourceDir / git binary in guest).
-5. Store/Dolt write error in guest (unknown; previously unobservable).
+
+## What proves closure
+
+`m11_selfdev_episode_probe.mjs` reaches `awaiting_approval` (the
+`waitForOperation` leg) on a fresh computer: either the desk commits a
+`fate_terminal` freeze inside the retry window, or the run fails loudly with
+a guard-exhaustion error rather than stranding `executing`.
 
 ## Recovery posture
 
