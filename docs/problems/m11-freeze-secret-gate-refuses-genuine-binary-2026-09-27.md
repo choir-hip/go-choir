@@ -3,7 +3,7 @@
 **Date:** 2026-09-27
 **Class:** red (self-development transition authority — the release staging
 gate decides which files the frozen bundle may bind)
-**Status:** documented; fix pending.
+**Status:** repaired in f8e3692e (+ residuals below); deployed proof pending - episode probe rerun required.
 **First observed:** probe `M11_SELFDEV_EPISODE_1790540781081`, staging
 `89970ebd`, computer `computer-e138a1e0d26ece87f551ca628dc5fc53`, operation
 `selfdev-97e5f7d2db3a1b67835c887c8002630c`, desk run
@@ -71,3 +71,21 @@ heuristic) apply only the structural high-precision patterns
 whose byte-level specificity survives string-blob adjacency. Add
 `/root/.config/go/telemetry` to the classifier ignore set for finding
 (2).
+
+## Residuals (post-fix, named by consensus review 2026-09-27)
+
+- The **text** leg still refuses on the full redaction-grade pattern
+  set: `credential_assignment` matches ordinary Go like
+  `token := strings.TrimSpace(x)`, so a release staging `.go` sources
+  or minified assets can hit the same false-positive class the binary
+  leg had. Mitigation staged only for binaries because the gate is
+  hygiene, not a security boundary (microVMs/capsules hold no real
+  credentials — the host gateway owns provider keys). If a release ever
+  carries text sources, apply the same structural-subset treatment.
+- The chunked binary scan originally mis-concatenated the carry
+  window (`append(carry[:0], …)` overwrote instead of prepending);
+  fixed in `e81e9532` with a boundary-straddle regression test.
+- `executor.go` is linux-gated; darwin `go build` never compiles the
+  gate, which is how the missing symbol survived a local build check —
+  linux test runs on Node B are the verification surface.
+
