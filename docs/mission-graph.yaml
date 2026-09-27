@@ -1114,23 +1114,39 @@ nodes:
     title: Platform-Signed Update Push + Restore (M9a, station)
     path: docs/definitions/choir-platform-update-push-restore-2026-09-26.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
     entrypoint: false
     enables: []
 
     note: >-
-      M9a (on spine, after M7): a platform-control-signed update offer
-      reaches the guest over the vmctl autoputer-proxy transport, the
-      guest verifies signature/binding/epoch/policy, stages the payload
-      into the updater's trusted incoming store, applies under a
-      canonical head binding, and promotes the route slot under a
-      platform-follow evidence class; restore to a pinned head uses the
-      existing checkpoint/tape edge. Proof: staging computer applies a
-      pushed update and restores to a pinned commit. Boundaries:
-      platform updates never mint owner decisions; divergent/pinned
-      lineage is refused; updater trust + route CAS mechanics
-      unchanged.
+      M9a settled 2026-09-26 (deployed 44e4169e; probe
+      scripts/m9a_platform_update_probe.mjs predicate satisfied on a
+      fresh-owner computer): a platform-control-signed update offer
+      reached the guest over the vmctl autoputer-proxy transport, applied
+      under a canonical head binding, promoted the route slot under the
+      platform-follow evidence class, and restored to the pinned head via
+      tape reconstruct (witness matched, frontend restaged).
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
       - docs/reports/choir-platform-update-system-consensus-2026-09-08.md
+  - id: choir-selfdev-gate-2026-09-27
+    title: Self-Development Gate — Supervised Episode on Records (M11, station)
+    path: docs/definitions/choir-selfdev-gate-2026-09-27.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    enables: []
+    note: >-
+      M11 (last spine station): one reversible-selfdev-v1 episode end to
+      end on staging — desk-authored candidate, expected-heads on every
+      material action, qualified-consensus decision under
+      reversible-selfdev-v1, driverless materialize->apply (M7),
+      verification, candidate-B falsification visible in the live Texture
+      doc, restore to the pinned pre-episode head (M9a path). Receipts
+      must be scored commitment_records under the frozen R5a vocabulary.
+      Probe: scripts/m11_selfdev_episode_probe.mjs.
+    sources:
+      - docs/definitions/choir-selfdev-gate-2026-09-27.md
+      - docs/evidence/m11-episode-call-map-2026-09-27.md

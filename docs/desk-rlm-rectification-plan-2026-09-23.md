@@ -47,12 +47,20 @@ Stated 2026-09-23, in conversation:
 
 **Naming — three strata, different states:**
 
-- *Live vocabulary:* **already cut over.** `agentprofile.Super = "management"`,
-  `CoSuper = "engineering"`, `Researcher = "research"`
-  (`internal/agentprofile/agentprofile.go:12-14`); desk agent IDs are already
-  `engineering:{docID}` (`engineering_desk.go:20-21`,
-  `texture_lifecycle_create.go:92`). The earlier draft's claim that the live
-  ID is `co_super:{docID}` was wrong.
+- *Live vocabulary:* **STALE — partially falsified 2026-09-27** (see
+  `docs/problems/rename-residual-census-2026-09-27.md`). The canonical
+  desk constants did rename (`agentprofile.Super = "management"`,
+  `CoSuper = "engineering"`, `Researcher = "research"`,
+  `internal/agentprofile/agentprofile.go:12-14`) and desk agent IDs are
+  `engineering:{docID}` — but the live *auxiliary* surface was never
+  swept: model-facing tool names (`cancel_co_super_assignment`,
+  `update_coagent`), persisted run-metadata keys (`co_super_slot`,
+  `cosuper_replacement_*`), acceptance checkpoint kinds
+  (`super_direction_opened`), the `open_persistent_super` control key,
+  ~120 error-string prefixes, prompt overlays teaching the demoted verbs,
+  and the `super-console` app/route all still carry V1 tokens. The earlier
+  draft's claim that the live ID is `co_super:{docID}` was wrong — and so
+  was this line's "already cut over."
 - *Durable vocabulary:* still old. `co_super_assignment_*` event kinds
   (`internal/types/lifecycle.go:60-64`), `choir.co_super_assignment` OG kinds
   (`internal/store/cosuper_assignments.go:25-39`), the `co_super_slots` SQL
@@ -578,9 +586,6 @@ after R3b; `M7` after R3c; `R4` after R3d; `R5a` anywhere before M11;
   none material.
 - **Texture consumer ordering:** read (R3a) precedes authoring (R3d);
   dual-read is the admit state, not a permanent second authority —
-  deletion of the desk-evidence branch is R3d's acceptance item, and R3a
-  names R3d as the deletion owner (not a calendar date). *Dissent:* none.
-- **Compound-vs-seam:** compound product-atom (merge R3+R4) rejected — it
   repeats R2's defect; R3d is still the compound-risk mission and is
   flagged with a split point (R3d-a = cell + consumer, no write; R3d-b =
   the write) to decide at charter, not mid-flight.
@@ -588,10 +593,17 @@ after R3b; `M7` after R3c; `R4` after R3d; `R5a` anywhere before M11;
 ### 11.5 Residuals carried (unassigned, not dropped)
 
 - `deskModuleSets` demoted verbs (`Message`/`Outcome`/`Spawn`/`Assign`)
-  must be cut or deferred — assigned to R3b/R3c.
+  must be cut or deferred — assigned to R3b/R3c. **CARRIED 2026-09-27:**
+  R3b/R3c/R3d settled without cutting or a recorded deferral; verbs
+  remain exported on every desk set (`internal/yaegikernel/choir.go:154-169`)
+  and prompt-taught (`rlm_engineering_runtime.yaml:51-53`), and
+  `yaegikernel/broker.go` still backs `Assign` with a process-local mock.
+  Post-spine residual pass owns the cut/deferral decision (census:
+  `docs/problems/rename-residual-census-2026-09-27.md`).
 - The `commit`+`CommitInboxCursor` atomicity gap is R2x scope (cursor).
 - `engineering:{docID}` desk agent "never runs"
   (`engineering_desk.go:18-19`) — still true; do not write acceptance as
   if that parent executes.
 - `docs/desk-rlm-rectification-plan-2026-09-25.md` does not exist — a few
   panel briefs cited it; the live plan is this file.
+

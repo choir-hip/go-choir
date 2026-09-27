@@ -108,16 +108,19 @@ boundaries:
 now:
   status: working
   slice: >-
-    station M9a SETTLED 2026-09-26 — platform-signed update push +
-    pinned-head restore proven on staging (deployed 44e4169e, evidence
-    docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md).
-    R5a SETTLED 2026-09-27 — vocab decoders + seed freeze landed+deployed
-    (bc58fa8f, ci 36283101087): per-family frozen decoders routed at
-    interpretation boundaries, one stratum-C normalization point
-    (repaired two latent compare gaps), keep-v3 pinned, pre-migration
-    fold proven identical. Next station: M11 — the self-development
-    gate, last on the spine. M11's dependencies are all settled:
-    M7 + M9a + R3d + R4 + R5a.
+    station M11 IN FLIGHT 2026-09-27 — the self-development gate, last on
+    the spine. Episode probe scripts/m11_selfdev_episode_probe.mjs
+    authored (client-minted qualified-consensus under
+    reversible-selfdev-v1: RFC-8785 canonical digests, seat_manifest
+    binding, Go RFC3339Nano truncation mirrored), pinned pre-episode
+    checkpoint via lifecycle/checkpoint, restore leg on the M9a path.
+    Deployed run launched against staging (fresh owner + tracking
+    computer). Call map: docs/evidence/m11-episode-call-map-2026-09-27.md.
+    In parallel, owner-directed spine reconciliation review: rename
+    residual census at docs/problems/rename-residual-census-2026-09-27.md
+    (Class A live-surface vs Class B frozen vocabulary vs Class C
+    owner-deferred R5b) + full agentic-consensus panel reviewing station
+    completeness.
   source_ref: main@bc58fa8f
   deploy_identity: staging https://choir.news build.commit=bc58fa8f
   candidate:
