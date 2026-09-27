@@ -3271,6 +3271,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			}
 			return toolregistry.ToolLoopCompletionGuardResult{
 				Continue:    true,
+				Reason:      "engineering_overlay_terminal_fate_required",
 				Instruction: "The turn ended without a committed terminal fate. Finish the assignment inside a capsule_go_eval cell: call choir.Freeze when a self-development bundle is bound, then choir.Complete once with execution_refs — or commit the corresponding terminal failure fate — before ending the turn. Narrative text alone does not end the run.",
 			}, nil
 		}))
