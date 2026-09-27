@@ -264,7 +264,7 @@ func TestStageGrantedReleaseAdmitsBinaryStringBlob(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(merged, "var/lib/artifact/release/bin/autoputer"), badBinary, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", t.TempDir()); err == nil || !strings.Contains(err.Error(), "refuses secret") {
+	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming); err == nil || !strings.Contains(err.Error(), "refuses secret") {
 		t.Fatalf("secret-bearing binary release error = %v", err)
 	}
 }
