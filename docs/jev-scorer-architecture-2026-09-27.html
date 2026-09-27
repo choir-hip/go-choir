@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jev Scorer Integration — Architecture (2026-09-27)</title>
+<title>Precommitment Fabric + Jev Scoring — Architecture (2026-09-27, r3)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -13,270 +13,249 @@
   h2 { font-size:15px; font-weight:600; letter-spacing:.02em; margin:44px 0 10px;
        padding-bottom:6px; border-bottom:1px solid #d8d4c9; }
   .sub { color:#6b675c; font-size:13px; margin-bottom:8px; }
-  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size:12.5px; }
   code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size:12px;
          background:#efece4; padding:1px 4px; border-radius:3px; }
   svg { display:block; background:#fff; border:1px solid #e2ded4; border-radius:6px; }
-  table { border-collapse:collapse; width:100%; font-size:13px; margin-top:10px;
-          background:#fff; }
+  table { border-collapse:collapse; width:100%; font-size:13px; margin-top:10px; background:#fff; }
   th { text-align:left; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
        color:#6b675c; padding:7px 12px 7px 10px; border-bottom:2px solid #d8d4c9; }
   td { vertical-align:top; padding:8px 12px 8px 10px; border-bottom:1px solid #e8e4da; }
   .legend { display:flex; gap:18px; flex-wrap:wrap; font-size:12px; color:#55524a; margin-top:8px; }
   .sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
-  ul { padding-left:18px; }
-  li { margin:3px 0; }
-  .cols { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
   .callout { background:#fff8e6; border:1px solid #e8d89a; border-radius:6px;
              padding:10px 14px; margin-top:14px; font-size:13px; }
-  .callout b { font-weight:600; }
+  .bad { color:#9a3c2e; font-weight:600; }
+  .good { color:#3c6b46; font-weight:600; }
 </style>
 </head>
 <body>
 
-<h1>Jev scorer integration — architecture</h1>
-<p class="sub">Internal working diagram page · 2026-09-27 · mutation class <b>RED</b> · after M11 episode · pending owner ratification</p>
+<h1>Precommitment fabric + Jev scoring — architecture</h1>
+<p class="sub">Internal working diagram · 2026-09-27 · rev 3 (post unified-collapse review) · mutation class <b>RED</b> · pending owner ratification</p>
+
+<div class="callout"><b>Round-3 consensus correction:</b> "every inter-desk utterance is a packet" over-collapses. The substrate unifies (one envelope, one authority path, one atomic wake-outbox fold, one inbox projection) but <b>two persisted families</b> survive: desk-authored <i>packets</i> (addressed obligations/mail) and ledger <i>records</i> (predictions, resolutions, scores). Scores are runtime-authored facts — they never enter the desk-mail path because <code>AssembleCellInbox</code> injects every channel message into cell context unfiltered: a score packet addressed to a desk is an evaluator-gaming channel by construction.</p>
 
 <!-- ================= TOPOLOGY ================= -->
-<h2>1 · Topology and happy path</h2>
-<p class="sub">The cell authors the lifecycle via tray-staged verbs; resolve's commit mints the scoring obligation automatically; a guest-side worker calls the host gateway. Verified: <code>agentcore</code>/<code>rlm_reduce</code> run inside the microVM (<code>internal/autoputer/run.go:196–200</code>); the host gateway holds all provider credentials and is the only egress.</p>
+<h2>1 · Topology — three author classes, one substrate</h2>
+<p class="sub">Cells author via tray-staged verbs; the reducer commits post-cell; all wakes ride the durable actor-wake outbox (minted in the canonical fold, `lifecycle.go:2088–2128`, drained by the 500ms projector). Wake is a <i>hint</i> — delivery is the durable pending-item drain at activation start.</p>
 
-<svg viewBox="0 0 1180 520" width="1180" height="520">
+<svg viewBox="0 0 1180 560" width="1180" height="560">
   <defs>
-    <marker id="arr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
-      <path d="M0,0 L9,3.5 L0,7 Z" fill="#44403a"/>
-    </marker>
-    <marker id="arrd" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
-      <path d="M0,0 L9,3.5 L0,7 Z" fill="#9a958a"/>
-    </marker>
+    <marker id="a" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 Z" fill="#44403a"/></marker>
+    <marker id="ad" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 Z" fill="#9a958a"/></marker>
+    <marker id="ax" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 Z" fill="#9a3c2e"/></marker>
     <style>
       .bx { fill:#fff; stroke:#8a857a; stroke-width:1.4; rx:6; }
       .bxg { fill:#fdf7e4; stroke:#b89a3a; stroke-width:1.4; rx:6; }
       .bxt { fill:#eef4ee; stroke:#6a8a6a; stroke-width:1.4; rx:6; }
-      .ttl { font:600 12px ui-monospace,Menlo,monospace; letter-spacing:.06em; fill:#3a372f; }
+      .bxr { fill:#fbeeec; stroke:#9a3c2e; stroke-width:1.4; rx:6; }
+      .ttl { font:600 12px ui-monospace,Menlo,monospace; letter-spacing:.05em; fill:#3a372f; }
       .txt { font:12.5px ui-sans-serif,system-ui; fill:#1c1b18; }
       .dim { font:11.5px ui-sans-serif,system-ui; fill:#6b675c; }
       .flow { stroke:#44403a; stroke-width:1.6; fill:none; }
       .flowd { stroke:#9a958a; stroke-width:1.4; fill:none; stroke-dasharray:5 4; }
+      .forbid { stroke:#9a3c2e; stroke-width:1.8; fill:none; stroke-dasharray:3 3; }
       .lbl { font:11px ui-monospace,Menlo,monospace; fill:#55524a; }
       .zone { font:600 11px ui-monospace,Menlo,monospace; letter-spacing:.14em; fill:#8a857a; }
     </style>
   </defs>
 
   <!-- zones -->
-  <rect x="10" y="14" width="760" height="492" fill="none" stroke="#c9c4b8" stroke-dasharray="6 5" rx="8"/>
-  <text x="24" y="38" class="zone">MICROVM — guest nixos · embedded Dolt ObjectGraph · no provider credentials</text>
-  <rect x="796" y="14" width="372" height="300" fill="none" stroke="#c9c4b8" stroke-dasharray="6 5" rx="8"/>
-  <text x="810" y="38" class="zone">HOST — bare metal · all provider creds</text>
+  <rect x="10" y="14" width="770" height="532" fill="none" stroke="#c9c4b8" stroke-dasharray="6 5" rx="8"/>
+  <text x="24" y="38" class="zone">MICROVM — guest · embedded Dolt ObjectGraph · no provider creds</text>
+  <rect x="806" y="14" width="362" height="240" fill="none" stroke="#c9c4b8" stroke-dasharray="6 5" rx="8"/>
+  <text x="820" y="38" class="zone">HOST — bare metal · all provider creds</text>
 
-  <!-- Yaegi cell -->
-  <rect x="30" y="60" width="280" height="128" class="bx"/>
-  <text x="46" y="84" class="ttl">YAEGI CELL · desk Go code</text>
-  <text x="46" y="108" class="txt">precommit.Commit(Prediction)</text>
-  <text x="46" y="128" class="txt">precommit.Resolve(id, Observation)</text>
-  <text x="46" y="152" class="dim">stages Tray intents — μs, no network</text>
-  <text x="46" y="172" class="dim">sees receipt + status only, never answers</text>
+  <!-- desks -->
+  <rect x="30" y="58" width="330" height="150" class="bx"/>
+  <text x="46" y="80" class="ttl">DESKS (cells) — research · eng · texture · mgmt</text>
+  <text x="46" y="104" class="txt">precommit.Commit(Prediction) — typed Qs+probs</text>
+  <text x="46" y="124" class="txt">precommit.Resolve(id, Observation) — evidence req'd</text>
+  <text x="46" y="144" class="txt">desk.Send(target, Packet{kind, body}) — mail</text>
+  <text x="46" y="168" class="dim">stage intents → μs → no network → exit</text>
+  <text x="46" y="188" class="dim">inbox = view over addressed pending items</text>
 
   <!-- reducer -->
-  <rect x="30" y="236" width="280" height="96" class="bx"/>
-  <text x="46" y="260" class="ttl">rlm_reduce — post-cell commit</text>
-  <text x="46" y="284" class="txt">one atomic append: resolution</text>
-  <text x="46" y="304" class="txt">+ score_request (runtime-stamped)</text>
-  <text x="46" y="322" class="dim">cell already gone — never blocks on Jev</text>
+  <rect x="30" y="248" width="330" height="104" class="bx"/>
+  <text x="46" y="270" class="ttl">rlm_reduce — ONE commit path</text>
+  <text x="46" y="292" class="txt">packets → commitMessageIntent (authority+wake)</text>
+  <text x="46" y="310" class="txt">lifecycle acts → commitActIntent (OG record)</text>
+  <text x="46" y="330" class="txt">resolve ⇒ +score_request in same conditional batch</text>
+  <text x="46" y="346" class="dim">wake rows minted in fold — at-least-once</text>
 
-  <!-- ObjectGraph -->
-  <rect x="370" y="60" width="380" height="190" class="bxg"/>
-  <text x="386" y="84" class="ttl">OBJECTGRAPH — immutable tape</text>
-  <text x="386" y="110" class="txt">choir.commitment_record <tspan class="dim">(existing; +typed Qs, +evidence refs)</tspan></text>
-  <text x="386" y="132" class="txt">choir.commitment_score_request <tspan class="dim">(NEW obligation)</tspan></text>
-  <text x="386" y="154" class="txt">choir.commitment_score_attempt <tspan class="dim">(NEW failure evidence)</tspan></text>
-  <text x="386" y="176" class="txt">choir.commitment_score <tspan class="dim">(NEW result, full distributions)</tspan></text>
-  <text x="386" y="202" class="dim">deterministic IDs = H(resolution, qDigest, scorerPin, specVer)</text>
-  <text x="386" y="222" class="dim">conditional append — replay/restore can't mint dupes</text>
+  <!-- ledger -->
+  <rect x="410" y="58" width="350" height="200" class="bxg"/>
+  <text x="426" y="80" class="ttl">OBJECTGRAPH — immutable tape</text>
+  <text x="426" y="106" class="txt">packets: CoagentSourcePacket <tspan class="dim">(desk mail)</tspan></text>
+  <text x="426" y="126" class="txt">records: commitment_record <tspan class="dim">(prediction/resolution)</tspan></text>
+  <text x="426" y="146" class="txt">        commitment_score_request <tspan class="dim">(obligation)</tspan></text>
+  <text x="426" y="166" class="txt">        commitment_score_attempt <tspan class="dim">(failure evidence)</tspan></text>
+  <text x="426" y="186" class="txt">        commitment_score / adjudication</text>
+  <text x="426" y="212" class="dim">deterministic IDs · score ≠ resolution kind — can never govern</text>
+  <text x="426" y="232" class="dim">actor_wake_outbox rows minted atomically with appends</text>
 
-  <!-- scorer worker -->
-  <rect x="370" y="288" width="380" height="96" class="bx"/>
-  <text x="386" y="312" class="ttl">SCORER WORKER · guest-side reconciler</text>
-  <text x="386" y="336" class="txt">sweep obligations → POST /provider/v1/judgments</text>
-  <text x="386" y="356" class="txt">bounded retry (backoff+jitter, Retry-After, bounded attempts)</text>
-  <text x="386" y="374" class="dim">restart reconciles from ledger; crash windows reconstructible</text>
+  <!-- dispatcher -->
+  <rect x="410" y="294" width="350" height="84" class="bx"/>
+  <text x="426" y="316" class="ttl">SCORING DISPATCHER — runtime, dumb</text>
+  <text x="426" y="338" class="txt">sweep requests → gateway → append score/attempt</text>
+  <text x="426" y="358" class="txt">bounded retry · no LLM · restart reconciles from ledger</text>
 
-  <!-- texture -->
-  <rect x="370" y="424" width="380" height="64" class="bxt"/>
-  <text x="386" y="448" class="ttl">SUPERVISION SINKS</text>
-  <text x="386" y="470" class="txt">SupervisionPack · owner API · Texture render · publishable articles</text>
+  <!-- management -->
+  <rect x="30" y="392" width="330" height="84" class="bxt"/>
+  <text x="46" y="414" class="ttl">MANAGEMENT DESK — judgment layer</text>
+  <text x="46" y="436" class="txt">drains pending adjudication items at own pace</text>
+  <text x="46" y="456" class="txt">appends adjudication record (score-axis, non-governing)</text>
+  <text x="46" y="470" class="dim">cold-start safe: durable pending, no wake storm</text>
+
+  <!-- supervision -->
+  <rect x="410" y="418" width="350" height="58" class="bxt"/>
+  <text x="426" y="440" class="ttl">SUPERVISION SINKS</text>
+  <text x="426" y="460" class="txt">SupervisionPack · owner API · Texture render surface</text>
+
+  <!-- forbidden lane -->
+  <rect x="410" y="494" width="350" height="40" class="bxr"/>
+  <text x="426" y="512" class="txt" fill="#9a3c2e"><tspan font-weight="700">FORBIDDEN:</tspan> score values → cell inbox / ActingPack</text>
+  <text x="426" y="526" class="dim">/ texture doc model frame — shape-level, not filtered</text>
 
   <!-- gateway -->
-  <rect x="820" y="60" width="180" height="96" class="bx"/>
-  <text x="834" y="84" class="ttl">HOST GATEWAY :8084</text>
-  <text x="834" y="108" class="txt">/provider/v1/judgments</text>
-  <text x="834" y="128" class="dim">per-VM bearer · per-computer</text>
-  <text x="834" y="144" class="dim">limiter + provider backoff</text>
+  <rect x="830" y="58" width="170" height="92" class="bx"/>
+  <text x="844" y="80" class="ttl">HOST GATEWAY :8084</text>
+  <text x="844" y="102" class="txt">/provider/v1/judgments</text>
+  <text x="844" y="122" class="dim">per-VM bearer · limiter</text>
+  <text x="844" y="138" class="dim">provider backoff</text>
 
   <!-- typesafe -->
-  <rect x="1040" y="60" width="116" height="96" class="bxg"/>
-  <text x="1052" y="84" class="ttl">TYPESAFE</text>
-  <text x="1052" y="108" class="txt">Jev /v1/systemone</text>
-  <text x="1052" y="128" class="dim">pinned served model</text>
-  <text x="1052" y="144" class="dim">host-held key</text>
+  <rect x="1040" y="58" width="116" height="92" class="bxg"/>
+  <text x="1052" y="80" class="ttl">TYPESAFE</text>
+  <text x="1052" y="102" class="txt">Jev /v1/systemone</text>
+  <text x="1052" y="122" class="dim">pinned model</text>
+  <text x="1052" y="138" class="dim">host-held key</text>
 
   <!-- flows -->
-  <path class="flow" d="M170 188 L170 236" marker-end="url(#arr)"/>
-  <text x="180" y="216" class="lbl">1 · tray (End-of-cell)</text>
-  <path class="flow" d="M310 284 L370 190" marker-end="url(#arr)"/>
-  <text x="314" y="236" class="lbl">2 · atomic append</text>
-  <path class="flowd" d="M560 288 L560 250" marker-end="url(#arrd)"/>
-  <text x="570" y="272" class="lbl">3 · eligible (request − score − terminal)</text>
-  <path class="flow" d="M750 310 C 800 260 810 140 820 110" marker-end="url(#arr)"/>
-  <text x="772" y="200" class="lbl">4 · per-VM bearer</text>
-  <path class="flow" d="M1000 108 L1040 108" marker-end="url(#arr)"/>
-  <text x="1002" y="98" class="lbl">5</text>
-  <path class="flowd" d="M820 130 C 800 200 790 280 750 330" marker-end="url(#arrd)"/>
-  <text x="780" y="300" class="lbl">6 · answers+dists</text>
-  <path class="flowd" d="M560 384 L560 424" marker-end="url(#arrd)"/>
-  <text x="570" y="408" class="lbl">7 · score record → supervision only</text>
+  <path class="flow" d="M195 208 L195 248" marker-end="url(#a)"/><text x="205" y="232" class="lbl">tray</text>
+  <path class="flow" d="M360 300 L410 180" marker-end="url(#a)"/><text x="352" y="238" class="lbl">append</text>
+  <path class="flowd" d="M585 294 L585 258" marker-end="url(#ad)"/><text x="595" y="278" class="lbl">eligible request</text>
+  <path class="flow" d="M760 330 C 800 300 815 160 830 110" marker-end="url(#a)"/><text x="782" y="200" class="lbl">bearer</text>
+  <path class="flow" d="M1000 104 L1040 104" marker-end="url(#a)"/>
+  <path class="flowd" d="M830 130 C 810 190 800 320 760 345" marker-end="url(#ad)"/>
+  <path class="flowd" d="M410 336 L360 380" marker-end="url(#ad)"/><text x="330" y="372" class="lbl">low-conf / disputed ⇒ pending item</text>
+  <path class="flowd" d="M585 378 L585 418" marker-end="url(#ad)"/><text x="595" y="402" class="lbl">score → supervision only</text>
+  <path class="forbid" d="M360 440 L410 500" marker-end="url(#ax)"/>
 </svg>
 <div class="legend">
   <span><span class="sw" style="background:#fdf7e4;border:1px solid #b89a3a"></span>ledger / external model</span>
-  <span><span class="sw" style="background:#fff;border:1px solid #8a857a"></span>runtime component</span>
-  <span><span class="sw" style="background:#eef4ee;border:1px solid #6a8a6a"></span>supervision sink</span>
-  <span><span class="sw" style="background:#44403a"></span>solid = synchronous within-path</span>
-  <span><span class="sw" style="background:#9a958a"></span>dashed = async settlement</span>
+  <span><span class="sw" style="background:#fff;border:1px solid #8a857a"></span>runtime</span>
+  <span><span class="sw" style="background:#eef4ee;border:1px solid #6a8a6a"></span>desk / supervision</span>
+  <span><span class="sw" style="background:#fbeeec;border:1px solid #9a3c2e"></span>forbidden lane</span>
+  <span><span class="sw" style="background:#44403a"></span>sync path</span>
+  <span><span class="sw" style="background:#9a958a"></span>async settlement</span>
 </div>
 
-<!-- ================= SEQUENCE ================= -->
-<h2>2 · Lifecycle sequence — what the agent authors vs what the runtime owns</h2>
-<svg viewBox="0 0 1180 420" width="1180" height="420">
-  <style>
-    .life { stroke:#d8d4c9; stroke-width:1; stroke-dasharray:3 4; }
-    .who { font:600 11.5px ui-monospace,Menlo,monospace; fill:#3a372f; }
-    .msg { stroke:#44403a; stroke-width:1.5; marker-end:url(#arr); }
-    .msgd { stroke:#9a958a; stroke-width:1.4; stroke-dasharray:5 4; marker-end:url(#arrd); }
-    .mt { font:11.5px ui-sans-serif,system-ui; fill:#1c1b18; }
-    .mt2 { font:10.5px ui-sans-serif,system-ui; fill:#6b675c; }
-  </style>
-
-  <text x="80" y="30" class="who">CELL (agent Go)</text>
-  <line class="life" x1="120" y1="40" x2="120" y2="400"/>
-  <text x="300" y="30" class="who">rlm_reduce</text>
-  <line class="life" x1="330" y1="40" x2="330" y2="400"/>
-  <text x="540" y="30" class="who">ObjectGraph</text>
-  <line class="life" x1="580" y1="40" x2="580" y2="400"/>
-  <text x="770" y="30" class="who">scorer worker</text>
-  <line class="life" x1="800" y1="40" x2="800" y2="400"/>
-  <text x="930" y="30" class="who">gateway → Jev</text>
-  <line class="life" x1="960" y1="40" x2="960" y2="400"/>
-
-  <path class="msg" d="M120 70 L330 70"/><text x="130" y="64" class="mt">Commit(typed Qs + agent probs)</text>
-  <path class="msg" d="M330 95 L580 95"/><text x="340" y="89" class="mt">append commitment_record</text><text x="340" y="103" class="mt2">frozen before evidence access — reject bare hypothesis</text>
-  <path class="msg" d="M120 150 L330 150"/><text x="130" y="144" class="mt">Resolve(id, Observation{evidenceRefs, excerpt, verdict})</text><text x="130" y="162" class="mt2">evidence required — verdict word alone resolves nothing</text>
-  <path class="msg" d="M330 180 L580 180"/><text x="340" y="174" class="mt">atomic: resolution + score_request (runtime stamps pin/spec)</text>
-  <path class="msgd" d="M800 210 L580 210"/><text x="590" y="204" class="mt">sweep: eligible request (no score, no terminal attempt)</text>
-  <path class="msg" d="M800 240 L960 240"/><text x="810" y="234" class="mt">judgments call — one attempt per retry budget</text>
-  <path class="msgd" d="M960 270 L800 270"/><text x="810" y="264" class="mt">answers by qID + full distributions + served model</text>
-  <path class="msg" d="M800 300 L580 300"/><text x="590" y="294" class="mt">append score (deterministic ID) / attempt (failure evidence)</text>
-  <path class="msgd" d="M580 340 L120 340"/><text x="130" y="334" class="mt">agent observes at most: status ∈ {pending, scored, terminal_unscored}</text>
-  <text x="590" y="355" class="mt2">SupervisionPack / Texture / articles see answers + distributions + provenance</text>
-  <text x="120" y="392" class="mt2">No Score() verb exists. No score values enter acting context. Retries are runtime-owned — the cell's model loop never drives them.</text>
-</svg>
-
-<!-- ================= LEDGER ================= -->
-<h2>3 · Ledger kinds and deterministic identity</h2>
+<!-- ================= TAXONOMY ================= -->
+<h2>2 · The unified taxonomy — three classes, shared substrate</h2>
 <table>
-  <tr><th style="width:300px">Kind</th><th style="width:110px">New?</th><th>Contents — binding</th></tr>
-  <tr><td class="mono">choir.commitment_record</td><td>existing</td>
-      <td>Prediction gains frozen <code>TypedQuestion[]</code>: stable qID, kind (noul/choice/score), criteria or ordered levels, agent's own probabilities. Resolution gains required <code>EvidenceRefs[]</code> + bounded excerpt. Resolver verdict stays a verdict, never a score.</td></tr>
-  <tr><td class="mono">choir.commitment_score_request</td><td><b>new</b></td>
-      <td>Obligation appended atomically with resolution. <code>id = H(resolutionID, questionDigest, scorerPin, specVersion)</code>. Runtime-stamps scorer identity and policy version — the cell cannot select them.</td></tr>
-  <tr><td class="mono">choir.commitment_score_attempt</td><td><b>new</b></td>
-      <td>Durable failure evidence per attempt (429/529/auth/invalid/refusal + next retry schedule). Pending is derived: request − score − terminal attempt. Never a stored flag.</td></tr>
-  <tr><td class="mono">choir.commitment_score</td><td><b>new</b></td>
-      <td>Answers by qID with <b>full distributions</b>, served model identity, state/question digests, scored_at, raw artifact refs. Same deterministic ID family — collision ⇒ compare input digests, don't silently accept.</td></tr>
+  <tr><th style="width:190px">Class</th><th style="width:250px">Kinds (v1)</th><th>Storage · wake · visibility</th></tr>
+  <tr>
+    <td><b>Desk-authored packets</b><br><span class="dim">addressed obligations/mail</span></td>
+    <td class="mono" style="font-size:12px">evidence_update · execution_request · execution_result · blocker · question · proposal · decision_request</td>
+    <td><code>CoagentSourcePacket</code> (existing schema). Wake addressee via outbox-fold row + pending drain. Inbox = view over addressed pending items.</td>
+  </tr>
+  <tr>
+    <td><b>Ledger acts</b><br><span class="dim">desk-authored lifecycle</span></td>
+    <td class="mono" style="font-size:12px">prediction (typed Qs + frozen probs) · resolution (verdict + required evidenceRefs)</td>
+    <td><code>CommitmentRecord</code> — schema-level typed fields, not packet bodies. Resolution mints <code>score_request</code> in the same conditional batch. Resolver wakes its named resolver obligation.</td>
+  </tr>
+  <tr>
+    <td><b>Runtime facts</b><br><span class="dim">scorer + mgmt adjudication</span></td>
+    <td class="mono" style="font-size:12px">score_request · score_attempt · score · adjudication <span class="dim">(mgmt second opinion — score-axis, never governing)</span></td>
+    <td>Separate OG object kinds, deterministic IDs. <b>Never packets, never desk wake, never inbox/ActingPack.</b> SupervisionPack + owner render only. Management adjudication queues as durable pending work.</td>
+  </tr>
 </table>
-<div class="callout"><b>Join safety:</b> <code>ResolveCommitments</code> classifies resolutions by link+timestamp today; a score-shaped record could hijack the join or become a phantom act. Resolution classification becomes explicit (kind check) so a score can <b>never</b> govern. Late scores bind to their original resolution ID — never the latest.</div>
+<div class="callout"><b>Why not one record type:</b> packets assume a caller run + desk profile (authority at <code>tools_worker_update.go:336–374</code>); scores are runtime-authored — no caller exists. Forging a desk caller poisons provenance. Shared envelope semantics + authority spine + wake substrate is the honest "one system"; the two families are the correct cut.</div>
 
-<!-- ================= VISIBILITY ================= -->
-<h2>4 · Visibility partition — the epistemic boundary</h2>
+<!-- ================= ENVELOPE ================= -->
+<h2>3 · Envelope vs kind-versioned body</h2>
 <table>
-  <tr><th style="width:300px">Surface</th><th style="width:130px">Score values?</th><th>Rule</th></tr>
-  <tr><td><code>ActingPack</code> — acting desk context</td><td><b>never</b></td>
-      <td>Shape-level: type gains no score fields. <code>Disagreement</code> splits — resolver-verdict conflict stays visible; scorer disagreement moves to supervision.</td></tr>
-  <tr><td>channel.message to acting desk</td><td><b>never</b></td>
-      <td>No answer-bearing wake. Operational events may carry status only.</td></tr>
-  <tr><td><code>SupervisionPack</code> · owner API · Texture render</td><td><b>full</b></td>
-      <td>Distributions, served model identity, attempt log, digests. Articles cite immutable score refs (per-doc opt-in).</td></tr>
-  <tr><td>Texture <i>model context</i> while rendering</td><td><b>gated</b></td>
-      <td>Texture's model frame is also an acting context — render scores for the owner without echoing them into the render model's input.</td></tr>
-  <tr><td>Research desk (autoresearch)</td><td><b>full, read-only</b></td>
-      <td>Reads historical scores for calibration tuning; never writes.</td></tr>
+  <tr><th style="width:300px">Layer</th><th>Owns</th></tr>
+  <tr><td><b>Envelope</b> (schema-level, flat, DisallowUnknownFields)</td>
+      <td><code>schema_version · kind · kind_version · packet_id/record_id · owner/computer/trajectory · author class + agent/run · addressee or consumer class · causal refs (target/resolution/parent) · committed seq/time · payload_digest</code>. Runtime-derived authority + visibility class — never author-asserted.</td></tr>
+  <tr><td><b>Kind-versioned body</b></td>
+      <td><code>prediction{hypothesis, assumptions, alternatives, questions[{id,kind(noul|choice|score),criteria,probs}], resolver_id, deadline}</code> · <code>resolution{target, verdict-enum, evidence_refs, excerpt}</code> · <code>score{answers_by_qid, distributions, served_model, digests}</code> · <code>adjudication{contested_refs, verdict, rationale}</code>. Semantic types reuse <code>types/commitment.go</code> as the single authority — no parallel schema.</td></tr>
+  <tr><td><b>Not fields:</b> mutable status</td>
+      <td>No shared <code>resolved/scored</code> field — delivery-ack, outcome resolution, scoring completion, and dispute settlement are separate projections over immutable records.</td></tr>
+</table>
+
+<!-- ================= WAKE + DELIVERY ================= -->
+<h2>4 · Wake semantics per kind — the durable rule</h2>
+<table>
+  <tr><th style="width:180px">Kind</th><th style="width:340px">Wake</th><th>Delivery guarantee</th></tr>
+  <tr><td class="mono">messaging kinds</td><td>addressed desk (outbox-fold row + projector)</td><td>At-least-once via pending drain at activation; wake is hint only.</td></tr>
+  <tr><td class="mono">prediction</td><td>named resolver's obligation</td><td>Resolver durable-pending item; cell can't act on evidence until receipt commits.</td></tr>
+  <tr><td class="mono">resolution</td><td>scorer obligation + operational subscribers (score-free projection)</td><td>Score request minted in same conditional batch — no lost-obligation window.</td></tr>
+  <tr><td class="mono">score_request / attempt</td><td><b>runtime consumer only</b></td><td>Dispatcher sweep + backoff; terminal → management blocker item.</td></tr>
+  <tr><td class="mono">score</td><td><b>no desk wake, ever</b></td><td>Supervision projection only; policy triggers adjudication item (low-conf ∪ dispute ∪ ambiguity ∪ random audit).</td></tr>
+  <tr><td class="mono">adjudication</td><td>concerned desk gets score-free factual verdict</td><td>Management pending drain; never recursive scoring of adjudications.</td></tr>
+</table>
+<div class="callout"><b>Panel-verified defect to fix first:</b> <code>wakeUpdatedCoagent</code> is at-most-once today (logs+returns on dispatch failure; fires only on <code>created</code>; drops when no management run is resident). The fix is not a new queue — every new kind enters <code>actorWakeOutboxFromObject</code>'s switch (unknown kinds silently return nil) and the pending-drain query runs at cell start. Also: cold-management gate (<code>management_controller.go:2703</code>) means adjudication items must be drained, not woken.</div>
+
+<!-- ================= COVERAGE ================= -->
+<h2>5 · Coverage — mandatory, and where it still leaks</h2>
+<table>
+  <tr><th style="width:280px">Leak</th><th>Fix</th></tr>
+  <tr><td>Desk resolves nothing → nothing scored</td><td>Open precommitments past deadline score as <b>expired</b>; assignment completion requires resolving bound open precommitments.</td></tr>
+  <tr><td>Nine-word verdict parser → unknown word maps to <code>unresolved</code> and silently exits the scored population</td><td>Eligibility keys on <b>resolution-record existence</b>, not discrepancy class; verdict becomes a typed enum.</td></tr>
+  <tr><td>Resolver pseudo-score occupies <code>rec.Scores</code> (<code>rlm_reduce.go:922–934</code>)</td><td>Removed before Jev scores exist — resolver verdict and scorer verdict never share the slot.</td></tr>
+  <tr><td>Same-cell commit + resolve → "predicted before evidence" unprovable</td><td>Durable prediction receipt must precede the evidence-bearing act — normally a separate activation. Coverage reporting shows committed-vs-acted delta.</td></tr>
+  <tr><td>Confidence-threshold routing</td><td>Memo evidence: Jev <code>confidence</code> ≈ max-prob — weak alone. Escalation policy = versioned function of confidence ∪ verdict-conflict ∪ ambiguity ∪ materiality ∪ random audit sample.</td></tr>
 </table>
 
 <!-- ================= STATES ================= -->
-<h2>5 · Obligation state machine</h2>
-<svg viewBox="0 0 1180 240" width="1180" height="240">
+<h2>6 · Obligation state machine</h2>
+<svg viewBox="0 0 1180 190" width="1180" height="190">
   <style>
     .st { fill:#fff; stroke:#8a857a; stroke-width:1.4; rx:14; }
     .stt { font:600 12.5px ui-sans-serif,system-ui; fill:#1c1b18; }
     .sm { font:10.5px ui-sans-serif,system-ui; fill:#6b675c; }
   </style>
-  <rect x="20" y="80" width="190" height="64" class="st"/><text x="60" y="105" class="stt">pending</text><text x="40" y="124" class="sm">request exists, no score</text>
-  <rect x="300" y="80" width="190" height="64" class="st"/><text x="352" y="105" class="stt">retrying</text><text x="318" y="124" class="sm">attempt recorded, backoff</text>
-  <rect x="580" y="80" width="190" height="64" class="st"/><text x="645" y="105" class="stt">scored</text><text x="600" y="124" class="sm">result appended (terminal)</text>
-  <rect x="860" y="80" width="280" height="64" class="st"/><text x="895" y="105" class="stt">terminal_unscored</text><text x="880" y="124" class="sm">invalid/refusal/exhaustion/auth-suspended</text>
-
-  <path class="flow" d="M210 100 L300 100" marker-end="url(#arr)"/><text x="222" y="92" class="lbl">429/529/down</text>
-  <path class="flow" d="M490 100 L580 100" marker-end="url(#arr)"/><text x="500" y="92" class="lbl">200 OK</text>
-  <path class="flow" d="M210 130 C 500 175 800 165 860 130" marker-end="url(#arr)"/><text x="430" y="168" class="lbl">invalid · refusal · auth-fail · retries exhausted</text>
+  <rect x="20" y="56" width="190" height="64" class="st"/><text x="60" y="81" class="stt">pending</text><text x="40" y="100" class="sm">request minted at resolve commit</text>
+  <rect x="300" y="56" width="190" height="64" class="st"/><text x="352" y="81" class="stt">retrying</text><text x="318" y="100" class="sm">attempt recorded · backoff</text>
+  <rect x="580" y="56" width="190" height="64" class="st"/><text x="645" y="81" class="stt">scored</text><text x="600" y="100" class="sm">result appended · terminal</text>
+  <rect x="860" y="56" width="290" height="64" class="st"/><text x="895" y="81" class="stt">terminal_unscored</text><text x="880" y="100" class="sm">invalid · refusal · auth-suspend · exhausted</text>
+  <path class="flow" d="M210 76 L300 76" marker-end="url(#a)"/><text x="222" y="68" class="lbl">429/529/down</text>
+  <path class="flow" d="M490 76 L580 76" marker-end="url(#a)"/><text x="500" y="68" class="lbl">200 OK</text>
+  <path class="flow" d="M210 106 C 480 150 800 140 860 106" marker-end="url(#a)"/><text x="420" y="150" class="lbl">terminal classes</text>
+  <path class="flowd" d="M675 120 L675 150 L260 150 L260 92" marker-end="url(#ad)"/><text x="330" y="144" class="lbl">scored + policy flag ⇒ management adjudication pending-item</text>
 </svg>
-<p class="sub" style="margin-top:6px">Scoring state is independent of outcome state: a down scorer never turns <code>confirmed</code> into <code>unresolved</code>. One retry owner (guest worker); the cell's model loop never retries. Auth failure suspends provider dispatch — no silent fallback, no self-scoring.</p>
+<p class="sub">Scoring state ≠ outcome state: a down scorer never turns <code>confirmed</code> into <code>unresolved</code>. Cell's model loop never drives retries. Exactly-once persistence, disclosed at-most-once-paid billing.</p>
 
 <!-- ================= DIALECTIC ================= -->
-<h2>6 · The dialectic — what the positions actually disagreed about</h2>
+<h2>7 · What the three rounds decided</h2>
 <table>
-  <tr><th style="width:220px">Position</th><th style="width:110px">Verdict</th><th>Core claim / fatal flaw</th></tr>
-  <tr><td><b>A — hidden harness outbox</b></td><td>component</td>
-      <td>Complete coverage, structural isolation; but invisible to the self-development loop that must tune it. Survives as the <i>settlement mechanism</i>, not the contract.</td></tr>
-  <tr><td><b>B — cell calls <code>Score()</code></b></td><td>rejected</td>
-      <td>Optional actuation → selection-biased calibration corpus; cheapest winning strategy is never calling it. Result-returning variants breach the boundary outright.</td></tr>
-  <tr><td><b>C — authored lifecycle, runtime settlement</b></td><td><b>endorsed</b></td>
-      <td>Agent authors typed precommits and evidence-bearing resolves (module verbs = RLM contract); the resolve commit mints the obligation automatically; results supervision-only. Unanimous composition across both rounds.</td></tr>
-  <tr><td>D — scorer is a desk</td><td>later</td>
-      <td>Cross-desk prediction markets (monitor desk precommits on executor) — the memo's own supervision topology; a fifth desk is not a minimal slice.</td></tr>
-  <tr><td>E — offline batch eval</td><td>later</td>
-      <td>Scores derived from ledger snapshots by autoresearch — no live signal; a complement to the spine, not the spine.</td></tr>
+  <tr><th style="width:250px">Design question</th><th style="width:110px">Verdict</th><th>Final shape</th></tr>
+  <tr><td>Cell calls <code>Score()</code>?</td><td class="bad">rejected</td><td>Optional actuation = selection bias. No Score verb exists; resolve-commit mints the obligation.</td></tr>
+  <tr><td>Every utterance a packet?</td><td>amended</td><td>One envelope/authority/wake substrate; two persisted families. Scores never become packets — delivery path injects into acting context unfiltered.</td></tr>
+  <tr><td>Management owns scoring?</td><td>amended</td><td>Management owns <b>adjudication</b> (durable pending work, score-axis records); runtime owns <b>dispatch</b> (dumb transport). Coverage stays mandatory.</td></tr>
+  <tr><td>Confidence gates?</td><td>clarified</td><td>Routes <b>escalation</b> to management, never <b>acceptance</b>. Weak signal alone — policy unions other triggers + audit sample.</td></tr>
+  <tr><td>Kind-versioned bodies?</td><td>amended</td><td>Yes for bodies; identity/provenance/causal-refs/visibility stay at envelope — joins must never parse opaque JSON.</td></tr>
+  <tr><td>Unaddressed casts in-system?</td><td>endorsed out</td><td>Heartbeats/telemetry/orphans stay on append-only <code>ChannelCast</code>. Line: packets = addressed obligations between named principals.</td></tr>
 </table>
-<div class="callout"><b>The real fault line:</b> obligation ownership, not transport (every position uses the same wire). Also settled: contract legibility belongs in the question spec and scorer policy — Go code the engineering desk can change — not in a score-triggering verb.</div>
 
-<!-- ================= OPEN ITEMS ================= -->
-<h2>7 · Open items and named residuals</h2>
-<div class="cols">
-<div>
+<!-- ================= KNOWN DEFECTS ================= -->
+<h2>8 · Existing defects this design surfaces (fix first)</h2>
 <table>
-  <tr><th>Open item</th><th>Status</th></tr>
-  <tr><td>Memo contract amendment</td>
-      <td><code>Resolve(id,obs)→(Score,error)</code> → async settlement receipt; doc-first commit per Problem Documentation First.</td></tr>
-  <tr><td>Sampled/delayed score delivery to cells</td>
-      <td>Deferred, default-off knob. Knob changes get precommitment-gated ("raising sample rate to X will move Brier by δ"). Requires a zero-leak proof window before first enablement.</td></tr>
-  <tr><td>Side-channel timing</td>
-      <td>Receipts leak scorer availability by timing. Mitigation: receipts carry no scorer identity; jittered batch dispatch. On the risk register.</td></tr>
-  <tr><td>Store API shape</td>
-      <td>Code prefers <code>AppendCommitmentRecord(put)</code>-style call for the atomic pair; follow existing helper conventions.</td></tr>
+  <tr><th style="width:300px">Defect</th><th>Why it blocks</th></tr>
+  <tr><td><code>Disagreement</code> leaks into ActingPack via <code>ResolveCommitments</code> (scorer flags folded into resolver-verdict flag)</td><td>Independent-score signal already reaches acting context before any Jev code ships. Split into resolution-verdict vs scorer disagreement.</td></tr>
+  <tr><td><code>AssembleCellInbox</code> injects every channel message unfiltered</td><td>Any score-bearing delivery would reach acting context. Keep scores off the message path entirely AND add the projection guard.</td></tr>
+  <tr><td>Texture doc body is re-read by its own authoring cell</td><td>Scores rendered into doc content re-enter acting context via content — render supervision to a separate surface/feed, never doc body.</td></tr>
+  <tr><td><code>AppendCommitmentRecord</code> treats existing-ID conflict as success without content comparison</td><td>Deterministic replay could mask a mutated body. Verify digests on collision.</td></tr>
+  <tr><td><code>wakeUpdatedCoagent</code> at-most-once + cold-management gate</td><td>New kinds must use the fold-minted outbox + pending drain, not the helper alone.</td></tr>
 </table>
-</div>
-<div>
-<table>
-  <tr><th>Named residual</th><th>Note</th></tr>
-  <tr><td>Exactly-once billing</td>
-      <td>Persistence is exactly-once; provider billing is not — crash-after-response may repeat a paid call. Disclosed, not hidden.</td></tr>
-  <tr><td>Listing cap as queue</td>
-      <td><code>ListCommitmentRecords</code> caps at 200 and filters computer after owner — unsuitable as the work-discovery mechanism; obligation records + wake path carry scheduling.</td></tr>
-  <tr><td>Secrets-gate text leg</td>
-      <td>Broad redaction regexes still refuse text release files (<code>token := …</code> pattern); deferred — gate is hygiene, not a boundary.</td></tr>
-  <tr><td>Texture model-context leak</td>
-      <td>Score values rendered for the owner must not enter the doc's own model frame — enforce at render, not by convention.</td></tr>
-</table>
-</div>
-</div>
+
+<!-- ================= ACCEPTANCE ================= -->
+<h2>9 · Staging acceptance</h2>
+<p class="sub">
+Typed commit freezes before evidence access · resolve requires immutable evidence refs · resolve succeeds with Jev down · one gateway call per obligation carrying pinned served model · crash matrix (before dispatch / after response / before append / after append) yields exactly one durable score · ActingPack object-shape check + serialized diff vs SupervisionPack (zero score fields, zero scorer-derived disagreement) · texture model frame contains no score-bearing content · management drains a queued adjudication while cold · adjudication never becomes governing resolution · expired/coverage items visible in coverage reporting.</p>
+<p class="sub" style="margin-top:10px">Deferred: PII adjudication · conductor routing · sampled/delayed score delivery to cells (default-off, itself precommitment-gated) · offline batch eval · general desk↔desk relay beyond the packet system.</p>
 
 </body>
 </html>
