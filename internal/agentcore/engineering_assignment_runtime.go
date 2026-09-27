@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 const (
@@ -116,7 +117,7 @@ func overlayIDNamedInObjective(objective string) string {
 // replay rather than mint duplicates.
 func deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID string, kind types.EngineeringAssignmentKind, candidateID string) string {
 	seed := strings.Join([]string{
-		"choir:co-super-assignment:v3", ownerID, computerID, trajectoryID, revisionID, string(kind), candidateID,
+		vocabmigrate.IdentitySeedCoSuperAssignmentV3, ownerID, computerID, trajectoryID, revisionID, string(kind), candidateID,
 	}, "\x00")
 	return "assignment-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
 }
@@ -209,7 +210,7 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 	attempt := uint64(1)
 	assignmentID := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, req.RevisionID, req.Kind, req.CandidateID)
 	requestDigestParts := []string{
-		"choir:co-super-request:v2", req.Objective, string(req.Kind), req.CandidateID, parentWorkID, req.RevisionID,
+		vocabmigrate.IdentitySeedCoSuperRequestV2, req.Objective, string(req.Kind), req.CandidateID, parentWorkID, req.RevisionID,
 	}
 	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
 		requestDigestParts = append(requestDigestParts, overlay)
@@ -245,7 +246,7 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 		parentControlID = req.CandidateID
 	}
 	parentDecisionID := "decision:" + objectgraph.SHA256([]byte(strings.Join([]string{
-		"choir:co-super-decision:v3", ownerID, computerID, parentAgentID, trajectoryID, parentWorkID, parentControlID, req.RevisionID,
+		vocabmigrate.IdentitySeedCoSuperDecisionV3, ownerID, computerID, parentAgentID, trajectoryID, parentWorkID, parentControlID, req.RevisionID,
 	}, "\x00")))
 	scopeBytes, err := json.Marshal(struct {
 		Revision types.Revision       `json:"revision"`
@@ -380,7 +381,7 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, req Delegate
 		ownerID, computerID, trajectoryID, parentAgentID, req.CommitmentControlID, string(req.Kind),
 	}, "\x00")))[0:24]
 	requestDigest := objectgraph.SHA256([]byte(strings.Join([]string{
-		"choir:delegated-cast-request:v1", req.Objective, string(req.Kind), req.CandidateID,
+		vocabmigrate.IdentitySeedDelegatedCastRequestV1, req.Objective, string(req.Kind), req.CandidateID,
 		parentWorkID, req.CommitmentControlID,
 	}, "\x00")))
 	if existing, getErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt); getErr == nil {
@@ -400,7 +401,7 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, req Delegate
 		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast reclaim superseded capsules: %w", err)
 	}
 	parentDecisionID := "decision:" + objectgraph.SHA256([]byte(strings.Join([]string{
-		"choir:delegated-decision:v1", ownerID, computerID, parentAgentID, trajectoryID, parentWorkID,
+		vocabmigrate.IdentitySeedDelegatedDecisionV1, ownerID, computerID, parentAgentID, trajectoryID, parentWorkID,
 		req.CommitmentControlID, run.RunID,
 	}, "\x00")))
 	scopeBytes, err := json.Marshal(struct {

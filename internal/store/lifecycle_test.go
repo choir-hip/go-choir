@@ -3893,3 +3893,35 @@ func TestQueueLifecycleUpdateCommitsActorWakeOutbox(t *testing.T) {
 		t.Fatalf("outbox update ID = %q, want %q", wake.UpdateID, wantUpdateID)
 	}
 }
+
+// TestDecodeLifecycleObjectFrozenKindBoundary is the R5a routing proof at
+// the lifecycle decode boundary: persisted command/event objects carrying
+// frozen-table kinds decode; kinds outside the table refuse loudly rather
+// than minting silent semantics.
+func TestDecodeLifecycleObjectFrozenKindBoundary(t *testing.T) {
+	// A V1-spelled command kind (pre-migration durable spelling) decodes.
+	v1Cmd, err := json.Marshal(types.LifecycleCommandReceipt{Kind: types.LifecycleOpenEngineeringAssignment})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeLifecycleObject[types.LifecycleCommandReceipt](objectgraph.Object{Body: v1Cmd}); err != nil {
+		t.Fatalf("frozen command kind refused: %v", err)
+	}
+	// A V1-spelled event kind decodes.
+	v1Evt, err := json.Marshal(types.LifecycleEvent{Kind: types.LifecycleEngineeringAssignmentOpened})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeLifecycleObject[types.LifecycleEvent](objectgraph.Object{Body: v1Evt}); err != nil {
+		t.Fatalf("frozen event kind refused: %v", err)
+	}
+	// Kinds outside the frozen tables refuse.
+	badCmd, _ := json.Marshal(types.LifecycleCommandReceipt{Kind: types.LifecycleCommandKind("open_co_super_assignment_forged")})
+	if _, err := decodeLifecycleObject[types.LifecycleCommandReceipt](objectgraph.Object{Body: badCmd}); err == nil {
+		t.Fatal("non-frozen command kind decoded")
+	}
+	badEvt, _ := json.Marshal(types.LifecycleEvent{Kind: types.LifecycleEventKind("co_super_assignment_forged")})
+	if _, err := decodeLifecycleObject[types.LifecycleEvent](objectgraph.Object{Body: badEvt}); err == nil {
+		t.Fatal("non-frozen event kind decoded")
+	}
+}

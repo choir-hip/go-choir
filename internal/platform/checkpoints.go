@@ -19,6 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 type CheckpointAuthority struct {
@@ -224,8 +225,12 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 		return fmt.Errorf("checkpoint authority: verifier event artifact refused")
 	}
 	event, uerr := computerevent.DecodeHistoricEvent(rawEvent)
+	// R5a: ActorProfile arrives from decoded historic bytes; V1 spellings
+	// are legal history. Join through the single normalization point,
+	// never raw equality against the live constant.
+	normalizedProfile, profileKnown := vocabmigrate.NormalizeHistoricProfile(event.ActorProfile)
 	if uerr != nil || event.EventKind != computerevent.EventVerificationRecorded ||
-		event.ActorProfile != agentprofile.Engineering || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
+		!profileKnown || normalizedProfile != agentprofile.Engineering || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
 		return fmt.Errorf("checkpoint authority: verifier event authority mismatch")
 	}
 	payloadRef, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])

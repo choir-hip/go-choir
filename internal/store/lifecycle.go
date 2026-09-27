@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 var (
@@ -856,6 +857,19 @@ func decodeLifecycleObject[T any](obj objectgraph.Object) (T, error) {
 	var rec T
 	if err := json.Unmarshal(obj.Body, &rec); err != nil {
 		return rec, err
+	}
+	// R5a frozen-vocabulary decode boundary: a persisted kind string is
+	// interpreted here. Kinds outside the frozen table are not frozen
+	// vocabulary and refuse loudly instead of minting silent semantics.
+	switch typed := any(rec).(type) {
+	case types.LifecycleCommandReceipt:
+		if _, ok := vocabmigrate.DecodeLifecycleCommandKind(typed.Kind); !ok {
+			return rec, fmt.Errorf("lifecycle: unknown frozen command kind %q", string(typed.Kind))
+		}
+	case types.LifecycleEvent:
+		if _, ok := vocabmigrate.DecodeLifecycleEventKind(typed.Kind); !ok {
+			return rec, fmt.Errorf("lifecycle: unknown frozen event kind %q", string(typed.Kind))
+		}
 	}
 	return rec, nil
 }

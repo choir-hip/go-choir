@@ -166,9 +166,10 @@ value:
 now:
   status: working
   slice: >-
-    Chartered 2026-09-26 against census findings. First cut: seed the
-    family tables from the census list, write the normalization point,
-    then the fold fixture.
+    Implementation landed locally 2026-09-26: per-family frozen tables +
+    routed decoders + normalization point + seed pins + coverage/fold
+    tests, all green. Landing loop next: full store/agentcore suites,
+    commit, CI, deploy identity, health probe.
   candidate:
     id: none
     state: none
@@ -204,13 +205,13 @@ now:
       - docs/evidence/choir-rlm-v2-mapping-2026-09-10.md §1 §3 (frozen maps)
   belief:
     believed_state: >-
-      Frozen vocabulary machinery exists for profile tokens only; all
+      Frozen vocabulary machinery existed for profile tokens only; all
       other durable families read raw. Two production comparisons
-      against live profile constants silently require V2 spellings on
-      historic bytes. The v3 seed and its neighbors are inline string
-      literals — pinned nowhere. R5b is deferred indefinitely, so R5a's
-      job is read-side freeze only: tables + routed decode + one
-      normalization point + fold proof.
+      against live profile constants silently required V2 spellings on
+      historic bytes. The v3 seed and its neighbors were inline string
+      literals — pinned nowhere. All repaired locally: families frozen,
+      normalization routed at both gap sites, seeds pinned, fold and
+      coverage tests green.
     next_observation: >-
       The fold fixture: whether a checked-in recorded tape exists that
       carries V1 spellings (projectionbase/rlm-replay goldens are
@@ -244,6 +245,36 @@ receipts:
     normalization — pre-cutover V1-spelled verification/decision events
     would fail on replay. Boundaries: no renames, no durable writes;
     decode-side + compare-site changes only; rollback is revert."
+  - "landed (uncommitted at receipt time): internal/vocabmigrate/families.go
+    — per-family frozen tables + decoders: frozenLifecycleCommandKinds /
+    frozenLifecycleEventKinds (all 25 command + 27 event kinds incl. the 10
+    V1 co_super spellings), frozenOGObjectKinds (all 55 production kinds
+    incl. 6 V1 co_super_*), frozenSchemaStrings (V1 + neutral durable
+    schemas incl. digest domains), frozenIdentitySeeds (keep-v3 + 5
+    neighbors pinned as consts), FrozenLifecycleJSONFields +
+    FrozenSQLIdentifiers manifests, and NormalizeHistoricProfile — the
+    single stratum-C normalization point (V2 live tokens -> canonical,
+    V1 spellings -> ForwardV1ToV2, frozen protocol passthrough, unknown
+    fails closed)."
+  - "routed: decodeLifecycleObject (store/lifecycle.go) validates
+    LifecycleCommandReceipt.Kind + LifecycleEvent.Kind against the frozen
+    tables — unknown stored kinds refuse loudly; ogRekey
+    (vocab_migrate_og.go) frozen-decodes obj kind before identity-formula
+    binding (non-frozen kinds keep identity, skip formulas);
+    checkpoints.go verifier witness + self_development_decision_binding
+    route ActorProfile through NormalizeHistoricProfile (repairs both
+    latent gaps); cmd/choir evidence-envelope schema compare uses
+    SchemaCapsuleEvidenceV1; all six seed literals replaced by the pinned
+    constants."
+  - "tests green: vocabmigrate package (coverage-by-source-scan —
+    every choir.* durable literal and lifecycle kind must be in a
+    frozen table, escape-aware literal scan; fold-identical fixture over
+    V1 spellings; normalization matrix; seed pins), store
+    TestDecodeLifecycleObjectFrozenKindBoundary (V1 kinds decode,
+    forged kinds refuse), agentcore
+    TestFinalizedDecisionBindingAcceptsV1ActorProfileSpelling
+    (actor_profile \"super\" binds; \"not-a-desk\" refuses) — the
+    latent-bug reproduction now passes post-fix."
 ---
 
 # R5a — Vocabulary Decoders + Seed Freeze (last station before M11)

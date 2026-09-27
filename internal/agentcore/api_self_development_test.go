@@ -905,6 +905,65 @@ func TestFinalizedDecisionBindingRejectsCrossAuthorityJoinsAndAllowsAcceptedDesc
 		t.Fatal("rejected decision was accepted as an applied descendant")
 	}
 }
+// TestFinalizedDecisionBindingAcceptsV1ActorProfileSpelling is the R5a
+// regression for the normalization gap: a pre-cutover historic decision
+// event spelled its actor profile "super" (the V1 management token).
+// Before the normalization point, raw equality against the live
+// agentprofile.Management constant refused it; through
+// vocabmigrate.NormalizeHistoricProfile it binds identically.
+func TestFinalizedDecisionBindingAcceptsV1ActorProfileSpelling(t *testing.T) {
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: "computer-binding",
+		Sequence: 1, PreviousHead: computerevent.ZeroHead, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		EventKind: computerevent.EventEffectAccepted, IdempotencyKey: "decision-binding-v1", RequestCommitment: strings.Repeat("1", 64),
+		TrajectoryID: "trajectory-binding", CapsuleID: "capsule-binding", ParentEventID: "operation-binding",
+		ActorProfile: "super", AuthorityRef: "external-owner:owner-binding", PrivacyClass: "owner", // V1 spelling
+		ExpectedDesiredEventHead: strings.Repeat("9", 64), ExpectedEffectiveEventHead: strings.Repeat("a", 64),
+		ExpectedDesiredStateCommitment: strings.Repeat("b", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
+		RequireExpectedHead: true,
+		PayloadCommitment:   computerevent.ZeroHead, ProposedEffectRef: strings.Repeat("2", 64), DecisionRef: strings.Repeat("3", 64),
+		InputArtifactRefs: []string{"artifact:sha256:" + strings.Repeat("d", 64)},
+		VerifierRefs:      []string{strings.Repeat("4", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	eventDigest, err := event.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	transition := computerevent.DurableEvent{
+		Request: computerevent.CASRequest{
+			Event: event, EventDigest: eventDigest,
+			Next: computerevent.Head{DesiredEventHead: strings.Repeat("5", 64), EffectiveEventHead: strings.Repeat("6", 64)},
+		},
+		Receipt: computerevent.Receipt{ReceiptKind: "EventHeadReceipt", ReceiptID: "receipt-binding-v1", KindFields: map[string]any{"event_digest": eventDigest}},
+	}
+	operation := selfdev.Operation{
+		OperationID: event.ParentEventID, ComputerID: event.ComputerID, TrajectoryID: event.TrajectoryID,
+		CapsuleID: event.CapsuleID, BundleDigest: event.ProposedEffectRef, VerifierRefs: append([]string(nil), event.VerifierRefs...),
+		DecisionActor: "owner-binding", DecisionEvent: eventDigest, DecisionReceipt: transition.Receipt.ReceiptID,
+		DesiredHead: transition.Request.Next.DesiredEventHead, EffectiveHead: transition.Request.Next.EffectiveEventHead,
+		State: selfdev.StateMaterializing,
+	}
+	if _, err := verifyFinalizedSelfDevelopmentDecision(operation, transition); err != nil {
+		t.Fatalf("V1-spelled historic decision refused: %v", err)
+	}
+	// An unknown (never-vocabulary) profile still refuses.
+	unknown := transition
+	unknown.Request.Event.ActorProfile = "not-a-desk"
+	unknownDigest, err := unknown.Request.Event.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown.Request.EventDigest = unknownDigest
+	unknown.Receipt.KindFields = map[string]any{"event_digest": unknownDigest}
+	if _, err := verifyFinalizedSelfDevelopmentDecision(operation, unknown); err == nil {
+		t.Fatal("unknown actor profile was accepted")
+	}
+}
+
 
 func TestKernelCapabilityUnavailableResponseIsTypedAndNonSecret(t *testing.T) {
 	recorder := httptest.NewRecorder()

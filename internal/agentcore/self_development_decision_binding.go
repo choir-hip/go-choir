@@ -8,6 +8,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 type verifiedSelfDevelopmentDecision struct {
@@ -51,7 +52,11 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 		operation.BundleDigest == "" || operation.BundleDigest != event.ProposedEffectRef {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: operation identity mismatch")
 	}
-	if event.SchemaVersion != computerevent.SchemaVersionV1 || event.ActorProfile != agentprofile.Management ||
+	// R5a: ActorProfile arrives from decoded historic bytes; V1 spellings
+	// are legal history. Join through the single normalization point,
+	// never raw equality against the live constant.
+	normalizedProfile, profileKnown := vocabmigrate.NormalizeHistoricProfile(event.ActorProfile)
+	if event.SchemaVersion != computerevent.SchemaVersionV1 || !profileKnown || normalizedProfile != agentprofile.Management ||
 		event.PrivacyClass != "owner" || event.ReducerVersion != computerevent.ReducerVersionV1 ||
 		!computerevent.IsSHA256(event.RequestCommitment) || !computerevent.IsSHA256(event.DecisionRef) {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: event authority contract mismatch")

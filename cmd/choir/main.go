@@ -31,6 +31,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 const (
@@ -827,7 +828,7 @@ func runLifecycle(args []string, stdout, stderr io.Writer) int {
 		var envelope struct {
 			Schema string `json:"schema"`
 		}
-		if err := json.Unmarshal(response, &envelope); err != nil || envelope.Schema != "choir.co_super_capsule_evidence/v1" {
+		if err := json.Unmarshal(response, &envelope); err != nil || envelope.Schema != vocabmigrate.SchemaCapsuleEvidenceV1 {
 			fmt.Fprintln(stderr, "choir lifecycle capsule-evidence: invalid capsule evidence response")
 			return 1
 		}

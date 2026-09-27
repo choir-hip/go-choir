@@ -241,6 +241,14 @@ func (o *ogObjectRow) ogRekey() error {
 		}
 		return o.field(name)
 	}
+	// R5a frozen-vocabulary boundary: a persisted kind absent from the
+	// frozen OG-kind table is not interpretable vocabulary — its identity
+	// fields cannot be V1 desk tokens, so rekeying is a no-op and identity
+	// stays stable rather than silently binding to a non-frozen kind.
+	if _, frozen := vocabmigrate.DecodeOGObjectKind(o.kind); !frozen {
+		o.newID = o.canonicalID
+		return nil
+	}
 	for _, f := range ogIdentityFormulas {
 		if f.kind != o.kind {
 			continue

@@ -13,6 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 // RegisterAssignedEngineeringTools adds only the exact persistent-Management assignment
@@ -254,7 +255,7 @@ func newReportPersistentManagementToTextureTool(rt *Runtime) toolregistry.Tool {
 			if strings.TrimSpace(execution.ToolCallID) == "" {
 				return "", fmt.Errorf("report_to_texture requires authenticated provider tool-call identity")
 			}
-			occurrence := objectgraph.SHA256([]byte(strings.Join([]string{"choir:persistent-super-report:v1", parent.OwnerID, parent.ComputerID, parent.RunID, execution.ToolCallID}, "\x00")))
+			occurrence := objectgraph.SHA256([]byte(strings.Join([]string{vocabmigrate.IdentitySeedPersistentSuperReportV1, parent.OwnerID, parent.ComputerID, parent.RunID, execution.ToolCallID}, "\x00")))
 			producerUpdateID := "super-report:" + occurrence
 			content := strings.TrimSpace(packet.Summary)
 			payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
