@@ -199,6 +199,22 @@ The deploy reported success and health-checked every service; the outage
 was the switch/restart window itself, not a stuck unit. Future probes
 should expect a per-deploy interruption of in-flight ops and plan retries.
 
+Verified on staging build `88d5a447` (probe computer `4b20e20e…`, op
+`selfdev-814208951f89a61d0a4c4e4c98c683b0`): the desk `end_turn`ed at
+06:51:16, the guard retried, and after the third prose ending the run
+terminalized; `cancelBoundEngineeringRun` propagated the failure into the
+operation — observed `state=failed`, `terminal_error="tool loop: completion
+guard \"\" was not satisfied after 2 retries"` at 06:59:13, *before* the
+probe deadline. The silent-`executing` wedge is closed.
+
+Residual: the desk model (deepseek-v4.1-flash) ended its turn without
+`choir.Freeze`/`choir.Complete` across all three chances — the substrate is
+honest now, but reaching `awaiting_approval` additionally requires the desk
+to actually commit a terminal fate, which is a model-completion problem,
+not a wedge. Cosmetic gap: the persisted error's quoted guard reason is
+empty (`""`) even though the guard sets `Reason` — investigate when the
+guard's reason string is next needed for triage.
+
 
 Known candidates inside the deferring call:
 
