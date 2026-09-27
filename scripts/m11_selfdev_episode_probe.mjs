@@ -318,7 +318,7 @@ async function postJSON(page, path, body) {
   return attempt();
 }
 
-async function waitForOperation(page, computerID, operationID, wanted, timeout = 1_500_000) {
+async function waitForOperation(page, computerID, operationID, wanted, timeout = 3_600_000) {
   const deadline = Date.now() + timeout;
   let last;
   while (Date.now() < deadline) {
