@@ -350,7 +350,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 			if derr := d.log.DeferUpdate(ctx, agentID, u.UpdateID, backoff); derr != nil {
 				log.Printf("dispatcher: defer %s/%s: %v", agentID, u.UpdateID, derr)
 			}
-			log.Printf("dispatcher: deferred %s/%s until %s", agentID, u.UpdateID, backoff.Format(time.RFC3339))
+			log.Printf("dispatcher: deferred %s/%s until %s cause=%v", agentID, u.UpdateID, backoff.Format(time.RFC3339), herr)
 			break
 		}
 		if herr != nil {
