@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CHOIR — Carbon Fiber Kintsugi — September 27</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    /* theme: carbon-fiber-kintsugi (frontend/src/lib/theme.ts) */
+    --paper: #0B0C0D;          /* colors.bg */
+    --ink: #F2EFE7;            /* colors.fg */
+    --muted: #B2AA98;       /* colors.muted */
+    --subtle: #766F62;     /* colors.subtle */
+    --accent: #FFD86B;     /* colors.accent */
+    --accent2: #FFF1BC;   /* colors.accent2 */
+    --rule: rgba(255,216,107,0.18);       /* colors.border */
+    --rule-strong: rgba(255,241,188,0.48); /* colors.borderStrong */
+    --mark: #FFE18A;         /* colors.tetramarkColor */
+
+    --paper-font: "Iowan Old Style", "Hoefler Text", Palatino, "Times New Roman", serif;
+    --mast-font: "Didot", "Hoefler Text", "Iowan Old Style", serif;
+    --ui-font: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  body { font-family: var(--paper-font); background: var(--paper); color: var(--ink);
+         -webkit-font-smoothing: antialiased; font-feature-settings: "onum" 1, "liga" 1; }
+  .slide { width:1280px; height:720px; page-break-after:always; position:relative; overflow:hidden;
+           background-color: var(--paper);
+           padding:44px 88px 60px; display:flex; flex-direction:column; }
+  .slide:last-child { page-break-after:auto; }
+
+  .rail { display:flex; justify-content:space-between; align-items:baseline; font-family:var(--mono);
+          font-size:9.5px; letter-spacing:0.17em; text-transform:uppercase; color:var(--muted); }
+  .rail .g { color:var(--accent); }
+  .hair { height:1px; background:var(--rule); margin-top:12px; }
+  .folio { position:absolute; bottom:26px; left:88px; right:88px; display:flex; justify-content:space-between;
+           font-family:var(--mono); font-size:9.5px; letter-spacing:0.17em; text-transform:uppercase; color:var(--subtle); }
+  .body-area { flex:1; padding-top:34px; display:flex; flex-direction:column; min-height:0; }
+  .tail { margin-top:auto; }
+
+  /* tetramark */
+  .tetra { display:block; color:var(--mark); }
+  .tetra path { fill: currentColor; }
+
+  .sect { font-family:var(--mono); font-size:10px; letter-spacing:0.24em; text-transform:uppercase;
+          color:var(--accent); margin-bottom:16px; }
+  h1.head { font-family:var(--paper-font); font-weight:600; font-size:57px; line-height:1.06;
+            letter-spacing:-0.012em; margin-bottom:14px; text-wrap:balance; }
+  .dek { font-style:italic; font-size:23px; color:var(--muted); line-height:1.4; max-width:900px; text-wrap:balance; }
+  .body { font-size:16px; line-height:1.62; }
+  .body.dim { color:var(--muted); }
+  .pull { font-style:italic; font-weight:600; font-size:29px; line-height:1.25; color:var(--ink);
+          border-top:2px solid var(--ink); border-bottom:1px solid var(--rule); padding:14px 0 12px; max-width:1080px; }
+  .pull .g { color:var(--accent); }
+  .note { font-size:14px; font-style:italic; color:var(--muted); line-height:1.5; }
+
+  /* cover */
+  .flag { margin-top:54px; border-top:3px solid var(--ink); border-bottom:1px solid var(--ink); padding:20px 0 20px; text-align:center; }
+  .overline { font-family:var(--mono); font-size:11px; letter-spacing:0.34em; text-transform:uppercase;
+              color:var(--accent); margin-bottom:14px; }
+  .mast { font-family:var(--mast-font); font-weight:400; font-size:168px; line-height:0.92; letter-spacing:0.015em; }
+  .cover-dek { text-align:center; font-style:italic; font-size:30px; margin-top:24px; }
+  .cover-note { text-align:center; font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+                text-transform:uppercase; color:var(--muted); margin-top:auto; }
+
+  /* structure */
+  .cols2 { column-count:2; column-gap:44px; column-rule:1px solid var(--rule); margin-top:24px; }
+  .cols3 { display:grid; grid-template-columns:1fr 1fr 1fr; margin-top:26px; }
+  .cols3 > div { padding:0 26px; }
+  .cols3 > div + div { border-left:1px solid var(--rule); }
+  .cols3 > div:first-child { padding-left:0; }
+  .cols3 > div:last-child { padding-right:0; }
+  .colhead { font-family:var(--mono); font-size:10px; letter-spacing:0.2em; text-transform:uppercase;
+             color:var(--accent); margin-bottom:9px; }
+
+  figure { margin:0; }
+  figure img { display:block; border:1px solid var(--rule-strong); width:100%; height:auto; }
+  figcaption { font-size:13.5px; font-style:italic; color:var(--muted); line-height:1.4; margin-top:8px; max-width:520px; }
+  .photo-pair { display:grid; grid-template-columns:1fr 1fr; gap:34px; margin-top:26px; }
+  .photo-pair img { height:258px; object-fit:cover; object-position:top center; }
+  .lead { display:grid; grid-template-columns:500px 1fr; gap:52px; margin-top:20px; align-items:start; }
+  .lead-side { display:flex; flex-direction:column; height:392px; }
+
+  .figs { display:grid; grid-template-columns:repeat(4,1fr); margin-top:34px; }
+  .figs > div { padding:0 26px; border-left:1px solid var(--rule); }
+  .figs > div:first-child { padding-left:0; border-left:none; }
+  .figs > div:last-child { padding-right:0; }
+  .fig-era { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase; color:var(--muted); }
+  .fig-n { font-weight:600; font-size:46px; line-height:1.1; margin:8px 0 6px; letter-spacing:-0.01em; }
+  .fig-n.g { color:var(--accent); }
+  .fig-l { font-size:14.5px; color:var(--muted); line-height:1.4; }
+
+  table.stand { width:100%; border-collapse:collapse; margin-top:24px; }
+  table.stand th { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase;
+                   color:var(--muted); font-weight:400; text-align:left; padding:0 0 8px; }
+  table.stand td { font-size:17px; padding:9px 0; border-top:1px solid var(--rule); }
+  table.stand tr.win td { border-top:2px solid var(--ink); font-weight:600; }
+  table.stand td.no { color:var(--muted); }
+  table.stand td.yes { color:var(--accent2); font-weight:600; }
+
+  .entries { display:grid; grid-template-columns:repeat(4,1fr); margin-top:36px; }
+  .entries > div { padding:0 24px; border-left:1px solid var(--rule); }
+  .entries > div:first-child { padding-left:0; border-left:none; }
+  .entries > div:last-child { padding-right:0; }
+  .entry-name { font-size:19px; font-weight:600; margin:8px 0 6px; letter-spacing:-0.005em; }
+  .entry-sub { font-size:14.5px; color:var(--muted); line-height:1.45; }
+  .base { border-top:2px solid var(--ink); margin-top:38px; padding-top:20px; display:flex; align-items:baseline; gap:24px; }
+  .comp-name { font-size:40px; font-weight:600; letter-spacing:-0.012em; }
+  .comp-sub { font-size:16px; font-style:italic; color:var(--muted); }
+  .byline-wrap { display:grid; grid-template-columns:1fr 300px; gap:54px; margin-top:24px; align-items:start; }
+  .byline { font-family:var(--mono); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
+            color:var(--muted); margin-bottom:14px; }
+  .portrait img { width:100%; border:1px solid var(--rule-strong); }
+
+  .askbox { border:2px solid var(--ink); padding:18px 22px; max-width:860px; }
+  .askbox .k { font-family:var(--mono); font-size:9.5px; letter-spacing:0.22em; text-transform:uppercase;
+               color:var(--accent2); margin-bottom:7px; }
+  .askbox .v { font-size:22px; font-style:italic; }
+  .contacts { font-family:var(--mono); font-size:11px; letter-spacing:0.14em; color:var(--muted); text-transform:uppercase; }
+  .colophon { display:flex; justify-content:space-between; align-items:flex-end; gap:40px; }
+  a { color:inherit; text-decoration:none; }
+  .rule-thin { height:1px; background:var(--rule); }
+  .mech { font-family:var(--mono); font-size:12.5px; letter-spacing:0.1em; color:var(--accent2); margin-top:38px; }
+
+  .draft { display:inline-block; margin-left:12px; font-family:var(--mono); font-size:8.5px; letter-spacing:0.18em;
+           text-transform:uppercase; color:var(--accent); border:1px solid var(--rule-strong); padding:2px 7px; vertical-align:1px; }
+  .cover-sub { text-align:center; font-family:var(--mono); font-size:11px; letter-spacing:0.3em; text-transform:uppercase;
+               color:var(--accent); margin-top:16px; }
+  .terms { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:28px; }
+  .term { border:1px solid var(--rule); }
+  .term-bar { border-bottom:1px solid var(--rule); padding:6px 10px; font-family:var(--mono); font-size:9px;
+              letter-spacing:0.16em; text-transform:uppercase; color:var(--muted); }
+  .term-body { padding:11px 10px; font-family:var(--mono); font-size:10px; line-height:1.7; color:var(--accent2); }
+  .term-body .dim { color:var(--subtle); }
+  .beats { display:grid; grid-template-columns:1fr 1fr; gap:46px; margin-top:24px; }
+  .beat { margin-bottom:14px; }
+  .beat .k, .loop .k { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase;
+                       color:var(--accent); margin-bottom:5px; }
+  .beat .v { font-size:14.5px; line-height:1.5; color:var(--muted); }
+  .loop { border:1px solid var(--rule); padding:14px 16px; margin-bottom:14px; }
+  .loop .line { font-family:var(--mono); font-size:11.5px; color:var(--muted); margin:6px 0 8px; }
+  .loop .line .g { color:var(--accent); }
+  .loop .v { font-size:14px; line-height:1.5; color:var(--muted); }
+  .demo { margin-top:auto; border-left:3px solid var(--accent); padding:10px 0 10px 20px; }
+  .demo .k { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase;
+             color:var(--accent); margin-bottom:8px; }
+  .demo .v { font-size:19px; font-style:italic; line-height:1.45; }
+  .calc { font-family:var(--mono); font-size:13px; letter-spacing:0.08em; color:var(--accent2); margin-top:28px; }
+  .twotab { display:grid; grid-template-columns:1fr 1fr; gap:46px; margin-top:22px; }
+  .askrow { display:flex; align-items:botom; gap:28px; margin-top:22px; align-items:center; }
+  .tk { font-family:var(--mono); font-size:0.86em; color:var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- 01 -->
+<section class="slide">
+  <div class="hair" style="margin-top:26px;"></div>
+  <div class="rail"><span>choir.news</span><span class="g">September 27, 2026</span></div>
+  <div class="flag" style="margin-top:50px;">
+    <svg class="tetra" viewBox="0 0 512 512" aria-hidden="true" style="width:60px;height:60px;margin:0 auto 16px;"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z"/></svg>
+    <div class="mast">CHOIR</div>
+  </div>
+  <div class="cover-dek" style="font-size:37px; font-style:normal; font-weight:600;">AI, a new species &mdash; of computer</div>
+  <div class="cover-sub">Introducing the automatic computer</div>
+  <div class="cover-note">choir.news</div>
+  <div class="folio"><span>Choir</span><span>01</span></div>
+</section>
+
+<!-- 02 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">02 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The shift</div>
+    <h1 class="head" style="font-size:47px;">The chat-based agent is the CLI. Now it&rsquo;s time for the GUI.</h1>
+    <div class="terms">
+      <div class="term"><div class="term-bar">ChatGPT</div><div class="term-body"><span class="">&gt; draft an intro</span><br><span class="dim">&gt; shorter</span><br><span class="dim">&gt; again</span></div></div>
+      <div class="term"><div class="term-bar">Claude</div><div class="term-body"><span class="">&gt; revise this section</span><br><span class="dim">&gt; keep the argument</span><br><span class="dim">&gt; no, simpler</span></div></div>
+      <div class="term"><div class="term-bar">Claude Tag (Slack)</div><div class="term-body"><span class="">@claude tag #draft</span><br><span class="dim">@claude redo it</span><br><span class="dim">@claude try again</span></div></div>
+      <div class="term"><div class="term-bar">Meta Muse</div><div class="term-body"><span class="">&gt; write the memo</span><br><span class="dim">&gt; not like that</span><br><span class="dim">&gt; start over</span></div></div>
+    </div>
+    <div class="cols2 body dim" style="margin-top:28px; margin-bottom:0;">
+      <p>Chat is a command line. You type a command, text comes back, and the state stays hidden. You learn the incantations &mdash; prompting is command syntax.</p>
+      <p>The CLI never died; power users still live in it. The GUI opened computing to everyone else, and that is where the market grew by orders of magnitude.</p>
+    </div>
+    <div class="pull tail" style="font-size:23px;">Text is the universal interface. <span class="g">But chat is not the only kind of text &mdash; documents are.</span></div>
+  </div>
+  <div class="folio"><span>Choir</span><span>02</span></div>
+</section>
+
+<!-- 03 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">03 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The story<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head" style="font-size:41px;">I wanted agents to make work that compounds. I got drafts that regenerate slop.</h1>
+    <div class="beats">
+      <div>
+        <div class="beat"><div class="k">Summer 2025</div><div class="v">Built an AI ghostwriter because I wanted to be prolific. Models stitched together by hand; the output beat any single model.</div></div>
+        <div class="beat"><div class="k">The turn</div><div class="v">Building it, I realized I did not want a ghostwriter. With the right tools &mdash; research, citation, analysis, understanding, writing, multimedia &mdash; I could produce quantity and quality myself.</div></div>
+        <div class="beat"><div class="k">The failed rebuild</div><div class="v">Tried to rebuild it on an agent-graph framework. Agents do not follow a flowchart; they discover the workflow as they go.</div></div>
+        <div class="beat" style="margin-bottom:0;"><div class="k">The realization</div><div class="v">Why give agents a computer when you can center the computer and give it agents. First prototype on localhost in about twenty minutes.</div></div>
+      </div>
+      <div>
+        <div class="loop"><div class="k">The chat loop</div><div class="line">correction &rarr; regeneration &rarr; new slop</div><div class="v">Talking to chat is easier than editing, so corrections go through regeneration. Each version fixes one thing and breaks another &mdash; nothing compounds.</div></div>
+        <div class="loop" style="margin-bottom:0;"><div class="k">The document loop</div><div class="line">correction &rarr; revision &rarr; <span class="g">the work compounds</span></div><div class="v">The edit is the message. The correction lands in the state and steers what happens next.</div></div>
+      </div>
+    </div>
+    <div class="note tail">Professional poker, then AI since 2015.</div>
+  </div>
+  <div class="folio"><span>Choir</span><span>03</span></div>
+</section>
+
+<!-- 04 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">04 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The product<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head">The work itself is the interface.</h1>
+    <div class="lead">
+      <figure>
+        <img src="shot-texture.png" alt="Texture &mdash; the living document">
+        <figcaption>Texture &mdash; agents update a versioned document. You edit it directly, and the edit is the message.</figcaption>
+      </figure>
+      <div class="lead-side">
+        <div class="colhead">Runs on staging today</div>
+        <table class="stand">
+          <tr><td>Texture &mdash; living documents</td><td class="yes" style="text-align:right;">staging</td></tr>
+          <tr><td>Mail &mdash; correspondence, every send owner-gated</td><td class="yes" style="text-align:right;">staging</td></tr>
+          <tr><td>Newspaper &mdash; provenance-linked wire</td><td class="no" style="text-align:right;">refactor</td></tr>
+          <tr><td>Radio &mdash; the station you steer by voice</td><td class="no" style="text-align:right;">development</td></tr>
+        </table>
+        <div class="note tail">Status as of September 27, 2026.</div>
+      </div>
+    </div>
+  </div>
+  <div class="folio"><span>Choir</span><span>04</span></div>
+</section>
+
+<!-- 05 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">05 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The difference<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head">Everyone sells compute. Choir owns state.</h1>
+    <div class="dek">Every agent brings its own sandbox &mdash; and the sandbox is thrown away.</div>
+    <div class="cols3" style="margin-top:30px;">
+      <div><div class="colhead">The sandbox crowd</div><div class="body dim">30+ agent-VM and cloud-computer companies ship essentially the same product: a disposable machine per run.</div></div>
+      <div><div class="colhead">What gets kept</div><div class="body dim">The run ends, and the accumulated state stays inside the vendor&rsquo;s silo. What the user learned &mdash; and what the agents learned &mdash; does not survive the vendor.</div></div>
+      <div><div class="colhead">The objection</div><div class="body dim">Memory import and export is arriving. Memory is a summary of what an assistant learned about you. Choir holds the work itself &mdash; versioned, and still being worked on by agents from any vendor.</div></div>
+    </div>
+    <div class="demo">
+      <div class="k">The proof</div>
+      <div class="v">Put a Markdown or PDF file into your Choir over MCP, then work on it from ChatGPT or Meta Muse. It stays live &mdash; versioned at the user level and the platform level, and still being worked on by the multi-agent system.</div>
+    </div>
+  </div>
+  <div class="folio"><span>Choir</span><span>05</span></div>
+</section>
+
+<!-- 06 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">06 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The engine<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head">A computer made of agents.</h1>
+    <div class="cols3" style="margin-top:32px;">
+      <div><div class="colhead">The harness</div><div class="body dim">Natively multi-agent, in Go. Desks with bounded capabilities &mdash; Texture, Research, Engineering, Management, Mail &mdash; each a recursive language model with its own context and imports. No root agent; coordination lives in the state.</div></div>
+      <div><div class="colhead">Precommitment records</div><div class="body dim">Agents commit to predictions before acting; outcomes resolve them. The same log is the learning signal, the audit trail, and the reputation record. Supervision is a property of the log, not a chat window.</div></div>
+      <div><div class="colhead">Model-neutral</div><div class="body dim">Cheap open-weight models for volume, frontier models where the stakes are highest. The state outlives every model it passes through.</div></div>
+    </div>
+    <div class="tail">
+      <div class="rule-thin"></div>
+      <div class="note" style="margin-top:12px;">External validation — Harvey, September 2026: on 50 held-out diligence data rooms, a recursive harness lifted rubric pass rate from 23.3% to 62.4%, and per-room model cost fell to ~$7 against ~$18 for a standard tool loop.</div>
+    </div>
+  </div>
+  <div class="folio"><span>Choir</span><span>06</span></div>
+</section>
+
+<!-- 07 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">07 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The newspaper<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head">The newspaper is the demo.</h1>
+    <div class="dek">choir.news is an app inside the web desktop. It reads the world continuously, keeps provenance on every claim, and publishes.</div>
+    <div class="cols3" style="margin-top:32px;">
+      <div><div class="colhead">The marketing</div><div class="body dim">The founder streams himself using Choir to cover tech, media, business, politics, and geostrategy. Viewers watch the work get steered by editing, not prompting.</div></div>
+      <div><div class="colhead">First series &mdash; Taiwan</div><div class="body dim">Reading the Taiwanese internet in its own language and platforms, for Western audiences: silicon supply chains, US&ndash;China relations, democratic legitimacy versus the authoritarian growth model.</div></div>
+      <div><div class="colhead">The hard part</div><div class="body dim">Labeling each source&rsquo;s political alignment and flagging coordinated or content-farm material. Taiwan is one of the most heavily targeted information environments in the world &mdash; the hardest available test of provenance. [TK R11]</div></div>
+    </div>
+    <div class="pull tail" style="font-size:24px;">Every claim carries its source. <span class="g">Every source carries its alignment.</span></div>
+  </div>
+  <div class="folio"><span>Choir</span><span>07</span></div>
+</section>
+
+<!-- 08 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">08 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">Autoradio<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head">The real platform shift is voice.</h1>
+    <div class="dek">Alexa and Siri were voice command lines: command, response, no state. Autoradio is a living station you steer by interrupting and recording your own takes.</div>
+    <div class="cols3" style="margin-top:30px;">
+      <div><div class="colhead">After voice CLIs</div><div class="body dim">Amazon's devices business lost more than $25B over five years; Apple pushed Siri's personal-context features back a year; Google replaced Assistant with Gemini for Home, calling the old one bound to rigid, specific commands.</div></div>
+      <div><div class="colhead">Call-in radio, with provenance</div><div class="body dim">Two-way radio has a proven social form &mdash; call-in radio built communities. Autoradio is call-in radio with provenance, where listeners&rsquo; takes become part of the record.</div></div>
+      <div><div class="colhead">Delivery</div><div class="body dim">A native mobile app plus an app inside the web desktop. Mobile puts Choir on the home screen, in the car, and on walks &mdash; where the daily habit forms.</div></div>
+    </div>
+    <div class="note" style="margin-top:22px;">Radio holds 32% of daily audio listening time and 55% of in-car audio time; 167M Americans listen to podcasts monthly. Edison Research / SSRS, 2026.</div>
+    <div class="pull tail">Generate the visuals. <span class="g">Preserve the voice.</span></div>
+  </div>
+  <div class="folio"><span>Choir</span><span>08</span></div>
+</section>
+
+<!-- 09 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">09 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The market<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head" style="font-size:43px;">The CLI market is chat. The GUI market is everyone who works in documents.</h1>
+    <div class="figs">
+      <div><div class="fig-era">The CLI market</div><div class="fig-n">88M+</div><div class="fig-l">paid AI subscriptions and seats announced — 50M ChatGPT, 30M Copilot, 8M Gemini Enterprise</div></div>
+      <div><div class="fig-era">The GUI market</div><div class="fig-n">450M+</div><div class="fig-l">paid seats in office and document suites — 450M+ Microsoft 365 commercial, 13M Google Workspace customers</div></div>
+      <div><div class="fig-era">First slice</div><div class="fig-n">3.0</div><div class="fig-l">general assistants used by the average AI user — multi-homing is already the norm (Menlo Ventures, Sep 2026)</div></div>
+      <div><div class="fig-era">The beachhead</div><div class="fig-n">644K</div><div class="fig-l">active podcasts and newsletter publishers named today — plus 140K U.S. writers and authors, 65% self-employed</div></div>
+    </div>
+    <div class="calc">644K creators × [price] × [defensible penetration] = [TK]</div>
+    <div class="note" style="margin-top:22px;">The labs want users to single-home. Multi-homing shows none of them has won: Choir aggregates the user&rsquo;s work across agents and turns models into interchangeable suppliers.</div>
+  </div>
+  <div class="folio"><span>Choir</span><span>09</span></div>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">10 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The business<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head" style="font-size:46px;">Choir owns the relationship by letting you own your state.</h1>
+    <div class="cols3" style="margin-top:32px;">
+      <div><div class="colhead">The core</div><div class="body dim">Open-source runtime, self-hostable. Most people will not self-host &mdash; the ability to leave is what earns the trust.</div></div>
+      <div><div class="colhead">The convenience</div><div class="body dim">Hosted Choir. Premium surfaces &mdash; Radio, research, teams &mdash; built on the user&rsquo;s state, never a claim on it.</div></div>
+      <div><div class="colhead">The network</div><div class="body dim">choir.news, Autoradio, and citations across computers. Reach grows with each publisher.</div></div>
+    </div>
+    <div class="note tail">WordPress runs 40.2% of all websites — 58.7% of those whose CMS is known: open source, self-hostable, most people on the hosted service, and no one fears lock-in. (W3Techs, September 2026)</div>
+  </div>
+  <div class="folio"><span>Choir</span><span>10</span></div>
+</section>
+
+<!-- 11 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">11 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">Why now<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head">Agents are everywhere. Their work belongs to no one.</h1>
+    <div class="cols3" style="margin-top:34px;">
+      <div><div class="colhead">The wave &mdash; mid 2026</div><div class="body dim">Meta Muse shipped September 8 and went to #1 in the App Store; Town raised $55M; Instinct is reported in talks at a ~$10B valuation. Anthropic's Orbit and OpenAI's Aeon are reported but unannounced. Each keeps the user's work in the vendor's silo.</div></div>
+      <div><div class="colhead">Chat is buckling</div><div class="body dim">Axios, September 26: the top labs are working through tens of thousands of agent-security incidents. OpenAI says tool-use training, evaluation, and inference for its most capable models remain paused.</div></div>
+      <div><div class="colhead">The economics turned</div><div class="body dim">Volume work costs $0.30 / $1.20 per million tokens on DeepSeek V4.1 Flash at peak, against $10 / $50 for the frontier. A model-neutral computer is now economically viable.</div></div>
+    </div>
+    <div class="tail">
+      <div class="rule-thin"></div>
+      <div class="note" style="margin-top:12px;">The question is not whether agents arrive. It is whose computer they work on.</div>
+    </div>
+  </div>
+  <div class="folio"><span>Choir</span><span>11</span></div>
+</section>
+
+<!-- 12 -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">12 / 12</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The ask<span class="draft">Draft &mdash; founder to rewrite</span></div>
+    <h1 class="head" style="font-size:44px;">Building the system that needs to exist.</h1>
+    <div class="dek" style="font-size:19px;">Spending ramps with revenue. A low base burn keeps the company default alive; the raise is capital to move fast when demand shows up, not money to go looking for it.</div>
+    <div class="askrow">
+      <div class="askbox" style="max-width:560px;">
+        <div class="k">The raise</div>
+        <div class="v">&asymp; $1.0&ndash;1.25M &mdash; a runway floor plus a growth reserve.</div>
+      </div>
+      <div class="note" style="max-width:430px; font-style:normal;"><span class="tk">[founder confirms the final number]</span></div>
+    </div>
+    <div class="twotab">
+      <div>
+        <div class="colhead">Base plan &mdash; pre-revenue, ~$20K/month</div>
+        <table class="stand">
+          <tr><td>Founder salary</td><td style="text-align:right;">$10K</td></tr>
+          <tr><td>Inference &mdash; open-weight volume, frontier bursts</td><td style="text-align:right;">~$3&ndash;5K</td></tr>
+          <tr><td>Infrastructure and miscellaneous</td><td style="text-align:right;">~$3&ndash;4K</td></tr>
+          <tr><td>Contractors, amortized &mdash; audit, legal</td><td style="text-align:right;">~$3K</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="colhead">Growth reserve &mdash; unlocked by milestones</div>
+        <table class="stand">
+          <tr><td>Launch plus first paying cohort</td><td class="yes" style="text-align:right;">inference ramp</td></tr>
+          <tr><td>MRR reaches <span class="tk">[X]</span></td><td class="yes" style="text-align:right;">first builder</td></tr>
+          <tr><td>MRR reaches <span class="tk">[Y]</span></td><td class="yes" style="text-align:right;">second builder</td></tr>
+          <tr><td>MRR reaches <span class="tk">[Z]</span></td><td class="yes" style="text-align:right;">operations</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="colophon tail">
+      <div>
+        <div class="note">Burn multiple (net burn &divide; net new ARR) under <span class="tk">[target]</span> once revenue starts. Inference before headcount; generalist builders, specialists as contractors.</div>
+        <div class="note" style="margin-top:8px;">Non-money ask: introductions to writers, podcasters, and analysts who publish weekly &mdash; not advisors.</div>
+        <div class="contacts" style="margin-top:14px;">choir.news &nbsp;&middot;&nbsp; github.com/choir-hip/go-choir</div>
+      </div>
+      <svg class="tetra" viewBox="0 0 512 512" aria-hidden="true" style="width:52px;height:52px;"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z"/></svg>
+    </div>
+  </div>
+  <div class="folio"><span>Choir</span><span>12</span></div>
+</section>
+
+</body>
+</html>
