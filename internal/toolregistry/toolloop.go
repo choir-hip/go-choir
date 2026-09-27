@@ -95,15 +95,15 @@ type toolLoopOptions struct {
 	llmConfig      provideriface.LLMSelection
 	conversationID string
 
-	initialToolChoice   string
-	terminalTools           map[string]bool
-	terminalToolResults     map[string]func(string) bool
-	passivatingTools        map[string]bool
-	passivatingToolResults  map[string]func(string) bool
-	requiredWriteTools      map[string]bool
+	initialToolChoice        string
+	terminalTools            map[string]bool
+	terminalToolResults      map[string]func(string) bool
+	passivatingTools         map[string]bool
+	passivatingToolResults   map[string]func(string) bool
+	requiredWriteTools       map[string]bool
 	requiredWriteToolResults map[string]func(string) bool
-	completionGuard     ToolLoopCompletionGuardFunc
-	parkWaiter          ToolLoopParkWaiterFunc
+	completionGuard          ToolLoopCompletionGuardFunc
+	parkWaiter               ToolLoopParkWaiterFunc
 
 	budget ToolLoopBudget
 }
@@ -301,15 +301,6 @@ func WithToolLoopBudget(budget ToolLoopBudget) ToolLoopOption {
 	}
 }
 
-// maxToolLoopIterations prevents infinite tool-calling loops. If the LLM
-// keeps requesting tool use without reaching an end_turn, we bail out
-// after this many iterations. This is a temporary stability ceiling while
-// worker leases, cancellation, compaction, and budget backpressure mature
-// toward longer or budget-governed execution.
-const (
-	maxToolLoopIterations = 200
-)
-
 var providerRateLimitRetryDelays = []time.Duration{
 	5 * time.Second,
 	20 * time.Second,
@@ -437,7 +428,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		return appendMessage("user", msg)
 	}
 
-	for i := 0; i < maxToolLoopIterations; i++ {
+	for i := 0; ; i++ {
 		if err := checkToolLoopBudgetBeforeProvider(options.budget, i, loopStartedAt); err != nil {
 			emitToolLoopBudgetExhausted(emit, options.budget, i, totalUsage, err)
 			return "", totalUsage, err
@@ -987,7 +978,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			return combinedFinalText(resp.Text), totalUsage, nil
 
 		case "max_tokens":
-			if req.ToolChoice != "" && len(resp.ToolCalls) == 0 && i < maxToolLoopIterations-1 {
+			if req.ToolChoice != "" && len(resp.ToolCalls) == 0 {
 				var retryAttempt int
 				if requiredNextTool != nil {
 					requiredNextTool.Attempts++
@@ -1023,7 +1014,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				return combinedFinalText(resp.Text), totalUsage, fmt.Errorf("tool loop: model stopped at max_tokens without text (iteration %d)", i+1)
 			}
 			maxTokenContinuationAttempts++
-			if maxTokenContinuationAttempts > maxTokenContinuationRetries || i >= maxToolLoopIterations-1 {
+			if maxTokenContinuationAttempts > maxTokenContinuationRetries {
 				return combinedFinalText(resp.Text), totalUsage, fmt.Errorf("tool loop: model stopped at max_tokens after %d continuation attempts (iteration %d)", maxTokenContinuationAttempts-1, i+1)
 			}
 			partialTextFragments = append(partialTextFragments, resp.Text)
@@ -1055,7 +1046,6 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		}
 	}
 
-	return "", totalUsage, fmt.Errorf("tool loop: exceeded %d iterations without end_turn", maxToolLoopIterations)
 }
 
 func (budget ToolLoopBudget) active() bool {

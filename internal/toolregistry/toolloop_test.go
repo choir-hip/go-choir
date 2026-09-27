@@ -1323,48 +1323,6 @@ func TestRunToolLoopMultipleToolIterations(t *testing.T) {
 	}
 }
 
-func TestRunToolLoopMaxIterations(t *testing.T) {
-	// LLM keeps requesting tool_use, hitting the iteration limit.
-	registry := NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name: "loop_tool",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "result", nil
-		},
-	}); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	// Always return tool_use.
-	provider := newMockToolLoopProvider(
-		&provideriface.ToolLoopResponse{
-			StopReason: "tool_use",
-			ToolCalls: []types.ToolCall{
-				{ID: "call-loop", Name: "loop_tool", Arguments: json.RawMessage(`{}`)},
-			},
-			Usage: provideriface.TokenUsage{InputTokens: 10, OutputTokens: 5},
-		},
-	)
-
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
-
-	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"loop"}`)},
-		"You are helpful.",
-		4096,
-		emit,
-		nil)
-
-	if err == nil {
-		t.Fatal("expected error for exceeding max iterations")
-	}
-	if !strings.Contains(err.Error(), "exceeded 200 iterations") {
-		t.Fatalf("max-iteration error = %q, want 200-iteration ceiling", err.Error())
-	}
-	if provider.CallCount() != maxToolLoopIterations {
-		t.Fatalf("provider calls = %d, want %d", provider.CallCount(), maxToolLoopIterations)
-	}
-}
-
 func TestRunToolLoopBudgetLimitsProviderCalls(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(Tool{
