@@ -2348,6 +2348,27 @@ func (s *Store) GetEngineeringAssignmentReport(ctx context.Context, ownerID, com
 	return report, nil
 }
 
+// GetEngineeringAssignmentReportByCanonicalID resolves a stored report from
+// its ReportRefs canonical object ID (the refs a terminal write appends are
+// canonical IDs, not ReportIDs). Used by the restart-recast supersede tuple.
+func (s *Store) GetEngineeringAssignmentReportByCanonicalID(ctx context.Context, canonicalID string) (types.EngineeringAssignmentReport, error) {
+	obj, err := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(canonicalID))
+	if err != nil {
+		return types.EngineeringAssignmentReport{}, err
+	}
+	if obj.ObjectKind != ogKindEngineeringReport {
+		return types.EngineeringAssignmentReport{}, ErrNotFound
+	}
+	report, err := decodeLifecycleObject[types.EngineeringAssignmentReport](obj)
+	if err != nil {
+		return types.EngineeringAssignmentReport{}, err
+	}
+	if report.ReportID == "" {
+		return types.EngineeringAssignmentReport{}, ErrNotFound
+	}
+	return report, nil
+}
+
 func (s *Store) GetEngineeringSubjectCandidate(ctx context.Context, ownerID, computerID, candidateID string) (types.EngineeringSubjectCandidate, error) {
 	obj, err := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(candidateID))
 	if err != nil {

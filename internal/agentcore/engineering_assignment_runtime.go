@@ -139,6 +139,11 @@ type OpenDocumentAssignmentRequest struct {
 	CandidateID          string
 	RevisionID           string
 	ModelPolicyOverlayID string
+	// Attempt defaults to 1. Attempts > 1 re-open a restart-cancelled cast and
+	// must carry the frozen supersede tuple naming the prior attempt's cancel
+	// report (store-side validateEngineeringSupersedeTuple enforces it).
+	Attempt    uint64
+	Supersedes *types.EngineeringSupersedeTuple
 }
 
 // DelegatedCastRequest is a desk-staged choir.Cast: one desk cell admits one
@@ -209,7 +214,10 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 	if parentWork == nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("document trajectory has no open engineering desk work item")
 	}
-	attempt := uint64(1)
+	attempt := req.Attempt
+	if attempt == 0 {
+		attempt = 1
+	}
 	assignmentID := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, req.RevisionID, req.Kind, req.CandidateID)
 	requestDigestParts := []string{
 		vocabmigrate.IdentitySeedCoSuperRequestV2, req.Objective, string(req.Kind), req.CandidateID, parentWorkID, req.RevisionID,
@@ -284,11 +292,20 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 		}
 	}
 	opaque := deterministicDocumentAssignmentCapability(assignmentID, attempt)
+	// Work-item and assigned-agent canonical IDs are attempt-scoped: attempt 2+
+	// (restart recast) must mint fresh objects — attempt 1's are already
+	// committed and open writes carry not-exists conditions.
+	assignedWorkID := "work:" + assignmentID
+	assignedAgentID := agentprofile.Engineering + ":" + assignmentID
+	if attempt > 1 {
+		assignedWorkID = fmt.Sprintf("%s:attempt-%d", assignedWorkID, attempt)
+		assignedAgentID = fmt.Sprintf("%s:attempt-%d", assignedAgentID, attempt)
+	}
 	binding := types.EngineeringAssignmentBinding{
 		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
 		ParentAgentID: parentAgentID, ParentRunID: "", ParentDecisionID: parentDecisionID,
 		ParentControlID: parentControlID, ParentWorkItemID: parentWorkID,
-		AssignedWorkItemID: "work:" + assignmentID, AssignedAgentID: agentprofile.Engineering + ":" + assignmentID,
+		AssignedWorkItemID: assignedWorkID, AssignedAgentID: assignedAgentID,
 		Kind: req.Kind, Attempt: attempt,
 		ScopeDigest: scopeDigest, RequestDigest: requestDigest, CapabilityDigest: store.DigestEngineeringOpaqueCapability(opaque),
 		ExecutionHandleDigest: objectgraph.SHA256([]byte(opaque)), SubjectDigest: subjectDigest,
@@ -301,6 +318,7 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 		CommandID: "co-super-open:" + assignmentID + fmt.Sprintf(":%d", attempt), AssignmentID: assignmentID, Binding: binding,
 		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: req.Objective},
+		Supersedes:    req.Supersedes,
 	}
 	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
 	if err != nil {
@@ -512,11 +530,17 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	binding := assignment.Binding
 	ownerID, computerID, trajectoryID := binding.OwnerID, binding.ComputerID, binding.TrajectoryID
 	assignmentID, attempt := assignment.AssignmentID, binding.Attempt
-	agentID, workID, runID, capsuleID := binding.AssignedAgentID, binding.AssignedWorkItemID, "run:"+assignmentID, binding.CapsuleID
+	agentID, workID, capsuleID := binding.AssignedAgentID, binding.AssignedWorkItemID, binding.CapsuleID
+	// The bound run's canonical ID is attempt-scoped for the same reason the
+	// work/agent mints are: a restart recast must not overwrite attempt 1's run.
+	runID := "run:" + assignmentID
+	if attempt > 1 {
+		runID = fmt.Sprintf("%s:attempt-%d", runID, attempt)
+	}
 	cancelOpen := func(cause error) error {
 		current, loadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
 		if loadErr == nil && !current.Disposition.Terminal() {
-			cancel := types.CancelEngineeringAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
+			cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("co-super-open-failed:%s:%d", assignmentID, attempt), OwnerID: ownerID, ComputerID: computerID,
 				AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: cause.Error()}
 			cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 			if _, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel); cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {

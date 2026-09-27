@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -654,5 +655,149 @@ func TestDeadlineWakeCancelsExpiredBoundAssignmentWithoutManagementSelection(t *
 	}
 	if done.Disposition != types.EngineeringAssignmentCancelled {
 		t.Fatalf("expired assignment not cancelled by derivable wake: %+v", done)
+	}
+}
+
+// A guest restart terminally cancels the bound assignment (absent capsule) but
+// must not strand the cast: the desk reconcile re-opens the cast at the next
+// attempt carrying a retry_after_block supersede tuple that names the prior
+// attempt's cancel report. A deliberate cancel (different reason) stays dead.
+func TestRestartCancelledCastRecastsAtNextAttempt(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	rt.assignmentRuntime = absentAssignmentCapsule{}
+	rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)
+
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-restart-recast", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignmentID := "assignment-restart-recast"
+	open := types.OpenEngineeringAssignmentRequest{
+		CommandID: "command-open-" + assignmentID, AssignmentID: assignmentID,
+		Binding: types.EngineeringAssignmentBinding{
+			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
+			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
+			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
+			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
+			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-" + assignmentID), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID)),
+			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
+			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
+			Writable:          true, CapsuleID: "capsule-" + assignmentID,
+			NetworkMode: types.EngineeringCapsuleNetworkForbidden, FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+		},
+		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "restart recast"},
+	}
+	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	runID := "run:" + assignmentID
+	run := types.RunRecord{
+		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
+		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
+		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		State: types.RunPending, Prompt: open.AssignedWork.Objective,
+		Metadata: map[string]any{
+			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
+			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
+			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
+			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
+			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
+			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
+			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
+			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
+		},
+	}
+	bind := types.BindEngineeringAssignmentRequest{
+		CommandID: "command-bind-" + assignmentID, OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
+		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
+		OpaqueCapability: "cap-" + assignmentID, CapsuleID: open.Binding.CapsuleID,
+	}
+	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
+		t.Fatal(err)
+	}
+
+	// Restart: the capsule is absent, so the sweep revokes + cancels attempt 1.
+	rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx)
+	cancelled, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 1)
+	if err != nil || cancelled.Disposition != types.EngineeringAssignmentCancelled {
+		t.Fatalf("attempt 1 not restart-cancelled: %+v err=%v", cancelled, err)
+	}
+	if cancelled.DispositionReason != restartCancelledAssignmentReason {
+		t.Fatalf("unexpected cancel reason %q", cancelled.DispositionReason)
+	}
+
+	// The reconcile predicate: the latest terminal attempt cancelled by restart
+	// is recast-admissible; a deliberate cancel is not.
+	attempts, err := s.ListEngineeringAssignments(ctx, seed.OwnerID, seed.ComputerID, seed.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, admissible := latestCancelledForRestartRecast(attempts, assignmentID)
+	if !admissible || latest.Binding.Attempt != 1 {
+		t.Fatalf("restart-cancelled attempt not marked recast-admissible: latest=%+v admissible=%v", latest, admissible)
+	}
+	reportRef := rt.restartRecastReportRef(ctx, latest)
+	if reportRef == "" {
+		t.Fatal("cancel report receipt not resolvable for supersede tuple")
+	}
+
+	// Attempt 2 opens with the frozen supersede tuple naming the cancel report.
+	open2 := types.OpenEngineeringAssignmentRequest{
+		CommandID: "command-open-" + assignmentID + ":2", AssignmentID: assignmentID,
+		Binding: types.EngineeringAssignmentBinding{
+			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
+			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
+			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
+			ParentWorkItemID:   seed.ParentWorkID,
+			AssignedWorkItemID: "work:" + assignmentID + ":attempt-2",
+			AssignedAgentID:    agentprofile.Engineering + ":" + assignmentID + ":attempt-2",
+			Kind:               types.EngineeringAssignmentImplementation, Attempt: 2,
+			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-" + assignmentID + "-2"), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID + "-2")),
+			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
+			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
+			Writable:          true, CapsuleID: "capsule-" + assignmentID + "-2",
+			NetworkMode: types.EngineeringCapsuleNetworkForbidden, FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+		},
+		AssignedAgent: types.AgentRecord{AgentID: agentprofile.Engineering + ":" + assignmentID + ":attempt-2"},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: "work:" + assignmentID + ":attempt-2", AssignedAgentID: agentprofile.Engineering + ":" + assignmentID + ":attempt-2", Objective: "restart recast"},
+		Supersedes: &types.EngineeringSupersedeTuple{
+			SupersedesAssignmentID: assignmentID, SupersedesAttempt: 1,
+			PriorReceiptRef: reportRef, SupersedeKind: types.EngineeringSupersedeRetryAfterBlock,
+			ReasonEnum: "restart_passivation",
+			DeltaDigest: objectgraph.SHA256([]byte(strings.Join([]string{
+				"retry_after_block", assignmentID, "1", "2", restartCancelledAssignmentReason,
+			}, "\x00"))),
+		},
+	}
+	open2.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenEngineeringAssignment(ctx, open2); err != nil {
+		t.Fatalf("attempt-2 recast open refused: %v", err)
+	}
+	recast, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 2)
+	if err != nil || recast.Disposition != types.EngineeringAssignmentOpen {
+		t.Fatalf("attempt 2 not open after recast: %+v err=%v", recast, err)
+	}
+
+	// A deliberate cancel is not recast-admissible: same predicate, wrong reason.
+	deliberate := cancelled
+	deliberate.DispositionReason = "owner requested cancellation"
+	if _, ok := latestCancelledForRestartRecast([]types.EngineeringAssignment{deliberate}, assignmentID); ok {
+		t.Fatal("deliberate cancel must not be restart-recast admissible")
 	}
 }
