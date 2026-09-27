@@ -111,7 +111,7 @@ Nothing else on the slide.
 - An app inside the web desktop, not a separate product. It reads the world continuously, keeps provenance on every claim, and publishes.
 - It doubles as content marketing: the founder streams himself using Choir to cover tech, media, business, politics, and geostrategy. Viewers watch the work get steered by editing, not prompting.
 - First series — Taiwan: reading the Taiwanese internet in its own language and platforms for Western audiences. Silicon supply chains, US–China relations, democratic legitimacy versus the authoritarian growth model.
-- The hard part: labeling each source's political alignment and flagging coordinated or content-farm material. Taiwan is one of the most heavily targeted information environments in the world — the hardest available test of provenance. (R11)
+- The hard part: labeling each source's political alignment and flagging coordinated or content-farm material. Taiwan is one of the most heavily targeted information environments in the world — the hardest available test of provenance — the work the Taiwan research documents by hand. (R11)
 
 ---
 
