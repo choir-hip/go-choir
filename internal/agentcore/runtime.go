@@ -2194,6 +2194,30 @@ func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) in
 	return count
 }
 
+// pendingDeskMutations reports how many pending texture-desk mutations exist
+// for this computer's owner. A pending mutation means the controller owes the
+// document another activation even while no run is in flight — the window
+// between activations must not read as "idle" to host lifecycle (idle sweep,
+// pressure reclaim). Receipt: docs/problems/vmctl-pressure-reclaim-mid-respawn-gap-2026-09-28.md.
+func (rt *Runtime) pendingDeskMutations(ctx context.Context) int {
+	if rt == nil || rt.store == nil {
+		return 0
+	}
+	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
+	if ownerID == "" {
+		ownerID = strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if ownerID == "" || computerID == "" {
+		return 0
+	}
+	count, err := rt.store.CountPendingAgentMutations(ctx, ownerID, computerID)
+	if err != nil {
+		return 0
+	}
+	return count
+}
+
 func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.RunRecord) bool {
 	if rt == nil || rt.store == nil {
 		return true

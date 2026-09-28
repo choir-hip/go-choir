@@ -2484,12 +2484,17 @@ func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
 		}
 		defer resp.Body.Close()
 		var health struct {
-			RunningRuns int `json:"running_runs"`
+			RunningRuns          int `json:"running_runs"`
+			DeskPendingMutations int `json:"desk_pending_mutations"`
 		}
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&health); err != nil {
 			return false
 		}
-		return health.RunningRuns > 0
+		// running_runs covers in-flight activations; desk_pending_mutations
+		// covers the gap between them — a controller that owes the document
+		// another desk run is not idle even when running_runs==0.
+		// Receipt: docs/problems/vmctl-pressure-reclaim-mid-respawn-gap-2026-09-28.md
+		return health.RunningRuns > 0 || health.DeskPendingMutations > 0
 	}
 }
 

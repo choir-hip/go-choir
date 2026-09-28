@@ -239,6 +239,7 @@ type runtimeHealthResponse struct {
 	ComputerID            string                   `json:"computer_id"`
 	RuntimeHealth         types.RuntimeHealthState `json:"runtime_health"`
 	RunningRuns           int                      `json:"running_runs"`
+	DeskPendingMutations  int                      `json:"desk_pending_mutations,omitempty"`
 	RunningProcessorRuns  int                      `json:"running_processor_runs"`
 	ResearchCount         int                      `json:"researcher_count"`
 	ActiveProvider        string                   `json:"active_provider"`
@@ -1014,6 +1015,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
 	runningProcessorRuns := h.rt.RunningCountByProfile(r.Context(), agentprofile.Processor)
+	deskPending := h.rt.pendingDeskMutations(r.Context())
 	resp := runtimeHealthResponse{
 		Status:               string(health),
 		Service:              "autoputer",
@@ -1021,6 +1023,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		RuntimeHealth:        health,
 		RunningRuns:          h.rt.RunningCount(),
 		RunningProcessorRuns: runningProcessorRuns,
+		DeskPendingMutations: deskPending,
 		ResearchCount:        h.rt.cfg.ResearchCount,
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("autoputer"),

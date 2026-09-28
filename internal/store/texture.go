@@ -1998,7 +1998,6 @@ type AgentMutation struct {
 	CompletedAt         *time.Time `json:"completed_at,omitempty"`
 }
 
-
 func textureMutationProjection(m AgentMutation) computerevent.TextureAgentMutationProjection {
 	var completedAt *string
 	if m.CompletedAt != nil {
@@ -2132,6 +2131,21 @@ func (s *Store) GetPendingAgentMutationByDoc(ctx context.Context, ownerID, compu
 		strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID),
 	)
 	return scanAgentMutation(row)
+}
+
+// CountPendingAgentMutations returns the number of pending mutations scoped to
+// one owner+computer. Used by the guest health surface so host-side lifecycle
+// (idle sweep, pressure reclaim) can tell a computer with un-consumed desk work
+// apart from a truly idle one — a pending mutation means the controller owes
+// the doc another activation even when no run is currently in flight.
+func (s *Store) CountPendingAgentMutations(ctx context.Context, ownerID, computerID string) (int, error) {
+	var count int
+	err := s.textureHandle().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM texture_agent_mutations
+		  WHERE owner_id = ? AND computer_id = ? AND state = 'pending'`,
+		strings.TrimSpace(ownerID), strings.TrimSpace(computerID),
+	).Scan(&count)
+	return count, err
 }
 
 // GetAgentMutationByRun returns the agent mutation for a specific run ID.
@@ -2271,7 +2285,6 @@ func (s *Store) DeferAgentMutation(ctx context.Context, ownerID, computerID, run
 	}
 	return nil
 }
-
 
 // FailAgentMutation marks an agent mutation as failed.
 func (s *Store) FailAgentMutation(ctx context.Context, ownerID, computerID, runID string) error {
