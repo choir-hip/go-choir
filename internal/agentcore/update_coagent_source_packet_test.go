@@ -837,15 +837,22 @@ func TestLifecycleRunInjectorReadsComputerScopedPendingUpdates(t *testing.T) {
 	}
 	// The seeded document's initial AuthorUser revision is a pending owner
 	// input, so the owner_revision packet is injected ahead of the lifecycle
-	// update.
-	var sawLifecycleUpdate bool
+	// update. The lifecycle update turn is a pointer — it names the update
+	// id; the payload body stays in-cell via choir.Updates().
+	var sawLifecycleUpdate, leakedPayload bool
 	for _, message := range messages {
-		if strings.Contains(string(message), "scoped lifecycle content") {
+		if strings.Contains(string(message), "update-lifecycle-injector") {
 			sawLifecycleUpdate = true
+		}
+		if strings.Contains(string(message), "scoped lifecycle content") {
+			leakedPayload = true
 		}
 	}
 	if !sawLifecycleUpdate {
-		t.Fatalf("lifecycle update messages = %s", messages)
+		t.Fatalf("lifecycle update messages missing update id = %s", messages)
+	}
+	if leakedPayload {
+		t.Fatalf("wake turn must not inline the update payload: %s", messages)
 	}
 }
 
