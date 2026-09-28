@@ -1,6 +1,11 @@
 # M11 blocker: Texture required-write loop starves the engineering desk op
 
-**Status:** documented 2026-09-27; fix pending.
+**Status:** FIXED 2026-09-28 — all four fix-direction legs landed in
+`67562b45` + `215f1be4` (main). Cell normalization kills the redeclaration
+trap; `SessionFrame.Updates`/`choir.Updates()` binds pending update records
+in-cell; the wake turn is a pointer-only turn (update ids, no payload); desk
+overlays state the cell contract. Staging acceptance pending: the M11
+episode probe run against the deployed build.
 **Evidence:** staging, computer `computer-9d8257559c5761cf07502d2bfb54f184`,
 op `selfdev-3c27040a8900fa53ebd58831c13887d2` (probe run r5, timed out after
 60 min in `executing`); Node B journal 22:45–22:56 UTC.
