@@ -954,6 +954,44 @@ func TestOwnershipRegistry_PremiumAlwaysOnIsModeledAndProtected(t *testing.T) {
 	}
 }
 
+// A computer whose guest reports in-flight runs is never an idle candidate —
+// LastActiveAt tracks ownership-resolution traffic only, so a mid-desk-run VM
+// reads idle without this check. Unreachable guests keep the old decision:
+// a silent guest is already a hibernation candidate for other reasons.
+// Receipt: docs/problems/vmctl-idle-sweep-hibernates-busy-guest-2026-09-28.md.
+func TestOwnershipRegistry_IdleSweepSkipsGuestWithRunningRuns(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetIdleTimeout(10 * time.Millisecond)
+
+	if _, err := reg.ResolveOrAssign("busy-user"); err != nil {
+		t.Fatalf("resolve busy-user: %v", err)
+	}
+	if _, err := reg.ResolveOrAssign("quiet-user"); err != nil {
+		t.Fatalf("resolve quiet-user: %v", err)
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("busy-user", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Hour)
+	reg.ownerships[ownershipKey("quiet-user", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Hour)
+	reg.mu.Unlock()
+
+	reg.setGuestBusyProbeForTest(func(own *VMOwnership) bool {
+		return own.UserID == "busy-user"
+	})
+
+	idle := reg.CheckIdleOwnerships()
+	if len(idle) != 1 || idle[0].UserID != "quiet-user" {
+		t.Fatalf("idle = %+v, want only quiet-user", idle)
+	}
+
+	// With the busy signal absent (guest unreachable), the same ownership
+	// hibernates — fail-open on the sweep is preserved.
+	reg.setGuestBusyProbeForTest(nil)
+	idle = reg.CheckIdleOwnerships()
+	if len(idle) != 2 {
+		t.Fatalf("idle without busy signal = %d, want 2", len(idle))
+	}
+}
+
 func TestHandler_IdleCheckIncludesPressureReclaimPlan(t *testing.T) {
 	srv, reg := newTestServer(t)
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{

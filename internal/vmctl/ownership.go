@@ -366,6 +366,11 @@ type OwnershipRegistry struct {
 	// is eligible for stop/hibernate. Zero means no idle timeout.
 	idleTimeout time.Duration
 
+	// guestBusyProbe answers whether the guest behind an ownership has live
+	// work (autoputer /health reports running_runs>0). Nil falls back to the
+	// HTTP probe; tests inject a deterministic stub.
+	guestBusyProbe func(own *VMOwnership) bool
+
 	// pressureReclaim controls pressure-aware dry-run lifecycle observation.
 	// It ranks reclaim candidates from measured host pressure without changing
 	// VM state until a later mission explicitly enables active reclaim.
@@ -2444,12 +2449,53 @@ func (r *OwnershipRegistry) CheckIdleOwnerships() []*VMOwnership {
 	}
 
 	now := time.Now()
-	candidates := idleOwnershipCandidates(ownerships, warmnessPolicy, pressure, idleTimeout, now)
+	candidates := idleOwnershipCandidates(ownerships, warmnessPolicy, pressure, idleTimeout, now, r.guestBusy())
 	idle := make([]*VMOwnership, 0, len(candidates))
 	for _, candidate := range candidates {
 		idle = append(idle, candidate.own)
 	}
 	return idle
+}
+
+// guestBusy returns the busy-check closure used by the idle sweep. The
+// default probes the guest's own /health for running_runs; a nil/ unreachable
+// answer keeps the pre-existing idle decision — a silent guest is already a
+// hibernation candidate for other reasons, and a claimed-busy guest is the
+// only case where the sweep is wrong without this check.
+func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
+	probe := r.guestBusyProbe
+	if probe != nil {
+		return probe
+	}
+	client := &http.Client{Timeout: 4 * time.Second}
+	return func(own *VMOwnership) bool {
+		base := strings.TrimRight(strings.TrimSpace(own.ComputerURL), "/")
+		if base == "" {
+			return false
+		}
+		req, err := http.NewRequest(http.MethodGet, base+"/health", nil)
+		if err != nil {
+			return false
+		}
+		req.Header.Set("X-Internal-Caller", "true")
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		var health struct {
+			RunningRuns int `json:"running_runs"`
+		}
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&health); err != nil {
+			return false
+		}
+		return health.RunningRuns > 0
+	}
+}
+
+// setGuestBusyProbeForTest pins the busy signal deterministically.
+func (r *OwnershipRegistry) setGuestBusyProbeForTest(probe func(*VMOwnership) bool) {
+	r.guestBusyProbe = probe
 }
 
 // StopIdleVMs transitions all idle VMs to hibernated state.

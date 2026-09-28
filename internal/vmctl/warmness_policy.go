@@ -155,7 +155,7 @@ func warmnessSummary(cfg WarmnessPolicyConfig, ownerships []*VMOwnership, idleEl
 	return summary
 }
 
-func idleOwnershipCandidates(ownerships []*VMOwnership, cfg WarmnessPolicyConfig, pressure HostPressureSample, idleTimeout time.Duration, now time.Time) []idleOwnershipCandidate {
+func idleOwnershipCandidates(ownerships []*VMOwnership, cfg WarmnessPolicyConfig, pressure HostPressureSample, idleTimeout time.Duration, now time.Time, busyProbe func(*VMOwnership) bool) []idleOwnershipCandidate {
 	cfg = normalizeWarmnessPolicyConfig(cfg)
 	candidates := make([]idleOwnershipCandidate, 0, len(ownerships))
 	for _, own := range ownerships {
@@ -171,6 +171,13 @@ func idleOwnershipCandidates(ownerships []*VMOwnership, cfg WarmnessPolicyConfig
 		}
 		idle := now.Sub(own.LastActiveAt)
 		if idle <= idleTimeout {
+			continue
+		}
+		// A guest with in-flight runs is not idle — LastActiveAt tracks
+		// ownership-resolution traffic only, so a computer mid-desk-run reads
+		// stale here. Consult the guest's own busy signal before candidacy;
+		// receipt: docs/problems/vmctl-idle-sweep-hibernates-busy-guest-2026-09-28.md
+		if busyProbe != nil && busyProbe(own) {
 			continue
 		}
 		class := warmnessClassForOwnership(own, cfg)
