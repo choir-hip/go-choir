@@ -78,7 +78,7 @@ var replayAirworthinessEntries = map[string]ReplayObservationClass{
 	"texture_document_aliases":        ReplayEventProjection,
 	"texture_agent_mutations":         ReplayEventProjection,
 	"texture_controller_checkpoints":  ReplayEmptyUntilSupported,
-	"texture_decisions":               ReplayEmptyUntilSupported,
+	"texture_decisions":               ReplayRetiredAbsent,
 	"agent_evidence":                  ReplayEmptyUntilSupported,
 	"content_items":                   ReplayEmptyUntilSupported,
 	"podcast_subscriptions":           ReplayEmptyUntilSupported,

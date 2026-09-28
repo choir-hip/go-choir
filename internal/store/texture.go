@@ -406,6 +406,13 @@ func (s *Store) bootstrapTexture() error {
 	if err != nil {
 		return fmt.Errorf("apply texture schema: %w", err)
 	}
+	// texture_decisions is retired: decisions live on the canonical event
+	// tape and the object graph, not in SQL. Drop any table a pre-retirement
+	// computer still carries so replay eligibility sees the declared
+	// retired_absent contract.
+	if _, err := s.textureHandle().Exec(`DROP TABLE IF EXISTS texture_decisions`); err != nil {
+		return fmt.Errorf("drop retired texture_decisions: %w", err)
+	}
 	if err := s.ensureTextureColumn("texture_agent_mutations", "scheduled_message_seq", "BIGINT NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
