@@ -32,6 +32,13 @@ import (
 //     drop the package clause, drop import specs whose path a prior cell
 //     already loaded, rename `func main` to a unique `__cell_main_<n>` and
 //     append one explicit call (keeps `return` semantics, kills auto-rerun);
+//   - import/statement mixes (imports followed by bare statements — the
+//     shape models actually emit, e.g. `import "choir"` then a bare
+//     `choir.ApplyTexture(...)`) — hoist the import lines into an import
+//     decl, lift top-level `x := e` to `var x = e`, wrap the remaining
+//     statements in a synthetic `func main`, and let the decl path rename +
+//     invoke it. Without this the cell compiles in yaegi file mode, which
+//     rejects top-level statements outright;
 //   - bare-statement fragments (can't parse as a file): scan-and-drop
 //     duplicate top-level import lines, keep everything else verbatim so
 //     expression cells still yield their value;
@@ -44,17 +51,24 @@ import (
 func (s *Session) normalizeCellSource(src string) string {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "cell.go", src, parser.ParseComments)
-	declFrag := false
 	if err != nil {
 		// Declaration fragment: prepend a synthetic package clause so the
 		// parser accepts import/const/var/func decls. If that also fails the
 		// source is a bare-statement fragment (or invalid) — handle below.
 		fset = token.NewFileSet()
 		file, err = parser.ParseFile(fset, "cell.go", "package p\n"+src, parser.ParseComments)
-		declFrag = true
 	}
 	if err != nil {
-		return s.dedupeFragmentImports(src)
+		// Import/statement mix: models emit `import "x"` followed by bare
+		// statements — unparseable as a file (import decls can't precede
+		// statements) AND unparseable as a decl fragment (imports are decls,
+		// statements aren't). Lift the contiguous leading import lines into
+		// a decl, wrap the statement tail in `func main()`, and re-enter the
+		// decl path, which renames and invokes main exactly once.
+		var ok bool
+		if file, fset, ok = s.parseWrappedStatementMix(src); !ok {
+			return s.dedupeFragmentImports(src)
+		}
 	}
 
 	var buf bytes.Buffer
@@ -67,7 +81,7 @@ func (s *Session) normalizeCellSource(src string) string {
 			emitted = true
 		}
 	}
-	_ = declFrag // package clause is dropped either way; only decls are emitted
+	// The package clause is dropped either way; only decls are emitted.
 
 	// Pass 1: emit imports that are new to this session.
 	seenThisCell := map[string]bool{}
@@ -116,6 +130,187 @@ func (s *Session) normalizeCellSource(src string) string {
 		return "1"
 	}
 	return buf.String()
+}
+
+// parseWrappedStatementMix rescues the import+statement shape models emit:
+// contiguous leading `import "x"` / `import ( ... )` lines are lifted into a
+// decl, top-level `name := expr` statements hoist to `var name = expr` when
+// the name isn't already bound (so the binding persists for later cells
+// exactly like a bare-statement cell) and degrade to `name = expr` in the
+// body when it is, and the remaining statements wrap in `func main()`
+// (which pass 2 renames to __cell_main_N and invokes once). Returns the
+// parsed file+fileset, or ok=false when the shape doesn't fit (comments
+// inside the import block, mid-file imports, or a statement tail that still
+// won't parse) — the caller falls back to dedupeFragmentImports so yaegi's
+// own diagnostics apply. Hoisted names land in s.cellDeclares so a
+// successful eval can mark them bound for the next cell.
+func (s *Session) parseWrappedStatementMix(src string) (*ast.File, *token.FileSet, bool) {
+	s.cellDeclares = nil
+	lines := strings.Split(src, "\n")
+	var imports []string
+	var rest []string
+	inBlock := false
+	sawBody := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case sawBody:
+			rest = append(rest, line)
+		case inBlock:
+			if trimmed == ")" {
+				inBlock = false
+				continue
+			}
+			if trimmed == "" || fragImportSpecLine(trimmed) {
+				imports = append(imports, trimmed)
+				continue
+			}
+			return nil, nil, false
+		case trimmed == "":
+			continue // leading blank — ambiguous position, skip
+		case trimmed == "import (" || trimmed == "import(":
+			inBlock = true
+		case fragImportLine.MatchString(trimmed):
+			imports = append(imports, strings.TrimSpace(strings.TrimPrefix(trimmed, "import")))
+		default:
+			sawBody = true
+			rest = append(rest, line)
+		}
+	}
+	if inBlock || len(imports) == 0 || len(rest) == 0 {
+		return nil, nil, false
+	}
+	// Names already bound at package scope this cell will see: every prior
+	// declared/hoisted name plus this cell's import names (the package
+	// identifier `fmt` in `import "fmt"` is a package-scope binding — a
+	// `fmt := …` that hoisted to `var fmt` would collide).
+	bound := map[string]bool{}
+	for name := range s.declaredNames {
+		bound[name] = true
+	}
+	for _, spec := range imports {
+		if name := importSpecBoundName(spec); name != "" {
+			bound[name] = true
+		}
+	}
+	// Split the statement tail via AST: `x := e` on new names hoists to
+	// `var x = e`; `x := e` on a bound name degrades to `x = e` in the body;
+	// all other statements pass through in order.
+	restSrc := strings.Join(rest, "\n")
+	stmtSet := token.NewFileSet()
+	stmtFile, stmtErr := parser.ParseFile(stmtSet, "stmts.go", "package p\nfunc f() {\n"+restSrc+"\n}", parser.ParseComments)
+	if stmtErr != nil || len(stmtFile.Decls) == 0 {
+		return nil, nil, false
+	}
+	fn, ok := stmtFile.Decls[0].(*ast.FuncDecl)
+	if !ok || fn.Body == nil {
+		return nil, nil, false
+	}
+	var hoisted []string
+	var body []string
+	for _, st := range fn.Body.List {
+		if as, ok := st.(*ast.AssignStmt); ok && as.Tok == token.DEFINE {
+			allNew := true
+			for _, e := range as.Lhs {
+				id, isIdent := e.(*ast.Ident)
+				if !isIdent || id.Name == "_" {
+					continue
+				}
+				if bound[id.Name] {
+					allNew = false
+					break
+				}
+			}
+			if allNew {
+				var lhs, rhs strings.Builder
+				for i, e := range as.Lhs {
+					if i > 0 {
+						lhs.WriteString(", ")
+					}
+					format.Node(&lhs, stmtSet, e)
+				}
+				for i, e := range as.Rhs {
+					if i > 0 {
+						rhs.WriteString(", ")
+					}
+					format.Node(&rhs, stmtSet, e)
+				}
+				hoisted = append(hoisted, "var "+lhs.String()+" = "+rhs.String())
+				for _, e := range as.Lhs {
+					if id, isIdent := e.(*ast.Ident); isIdent && id.Name != "_" {
+						bound[id.Name] = true
+					}
+				}
+				continue
+			}
+		}
+		var out strings.Builder
+		format.Node(&out, stmtSet, st)
+		body = append(body, out.String())
+	}
+	var sb strings.Builder
+	sb.WriteString("package p\nimport (\n")
+	sb.WriteString(strings.Join(imports, "\n"))
+	sb.WriteString("\n)\n")
+	for _, h := range hoisted {
+		sb.WriteString(h + "\n")
+	}
+	sb.WriteString("func main() {\n")
+	sb.WriteString(strings.Join(body, "\n"))
+	sb.WriteString("\n}\n")
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "cell.go", sb.String(), parser.ParseComments)
+	if err != nil {
+		return nil, nil, false
+	}
+	for _, st := range file.Decls {
+		gd, isGen := st.(*ast.GenDecl)
+		if !isGen || gd.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			for _, n := range spec.(*ast.ValueSpec).Names {
+				s.cellDeclares = append(s.cellDeclares, n.Name)
+			}
+		}
+	}
+	return file, fset, true
+}
+
+// pathBase returns the package-scope identifier an import binds: `bar` for
+// `foo/bar`, the trailing element for any path.
+func pathBase(path string) string {
+	if i := strings.LastIndex(path, "/"); i >= 0 {
+		return path[i+1:]
+	}
+	return path
+}
+
+// importSpecBoundName returns the package-scope identifier an import spec
+// binds: the explicit alias when present (`baz` for `baz "foo/bar"`), the
+// path's trailing element otherwise, "" for `_`/`.` forms (which bind no
+// usable package identifier here — dot-import collisions stay the
+// interpreter's problem).
+func importSpecBoundName(spec string) string {
+	m := fragImportSpecRe.FindStringSubmatch(spec)
+	if m == nil {
+		return ""
+	}
+	if m[1] != "" {
+		if m[1] == "." || m[1] == "_" {
+			return ""
+		}
+		return m[1]
+	}
+	return pathBase(m[2])
+}
+
+var fragImportSpecRe = regexp.MustCompile(`^(?:([\w\.]+)\s+)?"([^"]+)"$`)
+
+// fragImportSpecLine reports whether a line inside an `import ( ... )` block
+// is a bare spec (`"fmt"` or `alias "fmt"`), so the rescue pass can lift it.
+func fragImportSpecLine(line string) bool {
+	return regexp.MustCompile(`^(?:[\w\.]+\s+)?"[^"]+"$`).MatchString(line)
 }
 
 // dedupeFragmentImports strips top-level `import "path"` / `import (…)` lines

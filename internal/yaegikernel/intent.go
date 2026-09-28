@@ -69,7 +69,6 @@ const (
 	IntentTextureApply = "texture_apply"
 )
 
-
 // Completion results for IntentComplete.
 const (
 	CompleteCompleted = "completed"
@@ -108,14 +107,14 @@ type IncomingMessage struct {
 // disposes each update through its terminal write (ApplyTexture's
 // update_dispositions, a Report, an Outcome).
 type PendingUpdate struct {
-	UpdateID        string                             `json:"update_id"`
-	FromAgentID     string                             `json:"from_agent_id"`
-	FromRole        string                             `json:"from_role,omitempty"`
-	ChannelID       string                             `json:"channel_id,omitempty"`
-	MessageSeq      int64                              `json:"message_seq,omitempty"`
-	WorkItemID      string                             `json:"work_item_id,omitempty"`
-	Packet          types.CoagentSourcePacketPayload   `json:"packet"`
-	HumanProjection string                             `json:"human_projection,omitempty"`
+	UpdateID        string                           `json:"update_id"`
+	FromAgentID     string                           `json:"from_agent_id"`
+	FromRole        string                           `json:"from_role,omitempty"`
+	ChannelID       string                           `json:"channel_id,omitempty"`
+	MessageSeq      int64                            `json:"message_seq,omitempty"`
+	WorkItemID      string                           `json:"work_item_id,omitempty"`
+	Packet          types.CoagentSourcePacketPayload `json:"packet"`
+	HumanProjection string                           `json:"human_projection,omitempty"`
 }
 
 // StagedIntent is one non-blocking in-cell request awaiting post-cell

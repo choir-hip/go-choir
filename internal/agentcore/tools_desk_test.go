@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -126,6 +127,85 @@ func TestDeskGoEvalRejectsEmptySource(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), deskEvalExecCtx(t))
 	if _, err := tool.Func(ctx, json.RawMessage(`{"source":"  "}`)); err == nil {
 		t.Fatal("empty source must be rejected")
+	}
+}
+
+// ApplyTexture accepts the Go-native argument shape a cell authors. Staging's
+// producer failure — cells calling choir.ApplyTexture with a map literal
+// instead of a JSON string (map literal is the natural Go shape; the string
+// signature rejected it as a compile error, so no intent staged and the
+// required-write retry looped forever, per the M11 guest run-memory pull) —
+// is prevented by the verb taking any and marshaling at the seam.
+func TestDeskGoEvalApplyTextureAcceptsGoValue(t *testing.T) {
+	deskTestWorkerBin(t)
+	workers := newDeskSessionWorkers()
+	tool := newDeskGoEvalTool(&Runtime{}, workers, agentprofile.Texture)
+	execCtx := deskEvalExecCtx(t)
+	execCtx.Profile = agentprofile.Texture
+	execCtx.Role = agentprofile.Texture
+	ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
+	out, err := tool.Func(ctx, json.RawMessage(`{"source":"import \"choir\"\nedit := map[string]interface{}{\n  \"op\":\"apply\",\n  \"base_revision_id\":\"rev-1\",\n  \"content\":\"new head\",\n}\nres, err2 := choir.ApplyTexture(edit)\nif err2 != nil { print(\"apply_err: \", err2) } else { print(\"staged \", res) }","timeout_ms":15000}`))
+	if err != nil {
+		t.Fatalf("desk_go_eval returned error: %v", err)
+	}
+	if !strings.Contains(out, "staged  tray-") {
+		t.Fatalf("map-literal ApplyTexture did not stage an intent, got: %s", out)
+	}
+	if strings.Contains(out, "\"intents\":0") {
+		t.Fatalf("no intent staged from map-literal ApplyTexture, got: %s", out)
+	}
+}
+
+// The texture desk's required-write gate fires on an rlm:texture_apply
+// receipt — which exists only when the staged intent commits through the
+// bound authorizer. The M11 guest run-memory pull showed this exact chain
+// broken: the cell's map-literal arg type-errored, no intent staged, no
+// receipt minted, and the update_coagent wake redelivered forever.
+type stubCellAuthorizer struct {
+	seen []string
+}
+
+func (a *stubCellAuthorizer) CommitCellTextureAuthor(_ context.Context, _ *types.RunRecord, bodyJSON, _ string) (string, error) {
+	a.seen = append(a.seen, bodyJSON)
+	return `{"op":"apply","doc_id":"doc-1","revision_id":"rev-2"}`, nil
+}
+
+func TestDeskGoEvalApplyTextureCommitsReceipt(t *testing.T) {
+	deskTestWorkerBin(t)
+	rt, s := testRuntime(t)
+	auth := &stubCellAuthorizer{}
+	rt.SetTextureCellAuthorizer(auth)
+	rec := types.RunRecord{
+		RunID:        "run-texture-apply",
+		AgentID:      "agent-texture",
+		OwnerID:      "owner-1",
+		ComputerID:   "autoputer-test",
+		ChannelID:    "channel-texture",
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
+		State:        types.RunRunning,
+	}
+	if err := s.CreateRun(context.Background(), rec); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+	execCtx := toolregistry.ExecutionContext{
+		RunID: rec.RunID, AgentID: rec.AgentID, OwnerID: rec.OwnerID,
+		ChannelID: rec.ChannelID, ComputerID: rec.ComputerID,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture,
+		RunRecord: &rec,
+	}
+	workers := newDeskSessionWorkers()
+	tool := newDeskGoEvalTool(rt, workers, agentprofile.Texture)
+	ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
+	out, err := tool.Func(ctx, json.RawMessage(`{"source":"import \"choir\"\nchoir.ApplyTexture(map[string]interface{}{\n  \"op\":\"apply\",\n  \"base_revision_id\":\"rev-1\",\n  \"content\":\"new head\",\n})","timeout_ms":15000}`))
+	if err != nil {
+		t.Fatalf("desk_go_eval returned error: %v", err)
+	}
+	if !strings.Contains(out, "rlm:texture_apply:") {
+		t.Fatalf("committed apply missing rlm:texture_apply receipt, got: %s", out)
+	}
+	if len(auth.seen) != 1 || !strings.Contains(auth.seen[0], `"op":"apply"`) || !strings.Contains(auth.seen[0], `"base_revision_id":"rev-1"`) {
+		t.Fatalf("authorizer did not receive the marshaled map literal: %v", auth.seen)
 	}
 }
 

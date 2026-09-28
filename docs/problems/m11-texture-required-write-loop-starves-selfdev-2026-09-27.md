@@ -1,11 +1,12 @@
 # M11 blocker: Texture required-write loop starves the engineering desk op
 
-**Status:** FIXED 2026-09-28 — all four fix-direction legs landed in
-`67562b45` + `215f1be4` (main). Cell normalization kills the redeclaration
-trap; `SessionFrame.Updates`/`choir.Updates()` binds pending update records
-in-cell; the wake turn is a pointer-only turn (update ids, no payload); desk
-overlays state the cell contract. Staging acceptance pending: the M11
-episode probe run against the deployed build.
+**Status:** FIXED 2026-09-28 — cell carrier fix legs landed in `67562b45` +
+`215f1be4` + this commit (main). Cell normalization kills the redeclaration
+trap AND the import/statement-mix trap; `SessionFrame.Updates`/`choir.Updates()`
+binds pending update records in-cell; the wake turn is a pointer-only turn;
+desk overlays state the cell contract; JSON-bodied choir verbs accept
+Go-native values. Staging acceptance pending: the M11 episode probe run
+against the deployed build.
 **Evidence:** staging, computer `computer-9d8257559c5761cf07502d2bfb54f184`,
 op `selfdev-3c27040a8900fa53ebd58831c13887d2` (probe run r5, timed out after
 60 min in `executing`); Node B journal 22:45–22:56 UTC.
@@ -96,6 +97,36 @@ once; no `func main`; the activation's terminal write is
 persisted state" but doesn't name the redeclaration trap, so models keep
 sending full programs.
 
+## Root cause continued — CONFIRMED 2026-09-28 (second guest pull)
+
+The 67562b45 fix deployed; the loop kept spinning at ~30s cadence on the new
+binary. Pulling `run_memory_entries` out of the hibernated probe VM
+(`vm-d2237b9978aaba588aa2e0e1828a8adc`, `data.img` mounted `ro,noload`) shows
+the failure moved past the compile trap into two further substrate defects:
+
+1. **`import` + statements is unparseable as a yaegi cell.** The model's
+   cells are `import "choir"` followed by bare statements — the shape the
+   overlays themselves demonstrate (`rlm_engineering_runtime.yaml` works an
+   example in exactly this shape). `parser.ParseFile` rejects statements
+   after decls, so the mix fell through normalization unchanged and yaegi
+   file-mode compile failed every cell `expected declaration, found X`.
+   Fixed in `cell_normalize.go`: contiguous leading import lines hoist into
+   an `import ( ... )` decl, top-level `x := e` statements hoist to
+   `var x = e` (preserving REPL persistence), and the remaining statement
+   tail wraps in `func main()` which the existing pass renames to
+   `__cell_main_N` and invokes exactly once.
+2. **`ApplyTexture` demanded a serialized JSON string inside a Go cell.**
+   The signature `ApplyTexture(editJSON string)` forced the model to write
+   `choir.ApplyTexture("{\"op\":\"apply\",...}")` — a stringly JSON body
+   inside Go source. The model instead wrote the natural Go value:
+   `choir.ApplyTexture(map[string]interface{}{"op":"apply",...})`. That is
+   a compile-time type error for every cell, and the prompt's own examples
+   show the JSON object shape that invites the map literal. Widened to
+   `ApplyTexture(edit any)` with `jsonCellArg` marshaling Go values at the
+   seam; `EscalateActions` and `ReportPacket` had the same trap and are
+   widened identically. Guest cells now type-check whether the model passes
+   a map literal or a JSON string.
+
 ## Fix direction (decided)
 
 Upstream, per owner direction 2026-09-28:
@@ -105,6 +136,8 @@ Upstream, per owner direction 2026-09-28:
    and rename `func main` → unique `__cell_main_N()` + emit one explicit call
    (preserves `return` semantics, kills the auto-rerun). Accepts both the
    fragment shape tests use and the full-program shape models actually write.
+   **Extended 2026-09-28**: import+statement mixes hoist imports + lift
+   `:=` to `var` + wrap the tail in `func main`.
 2. **Bind update_coagent records as a cell variable** (`choir.Updates()` /
    `SessionFrame.Updates`), populated from `pendingCoagentUpdatesForRun` at
    cell admission — the REPL becomes the single source of truth for the
@@ -114,6 +147,11 @@ Upstream, per owner direction 2026-09-28:
    turn (dedupe still works on the injection-append receipt).
 4. **Write the desk cell contract into each profile's system prompt**:
    fragments not programs, imports-once, no `func main`, named terminal verb.
+   **Extended**: state that choir verbs take Go-native values (map/slice
+   literals), not serialized JSON strings.
+5. **Accept Go-native arguments at JSON-bodied verbs** (`ApplyTexture`,
+   `EscalateActions`, `ReportPacket`) — `any` + marshal at the seam, so the
+   cell's natural literal shape is the supported one.
 
 The required-write check and redelivery/backoff pressure stay as-is for now:
 with the compile trap gone and the payload reachable, `ApplyTexture` should

@@ -36,8 +36,13 @@ type Session struct {
 	// so normalization drops repeated import decls (yaegi compiles every
 	// cell as _.go in the same package — a re-import is a hard redeclared
 	// error). cellSeq numbers renamed func main decls (a declared main
-	// re-executes on every later cell otherwise).
+	// re-executes on every later cell otherwise). declaredNames tracks
+	// package-scope names earlier cells installed (hoisted vars, import
+	// names) so a later cell's `x := e` reuses the existing binding as an
+	// assignment instead of redeclaring it.
 	importedPaths map[string]bool
+	declaredNames map[string]bool
+	cellDeclares  []string
 	cellSeq       int
 }
 
@@ -77,7 +82,7 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 	if err := i.Use(buildFilteredSymbols(allowlist, extraSymbols)); err != nil {
 		return nil, fmt.Errorf("yaegi: load session symbols: %w", err)
 	}
-	return &Session{interp: i, allowlist: allowlist, stdout: stdout, stderr: stderr, importedPaths: map[string]bool{}}, nil
+	return &Session{interp: i, allowlist: allowlist, stdout: stdout, stderr: stderr, importedPaths: map[string]bool{}, declaredNames: map[string]bool{}}, nil
 }
 
 // Eval runs one cell on the persistent interpreter. Cells share variables,
@@ -189,9 +194,13 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 		default:
 		}
 		if evalErr == nil {
-			// The cell's import decls are live on the session now; record
-			// their paths so normalization drops repeats on later cells.
+			// The cell's import decls and hoisted vars are live on the
+			// session now; record them so normalization drops repeats
+			// and degrades re-`:=` to assignment on later cells.
 			s.markCellImports(src)
+			for _, n := range s.cellDeclares {
+				s.declaredNames[n] = true
+			}
 			return finish(nil, "")
 		}
 		return finish(evalErr, classifyExecuteError(evalErr, panicked))

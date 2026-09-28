@@ -281,3 +281,62 @@ func TestSessionRejectsDisallowedImports(t *testing.T) {
 		t.Fatal("disallowed import must fail")
 	}
 }
+
+// TestSessionImportStatementMix hoists the import+statement cell shape — the
+// exact source form models emit (`import "x"` followed by bare statements)
+// and the shape that starved the texture desk's required-write loop on
+// staging (guest run-memory pull, M11): file-mode compile rejected every
+// statement after the import decl. Imports lift into a decl, top-level
+// `x := e` hoists to `var x = e` so bindings persist across cells, and the
+// remaining statements run once inside the renamed cell main.
+func TestSessionImportStatementMix(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	sess, err := NewSession(nil, nil)
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+	defer sess.Close()
+	res, err := sess.Eval(ctx, "import \"fmt\"\ny := 8\nfmt.Println(y)\n")
+	if err != nil {
+		t.Fatalf("mixed import/statement cell: %v", err)
+	}
+	if res.Stdout != "8\n" {
+		t.Fatalf("mixed cell stdout=%q", res.Stdout)
+	}
+	// Hoisted y must persist — a later bare-statement cell reads it.
+	res, err = sess.Eval(ctx, "fmt.Println(y*3)")
+	if err != nil {
+		t.Fatalf("follow-up cell: %v", err)
+	}
+	if res.Stdout != "24\n" {
+		t.Fatalf("follow-up stdout=%q — := did not hoist to a persistent var", res.Stdout)
+	}
+	// A later cell re-importing fmt dedupes instead of redeclaring.
+	res, err = sess.Eval(ctx, "import \"fmt\"\nfmt.Println(\"again\")\n")
+	if err != nil {
+		t.Fatalf("re-import cell: %v", err)
+	}
+	if res.Stdout != "again\n" {
+		t.Fatalf("re-import stdout=%q", res.Stdout)
+	}
+	// Re-`:=` on an already-hoisted name inside another import-mix cell
+	// degrades to assignment, not a redeclare — the staging retry pattern.
+	res, err = sess.Eval(ctx, "import \"strings\"\ny := y * 2\nfmt.Println(strings.Repeat(\"x\", y/4))")
+	if err != nil {
+		t.Fatalf("re-declare cell: %v", err)
+	}
+	if res.Stdout != "xxxx\n" {
+		t.Fatalf("re-declare stdout=%q — := did not degrade to assignment", res.Stdout)
+	}
+	// The allowlist preflight still gates the mix shape: a disallowed import
+	// followed by statements must be refused before normalization rescues it.
+	sess2, err := NewSession(nil, nil)
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+	defer sess2.Close()
+	if _, err := sess2.Eval(ctx, "import \"os\"\nx := 1\nfmt.Println(x)"); err == nil {
+		t.Fatal("disallowed import inside import+statement mix bypassed preflight")
+	}
+}

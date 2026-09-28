@@ -432,6 +432,30 @@ func (s *ChoirScope) Updates() []PendingUpdate {
 	return append([]PendingUpdate(nil), s.updates...)
 }
 
+// jsonCellArg normalizes a cell-authored JSON argument: a JSON-encoded string
+// is used verbatim; any other JSON-marshalable Go value (map/slice literals,
+// typed structs) is marshaled. Cells are Go programs — the natural literal
+// form is a Go value, not a serialized string, so verbs accept both and the
+// wire shape stays canonical JSON.
+func jsonCellArg(v any) (string, error) {
+	switch t := v.(type) {
+	case nil:
+		return "", nil
+	case string:
+		return t, nil
+	case json.RawMessage:
+		return string(t), nil
+	case []byte:
+		return string(t), nil
+	default:
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return "", fmt.Errorf("choir: marshal cell argument as JSON: %w", err)
+		}
+		return string(raw), nil
+	}
+}
+
 // Context reports the activation identity the scope is bound to.
 func (s *ChoirScope) Context() map[string]string {
 	if s == nil {
@@ -456,6 +480,25 @@ func (s *ChoirScope) ReadDoc() DocSnapshot {
 	return *s.doc
 }
 
+// ApplyTexture stages a full-RLM texture authoring turn (R3d). edit is the
+// cell-authored texture body — {op, doc_id?, base_revision_id, content? or
+// edits?, update_dispositions?, controls?, work_disposition?, rationale?}
+// — accepted as a JSON-encoded string or any JSON-marshalable Go value (the
+// map literal form a cell naturally writes). The reducer commits it as an
+// AuthorAppAgent revision through the atomic ApplyTextureTurn transaction —
+// the genuine authoring turn, not a projection.
+func (s *ChoirScope) ApplyTexture(edit any) (string, error) {
+	t, err := s.boundTray("apply_texture")
+	if err != nil {
+		return "", err
+	}
+	editJSON, err := jsonCellArg(edit)
+	if err != nil {
+		return "", err
+	}
+	return t.ApplyTexture(editJSON)
+}
+
 // Pack returns the acting desk's cell-start commitment pack (R4): its own
 // committed/addressed acts joined with resolution observations and
 // discrepancies — score-free by construction (types.ActingPack carries no
@@ -468,19 +511,6 @@ func (s *ChoirScope) Pack() types.ActingPack {
 		return types.ActingPack{Items: []types.ActingPackItem{}}
 	}
 	return *s.pack
-}
-
-// ApplyTexture stages a full-RLM texture authoring turn (R3d): editJSON is the
-// JSON-encoded texture edit {doc_id?, base_revision_id, content? or edits?,
-// update_dispositions?, controls?, work_disposition?, rationale?}. The reducer
-// commits it as an AuthorAppAgent revision through the atomic ApplyTextureTurn
-// transaction — the genuine authoring turn, not a projection.
-func (s *ChoirScope) ApplyTexture(editJSON string) (string, error) {
-	t, err := s.boundTray("apply_texture")
-	if err != nil {
-		return "", err
-	}
-	return t.ApplyTexture(editJSON)
 }
 
 // Outcome records the cell's outcome as a durable self-report message to the
@@ -520,13 +550,19 @@ func (s *ChoirScope) boundTray(op string) (*Tray, error) {
 	return s.tray, nil
 }
 
-// Cast stages delegated admission of a downstream assignment.
-func (s *ChoirScope) Cast(desk, objective, spec string) (string, error) {
+// Cast stages delegated admission of a downstream assignment. spec is an
+// optional structured payload — a JSON-encoded string or any
+// JSON-marshalable Go value (""/nil stage no spec).
+func (s *ChoirScope) Cast(desk, objective string, spec any) (string, error) {
 	t, err := s.boundTray("cast")
 	if err != nil {
 		return "", err
 	}
-	return t.Cast(desk, objective, spec)
+	specJSON, err := jsonCellArg(spec)
+	if err != nil {
+		return "", err
+	}
+	return t.Cast(desk, objective, specJSON)
 }
 
 // Ask stages a directed query that resolves on the target's Reply.
@@ -576,11 +612,16 @@ func (s *ChoirScope) Escalate(toDesk, issue string) (string, error) {
 
 // EscalateActions surfaces a privileged-execution request to management: the
 // desk asks the target to run a set of guarded actions (the execution_request
-// packet kind on the carrier). actionsJSON is a JSON-encoded
-// []types.CoagentPacketAction with explicit per-action safety annotations; the
-// reducer validates the schema before the envelope mails.
-func (s *ChoirScope) EscalateActions(toDesk, issue, actionsJSON string) (string, error) {
+// packet kind on the carrier). actions is a JSON-encoded
+// []types.CoagentPacketAction or its equivalent Go value (a slice literal the
+// cell writes directly); the reducer validates the schema before the envelope
+// mails.
+func (s *ChoirScope) EscalateActions(toDesk, issue string, actions any) (string, error) {
 	t, err := s.boundTray("escalate")
+	if err != nil {
+		return "", err
+	}
+	actionsJSON, err := jsonCellArg(actions)
 	if err != nil {
 		return "", err
 	}
@@ -607,10 +648,15 @@ func (s *ChoirScope) Report(toDesk, claim string, evidenceRefs []string, resolve
 
 // ReportPacket asserts a report whose body is the full coagent source-packet
 // schema — the update_coagent packet contract surviving as Report's body
-// (mission R2). packetJSON is a JSON-encoded types.CoagentSourcePacketPayload;
-// the reducer validates kind/claims/sources/actions/questions before commit.
-func (s *ChoirScope) ReportPacket(toDesk, packetJSON, resolverID string) (string, error) {
+// (mission R2). packet is a JSON-encoded types.CoagentSourcePacketPayload or
+// its equivalent Go value (the map literal a cell writes directly); the
+// reducer validates kind/claims/sources/actions/questions before commit.
+func (s *ChoirScope) ReportPacket(toDesk string, packet any, resolverID string) (string, error) {
 	t, err := s.boundTray("report")
+	if err != nil {
+		return "", err
+	}
+	packetJSON, err := jsonCellArg(packet)
 	if err != nil {
 		return "", err
 	}
