@@ -46,29 +46,77 @@ is exactly what `actor_wake_outbox` + `MarkActorWakeProjected` was built to
 fence — the `request_source=update_coagent` continuation path evidently
 doesn't ride it.
 
-## Likely root-cause candidates (not yet confirmed)
+## Root cause — CONFIRMED 2026-09-28 via retained-computer run memory
 
-- The Texture desk's cell isn't staging `choir.ApplyTexture` (prompt/overlay
-  doesn't tell the model that a `update_coagent` continuation requires it).
-- The cell *does* stage it but the receipt marker `rlm:texture_apply:` isn't
-  emitted on this path (e.g. authorizer commits but output string differs).
-- The occurrence should not have been created for a desk lacking the write
-  affordance (e.g. a continuation routed to Texture whose work item doesn't
-  carry `lifecycle_work_item_id`, so the wrong branch of `initialTextureToolChoice`/
-  required-write wiring applies).
+Pulled the texture desk's run memory out of the retained computer's Dolt store
+(guest `data.img` → `state.texture/texture`, table `run_memory_entries`,
+loop `0a098ce1-0110-4cc6-a009-1798cfc46e9f`). The model **does** call
+`choir.ApplyTexture` — every turn contains `desk_go_eval` tool calls with
+well-formed `{"op":"apply","base_revision_id":...}` bodies.
 
-## Fix direction (not yet decided)
+The cells never execute. Every result is:
 
-- Cap required-write retries per occurrence and terminally dispose the
-  occurrence with a recorded failure (dead-letter) rather than redelivering
-  forever.
-- Give the defer path exponential backoff keyed to occurrence identity.
-- Verify `rlm:texture_apply:` is actually emitted on the desk-cell path and
-  the model is instructed to stage `choir.ApplyTexture` for update
-  continuations.
+```
+{"diag":"compile","error":"2:8: choir/_.go redeclared in this block"}
+```
 
+The desk cell is a persistent yaegi `Session` where the model is prompted to
+write full `package main` + `import "choir"` programs. The second cell's
+`import "choir"` collides with the first cell's import — yaegi compiles each
+cell as `_.go` in the same package and re-importing a package path is a hard
+redeclaration error. `Reuse: preserve` keeps the worker alive, so the model
+retries the same program shape every redelivery → infinite compile-fail loop.
+Locally reproduced with `yaegikernel.NewSession`: cell2 re-importing `fmt`
+fails `fmt/_.go redeclared`.
+
+Second defect in the same session semantics: a `func main` defined in any
+cell re-executes on every subsequent cell (yaegi treats `main` as the
+entrypoint per cell). So even a fragment-only model can trigger repeated
+side effects if a prior cell left `main` behind.
+
+Third defect, the RLM-design violation: `update_coagent` payloads are inlined
+into chat (`buildCoagentUpdateUserMessages` marshals the full packet JSON
+into a user turn) while the REPL — where the model must commit —
+has no variable holding them. `choir.Inbox()` reads the Dolt channel log
+only; update_coagent records live in the lifecycle-control object store.
+Context is a chat message, not a REPL variable — inverted from the RLM
+substrate (prompt-as-variable in the REPL, pointer-only in the context
+window).
+
+Fourth defect: the desk system prompts never state the cell contract.
+`texture.yaml`/`run_system.yaml` describe authoring philosophy but never say
+"cells are fragments on a persistent session; `import` each package at most
+once; no `func main`; the activation's terminal write is
+`choir.ApplyTexture`". The management overlay says "fragments building on
+persisted state" but doesn't name the redeclaration trap, so models keep
+sending full programs.
+
+## Fix direction (decided)
+
+Upstream, per owner direction 2026-09-28:
+
+1. **Normalize cell source before eval** in `Session.Eval`/`serveCell`:
+   strip the `package` clause, drop already-imported import declarations,
+   and rename `func main` → unique `__cell_main_N()` + emit one explicit call
+   (preserves `return` semantics, kills the auto-rerun). Accepts both the
+   fragment shape tests use and the full-program shape models actually write.
+2. **Bind update_coagent records as a cell variable** (`choir.Updates()` /
+   `SessionFrame.Updates`), populated from `pendingCoagentUpdatesForRun` at
+   cell admission — the REPL becomes the single source of truth for the
+   payload, matching RLM prompt-as-variable.
+3. **Slim the injected wake turn** to `update_ids` + phase + the desk's
+   terminal-write verb name — no payload JSON in chat. Keep the injected
+   turn (dedupe still works on the injection-append receipt).
+4. **Write the desk cell contract into each profile's system prompt**:
+   fragments not programs, imports-once, no `func main`, named terminal verb.
+
+The required-write check and redelivery/backoff pressure stay as-is for now:
+with the compile trap gone and the payload reachable, `ApplyTexture` should
+commit and the loop terminates naturally. If it still spins, dead-letter
+disposal is the follow-up — but don't design it until the honest path works.
 ## Residual question for the trace drill-down
 
 Whether the stuck engineering op is starved *by* this loop (resource
+
 contention) or has its own defect — the next probe should run against a VM
 without a live Texture continuation to isolate.
