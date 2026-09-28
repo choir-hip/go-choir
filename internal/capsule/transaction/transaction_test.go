@@ -154,3 +154,31 @@ func TestCapsuleEffectBundleValidateRefusesIncompleteFreeze(t *testing.T) {
 		}
 	}
 }
+
+// The overlay prompt (rlm_engineering_runtime.yaml:55) instructs desks to pass
+// capsule-go-eval:sha256: receipt refs — the prefix capsule-go-eval cells mint
+// (capsule/executor.go:722) and the executor resolves (executor.go:879).
+// Requiring capsule-exec: alone made every prompted freeze unbuildable;
+// receipt: docs/problems/m11-freeze-secret-screen-and-ref-prefix-2026-09-28.md.
+func TestCapsuleEffectBundleValidateAcceptsGoEvalReceiptRefs(t *testing.T) {
+	digest := func(fill byte) string { return repeatHex(fill) }
+	bundle := CapsuleEffectBundle{
+		BundleVersion: 1, ComputerID: "computer-1", BaseEventHead: digest('a'),
+		TrajectoryRef: "trajectory-1", CapsuleIdentity: "capsule-1", CapabilityPolicyDigest: digest('b'),
+		SourceTreeRef:         "source-tree:sha256:" + digest('c'),
+		OrderedFileEffects:    []ChangeRecord{{Path: "var/lib/artifact/release/bin/autoputer", Kind: "added", Mode: 0o755}},
+		GeneratedArtifactRefs: []string{"artifact:sha256:" + digest('d')},
+		BuildRecipeRef:        "capsule-go-eval:sha256:" + digest('e'),
+		RuntimeArtifactRef:    "runtime-artifact:sha256:" + digest('f'),
+		TestReceipts:          []string{"capsule-go-eval:sha256:" + digest('1')}, VerifierReceipts: []string{},
+		DependencyToolchainRefs: []string{"capsule-go-eval:sha256:" + digest('2')},
+		ResourceReceipts:        []string{"resource:sha256:" + digest('3')},
+		RuntimeFiles:            []capsule.FrozenReleaseFile{{Path: "bin/autoputer", SHA256: digest('d'), Mode: 0o755}},
+		Groups:                  map[string][]ChangeRecord{}, Ignored: []ChangeRecord{},
+	}
+	var err error
+	bundle.ContentDigest, err = bundle.ComputeContentDigest()
+	if err != nil || bundle.Validate(false) != nil {
+		t.Fatalf("capsule-go-eval receipt refs refused in draft: digest=%s validate=%v", bundle.ContentDigest, bundle.Validate(false))
+	}
+}

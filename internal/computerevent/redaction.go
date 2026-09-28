@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 type SecretHandle struct {
@@ -29,7 +30,6 @@ var privateSecretPatterns = []secretPattern{
 	{kind: "google_api_key", expression: regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{20,}\b`)},
 }
 
-
 // binarySecretPatterns is the refusal-safe subset for binary payloads.
 // DetectPrivateSecrets is a redaction-grade detector: over-matching only
 // costs extra encryption. Used as a refusal predicate (capsule release
@@ -46,7 +46,6 @@ var binarySecretPatterns = []secretPattern{
 	privateSecretPatterns[6],
 }
 
-
 // DetectBinarySecrets reports the secret kinds found in binary payload
 // content using the refusal-safe structural subset.
 func DetectBinarySecrets(payload []byte) []string {
@@ -55,6 +54,69 @@ func DetectBinarySecrets(payload []byte) []string {
 
 func DetectPrivateSecrets(payload []byte) []string {
 	return detectSecrets(payload, privateSecretPatterns)
+}
+
+// refusalCredentialAssignment captures the assigned value so the refusal
+// detector can drop matches whose value is program code, not a credential:
+// the capture is [\"']?(value) where value is the same charset as the
+// original pattern's `[^\s,;\"']{8,}` tail.
+var refusalCredentialAssignment = regexp.MustCompile(`(?i)(api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password)[\"']?[ \t]*[:=][ \t]*[\"']?([^\s,;\"']{8,})`)
+
+// credentialValueLooksLikeCode reports whether a credential_assignment match
+// value is program structure rather than a secret. Machine-generated and
+// vendored text (minified JS, vendored pdf.js, compiled string dumps)
+// produces credential-shaped tokens that are identifiers, member accesses,
+// or literals — the class of content the release secret scan must not
+// refuse. A lowercase unquoted string of 8+ word-chars is the remaining
+// secret shape (`api_key=abcdefghijklmnop`, `password=hunter2abc`).
+func credentialValueLooksLikeCode(key, value string) bool {
+	switch {
+	case strings.HasPrefix(value, "0x"), strings.HasPrefix(value, "0X"):
+		return true // hex literal (bitmask/enum constant)
+	case strings.ContainsAny(value, ".()[]/\\\\{}<>"):
+		return true // member access, call, index, or path expression
+	case strings.HasPrefix(value, "0"), strings.HasPrefix(value, "$"):
+		return true // numeric literal or interpolation start
+	}
+	if strings.EqualFold(key, value) {
+		return true // self-assignment (`password = password`, `token = token`)
+	}
+	// camelCase / identifier: any uppercase in the value means code.
+	for _, r := range value {
+		if 'A' <= r && r <= 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
+// DetectRefusalSecrets is the refusal-grade detector for text payloads.
+// Unlike DetectPrivateSecrets (redaction-grade, over-match is cheap) it keeps
+// precision high enough to gate a capsule release: private-key blocks and
+// provider token prefixes, plus credential_assignment only when the assigned
+// value is not obviously program code. Vendored build output — minified JS,
+// pdf.js enums like `PASSWORD: 0x0002000`, `token = this.getToken()` — is the
+// same false-positive class as compiled binaries, for which the binary
+// subset already exists.
+func DetectRefusalSecrets(payload []byte) []string {
+	kinds := make(map[string]struct{})
+	for _, pattern := range privateSecretPatterns {
+		if pattern.kind != "credential_assignment" && pattern.expression.Match(payload) {
+			kinds[pattern.kind] = struct{}{}
+		}
+	}
+	for _, match := range refusalCredentialAssignment.FindAllSubmatch(payload, -1) {
+		if len(match) > 2 && !credentialValueLooksLikeCode(string(match[1]), string(match[2])) {
+			kinds["credential_assignment"] = struct{}{}
+			break
+		}
+	}
+	result := make([]string, 0, len(kinds))
+	for kind := range kinds {
+		result = append(result, kind)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func detectSecrets(payload []byte, patterns []secretPattern) []string {

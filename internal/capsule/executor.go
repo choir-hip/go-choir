@@ -1470,7 +1470,10 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			scanner := bufio.NewScanner(&contextReader{ctx: ctx, reader: input})
 			scanner.Buffer(make([]byte, 64<<10), 1<<20)
 			for scanner.Scan() {
-				if findings := computerevent.DetectPrivateSecrets(scanner.Bytes()); len(findings) != 0 {
+				// Refusal-grade scan: DetectPrivateSecrets is redaction-grade and
+				// over-matches machine-generated text (vendored pdf.js enums,
+				// minified member accesses) just as it did compiled binaries.
+				if findings := computerevent.DetectRefusalSecrets(scanner.Bytes()); len(findings) != 0 {
 					_ = input.Close()
 					return nil, "", fmt.Errorf("capsule release refuses secret content in %q", change.Path)
 				}

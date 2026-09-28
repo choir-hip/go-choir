@@ -123,8 +123,16 @@ func validExecutionRefs(refs []string) bool {
 }
 
 func validExecutionRef(ref string) bool {
-	return strings.HasPrefix(ref, "capsule-exec:sha256:") &&
-		computerevent.IsSHA256(strings.TrimPrefix(ref, "capsule-exec:sha256:"))
+	// Both receipt prefixes are valid: capsule-exec for Exec receipts and
+	// capsule-go-eval for cell receipts. The overlay prompt instructs
+	// capsule-go-eval and the executor mints them (executor.go:722), so
+	// requiring capsule-exec made a correctly-authored freeze unbuildable.
+	for _, prefix := range []string{"capsule-exec:sha256:", "capsule-go-eval:sha256:"} {
+		if strings.HasPrefix(ref, prefix) && computerevent.IsSHA256(strings.TrimPrefix(ref, prefix)) {
+			return true
+		}
+	}
+	return false
 }
 
 func validImmutableRefs(refs []string) bool {
