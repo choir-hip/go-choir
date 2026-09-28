@@ -354,6 +354,60 @@ func TestApplyTextureTurnNonRevisionOutcomesDispositionInboundWithoutFakeRevisio
 	}
 }
 
+// Regression: a producer report queued while its work item was open remains
+// pending after the producer's own run settles the work item. The desk's
+// incorporate disposition must record the update disposition without
+// re-settling the already-terminal work — otherwise the update is wedged
+// pending forever and every desk turn fails with invalid transition.
+// Receipt: docs/problems/texture-incorporate-deadlock-settled-producer-2026-09-28.md
+// (staging op6: 33 consecutive apply_owner_revision failures).
+func TestApplyTextureTurnIncorporatesReportAfterProducerWorkSettled(t *testing.T) {
+	s, start, caller, work := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	report := textureTurnQueueResearchReport(t, s, start, work, "settled-producer")
+
+	// Producer run settles its work item before the desk turn consumes the
+	// report — the live staging sequence.
+	settle := types.SettleLifecycleWorkRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "settle-producer-work", TrajectoryID: start.TrajectoryID,
+		WorkItemID: work.WorkItemID, ActingAgentID: work.AssignedAgentID,
+		ResultRef: "report:" + report.UpdateID,
+	}
+	settle.CommandDigest, _ = ComputeSettleLifecycleWorkDigest(settle)
+	if _, err := s.SettleLifecycleWork(ctx, settle); err != nil {
+		t.Fatalf("settle producer work: %v", err)
+	}
+
+	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnRevision)
+	req.CommandID = "texture-turn-settled-producer"
+	req.Reason = "incorporate report from already-settled producer work"
+	bodyDoc := texturedoc.StructuredTextureDoc{Schema: texturedoc.SchemaV1, Doc: texturedoc.Node{Type: "doc", Attrs: map[string]any{"id": "doc-root"}, Content: []texturedoc.Node{{
+		Type: "paragraph", Attrs: map[string]any{"id": "p-one"}, Content: []texturedoc.Node{{Type: "text", Text: "incorporated evidence"}},
+	}}}}
+	req.Revision = types.Revision{RevisionID: "revision-settled-producer-v1", ParentRevisionID: req.ExpectedHeadRevisionID,
+		AuthorKind: types.AuthorAppAgent, AuthorLabel: "appagent", BodyDoc: mustJSONRaw(t, bodyDoc)}
+	req.Inbound = []types.TextureTurnInboundDisposition{{
+		TargetAgentID: start.Agent.AgentID, ProducerAgentID: report.ProducerAgentID,
+		ProducerUpdateID: report.ProducerUpdateID, UpdateID: report.UpdateID,
+		Disposition: types.UpdateIncorporated, ProducerWorkItemID: work.WorkItemID,
+		WorkDisposition: types.WorkItemOpen,
+	}}
+	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+	result, err := s.ApplyTextureTurn(ctx, req)
+	if err != nil {
+		t.Fatalf("incorporate after producer settle: %v", err)
+	}
+	if result.Revision == nil || result.Revision.RevisionID == "" {
+		t.Fatalf("no revision committed: %+v", result)
+	}
+	stored, err := s.GetLifecycleUpdate(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID,
+		start.Agent.AgentID, report.ProducerAgentID, report.ProducerUpdateID)
+	if err != nil || stored.Disposition != types.UpdateIncorporated {
+		t.Fatalf("update disposition = %+v, %v; want incorporated", stored, err)
+	}
+}
+
 func TestApplyTextureTurnRevisionUsesStructuredAuthorityAndExactSourceManifest(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()

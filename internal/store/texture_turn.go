@@ -514,7 +514,24 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			return types.LifecycleResult{}, workErr
 		}
 		if work.TrajectoryID != req.TrajectoryID || work.OwnerID != ownerID || work.ComputerID != computerID ||
-			work.Status != types.WorkItemOpen || strings.TrimSpace(work.AssignedAgentID) != disposition.ProducerAgentID {
+			strings.TrimSpace(work.AssignedAgentID) != disposition.ProducerAgentID {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		// The producer work item may already be terminal: the producer's own run
+		// settles its assignment work at completion (e.g. an Engineering report
+		// queued while its work item was open, then the work settled before the
+		// desk incorporated the report). The pending update is still live state
+		// the desk must be able to disposition — otherwise the update is
+		// permanently pending and every subsequent desk turn fails identically.
+		// Receipt: docs/problems/texture-incorporate-deadlock-settled-producer-2026-09-28.md
+		if workItemTerminal(work.Status) {
+			if disposition.WorkDisposition != types.WorkItemOpen && disposition.WorkDisposition != work.Status {
+				// A settle request for a different terminal shape conflicts.
+				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+			}
+			continue
+		}
+		if work.Status != types.WorkItemOpen {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		addCondition(objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash})
