@@ -66,7 +66,7 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 	dec := json.NewDecoder(strings.NewReader(bodyJSON))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&in); err != nil {
-		return "", fmt.Errorf("texture cell author: decode staged body: %w", err)
+		return "", fmt.Errorf("texture cell author: decode staged body: %w. Valid top-level fields: op, doc_id, base_revision_id, operation, content, edits, rationale, work_disposition, update_dispositions, controls, decision_kind, reason, evidence_refs, next_action, email. controls[] fields: target_work_item_id, open_persistent_super, open_researcher, objective, packet. packet fields: kind, summary, claims, sources, actions, questions, notes — schema_version is assigned by the runtime; do not send \"type\" or \"schema_version\". Valid packet kind values: evidence_update, execution_request, execution_result, blocker, question, proposal, decision_request", err)
 	}
 	var receipt string
 	var err error

@@ -155,6 +155,35 @@ func TestChoirSymbolsInSession(t *testing.T) {
 	}
 }
 
+// TestChoirPredeclaredInSession pins the desk contract: the choir binding is
+// installed at session construction, so a model's first cell may call
+// choir.* without `import "choir"` — and a model-authored re-import is
+// still deduped rather than fatal. Staging receipt 2026-09-28: two whole
+// iterations per activation died on `undefined: choir`.
+func TestChoirPredeclaredInSession(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	allowlist := NewAllowlist("choir", "fmt")
+	sess, err := NewSession(allowlist, scope.ChoirExports())
+	if err != nil {
+		t.Fatalf("session with choir symbols: %v", err)
+	}
+	defer sess.Close()
+	ctx := context.Background()
+	if _, err := sess.Eval(ctx, `choir.WriteFile("predeclared.txt", "no-import")`); err != nil {
+		t.Fatalf("choir call without import: %v", err)
+	}
+	if _, err := sess.Eval(ctx, "import \"choir\""); err != nil {
+		t.Fatalf("model-authored re-import must dedupe, got: %v", err)
+	}
+	res, err := sess.Eval(ctx, `choir.ReadFile("predeclared.txt")`)
+	if err != nil {
+		t.Fatalf("read after deduped import: %v", err)
+	}
+	if !res.Value.IsValid() || res.Value.Interface() != "no-import" {
+		t.Fatalf("read cell value = %v", res.Value)
+	}
+}
+
 // TestChoirResearchScopeIsReadOnly guards the read-only-world contract: a
 // researcher-bound scope observes files but cannot write, execute, or assign.
 // Mission R2 deliberately grants research full *message* authority (read-only

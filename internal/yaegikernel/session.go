@@ -82,7 +82,21 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 	if err := i.Use(buildFilteredSymbols(allowlist, extraSymbols)); err != nil {
 		return nil, fmt.Errorf("yaegi: load session symbols: %w", err)
 	}
-	return &Session{interp: i, allowlist: allowlist, stdout: stdout, stderr: stderr, importedPaths: map[string]bool{}, declaredNames: map[string]bool{}}, nil
+	s := &Session{interp: i, allowlist: allowlist, stdout: stdout, stderr: stderr, importedPaths: map[string]bool{}, declaredNames: map[string]bool{}}
+	// Predeclare the choir binding when the symbol surface provides it: the
+	// desk's entire write path goes through choir.* verbs, and requiring the
+	// model to `import "choir"` in its first cell burns one compile-rejected
+	// iteration per activation (observed on staging 2026-09-28: the texture
+	// desk's first two cells failed `undefined: choir` before it learned to
+	// import). Eval through the session's own path so importedPaths records
+	// the binding and later cells drop a repeated import exactly as for any
+	if _, ok := extraSymbols["choir/choir"]; ok && s.allowlist.IsAllowed("choir") == nil {
+		if _, err := s.Eval(context.Background(), "import \"choir\""); err != nil {
+			s.Close()
+			return nil, fmt.Errorf("yaegi: predeclare choir binding: %w", err)
+		}
+	}
+	return s, nil
 }
 
 // Eval runs one cell on the persistent interpreter. Cells share variables,

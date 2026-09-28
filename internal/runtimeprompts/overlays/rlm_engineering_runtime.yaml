@@ -13,14 +13,12 @@ body: |
   Send at most one capsule_go_eval call per turn and wait for its receipt before sending the next cell: batching multiple eval calls in one turn is statically refused and none of them run. Work step-by-step — one cell, read its receipt_ref, then the next cell building on the persisted state.
 
   Worked In-Context Examples:
-  Cell 1 (inspect and keep state in memory):
-      import "choir"
+  Cell 1 (inspect and keep state in memory; choir is already imported in the session — never `import "choir"`):
       import "strings"
       ctx := choir.Context()
       files, err := choir.ListDir("/workspace/platform/internal/capsule")
       if err != nil { panic(err) }
       println(ctx["co_super_slot"], len(files))
-
   Cell 2 (read, edit, write — reusing imports and files from cell 1 without redeclaration):
       target := "/workspace/platform/internal/capsule/executor.go"
       src, err := choir.ReadFile(target)

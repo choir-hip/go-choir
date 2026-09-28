@@ -13,7 +13,7 @@
 // /api/texture/documents/*, /api/trace/trajectories/*. No vmctl, no internal
 // routes, no writes beyond the single owner prompt.
 
-import { chromium } from '../frontend/node_modules/playwright/index.mjs';
+import { chromium } from '../frontend/node_modules/@playwright/test/index.mjs';
 import { registerPasskey } from '../frontend/tests/helpers/auth.js';
 import { setupVirtualAuthenticator } from '../frontend/tests/helpers/webauthn.js';
 
@@ -36,24 +36,36 @@ function uniqueEmail() {
 }
 
 async function fetchJSON(page, path, options = {}) {
-  return page.evaluate(
-    async ({ requestPath, requestOptions }) => {
-      const init = {
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', ...(requestOptions.headers || {}) },
-        ...requestOptions,
-      };
-      let res = await fetch(requestPath, init);
-      if (res.status === 401) {
-        await fetch('/auth/session', { credentials: 'include' }).catch(() => null);
-        res = await fetch(requestPath, init);
-      }
-      const body = await res.text();
-      if (!res.ok) throw new Error(`${requestOptions.method || 'GET'} ${requestPath} -> ${res.status} ${body}`);
-      return body ? JSON.parse(body) : null;
-    },
-    { requestPath: path, requestOptions: options },
-  );
+  // One retry on non-JSON: the proxy can transiently serve the SPA shell or a
+  // VM-handoff page immediately after a submit wakes the computer — that is
+  // not a 4xx, so the status check alone misses it and JSON.parse explodes.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await page.evaluate(
+        async ({ requestPath, requestOptions }) => {
+          const init = {
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', ...(requestOptions.headers || {}) },
+            ...requestOptions,
+          };
+          let res = await fetch(requestPath, init);
+          if (res.status === 401) {
+            await fetch('/auth/session', { credentials: 'include' }).catch(() => null);
+            res = await fetch(requestPath, init);
+          }
+          const body = await res.text();
+          if (!res.ok) throw new Error(`${requestOptions.method || 'GET'} ${requestPath} -> ${res.status} ${body}`);
+          return body ? JSON.parse(body) : null;
+        },
+        { requestPath: path, requestOptions: options },
+      );
+    } catch (err) {
+      const nonJson = /is not valid JSON|Unexpected token/.test(String(err));
+      if (!nonJson || attempt === 1) throw err;
+      await page.waitForTimeout(1500);
+    }
+  }
+  return null;
 }
 
 async function waitForDesktopReady(page, timeout = 180_000) {
@@ -112,8 +124,22 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
   await waitForDesktopReady(page, 180_000);
 
-  result.health = await fetchJSON(page, '/health');
+  // Fresh computers are pre-genesis by design: run admission on them is
+  // refused until the owner POSTs lifecycle/bootstrap-chain (the pre-genesis
+  // gate in createRunWithMetadata). The M11 probe does this before any
+  // submit; the prompt-bar submit path bypasses the admission gate and fails
+  // at append time with `invalid genesis`. Bootstrap here or the probe dies
+  // at `persist agent` on every fresh VM.
+  // /api/shell/bootstrap returns the bound computer_id directly — no
+  // separate ownership lookup needed.
+  const shell = await fetchJSON(page, '/api/shell/bootstrap');
+  const computerID = shell.computer_id || shell.computer?.computer_id;
+  if (!computerID) throw new Error(`computer id not derivable from /api/shell/bootstrap: ${JSON.stringify(shell)}`);
+  result.computer_id = computerID;
+  const bootstrapChain = await fetchJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/bootstrap-chain`, { method: 'POST', body: '{}' });
+  result.bootstrap_chain = bootstrapChain;
 
+  result.health = await fetchJSON(page, '/health');
   const promptBarResponse = page.waitForResponse(
     (response) => new URL(response.url()).pathname === '/api/prompt-bar' && response.request().method() === 'POST',
     { timeout: 90_000 },
@@ -135,8 +161,15 @@ try {
 
   const seenRevisions = new Map();
   const revisionTimeline = [];
+  const seenRunIDs = new Set();
+  const runCompileDiags = [];
+  let runEventsChecked = 0;
   let lastChangeAt = Date.now();
   const deadline = submitAt + WINDOW_MS;
+
+  // The internal run-events route is host-side; owner id comes from the
+  // session captured at registration (fetchJSON already carries cookies).
+  const sessionUserID = (await fetchJSON(page, '/auth/session')).user?.id || '';
 
   while (Date.now() < deadline) {
     let state;
@@ -160,6 +193,25 @@ try {
       lastChangeAt = Date.now();
       console.log(`[revision] v${entry.version_number} ${entry.author_kind} +${Math.round(entry.ms_from_submit / 1000)}s chars=${entry.content_chars}`);
     }
+    // M11 acceptance: the fixed desk compiles import+statement cells and
+    // accepts Go-native ApplyTexture args. A surviving compile-fail result
+    // in the run's cell receipts means the loop still starves; absence of
+    // `diag:"compile"` outcomes is the negative half of the proof.
+    if (runEventsChecked < 3 && state.doc?.current_revision_id) {
+      try {
+        const trajRuns = (trace.runs || trace.trajectory?.runs || []);
+        for (const run of trajRuns) {
+          if (!run.run_id || seenRunIDs.has(run.run_id)) continue;
+          seenRunIDs.add(run.run_id);
+          const ev = await fetchJSON(page, `/internal/runtime/runs/${encodeURIComponent(run.run_id)}/events?owner_id=${encodeURIComponent(sessionUserID)}`, { headers: { 'X-Internal-Caller': 'true', 'X-Authenticated-User': sessionUserID } }).catch(() => null);
+          const compileDiags = (ev?.events || []).filter((e) => String(e.diag || e.diagnostic_kind || '').includes('compile') || String(e.payload || '').includes('"diag":"compile"'));
+          if (compileDiags.length) {
+            runCompileDiags.push({ run_id: run.run_id, count: compileDiags.length });
+          }
+          runEventsChecked++;
+        }
+      } catch {}
+    }
     const live = Boolean(trace.trajectory?.live);
     const quietFor = Date.now() - lastChangeAt;
     if (!live && quietFor > QUIET_STOP_MS) break;
@@ -170,6 +222,7 @@ try {
   const appagentRevisions = revisionTimeline.filter((r) => r.author_kind === 'appagent');
   result.revisions = revisionTimeline;
   result.appagent_revision_count = appagentRevisions.length;
+  result.desk_compile_diag_runs = runCompileDiags; // empty on a passing run
   result.first_paint_ms = appagentRevisions.length ? appagentRevisions[0].ms_from_submit : null;
   result.total_revision_count = finalState.revisions.length;
   result.final_head_chars = (finalState.revisions.find((r) => r.revision_id === finalState.doc.current_revision_id)?.content || '').length;
