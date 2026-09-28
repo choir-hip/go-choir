@@ -117,7 +117,7 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 			// consumer opens the assignment asynchronously. A synchronous
 			// reconcile here would hold the HTTP request across a 90s spawn.
 			if result.Revision != nil {
-				h.dispatchTextureRevisionWake(ownerID, computerID, trajectoryID, *result.Revision, requestID, result.Trajectory.LifecycleVersion, result.Events, deskProfile)
+				h.dispatchTextureRevisionWake(ownerID, computerID, trajectoryID, *result.Revision, requestID, result.Events, deskProfile)
 			}
 		} else if _, wakeErr := h.ReconcileAgentWake(r.Context(), ownerID, docID); wakeErr != nil { /* durable start remains pending */
 		}

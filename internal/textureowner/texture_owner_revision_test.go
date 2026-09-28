@@ -462,7 +462,7 @@ func TestResidentTextureInjectsAndConsumesCurrentOwnerRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstOccurrence, err := agentcore.TextureDocumentRevisionOccurrence(firstRevision, "", 0, 0)
+	firstOccurrence, err := agentcore.TextureDocumentRevisionOccurrence(firstRevision, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}

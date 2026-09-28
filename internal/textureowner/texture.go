@@ -1308,7 +1308,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 			h.recordTextureAudit(r.Context(), "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
 			h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
 			if !command.Unbound {
-				h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Trajectory.LifecycleVersion, result.Events, h.lifecycleDocDeskProfile(r.Context(), ownerID, doc))
+				h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Events, h.lifecycleDocDeskProfile(r.Context(), ownerID, doc))
 			}
 		}
 		writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), *result.Revision))

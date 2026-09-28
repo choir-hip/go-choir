@@ -287,7 +287,7 @@ func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, compute
 	if docErr == nil && strings.TrimSpace(doc.TrajectoryID) != "" {
 		revision, revErr := a.store.GetLifecycleRevision(ctx, ownerID, computerID, strings.TrimSpace(content))
 		if revErr == nil && revision.AuthorKind == types.AuthorUser && revision.DocID == docID {
-			o, occurrenceErr := agentcore.TextureDocumentRevisionOccurrence(revision, "", 0, 0)
+			o, occurrenceErr := agentcore.TextureDocumentRevisionOccurrence(revision, "", 0)
 			if occurrenceErr != nil {
 				return "", "", "", occurrenceErr
 			}

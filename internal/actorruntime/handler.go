@@ -259,7 +259,7 @@ func (h *actorHandler) handleOwnerRevision(ctx context.Context, u actor.Update, 
 	if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
 		profile = agentprofile.Engineering
 	}
-	occurrence, err := agentcore.DocumentRevisionOccurrence(revision, profile, content.RequestID, content.LifecycleVersion, content.ReducerSeq)
+	occurrence, err := agentcore.DocumentRevisionOccurrence(revision, profile, content.RequestID, content.ReducerSeq)
 	if err != nil || occurrence.TargetAgentID != agentID || occurrence.TrajectoryID != u.TrajectoryID {
 		return nil, nil
 	}

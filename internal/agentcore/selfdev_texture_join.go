@@ -105,7 +105,7 @@ func (rt *Runtime) ensureSelfDevelopmentEngineeringDoc(ctx context.Context, oper
 		}
 	}
 	requestID := "owner-request-selfdev-" + operation.OperationID
-	occurrence, occErr := DocumentRevisionOccurrence(*result.Revision, agentprofile.Engineering, requestID, result.Trajectory.LifecycleVersion, reducerSeq)
+	occurrence, occErr := DocumentRevisionOccurrence(*result.Revision, agentprofile.Engineering, requestID, reducerSeq)
 	if occErr != nil {
 		return fmt.Errorf("build self-development engineering revision occurrence: %w", occErr)
 	}

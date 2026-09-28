@@ -1819,6 +1819,58 @@ func (s *Store) ListAllPendingLifecycleUpdates(ctx context.Context, ownerID, com
 	return s.ListPendingLifecycleUpdates(ctx, ownerID, computerID, targetAgentID, int(^uint(0)>>1))
 }
 
+// ListActionablePendingLifecycleUpdates is the boot-sweep wake view: every
+// producer report whose disposition is still pending for the target — unbound
+// AND bound. DeliveredAt is the claim timestamp set at bind, not consumption,
+// so it cannot filter here; consume-at-commit flips Disposition at commit, and
+// a bound-but-pending packet is still an exact pending trigger whose claim run
+// may have died without consuming it.
+func (s *Store) ListActionablePendingLifecycleUpdates(ctx context.Context, ownerID, computerID, targetAgentID string) ([]types.CoagentSourcePacket, error) {
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("lifecycle updates: object graph not initialized")
+	}
+	targetAgentID = strings.TrimSpace(targetAgentID)
+	rows, err := graph.ListJSONBodyFieldsByKindOwner(ctx, string(ogKindWorkerUpdate), ownerID, []string{
+		"$.target_agent_id",
+		"$.disposition",
+	}, lifecycleWorkerUpdateScanCap+1)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > lifecycleWorkerUpdateScanCap {
+		return nil, fmt.Errorf("lifecycle updates: scan cap %d exceeded for owner %s", lifecycleWorkerUpdateScanCap, ownerID)
+	}
+	updates := make([]types.CoagentSourcePacket, 0)
+	for _, row := range rows {
+		if len(row.Fields) < 2 ||
+			strings.TrimSpace(row.Fields[0]) != targetAgentID ||
+			strings.TrimSpace(row.Fields[1]) != string(types.UpdatePending) {
+			continue
+		}
+		update, getErr := s.GetCoagentSourcePacket(ctx, strings.TrimSpace(row.CanonicalID))
+		if getErr != nil {
+			if errors.Is(getErr, ErrNotFound) {
+				continue
+			}
+			return nil, getErr
+		}
+		if update.Disposition == types.UpdatePending && update.TargetAgentID == targetAgentID {
+			updates = append(updates, update)
+		}
+	}
+	sort.Slice(updates, func(i, j int) bool {
+		if updates[i].ReducerSeq != updates[j].ReducerSeq {
+			return updates[i].ReducerSeq < updates[j].ReducerSeq
+		}
+		return updates[i].UpdateID < updates[j].UpdateID
+	})
+	return updates, nil
+}
+
 func (s *Store) GetLifecycleUpdate(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, producerAgentID, producerUpdateID string) (types.CoagentSourcePacket, error) {
 	key := strings.TrimSpace(trajectoryID) + "\x00" + strings.TrimSpace(targetAgentID) + "\x00" + strings.TrimSpace(producerAgentID) + "\x00" + strings.TrimSpace(producerUpdateID)
 	obj, err := s.lifecycleGetObject(ctx, ogKindWorkerUpdate, ownerID, computerID, key)

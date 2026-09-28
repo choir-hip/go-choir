@@ -19,7 +19,7 @@ import (
 // trigger. The actor mailbox dedupes on the encoded occurrence identity, and
 // the boot scan re-derives the same wake from the document head, so a crash
 // between commit and dispatch loses nothing.
-func (rt *Handler) dispatchTextureRevisionWake(ownerID, computerID, trajectoryID string, revision types.Revision, requestID string, lifecycleVersion int64, events []types.LifecycleEvent, deskProfile string) {
+func (rt *Handler) dispatchTextureRevisionWake(ownerID, computerID, trajectoryID string, revision types.Revision, requestID string, events []types.LifecycleEvent, deskProfile string) {
 	if rt == nil || rt.Core == nil {
 		return
 	}
@@ -30,7 +30,7 @@ func (rt *Handler) dispatchTextureRevisionWake(ownerID, computerID, trajectoryID
 			reducerSeq = event.ReducerSeq
 		}
 	}
-	occurrence, err := agentcore.DocumentRevisionOccurrence(revision, deskProfile, requestID, lifecycleVersion, reducerSeq)
+	occurrence, err := agentcore.DocumentRevisionOccurrence(revision, deskProfile, requestID, reducerSeq)
 	if err != nil {
 		log.Printf("runtime: build document revision wake for doc %s: %v", revision.DocID, err)
 		return
@@ -116,7 +116,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("classify boot Texture lifecycle %s: %w", subject.AgentID, err)
 		}
-		updates, err := rt.Store.ListAllPendingLifecycleUpdates(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID)
+		updates, err := rt.Store.ListActionablePendingLifecycleUpdates(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID)
 		if err != nil {
 			return fmt.Errorf("list boot Texture reports %s: %w", subject.AgentID, err)
 		}
@@ -275,7 +275,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 			}
 		}
 		if ownerHeadPending {
-			base, err := agentcore.TextureDocumentRevisionOccurrence(ownerHead, "", snapshot.Trajectory.LifecycleVersion, ownerHeadSeq)
+			base, err := agentcore.TextureDocumentRevisionOccurrence(ownerHead, "", ownerHeadSeq)
 			if err != nil {
 				return fmt.Errorf("build boot Texture revision occurrence: %w", err)
 			}
@@ -830,7 +830,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		}
 		return nil, nil
 	}
-	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq); err != nil {
+	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq, ownerHeadPending || initialWorkWake); err != nil {
 		return nil, err
 	} else if reactivated {
 		if bindErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, rec.RunID, armedUpdates, exhausted, false, 0, "", ""); bindErr != nil {
@@ -1020,8 +1020,11 @@ func (rt *Handler) reconcileTextureUpdateDelivery(ctx context.Context, doc types
 	}
 	return nil
 }
-
-func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types.Document, textureAgentID string, scheduledSeq int64) (*types.RunRecord, bool, error) {
+// docWakeArmed reports that the document still carries wake pressure
+// independent of unbound packet coverage: an unconsumed owner head or open
+// desk work. It keeps a sleeping mutation reactivatable after consume-at-commit
+// bound its packets to a run that died before consuming them.
+func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types.Document, textureAgentID string, scheduledSeq int64, docWakeArmed bool) (*types.RunRecord, bool, error) {
 	if rt == nil || rt.Store == nil {
 		return nil, false, nil
 	}
@@ -1069,8 +1072,23 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 		} else if runRevisionID != documentRevisionID {
 			continue
 		}
-		if mutation == nil || (mutation.State != "pending" && mutation.State != "stale_activation" && (mutation.State != "sleeping" || scheduledSeq <= 0)) {
-			continue
+		// Sleeping reactivates whenever the document still carries wake
+		// pressure: unbound packets (scheduledSeq > 0), an unconsumed owner
+		// head, or open desk work — plus packets already bound to this run
+		// that never consumed. scheduledSeq only measures *unbound* coverage;
+		// a bound-but-pending packet proves its claim run died before
+		// consuming it.
+		if mutation.State != "pending" && mutation.State != "stale_activation" {
+			sleepingReactivable := docWakeArmed || scheduledSeq > 0
+			if mutation.State == "sleeping" && !sleepingReactivable {
+				sleepingReactivable, mutationErr = rt.mutationHasPendingBoundPackets(ctx, ownerID, doc.ComputerID, doc.TrajectoryID, textureAgentID, candidate.RunID)
+				if mutationErr != nil {
+					return nil, false, fmt.Errorf("check bound pending packets for passivated run %s: %w", candidate.RunID, mutationErr)
+				}
+			}
+			if mutation.State != "sleeping" || !sleepingReactivable {
+				continue
+			}
 		}
 		passivated = append(passivated, passivatedTextureAuthority{run: *candidate, sequence: mutation.ScheduledMessageSeq, mutationCreatedAt: mutation.CreatedAt})
 	}
@@ -1093,6 +1111,12 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	rec.Metadata = cloneMetadata(rec.Metadata)
 	rec.Metadata["request_source"] = "update_coagent"
 	rec.Metadata["request_intent"] = "integrate_execution_findings"
+	// The coverage watermark never shrinks: a sleeping mutation reactivated on
+	// bound-but-pending packets or owner-head pressure keeps the watermark that
+	// already claims them.
+	if selectedMutation != nil && scheduledSeq < selectedMutation.ScheduledMessageSeq {
+		scheduledSeq = selectedMutation.ScheduledMessageSeq
+	}
 	rec.Metadata["scheduled_message_seq"] = scheduledSeq
 	rec.Metadata["actor_reactivate_existing_memory"] = true
 	rec.Metadata["actor_reactivated_from_passivated"] = true
@@ -1128,6 +1152,23 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	// The current coagent_result occurrence is the execution authority. Do not
 	// redispatch the already-used one-shot initial_dispatch identity.
 	return rec, true, nil
+}
+
+// mutationHasPendingBoundPackets reports whether any pending producer report is
+// already claimed by runID — a bound-but-unconsumed packet is wake pressure for
+// exactly the sleeping mutation that owns the claim.
+func (rt *Handler) mutationHasPendingBoundPackets(ctx context.Context, ownerID, computerID, trajectoryID, textureAgentID, runID string) (bool, error) {
+	bound, err := rt.Store.ListBoundPendingUpdatesForTarget(ctx, ownerID, computerID, textureAgentID)
+	if err != nil {
+		return false, err
+	}
+	for _, update := range bound {
+		if strings.TrimSpace(update.TrajectoryID) == strings.TrimSpace(trajectoryID) &&
+			strings.TrimSpace(update.DeliveredToRunID) == strings.TrimSpace(runID) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (rt *Handler) latestEligibleWorkerMessage(ctx context.Context, ownerID, channelID string, afterSeq int64) (types.ChannelMessage, bool, error) {
@@ -1218,7 +1259,7 @@ func producerOccurrenceScopeMatches(o agentcore.TextureActorOccurrence, update t
 }
 
 func producerOccurrenceMatches(o agentcore.TextureActorOccurrence, update types.CoagentSourcePacket) bool {
-	return producerOccurrenceScopeMatches(o, update) && o.LifecycleVersion == update.LifecycleVersion && o.ReducerSeq == update.ReducerSeq
+	return producerOccurrenceScopeMatches(o, update)
 }
 
 func revisionOccurrenceScopeMatches(o agentcore.TextureActorOccurrence, revision types.Revision) bool {
@@ -1257,7 +1298,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 			docID := docIDFromTextureAgentID(agentID)
 			if _, docErr := rt.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID); docErr == nil {
 				if revision, revErr := rt.Store.GetLifecycleRevision(ctx, ownerID, computerID, strings.TrimSpace(content)); revErr == nil {
-					o, err = agentcore.TextureDocumentRevisionOccurrence(revision, "", 0, 0)
+					o, err = agentcore.TextureDocumentRevisionOccurrence(revision, "", 0)
 				}
 			}
 		}

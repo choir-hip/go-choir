@@ -1901,7 +1901,8 @@ func TestTextureCanonicalOccurrenceIdentitiesIncludeExactStoreScope(t *testing.T
 		}
 	}
 
-	variations := []types.CoagentSourcePacket{report, report, report, report, report, report, report, report, report, report, report, report}
+	// Scope fields discriminate: each produces a distinct trigger identity.
+	variations := []types.CoagentSourcePacket{report, report, report, report, report, report, report, report, report, report}
 	variations[0].OwnerID = "owner-b"
 	variations[1].ComputerID = "computer-b"
 	variations[2].TrajectoryID = "trajectory-b"
@@ -1911,9 +1912,7 @@ func TestTextureCanonicalOccurrenceIdentitiesIncludeExactStoreScope(t *testing.T
 	variations[6].ProducerUpdateID = "producer-update-b"
 	variations[7].ProducerWorkItemID = "producer-work-b"
 	variations[8].TargetWorkItemID = "texture-work-b"
-	variations[9].LifecycleVersion++
-	variations[10].ReducerSeq++
-	variations[11].MessageSeq++
+	variations[9].MessageSeq++
 	for i, changed := range variations {
 		o, err := agentcore.TextureProducerReportOccurrence(changed)
 		if err != nil {
@@ -1928,11 +1927,37 @@ func TestTextureCanonicalOccurrenceIdentitiesIncludeExactStoreScope(t *testing.T
 		}
 	}
 
+	// Mutable bookkeeping does NOT discriminate: consume-at-commit binding
+	// advances LifecycleVersion/ReducerSeq and stamps delivery fields on the
+	// same logical trigger; re-deriving the occurrence must reproduce the same
+	// actor row so the tape dedupes the re-asserted wake.
+	for i, mutate := range []func(*types.CoagentSourcePacket){
+		func(u *types.CoagentSourcePacket) { u.LifecycleVersion++ },
+		func(u *types.CoagentSourcePacket) { u.ReducerSeq++ },
+		func(u *types.CoagentSourcePacket) { u.DeliveredToRunID = "run-b" },
+		func(u *types.CoagentSourcePacket) { now := time.Now().UTC(); u.DeliveredAt = &now },
+		func(u *types.CoagentSourcePacket) { u.DeliveryAttempts++ },
+	} {
+		changed := report
+		mutate(&changed)
+		o, err := agentcore.TextureProducerReportOccurrence(changed)
+		if err != nil {
+			t.Fatalf("bookkeeping %d: %v", i, err)
+		}
+		got, err := agentcore.EncodeTextureActorOccurrence(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != encoded {
+			t.Fatalf("mutable bookkeeping %d minted a distinct occurrence", i)
+		}
+	}
+
 	ownerRevision := types.Revision{
 		RevisionID: "revision-a", DocID: "doc-a", OwnerID: "owner-a", ComputerID: "computer-a", TrajectoryID: "trajectory-a",
 		AuthorKind: types.AuthorUser, AuthorLabel: "owner-a",
 	}
-	documentRevisionOccurrence, err := agentcore.TextureDocumentRevisionOccurrence(ownerRevision, "request-a", 3, 17)
+	documentRevisionOccurrence, err := agentcore.TextureDocumentRevisionOccurrence(ownerRevision, "request-a", 17)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2010,7 +2035,7 @@ func TestAdapterSQLitePersistsExactTextureReportAndDocumentRevisionOccurrencesBe
 	if err != nil || ownerResult.Revision == nil {
 		t.Fatalf("commit owner revision: result=%+v err=%v", ownerResult, err)
 	}
-	documentRevisionOccurrence, err := agentcore.TextureDocumentRevisionOccurrence(*ownerResult.Revision, "request-occurrence", ownerResult.Trajectory.LifecycleVersion, ownerResult.Events[0].ReducerSeq)
+	documentRevisionOccurrence, err := agentcore.TextureDocumentRevisionOccurrence(*ownerResult.Revision, "request-occurrence", ownerResult.Events[0].ReducerSeq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2513,7 +2538,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureDocumentRevisionOccurrenc
 	if err != nil || ownerResult.Revision == nil {
 		t.Fatalf("commit owner revision: result=%+v err=%v", ownerResult, err)
 	}
-	occurrence, err := agentcore.TextureDocumentRevisionOccurrence(*ownerResult.Revision, "request-terminal-texture-owner-revision", ownerResult.Trajectory.LifecycleVersion, ownerResult.Events[0].ReducerSeq)
+	occurrence, err := agentcore.TextureDocumentRevisionOccurrence(*ownerResult.Revision, "request-terminal-texture-owner-revision", ownerResult.Events[0].ReducerSeq)
 	if err != nil {
 		t.Fatal(err)
 	}

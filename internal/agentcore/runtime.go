@@ -801,6 +801,10 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 	if err != nil {
 		return nil, err
 	}
+	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
+		return nil, err
+	}
 	rt.activate(rec)
 	return rec, nil
 }
@@ -1230,6 +1234,10 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&requesterRec) {
 		requesterSummaryProfile := agentProfileForRun(&requesterRec)
 		log.Printf("runtime: started coagent %s requested by %s requester_profile=%s", wireLifecycleSummary(rec), requesterRec.RunID, requesterSummaryProfile)
+	}
+	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
+		return nil, releaseEngineeringSlotClaim(err)
 	}
 
 	// Dispatch via actor runtime.
@@ -3218,6 +3226,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			return
 		}
 	}
+	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
+		return
+	}
 	llmConfig := provideriface.ResolvedLLMConfigFromMetadata(rec.Metadata)
 	renderedSystemPrompt := systemPrompt
 	if registry != nil {
@@ -3533,6 +3545,16 @@ func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types
 				return nil
 			}
 			if err := rt.store.SleepAgentMutationAfterTextureTurn(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.TrajectoryID, rec.RunID); err != nil && err != store.ErrMutationAlreadyCompleted {
+				return err
+			}
+			return nil
+		}
+		// Legacy-protocol recovery (mirrors handleRunCompletion): a pending
+		// mutation carrying RevisionID is a committed write that died before
+		// the applied-turn row existed. Completing it is the recovery the
+		// postcondition waits on.
+		if strings.TrimSpace(mutation.RevisionID) != "" {
+			if err := rt.store.CompleteAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 				return err
 			}
 			return nil
@@ -4044,11 +4066,96 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 			log.Printf("runtime: recover committed Texture turn for run %s: %v", rec.RunID, turnErr)
 		}
 	}
+	// Legacy-protocol recovery: a pending mutation carrying RevisionID is a
+	// committed write that died before the applied-turn row existed (or a
+	// pre-restart in-flight write). Completing it is the recovery the
+	// postcondition waits on; without this leg the occurrence defers forever.
+	if strings.TrimSpace(mutation.RevisionID) != "" {
+		if err := rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
+			log.Printf("runtime: texture agent revision run %s: complete written mutation: %v", rec.RunID, err)
+		}
+		return nil
+	}
 	// No committed turn: the activation ended without a durable write — a
 	// completed no-op. The mutation row goes stale so reconcile's stranded
-	// repair reclaims its covered packets; it is never a failure. Worker
-	// delegation rides on open work items, not a deferred mutation state.
+	// repair reclaims its covered packets; it is never a failure.
 	_ = rt.store.MarkAgentMutationStale(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
+	return nil
+}
+
+// recordExplicitInitialTextureDecisionIfNeeded persists the deterministic
+// no_worker_needed decision the prompt-bar flow stamps on a Texture run's
+// metadata. The decision is the audit row explaining why the desk answered
+// inline without delegating; a run completing without a Texture write must
+// still carry this receipt (receipt point 5, respawn-loop cluster).
+func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	if !runHasProfile(rec, agentprofile.Texture) ||
+		!metadataBoolValue(rec.Metadata, "texture_initial_decision_required") {
+		return nil
+	}
+	docID := metadataStringValue(rec.Metadata, "doc_id")
+	reason := metadataStringValue(rec.Metadata, "texture_initial_decision_reason")
+	kind := metadataStringValue(rec.Metadata, "texture_initial_decision_kind")
+	if docID == "" || reason == "" || kind != "no_worker_needed" {
+		return nil
+	}
+	existing, err := rt.store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
+	if err != nil {
+		return fmt.Errorf("list initial Texture decisions: %w", err)
+	}
+	for _, decision := range existing {
+		if decision.RunID == rec.RunID && decision.DecisionKind == kind && decision.Reason == reason {
+			rec.Metadata["texture_initial_decision_recorded"] = true
+			return nil
+		}
+	}
+	decision := types.TextureDecisionRecord{
+		DecisionID:   uuid.New().String(),
+		OwnerID:      rec.OwnerID,
+		DocID:        docID,
+		RunID:        rec.RunID,
+		TrajectoryID: trajectoryIDForRun(rec),
+		ActorID:      strings.TrimSpace(rec.AgentID),
+		DecisionKind: kind,
+		Reason:       reason,
+		EvidenceRefs: metadataStringSliceValue(rec.Metadata, "texture_initial_decision_evidence_refs"),
+		NextAction:   metadataStringValue(rec.Metadata, "texture_initial_decision_next_action"),
+		CreatedAt:    time.Now().UTC(),
+	}
+	if decision.ActorID == "" {
+		decision.ActorID = currentTextureAgentID(docID)
+	}
+	if err := rt.store.CreateTextureDecision(ctx, decision); err != nil {
+		return fmt.Errorf("record initial Texture decision: %w", err)
+	}
+	rec.Metadata["texture_initial_decision_recorded"] = true
+	return nil
+}
+
+func metadataStringSliceValue(metadata map[string]any, key string) []string {
+	if metadata == nil {
+		return nil
+	}
+	switch values := metadata[key].(type) {
+	case []string:
+		return append([]string(nil), values...)
+	case []any:
+		out := make([]string, 0, len(values))
+		for _, value := range values {
+			if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+				out = append(out, strings.TrimSpace(text))
+			}
+		}
+		return out
+	case string:
+		if strings.TrimSpace(values) == "" {
+			return nil
+		}
+		return []string{strings.TrimSpace(values)}
+	}
 	return nil
 }
 

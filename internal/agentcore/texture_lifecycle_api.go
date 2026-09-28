@@ -391,6 +391,12 @@ func DecodeTextureActorOccurrence(content string) (TextureActorOccurrence, error
 	return o, nil
 }
 
+// TextureProducerReportOccurrence derives a dedupe-stable identity from the
+// packet's immutable fields only. LifecycleVersion/ReducerSeq pin to zero:
+// consume-at-commit binding legitimately advances both on the trigger row,
+// and mixing them into the occurrence identity would mint a distinct actor
+// row per bind — the drift class the version check misread as staleness.
+// MessageSeq is immutable and stays the canonical discriminator.
 func TextureProducerReportOccurrence(update types.CoagentSourcePacket) (TextureActorOccurrence, error) {
 	o := TextureActorOccurrence{
 		Version: TextureActorOccurrenceVersion, Kind: TextureActorOccurrenceProducerReport,
@@ -398,7 +404,7 @@ func TextureProducerReportOccurrence(update types.CoagentSourcePacket) (TextureA
 		DocumentID: update.ChannelID, TargetAgentID: update.TargetAgentID, TargetWorkItemID: update.TargetWorkItemID, ProducerAgentID: update.AgentID,
 		UpdateID: update.UpdateID, ProducerUpdateID: update.ProducerUpdateID,
 		ProducerWorkID:   firstNonEmpty(update.ProducerWorkItemID, update.WorkItemID),
-		LifecycleVersion: update.LifecycleVersion, ReducerSeq: update.ReducerSeq, MessageSeq: update.MessageSeq,
+		LifecycleVersion: 0, ReducerSeq: 0, MessageSeq: update.MessageSeq,
 	}
 	if update.Direction != types.LifecyclePacketDirectionProducerReport || o.UpdateID == "" || o.ProducerUpdateID == "" || o.ProducerWorkID == "" {
 		return TextureActorOccurrence{}, fmt.Errorf("texture producer occurrence: incomplete canonical producer report")
@@ -412,15 +418,21 @@ func TextureProducerReportOccurrence(update types.CoagentSourcePacket) (TextureA
 // HeadRevisionID carries the revision identity; RequestID carries the
 // committing command's request identity when known (empty for boot-derived
 // wakes and legacy content resolution).
-func DocumentRevisionOccurrence(revision types.Revision, deskProfile, requestID string, lifecycleVersion, reducerSeq int64) (TextureActorOccurrence, error) {
+// DocumentRevisionOccurrence derives the occurrence identity from the revision
+// itself: lifecycle version is the revision's immutable VersionNumber and the
+// reducer sequence of its head-advanced event. The trajectory's ambient
+// lifecycle version is deliberately NOT mixed in — lifecycle commands bump it
+// while the pending head stays identical, and re-deriving the same wake with
+// different bytes would mint a duplicate actor row.
+func DocumentRevisionOccurrence(revision types.Revision, deskProfile, requestID string, reducerSeq int64) (TextureActorOccurrence, error) {
 	o := TextureActorOccurrence{
 		Version: TextureActorOccurrenceVersion, Kind: TextureActorOccurrenceDocumentRevision,
 		OwnerID: revision.OwnerID, ComputerID: revision.ComputerID, TrajectoryID: revision.TrajectoryID,
 		DocumentID: revision.DocID, TargetAgentID: strings.TrimSpace(deskProfile) + ":" + strings.TrimSpace(revision.DocID),
 		RequestID: strings.TrimSpace(requestID), HeadRevisionID: strings.TrimSpace(revision.RevisionID),
-		LifecycleVersion: lifecycleVersion, ReducerSeq: reducerSeq,
+		LifecycleVersion: int64(revision.VersionNumber), ReducerSeq: reducerSeq,
 	}
-	if revision.AuthorKind != types.AuthorUser || o.HeadRevisionID == "" ||
+	if (revision.AuthorKind != types.AuthorUser && revision.AuthorKind != types.AuthorAppAgent) || o.HeadRevisionID == "" ||
 		o.OwnerID == "" || o.ComputerID == "" || o.TrajectoryID == "" || o.DocumentID == "" ||
 		(deskProfile != agentprofile.Texture && deskProfile != agentprofile.Engineering) {
 		return TextureActorOccurrence{}, fmt.Errorf("document revision occurrence: incomplete canonical owner revision")
@@ -430,8 +442,8 @@ func DocumentRevisionOccurrence(revision types.Revision, deskProfile, requestID 
 
 // TextureDocumentRevisionOccurrence is the texture-desk variant of
 // DocumentRevisionOccurrence.
-func TextureDocumentRevisionOccurrence(revision types.Revision, requestID string, lifecycleVersion, reducerSeq int64) (TextureActorOccurrence, error) {
-	return DocumentRevisionOccurrence(revision, agentprofile.Texture, requestID, lifecycleVersion, reducerSeq)
+func TextureDocumentRevisionOccurrence(revision types.Revision, requestID string, reducerSeq int64) (TextureActorOccurrence, error) {
+	return DocumentRevisionOccurrence(revision, agentprofile.Texture, requestID, reducerSeq)
 }
 
 // TextureRecoveryOccurrence advances actor-log identity using only canonical
