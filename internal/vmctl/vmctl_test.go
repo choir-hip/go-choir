@@ -595,6 +595,52 @@ func TestOwnershipRegistry_StateDirPressureTriggersReclaimPlan(t *testing.T) {
 	}
 }
 
+// Under pressure reclaim, a computer whose guest reports in-flight runs
+// surfaces as protected and is never hibernated — busy work is not eligible
+// reclaim target. Receipt: same class as idle sweep hibernation
+// (docs/problems/vmctl-idle-sweep-hibernates-busy-guest-2026-09-28.md).
+func TestOwnershipRegistry_PressureReclaimProtectsGuestBusy(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode:                      PressureReclaimModeActive,
+		MinIdle:                   time.Millisecond,
+		MinMemoryAvailableBytes:   1024 * 1024 * 1024,
+		MinMemoryAvailablePercent: 10,
+		MaxCandidates:             5,
+	})
+	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{
+			SampledAt:              "2026-09-28T12:00:00Z",
+			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
+			MemoryAvailableBytes:   256 * 1024 * 1024,
+			MemoryAvailablePercent: 3.125,
+		}
+	})
+	if _, err := reg.ResolveOrAssign("pressure-busy-user"); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey("pressure-busy-user", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Hour)
+	reg.mu.Unlock()
+	reg.setGuestBusyProbeForTest(func(own *VMOwnership) bool { return true })
+
+	plan := reg.PressureReclaimPlan()
+	if plan.Inventory.Eligible != 0 || plan.Inventory.Protected != 1 {
+		t.Fatalf("inventory eligible/protected = %d/%d, want 0/1 (guest busy)", plan.Inventory.Eligible, plan.Inventory.Protected)
+	}
+	if len(plan.Candidates) == 0 || !plan.Candidates[0].Protected {
+		t.Fatalf("busy guest should be a protected candidate: %+v", plan.Candidates)
+	}
+	if !containsString(plan.Candidates[0].ProtectedReasons, "guest_busy") {
+		t.Fatalf("reasons = %+v, want guest_busy", plan.Candidates[0].ProtectedReasons)
+	}
+
+	// The action path (not just the plan) must skip the busy guest.
+	if candidates := reg.pressureReclaimActionCandidates(); len(candidates) != 0 {
+		t.Fatalf("pressureReclaimActionCandidates returned %d candidates for a busy guest, want 0", len(candidates))
+	}
+}
+
 func TestOwnershipRegistry_RetentionShadowPlanDoesNotExpandActivePrune(t *testing.T) {
 	stateDir := t.TempDir()
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")

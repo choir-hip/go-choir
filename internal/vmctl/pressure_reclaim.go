@@ -453,7 +453,7 @@ func (r *OwnershipRegistry) PressureReclaimPlan() PressureReclaimPlan {
 	plan.Pressure = sample
 
 	now := time.Now()
-	candidates := rankPressureCandidates(ownerships, cfg, warmnessPolicy, now)
+	candidates := rankPressureCandidates(ownerships, cfg, warmnessPolicy, now, r.guestBusy())
 	plan.Inventory = pressureInventory(ownerships, candidates)
 	limit := cfg.MaxCandidates
 	if limit > len(candidates) {
@@ -514,7 +514,7 @@ func (r *OwnershipRegistry) pressureReclaimActionCandidates() []pressureCandidat
 		return nil
 	}
 
-	ranked := rankPressureCandidates(ownerships, cfg, warmnessPolicy, time.Now())
+	ranked := rankPressureCandidates(ownerships, cfg, warmnessPolicy, time.Now(), r.guestBusy())
 	limit := cfg.MaxCandidates
 	if limit > len(ranked) {
 		limit = len(ranked)
@@ -562,13 +562,13 @@ func pressureInventory(ownerships []*VMOwnership, candidates []pressureCandidate
 	return inv
 }
 
-func rankPressureCandidates(ownerships []*VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, now time.Time) []pressureCandidateInternal {
+func rankPressureCandidates(ownerships []*VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, now time.Time, busyProbe func(*VMOwnership) bool) []pressureCandidateInternal {
 	candidates := make([]pressureCandidateInternal, 0, len(ownerships))
 	for _, own := range ownerships {
 		if own == nil || own.State != VMStateActive {
 			continue
 		}
-		candidates = append(candidates, pressureCandidateForOwnership(own, cfg, warmnessPolicy, now))
+		candidates = append(candidates, pressureCandidateForOwnership(own, cfg, warmnessPolicy, now, busyProbe))
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left, right := candidates[i], candidates[j]
@@ -586,13 +586,13 @@ func rankPressureCandidates(ownerships []*VMOwnership, cfg PressureReclaimConfig
 	return candidates
 }
 
-func pressureCandidateForOwnership(own *VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, now time.Time) pressureCandidateInternal {
+func pressureCandidateForOwnership(own *VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, now time.Time, busyProbe func(*VMOwnership) bool) pressureCandidateInternal {
 	idle := time.Duration(0)
 	if !own.LastActiveAt.IsZero() {
 		idle = now.Sub(own.LastActiveAt)
 	}
 	warmnessClass := warmnessClassForOwnership(own, warmnessPolicy)
-	reasons := protectedReclaimReasons(own, cfg, warmnessPolicy, idle)
+	reasons := protectedReclaimReasons(own, cfg, warmnessPolicy, idle, busyProbe)
 	priority := warmnessPriority(warmnessClass)
 	desktop := "primary"
 	if own.Kind == VMKindInteractive && own.DesktopID != PrimaryDesktopID {
@@ -615,7 +615,7 @@ func pressureCandidateForOwnership(own *VMOwnership, cfg PressureReclaimConfig, 
 	}
 }
 
-func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, idle time.Duration) []string {
+func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, idle time.Duration, busyProbe func(*VMOwnership) bool) []string {
 	var reasons []string
 	if own == nil {
 		return []string{"missing_ownership"}
@@ -635,6 +635,11 @@ func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmne
 	}
 	if cfg.MinIdle > 0 && idle < cfg.MinIdle {
 		reasons = append(reasons, "recent_activity")
+	}
+	if busyProbe != nil && busyProbe(own) {
+		// A guest with in-flight runs is doing work — LastActiveAt under-reads
+		// it. Never reclaim a live-desk computer under host pressure.
+		reasons = append(reasons, "guest_busy")
 	}
 	return reasons
 }
