@@ -36,10 +36,11 @@ function uniqueEmail() {
 }
 
 async function fetchJSON(page, path, options = {}) {
-  // One retry on non-JSON: the proxy can transiently serve the SPA shell or a
-  // VM-handoff page immediately after a submit wakes the computer — that is
-  // not a 4xx, so the status check alone misses it and JSON.parse explodes.
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // Retry non-JSON patiently right after a deploy: the proxy can serve the
+  // SPA shell or a VM-handoff page while the guest cold-starts — not a 4xx,
+  // so the status check misses it and JSON.parse explodes. 2026-09-28 probe
+  // died on exactly this (<!DOCTYPE at first poll after a deploy).
+  for (let attempt = 0; attempt < 6; attempt++) {
     try {
       return await page.evaluate(
         async ({ requestPath, requestOptions }) => {
@@ -61,8 +62,8 @@ async function fetchJSON(page, path, options = {}) {
       );
     } catch (err) {
       const nonJson = /is not valid JSON|Unexpected token/.test(String(err));
-      if (!nonJson || attempt === 1) throw err;
-      await page.waitForTimeout(1500);
+      if (!nonJson || attempt === 5) throw err;
+      await page.waitForTimeout(2500 * (attempt + 1));
     }
   }
   return null;
