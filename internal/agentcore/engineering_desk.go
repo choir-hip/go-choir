@@ -145,8 +145,17 @@ func (rt *Runtime) ReconcileEngineeringDesk(ctx context.Context, ownerID, docID 
 		return nil, nil
 	}
 	head := snapshot.HeadRevision
-	if head.RevisionID == "" || head.RevisionID != snapshot.Document.CurrentRevisionID || head.AuthorKind != types.AuthorUser {
+	if head.RevisionID == "" || head.RevisionID != snapshot.Document.CurrentRevisionID {
 		return nil, nil
+	}
+	if head.AuthorKind != types.AuthorUser {
+		// An agent-authored head (the desk's own landed revision) ends cast
+		// admission — only an owner revision opens new work — but it does NOT
+		// discharge the verification obligation: a completed implementation
+		// whose bound operation is frozen still needs its verification
+		// assignment. Run the verification-only pass over every attempt so a
+		// desk-authored head cannot wedge the operation at frozen.
+		return rt.reconcileVerificationOnly(ctx, doc, snapshot)
 	}
 	return rt.reconcileEngineeringCast(ctx, doc, snapshot, head)
 }
@@ -275,12 +284,15 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 	}
 	candidateID := ""
 	for _, ref := range implementation.ReportRefs {
-		_, _, suffix, parseErr := objectgraph.ParseCanonicalID(strings.TrimSpace(ref))
-		if parseErr != nil {
+		// ReportRefs carry canonical object IDs (obj:choir.co_super_report:…key-…),
+		// not ReportIDs. Resolve by canonical ID — the same loader the
+		// restart-recast supersede path uses — so a completed implementation's
+		// candidate is found instead of silently skipped.
+		report, reportErr := rt.store.GetEngineeringAssignmentReportByCanonicalID(ctx, ref)
+		if reportErr != nil {
 			continue
 		}
-		report, reportErr := rt.store.GetEngineeringAssignmentReport(ctx, implementation.Binding.OwnerID, implementation.Binding.ComputerID, suffix)
-		if reportErr != nil {
+		if report.AssignmentID != implementation.AssignmentID {
 			continue
 		}
 		if report.CandidateID != "" {
@@ -339,4 +351,31 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 		return nil, fmt.Errorf("engineering desk reconcile: open verification: %w", openErr)
 	}
 	return &started.Assignment, nil
+}
+
+// reconcileVerificationOnly is the agent-headed counterpart of the cast
+// reconcile's second duty: with no owner head to admit new work, it scans the
+// trajectory's assignments for the newest completed implementation attempt
+// and runs the frozen-operation verification chain on it. Deterministic: the
+// highest-attempt completed implementation is the one whose candidate the
+// verification must name.
+func (rt *Runtime) reconcileVerificationOnly(ctx context.Context, doc types.Document, snapshot types.LifecycleSnapshot) (*types.EngineeringAssignment, error) {
+	attempts, listErr := rt.store.ListEngineeringAssignments(ctx, doc.OwnerID, doc.ComputerID, doc.TrajectoryID)
+	if listErr != nil {
+		return nil, fmt.Errorf("engineering desk reconcile: %w", listErr)
+	}
+	var implementation *types.EngineeringAssignment
+	for i := range attempts {
+		a := &attempts[i]
+		if a.Binding.Kind != types.EngineeringAssignmentImplementation || a.Disposition != types.EngineeringAssignmentCompleted {
+			continue
+		}
+		if implementation == nil || a.Binding.Attempt > implementation.Binding.Attempt {
+			implementation = a
+		}
+	}
+	if implementation == nil {
+		return nil, nil
+	}
+	return rt.reconcileEngineeringVerification(ctx, doc, snapshot, *implementation, attempts)
 }
