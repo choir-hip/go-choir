@@ -801,10 +801,6 @@ func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID str
 	if err != nil {
 		return nil, err
 	}
-	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
-		rt.handleExecutionError(ctx, rec, err)
-		return nil, err
-	}
 	rt.activate(rec)
 	return rec, nil
 }
@@ -1234,10 +1230,6 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&requesterRec) {
 		requesterSummaryProfile := agentProfileForRun(&requesterRec)
 		log.Printf("runtime: started coagent %s requested by %s requester_profile=%s", wireLifecycleSummary(rec), requesterRec.RunID, requesterSummaryProfile)
-	}
-	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
-		rt.handleExecutionError(ctx, rec, err)
-		return nil, releaseEngineeringSlotClaim(err)
 	}
 
 	// Dispatch via actor runtime.
@@ -3226,10 +3218,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			return
 		}
 	}
-	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
-		rt.handleExecutionError(ctx, rec, err)
-		return
-	}
 	llmConfig := provideriface.ResolvedLLMConfigFromMetadata(rec.Metadata)
 	renderedSystemPrompt := systemPrompt
 	if registry != nil {
@@ -3304,23 +3292,22 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
 	if runHasProfile(rec, agentprofile.Texture) {
-		toolLoopOptions = append(toolLoopOptions, toolregistry.WithInitialToolChoice(initialTextureToolChoice(rec)))
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolLoopBudget(textureActorToolLoopBudget(rec)))
 		// R3d: texture's durable transition is a committed texture_apply cell
 		// intent (choir.ApplyTexture), committed by the bound authorizer inside
 		// ApplyTextureTurn. desk_go_eval receipts carry it as rlm:texture_apply.
+		// No initial-tool-choice or required-write choreography: the desk has
+		// one tool, and a turn without a committed write is a completed no-op —
+		// the next semantic event re-arms the reconcile loop. Forcing a write
+		// tool only converted model slips into run-fatal retries.
 		textureAuthored := func(output string) bool { return strings.Contains(output, "rlm:texture_apply:") }
 		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
-			// One committed authoring turn is the activation's durable
-			// transition — a canonical revision, atomic children controls, or
-			// an explicit no-change/wait/block decision are equally valid; park
-			// the resident run instead of turning it terminal.
+			// One committed authoring turn parks the resident run instead of
+			// turning it terminal.
 			toolLoopOptions = append(toolLoopOptions, toolregistry.WithPassivatingToolResult("desk_go_eval", textureAuthored))
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteToolResult("desk_go_eval", textureAuthored))
 		} else {
 			// Pre-lifecycle Texture tasks retain their single-write terminal contract.
 			toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolResult("desk_go_eval", textureAuthored))
-			toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteToolResult("desk_go_eval", textureAuthored))
 		}
 	}
 
@@ -3534,29 +3521,23 @@ func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types
 	}
 	switch mutation.State {
 	case "pending":
-		if revisionID := strings.TrimSpace(mutation.RevisionID); revisionID != "" {
-			if rec.Metadata == nil {
-				rec.Metadata = map[string]any{}
+		// Consume-at-commit: a no-write idle passivation is a completed no-op,
+		// not a failed mutation. A committed non-revision turn sleeps the
+		// mutation; nothing committed means the activation died mid-flight and
+		// the row goes stale for the next reconcile to replace.
+		if turn, err := rt.store.GetAppliedTextureTurnByCallerRun(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID, rec.RunID); err == nil && turn.TextureTurn != nil {
+			if turn.TextureTurn.Outcome == types.TextureTurnRevision && turn.Revision != nil {
+				if err := rt.store.CompleteAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, turn.Revision.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
+					return err
+				}
+				return nil
 			}
-			rec.Metadata["current_revision_id"] = revisionID
-			if err := rt.store.SleepAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil && err != store.ErrMutationAlreadyCompleted {
+			if err := rt.store.SleepAgentMutationAfterTextureTurn(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.TrajectoryID, rec.RunID); err != nil && err != store.ErrMutationAlreadyCompleted {
 				return err
 			}
 			return nil
 		}
-		if rt.textureRunRequestedWorkers(ctx, rec) {
-			if err := rt.store.DeferAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
-				return err
-			}
-			return nil
-		}
-		_ = rt.store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-		if rec.Metadata == nil {
-			rec.Metadata = map[string]any{}
-		}
-		rec.Metadata["texture_revision_failed_no_write"] = true
-		return fmt.Errorf("Texture run passivated without storing a Texture revision")
-	case "sleeping", "completed", "deferred":
+		_ = rt.store.MarkAgentMutationStale(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 		return nil
 	default:
 		return nil
@@ -3858,32 +3839,6 @@ func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDec
 	return "# " + title + "\n\n" + seedPrompt
 }
 
-// initialTextureToolChoice is reserved for narrow mechanical continuation
-// protocols. Ordinary first-paint Texture work must see the full Texture tool
-// surface so the actor can choose an honest revision, decision, delegation, or
-// blocker without hidden exact-tool choreography.
-//
-// For update_coagent continuations (worker evidence arrived), the model must
-// produce a document revision in its next cell — choir.ApplyTexture carries the
-// apply body for targeted or full-document drafts (especially v0→v1 and v1→v2).
-// The post-turn required-write check ensures a texture_apply intent commits.
-func initialTextureToolChoice(rec *types.RunRecord) string {
-	if rec == nil || !runHasProfile(rec, agentprofile.Texture) {
-		return ""
-	}
-	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
-		return "required"
-	}
-	if metadataIntValue(rec.Metadata, "scheduled_message_seq") > 0 {
-		return ""
-	}
-	if metadataStringValue(rec.Metadata, "request_intent") == "revise" &&
-		metadataStringValue(rec.Metadata, "current_author_kind") == string(types.AuthorUser) {
-		return "required"
-	}
-	return ""
-}
-
 // engineeringOverlayTerminalFateCommitted reports whether any persisted
 // tool_result block in the run's message log carries a capsule_go_eval output
 // with fate_terminal=true — the same predicate the terminal-tool check applies
@@ -4041,187 +3996,6 @@ func (rt *Runtime) latestActorToolLoopBudgetSpend(ctx context.Context, ownerID, 
 	return spend, true, nil
 }
 
-func (rt *Runtime) recordExplicitInitialTextureDecisionIfNeeded(ctx context.Context, rec *types.RunRecord) error {
-	if rt == nil || rt.store == nil || rec == nil {
-		return nil
-	}
-	if !runHasProfile(rec, agentprofile.Texture) ||
-		!metadataBoolValue(rec.Metadata, "texture_initial_decision_required") {
-		return nil
-	}
-	docID := metadataStringValue(rec.Metadata, "doc_id")
-	reason := metadataStringValue(rec.Metadata, "texture_initial_decision_reason")
-	kind := metadataStringValue(rec.Metadata, "texture_initial_decision_kind")
-	if docID == "" || reason == "" || kind != "no_worker_needed" {
-		return nil
-	}
-	existing, err := rt.store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100)
-	if err != nil {
-		return fmt.Errorf("list initial Texture decisions: %w", err)
-	}
-	for _, decision := range existing {
-		if decision.RunID == rec.RunID && decision.DecisionKind == kind && decision.Reason == reason {
-			rec.Metadata["texture_initial_decision_recorded"] = true
-			return nil
-		}
-	}
-	decision := types.TextureDecisionRecord{
-		DecisionID:   uuid.New().String(),
-		OwnerID:      rec.OwnerID,
-		DocID:        docID,
-		RunID:        rec.RunID,
-		TrajectoryID: trajectoryIDForRun(rec),
-		ActorID:      strings.TrimSpace(rec.AgentID),
-		DecisionKind: kind,
-		Reason:       reason,
-		EvidenceRefs: metadataStringSliceValue(rec.Metadata, "texture_initial_decision_evidence_refs"),
-		NextAction:   metadataStringValue(rec.Metadata, "texture_initial_decision_next_action"),
-		CreatedAt:    time.Now().UTC(),
-	}
-	if decision.ActorID == "" {
-		decision.ActorID = currentTextureAgentID(docID)
-	}
-	if err := rt.store.CreateTextureDecision(ctx, decision); err != nil {
-		return fmt.Errorf("record initial Texture decision: %w", err)
-	}
-	rec.Metadata["texture_initial_decision_recorded"] = true
-	return nil
-}
-
-func metadataStringSliceValue(metadata map[string]any, key string) []string {
-	if metadata == nil {
-		return nil
-	}
-	switch values := metadata[key].(type) {
-	case []string:
-		return append([]string(nil), values...)
-	case []any:
-		out := make([]string, 0, len(values))
-		for _, value := range values {
-			if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
-				out = append(out, strings.TrimSpace(text))
-			}
-		}
-		return out
-	case string:
-		if strings.TrimSpace(values) == "" {
-			return nil
-		}
-		return []string{strings.TrimSpace(values)}
-	default:
-		return nil
-	}
-}
-
-type explicitInitialTextureDecision struct {
-	DecisionKind string
-	Reason       string
-	EvidenceRefs []string
-	NextAction   string
-}
-
-func explicitNoWorkerDecisionRequestFromPrompt(prompt string) (explicitInitialTextureDecision, bool) {
-	text := strings.TrimSpace(prompt)
-	if !texturePromptExplicitlyRequestsNoWorkerDecision(text) {
-		return explicitInitialTextureDecision{}, false
-	}
-	lower := strings.ToLower(text)
-	reason := extractDelimitedPromptValue(text, lower, "exact reason ", []string{", evidence ref", ", evidence refs", ", next action", ". then "})
-	if reason == "" {
-		reason = extractDelimitedPromptValue(text, lower, "reason ", []string{", evidence ref", ", evidence refs", ", next action", ". then "})
-	}
-	if reason == "" {
-		return explicitInitialTextureDecision{}, false
-	}
-	evidence := extractDelimitedPromptValue(text, lower, "evidence ref ", []string{", next action", ". then "})
-	if evidence == "" {
-		evidence = extractDelimitedPromptValue(text, lower, "evidence refs ", []string{", next action", ". then "})
-	}
-	nextAction := extractDelimitedPromptValue(text, lower, "next action ", []string{". then ", " then "})
-	return explicitInitialTextureDecision{
-		DecisionKind: "no_worker_needed",
-		Reason:       strings.TrimSpace(reason),
-		EvidenceRefs: splitPromptRefs(evidence),
-		NextAction:   strings.TrimSpace(nextAction),
-	}, true
-}
-
-func extractDelimitedPromptValue(original, lower, marker string, delimiters []string) string {
-	start := strings.Index(lower, marker)
-	if start < 0 {
-		return ""
-	}
-	start += len(marker)
-	end := len(original)
-	tailLower := lower[start:]
-	for _, delimiter := range delimiters {
-		if idx := strings.Index(tailLower, delimiter); idx >= 0 && start+idx < end {
-			end = start + idx
-		}
-	}
-	return strings.Trim(strings.TrimSpace(original[start:end]), " ,")
-}
-
-func splitPromptRefs(value string) []string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	parts := strings.FieldsFunc(value, func(r rune) bool {
-		return r == ',' || r == ';'
-	})
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			out = append(out, trimmed)
-		}
-	}
-	return out
-}
-
-func texturePromptExplicitlyRequestsDecisionNote(prompt string) bool {
-	text := strings.ToLower(strings.TrimSpace(prompt))
-	if text == "" {
-		return false
-	}
-	if strings.Contains(text, "record_texture_decision") {
-		return true
-	}
-	if strings.Contains(text, "decision_kind") && strings.Contains(text, "off-document") && strings.Contains(text, "decision") {
-		return true
-	}
-	if strings.Contains(text, "record") && strings.Contains(text, "off-document") && strings.Contains(text, "decision note") {
-		return true
-	}
-	if strings.Contains(text, "record") && strings.Contains(text, "texture decision") {
-		return true
-	}
-	if strings.Contains(text, "record") && strings.Contains(text, "texture decision") {
-		return true
-	}
-	return false
-}
-
-func texturePromptExplicitlyRequestsNoWorkerDecision(prompt string) bool {
-	text := strings.ToLower(strings.TrimSpace(prompt))
-	if text == "" {
-		return false
-	}
-	if strings.Contains(text, "decision_kind") && strings.Contains(text, "no_worker_needed") {
-		return true
-	}
-	if strings.Contains(text, "no-worker") && strings.Contains(text, "decision") {
-		return true
-	}
-	if strings.Contains(text, "no worker") && strings.Contains(text, "decision") {
-		return true
-	}
-	if strings.Contains(text, "no research or execution worker") && texturePromptExplicitlyRequestsDecisionNote(text) {
-		return true
-	}
-	return false
-}
-
 // handleRunCompletion processes feature-specific side effects after a run
 // completes successfully. Texture document writes are intentionally not handled
 // here: canonical appagent revisions are created only by Texture write tools.
@@ -4270,68 +4044,12 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 			log.Printf("runtime: recover committed Texture turn for run %s: %v", rec.RunID, turnErr)
 		}
 	}
-	if strings.TrimSpace(mutation.RevisionID) != "" {
-		if err := rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
-			log.Printf("runtime: texture agent revision run %s: complete written mutation: %v", rec.RunID, err)
-			return nil
-		}
-		return nil
-	}
-
-	if rt.textureRunRequestedWorkers(persistCtx, rec) {
-		if err := rt.store.DeferAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
-			log.Printf("runtime: texture agent revision run %s: defer no-edit mutation: %v", rec.RunID, err)
-			return nil
-		}
-		log.Printf("runtime: texture agent revision run %s requested workers and completed without document edit; waiting for worker updates", rec.RunID)
-		return nil
-	}
-	_ = rt.store.FailAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-	if rec.Metadata == nil {
-		rec.Metadata = map[string]any{}
-	}
-	rec.Metadata["texture_revision_failed_no_write"] = true
-	log.Printf("runtime: Texture agent revision run %s completed without a Texture write tool; no canonical revision created", rec.RunID)
+	// No committed turn: the activation ended without a durable write — a
+	// completed no-op. The mutation row goes stale so reconcile's stranded
+	// repair reclaims its covered packets; it is never a failure. Worker
+	// delegation rides on open work items, not a deferred mutation state.
+	_ = rt.store.MarkAgentMutationStale(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 	return nil
-}
-
-func (rt *Runtime) textureRunRequestedWorkers(ctx context.Context, rec *types.RunRecord) bool {
-	if rt == nil || rt.store == nil || rec == nil {
-		return false
-	}
-	eventsForRun, err := rt.store.ListEvents(ctx, rec.RunID, 500)
-	if err != nil {
-		log.Printf("runtime: texture run %s: list events for worker requests: %v", rec.RunID, err)
-		return false
-	}
-	for _, ev := range eventsForRun {
-		if ev.Kind != types.EventToolResult {
-			continue
-		}
-		var payload struct {
-			Tool    string `json:"tool"`
-			IsError bool   `json:"is_error"`
-			Output  string `json:"output"`
-		}
-		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError {
-			continue
-		}
-		switch strings.TrimSpace(payload.Tool) {
-		case "request_super_execution":
-			return true
-		case "spawn_agent":
-			var output map[string]any
-			if err := json.Unmarshal([]byte(payload.Output), &output); err != nil {
-				continue
-			}
-			profile, _ := output["profile"].(string)
-			role, _ := output["role"].(string)
-			if strings.TrimSpace(profile) == agentprofile.Research || strings.TrimSpace(role) == agentprofile.Research {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func (rt *Runtime) channelHasGroundedHistory(ctx context.Context, ownerID, channelID string, before time.Time) (bool, error) {
@@ -4495,7 +4213,6 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	// undelivered packet forever; a failure after a successful write should still
 	// close the mutation on the latest stored revision.
 	if runHasProfile(rec, agentprofile.Texture) {
-		failedNoWrite := true
 		if mutation, mutationErr := rt.store.GetAgentMutationByRun(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); mutationErr != nil {
 			log.Printf("runtime: texture agent revision run %s: get mutation after failure: %v", rec.RunID, mutationErr)
 		} else if mutation != nil {
@@ -4503,18 +4220,11 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 				if completeErr := rt.store.CompleteAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); completeErr != nil && completeErr != store.ErrMutationAlreadyCompleted {
 					log.Printf("runtime: texture agent revision run %s: complete written mutation after failure: %v", rec.RunID, completeErr)
 				}
-				failedNoWrite = false
 			} else {
 				_ = rt.store.FailAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 			}
 		} else {
 			_ = rt.store.FailAgentMutation(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
-		}
-		if failedNoWrite {
-			if rec.Metadata == nil {
-				rec.Metadata = map[string]any{}
-			}
-			rec.Metadata["texture_revision_failed_no_write"] = true
 		}
 		if docID := metadataStringValue(rec.Metadata, "doc_id"); docID != "" {
 			failPayload, _ := json.Marshal(map[string]string{

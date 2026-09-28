@@ -60,6 +60,7 @@ var frozenLifecycleCommandKinds = map[types.LifecycleCommandKind]bool{
 	types.LifecycleCancelEngineeringAssignment:      true, // V1 "cancel_co_super_assignment"
 	types.LifecycleSetEngineeringCapsuleDisposition: true, // V1 "set_co_super_capsule_disposition"
 	types.LifecycleSettleProducerReports:            true,
+	types.LifecycleReconcileUpdateDelivery:          true,
 	types.LifecycleTerminalizeRun:                   true,
 	types.LifecycleReactivateRun:                    true,
 }
@@ -87,6 +88,8 @@ var frozenLifecycleEventKinds = map[types.LifecycleEventKind]bool{
 	types.LifecycleControlQueued:                    true,
 	types.LifecycleControlDelivered:                 true,
 	types.LifecycleControlActivationFailed:          true,
+	types.LifecycleUpdateDelivered:                  true,
+	types.LifecycleTextureActivationFailed:          true,
 	types.LifecycleEngineeringAssignmentOpened:      true, // V1 "co_super_assignment_opened"
 	types.LifecycleEngineeringAssignmentBound:       true, // V1 "co_super_assignment_bound"
 	types.LifecycleEngineeringAssignmentReported:    true, // V1 "co_super_assignment_reported"

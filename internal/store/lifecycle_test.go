@@ -158,7 +158,7 @@ func TestTerminalizeRunCommitsStateAndEventAtomically(t *testing.T) {
 	run := lifecycleRunFixture(start, "run-terminalize-1", types.RunRunning)
 	project := types.ReplaceLifecycleActivationRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		CommandID: "project-terminalize:" + start.TrajectoryID,
+		CommandID:    "project-terminalize:" + start.TrajectoryID,
 		TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: run,
 	}
 	project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
@@ -222,7 +222,7 @@ func TestReactivateRunCommitsStateAndEventAtomically(t *testing.T) {
 	run := lifecycleRunFixture(start, "run-reactivate-1", types.RunPassivated)
 	project := types.ReplaceLifecycleActivationRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		CommandID: "project-reactivate:" + start.TrajectoryID,
+		CommandID:    "project-reactivate:" + start.TrajectoryID,
 		TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: run,
 	}
 	project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
@@ -283,7 +283,7 @@ func TestUpdateRunWithEventFoldsEventIntoProjectionBatch(t *testing.T) {
 	run := lifecycleRunFixture(start, "run-fold-event", types.RunRunning)
 	project := types.ReplaceLifecycleActivationRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
-		CommandID: "project-fold:" + start.TrajectoryID,
+		CommandID:    "project-fold:" + start.TrajectoryID,
 		TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: run,
 	}
 	project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)

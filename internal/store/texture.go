@@ -147,23 +147,6 @@ CREATE TABLE IF NOT EXISTS texture_controller_checkpoints (
 
 CREATE INDEX IF NOT EXISTS idx_texture_controller_owner ON texture_controller_checkpoints(owner_id);
 
-CREATE TABLE IF NOT EXISTS texture_decisions (
-	decision_id        VARCHAR(255) PRIMARY KEY,
-	owner_id           VARCHAR(255) NOT NULL,
-	doc_id             VARCHAR(255) NOT NULL,
-	loop_id            VARCHAR(255) NOT NULL DEFAULT '',
-	trajectory_id      VARCHAR(255) NOT NULL DEFAULT '',
-	actor_id           VARCHAR(255) NOT NULL DEFAULT '',
-	decision_kind      VARCHAR(128) NOT NULL,
-	reason             LONGTEXT NOT NULL,
-	evidence_refs_json LONGTEXT NOT NULL DEFAULT '[]',
-	next_action        LONGTEXT NOT NULL DEFAULT '',
-	created_at         DATETIME NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_texture_decisions_doc ON texture_decisions(owner_id, doc_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_texture_decisions_run ON texture_decisions(owner_id, loop_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_texture_decisions_trajectory ON texture_decisions(owner_id, trajectory_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS agent_evidence (
 	evidence_id    VARCHAR(255) PRIMARY KEY,
@@ -1803,59 +1786,6 @@ func computeBlame(chain []types.Revision, head types.Revision) []types.BlameSect
 
 // ----- Scan helpers -----
 
-func scanTextureDecisionRows(rows *sql.Rows) ([]types.TextureDecisionRecord, error) {
-	defer func() { _ = rows.Close() }()
-	var records []types.TextureDecisionRecord
-	for rows.Next() {
-		rec, err := scanTextureDecision(rows)
-		if err != nil {
-			return nil, err
-		}
-		records = append(records, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate texture decisions: %w", err)
-	}
-	return records, nil
-}
-
-func scanTextureDecision(row interface{ Scan(...any) error }) (types.TextureDecisionRecord, error) {
-	var (
-		rec             types.TextureDecisionRecord
-		evidenceRefsRaw string
-		createdAtRaw    string
-	)
-	if err := row.Scan(
-		&rec.DecisionID,
-		&rec.OwnerID,
-		&rec.DocID,
-		&rec.RunID,
-		&rec.TrajectoryID,
-		&rec.ActorID,
-		&rec.DecisionKind,
-		&rec.Reason,
-		&evidenceRefsRaw,
-		&rec.NextAction,
-		&createdAtRaw,
-	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return types.TextureDecisionRecord{}, ErrNotFound
-		}
-		return types.TextureDecisionRecord{}, fmt.Errorf("scan texture decision: %w", err)
-	}
-	if strings.TrimSpace(evidenceRefsRaw) != "" {
-		if err := json.Unmarshal([]byte(evidenceRefsRaw), &rec.EvidenceRefs); err != nil {
-			return types.TextureDecisionRecord{}, fmt.Errorf("decode texture decision evidence refs: %w", err)
-		}
-	}
-	createdAt, err := time.Parse(time.RFC3339Nano, createdAtRaw)
-	if err != nil {
-		return types.TextureDecisionRecord{}, fmt.Errorf("parse texture decision created_at: %w", err)
-	}
-	rec.CreatedAt = createdAt.UTC()
-	return rec, nil
-}
-
 func scanEvidence(row interface{ Scan(...any) error }) (types.EvidenceRecord, error) {
 	var (
 		rec          types.EvidenceRecord
@@ -2162,45 +2092,34 @@ func (s *Store) GetAgentMutationByRun(ctx context.Context, ownerID, computerID, 
 	return scanAgentMutation(row)
 }
 
-// RecordAgentMutationRevision records the latest canonical revision written by
-// a still-active Texture mutation without closing the run. Multi-revision
-// Texture actors use the row as run-liveness/idempotency state; the revision
-// rows themselves are the per-write commit records.
-func (s *Store) RecordAgentMutationRevision(ctx context.Context, ownerID, computerID, runID, revisionID string) error {
-	s.textureMutationMu.Lock()
-	defer s.textureMutationMu.Unlock()
-	if s.projectionTape != nil {
-		found, err := s.projectTextureMutation(ctx, ownerID, computerID, "", runID, []string{"pending"}, nil, func(m *computerevent.TextureAgentMutationProjection) {
-			m.RevisionID = revisionID
-		})
-		if err != nil {
-			return err
-		}
-		if !found {
-			return ErrMutationAlreadyCompleted
-		}
-		return nil
+// ListRecentAgentMutationsByDoc returns a document's mutation rows newest-first
+// — the breaker's consecutive-dead-activation view. Projection-tape mode reads
+// the same SQL rows (mutations are double-written), so this needs no tape path.
+func (s *Store) ListRecentAgentMutationsByDoc(ctx context.Context, ownerID, computerID, docID string, limit int) ([]AgentMutation, error) {
+	if limit <= 0 {
+		limit = 10
 	}
-	result, err := s.textureHandle().ExecContext(ctx,
-		`UPDATE texture_agent_mutations
-		    SET revision_id = ?
-		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
-		revisionID,
-		strings.TrimSpace(ownerID),
-		strings.TrimSpace(computerID),
-		strings.TrimSpace(runID),
+	rows, err := s.textureHandle().QueryContext(ctx,
+		`SELECT doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at
+		   FROM texture_agent_mutations
+		  WHERE owner_id = ? AND computer_id = ? AND doc_id = ?
+		  ORDER BY created_at DESC
+		  LIMIT ?`,
+		strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID), limit,
 	)
 	if err != nil {
-		return fmt.Errorf("record texture agent mutation revision: %w", err)
+		return nil, fmt.Errorf("list recent texture agent mutations: %w", err)
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("check recorded mutation revision rows: %w", err)
+	defer rows.Close()
+	var out []AgentMutation
+	for rows.Next() {
+		m, err := scanAgentMutation(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *m)
 	}
-	if rows == 0 {
-		return ErrMutationAlreadyCompleted
-	}
-	return nil
+	return out, rows.Err()
 }
 
 // CompleteAgentMutation marks an agent mutation as completed with the latest
@@ -2252,40 +2171,6 @@ func (s *Store) CompleteAgentMutation(ctx context.Context, ownerID, computerID, 
 	return nil
 }
 
-// DeferAgentMutation marks a Texture run as intentionally completed without a
-// document write because it delegated to workers and is waiting for their
-// updates to wake the next revision run.
-func (s *Store) DeferAgentMutation(ctx context.Context, ownerID, computerID, runID string) error {
-	s.textureMutationMu.Lock()
-	defer s.textureMutationMu.Unlock()
-	now := time.Now().UTC()
-	if s.projectionTape != nil {
-		completedAt := now.Format(time.RFC3339Nano)
-		_, err := s.projectTextureMutation(ctx, ownerID, computerID, "", runID, []string{"pending"}, nil, func(m *computerevent.TextureAgentMutationProjection) {
-			m.State = "deferred"
-			m.CompletedAt = &completedAt
-		})
-		if errors.Is(err, ErrMutationAlreadyCompleted) {
-			return nil
-		}
-		return err
-	}
-	_, err := s.textureHandle().ExecContext(ctx,
-		`UPDATE texture_agent_mutations
-		    SET state = 'deferred',
-		        completed_at = ?
-		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
-		now.Format(time.RFC3339Nano),
-		strings.TrimSpace(ownerID),
-		strings.TrimSpace(computerID),
-		strings.TrimSpace(runID),
-	)
-	if err != nil {
-		return fmt.Errorf("defer texture agent mutation: %w", err)
-	}
-	return nil
-}
-
 // FailAgentMutation marks an agent mutation as failed.
 func (s *Store) FailAgentMutation(ctx context.Context, ownerID, computerID, runID string) error {
 	s.textureMutationMu.Lock()
@@ -2314,40 +2199,6 @@ func (s *Store) FailAgentMutation(ctx context.Context, ownerID, computerID, runI
 	)
 	if err != nil {
 		return fmt.Errorf("fail texture agent mutation: %w", err)
-	}
-	return nil
-}
-
-// CancelAgentMutation marks an agent mutation as cancelled by the owner while
-// preserving the current document head so the user can resume with a later
-// revision request.
-func (s *Store) CancelAgentMutation(ctx context.Context, ownerID, computerID, runID string) error {
-	s.textureMutationMu.Lock()
-	defer s.textureMutationMu.Unlock()
-	now := time.Now().UTC()
-	if s.projectionTape != nil {
-		completedAt := now.Format(time.RFC3339Nano)
-		_, err := s.projectTextureMutation(ctx, ownerID, computerID, "", runID, []string{"pending"}, nil, func(m *computerevent.TextureAgentMutationProjection) {
-			m.State = "cancelled"
-			m.CompletedAt = &completedAt
-		})
-		if errors.Is(err, ErrMutationAlreadyCompleted) {
-			return nil
-		}
-		return err
-	}
-	_, err := s.textureHandle().ExecContext(ctx,
-		`UPDATE texture_agent_mutations
-		    SET state = 'cancelled',
-		        completed_at = ?
-		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
-		now.Format(time.RFC3339Nano),
-		strings.TrimSpace(ownerID),
-		strings.TrimSpace(computerID),
-		strings.TrimSpace(runID),
-	)
-	if err != nil {
-		return fmt.Errorf("cancel texture agent mutation: %w", err)
 	}
 	return nil
 }

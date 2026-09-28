@@ -193,7 +193,11 @@ func validateTextureTurnShape(req types.ApplyTextureTurnRequest, graph TextureSo
 	seenWork := map[string]struct{}{}
 	for _, in := range req.Inbound {
 		key := in.TargetAgentID + "\x00" + in.ProducerAgentID + "\x00" + in.ProducerUpdateID
-		if in.TargetAgentID != req.CallerAgentID || in.ProducerAgentID == "" || in.ProducerUpdateID == "" || in.UpdateID == "" || in.ProducerWorkItemID == "" {
+		if in.Disposition == types.UpdateDelivered {
+			if in.TargetAgentID != req.CallerAgentID || in.ProducerAgentID == "" || in.ProducerUpdateID == "" || in.UpdateID == "" {
+				return fmt.Errorf("apply Texture turn: inbound requires exact caller target and producer/update identity")
+			}
+		} else if in.TargetAgentID != req.CallerAgentID || in.ProducerAgentID == "" || in.ProducerUpdateID == "" || in.UpdateID == "" || in.ProducerWorkItemID == "" {
 			return fmt.Errorf("apply Texture turn: inbound requires exact caller target, producer/update identity, and producer work")
 		}
 		if _, duplicate := seenInbound[key]; duplicate {
@@ -207,6 +211,13 @@ func validateTextureTurnShape(req types.ApplyTextureTurnRequest, graph TextureSo
 			seenWork[in.ProducerWorkItemID] = struct{}{}
 		}
 		switch in.Disposition {
+		case types.UpdateDelivered:
+			// Consume-at-commit terminal: delivery is proven by inclusion in this
+			// committed turn. No producer-work consequence and no reason required;
+			// delivered is neutral receipt, not a semantic verdict.
+			if in.WorkDisposition != "" && in.WorkDisposition != types.WorkItemOpen {
+				return fmt.Errorf("apply Texture turn: delivered inbound cannot settle producer work")
+			}
 		case types.UpdateIncorporated:
 			if in.WorkDisposition != types.WorkItemOpen && in.WorkDisposition != types.WorkItemCompleted {
 				return fmt.Errorf("apply Texture turn: incorporated inbound requires open or completed producer work")
@@ -219,7 +230,7 @@ func validateTextureTurnShape(req types.ApplyTextureTurnRequest, graph TextureSo
 				return fmt.Errorf("apply Texture turn: rejected inbound requires reason and open or refused producer work")
 			}
 		default:
-			return fmt.Errorf("apply Texture turn: inbound must explicitly incorporate or reject")
+			return fmt.Errorf("apply Texture turn: inbound must explicitly incorporate, reject, or deliver")
 		}
 	}
 	seenControl := map[string]struct{}{}
@@ -483,9 +494,12 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		producerWorkID, targetWorkID, bindingErr := ResolveLifecyclePacketWorkBindings(update)
 		if bindingErr != nil || update.Direction != types.LifecyclePacketDirectionProducerReport ||
 			(targetWorkID != "" && targetWorkID != req.CallerWorkItemID) ||
-			producerWorkID != disposition.ProducerWorkItemID || update.UpdateID != disposition.UpdateID ||
+			update.UpdateID != disposition.UpdateID ||
 			update.ProducerUpdateID != disposition.ProducerUpdateID || update.AgentID != disposition.ProducerAgentID ||
 			update.TargetAgentID != req.CallerAgentID || update.TrajectoryID != req.TrajectoryID || update.Disposition != types.UpdatePending {
+			return types.LifecycleResult{}, ErrLifecycleCommandConflict
+		}
+		if disposition.Disposition != types.UpdateDelivered && producerWorkID != disposition.ProducerWorkItemID {
 			return types.LifecycleResult{}, ErrLifecycleCommandConflict
 		}
 		seq++
@@ -508,7 +522,11 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		if err := appendEventAtCurrent(&events, req, ownerID, computerID, seq, eventKind, disposition.ProducerWorkItemID, update.UpdateID, artifactRefs, disposition.Reason, now); err != nil {
 			return types.LifecycleResult{}, err
 		}
-
+		if disposition.Disposition == types.UpdateDelivered {
+			// delivered carries no producer-work consequence — never look up or
+			// mutate the work item (it may be absent or already terminal).
+			continue
+		}
 		workObj, work, workErr := s.lifecycleWorkObject(ctx, ownerID, computerID, disposition.ProducerWorkItemID)
 		if workErr != nil {
 			return types.LifecycleResult{}, workErr

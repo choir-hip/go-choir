@@ -123,8 +123,11 @@ func TestCommitCellTextureApplyCommitsAuthorRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get mutation: %v", err)
 	}
-	if mutation == nil || mutation.RevisionID != out.RevisionID {
-		t.Fatalf("mutation did not record the committed revision: %+v vs %s", mutation, out.RevisionID)
+	// Consume-at-commit: the mutation stays pending until run completion
+	// terminalizes it from the applied-turn row — it must never be failed or
+	// stale while the cell is still live.
+	if mutation == nil || mutation.State != "pending" {
+		t.Fatalf("mutation must remain pending mid-run: %+v", mutation)
 	}
 
 	// Replay: same staged body + same revision identity replays the commit —

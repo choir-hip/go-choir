@@ -32,6 +32,7 @@ const (
 	LifecycleCancelEngineeringAssignment      LifecycleCommandKind = "cancel_co_super_assignment"
 	LifecycleSetEngineeringCapsuleDisposition LifecycleCommandKind = "set_co_super_capsule_disposition"
 	LifecycleSettleProducerReports            LifecycleCommandKind = "settle_producer_reports"
+	LifecycleReconcileUpdateDelivery          LifecycleCommandKind = "reconcile_update_delivery"
 	LifecycleTerminalizeRun                   LifecycleCommandKind = "terminalize_run"
 	LifecycleReactivateRun                    LifecycleCommandKind = "reactivate_run"
 )
@@ -39,26 +40,33 @@ const (
 type LifecycleEventKind string
 
 const (
-	LifecycleUpdateLate                       LifecycleEventKind = "update_late"
-	LifecycleTrajectoryStarted                LifecycleEventKind = "trajectory_started"
-	LifecycleWorkOpened                       LifecycleEventKind = "work_opened"
-	LifecycleWorkAmended                      LifecycleEventKind = "work_amended"
-	LifecycleRefsRecorded                     LifecycleEventKind = "refs_recorded"
-	LifecycleUpdateQueued                     LifecycleEventKind = "update_queued"
-	LifecycleActivationReplaced               LifecycleEventKind = "activation_replaced"
-	LifecycleUpdateApplied                    LifecycleEventKind = "update_applied"
-	LifecycleArtifactHeadAdvanced             LifecycleEventKind = "artifact_head_advanced"
-	LifecycleWorkSettled                      LifecycleEventKind = "work_settled"
-	LifecycleUpdateRejected                   LifecycleEventKind = "update_rejected"
-	LifecycleWorkRefused                      LifecycleEventKind = "work_refused"
-	LifecycleTrajectorySettled                LifecycleEventKind = "trajectory_settled"
-	LifecycleTrajectoryCancelled              LifecycleEventKind = "trajectory_cancelled"
-	LifecycleTrajectoryCancellationRequested  LifecycleEventKind = "trajectory_cancellation_requested"
-	LifecycleArtifactArchived                 LifecycleEventKind = "artifact_archived"
-	LifecycleTextureTurnCommitted             LifecycleEventKind = "texture_turn_committed"
-	LifecycleControlQueued                    LifecycleEventKind = "control_queued"
-	LifecycleControlDelivered                 LifecycleEventKind = "control_delivered"
-	LifecycleControlActivationFailed          LifecycleEventKind = "control_activation_failed"
+	LifecycleUpdateLate                      LifecycleEventKind = "update_late"
+	LifecycleTrajectoryStarted               LifecycleEventKind = "trajectory_started"
+	LifecycleWorkOpened                      LifecycleEventKind = "work_opened"
+	LifecycleWorkAmended                     LifecycleEventKind = "work_amended"
+	LifecycleRefsRecorded                    LifecycleEventKind = "refs_recorded"
+	LifecycleUpdateQueued                    LifecycleEventKind = "update_queued"
+	LifecycleActivationReplaced              LifecycleEventKind = "activation_replaced"
+	LifecycleUpdateApplied                   LifecycleEventKind = "update_applied"
+	LifecycleArtifactHeadAdvanced            LifecycleEventKind = "artifact_head_advanced"
+	LifecycleWorkSettled                     LifecycleEventKind = "work_settled"
+	LifecycleUpdateRejected                  LifecycleEventKind = "update_rejected"
+	LifecycleWorkRefused                     LifecycleEventKind = "work_refused"
+	LifecycleTrajectorySettled               LifecycleEventKind = "trajectory_settled"
+	LifecycleTrajectoryCancelled             LifecycleEventKind = "trajectory_cancelled"
+	LifecycleTrajectoryCancellationRequested LifecycleEventKind = "trajectory_cancellation_requested"
+	LifecycleArtifactArchived                LifecycleEventKind = "artifact_archived"
+	LifecycleTextureTurnCommitted            LifecycleEventKind = "texture_turn_committed"
+	LifecycleControlQueued                   LifecycleEventKind = "control_queued"
+	LifecycleControlDelivered                LifecycleEventKind = "control_delivered"
+	LifecycleControlActivationFailed         LifecycleEventKind = "control_activation_failed"
+	// LifecycleUpdateDelivered marks a producer report bound to its addressed
+	// activation (dispatch-time claim under consume-at-commit).
+	LifecycleUpdateDelivered LifecycleEventKind = "update_delivered"
+	// LifecycleTextureActivationFailed is the durable breaker trip: a desk
+	// activation ended without committing a turn past its bounded redelivery
+	// budget, or an update exhausted its delivery attempts.
+	LifecycleTextureActivationFailed          LifecycleEventKind = "texture_activation_failed"
 	LifecycleEngineeringAssignmentOpened      LifecycleEventKind = "co_super_assignment_opened"
 	LifecycleEngineeringAssignmentBound       LifecycleEventKind = "co_super_assignment_bound"
 	LifecycleEngineeringAssignmentReported    LifecycleEventKind = "co_super_assignment_reported"
@@ -250,6 +258,42 @@ type BindLifecycleControlDeliveryRequest struct {
 	ExpectedLifecycleVersion int64                              `json:"expected_lifecycle_version"`
 	Controls                 []BindLifecycleControlDeliveryItem `json:"controls"`
 	ActivationRefresh        *LifecycleControlActivationRefresh `json:"activation_refresh,omitempty"`
+}
+
+// ReconcileUpdateDeliveryItem carries one producer report through the
+// consume-at-commit bind/release step. ExpectedRunID is the prior
+// DeliveredToRunID CAS field: empty for a first bind, the dead run's id for a
+// stranded rebind. AttemptCountIsFinal asks the reducer to terminalize the
+// packet instead of rebinding when the delivery budget is spent.
+type ReconcileUpdateDeliveryItem struct {
+	UpdateID                 string `json:"update_id"`
+	ProducerAgentID          string `json:"producer_agent_id"`
+	ProducerUpdateID         string `json:"producer_update_id"`
+	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
+	ExpectedRunID            string `json:"expected_run_id"`
+	Exhaust                  bool   `json:"exhaust,omitempty"`
+}
+
+// ReconcileUpdateDeliveryRequest binds pending producer reports to their
+// addressed activation at dispatch and repairs stranded bindings left by runs
+// that terminated without a committed turn. A packet past the delivery
+// attempt cap terminalizes as delivered (delivery_attempts_exhausted) in the
+// same command so nothing drops silently.
+type ReconcileUpdateDeliveryRequest struct {
+	OwnerID       string `json:"owner_id"`
+	ComputerID    string `json:"computer_id"`
+	CommandID     string `json:"command_id"`
+	CommandDigest string `json:"command_digest"`
+	TrajectoryID  string `json:"trajectory_id"`
+	TargetAgentID string `json:"target_agent_id"`
+	TargetRunID   string `json:"target_run_id"`
+	// MaxAttempts caps binds per packet; items marked Exhaust terminalize
+	// instead of rebinding once this budget is spent.
+	MaxAttempts int                           `json:"max_attempts"`
+	Items       []ReconcileUpdateDeliveryItem `json:"items"`
+	// BreakerReason, when set, emits one texture_activation_failed event for
+	// the doc breaker trip observed by the reconciler (deduped by command id).
+	BreakerReason string `json:"breaker_reason,omitempty"`
 }
 
 type FailLifecycleControlActivationRequest struct {

@@ -372,13 +372,11 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		}
 		workItemID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id"))
 		if workItemID == "" {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 			return types.Revision{}, fmt.Errorf("create Texture revision: lifecycle work identity missing")
 		}
 		agentID := strings.TrimSpace(rec.AgentID)
 		expectedAgentID := currentTextureAgentID(doc.DocID)
 		if agentID == "" || agentID != expectedAgentID {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 			return types.Revision{}, fmt.Errorf("create Texture revision: run agent %q does not own lifecycle subject %q", agentID, expectedAgentID)
 		}
 		rev.RevisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
@@ -387,7 +385,6 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 		rev.ComputerID = strings.TrimSpace(doc.ComputerID)
 		graph, err := textureToolSourceGraphWriteSet(rev, materialized, rec)
 		if err != nil {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 			return types.Revision{}, fmt.Errorf("build Texture source graph shadow write: %w", err)
 		}
 		applied, applyErr := rt.applyTextureLifecycleTurn(ctx, rec, doc, in, types.TextureTurnRevision, rev, graph, in.Rationale)
@@ -410,11 +407,9 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	} else {
 		graph, graphErr := textureToolSourceGraphWriteSet(rev, materialized, rec)
 		if graphErr != nil {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 			return types.Revision{}, fmt.Errorf("build Texture source graph shadow write: %w", graphErr)
 		}
 		if err := rt.Store.CreateRevisionWithSourceGraph(ctx, rev, graph); err != nil {
-			_ = rt.Store.FailAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 			return types.Revision{}, fmt.Errorf("create Texture revision: %w", err)
 		}
 	}
@@ -433,8 +428,8 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	}
 	// Canonical lifecycle/document commit already succeeded. Mutation rows are a
 	// legacy run-completion projection and must not make durable success appear
-	// failed; restart reconciliation can derive them from the committed head.
-	_ = rt.Store.RecordAgentMutationRevision(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID, rev.RevisionID)
+	// Canonical lifecycle/document commit already succeeded — turn authority
+	// is the applied-turn row; run completion terminalizes the mutation.
 
 	rt.emitTextureDocumentRevisionEventForRun(ctx, rec, storedRev)
 	completedPayload, _ := json.Marshal(map[string]string{

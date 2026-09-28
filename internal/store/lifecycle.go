@@ -5335,6 +5335,59 @@ func (s *Store) ListDeliveredPendingProducerReports(ctx context.Context, ownerID
 	return out, nil
 }
 
+// ListBoundPendingUpdatesForTarget returns pending producer reports already
+// claimed by a delivery run for ONE target agent — the stranded-repair input
+// for consume-at-commit. Unbound and non-pending rows never appear.
+func (s *Store) ListBoundPendingUpdatesForTarget(ctx context.Context, ownerID, computerID, targetAgentID string) ([]types.CoagentSourcePacket, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	targetAgentID = strings.TrimSpace(targetAgentID)
+	if targetAgentID == "" {
+		return nil, fmt.Errorf("bound pending updates: target agent id is required")
+	}
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("bound pending updates: object graph not initialized")
+	}
+	rows, err := graph.ListJSONBodyFieldsByKindOwner(ctx, string(ogKindWorkerUpdate), ownerID, []string{
+		"$.target_agent_id",
+		"$.disposition",
+		"$.delivered_to_loop_id",
+	}, lifecycleWorkerUpdateScanCap+1)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > lifecycleWorkerUpdateScanCap {
+		return nil, fmt.Errorf("bound pending updates: scan cap %d exceeded for owner %s", lifecycleWorkerUpdateScanCap, ownerID)
+	}
+	var out []types.CoagentSourcePacket
+	for _, row := range rows {
+		if len(row.Fields) < 3 ||
+			strings.TrimSpace(row.Fields[0]) != targetAgentID ||
+			strings.TrimSpace(row.Fields[1]) != string(types.UpdatePending) ||
+			strings.TrimSpace(row.Fields[2]) == "" {
+			continue
+		}
+		update, getErr := s.GetCoagentSourcePacket(ctx, strings.TrimSpace(row.CanonicalID))
+		if getErr != nil {
+			if errors.Is(getErr, ErrNotFound) {
+				continue
+			}
+			return nil, getErr
+		}
+		if update.Direction != types.LifecyclePacketDirectionProducerReport || update.Disposition != types.UpdatePending || strings.TrimSpace(update.DeliveredToRunID) == "" {
+			continue
+		}
+		out = append(out, update)
+	}
+	return out, nil
+}
+
 func (s *Store) SettleLifecycleProducerReports(ctx context.Context, req types.SettleLifecycleProducerReportsRequest) (types.LifecycleResult, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {

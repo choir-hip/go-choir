@@ -41,20 +41,46 @@ func textureTurnCallerAgent(snapshot types.LifecycleSnapshot, agentID string) (t
 	return types.AgentRecord{}, fmt.Errorf("Texture lifecycle caller %q is absent from trajectory snapshot", agentID)
 }
 
-func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, callerAgentID string, decisions []textureUpdateDisposition, resultRef string) ([]types.TextureTurnInboundDisposition, error) {
+// textureTurnPendingInbound converts the desk's explicit update_dispositions
+// plus the consume-at-commit default into one ordered inbound set. Every
+// pending producer report addressed to this caller whose MessageSeq is covered
+// by the run's scheduled_seq (and which is unbound or bound to this run)
+// terminalizes inside the committed turn: named packets get the desk's
+// explicit disposition; un-named packets default to delivered — neutral
+// receipt, never auto-incorporated (incorporated requires a work result ref).
+// Iterate snapshot order so the synthesized inbound set is deterministic: the
+// command digest covers req.Inbound, so identical cells produce identical
+// requests (devin's digest-determinism point in the respawn-loop receipt).
+func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunRecord, decisions []textureUpdateDisposition, resultRef string) ([]types.TextureTurnInboundDisposition, error) {
+	callerAgentID := strings.TrimSpace(rec.AgentID)
+	scheduledSeq := int64(metadataIntValue(rec.Metadata, "scheduled_message_seq"))
 	pending := make(map[string]types.CoagentSourcePacket)
+	eligibleOrder := make([]string, 0, len(snapshot.Updates))
 	for _, update := range snapshot.Updates {
 		if update.Disposition != types.UpdatePending || update.Direction != types.LifecyclePacketDirectionProducerReport || strings.TrimSpace(update.TargetAgentID) != callerAgentID {
 			continue
 		}
+		// Consume boundary: packets dispatched to this activation (seq <=
+		// scheduledSeq) and either unclaimed or claimed by this run. A packet
+		// bound to another live run is left pending; reconcile re-binds
+		// stranded claims on dead runs before dispatch.
+		if scheduledSeq <= 0 || update.MessageSeq > scheduledSeq {
+			continue
+		}
+		if bound := strings.TrimSpace(update.DeliveredToRunID); bound != "" && bound != strings.TrimSpace(rec.RunID) {
+			continue
+		}
 		pending[strings.TrimSpace(update.UpdateID)] = update
+		eligibleOrder = append(eligibleOrder, strings.TrimSpace(update.UpdateID))
 	}
-	inbound := make([]types.TextureTurnInboundDisposition, 0, len(decisions))
+	inbound := make([]types.TextureTurnInboundDisposition, 0, len(eligibleOrder))
+	consumed := make(map[string]bool, len(eligibleOrder))
 	for _, decision := range decisions {
 		update, ok := pending[strings.TrimSpace(decision.UpdateID)]
 		if !ok {
-			return nil, fmt.Errorf("Texture update disposition %q does not name a pending target-bound producer report", decision.UpdateID)
+			return nil, fmt.Errorf("Texture update disposition %q does not name a pending target-bound producer report eligible to this activation", decision.UpdateID)
 		}
+		consumed[strings.TrimSpace(decision.UpdateID)] = true
 		producerWorkID := strings.TrimSpace(update.ProducerWorkItemID)
 		if producerWorkID == "" {
 			return nil, fmt.Errorf("Texture update disposition %q lacks explicit producer work identity", decision.UpdateID)
@@ -78,6 +104,21 @@ func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, callerAgentID s
 			Disposition: disposition, ProducerWorkItemID: producerWorkID,
 			WorkDisposition: workDisposition, WorkResultRef: workResultRef,
 			Reason: strings.TrimSpace(decision.Reason),
+		})
+	}
+	// Consume-at-commit default: covered packets the desk did not name
+	// terminalize as delivered inside this same atomic commit.
+	for _, updateID := range eligibleOrder {
+		if consumed[updateID] {
+			continue
+		}
+		update := pending[updateID]
+		inbound = append(inbound, types.TextureTurnInboundDisposition{
+			TargetAgentID: callerAgentID, ProducerAgentID: update.AgentID,
+			ProducerUpdateID: update.ProducerUpdateID, UpdateID: update.UpdateID,
+			Disposition:        types.UpdateDelivered,
+			ProducerWorkItemID: strings.TrimSpace(update.ProducerWorkItemID),
+			WorkDisposition:    types.WorkItemOpen,
 		})
 	}
 	return inbound, nil
@@ -183,7 +224,7 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	if resultRef == "" {
 		resultRef = strings.TrimSpace(doc.CurrentRevisionID)
 	}
-	inbound, err := textureTurnPendingInbound(snapshot, rec.AgentID, in.UpdateDispositions, resultRef)
+	inbound, err := textureTurnPendingInbound(snapshot, rec, in.UpdateDispositions, resultRef)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -305,9 +346,5 @@ func (h *Handler) commitTextureNonRevisionTurn(ctx context.Context, rec *types.R
 	if err != nil {
 		return types.LifecycleResult{}, fmt.Errorf("apply atomic Texture non-revision turn: %w", err)
 	}
-	// The lifecycle turn is the authority. Best-effort deferral prevents the
-	// legacy revision-required finalizer from misclassifying this committed
-	// no-revision outcome; it never writes the existing head as a fake revision.
-	_ = h.Store.SleepAgentMutationAfterTextureTurn(context.WithoutCancel(ctx), rec.OwnerID, computerID, doc.TrajectoryID, rec.RunID)
 	return result, nil
 }

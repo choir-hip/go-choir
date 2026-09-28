@@ -1944,7 +1944,21 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 		if agentProfileForRun(rec) == agentprofile.Research {
 			return rt.listPendingLifecyclePacketsDeliveredToRun(ctx, rec)
 		}
-		return rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+		updates, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+		if err != nil {
+			return nil, err
+		}
+		// Consume-at-commit: packets already claimed by THIS run are part of
+		// its eligible inbound set — a restart/reactivation must see them.
+		bound, bErr := rt.store.ListBoundPendingUpdatesForTarget(ctx, ownerID, computerID, agentID)
+		if bErr == nil {
+			for _, u := range bound {
+				if strings.TrimSpace(u.DeliveredToRunID) == strings.TrimSpace(rec.RunID) {
+					updates = append(updates, u)
+				}
+			}
+		}
+		return updates, nil
 	}
 	return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 }

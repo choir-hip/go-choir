@@ -16,8 +16,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-
-
 func TestLifecycleReviseCommitsOwnerRevisionAndDispatchesWake(t *testing.T) {
 	core, handler := testAPISetup(t)
 	start := startObservationLifecycle(t, core.Store())
@@ -59,6 +57,50 @@ func TestLifecycleReviseCommitsOwnerRevisionAndDispatchesWake(t *testing.T) {
 	occurrence, err := agentcore.DecodeTextureActorOccurrence(dispatches[0].content)
 	if err != nil || occurrence.Kind != agentcore.TextureActorOccurrenceDocumentRevision || occurrence.HeadRevisionID != receipt.RevisionID {
 		t.Fatalf("revision occurrence=%+v err=%v", occurrence, err)
+	}
+}
+
+func TestPendingTextureOwnerRevisionWakesOnNonDeskAgentHead(t *testing.T) {
+	base := types.LifecycleSnapshot{
+		Trajectory: types.TrajectoryRecord{Status: types.TrajectoryLive, TrajectoryID: "trajectory-1"},
+		Document:   types.Document{DocID: "doc-1"},
+	}
+	rev := types.Revision{RevisionID: "rev-x", DocID: "doc-1"}
+
+	// User edit wakes (existing contract).
+	s := base
+	s.HeadRevision = rev
+	s.HeadRevision.AuthorKind = types.AuthorUser
+	s.Document.CurrentRevisionID = rev.RevisionID
+	if _, _, ok := store.PendingTextureOwnerRevision(s); !ok {
+		t.Fatal("user-authored head must wake the desk")
+	}
+
+	// Agent-principal head (AuthorAppAgent, non-desk source) wakes — the
+	// document-channel cast is an agent-authored head revision.
+	s = base
+	s.HeadRevision = rev
+	s.HeadRevision.AuthorKind = types.AuthorAppAgent
+	s.HeadRevision.Metadata = json.RawMessage(`{"source":"coagent_texture_seed"}`)
+	s.HeadRevision.ParentRevisionID = "rev-parent"
+	s.Document.CurrentRevisionID = rev.RevisionID
+	pending, _, ok := store.PendingTextureOwnerRevision(s)
+	if !ok || pending.RevisionID != rev.RevisionID {
+		t.Fatalf("agent-principal head must wake the desk: pending=%v ok=%v", pending, ok)
+	}
+
+	// Desk-authored head (source=texture_cell / legacy edit verbs) does NOT
+	// wake — its own commit would self-respawn the desk forever.
+	for _, source := range []string{"texture_cell", "edit_texture", "apply_texture"} {
+		s = base
+		s.HeadRevision = rev
+		s.HeadRevision.AuthorKind = types.AuthorAppAgent
+		s.HeadRevision.Metadata = json.RawMessage(`{"source":"` + source + `"}`)
+		s.HeadRevision.ParentRevisionID = "rev-parent"
+		s.Document.CurrentRevisionID = rev.RevisionID
+		if _, _, pending := store.PendingTextureOwnerRevision(s); pending {
+			t.Fatalf("desk-authored head (source=%s) must not wake the desk", source)
+		}
 	}
 }
 
@@ -170,7 +212,6 @@ func TestLifecycleTextureResearchOpenerDerivesIdentitiesAndCommitsBeforeWake(t *
 		t.Fatalf("Research runtime opener replay=%+v err=%v", replay, err)
 	}
 }
-
 
 func TestTextureLifecycleCreateExactReplayAndChangedPayloadConflict(t *testing.T) {
 	core, handler := testAPISetup(t)

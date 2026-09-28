@@ -147,6 +147,11 @@ const (
 	UpdateRejected     UpdateDisposition = "rejected"
 	UpdateCancelled    UpdateDisposition = "cancelled"
 	UpdateLate         UpdateDisposition = "late"
+	// UpdateDelivered is the consume-at-commit terminal: the packet reached its
+	// addressed activation and was folded into that activation's committed turn
+	// without a semantic verdict. delivered never claims incorporation —
+	// incorporated requires an explicit desk disposition carrying work refs.
+	UpdateDelivered UpdateDisposition = "delivered"
 )
 
 // LifecyclePacketDirection distinguishes a producer's upward report from a
@@ -198,6 +203,11 @@ type CoagentSourcePacket struct {
 	CreatedAt        time.Time                  `json:"created_at"`
 	DeliveredToRunID string                     `json:"delivered_to_loop_id,omitempty"`
 	DeliveredAt      *time.Time                 `json:"delivered_at,omitempty"`
+	// DeliveryAttempts counts activation bindings under consume-at-commit
+	// redelivery. Each stranded bind retry increments it; at the cap the packet
+	// terminalizes as delivered with reason delivery_attempts_exhausted so a
+	// poison packet cannot respawn the desk forever.
+	DeliveryAttempts int `json:"delivery_attempts,omitempty"`
 }
 
 // LifecycleControlActorOccurrenceContent derives the canonical actor occurrence

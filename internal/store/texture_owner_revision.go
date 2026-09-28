@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -28,8 +29,11 @@ func TextureTurnConsumedHead(events []types.LifecycleEvent, revisionID string) b
 }
 
 // PendingTextureOwnerRevision derives the desk's owner-input trigger from the
-// document head: the head is an owner-authored revision that no Texture turn
-// has consumed. Returns the head revision and the reducer sequence of the
+// document head: the head is an owner-side revision that no Texture turn has
+// consumed. Owner-side means a user edit (AuthorUser) or an agent-principal
+// revision (AuthorAppAgent) that did not come from this desk's own authoring
+// turn — a desk-authored head must never wake the desk, or every apply commit
+// would respawn it. Returns the head revision and the reducer sequence of the
 // artifact_head_advanced event that committed it (0 when the head predates
 // event history, e.g. the initial revision).
 func PendingTextureOwnerRevision(snapshot types.LifecycleSnapshot) (types.Revision, int64, bool) {
@@ -37,7 +41,7 @@ func PendingTextureOwnerRevision(snapshot types.LifecycleSnapshot) (types.Revisi
 	if snapshot.Trajectory.Status != types.TrajectoryLive ||
 		strings.TrimSpace(head.RevisionID) == "" ||
 		head.RevisionID != snapshot.Document.CurrentRevisionID ||
-		head.AuthorKind != types.AuthorUser {
+		!textureRevisionIsOwnerInput(head) {
 		return types.Revision{}, 0, false
 	}
 	if TextureTurnConsumedHead(snapshot.Events, head.RevisionID) {
@@ -51,4 +55,37 @@ func PendingTextureOwnerRevision(snapshot types.LifecycleSnapshot) (types.Revisi
 		}
 	}
 	return head, seq, true
+}
+
+// textureRevisionIsOwnerInput reports whether a head revision is owner-side
+// input to the desk: user-authored, or agent-authored by anyone other than
+// the bound desk itself. Two exclusions keep the widening honest:
+//   - desk-authored revisions (metadata source = a desk write tool): waking on
+//     the desk's own commit would self-respawn it forever;
+//   - the trajectory's initial revision (ParentRevisionID empty): the seed is
+//     already armed by the initial-work wake, and counting it as owner input
+//     double-dispatches trajectory start.
+func textureRevisionIsOwnerInput(rev types.Revision) bool {
+	if rev.AuthorKind == types.AuthorUser {
+		return true
+	}
+	if rev.AuthorKind != types.AuthorAppAgent {
+		return false
+	}
+	if strings.TrimSpace(rev.ParentRevisionID) == "" {
+		return false
+	}
+	source := ""
+	if len(rev.Metadata) > 0 {
+		var meta map[string]any
+		if err := json.Unmarshal(rev.Metadata, &meta); err == nil {
+			source, _ = meta["source"].(string)
+		}
+	}
+	switch strings.TrimSpace(source) {
+	case "texture_cell", "edit_texture", "apply_texture":
+		return false
+	default:
+		return true
+	}
 }

@@ -751,8 +751,38 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		return nil, fmt.Errorf("load lifecycle Texture snapshot: %w", snapshotErr)
 	}
 	_, ownerHeadSeq, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot)
+
+	// Consume-at-commit stranded repair: a pending producer report bound to a
+	// run that terminated without a committed turn re-enters the eligible set
+	// — the dead run proved nothing. Packets whose delivery budget is spent
+	// terminalize as delivered (delivery_attempts_exhausted) inside the
+	// reconcile-delivery command so nothing loops forever.
+	// Receipt: docs/problems/texture-desk-activation-contract-respawn-loop-2026-09-28.md
+	stranded, exhausted, strandedErr := rt.textureStrandedDeliveries(ctx, ownerID, doc, textureAgentID)
+	if strandedErr != nil {
+		return nil, strandedErr
+	}
+	armedUpdates := make([]types.CoagentSourcePacket, 0, len(updates)+len(stranded))
+	armedUpdates = append(armedUpdates, updates...)
+	armedUpdates = append(armedUpdates, stranded...)
+
+	// Breaker (B6): consecutive dead desk activations (stale_activation or
+	// failed mutations) stop update-driven dispatch at the cap. The owner head
+	// stays armed — an unanswered owner directive is product-visible pressure,
+	// not packet bookkeeping.
+	breakerStreak, breakerErr := rt.textureActivationBreakerStreak(ctx, ownerID, doc)
+	if breakerErr != nil {
+		return nil, breakerErr
+	}
+	breakerTripped := breakerStreak >= textureDeliveryMaxAttempts
+	breakerNewestRun := ""
+	if breakerTripped {
+		breakerNewestRun = strings.TrimSpace(rt.textureBreakerNewestRunID(ctx, ownerID, doc))
+	}
+	breakerReason := fmt.Sprintf("activation_breaker: %d consecutive desk activations terminated without a committed turn", breakerStreak)
+
 	initialWorkWake := false
-	if len(updates) == 0 && !ownerHeadPending {
+	if len(armedUpdates) == 0 && !ownerHeadPending {
 		for _, work := range snapshot.WorkItems {
 			if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID {
 				initialWorkWake = true
@@ -774,7 +804,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		}
 	}
 	var scheduledSeq int64
-	for _, update := range updates {
+	for _, update := range armedUpdates {
 		if update.MessageSeq > scheduledSeq {
 			scheduledSeq = update.MessageSeq
 		}
@@ -782,13 +812,31 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 	if ownerHeadSeq > scheduledSeq {
 		scheduledSeq = ownerHeadSeq
 	}
+
+	// Nothing armed: repair exhausted bindings and record the breaker trip,
+	// then stop. No dispatch means no new delivery claims.
+	if len(armedUpdates) == 0 && !ownerHeadPending && !initialWorkWake {
+		if recErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, "", nil, exhausted, breakerTripped, breakerStreak, breakerNewestRun, breakerReason); recErr != nil {
+			return nil, recErr
+		}
+		return nil, nil
+	}
+	// Breaker-tripped update-driven pressure: exhaust the packet claims so
+	// poison packets die, emit the durable breaker event, and refuse dispatch.
+	// Owner-head pressure bypasses this gate entirely.
+	if breakerTripped && !ownerHeadPending {
+		if recErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, "", armedUpdates, exhausted, true, breakerStreak, breakerNewestRun, breakerReason); recErr != nil {
+			return nil, recErr
+		}
+		return nil, nil
+	}
 	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq); err != nil {
 		return nil, err
 	} else if reactivated {
+		if bindErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, rec.RunID, armedUpdates, exhausted, false, 0, "", ""); bindErr != nil {
+			log.Printf("texture controller: bind producer reports to reactivated run %s: %v", rec.RunID, bindErr)
+		}
 		return rec, nil
-	}
-	if len(updates) == 0 && !ownerHeadPending && !initialWorkWake {
-		return nil, nil
 	}
 	pendingCleanupCtx := context.WithoutCancel(ctx)
 	for {
@@ -827,8 +875,150 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		}
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)
 	}
+	// Bind-at-dispatch: claim the covered packets onto the new run. Failure is
+	// logged not fatal — consume-at-commit keys on scheduledSeq, so the commit
+	// consumes them regardless; stranded repair catches a missed claim later.
+	if bindErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, rec.RunID, armedUpdates, exhausted, false, 0, "", ""); bindErr != nil {
+		log.Printf("texture controller: bind producer reports to run %s: %v", rec.RunID, bindErr)
+	}
 	return rec, nil
 
+}
+
+// textureDeliveryMaxAttempts bounds dispatch-time delivery claims per packet
+// (and doubles as the consecutive-dead-activation breaker cap). Three keeps
+// poison packets terminal in seconds while tolerating one transient crash.
+const textureDeliveryMaxAttempts = 3
+
+// textureStrandedDeliveries returns pending producer reports addressed to this
+// desk whose DeliveredToRunID names a run that is terminal or absent. Reports
+// with delivery budget left rebind on dispatch; reports at the cap return in
+// the exhausted slice for terminal delivery bookkeeping.
+func (rt *Handler) textureStrandedDeliveries(ctx context.Context, ownerID string, doc types.Document, textureAgentID string) (stranded []types.CoagentSourcePacket, exhausted []types.CoagentSourcePacket, err error) {
+	if rt == nil || rt.Store == nil {
+		return nil, nil, nil
+	}
+	bound, err := rt.Store.ListBoundPendingUpdatesForTarget(ctx, ownerID, strings.TrimSpace(doc.ComputerID), textureAgentID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list bound pending Texture producer reports: %w", err)
+	}
+	dead := map[string]bool{}
+	checked := map[string]bool{}
+	for _, update := range bound {
+		if strings.TrimSpace(update.TrajectoryID) != strings.TrimSpace(doc.TrajectoryID) ||
+			strings.TrimSpace(update.TargetAgentID) != textureAgentID {
+			continue
+		}
+		runID := strings.TrimSpace(update.DeliveredToRunID)
+		live, seen := checked[runID]
+		if !seen {
+			run, getErr := rt.Store.GetLifecycleRun(ctx, ownerID, doc.ComputerID, runID)
+			switch {
+			case errors.Is(getErr, store.ErrNotFound):
+				live = false
+			case getErr != nil:
+				return nil, nil, fmt.Errorf("check bound run %s liveness: %w", runID, getErr)
+			default:
+				live = !run.State.Terminal()
+			}
+			checked[runID] = live
+		}
+		if live {
+			continue
+		}
+		if dead[update.UpdateID] {
+			continue
+		}
+		dead[update.UpdateID] = true
+		if update.DeliveryAttempts+1 > textureDeliveryMaxAttempts {
+			exhausted = append(exhausted, update)
+		} else {
+			stranded = append(stranded, update)
+		}
+	}
+	return stranded, exhausted, nil
+}
+
+// textureActivationBreakerStreak counts consecutive dead desk activations —
+// stale_activation or failed mutation rows, newest first. Any row that
+// committed a turn (completed or sleeping) or is still in flight (pending)
+// ends the streak.
+func (rt *Handler) textureActivationBreakerStreak(ctx context.Context, ownerID string, doc types.Document) (int, error) {
+	mutations, err := rt.Store.ListRecentAgentMutationsByDoc(ctx, ownerID, strings.TrimSpace(doc.ComputerID), strings.TrimSpace(doc.DocID), 2*textureDeliveryMaxAttempts)
+	if err != nil {
+		return 0, fmt.Errorf("list recent Texture mutations: %w", err)
+	}
+	streak := 0
+	for _, m := range mutations {
+		if m.State == "stale_activation" || m.State == "failed" {
+			streak++
+			continue
+		}
+		break
+	}
+	return streak, nil
+}
+
+// textureBreakerNewestRunID returns the run id of the newest counted dead
+// activation, keying breaker events so each distinct collapse emits once.
+func (rt *Handler) textureBreakerNewestRunID(ctx context.Context, ownerID string, doc types.Document) string {
+	mutations, err := rt.Store.ListRecentAgentMutationsByDoc(ctx, ownerID, strings.TrimSpace(doc.ComputerID), strings.TrimSpace(doc.DocID), 1)
+	if err != nil || len(mutations) == 0 {
+		return ""
+	}
+	return mutations[0].RunID
+}
+
+// reconcileTextureUpdateDelivery issues the consume-at-commit bookkeeping
+// command: binds covered packets to the armed run (targetRunID empty means
+// exhaust-only), terminalizes packets at their delivery cap, and records a
+// breaker event when tripped. bindCandidates carry their current claim in
+// ExpectedRunID so a stranded packet rebinds only from the dead run observed.
+func (rt *Handler) reconcileTextureUpdateDelivery(ctx context.Context, doc types.Document, textureAgentID, targetRunID string, bindCandidates, exhaustCandidates []types.CoagentSourcePacket, breakerTripped bool, breakerStreak int, breakerRunID, breakerReason string) error {
+	if rt == nil || rt.Store == nil {
+		return nil
+	}
+	if len(bindCandidates) == 0 && len(exhaustCandidates) == 0 && !breakerTripped {
+		return nil
+	}
+	ownerID := strings.TrimSpace(doc.OwnerID)
+	trajectoryID := strings.TrimSpace(doc.TrajectoryID)
+	items := make([]types.ReconcileUpdateDeliveryItem, 0, len(bindCandidates)+len(exhaustCandidates))
+	for _, u := range bindCandidates {
+		items = append(items, types.ReconcileUpdateDeliveryItem{
+			UpdateID: strings.TrimSpace(u.UpdateID), ProducerAgentID: u.AgentID, ProducerUpdateID: u.ProducerUpdateID,
+			ExpectedLifecycleVersion: u.LifecycleVersion, ExpectedRunID: strings.TrimSpace(u.DeliveredToRunID),
+		})
+	}
+	for _, u := range exhaustCandidates {
+		items = append(items, types.ReconcileUpdateDeliveryItem{
+			UpdateID: strings.TrimSpace(u.UpdateID), ProducerAgentID: u.AgentID, ProducerUpdateID: u.ProducerUpdateID,
+			ExpectedLifecycleVersion: u.LifecycleVersion, ExpectedRunID: strings.TrimSpace(u.DeliveredToRunID),
+			Exhaust: true,
+		})
+	}
+	req := types.ReconcileUpdateDeliveryRequest{
+		OwnerID: ownerID, ComputerID: strings.TrimSpace(doc.ComputerID), TrajectoryID: trajectoryID,
+		TargetAgentID: textureAgentID, TargetRunID: strings.TrimSpace(targetRunID),
+		MaxAttempts: textureDeliveryMaxAttempts, Items: items,
+	}
+	commandKey := "bind:" + strings.TrimSpace(targetRunID)
+	if strings.TrimSpace(targetRunID) == "" {
+		commandKey = "exhaust:" + breakerRunID + ":" + fmt.Sprintf("%d", breakerStreak)
+	}
+	req.CommandID = "texture-delivery:" + trajectoryID + ":" + textureAgentID + ":" + commandKey
+	if breakerTripped {
+		req.BreakerReason = breakerReason
+	}
+	var err error
+	req.CommandDigest, err = store.ComputeReconcileUpdateDeliveryDigest(req)
+	if err != nil {
+		return fmt.Errorf("digest texture update delivery: %w", err)
+	}
+	if _, err := rt.Store.ReconcileUpdateDelivery(context.WithoutCancel(ctx), req); err != nil {
+		return fmt.Errorf("reconcile texture update delivery: %w", err)
+	}
+	return nil
 }
 
 func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types.Document, textureAgentID string, scheduledSeq int64) (*types.RunRecord, bool, error) {
