@@ -28,9 +28,9 @@ func seedCellAuthorLifecycle(t *testing.T, s *store.Store, ownerID, suffix strin
 	start := types.StartLifecycleRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-cell-author-" + suffix,
 		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
-		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
-		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
-		InitialWork:    types.WorkItemRecord{WorkItemID: "work-cell-author-" + suffix, Objective: "author the supervision doc", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "work-cell-author-" + suffix, Objective: "author the supervision doc", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
 		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Cell author " + suffix, CreatedAt: now, UpdatedAt: now},
 		InitialRevision: types.Revision{RevisionID: "revision-cell-author-base-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial head content", CreatedAt: now},
 		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
@@ -176,9 +176,9 @@ func TestCommitCellTextureDecideRecordsTurn(t *testing.T) {
 		t.Fatalf("CommitCellTextureAuthor decide: %v", err)
 	}
 	var out struct {
-		Op          string `json:"op"`
-		Outcome     string `json:"outcome"`
-		HeadRevID   string `json:"head_revision_id"`
+		Op           string `json:"op"`
+		Outcome      string `json:"outcome"`
+		HeadRevID    string `json:"head_revision_id"`
 		DecisionKind string `json:"decision_kind"`
 	}
 	if err := json.Unmarshal([]byte(receipt), &out); err != nil {
@@ -193,5 +193,47 @@ func TestCommitCellTextureDecideRecordsTurn(t *testing.T) {
 	}
 	if docAfter.CurrentRevisionID != docBefore.CurrentRevisionID {
 		t.Fatalf("decide op advanced doc head: %s -> %s", docBefore.CurrentRevisionID, docAfter.CurrentRevisionID)
+	}
+}
+
+// The desk model's natural spelling "wait" normalizes to the canonical
+// wait_for_evidence at ingest — same atomic turn, same non-advancing head,
+// canonical kind on the receipt.
+// Receipt: docs/problems/texture-desk-decision-kind-wait-rejected-2026-09-28.md.
+func TestCommitCellTextureDecideNormalizesWaitKind(t *testing.T) {
+	s, err := store.Open(t.TempDir() + "/cell-decide-alias.db")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	ctx := context.Background()
+	ownerID := "owner-cell-author-alias"
+	rec := seedCellAuthorLifecycle(t, s, ownerID, "decide")
+
+	h := &Handler{Store: s, Bus: events.NewEventBus()}
+	h.createAgentMutationForRun(ctx, &rec)
+
+	docBefore, err := s.GetLifecycleDocument(ctx, ownerID, rec.ComputerID, rec.ChannelID)
+	if err != nil {
+		t.Fatalf("get lifecycle document: %v", err)
+	}
+	receipt, err := h.CommitCellTextureAuthor(ctx, &rec,
+		`{"op":"decide","decision_kind":"wait","reason":"durable engineering desk still running","next_action":"await child report","base_revision_id":"`+docBefore.CurrentRevisionID+`"}`,
+		"cell-author-idem-alias")
+	if err != nil {
+		t.Fatalf("CommitCellTextureAuthor decide(wait): %v", err)
+	}
+	var out struct {
+		DecisionKind string `json:"decision_kind"`
+		Outcome      string `json:"outcome"`
+	}
+	if err := json.Unmarshal([]byte(receipt), &out); err != nil {
+		t.Fatalf("decode decide receipt: %v", err)
+	}
+	if out.DecisionKind != "wait_for_evidence" {
+		t.Fatalf("decision_kind = %q, want canonical wait_for_evidence", out.DecisionKind)
+	}
+	if out.Outcome != string(types.TextureTurnWait) {
+		t.Fatalf("outcome = %q, want %q", out.Outcome, types.TextureTurnWait)
 	}
 }

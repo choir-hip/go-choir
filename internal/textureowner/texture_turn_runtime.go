@@ -258,7 +258,8 @@ func (h *Handler) commitTextureNonRevisionTurn(ctx context.Context, rec *types.R
 	}
 	h.textureEditMu.Lock()
 	defer h.textureEditMu.Unlock()
-	if !validTextureDecisionKind(strings.TrimSpace(in.DecisionKind)) {
+	in.DecisionKind = normalizeTextureDecisionKind(in.DecisionKind)
+	if !validTextureDecisionKind(in.DecisionKind) {
 		return types.LifecycleResult{}, fmt.Errorf("decision_kind must be one of delegation_opened, delegation_skipped, delegation_deferred, wait_for_evidence, blocker, no_worker_needed")
 	}
 	if strings.TrimSpace(in.Reason) == "" {

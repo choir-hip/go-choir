@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"unicode"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 
@@ -18,7 +18,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
 
 type textureStructuredEdit struct {
 	Op             string                   `json:"op"`
@@ -93,7 +92,6 @@ func validateTextureControls(toolName string, controls []textureControlArgs) err
 	return nil
 }
 
-
 type materializedTextureEdit struct {
 	Content               string
 	BodyDoc               json.RawMessage
@@ -118,10 +116,6 @@ func isTextureWriteToolName(name string) bool {
 	}
 }
 
-
-
-
-
 type recordTextureDecisionArgs struct {
 	DocID              string                     `json:"doc_id,omitempty"`
 	BaseRevisionID     string                     `json:"base_revision_id,omitempty"`
@@ -133,7 +127,17 @@ type recordTextureDecisionArgs struct {
 	Controls           []textureControlArgs       `json:"controls,omitempty"`
 }
 
-
+// normalizeTextureDecisionKind maps the desk model's natural spellings onto
+// the canonical enum. "wait" is the common guess for wait_for_evidence;
+// receipt: docs/problems/texture-desk-decision-kind-wait-rejected-2026-09-28.md.
+func normalizeTextureDecisionKind(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "wait", "waiting", "idle":
+		return "wait_for_evidence"
+	default:
+		return strings.TrimSpace(kind)
+	}
+}
 
 func validTextureDecisionKind(kind string) bool {
 	switch kind {

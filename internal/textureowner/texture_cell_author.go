@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"strings"
 )
 
 // texture_cell_author.go — the full-RLM texture authoring commit path (R3d).
@@ -27,13 +27,13 @@ type cellTextureAuthorArgs struct {
 	DocID          string `json:"doc_id,omitempty"`
 	BaseRevisionID string `json:"base_revision_id,omitempty"`
 	// apply fields — one of content (full replace) or edits (structured).
-	Operation        string                  `json:"operation,omitempty"`
-	Content          string                  `json:"content,omitempty"`
-	StructuredEdits  []textureStructuredEdit `json:"edits,omitempty"`
-	Rationale        string                  `json:"rationale,omitempty"`
-	WorkDisposition  string                  `json:"work_disposition,omitempty"`
+	Operation          string                     `json:"operation,omitempty"`
+	Content            string                     `json:"content,omitempty"`
+	StructuredEdits    []textureStructuredEdit    `json:"edits,omitempty"`
+	Rationale          string                     `json:"rationale,omitempty"`
+	WorkDisposition    string                     `json:"work_disposition,omitempty"`
 	UpdateDispositions []textureUpdateDisposition `json:"update_dispositions,omitempty"`
-	Controls         []textureControlArgs    `json:"controls,omitempty"`
+	Controls           []textureControlArgs       `json:"controls,omitempty"`
 	// decide fields.
 	DecisionKind string   `json:"decision_kind,omitempty"`
 	Reason       string   `json:"reason,omitempty"`
@@ -160,7 +160,7 @@ func (h *Handler) commitCellTextureDecide(ctx context.Context, rec *types.RunRec
 	dec := recordTextureDecisionArgs{
 		DocID:              strings.TrimSpace(in.DocID),
 		BaseRevisionID:     strings.TrimSpace(in.BaseRevisionID),
-		DecisionKind:       strings.TrimSpace(in.DecisionKind),
+		DecisionKind:       normalizeTextureDecisionKind(in.DecisionKind),
 		Reason:             strings.TrimSpace(in.Reason),
 		EvidenceRefs:       in.EvidenceRefs,
 		NextAction:         strings.TrimSpace(in.NextAction),
