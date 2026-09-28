@@ -1,6 +1,6 @@
 # M11 blocker: guest restart cancels the bound desk run terminally; the selfdev operation strands `executing` forever
 
-**Status:** open, blocking M11 episode leg `primary_started -> awaiting_approval`.
+**Status:** REPAIRED 2026-09-28 (receipt updated post-landing). Both fix paths from "Fix options" landed: **A** — restart-cancelled document casts recast at bumped attempt (`301fcc21` implementation, `530fcdb2` verification casts; `latestCancelledForRestartRecast`/`reconcileEngineeringCast`, internal/agentcore/engineering_desk.go). **B** — bound-desk death drives the op to `failed` with `terminal_error` (`failBoundSelfdevOperation`, internal/agentcore/engineering_assignment_fate.go:307, looping executing→frozen→verified→awaiting_approval→requested). Deliberate cancels still stay dead; only restart-cancelled rows re-execute. Deployed proof of the closure criterion below is pending the texture-desk contract fix (docs/problems/texture-desk-applytexture-contract-failure-2026-09-28.md).
 **First observed:** 2026-09-27, staging `b0a21b18`, probe run
 (op `selfdev-75b0c0e8ab796cecaeae01444222fe3d`, computer
 `computer-f53b4421fed0a62d2dd6ebc982e4b8a2`, VM `vm-a597952dab44a90b9db0de622fe30865`).
