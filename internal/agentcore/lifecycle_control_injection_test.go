@@ -646,7 +646,9 @@ func TestPersistentManagementReportToTextureCanonicalReplayWakeAndInjection(t *t
 	}
 	injected := rt.coagentUpdateTurnInjector(&textureRun)
 	messages, err := injected(false)
-	if err != nil || len(messages) != 1 || !strings.Contains(string(messages[0]), "inspected assignment progress") || !strings.Contains(string(messages[0]), fixture.trajectoryID) {
+	// Pointer wake: the update id + trajectory are named; the payload body
+	// ("inspected assignment progress") is cell-only via choir.Updates().
+	if err != nil || len(messages) != 1 || !strings.Contains(string(messages[0]), updates[0].UpdateID) || !strings.Contains(string(messages[0]), fixture.trajectoryID) || strings.Contains(string(messages[0]), "inspected assignment progress") {
 		t.Fatalf("Texture report injection = %s err=%v", messages, err)
 	}
 	if legacy, err := s.ListCoagentMailboxBacklog(context.Background(), ownerID, fixture.control.AgentID, 10); err != nil || len(legacy) != 0 {
@@ -1410,8 +1412,10 @@ func TestFingerprintBoundResearchRunAcceptsLaterControlWithoutSecondRun(t *testi
 			appendAuthenticatedInjectionForTest(t, s, bound, message)
 		}
 	}
-	if strings.Count(joined, content) != 1 {
-		t.Fatalf("later control injection count=%d messages=%s", strings.Count(joined, content), joined)
+	// Pointer contract: the injected turn names the later control's update
+	// id (payload lives in-cell via choir.Updates(), never in chat).
+	if !strings.Contains(joined, later.UpdateID) || strings.Contains(joined, content) {
+		t.Fatalf("later control injection missing update id or leaking payload messages=%s", joined)
 	}
 	repeated, err := rt.prependInitialCoagentUpdatePackets(context.Background(), &bound, []json.RawMessage{json.RawMessage(`{"role":"user","content":"base"}`)})
 	if err != nil || len(repeated) != 1 {
@@ -1971,20 +1975,27 @@ func TestPersistentManagementRewakeReceivesPendingEngineeringCancellationReports
 		t.Fatalf("pending updates missing control or cancel report: hasControl=%v hasCancelReport=%v updates=%+v", hasControl, hasCancelReport, updates)
 	}
 
-	// Verify that the turn injector injects the cancellation report into the prompt
+	// The turn injector delivers a pointer wake: the cancellation report's
+	// update id arrives; the reason text stays in-cell (choir.Updates()).
 	injector := rt.coagentUpdateTurnInjector(secondRun)
 	injected, err := injector(false)
 	if err != nil || len(injected) == 0 {
 		t.Fatalf("injected turns=%+v err=%v", injected, err)
 	}
-	foundCancelText := false
+	foundCancelPtr, leakedReason := false, false
 	for _, raw := range injected {
+		if strings.Contains(string(raw), cancelled.Update.UpdateID) {
+			foundCancelPtr = true
+		}
 		if strings.Contains(string(raw), "restart revoked absent capsule") {
-			foundCancelText = true
+			leakedReason = true
 		}
 	}
-	if !foundCancelText {
-		t.Fatalf("injected turns do not contain cancellation reason: %s", injected)
+	if !foundCancelPtr {
+		t.Fatalf("injected turns missing cancellation update id: %s", injected)
+	}
+	if leakedReason {
+		t.Fatalf("wake turn must not inline the cancellation reason: %s", injected)
 	}
 }
 

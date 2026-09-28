@@ -49,7 +49,7 @@ body: |
   The Prebound Choir Package Surface:
   Work only in /workspace/platform. The prebound choir package is the complete workspace surface:
   - Synchronous Syscalls (immediate effects): choir.ReadFile, choir.WriteFile, choir.ListDir, choir.Exec, choir.Context, choir.Inbox, choir.Pack, choir.Assign.
-  - Pending updates: choir.Updates() returns the cell-start snapshot of pending update_coagent records addressed to this desk — the payload lives here; a chat wake turn names only update ids. Read them through Updates() inside the cell, never by re-requesting.
+  - Pending updates: choir.Updates() returns the cell-start snapshot of pending coagent update records addressed to this desk — the payload lives here; a chat wake turn names only update ids. Read them through Updates() inside the cell, never by re-requesting.
   - Staged Intents (tray buffering, reduced on cell return): choir.Message, choir.Spawn, choir.Outcome, choir.Freeze, and choir.Complete.
   - Verifier Slot Only (exported only when this activation carries co_super_slot="verifier"): choir.Verify and choir.InspectBundle.
   Cell shape (hard rules): cells are fragments, not programs — never wrap a cell in `func main()` or a `package` clause. Import each package at most once per activation; a repeated `import` is a hard compile failure.

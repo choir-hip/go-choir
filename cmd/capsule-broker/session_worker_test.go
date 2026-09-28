@@ -115,7 +115,7 @@ func buildBrokerBinary(t *testing.T) string {
 
 func evalCell(t *testing.T, w *sessionWorker, source string) yaegikernel.SessionResult {
 	t.Helper()
-	res, err := w.eval(source, nil, 60*time.Second)
+	res, err := w.eval(source, nil, nil, 60*time.Second)
 	if err != nil {
 		t.Fatalf("eval %q: %v", source, err)
 	}
@@ -183,7 +183,7 @@ func TestSessionWorkerResearchDeniedEndToEnd(t *testing.T) {
 	if res := evalCell(t, w, `import "choir"`); res.Error != "" {
 		t.Fatalf("import choir: %s", res.Error)
 	}
-	res, err := w.eval(`choir.WriteFile("x.txt", "x")`, nil, 60*time.Second)
+	res, err := w.eval(`choir.WriteFile("x.txt", "x")`, nil, nil, 60*time.Second)
 	if err != nil {
 		t.Fatalf("transport: %v", err)
 	}
