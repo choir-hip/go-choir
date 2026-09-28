@@ -105,6 +105,55 @@ func TestSessionCompileRejectionPreservesHeap(t *testing.T) {
 	}
 }
 
+// TestSessionProgramShapedCells (2026-09-27 texture starvation regression):
+// models emit full `package main` programs, not fragments. Repeated imports
+// must dedupe silently, func main must be renamed-and-called once, and
+// session state must persist across every shape.
+func TestSessionProgramShapedCells(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	sess, err := NewSession(nil, nil)
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+	defer sess.Close()
+
+	// Two full-program cells: the second re-imports fmt and re-declares
+	// main. Pre-normalization the second failed `fmt/_.go redeclared` and
+	// the desk retried the identical program forever.
+	for i, src := range []string{
+		"package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"one\") }",
+		"package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"two\") }",
+	} {
+		res, err := sess.Eval(ctx, src)
+		if err != nil {
+			t.Fatalf("program cell %d: %v", i, err)
+		}
+		want := map[int]string{0: "one\n", 1: "two\n"}[i]
+		if res.Stdout != want {
+			t.Fatalf("program cell %d stdout = %q, want %q", i, res.Stdout, want)
+		}
+	}
+
+	// A func main from an earlier cell must not re-execute on later cells.
+	res, err := sess.Eval(ctx, `fmt.Println("after")`)
+	if err != nil || res.Stdout != "after\n" {
+		t.Fatalf("post-main cell stdout = %q err=%v, want after only", res.Stdout, err)
+	}
+	// A mid-session fresh import installs as its own decl fragment; the
+	// following statement cells use it, and session state persists.
+	if _, err := sess.Eval(ctx, `import "strings"`); err != nil {
+		t.Fatalf("mid-session import: %v", err)
+	}
+	if _, err := sess.Eval(ctx, `x := strings.ToUpper("rlm")`); err != nil {
+		t.Fatalf("new-import use: %v", err)
+	}
+	res, err = sess.Eval(ctx, `x`)
+	if err != nil || !res.Value.IsValid() || res.Value.Interface() != "RLM" {
+		t.Fatalf("persisted value = %v %v, want RLM", res.Value, err)
+	}
+}
+
 // TestSessionFailureKinds (settlement-gate item 1): the typed disposition and
 // kind travel separately from the verbatim message; timeout and panic are
 // unsafe-to-reuse with their own kinds, preflight preserves.

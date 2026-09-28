@@ -674,6 +674,9 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			reduction := rlmReductionForCall(ctx, rt, toolCtx)
 			if reduction.active {
 				req.Inbox = reduction.inbox
+				// RLM prompt-as-variable: pending update_coagent records ride
+				// the request so choir.Updates() exposes them in the cell.
+				req.Updates = pendingCellUpdates(ctx, rt, toolregistry.ExecutionContextFrom(ctx))
 			}
 			result, err := toolCtx.Executor.GoEval(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
 			if err != nil {

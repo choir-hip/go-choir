@@ -848,8 +848,14 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 	if len(provider.requests) < 2 {
 		t.Fatalf("provider calls = %d, want second call after injected update", len(provider.requests))
 	}
-	if !toolLoopRequestContains(provider.requests[1], "WARM_UPDATE_CONTENT") {
-		t.Fatalf("second provider request did not contain injected update: %+v", provider.requests[1].Messages)
+	// RLM prompt-as-variable: the wake turn is a pointer — it names the
+	// update id and never inlines the payload (the cell reads the body via
+	// choir.Updates()).
+	if !toolLoopRequestContains(provider.requests[1], "update-warm-1") {
+		t.Fatalf("second provider request did not contain injected update id: %+v", provider.requests[1].Messages)
+	}
+	if toolLoopRequestContains(provider.requests[1], "WARM_UPDATE_CONTENT") {
+		t.Fatalf("wake turn must not inline the update payload: %+v", provider.requests[1].Messages)
 	}
 	storedRun, err := s.GetRun(ctx, rec.RunID)
 	if err != nil {
@@ -889,7 +895,9 @@ func (p *warmUpdateInjectionProvider) CallWithTools(ctx context.Context, req pro
 		}, nil
 	}
 	text := "processed warm update"
-	if !toolLoopRequestContains(req, "WARM_UPDATE_CONTENT") {
+	// The wake turn is a pointer: the update id arrives, the payload does
+	// not (the cell reads it via choir.Updates()).
+	if !toolLoopRequestContains(req, "update-warm-1") {
 		text = "missing warm update"
 	}
 	return &provideriface.ToolLoopResponse{

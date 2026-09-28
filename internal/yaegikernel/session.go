@@ -32,6 +32,13 @@ type Session struct {
 	stderr    *switchWriter
 	poisoned  error
 	closed    bool
+	// importedPaths tracks package paths earlier successful cells installed,
+	// so normalization drops repeated import decls (yaegi compiles every
+	// cell as _.go in the same package — a re-import is a hard redeclared
+	// error). cellSeq numbers renamed func main decls (a declared main
+	// re-executes on every later cell otherwise).
+	importedPaths map[string]bool
+	cellSeq       int
 }
 
 // switchWriter routes interpreter output to the current cell's buffer. The
@@ -70,7 +77,7 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 	if err := i.Use(buildFilteredSymbols(allowlist, extraSymbols)); err != nil {
 		return nil, fmt.Errorf("yaegi: load session symbols: %w", err)
 	}
-	return &Session{interp: i, allowlist: allowlist, stdout: stdout, stderr: stderr}, nil
+	return &Session{interp: i, allowlist: allowlist, stdout: stdout, stderr: stderr, importedPaths: map[string]bool{}}, nil
 }
 
 // Eval runs one cell on the persistent interpreter. Cells share variables,
@@ -96,6 +103,11 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 		res.Duration = time.Since(start)
 		return res, &EvalError{err: err, Reuse: ReusePreserve, Kind: DiagImportPreflight}
 	}
+	// Normalize the program-shaped sources models actually emit into the
+	// fragment shape this persistent session accepts: drop the package
+	// clause, drop import decls for paths already loaded, and rename
+	// func main to a unique callable so it can't auto-rerun on later cells.
+	src = s.normalizeCellSource(src)
 	// Compile gate: a Compile error proves nothing executed (isolation matrix
 	// 2026-09-09: failed Compile leaves the heap exactly intact), so the
 	// session is preserved. A successful Compile may install symbols, so every
@@ -177,6 +189,9 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 		default:
 		}
 		if evalErr == nil {
+			// The cell's import decls are live on the session now; record
+			// their paths so normalization drops repeats on later cells.
+			s.markCellImports(src)
 			return finish(nil, "")
 		}
 		return finish(evalErr, classifyExecuteError(evalErr, panicked))

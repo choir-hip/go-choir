@@ -31,6 +31,10 @@ type SessionFrame struct {
 	// and discrepancies — never score fields, by construction — read inside
 	// the cell through choir.Pack().
 	Pack *types.ActingPack `json:"pack,omitempty"`
+	// Updates carries the pending update_coagent records bound for this
+	// cell (RLM prompt-as-variable): the cell reads them via
+	// choir.Updates(); the wake turn in chat carries only their ids.
+	Updates []PendingUpdate `json:"updates,omitempty"`
 }
 
 // DocSnapshot is the bound texture document's head a cell authors against:

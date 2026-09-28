@@ -160,13 +160,13 @@ func (w *sessionWorker) awaitReady(timeout time.Duration) error {
 // inbox snapshot rides the frame for cell-start injection. A timeout kills
 // the worker; a poisoned cell (worker exits) is surfaced so the caller
 // respawns. Reserved output streams are tolerated and skipped.
-func (w *sessionWorker) eval(source string, inbox []yaegikernel.IncomingMessage, timeout time.Duration) (yaegikernel.SessionResult, error) {
+func (w *sessionWorker) eval(source string, inbox []yaegikernel.IncomingMessage, updates []yaegikernel.PendingUpdate, timeout time.Duration) (yaegikernel.SessionResult, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.dead {
 		return yaegikernel.SessionResult{}, fmt.Errorf("session worker dead, respawn required")
 	}
-	frame, err := json.Marshal(yaegikernel.SessionFrame{ID: nextSessionFrameID(), Source: source, Inbox: inbox})
+	frame, err := json.Marshal(yaegikernel.SessionFrame{ID: nextSessionFrameID(), Source: source, Inbox: inbox, Updates: updates})
 	if err != nil {
 		return yaegikernel.SessionResult{}, err
 	}
@@ -397,7 +397,7 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		resultBytes, _ := json.Marshal(result)
 		return BrokerRPCResponse{Result: resultBytes}
 	}
-	res, err := w.eval(p.Source, p.Inbox, timeout)
+	res, err := w.eval(p.Source, p.Inbox, p.Updates, timeout)
 	if err != nil {
 		b.dropSession(cap.AgentRunID)
 		result := capsule.GoEvalResult{ExitCode: 1, Error: fmt.Sprintf("session eval: %v", err), Duration: time.Since(start), Reuse: yaegikernel.ReuseUnsafeToReuse, DiagKind: yaegikernel.DiagWorker}

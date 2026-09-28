@@ -274,19 +274,20 @@ func (w *DeskSessionWorker) Eval(ctx context.Context, source string) (SessionRes
 // session frame so choir.Inbox() inside the cell reads delivered acts
 // without a network roundtrip — the desk analogue of GoEvalRequest.Inbox.
 func (w *DeskSessionWorker) EvalInbox(ctx context.Context, source string, inbox []IncomingMessage) (SessionResult, error) {
-	return w.EvalCell(ctx, source, inbox, nil, nil)
+	return w.EvalCell(ctx, source, inbox, nil, nil, nil)
 }
 
 // EvalCell runs one cell with the full frame payload: the inbox snapshot,
-// the acting desk's score-free commitment pack (R4, choir.Pack()), and for
-// a texture desk the bound document's head (R3d, choir.ReadDoc()).
-func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox []IncomingMessage, doc *DocSnapshot, pack *types.ActingPack) (SessionResult, error) {
+// the acting desk's score-free commitment pack (R4, choir.Pack()), the
+// pending update_coagent records (choir.Updates()), and for a texture desk
+// the bound document's head (R3d, choir.ReadDoc()).
+func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox []IncomingMessage, doc *DocSnapshot, pack *types.ActingPack, updates []PendingUpdate) (SessionResult, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.dead {
 		return SessionResult{}, fmt.Errorf("desk session worker dead")
 	}
-	frame := SessionFrame{ID: nextDeskSessionFrameID(), Source: source, Inbox: inbox, Doc: doc, Pack: pack}
+	frame := SessionFrame{ID: nextDeskSessionFrameID(), Source: source, Inbox: inbox, Doc: doc, Pack: pack, Updates: updates}
 	raw, err := json.Marshal(frame)
 	if err != nil {
 		return SessionResult{}, fmt.Errorf("desk eval marshal: %w", err)

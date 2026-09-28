@@ -152,7 +152,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				evalCtx, cancel = context.WithTimeout(ctx, time.Duration(input.TimeoutMS)*time.Millisecond)
 				defer cancel()
 			}
-			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack)
+			// RLM prompt-as-variable: pending update_coagent records ride the
+			// frame so choir.Updates() exposes them inside the cell. The chat
+			// wake turn carries only ids.
+			updates := pendingCellUpdates(ctx, rt, execCtx)
+			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates)
 
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
@@ -230,6 +234,50 @@ func textureDocSnapshotForRun(ctx context.Context, rt *Runtime, rec *types.RunRe
 		AuthorKind: string(rev.AuthorKind),
 		Content:    rev.Content,
 	}
+}
+
+// pendingCellUpdates loads the pending update_coagent records addressed to
+// this desk's agent and maps them into the cell-visible PendingUpdate shape
+// (RLM prompt-as-variable: the payload lives on the frame, not in chat).
+func pendingCellUpdates(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) []yaegikernel.PendingUpdate {
+	if rt == nil || rt.store == nil || execCtx.RunRecord == nil {
+		return nil
+	}
+	rec := execCtx.RunRecord
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	agentID := strings.TrimSpace(rec.AgentID)
+	if ownerID == "" || agentID == "" || !runSupportsCoagentUpdateInjection(rec) {
+		return nil
+	}
+	updates, err := rt.pendingCoagentUpdatesForRun(ctx, rec, ownerID, agentID, 100)
+	if err != nil {
+		return nil
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	// The cell variable exposes the desk's pending backlog — every
+	// deliverable update not yet disposed by a terminal write — regardless
+	// of whether a chat wake turn already named it. Seen-ness exists to
+	// dedupe chat injection, not to hide the payload from the cell.
+	out := make([]yaegikernel.PendingUpdate, 0, len(updates))
+	for _, u := range updates {
+		id := strings.TrimSpace(u.UpdateID)
+		if id == "" || !coagentUpdateDeliverableForRun(rec, u) {
+			continue
+		}
+		out = append(out, yaegikernel.PendingUpdate{
+			UpdateID:        id,
+			FromAgentID:     strings.TrimSpace(u.AgentID),
+			FromRole:        strings.TrimSpace(u.Role),
+			ChannelID:       strings.TrimSpace(u.ChannelID),
+			MessageSeq:      u.MessageSeq,
+			WorkItemID:      strings.TrimSpace(u.WorkItemID),
+			Packet:          u.Packet,
+			HumanProjection: strings.TrimSpace(u.Content),
+		})
+	}
+	return out
 }
 
 // deskWorkerBinary is the executable the session worker re-executes as

@@ -29,7 +29,10 @@ type coagentUpdatePacket struct {
 	TargetAgentID     string                    `json:"target_agent_id,omitempty"`
 	ChannelID         string                    `json:"channel_id,omitempty"`
 	TrajectoryID      string                    `json:"trajectory_id,omitempty"`
-	Updates           []coagentUpdatePacketItem `json:"updates"`
+	// Updates is gone from the wire shape — pending payloads ride the cell
+	// frame as choir.Updates(), not the chat packet. The wake turn emits
+	// update_refs (ids + routing) and id-only stubs for dedupe; see
+	// buildCoagentUpdateUserMessages.
 	SourceEntities    []types.SourceEntity      `json:"source_entities,omitempty"`
 	SourceRejections  []coagentSourceRejection  `json:"source_rejections,omitempty"`
 	SourceInstruction string                    `json:"source_instruction,omitempty"`
@@ -42,16 +45,6 @@ type coagentSourceRejection struct {
 	Kind      string `json:"kind,omitempty"`
 	TargetURI string `json:"target_uri,omitempty"`
 	Reason    string `json:"reason"`
-}
-
-type coagentUpdatePacketItem struct {
-	UpdateID        string                           `json:"update_id"`
-	FromAgentID     string                           `json:"from_agent_id,omitempty"`
-	FromRole        string                           `json:"from_role,omitempty"`
-	ChannelID       string                           `json:"channel_id,omitempty"`
-	MessageSeq      int64                            `json:"message_seq,omitempty"`
-	Packet          types.CoagentSourcePacketPayload `json:"packet"`
-	HumanProjection string                           `json:"human_projection"`
 }
 
 func (rt *Runtime) projectTerminalOutcomeContent(ctx context.Context, updates []types.CoagentSourcePacket) ([]types.CoagentSourcePacket, error) {
@@ -94,9 +87,25 @@ func (rt *Runtime) projectTerminalOutcomeContent(ctx context.Context, updates []
 	return projected, nil
 }
 
+// buildCoagentUpdateUserMessages emits the wake turn for pending updates.
+// RLM prompt-as-variable: the chat turn is a *pointer* — update ids, sender
+// identity, and the desk's terminal-write verb — never the payload. The
+// payload is bound inside the cell as choir.Updates(); the model reads it
+// there and disposes each update through its terminal write.
 func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliveryPhase string, targetAgentID string, sourceEntities []types.SourceEntity, sourceRejections []coagentSourceRejection) ([]json.RawMessage, []string, error) {
 	if len(updates) == 0 {
 		return nil, nil, nil
+	}
+	// Pointer items carry identity + routing metadata only. Packet bodies
+	// and human projections are deliberately absent — the cell reads them
+	// through choir.Updates() bound on the eval frame.
+	type updateRef struct {
+		UpdateID    string `json:"update_id"`
+		FromAgentID string `json:"from_agent_id,omitempty"`
+		FromRole    string `json:"from_role,omitempty"`
+		ChannelID   string `json:"channel_id,omitempty"`
+		MessageSeq  int64  `json:"message_seq,omitempty"`
+		Kind        string `json:"kind,omitempty"`
 	}
 	packet := coagentUpdatePacket{
 		Schema:            lifecycleInjectionEnvelopeSchemaV1,
@@ -107,9 +116,9 @@ func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliver
 		SourceRejections:  sourceRejections,
 		SourceInstruction: coagentUpdateSourceInstruction(sourceEntities, sourceRejections),
 		Instruction:       coagentUpdateInstruction(deliveryPhase),
-		Updates:           make([]coagentUpdatePacketItem, 0, len(updates)),
 	}
 	updateIDs := make([]string, 0, len(updates))
+	refs := make([]updateRef, 0, len(updates))
 	for _, update := range updates {
 		id := strings.TrimSpace(update.UpdateID)
 		if id != "" {
@@ -126,21 +135,39 @@ func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliver
 		if packet.TrajectoryID == "" {
 			packet.TrajectoryID = strings.TrimSpace(update.TrajectoryID)
 		}
-		packet.Updates = append(packet.Updates, coagentUpdatePacketItem{
-			UpdateID:        id,
-			FromAgentID:     strings.TrimSpace(update.AgentID),
-			FromRole:        strings.TrimSpace(update.Role),
-			ChannelID:       strings.TrimSpace(update.ChannelID),
-			MessageSeq:      update.MessageSeq,
-			Packet:          normalizeCoagentSourcePacketPayload(update.Packet),
-			HumanProjection: strings.TrimSpace(update.Content),
+		refs = append(refs, updateRef{
+			UpdateID:    id,
+			FromAgentID: strings.TrimSpace(update.AgentID),
+			FromRole:    strings.TrimSpace(update.Role),
+			ChannelID:   strings.TrimSpace(update.ChannelID),
+			MessageSeq:  update.MessageSeq,
+			Kind:        strings.TrimSpace(update.Packet.Kind),
 		})
 	}
-	packetJSON, err := json.Marshal(packet)
+	// Pointer-only wire shape: `update_refs` replaces the payload-bearing
+	// `updates` list. lifecycleInjectionIDsFromRunMemory still reads
+	// `updates[].update_id`, so keep an id-only array for dedupe.
+	payload, err := json.Marshal(map[string]any{
+		"schema":             packet.Schema,
+		"packet_type":        packet.PacketType,
+		"delivery_phase":     packet.DeliveryPhase,
+		"target_agent_id":    packet.TargetAgentID,
+		"owner_id":           packet.OwnerID,
+		"computer_id":        packet.ComputerID,
+		"target_run_id":      packet.TargetRunID,
+		"channel_id":         packet.ChannelID,
+		"trajectory_id":      packet.TrajectoryID,
+		"instruction":        packet.Instruction + " The payloads are already bound inside your cell as choir.Updates() — read them there; do not re-request them.",
+		"source_entities":    packet.SourceEntities,
+		"source_rejections":  packet.SourceRejections,
+		"source_instruction": packet.SourceInstruction,
+		"update_refs":        refs,
+		"updates":            updateIDsToStubs(updateIDs),
+	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal coagent update packet: %w", err)
 	}
-	text := strings.TrimSpace(fmt.Sprintf("%s\n\n%s", coagentUpdatePacketPreamble(deliveryPhase), string(packetJSON)))
+	text := strings.TrimSpace(fmt.Sprintf("%s\n\n%s", coagentUpdatePacketPreamble(deliveryPhase), string(payload)))
 	msg, err := json.Marshal(map[string]any{
 		"role": "user",
 		"content": []map[string]string{{
@@ -152,6 +179,17 @@ func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliver
 		return nil, nil, fmt.Errorf("marshal coagent update user message: %w", err)
 	}
 	return []json.RawMessage{msg}, updateIDs, nil
+}
+
+// updateIDsToStubs emits `[{update_id: "…"}]` so the dedupe reader
+// (lifecycleInjectionIDsFromRunMemory) sees the same ids on the slimmed
+// wire shape as the old payload-bearing one.
+func updateIDsToStubs(ids []string) []map[string]string {
+	out := make([]map[string]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, map[string]string{"update_id": id})
+	}
+	return out
 }
 
 func coagentUpdateSourceInstruction(sourceEntities []types.SourceEntity, sourceRejections []coagentSourceRejection) string {

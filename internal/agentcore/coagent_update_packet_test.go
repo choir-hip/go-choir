@@ -59,8 +59,14 @@ func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 	if !strings.Contains(text, "coagent_update") {
 		t.Fatalf("packet text missing typed metadata: %q", text)
 	}
-	if !strings.Contains(text, "A sourced update arrived.") {
-		t.Fatalf("packet text missing update body: %q", text)
+	if !strings.Contains(text, `"update_id":"upd-1"`) {
+		t.Fatalf("packet text missing update id pointer: %q", text)
+	}
+	// RLM prompt-as-variable: the payload must NOT be in chat — the cell
+	// reads it through choir.Updates(). Assert body text and packet claims
+	// never inline.
+	if strings.Contains(text, "A sourced update arrived.") || strings.Contains(text, "human_projection") || strings.Contains(text, "grounded fact") {
+		t.Fatalf("packet text must not inline the payload: %q", text)
 	}
 	if !strings.Contains(text, `"source_entities"`) ||
 		!strings.Contains(text, "src-source-service-demo") ||

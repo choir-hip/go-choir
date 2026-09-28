@@ -117,6 +117,10 @@ type GoEvalRequest struct {
 	AllowedPackages []string                      `json:"allowed_packages"` // kernel allowlist override (optional)
 	TimeoutMS       int                           `json:"timeout_ms"`       // timeout in milliseconds (0 = broker default)
 	Inbox           []yaegikernel.IncomingMessage `json:"inbox,omitempty"`
+	// Updates carries the pending update_coagent records bound for this
+	// cell (RLM prompt-as-variable): the cell reads them via
+	// choir.Updates(); the wake turn in chat carries only their ids.
+	Updates         []yaegikernel.PendingUpdate   `json:"updates,omitempty"`
 }
 
 // GoEvalResult is the result of evaluating Go source in the capsule. Intents

@@ -47,6 +47,10 @@ type ChoirScope struct {
 	// committed/addressed acts joined with resolution observations —
 	// score-free by construction (types.ActingPack has no score fields).
 	pack *types.ActingPack
+	// updates is the cell-start snapshot of pending update_coagent records
+	// (RLM prompt-as-variable): read via Updates(). The wake turn in chat
+	// carries only update ids; the payload lives here.
+	updates []PendingUpdate
 }
 
 // SessionRoleResearch is the read-only role: sessions bound to it observe
@@ -98,6 +102,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc
 			s.pack = frame.Pack
+			s.updates = append([]PendingUpdate(nil), frame.Updates...)
 		},
 		End: func() []StagedIntent {
 			var out []StagedIntent
@@ -108,6 +113,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.inbox = nil
 			s.doc = nil
 			s.pack = nil
+			s.updates = nil
 			return out
 		},
 	}
@@ -194,6 +200,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"ListDir":  reflect.ValueOf(s.ListDir),
 		"Context":  reflect.ValueOf(s.Context),
 		"Inbox":    reflect.ValueOf(s.Inbox),
+		"Updates":  reflect.ValueOf(s.Updates),
 		"Pack":     reflect.ValueOf(s.Pack),
 	}
 	verbs := map[string]func() reflect.Value{
@@ -411,6 +418,18 @@ func (s *ChoirScope) Inbox() []IncomingMessage {
 		return []IncomingMessage{}
 	}
 	return append([]IncomingMessage(nil), s.inbox...)
+}
+
+// Updates returns the cell-start snapshot of pending update_coagent records.
+// The RLM contract puts the payload here — a REPL variable — rather than
+// inline in the model's context window: the chat wake turn carries only the
+// update ids. Side-effect-free inside the cell; unbound scopes see an empty
+// slice. A desk disposes each update through its terminal write.
+func (s *ChoirScope) Updates() []PendingUpdate {
+	if s == nil {
+		return []PendingUpdate{}
+	}
+	return append([]PendingUpdate(nil), s.updates...)
 }
 
 // Context reports the activation identity the scope is bound to.

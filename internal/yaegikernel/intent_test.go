@@ -102,6 +102,28 @@ func TestCellBindingInboxAndStaging(t *testing.T) {
 	}
 }
 
+// TestCellBindingUpdates proves the RLM prompt-as-variable contract:
+// Begin installs the pending-update records as an isolated cell snapshot,
+// scope.Updates() exposes them inside the cell, and End clears them so a
+// post-cell call never replays a stale payload.
+func TestCellBindingUpdates(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	hooks := scope.BindCell()
+	frame := SessionFrame{ID: "cell-2", Updates: []PendingUpdate{
+		{UpdateID: "upd-1", FromAgentID: "texture:doc-1", FromRole: "texture", HumanProjection: "write the intro"},
+	}}
+	hooks.Begin(frame)
+	frame.Updates[0].HumanProjection = "mutated after inject"
+	got := scope.Updates()
+	if len(got) != 1 || got[0].UpdateID != "upd-1" || got[0].HumanProjection != "write the intro" {
+		t.Fatalf("updates snapshot not bound/isolated: %+v", got)
+	}
+	hooks.End()
+	if len(scope.Updates()) != 0 {
+		t.Fatal("updates must clear at cell end")
+	}
+}
+
 // TestServeCellFailedDropsTray proves the two-phase ack gate at the cell
 // level: a poisoned cell ships no staged intents, so the reducer never sees
 // them and the inbox cursor cannot advance.

@@ -157,7 +157,10 @@ func TestBoundLifecycleControlWarmAndColdInjectionExactlyOnce(t *testing.T) {
 	fixture := bindResearchControlFixture(t, rt, s, "owner-control-injection", "warm")
 	inject := rt.coagentUpdateTurnInjectorWithInitialPhase(&fixture.run, coagentPacketDeliveryCold)
 	first, err := inject(false)
-	if err != nil || len(first) != 1 || !strings.Contains(string(first[0]), fixture.control.Content) || !strings.Contains(string(first[0]), "evidence_update") {
+	// RLM prompt-as-variable: the wake turn is a pointer — update id +
+	// packet kind arrive; the payload body does not (the cell reads it via
+	// choir.Updates()).
+	if err != nil || len(first) != 1 || !strings.Contains(string(first[0]), fixture.control.UpdateID) || !strings.Contains(string(first[0]), "evidence_update") || strings.Contains(string(first[0]), fixture.control.Content) {
 		t.Fatalf("warm exact injection=%s err=%v", first, err)
 	}
 	appendAuthenticatedInjectionForTest(t, s, fixture.run, first[0])
@@ -168,7 +171,9 @@ func TestBoundLifecycleControlWarmAndColdInjectionExactlyOnce(t *testing.T) {
 
 	cold := bindResearchControlFixture(t, rt, s, "owner-control-injection", "cold")
 	messages, err := rt.prependInitialCoagentUpdatePackets(context.Background(), &cold.run, []json.RawMessage{json.RawMessage(`{"role":"user","content":"base"}`)})
-	if err != nil || len(messages) != 2 || !strings.Contains(string(messages[0]), cold.control.Content) {
+	// Pointer contract: cold prepended turn names the update id; payload
+	// stays out of chat.
+	if err != nil || len(messages) != 2 || !strings.Contains(string(messages[0]), cold.control.UpdateID) || strings.Contains(string(messages[0]), cold.control.Content) {
 		t.Fatalf("cold exact injection=%s err=%v", messages, err)
 	}
 	appendAuthenticatedInjectionForTest(t, s, cold.run, messages[0])

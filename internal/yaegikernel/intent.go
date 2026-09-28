@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // delegation, and completion stage into a per-cell in-memory tray in
@@ -96,6 +98,24 @@ type IncomingMessage struct {
 	CreatedAt    time.Time `json:"created_at"`
 	EvidenceRefs []string  `json:"evidence_refs,omitempty"`
 	Body         string    `json:"body"`
+}
+
+// PendingUpdate is one pending update_coagent record bound into the cell at
+// cell-start, readable via choir.Updates(). The RLM contract puts the update
+// payload here — a REPL variable — instead of inline in the model's context
+// window: the wake turn carries only the update ids. Packet is the canonical
+// source-packet payload (claims, sources, actions, questions); a desk
+// disposes each update through its terminal write (ApplyTexture's
+// update_dispositions, a Report, an Outcome).
+type PendingUpdate struct {
+	UpdateID        string                             `json:"update_id"`
+	FromAgentID     string                             `json:"from_agent_id"`
+	FromRole        string                             `json:"from_role,omitempty"`
+	ChannelID       string                             `json:"channel_id,omitempty"`
+	MessageSeq      int64                              `json:"message_seq,omitempty"`
+	WorkItemID      string                             `json:"work_item_id,omitempty"`
+	Packet          types.CoagentSourcePacketPayload   `json:"packet"`
+	HumanProjection string                             `json:"human_projection,omitempty"`
 }
 
 // StagedIntent is one non-blocking in-cell request awaiting post-cell
