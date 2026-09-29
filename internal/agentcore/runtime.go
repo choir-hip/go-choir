@@ -1675,7 +1675,39 @@ func (rt *Runtime) persistActivationStateWithEvent(ctx context.Context, rec *typ
 	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDeliveredWithEvent(ctx, rec, event); err != nil {
 		return false, err
 	}
+	// A bound Engineering run leaving pending/running (completed, failed,
+	// cancelled, blocked, passivated) strands its capsule and trajectory-bound
+	// operation unless the assignment fate reconcile + desk reconcile re-run.
+	// Kick both here — at the single persistence point every run-state
+	// transition shares — so dead drivers never wait for a restart or an
+	// unrelated wake. Best-effort: the kick never masks the persisted
+	// transition. Receipt:
+	// docs/problems/engineering-run-death-leaves-bound-assignment-2026-09-29.md
+	if assignedEngineeringRun(rec) && rec.State != types.RunPending && rec.State != types.RunRunning {
+		rt.kickEngineeringReconcileAfterPersist(rec)
+	}
 	return true, nil
+}
+
+// kickEngineeringReconcileAfterPersist re-drives the assignment and desk
+// reconciles for a trajectory whose bound run just left pending/running. The
+// assignment reconcile repairs capsule fate; the desk reconcile is the
+// op-coupling authority (recast, fail-op, verification chain).
+func (rt *Runtime) kickEngineeringReconcileAfterPersist(rec *types.RunRecord) {
+	trajID := strings.TrimSpace(trajectoryIDForRun(rec))
+	if trajID == "" {
+		return
+	}
+	ownerID, computerID, runID, state := rec.OwnerID, rec.ComputerID, rec.RunID, rec.State
+	go func() {
+		kickCtx := context.Background()
+		if reconErr := rt.ReconcileEngineeringAssignmentsForTrajectory(kickCtx, ownerID, computerID, trajID); reconErr != nil {
+			log.Printf("runtime: engineering reconcile after assignment run %s left %s: %v", runID, state, reconErr)
+		}
+		if _, deskErr := rt.ReconcileEngineeringDeskForTrajectory(kickCtx, ownerID, trajID); deskErr != nil {
+			log.Printf("runtime: engineering desk reconcile after assignment run %s left %s: %v", runID, state, deskErr)
+		}
+	}()
 }
 
 // persistActivationStateAndEmit writes the activation state and its runtime
@@ -1703,33 +1735,6 @@ func (rt *Runtime) persistActivationStateAndEmit(ctx context.Context, rec *types
 		return false, nil
 	}
 	rt.appendTraceEvent(ctx, evRec)
-	// A bound Engineering run leaving pending/running (failed, cancelled,
-	// blocked, passivated) strands its capsule and trajectory-bound operation
-	// unless the assignment fate reconcile re-runs. Kick it here — at the
-	// single persistence point every run-state transition shares — so dead
-	// drivers never wait for a restart or unrelated wake. Best-effort: the
-	// kick never masks the persisted transition. Receipt:
-	// docs/problems/engineering-run-death-leaves-bound-assignment-2026-09-29.md
-	if assignedEngineeringRun(rec) && rec.State != types.RunPending && rec.State != types.RunRunning {
-		if trajID := strings.TrimSpace(trajectoryIDForRun(rec)); trajID != "" {
-			go func(ownerID, computerID, trajectoryID, runID string) {
-				kickCtx := context.Background()
-				if reconErr := rt.ReconcileEngineeringAssignmentsForTrajectory(kickCtx, ownerID, computerID, trajectoryID); reconErr != nil {
-					log.Printf("runtime: engineering reconcile after assignment run %s left %s: %v", runID, rec.State, reconErr)
-				}
-				// The desk reconcile is the op-coupling authority: it recasts a
-				// restart-cancelled cast, fails the op on a genuinely terminal
-				// implementation, or drives frozen→verification→approval. The
-				// trajectory reconcile repairs the assignment but deliberately
-				// carries no op semantics — without this second kick a
-				// document-bound operation only repairs at boot or the next
-				// owner revision.
-				if _, deskErr := rt.ReconcileEngineeringDeskForTrajectory(kickCtx, ownerID, trajectoryID); deskErr != nil {
-					log.Printf("runtime: engineering desk reconcile after assignment run %s left %s: %v", runID, rec.State, deskErr)
-				}
-			}(rec.OwnerID, rec.ComputerID, trajID, rec.RunID)
-		}
-	}
 	rt.bus.Publish(events.RuntimeEvent{
 		Record: *evRec,
 		Actor:  events.ActorRuntime,

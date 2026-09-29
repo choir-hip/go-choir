@@ -101,19 +101,16 @@ to `RecordEngineeringOrphanObservation`
 WITHOUT calling `failBoundSelfdevOperation` and WITHOUT capsule revocation.
 This is a second fate authority that races the real one — an op can sit
 `executing` with a terminal-failed assignment and an active capsule forever.
+### Claim projections — deletion attempted, REVERTED (falsified)
 
-Fix: the assignment branch of the orphan fallback is removed once Merge 2
-exists; orphan observation stays for non-assignment generic child runs.
-Single fate authority.
-
-### Deletion — write-only claim projections
-
-`ogKindEngineeringRunClaim`, `ogKindEngineeringCapability`,
-`ogKindEngineeringCapsule` are minted at Bind
-(`engineering_assignments.go:1585-1604`) and read nowhere. They exist only
-for not-exists uniqueness conditions, which the assignment/run objects can
-carry directly. Delete the three projections + vocab migration entries +
-their tests after preserving equivalent uniqueness checks. Net ~-100 LoC.
+The `ogKindEngineering{Run,Capability,Capsule}Claim` objects looked write-only
+(no readers found), and the scout recommended deletion with uniqueness moved
+to conditions. The attempt failed live: `ObjectCondition{CanonicalID,
+Exists:false}` only blocks a bind when an object *exists* at that ID — the
+claim objects ARE the uniqueness markers. Conditions alone pass vacuously.
+`TestEngineeringAssignmentBindClaimsCapabilityAndCapsuleUniquely` caught the
+regression; the deletion was reverted. Verdict: keep the three mints — ~30
+lines buying durable per-run/per-capability/per-capsule collision fencing.
 
 ### Backstop sweep — narrow, second commit
 

@@ -308,7 +308,7 @@ func TestFallbackAbstainsOnAssignmentRun(t *testing.T) {
 	}
 }
 
-func TestFallbackRecordsOrphanObservationOnAssignedTerminalRun(t *testing.T) {
+func TestFallbackLeavesAssignedTerminalRunToFateReconcile(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -387,26 +387,19 @@ func TestFallbackRecordsOrphanObservationOnAssignedTerminalRun(t *testing.T) {
 		AgentProfile: agentprofile.Engineering,
 	}
 	if err := rt.bindTerminalRunOutcome(ctx, &probe, false); err != nil {
-		t.Fatalf("fallback orphan observation: %v", err)
+		t.Fatalf("fallback on assignment run: %v", err)
 	}
+	// The fallback is no longer a fate authority for assignment runs: the
+	// assignment stays bound until the trajectory/desk reconcile owns its
+	// closure (recast for restart-class deaths, op-fail for real failures).
+	// Asserting terminal here would re-bless the second-authority shape the
+	// wedge cluster proved unsafe.
 	assignment, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !assignment.Disposition.Terminal() {
-		t.Fatalf("assignment disposition = %v, want terminal orphan close", assignment.Disposition)
-	}
-	propDigest, err := store.ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, types.EngineeringResultFailed, types.EngineeringVerdictNone, nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reportID := store.TerminalReportID(seed.OwnerID, seed.ComputerID, assignmentID, 1, propDigest)
-	report, err := s.GetEngineeringAssignmentReport(ctx, seed.OwnerID, seed.ComputerID, reportID)
-	if err != nil {
-		t.Fatalf("orphan report %s: %v", reportID, err)
-	}
-	if report.Result != types.EngineeringResultFailed {
-		t.Fatalf("orphan report result = %v, want failed", report.Result)
+	if assignment.Disposition.Terminal() {
+		t.Fatalf("assignment disposition = %v, want non-terminal (fate reconcile owns closure)", assignment.Disposition)
 	}
 	updates, err := s.ListPendingWorkerUpdates(ctx, seed.OwnerID, "texture:"+run.ChannelID, 10)
 	if err != nil {

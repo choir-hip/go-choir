@@ -29,10 +29,10 @@ type assignedEngineeringFateDeadline struct {
 	Attempt      uint64 `json:"attempt"`
 }
 
-// delegatedAssignmentSpawnDeadline is the durable payload that carries a
-// delegated cast's spawn inputs to the post-commit wake. The binding stores
-// only digests and work-item IDs — not the objective text the bound run needs
-// as its prompt — so the saga inputs travel on the wake.
+// delegatedAssignmentSpawnDeadline is the durable spawn obligation minted
+// atomically inside the assignment Open commit (actorWakeOutboxFromObject).
+// Objective/candidate are optional overrides for legacy payloads; the handler
+// derives them from the assigned work item and binding.
 type delegatedAssignmentSpawnDeadline struct {
 	AssignmentID string `json:"assignment_id"`
 	Attempt      uint64 `json:"attempt"`
@@ -40,42 +40,12 @@ type delegatedAssignmentSpawnDeadline struct {
 	CandidateID  string `json:"candidate_id,omitempty"`
 }
 
-// armDelegatedCastSpawn schedules the durable wake that resumes a delegated
-// cast's spawn/bind/activate saga after the cell commits. The commit path
-// (commitActIntent) performs only the durable open; running the saga inside
-// the reducer would hold the cell lock across capsule spawn (consensus
-// precondition). The wake is near-immediate — the saga is latency-sensitive —
-// and resumable: re-delivery re-derives the deterministic binding and replays.
-func (rt *Runtime) armDelegatedCastSpawn(assignment types.EngineeringAssignment, objective, candidateID string) {
-	if rt == nil || rt.store == nil {
-		return
-	}
-	binding := assignment.Binding
-	// Only a committed-but-unbound delegated open needs the deferred saga; a
-	// bound/terminal or non-delegated assignment is already resolved.
-	if binding.CastAuthority != types.EngineeringCastAuthorityDelegated ||
-		assignment.Disposition == types.EngineeringAssignmentBound ||
-		assignment.Disposition.Terminal() {
-		return
-	}
-	payload, err := json.Marshal(delegatedAssignmentSpawnDeadline{
-		AssignmentID: assignment.AssignmentID, Attempt: binding.Attempt,
-		Objective: objective, CandidateID: candidateID,
-	})
-	if err != nil {
-		log.Printf("runtime: encode delegated spawn deadline for %s: %v", assignment.AssignmentID, err)
-		return
-	}
-	rt.scheduleContinuation(context.Background(), binding.OwnerID, binding.ComputerID, binding.ParentAgentID,
-		delegatedAssignmentSpawnDeadlineUpdateKind, string(payload), binding.TrajectoryID, "", time.Now().UTC())
-}
-
-// HandleDelegatedAssignmentSpawnDeadline re-drives a delegated cast's
-// spawn/bind/activate saga from its committed-but-unbound open. The saga
-// re-derives the exact digests the binding committed (resumeDelegatedCast
-// Assignment verifies the subject/capability digests fail-closed), so a
-// replayed or duplicated wake is a safe no-op. A bound, terminal, or
-// non-delegated assignment returns without re-running.
+// HandleDelegatedAssignmentSpawnDeadline re-drives an assignment's
+// spawn/bind/activate saga from its committed-but-unbound open — shared by
+// owner and delegated casts since the wake is minted inside the Open commit.
+// The saga re-derives the exact digests the binding committed, so a replayed
+// or duplicated wake is a safe no-op. A bound, terminal, or non-open
+// assignment returns without re-running.
 func (rt *Runtime) HandleDelegatedAssignmentSpawnDeadline(ctx context.Context, ownerID, computerID, agentID, content string) error {
 	if rt == nil || rt.store == nil {
 		return nil
@@ -96,21 +66,69 @@ func (rt *Runtime) HandleDelegatedAssignmentSpawnDeadline(ctx context.Context, o
 		return err
 	}
 	binding := assignment.Binding
-	if binding.CastAuthority != types.EngineeringCastAuthorityDelegated || binding.ParentAgentID != agentID ||
-		assignment.Disposition == types.EngineeringAssignmentBound || assignment.Disposition.Terminal() {
+	if binding.ParentAgentID != agentID ||
+		assignment.Disposition == types.EngineeringAssignmentBound || assignment.Disposition.Terminal() ||
+		strings.TrimSpace(assignment.BoundRunID) != "" {
 		return nil
 	}
-	req := DelegatedCastRequest{
-		Objective:           deadline.Objective,
-		Kind:                binding.Kind,
-		CandidateID:         deadline.CandidateID,
-		CommitmentControlID: binding.ParentControlID,
-		CasterAgentID:       binding.ParentAgentID,
+	// The saga owns engineeringAssignmentOpenMu for the whole spawn→bind
+	// window — the wake handler must take the same lock and re-read so a
+	// trajectory reconcile can't reap a live saga's pre-bind window, and a
+	// committed bind/cancel is observed before external effects.
+	rt.engineeringAssignmentOpenMu.Lock()
+	defer rt.engineeringAssignmentOpenMu.Unlock()
+	assignment, err = rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, deadline.AssignmentID, deadline.Attempt)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
 	}
-	if _, resumeErr := rt.resumeDelegatedCastAssignment(ctx, assignment, req); resumeErr != nil {
-		return fmt.Errorf("delegated spawn saga for %s: %w", deadline.AssignmentID, resumeErr)
+	if err != nil {
+		return err
+	}
+	binding = assignment.Binding
+	if binding.ParentAgentID != agentID || assignment.Disposition != types.EngineeringAssignmentOpen ||
+		strings.TrimSpace(assignment.BoundRunID) != "" {
+		return nil
+	}
+	objective, objErr := rt.assignmentSpawnResumeObjective(ctx, assignment, deadline.Objective)
+	if objErr != nil {
+		return objErr
+	}
+	candidateID := strings.TrimSpace(deadline.CandidateID)
+	if candidateID == "" {
+		candidateID = strings.TrimSpace(binding.SourceCandidateID)
+	}
+	if binding.CastAuthority == types.EngineeringCastAuthorityDelegated {
+		req := DelegatedCastRequest{
+			Objective: objective, Kind: binding.Kind, CandidateID: candidateID,
+			CommitmentControlID: binding.ParentControlID, CasterAgentID: binding.ParentAgentID,
+		}
+		if _, resumeErr := rt.resumeDelegatedCastAssignment(ctx, assignment, req); resumeErr != nil {
+			return fmt.Errorf("delegated spawn saga for %s: %w", deadline.AssignmentID, resumeErr)
+		}
+		return nil
+	}
+	// Owner cast: the spawn obligation rode on the open commit's outbox wake;
+	// re-drive the same document-bound resume the desk path uses.
+	if _, resumeErr := rt.resumeAssignedEngineeringForDocument(ctx, assignment, OpenDocumentAssignmentRequest{
+		Objective: objective, Kind: binding.Kind, CandidateID: candidateID,
+	}); resumeErr != nil {
+		return fmt.Errorf("owner spawn saga for %s: %w", deadline.AssignmentID, resumeErr)
 	}
 	return nil
+}
+
+// assignmentSpawnResumeObjective resolves the committed objective text for a
+// spawn wake: the assigned work item is the durable carrier (Open writes it in
+// the same transaction), so the wake itself needs only assignment identity.
+func (rt *Runtime) assignmentSpawnResumeObjective(ctx context.Context, assignment types.EngineeringAssignment, wakeObjective string) (string, error) {
+	if objective := strings.TrimSpace(wakeObjective); objective != "" {
+		return objective, nil
+	}
+	work, err := rt.store.GetLifecycleWorkItem(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.AssignedWorkItemID)
+	if err != nil {
+		return "", fmt.Errorf("load assigned work item for spawn resume: %w", err)
+	}
+	return strings.TrimSpace(work.Objective), nil
 }
 
 func encodeAssignedEngineeringFateDeadline(assignmentID string, attempt uint64) (string, error) {

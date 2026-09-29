@@ -782,12 +782,20 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 			if openErr != nil {
 				return 0, fmt.Errorf("reduce: delegated cast admission: %w", openErr)
 			}
-			if rt.kernelMode && rt.scheduleActor != nil {
-				rt.armDelegatedCastSpawn(opened.Assignment, in.Objective, "")
-			} else if _, resumeErr := rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, DelegatedCastRequest{
-				Objective: in.Objective, Kind: opened.Assignment.Binding.Kind,
-			}); resumeErr != nil {
-				return 0, fmt.Errorf("reduce: delegated cast spawn (non-kernel): %w", resumeErr)
+			// The spawn obligation is atomic with the open commit — the
+			// lifecycle outbox mints delegated_assignment_spawn_deadline in
+			// the same transaction — so kernel mode needs no post-commit arm.
+			// Non-kernel runtimes (tests without the wake outbox) resume
+			// inline under the saga mutex.
+			if !(rt.kernelMode && rt.scheduleActor != nil) {
+				rt.engineeringAssignmentOpenMu.Lock()
+				_, resumeErr := rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, DelegatedCastRequest{
+					Objective: in.Objective, Kind: opened.Assignment.Binding.Kind,
+				})
+				rt.engineeringAssignmentOpenMu.Unlock()
+				if resumeErr != nil {
+					return 0, fmt.Errorf("reduce: delegated cast spawn (non-kernel): %w", resumeErr)
+				}
 			}
 		}
 	}

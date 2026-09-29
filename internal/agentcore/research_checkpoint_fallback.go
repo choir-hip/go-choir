@@ -53,28 +53,13 @@ func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persis
 	if strings.TrimSpace(persisted.RequestedByRunID) == "" {
 		return terminalOutcomeBinding{}, nil
 	}
-	// Durable lifecycle updates and Engineering assignments are already canonical obligations.
-	// Terminal run state is only their activation projection; it must not synthesize or bind
-	// a second worker-update authority from the RunRecord outcome.
-	assignmentID := strings.TrimSpace(metadataStringValue(persisted.Metadata, "assignment_id"))
-	if assignmentID != "" {
-		attempt := uint64(metadataIntValue(persisted.Metadata, "assignment_attempt"))
-		reason := types.OrphanReasonProcessExitedWithoutPacket
-		if persisted.State == types.RunCancelled {
-			reason = types.OrphanReasonCancelled
-		}
-		obs := types.EngineeringOrphanObservation{
-			OwnerID:      persisted.OwnerID,
-			ComputerID:   persisted.ComputerID,
-			RunID:        persisted.RunID,
-			AssignmentID: assignmentID,
-			Attempt:      attempt,
-			Reason:       reason,
-			ObservedAt:   time.Now().UTC(),
-		}
-		if _, err := rt.store.RecordEngineeringOrphanObservation(ctx, obs); err != nil && !errors.Is(err, store.ErrEngineeringAssignmentCommandConflict) {
-			return terminalOutcomeBinding{}, fmt.Errorf("record orphan observation for run %s: %w", persisted.RunID, err)
-		}
+	// Engineering assignments are already canonical obligations: terminal run
+	// state is only their activation projection. The assignment fate path owns
+	// repair — the run-persist kick fires trajectory + desk reconcile on every
+	// non-active persist — so this function deliberately does not terminalize
+	// assignment rows (a second fate authority could close the assignment
+	// without recasting or failing the bound self-development operation).
+	if strings.TrimSpace(metadataStringValue(persisted.Metadata, "assignment_id")) != "" {
 		return terminalOutcomeBinding{}, nil
 	}
 	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||

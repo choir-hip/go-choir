@@ -346,17 +346,10 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 // counterpart to startAssignedEngineeringForDocument — same fate saga, a
 // different admission authority and identity scheme.
 //
-// Cell-commit callers must use openDelegatedCastAssignment + armDelegatedCastSpawn:
-// the durable open is the commit and the spawn/bind saga resumes from the
-// deferred delegated_assignment_spawn_deadline wake (consensus precondition —
-// no spawn work inside the cell reducer).
-func (rt *Runtime) startDelegatedCastAssignment(ctx context.Context, req DelegatedCastRequest) (AssignedEngineeringStart, error) {
-	opened, err := rt.openDelegatedCastAssignment(ctx, req)
-	if err != nil {
-		return AssignedEngineeringStart{}, err
-	}
-	return rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, req)
-}
+// Cell-commit callers use openDelegatedCastAssignment only: the spawn
+// obligation is minted atomically by the Open commit's actor-wake outbox
+// (delegated_assignment_spawn_deadline), so no post-commit arm is needed —
+// the saga resumes from the durable wake, or synchronously under the saga
 
 // openDelegatedCastAssignment commits only the durable open for a delegated
 // cast: it resolves the caster's open work item, mints the deterministic
@@ -422,6 +415,8 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, req Delegate
 		if existing.Disposition == types.EngineeringAssignmentBound || existing.Disposition.Terminal() {
 			return AssignedEngineeringStart{Assignment: existing, Replay: true}, nil
 		}
+		rt.engineeringAssignmentOpenMu.Lock()
+		defer rt.engineeringAssignmentOpenMu.Unlock()
 		return rt.resumeDelegatedCastAssignment(ctx, existing, req)
 	} else if !errors.Is(getErr, store.ErrNotFound) {
 		return AssignedEngineeringStart{}, getErr
@@ -485,34 +480,18 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, req Delegate
 		return AssignedEngineeringStart{}, err
 	}
 	rt.armAssignedEngineeringDeadline(opened.Assignment)
-	// The durable open is committed. Do NOT run spawnBindActivate here — the
-	// cell-commit path arms a deferred delegated_assignment_spawn_deadline wake
-	// and the saga resumes post-commit (consensus precondition). The preflight
-	// and capability digests recorded on the binding let the wake re-derive and
-	// verify the exact spawn inputs.
+	// The durable open is committed and its spawn obligation is already
+	// durable — the Open commit's actor-wake outbox minted it atomically.
+	// The saga resumes from that wake (or inline in non-kernel runtimes).
+	// The preflight and capability digests recorded on the binding let the
+	// wake re-derive and verify the exact spawn inputs.
 	return AssignedEngineeringStart{Assignment: opened.Assignment}, nil
 }
 
 // resumeDelegatedCastAssignment re-drives the spawn/bind saga for a delegated
-// cast whose durable open committed but whose bind never landed.
+// cast whose durable open committed but whose bind never landed. Caller MUST
+// hold engineeringAssignmentOpenMu and pass a freshly re-read assignment.
 func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment types.EngineeringAssignment, req DelegatedCastRequest) (AssignedEngineeringStart, error) {
-	// The delegated wake handler calls this outside the open saga's critical
-	// section; without the lock a trajectory reconcile can reap the committed
-	// open row (BoundRunID=="" → restart-cancel) while this spawn is live.
-	// Serialize with the same mutex and re-read so a concurrent cancel/bind
-	// is observed before external effects.
-	rt.engineeringAssignmentOpenMu.Lock()
-	defer rt.engineeringAssignmentOpenMu.Unlock()
-	current, currentErr := rt.store.GetEngineeringAssignment(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
-		assignment.AssignmentID, assignment.Binding.Attempt)
-	if currentErr != nil {
-		return AssignedEngineeringStart{}, fmt.Errorf("reload delegated assignment under saga lock: %w", currentErr)
-	}
-	if current.Disposition != types.EngineeringAssignmentOpen || strings.TrimSpace(current.BoundRunID) != "" {
-		// Already bound, cancelled, or completed by a serialized actor.
-		return AssignedEngineeringStart{Assignment: current}, nil
-	}
-	assignment = current
 	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, assignment.Binding.SourceArtifactRef)
 	if err != nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast preflight resumed subject: %w", err)

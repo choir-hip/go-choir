@@ -612,10 +612,20 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 			return ActorWakeOutbox{}, objectgraph.Object{}, err
 		}
 		sourceID := "assignment:" + assignment.AssignmentID + ":" + fmt.Sprint(assignment.Binding.Attempt)
-		// G10: a freshly opened assignment owes the six-hour bound deadline.
+		// A freshly opened assignment owes its spawn saga — minted atomically
+		// in the same commit, so a crash between durable open and any
+		// post-commit arm can no longer strand the row open+unbound. Owner
+		// and delegated casts share this wake; the handler re-reads durable
+		// state and derives objective/candidate from the work item/binding.
+		// The six-hour bound deadline is re-armed at bind
+		// (armAssignedEngineeringDeadline), not here.
 		if assignment.Disposition == types.EngineeringAssignmentOpen && assignment.LifecycleVersion == 1 {
-			return actorWakeOutbox(obj, sourceID, assignment.Binding.ParentAgentID, assignment.Binding.TrajectoryID, "",
-				"assigned_engineering_fate_deadline", string(content), obj.CreatedAt.UTC().Add(6*time.Hour), "wake:"+obj.CanonicalID+":"+sourceID)
+			spawnContent, spawnErr := json.Marshal(actorWakeEngineeringDeadlineContent{AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt})
+			if spawnErr != nil {
+				return ActorWakeOutbox{}, objectgraph.Object{}, spawnErr
+			}
+			return actorWakeOutbox(obj, sourceID+":spawn", assignment.Binding.ParentAgentID, assignment.Binding.TrajectoryID, "",
+				"delegated_assignment_spawn_deadline", string(spawnContent), time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID+":spawn")
 		}
 		// G9: a committed disposition that leaves pending fate work owes an
 		// immediate re-drive — the watchdog arms after commit, so a crash in
