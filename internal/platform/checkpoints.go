@@ -86,8 +86,11 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: non-verifier head receipt does not bind the accepted head")
 		}
 		if request.PlatformFollow {
+			// Accepted is the canonical tip at publish; the applied event is
+			// bound by EffectiveEventHead under the dual-head checkpoint shape
+			// (post-cutover, batches land between apply and publish).
 			var eventKind string
-			if err := a.cas.store.db.QueryRowContext(ctx, `SELECT event_kind FROM computer_event_append_receipts WHERE computer_id=? AND event_digest=?`, request.ComputerID, request.AcceptedEventHead).Scan(&eventKind); err != nil || eventKind != string(computerevent.EventMaterializationApplied) {
+			if err := a.cas.store.db.QueryRowContext(ctx, `SELECT event_kind FROM computer_event_append_receipts WHERE computer_id=? AND event_digest=?`, request.ComputerID, request.EffectiveEventHead).Scan(&eventKind); err != nil || eventKind != string(computerevent.EventMaterializationApplied) {
 				return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: platform-follow checkpoint requires an applied-event head")
 			}
 			if !computerevent.IsSHA256(request.MaterializationReceiptDigest) {

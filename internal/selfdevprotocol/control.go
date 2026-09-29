@@ -92,12 +92,12 @@ type CheckpointRequest struct {
 	// a verifier run, so verifier fields must be absent — same non-blending
 	// rule as OwnerRecovery. Unlike owner-recovery it may authorize route
 	// projection: the platform-follow scope is the routing decision record.
-	PlatformFollow               bool                            `json:"platform_follow,omitempty"`
-	ReducerVersion               int                             `json:"reducer_version"`
-	VMLocalContentWitness        VMLocalContentWitness           `json:"vm_local_content_witness"`
-	FrontendIdentity             FrontendIdentity                `json:"frontend_identity"`
-	TapeCompleteness             string                          `json:"tape_completeness,omitempty"`
-	CompleteFromHead             string                          `json:"complete_from_head,omitempty"`
+	PlatformFollow        bool                  `json:"platform_follow,omitempty"`
+	ReducerVersion        int                   `json:"reducer_version"`
+	VMLocalContentWitness VMLocalContentWitness `json:"vm_local_content_witness"`
+	FrontendIdentity      FrontendIdentity      `json:"frontend_identity"`
+	TapeCompleteness      string                `json:"tape_completeness,omitempty"`
+	CompleteFromHead      string                `json:"complete_from_head,omitempty"`
 }
 
 type Checkpoint struct {
@@ -219,7 +219,12 @@ func CheckpointFromRequest(request CheckpointRequest) (Checkpoint, []byte, error
 			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: platform-follow checkpoint requires the applied-event receipt binding")
 		}
 	} else {
-		if request.AcceptedEventHead != request.EffectiveEventHead ||
+		// Under the append+project cutover the canonical head keeps moving
+		// after the applied event (every projection batch is an event), so
+		// accepted (canonical tip at publish) and effective (applied state
+		// position) legitimately differ — the authority's FOR UPDATE head
+		// check is the live equality gate, this is only shape validation.
+		if !computerevent.IsSHA256(request.EffectiveEventHead) ||
 			!computerevent.IsSHA256(request.MaterializationReceiptDigest) || !computerevent.IsSHA256(request.VerifierCertificateDigest) {
 			return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: complete accepted/effective bindings are required")
 		}

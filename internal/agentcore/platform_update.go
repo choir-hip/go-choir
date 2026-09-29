@@ -309,14 +309,13 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 // second mint under the same key produces a conflicting request commitment).
 func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, offerDigest, acceptedDigest string, result updater.ApplyResult, appliedEventHead, operationID string, report PlatformUpdateReport) (PlatformUpdateReport, error) {
 	computerID := offer.ComputerID
-	appliedKey := platformUpdateIdempotencyKey("applied", offer.UpdateID)
 	head, err := rt.store.Head(ctx, computerID)
 	if err != nil || head == nil {
 		return report, fmt.Errorf("platform update: post-apply head unavailable")
 	}
-	appliedReceipt, found, err := rt.store.EventReceiptByIdempotency(ctx, computerID, appliedKey)
+	headReceipt, found, err := rt.store.EventReceiptByDigest(ctx, computerID, head.CanonicalEventHead)
 	if err != nil || !found {
-		return report, fmt.Errorf("platform update: applied event receipt unavailable")
+		return report, fmt.Errorf("platform update: canonical head event receipt unavailable")
 	}
 
 	version := computerversion.ComputerVersion{CodeRef: offer.CodeClosure.Ref, ArtifactProgramRef: offer.ArtifactProgram.Ref}
@@ -334,7 +333,7 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 		// fresh verifier certificate under the same key and conflict server-side.
 		checkpoint = *fetched
 		request := checkpoint.Checkpoint.Request
-		if request.AcceptedEventHead != appliedEventHead || request.ReleaseDigest != result.ReleaseDigest || request.ComputerVersion != version {
+		if request.EffectiveEventHead != appliedEventHead || request.ReleaseDigest != result.ReleaseDigest || request.ComputerVersion != version {
 			return report, fmt.Errorf("platform update: fetched checkpoint does not bind this update")
 		}
 		verifierDigest = request.VerifierCertificateDigest
@@ -362,11 +361,11 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 		}
 		published, publishErr := rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
 			ComputerID: computerID, IdempotencyKey: checkpointKey,
-			ComputerVersion: version, AcceptedEventHead: appliedEventHead, EffectiveEventHead: head.EffectiveEventHead,
-			EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: appliedReceipt.ReceiptID,
+			ComputerVersion: version, AcceptedEventHead: head.CanonicalEventHead, EffectiveEventHead: head.EffectiveEventHead,
+			EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: headReceipt.ReceiptID,
 			ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
 			MaterializationReceiptDigest: receiptDigest,
-			PlatformFollow: true, ReducerVersion: head.ReducerVersion,
+			PlatformFollow:               true, ReducerVersion: head.ReducerVersion,
 			VMLocalContentWitness: witness, FrontendIdentity: frontend,
 		})
 		if publishErr != nil {
@@ -402,13 +401,18 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 			return report, eventErr
 		}
 	}
-	checkpointEventReceipt, found, err := rt.store.EventReceiptByIdempotency(ctx, computerID, checkpointEventIdempotency)
-	if err != nil || !found {
-		return report, fmt.Errorf("platform update: checkpoint event receipt unavailable")
+	// The route projection request must name the live canonical head: the
+	// authority rejects any digest that is not the current head. Re-read
+	// after the checkpoint_published append instead of pinning that event —
+	// on retry passes any drift between append and publish makes a pinned
+	// digest permanently stale, the same wedge class as the checkpoint head.
+	routeHead, headErr := rt.store.Head(ctx, computerID)
+	if headErr != nil || routeHead == nil {
+		return report, fmt.Errorf("platform update: route projection head unavailable")
 	}
-	checkpointEventHead, _ := checkpointEventReceipt.KindFields["event_digest"].(string)
-	if !computerevent.IsSHA256(checkpointEventHead) {
-		return report, fmt.Errorf("platform update: checkpoint event receipt is not head-bound")
+	routeHeadReceipt, found, err := rt.store.EventReceiptByDigest(ctx, computerID, routeHead.CanonicalEventHead)
+	if err != nil || !found {
+		return report, fmt.Errorf("platform update: route head event receipt unavailable")
 	}
 
 	// Route promotion under the platform-follow evidence class — distinct
@@ -438,9 +442,12 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 		oldVersion, expectedGeneration = currentRoute.LatestReceipt.Old, currentRoute.LatestReceipt.ExpectedGeneration
 	}
 	createdAt := checkpoint.Receipt.IssuedAt
+	// RouteProjectionFromRequest recomputes this payload from the minted
+	// checkpoint's request fields and refuses any byte deviation — bind it
+	// from the published checkpoint verbatim, never from the head read.
 	acceptedPayload := selfdevprotocol.AcceptedEventAuthorizationEvidence{
-		Version: 1, ComputerID: computerID, AcceptedOrRollbackEventDigest: appliedEventHead,
-		EventHeadReceiptID: appliedReceipt.ReceiptID, EffectiveEventHead: head.EffectiveEventHead,
+		Version: 1, ComputerID: computerID, AcceptedOrRollbackEventDigest: checkpoint.Checkpoint.Request.AcceptedEventHead,
+		EventHeadReceiptID: checkpoint.Checkpoint.Request.EventHeadReceiptID, EffectiveEventHead: checkpoint.Checkpoint.Request.EffectiveEventHead,
 		OldComputerVersion: oldVersion, NewComputerVersion: version,
 		DecisionActor: selfdevprotocol.PlatformUpdateFollowActor, DecisionScope: selfdevprotocol.PlatformUpdateFollowScope,
 	}
@@ -457,7 +464,7 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 		return report, err
 	}
 	promotionPayload := selfdevprotocol.PromotionJoinEvidence{
-		Version: 1, ComputerID: computerID, EventHeadReceiptID: checkpointEventReceipt.ReceiptID,
+		Version: 1, ComputerID: computerID, EventHeadReceiptID: routeHeadReceipt.ReceiptID,
 		CheckpointReceiptDigest: checkpointReceiptDigest, MaterializationReceiptDigest: receiptDigest,
 		VerifierCertificateDigest: verifierDigest, OldComputerVersion: oldVersion, NewComputerVersion: version,
 	}
@@ -479,7 +486,7 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 	projectionRequest := selfdevprotocol.RouteProjectionRequest{
 		ComputerID: computerID, IdempotencyKey: fmt.Sprintf("platform-update-route-certificate-%s-%d", offer.UpdateID, authorizationWindow.Unix()),
 		Checkpoint: checkpoint, CodeClosure: offer.CodeClosure, ArtifactProgram: offer.ArtifactProgram,
-		CanonicalEventHead: checkpointEventHead, EventHeadReceiptID: checkpointEventReceipt.ReceiptID,
+		CanonicalEventHead: routeHead.CanonicalEventHead, EventHeadReceiptID: routeHeadReceipt.ReceiptID,
 		ApprovalEvidence: approvalEvidence, PromotionEvidence: promotionEvidence, Command: command,
 		DecisionActor: selfdevprotocol.PlatformUpdateFollowActor, DecisionScope: selfdevprotocol.PlatformUpdateFollowScope,
 		ExpiresAt: authorizationWindow.Add(5 * time.Minute).Format(time.RFC3339Nano),
@@ -519,6 +526,7 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 	}
 	return report, nil
 }
+
 // resumePlatformUpdateTail re-drives the post-apply tail for an update whose
 // materialization committed but whose checkpoint/route events never landed —
 // the tail dies when the guest restarts under apply, and before this path

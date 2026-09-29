@@ -368,9 +368,20 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	if err != nil || !found {
 		return fmt.Errorf("materializer: applied event receipt unavailable")
 	}
+	// The applied event's own receipt stays bound to the approval/promotion
+	// evidence below (the route join names the applied event, not the head).
+	// The checkpoint request must pin the POST-APPEND head: every event on
+	// this chain (including the projection batches the per-commit sweep keeps
+	// minting) advances canonical_event_head, so a request that names the
+	// applied event's digest fails the authority's FOR UPDATE equality check
+	// on every retry — the wedge observed on computer-5352d5a8 2026-09-29.
 	appliedEventHead, _ := eventReceipt.KindFields["event_digest"].(string)
 	if !computerevent.IsSHA256(appliedEventHead) {
 		return fmt.Errorf("materializer: applied event receipt is not head-bound")
+	}
+	checkpointHeadReceipt, found, err := rt.store.EventReceiptByDigest(ctx, operation.ComputerID, head.CanonicalEventHead)
+	if err != nil || !found {
+		return fmt.Errorf("materializer: current-head event receipt unavailable")
 	}
 	version := computerversion.ComputerVersion{CodeRef: closure.Ref, ArtifactProgramRef: program.Ref}
 	reconstructionDigest, err := selfdevprotocol.Digest(struct {
@@ -413,8 +424,8 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	}
 	checkpoint, err := rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
 		ComputerID: operation.ComputerID, IdempotencyKey: "selfdev-checkpoint-" + operation.DecisionEvent,
-		ComputerVersion: version, AcceptedEventHead: appliedEventHead, EffectiveEventHead: head.EffectiveEventHead,
-		EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: eventReceipt.ReceiptID,
+		ComputerVersion: version, AcceptedEventHead: head.CanonicalEventHead, EffectiveEventHead: head.EffectiveEventHead,
+		EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: checkpointHeadReceipt.ReceiptID,
 		ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
 		MaterializationReceiptDigest: receiptDigest, VerifierCertificateDigest: verifierDigest,
 		VerifierCertificate: verifierCertificate, ReducerVersion: head.ReducerVersion,
@@ -445,13 +456,20 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 			return eventErr
 		}
 	}
-	checkpointEventReceipt, found, err := rt.store.EventReceiptByIdempotency(ctx, operation.ComputerID, checkpointEventIdempotency)
-	if err != nil || !found {
-		return fmt.Errorf("materializer: checkpoint event receipt unavailable")
+	// The route projection request must name the live canonical head: the
+	// authority rejects any digest that is not the current head (and the
+	// promotion join mirrors request.EventHeadReceiptID into the
+	// certificate). Re-read after the checkpoint_published append instead of
+	// pinning that event — any drift between append and publish makes a
+	// pinned digest permanently stale, the same wedge class as the
+	// checkpoint head binding above.
+	routeHead, err := rt.store.Head(ctx, operation.ComputerID)
+	if err != nil || routeHead == nil {
+		return fmt.Errorf("materializer: route projection head unavailable")
 	}
-	checkpointEventHead, _ := checkpointEventReceipt.KindFields["event_digest"].(string)
-	if !computerevent.IsSHA256(checkpointEventHead) {
-		return fmt.Errorf("materializer: checkpoint event receipt is not head-bound")
+	routeHeadReceipt, found, err := rt.store.EventReceiptByDigest(ctx, operation.ComputerID, routeHead.CanonicalEventHead)
+	if err != nil || !found {
+		return fmt.Errorf("materializer: route head event receipt unavailable")
 	}
 	routeSlotID, err := routeledger.RouteSlotID(rt.selfdevRouteOwnerID, rt.selfdevRouteDesktopID)
 	if err != nil {
@@ -470,9 +488,12 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		oldVersion, expectedGeneration = currentRoute.LatestReceipt.Old, currentRoute.LatestReceipt.ExpectedGeneration
 	}
 	createdAt := checkpoint.Receipt.IssuedAt
+	// RouteProjectionFromRequest recomputes this payload from the minted
+	// checkpoint's request fields and refuses any byte deviation — bind it
+	// from the published checkpoint verbatim, never from the head read.
 	acceptedPayload := selfdevprotocol.AcceptedEventAuthorizationEvidence{
-		Version: 1, ComputerID: operation.ComputerID, AcceptedOrRollbackEventDigest: appliedEventHead,
-		EventHeadReceiptID: eventReceipt.ReceiptID, EffectiveEventHead: head.EffectiveEventHead,
+		Version: 1, ComputerID: operation.ComputerID, AcceptedOrRollbackEventDigest: checkpoint.Checkpoint.Request.AcceptedEventHead,
+		EventHeadReceiptID: checkpoint.Checkpoint.Request.EventHeadReceiptID, EffectiveEventHead: checkpoint.Checkpoint.Request.EffectiveEventHead,
 		OldComputerVersion: oldVersion, NewComputerVersion: version,
 		DecisionActor: operation.DecisionActor, DecisionScope: decisionScope,
 	}
@@ -489,7 +510,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		return err
 	}
 	promotionPayload := selfdevprotocol.PromotionJoinEvidence{
-		Version: 1, ComputerID: operation.ComputerID, EventHeadReceiptID: checkpointEventReceipt.ReceiptID,
+		Version: 1, ComputerID: operation.ComputerID, EventHeadReceiptID: routeHeadReceipt.ReceiptID,
 		CheckpointReceiptDigest: checkpointReceiptDigest, MaterializationReceiptDigest: receiptDigest,
 		VerifierCertificateDigest: verifierDigest, OldComputerVersion: oldVersion, NewComputerVersion: version,
 	}
@@ -514,7 +535,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	projectionRequest := selfdevprotocol.RouteProjectionRequest{
 		ComputerID: operation.ComputerID, IdempotencyKey: fmt.Sprintf("selfdev-route-certificate-%s-%d", operation.DecisionEvent, authorizationWindow.Unix()),
 		Checkpoint: checkpoint, CodeClosure: closure, ArtifactProgram: program,
-		CanonicalEventHead: checkpointEventHead, EventHeadReceiptID: checkpointEventReceipt.ReceiptID,
+		CanonicalEventHead: routeHead.CanonicalEventHead, EventHeadReceiptID: routeHeadReceipt.ReceiptID,
 		ApprovalEvidence: approvalEvidence, PromotionEvidence: promotionEvidence, Command: command,
 		DecisionActor: operation.DecisionActor, DecisionScope: decisionScope,
 		ExpiresAt: authorizationWindow.Add(5 * time.Minute).Format(time.RFC3339Nano),

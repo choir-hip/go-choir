@@ -352,6 +352,28 @@ func (s *Store) EventReceiptByIdempotency(ctx context.Context, computerID, idemp
 	return receipt, true, nil
 }
 
+// EventReceiptByDigest returns the finalized append receipt for the event
+// identified by digest — the join the checkpoint authority requires between
+// `event_head_receipt_id` and the event it receipts. Absence is not an error.
+func (s *Store) EventReceiptByDigest(ctx context.Context, computerID, eventDigest string) (computerevent.Receipt, bool, error) {
+	if s == nil || s.db == nil {
+		return computerevent.Receipt{}, false, fmt.Errorf("computer event projection: nil store")
+	}
+	var raw, status string
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(event_head_receipt_json, ''), status FROM computer_event_index WHERE computer_id=? AND event_digest=?`, strings.TrimSpace(computerID), strings.TrimSpace(eventDigest)).Scan(&raw, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return computerevent.Receipt{}, false, nil
+	}
+	if err != nil || status != "finalized" || raw == "" {
+		return computerevent.Receipt{}, false, fmt.Errorf("computer event projection: finalized receipt for digest unavailable")
+	}
+	var receipt computerevent.Receipt
+	if err := json.Unmarshal([]byte(raw), &receipt); err != nil {
+		return computerevent.Receipt{}, false, err
+	}
+	return receipt, true, nil
+}
+
 func nullableEventString(value string) any {
 	if value == "" {
 		return nil
