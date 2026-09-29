@@ -48,6 +48,10 @@ const LOG_PATH = `/tmp/m11_probe_${marker}.log`;
 function mark(leg, extra) {
   const line = `${new Date().toISOString()} ${leg}${extra ? ' ' + JSON.stringify(extra).slice(0, 300) : ''}`;
   appendFileSync(LOG_PATH, line + '\n');
+  // A leg mark is the predicate's evidence: flip the matching flag so the
+  // verdict reflects what actually ran. Non-leg marks (checkpoint digests,
+  // diagnostics) are absent from result.legs and stay log-only.
+  if (Object.hasOwn(result.legs, leg)) result.legs[leg] = true;
 }
 
 function uniqueEmail() {
@@ -131,7 +135,11 @@ function corpusdEventHead(computerID, ownerID) {
   );
 }
 
-function corpusdEvents(computerID, ownerID, limit = 100) {
+// The replay endpoint returns the OLDEST `limit` events. projection_batch
+// spam lands between apply evidence and the tail, so the default window must
+// cover the whole episode or apply_events reads a prefix that never contains
+// materialization_applied/checkpoint_published/route_projection_updated.
+function corpusdEvents(computerID, ownerID, limit = 5000) {
   return nodeBJSON(
     `curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/replay?computer_id=${encodeURIComponent(computerID)}&limit=${limit}'`,
   );
