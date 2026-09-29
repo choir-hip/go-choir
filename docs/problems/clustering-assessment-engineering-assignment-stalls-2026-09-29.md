@@ -256,3 +256,93 @@ that one needs a decision (reject/fail/reopen), not a mechanism.
 Panel + scouts consulted: `.agentic-consensus/agentic-consensus-20260928-222842/`
 (excluding claude per owner token budget); scouts `StallSurfaceScout`,
 `ViaNegativaScout` (agent:// refs).
+## Third harvest — 2026-09-29 M11 re-probe (deployed `9f8c9866`)
+
+The second-harvest fixes landed and the retry arm works. The re-run found
+wedge 6: the materializer's `PublishCheckpoint` request is bound to the
+wrong head.
+
+### Wedge 6 — checkpoint request bound to the applied-event head, not the current effective head
+
+`recordMaterializationApplied` (internal/agentcore/self_development_materializer.go:414)
+posts `selfdevprotocol.CheckpointRequest{AcceptedEventHead: appliedEventHead, EffectiveEventHead: head.EffectiveEventHead}`
+where `appliedEventHead` is the just-appended `materialization_applied`
+digest and `head` is re-read *after* that append. `CheckpointAuthority.Publish`
+(internal/platform/checkpoints.go:60) requires the request's
+`AcceptedEventHead` to equal `computer_event_heads.canonical_event_head`
+and `EffectiveEventHead` to equal `computer_event_heads.effective_event_head`
+at publish time.
+
+Between the applied event's append and the checkpoint publish, the
+per-commit projection sweep mints more `projection_batch_recorded` events
+on the same chain — the canonical/effective heads move forward. The request
+is stale by the time it reaches corpusd; every retry carries the same stale
+heads. Observed live 2026-09-29: op `selfdev-0af47efdf2983e4a5bad609be0cbd597`
+(computer `computer-5352d5a8`) sat `materializing` from 06:41:58Z, the
+`materialization_applied` event committed at seq 1155, and the drain's
+60s retry wake fired ~30× each returning
+`guest credential: checkpoint refused with status 400`
+(corpusd journal shows no entries — the 400 body says only
+`"checkpoint authority: current accepted/effective head does not match request"`).
+
+Why the retry-arm didn't help: it re-fires *the same* `recordMaterializationApplied`
+call, which recomputes `head` — but `appliedEventHead` comes from the
+`EventReceiptByIdempotency` lookup (immutable `event_digest` of the already-
+committed applied event), so `AcceptedEventHead` stays pinned to seq-1155's
+digest even though the live head has moved. The op is deterministic-frozen.
+
+Fix direction (not yet landed): the checkpoint request's
+`AcceptedEventHead`/`EffectiveEventHead`/`EventHeadReceiptID` must be re-read
+*at publish time* from the post-append head — i.e. bind to the head that
+contains the applied event's *consequences* (projection batches + any
+subsequent canonical events), not to the applied event's own digest. The
+authority's strict equality is correct; the producer pins the wrong row.
+
+Hermeticity note: this defect was invisible on the earlier pre-fix run
+because the drain died before reaching `PublishCheckpoint`. The retry arm
+exposed it — the trigger-edge fix moved the wedge one layer deeper.
+
+Fix belongs in the same transaction family as the second-harvest commit:
+re-derive `AcceptedEventHead`/`EffectiveEventHead`/`EventHeadReceiptID` from
+`rt.store.Head(ctx, computerID)` *after* the applied event commits, inside
+`recordMaterializationApplied`, immediately before `PublishCheckpoint`
+(after line ~363's head re-read; the current code re-reads but then pins
+`appliedEventHead` instead of `head.CanonicalEventHead`). Event-head receipt
+must likewise be re-fetched for the *current* canonical head, not the
+applied event's.
+
+### Wedge 6 repair — landed in the dual-head checkpoint commit
+
+The production data forced a wider repair than the paragraph above
+proposed. Live state on `computer-5352d5a8`: canonical head seq 1204
+(`0729ffe5`), effective head seq 1155 (`b9b4c7de` = the
+`materialization_applied` digest) — the heads *permanently* diverge after
+any post-apply event. Three coordinated changes:
+
+1. **Producer rebind** (`self_development_materializer.go`,
+   `platform_update.go`): `AcceptedEventHead`/`EventHeadReceiptID` now bind
+   the fresh post-append `head.CanonicalEventHead` and its append receipt;
+   `EffectiveEventHead`/`EffectiveStateCommitment` bind `head.Effective*`.
+   New `store.EventReceiptByDigest` joins the canonical-head digest to its
+   `event_head_receipt_id`. The `accepted` authorization payload is built
+   verbatim from the *minted* checkpoint's request fields (the authority
+   recomputes it byte-equal from `checkpoint.Request`), and the
+   route-projection request takes a second fresh `Head` read after the
+   `checkpoint_published` append — pinning the checkpoint event's digest
+   wedges identically under drift.
+2. **Protocol relaxation** (`selfdevprotocol/control.go`): the verifier
+   class no longer requires `AcceptedEventHead == EffectiveEventHead`.
+   That equality predates the append+project cutover (landed 2026-07-19);
+   owner-recovery checkpoints already carry `accepted != effective`, and
+   the live-head equality stays enforced by the authority's FOR UPDATE row
+   check — this layer is shape validation only.
+3. **Authority join shift** (`platform/checkpoints.go`): platform-follow's
+   `event_kind == materialization_applied` check moved from
+   `AcceptedEventHead` to `EffectiveEventHead` — accepted names the tip,
+   effective names the applied event under the dual-head shape.
+
+Residual race (accepted): a host append landing between the guest's head
+read and the FOR UPDATE check still 400s — but the drain re-arms and each
+retry carries a fresh head, so it converges in quiet windows instead of
+wedge-permanently. `PublishRouteProjection`'s live-head pin is kept as the
+freshness fence (certifies "transition at canonical head H").
