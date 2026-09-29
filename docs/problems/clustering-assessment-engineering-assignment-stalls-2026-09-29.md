@@ -370,3 +370,38 @@ enforces the realization fence only for fresh requests (no journal). A
 found journal is a self-describing resume: commitment equality alone
 gates it. Same class as wedge 6 — a pre-cutover identity assumption
 (realization as fencing token) colliding with restart-durable replay.
+
+### Wedge 8 — a transient apply refusal degrades a completed op
+
+Found after the wedge-7 fix deployed: `computer-5352d5a8`'s op
+`selfdev-0af47efdf2983e4a5bad609be0cbd597` is now `degraded`
+(`terminal_error = "updater client: updater refused request"`,
+updated 2026-09-29T07:46:45Z) even though the updater journal shows
+`phase=completed` for `selfdev-apply-f7932e29e18595683b58bb9c…`.
+
+`materializeSelfDevelopmentOperation` calls `selfdevUpdater.Apply` *before*
+the applied-event idempotency check. When the epoch-rotated apply refused
+(wedge 7's mechanism), the applyErr fell through to the
+`result.RecoveryReceipt == nil` branch and transitioned the operation to
+`StateDegraded` — a terminal state absent from the drain's
+`ListByStates(awaiting_approval, accepted, materializing,
+rollback_pending)`, so reconcile no longer sees it. Two defects:
+
+1. `Apply` returning a transport/validation refusal (not a recovery
+   outcome) for a journaled-completed op is treated as a materialization
+   failure — the drain confuses "the updater cannot tell me about this op
+   right now" with "this op's apply failed".
+2. `StateDegraded` is a one-way pit for errors the journal knows are
+   already resolved. Ops that reach `recordMaterializationApplied`'s
+   idempotency gate post-apply never re-enter the drain.
+
+Repair (landed): `updater.ReadJournalOutcome` exposes the durable journal;
+`materializeSelfDevelopmentOperation` and `rollbackSelfDevelopmentOperation`
+consult it after `Apply` and let a terminal journaled outcome supersede
+whatever the live call returned. `degraded` is no longer terminal — the
+drain re-drives degraded operations (rollback vs apply discriminated by
+route receipt presence) and the state machine permits `degraded → applied |
+rolled_back | failed` for journal-verified repair. Only typed updater
+refusals (`ErrApplyRefused`, 4xx) degrade; transport failures stay
+materializing and re-arm the retry wake. A degraded op re-refused with a
+non-terminal journal stays degraded silently rather than churning retries.

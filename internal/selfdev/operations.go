@@ -574,6 +574,12 @@ func allowedTransition(from, to string) bool {
 		return to == StateRollbackPending || to == StateDegraded
 	case StateRollbackPending:
 		return to == StateRolledBack || to == StateFailed || to == StateDegraded
+	case StateDegraded:
+		// Not terminal: a journaled terminal outcome repairs it forward to
+		// applied/rolled_back, or to failed when the updater journal recorded
+		// a recovery-verified failure. The materializer only re-drives
+		// degraded operations; nothing else writes these edges.
+		return to == StateApplied || to == StateRolledBack || to == StateFailed
 	default:
 		return false
 	}

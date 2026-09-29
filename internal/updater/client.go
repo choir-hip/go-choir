@@ -338,12 +338,15 @@ func (c *Client) Apply(ctx context.Context, request ApplyRequest) (ApplyResult, 
 		}
 		return result, nil
 	}
-	var failed struct {
-		Result ApplyResult `json:"result"`
-		Error  string      `json:"error"`
-	}
-	if err := json.Unmarshal(raw, &failed); err == nil && failed.Error != "" {
-		return failed.Result, fmt.Errorf("updater client: %s", failed.Error)
+	if response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusConflict {
+		var failed struct {
+			Result ApplyResult `json:"result"`
+			Error  string      `json:"error"`
+		}
+		if err := json.Unmarshal(raw, &failed); err == nil {
+			return failed.Result, fmt.Errorf("%w: %s", ErrApplyRefused, failed.Error)
+		}
+		return ApplyResult{}, fmt.Errorf("%w: status %d", ErrApplyRefused, response.StatusCode)
 	}
 	return ApplyResult{}, fmt.Errorf("updater client: refused apply with status %d", response.StatusCode)
 }

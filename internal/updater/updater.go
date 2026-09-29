@@ -26,6 +26,15 @@ const ManifestVersion = 1
 
 var ErrIdempotencyConflict = errors.New("updater idempotency conflict")
 
+// ErrApplyRefused marks a validation-level refusal (4xx) the updater daemon
+// returned for an apply request: malformed or mismatched request, commitment
+// mismatch, idempotency conflict on an in-flight operation. It is distinct
+// from transport failures (daemon unreachable, socket errors): the caller
+// should degrade an operation on refusal but retry on transport failure,
+// because a transport failure may hide a journal write that already
+// completed the apply.
+var ErrApplyRefused = errors.New("updater refused apply")
+
 type ManifestFile struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
@@ -761,6 +770,35 @@ func readJournal(path string) (operationJournal, bool, error) {
 		return operationJournal{}, true, err
 	}
 	return journal, true, nil
+}
+
+// JournalOutcome is the durable result recorded in an apply journal. Terminal
+// reports whether the journal reached a completed or failed outcome; a
+// mid-flight journal (prepared/swapped/restart-requested) still belongs to
+// the updater's own resume path and reports Terminal=false.
+type JournalOutcome struct {
+	Result   ApplyResult
+	Failure  string
+	Terminal bool
+}
+
+// ReadJournalOutcome returns the journal recorded for an idempotency key
+// under root. found=false means no journal file exists. The materializer
+// uses it to re-drive terminal bookkeeping (applied/failed event,
+// checkpoint, route) without re-entering the updater when a prior pass
+// already completed the swap — e.g. a degraded operation whose refusal
+// landed after the journal wrote phase=completed — and to keep repair
+// possible while the updater socket is unavailable during early boot.
+func ReadJournalOutcome(root, idempotencyKey string) (JournalOutcome, bool, error) {
+	journal, found, err := readJournal(filepath.Join(filepath.Clean(strings.TrimSpace(root)), "operations", safeName(idempotencyKey)+".json"))
+	if err != nil || !found {
+		return JournalOutcome{}, false, err
+	}
+	return JournalOutcome{
+		Result:   journal.Result,
+		Failure:  journal.Failure,
+		Terminal: journal.Result.Outcome != "",
+	}, true, nil
 }
 
 func writeJournal(path string, journal operationJournal) error {

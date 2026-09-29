@@ -73,7 +73,7 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 	}
 	rt.selfdevMaterializeMu.Lock()
 	defer rt.selfdevMaterializeMu.Unlock()
-	operations, err := rt.selfdevOperations.ListByStates(ctx, rt.selfdevComputerID, selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending)
+	operations, err := rt.selfdevOperations.ListByStates(ctx, rt.selfdevComputerID, selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending, selfdev.StateDegraded)
 	if err != nil {
 		return
 	}
@@ -94,7 +94,12 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 			}
 		}
 		var operationErr error
-		if operation.State == selfdev.StateRollbackPending {
+		if operation.State == selfdev.StateRollbackPending ||
+			// A degraded operation carrying a route receipt completed a prior
+			// promote and was lost mid-rollback; a degraded operation without
+			// one was lost mid-apply. The route receipt — only ever written by
+			// recordMaterializationApplied — discriminates the two.
+			(operation.State == selfdev.StateDegraded && strings.TrimSpace(operation.RouteReceipt) != "") {
 			operationErr = rt.rollbackSelfDevelopmentOperation(ctx, operation)
 		} else {
 			operationErr = rt.materializeSelfDevelopmentOperation(ctx, operation)
@@ -250,6 +255,15 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		return err
 	}
 	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
+	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
+		// The journal is the durable authority: a terminal outcome supersedes
+		// whatever the live Apply returned (including a transport error that
+		// lost the response or an epoch-fenced replay refusal).
+		result, applyErr = journaled.Result, nil
+		if journaled.Result.Outcome != "applied" {
+			applyErr = errors.New(journaled.Failure)
+		}
+	}
 	ref, publicKey, keyErr := rt.selfdevUpdater.PublicKey(ctx)
 	if keyErr != nil {
 		return keyErr
@@ -259,12 +273,25 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
 			return fmt.Errorf("materializer: invalid applied receipts")
 		}
-		return rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventMaterializationApplied, selfdev.StateMaterializing, selfdev.StateApplied, routeledger.TransitionPromote, "computer:self_development:approve")
+		return rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventMaterializationApplied, operation.State, selfdev.StateApplied, routeledger.TransitionPromote, "computer:self_development:approve")
 	}
 	if result.RecoveryReceipt != nil && result.RecoveryReceipt.Verify(resolver) == nil {
-		return rt.recordMaterializationFailed(ctx, operation, result, applyErr, selfdev.StateMaterializing)
+		return rt.recordMaterializationFailed(ctx, operation, result, applyErr, operation.State)
 	}
-	_, transitionErr := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, selfdev.StateMaterializing, selfdev.StateDegraded, func(next *selfdev.Operation) error {
+	// Only a typed refusal is terminal: the updater judged the request itself
+	// invalid. Transport failures (daemon down, socket error) stay
+	// materializing and the caller re-arms a retry wake — the journal may
+	// already record a completed swap the response never delivered.
+	if !errors.Is(applyErr, updater.ErrApplyRefused) {
+		return applyErr
+	}
+	if operation.State == selfdev.StateDegraded {
+		// Re-refused while degraded and the journal still has no terminal
+		// outcome: nothing will repair this pass's verdict; staying silent
+		// keeps the terminal row instead of arming a retry every 60s.
+		return nil
+	}
+	_, transitionErr := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, selfdev.StateDegraded, func(next *selfdev.Operation) error {
 		next.TerminalError = applyErr.Error()
 		return nil
 	})
@@ -301,6 +328,12 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 		return err
 	}
 	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
+	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
+		result, applyErr = journaled.Result, nil
+		if journaled.Result.Outcome != "applied" {
+			applyErr = errors.New(journaled.Failure)
+		}
+	}
 	ref, publicKey, keyErr := rt.selfdevUpdater.PublicKey(ctx)
 	if keyErr != nil {
 		return keyErr
@@ -310,12 +343,20 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 		if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
 			return fmt.Errorf("materializer: invalid rollback receipts")
 		}
-		return rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventRollbackApplied, selfdev.StateRollbackPending, selfdev.StateRolledBack, routeledger.TransitionRollback, "computer:self_development:rollback")
+		return rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventRollbackApplied, operation.State, selfdev.StateRolledBack, routeledger.TransitionRollback, "computer:self_development:rollback")
 	}
 	if result.RecoveryReceipt != nil && result.RecoveryReceipt.Verify(resolver) == nil {
-		return rt.recordMaterializationFailed(ctx, operation, result, applyErr, selfdev.StateRollbackPending)
+		return rt.recordMaterializationFailed(ctx, operation, result, applyErr, operation.State)
 	}
-	_, transitionErr := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, selfdev.StateRollbackPending, selfdev.StateDegraded, func(next *selfdev.Operation) error {
+	if !errors.Is(applyErr, updater.ErrApplyRefused) {
+		return applyErr
+	}
+	if operation.State == selfdev.StateDegraded {
+		// Re-refused while degraded with a non-terminal journal: stay
+		// terminal rather than arming a retry loop.
+		return nil
+	}
+	_, transitionErr := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, selfdev.StateDegraded, func(next *selfdev.Operation) error {
 		next.TerminalError = applyErr.Error()
 		return nil
 	})
