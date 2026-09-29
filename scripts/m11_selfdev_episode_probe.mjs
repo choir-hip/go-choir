@@ -468,7 +468,18 @@ try {
       qualified_consensus: { seat_manifest: consensus.manifest, subject: consensus.subject, selection: consensus.selection, ballots: consensus.ballots, now: consensus.now },
     });
     result.primary_decision = approved.json ?? approved.text;
-    if (approved.status !== 200) throw new Error(`approval refused: ${JSON.stringify(result.primary_decision)}`);
+    if (approved.status !== 200) {
+      // The appender's post-commit drain races this POST: our own committed
+      // decision event can be finalized by recoverSelfDevelopmentDecision
+      // before the handler's op-state transition lands, and the request then
+      // returns 409 "state is accepted" even though the decision committed.
+      // The durable op record is the authority — accept a descended state.
+      const current = await fetchJSON(page, `/api/computers/${encodeURIComponent(computerID)}/self-development/operations/${encodeURIComponent(primaryID)}`);
+      result.primary_decision_recovery = { status: approved.status, body: approved.json ?? approved.text, observed: current?.state };
+      if (!(current?.state === 'accepted' || current?.state === 'materializing' || current?.state === 'applied')) {
+        throw new Error(`approval refused: ${JSON.stringify(result.primary_decision)}`);
+      }
+    }
     mark('approved');
 
     primary = await waitForOperation(page, computerID, primaryID, 'applied');
@@ -518,8 +529,18 @@ try {
             reason: `Candidate-B falsification for ${marker}`, ...candidateBindings, mode_receipt: candidateDecisionMode.receipt,
           });
           result.candidate_b_decision = rejected.json ?? rejected.text;
+          // Same drain race as the approve path: the committed reject event
+          // may be finalized before the handler's op transition, yielding
+          // 409 with the durable record already 'rejected'. Authority = op.
+          if (rejected.status !== 200) {
+            const currentCandidate = await fetchJSON(page, `/api/computers/${encodeURIComponent(computerID)}/self-development/operations/${encodeURIComponent(candidateID)}`);
+            result.candidate_b_decision_recovery = { status: rejected.status, observed: currentCandidate?.state };
+            if (currentCandidate?.state === 'rejected') {
+              result.candidate_b_decision = currentCandidate;
+            }
+          }
           mark('candidate_b_rejected', {status: rejected.status});
-          result.legs.candidate_b_rejected = rejected.status === 200 && rejected.json?.state === 'rejected';
+          result.legs.candidate_b_rejected = result.candidate_b_decision?.state === 'rejected' || (rejected.status === 200 && rejected.json?.state === 'rejected');
         } else {
           result.candidate_b_blocker = 'candidate-B did not reach awaiting_approval; no public commitment-record mint endpoint exists';
         }
