@@ -504,7 +504,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 			}
 		}
 		checkpoint, err = rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
-			ComputerID: operation.ComputerID, IdempotencyKey: "selfdev-checkpoint-" + operation.DecisionEvent,
+			ComputerID: operation.ComputerID, IdempotencyKey: "selfdev-checkpoint-" + operation.DecisionEvent + "-" + head.CanonicalEventHead[:16],
 			ComputerVersion: version, AcceptedEventHead: head.CanonicalEventHead, EffectiveEventHead: head.EffectiveEventHead,
 			EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: checkpointHeadReceipt.ReceiptID,
 			ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
