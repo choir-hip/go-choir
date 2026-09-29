@@ -434,3 +434,39 @@ checkpoint never minted for this computer. If the authority's key-pin
 check fires after the join fix, a genesis re-import
 (`importSelfDevelopmentGenesis` is replay-safe for an existing event) is
 the remediation path.
+
+## Resolution (landed 2026-09-29)
+
+All wedges are closed; `selfdev-0af47efdf2983e4a5bad609be0cbd597` drained to
+`applied` on build `b54910a4` (deployed 13:49 UTC, VM epoch 12794).
+
+- **Wedge 10** — `7619a17b`: `verificationEvidence` reads the recorded
+  `verification_recorded` payload via `eventPayloadReader`; the certificate
+  signs the draft bundle digest + payload verifier_refs. Test fixtures now
+  mirror production finalization (bundle rewritten with the event digest in
+  `VerifierReceipts`, new final digest on the operation row).
+- **Wedge 11 (new)** — `bc27837a`: `Publish` treats `ErrNoRows` on the
+  `verifier-control` pin lookup as a first-use pin when the computer has a
+  `genesis_imported` event. Chain-bootstrapped computers (empty
+  `verifier_refs`, no genesis-mint checkpoint) can never satisfy the original
+  pin rule; the pin is authorized by the checkpoint's own receipt and marked
+  `repair: legacy-import first-use pin`.
+- **Wedge 12 (new)** — `661ccf99` + `6f88d2d8`: head-bound CAS retry (3
+  attempts, re-reads head/receipt/reconstruction digest) plus head-keyed
+  checkpoint idempotency (`-<head[:16]>`) so a moved head mints a fresh key
+  instead of colliding on a stale-commitment replay. Trigger: per-boot
+  `key_revoked` credential rotations advance the head inside the publish
+  window.
+- **Wedge 13 (new)** — `06b5d197` + `067cdd95` + `b54910a4`: on
+  `RouteAbsent` for a non-rollback op, the materializer bootstraps the route
+  slot via `ApplyPlatformFollowRouteProjection` under
+  `PlatformUpdateFollowScope`/`PlatformUpdateFollowActor`. The self-dev
+  endpoint refuses `TransitionBootstrap` by design; bootstrap is
+  platform-scope, matching `platform_update.go`'s own RouteAbsent bootstrap.
+  `ResolveComputerVersionRouteOrAbsent` is used so the flag reaches the
+  branch instead of erroring.
+
+Residual risk: the verifier pin's first-use path trusts whatever key the
+guest's signer presents on its first verifier-class checkpoint. For
+BootstrapChain imports that is the only possible key — the guest data volume
+is not host-observable. Documented in the pin receipt's `repair` field.
