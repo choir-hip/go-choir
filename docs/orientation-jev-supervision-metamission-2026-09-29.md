@@ -147,7 +147,8 @@ research tuning, not after. New order (each a separate `/goal` file):
 
 | # | Station | Delivers | Depends |
 |---|---|---|---|
-| M0 | **Research-prompt debug** — the QA stall | Redeploy owner computer onto today's build; diagnose desk wake debt + research-no-report-back + SSE reconnect; timing records per desk turn. The "10 versions in 5 minutes" bar lives here. | none — first |
+| M0 | **Research-prompt debug + desk wake** | Redeploy owner computer onto today's build; diagnose desk wake debt + **why research never reported back** + SSE reconnect; timing records per desk turn. The "10 versions in 5 minutes" bar lives here. | none — first |
+| M0a | **Research full-RLM + mid-cell evidence** | Delete the 14-tool surface; research is `desk_go_eval` only. In-cell verbs `choir.WebSearch`/`FetchURL`/evidence ops + **eager channel emission** (`choir.EmitEvidence` or eager `Report` — channel message delivers mid-cell, ledger commit still stages atomically at cell end). Texture's follow-up path back to a live research cell = channel cast → cell inbox. *This is the substrate change the QA stall actually needs — not a faster model.* | M0 |
 | M1 | **Scoreable commitments** | `Precommit` freezes typed questions + probabilities; `Resolve` carries evidence refs; `Disagreement` split (resolver-verdict vs scorer). | M0 findings may reshape |
 | M2 | **Model/policy eval surface** | Model/provider/effort is desk-chosen config, not static `model-policy.toml`; evals run as parallel RLM casts; timing + token records per turn. *Moved before Jev — it is the instrument research tuning needs.* | M1 (evals score commitments) |
 | M3 | **Research hill-climbing** | Multi-model/effort eval matrix on the QA prompt family; prompt, repl-state, and search-API ergonomics tuned against measured versions. | M2 |
