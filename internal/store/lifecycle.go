@@ -571,47 +571,72 @@ func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object) (ActorWakeOutbox
 		strings.TrimSpace(update.TrajectoryID), strings.TrimSpace(update.AgentID), "coagent_result", content, time.Time{}, "wake:"+worker.CanonicalID)
 }
 
-func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Object) (ActorWakeOutbox, objectgraph.Object, error) {
+// actorWakeOutboxFromObject derives every durable actor wake a committed
+// object owes. Most kinds owe at most one; an engineering assignment at its
+// initial bound commit owes two — the run dispatch (the crash-gap repair for
+// the bind→activate window) and the progress-overdue deadline — so the return
+// is a slice and the caller mints each unprojected entry.
+func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Object) ([]objectgraph.Object, error) {
 	switch obj.ObjectKind {
 	case ogKindWorkerUpdate:
-		return actorWakeOutboxFromWorkerUpdate(obj)
+		_, outbox, err := actorWakeOutboxFromWorkerUpdate(obj)
+		if err != nil || outbox.CanonicalID == "" {
+			return nil, err
+		}
+		return []objectgraph.Object{outbox}, nil
 	case ogKindWorkItem:
 		work, err := decodeLifecycleObject[types.WorkItemRecord](obj)
 		if err != nil {
-			return ActorWakeOutbox{}, objectgraph.Object{}, err
+			return nil, err
 		}
 		if work.Status != types.WorkItemOpen || work.LifecycleVersion != 1 || strings.TrimSpace(work.AssignedAgentID) == "" || strings.TrimSpace(work.TrajectoryID) == "" {
-			return ActorWakeOutbox{}, objectgraph.Object{}, nil
+			return nil, nil
 		}
 		content, err := json.Marshal(actorWakeWorkAssignedContent{WorkItemID: work.WorkItemID, TrajectoryID: work.TrajectoryID})
 		if err != nil {
-			return ActorWakeOutbox{}, objectgraph.Object{}, err
+			return nil, err
 		}
 		sourceID := "work:" + work.WorkItemID + ":" + fmt.Sprint(work.LifecycleVersion)
-		return actorWakeOutbox(obj, sourceID, work.AssignedAgentID, work.TrajectoryID, "", "lifecycle_work_assigned", string(content), time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID)
+		_, outbox, err := actorWakeOutbox(obj, sourceID, work.AssignedAgentID, work.TrajectoryID, "", "lifecycle_work_assigned", string(content), time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID)
+		if err != nil || outbox.CanonicalID == "" {
+			return nil, err
+		}
+		return []objectgraph.Object{outbox}, nil
 	case ogKindLifecycleCancelIntent:
 		intent, err := decodeLifecycleObject[types.LifecycleCancellationIntent](obj)
 		if err != nil {
-			return ActorWakeOutbox{}, objectgraph.Object{}, err
+			return nil, err
 		}
 		if strings.TrimSpace(intent.TrajectoryID) == "" || strings.TrimSpace(intent.OwnerID) == "" {
-			return ActorWakeOutbox{}, objectgraph.Object{}, ErrLifecycleInvalidTransition
+			return nil, ErrLifecycleInvalidTransition
 		}
-		return actorWakeOutbox(obj, "cancel:"+intent.CommandID, "management:"+intent.OwnerID, intent.TrajectoryID, "",
+		_, outbox, err := actorWakeOutbox(obj, "cancel:"+intent.CommandID, "management:"+intent.OwnerID, intent.TrajectoryID, "",
 			"lifecycle_cancellation", intent.TrajectoryID, time.Time{}, "wake:"+obj.CanonicalID+":"+intent.CommandID)
+		if err != nil || outbox.CanonicalID == "" {
+			return nil, err
+		}
+		return []objectgraph.Object{outbox}, nil
 	case ogKindEngineeringAssignment:
 		assignment, err := decodeLifecycleObject[types.EngineeringAssignment](obj)
 		if err != nil {
-			return ActorWakeOutbox{}, objectgraph.Object{}, err
+			return nil, err
 		}
 		if strings.TrimSpace(assignment.Binding.ParentAgentID) == "" {
-			return ActorWakeOutbox{}, objectgraph.Object{}, nil
-		}
-		content, err := json.Marshal(actorWakeEngineeringDeadlineContent{AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt})
-		if err != nil {
-			return ActorWakeOutbox{}, objectgraph.Object{}, err
+			return nil, nil
 		}
 		sourceID := "assignment:" + assignment.AssignmentID + ":" + fmt.Sprint(assignment.Binding.Attempt)
+		var wakes []objectgraph.Object
+		appendWake := func(sourceIDSuffix, targetAgentID, kind, content string, notBefore time.Time) error {
+			_, outbox, wakeErr := actorWakeOutbox(obj, sourceID+sourceIDSuffix, targetAgentID, assignment.Binding.TrajectoryID, "",
+				kind, content, notBefore, "wake:"+obj.CanonicalID+":"+sourceID+sourceIDSuffix)
+			if wakeErr != nil {
+				return wakeErr
+			}
+			if outbox.CanonicalID != "" {
+				wakes = append(wakes, outbox)
+			}
+			return nil
+		}
 		// A freshly opened assignment owes its spawn saga — minted atomically
 		// in the same commit, so a crash between durable open and any
 		// post-commit arm can no longer strand the row open+unbound. Owner
@@ -622,10 +647,12 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 		if assignment.Disposition == types.EngineeringAssignmentOpen && assignment.LifecycleVersion == 1 {
 			spawnContent, spawnErr := json.Marshal(actorWakeEngineeringDeadlineContent{AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt})
 			if spawnErr != nil {
-				return ActorWakeOutbox{}, objectgraph.Object{}, spawnErr
+				return nil, spawnErr
 			}
-			return actorWakeOutbox(obj, sourceID+":spawn", assignment.Binding.ParentAgentID, assignment.Binding.TrajectoryID, "",
-				"delegated_assignment_spawn_deadline", string(spawnContent), time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID+":spawn")
+			if err := appendWake(":spawn", assignment.Binding.ParentAgentID, "delegated_assignment_spawn_deadline", string(spawnContent), time.Time{}); err != nil {
+				return nil, err
+			}
+			return wakes, nil
 		}
 		// G9: a committed disposition that leaves pending fate work owes an
 		// immediate re-drive — the watchdog arms after commit, so a crash in
@@ -634,37 +661,61 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 		if assignment.Disposition == types.EngineeringAssignmentBound && assignment.PendingProposal != nil {
 			switch assignment.CapsuleDisposition {
 			case types.EngineeringCapsuleFreezeRequested, types.EngineeringCapsuleFrozen, types.EngineeringCapsuleRevokeRequested, types.EngineeringCapsuleRevoked:
-				return actorWakeOutbox(obj, sourceID+":fate", assignment.Binding.ParentAgentID, assignment.Binding.TrajectoryID, "",
-					"assigned_engineering_fate_deadline", string(content), time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID+":fate")
+				content, contentErr := json.Marshal(actorWakeEngineeringDeadlineContent{AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt})
+				if contentErr != nil {
+					return nil, contentErr
+				}
+				if err := appendWake(":fate", assignment.Binding.ParentAgentID, "assigned_engineering_fate_deadline", string(content), time.Time{}); err != nil {
+					return nil, err
+				}
+				return wakes, nil
 			}
 		}
-		// M11 edge 3: a bound assignment with no fate proposal owes the
-		// progress-overdue wake. Every commit re-emits the wake with this
-		// object's UpdatedAt as the silence anchor, so accepted reports re-arm
-		// the review window; the fired deadline is a no-op while fresher
-		// progress exists. Silence is supervision signal, not auto-cancel.
 		if assignment.Disposition == types.EngineeringAssignmentBound && assignment.PendingProposal == nil &&
-			!assignment.UpdatedAt.IsZero() && assignment.CapsuleDisposition == types.EngineeringCapsuleActive {
-			progressContent, progressErr := json.Marshal(actorWakeEngineeringProgressContent{
-				AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
-				SilenceSinceUnixNano: assignment.UpdatedAt.UnixNano(),
-			})
-			if progressErr != nil {
-				return ActorWakeOutbox{}, objectgraph.Object{}, progressErr
+			assignment.CapsuleDisposition == types.EngineeringCapsuleActive {
+			// Bind→activate crash gap: the first bound commit mints the run's
+			// initial_dispatch durably, so a process death between the bind
+			// commit and rt.activate no longer strands a bound run pending
+			// forever. The wake replays the exact content rt.activate sends;
+			// handleInitialDispatch re-reads run state and no-ops once the
+			// run is past pending. LifecycleVersion==2 names the first bind
+			// commit only — later bound commits (fate proposals, report
+			// recording) must not re-dispatch a consumed initial_dispatch.
+			if assignment.LifecycleVersion == 2 && strings.TrimSpace(assignment.BoundRunID) != "" &&
+				strings.TrimSpace(assignment.Binding.AssignedAgentID) != "" {
+				if err := appendWake(":dispatch", assignment.Binding.AssignedAgentID, "initial_dispatch", assignment.BoundRunID, time.Time{}); err != nil {
+					return nil, err
+				}
 			}
-			return actorWakeOutbox(obj, fmt.Sprintf("%s:progress:%d", sourceID, assignment.UpdatedAt.UnixNano()),
-				assignment.Binding.ParentAgentID, assignment.Binding.TrajectoryID, "",
-				"engineering_progress_overdue_deadline", string(progressContent),
-				assignment.UpdatedAt.Add(EngineeringProgressReviewWindow), fmt.Sprintf("wake:%s:%s:progress:%d", obj.CanonicalID, sourceID, assignment.UpdatedAt.UnixNano()))
+			// M11 edge 3: a bound assignment with no fate proposal owes the
+			// progress-overdue wake. Every commit re-emits the wake with this
+			// object's UpdatedAt as the silence anchor, so accepted reports
+			// re-arm the review window; the fired deadline is a no-op while
+			// fresher progress exists. Silence is supervision signal, not
+			// auto-cancel.
+			if !assignment.UpdatedAt.IsZero() {
+				progressContent, progressErr := json.Marshal(actorWakeEngineeringProgressContent{
+					AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
+					SilenceSinceUnixNano: assignment.UpdatedAt.UnixNano(),
+				})
+				if progressErr != nil {
+					return nil, progressErr
+				}
+				if err := appendWake(fmt.Sprintf(":progress:%d", assignment.UpdatedAt.UnixNano()), assignment.Binding.ParentAgentID,
+					"engineering_progress_overdue_deadline", string(progressContent),
+					assignment.UpdatedAt.Add(EngineeringProgressReviewWindow)); err != nil {
+					return nil, err
+				}
+			}
 		}
-		return ActorWakeOutbox{}, objectgraph.Object{}, nil
+		return wakes, nil
 	case ogKindTexRev:
 		revision, err := decodeLifecycleObject[types.Revision](obj)
 		if err != nil {
-			return ActorWakeOutbox{}, objectgraph.Object{}, err
+			return nil, err
 		}
 		if revision.AuthorKind != types.AuthorUser || strings.TrimSpace(revision.DocID) == "" || strings.TrimSpace(revision.TrajectoryID) == "" {
-			return ActorWakeOutbox{}, objectgraph.Object{}, nil
+			return nil, nil
 		}
 		profile := agentprofile.Texture
 		for _, candidate := range objects {
@@ -685,13 +736,17 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 		content, err := json.Marshal(actorWakeOwnerRevisionContent{RevisionID: revision.RevisionID, RequestID: revision.RevisionID,
 			LifecycleVersion: lifecycleVersion, ReducerSeq: reducerSeq})
 		if err != nil {
-			return ActorWakeOutbox{}, objectgraph.Object{}, err
+			return nil, err
 		}
 		sourceID := "revision:" + revision.RevisionID
-		return actorWakeOutbox(obj, sourceID, profile+":"+revision.DocID, revision.TrajectoryID, "owner:"+revision.OwnerID,
+		_, outbox, err := actorWakeOutbox(obj, sourceID, profile+":"+revision.DocID, revision.TrajectoryID, "owner:"+revision.OwnerID,
 			"owner_revision", string(content), time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID)
+		if err != nil || outbox.CanonicalID == "" {
+			return nil, err
+		}
+		return []objectgraph.Object{outbox}, nil
 	default:
-		return ActorWakeOutbox{}, objectgraph.Object{}, nil
+		return nil, nil
 	}
 }
 
@@ -849,7 +904,7 @@ func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 			return minted, fmt.Errorf("migrate actor wake outbox: list %s: %w", kind, err)
 		}
 		for _, obj := range objects {
-			_, outbox, err := actorWakeOutboxFromObject(obj, s.actorWakeResolverObjects(ctx, obj, objects))
+			outboxes, err := actorWakeOutboxFromObject(obj, s.actorWakeResolverObjects(ctx, obj, objects))
 			if err != nil {
 				// One malformed/unmappable object must not abort the migration
 				// and strand every later pending packet — now that the boot
@@ -857,19 +912,21 @@ func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 				log.Printf("migrate actor wake outbox: skip %s %s: %v", kind, obj.CanonicalID, err)
 				continue
 			}
-			if outbox.CanonicalID == "" {
-				continue
-			}
-			// Not-exists condition makes re-minting idempotent: a wake already
-			// folded by a live commit or a prior migration run is skipped.
-			condition := objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID, Exists: false}
-			if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{outbox}}); err != nil {
-				if errors.Is(err, objectgraph.ErrConflict) {
-					continue // already minted
+			for _, outbox := range outboxes {
+				if outbox.CanonicalID == "" {
+					continue
 				}
-				return minted, fmt.Errorf("migrate actor wake outbox: mint %s: %w", outbox.CanonicalID, err)
+				// Not-exists condition makes re-minting idempotent: a wake already
+				// folded by a live commit or a prior migration run is skipped.
+				condition := objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID, Exists: false}
+				if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{outbox}}); err != nil {
+					if errors.Is(err, objectgraph.ErrConflict) {
+						continue // already minted
+					}
+					return minted, fmt.Errorf("migrate actor wake outbox: mint %s: %w", outbox.CanonicalID, err)
+				}
+				minted++
 			}
-			minted++
 		}
 	}
 	return minted, nil
@@ -2161,57 +2218,59 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		seenConditions[condition.CanonicalID] = struct{}{}
 	}
 	for _, obj := range objects {
-		_, outbox, outboxErr := actorWakeOutboxFromObject(obj, s.actorWakeResolverObjects(ctx, obj, objects))
+		outboxes, outboxErr := actorWakeOutboxFromObject(obj, s.actorWakeResolverObjects(ctx, obj, objects))
 		if outboxErr != nil {
 			return types.LifecycleResult{}, fmt.Errorf("lifecycle: derive actor wake outbox: %w", outboxErr)
 		}
-		if outbox.CanonicalID == "" {
-			continue
-		}
-		if _, exists := seenObjects[outbox.CanonicalID]; !exists {
-			// The wake key is deterministic, so a prior transition on the same
-			// source may already have minted it. Re-minting is idempotent: an
-			// existing unprojected wake with identical body is kept (guard on
-			// its hash); an already-projected wake is re-armed for this
-			// transition (the obligation it signals is still open); only a body
-			// drift on a pending wake is a real conflict.
-			existing, getErr := s.lifecycleGraph().GetObject(ctx, outbox.CanonicalID)
-			switch {
-			case errors.Is(getErr, objectgraph.ErrNotFound):
-				objects = append(objects, outbox)
-				seenObjects[outbox.CanonicalID] = struct{}{}
-				conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID})
-				seenConditions[outbox.CanonicalID] = struct{}{}
-			case getErr != nil:
-				return types.LifecycleResult{}, getErr
-			default:
-				var existingMeta struct {
-					Projected bool `json:"projected"`
-				}
-				if json.Unmarshal(existing.Metadata, &existingMeta) != nil {
-					return types.LifecycleResult{}, fmt.Errorf("lifecycle: decode actor wake outbox %s metadata", outbox.CanonicalID)
-				}
-				conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID, Exists: true, ExpectedContentHash: existing.ContentHash})
-				seenConditions[outbox.CanonicalID] = struct{}{}
-				if existingMeta.Projected {
-					// Re-arm: the prior wake was consumed but the obligation is
-					// still open, so this transition re-mints it unprojected.
-					rearmed := outbox
-					rearmed.CreatedAt = existing.CreatedAt
-					objects = append(objects, rearmed)
+		for _, outbox := range outboxes {
+			if outbox.CanonicalID == "" {
+				continue
+			}
+			if _, exists := seenObjects[outbox.CanonicalID]; !exists {
+				// The wake key is deterministic, so a prior transition on the same
+				// source may already have minted it. Re-minting is idempotent: an
+				// existing unprojected wake with identical body is kept (guard on
+				// its hash); an already-projected wake is re-armed for this
+				// transition (the obligation it signals is still open); only a body
+				// drift on a pending wake is a real conflict.
+				existing, getErr := s.lifecycleGraph().GetObject(ctx, outbox.CanonicalID)
+				switch {
+				case errors.Is(getErr, objectgraph.ErrNotFound):
+					objects = append(objects, outbox)
 					seenObjects[outbox.CanonicalID] = struct{}{}
-				} else if !bytes.Equal(existing.Body, outbox.Body) {
-					// Body (not metadata timestamps) carries the obligation; a
-					// pending wake whose body changed means the source was
-					// concurrently transitioned by a different command — the
-					// canonical concurrent-state-change signal.
-					return types.LifecycleResult{}, ErrConcurrentStateChange
+					conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID})
+					seenConditions[outbox.CanonicalID] = struct{}{}
+				case getErr != nil:
+					return types.LifecycleResult{}, getErr
+				default:
+					var existingMeta struct {
+						Projected bool `json:"projected"`
+					}
+					if json.Unmarshal(existing.Metadata, &existingMeta) != nil {
+						return types.LifecycleResult{}, fmt.Errorf("lifecycle: decode actor wake outbox %s metadata", outbox.CanonicalID)
+					}
+					conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID, Exists: true, ExpectedContentHash: existing.ContentHash})
+					seenConditions[outbox.CanonicalID] = struct{}{}
+					if existingMeta.Projected {
+						// Re-arm: the prior wake was consumed but the obligation is
+						// still open, so this transition re-mints it unprojected.
+						rearmed := outbox
+						rearmed.CreatedAt = existing.CreatedAt
+						objects = append(objects, rearmed)
+						seenObjects[outbox.CanonicalID] = struct{}{}
+					} else if !bytes.Equal(existing.Body, outbox.Body) {
+						// Body (not metadata timestamps) carries the obligation; a
+						// pending wake whose body changed means the source was
+						// concurrently transitioned by a different command — the
+						// canonical concurrent-state-change signal.
+						return types.LifecycleResult{}, ErrConcurrentStateChange
+					}
 				}
 			}
-		}
-		if _, exists := seenConditions[outbox.CanonicalID]; !exists {
-			conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID})
-			seenConditions[outbox.CanonicalID] = struct{}{}
+			if _, exists := seenConditions[outbox.CanonicalID]; !exists {
+				conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID})
+				seenConditions[outbox.CanonicalID] = struct{}{}
+			}
 		}
 	}
 	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: edges}); err != nil {

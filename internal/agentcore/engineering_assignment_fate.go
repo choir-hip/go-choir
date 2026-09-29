@@ -229,8 +229,16 @@ func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, ass
 		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 		result, cancelErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
 		if cancelErr == nil {
-			if !result.Replay && result.Update != nil {
-				rt.wakeUpdatedCoagent(ctx, *result.Update)
+			if !result.Replay {
+				if result.Update != nil {
+					rt.wakeUpdatedCoagent(ctx, *result.Update)
+				}
+				// Every assignment-level cancellation funnels through this
+				// choke point; the bound self-development op must fail here,
+				// not only in the trajectory wrapper — reconcile, deadline,
+				// and direct-cancel callers each used to leave the op
+				// executing. Best-effort: terminal/missing op converges.
+				rt.failBoundSelfdevOperation(ctx, current.Binding.ComputerID, current.Binding.TrajectoryID, cancel.Reason)
 			}
 			return result, nil
 		}
@@ -315,15 +323,8 @@ func (rt *Runtime) cancelBoundEngineeringRun(ctx context.Context, rec types.RunR
 		return true, err
 	}
 	_, err = rt.persistSystemEngineeringCancellation(ctx, assignment, reason)
-	if err == nil {
-		// A bound desk run that terminalizes without a committed fate leaves
-		// its self-development operation in `executing` forever unless the
-		// cancellation reaches the op store — the wedge the completion guard
-		// now surfaces must resolve to `failed`, not sit silent. Best-effort:
-		// an op lookup miss or a state-conflict on an already-terminal op is
-		// convergence, not failure.
-		rt.failBoundSelfdevOperation(ctx, rec.ComputerID, trajectoryIDForRun(&rec), reason)
-	}
+	// persistSystemEngineeringCancellation closes the bound self-development
+	// op at the choke point; a second fail call here would be duplicate.
 	return true, err
 }
 
