@@ -73,10 +73,26 @@ func assignedEngineeringRun(rec *types.RunRecord) bool {
 		metadataStringValue(rec.Metadata, "assignment_id") != ""
 }
 
-func (rt *Runtime) assignedEngineeringCapsuleUsable(assignment types.EngineeringAssignment) bool {
+func (rt *Runtime) assignedEngineeringCapsuleUsable(ctx context.Context, assignment types.EngineeringAssignment) bool {
 	exec := rt.assignedCapsule()
 	if exec == nil || strings.TrimSpace(assignment.BoundRunID) == "" || strings.TrimSpace(assignment.Binding.CapsuleID) == "" {
 		return false
+	}
+	// A bound run that is no longer executing (completed/failed/cancelled
+	// without reporting, or parked blocked by budget/rate-limit) cannot drive
+	// its capsule to a terminal fate. Capsule liveness alone is not proof of
+	// usability — the run is the driver. Receipt:
+	// docs/problems/engineering-run-death-leaves-bound-assignment-2026-09-29.md
+	// RunBlocked is dead for assignment purposes: blocked runs are excluded
+	// from residency and replaced, never resumed, so the capsule can never
+	// reach terminal fate through it. Terminal or missing rows are dead.
+	// Pending bound runs are mid-saga (reconcile holds the open mutex), so
+	// they stay usable.
+	if rt.store != nil {
+		run, runErr := rt.store.GetLifecycleRun(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.BoundRunID)
+		if runErr != nil || (run.State != types.RunPending && run.State != types.RunRunning) {
+			return false
+		}
 	}
 	handle, handleErr := exec.AssignmentHandle(assignment.BoundRunID, assignment.Binding.CapsuleID)
 	diagnostics, inspectErr := exec.InspectCapsuleRaw(assignment.Binding.CapsuleID)
@@ -483,7 +499,7 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			}
 			continue
 		}
-		usable := rt.assignedEngineeringCapsuleUsable(assignment)
+		usable := rt.assignedEngineeringCapsuleUsable(ctx, assignment)
 		if usable {
 			continue
 		}

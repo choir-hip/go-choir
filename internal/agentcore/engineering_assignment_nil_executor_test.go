@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"context"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -27,7 +28,7 @@ func TestAssignedEngineeringCapsuleUsableWithoutExecutorDoesNotPanic(t *testing.
 		BoundRunID: "run-bound",
 		Binding:    types.EngineeringAssignmentBinding{CapsuleID: "capsule-bound"},
 	}
-	if rt.assignedEngineeringCapsuleUsable(assignment) {
+	if rt.assignedEngineeringCapsuleUsable(context.Background(), assignment) {
 		t.Fatal("no capsule executor must never report a usable assignment capsule")
 	}
 }

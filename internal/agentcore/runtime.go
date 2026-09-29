@@ -1703,6 +1703,22 @@ func (rt *Runtime) persistActivationStateAndEmit(ctx context.Context, rec *types
 		return false, nil
 	}
 	rt.appendTraceEvent(ctx, evRec)
+	// A bound Engineering run leaving pending/running (failed, cancelled,
+	// blocked, passivated) strands its capsule and trajectory-bound operation
+	// unless the assignment fate reconcile re-runs. Kick it here — at the
+	// single persistence point every run-state transition shares — so dead
+	// drivers never wait for a restart or unrelated wake. Best-effort: the
+	// kick never masks the persisted transition. Receipt:
+	// docs/problems/engineering-run-death-leaves-bound-assignment-2026-09-29.md
+	if assignedEngineeringRun(rec) && rec.State != types.RunPending && rec.State != types.RunRunning {
+		if trajID := strings.TrimSpace(trajectoryIDForRun(rec)); trajID != "" {
+			go func(ownerID, computerID, trajectoryID, runID string) {
+				if reconErr := rt.ReconcileEngineeringAssignmentsForTrajectory(context.Background(), ownerID, computerID, trajectoryID); reconErr != nil {
+					log.Printf("runtime: engineering reconcile after assignment run %s left %s: %v", runID, rec.State, reconErr)
+				}
+			}(rec.OwnerID, rec.ComputerID, trajID, rec.RunID)
+		}
+	}
 	rt.bus.Publish(events.RuntimeEvent{
 		Record: *evRec,
 		Actor:  events.ActorRuntime,
