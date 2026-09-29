@@ -567,6 +567,18 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	}
 	routeIdempotency := routeledger.IdempotencyKey("idempotency:selfdev-route:" + operation.DecisionEvent)
 	oldVersion, expectedGeneration := currentRoute.Slot.Current, currentRoute.Slot.Generation
+	// A chain-bootstrapped computer has no route slot row: Resolve returns
+	// RouteAbsent with no current version. The only legal first transition is
+	// TransitionBootstrap — promote/rollback both require an existing slot.
+	// Detect that here rather than letting the authority surface "route is
+	// absent" as a terminal refusal.
+	effectiveRouteKind := routeKind
+	if currentRoute.RouteAbsent {
+		if routeKind == routeledger.TransitionRollback {
+			return fmt.Errorf("materializer: cannot rollback to an absent route slot")
+		}
+		effectiveRouteKind = routeledger.TransitionBootstrap
+	}
 	if currentRoute.Slot.Current == version {
 		if currentRoute.LatestReceipt.IdempotencyKey != routeIdempotency || currentRoute.LatestReceipt.New != version {
 			return fmt.Errorf("materializer: current route already changed by another transition")
@@ -609,7 +621,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		return err
 	}
 	command := routeledger.TransitionCommand{
-		RouteSlotID: routeSlotID, Kind: routeKind, Old: oldVersion, New: version,
+		RouteSlotID: routeSlotID, Kind: effectiveRouteKind, Old: oldVersion, New: version,
 		ExpectedGeneration: expectedGeneration, ApprovalRef: routeledger.ApprovalRef(approvalEvidence.Ref),
 		PromotionCertificateRef: routeledger.PromotionCertificateRef(promotionEvidence.Ref),
 		IdempotencyKey:          routeIdempotency,
