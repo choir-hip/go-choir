@@ -561,7 +561,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	if err != nil {
 		return err
 	}
-	currentRoute, err := rt.selfdevRoute.ResolveComputerVersionRoute(ctx, routeSlotID)
+	currentRoute, err := rt.selfdevRoute.ResolveComputerVersionRouteOrAbsent(ctx, routeSlotID)
 	if err != nil {
 		return err
 	}
