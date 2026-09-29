@@ -475,8 +475,9 @@ try {
       // returns 409 "state is accepted" even though the decision committed.
       // The durable op record is the authority — accept a descended state.
       const current = await fetchJSON(page, `/api/computers/${encodeURIComponent(computerID)}/self-development/operations/${encodeURIComponent(primaryID)}`);
-      result.primary_decision_recovery = { status: approved.status, body: approved.json ?? approved.text, observed: current?.state };
-      if (!(current?.state === 'accepted' || current?.state === 'materializing' || current?.state === 'applied')) {
+      const currentState = current?.json?.state;
+      result.primary_decision_recovery = { status: approved.status, body: approved.json ?? approved.text, observed: currentState };
+      if (!(currentState === 'accepted' || currentState === 'materializing' || currentState === 'applied')) {
         throw new Error(`approval refused: ${JSON.stringify(result.primary_decision)}`);
       }
     }
@@ -534,9 +535,9 @@ try {
           // 409 with the durable record already 'rejected'. Authority = op.
           if (rejected.status !== 200) {
             const currentCandidate = await fetchJSON(page, `/api/computers/${encodeURIComponent(computerID)}/self-development/operations/${encodeURIComponent(candidateID)}`);
-            result.candidate_b_decision_recovery = { status: rejected.status, observed: currentCandidate?.state };
-            if (currentCandidate?.state === 'rejected') {
-              result.candidate_b_decision = currentCandidate;
+            result.candidate_b_decision_recovery = { status: rejected.status, observed: currentCandidate?.json?.state };
+            if (currentCandidate?.json?.state === 'rejected') {
+              result.candidate_b_decision = currentCandidate.json;
             }
           }
           mark('candidate_b_rejected', {status: rejected.status});
