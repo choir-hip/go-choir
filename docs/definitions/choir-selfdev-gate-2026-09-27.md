@@ -148,34 +148,37 @@ value:
       decode or misses a score stamp — receipts are not scored records.'
 
 now:
-  status: working
+  status: landed — full six-leg episode satisfied on staging 2026-09-29
   slice: >-
-    Chartered 2026-09-27 on R5a's settled receipt — all dependencies
-    landed+deployed. 2026-09-27 execution session: four substrate wedges
-    found and repaired (end_turn-without-commit guard
-    docs/problems/m11-engineering-desk-deferral-2026-09-27.md;
-    restart-cancelled cast recast 301fcc21; verification-cast recast
-    530fcdb2; recast desk terminal-report uncommittable -> staged
-    proposal commits 88419f88). Iteration cap deleted per owner ruling
-    (61bd89fc): runaway detection is management/texture's job. 2026-09-27
-    second session: actuator=tools deleted end to end (ownership field,
-    vmctl API, broker one-shot/legacy dispatch, HostSelectsRLM gate,
-    guest cmdline/env route) and the three supervision edges wired per
-    docs/problems/m11-supervision-blind-desk-progress-2026-09-27.md:
-    reports wake a resident parked Management run and stay durable
-    otherwise; document-cast reports retarget to texture:<doc> with the
-    supervision subject minted atomically at first report; a derivable
-    progress_overdue_deadline wake emits one observation
-    packet per silence window. Episode leg on a fresh RLM computer
-    (probe M11_SELFDEV_EPISODE_1790532595839, computer
-    computer-330816470b…): the desk authored + verified the evidence
-    artifact across 48 cells, then both choir.Freeze cells refused —
-    CanonicalEventHead==BaseHead is unsatisfiable once the op's own
-    trajectory_started + continuous projection_batch_recorded advance
-    the head past the pin. Documented
-    docs/problems/m11-freeze-base-head-equality-unsatisfiable-2026-09-27.md.
-    Fix: freeze asserts the pinned projection surface (desired/effective
-    heads, no pending transition), not canonical-head equality.
+    M11 landed 2026-09-29 (probe run 9, predicate `satisfied`, EXIT 0;
+    staging build e886f576+probe). 2026-09-29 reoriented session after
+    clustering assessment
+    (docs/problems/clustering-assessment-engineering-assignment-stalls-2026-09-29.md):
+    Phase A closed six missing event-trigger edges into existing reconcile
+    authorities (cancel choke point, desk kick on pending/running exit,
+    verify-fail gated to frozen, spawn resume serialized, bind→activate
+    atomicity, recast cap 3→fail); Phase B merged three structural
+    authorities (spawn obligation inside Open commit, terminal-run death
+    through fate path, three write-only claim projections deleted).
+    Probe discovered and landed one substrate defect: candidate-B reject
+    decision CAS-refused at pin verification — reject reason pinned as a
+    private payload on an owner-class event; both sides introduced in
+    7d635330; every reject had failed since July (fixed 89cd7247,
+    receipt docs/problems/m11-candidate-reject-pin-mismatch-2026-09-29.md).
+    Residual wart documented: post-commit drain can finalize the committed
+    decision before the handler's op transition, returning 409 for a
+    decision that committed (probe tolerates; correct end-state).
+    Episode evidence:
+    docs/evidence/m11-probe-run9-satisfied-2026-09-29.json — primary op
+    selfdev-fab16b4e28c535ec06c6615537f7b4f9 driverless
+    frozen→awaiting_approval→accepted→applied with qualified consensus,
+    apply tail events (materialization_applied, checkpoint_published,
+    route_projection_updated), candidate-B selfdev-0652c3b3aaef95610f3e42bb7b992f22
+    rejected, falsified commitment visible in the live Texture doc,
+    restored to pinned head via tape_reconstruct. Deferred:
+    commitment_materiality_visible leg (informational, not in predicate —
+    its required falsifier is falsified_commitment_visible, observed
+    true); Jev scorer integration pending owner ratification.
   candidate:
     id: none
     state: none
@@ -201,8 +204,12 @@ now:
       demonstrably develops itself under supervision and the M14-M16
       world-wire missions unlock.
     scope_if_supported: self-development gate satisfied; spine complete
-    status: active
+    status: supported — probe run 9 satisfied all six episode legs on
+      staging 2026-09-29 with no manual repair; scored commitment records
+      and the falsified candidate-B record readable in the live Texture
+      doc (document 42c8b813-cdd2-53af-bdb3-4df12e611d8f).
     evidence_refs:
+      - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
       - docs/desk-rlm-rectification-plan-2026-09-23.md §11.2 (M11), §11.3 (owner rulings)
       - docs/world-wire-mission-stack-2026-09-22.md (3e gate)
   belief:

@@ -84,8 +84,21 @@ live one.
 - **R5a** vocab decoders + seed freeze — gates M11; keep `choir:co-super-assignment:v3`. **R5b** rename-migrate deferred indefinitely.
 - **M7 landed+deployed** (`722b49bf`: derivable selfdev continuations — post-commit observer + coalesced drain advance an op through materialization with no API driver; mid-materialize crash recovers derivably; parked ops mint management-addressed boundary records). — goal file: [`definitions/choir-selfdev-derivable-continuations-2026-09-26.md`](definitions/choir-selfdev-derivable-continuations-2026-09-26.md).
 - **M9a** platform push + restore — on M11's restore edge; chartered under the meta-goal: [`definitions/choir-platform-update-push-restore-2026-09-26.md`](definitions/choir-platform-update-push-restore-2026-09-26.md).
-- **M11** self-dev gate — receipts are scored commitment_records readable in the live Texture doc (owner ruling: the doc is the gate's supervision surface).
-- **M9b/M10** after M11.
+- **M11 settled — self-dev gate LANDED 2026-09-29** (staging `e886f576`):
+  the reversible-selfdev-v1 episode ran end to end on staging with no
+  manual repair — probe run 9 predicate `satisfied`, all six legs
+  (desk-authored op driverless frozen→awaiting_approval→applied under
+  qualified consensus, apply tail events on the tape, candidate-B
+  rejected, falsified record visible in the live Texture doc, pinned-head
+  restore via tape_reconstruct). Substrate repairs that made it stick:
+  nine obligation-edge closures/merges landed under the clustering
+  assessment; the probe found + fixed the reject pin-verification defect
+  (`89cd7247`) — candidate-B reject had never committed since 7d635330.
+  Goal file: [`definitions/choir-selfdev-gate-2026-09-27.md`](definitions/choir-selfdev-gate-2026-09-27.md);
+  evidence: [`evidence/m11-probe-run9-satisfied-2026-09-29.json`](evidence/m11-probe-run9-satisfied-2026-09-29.json).
+  The spine is complete; M9b/M10 become the next frontier.
+- **M9b/M10** after M11 — now unblocked; next station to be chartered
+  from [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md).
 
 **K** [`definitions/choir-ontology-kernel-2026-09-24.md`](definitions/choir-ontology-kernel-2026-09-24.md) — landed substrate (main@66981cef); its `now.status=working` only for a pending owner deletion-sweep ruling.
 

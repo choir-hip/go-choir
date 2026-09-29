@@ -106,21 +106,22 @@ boundaries:
     - run acceptance and deployment routing
 
 now:
-  status: working
+  status: settled — spine complete at M11 terminal 2026-09-29
   slice: >-
-    station M11 IN FLIGHT 2026-09-27 — the self-development gate, last on
-    the spine. Episode probe scripts/m11_selfdev_episode_probe.mjs
-    authored (client-minted qualified-consensus under
-    reversible-selfdev-v1: RFC-8785 canonical digests, seat_manifest
-    binding, Go RFC3339Nano truncation mirrored), pinned pre-episode
-    checkpoint via lifecycle/checkpoint, restore leg on the M9a path.
-    Deployed run launched against staging (fresh owner + tracking
-    computer). Call map: docs/evidence/m11-episode-call-map-2026-09-27.md.
-    In parallel, owner-directed spine reconciliation review: rename
-    residual census at docs/problems/rename-residual-census-2026-09-27.md
-    (Class A live-surface vs Class B frozen vocabulary vs Class C
-    owner-deferred R5b) + full agentic-consensus panel reviewing station
-    completeness.
+    station M11 LANDED 2026-09-29 — the self-development gate, last on
+    the spine. Probe run 9 predicate `satisfied` on staging
+    (docs/evidence/m11-probe-run9-satisfied-2026-09-29.json): fresh owner
+    + real computer, desk-authored op driverless
+    frozen→awaiting_approval→accepted→applied under client-minted
+    qualified consensus, apply tail events on the canonical tape,
+    candidate-B rejected, falsified commitment visible in the live
+    Texture doc, restored to the pinned pre-episode head via
+    tape_reconstruct — six legs, no manual repair. The 2026-09-29
+    session repaired the obligation substrate that made it stick
+    (clustering assessment; nine edge closures/merges) and the probe's
+    own substrate find (reject pin mismatch, 89cd7247). Spine complete;
+    next frontier is M9b/M10 per world-wire-mission-stack-2026-09-22.md
+    — to be chartered at handoff.
   source_ref: main@bc58fa8f
   deploy_identity: staging https://choir.news build.commit=bc58fa8f
   candidate:
@@ -147,9 +148,12 @@ now:
       R3d+R4 land idea-level doc state before the gate, so the observer can
       read supervision state — not just event traffic — when M11 runs.
     scope_if_supported: the desk-RLM rectification spine through M11
-    status: active
+    status: supported — the M11 episode satisfied all six legs on staging
+      2026-09-29; the live doc carried the falsified candidate-B record
+      and scored commitment records under the frozen vocabulary.
     evidence_refs:
       - docs/desk-rlm-rectification-plan-2026-09-23.md §11
+      - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
   decision:
     what: >-
       One durable meta-goal covers the whole spine; a `now.slice` station
@@ -264,6 +268,18 @@ receipts:
     over commitment_record); deployed live-record proof deferred to a doc
     desk report-cast. now.slice -> R3b."
 
+  - "M11 terminal 2026-09-29: landed on staging (probe run 9 predicate
+    satisfied; deployed chain through 89cd7247 reject-pin fix); goal
+    docs/definitions/choir-selfdev-gate-2026-09-27.md now.status=landed;
+    mission-graph node settled. Driverless episode: desk-authored op
+    frozen->awaiting_approval->accepted->applied under qualified
+    consensus; candidate-B rejected; falsified record visible in the
+    live Texture doc; pinned-head restore via tape_reconstruct.
+    Substrate: nine obligation-edge closures/merges under the 2026-09-29
+    clustering assessment; reject pin-verification defect found by the
+    probe and fixed (89cd7247). Evidence:
+    docs/evidence/m11-probe-run9-satisfied-2026-09-29.json.
+    Spine complete — all stations settled."
 ---
 
 # Rectification Spine — durable meta-goal
@@ -284,9 +300,9 @@ and points at a dedicated throughline `/goal` file for the current mission.
   outcomes live in `docs/desk-rlm-rectification-plan-2026-09-23.md` §11 —
   read it before chartering the next station.
 
-**Current station:** M7 → skip the harness (selfdev ops advance on
-derivable continuations driven by the management cell). R4 landed+deployed
-(`68a2e023`, ledger read surface: accrual, falsification-visible
-materiality, score-free acting packs, learning-claims gate). Station goal:
-`choir-selfdev-derivable-continuations-2026-09-26.md`. Also unblocked:
-M9a (once M7 produces something signable); R5a before M11.
+**Spine status: COMPLETE 2026-09-29.** All stations settled at the M11
+terminal receipt — the supervised self-development gate ran end to end on
+staging driverless (goal `choir-selfdev-gate-2026-09-27.md`,
+`now.status=landed`; evidence `docs/evidence/m11-probe-run9-satisfied-2026-09-29.json`).
+Next frontier is M9b/M10 per `docs/world-wire-mission-stack-2026-09-22.md`;
+the next station's `/goal` is authored at handoff per the discipline above.

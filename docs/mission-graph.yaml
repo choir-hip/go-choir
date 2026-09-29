@@ -1134,18 +1134,19 @@ nodes:
     title: Self-Development Gate — Supervised Episode on Records (M11, station)
     path: docs/definitions/choir-selfdev-gate-2026-09-27.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
     entrypoint: false
     enables: []
     note: >-
-      M11 (last spine station): one reversible-selfdev-v1 episode end to
-      end on staging — desk-authored candidate, expected-heads on every
-      material action, qualified-consensus decision under
-      reversible-selfdev-v1, driverless materialize->apply (M7),
-      verification, candidate-B falsification visible in the live Texture
-      doc, restore to the pinned pre-episode head (M9a path). Receipts
-      must be scored commitment_records under the frozen R5a vocabulary.
+      M11 (last spine station) landed 2026-09-29: the
+      reversible-selfdev-v1 episode ran end to end on staging with no
+      manual repair — probe run 9 predicate `satisfied` (desk-authored
+      primary op driverless frozen→awaiting_approval→applied under
+      qualified consensus, apply tail events confirmed, candidate-B
+      rejected, falsified record visible in the live Texture doc,
+      pinned-head restore via tape_reconstruct). Evidence:
+      docs/evidence/m11-probe-run9-satisfied-2026-09-29.json.
       Probe: scripts/m11_selfdev_episode_probe.mjs.
     sources:
       - docs/definitions/choir-selfdev-gate-2026-09-27.md
