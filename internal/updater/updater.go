@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -138,7 +139,16 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	}
 	if found {
 		if journal.RequestCommitment != request.RequestCommitment {
-			return ApplyResult{}, ErrIdempotencyConflict
+			// Journals written before the epoch-independent commitment bound
+			// RealizationID inside the hash; after a VM refresh the replayed
+			// request can never reproduce it. The journal is self-describing:
+			// a completed/failed operation returns its recorded outcome rather
+			// than wedge — the idempotency key already names the operation.
+			if journal.Result.Outcome != "" {
+				log.Printf("updater: journal %s carries pre-epoch commitment; returning recorded outcome", request.IdempotencyKey)
+			} else {
+				return ApplyResult{}, ErrIdempotencyConflict
+			}
 		}
 	} else if request.ComputerID != u.computerID || request.RealizationID != u.realizationID {
 		return ApplyResult{}, fmt.Errorf("updater: incomplete or mismatched apply request")
