@@ -201,7 +201,7 @@ func TestUpdaterRejectsSymlinkManifestEntryBeforePointerMutation(t *testing.T) {
 	}
 	manifest.ContentDigest = computerevent.DigestBytes(unsigned)
 	request := ApplyRequest{ComputerID: "computer-test", RealizationID: "realization-test", OperationID: "operation", IdempotencyKey: "idem", AcceptedEventHead: manifest.AcceptedEventHead, SourceDir: source, Manifest: manifest}
-	request.RequestCommitment, err = validateApplyRequest(request.ComputerID, request.RealizationID, request)
+	request.RequestCommitment, err = validateApplyRequest(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func updaterRequestFixture(t *testing.T, updaterRoot, computerID, realizationID,
 	}
 	manifest.ContentDigest = computerevent.DigestBytes(unsigned)
 	request := ApplyRequest{ComputerID: computerID, RealizationID: realizationID, OperationID: operationID, IdempotencyKey: idempotencyKey, AcceptedEventHead: manifest.AcceptedEventHead, SourceDir: source, Manifest: manifest}
-	request.RequestCommitment, err = validateApplyRequest(computerID, realizationID, request)
+	request.RequestCommitment, err = validateApplyRequest(request)
 	if err != nil {
 		t.Fatal(err)
 	}

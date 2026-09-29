@@ -115,20 +115,33 @@ func New(root, computerID, realizationID string, service ServiceManager, health 
 func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	commitment, err := validateApplyRequest(u.computerID, u.realizationID, request)
+	journalPath := filepath.Join(u.root, "operations", safeName(request.IdempotencyKey)+".json")
+	journal, found, err := readJournal(journalPath)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	// The request commitment deliberately excludes RealizationID: a deploy
+	// refresh rotates the realization epoch, and a replayed apply for an
+	// already-journaled operation must still return the recorded outcome
+	// instead of wedge-refusing (journal replay is the resume path; the
+	// guest reboots between apply and checkpoint in that window). Fresh
+	// applies keep the strict realization fence below.
+	if _, err := validateApplyRequest(request); err != nil {
+		return ApplyResult{}, err
+	}
+	commitment, err := computeApplyRequestCommitment(request)
 	if err != nil {
 		return ApplyResult{}, err
 	}
 	if commitment != request.RequestCommitment {
 		return ApplyResult{}, fmt.Errorf("updater: request commitment mismatch")
 	}
-	journalPath := filepath.Join(u.root, "operations", safeName(request.IdempotencyKey)+".json")
-	journal, found, err := readJournal(journalPath)
-	if err != nil {
-		return ApplyResult{}, err
-	}
-	if found && journal.RequestCommitment != request.RequestCommitment {
-		return ApplyResult{}, ErrIdempotencyConflict
+	if found {
+		if journal.RequestCommitment != request.RequestCommitment {
+			return ApplyResult{}, ErrIdempotencyConflict
+		}
+	} else if request.ComputerID != u.computerID || request.RealizationID != u.realizationID {
+		return ApplyResult{}, fmt.Errorf("updater: incomplete or mismatched apply request")
 	}
 	if found && journal.Result.Outcome != "" {
 		if journal.Result.Outcome == "failed" {
@@ -569,25 +582,34 @@ func FinalizeManifest(manifest ReleaseManifest) (ReleaseManifest, error) {
 }
 
 func ComputeApplyRequestCommitment(request ApplyRequest) (string, error) {
-	request.RequestCommitment = ""
-	canonical, err := computerevent.CanonicalJSON(request)
+	return computeApplyRequestCommitment(request)
+}
+
+// computeApplyRequestCommitment signs every field that identifies the work —
+// except RealizationID. Realization rotates on each VM epoch (deploy refresh),
+// but the operation journal it guards must outlive the rotation so a replayed
+// apply can return the recorded outcome instead of wedging the operation.
+func computeApplyRequestCommitment(request ApplyRequest) (string, error) {
+	commitmentInput := request
+	commitmentInput.RequestCommitment = ""
+	commitmentInput.RealizationID = ""
+	canonical, err := computerevent.CanonicalJSON(commitmentInput)
 	if err != nil {
 		return "", err
 	}
 	return computerevent.DigestBytes(canonical), nil
 }
 
-func validateApplyRequest(computerID, realizationID string, request ApplyRequest) (string, error) {
-	if request.ComputerID != computerID || request.RealizationID != realizationID || request.OperationID == "" || request.IdempotencyKey == "" || !computerevent.IsSHA256(request.AcceptedEventHead) || request.Manifest.ComputerID != computerID || request.Manifest.AcceptedEventHead != request.AcceptedEventHead || !filepath.IsAbs(request.SourceDir) {
+// validateApplyRequest is shape validation only — the commitment is computed
+// independently in Apply so callers may validate without it. RealizationID
+// equality is enforced separately in Apply for fresh requests only.
+func validateApplyRequest(request ApplyRequest) (string, error) {
+	if strings.TrimSpace(request.ComputerID) == "" || request.OperationID == "" || request.IdempotencyKey == "" ||
+		!computerevent.IsSHA256(request.AcceptedEventHead) || request.Manifest.ComputerID != request.ComputerID ||
+		request.Manifest.AcceptedEventHead != request.AcceptedEventHead || !filepath.IsAbs(request.SourceDir) {
 		return "", fmt.Errorf("updater: incomplete or mismatched apply request")
 	}
-	commitmentInput := request
-	commitmentInput.RequestCommitment = ""
-	canonical, err := computerevent.CanonicalJSON(commitmentInput)
-	if err != nil {
-		return "", err
-	}
-	return computerevent.DigestBytes(canonical), nil
+	return computeApplyRequestCommitment(request)
 }
 
 func (u *Updater) currentRelease() (string, string, error) {
