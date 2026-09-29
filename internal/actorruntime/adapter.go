@@ -282,10 +282,18 @@ func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, compute
 
 	// Pre-repair owner wakes carried only the revision id and no authenticated
 	// trajectory/source. Resolve the exact document-bound owner revision.
+	// Lookup failures are transient — they retry on the next sweep; only a
+	// resolved miss means the canonical occurrence is gone for good.
 	docID := strings.TrimPrefix(strings.TrimSpace(toAgentID), agentprofile.Texture+":")
 	doc, docErr := a.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	if docErr != nil && !errors.Is(docErr, store.ErrNotFound) {
+		return "", "", "", fmt.Errorf("actorruntime: resolve Texture owner document %s: %w", docID, docErr)
+	}
 	if docErr == nil && strings.TrimSpace(doc.TrajectoryID) != "" {
 		revision, revErr := a.store.GetLifecycleRevision(ctx, ownerID, computerID, strings.TrimSpace(content))
+		if revErr != nil && !errors.Is(revErr, store.ErrNotFound) {
+			return "", "", "", fmt.Errorf("actorruntime: resolve Texture owner revision: %w", revErr)
+		}
 		if revErr == nil && revision.AuthorKind == types.AuthorUser && revision.DocID == docID {
 			o, occurrenceErr := agentcore.TextureDocumentRevisionOccurrence(revision, "", 0)
 			if occurrenceErr != nil {
@@ -298,7 +306,7 @@ func (a *Adapter) canonicalTextureDispatch(ctx context.Context, ownerID, compute
 			return encoded, o.TrajectoryID, "owner:" + o.OwnerID, nil
 		}
 	}
-	return "", "", "", fmt.Errorf("actorruntime: Texture wake has no exact pending canonical occurrence")
+	return "", "", "", fmt.Errorf("%w: %s -> %s", store.ErrNoPendingActorOccurrence, content, toAgentID)
 }
 
 // dispatch is the function hook that the runtime core calls to send actor

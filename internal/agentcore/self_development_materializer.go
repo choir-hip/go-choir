@@ -59,6 +59,14 @@ func (rt *Runtime) selfdevReconcileDrain() {
 	}
 }
 
+// TriggerSelfDevelopmentReconcile is the derivable-continuation boundary for
+// the materializer: durable retry wakes (selfdev_materialization_retry) and
+// post-commit observers converge on this single non-blocking arm. Exported for
+// actorruntime's deadline dispatch.
+func (rt *Runtime) TriggerSelfDevelopmentReconcile() {
+	rt.triggerSelfDevelopmentReconcile()
+}
+
 func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) {
 	if rt == nil || rt.maintenanceHeld() || rt.selfdevUpdater == nil || rt.selfdevVerifier == nil || rt.selfdevControl == nil || rt.selfdevRoute == nil || rt.selfdevRouteOwnerID == "" || rt.selfdevRouteDesktopID == "" || rt.selfdevComputerID == "" || rt.selfdevOperations == nil || rt.eventAppender == nil || rt.store == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || strings.TrimSpace(rt.selfdevRealizationID) == "" {
 		return
@@ -92,8 +100,22 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 			operationErr = rt.materializeSelfDevelopmentOperation(ctx, operation)
 		}
 		if operationErr != nil {
-			// The durable operation and updater journal retain the recovery point.
-			// Startup and idempotent owner retries invoke this reconciler again.
+			// The durable operation and updater journal retain the recovery
+			// point, but nothing else re-fires this reconciler unless another
+			// commit happens — a silent failure here is a permanent wedge
+			// (assessment wedge 4). Re-arm a durable retry wake addressed to
+			// the management mailbox so the obligation survives the failed
+			// pass. Idempotent: the retry handler re-runs the same drain,
+			// which re-drives from the retained journal phase.
+			log.Printf("selfdev materializer: operation %s in %s needs retry: %v",
+				operation.OperationID, operation.State, operationErr)
+			if rt.scheduleActor != nil {
+				if armErr := rt.scheduleActor(context.Background(), rt.selfdevRouteOwnerID, rt.selfdevComputerID,
+					"management:"+rt.selfdevRouteOwnerID, selfdevMaterializationRetryKind,
+					operation.OperationID, "", "", time.Now().UTC().Add(60*time.Second)); armErr != nil {
+					log.Printf("selfdev materializer: retry wake for %s: %v", operation.OperationID, armErr)
+				}
+			}
 			continue
 		}
 	}

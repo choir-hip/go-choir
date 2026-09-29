@@ -79,6 +79,13 @@ var ErrWorkspaceReplaceRequiresQuarantine = errors.New("workspace replace requir
 // structured body/source validation before persistence.
 var ErrInvalidTextureRevision = errors.New("invalid texture revision")
 
+// ErrNoPendingActorOccurrence marks a durable actor wake whose backing
+// canonical occurrence no longer exists — the source row was consumed,
+// disposed, or delivery-exhausted before the outbox wake projected. Dispatch
+// can never succeed; the sweep must mark the wake projected rather than
+// retry forever.
+var ErrNoPendingActorOccurrence = errors.New("no pending canonical actor occurrence")
+
 func sanitizeStoreText(value string) string {
 	return strings.ToValidUTF8(value, "\uFFFD")
 }

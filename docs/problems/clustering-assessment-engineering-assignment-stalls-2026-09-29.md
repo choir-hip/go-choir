@@ -118,6 +118,47 @@ Stall shapes a merge cannot close (because the trigger *is* a timer or a
 policy, not an event):
 
 - `frozen` op with completed implementation but no `candidate_id` (no desk
+
+## Second harvest — 2026-09-29 M11 re-probe (deployed `c689e7fd`)
+
+Two more members surfaced under live load; both are the same cluster shape:
+a durable obligation whose only repair channel fires once and dies on the
+first error.
+
+### Wedge 4 — selfdev materializer drain is one-shot, no re-arm
+
+`selfdevReconcileDrain` re-runs `reconcileSelfDevelopmentMaterialization`
+only when (a) the post-commit observer sees a *new* event append, or (b) the
+boot phase fires once, or (c) an owner POST explicitly triggers it. When the
+drain's `materializeSelfDevelopmentOperation` errors post-`Apply` — verifier
+cert, checkpoint publish, route projection — the drain swallows the error,
+leaves the flag clear, and exits. The op stays `materializing`; the next
+retry requires a new commit that may never arrive. Observed live: op
+`selfdev-89d5e9ef` (computer `computer-ccb04d4a`) sat `materializing` for 50+
+minutes after `materialization_applied` committed at 04:14:02Z; updater
+journal `phase=completed`; no `checkpoint_published` or
+`route_projection_updated` ever followed.
+
+Fix direction: failure re-arms a durable wake (`delegated_` deadline or
+outbox kind) instead of dying in the drain loop. The obligation is "op in
+non-parked non-terminal state"; a scheduled retry IS the repair channel.
+
+### Wedge 5 — actor-wake outbox mints wakes for terminal/exhausted updates
+
+`migrateActorWakeOutbox` mints an outbox wake for every `ogKindWorkerUpdate`
+row regardless of pending state. Rows whose activation already exhausted
+delivery (`texture_activation_failed`, `delivery_attempts_exhausted`) mint
+wakes that the projector then dispatches on a 500 ms tick and fails
+deterministically: `Texture wake has no exact pending canonical occurrence`.
+The wake is never marked projected (dispatch errors `continue` without a
+mark), so the sweep retries the same dead wake every 500 ms forever.
+Observed live on `computer-ccb04d4a`: `assignment-report:cancel-report:
+sha256:76819f…` looped every ~500 ms post-restart at 04:20Z onward.
+
+Fix direction: (a) skip minting wakes for worker updates with no pending
+canonical row — the migration reads `pending`/`disposed` state already; (b)
+when dispatch fails deterministically on a known-stale wake, mark the outbox
+entry projected so it leaves the drain set.
   branch classifies this — `engineering_desk.go:296-320` returns nil).
 - `frozen` op with terminal-failed/cancelled implementation and no
   verification assignment (no `frozen → failed` trigger).

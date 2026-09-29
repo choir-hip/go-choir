@@ -2513,6 +2513,17 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 			dispatchErr = rt.dispatchActor(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
 		}
 		if dispatchErr != nil {
+			if errors.Is(dispatchErr, store.ErrNoPendingActorOccurrence) {
+				// The backing occurrence is gone (consumed, disposed, or
+				// delivery-exhausted before this wake projected). Retrying can
+				// never succeed — mark projected so the wake leaves the drain.
+				if markErr := rt.store.MarkActorWakeProjected(ctx, wake.CanonicalID); markErr != nil {
+					log.Printf("runtime: actor wake outbox dispose dead wake %s: %v", wake.SourceUpdateID, markErr)
+				} else {
+					log.Printf("runtime: actor wake outbox disposed dead wake %s", wake.SourceUpdateID)
+				}
+				continue
+			}
 			log.Printf("runtime: actor wake outbox dispatch %s: %v", wake.SourceUpdateID, dispatchErr)
 			continue
 		}

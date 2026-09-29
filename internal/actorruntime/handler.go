@@ -102,6 +102,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleReactivatedManagementResumeDeadline(ctx, u, memory)
 	case "wire_reconciler_publish_deadline":
 		return h.handleWireReconcilerPublishDeadline(ctx, u, memory)
+	case "selfdev_materialization_retry":
+		return h.handleSelfDevelopmentMaterializationRetry(ctx, u, memory)
 	case "lifecycle_work_assigned":
 		return h.handleLifecycleWorkAssigned(ctx, u, memory)
 	case "lifecycle_cancellation":
@@ -124,6 +126,14 @@ func (h *actorHandler) handleActivationBudgetDeadline(ctx context.Context, u act
 	if err := h.rt.HandleActivationBudgetDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("actorruntime: activation budget deadline: %w", err)
 	}
+	return memory, nil
+}
+
+// handleSelfDevelopmentMaterializationRetry re-arms the self-development
+// drain on a durable wake. The drain's own ListByStates is the sole state
+// gate — replayed or superseded wakes are no-ops.
+func (h *actorHandler) handleSelfDevelopmentMaterializationRetry(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	h.rt.TriggerSelfDevelopmentReconcile()
 	return memory, nil
 }
 
