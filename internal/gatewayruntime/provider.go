@@ -224,14 +224,39 @@ func (p *Provider) do(ctx context.Context, req llmRequest, accept string) (*http
 	return resp, nil
 }
 
+// gatewayHTTPStatusError preserves the HTTP status the gateway returned so
+// callers (the tool loop) can distinguish transient 5xx/429 provider outages
+// from hard failures. The message format is unchanged.
+type gatewayHTTPStatusError struct {
+	status  string
+	message string
+}
+
+func (e *gatewayHTTPStatusError) Error() string { return e.message }
+
+// Transient reports whether the status is a retriable provider-side failure:
+// 429 (rate limit) and 5xx (service unavailable, bad gateway, upstream
+// timeouts). A transient error mid-tool-loop must not terminalize a bound
+// assignment — the same retry authority a durable obligation owes.
+func (e *gatewayHTTPStatusError) Transient() bool {
+	if e == nil {
+		return false
+	}
+	code := e.status
+	if len(code) >= 3 && code[3] == ' ' {
+		code = code[:3]
+	}
+	return code == "429" || (len(code) == 3 && code[0] == '5')
+}
+
 func gatewayStatusError(status string, body []byte) error {
 	var errResp struct {
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
-		return fmt.Errorf("gateway client: %s", errResp.Error)
+		return &gatewayHTTPStatusError{status: status, message: fmt.Sprintf("gateway client: %s", errResp.Error)}
 	}
-	return fmt.Errorf("gateway client: status %s (sanitized)", status)
+	return &gatewayHTTPStatusError{status: status, message: fmt.Sprintf("gateway client: status %s (sanitized)", status)}
 }
 
 func parseGatewaySSE(body io.Reader, onChunk func(streamChunk)) (*llmResponse, error) {

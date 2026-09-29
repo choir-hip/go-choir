@@ -428,6 +428,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		return appendMessage("user", msg)
 	}
 
+	transientAttempts := 0
 	for i := 0; ; i++ {
 		if err := checkToolLoopBudgetBeforeProvider(options.budget, i, loopStartedAt); err != nil {
 			emitToolLoopBudgetExhausted(emit, options.budget, i, totalUsage, err)
@@ -562,6 +563,28 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 						"provider_error_kind": "precondition_failed",
 					})
 					emit(types.EventRunRetry, "provider_tool_choice", payload)
+				}
+				continue
+			}
+			// Transient provider outage (gateway 429/5xx or an equivalent
+			// marker on another provider): a bound assignment's activation
+			// must not terminalize on a recoverable call. Bounded in-loop
+			// retry with a short sleep; the durable run record is untouched
+			// so a retry costs one iteration of wall time, not a state.
+			if isTransientProviderError(err) && transientAttempts < 3 {
+				transientAttempts++
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"reason":         "transient_provider_error",
+						"attempt":        transientAttempts,
+						"provider_error": err.Error(),
+					})
+					emit(types.EventRunRetry, "transient_provider", payload)
+				}
+				select {
+				case <-ctx.Done():
+					return "", totalUsage, fmt.Errorf("tool loop iteration %d: %w", i, ctx.Err())
+				case <-time.After(15 * time.Second):
 				}
 				continue
 			}
@@ -1253,6 +1276,31 @@ func isProviderPreconditionError(err error) bool {
 	return strings.Contains(text, "412") ||
 		strings.Contains(text, "precondition failed") ||
 		strings.Contains(text, "thinking mode does not support this tool_choice")
+}
+
+// isTransientProviderError reports whether a provider call error is a
+// recoverable outage rather than a request failure. Typed errors that expose
+// Transient() bool (gatewayHTTPStatusError: 429 + 5xx) are authoritative;
+// the string fallback covers providers that flatten status into the message
+// (matches the existing precondition-detection convention in this file).
+func isTransientProviderError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var transient interface{ Transient() bool }
+	if errors.As(err, &transient) && transient.Transient() {
+		return true
+	}
+	text := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"status 429", "status 500", "status 502", "status 503", "status 504",
+		"too many requests", "service unavailable", "bad gateway", "gateway timeout",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func toolDefinitionsMatchingName(defs []provideriface.ToolDefinition, name string) []provideriface.ToolDefinition {
