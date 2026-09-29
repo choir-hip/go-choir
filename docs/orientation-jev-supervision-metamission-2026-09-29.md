@@ -14,22 +14,52 @@ Owner's prompt-bar session on `computer-03335285269bdba4f94377e56879f9e6`
 
 | t (UTC) | Event |
 |---|---|
-| 22:16:50 | `trajectory_started` — prompt-bar turn on doc `268ef2d0` ("What's new in ai today") |
-| 22:17:04 | `conductor` run completed — `open_app` → texture doc |
-| 22:18:08 | `texture_turn_committed` + `work_opened` + `control_queued` — v1 (appagent, "pre-search") committed; work item opened to `research:` desk |
-| 22:18:53 | texture run `9b5ddc61` **passivated** (7.3k input tokens) |
-| 22:19:09 | `control_delivered` to research desk — **last trajectory event** (reducer_seq 5) |
-| 22:19–22:26 | research run `84af5a50` executes (123,490 input tokens, ~7.7 min, `reasoning=low`, model gpt-5.6-luna via chatgpt) |
-| 22:26:50 | research run completed — result: *"Research remains open. Initial evidence was staged, but primary-source verification is incomplete"* |
-| 22:26:50+ | **silence** — no `texture_turn_committed` for v2; no further trajectory events; reducer still at seq 5 |
+## A. What actually happened in the QA failure (evidence, not conjecture)
 
-What the owner saw: slow texture open → blank page → slow v0 → slow v1
-pre-search → "lifecycle stream disconnected" → no v2.
+Owner's prompt-bar session on `computer-03335285269bdba4f94377e56879f9e6`
+(owner `5bd6de97-3b58-408c-bf89-c42c81b083de`), ~22:16–22:27Z 2026-09-29:
 
-### The defects this exposes (evidence-backed)
+| t (UTC) | Event | Δ |
+|---|---|---|
+| 22:16:50 | `trajectory_started` — prompt-bar turn on doc `268ef2d0` ("What's new in ai today") | — |
+| 22:17:04 | `conductor` run completed — `open_app` → texture doc | **+14s** (routing) |
+| 22:18:08 | `texture_turn_committed` + `work_opened` + `control_queued` — v1 (appagent, pre-search) committed; work item opened to `research:` | **+64s** (texture turn 1: one cell, LLM + commit) |
+| 22:18:53 | texture run `9b5ddc61` passivated (7.3k input tokens) | — |
+| 22:19:09 | `control_delivered` to research — **last trajectory event** (reducer_seq 5) | +16s delivery |
+| 22:19–22:26 | research run `84af5a50`: **123,490 input tokens**, ~5–9 sequential `stream=false` provider calls, `reasoning=low`, `gpt-5.6-luna` via chatgpt | **~7.7 min** |
+| 22:26:50 | research completed — "Research remains open. Initial evidence was staged, but primary-source verification is incomplete" | — |
+| 22:26:50+ | **silence** — no `texture_turn_committed` for v2; no report-back wake; reducer still at seq 5 | stall |
 
-1. **Research completed without producing a turn.** The research desk ended
-   its cell "remains open" — staged evidence, no resolve, no report — and
+### Per-leg diagnosis
+
+1. **Prompt→conductor (14s)**: acceptable; the target is <1s+app-open —
+   the gap is VM wake + conductor call, not model latency.
+
+2. **Texture v1 (64s)**: one texture cell. The desk's prompt-build +
+   `desk_go_eval` + `ApplyTexture` commit. Not model-bound — the whole
+   cell is serial. Fast-model swap helps proportionally, not structurally.
+
+3. **Research 470s — the real defect.** `stream=false`, `reasoning=low`,
+   and a serial tool loop where each `tool_use` call re-sends the full
+   message history: call N carries N-1 tool results. 123k input tokens is
+   context compounding, not work volume. The fix is not a faster model —
+   it's parallel `web_search`/`fetch_url` calls inside one cell, or
+   texture re-delegating mid-turn (the owner's design: "texture precommits
+   and delegates in the same cell; researchers send evidence back; texture
+   revises on each update").
+
+4. **No v2 — the missing report-back leg.** Research staged evidence but
+   never called `choir.Report`/`ReportPacket` to texture, or the delivery
+   didn't wake texture's turn. The trajectory tape has been at seq 5
+   since `control_delivered`. `desk_pending_mutations: 7` on the VM's
+   health shows desk debt already queued — this computer is on `b85af274`
+   (9/28 build), one build behind today's reconcile-kick fixes.
+
+5. **"Lifecycle stream disconnected"** = SSE on `/api/trajectories/{id}/stream`
+   dropped post-snapshot. The handler sends `: heartbeat` every 15s
+   (`api_trajectory.go:162`) — not app-side idle. The drop is the proxy hop
+   or browser `onerror`; the frontend reports a reconnectable drop as
+   terminal-looking instead of resubscribing.
    nothing re-woke texture to render v2. This is the same failure class the
    9/29 clustering assessment fixed at the *assignment* layer; the
    trajectory/desk-consumption layer still has an open edge: an `open` work
@@ -109,26 +139,28 @@ cell-actuated won over A: hidden outbox). The reconciled shape:
 
 ---
 
-## C. Metamission skeleton — constituent /goals in sequence
+## C. Metamission skeleton — resequenced for research hill-climbing
 
-Ordered by dependency; each is a separate throughline `/goal` file:
+Owner 2026-09-29: research tuning needs multi-model evals, not a single
+luna-xhigh config — so the eval/model-switching surface must land *before*
+research tuning, not after. New order (each a separate `/goal` file):
 
 | # | Station | Delivers | Depends |
 |---|---|---|---|
-| J0 | **Research-prompt debug** — the QA stall | Diagnosis of desk wake debt + research-no-turn + SSE reconnect; timing records per desk turn. The "10 versions in 5 minutes" bar lives here. | None — first. |
-| J1 | **Scoreable commitments** | Precommit freezes typed questions + probabilities; Resolve carries evidence refs; `Disagreement` split (resolver-verdict vs scorer). | J0's findings may reshape this. |
-| J2 | **Jev transport** | Gateway `POST /provider/v1/judgments` → OpenRouter `typesafe/jev-1.13`; per-VM bearer + own rate bucket; OpenRouter key via `deploy-provider-creds.sh`. | None (can parallel J0/J1). |
-| J3 | **Jev-in-management** | `jev.decide` module verb in the management desk; low-confidence → RLM sub-cast with the distribution as context variable; conductor `choice`-routing for model/provider. | J1+J2. |
-| J4 | **RLM-based model switching** | Model/provider/route selection moves from `model-policy.toml` into desk-chosen config; evals run as parallel RLM casts; Jev scores eval outputs. | J3. |
-| J5 | **Timing evals** | Per-turn latency + cost records as commitment data; research/selfdev timing evals run through the RLM eval surface. | J4. |
-| — | **World Wire** | Resumes on these foundations. | All above. |
+| M0 | **Research-prompt debug** — the QA stall | Redeploy owner computer onto today's build; diagnose desk wake debt + research-no-report-back + SSE reconnect; timing records per desk turn. The "10 versions in 5 minutes" bar lives here. | none — first |
+| M1 | **Scoreable commitments** | `Precommit` freezes typed questions + probabilities; `Resolve` carries evidence refs; `Disagreement` split (resolver-verdict vs scorer). | M0 findings may reshape |
+| M2 | **Model/policy eval surface** | Model/provider/effort is desk-chosen config, not static `model-policy.toml`; evals run as parallel RLM casts; timing + token records per turn. *Moved before Jev — it is the instrument research tuning needs.* | M1 (evals score commitments) |
+| M3 | **Research hill-climbing** | Multi-model/effort eval matrix on the QA prompt family; prompt, repl-state, and search-API ergonomics tuned against measured versions. | M2 |
+| M4 | **Jev transport** | Gateway `POST /provider/v1/judgments` → OpenRouter `typesafe/jev-1.13` pinned; per-VM bearer + own rate bucket. | none (parallel M2/M3) |
+| M5 | **Jev-in-management + scorer** | `jev.decide` in management's cell; low-confidence → RLM sub-cast w/ distribution as context var; commitment-score reconciler + `choir.commitment_score` kind; conductor `choice`-routing. | M1+M4 |
+| M6 | **Timing evals as commitment records** | per-turn latency/cost records feed the world model; research/selfdev timing evals on the RLM surface. | M3+M5 |
+| — | **World Wire** | Resumes on these foundations. | all above |
 
 ### Open decisions for the owner
 
-1. **J0 scope**: fix-forward on the QA stall (redeploy the owner's computer
-   onto today's build first — the cheapest experiment) vs. the full timing/
-   latency instrumentation mission.
-2. **Does J3 land commitment-scoring AND management-gating together**, or
-   scorer-async first (lower risk) with the cell-actuated gate second?
-3. **Conductor-as-router**: replace model-policy.toml wholesale (J4) or
-   Jev-choice overrides a static default first (incremental)?
+1. **M0 scope**: restart/redeploy the owner's computer onto today's build
+   and retest (cheapest) vs. instrument first then measure.
+2. **M5 split**: commitment-scorer-async first (lower risk) + cell-actuated
+   management gate second, or both in one station?
+3. **Conductor-as-router**: Jev-choice overrides a static default
+   incrementally, or replaces `model-policy.toml` wholesale at M2?
