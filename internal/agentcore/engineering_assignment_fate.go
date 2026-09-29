@@ -87,10 +87,17 @@ func (rt *Runtime) assignedEngineeringCapsuleUsable(ctx context.Context, assignm
 	// from residency and replaced, never resumed, so the capsule can never
 	// reach terminal fate through it. Terminal or missing rows are dead.
 	// Pending bound runs are mid-saga (reconcile holds the open mutex), so
-	// they stay usable.
+	// they stay usable — but only within the activation grace: a pending run
+	// older than the grace means bind committed but the activate wake never
+	// landed (crash between Bind and rt.activate, or a lost dispatch), so the
+	// driver is dead and the capsule must not read usable forever.
 	if rt.store != nil {
 		run, runErr := rt.store.GetLifecycleRun(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.BoundRunID)
 		if runErr != nil || (run.State != types.RunPending && run.State != types.RunRunning) {
+			return false
+		}
+		if run.State == types.RunPending && !run.CreatedAt.IsZero() &&
+			time.Since(run.CreatedAt) > engineeringActivationGrace {
 			return false
 		}
 	}
@@ -276,6 +283,11 @@ func (rt *Runtime) finishEngineeringTrajectoryCancellation(ctx context.Context, 
 			return err
 		}
 	}
+	// A cancelled trajectory's bound self-development operation cannot reach
+	// acceptance — the desk reconcile short-circuits on non-live trajectories,
+	// so the op-close edge lives here: the one path every trajectory
+	// cancellation funnels through.
+	rt.failBoundSelfdevOperation(ctx, computerID, trajectoryID, reason)
 	return nil
 }
 
@@ -526,6 +538,13 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 		if !cancelled.Replay && cancelled.Update != nil {
 			rt.wakeUpdatedCoagent(ctx, *cancelled.Update)
 		}
+	}
+	// Terminal trajectories close their bound self-development operation here:
+	// the desk reconcile early-returns on non-live trajectories, so without
+	// this edge a cancelled/settled trajectory strands the op at executing.
+	if trajectory.Status != types.TrajectoryLive {
+		rt.failBoundSelfdevOperation(ctx, computerID, trajectoryID,
+			"trajectory "+string(trajectory.Status))
 	}
 	return nil
 }

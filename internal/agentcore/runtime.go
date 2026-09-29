@@ -1713,8 +1713,19 @@ func (rt *Runtime) persistActivationStateAndEmit(ctx context.Context, rec *types
 	if assignedEngineeringRun(rec) && rec.State != types.RunPending && rec.State != types.RunRunning {
 		if trajID := strings.TrimSpace(trajectoryIDForRun(rec)); trajID != "" {
 			go func(ownerID, computerID, trajectoryID, runID string) {
-				if reconErr := rt.ReconcileEngineeringAssignmentsForTrajectory(context.Background(), ownerID, computerID, trajectoryID); reconErr != nil {
+				kickCtx := context.Background()
+				if reconErr := rt.ReconcileEngineeringAssignmentsForTrajectory(kickCtx, ownerID, computerID, trajectoryID); reconErr != nil {
 					log.Printf("runtime: engineering reconcile after assignment run %s left %s: %v", runID, rec.State, reconErr)
+				}
+				// The desk reconcile is the op-coupling authority: it recasts a
+				// restart-cancelled cast, fails the op on a genuinely terminal
+				// implementation, or drives frozen→verification→approval. The
+				// trajectory reconcile repairs the assignment but deliberately
+				// carries no op semantics — without this second kick a
+				// document-bound operation only repairs at boot or the next
+				// owner revision.
+				if _, deskErr := rt.ReconcileEngineeringDeskForTrajectory(kickCtx, ownerID, trajectoryID); deskErr != nil {
+					log.Printf("runtime: engineering desk reconcile after assignment run %s left %s: %v", runID, rec.State, deskErr)
 				}
 			}(rec.OwnerID, rec.ComputerID, trajID, rec.RunID)
 		}

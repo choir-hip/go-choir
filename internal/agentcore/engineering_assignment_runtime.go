@@ -39,6 +39,12 @@ const (
 	// restart. Longer than an in-flight commit needs, shorter than the
 	// deadline backstop.
 	assignedEngineeringFateWatchdogDelay = 5 * time.Minute
+	// engineeringActivationGrace bounds the bind→activate window: a bound run
+	// that stays pending past the grace never got its dispatch (crash between
+	// Bind and activate, or a lost mailbox write), so the assignment's capsule
+	// reads dead and the trajectory reconcile repairs instead of waiting for
+	// the six-hour deadline.
+	engineeringActivationGrace = 5 * time.Minute
 )
 
 // assignedEngineeringDeadline returns the I26 fail-closed bound-assignment
@@ -490,6 +496,23 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, req Delegate
 // resumeDelegatedCastAssignment re-drives the spawn/bind saga for a delegated
 // cast whose durable open committed but whose bind never landed.
 func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment types.EngineeringAssignment, req DelegatedCastRequest) (AssignedEngineeringStart, error) {
+	// The delegated wake handler calls this outside the open saga's critical
+	// section; without the lock a trajectory reconcile can reap the committed
+	// open row (BoundRunID=="" → restart-cancel) while this spawn is live.
+	// Serialize with the same mutex and re-read so a concurrent cancel/bind
+	// is observed before external effects.
+	rt.engineeringAssignmentOpenMu.Lock()
+	defer rt.engineeringAssignmentOpenMu.Unlock()
+	current, currentErr := rt.store.GetEngineeringAssignment(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
+		assignment.AssignmentID, assignment.Binding.Attempt)
+	if currentErr != nil {
+		return AssignedEngineeringStart{}, fmt.Errorf("reload delegated assignment under saga lock: %w", currentErr)
+	}
+	if current.Disposition != types.EngineeringAssignmentOpen || strings.TrimSpace(current.BoundRunID) != "" {
+		// Already bound, cancelled, or completed by a serialized actor.
+		return AssignedEngineeringStart{Assignment: current}, nil
+	}
+	assignment = current
 	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, assignment.Binding.SourceArtifactRef)
 	if err != nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast preflight resumed subject: %w", err)
