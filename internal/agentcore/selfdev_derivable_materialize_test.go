@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	transaction "github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -757,8 +758,73 @@ func (fx *derivableSelfDevFixture) seedOperationToAwaitingApproval(t *testing.T,
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The materializer reads the recorded verification payload for the
+	// certificate join (wedge-10 fix): the event digest lands in
+	// VerifierRefs while the payload carries the draft bundle digest and
+	// cited evidence refs.
+	verifierRunID := "run:verifier-" + idempotencyKey
+	verificationPayload, err := computerevent.CanonicalJSON(map[string]any{
+		"schema_version": 1, "operation_id": operation.OperationID, "bundle_digest": bundleDigest,
+		"decision": "pass", "verifier_refs": []string{"capsule-go-eval:sha256:" + strings.Repeat("a", 64)},
+		"verifier_run_id": verifierRunID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verificationID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	verificationEvent := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: verificationID, ComputerID: fx.computerID,
+		EventKind: computerevent.EventVerificationRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "test-verification-" + idempotencyKey,
+		TrajectoryID:   operation.TrajectoryID, CapsuleID: operation.CapsuleID,
+		ActorProfile: agentprofile.Engineering, AuthorityRef: "guest-core:self-development-verifier",
+		PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, _, err := fx.appender.AppendNewPayload(ctx, verificationEvent, computerevent.TransitionInput{}, verificationPayload, "application/vnd.choir.self-development-verification+json", "public"); err != nil {
+		t.Fatal(err)
+	}
+	verificationEvent, found, err := fx.store.EventByIdempotency(ctx, fx.computerID, "test-verification-"+idempotencyKey)
+	if err != nil || !found {
+		t.Fatalf("verification event projection unavailable: %v", err)
+	}
+	verificationDigest, err := verificationEvent.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Production finalization rewrites the bundle to carry the verification
+	// event digest in VerifierReceipts — the operation records the final
+	// digest while the recorded verifier payload keeps the draft. Mirror the
+	// same shape so the materializer's VerifierReceipts gate holds.
+	rawFinal, err := os.ReadFile(filepath.Join(fx.updaterRoot, "incoming", bundleDigest, "bundle.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var finalBundle transaction.CapsuleEffectBundle
+	if err := json.Unmarshal(rawFinal, &finalBundle); err != nil {
+		t.Fatal(err)
+	}
+	finalBundle.VerifierReceipts = []string{verificationDigest}
+	if err := finalBundle.Validate(true); err != nil {
+		t.Fatal(err)
+	}
+	finalBytes, err := computerevent.CanonicalJSON(finalBundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalDigest := computerevent.DigestBytes(finalBytes)
+	finalDir := filepath.Join(fx.updaterRoot, "incoming", finalDigest)
+	if err := os.Rename(filepath.Join(fx.updaterRoot, "incoming", bundleDigest), finalDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(finalDir, "bundle.json"), finalBytes, 0o400); err != nil {
+		t.Fatal(err)
+	}
 	operation, err = fx.operations.Transition(ctx, fx.computerID, operation.OperationID, selfdev.StateFrozen, selfdev.StateVerified, func(next *selfdev.Operation) error {
-		next.VerifierRefs = []string{strings.Repeat("e", 64)}
+		next.BundleDigest = finalDigest
+		next.VerifierRefs = []string{verificationDigest}
 		return nil
 	})
 	if err != nil {
@@ -768,7 +834,7 @@ func (fx *derivableSelfDevFixture) seedOperationToAwaitingApproval(t *testing.T,
 	if err != nil {
 		t.Fatal(err)
 	}
-	return operation, bundleDigest, operation.TrajectoryID
+	return operation, finalDigest, operation.TrajectoryID
 }
 
 // writeFrozenBundle stages the frozen capsule bundle the materializer reads.
@@ -870,7 +936,7 @@ func (fx *derivableSelfDevFixture) appendDecision(t *testing.T, operation selfde
 		ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
 		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 		RequireExpectedHead: true, PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: bundleDigest,
-		DecisionRef: strings.Repeat("d", 64), VerifierRefs: []string{strings.Repeat("e", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+		DecisionRef: strings.Repeat("d", 64), VerifierRefs: append([]string(nil), operation.VerifierRefs...), ReducerVersion: computerevent.ReducerVersionV1,
 		InputArtifactRefs: []string{"artifact:sha256:" + strings.Repeat("f", 64)},
 	}
 	target, err := computerevent.CanonicalJSON(map[string]string{"base_head": operation.BaseHead, "bundle_digest": bundleDigest})

@@ -405,3 +405,32 @@ rolled_back | failed` for journal-verified repair. Only typed updater
 refusals (`ErrApplyRefused`, 4xx) degrade; transport failures stay
 materializing and re-arm the retry wake. A degraded op re-refused with a
 non-terminal journal stays degraded silently rather than churning retries.
+
+### Wedge 10 — verifier certificate joins against the wrong refs
+
+Surfaced once wedge-8 repair reached `PublishCheckpoint`: the checkpoint
+authority refuses every verifier-class checkpoint with
+`"verifier decision mismatch"` (deterministic, observed 09:50 + 10:05 +
+10:26 across three epochs).
+
+The authority joins the certificate verbatim against the recorded
+verification payload. The materializer passed `operation.BundleDigest`
+(the post-verification *finalized* digest — `finalizeVerifiedCapsuleBundle`
+rewrites the bundle to add the verifier receipt) and
+`operation.VerifierRefs` (the verification *event* digest). The recorded
+payload carries the *draft* bundle digest and the evidence refs the
+verifier cited (`capsule-go-eval:sha256:…` run receipts). Both fields
+mismatch forever.
+
+Repair (landed): `verificationEvidence` reads the verification event's
+output payload via `eventPayloadReader` and the certificate signs the
+payload's `bundle_digest` + `verifier_refs`. The wedge is orthogonal to
+the ops table — no schema or state change; ops in `degraded` or
+`materializing` self-repair on the next drain pass.
+
+Upstream note: `computer-5352d5a8` also lacks a `computer_checkpoints` row
+and a `control_key_history` verifier pin — the genesis bootstrap
+checkpoint never minted for this computer. If the authority's key-pin
+check fires after the join fix, a genesis re-import
+(`importSelfDevelopmentGenesis` is replay-safe for an existing event) is
+the remediation path.

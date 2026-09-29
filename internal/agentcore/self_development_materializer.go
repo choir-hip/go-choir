@@ -440,10 +440,21 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	if len(operation.VerifierRefs) == 0 {
 		return fmt.Errorf("materializer: verifier evidence unavailable")
 	}
+	// The certificate's evidence binding must name what the verifier actually
+	// attested: the recorded verification payload carries the *draft* bundle
+	// digest (pre-finalization) and the cited evidence refs, while the
+	// operation row holds the post-verification finalized digest and the
+	// verification event digest. The checkpoint authority joins certificate
+	// fields against the payload verbatim; operation fields refuse
+	// deterministically (wedge-10).
+	evidence, err := rt.verificationEvidence(ctx, operation)
+	if err != nil {
+		return err
+	}
 	verifierCertificate, err := rt.selfdevVerifier.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
 		Version: 1, ComputerID: operation.ComputerID, OperationID: operation.OperationID,
-		BundleDigest: operation.BundleDigest, VerificationEventDigest: operation.VerifierRefs[0],
-		VerifierEvidenceRefs: operation.VerifierRefs, DecisionEventHead: operation.DecisionEvent,
+		BundleDigest: evidence.VerifiedBundleDigest, VerificationEventDigest: operation.VerifierRefs[0],
+		VerifierEvidenceRefs: evidence.Refs, DecisionEventHead: operation.DecisionEvent,
 		CodeRef: string(version.CodeRef), ArtifactProgramRef: string(version.ArtifactProgramRef),
 		ReleaseDigest: result.ReleaseDigest, Decision: verifierDecision,
 	})
@@ -454,6 +465,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	if err != nil {
 		return err
 	}
+
 	verifierDigest := computerevent.DigestBytes(verifierJSON)
 	pinned, _, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, result.ReleaseDigest)
 	if err != nil {
@@ -623,6 +635,49 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		return nil
 	})
 	return err
+}
+
+type selfdevVerificationEvidence struct {
+	VerifiedBundleDigest string
+	Refs                 []string
+}
+
+// verificationEvidence reads the recorded verification event's output
+// payload and returns the exact fields the checkpoint authority joins on:
+// the draft bundle digest the verifier signed off (pre-finalization) and
+// the evidence refs it cited. The operation row's BundleDigest/VerifierRefs
+// diverge deliberately — finalization rewrites the bundle (adding the
+// verifier receipt) and VerifierRefs stores the event digest — so the
+// recorded payload is the only sound certificate source.
+func (rt *Runtime) verificationEvidence(ctx context.Context, operation selfdev.Operation) (selfdevVerificationEvidence, error) {
+	if rt.eventPayloadReader == nil {
+		return selfdevVerificationEvidence{}, fmt.Errorf("materializer: event payload reader unavailable")
+	}
+	event, found, err := rt.store.EventByDigest(ctx, operation.ComputerID, operation.VerifierRefs[0])
+	if err != nil || !found || event.EventKind != computerevent.EventVerificationRecorded || len(event.OutputArtifactRefs) != 1 {
+		return selfdevVerificationEvidence{}, fmt.Errorf("materializer: verification event unavailable")
+	}
+	payloadRef, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])
+	if err != nil {
+		return selfdevVerificationEvidence{}, err
+	}
+	raw, err := rt.eventPayloadReader.FetchPayload(ctx, operation.ComputerID, payloadRef.Digest().String())
+	if err != nil {
+		return selfdevVerificationEvidence{}, fmt.Errorf("materializer: verification payload unavailable: %w", err)
+	}
+	var payload struct {
+		OperationID   string   `json:"operation_id"`
+		BundleDigest  string   `json:"bundle_digest"`
+		Decision      string   `json:"decision"`
+		VerifierRefs  []string `json:"verifier_refs"`
+		VerifierRunID string   `json:"verifier_run_id"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil || payload.OperationID != operation.OperationID ||
+		payload.Decision != "pass" || len(payload.VerifierRefs) == 0 || payload.VerifierRunID == "" ||
+		!computerevent.IsSHA256(payload.BundleDigest) {
+		return selfdevVerificationEvidence{}, fmt.Errorf("materializer: verification payload refused")
+	}
+	return selfdevVerificationEvidence{VerifiedBundleDigest: payload.BundleDigest, Refs: payload.VerifierRefs}, nil
 }
 
 func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, applyErr error, expectedState string) error {
