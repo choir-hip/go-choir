@@ -957,9 +957,14 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			})
 		}
 		if request.Decision == "reject" {
+			// The rejection reason is an owner-visible decision record on an
+			// "owner"-class event. Pinning it as a private payload puts the pin
+			// receipt's privacy_class at "private" while ValidateEventPins
+			// requires the event's own class — every reject CAS-refused at pin
+			// verification (7d635330 introduced both sides). Pin owner, not private.
 			payloads = append(payloads, computerevent.EventPayload{
 				Content: []byte(request.Reason), MediaType: "text/plain; charset=utf-8",
-				PrivacyClass: "private", Direction: computerevent.EventPayloadOutput, Private: true,
+				PrivacyClass: "owner", Direction: computerevent.EventPayloadOutput,
 			})
 		}
 		_, artifactDigests, appendErr := h.rt.eventAppender.AppendNewPayloadSet(r.Context(), event, input, payloads, h.rt.privateArtifactCipher)
