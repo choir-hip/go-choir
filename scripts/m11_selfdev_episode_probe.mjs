@@ -135,13 +135,18 @@ function corpusdEventHead(computerID, ownerID) {
   );
 }
 
-// The replay endpoint returns the OLDEST `limit` events. projection_batch
-// spam lands between apply evidence and the tail, so the default window must
-// cover the whole episode or apply_events reads a prefix that never contains
-// materialization_applied/checkpoint_published/route_projection_updated.
-function corpusdEvents(computerID, ownerID, limit = 5000) {
+// The replay endpoint returns OLDEST-first pages of at most ~2000 events.
+// Apply evidence lands at the tail: read the head for the current max
+// sequence, then fetch a tail window via after_sequence. A head query that
+// cannot parse a sequence falls back to the oldest page (conservative —
+// apply_events then honestly reports absent evidence).
+function corpusdEvents(computerID, ownerID, limit = 2000) {
+  let afterSequence = 0;
+  const head = corpusdEventHead(computerID, ownerID);
+  const headSeq = Number(head?.canonical_sequence ?? head?.sequence ?? head?.max_sequence ?? 0);
+  if (Number.isFinite(headSeq) && headSeq > limit) afterSequence = headSeq - limit;
   return nodeBJSON(
-    `curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/replay?computer_id=${encodeURIComponent(computerID)}&limit=${limit}'`,
+    `curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/replay?computer_id=${encodeURIComponent(computerID)}&limit=${limit}&after_sequence=${afterSequence}'`,
   );
 }
 
