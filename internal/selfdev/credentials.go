@@ -305,6 +305,11 @@ func (g *GuestCredentials) PublishCheckpoint(ctx context.Context, checkpoint sel
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusCreated {
+		raw, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+		detail := strings.TrimSpace(string(raw))
+		if detail != "" {
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("guest credential: checkpoint refused with status %d: %s", response.StatusCode, detail)
+		}
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("guest credential: checkpoint refused with status %d", response.StatusCode)
 	}
 	var result selfdevprotocol.CheckpointResponse
