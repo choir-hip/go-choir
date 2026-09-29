@@ -346,3 +346,27 @@ read and the FOR UPDATE check still 400s — but the drain re-arms and each
 retry carries a fresh head, so it converges in quiet windows instead of
 wedge-permanently. `PublishRouteProjection`'s live-head pin is kept as the
 freshness fence (certifies "transition at canonical head H").
+
+### Wedge 7 — apply replay fenced by rotating realization ID
+
+Found on the first drain pass after the dual-head checkpoint deploy
+(2026-09-29, computer `computer-5352d5a8`, op `selfdev-0af47efdf2983e4a5bad609be0cbd597`):
+the VM refreshed at deploy time (`epoch 12782 -> 12783`), and the guest's
+retry of `updater.Apply` for the already-materialized release refused with
+`updater client: updater refused request` — one shot at 07:46:45, then the
+guest went silent (no armed retry re-fired visibly).
+
+`realizationIDFor(vmID, epoch)` (internal/vmctl/ownership.go:2658) embeds
+the epoch, so every boot changes the updater's `realizationID`.
+`validateApplyRequest` required `request.RealizationID == updater's` and
+folded `RealizationID` into `RequestCommitment`, so a replayed apply for a
+journaled operation failed validation twice: mismatched fence and
+mismatched commitment (`ErrIdempotencyConflict`). The journal on the VM's
+persistent disk showed `phase: completed` — the result was already
+durable; the caller just could not read it back.
+
+Repair: `RequestCommitment` no longer includes `RealizationID`, and `Apply`
+enforces the realization fence only for fresh requests (no journal). A
+found journal is a self-describing resume: commitment equality alone
+gates it. Same class as wedge 6 — a pre-cutover identity assumption
+(realization as fencing token) colliding with restart-durable replay.
