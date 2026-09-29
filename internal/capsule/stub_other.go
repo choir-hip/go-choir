@@ -5,6 +5,7 @@ package capsule
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -20,7 +21,15 @@ type Executor struct{}
 func NewExecutor(stateDir, lowerDir, brokerPath string, vmMemoryTotal int64) *Executor {
 	return &Executor{}
 }
+
+// ErrSubjectArtifactUnavailable marks a durable capsule artifact ref whose
+// bytes are permanently absent or corrupt. Mirrors the linux implementation.
+var ErrSubjectArtifactUnavailable = errors.New("capsule subject artifact unavailable or corrupt")
+
 func NewExecutorWithSource(stateDir, lowerDir, sourceDir, brokerPath string, vmMemoryTotal int64) *Executor {
+	return &Executor{}
+}
+func NewExecutorWithArtifacts(stateDir, artifactDir, lowerDir, sourceDir, brokerPath string, vmMemoryTotal int64) *Executor {
 	return &Executor{}
 }
 func (e *Executor) InitializationError() error { return stubErr("initialize") }

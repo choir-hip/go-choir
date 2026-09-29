@@ -43,6 +43,7 @@ type Executor struct {
 	executionReceipts map[string]ExecutionReceipt
 	grantedReceipts   map[string]GrantedExecutionReceipt
 	stateDir          string
+	artifactDir       string
 	lowerDir          string
 	sourceDir         string
 	brokerPath        string
@@ -61,7 +62,25 @@ func NewExecutor(stateDir, lowerDir, brokerPath string, vmMemoryTotal int64) *Ex
 	return NewExecutorWithSource(stateDir, lowerDir, "", brokerPath, vmMemoryTotal)
 }
 
+// ErrSubjectArtifactUnavailable marks a durable capsule artifact ref (subject
+// tree or receipt) whose bytes are permanently absent or corrupt — the
+// realization that held them is gone. Transient I/O errors never carry this
+// sentinel; it means "this ref will never resolve again".
+var ErrSubjectArtifactUnavailable = errors.New("capsule subject artifact unavailable or corrupt")
+
 func NewExecutorWithSource(stateDir, lowerDir, sourceDir, brokerPath string, vmMemoryTotal int64) *Executor {
+	return NewExecutorWithArtifacts(stateDir, "", lowerDir, sourceDir, brokerPath, vmMemoryTotal)
+}
+
+// NewExecutorWithArtifacts splits durable artifact authority (subjects/ and
+// receipts/, named by durable capsule-subject:/receipt refs committed to the
+// store) from ephemeral capsule scratch. artifactDir must live on persistent
+// guest storage; stateDir may be tmpfs. An empty artifactDir falls back to
+// stateDir — valid only where stateDir is itself durable (tests).
+func NewExecutorWithArtifacts(stateDir, artifactDir, lowerDir, sourceDir, brokerPath string, vmMemoryTotal int64) *Executor {
+	if strings.TrimSpace(artifactDir) == "" {
+		artifactDir = stateDir
+	}
 	e := &Executor{
 		capsules:          make(map[string]*Capsule),
 		capabilities:      make(map[capKey]*Capability),
@@ -70,6 +89,7 @@ func NewExecutorWithSource(stateDir, lowerDir, sourceDir, brokerPath string, vmM
 		executionReceipts: make(map[string]ExecutionReceipt),
 		grantedReceipts:   make(map[string]GrantedExecutionReceipt),
 		stateDir:          filepath.Clean(stateDir),
+		artifactDir:       filepath.Clean(artifactDir),
 		lowerDir:          filepath.Clean(lowerDir),
 		sourceDir:         filepath.Clean(sourceDir),
 		brokerPath:        filepath.Clean(brokerPath),
@@ -106,8 +126,18 @@ func (e *Executor) subjectArtifactPath(ref string) (string, string, error) {
 	if _, err := hex.DecodeString(digest); err != nil || strings.ToLower(digest) != digest {
 		return "", "", fmt.Errorf("capsule subject artifact digest is invalid")
 	}
-	root := filepath.Join(e.stateDir, "subjects", digest, "workspace", "platform")
+	root := filepath.Join(e.artifactRoot(), "subjects", digest, "workspace", "platform")
 	return root, digest, nil
+}
+
+// artifactRoot resolves the durable artifact directory; executors built
+// without NewExecutorWithArtifacts (literal test fixtures) fall back to
+// stateDir, preserving the pre-split single-directory layout.
+func (e *Executor) artifactRoot() string {
+	if e.artifactDir == "" {
+		return e.stateDir
+	}
+	return e.artifactDir
 }
 
 // PreflightSourceSnapshot persists an immutable content-addressed complete-tree
@@ -143,7 +173,7 @@ func (e *Executor) PreflightSourceSnapshot(ctx context.Context, candidateRef str
 		}
 		actual, err := digestCanonicalSubjectTree(ctx, root)
 		if err != nil || actual != digest {
-			return SourcePreflight{}, fmt.Errorf("capsule candidate artifact is unavailable or corrupt")
+			return SourcePreflight{}, fmt.Errorf("%w: %s", ErrSubjectArtifactUnavailable, candidateRef)
 		}
 		return SourcePreflight{SubjectDigest: digest, ArtifactRef: candidateRef}, nil
 	}
@@ -808,7 +838,7 @@ func receiptArtifactName(ref string) string {
 }
 
 func (e *Executor) persistReceiptArtifact(kind, ref string, canonical []byte) error {
-	root := filepath.Join(e.stateDir, "receipts", kind)
+	root := filepath.Join(e.artifactRoot(), "receipts", kind)
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return err
 	}
@@ -854,7 +884,7 @@ func (e *Executor) PersistGrantedFreezeReceipt(ctx context.Context, agentRunID, 
 }
 
 func (e *Executor) OpenCapsuleFateReceipt(ref string) (CapsuleFateReceipt, error) {
-	raw, err := os.ReadFile(filepath.Join(e.stateDir, "receipts", "fate", receiptArtifactName(ref)))
+	raw, err := os.ReadFile(filepath.Join(e.artifactRoot(), "receipts", "fate", receiptArtifactName(ref)))
 	if err != nil {
 		return CapsuleFateReceipt{}, fmt.Errorf("capsule fate receipt unavailable")
 	}
@@ -885,7 +915,7 @@ func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
 	if ok {
 		return stored, nil
 	}
-	raw, err := os.ReadFile(filepath.Join(e.stateDir, "receipts", "execution", receiptArtifactName(ref)))
+	raw, err := os.ReadFile(filepath.Join(e.artifactRoot(), "receipts", "execution", receiptArtifactName(ref)))
 	if err != nil {
 		return ExecutionReceipt{}, fmt.Errorf("executor receipt unavailable")
 	}
@@ -923,7 +953,7 @@ func (e *Executor) OpenGrantedExecutionReceipt(ref string) (GrantedExecutionRece
 	if ok {
 		return stored, nil
 	}
-	raw, err := os.ReadFile(filepath.Join(e.stateDir, "receipts", "granted", receiptArtifactName(ref)))
+	raw, err := os.ReadFile(filepath.Join(e.artifactRoot(), "receipts", "granted", receiptArtifactName(ref)))
 	if err != nil {
 		return GrantedExecutionReceipt{}, fmt.Errorf("granted executor receipt unavailable")
 	}
@@ -1244,10 +1274,12 @@ func (e *Executor) PersistGrantedCandidate(ctx context.Context, agentRunID, hand
 	if err != nil {
 		return SourcePreflight{}, err
 	}
-	if err := os.MkdirAll(filepath.Join(e.stateDir, "subjects"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(e.artifactRoot(), "subjects"), 0o700); err != nil {
 		return SourcePreflight{}, err
 	}
-	temporary, err := os.MkdirTemp(e.stateDir, ".candidate-")
+	// The staging dir must share the durable artifact filesystem so the final
+	// os.Rename is atomic; tmpfs staging would cross mount points.
+	temporary, err := os.MkdirTemp(e.artifactRoot(), ".candidate-")
 	if err != nil {
 		return SourcePreflight{}, err
 	}
@@ -1263,7 +1295,7 @@ func (e *Executor) PersistGrantedCandidate(ctx context.Context, agentRunID, hand
 	if err := makeSubjectTreeReadOnly(target); err != nil {
 		return SourcePreflight{}, err
 	}
-	final := filepath.Join(e.stateDir, "subjects", digest)
+	final := filepath.Join(e.artifactRoot(), "subjects", digest)
 	if err := os.Rename(temporary, final); err != nil {
 		existing, verifyErr := digestCanonicalSubjectTree(ctx, filepath.Join(final, "workspace", "platform"))
 		if verifyErr != nil || existing != digest {

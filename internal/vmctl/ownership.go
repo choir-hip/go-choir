@@ -2486,6 +2486,7 @@ func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
 		var health struct {
 			RunningRuns          int `json:"running_runs"`
 			DeskPendingMutations int `json:"desk_pending_mutations"`
+			SelfdevActiveOps     int `json:"selfdev_active_operations"`
 		}
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&health); err != nil {
 			return false
@@ -2493,8 +2494,13 @@ func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
 		// running_runs covers in-flight activations; desk_pending_mutations
 		// covers the gap between them — a controller that owes the document
 		// another desk run is not idle even when running_runs==0.
-		// Receipt: docs/problems/vmctl-pressure-reclaim-mid-respawn-gap-2026-09-28.md
-		return health.RunningRuns > 0 || health.DeskPendingMutations > 0
+		// selfdev_active_operations covers the mid-transaction states
+		// (executing/accepted/materializing/rollback_pending) whose loss is
+		// not restart-repairable; parked states are excluded so a wedged op
+		// cannot pin the guest busy forever.
+		// Receipts: docs/problems/vmctl-pressure-reclaim-mid-respawn-gap-2026-09-28.md,
+		// docs/problems/capsule-subject-artifact-ephemeral-2026-09-28.md
+		return health.RunningRuns > 0 || health.DeskPendingMutations > 0 || health.SelfdevActiveOps > 0
 	}
 }
 

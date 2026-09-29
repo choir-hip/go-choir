@@ -1,7 +1,9 @@
 # Capsule subject artifacts live on tmpfs — `capsule-subject:` refs die with every realization
 
 Date: 2026-09-28
-Status: **problem documented; repair pending consensus adjudication.**
+Status: **repaired in source, pending deploy.** Repair adjudicated by a
+convergent panel (`.agentic-consensus/agentic-consensus-20260928-191018/`,
+11 panelists: codex/claude/gemini38/glm53/gpt6-sol substantive).
 Mutation class: **red** (capsule executor artifact persistence, guest image
 layout — verification subject authority).
 Clustering note: third defect this session in the engineering-verification
@@ -94,3 +96,39 @@ Refs: `docs/problems/engineering-verification-chain-dead-2026-09-28.md`
 `vmctl-idle-sweep-hibernates-busy-guest-2026-09-28.md` (pressure hibernate
 mid-work is compounding this class).
 Mission: `docs/definitions/choir-selfdev-gate-2026-09-27.md` (M11).
+
+## Repair landed (pending deploy)
+
+Consensus-adjudicated repair set, all landed together per the clustering
+note:
+
+1. **Durability split** — `capsule.NewExecutorWithArtifacts` splits durable
+   artifact authority (`subjects/`, `receipts/`, and the `.candidate-*`
+   staging dir that must share the rename filesystem) onto
+   `CHOIR_CAPSULE_ARTIFACT_DIR=/mnt/persistent/capsule-artifacts`; capsule
+   scratch stays on tmpfs `CHOIR_CAPSULE_STATE_DIR`. Autoputer fails closed
+   when the five executor roots are not configured together.
+2. **Missing-artifact sentinel** — `capsule.ErrSubjectArtifactUnavailable`
+   wraps permanently-absent/corrupt subject bytes. The verification opener
+   terminalizes the bound operation (`failBoundSelfdevOperation`) instead of
+   retrying forever; delegated-cast paths surface it as a logged error.
+3. **Verified-state wedge** — a restart between `frozen→verified` and
+   `verified→awaiting_approval` left the gate's `StateVerified` missing.
+   Reconcile resumes the parked transition directly (verifier ref + final
+   digest already on the op row; no respawn).
+4. **Terminal-verification wedge** — a verification assignment that
+   terminated while the op stayed frozen made reconcile return the dead
+   verification forever; reconcile now fails the op.
+5. **Replay-identity** — open-but-unbound verification resumes compared the
+   stored `ParentControlID` (candidate ID) against `req.RevisionID`, forcing
+   `ErrEngineeringAssignmentCommandConflict` on every resume. The effective
+   parent control is derived once and used for both compare and binding.
+6. **Busy signal** — `/health` now reports `selfdev_active_operations`
+   (executing/accepted/materializing/rollback_pending only — parked states
+   are restart-safe under the durability split and must not pin the guest);
+   vmctl's `guestBusy` probe consumes it.
+
+The stranded `selfdev-ffbd...` operation is unsalvageable (its candidate
+bytes never reached durable storage; no CAS upload path exists). It will be
+terminalized by the boot reconcile under fix 2/4, then the M11 episode
+re-runs end-to-end as deployed acceptance.

@@ -2218,6 +2218,29 @@ func (rt *Runtime) pendingDeskMutations(ctx context.Context) int {
 	return count
 }
 
+// activeSelfdevOperations counts self-development operations holding
+// in-flight transactional state that would be lost to a guest termination:
+// executing (cast running), accepted (approved, apply pending),
+// materializing, and rollback_pending. Parked states — frozen, verified,
+// awaiting_approval — are deliberately excluded: with artifacts on durable
+// storage the boot reconcile can resume them after a restart, and a wedged
+// parked op must not pin the guest busy forever.
+func (rt *Runtime) activeSelfdevOperations(ctx context.Context) int {
+	if rt == nil || rt.selfdevOperations == nil {
+		return 0
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if computerID == "" {
+		return 0
+	}
+	ops, err := rt.selfdevOperations.ListByStates(ctx, computerID,
+		selfdev.StateExecuting, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending)
+	if err != nil {
+		return 0
+	}
+	return len(ops)
+}
+
 func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.RunRecord) bool {
 	if rt == nil || rt.store == nil {
 		return true

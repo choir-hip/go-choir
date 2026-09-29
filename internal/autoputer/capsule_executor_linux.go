@@ -16,18 +16,25 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	state := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_STATE_DIR"))
 	source := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_SOURCE_ROOT"))
 	lower := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_LOWER_ROOT"))
-	configured := broker != "" || state != "" || source != "" || lower != ""
+	artifact := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_ARTIFACT_DIR"))
+	configured := broker != "" || state != "" || source != "" || lower != "" || artifact != ""
 	if !configured {
 		return nil, false, nil
 	}
-	if broker == "" || state == "" || source == "" || lower == "" {
-		return nil, false, fmt.Errorf("capsule executor requires broker, state, source, and lower roots together")
+	if broker == "" || state == "" || source == "" || lower == "" || artifact == "" {
+		return nil, false, fmt.Errorf("capsule executor requires broker, state, source, lower, and artifact roots together")
 	}
 	if err := os.MkdirAll(state, 0o700); err != nil {
 		return nil, false, fmt.Errorf("create capsule state directory: %w", err)
 	}
 	if err := os.Chmod(state, 0o700); err != nil {
 		return nil, false, fmt.Errorf("secure capsule state directory: %w", err)
+	}
+	if err := os.MkdirAll(artifact, 0o700); err != nil {
+		return nil, false, fmt.Errorf("create capsule artifact directory: %w", err)
+	}
+	if err := os.Chmod(artifact, 0o700); err != nil {
+		return nil, false, fmt.Errorf("secure capsule artifact directory: %w", err)
 	}
 	memoryTotal := int64(0)
 	if raw := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_MEMORY_TOTAL_BYTES")); raw != "" {
@@ -49,7 +56,7 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	if memoryTotal < int64(1<<30) {
 		return nil, false, fmt.Errorf("capsule executor memory admission budget is unavailable")
 	}
-	executor := capsule.NewExecutorWithSource(state, lower, source, broker, memoryTotal)
+	executor := capsule.NewExecutorWithArtifacts(state, artifact, lower, source, broker, memoryTotal)
 	if err := executor.InitializationError(); err != nil {
 		return nil, false, err
 	}

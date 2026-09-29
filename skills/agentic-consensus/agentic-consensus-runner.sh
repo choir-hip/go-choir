@@ -87,6 +87,7 @@ SEQUENTIAL=0
 DRY_RUN=0
 KEEP_GOING=0
 NO_TOOLS_OMP=0
+DEBUG_PERMISSIONS=0
 TIMEOUT_SECONDS=1200
 MODE="convergent"
 LENSES=""
@@ -205,6 +206,7 @@ while [[ $# -gt 0 ]]; do
     --omp-ling-thinking)
       [[ $# -ge 2 ]] || { echo "--omp-ling-thinking requires a value" >&2; exit 2; }
       OMP_LING_THINKING="$2"; shift 2 ;;
+    --debug) DEBUG_PERMISSIONS=1; shift ;;
     --sequential) SEQUENTIAL=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --keep-going) KEEP_GOING=1; shift ;;
@@ -332,7 +334,11 @@ build_cmd() {
   CMD=()
   case "$agent" in
     codex)
-      CMD=(codex exec --cd "$CWD" --sandbox read-only -c 'approval_policy="never"' --ephemeral --skip-git-repo-check)
+      if [[ "$DEBUG_PERMISSIONS" -eq 1 ]]; then
+        CMD=(codex exec --cd "$CWD" --sandbox workspace-write -c 'approval_policy="on-failure"' --ephemeral --skip-git-repo-check)
+      else
+        CMD=(codex exec --cd "$CWD" --sandbox read-only -c 'approval_policy="never"' --ephemeral --skip-git-repo-check)
+      fi
       [[ -n "$CODEX_MODEL" ]] && CMD+=(-m "$CODEX_MODEL")
       CMD+=("$AGENT_PROMPT") ;;
     devin)
@@ -340,11 +346,19 @@ build_cmd() {
       [[ -n "$DEVIN_MODEL" ]] && CMD+=(--model "$DEVIN_MODEL")
       CMD+=(-p "$AGENT_PROMPT") ;;
     claude)
-      CMD=(claude -p --output-format text --permission-mode plan --no-session-persistence)
+      if [[ "$DEBUG_PERMISSIONS" -eq 1 ]]; then
+        CMD=(claude -p --output-format text --permission-mode auto --no-session-persistence)
+      else
+        CMD=(claude -p --output-format text --permission-mode plan --no-session-persistence)
+      fi
       [[ -n "$CLAUDE_MODEL" ]] && CMD+=(--model "$CLAUDE_MODEL")
       CMD+=("$AGENT_PROMPT") ;;
     cursor)
-      CMD=(agent --print --output-format text --mode ask --trust --force --approve-mcps --workspace "$CWD")
+      if [[ "$DEBUG_PERMISSIONS" -eq 1 ]]; then
+        CMD=(agent --print --output-format text --trust --force --approve-mcps --workspace "$CWD")
+      else
+        CMD=(agent --print --output-format text --mode ask --trust --force --approve-mcps --workspace "$CWD")
+      fi
       [[ -n "$CURSOR_MODEL" ]] && CMD+=(--model "$CURSOR_MODEL")
       CMD+=("$AGENT_PROMPT") ;;
     opencode)

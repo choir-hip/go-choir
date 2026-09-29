@@ -387,6 +387,7 @@ EOF
     "d /run/choir-updater-control 0700 root root -"
     "d /run/choir-runtime-handoff 0700 root root -"
     "d /run/choir 0700 root root -"
+    "d /mnt/persistent/capsule-artifacts 0700 root root -"
     "d /mnt/persistent/choir-signers 0711 root root -"
     "d /mnt/persistent/choir-signers/guest-core 0700 choir-guest-signer choir-guest-signer -"
     "d /mnt/persistent/choir-signers/verifier 0700 choir-verifier-signer choir-verifier-signer -"
@@ -725,6 +726,7 @@ EOF
       CHOIR_BASELINE_RELEASE_ROOT = "${goChoirPackages.autoputer}";
       CHOIR_CAPSULE_BROKER_PATH = "${goChoirPackages.capsuleBroker}/bin/capsule-broker";
       CHOIR_CAPSULE_STATE_DIR = "/run/choir/capsules";
+      CHOIR_CAPSULE_ARTIFACT_DIR = "/mnt/persistent/capsule-artifacts";
       CHOIR_CAPSULE_SOURCE_ROOT = "/mnt/persistent/files/Source/platform";
       CHOIR_CAPSULE_LOWER_ROOT = "/";
       GIT_AUTHOR_NAME = "Choir Capsule";

@@ -226,8 +226,17 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 		requestDigestParts = append(requestDigestParts, overlay)
 	}
 	requestDigest := objectgraph.SHA256([]byte(strings.Join(requestDigestParts, "\x00")))
+	// The durable binding stores the effective parent control: candidate ID
+	// for verification, revision ID otherwise. The replay compare must use
+	// the same value the binding wrote — comparing against req.RevisionID
+	// forces ErrEngineeringAssignmentCommandConflict on every verification
+	// resume.
+	parentControlID := req.RevisionID
+	if req.Kind == types.EngineeringAssignmentVerification {
+		parentControlID = req.CandidateID
+	}
 	if existing, getErr := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt); getErr == nil {
-		if existing.Binding.ParentAgentID != parentAgentID || existing.Binding.ParentControlID != req.RevisionID ||
+		if existing.Binding.ParentAgentID != parentAgentID || existing.Binding.ParentControlID != parentControlID ||
 			existing.Binding.ParentWorkItemID != parentWorkID || existing.Binding.Kind != req.Kind ||
 			existing.Binding.RequestDigest != requestDigest || existing.Binding.SourceCandidateID != req.CandidateID {
 			return AssignedEngineeringStart{}, store.ErrEngineeringAssignmentCommandConflict
@@ -248,12 +257,6 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 	}
 	if err := rt.reclaimSupersededAssignmentCapsules(ctx, types.RunRecord{OwnerID: ownerID, ComputerID: computerID}, assignmentID); err != nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("reclaim superseded assignment capsules: %w", err)
-	}
-	parentControlID := req.RevisionID
-	if req.Kind == types.EngineeringAssignmentVerification {
-		// The verification assignment's parent control is the candidate record:
-		// the durable receipt of the completed implementation it verifies.
-		parentControlID = req.CandidateID
 	}
 	parentDecisionID := "decision:" + objectgraph.SHA256([]byte(strings.Join([]string{
 		vocabmigrate.IdentitySeedCoSuperDecisionV3, ownerID, computerID, parentAgentID, trajectoryID, parentWorkID, parentControlID, req.RevisionID,

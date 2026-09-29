@@ -3,10 +3,12 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -279,7 +281,18 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 	if err != nil {
 		return nil, nil // no self-development operation bound to this trajectory
 	}
-	if operation.BundleDigest == "" || (operation.State != selfdev.StateFrozen && operation.State != selfdev.StateAwaitingApproval) {
+	if operation.BundleDigest == "" ||
+		(operation.State != selfdev.StateFrozen && operation.State != selfdev.StateVerified && operation.State != selfdev.StateAwaitingApproval) {
+		return nil, nil
+	}
+	// A verified operation carries the finalized bundle digest + verifier ref
+	// on the store row; a crash between frozen->verified and
+	// verified->awaiting_approval only needs the terminal transition replayed.
+	if operation.State == selfdev.StateVerified {
+		if _, transitionErr := rt.selfdevOperations.Transition(ctx, doc.ComputerID, operation.OperationID,
+			selfdev.StateVerified, selfdev.StateAwaitingApproval, nil); transitionErr != nil {
+			return nil, fmt.Errorf("engineering desk reconcile: resume verified selfdev operation: %w", transitionErr)
+		}
 		return nil, nil
 	}
 	candidateID := ""
@@ -338,8 +351,22 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 		}
 		return &started.Assignment, nil
 	}
-	if vFound && (vLatest.Disposition == types.EngineeringAssignmentBound || vLatest.Disposition.Terminal()) {
+	if vFound && vLatest.Disposition == types.EngineeringAssignmentBound {
 		return &vLatest, nil
+	}
+	// A verification that finished while the operation stayed frozen (e.g. a
+	// restart-uncancelled failure, or a completed verification whose
+	// record_self_development_verification cell never landed) leaves the op
+	// stranded — no further verification can be admitted under the same
+	// frozen digest. Fail the operation rather than retry forever.
+	if vFound && vLatest.Disposition.Terminal() {
+		reason := "verification assignment terminated while operation stayed frozen"
+		if vLatest.Disposition == types.EngineeringAssignmentCompleted {
+			reason = "verification completed but operation never advanced past frozen"
+		}
+		rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID, reason)
+		return nil, fmt.Errorf("engineering desk reconcile: %s (verification attempt %d: %s)",
+			reason, vLatest.Binding.Attempt, vLatest.Disposition)
 	}
 	objective := "Verify the frozen self-development bundle for operation " + operation.OperationID +
 		" against the implementation assignment's candidate artifact."
@@ -348,6 +375,10 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 		RevisionID: implementation.Binding.ParentControlID, Attempt: vLatest.Binding.Attempt,
 	})
 	if openErr != nil {
+		if errors.Is(openErr, capsule.ErrSubjectArtifactUnavailable) {
+			rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID,
+				"candidate artifact lost before verification opened: "+strings.TrimSpace(openErr.Error()))
+		}
 		return nil, fmt.Errorf("engineering desk reconcile: open verification: %w", openErr)
 	}
 	return &started.Assignment, nil
