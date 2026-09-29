@@ -230,7 +230,11 @@ function mintQualifiedConsensus({ computerID, operation, head }) {
     selected_at_head: selectedAtHead,
     selected_sequence: selectedSequence,
   };
-  selection.selection_digest = canonicalDigest({ ...selection, selection_digest: '' });
+  // Go's CanonicalJSON honors omitempty: a zeroed-out digest field is omitted
+  // from the preimage entirely, so digest the object before the field exists —
+  // never with `selection_digest: ''` (that byte changes the digest and trips
+  // ErrMissingSelection at decision-policy Reduce).
+  selection.selection_digest = canonicalDigest(selection);
 
   // The author seat is present in the manifest but recused from verification.
   // Reduce rejects a signer that is recused from the verification domain, so
@@ -249,8 +253,8 @@ function mintQualifiedConsensus({ computerID, operation, head }) {
       window_id: selection.selection_digest,
       signer_provenance: `m11:${marker}:${seat.seat_id}`,
     };
-    ballot.attestation = sha256hex(`choir-ballot-attestation-v1:${canonicalJSON({ ...ballot, attestation: '', ballot_digest: '' })}`);
-    ballot.ballot_digest = canonicalDigest({ ...ballot, ballot_digest: '' });
+    ballot.attestation = sha256hex(`choir-ballot-attestation-v1:${canonicalJSON(ballot)}`);
+    ballot.ballot_digest = canonicalDigest(ballot);
     return ballot;
   });
 
@@ -271,7 +275,7 @@ function mintQualifiedConsensus({ computerID, operation, head }) {
     window: { started_at: now, expires_at: expires },
     reducer_version: 'decisionpolicy-consensus-v1',
   };
-  receipt.receipt_digest = canonicalDigest({ ...receipt, receipt_digest: '' });
+  receipt.receipt_digest = canonicalDigest(receipt);
   return { manifest, subject, selection, ballots, now, receipt, bindings };
 }
 
