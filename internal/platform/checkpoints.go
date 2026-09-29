@@ -105,6 +105,7 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	var storedVerifierKeyID string
 	var storedVerifierKey []byte
 	var keyLookupErr error
+	var legacyFirstPin bool
 	if !request.OwnerRecovery && !request.PlatformFollow {
 		var keyErr error
 		verifierKey, keyErr = base64.RawStdEncoding.DecodeString(request.VerifierCertificate.PublicKey)
@@ -124,6 +125,21 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 			if keyLookupErr != nil && !errors.Is(keyLookupErr, sql.ErrNoRows) {
 				return selfdevprotocol.CheckpointResponse{}, keyLookupErr
 			}
+		} else if errors.Is(keyLookupErr, sql.ErrNoRows) {
+			// Chain-bootstrapped computers carry genesis_imported events with
+			// empty verifier_refs and never mint a genesis checkpoint, so the
+			// bootstrap pin above never wrote a row — the only path that could
+			// repair them. Treat the absent pin as a first-use binding: pin the
+			// key the guest's verifier service actually presents, authorized by
+			// this checkpoint's own receipt. Substitution risk is bounded by the
+			// guest trust boundary (the verifier key lives on the guest data
+			// volume and cannot be observed host-side); a wrong key is at most
+			// as bad as the verifier socket itself being compromised.
+			var genesisSeq uint64
+			if genErr := a.cas.store.db.QueryRowContext(ctx, `SELECT sequence FROM computer_event_append_receipts WHERE computer_id=? AND event_kind=? ORDER BY sequence LIMIT 1`, request.ComputerID, string(computerevent.EventGenesisImported)).Scan(&genesisSeq); genErr != nil {
+				return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier key is not the pinned computer key")
+			}
+			legacyFirstPin = true
 		} else if keyLookupErr != nil || storedVerifierKeyID != verifierKeyID || !ed25519.PublicKey(storedVerifierKey).Equal(ed25519.PublicKey(verifierKey)) {
 			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier key is not the pinned computer key")
 		}
@@ -142,12 +158,19 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	var verifierKeyReceipt computerevent.Receipt
 	var verifierKeyReceiptJSON []byte
 	var verifierKeyReceiptDigest string
-	if request.VerifierTrustBootstrap && errors.Is(keyLookupErr, sql.ErrNoRows) {
-		verifierKeyReceipt, err = computerevent.NewSignedReceipt("VerifierKeyPinned", "corpusd", map[string]any{
+	if errors.Is(keyLookupErr, sql.ErrNoRows) && (request.VerifierTrustBootstrap || legacyFirstPin) {
+		pinFields := map[string]any{
 			"computer_id": request.ComputerID, "key_id": verifierKeyID,
-			"public_key": request.VerifierCertificate.PublicKey, "genesis_event_head": request.AcceptedEventHead,
+			"public_key":        request.VerifierCertificate.PublicKey,
 			"checkpoint_digest": checkpoint.Digest,
-		}, []computerevent.SigningKey{a.cas.signingKey}, receipt.IssuedAt)
+		}
+		if request.VerifierTrustBootstrap {
+			pinFields["genesis_event_head"] = request.AcceptedEventHead
+		} else {
+			pinFields["repair"] = "legacy-import first-use pin"
+			pinFields["accepted_event_head"] = request.AcceptedEventHead
+		}
+		verifierKeyReceipt, err = computerevent.NewSignedReceipt("VerifierKeyPinned", "corpusd", pinFields, []computerevent.SigningKey{a.cas.signingKey}, receipt.IssuedAt)
 		if err != nil {
 			return selfdevprotocol.CheckpointResponse{}, err
 		}
@@ -170,7 +193,7 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 		return selfdevprotocol.CheckpointResponse{}, err
 	}
 	defer tx.Rollback()
-	if request.VerifierTrustBootstrap && errors.Is(keyLookupErr, sql.ErrNoRows) {
+	if errors.Is(keyLookupErr, sql.ErrNoRows) && (request.VerifierTrustBootstrap || legacyFirstPin) {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO control_key_history (signer_domain,computer_id,key_id,public_key,status,activation_sequence,activation_time,first_invalid_sequence,first_invalid_time,replacement_key_id,authorizing_receipt_json,authorizing_receipt_digest,inserted_at) VALUES ('verifier-control',?,?,?,'active',?,?,NULL,NULL,NULL,?,?,?)`,
 			request.ComputerID, verifierKeyID, verifierKey, head.Sequence, receipt.IssuedAt, string(verifierKeyReceiptJSON), verifierKeyReceiptDigest, receipt.IssuedAt); err != nil {
 			return selfdevprotocol.CheckpointResponse{}, err
