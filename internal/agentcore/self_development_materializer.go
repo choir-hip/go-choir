@@ -475,16 +475,49 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	if err != nil {
 		return err
 	}
-	checkpoint, err := rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
-		ComputerID: operation.ComputerID, IdempotencyKey: "selfdev-checkpoint-" + operation.DecisionEvent,
-		ComputerVersion: version, AcceptedEventHead: head.CanonicalEventHead, EffectiveEventHead: head.EffectiveEventHead,
-		EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: checkpointHeadReceipt.ReceiptID,
-		ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
-		MaterializationReceiptDigest: receiptDigest, VerifierCertificateDigest: verifierDigest,
-		VerifierCertificate: verifierCertificate, ReducerVersion: head.ReducerVersion,
-		VMLocalContentWitness: witness, FrontendIdentity: frontend,
-	})
-	if err != nil {
+	// The authority CAS-gates on the live head, but arbitrary tape events
+	// (per-boot key_revoked rotations, projection sweeps, concurrent cells)
+	// keep advancing it between the head read above and publish. Re-read the
+	// head + receipt + reconstruction digest and retry; the certificate is
+	// bound to the decision event, not the current head, so republishing is
+	// safe. Bounded at three attempts — a persistently-moving head means a
+	// livelock loop, which is worse than surfacing the error.
+	var checkpoint selfdevprotocol.CheckpointResponse
+	published := false
+	for attempt := 0; attempt < 3 && !published; attempt++ {
+		if attempt > 0 {
+			head, err = rt.store.Head(ctx, operation.ComputerID)
+			if err != nil || head == nil {
+				return fmt.Errorf("materializer: applied projection unavailable on retry")
+			}
+			checkpointHeadReceipt, found, err = rt.store.EventReceiptByDigest(ctx, operation.ComputerID, head.CanonicalEventHead)
+			if err != nil || !found {
+				return fmt.Errorf("materializer: current-head event receipt unavailable on retry")
+			}
+			reconstructionDigest, err = selfdevprotocol.Digest(struct {
+				Version       computerversion.ComputerVersion `json:"computer_version"`
+				EffectiveHead string                          `json:"effective_event_head"`
+				ReleaseDigest string                          `json:"release_digest"`
+			}{version, head.EffectiveEventHead, result.ReleaseDigest})
+			if err != nil {
+				return err
+			}
+		}
+		checkpoint, err = rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
+			ComputerID: operation.ComputerID, IdempotencyKey: "selfdev-checkpoint-" + operation.DecisionEvent,
+			ComputerVersion: version, AcceptedEventHead: head.CanonicalEventHead, EffectiveEventHead: head.EffectiveEventHead,
+			EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: checkpointHeadReceipt.ReceiptID,
+			ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
+			MaterializationReceiptDigest: receiptDigest, VerifierCertificateDigest: verifierDigest,
+			VerifierCertificate: verifierCertificate, ReducerVersion: head.ReducerVersion,
+			VMLocalContentWitness: witness, FrontendIdentity: frontend,
+		})
+		if err != nil && strings.Contains(err.Error(), "head CAS conflict") {
+			continue
+		}
+		published = true
+	}
+	if !published {
 		return err
 	}
 	checkpointRef := "checkpoint:sha256:" + checkpoint.Checkpoint.Digest
