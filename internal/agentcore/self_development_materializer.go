@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 type updaterReceiptKeyResolver struct {
@@ -573,17 +574,19 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	// Detect that here rather than letting the authority surface "route is
 	// absent" as a terminal refusal.
 	effectiveRouteKind := routeKind
+	effectiveScope, effectiveActor := decisionScope, operation.DecisionActor
 	if currentRoute.RouteAbsent {
 		if routeKind == routeledger.TransitionRollback {
 			return fmt.Errorf("materializer: cannot rollback to an absent route slot")
 		}
+		// Bootstrap is a platform-scope act: the self-dev projection endpoint
+		// refuses TransitionBootstrap by design (vmctl/self_development_route.go),
+		// and only ApplyPlatformFollowRouteProjection accepts it. The first
+		// materialization of a chain-bootstrapped computer binds its initial
+		// route under the platform-follow evidence class.
 		effectiveRouteKind = routeledger.TransitionBootstrap
-	}
-	if currentRoute.Slot.Current == version {
-		if currentRoute.LatestReceipt.IdempotencyKey != routeIdempotency || currentRoute.LatestReceipt.New != version {
-			return fmt.Errorf("materializer: current route already changed by another transition")
-		}
-		oldVersion, expectedGeneration = currentRoute.LatestReceipt.Old, currentRoute.LatestReceipt.ExpectedGeneration
+		effectiveScope = selfdevprotocol.PlatformUpdateFollowScope
+		effectiveActor = selfdevprotocol.PlatformUpdateFollowActor
 	}
 	createdAt := checkpoint.Receipt.IssuedAt
 	// RouteProjectionFromRequest recomputes this payload from the minted
@@ -593,7 +596,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		Version: 1, ComputerID: operation.ComputerID, AcceptedOrRollbackEventDigest: checkpoint.Checkpoint.Request.AcceptedEventHead,
 		EventHeadReceiptID: checkpoint.Checkpoint.Request.EventHeadReceiptID, EffectiveEventHead: checkpoint.Checkpoint.Request.EffectiveEventHead,
 		OldComputerVersion: oldVersion, NewComputerVersion: version,
-		DecisionActor: operation.DecisionActor, DecisionScope: decisionScope,
+		DecisionActor: effectiveActor, DecisionScope: effectiveScope,
 	}
 	acceptedJSON, err := computerevent.CanonicalJSON(acceptedPayload)
 	if err != nil {
@@ -635,14 +638,19 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		Checkpoint: checkpoint, CodeClosure: closure, ArtifactProgram: program,
 		CanonicalEventHead: routeHead.CanonicalEventHead, EventHeadReceiptID: routeHeadReceipt.ReceiptID,
 		ApprovalEvidence: approvalEvidence, PromotionEvidence: promotionEvidence, Command: command,
-		DecisionActor: operation.DecisionActor, DecisionScope: decisionScope,
+		DecisionActor: effectiveActor, DecisionScope: effectiveScope,
 		ExpiresAt: authorizationWindow.Add(5 * time.Minute).Format(time.RFC3339Nano),
 	}
 	authorization, err := rt.selfdevControl.PublishRouteProjection(ctx, projectionRequest)
 	if err != nil {
 		return err
 	}
-	route, err := rt.selfdevRoute.ApplySelfDevelopmentRouteProjection(ctx, selfdevprotocol.ApplyRouteProjectionRequest{Projection: projectionRequest, Authorization: authorization})
+	var route vmctl.RouteResolution
+	if effectiveRouteKind == routeledger.TransitionBootstrap {
+		route, err = rt.selfdevRoute.ApplyPlatformFollowRouteProjection(ctx, selfdevprotocol.ApplyRouteProjectionRequest{Projection: projectionRequest, Authorization: authorization})
+	} else {
+		route, err = rt.selfdevRoute.ApplySelfDevelopmentRouteProjection(ctx, selfdevprotocol.ApplyRouteProjectionRequest{Projection: projectionRequest, Authorization: authorization})
+	}
 	if err != nil || route.TransitionReceipt == nil {
 		return fmt.Errorf("materializer: route projection failed: %w", err)
 	}
