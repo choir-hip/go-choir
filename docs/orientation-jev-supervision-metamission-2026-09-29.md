@@ -120,7 +120,7 @@ module. Station list:
 | # | Station | Delivers | Depends |
 |---|---|---|---|
 | M0 | **Debug + stabilize** | Redeploy owner computer onto today's build; reconcile the 7 pending mutations + 3 stale runs (counter → 0, not masked by idle-sweep busy-check); SSE auto-resubscribe (~20 lines, `frontend/src/lib/lifecycle.js` — `onerror` resumes via `?after=` cursor, no terminal error); baseline per-leg timings; problem record. No throughput bar here. | none — first |
-| M-SUB | **Async signal plane + stall terminator** (red-class kernel — divergent+convergent panels adjudicated; design below) | Owner contract: any desk sends async anytime; parked desk receives immediately (`dispatchActor` — exists); working desk receives immediately after its current model call (drain at `injectUserTurns` seam — exists, needs a mid-run source). **SEND**: `choir.Emit` → broker `ActionEmit` → `channelCast` (durable append + tape event + wake + receipt), never tray-staged; kind path-derived so emissions can't masquerade as commitments. **RECEIVE mid-cell**: advisory piggyback on `s.call` responses v1; watcher-goroutine long-poll deferred behind request-ID mux proof; native demux deferred (highest blast radius). **Stall terminator ships first**: `cell_fate` record on every exit + armed terminal deadline (`scheduleContinuation` pattern) — `ReduceCellIntents(failed)` persists nothing today; that's the hole your QA hit. Unified channel log + store-layer kind whitelist (split plane deferred to World Wire). | M0 |
+| M-SUB | **Async signal plane + stall terminator** (red-class kernel — divergent+convergent panels adjudicated; design below) | Owner contract: any desk sends async anytime; parked desk receives immediately (`dispatchActor` — exists); working desk receives immediately after its current model call. **SEND**: `choir.Emit` → broker `ActionEmit` → `channelCast` (durable append + tape event + wake + receipt), never tray-staged; kind path-derived so emissions can't masquerade as commitments. **RECEIVE**: working desks get a fixed-format *notice* at the `injectUserTurns` seam (sender, kind, seq, ~140-char snippet — never sender free text); the content itself lands in the cell's repl as a refreshed variable (`Updates()`/`Inbox()` re-read host-side), RLM pulls bodies via verbs. Mid-cell: advisory piggyback on `s.call` responses v1; watcher long-poll deferred behind request-ID mux proof; native demux deferred. **Stall terminator ships first**: `cell_fate` record on every exit + armed terminal deadline — `ReduceCellIntents(failed)` persists nothing today; that's the hole your QA hit. Unified channel log + store-layer kind whitelist (split plane deferred to World Wire). | M0 |
 | M0a-1 | **In-cell research verbs** | `choir.WebSearch`/`FetchURL`/evidence ops as Go verbs; egress budget rehomed (typed tools carry per-activation egress + 8GiB cap — deleting without rehoming deletes governance). Typed surface still live — controlled-comparison verify of the stall fix. | M-SUB |
 | M0a-2 | **Research tool-surface deletion** | Delete the 14-tool surface; capability-parity checklist (each capability reachable via `choir.*` or dropped with reason); prompt-overlay rewrites in the same commit (`rlm_research_runtime.yaml`, `research.yaml` instruct the deleted cadence). | M0a-1 |
 | M1 | **Scoreable commitments** | `Precommit`/`Resolve`/`Disagreement` from strings to types; string-commitment grandfathering stated. | parallel-safe — types/store change |
@@ -144,11 +144,17 @@ SEND   choir.Emit(payload) → broker ActionEmit → channelCast path:
 
 PARKED recipient   existing dispatchActor wake — zero new code.
 
-WORKING recipient  drain at the injectUserTurns seam (toolloop.go:672):
+WORKING recipient  notify at the injectUserTurns seam (toolloop.go:672):
                    after the current model call returns, before the next
-                   model call, host reads durable inbox through committed
-                   high-water and injects provenance-stamped envelopes as
-                   user-role turns. Injection is a VIEW; never authority.
+                   model call, the host injects a fixed-format notice —
+                   sender, kind, seq, ~140-char snippet — never
+                   sender-authored free text (kills most of the prompt-
+                   injection surface: the injected string is renderer
+                   output, not content). The CONTENT is never injected:
+                   it lands in the cell's repl environment as a refreshed
+                   variable — Updates()/Inbox() re-read the host-side
+                   snapshot — and the RLM pulls full bodies via verbs
+                   when it chooses. Notice = pointer; variable = payload.
 
 MID-CELL (v1)      piggyback watermark on s.call responses — advisory
                    visibility for broker-active cells; never authoritative.
@@ -175,13 +181,15 @@ from zero; must rekey to (channel, desk) — a named fix inside this work.
 Ship order (each independent): 1) `cell_fate` record + armed terminal
 deadline (closes the silent-stall hole first); 2) `Emit` verb + epoch
 fence + append-rate caps + egress charge; 3) durable cursor + injection
-seam + provenance rendering + aggregate drain caps; 4) piggyback.
+seam + notice rendering + aggregate drain caps; 4) piggyback.
 
 Residual risks the panel converged on: injection is a prompt-injection
-channel (needs a redline test corpus, not just caps); poison-envelope
-replay loop (a message that crashes rendering replays every respawn —
-needs seq-level quarantine on tape); wake-policy squint (emission wakes
-must coalesce differently than obligation wakes before World Wire).
+channel — substantially defused by notice-only injection (the injected
+string is renderer-fixed, ~140-char snippet cap) but repl-side content
+remains untrusted data the RLM quotes from; poison-envelope replay loop
+(a message that crashes rendering replays every respawn — needs
+seq-level quarantine on tape); wake-policy squint (emission wakes must
+coalesce differently than obligation wakes before World Wire).
 
 ### Open questions — resolved by owner 2026-09-29
 
