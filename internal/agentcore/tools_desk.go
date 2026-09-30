@@ -462,5 +462,15 @@ func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaeg
 	}
 	sum := sha256.Sum256([]byte(rec.RunID + "\x1f" + docID + "\x1f" + doc.CurrentRevisionID))
 	_, err = rt.textureCellAuthorizer.CommitCellTextureAuthor(ctx, rec, string(body), "rlm-texture-idle:"+hex.EncodeToString(sum[:8]))
-	return err
+	if err != nil {
+		// A non-pending mutation or mismatched doc means the trigger was already
+		// consumed (the cell committed a turn through another path, or the run
+		// settled). That is success for our purpose — never fail a healthy cell
+		// over an already-disposed wake.
+		if strings.Contains(err.Error(), "not pending") || strings.Contains(err.Error(), "does not match authenticated") {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
