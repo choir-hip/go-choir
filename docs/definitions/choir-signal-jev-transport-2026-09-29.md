@@ -117,12 +117,13 @@ boundaries:
     - 'deploy-provider-creds credential provisioning'
 
 now:
-  status: working
-  slice: 'verify OpenRouter alpha-endpoint access for typesafe/jev-1.13
-    first — if absent, record as a named residual and stop; then author
-    gateway POST /provider/v1/judgments route handler + OpenRouter client'
+  status: complete
+  slice: 'landed — live VM→gateway→OpenRouter round-trip returns pinned
+    typesafe/jev-1.13 distribution; refusal probes refuse (401 missing,
+    403 cross-VM BindJevPeer, 429 bucket); independent per-VM buckets
+    proven (VM-A exhausted → VM-B 200)'
   source_ref: main@ac54317c
-  deploy_identity: 'staging build.commit=b85af274'
+  deploy_identity: 'staging build.commit=2404e7d2'
   candidate:
     id: none
     state: none
@@ -142,8 +143,8 @@ now:
     # connectivity
     delta_o: 'M5 uses it'
     scope_if_supported: 'all judgment transport for the computer'
-    status: proposed
-    evidence_refs: []
+    status: resolved
+    evidence_refs: ['docs/evidence/m4-jev-transport-roundtrip-2026-09-30.md']
   decision:
     what: 'gateway POST /provider/v1/judgments → OpenRouter
       typesafe/jev-1.13, per owner §12.2'
@@ -163,5 +164,14 @@ now:
     OPENROUTER_API_KEY from the gateway env; live round-trip on a
     staging VM'
 
-receipts: []
+receipts:
+  - id: m4-live-round-trip
+    kind: outcome
+    status: settled
+    summary: 'Deployed proof: POST /provider/v1/judgments on staging returns a
+      pinned typesafe/jev-1.13 decision distribution (200) with a real per-VM
+      bearer. Refusal probes: missing bearer 401, peer-IP-mismatched bearer 403
+      (BindJevPeer), exhausted VM-A judgments bucket 429 while VM-B still 200 —
+      per-VM rate buckets independent. Rollback documented.'
+    evidence_ref: 'docs/evidence/m4-jev-transport-roundtrip-2026-09-30.md'
 ---
