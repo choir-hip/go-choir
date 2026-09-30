@@ -2,6 +2,7 @@ package textureowner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"path/filepath"
@@ -255,6 +256,260 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 		}
 	}
 	t.Fatalf("computer A pending mutation suppressed computer B restart wake: %+v", runs)
+}
+
+// A texture run passivated with passivated_reason=runtime_restarted while an
+// owner revision is still pending must be reactivated by Handler.Start, not
+// left stranded. Production receipt: run 654acaec on the owner computer was
+// passivated at 03:48 and never reactivated across the 04:21 restart — the
+// owner revision stayed armed-but-undelivered.
+func TestTextureOwnerStartReactivatesRuntimeRestartedPassivatedRun(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "texture-restart-rewake.db")
+	s1, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open first store: %v", err)
+	}
+
+	const (
+		ownerID      = "user-texture-rewake"
+		docID        = "doc-texture-rewake"
+		agentID      = "texture:" + docID
+		trajectoryID = "trajectory-texture-rewake"
+		revisionID   = "rev-texture-rewake"
+		computerID   = "autoputer-texture-rewake"
+		passivatedID = "passivated-texture-rewake"
+	)
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-texture-rewake",
+		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		InitialWork: types.WorkItemRecord{
+			WorkItemID: "work-texture-rewake", Objective: "owner directive", AssignedAgentID: agentID,
+		},
+		InitialDocument: types.Document{DocID: docID, Title: "Rewake target"},
+		InitialRevision: types.Revision{
+			RevisionID: revisionID, AuthorKind: types.AuthorUser, AuthorLabel: "user",
+			Content: "Owner directive pending rewake",
+		},
+		Agent: types.AgentRecord{
+			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
+			Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+		},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := s1.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start durable lifecycle: %v", err)
+	}
+
+	// Seed exactly as production: insert a pending texture activation via the
+	// lifecycle projection, then passivate it the way a runtime_restarted
+	// boot does — UpdateRun on the same record, keeping TrajectoryID.
+	live := types.RunRecord{
+		RunID: passivatedID, AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
+		ChannelID: docID, TrajectoryID: trajectoryID,
+		AgentProfile: "texture", AgentRole: "texture",
+		State:     types.RunPending,
+		CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			"type":                    textureAgentRevisionTaskType,
+			"doc_id":                  docID,
+			"current_revision_id":     revisionID,
+			"lifecycle_trajectory_id": trajectoryID,
+		},
+	}
+	insertReq := types.ReplaceLifecycleActivationRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "seed-live:" + passivatedID,
+		TrajectoryID: trajectoryID, AgentID: agentID, Run: live,
+	}
+	insertReq.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(insertReq)
+	if _, err := s1.ReplaceLifecycleActivation(ctx, insertReq); err != nil {
+		t.Fatalf("seed live texture run: %v", err)
+	}
+	passivated := live
+	passivated.State = types.RunPassivated
+	passivated.Metadata = map[string]any{}
+	for k, v := range live.Metadata {
+		passivated.Metadata[k] = v
+	}
+	passivated.Metadata["passivated_reason"] = "runtime_restarted"
+	if err := s1.UpdateRun(ctx, passivated); err != nil {
+		t.Fatalf("passivate texture run: %v", err)
+	}
+	// Boot passivation stales the mutation; reactivation must accept that state.
+	if err := s1.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID: docID, RunID: passivatedID, OwnerID: ownerID, ComputerID: computerID,
+		State: "stale_activation", RevisionID: revisionID, CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed stale_activation mutation: %v", err)
+	}
+	if err := s1.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+
+	s2, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	t.Cleanup(func() { _ = s2.Close() })
+	rt := agentcore.New(provideriface.Config{
+		ComputerID: computerID, StorePath: dbPath,
+		PromptRoot: filepath.Join(t.TempDir(), "prompts"),
+		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+	}, s2, events.NewEventBus(), provider.NewStubProvider(0))
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	t.Cleanup(rt.Stop)
+
+	if err := NewHandler(rt).Start(ctx); err != nil {
+		t.Fatalf("texture owner start: %v", err)
+	}
+
+	runs, err := s2.ListLifecycleRunsByChannel(ctx, ownerID, computerID, docID, 10)
+	if err != nil {
+		t.Fatalf("list lifecycle runs: %v", err)
+	}
+	var run *types.RunRecord
+	for i := range runs {
+		if runs[i].RunID == passivatedID {
+			run = &runs[i]
+		}
+	}
+	if run == nil {
+		t.Fatalf("passivated texture run not listed")
+	}
+	if run.State != types.RunPending {
+		t.Fatalf("runtime_restarted texture run was not reactivated; state=%s reason=%s",
+			run.State, metadataStringValue(run.Metadata, "passivated_reason"))
+	}
+}
+
+// The runtime_restarted restart gap, isolated: when the document head is a
+// desk-authored (non-owner-input) revision, ownerHeadPending is false and the
+// open work item is the only arm. A passivated texture run must still
+// reactivate — the pre-fix gate suppressed initialWorkWake on any texture
+// run regardless of state, stranding the interrupted activation forever.
+func TestTextureOwnerStartReactivatesPassivatedRunOnOpenWork(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "texture-restart-workrewake.db")
+	s1, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open first store: %v", err)
+	}
+
+	const (
+		ownerID      = "user-texture-workrewake"
+		docID        = "doc-texture-workrewake"
+		agentID      = "texture:" + docID
+		trajectoryID = "trajectory-texture-workrewake"
+		revisionID   = "rev-texture-workrewake"
+		computerID   = "autoputer-texture-workrewake"
+		passivatedID = "passivated-texture-workrewake"
+	)
+	now := time.Now().UTC()
+	// Desk-authored head (author app agent, texture_cell source) → not
+	// owner-input, so PendingTextureOwnerRevision reports false and the open
+	// work item is the sole wake arm.
+	headMeta, _ := json.Marshal(map[string]any{"source": "texture_cell"})
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start-texture-workrewake",
+		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		InitialWork: types.WorkItemRecord{
+			WorkItemID: "work-texture-workrewake", Objective: "desk work pending rewake", AssignedAgentID: agentID,
+		},
+		InitialDocument: types.Document{DocID: docID, Title: "Work rewake target"},
+		InitialRevision: types.Revision{
+			RevisionID: revisionID, AuthorKind: types.AuthorAppAgent, AuthorLabel: "texture",
+			BodyDoc: observationBodyDoc("Desk head"), Metadata: headMeta,
+		},
+		Agent: types.AgentRecord{
+			AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
+			Profile: "texture", Role: "texture", ChannelID: docID, CreatedAt: now, UpdatedAt: now,
+		},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := s1.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start durable lifecycle: %v", err)
+	}
+
+	live := types.RunRecord{
+		RunID: passivatedID, AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
+		ChannelID: docID, TrajectoryID: trajectoryID,
+		AgentProfile: "texture", AgentRole: "texture",
+		State:     types.RunPending,
+		CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{
+			"type":                    textureAgentRevisionTaskType,
+			"doc_id":                  docID,
+			"current_revision_id":     revisionID,
+			"lifecycle_trajectory_id": trajectoryID,
+		},
+	}
+	insertReq := types.ReplaceLifecycleActivationRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "seed-live-work:" + passivatedID,
+		TrajectoryID: trajectoryID, AgentID: agentID, Run: live,
+	}
+	insertReq.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(insertReq)
+	if _, err := s1.ReplaceLifecycleActivation(ctx, insertReq); err != nil {
+		t.Fatalf("seed live texture run: %v", err)
+	}
+	passivated := live
+	passivated.State = types.RunPassivated
+	passivated.Metadata = map[string]any{}
+	for k, v := range live.Metadata {
+		passivated.Metadata[k] = v
+	}
+	passivated.Metadata["passivated_reason"] = "runtime_restarted"
+	if err := s1.UpdateRun(ctx, passivated); err != nil {
+		t.Fatalf("passivate texture run: %v", err)
+	}
+	if err := s1.CreateAgentMutation(ctx, store.AgentMutation{
+		DocID: docID, RunID: passivatedID, OwnerID: ownerID, ComputerID: computerID,
+		State: "stale_activation", RevisionID: revisionID, CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed stale_activation mutation: %v", err)
+	}
+	if err := s1.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+
+	s2, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	t.Cleanup(func() { _ = s2.Close() })
+	rt := agentcore.New(provideriface.Config{
+		ComputerID: computerID, StorePath: dbPath,
+		PromptRoot: filepath.Join(t.TempDir(), "prompts"),
+		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+	}, s2, events.NewEventBus(), provider.NewStubProvider(0))
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	t.Cleanup(rt.Stop)
+
+	if err := NewHandler(rt).Start(ctx); err != nil {
+		t.Fatalf("texture owner start: %v", err)
+	}
+
+	runs, err := s2.ListLifecycleRunsByChannel(ctx, ownerID, computerID, docID, 10)
+	if err != nil {
+		t.Fatalf("list lifecycle runs: %v", err)
+	}
+	var run *types.RunRecord
+	for i := range runs {
+		if runs[i].RunID == passivatedID {
+			run = &runs[i]
+		}
+	}
+	if run == nil {
+		t.Fatalf("passivated texture run not listed")
+	}
+	if run.State != types.RunPending {
+		t.Fatalf("open-work texture run was not reactivated; state=%s reason=%s",
+			run.State, metadataStringValue(run.Metadata, "passivated_reason"))
+	}
 }
 
 func TestTextureOwnerRevisionRejectsTerminalLifecycleWithoutDispatch(t *testing.T) {

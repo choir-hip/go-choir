@@ -54,17 +54,33 @@ edge, not the pending-mutation wedge.
 - Guest health post-refresh: build `4c279162`, `running_runs=0`,
   `selfdev_active_operations=8`, pending_mutations reconciled.
 
-## What M-SUB must add
+## Repair (landed 2026-09-30)
 
-M-SUB's stall terminator (`cell_fate` + armed deadline) covers the
-failed-cell case; this residual is the **passivated-not-resumed** case.
-M-SUB should extend `cell_fate`/wake coverage to `runtime_restarted`
-passivation — a restarted desk must either resume its pending activation
-or record a fate so the trajectory doesn't hang silently. Alternatively
-a desk-watchdog re-arms a passivated activation whose obligation is still
-open (check whether `engineeringAssignmentOpenMu`/desk reconcile kick
-already covers texture on restart — the run suggests it does not for
-`runtime_restarted`).
+The upstream gate was subtler than "reconcile doesn't run on restart": a
+consumed head (`texture_turn_committed` before the kill) makes
+`ownerHeadPending` false, so the only remaining arm is `initialWorkWake` —
+the open desk work item. `reconcileAgentWakeLocked` armed it but then
+**suppressed it on any texture revision run for the doc, regardless of
+state** (`texture_controller.go` ~line 797). The passivated
+`runtime_restarted` run counted as live authority, zeroed `initialWorkWake`,
+and reconcile early-returned before `reactivatePassivatedTextureRun`. The
+interrupted run suppressed its own recovery.
+
+Fix: the suppression now requires `runs[i].State.Active()` — a passivated or
+terminal run is a dead authority, so the open-work wake stays armed and
+`reactivatePassivatedTextureRun` resumes the stale_activation mutation.
+
+Regression coverage:
+`TestTextureOwnerStartReactivatesPassivatedRunOnOpenWork` (fails pre-fix,
+`state=passivated`; passes post-fix) and
+`TestTextureOwnerStartReactivatesRuntimeRestartedPassivatedRun` exercise the
+real lifecycle seed (`ReplaceLifecycleActivation` → `UpdateRun` passivate
+→ `MarkAgentMutationStale`).
+
+Residual M-SUB follow-up (unchanged): the fix covers the open-work re-wake
+case; a desk activated by a consumed owner revision with no open work item
+still relies on `armedUpdates`/`ownerHeadPending` or a re-minted outbox
+obligation.
 
 ## Probe fix queued
 

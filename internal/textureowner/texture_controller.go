@@ -795,7 +795,13 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 				return nil, fmt.Errorf("list initial lifecycle Texture runs: %w", runsErr)
 			}
 			for i := range runs {
+				// Only a live activation suppresses the work-item wake. A
+				// passivated or terminal run is a dead authority — its stale
+				// obligation must re-arm through reactivatePassivatedTextureRun,
+				// not stand down the open-work wake. This is the runtime_restarted
+				// restart gap: the interrupted run suppressed its own recovery.
 				if strings.TrimSpace(runs[i].AgentID) == textureAgentID &&
+					runs[i].State.Active() &&
 					isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
 					initialWorkWake = false
 					break
