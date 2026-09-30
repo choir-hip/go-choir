@@ -186,9 +186,10 @@ now:
     front: deployed acceptance on all three — M-SUB Emit proofs, M1
     typed-commitment tape, M0a controlled-comparison verify before the
     deletion commit.'
-  source_ref: main@9e3d6948
-  deploy_identity: 'staging deployed_commit=2404e7d2 (vmctl flapping;
-    007b64df/9e3d6948 deploys propagating behind a wedged Node B job)'
+  source_ref: main@72b974a4
+  deploy_identity: 'staging build.commit=37882e1d (guest epoch 979, deployed
+    + verified); deploy ledger deployed_commit field lags — /health
+    build.commit is the authoritative running-build identity'
   candidate:
     id: none
     state: none
