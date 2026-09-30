@@ -367,7 +367,13 @@ func pendingEmitsForRun(ctx context.Context, rt *Runtime, rec *types.RunRecord, 
 	}
 	out := make([]yaegikernel.PendingEmit, 0, len(msgs))
 	for _, m := range msgs {
-		kind, body := "emit", m.Content
+		// Only ActionEmit envelopes are emissions: a message written through
+		// the emit path always carries rlmEnvelopeV1 with Kind="emit". Plain
+		// channel traffic (coagent updates, packets, legacy writes) is NOT an
+		// emission — defaulting unenveloped content to emit re-delivers the
+		// update payload as a notice snippet and inlines it into the wake
+		// turn (the leak the warm-update test catches).
+		kind, body := "", ""
 		if rest, ok := strings.CutPrefix(m.Content, rlmEnvelopeV1); ok {
 			var env rlmEnvelope
 			if jerr := json.Unmarshal([]byte(rest), &env); jerr == nil {
@@ -377,9 +383,7 @@ func pendingEmitsForRun(ctx context.Context, rt *Runtime, rec *types.RunRecord, 
 						kind = env.MsgKind
 					}
 				}
-				if env.Body != "" {
-					body = env.Body
-				}
+				body = env.Body
 			}
 		}
 		if kind != "emit" {
