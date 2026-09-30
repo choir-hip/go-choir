@@ -279,23 +279,39 @@ now:
     window), a fresh trajectory 5fc5b712 bound a texture work item
     (doc df78cc76) that STILL sits open/unexecuted — the prompt-bar
     texture work item is not a self-driving RLM cell; the
-    sub-RLM cast to an agent desk, which is this missions own
-    deliverable and is not yet self-driving end-to-end. M1 proof now
-    needs EITHER the M2 document-channel cast wired (the missions real
-    work) OR a direct sub-RLM cell invocation surface, not more prompt
-    retries.
+    precommit/resolve/disagreement path needs the document-channel
+    sub-RLM cast to an agent desk — the missions own deliverable,
+    not yet self-driving end-to-end.
 
-    Remaining gate = OOM capacity (platform-dolt 28GB on a 31GB box
-    re-mints the VM every ~20-40min) + the M2 document-channel-cast
-    mechanism for the M1 proof itself.'
+    14:45Z deeper finding: the engineering-bound doc f939b0f9 DOES drive
+    the document-channel cast (3 engineering assignment attempts opened,
+    all restart-cancelled by OOM — the live-lock source). But texture
+    revise now 409s: "lifecycle has multiple open desk target work
+    items" — doc f939b0f9 holds BOTH an open engineering:f939b0f9 cast
+    item AND a stale open texture:f939b0f9 item (whose run 88cb8aa5 died
+    on the projection wedge). The retained computer carries accumulated
+    corrupt residue across ~10 live trajectories — dual desk targets,
+    exhausted casts, dead pending runs — that no single reconcile clears.
+    This is the residue boundary, not a substrate defect.
+
+    Remaining gates (owner/ops, not more code): (a) platform-dolt OOM
+    capacity — 28GB on 31GB re-mints the VM every ~20-40min; (b) a clean
+    retained computer OR a state-repair sweep for computer-03335285
+    residue (rematerialize-from-tape is the heavy but designed path) so
+    the dual-desk 409 clears; (c) then the M2 document-channel cast
+    drives a desk cell to stage precommit/resolve/disagreement on tape.'
   receipts:
   - id: m1-commit-proof-attempt-2026-09-30
     boundary: execute
     commit_or_artifact: 'trajectories b9f7f256-07ad + 0c228ea4-6fd5 +
-      5fc5b712-825d on computer-03335285; work items open, never
-      executed — passivate-on-reboot, then recast live-lock starvation
-      (fixed 886e5ce1), then mechanism gap: texture-bound prompt work
-      item is not a self-driving commitment-cell.'
+      5fc5b712-825d on computer-03335285; engineering-bound f939b0f9 cast
+      fired but all attempts restart-cancelled; texture revise 409s on
+      dual desk-target residue.'
+    proof_refs: [prompt-bar run start accepted 2026-09-30T13:32Z+13:42Z;
+      traj 84868c2d seq30 open engineering+texture work items]
+    cannot_prove: 'a desk cell staging precommit/resolve/disagreement
+      intent -> choir.commitment_record objects on the OG ledger; blocked
+      by corrupt residue on the retained computer + OOM capacity.'
 
 receipts: []
 
