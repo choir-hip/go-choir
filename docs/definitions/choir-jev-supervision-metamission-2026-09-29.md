@@ -283,23 +283,29 @@ now:
     sub-RLM cast to an agent desk — the missions own deliverable,
     not yet self-driving end-to-end.
 
-    14:45Z deeper finding: the engineering-bound doc f939b0f9 DOES drive
-    the document-channel cast (3 engineering assignment attempts opened,
-    all restart-cancelled by OOM — the live-lock source). But texture
-    revise now 409s: "lifecycle has multiple open desk target work
-    items" — doc f939b0f9 holds BOTH an open engineering:f939b0f9 cast
-    item AND a stale open texture:f939b0f9 item (whose run 88cb8aa5 died
-    on the projection wedge). The retained computer carries accumulated
-    corrupt residue across ~10 live trajectories — dual desk targets,
-    exhausted casts, dead pending runs — that no single reconcile clears.
-    This is the residue boundary, not a substrate defect.
+    15:35Z — the "dual desk-target residue" diagnosis was WRONG: the second
+    open texture:f939b0f9 item is the BY-DESIGN supervision surface minted
+    by 19e2c256 beside every document cast, not corrupt residue. The real
+    defect was four sites built on 'at most one desk agent per document':
+    the revise guard counted supervision as a desk target (409), the
+    wake resolver probed texture: first (cast wakes went to the
+    supervision agent, never the engineering occurrence consumer),
+    lifecycleDocDeskProfile was order-nondeterministic, and
+    reconcileAgentWakeLocked would have armed apply_owner_revision cells
+    on the supervision agent. Fixed in c58ed60a (receipt
+    docs/problems/owner-revision-supervision-desk-target-409-2026-09-30.md),
+    deployed to staging, computer refreshed to epoch 972: texture revise
+    409 -> 202 (revision 87baf761), artifact_head_advanced ->
+    co_super_assignment_opened -> co_super_assignment_bound -> run
+    run:assignment-dee9215f-2e4b-5b05-bbb3-55cf0f540c35 executing the M1
+    commitment-cell prompt. The document-channel cast is proven live.
 
     Remaining gates (owner/ops, not more code): (a) platform-dolt OOM
-    capacity — 28GB on 31GB re-mints the VM every ~20-40min; (b) a clean
-    retained computer OR a state-repair sweep for computer-03335285
-    residue (rematerialize-from-tape is the heavy but designed path) so
-    the dual-desk 409 clears; (c) then the M2 document-channel cast
-    drives a desk cell to stage precommit/resolve/disagreement on tape.'
+    capacity — 28GB on 31GB re-mints the VM every ~20-40min; the
+    refresh-cycle workaround is exercised but a memory cap is the durable
+    fix; (b) the M1 commitment cell must complete its
+    precommit/resolve/disagreement staging and report commitment_record
+    ids on the tape.
   receipts:
   - id: m1-commit-proof-attempt-2026-09-30
     boundary: execute
