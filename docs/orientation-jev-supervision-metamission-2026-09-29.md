@@ -120,23 +120,28 @@ module. Station list:
 | # | Station | Delivers | Depends |
 |---|---|---|---|
 | M0 | **Debug + stabilize** | Redeploy owner computer onto today's build; reconcile the 7 pending mutations + 3 stale runs (counter → 0, not masked by idle-sweep busy-check); SSE auto-resubscribe (~20 lines, `frontend/src/lib/lifecycle.js` — `onerror` resumes via `?after=` cursor, no terminal error); baseline per-leg timings; problem record. No throughput bar here. | none — first |
-| M-SUB | **Duplex cell IPC + eager emission + stall terminator** | (red-class kernel) Evidence reaches texture mid-cell while the cell still runs; ledger stays staged-atomic at cell end. Mid-cell inbox refresh so texture follow-ups reach a live cell. Emission-divergence rule stated (cell emits then crashes → texture holds a delivered non-ledger message). Every completed cell emits terminal report-or-failure that advances the reducer — the silent-stall gap gets an owner. Shared by research evidence, texture follow-ups, management sub-casts. | M0 |
+| M-SUB | **Eager evidence stream + stall terminator** (red-class kernel — panel-adjudicated architecture below) | Emissions = a distinct durable channel record kind, written synchronously mid-cell by a new broker action `ActionEmit` — NOT tray-staged (bound-cell `choir.Message` is tray-staged today; my earlier premise that `ActionMessage` delivers mid-cell was wrong). Delivery-is-the-record: emitted evidence stands after a crash, marked by kind, never tombstoned; cell fate recorded separately so consumers join emission→outcome. Follow-ups reach research via cell-boundary inbox + cheap `choir.PollInbox` broker verb for long loops — **true mid-cell push is infeasible** (worker is blocked inside `sess.Eval`; a pushed frame can't be consumed). Stall terminator: durable `cell_fate` record on every cell exit + armed terminal deadline per activation (existing `scheduleContinuation` pattern, not a sweep) — today `ReduceCellIntents(failed)` persists nothing, that's the hole. Backpressure = admission-side emit budget; per-channel order only; fanout = per-consumer cursors on the shared channel log. | M0 |
 | M0a-1 | **In-cell research verbs** | `choir.WebSearch`/`FetchURL`/evidence ops as Go verbs; egress budget rehomed (typed tools carry per-activation egress + 8GiB cap — deleting without rehoming deletes governance). Typed surface still live — controlled-comparison verify of the stall fix. | M-SUB |
 | M0a-2 | **Research tool-surface deletion** | Delete the 14-tool surface; capability-parity checklist (each capability reachable via `choir.*` or dropped with reason); prompt-overlay rewrites in the same commit (`rlm_research_runtime.yaml`, `research.yaml` instruct the deleted cadence). | M0a-1 |
 | M1 | **Scoreable commitments** | `Precommit`/`Resolve`/`Disagreement` from strings to types; string-commitment grandfathering stated. | parallel-safe — types/store change |
 | M2 | **Model-policy RLM module + eval surface** | Persistent per-desk model policy (texture changes its own model in a Go cell) + parametric selection at cast time (research picks the sub-RLM's model). Evals as parallel RLM casts; per-turn timing/token/cost records; QA fixture/golden set. | M0a-2 for research-valid evals; M1 for scored evals |
-| M3 | **Research hill-climbing** | Multi-model/effort matrix on the QA family via M2's module. **Owns the 10-in-5 bar**: ≥10 distinct committed texture revisions in 300s end-to-end, each attributable to a research emission; per-leg timings are diagnostics. | M2 |
+| M3 | **Research hill-climbing — iterative research shape** | Multi-model/effort matrix on the QA family via M2's module. Success = a research pattern that is fast AND deep: continuous iterative research running for days/weeks, evidence streaming to texture, eventually feeding more than one texture — the World-Wire seed, not a single-doc loop. ("10 versions in 5 min" is a directional smell-test, not a guarantee to Goodhart.) | M2 |
 | M4 | **Jev transport** | Gateway `POST /provider/v1/judgments` → OpenRouter `typesafe/jev-1.13`; per-VM bearer + rate bucket; alpha credential provisioning. | none — parallel |
 | M5 | **Management = scorer + `jev.decide` + mgmt RLM-ification** | Scoring is management's job (Jev default, pluggable with other decision models/LLMs later); low confidence → RLM sub-cast w/ distribution in context; passthrough-or-translate routing between eng and texture rides the same scoring loop; `choir.commitment_score` kind; management's typed tools → `choir.*` verbs (last desk to one-tool). | M1+M4 |
 | — | **World Wire** | Named entry gate: which prerequisites block + deployed ingress-to-artifact proof. | all above |
 
-### Remaining open questions
+### Open questions — resolved by owner 2026-09-29
 
-1. **M0**: redeploy+retest first (panel rec: yes — cheap, today's build
-   carries the wake repairs) or instrument first?
-2. **M0a phase split**: verbs+emission land while typed tools still exist
-   (rollback point), or one cutover?
-3. **Emission-divergence rule**: a mid-cell emit from a cell that then
-   crashes leaves texture holding a delivered message with no ledger
-   commitment. Is the emit provisional (marked non-ledger until cell
-   commit reconciles) or is delivery itself the record?
+1. **M0**: redeploy the computer onto today's build first. Resolved.
+2. **M0a phase split** — clarified as: sequential commits within one
+   mission, not separate missions. Land the new verbs + emission while
+   the typed surface still exists (verifiable, rollback-able), then the
+   deletion commit. Default per panel.
+3. **Emission-divergence rule** — resolved by the M-SUB architecture
+   panel (`.agentic-consensus/agentic-consensus-20260929-205259/`):
+   delivery-is-the-record. Emissions are a distinct durable channel kind;
+   a cell that emits then crashes leaves the evidence standing (texture
+   may already have read it — tombstoning can't undo that). Provisional-
+   vs-committed is carried by record KIND, and a separate `cell_fate`
+   record lets consumers join emission→outcome and downgrade confidence
+   on orphaned evidence.
