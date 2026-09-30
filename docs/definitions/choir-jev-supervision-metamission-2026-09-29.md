@@ -291,8 +291,24 @@ now:
     MaxDeferrals=64 bound ErrDeferUnprocessed so a wait that outlives the
     bound poisons instead of live-locking; texture pending-postcondition
     classified by run state (terminal run -> durable-invalid, parked run ->
-    real defer). Files: internal/actor/{actor,dispatcher,log_sqlite},
     actorruntime/{adapter,handler}. Tests prove the bound + the consume.
+
+    18:11Z — cc1b5af4 deployed; guest refresh forced onto it bricked the
+    retained computer: unclean unmount left data.img (vdb) corrupt ->
+    fsck /dev/vdb failed -> /mnt/persistent failed -> emergency mode, and
+    the in-flight vmctl refresh goroutine hung holding refreshing[key]
+    (blocks /recover). Recovery: kill the emergency-mode firecracker, copy
+    + e2fsck -y the data.img copy (journal recovered, free counts fixed),
+    swap repaired image in, restart vmctl to clear the stuck flag, refresh.
+    Guest came up clean on cc1b5af4 at 19:18Z — runtime: started, boot
+    passivation sweep ran, ZERO defer/poison/durable-invalid flood
+    post-boot (all four live-lock signatures dead). Residual: wedged
+    persistent-Management resident f2e0446f still running (skipped by boot
+    passivation as a spawned-work-item path) — occupies the slot without a
+    watchdog; management wakes bound, not free-running. engineering desk
+    reconcile logs a non-repeating ''co-super assignment invalid
+    transition'' — a fourth invalid-wrap surfaced, needs a typed
+    ErrDurableInvalid mapping.
   '
   next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
     and fixed: exhausted restart recasts live-locked the guest. "recast
