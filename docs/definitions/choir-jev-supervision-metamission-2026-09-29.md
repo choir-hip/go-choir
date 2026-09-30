@@ -20,22 +20,22 @@ metamission:
     - id: m0-debug-stabilize
       path: docs/definitions/choir-signal-m0-debug-stabilize-2026-09-29.md
       readiness: drafted
-      status: working
+      status: complete
       depends_on: []
     - id: m-sub-signal-plane
       path: docs/definitions/choir-signal-async-signal-plane-2026-09-29.md
       readiness: drafted
-      status: pending
+      status: working
       depends_on: [m0-debug-stabilize]
     - id: m0a-research-rlm-cutover
       path: docs/definitions/choir-signal-research-rlm-cutover-2026-09-29.md
       readiness: drafted
-      status: pending
+      status: working
       depends_on: [m-sub-signal-plane]
     - id: m1-typed-commitments
       path: docs/definitions/choir-signal-typed-commitments-2026-09-29.md
       readiness: drafted
-      status: pending
+      status: working
       depends_on: []
     - id: m2-model-policy-rlm-module
       path: docs/definitions/choir-signal-model-policy-rlm-module-2026-09-29.md
@@ -50,7 +50,7 @@ metamission:
     - id: m4-jev-transport
       path: docs/definitions/choir-signal-jev-transport-2026-09-29.md
       readiness: drafted
-      status: pending
+      status: complete
       depends_on: []
     - id: m5-management-scorer
       path: docs/definitions/choir-signal-management-scorer-jev-2026-09-29.md
@@ -260,7 +260,34 @@ now:
     authority reconstructed". THE PROJECTION WEDGE IS REPAIRED. Remaining
     fault is the OOM itself + the stale vmctl route it re-mints (502
     "resolve user autoputer"); audit fix 0a03783b is merged but its deploy
-    was concurrency-cancelled twice — build still 9e3d6948.'
+    was concurrency-cancelled twice — build still 9e3d6948.
+
+    ROOT-CAUSE CLUSTER (three live-locks, one day, one class): the actor
+    dispatcher''s `defer` is the silent default — any reconcile error that
+    isn''t explicitly typed as durable-invalid wraps `ErrDeferUnprocessed`,
+    which rolls back the attempt count, so a *decided-invalid* condition
+    bypasses MaxAttempts/poison and redelivers forever, saturating the
+    guest CPU and starving every other desk''s reconcile:
+      (1) exhausted restart recasts transient-error live-lock — 886e5ce1;
+      (2) stored-grant-attestation ErrEngineeringAssignmentInvalid wrapped
+          transient — 382 defers/3min on texture:f939b0f9, fix b7f59cc9
+          (map Invalid -> invalid authority -> terminalize), deployed;
+      (3) reactivated persistent-Management resident `b05f42a6` — carried
+          actor_reactivated_from_passivated so the fresh-mint watchdog
+          skipped it, and the reactivation watchdog is a one-shot timer
+          lost on restart; resident stayed pending, slot occupied, every
+          later Management wake deferred — fix 3b0a1ed2 (call
+          failExpiredReactivatedManagementResume on the live-wake
+          resident gate).
+    Per AGENTS.md Root-Cause-Clustering the next move is substrate-level,
+    not another per-symptom patch. A 5-panelist convergent consensus
+    (.agentic-consensus/live-lock-20260930/) unanimously returned D —
+    change the dispatcher contract, not just the error vocabulary: make
+    defer explicit + bounded, let unclassified errors fall to
+    poison/terminalize, and introduce a durable-invalid category the
+    handler treats as incorporate (nil,nil) so a decided-invalid
+    occurrence records its fate and releases the slot.
+  '
   next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
     and fixed: exhausted restart recasts live-locked the guest. "recast
     attempts exhausted" returned a transient error, so the actor
