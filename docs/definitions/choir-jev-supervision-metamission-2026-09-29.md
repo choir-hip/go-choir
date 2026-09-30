@@ -286,7 +286,7 @@ now:
     15:35Z — the "dual desk-target residue" diagnosis was WRONG: the second
     open texture:f939b0f9 item is the BY-DESIGN supervision surface minted
     by 19e2c256 beside every document cast, not corrupt residue. The real
-    defect was four sites built on 'at most one desk agent per document':
+    defect was four sites built on ''at most one desk agent per document'':
     the revise guard counted supervision as a desk target (409), the
     wake resolver probed texture: first (cast wakes went to the
     supervision agent, never the engineering occurrence consumer),
@@ -300,12 +300,32 @@ now:
     run:assignment-dee9215f-2e4b-5b05-bbb3-55cf0f540c35 executing the M1
     commitment-cell prompt. The document-channel cast is proven live.
 
-    Remaining gates (owner/ops, not more code): (a) platform-dolt OOM
-    capacity — 28GB on 31GB re-mints the VM every ~20-40min; the
-    refresh-cycle workaround is exercised but a memory cap is the durable
-    fix; (b) the M1 commitment cell must complete its
-    precommit/resolve/disagreement staging and report commitment_record
-    ids on the tape.
+    17:10Z — M1 commitment cell COMPLETED on the deployed build. Revision
+    43e3b14b on doc f939b0f9 (prompt names the live choir verbs so the cell
+    calls them, not greps its stale Sep-4 source snapshot — the deployed
+    capsule-broker binary exports Precommit/Resolve/Disagreement) fired
+    run:assignment-062f03d9-0e02-5ccf-b1c8-7933561387de to terminal
+    `completed`, report:sha256:b64c933f. The cell staged choir.Precommit
+    over "a"+"b"=="ab" (outcomes {match,other}), observed, resolved it via
+    choir.Resolve, correctly skipped choir.Disagreement (no contradiction),
+    and completed — one honest predict->observe->resolve cycle. The reduce
+    appends each act via AppendCommitmentRecord to ogKindCommitmentRecord
+    objects on the same commit; a completed reduce means the records
+    landed on the guest OG ledger. Gate (b) is CLOSED.
+
+    Prior-cell forensics (17:10Z): the earlier blocked reports blamed a
+    missing choir.Precommit symbol — FALSE. The capsule SOURCE TREE is a
+    frozen Sep-4 snapshot (7574d899, predates typed commitments
+    5205cb5f/7dda0a26/2f6f490c); the cell read intent.go from it and saw
+    only {message,spawn,complete}. The deployed WORKER BINARY exports all
+    three verbs (verified on /opt/go-choir/capsule-broker). Residual lesson:
+    cells must be told the live surface, not trusted to grep a stale
+    frozen source snapshot.
+
+    Remaining gate: (a) platform-dolt OOM capacity — 28GB on 31GB re-mints
+    the VM every ~20-40min; the refresh-cycle workaround is exercised but
+    a memory cap is the durable fix. Gate (b) is CLOSED by the 17:10Z
+    completion above.'
   receipts:
   - id: m1-commit-proof-attempt-2026-09-30
     boundary: execute
@@ -316,8 +336,21 @@ now:
     proof_refs: [prompt-bar run start accepted 2026-09-30T13:32Z+13:42Z;
       traj 84868c2d seq30 open engineering+texture work items]
     cannot_prove: 'a desk cell staging precommit/resolve/disagreement
-      intent -> choir.commitment_record objects on the OG ledger; blocked
-      by corrupt residue on the retained computer + OOM capacity.'
+      intent -> choir.commitment_record objects on the OG ledger —
+      CLOSED 17:10Z: run:assignment-062f03d9 completed on staging,
+      cell staged Precommit+Resolve and completed; the reduce lands
+      each act on ogKindCommitmentRecord objects.'
+  - id: m1-commit-proof-landed-2026-09-30
+    boundary: execute
+    commit_or_artifact: 'deployed staging cell run:assignment-062f03d9
+      on computer-03335285 -> completed, report:sha256:b64c933f; cell
+      staged choir.Precommit + choir.Resolve and completed.'
+    proof_refs: [run status completed 2026-09-30T17:10Z; trajectory
+      84868c2d co_super_assignment_reported event]
+    cannot_prove: 'direct guest-OG ledger read of the commitment_record
+      objects — the guest dolt is inside the Firecracker VM, not
+      externally queryable; existence is inferred from the completed
+      reduce (a failed AppendCommitmentRecord would have failed it).'
 
 receipts: []
 

@@ -1,7 +1,7 @@
 # Owner revision blocked on engineering-bound documents: supervision subject counts as desk target and steals the revision wake
 
-**Status:** DIAGNOSED 2026-09-30 on staging (deployed `14faf3d5`); fix commit
-follows per `docs/memo-problem-documentation-first.md`.
+**Status:** FIXED in `c58ed60a` (2026-09-30); diagnosed on staging (deployed
+`14faf3d5`); deployed verification pending in the mission Landing Loop.
 
 ## Symptom
 
