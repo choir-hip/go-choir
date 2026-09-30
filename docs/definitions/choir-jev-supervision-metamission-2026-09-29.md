@@ -331,6 +331,18 @@ now:
     now dispatch through redrive hooks that mint <base>#redrive-N when the
     identity family is fully consumed; pending members suppress salting so
     replay dedup is unchanged. cfa90b87 unstrands on the 08a76896 boot.
+    DEPLOY-OUTCOME UPDATE (37882e1d, deployed 22:39Z, guest epoch 979):
+    wakeUpdatedCoagent (the live commit trigger) also routed through the
+    redrive hook — all three re-drive authorities (outbox sweep, canonical
+    re-enqueue, persistent-Management recovery, live commit trigger) now
+    salt on a consumed family. Post-boot evidence: obligation CONFIRMED
+    still open (work item 7be3d1de open, bound run 362febb2 passivated,
+    predicate actorWakeOutboxFromWorkerUpdate yields the wake). The salted
+    dispatch is queued — the serial outbox drain is working a 128+ dead-wake
+    backlog (discharged obligations re-armed by the same migration; each
+    disposes on ErrNoPendingActorOccurrence). Separate environment fault:
+    provider chatgpt circuit open (upstream unhealthy) — research cell
+    calls fail on the provider until upstream recovers; not the seam.
   '
   '
   next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
