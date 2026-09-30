@@ -940,20 +940,43 @@ nodes:
     title: Rectification Spine — durable meta-goal
     path: docs/definitions/choir-rectification-spine-2026-09-25.md
     ledger: ''
+    status: settled
+    kind: spine
+    entrypoint: false
+    execution_mode: completed_non_executable
+    depends_on:
+      - choir-commitment-ledger-desk-carrier-draft-2026-09-23
+    enables:
+      - choir-jev-supervision-metamission-2026-09-29
+    note: >-
+      Complete 2026-09-29: final station M11 (selfdev gate) settled on
+      staging e886f576 — probe run 9 satisfied. The spine's durable
+      meta-goal is archived; its receipts remain. Next frontier is the
+      Jev/supervision metamission.
+    sources:
+      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
+  - id: choir-jev-supervision-metamission-2026-09-29
+    title: Jev / Supervision Metamission — signal plane to management-scored commitments
+    path: docs/definitions/choir-jev-supervision-metamission-2026-09-29.md
+    ledger: ''
     status: working
     kind: spine
     entrypoint: true
     execution_mode: mission_orchestrator
     depends_on:
-      - choir-commitment-ledger-desk-carrier-draft-2026-09-23
+      - choir-rectification-spine-2026-09-25
     enables: []
     note: >-
-      The single durable /goal entrypoint for the post-R2 spine. Its
-      now.slice carries the live station pointer (R2x) and is rewritten at
-      every terminal receipt (AGENTS.md Goal-Station Handoff). Owner-
-      ratified 2026-09-25. Covers the whole spine to M11.
+      Owner-ratified 2026-09-29 metamission spine (definition_version 4,
+      readiness ladder). Eight stations: M0 debug/stabilize (redeploy
+      owner computer first), M-SUB signal plane, M0a research RLM
+      cutover, M1 typed commitments, M2 model-policy RLM module, M3
+      research hill-climb, M4 Jev transport, M5 management-scorer.
+      Stations carry readiness: drafted pending authoring consensus
+      review; continuous authority under the ratified spine.
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/orientation-jev-supervision-metamission-2026-09-29.md
   - id: choir-carrier-substrate-integrity-2026-09-25
     title: Carrier Substrate Integrity (R2x, station)
     path: docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md

@@ -5,6 +5,21 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
+## Current Mission — Jev / Supervision Metamission
+
+[`definitions/choir-jev-supervision-metamission-2026-09-29.md`](definitions/choir-jev-supervision-metamission-2026-09-29.md)
+is the live `/goal` entrypoint (owner-ratified spine 2026-09-29,
+`readiness: reviewed`). Eight stations:
+**M0** debug/stabilize (redeploy owner computer first — owner direction) →
+**M-SUB** async signal plane (Emit verb, cell_fate, notice-injection) →
+**M0a** research RLM cutover → **M1** typed commitments →
+**M2** model-policy RLM module → **M3** research hill-climb →
+**M4** Jev transport (parallel) → **M5** management-scorer.
+Orientation: [`orientation-jev-supervision-metamission-2026-09-29.md`](orientation-jev-supervision-metamission-2026-09-29.md).
+Station goal files carry `readiness: drafted` pending authoring consensus
+review; they run continuously under the ratified spine once promoted.
+
+
 ## Archived Receipt — Strand-2 Freeze-Order Patch (R0)
 
 [`definitions/choir-strand2-freeze-order-patch-2026-09-23.md`](definitions/choir-strand2-freeze-order-patch-2026-09-23.md)
@@ -73,7 +88,7 @@ The owner ratified the spine as a whole; each mission still runs under its
 own throughline `/goal` file. `/goal`-station rule (AGENTS.md): after each
 terminal receipt, set the next mission's goal — the entrypoint below is the
 live one.
-- **Spine meta-goal** [`definitions/choir-rectification-spine-2026-09-25.md`](definitions/choir-rectification-spine-2026-09-25.md) — **the durable `/goal` entrypoint** for the whole spine (`/goal docs/definitions/choir-rectification-spine-2026-09-25.md`). Its `now.slice` carries the live station pointer and is rewritten at each terminal receipt.
+- **Spine meta-goal** [`definitions/choir-rectification-spine-2026-09-25.md`](definitions/choir-rectification-spine-2026-09-25.md) — **settled 2026-09-29** on M11's landed receipt; archived. The live entrypoint is the Jev/supervision metamission above.
 - **R2x landed** (`ebdaef45`+`53035642`: deadline wake armed at bind, both selection sweeps deleted, commit self-heals via `recoverPartialActCommit`); deployed-cancel proof deferred — lever `CHOIR_ASSIGNMENT_DEADLINE` committed, needs `choir.assignment_deadline` cmdline plumbing for a staging probe.
 - **R3a landed** (`4cf82057`: occurrence/evidence resolves desk acts from `choir.commitment_record`, dual-read vs `worker_updates_*`); deployed live-record proof deferred to a doc desk report-cast. — goal file: [`definitions/choir-texture-ledger-consumer-2026-09-25.md`](definitions/choir-texture-ledger-consumer-2026-09-25.md).
 - **R3b landed+deployed** (`b9f43583`: host desk-cell carrier — `autoputer desk-session`, `desk_go_eval` sealed per profile, canonical-ledger reduction, `InCellCarrier` fan under `actuator=rlm`, unknown-desk cast rejected, kill mid-cell respawns clean); deployed live-desk acceptance deferred to R3c (actuator). — goal file: [`definitions/choir-desk-cell-carrier-2026-09-25.md`](definitions/choir-desk-cell-carrier-2026-09-25.md).
@@ -96,9 +111,9 @@ live one.
   (`89cd7247`) — candidate-B reject had never committed since 7d635330.
   Goal file: [`definitions/choir-selfdev-gate-2026-09-27.md`](definitions/choir-selfdev-gate-2026-09-27.md);
   evidence: [`evidence/m11-probe-run9-satisfied-2026-09-29.json`](evidence/m11-probe-run9-satisfied-2026-09-29.json).
-  The spine is complete; M9b/M10 become the next frontier.
-- **M9b/M10** after M11 — now unblocked; next station to be chartered
-  from [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md).
+  The spine is complete; the next frontier is the Jev/supervision
+  metamission (entrypoint above). M9b/M10 of the world-wire stack are
+  unblocked and fold into that metamission's station sequence.
 
 **K** [`definitions/choir-ontology-kernel-2026-09-24.md`](definitions/choir-ontology-kernel-2026-09-24.md) — landed substrate (main@66981cef); its `now.status=working` only for a pending owner deletion-sweep ruling.
 
