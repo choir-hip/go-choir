@@ -309,6 +309,17 @@ now:
     reconcile logs a non-repeating ''co-super assignment invalid
     transition'' — a fourth invalid-wrap surfaced, needs a typed
     ErrDurableInvalid mapping.
+
+    SIXTH DEFECT (wake durability): cfa90b87 M0a cell armed as control
+    4158e48b (texture:ce3e0e77 -> research:cfa90b87, disposition=pending,
+    carries the web-search question) but its actor wake never reached the
+    tape — QueueLifecycleUpdate commits the control, then
+    wakeUpdatedCoagent->dispatchActor appends the actor row as a SEPARATE
+    non-atomic call; the 19:16 crash landed between them. Durable control
+    pending, zero actor row, cell never fires. MigrateActorWakeOutbox only
+    backfills PRE-cutover objects; a post-cutover crash-lost wake is not
+    re-minted. Needs: atomic queue+wake commit OR a pending-control->
+    actor re-announce reconcile.
   '
   next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
     and fixed: exhausted restart recasts live-locked the guest. "recast
