@@ -78,6 +78,11 @@ func main() {
 
 	handler.SetBreakers(breakers)
 
+	// The Jev Decisions route is independently gated. Its OpenRouter key stays
+	// in the gateway environment; disabled transport never falls back to an
+	// unpinned model or a direct TypeSafe endpoint.
+	handler.SetJevTransport(gateway.NewJevTransportFromEnv(cfg.JevJudgmentsEnabled))
+
 	// M22b / C20: wire per-service health checkers so GET /health/{service}
 	// can probe backend dependencies (sourcecycled, runtime, qdrant, dolt,
 	// ollama) from outside the gateway. The checkers are lightweight HTTP

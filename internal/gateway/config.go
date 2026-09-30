@@ -41,13 +41,17 @@ type Config struct {
 	// do not invalidate still-running desktop VMs.
 	IdentityStorePath string
 
+	// JevJudgmentsEnabled gates the experimental OpenRouter Decisions route.
+	// Set GATEWAY_JEV_JUDGMENTS_ENABLED=0 to stop new Jev calls before
+	// retiring its station-owned credentials and rate-limit buckets.
+	JevJudgmentsEnabled bool
+
 	// ServiceHealthURLs maps a dependency service name (e.g. "sourcecycled",
 	// "runtime", "qdrant", "dolt", "ollama") to the URL the gateway should
 	// probe for GET /health/{service}. Empty entries fall back to defaults
 	// (see DefaultServiceHealthURLs). These are used by the per-service
-	// health endpoint and the /health/ready aggregator so operators can
-	// observe backend dependency health from outside the gateway
-	// (M22b / C20).
+	// health endpoint and /health/ready aggregator so operators can observe
+	// backend dependency health from outside the gateway (M22b / C20).
 	ServiceHealthURLs map[string]string
 }
 
@@ -85,10 +89,11 @@ func LoadConfig() Config {
 	}
 
 	return Config{
-		Port:              port,
-		AutoputerTokenTTL: ttl,
-		IdentityStorePath: os.Getenv("GATEWAY_IDENTITY_STORE_PATH"),
-		ServiceHealthURLs: loadServiceHealthURLs(),
+		Port:                port,
+		AutoputerTokenTTL:   ttl,
+		IdentityStorePath:   os.Getenv("GATEWAY_IDENTITY_STORE_PATH"),
+		JevJudgmentsEnabled: envBool("GATEWAY_JEV_JUDGMENTS_ENABLED", false),
+		ServiceHealthURLs:   loadServiceHealthURLs(),
 	}
 }
 
@@ -106,6 +111,17 @@ func loadServiceHealthURLs() map[string]string {
 		}
 	}
 	return out
+}
+
+func envBool(key string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }
 
 // LoadRateLimiterConfig resolves rate limiter configuration from
@@ -156,6 +172,11 @@ type AutoputerIdentity struct {
 	// Active indicates whether the credential is currently valid.
 	// Revoked or replaced credentials have Active=false.
 	Active bool
+
+	// JevPeerIP is the guest-network source address first authorized to use
+	// this bearer on the Jev route. It prevents a bearer copied to a different
+	// VM from being reused there; credential rotation clears the binding.
+	JevPeerIP string
 }
 
 // IdentityRegistry manages autoputer identities and their credentials.
@@ -375,6 +396,31 @@ func (r *IdentityRegistry) ValidateCredential(rawToken string) (string, error) {
 	}
 
 	return computerID, nil
+}
+
+// BindJevPeer binds a validated Jev bearer to its first authorized VM source
+// address. Subsequent use from any other guest peer is refused. This binding
+// is persisted alongside the token hash so a gateway restart cannot widen the
+// bearer to every runtime VM again.
+func (r *IdentityRegistry) BindJevPeer(computerID, peerIP string) error {
+	peerIP = strings.TrimSpace(peerIP)
+	if computerID == "" || peerIP == "" {
+		return fmt.Errorf("Jev peer binding requires computer and peer")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	identity, ok := r.identities[computerID]
+	if !ok || !identity.Active || time.Now().After(identity.ExpiresAt) {
+		return fmt.Errorf("credential is not active")
+	}
+	if identity.JevPeerIP != "" && identity.JevPeerIP != peerIP {
+		return fmt.Errorf("Jev bearer is bound to another VM")
+	}
+	if identity.JevPeerIP == peerIP {
+		return nil
+	}
+	identity.JevPeerIP = peerIP
+	return r.persistLocked()
 }
 
 // RevokeCredential revokes the credential for the given autoputer ID.

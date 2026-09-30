@@ -113,6 +113,7 @@ type Handler struct {
 	rateLimiter  *PerAutoputerRateLimiter // per-autoputer rate limiter (may be nil)
 	searchClient *SearchClient            // web search client with rotation (may be nil)
 	breakers     *BreakerRegistry         // per-provider circuit breakers (may be nil)
+	jevTransport *JevTransport            // OpenRouter Decisions transport (may be nil)
 	// serviceCheckers maps a dependency service name to its health probe.
 	// Used by GET /health/{service} so operators can observe backend
 	// dependency health (sourcecycled, runtime, qdrant, dolt, ollama) from
@@ -181,6 +182,13 @@ func NewMultiHandlerWithRateLimit(registry *IdentityRegistry, mp *provider.Multi
 // when nil, breaker-related endpoints report "not configured".
 func (h *Handler) SetBreakers(r *BreakerRegistry) {
 	h.breakers = r
+}
+
+// SetJevTransport attaches the independently gated Jev transport. A nil
+// transport leaves the registered route unavailable rather than falling back
+// to another model or endpoint.
+func (h *Handler) SetJevTransport(transport *JevTransport) {
+	h.jevTransport = transport
 }
 
 // SetServiceCheckers attaches the per-service health probes used by
@@ -1051,6 +1059,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// only coarse status — never credentials or upstream bodies.
 	s.HandleFunc("/health/{service}", h.HandleServiceHealth)
 	s.HandleFunc("/provider/v1/inference", h.HandleInference)
+	s.HandleFunc("/provider/v1/judgments", h.HandleJudgment)
 	s.HandleFunc("/provider/openai/v1/chat/completions", h.HandleOpenAIChatCompletions)
 	s.HandleFunc("/provider/openai/v1/models", h.HandleOpenAIModels)
 	s.HandleFunc("/provider/v1/search", h.HandleSearch)

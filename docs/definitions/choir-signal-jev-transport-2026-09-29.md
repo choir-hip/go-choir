@@ -72,11 +72,12 @@ finish:
         two-computer probe)'
       proves: 'per-VM isolation is enforced, not just configured'
       evidence_class: deployed proof
-  rollback: 'disable the route; settle in-flight requests; retain
+  rollback: 'set GATEWAY_JEV_JUDGMENTS_ENABLED=0 and restart the gateway;
+    settle in-flight requests (up to the transport timeout); retain
     request/distribution evidence; remove only station-owned
-    credential/config additions (the alpha-endpoint credential +
-    per-VM bearer + bucket config) without revoking shared credentials;
-    git revert the station commits'
+    credential/config additions (the alpha-endpoint credential + per-VM
+    bearer bindings + judgment bucket state) without revoking shared
+    credentials; git revert the station commits'
   landing:
     required: true
     environment: staging

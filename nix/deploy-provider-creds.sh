@@ -122,6 +122,14 @@ for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION ZAI_API_KEY ZAI_BASE_URL OPENCODE
   add_env_once "$key"
 done
 
+# Jev is independently gated at the gateway. Deploy it enabled alongside a
+# provisioned OpenRouter key unless the operator explicitly sets it to 0 in
+# the environment; rollback disables this gate, settles in-flight calls, then
+# retires this station-owned configuration and its rate-limit buckets.
+if [ -n "${OPENROUTER_API_KEY:-}" ] || has_env_key "OPENROUTER_API_KEY"; then
+  ENVS+=("GATEWAY_JEV_JUDGMENTS_ENABLED=${GATEWAY_JEV_JUDGMENTS_ENABLED:-1}")
+fi
+
 if [ -n "${ZAI_API_KEY:-}" ] || has_env_key "ZAI_API_KEY"; then
   ENVS+=("GATEWAY_ZAI_MODELS=${GATEWAY_ZAI_MODELS:-$DEFAULT_GATEWAY_ZAI_MODELS}")
   if ! has_env_key "ZAI_BASE_URL"; then
