@@ -167,5 +167,31 @@ now:
   next_action: 'after M0a+M1: author the module verbs + persistence
     layer + parametric cast plumbing + eval-cast surface + QA fixtures'
 
+  # Recon 2026-09-30 (M2 slice first move — reconcile before authoring).
+  # modelpolicy substrate on current main is NOT absent — it is unwired:
+  # - modelpolicy.Manager (internal/modelpolicy/model_policy.go) already
+  #   gives persistent per-desk policy: Policy{Defaults, Roles
+  #   map[string]LLMSelection}, per-owner Load, file overlays under
+  #   System/model-policy-overlays, Resolve(ctx, ownerID, role, overlayID),
+  #   and EnrichMetadata which stamps llm_model / llm_reasoning_effort /
+  #   llm_max_tokens / llm_policy_source / llm_policy_overlay_id onto run
+  #   metadata (read by runtime.go:854,1182 and
+  #   engineering_assignment_runtime.go:759).
+  # - One in-cell verb exists: verify_model_capability
+  #   (modelpolicy/tools_model_verify.go) -> resolveToolModelSelection.
+  # - THE M2 GAPS (no host tool, no choir verb, no reconciler):
+  #   (a) no persistent per-desk policy *write* verb — Load/Resolve only;
+  #       the "texture changes its own model in a go cell" owner statement
+  #       needs a choir.SetModelPolicy-class verb writing Roles[desk].
+  #   (b) no parametric cast override — cast/spawn resolve model via
+  #       EnrichMetadata + overlayID; the owner wants model chosen at cast
+  #       call time (research calls sub-RLMs and picks the model).
+  #   (c) no parallel RLM eval-cast surface + per-turn timing/token/cost
+  #       records — RunRecord.metadata already carries llm_model and
+  #       input/output tokens (m0_qa_probe reads them); what's missing is
+  #       the matrix runner + cost projection, not the fields.
+  #   Conductor untouched per settled decision. Authoring gate remains
+  #   M0a+M1 settle; recon only.
+
 receipts: []
 ---
