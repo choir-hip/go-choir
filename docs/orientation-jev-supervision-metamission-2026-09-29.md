@@ -12,18 +12,11 @@ metamission skeleton.
 Owner's prompt-bar session on `computer-03335285269bdba4f94377e56879f9e6`
 (owner `5bd6de97-3b58-408c-bf89-c42c81b083de`), ~22:16–22:27Z 2026-09-29:
 
-| t (UTC) | Event |
-|---|---|
-## A. What actually happened in the QA failure (evidence, not conjecture)
-
-Owner's prompt-bar session on `computer-03335285269bdba4f94377e56879f9e6`
-(owner `5bd6de97-3b58-408c-bf89-c42c81b083de`), ~22:16–22:27Z 2026-09-29:
-
 | t (UTC) | Event | Δ |
 |---|---|---|
 | 22:16:50 | `trajectory_started` — prompt-bar turn on doc `268ef2d0` ("What's new in ai today") | — |
 | 22:17:04 | `conductor` run completed — `open_app` → texture doc | **+14s** (routing) |
-| 22:18:08 | `texture_turn_committed` + `work_opened` + `control_queued` — v1 (appagent, pre-search) committed; work item opened to `research:` | **+64s** (texture turn 1: one cell, LLM + commit) |
+| 22:18:08 | `texture_turn_committed` + `work_opened` + `control_queued` — v1 (appagent, pre-search) committed; work item opened to `research:` | **+64s** (texture turn 1) |
 | 22:18:53 | texture run `9b5ddc61` passivated (7.3k input tokens) | — |
 | 22:19:09 | `control_delivered` to research — **last trajectory event** (reducer_seq 5) | +16s delivery |
 | 22:19–22:26 | research run `84af5a50`: **123,490 input tokens**, ~5–9 sequential `stream=false` provider calls, `reasoning=low`, `gpt-5.6-luna` via chatgpt | **~7.7 min** |
@@ -32,63 +25,48 @@ Owner's prompt-bar session on `computer-03335285269bdba4f94377e56879f9e6`
 
 ### Per-leg diagnosis
 
-1. **Prompt→conductor (14s)**: acceptable; the target is <1s+app-open —
-   the gap is VM wake + conductor call, not model latency.
+1. **Prompt→conductor (14s)**: the target is <1s+app-open — the gap is VM
+   wake + conductor call, not model latency.
 
-2. **Texture v1 (64s)**: one texture cell. The desk's prompt-build +
-   `desk_go_eval` + `ApplyTexture` commit. Not model-bound — the whole
-   cell is serial. Fast-model swap helps proportionally, not structurally.
+2. **Texture v1 (64s)**: one texture cell — prompt-build + `desk_go_eval` +
+   `ApplyTexture` commit. Not model-bound; the whole cell is serial.
+   Fast-model swap helps proportionally, not structurally.
 
 3. **Research 470s — the real defect.** `stream=false`, `reasoning=low`,
    and a serial tool loop where each `tool_use` call re-sends the full
    message history: call N carries N-1 tool results. 123k input tokens is
    context compounding, not work volume. The fix is not a faster model —
-   it's parallel `web_search`/`fetch_url` calls inside one cell, or
-   texture re-delegating mid-turn (the owner's design: "texture precommits
-   and delegates in the same cell; researchers send evidence back; texture
-   revises on each update").
+   it's research authoring a **Go cell** that loops search→emit-evidence→
+   deepen inside one `desk_go_eval` call (the owner's design: texture
+   precommits and delegates in one cell; researchers send evidence back as
+   they go; texture revises per update and may re-delegate).
 
 4. **No v2 — the missing report-back leg.** Research staged evidence but
-   never called `choir.Report`/`ReportPacket` to texture, or the delivery
-   didn't wake texture's turn. The trajectory tape has been at seq 5
-   since `control_delivered`. `desk_pending_mutations: 7` on the VM's
-   health shows desk debt already queued — this computer is on `b85af274`
-   (9/28 build), one build behind today's reconcile-kick fixes.
+   never delivered a report that re-woke texture. Two compounding causes:
+   (a) research never called `choir.Report`/`ReportPacket` — it treats
+   channel delivery as optional; (b) even if it had, tray intents commit at
+   cell `End` — evidence can't reach texture until the cell finishes, so
+   "send evidence + keep searching" can't stream today. Plus the trajectory
+   reducer has been at seq 5 since `control_delivered`: an `open` work item
+   + a completed desk run + no committed turn = silent stall — the
+   assignment-layer gap the 9/29 clustering assessment fixed is still open
+   at the desk-consumption layer.
 
-5. **"Lifecycle stream disconnected"** = SSE on `/api/trajectories/{id}/stream`
-   dropped post-snapshot. The handler sends `: heartbeat` every 15s
-   (`api_trajectory.go:162`) — not app-side idle. The drop is the proxy hop
-   or browser `onerror`; the frontend reports a reconnectable drop as
-   terminal-looking instead of resubscribing.
-   nothing re-woke texture to render v2. This is the same failure class the
-   9/29 clustering assessment fixed at the *assignment* layer; the
-   trajectory/desk-consumption layer still has an open edge: an `open` work
-   item + a completed desk run + no committed turn = silent stall.
-
-2. **"Lifecycle stream disconnected"** is the frontend SSE on
-   `/api/trajectories/{id}/stream`. The handler sends `: heartbeat` every
-   15s (`api_trajectory.go:162`), so app-side idle timeout is not the cause.
+5. **"Lifecycle stream disconnected"** = frontend SSE on
+   `/api/trajectories/{id}/stream` dropped post-snapshot. The handler sends
+   `: heartbeat` every 15s (`api_trajectory.go:162`) — not app-side idle.
    Candidates: proxy hop (`choir.news` → VM) recycling the SSE connection,
-   or the browser's EventSource `onerror` on a transient drop. The stream
-   delivers `replay_required` for cursor expiry — a clean reconnect path —
-   but the UI currently surfaces the disconnect as terminal-looking rather
-   than auto-resubscribing. **Frontend should treat post-snapshot `onerror`
-   as reconnectable**: EventSource auto-reconnects natively; the handler
-   discards that fact and calls it an error.
+   or browser EventSource `onerror` on a transient drop. The stream delivers
+   `replay_required` for cursor expiry — a clean reconnect path — but the
+   UI surfaces a reconnectable drop as terminal-looking instead of
+   auto-resubscribing.
 
-3. **Desk wake debt predates the QA.** `/health` shows
-   `desk_pending_mutations: 7`, and three runs are `pending` since
-   2026-09-28 (`management:b05f42a6`, `texture:e98f8f3f`, `texture:43ad448a`)
-   — none have moved in 24h. The VM runs `b85af274` (9/28 build), predating
-   today's reconcile-kick and edge-closure fixes — the stall may partly be
-   the known wake-gap those repairs addressed. A redeploy + restart of this
-   computer's desks is the first cheap experiment.
-
-4. **Latency is architectural, not a tuning bug.** A research turn costs
-   ~120k input tokens and ~8 minutes end-to-end (prompt→conductor→texture
-   v1→research→…). "10 versions in 5 minutes" is a different architecture:
-   parallel casts, streaming partial turns, or fast-path summaries — not a
-   faster model.
+6. **Desk wake debt predates the QA.** `/health` shows
+   `desk_pending_mutations: 7`, and three runs `pending` since 2026-09-28
+   (`management:b05f42a6`, `texture:e98f8f3f`, `texture:43ad448a`). The VM
+   runs `b85af274` (9/28 build), predating today's reconcile-kick and
+   edge-closure fixes — the stall may partly be the known wake-gap.
+   Redeploy + restart is the first cheap experiment.
 
 ---
 
@@ -139,29 +117,37 @@ cell-actuated won over A: hidden outbox). The reconciled shape:
 
 ---
 
-## C. Metamission skeleton — resequenced for research hill-climbing
+## C. Metamission skeleton — consensus-adjudicated order
 
-Owner 2026-09-29: research tuning needs multi-model evals, not a single
-luna-xhigh config — so the eval/model-switching surface must land *before*
-research tuning, not after. New order (each a separate `/goal` file):
+Reviewed by a 5-agent convergent panel (codex, gpt6-sol, glm53-flash,
+gemini38, devin; 2026-09-29, `.agentic-consensus/agentic-consensus-20260929-195929/`).
+Verdict: skeleton sound, but M0a hid a red-class kernel station, the silent
+stall had no owner, and management's RLM-ification was missing. Adjudicated
+order (each a separate `/goal` file):
 
 | # | Station | Delivers | Depends |
 |---|---|---|---|
-| M0 | **Research-prompt debug + desk wake** | Redeploy owner computer onto today's build; diagnose desk wake debt + **why research never reported back** + SSE reconnect; timing records per desk turn. The "10 versions in 5 minutes" bar lives here. | none — first |
-| M0a | **Research full-RLM + mid-cell evidence** | Delete the 14-tool surface; research is `desk_go_eval` only. In-cell verbs `choir.WebSearch`/`FetchURL`/evidence ops + **eager channel emission** (`choir.EmitEvidence` or eager `Report` — channel message delivers mid-cell, ledger commit still stages atomically at cell end). Texture's follow-up path back to a live research cell = channel cast → cell inbox. *This is the substrate change the QA stall actually needs — not a faster model.* | M0 |
-| M1 | **Scoreable commitments** | `Precommit` freezes typed questions + probabilities; `Resolve` carries evidence refs; `Disagreement` split (resolver-verdict vs scorer). | M0 findings may reshape |
-| M2 | **Model/policy eval surface** | Model/provider/effort is desk-chosen config, not static `model-policy.toml`; evals run as parallel RLM casts; timing + token records per turn. *Moved before Jev — it is the instrument research tuning needs.* | M1 (evals score commitments) |
-| M3 | **Research hill-climbing** | Multi-model/effort eval matrix on the QA prompt family; prompt, repl-state, and search-API ergonomics tuned against measured versions. | M2 |
-| M4 | **Jev transport** | Gateway `POST /provider/v1/judgments` → OpenRouter `typesafe/jev-1.13` pinned; per-VM bearer + own rate bucket. | none (parallel M2/M3) |
-| M5 | **Jev-in-management + scorer** | `jev.decide` in management's cell; low-confidence → RLM sub-cast w/ distribution as context var; commitment-score reconciler + `choir.commitment_score` kind; conductor `choice`-routing. | M1+M4 |
-| M6 | **Timing evals as commitment records** | per-turn latency/cost records feed the world model; research/selfdev timing evals on the RLM surface. | M3+M5 |
-| — | **World Wire** | Resumes on these foundations. | all above |
+| M0 | **Debug + stabilize** | Redeploy owner computer onto today's build; reconcile the 7 pending mutations + 3 stale pending runs (counter → 0, not masked by the idle-sweep busy-check); SSE auto-resubscribe as a named fix (~20 lines, `frontend/src/lib/lifecycle.js` — `onerror` resumes via `?after=` cursor instead of terminal error); baseline per-leg timings; problem record. *No throughput bar here.* | none — first |
+| M-SUB | **Duplex cell IPC + eager emission + stall terminator** | (red-class kernel) Eager channel delivery mid-cell: evidence reaches texture while the cell still runs; ledger/commitment stays staged-atomic at cell end. Mid-cell inbox refresh so texture follow-ups reach a live research cell. Emission-divergence contract (cell emits then crashes → texture holds a delivered non-ledger message: rule stated). **Desk-consumption liveness**: every completed cell emits a terminal report-or-failure event that advances the reducer — the silent-stall gap gets an owner. Shared by research, texture follow-ups, management sub-cast, conductor routing. | M0 |
+| M0a-1 | **In-cell research verbs** | `choir.WebSearch`/`FetchURL`/evidence-ops as Go-callable verbs; egress budget rehomed onto the cell substrate (the typed tools carry per-activation egress + 8GiB cap — deleting them without rehoming deletes governance). Typed surface still live — verify stall fix in controlled comparison. | M-SUB |
+| M0a-2 | **Research tool-surface deletion** | Delete the 14-tool surface; capability-parity checklist as acceptance (each deleted capability reachable via `choir.*` or explicitly dropped with reason); prompt-overlay rewrites (`rlm_research_runtime.yaml`, `promptstore/defaults/research.yaml` instruct the deleted cadence — must ship in the same commit or it's an instant regression). | M0a-1 |
+| M1 | **Scoreable commitments** | `Precommit` freezes typed questions + probabilities; `Resolve` carries evidence refs; `Disagreement` split; string-commitment grandfathering stated. | parallel-safe with M-SUB→M0a — types/store change |
+| M2 | **Model/policy eval surface + instrumentation** | Model/provider/effort desk-chosen; evals as parallel RLM casts (fan-out size, owning desk, fixture location, score-matrix artifact all named); per-turn timing/token/cost records (folds most of old M6); eval fixture/golden set for the QA prompt family. Commitment-backed evals need M1; raw instrumentation doesn't. | M0a-2 for research-specific validity; M1 for scored evals |
+| M3 | **Research hill-climbing** | Multi-model/effort matrix on the QA family. **Owns the 10-in-5 bar**: ≥10 distinct committed texture revisions within 300s of prompt submission end-to-end, each revision attributable to a research emission; per-leg timings are diagnostics, not the bar. | M2 |
+| M4 | **Jev transport** | Gateway `POST /provider/v1/judgments` → OpenRouter `typesafe/jev-1.13` pinned; per-VM bearer + rate bucket; alpha-endpoint credential provisioning named. | none — parallel throughout |
+| M5a | **Async commitment scorer** | Reconciler scoring frozen commitments; `choir.commitment_score` OG kind; ActingPack isolation verified; full distributions retained; `confidence` never gates. | M1+M4 |
+| M5b | **`jev.decide` + management RLM-ification** | `jev.decide` in-cell verb; low-confidence → RLM sub-cast w/ distribution as context var; management's typed tools (`report_to_texture`, `cancel_co_super_assignment`, assignment family) become `choir.*` verbs — last desk reaches the one-tool doctrine. | M5a |
+| M5c | **Conductor `choice`-routing** | Route selection as a Jev `choice` question over M2's desk-chosen config surface; incremental override of `model-policy.toml`, not wholesale replacement (doctrine already schedules the broker-mediated cutover — this follows M5a's distribution evidence). Conductor call path (desk? direct judgments call?) resolved at charter. | M5b+M2 |
+| — | **World Wire** | Resumes on these foundations. Named entry gate required: which prerequisites actually block + a deployed ingress-to-artifact proof. | all above |
 
 ### Open decisions for the owner
 
-1. **M0 scope**: restart/redeploy the owner's computer onto today's build
-   and retest (cheapest) vs. instrument first then measure.
-2. **M5 split**: commitment-scorer-async first (lower risk) + cell-actuated
-   management gate second, or both in one station?
-3. **Conductor-as-router**: Jev-choice overrides a static default
-   incrementally, or replaces `model-policy.toml` wholesale at M2?
+1. **M0 scope**: restart/redeploy + retest vs instrument-first (panel:
+   redeploy first — cheap, and today's build carries the wake repairs).
+2. **M0a phase split**: land emission+verbs while the typed surface still
+   exists (rollback point, isolates the fix variable), or one cutover.
+3. **Management RLM-ification**: fold into M5b (panel majority) vs a thin
+   standalone station after M5c.
+4. **Conductor call path**: is conductor route selection a `jev.decide`
+   inside management's cell, or a direct judgments call from the conductor
+   run profile? Conductor is not a desk — the fork changes M5c's shape.
