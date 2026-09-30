@@ -120,13 +120,22 @@ boundaries:
     - 'rlm_research_runtime.yaml + promptstore/defaults/research.yaml'
 
 now:
-  status: blocked_incomplete
-  slice: 'reconcile M-SUB acceptance; enumerate every current research
-    tool + its budget hook; freeze the parity checklist; then author
-    choir.WebSearch/FetchURL/evidence-ops verbs on the typed surface
-    (two-commit phase 1)'
-  source_ref: main@ac54317c
-  deploy_identity: unknown
+  status: working
+  slice: 'phase-1 verbs landed + proven in a real cell (b83ea5db, a09fd215,
+    007b64df): 13 research choir.* verbs on the typed surface — 9
+    network/content via rt.researchDeps.HostEgress + 4 evidence/run-memory
+    via rt.egressEvidenceTool, all over a generic StreamBrokerEgress frame
+    round-trip under the shared activation egress ledger. Two incidental
+    fixes landed: emission drain no longer treats unenveloped traffic as
+    emit (was inlining update payloads — the warm-update CI break), and the
+    research session handle now authorizes the 13 egress actions. Local
+    end-to-end proof: TestDeskGoEvalWebSearchEgressRoundTrip + Refused run a
+    real re-executed worker cell -> choir.WebSearch -> host HostEgress ->
+    stub client -> result. Blocked on staging: controlled-comparison verify
+    needs live vmctl (degraded), then the deletion commit.'
+  source_ref: main@007b64df
+  deploy_identity: 'deployed_commit 2404e7d2; a09fd215/007b64df propagating
+    (Node B deploy in flight; vmctl unavailable blocks computer pickup)'
   candidate:
     id: none
     state: none
@@ -166,10 +175,15 @@ now:
       evidence/memory ops parity needs the checklist'
     next_observation: 'first desk_go_eval-only research turn completing
       a multi-search loop on staging'
-  blocker_or_risk: 'depends on M-SUB; prompt-overlay rewrites must ship
-    in the deletion commit or regression is instant'
-  next_action: 'after M-SUB: land verbs+emission on the existing typed
-    surface, verify stall fix, then the deletion commit'
+  blocker_or_risk: 'prompt-overlay rewrites must ship in the deletion commit
+    or regression is instant; phase-1 verbs landed but unverified on staging
+    until a desk_go_eval cell exercises them'
+  next_action: 'deployed verify of the verb bridge (a desk_go_eval research
+    cell calling choir.WebSearch + a content verb mid-cell), then the
+    deletion commit: buildDeskCellRegistry -> {desk_go_eval}, drop
+    researchtools.Register/RegisterEvidenceTools/RegisterRunMemoryTools from
+    the research registry, rewrite rlm_research_runtime.yaml + research.yaml
+    overlays to the Go-module surface.'
 
 receipts: []
 ---
