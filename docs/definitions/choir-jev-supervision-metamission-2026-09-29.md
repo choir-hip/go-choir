@@ -179,12 +179,16 @@ boundaries:
 
 now:
   status: working
-  slice: 'M0 settled (restart re-wake fix d1d875a0, deployed 38e094fc). Live
-    front: M1 typed-commitments deployed proof + M4 Jev VM->OpenRouter
-    round-trip (both parallel-safe, running); M-SUB first sub-cut
-    cell_fate+deadline in progress — unblocks M0a'
-  source_ref: main@ac54317c
-  deploy_identity: 'staging build.commit=38e094fc'
+  slice: 'M0 + M4 settled complete. M-SUB residuals landed (emit boundary-
+    drain, cursor rekey, advisory piggyback); M0a phase-1 verbs landed +
+    cell-proven (b83ea5db, a09fd215, 007b64df, 9e3d6948 — research choir.*
+    egress verbs + handle auth + research messaging-authority repair). Live
+    front: deployed acceptance on all three — M-SUB Emit proofs, M1
+    typed-commitment tape, M0a controlled-comparison verify before the
+    deletion commit.'
+  source_ref: main@9e3d6948
+  deploy_identity: 'staging deployed_commit=2404e7d2 (vmctl flapping;
+    007b64df/9e3d6948 deploys propagating behind a wedged Node B job)'
   candidate:
     id: none
     state: none
@@ -228,12 +232,16 @@ now:
     next_observation: 'first M1 desk-cell commitment records + M4 live
       round-trip distribution on the staging tape; first M-SUB cell_fate
       record on a timed-out/killed cell'
-  blocker_or_risk: 'station files carry readiness: reviewed after the
-    authoring panel — promotion to executable happens per-station as
-    dependencies clear; M-SUB/M0a promoted on M0 settle'
-  next_action: 'land M1 + M4 deployed proofs (running; wedge cleared —
-    texture-delivery crash loop fixed 2404e7d2); then M-SUB Emit sub-cut
-    (cell_fate+deadline landed), then inject + piggyback, then M0a'
+  blocker_or_risk: 'staging environment red — vmctl unavailable/flapping and
+    Node B deploy jobs wedged, so deployed_commit stays 2404e7d2 behind the
+    landed code. Every remaining acceptance item is evidence_class
+    deployed_proof and needs a live desk activation; M0a deletion is
+    additionally gated on controlled-comparison verify while both surfaces
+    live. M2/M3/M5 remain dependency-blocked (M0a/M1 unsettled).'
+  next_action: 'on vmctl recovery + deployed_commit >= 9e3d6948: run M-SUB
+    deployed emit proofs, then M0a controlled-comparison verify -> deletion
+    commit ({desk_go_eval} registry + rlm_research_runtime.yaml overlay
+    rewrite), then M1 deployed commitment tape, then M2/M3/M5.'
 
 receipts: []
 
