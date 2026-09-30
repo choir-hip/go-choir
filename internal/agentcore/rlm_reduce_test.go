@@ -16,6 +16,7 @@ import (
 func testReductionScope() ReductionScope {
 	return ReductionScope{
 		FromAgentID: "engineering:impl",
+		DeskAgentID: "engineering:impl",
 		FromRole:    "engineering",
 		ChannelID:   "chan-reduce-test",
 		RunID:       "run-reduce-test",
@@ -125,15 +126,49 @@ func TestReduceSuccessPersistsAndCommits(t *testing.T) {
 	if inbox[1].Kind != "complete" || inbox[1].Body != "done" {
 		t.Fatalf("complete envelope decoded = %+v", inbox[1])
 	}
-	if err := CommitInboxCursor(ctx, rt.store, scope.OwnerID, scope.RunID, scope.ChannelID, highWater); err != nil {
+	if err := CommitInboxCursor(ctx, rt.store, scope.OwnerID, scope.RunID, scope.FromAgentID, scope.ChannelID, highWater); err != nil {
 		t.Fatal(err)
 	}
-	if cursor, err := LoadInboxCursor(ctx, rt.store, scope.OwnerID, scope.RunID, scope.ChannelID); err != nil || cursor != highWater {
-		t.Fatalf("committed cursor = %d, want %d (%v)", cursor, highWater, err)
+	if cursor, err := LoadInboxCursorForDesk(ctx, rt.store, scope.OwnerID, scope.FromAgentID, scope.ChannelID); err != nil || cursor != highWater {
+		t.Fatalf("committed desk cursor = %d, want %d (%v)", cursor, highWater, err)
 	}
 	// A later cell observes only newer mail: the cursor is a real fence.
 	if inbox2, _, err := AssembleCellInbox(ctx, rt, scope.ChannelID, highWater); err != nil || len(inbox2) != 0 {
 		t.Fatalf("post-cursor inbox = %+v, %v", inbox2, err)
+	}
+}
+
+// TestInboxCursorSurvivesDeskRespawn proves the (channel,desk) rekey: a
+// cursor committed under run A is recovered when the desk respawns with a
+// new run_id — the invariant the runID key could not hold. Commit stamps
+// desk_agent_id; the ForDesk read finds it across the agent's runs.
+func TestInboxCursorSurvivesDeskRespawn(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	ctx := testReductionCtx(scope)
+
+	// Commit a cursor under the desk's first run.
+	const watermark = 42
+	if err := CommitInboxCursor(ctx, rt.store, scope.OwnerID, "run-respawn-A", scope.DeskAgentID, scope.ChannelID, watermark); err != nil {
+		t.Fatalf("commit under run A: %v", err)
+	}
+	// Respawn: a different run_id under the same desk agent + channel must
+	// resume at the watermark, not replay from zero.
+	cursor, err := LoadInboxCursorForDesk(ctx, rt.store, scope.OwnerID, scope.DeskAgentID, scope.ChannelID)
+	if err != nil {
+		t.Fatalf("load after respawn: %v", err)
+	}
+	if cursor != watermark {
+		t.Fatalf("respawned desk cursor = %d, want %d — (channel,desk) key not honored", cursor, watermark)
+	}
+	// A different desk agent on the same channel starts at zero: keys do not
+	// collide.
+	other, err := LoadInboxCursorForDesk(ctx, rt.store, scope.OwnerID, "texture:other", scope.ChannelID)
+	if err != nil {
+		t.Fatalf("load other desk: %v", err)
+	}
+	if other != 0 {
+		t.Fatalf("other desk leaked cursor = %d, want 0", other)
 	}
 }
 

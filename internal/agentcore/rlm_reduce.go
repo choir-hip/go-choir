@@ -49,11 +49,18 @@ type rlmMailbox interface {
 type rlmCursorStore interface {
 	AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryEntry) (types.RunMemoryEntry, error)
 	ListRunMemoryEntries(ctx context.Context, ownerID, runID string) ([]types.RunMemoryEntry, error)
+	ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agentID string, kinds []string) ([]types.RunMemoryEntry, error)
 }
 
 // ReductionScope binds one reduction to its validated sender and mailbox.
 type ReductionScope struct {
 	FromAgentID string // validated sender desk identity
+	// DeskAgentID is the durable desk identity the (channel,desk) inbox
+	// cursor is keyed on — resolved once at reduction setup so load, commit,
+	// and recovery all read/write the same key. Distinct from FromAgentID:
+	// for a capsule call the exec-context agent can be the worker while the
+	// run record carries the durable desk.
+	DeskAgentID string
 	FromRole    string // validated sender role (spawn policy)
 	ChannelID   string // durable mailbox channel
 	RunID       string // activation run carrying the inbox cursor
@@ -484,8 +491,44 @@ func AssembleCellInbox(ctx context.Context, mb rlmMailbox, channelID string, cur
 	return inbox, highWater, nil
 }
 
+// inboxCursorValue decodes the cursor seq + channel from one run-memory
+// cursor entry. Returns the cursor value and whether the entry addressed
+// this channel.
+func inboxCursorValue(e types.RunMemoryEntry, channelID string) (uint64, bool) {
+	if e.Kind != rlmInboxCursorKind {
+		return 0, false
+	}
+	channel, _ := e.Details["channel_id"].(string)
+	if channel != channelID {
+		return 0, false
+	}
+	switch v := e.Details["cursor"].(type) {
+	case float64:
+		return uint64(v), true
+	case int64:
+		if v > 0 {
+			return uint64(v), true
+		}
+	}
+	return 0, true
+}
+
+// deskAgentForCursor resolves the durable desk identity the (channel,desk)
+// cursor is keyed on: the run's bound agent when the run record carries one
+// (a desk cell's own agent), else the exec context's acting agent. Never the
+// worker/run id — a respawn changes run_id but not the desk.
+func deskAgentForCursor(execCtx toolregistry.ExecutionContext) string {
+	if execCtx.RunRecord != nil {
+		if id := strings.TrimSpace(execCtx.RunRecord.AgentID); id != "" {
+			return id
+		}
+	}
+	return strings.TrimSpace(execCtx.AgentID)
+}
+
 // LoadInboxCursor returns the durable unread cursor for the run's channel.
-// Absence means zero: a fresh activation reads from the log start.
+// Absence means zero: a fresh activation reads from the log start. Retained
+// as the runID-keyed backfill read — LoadInboxCursorForDesk is the primary.
 func LoadInboxCursor(ctx context.Context, st rlmCursorStore, ownerID, runID, channelID string) (uint64, error) {
 	entries, err := st.ListRunMemoryEntries(ctx, ownerID, runID)
 	if err != nil {
@@ -493,36 +536,47 @@ func LoadInboxCursor(ctx context.Context, st rlmCursorStore, ownerID, runID, cha
 	}
 	var cursor uint64
 	for _, e := range entries {
-		if e.Kind != rlmInboxCursorKind {
-			continue
-		}
-		channel, _ := e.Details["channel_id"].(string)
-		if channel != channelID {
-			continue
-		}
-		switch v := e.Details["cursor"].(type) {
-		case float64:
-			if uint64(v) > cursor {
-				cursor = uint64(v)
-			}
-		case int64:
-			if v > 0 && uint64(v) > cursor {
-				cursor = uint64(v)
-			}
+		if v, ok := inboxCursorValue(e, channelID); ok && v > cursor {
+			cursor = v
 		}
 	}
 	return cursor, nil
 }
 
-// CommitInboxCursor advances the durable unread cursor. Call only with a
-// committed reduction receipt: failed cells never reach this path, so unread
-func CommitInboxCursor(ctx context.Context, st rlmCursorStore, ownerID, runID, channelID string, cursor uint64) error {
+// LoadInboxCursorForDesk returns the durable unread cursor keyed
+// (channel, desk): it reads across the desk agent's runs, so a respawned
+// desk minting a new run_id resumes at its channel watermark rather than
+// replaying from zero. New-style entries carry desk_agent_id in details;
+// legacy runID-keyed entries (no agent stamp) still count via the same
+// channel match — dual-read/backfill so a pre-cutover cursor is honored.
+func LoadInboxCursorForDesk(ctx context.Context, st rlmCursorStore, ownerID, agentID, channelID string) (uint64, error) {
+	if strings.TrimSpace(agentID) == "" {
+		return 0, nil
+	}
+	entries, err := st.ListRunMemoryEntriesForAgent(ctx, ownerID, agentID, []string{string(rlmInboxCursorKind)})
+	if err != nil {
+		return 0, err
+	}
+	var cursor uint64
+	for _, e := range entries {
+		if v, ok := inboxCursorValue(e, channelID); ok && v > cursor {
+			cursor = v
+		}
+	}
+	return cursor, nil
+}
+
+// CommitInboxCursor advances the durable unread cursor, stamped with the
+// desk agent so the (channel,desk) key survives a worker respawn. Call only
+// with a committed reduction receipt: failed cells never reach this path.
+func CommitInboxCursor(ctx context.Context, st rlmCursorStore, ownerID, runID, agentID, channelID string, cursor uint64) error {
 	_, err := st.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
 		RunID:   runID,
 		OwnerID: ownerID,
+		AgentID: agentID,
 		Kind:    rlmInboxCursorKind,
 		Summary: fmt.Sprintf("rlm inbox cursor %d on %s", cursor, channelID),
-		Details: map[string]any{"channel_id": channelID, "cursor": cursor},
+		Details: map[string]any{"channel_id": channelID, "desk_agent_id": agentID, "cursor": cursor},
 	})
 	return err
 }
@@ -638,7 +692,7 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 	if channel == "" || execCtx.RunID == "" {
 		return inert
 	}
-	cursor, err := LoadInboxCursor(ctx, rt.store, execCtx.OwnerID, execCtx.RunID, channel)
+	cursor, err := LoadInboxCursorForDesk(ctx, rt.store, execCtx.OwnerID, deskAgentForCursor(execCtx), channel)
 	if err != nil {
 		return inert
 	}
@@ -658,6 +712,7 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 		toolCtx: toolCtx,
 		scope: ReductionScope{
 			FromAgentID: execCtx.AgentID,
+			DeskAgentID: deskAgentForCursor(execCtx),
 			FromRole:    string(toolCtx.Role),
 			ChannelID:   channel,
 			RunID:       execCtx.RunID,
@@ -694,7 +749,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 	if channel == "" || execCtx.RunID == "" {
 		return inert
 	}
-	cursor, err := LoadInboxCursor(ctx, rt.store, execCtx.OwnerID, execCtx.RunID, channel)
+	cursor, err := LoadInboxCursorForDesk(ctx, rt.store, execCtx.OwnerID, deskAgentForCursor(execCtx), channel)
 	if err != nil {
 		return inert
 	}
@@ -718,6 +773,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 		toolCtx: nil, // non-capsule desk — no capsule tool context
 		scope: ReductionScope{
 			FromAgentID: execCtx.AgentID,
+			DeskAgentID: deskAgentForCursor(execCtx),
 			FromRole:    role,
 			ChannelID:   channel,
 			RunID:       execCtx.RunID,
@@ -802,7 +858,7 @@ func (r *rlmCallReduction) recoverPartialActCommit(ctx context.Context, intents 
 	if r.ledger == nil {
 		return false, nil
 	}
-	cursor, err := LoadInboxCursor(ctx, r.st, r.scope.OwnerID, r.scope.RunID, r.scope.ChannelID)
+	cursor, err := LoadInboxCursorForDesk(ctx, r.st, r.scope.OwnerID, r.scope.DeskAgentID, r.scope.ChannelID)
 	if err != nil {
 		return false, fmt.Errorf("recover partial act commit: load inbox cursor: %w", err)
 	}
@@ -909,7 +965,7 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 		}
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: seq, Kind: in.Kind})
 	}
-	if err := CommitInboxCursor(ctx, r.st, r.scope.OwnerID, r.scope.RunID, r.scope.ChannelID, highWater); err != nil {
+	if err := CommitInboxCursor(ctx, r.st, r.scope.OwnerID, r.scope.RunID, r.scope.DeskAgentID, r.scope.ChannelID, highWater); err != nil {
 		return err
 	}
 	r.receipt = receipt

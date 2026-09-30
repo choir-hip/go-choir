@@ -277,6 +277,55 @@ func (s *Store) ListRunMemoryEntries(ctx context.Context, ownerID, runID string)
 	return entries, nil
 }
 
+// ListRunMemoryEntriesForAgent returns run-memory entries for one desk agent
+// across all its runs, in agent's seq order per run then run order. The
+// durable inbox cursor is keyed (channel, desk): a respawned desk mints a new
+// run_id but must resume its channel cursor — the (runID,channel) key can't
+// do that. If ownerID is non-empty the query is scoped to that owner; kinds
+// restricts to the named entry kinds (empty = all kinds).
+func (s *Store) ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agentID string, kinds []string) ([]types.RunMemoryEntry, error) {
+	if agentID == "" {
+		return nil, fmt.Errorf("list run memory for agent: agent_id is required")
+	}
+	query := `SELECT entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq,
+	        kind, role, message_json, summary, first_kept_entry_id,
+	        tokens_before, reason, model, details_json, created_at
+	   FROM run_memory_entries
+	  WHERE agent_id = ?`
+	args := []any{agentID}
+	if ownerID != "" {
+		query += ` AND owner_id = ?`
+		args = append(args, ownerID)
+	}
+	if len(kinds) > 0 {
+		marks := make([]string, len(kinds))
+		for i, k := range kinds {
+			marks[i] = "?"
+			args = append(args, k)
+		}
+		query += ` AND kind IN (` + strings.Join(marks, ",") + `)`
+	}
+	query += ` ORDER BY created_at ASC, seq ASC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query run memory entries for agent: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var entries []types.RunMemoryEntry
+	for rows.Next() {
+		entry, err := scanRunMemoryEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
 // RunMemoryEntryFingerprint is a content-safe identity and digest view of a
 // run-memory row. It deliberately exposes hashes instead of provider-facing
 // message, summary, or details text so replay diagnostics cannot become a

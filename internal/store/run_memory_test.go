@@ -86,6 +86,49 @@ func TestRunMemoryAppendListAndLatest(t *testing.T) {
 	}
 }
 
+func TestListRunMemoryEntriesForAgentCrossRunKindFilter(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	// Same desk agent across two runs (a respawn): cursor entries on run A
+	// must surface for the desk's new run B. Non-cursor kinds are excluded.
+	append := func(runID, kind string, details map[string]any) {
+		t.Helper()
+		if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+			RunID:   runID,
+			OwnerID: "owner-1",
+			AgentID: "agent-desk",
+			Kind:    types.RunMemoryEntryKind(kind),
+			Details: details,
+		}); err != nil {
+			t.Fatalf("append %s on %s: %v", kind, runID, err)
+		}
+	}
+	append("run-a", "rlm_inbox_cursor", map[string]any{"channel_id": "ch-1", "desk_agent_id": "agent-desk", "cursor": int64(7)})
+	append("run-a", "message", map[string]any{}) // different kind — excluded by filter
+	append("run-b", "rlm_inbox_cursor", map[string]any{"channel_id": "ch-1", "desk_agent_id": "agent-desk", "cursor": int64(9)})
+	// A different agent on the same channel must not leak into this desk's read.
+	if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		RunID: "run-c", OwnerID: "owner-1", AgentID: "agent-other",
+		Kind:    types.RunMemoryEntryKind("rlm_inbox_cursor"),
+		Details: map[string]any{"channel_id": "ch-1", "cursor": int64(99)},
+	}); err != nil {
+		t.Fatalf("append other-agent cursor: %v", err)
+	}
+
+	entries, err := s.ListRunMemoryEntriesForAgent(ctx, "owner-1", "agent-desk", []string{"rlm_inbox_cursor"})
+	if err != nil {
+		t.Fatalf("list for agent: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 cursor entries across runs, got %d", len(entries))
+	}
+	runs := map[string]bool{entries[0].RunID: true, entries[1].RunID: true}
+	if !runs["run-a"] || !runs["run-b"] {
+		t.Fatalf("expected entries on run-a and run-b, got %v", runs)
+	}
+}
+
 func TestRunMemoryEntryFingerprintsHashRowsWithoutContent(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
