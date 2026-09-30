@@ -43,6 +43,13 @@ start:
       injectUserTurns seam (toolloop.go:672) exists between model calls.
       rlm_inbox_cursor is run-memory scoped to runID — respawn replays
       from zero.'
+    - 'M0 residual (2026-09-30, live on 4c279162): a texture desk activated
+      for an owner revision is passivated with reason=runtime_restarted and
+      NEVER re-woken — passivateInterruptedActivations marks the run +
+      MarkAgentMutationStale but writes no actor-wake outbox row, so the
+      projector disposes the consumed occurrence as a dead wake. Scope:
+      cell_fate / desk re-wake must cover the runtime_restarted passivation
+      case, not only cell-exit failure.'
 
 finish:
   deliver: 'Any desk can send a durable async signal mid-cell; a parked
@@ -83,6 +90,13 @@ finish:
     - action: 'a cell that hangs past its armed deadline records
         cell_fate=timeout and the reducer advances'
       proves: 'the hang case (not just the kill case) terminates stalls'
+      evidence_class: deployed proof
+    - action: 'force a runtime restart while a texture activation is
+        pending/running; after recovery the desk re-fires its open
+        obligation (new activation or recorded fate) — the M0 residual
+        closes'
+      proves: 'runtime_restarted passivation re-arms the desk, not a dead
+        wake'
       evidence_class: deployed proof
     - action: 'a newer advisory watermark is observed on an s.call
         response after an emission lands mid-activation'
@@ -154,7 +168,8 @@ now:
     claim: 'If injection is a fixed-format notice (sender/kind/seq/snippet)
       and content lands as a repl variable, then prompt-injection risk
       collapses to renderer-fixed strings while delivery latency meets the
-      owner contract'
+      owner contract; separately the runtime_restarted re-wake closes the
+      M0 residual stall'
     test: 'frozen renderer contract against a redline corpus of hostile
       emission bodies: pass = notice text is byte-identical to renderer
       output modulo the quoted snippet, delimiters/length caps hold, the

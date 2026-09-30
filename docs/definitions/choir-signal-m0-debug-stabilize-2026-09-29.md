@@ -113,8 +113,9 @@ boundaries:
   protected_surfaces: [frontend lifecycle SSE client, vmctl/deploy path]
 
 now:
-  status: working
-  slice: 'in progress — SSE fix pushed (15b2725a), deploy ac168350 in
+  status: complete
+  slice: 'settled — redeployed 4c279162; wake debt reconciled; QA repro
+    attributed a residual (texture runtime_restarted no-rewake) to M-SUB — SSE fix pushed (15b2725a), deploy ac168350 in
     flight; next: refresh owner computer → reconcile debt → QA repro →
     baseline timings'
   source_ref: main@ac54317c
@@ -159,5 +160,16 @@ now:
     onto current staging build; snapshot /health + desk diagnostics first;
     run the QA repro; reconcile pending mutations; land the SSE reconnect fix'
 
-receipts: []
+receipts:
+  - id: m0-redeploy-and-residual
+    kind: outcome
+    status: settled
+    summary: 'Owner computer refreshed to 4c279162 (epoch 958); desk
+      pending_mutations 0; 3 stale pending runs reconciled to passivated;
+      SSE reconnect fix deployed (stream?after=cursor in TextureEditor
+      chunk); QA repro timed out but failure attributed to named residual
+      — texture desk passivated runtime_restarted with no re-wake.
+      Baseline legs recorded for the executed legs.'
+    evidence_ref: 'docs/evidence/m0-residual-texture-runtime-restart-2026-09-30.md
+      + docs/evidence/m0-qa-baseline-timings-2026-09-30.json'
 ---
