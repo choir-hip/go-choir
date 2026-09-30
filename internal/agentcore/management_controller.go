@@ -262,6 +262,17 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 	if resident, found, err := rt.activeRunByAgent(ctx, ownerID, agentID); err != nil {
 		return nil, fmt.Errorf("check resident super run: %w", err)
 	} else if found {
+		// A reactivated resident carries actor_reactivated_from_passivated —
+		// the fresh-mint watchdog below skips it on purpose, and the
+		// reactivation watchdog is a one-shot timer that does not survive a
+		// restart. If the run never dispatched and is past its deadline, fail
+		// it here so the singleton slot releases instead of live-locking every
+		// later wake (b05f42a6: stranded 2h, deferred all Management wakes).
+		if expired, failErr := rt.failExpiredReactivatedManagementResume(ctx, ownerID, resident.RunID, time.Now().UTC()); failErr != nil {
+			return nil, fmt.Errorf("release stale reactivated super run: %w", failErr)
+		} else if expired {
+			return nil, fmt.Errorf("%w: stale reactivated super run %s released, redrive via live trigger", ErrActivationOccurrenceMustRemainUnprocessed, resident.RunID)
+		}
 		if err := rt.persistentManagementResidentMatchesExact(&resident, exactUpdateID); err != nil {
 			return nil, err
 		}
