@@ -76,7 +76,15 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	readOnly := role == SessionRoleResearch
 	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit}
 	if readOnly {
-		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionEmit}
+		// Research is read-only on the filesystem but owns the host-mediated
+		// egress verbs (web_search/fetch_url/source_search/import_*/read_*/
+		// list_*/search_wire_corpus + evidence/run-memory) — the handle must
+		// authorize the frame actions the cell verbs dispatch.
+		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionEmit,
+			ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
+			ActionImportURL, ActionReadContentItem, ActionListContentSelectors,
+			ActionReadContentSelector, ActionSearchWireCorpus,
+			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry}
 	}
 	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, time.Hour)
 	if err != nil {
