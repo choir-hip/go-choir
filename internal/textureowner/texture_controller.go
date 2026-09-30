@@ -2,11 +2,16 @@ package textureowner
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
+
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -1008,14 +1013,21 @@ func (rt *Handler) reconcileTextureUpdateDelivery(ctx context.Context, doc types
 		TargetAgentID: textureAgentID, TargetRunID: strings.TrimSpace(targetRunID),
 		MaxAttempts: textureDeliveryMaxAttempts, Items: items,
 	}
+	// The CommandID is the command's durable identity. Because the item set is
+	// part of command identity (see ComputeReconcileUpdateDeliveryDigest), the
+	// ID must be content-derived: an identical request replays the stored
+	// receipt, while a request whose armed/exhausted set drifted across a boot
+	// gets a fresh ID instead of colliding on the prior receipt's digest —
+	// which surfaced as `lifecycle command digest conflict` startup refusals
+	// (docs/problems/m0-residual-texture-delivery-command-digest-crashloop-2026-09-30.md).
 	commandKey := "bind:" + strings.TrimSpace(targetRunID)
 	if strings.TrimSpace(targetRunID) == "" {
 		commandKey = "exhaust:" + breakerRunID + ":" + fmt.Sprintf("%d", breakerStreak)
 	}
-	req.CommandID = "texture-delivery:" + trajectoryID + ":" + textureAgentID + ":" + commandKey
 	if breakerTripped {
 		req.BreakerReason = breakerReason
 	}
+	req.CommandID = "texture-delivery:" + trajectoryID + ":" + textureAgentID + ":" + commandKey + ":" + textureDeliveryContentKey(req)
 	var err error
 	req.CommandDigest, err = store.ComputeReconcileUpdateDeliveryDigest(req)
 	if err != nil {
@@ -1025,6 +1037,39 @@ func (rt *Handler) reconcileTextureUpdateDelivery(ctx context.Context, doc types
 		return fmt.Errorf("reconcile texture update delivery: %w", err)
 	}
 	return nil
+}
+
+// textureDeliveryContentKey digests the reconcile request's drifting content —
+// the target run/agent, the armed+exhausted item set, breaker state, and the
+// attempt cap — so the durable CommandID names this exact batch. Items are
+// sorted by UpdateID before hashing so a reordered equivalent batch reuses the
+// same identity (replay dedup), while a genuinely changed set gets a fresh ID.
+// Called before CommandDigest is computed, so CommandID and CommandDigest are
+// empty here and never feed the key. Returns "" only if the content fails to
+// marshal.
+func textureDeliveryContentKey(req types.ReconcileUpdateDeliveryRequest) string {
+	items := make([]types.ReconcileUpdateDeliveryItem, len(req.Items))
+	copy(items, req.Items)
+	sort.Slice(items, func(i, j int) bool { return items[i].UpdateID < items[j].UpdateID })
+	content := struct {
+		TargetAgentID string                              `json:"target_agent_id"`
+		TargetRunID   string                              `json:"target_run_id"`
+		MaxAttempts   int                                 `json:"max_attempts"`
+		BreakerReason string                              `json:"breaker_reason,omitempty"`
+		Items         []types.ReconcileUpdateDeliveryItem `json:"items"`
+	}{
+		TargetAgentID: req.TargetAgentID,
+		TargetRunID:   req.TargetRunID,
+		MaxAttempts:   req.MaxAttempts,
+		BreakerReason: req.BreakerReason,
+		Items:         items,
+	}
+	payload, err := json.Marshal(content)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])[:16]
 }
 // docWakeArmed reports that the document still carries wake pressure
 // independent of unbound packet coverage: an unconsumed owner head or open
