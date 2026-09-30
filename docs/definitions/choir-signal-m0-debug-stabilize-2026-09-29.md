@@ -115,9 +115,11 @@ boundaries:
 now:
   status: complete
   slice: 'settled — redeployed 4c279162; wake debt reconciled; QA repro
-    attributed a residual (texture runtime_restarted no-rewake) to M-SUB — SSE fix pushed (15b2725a), deploy ac168350 in
-    flight; next: refresh owner computer → reconcile debt → QA repro →
-    baseline timings'
+    residual (texture runtime_restarted no-rewake) root-caused and FIXED
+    d1d875a0: reconcileAgentWakeLocked suppressed initialWorkWake on any
+    texture run regardless of state, so the passivated run stood down its
+    own reactivation. Gate now requires State.Active(). Regression:
+    TestTextureOwnerStartReactivatesPassivatedRunOnOpenWork (fails pre-fix).'
   source_ref: main@ac54317c
   deploy_identity: 'staging build.commit=b85af274'
   candidate:
@@ -139,8 +141,9 @@ now:
     delta_o: 'trajectory events + desk diagnostics diff before/after'
     scope_if_supported: 'M-SUB scope narrows to signal-plane-only vs
       signal-plane+desk-consumption'
-    status: testing
-    evidence_refs: []
+    status: resolved
+    evidence_refs:
+    - 'docs/evidence/m0-residual-texture-runtime-restart-2026-09-30.md (repair section; fix d1d875a0)'
   decision:
     what: 'redeploy-first per owner; SSE fix bundled (small, same mission)'
     kind: operational
@@ -172,4 +175,13 @@ receipts:
       Baseline legs recorded for the executed legs.'
     evidence_ref: 'docs/evidence/m0-residual-texture-runtime-restart-2026-09-30.md
       + docs/evidence/m0-qa-baseline-timings-2026-09-30.json'
+  - id: m0-runtime-restart-rewake-fix
+    kind: outcome
+    status: settled
+    summary: 'runtime_restarted texture run suppressed its own re-wake:
+      reconcileAgentWakeLocked zeroed initialWorkWake on any texture run
+      regardless of state, so the passivated activation stood down its own
+      reactivation. Fixed d1d875a0 (State.Active() gate) + two regression
+      tests. Residual narrows to: consumed-head + no-open-work still relies
+      on armedUpdates/re-minted outbox (M-SUB scope).'
 ---
