@@ -90,3 +90,15 @@ the pending control must be re-driven via a new-generation occurrence or an
 explicit rebind/re-drive command, not a replay of the consumed `update_id`.
 That is a distinct defect (transport dedup swallows obligation redrive) and
 should be documented before patching, per problem-documentation-first.
+
+## Resolution (landed 08a76896)
+
+The consumed-but-stranded gap is fixed: `sweepActorWakeOutbox` and
+`enqueueCanonicalLifecycleControlOccurrences` now dispatch through
+`dispatchActorRedrive` / `scheduleActorRedrive`. On the redrive path only,
+`dispatchAtMode` consults `SQLiteLog.RedriveFamilyStatus`; when the
+deterministic `update_id` family is fully consumed it mints
+`<base>#redrive-N`. Ordinary dispatch and scheduled wakes keep pure replay
+dedup. Verified by
+`TestDispatchAtRedrivesConsumedCoagentResultWithSaltedGeneration` and staging
+will confirm via `cfa90b87` reactivation on the next boot migration.

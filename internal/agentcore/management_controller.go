@@ -2570,8 +2570,10 @@ func (rt *Runtime) reconcileParkedLifecycleCoagentWakeLocked(ctx context.Context
 		return bound, nil
 	}
 	// A retry after append commit but before actor acknowledgement observes no
-	// pending controls. Re-enqueue every canonical occurrence: the original A
-	// and any already durable B IDs deduplicate while an unpersisted B is created.
+	// pending controls. Re-enqueue every canonical occurrence: durable IDs
+	// still unprocessed deduplicate; a consumed row whose control stayed bound
+	// mints a salted redrive generation (the consumed-but-stranded repair),
+	// while an unpersisted B is created.
 	rt.activate(&rec)
 	if err := rt.enqueueCanonicalLifecycleControlOccurrences(ctx, &rec); err != nil {
 		return &rec, err
