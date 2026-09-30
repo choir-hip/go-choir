@@ -598,6 +598,12 @@ func (rt *Runtime) ValidateLifecycleProducerReportAuthority(ctx context.Context,
 			if errors.Is(assignmentErr, store.ErrNotFound) {
 				return invalidLifecycleProducerReportAuthority("Engineering source assignment is missing")
 			}
+			if errors.Is(assignmentErr, store.ErrEngineeringAssignmentInvalid) {
+				// The stored assignment's own grant/execution attestation fails
+				// re-validation — a deterministic-invalid object, never
+				// transient. Deferring it live-locks the dispatcher.
+				return invalidLifecycleProducerReportAuthority("Engineering source assignment stored attestation invalid")
+			}
 			return fmt.Errorf("load Engineering source assignment: %w", assignmentErr)
 		}
 		if assignment.LifecycleVersion <= 0 || assignment.Binding.OwnerID != report.OwnerID || assignment.Binding.ComputerID != report.ComputerID || assignment.Binding.TrajectoryID != report.TrajectoryID || assignment.Binding.AssignedAgentID != report.AgentID || assignment.Binding.AssignedWorkItemID != report.ProducerWorkItemID || assignment.BoundRunID != report.SourceRunID {
