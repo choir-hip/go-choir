@@ -101,6 +101,7 @@ let textureV2 = null;
 while (Date.now() < deadline) {
   const runs = await listRuns();
   for (const r of runs) {
+    if (r.created_at < iso(t0)) continue; // only this probe's trajectory's legs
     if (seenRuns.get(r.run_id) !== r.state) {
       seenRuns.set(r.run_id, r.state);
       if (r.agent_profile === 'research' && r.created_at >= iso(t0)) researchRun = r;

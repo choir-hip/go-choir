@@ -1,0 +1,22 @@
+{
+  "probe": "m0_qa_repro",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "prompt": "What's new in ai today",
+  "started_at": "2026-09-30T03:48:02.813Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": 1790740107476,
+      "wall_ms": 24663,
+      "ok": true,
+      "trajectory": "15590d6c-512d-5cca-a36e-a8969a6c7083",
+      "doc": "485859ad-344e-5872-b5c1-fff3ff340b12",
+      "owner_revision": "12db5d82-a817-5936-ad98-1c9bfd28a8a1"
+    }
+  ],
+  "ok": false,
+  "failure": "timed out after 15min (legs: prompt_bar_submit,run:conductor:completed,run:research:completed,run:conductor:completed,run:management:completed,run:texture:failed,run:conductor:completed,run:engineering:completed,run:engineering:cancelled,run:engineering:cancelled,run:engineering:cancelled,run:engineering:cancelled,run:engineering:cancelled,run:engineering:cancelled,run:engineering:cancelled,run:engineering:cancelled,run:engineering:cancelled,run:engineering:cancelled,run:engineering:cancelled,run:engineering:completed,run:engineering:cancelled)",
+  "finished_at": "2026-09-30T04:03:07.035Z",
+  "total_wall_ms": 904222,
+  "note": "baseline trimmed: historical terminal runs removed (probe scope bug fixed in-script)"
+}

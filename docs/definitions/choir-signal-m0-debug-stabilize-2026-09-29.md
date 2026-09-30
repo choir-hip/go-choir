@@ -114,8 +114,9 @@ boundaries:
 
 now:
   status: working
-  slice: 'redeploy owner computer → reconcile wake debt → SSE fix → QA
-    repro → baseline timings'
+  slice: 'in progress — SSE fix pushed (15b2725a), deploy ac168350 in
+    flight; next: refresh owner computer → reconcile debt → QA repro →
+    baseline timings'
   source_ref: main@ac54317c
   deploy_identity: 'staging build.commit=b85af274'
   candidate:
