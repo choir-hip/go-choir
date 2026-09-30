@@ -310,16 +310,17 @@ now:
     transition'' — a fourth invalid-wrap surfaced, needs a typed
     ErrDurableInvalid mapping.
 
-    SIXTH DEFECT (wake durability): cfa90b87 M0a cell armed as control
-    4158e48b (texture:ce3e0e77 -> research:cfa90b87, disposition=pending,
-    carries the web-search question) but its actor wake never reached the
-    tape — QueueLifecycleUpdate commits the control, then
-    wakeUpdatedCoagent->dispatchActor appends the actor row as a SEPARATE
-    non-atomic call; the 19:16 crash landed between them. Durable control
-    pending, zero actor row, cell never fires. MigrateActorWakeOutbox only
-    backfills PRE-cutover objects; a post-cutover crash-lost wake is not
-    re-minted. Needs: atomic queue+wake commit OR a pending-control->
-    actor re-announce reconcile.
+    SIXTH DEFECT (delivered-not-consumed wake strand): cfa90b87 M0a cell
+    armed as control 4158e48b (texture:ce3e0e77 -> research:cfa90b87,
+    disposition=pending, web-search question) with delivered_to_loop_id=
+    362febb2 delivered_at 17:12:39 — the run consumed nothing (store
+    append failed 17:37), then restart-passivated. The wake-mint guard in
+    actorWakeOutboxFromWorkerUpdate (lifecycle.go:553-557) skips any
+    update with DeliveredToRunID set, so MigrateActorWakeOutbox never
+    re-mints its wake and sweepActorWakeOutbox has nothing to project:
+    a crash AFTER delivery-binding but BEFORE consumption strands the
+    pending control with no wake path. Needs: re-mint when the bound run
+    is not Active/never consumed (delivered!=consumed => wake owed).
   '
   next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
     and fixed: exhausted restart recasts live-locked the guest. "recast

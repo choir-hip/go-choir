@@ -545,15 +545,36 @@ func actorWakeRunContentJSON(runID string) (string, error) {
 	return string(content), nil
 }
 
-func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object) (ActorWakeOutbox, objectgraph.Object, error) {
+func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object, resolver []objectgraph.Object) (ActorWakeOutbox, objectgraph.Object, error) {
 	update, err := decodeLifecycleObject[types.CoagentSourcePacket](worker)
 	if err != nil {
 		return ActorWakeOutbox{}, objectgraph.Object{}, err
 	}
 	if strings.TrimSpace(update.TargetAgentID) == "" ||
-		(update.Disposition != "" && update.Disposition != types.UpdatePending) ||
-		strings.TrimSpace(update.DeliveredToRunID) != "" {
+		(update.Disposition != "" && update.Disposition != types.UpdatePending) {
 		return ActorWakeOutbox{}, objectgraph.Object{}, nil
+	}
+	// A pending update that was bound to a delivery run but never consumed is
+	// still owed a wake when that run can no longer deliver: a crash between
+	// binding (delivered_to_loop_id set) and consumption strands the control
+	// forever if the wake is suppressed on the mere presence of the binding.
+	// Suppress only when the bound run is still Active (pending/running/
+	// blocked) and can inject it; a passivated or terminal bound run — or a
+	// bound run that cannot be resolved — leaves the obligation undischarged.
+	if bound := strings.TrimSpace(update.DeliveredToRunID); bound != "" {
+		for _, obj := range resolver {
+			if obj.ObjectKind != ogKindRun {
+				continue
+			}
+			run, decErr := decodeLifecycleObject[types.RunRecord](obj)
+			if decErr != nil || run.RunID != bound {
+				continue
+			}
+			if run.State.Active() {
+				return ActorWakeOutbox{}, objectgraph.Object{}, nil
+			}
+			break
+		}
 	}
 	content := types.LifecycleControlActorOccurrenceContent(update)
 	if content == "" || strings.TrimSpace(update.TrajectoryID) == "" || strings.TrimSpace(update.AgentID) == "" {
@@ -579,7 +600,7 @@ func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object) (ActorWakeOutbox
 func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Object) ([]objectgraph.Object, error) {
 	switch obj.ObjectKind {
 	case ogKindWorkerUpdate:
-		_, outbox, err := actorWakeOutboxFromWorkerUpdate(obj)
+		_, outbox, err := actorWakeOutboxFromWorkerUpdate(obj, objects)
 		if err != nil || outbox.CanonicalID == "" {
 			return nil, err
 		}
@@ -776,6 +797,20 @@ func actorWakeRevisionVersions(trajectoryID string, revision objectgraph.Object,
 }
 
 func (s *Store) actorWakeResolverObjects(ctx context.Context, obj objectgraph.Object, objects []objectgraph.Object) []objectgraph.Object {
+	if obj.ObjectKind == ogKindWorkerUpdate {
+		// A pending control bound to a delivery run owes its wake only when the
+		// bound run is no longer Active (passivated/terminal/unresolvable). The
+		// resolver therefore needs the bound run's projection so the caller can
+		// distinguish a live bound run (suppress) from a stranded one (mint).
+		update, err := decodeLifecycleObject[types.CoagentSourcePacket](obj)
+		if err != nil || strings.TrimSpace(update.DeliveredToRunID) == "" {
+			return objects
+		}
+		if runObj, runErr := s.getRunObjectByOwnerOG(ctx, update.OwnerID, update.DeliveredToRunID); runErr == nil {
+			return append(append([]objectgraph.Object{}, objects...), runObj)
+		}
+		return objects
+	}
 	if obj.ObjectKind != ogKindTexRev {
 		return objects
 	}
