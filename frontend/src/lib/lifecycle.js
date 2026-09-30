@@ -42,65 +42,108 @@ export async function getLifecycleSnapshot(trajectoryId) {
 // observeLifecycle opens the event stream before fetching the snapshot, then
 // discards buffered events covered by the snapshot cursor and delivers the
 // remainder in reducer order. Overflow and expired cursors force replay.
+// Post-snapshot stream errors reconnect at the last cursor (?after=cursor)
+// with bounded exponential backoff; exhaustion surfaces onError.
+const MAX_RECONNECT_ATTEMPTS = 8;
+
 export async function observeLifecycle(trajectoryId, handlers = {}) {
   if (!trajectoryId) throw new Error('Trajectory ID is required');
-  const buffer = [];
-  let snapshotReady = false;
   let cursor = 0;
   let closed = false;
-  const stream = new EventSource(`/api/trajectories/${encodeURIComponent(trajectoryId)}/stream?after=0`, { withCredentials: true });
-  const opened = new Promise((resolve, reject) => {
-    stream.onopen = resolve;
-    stream.onerror = () => {
-      if (!snapshotReady) reject(new Error('Lifecycle stream failed before snapshot'));
-      else handlers.onError?.(new Error('Lifecycle stream disconnected'));
-    };
-  });
-  stream.addEventListener('lifecycle', (message) => {
-    try {
-      const event = JSON.parse(message.data);
-      requireDurableWorkSchema(event, 'Lifecycle stream event');
-      if (!snapshotReady) {
-        buffer.push(event);
-        if (buffer.length > 1000) {
-          stream.close();
-          closed = true;
-          handlers.onReplayRequired?.({ reason: 'buffer_overflow' });
+  let stream = null;
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const attach = (es) => {
+    let ready = false;
+    const buffer = [];
+    es.addEventListener('lifecycle', (message) => {
+      try {
+        const event = JSON.parse(message.data);
+        requireDurableWorkSchema(event, 'Lifecycle stream event');
+        if (!ready) {
+          buffer.push(event);
+          if (buffer.length > 1000) {
+            es.close();
+            closed = true;
+            handlers.onReplayRequired?.({ reason: 'buffer_overflow' });
+          }
+          return;
         }
-        return;
+        if (event.reducer_seq > cursor) {
+          cursor = event.reducer_seq;
+          handlers.onEvent?.(event);
+        }
+      } catch (error) {
+        handlers.onError?.(error);
       }
-      if (event.reducer_seq > cursor) {
-        cursor = event.reducer_seq;
-        handlers.onEvent?.(event);
-      }
+    });
+    es.addEventListener('replay_required', (message) => {
+      es.close();
+      closed = true;
+      handlers.onReplayRequired?.(JSON.parse(message.data));
+    });
+    return {
+      markReady() {
+        ready = true;
+        buffer.sort((left, right) => left.reducer_seq - right.reducer_seq);
+        for (const event of buffer) {
+          if (event.reducer_seq > cursor) {
+            cursor = event.reducer_seq;
+            handlers.onEvent?.(event);
+          }
+        }
+      },
+    };
+  };
+
+  const connect = async (after) => {
+    const es = new EventSource(`/api/trajectories/${encodeURIComponent(trajectoryId)}/stream?after=${after}`, { withCredentials: true });
+    stream = es;
+    const gate = attach(es);
+    try {
+      await new Promise((resolve, reject) => {
+        es.onopen = resolve;
+        es.onerror = () => reject(new Error('Lifecycle stream failed to open'));
+      });
+      const snapshot = await getLifecycleSnapshot(trajectoryId);
+      if (snapshot.snapshot_cursor > cursor) cursor = snapshot.snapshot_cursor;
+      gate.markReady();
+      handlers.onSnapshot?.(snapshot);
     } catch (error) {
-      handlers.onError?.(error);
+      es.close();
+      throw error;
     }
-  });
-  stream.addEventListener('replay_required', (message) => {
-    stream.close();
-    closed = true;
-    handlers.onReplayRequired?.(JSON.parse(message.data));
-  });
-  try {
-    await opened;
-    const snapshot = await getLifecycleSnapshot(trajectoryId);
-    cursor = snapshot.snapshot_cursor || 0;
-    snapshotReady = true;
-    handlers.onSnapshot?.(snapshot);
-    buffer.sort((left, right) => left.reducer_seq - right.reducer_seq);
-    for (const event of buffer) {
-      if (event.reducer_seq > cursor) {
-        cursor = event.reducer_seq;
-        handlers.onEvent?.(event);
+    // Post-open errors arm the reconnect loop at the last durable cursor.
+    es.onerror = () => {
+      es.close();
+      if (!closed) void reconnect();
+    };
+  };
+
+  const reconnect = async () => {
+    for (let attempt = 0; attempt < MAX_RECONNECT_ATTEMPTS && !closed; attempt += 1) {
+      await sleep(Math.min(1000 * 2 ** attempt, 15000));
+      if (closed) return;
+      try {
+        await connect(cursor);
+        return;
+      } catch {
+        // keep backing off
       }
     }
+    if (!closed) handlers.onError?.(new Error('Lifecycle stream disconnected'));
+  };
+
+  try {
+    await connect(0);
   } catch (error) {
-    stream.close();
     closed = true;
+    if (stream) stream.close();
     throw error;
   }
   return () => {
-    if (!closed) stream.close();
+    closed = true;
+    if (stream) stream.close();
   };
 }
