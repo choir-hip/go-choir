@@ -35,6 +35,10 @@ start:
   predecessor:
     mission: none — pure transport; parallel-safe throughout
   observed_artifact:
+    - 'RESOLVED 2026-09-29: OPENROUTER_API_KEY pushed to
+      node-b:/var/lib/go-choir/gateway-provider.env via
+      nix/deploy-provider-creds.sh (script extended to carry the key);
+      gateway active, health ready at b85af274'
     - 'ratified constraints (9/27 panels + owner §12.2): pinned
       typesafe/jev-1.13 (never jev-latest); transport = gateway
       POST /provider/v1/judgments → OpenRouter /api/alpha/decisions;
@@ -147,15 +151,16 @@ now:
     evidence_ref: '9/27 consensus panels + orientation doc'
     owner_ratification_ref: 'owner 2026-09-27 §12.2 + 2026-09-29'
   belief:
-    believed_state: 'transport is narrow and parallel-safe; alpha
-      endpoint provisioning is the named external dependency'
-    main_uncertainty: 'OpenRouter alpha endpoint access + per-VM bearer
-      provisioning'
+    believed_state: 'transport is narrow and parallel-safe; OpenRouter
+      creds are provisioned on node-b (2026-09-29)'
+    main_uncertainty: 'whether the alpha /api/alpha/decisions endpoint
+      accepts the provisioned key for typesafe/jev-1.13'
     next_observation: 'first live VM→judgment round-trip'
-  blocker_or_risk: 'alpha-endpoint credential provisioning is external'
-  next_action: 'verify OpenRouter alpha-endpoint access first (named
-    residual if absent); then author the gateway route + OpenRouter
-    client + cred provisioning; live round-trip on a staging VM'
+  blocker_or_risk: 'none — OpenRouter creds provisioned on node-b
+    2026-09-29 (deploy-provider-creds.sh now carries OPENROUTER_API_KEY)'
+  next_action: 'author the gateway route + OpenRouter client reading
+    OPENROUTER_API_KEY from the gateway env; live round-trip on a
+    staging VM'
 
 receipts: []
 ---
