@@ -100,6 +100,27 @@ claude, codex, gpt-6-sol, gemini-3.8, glm-5.3, devin, gpt-6-luna; failed:
   deterministic or excluded from the turn digest — `Inbound` is part of
   command identity; nondeterministic defaults break replay (devin).
 
+## Repair log
+
+- **2026-09-30 — owner-revision trigger non-disposal (defect #5 of the M1
+  deployed proof).** Root cause: a texture desk `desk_go_eval` cell that staged
+  no `ApplyTexture`/`decide` intent reduced its tray and left the
+  `texture_activation` occurrence pending; `TextureActorOccurrencePostcondition`
+  (DocumentRevision arm) requires either head advancement or a
+  `texture_turn_committed` event whose `artifactRefs[1]` equals the trigger
+  head, neither of which an intent-less cell ever produced. The wake re-armed
+  on every reconcile (`without disposing exact trigger`, ~30 s cadence).
+  Repair: `Runtime.consumeIdleTextureTrigger` (`internal/agentcore/tools_desk.go`)
+  auto-commits a `no_semantic_change` decide turn (base = current head) when a
+  texture-profile cell commits no `IntentTextureApply`, emitting the consumed
+  marker. Gated to `runHasProfile(rec, agentprofile.Texture)`; tolerates
+  already-consumed/not-pending/missing-doc so a non-authoring cell never
+  fails over a disposed wake. Landed in `a08defc0` (consume), `6f685d6f`
+  (tolerance), `7b78b9e7` (texture-profile gate). This is the point-5
+  adjudicated path — "a no-write end is a completed no-op activation" — for the
+  owner-revision arm only; the pending-update disposition machinery (points
+  1–3) remains open.
+
 ## Adjacent defects (independent of this fix)
 
 - Retry replays the identical call verbatim under same `call_id` — must
