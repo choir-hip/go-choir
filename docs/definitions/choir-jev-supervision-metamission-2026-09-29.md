@@ -232,24 +232,26 @@ now:
     next_observation: 'first M1 desk-cell commitment records + M4 live
       round-trip distribution on the staging tape; first M-SUB cell_fate
       record on a timed-out/killed cell'
-  blocker_or_risk: 'staging env BLOCKED at a precise fault, root-caused on
-    Node B 2026-09-30: the retained computer
-    computer-03335285269bdba4f94377e56879f9e6 runs on a wedged
-    candidate-fleet-e15cb89f firecracker (150min at 149% CPU/3GB, console
-    log 108MB). The run plane (/api/runs, /api/prompt-bar ->
-    internal/runtime/runs) is served inside that guest, so no run or desk
-    activation can start -> every deployed_proof item is unreachable.
-    vmctl reports unavailable (blocked on the guest); gateway/corpusd/
-    maild/auth/proxy/sourcecycled healthy; build.commit=9e3d6948 already
-    deployed. Recovery = restart/replace that guest, a VM-lifecycle
-    action reserved for owner/ops. M2/M3/M5 remain dependency-blocked.'
-  next_action: 'owner/ops: bounce the wedged candidate-fleet-e15cb89f guest
-    (or restart vmctl + re-home the computer). When vmctl=ok and
-    /api/runs serves on deployed_commit>=9e3d6948: run M-SUB deployed emit
-    proofs -> M0a controlled-comparison verify -> deletion commit
-    ({desk_go_eval} registry + rlm_research_runtime.yaml rewrite) -> M1
-    deployed commitment tape -> M2/M3/M5. Station recon already done in
-    the M5/M2/M3 files (Recon 2026-09-30 notes).'
+  blocker_or_risk: 'staging env was blocked at a precise fault, root-caused
+    on Node B 2026-09-30: vmctl had a STALE route for the retained computer
+    (cached guest IP 10.200.63.2:8085 while the guest had re-minted to
+    10.200.67.2:8085), so proxy->upstream hung ~20s -> 502 and vmctl
+    reported unavailable. The guest itself was READY and working (autoputer
+    health ready, running_runs, desk_pending_mutations). RECOVERY LANDED
+    non-destructively: /internal/vmctl/refresh re-derived the route ->
+    proxy:ok, vmctl:ok, /api/runs 200, build.commit=9e3d6948. QA repro
+    (m0_qa_probe) now executes: owner rev + texture v1 committed, research
+    legs running. Residual risk: research legs held running >20min with one
+    post-owner revision — watch for a stall recurrence. M2/M3/M5 remain
+    dependency-blocked (M0a/M1 unsettled).'
+  next_action: 'finish the live QA repro to a 2nd post-owner revision
+    (texture v2) = M-SUB/M1 deployed acceptance; then M0a controlled-
+    comparison verify -> deletion commit ({desk_go_eval} registry +
+    rlm_research_runtime.yaml rewrite); then M2/M3/M5. Recovery pattern for
+    future outages: probe the guest directly, then
+    POST /internal/vmctl/refresh on the vmctl unix socket before assuming a
+    wedged VM. Station recon already done in the M5/M2/M3 files
+    (Recon 2026-09-30 notes).'
 
 receipts: []
 
