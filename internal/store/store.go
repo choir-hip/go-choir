@@ -2483,6 +2483,22 @@ func (s *Store) ListChannelMessages(ctx context.Context, ownerID, channelID stri
 	return msgs, nil
 }
 
+// ListChannelMessagesTo returns channel messages addressed to one agent
+// across all sender channels, ordered by sequence ascending. Companion to
+// ListChannelMessages: emits travel on the sender's channel, so a recipient
+// desk's own-channel read misses them — this is the to-agent drain read.
+func (s *Store) ListChannelMessagesTo(ctx context.Context, ownerID, toAgentID string, afterSeq int64, limit int) ([]types.ChannelMessage, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	msgs, err := s.ListChannelMessagesToOG(ctx, ownerID, toAgentID, afterSeq, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query channel messages to agent: %w", err)
+	}
+	sort.Slice(msgs, func(i, j int) bool { return msgs[i].Seq < msgs[j].Seq })
+	return msgs, nil
+}
+
 // ListChannelMessagesByTrajectory returns durable channel messages for a
 // specific trajectory, ordered by channel sequence ascending.
 func (s *Store) ListChannelMessagesByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.ChannelMessage, error) {

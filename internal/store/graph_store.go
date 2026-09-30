@@ -1727,6 +1727,40 @@ func (s *Store) ListChannelMessagesOG(ctx context.Context, ownerID, channelID st
 	return msgs, nil
 }
 
+// ListChannelMessagesToOG lists channel messages addressed to one agent,
+// across all sender channels, after a sequence watermark. The emit signal
+// plane mails envelopes on the sender's channel with to_agent_id set, so a
+// desk's own-channel ChannelRead never sees them; this to-agent projection is
+// the boundary-drain read for emission notices.
+func (s *Store) ListChannelMessagesToOG(ctx context.Context, ownerID, toAgentID string, afterSeq int64, limit int) ([]types.ChannelMessage, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	objs, err := s.ogListByMetadata(ctx, ogKindChannelMsg, "to_agent_id", toAgentID, 100000)
+	if err != nil {
+		return nil, err
+	}
+	msgs := make([]types.ChannelMessage, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.ChannelMessage
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if ownerID != "" && obj.OwnerID != ownerID {
+			continue
+		}
+		if rec.Seq <= afterSeq {
+			continue
+		}
+		msgs = append(msgs, rec)
+	}
+	sort.Slice(msgs, func(i, j int) bool { return msgs[i].Seq < msgs[j].Seq })
+	if len(msgs) > limit {
+		msgs = msgs[:limit]
+	}
+	return msgs, nil
+}
+
 // =========================================================================
 // Worker Updates — object graph implementation
 // =========================================================================

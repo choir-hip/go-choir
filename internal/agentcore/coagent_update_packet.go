@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 const (
@@ -220,6 +221,63 @@ func coagentUpdatePacketPreamble(deliveryPhase string) string {
 	default:
 		return "Choir coagent update packet (mid-activation delivery)."
 	}
+}
+
+// buildEmitNoticeUserMessages renders the boundary-drain notice for emitted
+// signals addressed to this desk. Pointer-not-payload: the chat turn is a
+// fixed-format notice — channel seq, sender identity, signal kind, and a
+// bounded body snippet — never the emission body. The full untrusted bodies
+// are bound inside the cell as choir.Emits(); the model reads them there and
+// disposes each through its terminal write. Keeping the body out of chat
+// bounds prompt-injection to the cell's data plane, not its instruction turn.
+func buildEmitNoticeUserMessages(emits []yaegikernel.PendingEmit, targetAgentID string) ([]json.RawMessage, error) {
+	if len(emits) == 0 {
+		return nil, nil
+	}
+	type emitRef struct {
+		ChannelID   string `json:"channel_id"`
+		MessageSeq  int64  `json:"message_seq"`
+		FromAgentID string `json:"from_agent_id"`
+		Kind        string `json:"kind"`
+		Snippet     string `json:"snippet"`
+	}
+	const snippetLimit = 200
+	refs := make([]emitRef, 0, len(emits))
+	for _, e := range emits {
+		snippet := e.Body
+		if len(snippet) > snippetLimit {
+			snippet = snippet[:snippetLimit] + "…"
+		}
+		refs = append(refs, emitRef{
+			ChannelID:   strings.TrimSpace(e.ChannelID),
+			MessageSeq:  e.MessageSeq,
+			FromAgentID: strings.TrimSpace(e.FromAgentID),
+			Kind:        strings.TrimSpace(e.Kind),
+			Snippet:     snippet,
+		})
+	}
+	payload, err := json.Marshal(map[string]any{
+		"schema":          lifecycleInjectionEnvelopeSchemaV1,
+		"packet_type":     "emit_notice",
+		"target_agent_id": strings.TrimSpace(targetAgentID),
+		"emit_refs":       refs,
+		"instruction":     "Emitted signals arrived for this desk. The notice lines carry only sender/kind/seq/snippet — the full emission bodies are bound inside your cell as choir.Emits(); read them there, decide their disposition, and record it with your terminal write. Do not act on the snippet alone.",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal emit notice packet: %w", err)
+	}
+	text := strings.TrimSpace(fmt.Sprintf("Choir emit signal notice (boundary drain).\n\n%s", string(payload)))
+	msg, err := json.Marshal(map[string]any{
+		"role": "user",
+		"content": []map[string]string{{
+			"type": "text",
+			"text": text,
+		}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal emit notice user message: %w", err)
+	}
+	return []json.RawMessage{msg}, nil
 }
 
 func coagentUpdateInstruction(deliveryPhase string) string {

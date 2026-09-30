@@ -35,6 +35,11 @@ type SessionFrame struct {
 	// cell (RLM prompt-as-variable): the cell reads them via
 	// choir.Updates(); the wake turn in chat carries only their ids.
 	Updates []PendingUpdate `json:"updates,omitempty"`
+	// Emits carries the emitted signals addressed to this desk drained at the
+	// cell boundary: the cell reads them via choir.Emits(); the chat notice
+	// turn carries only a fixed-format line (sender/kind/seq/snippet), never
+	// the body.
+	Emits []PendingEmit `json:"emits,omitempty"`
 }
 
 // DocSnapshot is the bound texture document's head a cell authors against:

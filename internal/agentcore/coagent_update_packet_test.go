@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
@@ -76,5 +77,60 @@ func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
 	}
 	if strings.Contains(text, "http://") || strings.Contains(text, "https://") {
 		t.Fatalf("packet text should not instruct ordinary clickable links: %q", text)
+	}
+}
+
+func TestBuildEmitNoticeUserMessagesPointerNotPayload(t *testing.T) {
+	t.Parallel()
+	longBody := strings.Repeat("x", 500)
+	emits := []yaegikernel.PendingEmit{{
+		ChannelID:   "ch-sender",
+		MessageSeq:  7,
+		FromAgentID: "research:doc-1",
+		FromRole:    "research",
+		Kind:        "emit",
+		Body:        longBody,
+	}}
+	msgs, err := buildEmitNoticeUserMessages(emits, "texture:doc-1")
+	if err != nil {
+		t.Fatalf("build emit notice: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 notice message, got %d", len(msgs))
+	}
+	var userMsg struct {
+		Role    string `json:"role"`
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(msgs[0], &userMsg); err != nil {
+		t.Fatalf("decode notice: %v", err)
+	}
+	text := userMsg.Content[0].Text
+	// Pointer-not-payload: the full 500-char body must NOT appear in chat —
+	// only a bounded snippet plus routing metadata.
+	if strings.Contains(text, longBody) {
+		t.Fatalf("notice leaked full emission body into chat turn")
+	}
+	if !strings.Contains(text, "choir.Emits()") {
+		t.Fatalf("notice must direct the desk to choir.Emits() for bodies")
+	}
+	if !strings.Contains(text, "emit_notice") {
+		t.Fatalf("notice must carry packet_type emit_notice")
+	}
+	if !strings.Contains(text, "research:doc-1") || !strings.Contains(text, "7") {
+		t.Fatalf("notice missing sender identity or seq: %s", text)
+	}
+}
+
+func TestBuildEmitNoticeUserMessagesEmpty(t *testing.T) {
+	t.Parallel()
+	msgs, err := buildEmitNoticeUserMessages(nil, "texture:doc-1")
+	if err != nil {
+		t.Fatalf("build empty notice: %v", err)
+	}
+	if msgs != nil {
+		t.Fatalf("expected nil messages for no emits, got %d", len(msgs))
 	}
 }

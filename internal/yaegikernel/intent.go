@@ -121,6 +121,21 @@ type PendingUpdate struct {
 	HumanProjection string                           `json:"human_projection,omitempty"`
 }
 
+// PendingEmit is one emitted signal body bound into a desk cell as a REPL
+// variable. Emits travel on the sender's channel with to_agent_id set, so a
+// recipient desk drains addressed emissions through this bound snapshot —
+// the chat boundary turn carries only the fixed-format notice (sender/kind/
+// seq/snippet), never the body. Side-effect-free inside the cell; the model
+// reads the untrusted body here, keeping prompt-injection bounded to data.
+type PendingEmit struct {
+	ChannelID   string `json:"channel_id,omitempty"`
+	MessageSeq  int64  `json:"message_seq"`
+	FromAgentID string `json:"from_agent_id"`
+	FromRole    string `json:"from_role,omitempty"`
+	Kind        string `json:"kind"`
+	Body        string `json:"body"`
+}
+
 // StagedIntent is one non-blocking in-cell request awaiting post-cell
 // reduction. LocalID correlates the intent within its cell only.
 type StagedIntent struct {

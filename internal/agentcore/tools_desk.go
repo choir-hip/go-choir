@@ -167,10 +167,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// frame so choir.Updates() exposes them inside the cell. The chat
 			// wake turn carries only ids.
 			updates := pendingCellUpdates(ctx, rt, execCtx)
+			emits := pendingCellEmits(ctx, rt, execCtx)
 			if reduction.active {
 				rt.armCellTerminalDeadline(evalCtx, reduction)
 			}
-			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates)
+			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits)
 
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
@@ -308,6 +309,74 @@ func pendingCellUpdates(ctx context.Context, rt *Runtime, execCtx toolregistry.E
 			WorkItemID:      strings.TrimSpace(u.WorkItemID),
 			Packet:          u.Packet,
 			HumanProjection: strings.TrimSpace(u.Content),
+		})
+	}
+	return out
+}
+
+// pendingCellEmits drains emitted signals addressed to this desk's agent,
+// after the desk's inbox cursor. Emits travel on the *sender's* channel with
+// to_agent_id set, so the desk's own-channel ChannelRead never sees them;
+// this is the boundary-drain read for choir.Emits(). The cell gets the full
+// untrusted body; the chat boundary turn carries only a fixed-format notice.
+// pendingCellEmits is the cell-frame adapter: drains addressed emissions for
+// the run's desk agent into the bound choir.Emits() snapshot.
+func pendingCellEmits(ctx context.Context, rt *Runtime, execCtx toolregistry.ExecutionContext) []yaegikernel.PendingEmit {
+	if execCtx.RunRecord == nil {
+		return nil
+	}
+	return pendingEmitsForRun(ctx, rt, execCtx.RunRecord)
+}
+
+// pendingEmitsForRun drains emitted signals addressed to this desk's agent.
+// Emits travel on the *sender's* channel with to_agent_id set, so the desk's
+// own-channel ChannelRead never sees them; this is the boundary-drain read.
+// The cell gets the full untrusted body (choir.Emits()); the chat boundary
+// turn carries only a fixed-format notice (sender/kind/seq/snippet).
+func pendingEmitsForRun(ctx context.Context, rt *Runtime, rec *types.RunRecord) []yaegikernel.PendingEmit {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	ownerID := strings.TrimSpace(rec.OwnerID)
+	agentID := strings.TrimSpace(rec.AgentID)
+	if ownerID == "" || agentID == "" || !runSupportsCoagentUpdateInjection(rec) {
+		return nil
+	}
+	// Drain addressed emissions. Emit bodies are bound per-cell; the desk
+	// consumes them by terminal write so a cursor the cell never processed
+	// re-surfaces — drain from zero is safe (idempotent re-read) and lets the
+	// desk decide disposition.
+	msgs, err := rt.store.ListChannelMessagesTo(ctx, ownerID, agentID, 0, 200)
+	if err != nil || len(msgs) == 0 {
+		return nil
+	}
+	out := make([]yaegikernel.PendingEmit, 0, len(msgs))
+	for _, m := range msgs {
+		kind, body := "emit", m.Content
+		if rest, ok := strings.CutPrefix(m.Content, rlmEnvelopeV1); ok {
+			var env rlmEnvelope
+			if jerr := json.Unmarshal([]byte(rest), &env); jerr == nil {
+				if env.Kind != "" {
+					kind = env.Kind
+					if kind == "message" && env.MsgKind != "" {
+						kind = env.MsgKind
+					}
+				}
+				if env.Body != "" {
+					body = env.Body
+				}
+			}
+		}
+		if kind != "emit" {
+			continue // only emission envelopes drain here; packets/other kinds use their own path
+		}
+		out = append(out, yaegikernel.PendingEmit{
+			ChannelID:   strings.TrimSpace(m.ChannelID),
+			MessageSeq:  m.Seq,
+			FromAgentID: strings.TrimSpace(m.FromAgentID),
+			FromRole:    strings.TrimSpace(m.Role),
+			Kind:        kind,
+			Body:        body,
 		})
 	}
 	return out

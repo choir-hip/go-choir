@@ -2169,8 +2169,13 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 			}
 			fresh = append(fresh, update)
 		}
+		emits := pendingEmitsForRun(context.Background(), rt, rec)
+		emitMsgs, err := buildEmitNoticeUserMessages(emits, agentID)
+		if err != nil {
+			return nil, err
+		}
 		if len(fresh) == 0 {
-			return ownerMessages, nil
+			return append(ownerMessages, emitMsgs...), nil
 		}
 		projected, err := rt.projectTerminalOutcomeContent(context.Background(), fresh)
 		if err != nil {
@@ -2180,7 +2185,7 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		if err != nil {
 			return nil, err
 		}
-		return append(ownerMessages, msgs...), nil
+		return append(append(ownerMessages, msgs...), emitMsgs...), nil
 	}
 }
 

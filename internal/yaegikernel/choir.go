@@ -51,6 +51,10 @@ type ChoirScope struct {
 	// (RLM prompt-as-variable): read via Updates(). The wake turn in chat
 	// carries only update ids; the payload lives here.
 	updates []PendingUpdate
+	// emits is the cell-start snapshot of emitted signals addressed to this
+	// desk (boundary-drain): read via Emits(). The notice turn carries only
+	// a fixed-format line; the untrusted body lives here.
+	emits []PendingEmit
 }
 
 // SessionRoleResearch is the read-only role: sessions bound to it observe
@@ -106,6 +110,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.doc = frame.Doc
 			s.pack = frame.Pack
 			s.updates = append([]PendingUpdate(nil), frame.Updates...)
+			s.emits = append([]PendingEmit(nil), frame.Emits...)
 		},
 		End: func() []StagedIntent {
 			var out []StagedIntent
@@ -117,6 +122,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.doc = nil
 			s.pack = nil
 			s.updates = nil
+			s.emits = nil
 			return out
 		},
 	}
@@ -204,6 +210,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Context":  reflect.ValueOf(s.Context),
 		"Inbox":    reflect.ValueOf(s.Inbox),
 		"Updates":  reflect.ValueOf(s.Updates),
+		"Emits":    reflect.ValueOf(s.Emits),
 		"Pack":     reflect.ValueOf(s.Pack),
 	}
 	verbs := map[string]func() reflect.Value{
@@ -446,6 +453,18 @@ func (s *ChoirScope) Updates() []PendingUpdate {
 		return []PendingUpdate{}
 	}
 	return append([]PendingUpdate(nil), s.updates...)
+}
+
+// Emits returns the cell-start snapshot of emitted signals addressed to this
+// desk. The boundary-drain notice turn carries only the fixed-format
+// notice line (sender/kind/seq/snippet); the full untrusted emission bodies
+// live here as data. A desk reads them here and disposes each through its
+// terminal write — never trust the notice to carry instructions.
+func (s *ChoirScope) Emits() []PendingEmit {
+	if s == nil {
+		return []PendingEmit{}
+	}
+	return append([]PendingEmit(nil), s.emits...)
 }
 
 // jsonCellArg normalizes a cell-authored JSON argument: a JSON-encoded string

@@ -33,7 +33,7 @@ func TestDeskWorkerEmitRoundTrip(t *testing.T) {
 	evalDone := make(chan SessionResult, 1)
 	evalErr := make(chan error, 1)
 	go func() {
-		res, err := w.EvalCell(context.Background(), "print(1)", nil, nil, nil, nil)
+		res, err := w.EvalCell(context.Background(), "print(1)", nil, nil, nil, nil, nil)
 		if err != nil {
 			evalErr <- err
 			return
@@ -107,7 +107,7 @@ func TestDeskWorkerEmitRefused(t *testing.T) {
 
 	evalErr := make(chan error, 1)
 	go func() {
-		_, err := w.EvalCell(context.Background(), "x", nil, nil, nil, nil)
+		_, err := w.EvalCell(context.Background(), "x", nil, nil, nil, nil, nil)
 		evalErr <- err
 	}()
 

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -288,6 +289,64 @@ func TestOGListChannelMessagesAfterSeq(t *testing.T) {
 			t.Errorf("seq %d should be > 2", m.Seq)
 		}
 	}
+}
+
+func TestOGListChannelMessagesToDrainsAcrossSenderChannels(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	// Emissions land on the *sender's* channel with to_agent_id set; a
+	// recipient desk's own-channel read never sees them. The to-agent drain
+	// must collect them across sender channels by to_agent_id after a cursor.
+	seed := []struct {
+		channel, to, from string
+		seq               int64
+	}{
+		{"ch-sender-a", "agent-desk", "sender-a", 1},
+		{"ch-sender-b", "agent-desk", "sender-b", 2},
+		{"ch-sender-a", "agent-other", "sender-a", 3}, // addressed elsewhere — excluded
+		{"ch-desk-own", "", "agent-desk", 4},          // desk's own channel — excluded
+	}
+	for _, r := range seed {
+		msg := &types.ChannelMessage{
+			ChannelID:   r.channel,
+			Seq:         r.seq,
+			From:        r.from,
+			FromAgentID: r.from,
+			ToAgentID:   r.to,
+			Role:        "emit",
+			Content:     rlmEmitFixtureBody(r.seq),
+			Timestamp:   now.Add(time.Duration(r.seq) * time.Second),
+		}
+		if err := s.AppendChannelMessageOG(ctx, msg, "owner-to"); err != nil {
+			t.Fatalf("append seq %d: %v", r.seq, err)
+		}
+	}
+
+	msgs, err := s.ListChannelMessagesToOG(ctx, "owner-to", "agent-desk", 0, 10)
+	if err != nil {
+		t.Fatalf("list to-agent: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 addressed emissions, got %d", len(msgs))
+	}
+	if msgs[0].Seq != 1 || msgs[1].Seq != 2 {
+		t.Fatalf("drain must be seq-ordered: got %d,%d", msgs[0].Seq, msgs[1].Seq)
+	}
+
+	// Cursor advance: only emissions after the watermark re-surface.
+	rest, err := s.ListChannelMessagesToOG(ctx, "owner-to", "agent-desk", 1, 10)
+	if err != nil {
+		t.Fatalf("list to-agent after seq 1: %v", err)
+	}
+	if len(rest) != 1 || rest[0].Seq != 2 {
+		t.Fatalf("expected only seq 2 after cursor 1, got %v", rest)
+	}
+}
+
+func rlmEmitFixtureBody(seq int64) string {
+	return "rlm/v1 {\"kind\":\"emit\",\"body\":\"sig-" + strconv.FormatInt(seq, 10) + "\"}"
 }
 
 func TestListRunsByOwnerStatesLoadsMatchingStatesOnly(t *testing.T) {
