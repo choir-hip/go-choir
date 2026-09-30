@@ -345,7 +345,15 @@ now:
     calls fail on the provider until upstream recovers; not the seam.
   '
   '
-  next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
+  next_action: 'STATUS 23:00Z — redrive chain (a2b87d69 + a7e31232 + 08a76896
+    + 766b3a53 + 37882e1d) DEPLOYED to staging, guest epoch 979 live on
+    37882e1d. cfa90b87 obligation confirmed open (work item 7be3d1de,
+    bound run 362febb2 passivated). Salted dispatch is queued behind a
+    279+ dead-wake serial drain (discharged obligations re-armed by the
+    migration, each disposing on ErrNoPendingActorOccurrence). BLOCKED:
+    unstrand confirmation pending drain + provider chatgpt circuit-open
+    recovery. M-SUB/M1/M0a deployed proofs all share this gate.
+
     and fixed: exhausted restart recasts live-locked the guest. "recast
     attempts exhausted" returned a transient error, so the actor
     dispatcher re-delivered the reconcile occurrence forever (every ~2-4s
