@@ -250,17 +250,24 @@ now:
     action can never satisfy -> every texture audit append aborted
     "lifecycle receipt join unavailable"; the tape silently dropped the
     whole texture audit trail since ~Aug 20. Fix 0a03783b maps
-    entry.Action->causal kind. Remaining host fault: owner/ops capacity
-    action (platform-dolt memory cap / tuning / larger box). M2/M3/M5
-    remain dependency-blocked (M0a/M1 unsettled).'
-  next_action: 'owner/ops: cap or tune platform-dolt memory (or scale the
-    box) so the OOM-killer stops killing the retained-computer VM; that is
-    the single gate for every deployed_proof item. Meanwhile POST
-    /internal/vmctl/refresh is the non-destructive route-recovery between
-    reboots. When vmctl stays ok and deployed_commit>=9e3d6948 with a
-    stable guest: M-SUB emit proofs -> M0a controlled-comparison verify ->
-    deletion commit -> M1 tape -> M2/M3/M5. Station recon done in
-    M5/M2/M3 files (Recon 2026-09-30 notes).'
+    entry.Action->causal kind. THIRD fault surfaced 13:05 (the prompt-bar
+    submit 500): "computer event projection repair required" — an OOM-kill
+    mid-append committed the platform CAS but killed the embedded finalize,
+    so platformHead != embeddedHead and the appender refuses all appends.
+    Recovery = one guest boot with RUNTIME_RECOVERY_REPLAY_ONLY=1
+    (autoputer/run.go runReplayPhase re-materializes embedded projection
+    from canonical — non-destructive, vmctl/ops action). Net: the OOM is the
+    ROOT capacity fault; the stale route + the projection wedge + the audit
+    misroute are its fallout. All code fixes landed+green; M2/M3/M5 remain
+    dependency-blocked (M0a/M1 unsettled).'
+  next_action: 'owner/ops: (a) cap/tune platform-dolt memory or scale Node B
+    so the kernel OOM-killer stops killing the retained VM; (b) run one
+    RUNTIME_RECOVERY_REPLAY_ONLY boot to re-materialize the wedged event
+    projection. Then (deployed_commit >= audit-fix SHA, stable guest):
+    M-SUB emit proofs -> M0a controlled-comparison verify -> deletion
+    commit -> M1 typed-commitment tape -> M2/M3/M5. POST
+    /internal/vmctl/refresh recovers the route between reboots. Station
+    recon done in M5/M2/M3 files (Recon 2026-09-30 notes).'
 
 receipts: []
 
