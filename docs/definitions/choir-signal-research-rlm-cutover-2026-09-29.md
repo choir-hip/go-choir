@@ -2,21 +2,36 @@
 definition_version: 4
 definition_id: choir-signal-research-rlm-cutover-2026-09-29
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-jev-supervision-metamission-2026-09-29
+
+# review binds THIS file at its fixed commit (stamped at promotion).
+review:
+  reviewer: 'agentic-consensus authoring panel (codex, claude, devin,
+    gpt6-sol, gemini38) — send_back round resolved'
+  frozen_ref: 'pending-stamp'
+  verdict: accept
+  evidence_ref: '.agentic-consensus/agentic-consensus-20260929-215420/'
 
 start:
   captured_at: '2026-09-29T22:40:00Z'
   source:
     canonical_ref: main@ac54317c
-    deploy_identity: staging https://choir.news (post-M-SUB build)
+    deploy_identity: 'staging https://choir.news build.commit=b85af274
+      (observed at capture; post-M-SUB identity recorded in now at promotion)'
   worktrees:
     - path: /Users/wiz/go-choir
-      status: clean
-      class: source
+      status: dirty
+      class: goal_candidate
       owner: this session
-      touch: read_write
+      touch: goal_owned
       recovery: git
+    - path: docs/desk-rlm-rectification-plan-2026-09-23.md
+      status: dirty
+      class: other_agent_wip
+      owner: other agent
+      touch: forbidden
+      recovery: 'leave in place; never include in station commits'
   predecessor:
     mission: M-SUB (signal plane) — emits + notices must exist before the
       research loop can use them
@@ -55,9 +70,16 @@ finish:
         broker refuses with a budget error returned into the cell'
       proves: 'governance moved, not deleted'
       evidence_class: deployed proof
-  rollback: 'two-commit phasing (verbs+emission first, deletion second)
-    gives a rollback point; git revert the deletion commit restores the
-    typed surface'
+    - action: 'fetch the deployed research model-request tool schema after
+        the deletion commit; assert exactly {desk_go_eval} and verify the
+        active prompt overlays reference only retained in-cell capabilities'
+      proves: 'one-tool doctrine landed, overlays consistent'
+      evidence_class: deployed proof + static analysis
+  rollback: 'two-commit phasing (verbs+emission first while the typed
+    surface remains, deletion second) gives a rollback point; rollback of
+    the first commit names the broker+budget changes and keeps the typed
+    surface compatible until it can also revert safely; git revert the
+    deletion commit restores the typed surface'
   landing:
     required: true
     environment: staging
@@ -79,8 +101,9 @@ homotopy:
     for days/weeks continuously is the far end'
 
 boundaries:
-  mutation_class: red (desk tool surface + broker actions + prompts +
-    protected research surface)
+  mutation_class: red
+  # red: desk tool surface + broker actions + prompts + protected
+  # research surface.
   authority_sources: [owner direction (all four desks = one tool,
     desk_go_eval), orientation doc M0a rows, panel adjudication]
   must_preserve:
@@ -97,8 +120,11 @@ boundaries:
     - 'rlm_research_runtime.yaml + promptstore/defaults/research.yaml'
 
 now:
-  status: pending
-  slice: 'not started — promote after M-SUB settles'
+  status: blocked_incomplete
+  slice: 'reconcile M-SUB acceptance; enumerate every current research
+    tool + its budget hook; freeze the parity checklist; then author
+    choir.WebSearch/FetchURL/evidence-ops verbs on the typed surface
+    (two-commit phase 1)'
   source_ref: main@ac54317c
   deploy_identity: unknown
   candidate:
@@ -113,11 +139,13 @@ now:
     claim: 'If research authors a Go cell looping search→emit→deepen, the
       123k-input-token serial tool-call pattern disappears and the
       research leg drops from ~470s to a small multiple of per-call
-      latency'
+      latency, normalized per committed evidence item'
     test: 'QA repro timing on the cutover build: research leg duration +
-      input-token count vs the b85af274 baseline'
-    edge: 'frame_lock — "turn" semantics change; the metric must compare
-      work done, not calls made'
+      input-token count vs the M0 baseline
+      (docs/evidence/m0-qa-baseline-timings-*.json)'
+    edge: frame_lock
+    # "turn" semantics change; the metric must compare work done, not
+    # calls made — normalize per committed evidence item
     delta_o: 'per-leg timing records from M0 baseline vs cutover build'
     scope_if_supported: 'research desk performance + iterative-research
       shape'

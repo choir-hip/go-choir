@@ -2,21 +2,36 @@
 definition_version: 4
 definition_id: choir-signal-model-policy-rlm-module-2026-09-29
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-jev-supervision-metamission-2026-09-29
+
+# review binds THIS file at its fixed commit (stamped at promotion).
+review:
+  reviewer: 'agentic-consensus authoring panel (codex, claude, devin,
+    gpt6-sol, gemini38) — send_back round resolved'
+  frozen_ref: 'pending-stamp'
+  verdict: accept
+  evidence_ref: '.agentic-consensus/agentic-consensus-20260929-215420/'
 
 start:
   captured_at: '2026-09-29T22:40:00Z'
   source:
     canonical_ref: main@ac54317c
-    deploy_identity: staging https://choir.news (post-M0a/M1)
+    deploy_identity: 'staging https://choir.news build.commit=b85af274
+      (observed at capture; post-M0a/M1 identity recorded in now at promotion)'
   worktrees:
     - path: /Users/wiz/go-choir
-      status: clean
-      class: source
+      status: dirty
+      class: goal_candidate
       owner: this session
-      touch: read_write
+      touch: goal_owned
       recovery: git
+    - path: docs/desk-rlm-rectification-plan-2026-09-23.md
+      status: dirty
+      class: other_agent_wip
+      owner: other agent
+      touch: forbidden
+      recovery: 'leave in place; never include in station commits'
   predecessor:
     mission: 'M0a (research RLM — evals must measure the post-deletion
       surface) + M1 (scored evals need typed commitments; raw
@@ -38,23 +53,31 @@ finish:
     QA fixture/golden set; conductor stays policy-routing only'
   acceptance:
     - action: 'a texture cell changes its own model persistently; the
-        next turn runs the new model'
-      proves: 'persistent per-desk model policy'
+        next turn runs the new model; a restart/rewarm of the computer
+        keeps the selected model effective'
+      proves: 'persistent per-desk model policy is durable'
       evidence_class: deployed proof
     - action: 'a research cell casts a sub-RLM with a model chosen at
-        call time; the sub-RLM runs that model'
-      proves: 'parametric model selection'
+        call time; the sub-RLM runs that model; the documented default
+        fallback path works when no override is given'
+      proves: 'parametric model selection with safe fallback'
       evidence_class: deployed proof
-    - action: 'an eval matrix runs N model/effort configs as parallel
-        RLM casts and emits a score-matrix artifact'
+    - action: 'on the deployed M2 build, run N model/effort configs
+        through the eval-cast surface as parallel RLM casts without
+        another deployment; the score-matrix artifact records per-cast
+        model identities + timing/token/cost'
       proves: 'the eval surface exists as the instrument M3 needs'
       evidence_class: deployed proof
     - action: 'conductor routes prompt-bar intent to the right appagent
         without touching model selection'
       proves: 'conductor = policy routing, not model routing'
       evidence_class: deployed proof
-  rollback: 'module is additive; revert restores static model-policy.toml;
-    parametric callers fall back to default'
+  rollback: 'capture previous effective per-desk policies before revert;
+    owner-reachable per-desk policy reset to toml default without
+    redeploy; explicitly disable/restore durable overrides; drain or
+    safely settle in-flight parametric casts; verify default model
+    selection after rollback; module is additive — revert restores
+    static model-policy.toml'
   landing:
     required: true
     environment: staging
@@ -74,8 +97,8 @@ homotopy:
     parametric at cast time → full eval-driven selection'
 
 boundaries:
-  mutation_class: red (model/provider selection is a protected routing
-    surface)
+  mutation_class: red
+  # red: model/provider selection is a protected routing surface.
   authority_sources: [owner direction 2026-09-29 (model policy = RLM
     module; conductor = intent classifier only), orientation doc]
   must_preserve:
@@ -94,9 +117,11 @@ boundaries:
     - 'per-desk run profile assembly'
 
 now:
-  status: pending
-  slice: 'not started — promote after M0a (research-surface validity)
-    and M1 (scored evals) settle'
+  status: blocked_incomplete
+  slice: 'reconcile M0a/M1 receipts and inspect the existing model-policy
+    manager, overlays, and cast selection path; then author choir
+    model-policy module verbs: persistent per-desk policy storage and
+    parametric cast override'
   source_ref: main@ac54317c
   deploy_identity: unknown
   candidate:
@@ -111,9 +136,13 @@ now:
     claim: 'If desks own model policy (persistent + parametric), then
       research hill-climbing becomes a desk-level operation, not a
       platform deploy — evals run as casts, results feed commitments'
-    test: 'M3 runs a multi-model eval matrix without any redeploy'
-    edge: 'missing_oracle — whether per-cast model override breaks
-      anything (billing, rate limits, gateway auth)'
+    test: 'on the deployed M2 build: change a desk''s persistent model,
+      observe its next turn and restart behavior, run a parametric
+      sub-cast and inspect the model actually charged/used, run the eval
+      matrix with no redeploy'
+    edge: missing_oracle
+    # per-cast override may break billing/rate limits/gateway auth —
+    # the test must surface that
     delta_o: 'first parametric cast observed with correct model'
     scope_if_supported: 'all desks + sub-RLM casts'
     status: proposed

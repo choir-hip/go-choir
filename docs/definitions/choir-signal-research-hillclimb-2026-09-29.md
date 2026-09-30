@@ -2,21 +2,36 @@
 definition_version: 4
 definition_id: choir-signal-research-hillclimb-2026-09-29
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-jev-supervision-metamission-2026-09-29
+
+# review binds THIS file at its fixed commit (stamped at promotion).
+review:
+  reviewer: 'agentic-consensus authoring panel (codex, claude, devin,
+    gpt6-sol, gemini38) — send_back round resolved'
+  frozen_ref: 'pending-stamp'
+  verdict: accept
+  evidence_ref: '.agentic-consensus/agentic-consensus-20260929-215420/'
 
 start:
   captured_at: '2026-09-29T22:40:00Z'
   source:
     canonical_ref: main@ac54317c
-    deploy_identity: staging https://choir.news (post-M2)
+    deploy_identity: 'staging https://choir.news build.commit=b85af274
+      (observed at capture; post-M2 identity recorded in now at promotion)'
   worktrees:
     - path: /Users/wiz/go-choir
-      status: clean
-      class: source
+      status: dirty
+      class: goal_candidate
       owner: this session
-      touch: read_write
+      touch: goal_owned
       recovery: git
+    - path: docs/desk-rlm-rectification-plan-2026-09-23.md
+      status: dirty
+      class: other_agent_wip
+      owner: other agent
+      touch: forbidden
+      recovery: 'leave in place; never include in station commits'
   predecessor:
     mission: M2 (model-policy module + eval surface + QA fixtures)
   observed_artifact:
@@ -28,27 +43,35 @@ start:
       (the World-Wire seed).'
 
 finish:
-  deliver: 'Research tuning is evidence-driven: a multi-model/effort
-    matrix over the QA prompt family produces measured prompt, repl-state,
-    and search-API-ergonomics decisions; the iterative-research pattern
-    (search→emit→deepen, texture revising per update) is the tuned
-    operating shape.'
-  artifact: 'eval matrix over ≥3 model/effort configs on the QA fixture;
+  deliver: 'Research tuning is evidence-driven: a frozen QA fixture +
+    groundedness/attribution rubric committed BEFORE any matrix run;
+    a multi-model/effort matrix over the fixture produces measured
+    prompt, repl-state, and search-API-ergonomics decisions; the
+    iterative-research pattern (search→emit→deepen, texture revising
+    per update) is the tuned operating shape.'
+  artifact: 'frozen QA fixture + named quality rubric; eval matrix over
+    ≥3 model/effort configs with per-config quality + latency + cost;
     tuned research prompt + repl-state + search-API ergonomics;
     measured iterative-research pattern with evidence streaming'
   acceptance:
-    - action: 'eval matrix runs the QA fixture across model/effort
-        configs; the score-matrix artifact records quality + latency +
-        token cost per config'
-      proves: 'research tuning is measured, not guessed'
+    - action: 'the score-matrix artifact names the frozen rubric and
+        records quality + latency + token cost per config; an
+        independently assessed before/after comparison under that rule
+        states what result would refute improvement'
+      proves: 'research tuning is measured against a frozen rubric, not
+        post-hoc'
       evidence_class: deployed proof
     - action: 'a research activation sustains the search→emit→deepen
         loop across multiple evidence deliveries to texture, with
-        texture revising per update'
-      proves: 'the iterative-research pattern works under tuning'
+        texture revising per update; each texture revision cites a
+        distinct research emission seq (no cosmetic-churn versions)'
+      proves: 'the iterative-research pattern works under tuning without
+        version-spam'
       evidence_class: deployed proof
   rollback: 'tuning is config + prompt; revert restores prior prompt/
-    config; the eval surface stays'
+    config; restore captured effective per-desk runtime policy via the
+    supported module path (M2) and observe a turn using it; the eval
+    surface stays'
   landing:
     required: true
     environment: staging
@@ -69,21 +92,27 @@ homotopy:
     matrix → matrix + continuous-research-day-scale evals'
 
 boundaries:
-  mutation_class: orange (prompt + config changes; not kernel)
+  mutation_class: orange
+  # orange: prompt + config changes; no kernel or canonical-authority
+  # mutation. choir.* verb signature changes would reclassify red.
   authority_sources: [owner direction (research tuning needs multi-model
     evals), orientation doc M3 row]
   must_preserve:
     - 'evals measure the post-M0a surface (desk_go_eval only)'
     - 'iterative-research shape — not a one-shot benchmark'
-    - 'quality is measured alongside speed (groundedness, attribution)'
+    - 'quality is measured alongside speed (groundedness, attribution)
+      under a frozen rubric'
   excluded:
     - 'substrate changes (M-SUB/M0a already landed)'
     - 'World Wire fanout'
+    - 'choir.* verb signature changes (reclassify red if needed)'
   protected_surfaces: []
 
 now:
-  status: pending
-  slice: 'not started — promote after M2 settles'
+  status: blocked_incomplete
+  slice: 'reconcile M2 receipts; freeze the QA fixture, the
+    groundedness/attribution rubric, the baseline, and the comparison
+    rule BEFORE running any tuning candidate; then run the eval matrix'
   source_ref: main@ac54317c
   deploy_identity: unknown
   candidate:
@@ -94,14 +123,16 @@ now:
     digest: none
     scope: []
   conjecture:
-    id: iterative-beats-serial
-    claim: 'If research runs the search→emit→deepen Go-cell loop instead
-      of the serial tool-call loop, then quality-per-time rises and the
-      QA repro''s 7.7-minute dead leg collapses'
-    test: 'eval matrix on the QA fixture + a sustained iterative-research
-      run'
-    edge: 'resource — a tuned prompt may still be slow if the fixture is
-      unrepresentative'
+    id: tuned-config-beats-default
+    claim: 'a tuned model/effort/prompt config beats the M0a default on
+      quality-per-time on the frozen fixture — the claim is about tuning,
+      not the iterative-vs-serial shape (M0a''s claim)'
+    test: 'frozen-rubric before/after on the QA fixture + a sustained
+      iterative-research run; matrix existence alone does NOT support
+      the claim'
+    edge: missing_oracle
+    # the fixture may be unrepresentative — a tuned prompt can still be
+    # slow on real prompts
     delta_o: 'expand the QA fixture; measure on more prompt families'
     scope_if_supported: 'research desk operating shape; seeds World Wire
       continuous research'
@@ -119,13 +150,15 @@ now:
   belief:
     believed_state: 'the serial tool loop was the dominant cost; the
       iterative pattern plus model choice should collapse it'
-    main_uncertainty: 'what the quality bar is — groundedness rubric for
-      the eval matrix is unstated'
-    next_observation: 'first eval-matrix score artifact'
-  blocker_or_risk: 'depends on M2; quality rubric for evals needs
-    definition at station time'
-  next_action: 'after M2: author the QA fixture, run the eval matrix,
-    tune prompt+repl+search ergonomics, prove the iterative pattern'
+    main_uncertainty: 'the groundedness rubric — must be frozen in the
+      first slice, not discovered after the matrix'
+    next_observation: 'first eval-matrix score artifact under the frozen
+      rubric'
+  blocker_or_risk: 'depends on M2; quality rubric freeze is the first
+    move, not a deferred detail'
+  next_action: 'after M2: commit the QA fixture + frozen rubric, run the
+    eval matrix, tune prompt+repl+search ergonomics, prove the
+    iterative pattern'
 
 receipts: []
 ---
