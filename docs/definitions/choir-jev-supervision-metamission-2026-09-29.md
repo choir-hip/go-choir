@@ -261,30 +261,30 @@ now:
     fault is the OOM itself + the stale vmctl route it re-mints (502
     "resolve user autoputer"); audit fix 0a03783b is merged but its deploy
     was concurrency-cancelled twice — build still 9e3d6948.'
-  next_action: 'STATUS 13:45Z — audit fix 0a03783b DEPLOYED (build.commit
-    now 0a03783b, vmctl ok). Projection wedge REPAIRED (replay ran). M1
-    typed-commitment proof ATTEMPTED: run start landed trajectory
-    b9f7f256 + a fresh 0c228ea4; both work items stay open/unexecuted —
-    the guest rebooted mid-flight (run passivated) and post-deploy the
-    texture reconcile is starved by the engineering desk''s recast storm
-    (every OOM-passivated engineering attempt now spam-loops "restart
-    recast: co-super assignment invalid transition" / "recast attempts
-    exhausted"). texture create/revise also time out — no desk write is
-    durable right now. Remaining gates (owner/ops, not code): (a) cap/tune
-    platform-dolt memory or scale Node B so OOM stops re-minting the VM
-    every ~20-40min; (b) a healthy window where ONE texture/engineering
-    desk write completes so a work item actually executes. Then M1
-    typed-commitment tape -> M0a verify -> deletion -> M2/M3/M5.'
+  next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
+    and fixed: exhausted restart recasts live-locked the guest. "recast
+    attempts exhausted" returned a transient error, so the actor
+    dispatcher re-delivered the reconcile occurrence forever (every ~2-4s
+    x2 dead assignments), saturating CPU and starving every other desk
+    reconcile — why the M1 texture work item never got a slot and
+    texture create/revise timed out. The exhausted branch already fails
+    the bound selfdev operation durably, so it now returns clean
+    (occurrence incorporated, loop stops). Fix 886e5ce1 (impl+verify
+    branches), agentcore+actor+textureowner green. DEPLOYING.
+    Audit fix 0a03783b already live; projection wedge repaired. Remaining
+    gate = OOM capacity (platform-dolt 28GB on a 31GB box re-mints the VM
+    every ~20-40min). Once 886e5ce1 deploys AND a healthy window holds:
+    M1 typed-commitment tape -> M0a verify -> deletion -> M2/M3/M5.'
   receipts:
   - id: m1-commit-proof-attempt-2026-09-30
     boundary: execute
     commit_or_artifact: 'trajectories b9f7f256-07ad + 0c228ea4-6fd5 on
-      computer-03335285; work items open, never executed (passivate on
-      reboot + recast-storm starvation)'
+      computer-03335285; work items open, never executed — run passivated
+      on reboot, then the recast live-lock starved the texture reconcile.'
     proof_refs: [prompt-bar run start accepted 2026-09-30T13:32Z + 13:42Z]
     cannot_prove: 'a desk cell staging precommit/resolve/disagreement
-      intent -> choir.commitment_record objects on the OG ledger, because
-      no desk write survives the OOM/reboot/recast-storm window.'
+      intent -> choir.commitment_record objects on the OG ledger; blocked
+      by the recast live-lock (fixed 886e5ce1) + OOM reboot cycle.'
 
 receipts: []
 
