@@ -13,7 +13,30 @@ the rules these fields serve.
 
 ```yaml
 ---
-definition_version: 3
+definition_version: 4
+
+# readiness ladder — how far this file is from execution. The further from
+# execution, the less likely finalization; non-executable files are still
+# valuable as durable intention documentation.
+readiness: intent | drafted | reviewed | executable
+
+# review — latest authoring-gate receipt for THIS file; required before
+# promotion to executable under continuous authority.
+review:
+  reviewer: <panel/agents that reviewed this file, or none>
+  frozen_ref: <content digest reviewed>
+  verdict: accept | send_back | escalate | none
+  evidence_ref: <review output path or none>
+
+# metamission — present when this file is an ordered station set, not a
+# single station. now.slice carries the live station pointer.
+metamission:
+  stations:
+    - id: <station id>
+      path: <goal file path>
+      readiness: intent | drafted | reviewed | executable
+      status: pending | working | complete | superseded
+      depends_on: [<station ids>]
 
 start:
   captured_at: <RFC-3339 timestamp>
@@ -201,6 +224,32 @@ The compact resumable picture — three lines, not a second ledger.
 One receipt per closed boundary. `landing` is present only when
 `finish.landing.required: true`. Do not add receipts for dispatch, heartbeat,
 dashboard refresh, or routine CI poll.
+
+### `readiness` — the execution-distance ladder
+
+`intent`/`drafted`/`reviewed`/`executable`. `executable` requires
+`now.status: working` plus named authority — an owner statement or the
+containing metamission's `now.slice` pointing at this station under an
+owner-ratified spine. A non-executable file is not dead work: it is the
+durable record of an intention, kept precisely because early intent
+documentation is what future planning reads. Promotions are recorded in
+`review`.
+
+### `review` — authoring-gate receipt
+
+One entry — the latest review of this file (not of landed code).
+`frozen_ref` binds the verdict to a content digest; a `reviewed` file
+whose digest changed since its `accept` is `drafted` again. This is the
+authoring gate; the landed-candidate consensus gate at `complete` is a
+separate, unchanged obligation for behavior change.
+
+### `metamission` — ordered station set
+
+Present only on a spine file. `stations[]` lists each station's goal file
+path, readiness, status, and `depends_on`. `now.slice` names the live
+station. The spine file never absorbs per-station detail; a station's
+`now` is its own authority. Spine settles `complete` only when every
+station is `complete` or `superseded`.
 
 ### `weak_measures` (optional)
 

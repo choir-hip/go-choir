@@ -185,6 +185,56 @@ now         the one mutable current-state card (status, slice, candidate,
 receipts    compact refs for closed boundaries
 ```
 
+## Readiness — how far a goal file is from execution
+
+`readiness` replaces any draft/not-draft distinction. The further a file
+sits from execution, the less likely it is ever finalized — so readiness
+is a ladder, and non-executable files are still valuable: they are the
+durable documentation of intention. The authoring agent sets `readiness`;
+each promotion is recorded:
+
+```text
+intent       a direction, not yet shaped — exists so the idea isn't lost;
+             do not execute
+drafted      authored to the schema; unreviewed; not executable
+reviewed     passed agentic-consensus review of THIS file, bound to a
+             frozen digest in `review`; coherent and authority-checked
+executable   authorized to run: `readiness: executable` +
+             `now.status: working` + named authority (owner statement, or
+             the containing metamission's `now.slice` pointing at it
+             under an owner-ratified spine)
+```
+
+**Continuous-authority rule (owner 2026-09-29):** work proceeds
+continuously without per-station owner approval when the file passed
+agentic consensus and is coherent — the metamission's spine ratification
+plus per-file consensus review is the authorization, not a per-station
+ask. Owner approval is reserved for genuinely irreversible or
+authority-changing steps.
+
+## Metamission — an ordered set of goal files under one spine
+
+A metamission is itself a throughline goal file: its `finish` is the
+ordered station set landed, its `now.slice` carries the live station
+pointer, and its `metamission` block lists stations with path, readiness,
+and dependencies. It is the durable authority for multi-station work —
+it never absorbs per-station detail. Each station has its own `/goal`
+file. The rectification spine
+(`definitions/choir-rectification-spine-2026-09-25.md`) is the precedent.
+A metamission settles `complete` only when every station is `complete`
+or explicitly `superseded`.
+
+## Review — the per-file authoring receipt
+
+`review` records the latest file-review: `reviewer` (panel or agent),
+`frozen_ref` (digest reviewed), `verdict` (`accept`/`send_back`/
+`escalate`), `evidence_ref`. A `reviewed` file with `verdict: accept`
+bound to its current digest is continuous-authority-executable under the
+rule above. This is the file-authoring gate; the landed-candidate
+consensus gate at `complete` is unchanged and still mandatory for
+behavior change.
+
+
 ## The Circuit
 
 One pass per control interval. Same circuit at every scale; only budgets
