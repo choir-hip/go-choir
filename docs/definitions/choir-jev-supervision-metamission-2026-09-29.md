@@ -2,9 +2,12 @@
 definition_version: 4
 definition_id: choir-jev-supervision-metamission-2026-09-29
 execution_mode: mission_orchestrator
-readiness: reviewed
+readiness: executable
 
 # review binds THIS file at its fixed commit (stamped at promotion).
+# executable: now.status=working + named authority (owner-ratified spine
+# 2026-09-29 + authoring-panel accept). Stations promote per their own
+# readiness as dependencies clear.
 review:
   reviewer: 'agentic-consensus authoring panel (codex, claude, devin,
     gpt6-sol, gemini38) — send_back round resolved'
