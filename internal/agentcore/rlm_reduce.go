@@ -30,6 +30,12 @@ const rlmEnvelopeV1 = "rlm/v1 "
 // cursor per activation channel. Latest entry wins; absence means zero.
 const rlmInboxCursorKind = types.RunMemoryEntryKind("rlm_inbox_cursor")
 
+const (
+	cellFateSuccess = "success"
+	cellFateFailure = "failure"
+	cellFateTimeout = "timeout"
+)
+
 // rlmMailbox is the durable surface reduction needs: the Dolt-backed channel
 // log for envelopes. *Runtime implements it directly.
 type rlmMailbox interface {
@@ -66,12 +72,14 @@ type ReducedIntent struct {
 }
 
 // ReductionReceipt is the two-phase ack: Committed is true only when every
-// intent persisted and the cursor advanced. Failed cells return Committed
-// false with the entering cursor unchanged.
+// intent persisted and the cursor advanced. Fate records an exit separately
+// from tray commitment, so failures terminate the reducer without
+// acknowledging unread mail.
 type ReductionReceipt struct {
 	Intents   []ReducedIntent
 	Cursor    uint64
 	Committed bool
+	Fate      string
 }
 
 // spawnRoleAllowed enforces role-bounded fan-out: research desks cannot mint
@@ -325,13 +333,20 @@ func intentIdempotencyKey(scope ReductionScope, localID, to, content string) str
 	return "rlm:" + cell + ":" + strings.TrimSpace(localID) + ":" + hex.EncodeToString(sum[:6])
 }
 
-// ReduceCellIntents commits one cell's staged tray. cellSucceeded false (or a
-// poisoned-cell result) persists nothing and returns the entering cursor: the
-// durable cursor advances only upon successful reduction, so failed cells
-// never acknowledge unread mail.
+// ReduceCellIntents commits one cell's staged tray. A failed cell never
+// commits its tray or cursor acknowledgement, but it does commit a separate
+// cell_fate record so recovery can distinguish a dead cell from an absent
+// result.
 func ReduceCellIntents(ctx context.Context, mb rlmMailbox, scope ReductionScope, intents []yaegikernel.StagedIntent, cellSucceeded bool) (ReductionReceipt, error) {
 	if !cellSucceeded {
-		return ReductionReceipt{Cursor: scope.Cursor}, nil
+		st, ok := cellFateStoreForMailbox(mb)
+		if !ok {
+			return ReductionReceipt{Cursor: scope.Cursor}, fmt.Errorf("reduce: cell fate store unavailable")
+		}
+		if err := RecordCellFate(ctx, st, scope, cellFateFailure, "cell returned unsuccessfully"); err != nil {
+			return ReductionReceipt{Cursor: scope.Cursor}, err
+		}
+		return ReductionReceipt{Cursor: scope.Cursor, Fate: cellFateFailure}, nil
 	}
 	if err := validateCellIntents(scope, intents); err != nil {
 		return ReductionReceipt{Cursor: scope.Cursor}, err
@@ -345,7 +360,25 @@ func ReduceCellIntents(ctx context.Context, mb rlmMailbox, scope ReductionScope,
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: seq, Kind: in.Kind})
 	}
 	receipt.Committed = true
+	st, ok := cellFateStoreForMailbox(mb)
+	if !ok {
+		return ReductionReceipt{Cursor: scope.Cursor}, fmt.Errorf("reduce: cell fate store unavailable")
+	}
+	if err := RecordCellFate(ctx, st, scope, cellFateSuccess, "tray committed"); err != nil {
+		return ReductionReceipt{Cursor: scope.Cursor}, err
+	}
+	receipt.Fate = cellFateSuccess
 	return receipt, nil
+}
+
+func cellFateStoreForMailbox(mb rlmMailbox) (rlmCursorStore, bool) {
+	if st, ok := mb.(rlmCursorStore); ok {
+		return st, true
+	}
+	if rt, ok := mb.(*Runtime); ok && rt.store != nil {
+		return rt.store, true
+	}
+	return nil, false
 }
 
 // stagedIntentEnvelope builds the durable envelope for an intent. Keeping the
@@ -494,6 +527,75 @@ func CommitInboxCursor(ctx context.Context, st rlmCursorStore, ownerID, runID, c
 	return err
 }
 
+// CellFate returns the first terminal disposition recorded for cellID. A
+// deterministic entry identity gives timeout and late worker-return paths one
+// winner even when they race across a restart.
+func CellFate(ctx context.Context, st rlmCursorStore, ownerID, runID, cellID string) (string, bool, error) {
+	entries, err := st.ListRunMemoryEntries(ctx, ownerID, runID)
+	if err != nil {
+		return "", false, err
+	}
+	for _, entry := range entries {
+		if entry.Kind != types.RunMemoryEntryCellFate {
+			continue
+		}
+		recordedCell, _ := entry.Details["cell_id"].(string)
+		if recordedCell != cellID {
+			continue
+		}
+		fate, _ := entry.Details["fate"].(string)
+		return fate, fate != "", nil
+	}
+	return "", false, nil
+}
+
+// RecordCellFate appends the orthogonal terminal result for one cell. It never
+// writes staged intents or advances the inbox cursor. The deterministic entry
+// ID makes duplicate deadline delivery and a late poisoned-worker result
+// converge on the first durable fate.
+func RecordCellFate(ctx context.Context, st rlmCursorStore, scope ReductionScope, fate, reason string) error {
+	cellID := stableCellID(scope)
+	if scope.RunID == "" || scope.OwnerID == "" || cellID == "" {
+		return fmt.Errorf("record cell fate: run, owner, and cell identity are required")
+	}
+	if recorded, found, err := CellFate(ctx, st, scope.OwnerID, scope.RunID, cellID); err != nil {
+		return fmt.Errorf("record cell fate: inspect existing fate: %w", err)
+	} else if found {
+		if recorded == fate {
+			return nil
+		}
+		return nil // first terminal fate wins
+	}
+	sum := sha256.Sum256([]byte(scope.OwnerID + "\x00" + scope.RunID + "\x00" + cellID))
+	entry := types.RunMemoryEntry{
+		EntryID: "cell-fate:" + hex.EncodeToString(sum[:]),
+		RunID: scope.RunID, OwnerID: scope.OwnerID, AgentID: scope.FromAgentID,
+		Kind: types.RunMemoryEntryCellFate,
+		Summary: fmt.Sprintf("cell fate %s for %s", fate, cellID),
+		Reason:  reason,
+		Details: map[string]any{
+			"cell_id": cellID, "channel_id": scope.ChannelID,
+			"cursor": scope.Cursor, "fate": fate,
+		},
+		CreatedAt: time.Now().UTC(),
+	}
+	if _, err := st.AppendRunMemoryEntry(ctx, entry); err == nil {
+		return nil
+	} else if recorded, found, inspectErr := CellFate(ctx, st, scope.OwnerID, scope.RunID, cellID); inspectErr == nil && found {
+		_ = recorded
+		return nil
+	} else {
+		return fmt.Errorf("record cell fate: append: %w", err)
+	}
+}
+
+func stableCellID(scope ReductionScope) string {
+	if cellID := strings.TrimSpace(scope.CellID); cellID != "" {
+		return cellID
+	}
+	return fmt.Sprintf("%s:%d", scope.RunID, scope.Cursor)
+}
+
 // path stays byte-identical then, and reduction is a no-op. rec and toolCtx
 // are retained so a staged Complete intent can author the assignment fate
 // (P3-settlement: the reducer is the single fate author).
@@ -563,7 +665,7 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 			ComputerID:  execCtx.ComputerID,
 			ReturnTo:    requester,
 			Cursor:      cursor,
-			CellID:      fmt.Sprintf("%s:%d", execCtx.RunID, cursor),
+			CellID:      cellIDForExecution(execCtx, cursor),
 		},
 		ledger:    rt.store,
 		inbox:     inbox,
@@ -623,7 +725,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 			ComputerID:  execCtx.ComputerID,
 			ReturnTo:    requester,
 			Cursor:      cursor,
-			CellID:      fmt.Sprintf("%s:%d", execCtx.RunID, cursor),
+			CellID:      cellIDForExecution(execCtx, cursor),
 		},
 		ledger:    rt.store,
 		inbox:     inbox,
@@ -652,9 +754,40 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 	if recovered, err := r.recoverPartialActCommit(ctx, intents, highWater); err != nil {
 		return err
 	} else if recovered {
+		return r.recordFate(ctx, cellFateSuccess, "tray recovered")
+	}
+	if err := r.commitTray(ctx, intents, highWater); err != nil {
+		return err
+	}
+	return r.recordFate(ctx, cellFateSuccess, "tray committed")
+}
+
+// abort records a terminal cell disposition without touching the staged tray
+// or inbox cursor. Callers use it for worker errors, transport kills, and
+// deadline cancellation before returning the original cell error.
+func (r *rlmCallReduction) abort(ctx context.Context, fate, reason string) error {
+	if r == nil || !r.active {
 		return nil
 	}
-	return r.commitTray(ctx, intents, highWater)
+	return r.recordFate(ctx, fate, reason)
+}
+
+func (r *rlmCallReduction) recordFate(ctx context.Context, fate, reason string) error {
+	if err := RecordCellFate(context.WithoutCancel(ctx), r.st, r.scope, fate, reason); err != nil {
+		return fmt.Errorf("reduce: record cell fate %s: %w", fate, err)
+	}
+	if r.receipt.Cursor == 0 {
+		r.receipt.Cursor = r.scope.Cursor
+	}
+	r.receipt.Fate = fate
+	return nil
+}
+
+func cellIDForExecution(execution toolregistry.ExecutionContext, cursor uint64) string {
+	if callID := strings.TrimSpace(execution.ToolCallID); callID != "" {
+		return "cell:" + execution.RunID + ":" + callID
+	}
+	return fmt.Sprintf("%s:%d", execution.RunID, cursor)
 }
 
 // recoverPartialActCommit is the named crash-recovery path for the reducer's

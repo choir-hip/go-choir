@@ -392,7 +392,12 @@ const (
 	// RunMemoryEntryCompaction stores an operational summary checkpoint and
 	// the first raw message retained after that checkpoint.
 	RunMemoryEntryCompaction RunMemoryEntryKind = "compaction"
+
+	// RunMemoryEntryCellFate is the durable terminal disposition of one
+	// dispatched RLM cell. It is reducer metadata, never provider context.
+	RunMemoryEntryCellFate RunMemoryEntryKind = "cell_fate"
 )
+
 
 // RunMemoryEntry is a durable, ordered context record for a runtime run. The
 // provider context is rebuilt from these entries, allowing runs to survive

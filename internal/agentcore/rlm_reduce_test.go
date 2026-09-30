@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -60,11 +61,12 @@ func TestCommitFreezeIntentRejectsDocumentTrajectoryBeforeExecutorEffect(t *test
 }
 
 // TestReduceFailedCellDropsTray is the two-phase ack gate at the reduction
-// boundary: a failed cell persists nothing and the durable cursor holds, so
-// unread mail is never acknowledged for work that did not happen.
+// boundary: a failed cell persists no staged intent and the durable cursor
+// holds, but a separate cell_fate terminates the reducer's wait.
 func TestReduceFailedCellDropsTray(t *testing.T) {
 	rt, _ := testRuntime(t)
 	scope := testReductionScope()
+	scope.CellID = "cell-failed-tray"
 	ctx := testReductionCtx(scope)
 	intents := []yaegikernel.StagedIntent{
 		{LocalID: "tray-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: "lost"},
@@ -73,8 +75,8 @@ func TestReduceFailedCellDropsTray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if receipt.Committed || len(receipt.Intents) != 0 || receipt.Cursor != scope.Cursor {
-		t.Fatalf("failed reduction = %+v, want inert", receipt)
+	if receipt.Committed || receipt.Fate != cellFateFailure || len(receipt.Intents) != 0 || receipt.Cursor != scope.Cursor {
+		t.Fatalf("failed reduction = %+v, want uncommitted failure fate", receipt)
 	}
 	msgs, _, err := rt.ChannelRead(scope.ChannelID, 0)
 	if err != nil {
@@ -85,6 +87,10 @@ func TestReduceFailedCellDropsTray(t *testing.T) {
 	}
 	if cursor, err := LoadInboxCursor(ctx, rt.store, scope.OwnerID, scope.RunID, scope.ChannelID); err != nil || cursor != 0 {
 		t.Fatalf("failed cell cursor = %d, %v", cursor, err)
+	}
+	fate, found, err := CellFate(ctx, rt.store, scope.OwnerID, scope.RunID, scope.CellID)
+	if err != nil || !found || fate != cellFateFailure {
+		t.Fatalf("failed cell fate = %q, found=%t, err=%v", fate, found, err)
 	}
 }
 
@@ -103,7 +109,7 @@ func TestReduceSuccessPersistsAndCommits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !receipt.Committed || len(receipt.Intents) != 2 {
+	if !receipt.Committed || receipt.Fate != cellFateSuccess || len(receipt.Intents) != 2 {
 		t.Fatalf("success receipt = %+v", receipt)
 	}
 	inbox, highWater, err := AssembleCellInbox(ctx, rt, scope.ChannelID, scope.Cursor)
@@ -128,6 +134,130 @@ func TestReduceSuccessPersistsAndCommits(t *testing.T) {
 	// A later cell observes only newer mail: the cursor is a real fence.
 	if inbox2, _, err := AssembleCellInbox(ctx, rt, scope.ChannelID, highWater); err != nil || len(inbox2) != 0 {
 		t.Fatalf("post-cursor inbox = %+v, %v", inbox2, err)
+	}
+}
+
+func TestCellTerminalDeadlineRecordsTimeoutForRestartPassivatedCell(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	scope.ComputerID = rt.TextureComputerID()
+	scope.CellID = "cell-restart-passivated"
+	now := time.Now().UTC()
+	rec := &types.RunRecord{
+		RunID: scope.RunID, OwnerID: scope.OwnerID, ComputerID: scope.ComputerID,
+		AgentID: scope.FromAgentID, ChannelID: scope.ChannelID, State: types.RunPassivated,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := rt.store.CreateRun(context.Background(), *rec); err != nil {
+		t.Fatal(err)
+	}
+	content, err := encodeCellTerminalDeadline(rec, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.HandleCellTerminalDeadline(context.Background(), rec.OwnerID, rec.ComputerID, rec.AgentID, content); err != nil {
+		t.Fatal(err)
+	}
+	fate, found, err := CellFate(context.Background(), rt.store, scope.OwnerID, scope.RunID, scope.CellID)
+	if err != nil || !found || fate != cellFateTimeout {
+		t.Fatalf("passivated deadline fate = %q, found=%t, err=%v", fate, found, err)
+	}
+	if err := rt.HandleCellTerminalDeadline(context.Background(), rec.OwnerID, rec.ComputerID, rec.AgentID, content); err != nil {
+		t.Fatalf("duplicate deadline: %v", err)
+	}
+	entries, err := rt.store.ListRunMemoryEntries(context.Background(), scope.OwnerID, scope.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fates := 0
+	for _, entry := range entries {
+		if entry.Kind == types.RunMemoryEntryCellFate {
+			fates++
+		}
+	}
+	if fates != 1 {
+		t.Fatalf("cell fate entries = %d, want one", fates)
+	}
+}
+
+func TestArmCellTerminalDeadlineCarriesReductionIdentity(t *testing.T) {
+	rt, _ := testRuntime(t)
+	rt.kernelMode = true
+	deadline := time.Now().UTC().Add(time.Minute)
+	var gotKind, gotContent string
+	var gotNotBefore time.Time
+	rt.scheduleActor = func(_ context.Context, _, _, _, kind, content, _, _ string, notBefore time.Time) error {
+		gotKind, gotContent, gotNotBefore = kind, content, notBefore
+		return nil
+	}
+	rec := &types.RunRecord{
+		RunID: "run-cell-deadline", OwnerID: "user-alice", ComputerID: rt.TextureComputerID(),
+		AgentID: "research:deadline", ChannelID: "channel-deadline",
+	}
+	reduction := &rlmCallReduction{
+		active: true, rec: rec,
+		scope: ReductionScope{
+			RunID: rec.RunID, OwnerID: rec.OwnerID, ComputerID: rec.ComputerID,
+			FromAgentID: rec.AgentID, ChannelID: rec.ChannelID, CellID: "cell-deadline", Cursor: 7,
+		},
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	rt.armCellTerminalDeadline(ctx, reduction)
+	if gotKind != cellTerminalDeadlineUpdateKind || !gotNotBefore.Equal(deadline) {
+		t.Fatalf("scheduled cell deadline = kind=%q not_before=%v", gotKind, gotNotBefore)
+	}
+	got, err := decodeCellTerminalDeadline(gotContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RunID != rec.RunID || got.CellID != reduction.scope.CellID || got.Cursor != reduction.scope.Cursor ||
+		got.ChannelID != rec.ChannelID || got.AgentID != rec.AgentID {
+		t.Fatalf("scheduled cell deadline payload = %+v", got)
+	}
+}
+
+func TestCellTerminalDeadlineDoesNotCancelReactivatedRun(t *testing.T) {
+	rt, _ := testRuntime(t)
+	now := time.Now().UTC()
+	scope := testReductionScope()
+	scope.ComputerID = rt.TextureComputerID()
+	scope.CellID = "cell-restarted-generation"
+	rec := types.RunRecord{
+		RunID: scope.RunID, OwnerID: scope.OwnerID, ComputerID: scope.ComputerID,
+		AgentID: scope.FromAgentID, ChannelID: scope.ChannelID, State: types.RunRunning,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := rt.store.CreateRun(context.Background(), rec); err != nil {
+		t.Fatal(err)
+	}
+	content, err := encodeCellTerminalDeadline(&rec, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.State = types.RunPassivated
+	rec.UpdatedAt = now.Add(time.Second)
+	if err := rt.store.UpdateRun(context.Background(), rec); err != nil {
+		t.Fatal(err)
+	}
+	rec.State = types.RunRunning
+	rec.UpdatedAt = now.Add(2 * time.Second)
+	if err := rt.store.UpdateRun(context.Background(), rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.HandleCellTerminalDeadline(context.Background(), rec.OwnerID, rec.ComputerID, rec.AgentID, content); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := rt.store.GetRunByOwner(context.Background(), rec.OwnerID, rec.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.State != types.RunRunning {
+		t.Fatalf("reactivated run was cancelled by stale cell deadline: %+v", stored)
+	}
+	fate, found, err := CellFate(context.Background(), rt.store, scope.OwnerID, scope.RunID, scope.CellID)
+	if err != nil || !found || fate != cellFateTimeout {
+		t.Fatalf("reactivated cell fate = %q, found=%t, err=%v", fate, found, err)
 	}
 }
 

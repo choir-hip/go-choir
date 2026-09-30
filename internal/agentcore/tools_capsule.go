@@ -670,6 +670,12 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			if strings.TrimSpace(input.Source) == "" {
 				return "", fmt.Errorf("capsule_go_eval: source is required")
 			}
+			evalCtx := ctx
+			if input.TimeoutMS > 0 {
+				var cancel context.CancelFunc
+				evalCtx, cancel = context.WithTimeout(ctx, time.Duration(input.TimeoutMS)*time.Millisecond)
+				defer cancel()
+			}
 			req := capsule.GoEvalRequest{Source: input.Source, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS}
 			reduction := rlmReductionForCall(ctx, rt, toolCtx)
 			if reduction.active {
@@ -677,10 +683,29 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				// RLM prompt-as-variable: pending update_coagent records ride
 				// the request so choir.Updates() exposes them in the cell.
 				req.Updates = pendingCellUpdates(ctx, rt, toolregistry.ExecutionContextFrom(ctx))
+				rt.armCellTerminalDeadline(evalCtx, reduction)
 			}
-			result, err := toolCtx.Executor.GoEval(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
+			result, err := toolCtx.Executor.GoEval(evalCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
 			if err != nil {
+				if reduction.active {
+					fate := cellFateFailure
+					if evalCtx.Err() == context.DeadlineExceeded {
+						fate = cellFateTimeout
+					}
+					if fateErr := reduction.abort(context.Background(), fate, err.Error()); fateErr != nil {
+						return "", fateErr
+					}
+				}
 				return "", err
+			}
+			if reduction.active && result.Error != "" {
+				fate := cellFateFailure
+				if evalCtx.Err() == context.DeadlineExceeded {
+					fate = cellFateTimeout
+				}
+				if fateErr := reduction.abort(context.Background(), fate, result.Error); fateErr != nil {
+					return "", fateErr
+				}
 			}
 			if reduction.active && result.Error == "" {
 				if rerr := reduction.commit(ctx, result.Intents); rerr != nil {

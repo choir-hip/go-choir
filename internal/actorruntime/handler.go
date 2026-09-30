@@ -90,6 +90,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleChannelMessage(ctx, u, memory)
 	case "activation_budget_deadline":
 		return h.handleActivationBudgetDeadline(ctx, u, memory)
+	case "cell_terminal_deadline":
+		return h.handleCellTerminalDeadline(ctx, u, memory)
 	case "assigned_engineering_fate_deadline":
 		return h.handleAssignedEngineeringFateDeadline(ctx, u, memory)
 	case "delegated_assignment_spawn_deadline":
@@ -125,6 +127,17 @@ func (h *actorHandler) handleActivationBudgetDeadline(ctx context.Context, u act
 	}
 	if err := h.rt.HandleActivationBudgetDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("actorruntime: activation budget deadline: %w", err)
+	}
+	return memory, nil
+}
+
+func (h *actorHandler) handleCellTerminalDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve cell terminal deadline scope: %w", err)
+	}
+	if err := h.rt.HandleCellTerminalDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		return nil, fmt.Errorf("actorruntime: cell terminal deadline: %w", err)
 	}
 	return memory, nil
 }

@@ -16,6 +16,7 @@ import (
 
 const (
 	activationBudgetDeadlineUpdateKind         = "activation_budget_deadline"
+	cellTerminalDeadlineUpdateKind             = "cell_terminal_deadline"
 	assignedEngineeringFateDeadlineUpdateKind  = "assigned_engineering_fate_deadline"
 	delegatedAssignmentSpawnDeadlineUpdateKind = "delegated_assignment_spawn_deadline"
 	engineeringProgressDeadlineUpdateKind      = "engineering_progress_overdue_deadline"
@@ -39,6 +40,113 @@ type delegatedAssignmentSpawnDeadline struct {
 	Attempt      uint64 `json:"attempt"`
 	Objective    string `json:"objective"`
 	CandidateID  string `json:"candidate_id,omitempty"`
+}
+
+// cellTerminalDeadline is the complete reduction identity needed to terminate
+// a cell after its worker/process is gone. The durable actor wake is the timer;
+// no resident process is required to author the timeout fate.
+type cellTerminalDeadline struct {
+	RunID                 string `json:"run_id"`
+	OwnerID               string `json:"owner_id"`
+	ComputerID            string `json:"computer_id"`
+	AgentID               string `json:"agent_id"`
+	ChannelID             string `json:"channel_id"`
+	CellID                string `json:"cell_id"`
+	Cursor                uint64 `json:"cursor"`
+	ActivationUpdatedUnix int64  `json:"activation_updated_unix_nano"`
+	TrajectoryID          string `json:"trajectory_id,omitempty"`
+}
+
+func encodeCellTerminalDeadline(rec *types.RunRecord, scope ReductionScope) (string, error) {
+	if rec == nil {
+		return "", fmt.Errorf("cell terminal deadline: run is required")
+	}
+	content, err := json.Marshal(cellTerminalDeadline{
+		RunID: rec.RunID, OwnerID: rec.OwnerID, ComputerID: rec.ComputerID,
+		AgentID: rec.AgentID, ChannelID: scope.ChannelID, CellID: stableCellID(scope),
+		Cursor: scope.Cursor, ActivationUpdatedUnix: rec.UpdatedAt.UTC().UnixNano(),
+		TrajectoryID: trajectoryIDForRun(rec),
+	})
+	return string(content), err
+}
+
+func decodeCellTerminalDeadline(content string) (cellTerminalDeadline, error) {
+	var deadline cellTerminalDeadline
+	if err := json.Unmarshal([]byte(content), &deadline); err != nil {
+		return cellTerminalDeadline{}, err
+	}
+	deadline.RunID = strings.TrimSpace(deadline.RunID)
+	deadline.OwnerID = strings.TrimSpace(deadline.OwnerID)
+	deadline.ComputerID = strings.TrimSpace(deadline.ComputerID)
+	deadline.AgentID = strings.TrimSpace(deadline.AgentID)
+	deadline.ChannelID = strings.TrimSpace(deadline.ChannelID)
+	deadline.CellID = strings.TrimSpace(deadline.CellID)
+	if deadline.RunID == "" || deadline.OwnerID == "" || deadline.ComputerID == "" ||
+		deadline.AgentID == "" || deadline.CellID == "" || deadline.ActivationUpdatedUnix == 0 {
+		return cellTerminalDeadline{}, fmt.Errorf("run, owner, computer, agent, cell identity, and activation timestamp are required")
+	}
+	return deadline, nil
+}
+
+// armCellTerminalDeadline mints a timeout wake at cell dispatch. It shares the
+// activation's hard deadline, so a cell cannot outlive its activation and a
+// restart still has the exact cell identity to close.
+func (rt *Runtime) armCellTerminalDeadline(ctx context.Context, reduction *rlmCallReduction) {
+	if rt == nil || reduction == nil || !reduction.active || reduction.rec == nil {
+		return
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return
+	}
+	content, err := encodeCellTerminalDeadline(reduction.rec, reduction.scope)
+	if err != nil {
+		log.Printf("runtime: encode cell terminal deadline: %v", err)
+		return
+	}
+	rt.scheduleContinuation(context.WithoutCancel(ctx), reduction.rec.OwnerID, reduction.rec.ComputerID,
+		reduction.rec.AgentID, cellTerminalDeadlineUpdateKind, content,
+		trajectoryIDForRun(reduction.rec), "", deadline)
+}
+
+// HandleCellTerminalDeadline records timeout for an unfinished dispatched
+// cell. The fate entry's deterministic identity makes duplicate delivery and a
+// late worker result safe. It only cancels the same activation generation that
+// armed the deadline; a runtime-restarted run still records the timeout but
+// remains available for the re-wake to resume.
+func (rt *Runtime) HandleCellTerminalDeadline(ctx context.Context, ownerID, computerID, agentID, content string) error {
+	deadline, err := decodeCellTerminalDeadline(content)
+	if err != nil {
+		return fmt.Errorf("decode cell terminal deadline: %w", err)
+	}
+	if deadline.OwnerID != strings.TrimSpace(ownerID) || deadline.ComputerID != strings.TrimSpace(computerID) ||
+		deadline.AgentID != strings.TrimSpace(agentID) {
+		return nil
+	}
+	rec, matched, err := rt.scheduledRunMatches(ctx, ownerID, computerID, agentID, deadline.RunID)
+	if err != nil || !matched || rec.State.Terminal() {
+		return err
+	}
+	scope := ReductionScope{
+		FromAgentID: deadline.AgentID, ChannelID: deadline.ChannelID, RunID: deadline.RunID,
+		OwnerID: deadline.OwnerID, ComputerID: deadline.ComputerID, CellID: deadline.CellID, Cursor: deadline.Cursor,
+	}
+	if existing, found, err := CellFate(ctx, rt.store, scope.OwnerID, scope.RunID, scope.CellID); err != nil {
+		return fmt.Errorf("load cell deadline fate: %w", err)
+	} else if found {
+		_ = existing
+		return nil
+	}
+	if err := RecordCellFate(context.WithoutCancel(ctx), rt.store, scope, cellFateTimeout, "cell terminal deadline exceeded"); err != nil {
+		return err
+	}
+	if rec.State.Active() && rec.UpdatedAt.UTC().UnixNano() == deadline.ActivationUpdatedUnix {
+		if err := rt.terminalizeRun(context.WithoutCancel(ctx), rec.RunID, rec.OwnerID, "cell terminal deadline exceeded"); err != nil &&
+			!strings.Contains(err.Error(), "cannot cancel") {
+			return err
+		}
+	}
+	return nil
 }
 
 // HandleDelegatedAssignmentSpawnDeadline re-drives an assignment's

@@ -156,6 +156,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// frame so choir.Updates() exposes them inside the cell. The chat
 			// wake turn carries only ids.
 			updates := pendingCellUpdates(ctx, rt, execCtx)
+			if reduction.active {
+				rt.armCellTerminalDeadline(evalCtx, reduction)
+			}
 			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates)
 
 			result := yaegikernel.SessionResult{}
@@ -166,6 +169,15 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				result.Error = evalErr.Error()
 			} else {
 				result = res
+			}
+			if reduction.active && result.Error != "" {
+				fate := cellFateFailure
+				if evalCtx.Err() == context.DeadlineExceeded {
+					fate = cellFateTimeout
+				}
+				if fateErr := reduction.abort(context.Background(), fate, result.Error); fateErr != nil {
+					return "", fateErr
+				}
 			}
 			if reduction.active && result.Error == "" {
 				if rerr := reduction.commit(ctx, result.Intents); rerr != nil {

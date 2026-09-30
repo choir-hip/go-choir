@@ -151,9 +151,12 @@ boundaries:
 
 now:
   status: blocked_incomplete
-  slice: 'ship cell_fate record + armed terminal deadline on cell exit
-    first (independent sub-cut, unblocks stall terminator); then
-    ActionEmit; then injectUserTurns notice; then advisory piggyback'
+  slice: 'cell_fate+deadline'
+  evidence_refs:
+    - internal/agentcore/rlm_reduce_test.go#TestReduceFailedCellDropsTray
+    - internal/agentcore/rlm_reduce_test.go#TestCellTerminalDeadlineRecordsTimeoutForRestartPassivatedCell
+    - internal/agentcore/rlm_reduce_test.go#TestArmCellTerminalDeadlineCarriesReductionIdentity
+    - internal/agentcore/rlm_reduce_test.go#TestCellTerminalDeadlineDoesNotCancelReactivatedRun
   source_ref: main@ac54317c
   deploy_identity: unknown
   candidate:
