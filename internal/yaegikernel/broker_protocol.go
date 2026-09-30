@@ -130,6 +130,13 @@ type EmitPayload struct {
 // EmitResult identifies the durable channel record written by ActionEmit.
 type EmitResult struct {
 	Seq uint64 `json:"seq"`
+	// AdvisorySeq is the advisory piggyback on the s.call response: the newest
+	// channel seq of emissions addressed to the *calling* desk at emit time.
+	// A cell that already consumed up to its cell-start watermark sees
+	// AdvisorySeq > that mark when a new emission landed mid-activation — so
+	// delivery does not have to wait for the next injectUserTurns boundary.
+	// Zero means no advisory available (non-desk caller, drain read failed).
+	AdvisorySeq uint64 `json:"advisory_seq,omitempty"`
 }
 
 // Validate checks internal consistency of a BrokerRequest.

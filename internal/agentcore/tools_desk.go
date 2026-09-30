@@ -493,7 +493,46 @@ func (rt *Runtime) deskEmitSignal(ctx context.Context, payload yaegikernel.EmitP
 	if err != nil {
 		return yaegikernel.EmitResult{}, fmt.Errorf("emit: %w", err)
 	}
-	return yaegikernel.EmitResult{Seq: seq}, nil
+	// Advisory piggyback: the newest emission seq addressed to the *calling*
+	// desk, not the recipient — a mid-cell emit returns a watermark the cell
+	// can compare against its consumed high-water. Non-fatal: a drain failure
+	// degrades to no advisory rather than refusing the emit.
+	advisory := rt.newestEmissionSeqTo(ctx, execCtx)
+	return yaegikernel.EmitResult{Seq: seq, AdvisorySeq: advisory}, nil
+}
+
+// newestEmissionSeqTo returns the highest channel seq of emissions addressed
+// to the calling desk — the advisory watermark riding an emit's s.call
+// response. Read-only and non-fatal: the caller desk is resolved the same
+// way the reduction resolves its cursor identity (run record's bound agent,
+// else exec context agent). Returns 0 when the desk can't be resolved or the
+// drain fails.
+func (rt *Runtime) newestEmissionSeqTo(ctx context.Context, execCtx toolregistry.ExecutionContext) uint64 {
+	if rt == nil || rt.store == nil {
+		return 0
+	}
+	ownerID := ""
+	agentID := strings.TrimSpace(execCtx.AgentID)
+	if execCtx.RunRecord != nil {
+		ownerID = strings.TrimSpace(execCtx.RunRecord.OwnerID)
+		if id := strings.TrimSpace(execCtx.RunRecord.AgentID); id != "" {
+			agentID = id
+		}
+	}
+	if agentID == "" {
+		return 0
+	}
+	msgs, err := rt.store.ListChannelMessagesTo(ctx, ownerID, agentID, 0, 1)
+	if err != nil || len(msgs) == 0 {
+		return 0
+	}
+	var max uint64
+	for _, m := range msgs {
+		if uint64(m.Seq) > max {
+			max = uint64(m.Seq)
+		}
+	}
+	return max
 }
 
 // consumeIdleTextureTrigger disposes the owner-revision wake when a texture

@@ -345,7 +345,10 @@ func (s *ChoirScope) Message(recipientID, kind, body string) (MessageResult, err
 
 // Emit durably sends an immediate signal to another desk. Unlike Message, it
 // never enters the bound cell's tray: the host writes the "emit" envelope and
-// wakes the recipient before this call returns.
+// wakes the recipient before this call returns. The result's AdvisorySeq is
+// the piggyback watermark — the newest emission seq addressed to *this* desk,
+// so a caller can observe a mid-activation arrival without waiting for the
+// next boundary notice.
 func (s *ChoirScope) Emit(toDesk, kind, body string) (EmitResult, error) {
 	if err := s.mutateDenied("Emit"); err != nil {
 		return EmitResult{}, err
