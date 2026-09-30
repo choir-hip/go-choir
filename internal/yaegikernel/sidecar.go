@@ -295,6 +295,12 @@ func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 		_ = json.Unmarshal(resp.Result, &out)
 		return out, nil
 	})
+	// Egress verbs ride one generic frame round-trip: the cell is blocked
+	// inside serveCell while the host resolves the action against its
+	// search/HTTP/content deps under the egress budget.
+	broker.SetEgress(func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+		return egressRoundTrip(fc, scope, cfg.Epoch, action, payload)
+	})
 	ready, err := json.Marshal(SessionResult{ID: "ready"})
 	if err != nil {
 		os.Exit(2)
@@ -309,4 +315,36 @@ func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+// egressRoundTrip runs one host-mediated research verb through the session
+// socket: wrap the action + raw payload in a BrokerRequest, write it on
+// StreamBrokerEgress, wait for the host's StreamBrokerEgressResult, and hand
+// back the raw JSON result. The cell is blocked inside serveCell for the
+// whole round-trip — no concurrent frame traffic on this conn.
+func egressRoundTrip(fc *FramedConn, scope *ChoirScope, epoch uint64, action BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+	req := BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: newReceiptID(),
+		HandleRef: scope.HandleRef(), Epoch: epoch, Action: action, Payload: payload}
+	enc, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s request marshal: %w", action, err)
+	}
+	if err := fc.WriteFrame(StreamBrokerEgress, enc); err != nil {
+		return nil, fmt.Errorf("%s write frame: %w", action, err)
+	}
+	stream, rraw, err := fc.ReadFrame()
+	if err != nil {
+		return nil, fmt.Errorf("%s read result: %w", action, err)
+	}
+	if stream != StreamBrokerEgressResult {
+		return nil, fmt.Errorf("%s: unexpected stream %d", action, stream)
+	}
+	var resp BrokerResponse
+	if err := json.Unmarshal(rraw, &resp); err != nil {
+		return nil, fmt.Errorf("%s decode result: %w", action, err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("%s: %s", action, resp.Error)
+	}
+	return resp.Result, nil
 }

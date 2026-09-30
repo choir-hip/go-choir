@@ -494,6 +494,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		Store: rt.store, Content: rt.content, Search: searchClient,
 		Source: sourceClient, HTTP: httpClient, Egress: rt.researchEgress,
 	}
+	rt.researchDeps = &researchDeps
 	var deskCellRegistries = map[string]*toolregistry.ToolRegistry{}
 	for _, deskProfile := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research} {
 		if !deskCarrierLive(deskProfile) {

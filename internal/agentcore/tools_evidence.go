@@ -38,6 +38,25 @@ func RegisterRunMemoryTools(registry *toolregistry.ToolRegistry, rt *Runtime) er
 	return registry.Register(newGetRunMemoryEntryTool(rt))
 }
 
+// egressEvidenceTool maps the evidence + run-memory tool names to their
+// rt-bound Funcs so a desk cell's choir.* egress verbs resolve through the
+// same tool surface — one behavior/ledger, the cell never holds a socket.
+// Keyed by tool name (== the broker action string).
+func (rt *Runtime) egressEvidenceTool() map[string]toolregistry.ToolFunc {
+	m := map[string]toolregistry.ToolFunc{}
+	for _, tool := range []toolregistry.Tool{
+		newSaveEvidenceTool(rt),
+		newReadEvidenceTool(rt),
+		newListEvidenceTool(rt),
+		newGetRunMemoryEntryTool(rt),
+	} {
+		if tool.Func != nil {
+			m[tool.Name] = tool.Func
+		}
+	}
+	return m
+}
+
 // RegisterModelDiagnosticTools installs provider/model diagnostic verifiers.
 // verify_model_capability is a model diagnostic and does not belong in Texture's
 // default authoring affordance.

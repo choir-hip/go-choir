@@ -113,6 +113,11 @@ type Runtime struct {
 	// for desk-carrier research (R3r/D2). Lazy; installed by
 	// InstallDefaultAgentTools, charged by every host-mediated network tool.
 	researchEgress *researchtools.EgressBudgetLedger
+	// researchDeps are the search/HTTP/source clients + ledger bound at
+	// tool-install for the desk cell's host-mediated egress verbs
+	// (choir.WebSearch/FetchURL → StreamBrokerEgress → deskEgress). nil until
+	// InstallDefaultAgentTools builds them.
+	researchDeps *researchtools.Dependencies
 
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex

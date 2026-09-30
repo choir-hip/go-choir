@@ -12,13 +12,26 @@ const ProtocolVersion = 1
 type BrokerAction string
 
 const (
-	ActionExec      BrokerAction = "exec"
-	ActionReadFile  BrokerAction = "read_file"
-	ActionWriteFile BrokerAction = "write_file"
-	ActionListDir   BrokerAction = "list_dir"
-	ActionAssign    BrokerAction = "assign"
-	ActionMessage   BrokerAction = "message"
-	ActionEmit      BrokerAction = "emit"
+	ActionExec                 BrokerAction = "exec"
+	ActionReadFile             BrokerAction = "read_file"
+	ActionWriteFile            BrokerAction = "write_file"
+	ActionListDir              BrokerAction = "list_dir"
+	ActionAssign               BrokerAction = "assign"
+	ActionMessage              BrokerAction = "message"
+	ActionEmit                 BrokerAction = "emit"
+	ActionWebSearch            BrokerAction = "web_search"
+	ActionFetchURL             BrokerAction = "fetch_url"
+	ActionSourceSearch         BrokerAction = "source_search"
+	ActionImportDocument       BrokerAction = "import_document_content"
+	ActionImportURL            BrokerAction = "import_url_content"
+	ActionReadContentItem      BrokerAction = "read_content_item"
+	ActionListContentSelectors BrokerAction = "list_content_item_selectors"
+	ActionReadContentSelector  BrokerAction = "read_content_item_selector"
+	ActionSearchWireCorpus     BrokerAction = "search_wire_corpus"
+	ActionSaveEvidence         BrokerAction = "save_evidence"
+	ActionReadEvidence         BrokerAction = "read_evidence"
+	ActionListEvidence         BrokerAction = "list_evidence"
+	ActionGetRunMemoryEntry    BrokerAction = "get_run_memory_entry"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -139,6 +152,75 @@ type EmitResult struct {
 	AdvisorySeq uint64 `json:"advisory_seq,omitempty"`
 }
 
+// WebSearchPayload defines the parameters for ActionWebSearch — a host-
+// resolved web search so the cell sees a result, not an open egress socket.
+type WebSearchPayload struct {
+	Query      string `json:"query"`
+	MaxResults int    `json:"max_results,omitempty"`
+}
+
+// FetchURLPayload defines the parameters for ActionFetchURL — a host-
+// resolved fetch; the cell receives bounded content, never a socket.
+type FetchURLPayload struct {
+	URL string `json:"url"`
+}
+
+// The remaining research cell verbs. Each action name equals its registry
+// tool name so host egress dispatches into the same deps-bound ToolFunc —
+// one source of truth for charging and projection. Results return as opaque
+// JSON (the tool's bounded projection) into the cell.
+type SourceSearchPayload struct {
+	Query      string `json:"query"`
+	MaxResults int    `json:"max_results,omitempty"`
+}
+type ImportDocumentPayload struct {
+	URL      string `json:"url,omitempty"`
+	FilePath string `json:"file_path,omitempty"`
+	Query    string `json:"query,omitempty"`
+}
+type ImportURLPayload struct {
+	URL   string `json:"url"`
+	Query string `json:"query,omitempty"`
+}
+type ReadContentItemPayload struct {
+	ContentID    string `json:"content_id"`
+	MaxTextChars int    `json:"max_text_chars,omitempty"`
+	MaxSegments  int    `json:"max_segments,omitempty"`
+}
+type ListContentSelectorsPayload struct {
+	ContentID string `json:"content_id"`
+}
+type ReadContentSelectorPayload struct {
+	ContentID    string `json:"content_id"`
+	SelectorID   string `json:"selector_id"`
+	MaxTextChars int    `json:"max_text_chars,omitempty"`
+}
+type SearchWireCorpusPayload struct {
+	Query string `json:"query"`
+	Limit int    `json:"limit,omitempty"`
+}
+
+// Evidence + run-memory cell verbs. These resolve through rt-bound tools on
+// the host (agentcore), not the researchtools deps table — the action name
+// equals the tool name there too.
+type SaveEvidencePayload struct {
+	Kind      string          `json:"kind"`
+	SourceURI string          `json:"source_uri,omitempty"`
+	Title     string          `json:"title,omitempty"`
+	Content   string          `json:"content"`
+	Metadata  json.RawMessage `json:"metadata,omitempty"`
+}
+type ReadEvidencePayload struct {
+	EvidenceID string `json:"evidence_id"`
+}
+type ListEvidencePayload struct {
+	AgentID string `json:"agent_id,omitempty"`
+	Limit   int    `json:"limit,omitempty"`
+}
+type GetRunMemoryEntryPayload struct {
+	EntryID string `json:"entry_id"`
+}
+
 // Validate checks internal consistency of a BrokerRequest.
 func (r *BrokerRequest) Validate() error {
 	if r.ProtocolVersion != ProtocolVersion {
@@ -157,7 +239,10 @@ func (r *BrokerRequest) Validate() error {
 		return fmt.Errorf("broker protocol: action is required")
 	}
 	switch r.Action {
-	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit:
+	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit,
+		ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument, ActionImportURL,
+		ActionReadContentItem, ActionListContentSelectors, ActionReadContentSelector, ActionSearchWireCorpus,
+		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

@@ -40,6 +40,13 @@ const (
 	// durable sequence or refusal before cell evaluation continues.
 	StreamBrokerEmit       = 4
 	StreamBrokerEmitResult = 5
+	// StreamBrokerEgress carries one synchronous host-mediated network call
+	// (web_search / fetch_url / source_search) from the cell worker to its
+	// host; StreamBrokerEgressResult returns the bounded result. One generic
+	// egress stream for all host-resolved network verbs — the payload's
+	// BrokerAction names which.
+	StreamBrokerEgress       = 6
+	StreamBrokerEgressResult = 7
 )
 
 // MaxFramePayload bounds one frame. Cells exceeding it are rejected before

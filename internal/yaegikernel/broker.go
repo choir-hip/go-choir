@@ -32,6 +32,12 @@ type BrokerConfig struct {
 	// Emit performs the host-side durable channel write and recipient wake.
 	// A nil handler refuses emits rather than retaining an in-worker receipt.
 	Emit EmitHandler
+	// Egress is the generic host-mediated research boundary (research phase 1):
+	// the worker binds it to a StreamBrokerEgress frame round-trip so the host
+	// resolves any egress action (web_search/fetch_url/source_search/import_*/
+	// read_*/list_*/search_wire_corpus) against its deps under the shared
+	// activation egress budget. nil refuses the verb.
+	Egress func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error)
 }
 
 // Broker executes authorized operations requested by untrusted Yaegi activations.
@@ -86,6 +92,15 @@ func (b *Broker) SetEmit(h EmitHandler) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.cfg.Emit = h
+}
+
+// SetEgress installs the generic host-mediated research boundary. Bound
+// post-construction for the same reason as Emit: the session socket only
+// exists after the worker's framed conn is up.
+func (b *Broker) SetEgress(h func(context.Context, BrokerAction, json.RawMessage) (json.RawMessage, error)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.cfg.Egress = h
 }
 
 // SetEmitRefused toggles the rollback gate for new emissions.
@@ -154,6 +169,9 @@ func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerR
 		return b.handleMessage(ctx, req, receiptID, start)
 	case ActionEmit:
 		return b.handleEmit(ctx, req, receiptID, start)
+	case ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument, ActionImportURL,
+		ActionReadContentItem, ActionListContentSelectors, ActionReadContentSelector, ActionSearchWireCorpus:
+		return b.handleEgress(ctx, req, receiptID, start)
 	default:
 		return NewErrorResponse(req.RequestID, fmt.Sprintf("unsupported action %q", req.Action), time.Since(start))
 	}
@@ -404,6 +422,27 @@ func (b *Broker) handleEmit(ctx context.Context, req *BrokerRequest, receiptID s
 	result, err := emit(ctx, payload)
 	if err != nil {
 		return NewErrorResponse(req.RequestID, fmt.Sprintf("emit: %v", err), time.Since(start))
+	}
+	resp, err := NewSuccessResponse(req.RequestID, result, receiptID, time.Since(start))
+	if err != nil {
+		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
+	}
+	return resp
+}
+
+// handleEgress resolves any host-mediated research verb through cfg.Egress.
+// The raw payload passes through untouched — the host's deps-bound ToolFunc
+// decodes and validates it — and the raw JSON result passes back to the cell.
+func (b *Broker) handleEgress(ctx context.Context, req *BrokerRequest, receiptID string, start time.Time) *BrokerResponse {
+	b.mu.Lock()
+	h := b.cfg.Egress
+	b.mu.Unlock()
+	if h == nil {
+		return NewErrorResponse(req.RequestID, fmt.Sprintf("%s host unavailable", req.Action), time.Since(start))
+	}
+	result, err := h(ctx, req.Action, req.Payload)
+	if err != nil {
+		return NewErrorResponse(req.RequestID, fmt.Sprintf("%s: %v", req.Action, err), time.Since(start))
 	}
 	resp, err := NewSuccessResponse(req.RequestID, result, receiptID, time.Since(start))
 	if err != nil {

@@ -140,6 +140,21 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				Emit: func(emitCtx context.Context, payload yaegikernel.EmitPayload) (yaegikernel.EmitResult, error) {
 					return rt.deskEmitSignal(emitCtx, payload)
 				},
+				// Egress services the cell's host-mediated research verbs
+				// (choir.* → StreamBrokerEgress). Evidence/run-memory actions
+				// resolve through rt-bound tools; network/content actions go to
+				// researchDeps.HostEgress under the shared egress ledger — one
+				// deps surface, never an open socket.
+				Egress: func(egrCtx context.Context, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+					if fn, ok := rt.egressEvidenceTool()[string(action)]; ok {
+						out, err := fn(egrCtx, payload)
+						return json.RawMessage(out), err
+					}
+					if rt.researchDeps == nil {
+						return nil, fmt.Errorf("%s host unavailable", action)
+					}
+					return rt.researchDeps.HostEgress(egrCtx, string(action), payload)
+				},
 			}
 			w, err := workers.deskWorkerFor(activationID, workerCfg)
 			if err != nil {

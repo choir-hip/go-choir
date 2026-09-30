@@ -175,7 +175,10 @@ var deskModuleSets = map[string][]string{
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
 	"research": {"Message", "Emit", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
+		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
+		"WebSearch", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
+		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
+		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry"},
 	// Texture authors document revisions and escalates; artifact writes are
 	// the staged ApplyTexture intent (committed through ApplyTextureTurn),
 	// not capsule file ops. Children (research probes, persistent management)
@@ -214,28 +217,41 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Pack":     reflect.ValueOf(s.Pack),
 	}
 	verbs := map[string]func() reflect.Value{
-		"WriteFile":       func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
-		"Exec":            func() reflect.Value { return reflect.ValueOf(s.Exec) },
-		"Assign":          func() reflect.Value { return reflect.ValueOf(s.Assign) },
-		"Message":         func() reflect.Value { return reflect.ValueOf(s.Message) },
-		"Emit":            func() reflect.Value { return reflect.ValueOf(s.Emit) },
-		"Outcome":         func() reflect.Value { return reflect.ValueOf(s.Outcome) },
-		"Complete":        func() reflect.Value { return reflect.ValueOf(s.Complete) },
-		"Freeze":          func() reflect.Value { return reflect.ValueOf(s.Freeze) },
-		"Cast":            func() reflect.Value { return reflect.ValueOf(s.Cast) },
-		"Ask":             func() reflect.Value { return reflect.ValueOf(s.Ask) },
-		"Note":            func() reflect.Value { return reflect.ValueOf(s.Note) },
-		"Reply":           func() reflect.Value { return reflect.ValueOf(s.Reply) },
-		"CancelAct":       func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
-		"Escalate":        func() reflect.Value { return reflect.ValueOf(s.Escalate) },
-		"EscalateActions": func() reflect.Value { return reflect.ValueOf(s.EscalateActions) },
-		"Precommit":    func() reflect.Value { return reflect.ValueOf(s.Precommit) },
-		"Report":       func() reflect.Value { return reflect.ValueOf(s.Report) },
-		"ReportPacket": func() reflect.Value { return reflect.ValueOf(s.ReportPacket) },
-		"Resolve":      func() reflect.Value { return reflect.ValueOf(s.Resolve) },
-		"Disagreement": func() reflect.Value { return reflect.ValueOf(s.Disagreement) },
-		"ReadDoc":      func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
-		"ApplyTexture": func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
+		"WriteFile":            func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
+		"Exec":                 func() reflect.Value { return reflect.ValueOf(s.Exec) },
+		"Assign":               func() reflect.Value { return reflect.ValueOf(s.Assign) },
+		"Message":              func() reflect.Value { return reflect.ValueOf(s.Message) },
+		"Emit":                 func() reflect.Value { return reflect.ValueOf(s.Emit) },
+		"Outcome":              func() reflect.Value { return reflect.ValueOf(s.Outcome) },
+		"Complete":             func() reflect.Value { return reflect.ValueOf(s.Complete) },
+		"Freeze":               func() reflect.Value { return reflect.ValueOf(s.Freeze) },
+		"Cast":                 func() reflect.Value { return reflect.ValueOf(s.Cast) },
+		"Ask":                  func() reflect.Value { return reflect.ValueOf(s.Ask) },
+		"Note":                 func() reflect.Value { return reflect.ValueOf(s.Note) },
+		"Reply":                func() reflect.Value { return reflect.ValueOf(s.Reply) },
+		"CancelAct":            func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
+		"Escalate":             func() reflect.Value { return reflect.ValueOf(s.Escalate) },
+		"EscalateActions":      func() reflect.Value { return reflect.ValueOf(s.EscalateActions) },
+		"Precommit":            func() reflect.Value { return reflect.ValueOf(s.Precommit) },
+		"Report":               func() reflect.Value { return reflect.ValueOf(s.Report) },
+		"ReportPacket":         func() reflect.Value { return reflect.ValueOf(s.ReportPacket) },
+		"Resolve":              func() reflect.Value { return reflect.ValueOf(s.Resolve) },
+		"Disagreement":         func() reflect.Value { return reflect.ValueOf(s.Disagreement) },
+		"ReadDoc":              func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
+		"ApplyTexture":         func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
+		"WebSearch":            func() reflect.Value { return reflect.ValueOf(s.WebSearch) },
+		"FetchURL":             func() reflect.Value { return reflect.ValueOf(s.FetchURL) },
+		"SourceSearch":         func() reflect.Value { return reflect.ValueOf(s.SourceSearch) },
+		"ImportDocument":       func() reflect.Value { return reflect.ValueOf(s.ImportDocument) },
+		"ImportURL":            func() reflect.Value { return reflect.ValueOf(s.ImportURL) },
+		"ReadContentItem":      func() reflect.Value { return reflect.ValueOf(s.ReadContentItem) },
+		"ListContentSelectors": func() reflect.Value { return reflect.ValueOf(s.ListContentSelectors) },
+		"ReadContentSelector":  func() reflect.Value { return reflect.ValueOf(s.ReadContentSelector) },
+		"SearchWireCorpus":     func() reflect.Value { return reflect.ValueOf(s.SearchWireCorpus) },
+		"SaveEvidence":         func() reflect.Value { return reflect.ValueOf(s.SaveEvidence) },
+		"ReadEvidence":         func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
+		"ListEvidence":         func() reflect.Value { return reflect.ValueOf(s.ListEvidence) },
+		"RunMemoryEntry":       func() reflect.Value { return reflect.ValueOf(s.RunMemoryEntry) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -358,6 +374,102 @@ func (s *ChoirScope) Emit(toDesk, kind, body string) (EmitResult, error) {
 		return EmitResult{}, err
 	}
 	return result, nil
+}
+
+// WebSearch resolves a web search through the host's search client under the
+// per-activation egress budget — a synchronous broker call, never an open
+// socket. Returns the tool's bounded projection as JSON.
+func (s *ChoirScope) WebSearch(query string, maxResults int) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionWebSearch, WebSearchPayload{Query: query, MaxResults: maxResults}, &out)
+	return out, err
+}
+
+// FetchURL resolves a URL fetch through the host's HTTP client under the
+// per-activation egress budget — synchronous, bounded, never an open socket.
+// Returns the tool's bounded projection as JSON.
+func (s *ChoirScope) FetchURL(url string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionFetchURL, FetchURLPayload{URL: url}, &out)
+	return out, err
+}
+
+// SourceSearch queries the Source Service through the host; returns the
+// bounded source-list projection as JSON.
+func (s *ChoirScope) SourceSearch(query string, maxResults int) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionSourceSearch, SourceSearchPayload{Query: query, MaxResults: maxResults}, &out)
+	return out, err
+}
+
+// ImportDocument imports a URL or file path into the ContentItem substrate.
+func (s *ChoirScope) ImportDocument(url, filePath, query string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionImportDocument, ImportDocumentPayload{URL: url, FilePath: filePath, Query: query}, &out)
+	return out, err
+}
+
+// ImportURL imports a URL into the ContentItem substrate.
+func (s *ChoirScope) ImportURL(url, query string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionImportURL, ImportURLPayload{URL: url, Query: query}, &out)
+	return out, err
+}
+
+// ReadContentItem reads an owner-scoped ContentItem's bounded text/metadata.
+func (s *ChoirScope) ReadContentItem(contentID string, maxTextChars, maxSegments int) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionReadContentItem, ReadContentItemPayload{ContentID: contentID, MaxTextChars: maxTextChars, MaxSegments: maxSegments}, &out)
+	return out, err
+}
+
+// ListContentSelectors lists addressable selectors (pages/slides/chunks).
+func (s *ChoirScope) ListContentSelectors(contentID string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionListContentSelectors, ListContentSelectorsPayload{ContentID: contentID}, &out)
+	return out, err
+}
+
+// ReadContentSelector reads one exact selector's text from a ContentItem.
+func (s *ChoirScope) ReadContentSelector(contentID, selectorID string, maxTextChars int) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionReadContentSelector, ReadContentSelectorPayload{ContentID: contentID, SelectorID: selectorID, MaxTextChars: maxTextChars}, &out)
+	return out, err
+}
+
+// SearchWireCorpus searches the owner's published wire corpus.
+func (s *ChoirScope) SearchWireCorpus(query string, limit int) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionSearchWireCorpus, SearchWireCorpusPayload{Query: query, Limit: limit}, &out)
+	return out, err
+}
+
+// SaveEvidence persists evidentiary material into the owner's Dolt workspace.
+func (s *ChoirScope) SaveEvidence(kind, sourceURI, title, content string, metadata json.RawMessage) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionSaveEvidence, SaveEvidencePayload{Kind: kind, SourceURI: sourceURI, Title: title, Content: content, Metadata: metadata}, &out)
+	return out, err
+}
+
+// ReadEvidence reads one saved evidence record by id.
+func (s *ChoirScope) ReadEvidence(evidenceID string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionReadEvidence, ReadEvidencePayload{EvidenceID: evidenceID}, &out)
+	return out, err
+}
+
+// ListEvidence lists recent saved evidence for an agent or the owner scope.
+func (s *ChoirScope) ListEvidence(agentID string, limit int) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionListEvidence, ListEvidencePayload{AgentID: agentID, Limit: limit}, &out)
+	return out, err
+}
+
+// RunMemoryEntry retrieves one durable run-memory entry by id.
+func (s *ChoirScope) RunMemoryEntry(entryID string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionGetRunMemoryEntry, GetRunMemoryEntryPayload{EntryID: entryID}, &out)
+	return out, err
 }
 
 // Spawn asynchronously delegates a subtask within role policy. It stages

@@ -49,6 +49,11 @@ type DeskSessionWorkerConfig struct {
 	// host authority. Nil refuses emits rather than recording an in-worker
 	// receipt that a cell death would silently lose.
 	Emit EmitHandler
+	// Egress services StreamBrokerEgress frames the worker sends mid-cell
+	// for host-mediated network verbs (web_search / fetch_url / source_search).
+	// The host resolves the call against its deps under the egress budget and
+	// returns the bounded result. Nil refuses the verb.
+	Egress func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error)
 }
 
 // sessionReadyTimeout bounds the worker's post-prebind ready handshake. A
@@ -320,6 +325,13 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 				w.serviceEmit(ctx, payload)
 				continue
 			}
+			// Mid-cell host-mediated network verbs (web_search / fetch_url /
+			// source_search) ride the shared egress stream; the host resolves
+			// them and answers, then keeps waiting for the StreamCell result.
+			if stream == StreamBrokerEgress {
+				w.serviceEgress(ctx, payload)
+				continue
+			}
 			if stream != StreamCell {
 				ch <- result{err: fmt.Errorf("desk eval: unexpected stream %d", stream)}
 				return
@@ -393,6 +405,40 @@ func (w *DeskSessionWorker) writeEmitResult(requestID string, res *EmitResult, c
 		return
 	}
 	_ = w.framed.WriteFrame(StreamBrokerEmitResult, raw)
+}
+
+// serviceEgress answers one StreamBrokerEgress frame. The worker sent a
+// BrokerRequest whose action names a host-mediated network verb; the host
+// resolves it via cfg.Egress (the deps-bound handler in agentcore) and
+// replies on StreamBrokerEgressResult so the blocked cell resumes.
+func (w *DeskSessionWorker) serviceEgress(ctx context.Context, payload []byte) {
+	var req BrokerRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		w.writeEgressResult(req.RequestID, nil, fmt.Errorf("egress decode request: %w", err))
+		return
+	}
+	handler := w.cfg.Egress
+	if handler == nil {
+		w.writeEgressResult(req.RequestID, nil, fmt.Errorf("%s host unavailable", req.Action))
+		return
+	}
+	res, err := handler(ctx, req.Action, req.Payload)
+	w.writeEgressResult(req.RequestID, res, err)
+}
+
+func (w *DeskSessionWorker) writeEgressResult(requestID string, res json.RawMessage, cause error) {
+	resp := NewErrorResponse(requestID, "", 0)
+	if cause != nil {
+		resp.Error = cause.Error()
+	} else {
+		resp.Success = true
+		resp.Result = res
+	}
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		return
+	}
+	_ = w.framed.WriteFrame(StreamBrokerEgressResult, raw)
 }
 
 // Kill terminates the worker's process group and marks it dead. Staged
