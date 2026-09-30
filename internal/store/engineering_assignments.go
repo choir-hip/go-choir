@@ -1698,7 +1698,7 @@ func buildEngineeringReturnPacket(now time.Time, seq int64, assignment types.Eng
 		docID := strings.TrimPrefix(assignment.Binding.ParentAgentID, agentprofile.Engineering+":")
 		if docID != "" {
 			update.TargetAgentID = agentprofile.Texture + ":" + docID
-			update.TargetWorkItemID = "work:texture-supervision:" + docID
+			update.TargetWorkItemID = TextureSupervisionWorkItemPrefix + docID
 		}
 	}
 	key := update.TrajectoryID + "\x00" + update.TargetAgentID + "\x00" + update.AgentID + "\x00" + update.ProducerUpdateID
@@ -1706,6 +1706,19 @@ func buildEngineeringReturnPacket(now time.Time, seq int64, assignment types.Eng
 	meta["producer_update_id"], meta["target_agent_id"] = update.ProducerUpdateID, update.TargetAgentID
 	obj, err := lifecycleObject(ogKindWorkerUpdate, update.OwnerID, update.ComputerID, key, update, meta, now, now)
 	return update, obj, err
+}
+
+// TextureSupervisionWorkItemPrefix prefixes the durable supervision work item
+// minted beside every document-cast engineering assignment
+// (textureSupervisionSubject below). The item is the return surface for the
+// desk's producer-report packets — a standing report target, never a revision
+// consumer — so revision-target selection must exclude it by this prefix.
+const TextureSupervisionWorkItemPrefix = "work:texture-supervision:"
+
+// IsTextureSupervisionWorkItem reports whether workItemID names the durable
+// supervision surface minted for a document-cast assignment.
+func IsTextureSupervisionWorkItem(workItemID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(workItemID), TextureSupervisionWorkItemPrefix)
 }
 
 // textureSupervisionSubject derives the durable texture:<docID> subject and
@@ -1739,7 +1752,7 @@ func (s *Store) textureSupervisionSubject(ctx context.Context, ownerID, computer
 		return objectgraph.Object{}, objectgraph.Object{}, err
 	}
 	work := types.WorkItemRecord{
-		WorkItemID: "work:texture-supervision:" + docID, OwnerID: ownerID, ComputerID: computerID,
+		WorkItemID: TextureSupervisionWorkItemPrefix + docID, OwnerID: ownerID, ComputerID: computerID,
 		TrajectoryID: binding.TrajectoryID, AssignedAgentID: agent.AgentID,
 		Objective: "Supervise the engineering desk's assignment reports for this document",
 		Reason:    "document-cast engineering supervision surface", AuthorityProfile: agentprofile.Texture,

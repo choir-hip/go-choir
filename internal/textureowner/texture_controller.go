@@ -61,14 +61,32 @@ func (rt *Handler) lifecycleDocDeskProfile(ctx context.Context, ownerID string, 
 	if err != nil {
 		return ""
 	}
+	textureWorkItemID := ""
 	for _, work := range snapshot.WorkItems {
 		if work.Status != types.WorkItemOpen {
 			continue
 		}
+		// The supervision surface minted beside a document cast is a report
+		// target, never a revision consumer — exclude it so a bound document's
+		// executor desk resolves deterministically.
+		if store.IsTextureSupervisionWorkItem(work.WorkItemID) {
+			continue
+		}
 		profile := strings.TrimSpace(work.AuthorityProfile)
-		if (profile == agentprofile.Texture || profile == agentprofile.Engineering) && work.AssignedAgentID == profile+":"+doc.DocID {
+		if (profile != agentprofile.Texture && profile != agentprofile.Engineering) ||
+			work.AssignedAgentID != profile+":"+doc.DocID {
+			continue
+		}
+		if profile == agentprofile.Engineering {
+			// The engineering desk is the document's executor when bound; an
+			// owner revision occurrence must name it, never the supervision
+			// subject that shares the document channel.
 			return profile
 		}
+		textureWorkItemID = work.WorkItemID
+	}
+	if textureWorkItemID != "" {
+		return agentprofile.Texture
 	}
 	return ""
 }
@@ -756,6 +774,22 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		return nil, fmt.Errorf("load lifecycle Texture snapshot: %w", snapshotErr)
 	}
 	_, ownerHeadSeq, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot)
+	// A texture:<docID> subject whose document is bound to the engineering
+	// desk is the supervision surface minted beside the cast — it consumes
+	// producer reports only. Owner revisions are cast directives owned by the
+	// engineering desk's occurrence consumer, never this agent, so the pending
+	// owner head must not arm a Texture revision cell here.
+	supervisionOnly := false
+	for _, agent := range snapshot.Agents {
+		if agent.AgentID == agentprofile.Engineering+":"+docID && agent.LifecycleVersion > 0 {
+			supervisionOnly = true
+			break
+		}
+	}
+	if supervisionOnly {
+		ownerHeadPending = false
+	}
+
 
 	// Consume-at-commit stranded repair: a pending producer report bound to a
 	// run that terminated without a committed turn re-enters the eligible set
@@ -789,7 +823,8 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 	initialWorkWake := false
 	if len(armedUpdates) == 0 && !ownerHeadPending {
 		for _, work := range snapshot.WorkItems {
-			if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID {
+			if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID &&
+				!store.IsTextureSupervisionWorkItem(work.WorkItemID) {
 				initialWorkWake = true
 				break
 			}
@@ -1491,6 +1526,18 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 		(doc.CurrentRevisionID != o.HeadRevisionID || store.TextureTurnConsumedHead(snapshot.Events, o.HeadRevisionID)) {
 		return o, TextureActorOccurrenceTerminal, nil
 	}
+	if o.Kind == agentcore.TextureActorOccurrenceDocumentRevision {
+		// A texture:<docID> agent on an engineering-bound document is the
+		// supervision surface, never a revision executor — owner-revision
+		// occurrences minted before the wake resolver learned the executor
+		// first rule terminalize here so they cannot arm a Texture apply.
+		for _, agent := range snapshot.Agents {
+			if agent.AgentID == agentprofile.Engineering+":"+doc.DocID && agent.LifecycleVersion > 0 {
+				return o, TextureActorOccurrenceTerminal, nil
+			}
+		}
+	}
+
 	agent, err := rt.Store.GetAgentByScope(ctx, o.OwnerID, o.ComputerID, o.TargetAgentID)
 	agentProfile, _ := agentprofile.Canonical(agent.Profile)
 	agentRole, _ := agentprofile.Canonical(agent.Role)

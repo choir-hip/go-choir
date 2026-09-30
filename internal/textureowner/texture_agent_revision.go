@@ -137,6 +137,13 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 		if work.Status != types.WorkItemOpen {
 			continue
 		}
+		// The durable supervision surface minted beside a document cast
+		// (store.TextureSupervisionWorkItemPrefix) is a report target, never a
+		// revision consumer — an engineering-bound document legitimately shows
+		// it alongside the engineering cast item, so it must not count.
+		if store.IsTextureSupervisionWorkItem(work.WorkItemID) {
+			continue
+		}
 		profile := strings.TrimSpace(work.AuthorityProfile)
 		if profile != agentprofile.Texture && profile != agentprofile.Engineering {
 			continue

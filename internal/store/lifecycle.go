@@ -783,7 +783,12 @@ func (s *Store) actorWakeResolverObjects(ctx context.Context, obj objectgraph.Ob
 	if err != nil || strings.TrimSpace(revision.DocID) == "" {
 		return objects
 	}
-	for _, profile := range []string{agentprofile.Texture, agentprofile.Engineering} {
+	// Executor before supervisor: an engineering-bound document also carries a
+	// durable texture:<docID> supervision subject (the report-return surface
+	// minted by the assignment commit). Owner revisions are cast directives —
+	// they must reach the engineering desk occurrence consumer, never the
+	// supervision agent that shares the document channel.
+	for _, profile := range []string{agentprofile.Engineering, agentprofile.Texture} {
 		agent, getErr := s.lifecycleGetObject(ctx, ogKindAgent, revision.OwnerID, revision.ComputerID, profile+":"+revision.DocID)
 		if getErr == nil {
 			return append(append([]objectgraph.Object{}, objects...), agent)
