@@ -797,7 +797,6 @@ func TestInitialDispatchReactivatesRestartPassivatedRun(t *testing.T) {
 	}
 }
 
-
 // TestHandlerColdStartCoagentResult tests the cold-start path: a coagent_result
 // arrives with nil memory (no parked run). The handler should call
 // ReconcileCoagentWake to create a new run.
@@ -2759,5 +2758,79 @@ func TestKernelOutboxProjectorMintsOneSQLiteActorWake(t *testing.T) {
 		if wake.SourceUpdateID == queue.UpdateID {
 			t.Fatalf("queued update wake remains unprojected: %+v", wake)
 		}
+	}
+}
+
+func TestDispatchAtRedrivesConsumedCoagentResultWithSaltedGeneration(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "redrive-consumed.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	cfg := provideriface.Config{ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
+	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
+
+	const ownerID, target = "owner-redrive", "research:cfa90b87-cd5b-4950-8697-93ab1ad1954e"
+	const content, trajectory, from = "sha256:4158e48b", "traj-redrive", "texture:ce3e0e77"
+	mailbox := scopedActorMailboxID(ownerID, "autoputer-test", target)
+	baseID := actorDispatchUpdateID(ownerID, "autoputer-test", target, "coagent_result", content, trajectory, from)
+
+	// First delivery: lands as the deterministic id, then gets consumed.
+	if err := adapter.dispatchRedrive(ctx, ownerID, "autoputer-test", target, "coagent_result", content, trajectory, from); err != nil {
+		t.Fatalf("first dispatch: %v", err)
+	}
+	if err := adapter.log.MarkProcessed(ctx, mailbox, baseID); err != nil {
+		t.Fatalf("consume first row: %v", err)
+	}
+
+	// Plain dispatch keeps pure replay dedup: a re-send of the consumed base id
+	// must not mint a duplicate (channel/initial_dispatch replay contract).
+	if err := adapter.dispatchAt(ctx, ownerID, "autoputer-test", target, "coagent_result", content, trajectory, from, time.Time{}); err != nil {
+		t.Fatalf("plain resend: %v", err)
+	}
+	if backlog, err := adapter.log.Unprocessed(ctx, mailbox); err != nil || len(backlog) != 0 {
+		t.Fatalf("plain resend backlog = %+v (err %v), want empty", backlog, err)
+	}
+
+	// The strand: an outbox re-arm re-dispatches the same logical occurrence
+	// after the bound run died. The replayed base id is consumed, so without a
+	// generation the append would dedup into nothing and drain no activation.
+	if err := adapter.dispatchRedrive(ctx, ownerID, "autoputer-test", target, "coagent_result", content, trajectory, from); err != nil {
+		t.Fatalf("redrive dispatch: %v", err)
+	}
+	backlog, err := adapter.log.Unprocessed(ctx, mailbox)
+	if err != nil {
+		t.Fatalf("read backlog: %v", err)
+	}
+	if len(backlog) != 1 || backlog[0].UpdateID != baseID+"#redrive-1" {
+		t.Fatalf("backlog = %+v, want exactly the salted redrive-1 row", backlog)
+	}
+
+	// Concurrent/replayed re-drives of the same open obligation mint the same
+	// salted id and dedup — no duplicate tape rows.
+	if err := adapter.dispatchRedrive(ctx, ownerID, "autoputer-test", target, "coagent_result", content, trajectory, from); err != nil {
+		t.Fatalf("replay redrive: %v", err)
+	}
+	backlog, err = adapter.log.Unprocessed(ctx, mailbox)
+	if err != nil || len(backlog) != 1 {
+		t.Fatalf("replay backlog = %+v (err %v), want the single salted row", backlog, err)
+	}
+
+	// After the salted generation is also consumed, the next re-drive advances
+	// the generation rather than resending a consumed id.
+	if err := adapter.log.MarkProcessed(ctx, mailbox, baseID+"#redrive-1"); err != nil {
+		t.Fatalf("consume salted row: %v", err)
+	}
+	if err := adapter.dispatchRedrive(ctx, ownerID, "autoputer-test", target, "coagent_result", content, trajectory, from); err != nil {
+		t.Fatalf("second-generation redrive: %v", err)
+	}
+	backlog, err = adapter.log.Unprocessed(ctx, mailbox)
+	if err != nil || len(backlog) != 1 || backlog[0].UpdateID != baseID+"#redrive-2" {
+		t.Fatalf("second generation backlog = %+v (err %v), want redrive-2", backlog, err)
 	}
 }

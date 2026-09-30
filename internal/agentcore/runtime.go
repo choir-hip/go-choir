@@ -131,9 +131,15 @@ type Runtime struct {
 	// it calls this function. If nil, activate() panics — there is no
 	// fallback path. The actor runtime is the only execution substrate.
 	dispatchActor func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error
+	// dispatchActorRedrive is the outbox-sweep delivery hook: identical to
+	// dispatchActor except a caller asserts the wake re-drives an open
+	// obligation, so the adapter may mint a salted tape generation when the
+	// deterministic update_id was already consumed.
+	dispatchActorRedrive func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 	// scheduleActor durably appends a deferred actor occurrence. It is bound
 	// only in kernel mode, where NotBefore is interpreted by the dispatcher.
-	scheduleActor func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
+	scheduleActor        func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
+	scheduleActorRedrive func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
 
 	desktopState    *desktopstate.Handler
 	content         *contentowner.Service
@@ -262,6 +268,18 @@ func (rt *Runtime) SetTextureCellAuthorizer(a TextureCellAuthorizer) {
 // The adapter owns the actor tape and binds this alongside dispatchActor.
 func (rt *Runtime) SetScheduleActor(fn func(context.Context, string, string, string, string, string, string, string, time.Time) error) {
 	rt.scheduleActor = fn
+}
+
+// SetDispatchActorRedrive binds the re-drive delivery hook used only by the
+// actor-wake outbox sweep. When unset the sweep falls back to dispatchActor.
+func (rt *Runtime) SetDispatchActorRedrive(fn func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error) {
+	rt.dispatchActorRedrive = fn
+}
+
+// SetScheduleActorRedrive binds the deferred re-drive hook used only by the
+// actor-wake outbox sweep. When unset the sweep falls back to scheduleActor.
+func (rt *Runtime) SetScheduleActorRedrive(fn func(context.Context, string, string, string, string, string, string, string, time.Time) error) {
+	rt.scheduleActorRedrive = fn
 }
 
 // DispatchActorActive reports whether the actor dispatch hook is set.
@@ -2506,16 +2524,29 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 		log.Printf("runtime: actor wake outbox sweep: actor delivery unavailable")
 		return
 	}
+	// The sweep is the obligation re-drive authority: dispatch through the
+	// redrive hooks so a wake whose deterministic tape row was already consumed
+	// (delivered-bound run died before consuming its control) mints a salted
+	// generation instead of deduping into nothing. First-time wakes are
+	// unaffected — an empty family keeps the base update_id.
+	dispatch := rt.dispatchActorRedrive
+	if dispatch == nil {
+		dispatch = rt.dispatchActor
+	}
+	schedule := rt.scheduleActorRedrive
+	if schedule == nil {
+		schedule = rt.scheduleActor
+	}
 	for _, wake := range wakes {
 		var dispatchErr error
 		if !wake.NotBefore.IsZero() {
-			if rt.scheduleActor == nil {
+			if schedule == nil {
 				log.Printf("runtime: actor wake outbox schedule unavailable for %s", wake.SourceUpdateID)
 				continue
 			}
-			dispatchErr = rt.scheduleActor(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID, wake.NotBefore.UTC())
+			dispatchErr = schedule(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID, wake.NotBefore.UTC())
 		} else {
-			dispatchErr = rt.dispatchActor(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
+			dispatchErr = dispatch(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
 		}
 		if dispatchErr != nil {
 			if errors.Is(dispatchErr, store.ErrNoPendingActorOccurrence) {

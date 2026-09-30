@@ -166,6 +166,8 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	// actor message. No fallback path exists.
 	rt.SetCheckedDispatchActor(a.dispatch)
 	rt.SetScheduleActor(a.schedule)
+	rt.SetDispatchActorRedrive(a.dispatchRedrive)
+	rt.SetScheduleActorRedrive(a.scheduleRedrive)
 
 	return a
 }
@@ -326,6 +328,33 @@ func (a *Adapter) schedule(ctx context.Context, ownerID, computerID, toAgentID, 
 }
 
 func (a *Adapter) dispatchAt(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error {
+	return a.dispatchAtMode(ctx, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID, notBefore, false)
+}
+
+// dispatchRedrive is the outbox-sweep delivery hook. A caller on this path
+// asserts the wake is a re-drive of an open obligation, so a consumed tape row
+// must not swallow it: when every member of the deterministic update_id family
+// is already processed, mint a salted generation so the re-drive lands as a
+// fresh tape row (cfa90b87/4158e48b: delivered 17:12, activation crashed,
+// re-arm replayed a consumed row — a plain resend dedups into nothing and the
+// pending control strands behind its dead bound run). The salt is
+// family-size-derived, so concurrent re-drives collapse to the same id; a
+// still-unprocessed family member suppresses a new generation. Ordinary
+// dispatch/schedule callers keep pure replay dedup — channel_message replays,
+// emission replays, and parked-run initial_dispatch re-dispatch rely on
+// collapsing the same id.
+func (a *Adapter) dispatchRedrive(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
+	return a.dispatchAtMode(ctx, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID, time.Time{}, true)
+}
+
+func (a *Adapter) scheduleRedrive(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error {
+	if notBefore.IsZero() {
+		return fmt.Errorf("actorruntime: schedule redrive requires not_before")
+	}
+	return a.dispatchAtMode(ctx, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID, notBefore.UTC(), true)
+}
+
+func (a *Adapter) dispatchAtMode(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time, redrive bool) error {
 	ownerID, computerID, toAgentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(toAgentID)
 	if ownerID == "" || computerID == "" || toAgentID == "" {
 		return fmt.Errorf("actorruntime: dispatch: owner_id, computer_id, and to_agent_id are required")
@@ -338,10 +367,17 @@ func (a *Adapter) dispatchAt(ctx context.Context, ownerID, computerID, toAgentID
 		}
 		return canonicalErr
 	}
+	mailbox := scopedActorMailboxID(ownerID, computerID, toAgentID)
 	updateID := actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID)
+	if redrive && a.log != nil {
+		familySize, familyPending, statusErr := a.log.RedriveFamilyStatus(ctx, mailbox, updateID)
+		if statusErr == nil && familySize > 0 && !familyPending {
+			updateID = fmt.Sprintf("%s#redrive-%d", updateID, familySize)
+		}
+	}
 	u := actor.Update{
 		UpdateID:     updateID,
-		ToAgentID:    scopedActorMailboxID(ownerID, computerID, toAgentID),
+		ToAgentID:    mailbox,
 		FromAgentID:  fromAgentID,
 		Kind:         kind,
 		Content:      content,

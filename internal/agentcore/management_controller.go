@@ -706,7 +706,15 @@ func (rt *Runtime) enqueuePersistentManagementRecoveryOccurrence(ctx context.Con
 		return err
 	}
 	log.Printf("runtime: persistent-Management recovery occurrence queued run=%s update=%s source=%s", rec.RunID, packet.UpdateID, packet.AgentID)
-	if err := rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID,
+	// Recovery occurrence content is deterministic per packet version; if a
+	// prior recovery for this packet was consumed and the run crashed again,
+	// a plain dispatch replays a consumed row. The redrive hook mints a salted
+	// generation so the second recovery actually lands.
+	dispatch := rt.dispatchActorRedrive
+	if dispatch == nil {
+		dispatch = rt.dispatchActor
+	}
+	if err := dispatch(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID,
 		"coagent_result", occurrence, trajectoryID, packet.AgentID); err != nil {
 		return fmt.Errorf("dispatch persistent Management recovery %s: %w", packet.UpdateID, err)
 	}
@@ -2445,6 +2453,15 @@ func (rt *Runtime) enqueueCanonicalLifecycleControlOccurrences(ctx context.Conte
 	if rt == nil || rt.store == nil || rec == nil || rt.dispatchActor == nil {
 		return fmt.Errorf("runtime lifecycle occurrence dispatch unavailable")
 	}
+	// Re-enqueue is a re-drive of an open obligation: a bound run that crashed
+	// before consuming leaves the deterministic occurrence consumed on the
+	// tape, so a plain dispatch dedups into nothing. Use the redrive hook (the
+	// adapter salts a fresh generation) so restart durability survives the
+	// already-consumed row.
+	dispatch := rt.dispatchActorRedrive
+	if dispatch == nil {
+		dispatch = rt.dispatchActor
+	}
 	trajectoryID := lifecycleControlTrajectoryForRun(rec)
 	var after int64
 	for {
@@ -2457,7 +2474,7 @@ func (rt *Runtime) enqueueCanonicalLifecycleControlOccurrences(ctx context.Conte
 			if content == "" {
 				return store.ErrLifecycleInvalidTransition
 			}
-			if err := rt.dispatchActor(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID, "coagent_result", content, trajectoryID, update.AgentID); err != nil {
+			if err := dispatch(context.WithoutCancel(ctx), rec.OwnerID, rec.ComputerID, rec.AgentID, "coagent_result", content, trajectoryID, update.AgentID); err != nil {
 				return fmt.Errorf("enqueue canonical lifecycle occurrence %s for run %s: %w", update.UpdateID, rec.RunID, err)
 			}
 		}

@@ -336,6 +336,33 @@ func (l *SQLiteLog) UpdateStatus(ctx context.Context, agentID, updateID string) 
 	return true, processedAt.Valid, nil
 }
 
+// RedriveFamilyStatus reports the delivery state of a deterministic update
+// identity and every salted redrive generation minted for it. The adapter
+// uses it when re-sending a logical occurrence whose earlier delivery was
+// already consumed: the update_id is content-derived, so a plain resend of a
+// processed row is a durable no-op and the obligation stays stranded forever.
+// Returns total family size and whether any member is still unprocessed.
+func (l *SQLiteLog) RedriveFamilyStatus(ctx context.Context, agentID, updateID string) (size int, pending bool, err error) {
+	rows, err := l.db.QueryContext(ctx, `
+SELECT processed_at IS NULL FROM actor_updates
+WHERE to_agent_id = ? AND (update_id = ? OR update_id LIKE ?)`, agentID, updateID, updateID+"#redrive-%")
+	if err != nil {
+		return 0, false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var unprocessed bool
+		if err := rows.Scan(&unprocessed); err != nil {
+			return 0, false, err
+		}
+		size++
+		if unprocessed {
+			pending = true
+		}
+	}
+	return size, pending, rows.Err()
+}
+
 // MailboxIdentities lists every durable actor identity, including identities
 // retained only by processed history or a compacted snapshot.
 func (l *SQLiteLog) MailboxIdentities(ctx context.Context) ([]string, error) {
