@@ -302,10 +302,10 @@ now:
     swap repaired image in, restart vmctl to clear the stuck flag, refresh.
     Guest came up clean on cc1b5af4 at 19:18Z — runtime: started, boot
     passivation sweep ran, ZERO defer/poison/durable-invalid flood
-    post-boot (all four live-lock signatures dead). Residual: wedged
-    persistent-Management resident f2e0446f still running (skipped by boot
-    passivation as a spawned-work-item path) — occupies the slot without a
-    watchdog; management wakes bound, not free-running. engineering desk
+    post-boot (all four live-lock signatures dead). Wedged
+    persistent-Management resident f2e0446f passivated at 19:16Z and the
+    slot freed — management no longer defer-storms. research:cfa90b87 run
+    362febb2 is passivated awaiting its cell wake. engineering desk
     reconcile logs a non-repeating ''co-super assignment invalid
     transition'' — a fourth invalid-wrap surfaced, needs a typed
     ErrDurableInvalid mapping.
