@@ -232,26 +232,28 @@ now:
     next_observation: 'first M1 desk-cell commitment records + M4 live
       round-trip distribution on the staging tape; first M-SUB cell_fate
       record on a timed-out/killed cell'
-  blocker_or_risk: 'staging env was blocked at a precise fault, root-caused
-    on Node B 2026-09-30: vmctl had a STALE route for the retained computer
-    (cached guest IP 10.200.63.2:8085 while the guest had re-minted to
-    10.200.67.2:8085), so proxy->upstream hung ~20s -> 502 and vmctl
-    reported unavailable. The guest itself was READY and working (autoputer
-    health ready, running_runs, desk_pending_mutations). RECOVERY LANDED
-    non-destructively: /internal/vmctl/refresh re-derived the route ->
-    proxy:ok, vmctl:ok, /api/runs 200, build.commit=9e3d6948. QA repro
-    (m0_qa_probe) now executes: owner rev + texture v1 committed, research
-    legs running. Residual risk: research legs held running >20min with one
-    post-owner revision — watch for a stall recurrence. M2/M3/M5 remain
-    dependency-blocked (M0a/M1 unsettled).'
-  next_action: 'finish the live QA repro to a 2nd post-owner revision
-    (texture v2) = M-SUB/M1 deployed acceptance; then M0a controlled-
-    comparison verify -> deletion commit ({desk_go_eval} registry +
-    rlm_research_runtime.yaml rewrite); then M2/M3/M5. Recovery pattern for
-    future outages: probe the guest directly, then
-    POST /internal/vmctl/refresh on the vmctl unix socket before assuming a
-    wedged VM. Station recon already done in the M5/M2/M3 files
-    (Recon 2026-09-30 notes).'
+  blocker_or_risk: 'staging env root-caused on Node B 2026-09-30 to a HOST
+    CAPACITY fault, not code: platform-dolt (go-choir-platform-dolt) balloons
+    to anon-rss 28GB (total-vm 48GB) on a 31GB box -> kernel OOM-killer kills
+    it AND the retained-computer firecracker
+    (vmmanager: "exited with error: signal: killed", 12:31:26). Each kill
+    reboots the guest (~20-40min cycle) -> boot passivation mass-parks
+    in-flight desk cells -> desk legs (incl. our QA research legs) die
+    mid-leg -> v2 cannot form -> all deployed_proof items are unreachable.
+    The stale-route/vmctl-unavailable flapping is a SYMPTOM of these re-mints;
+    POST /internal/vmctl/refresh on the vmctl unix socket recovers the route
+    non-destructively but only until the next OOM kill. build.commit=9e3d6948
+    is deployed and the guest itself is READY/working when up. Fix needs
+    owner/ops capacity action (platform-dolt memory cap / tuning / larger
+    box). M2/M3/M5 remain dependency-blocked (M0a/M1 unsettled).'
+  next_action: 'owner/ops: cap or tune platform-dolt memory (or scale the
+    box) so the OOM-killer stops killing the retained-computer VM; that is
+    the single gate for every deployed_proof item. Meanwhile POST
+    /internal/vmctl/refresh is the non-destructive route-recovery between
+    reboots. When vmctl stays ok and deployed_commit>=9e3d6948 with a
+    stable guest: M-SUB emit proofs -> M0a controlled-comparison verify ->
+    deletion commit -> M1 tape -> M2/M3/M5. Station recon done in
+    M5/M2/M3 files (Recon 2026-09-30 notes).'
 
 receipts: []
 
