@@ -377,7 +377,19 @@ now:
     the VM every ~20-40min when it crosses ~28GB); the refresh-cycle
     workaround is exercised but a memory cap is the durable fix —
     owner/ops, not code. Gate (b) is CLOSED by the 17:10Z
-    completion above.'
+    completion above.
+
+    19:20Z — dispatcher substrate fix DEPLOYED and live (cc1b5af4):
+    ErrDurableInvalid consumes decided-invalid occurrences + records
+    delivery_invalid fate; defer_count/MaxDeferrals=64 bound every defer so
+    a wait that outlives the bound poisons instead of live-locking. All four
+    live-lock signatures dead (0 defer/poison/invalid post-boot); wedged
+    residents f2e0446f (Management) and 362febb2 (research:cfa90b87)
+    passivated, slots freed. The forced refresh bricked the guest (unclean
+    vdb unmount -> fsck fail -> emergency mode + hung vmctl refreshing
+    flag): recovered via copy+e2fsck repair + vmctl restart. NEXT: re-drive
+    the armed research cell (cfa90b87 M0a verify) and run the M-SUB/M1
+    deployed proofs on a now-stable dispatcher.'
   receipts:
   - id: m1-commit-proof-attempt-2026-09-30
     boundary: execute
