@@ -323,6 +323,15 @@ now:
     the bound run is still Active; passivated/terminal/unresolvable bound
     run re-mints the wake (actor_wake_strand_test.go proves both legs).
     Awaiting deploy; cfa90b87 unstrands on the next guest boot migration.
+    DEPLOY-OUTCOME UPDATE (08a76896): a7e31232's migration minted 3 pending
+    wakes at 21:14Z yet cfa90b87 stayed passivated — a divergent panel plus
+    code audit proved the re-arm replayed the consumed tape row
+    (actorDispatchUpdateID is content-derived; ON CONFLICT(update_id) DO
+    NOTHING swallows the resend). The sweep and the canonical re-enqueue
+    now dispatch through redrive hooks that mint <base>#redrive-N when the
+    identity family is fully consumed; pending members suppress salting so
+    replay dedup is unchanged. cfa90b87 unstrands on the 08a76896 boot.
+  '
   '
   next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
     and fixed: exhausted restart recasts live-locked the guest. "recast
