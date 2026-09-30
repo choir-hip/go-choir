@@ -2818,10 +2818,18 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 	// message to wake the target agent — the handler will resume the
 	// parked run (or start a new one) and inject the update via
 	// injectUserTurns. No channel signal, no reconcile-new-run.
-	if rt.dispatchActor == nil {
+	// This is an obligation re-drive: the pending control may already own a
+	// consumed tape row from an earlier delivery that never discharged it, so
+	// route through the redrive hook — a fully-consumed identity family mints
+	// a salted generation instead of deduping into nothing.
+	dispatch := rt.dispatchActorRedrive
+	if dispatch == nil {
+		dispatch = rt.dispatchActor
+	}
+	if dispatch == nil {
 		panic("runtime: wakeUpdatedCoagent called without dispatchActor set — actor runtime is required")
 	}
-	if err := rt.dispatchActor(ctx, update.OwnerID, firstNonEmpty(update.ComputerID, rt.TextureComputerID()), target, "coagent_result", lifecycleControlActorOccurrenceContent(update), update.TrajectoryID, update.AgentID); err != nil {
+	if err := dispatch(ctx, update.OwnerID, firstNonEmpty(update.ComputerID, rt.TextureComputerID()), target, "coagent_result", lifecycleControlActorOccurrenceContent(update), update.TrajectoryID, update.AgentID); err != nil {
 		log.Printf("runtime: actor wake coagent for update %s: %v", update.UpdateID, err)
 	}
 }
