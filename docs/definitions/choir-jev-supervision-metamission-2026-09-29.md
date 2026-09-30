@@ -322,9 +322,12 @@ now:
     cells must be told the live surface, not trusted to grep a stale
     frozen source snapshot.
 
-    Remaining gate: (a) platform-dolt OOM capacity — 28GB on 31GB re-mints
-    the VM every ~20-40min; the refresh-cycle workaround is exercised but
-    a memory cap is the durable fix. Gate (b) is CLOSED by the 17:10Z
+    Remaining gate: (a) platform-dolt OOM capacity — 17:15Z measured
+    corpus :13307 at 9.1GB RSS, :13306 at 1.5GB, 14GB free on 31GB
+    (headroom now, but the corpus store grows unboundedly and re-mints
+    the VM every ~20-40min when it crosses ~28GB); the refresh-cycle
+    workaround is exercised but a memory cap is the durable fix —
+    owner/ops, not code. Gate (b) is CLOSED by the 17:10Z
     completion above.'
   receipts:
   - id: m1-commit-proof-attempt-2026-09-30
