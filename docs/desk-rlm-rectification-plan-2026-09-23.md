@@ -607,3 +607,107 @@ after R3b; `M7` after R3c; `R4` after R3d; `R5a` anywhere before M11;
 - `docs/desk-rlm-rectification-plan-2026-09-25.md` does not exist — a few
   panel briefs cited it; the live plan is this file.
 
+## 12. Addendum 2026-09-29 — overnight autonomy scope + trace/Jev surface
+
+**Provenance:** owner direction 2026-09-29 (this session), not yet ratified
+as a mission-graph change. §11 remains the ratified spine; this section is
+the working overlay for the overnight autonomous run. When the two conflict,
+§11 governs until the owner ratifies the reordering.
+
+### 12.1 Overnight goal
+
+Self-development working across all four core desks (management,
+engineering, research, texture) with live texture supervision — the desk
+topology §3 describes, on the canonical event substrate. Explicitly: not
+"engineering-only selfdev". The overnight run's value is the full loop:
+a desk casts work, a desk executes it, a desk supervises it, the owner
+reads a live Texture document that advances.
+
+### 12.2 Jev: transport is OpenRouter, not the TypeSafe direct API
+
+**Owner direction 2026-09-29:** Jev calls go through OpenRouter
+(`POST https://openrouter.ai/api/alpha/decisions`, model
+`typesafe/jev-1.13`; the `~typesafe/jev-latest` alias tracks the newest
+release). The OpenRouter key lives in `.env` (`OPENROUTER_API_KEY`) and is
+deployed to Node B by extending `nix/deploy-provider-creds.sh` — the same
+hoisting path as `gateway-provider.env` and `codex-auth.json`.
+
+Live-verified 2026-09-29 (~$0.000022/call, `usage.cost` in response): a
+noul + choice battery against a hypothesis/evidence/outcome state returned
+typed answers with correct polarity and a pinned served-model version
+(`typesafe/jev-1.13-20260917`). **Pin `typesafe/jev-1.13`, never
+`jev-latest`** — jaggedness notes (`docs.typesafe.ai/model-jaggedness/jev-1.13.md`)
+are bound to a served version.
+
+This changes the earlier Jev prompt's assumption (typesafe direct
+`POST /v1/systemone`); the OpenRouter Decisions API shape is the wire
+contract now (`model`, `state`, `questions` map of `{type:noul|choice|score,
+instructions, criteria}` → `answers` map of `{type, noul|choice+probabilities
+|score+legend+probabilities, confidence}`).
+
+### 12.3 Trace/log substrate — first panel findings (2026-09-29)
+
+Panel run `.agentic-consensus/agentic-consensus-20260929-024442`
+(convergent, most routes unavailable this session — claude session-limited,
+OMP free-tier routes down, cursor CLI absent; substantive outputs: devin +
+opencode + a repo-verified correction).
+
+**Verified substrate corrections the panel surfaced:**
+
+- `internal/trace/` **already exists** — Dolt-backed `trace_events` table
+  (id/run_id/parent_id/event_type/actor/tool/owner_id/trajectory_id/
+  seq/stream_seq/payload/created_at), `FromEventRecord` projection, a
+  `RedactingStore`, and a `Queries`/`NewHTTPHandler` serving
+  `GET /api/trace/events?run_id=…` + parent-chain reconstruction.
+- It is **mounted but disabled**: `internal/autoputer/run.go:379` wires it
+  behind `RUNTIME_TRACE_PERSISTENCE_ENABLED` (default false;
+  `internal/provideriface/config.go:146`); the flag is not set in
+  `nix/autoputer-vm.nix`, and the HTTP handler is not mounted on the guest
+  router — the query surface exists only for tests.
+- `GET /api/trajectories/{id}/events` pages the **lifecycle reducer event**
+  stream, not `types.EventRecord` — so `tool.invoked`/`tool.result`
+  emissions (`internal/toolregistry/batch_executor.go:67,115`) are not
+  readable through that route. A naive "add provider events to
+  EventRecord" would be durable but unreadable.
+
+**Panel direction (pending a fuller panel):**
+
+- One observation substrate: extend the existing `EventRecord` stream with
+  `provider.request`/`provider.response` kinds at the runtime emit sites
+  (`internal/toolregistry/toolloop.go:503+`, plus the non-tool-loop
+  `Provider.Execute` path), *and* mount an owner-scoped cursor-paginated
+  read on the same stream (the `api_trajectory.go` lifecycle cursor is the
+  wrong store).
+- Do not mount `internal/trace/query.go` as-is (its default
+  `OwnerResolver` trusts a `?owner_id=` query param — a wrong-owner denial
+  bug); either wire it behind `authenticateUser` or expose the same
+  cursor contract on the canonical event store.
+- `internal/trace`'s store is an *optional duplicate* of the event table —
+  decide whether to enable it (one flag) or delete it. Don't run both.
+- Ops/log surface stays journald for now; do not build a shipper or a
+  second store. The owner-facing answer to "what did desks do" comes from
+  commitment records + provider/tool traces, not service logs.
+
+### 12.4 Residuals carried forward into the overnight run
+
+- Stranded-op terminalization (`selfdev-ffbd…` op `failed` 2026-09-29
+  03:45Z under the deploy of `c689e7fd`) — closed.
+- `selfdev-89d5e9ef` op `degraded` 2026-09-29 05:10Z on computer
+  `computer-ccb04d4a` — the drain retry arm landed in `9f8c9866` after it;
+  the op is terminal-by-state, not by the retry path.
+- ChatGPT provider credential rotated at 04:20Z (refresh-token reuse);
+  redeployed via `nix/deploy-provider-creds.sh` at 05:36Z; gateway
+  confirmed healthy (chatgpt inference succeeded 05:37:40Z). OpenRouter
+  Jev key added to the same hoist path for the overnight build.
+- M11 probe `M11_SELFDEV_EPISODE_1790662546195` running on
+  `computer-5352d5a8` — apply leg in flight on `9f8c9866`.
+
+### 12.5 What §12 does NOT change
+
+- M11 (self-development gate) remains the gate; the trace/Jev work is the
+  supervision surface M11's episode must be legible through.
+- The §11 mission ordering is unchanged; §12 only says the overnight
+  session runs M11 to completion and then immediately opens the Jev/trace
+  slice, not that it re-orders the ratified spine.
+- Epistemic boundary: score records never enter acting context; the trace
+  store is supervision-only input to management/texture desks.
