@@ -345,14 +345,15 @@ now:
     calls fail on the provider until upstream recovers; not the seam.
   '
   '
-  next_action: 'STATUS 23:00Z — redrive chain (a2b87d69 + a7e31232 + 08a76896
-    + 766b3a53 + 37882e1d) DEPLOYED to staging, guest epoch 979 live on
-    37882e1d. cfa90b87 obligation confirmed open (work item 7be3d1de,
-    bound run 362febb2 passivated). Salted dispatch is queued behind a
-    279+ dead-wake serial drain (discharged obligations re-armed by the
-    migration, each disposing on ErrNoPendingActorOccurrence). BLOCKED:
-    unstrand confirmation pending drain + provider chatgpt circuit-open
-    recovery. M-SUB/M1/M0a deployed proofs all share this gate.
+  next_action: 'STATUS 23:20Z — redrive chain (a2b87d69 + a7e31232 + 08a76896
+    + 766b3a53 + 37882e1d) DEPLOYED, guest epoch 979 on 37882e1d. Guest
+    REBOOTED ~22:52 (vmctl-exec 2495033): migration minted 1778 pending wakes
+    at 23:16 — cfa90b87 wake re-armed, now queued behind a serial 1778-wake
+    drain (~150 disposed in 20min). cfa90b87 obligation open (work 7be3d1de,
+    bound run 362febb2 passivated); run reactivates when the drain reaches it.
+    Environment faults: provider chatgpt circuit open (research cells 400);
+    the 1778 backlog is a one-time migration-fanout cost. M-SUB/M1/M0a
+    deployed proofs share this gate.'
 
     and fixed: exhausted restart recasts live-locked the guest. "recast
     attempts exhausted" returned a transient error, so the actor
