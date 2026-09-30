@@ -195,6 +195,16 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				for _, in := range reduction.receipt.Intents {
 					result.Receipts = append(result.Receipts, fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq))
 				}
+				// A texture desk cell that staged no texture_apply intent did not
+				// commit a turn, so the owner-revision trigger would stay pending
+				// forever (defect #5: "activation returned without disposing exact
+				// trigger"). Consume it with a no_semantic_change turn — the desk
+				// authored nothing, which is still a disposition of the wake.
+				if deskRole == agentprofile.Texture {
+					if cerr := rt.consumeIdleTextureTrigger(ctx, result.Intents); cerr != nil {
+						return "", fmt.Errorf("desk_go_eval: consume texture trigger: %w", cerr)
+					}
+				}
 			}
 			out, _ := json.Marshal(map[string]any{
 				"stdout":   result.Stdout,
@@ -410,4 +420,47 @@ func (rt *Runtime) deskEmitSignal(ctx context.Context, payload yaegikernel.EmitP
 		return yaegikernel.EmitResult{}, fmt.Errorf("emit: %w", err)
 	}
 	return yaegikernel.EmitResult{Seq: seq}, nil
+}
+
+// consumeIdleTextureTrigger disposes the owner-revision wake when a texture
+// desk cell completed without staging a texture_apply intent. Without this the
+// trigger never consumes: texture_turn_committed needs an artifactRefs[1] ==
+// the trigger head, which only a turn commit writes. A cell that authored no
+// revision/decision still must answer the wake — the desk observed the owner
+// revision and chose to change nothing, which is the no_semantic_change turn.
+func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaegikernel.StagedIntent) error {
+	for _, in := range intents {
+		if in.Kind == yaegikernel.IntentTextureApply {
+			return nil // the cell committed a real turn; the trigger consumed
+		}
+	}
+	execCtx := toolregistry.ExecutionContextFrom(ctx)
+	rec := execCtx.RunRecord
+	if rt == nil || rt.textureCellAuthorizer == nil || rec == nil {
+		return nil // not a texture run or no authorizer bound — nothing to do
+	}
+	docID := strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))
+	if docID == "" {
+		docID = strings.TrimSpace(execCtx.ChannelID)
+	}
+	if docID == "" {
+		return nil
+	}
+	doc, err := rt.store.GetLifecycleDocument(ctx, rec.OwnerID, rec.ComputerID, docID)
+	if err != nil || doc.CurrentRevisionID == "" {
+		return err
+	}
+	body, err := json.Marshal(map[string]any{
+		"op":               "decide",
+		"doc_id":           docID,
+		"base_revision_id": doc.CurrentRevisionID,
+		"decision_kind":    "no_worker_needed",
+		"reason":           "desk cell completed with no authoring act; consuming the owner revision",
+	})
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256([]byte(rec.RunID + "\x1f" + docID + "\x1f" + doc.CurrentRevisionID))
+	_, err = rt.textureCellAuthorizer.CommitCellTextureAuthor(ctx, rec, string(body), "rlm-texture-idle:"+hex.EncodeToString(sum[:8]))
+	return err
 }
