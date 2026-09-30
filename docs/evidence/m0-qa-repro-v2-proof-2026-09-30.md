@@ -40,3 +40,14 @@ Residual: the OOM-driven reboot cycle means deployed proofs must complete inside
 one ~20-40min uptime window; sustained acceptance still wants the platform-dolt
 memory fix. This proof landed across one reboot boundary via the texture-durable
 revision (v1 survived, v2 authored post-restart).
+
+Follow-on fault observed while attempting the M1 typed-commitment proof
+(2026-09-30 ~12:55): `choir run start` began returning HTTP 500
+`{"error":"failed to submit prompt"}`. Guest autoputer stayed `ready` and
+corpusd stayed `ok`, but the guest->corpusd event-append leg logged
+`corpusd returned 400: computer event CAS: lifecycle receipt join
+unavailable` on the trajectory_started append. The canonical event-write
+path is a third fault surface (CAS/join precondition), orthogonal to the
+OOM reboot cycle and the vmctl stale route. Submission worked in prior
+windows (the v2 proof landed) — the failure is windowed, matching the OOM
+reboot cycle knocking out mid-append state.
