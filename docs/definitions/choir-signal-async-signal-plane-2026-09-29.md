@@ -151,14 +151,20 @@ boundaries:
 
 now:
   status: blocked_incomplete
-  slice: 'cell_fate+deadline'
+  slice: 'injection seam — boundary-drain notice + repl-variable refresh'
   evidence_refs:
     - internal/agentcore/rlm_reduce_test.go#TestReduceFailedCellDropsTray
     - internal/agentcore/rlm_reduce_test.go#TestCellTerminalDeadlineRecordsTimeoutForRestartPassivatedCell
     - internal/agentcore/rlm_reduce_test.go#TestArmCellTerminalDeadlineCarriesReductionIdentity
     - internal/agentcore/rlm_reduce_test.go#TestCellTerminalDeadlineDoesNotCancelReactivatedRun
   source_ref: main@ac54317c
-  deploy_identity: unknown
+  deploy_identity: 'staging build.commit=6f9dcf17'
+  # Emit verb + ActionEmit + refuse gate landed (6f9dcf17, orange). The
+  # durable host write is deferred: choir.Emit currently returns "emit host
+  # unavailable" because BrokerConfig.Emit is nil — the worker's cfg.Emit
+  # must become a StreamBrokerEmit/StreamBrokerEmitResult round-trip on the
+  # session socket and the host EvalCell must loop on emit frames calling a
+  # durable channel appender. Do not read "Emit verb landed" as functional.
   candidate:
     id: none
     state: none
