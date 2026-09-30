@@ -2,8 +2,10 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
@@ -33,81 +35,150 @@ func commitmentCanonicalID(t *testing.T, s *store.Store, scope ReductionScope, i
 	return id
 }
 
-// Probe 3 — a desk cell staging choir.Precommit records a frozen prediction on
-// the OG commitment ledger; the record binds the acting agent, lands
-// unresolved, and is idempotent under cell replay.
-func TestR2PrecommitMintsLedgerRecord(t *testing.T) {
+// Probe 3 — a desk cell's typed Precommit, Resolve, and Disagreement acts
+// append separate commitment_record objects. The frozen distribution and
+// resolution evidence remain on the tape; the disagreement is a distinct
+// epistemic act rather than an acting-context signal.
+func TestR2TypedCommitmentSequenceMintsLedgerRecords(t *testing.T) {
 	rt, s := testRuntime(t)
 	scope := testReductionScope()
-	scope.CellID = "cell-r2-precommit"
+	scope.ComputerID = rt.TextureComputerID()
+	scope.CellID = "cell-r2-typed-commitment"
 	ctx := testReductionCtx(scope)
-
-	intent := yaegikernel.StagedIntent{
-		LocalID:   "pc-1",
-		Kind:      yaegikernel.IntentPrecommit,
-		Statement: "the frozen corpus digest will not change under rewarm",
-	}
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: scope, ledger: rt.store}
-	// Precommit is ledger-only: it returns no mailed seq but must not error —
-	// a nil reduce with ledger set is the mint having run.
-	if _, err := reduction.commitActIntent(ctx, intent); err != nil {
+
+	precommitBody, err := json.Marshal(types.CommitmentPrecommit{
+		Question:     "will the retained tape replay?",
+		Distribution: map[string]float64{"yes": 0.8, "no": 0.2},
+		Resolver:     "management",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	precommit := yaegikernel.StagedIntent{
+		LocalID: "pc-1", Kind: yaegikernel.IntentPrecommit, Precommit: string(precommitBody),
+	}
+	if err := validateSemanticActIntent(precommit); err != nil {
+		t.Fatalf("validate typed precommit: %v", err)
+	}
+	if _, err := reduction.commitActIntent(ctx, precommit); err != nil {
 		t.Fatalf("precommit reduce: %v", err)
 	}
-	if id := commitmentCanonicalID(t, s, scope, intent); id == "" {
-		t.Fatal("precommit record absent from the commitment ledger")
+
+	targetID := commitmentRecordForIntent(scope, precommit).RecordID
+	resolveBody, err := json.Marshal(types.CommitmentResolve{
+		Verdict: "confirmed", EvidenceRefs: []string{"evidence://replay"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolve := yaegikernel.StagedIntent{
+		LocalID: "res-1", Kind: yaegikernel.IntentResolve, TargetRef: targetID, Resolve: string(resolveBody),
+	}
+	if err := validateSemanticActIntent(resolve); err != nil {
+		t.Fatalf("validate typed resolve: %v", err)
+	}
+	if _, err := reduction.commitActIntent(ctx, resolve); err != nil {
+		t.Fatalf("resolve reduce: %v", err)
+	}
+
+	disagreementBody, err := json.Marshal(types.CommitmentDisagreement{
+		CommitmentID: targetID, ScorerVerdict: "contradicted", ResolverVerdict: "confirmed",
+		EvidenceRefs: []string{"evidence://counterexample"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	disagreement := yaegikernel.StagedIntent{
+		LocalID: "dis-1", Kind: yaegikernel.IntentDisagreement, Disagreement: string(disagreementBody),
+	}
+	if err := validateSemanticActIntent(disagreement); err != nil {
+		t.Fatalf("validate typed disagreement: %v", err)
+	}
+	if _, err := reduction.commitActIntent(ctx, disagreement); err != nil {
+		t.Fatalf("disagreement reduce: %v", err)
+	}
+
+	records, err := s.ListCommitmentRecords(ctx, scope.OwnerID, scope.ComputerID, "", 10)
+	if err != nil {
+		t.Fatalf("list typed commitment tape: %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("typed commitment tape records = %d, want 3", len(records))
+	}
+	byID := map[string]types.CommitmentRecord{}
+	for _, rec := range records {
+		byID[rec.RecordID] = rec
+	}
+	if got := byID[targetID].Precommit; got == nil || got.Question != "will the retained tape replay?" ||
+		got.Distribution["yes"] != 0.8 || got.Resolver != "management" {
+		t.Fatalf("typed precommit record = %+v", byID[targetID])
+	}
+	if got := byID[commitmentRecordForIntent(scope, resolve).RecordID].Resolve; got == nil ||
+		got.Verdict != "confirmed" || len(got.EvidenceRefs) != 1 {
+		t.Fatalf("typed resolve record = %+v", byID[commitmentRecordForIntent(scope, resolve).RecordID])
+	}
+	if got := byID[commitmentRecordForIntent(scope, disagreement).RecordID].Disagreement; got == nil ||
+		got.ScorerVerdict != "contradicted" || got.ResolverVerdict != "confirmed" {
+		t.Fatalf("typed disagreement record = %+v", byID[commitmentRecordForIntent(scope, disagreement).RecordID])
+	}
+
+	// The next desk cell receives an ActingPack dump, never the frozen
+	// distribution, scorer result, or disagreement act from this sequence.
+	packRaw, err := json.Marshal(types.BuildActingPack(records, scope.FromAgentID, 0))
+	if err != nil {
+		t.Fatalf("marshal acting pack: %v", err)
+	}
+	for _, forbidden := range []string{`"scores"`, `"distribution"`, `"probabilities"`, `"disagreement"`} {
+		if strings.Contains(string(packRaw), forbidden) {
+			t.Fatalf("acting pack leaked %s after typed sequence: %s", forbidden, packRaw)
+		}
 	}
 }
 
-// Probe 3 (resolution half) — a desk cell staging choir.Resolve(target,
-// outcome) writes the resolved outcome onto the ledger as a record linked to
-// the closed act: discrepancy class, resolver observation, and the resolver's
-// score answer are all captured so the score-accrual layer can read it. The
-// score never re-enters the acting cell's context — it lives only on the
-// ledger (the epistemic boundary).
-func TestR2ResolveWritesOutcomeOntoLedger(t *testing.T) {
+// Legacy string commitments have no frozen distribution to infer. A typed
+// Resolve may still close them; they remain unscoreable rather than being
+// rewritten or rejected.
+func TestR2TypedResolveGrandfathersLegacyStringCommitment(t *testing.T) {
 	rt, s := testRuntime(t)
 	scope := testReductionScope()
-	scope.CellID = "cell-r2-resolve"
+	scope.ComputerID = rt.TextureComputerID()
+	scope.CellID = "cell-r2-legacy-commitment"
 	ctx := testReductionCtx(scope)
+	legacy := types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1,
+		RecordID: "legacy-string-commitment",
+		Prediction: types.CommitmentPrediction{
+			Hypothesis: "the legacy string commitment remains valid",
+		},
+		Discrepancy: types.DiscrepancyUnresolved,
+		Provenance:  types.CommitmentProvenance{AgentID: scope.FromAgentID},
+	}
+	if _, err := s.AppendCommitmentRecord(ctx, scope.OwnerID, scope.ComputerID, legacy); err != nil {
+		t.Fatalf("append legacy commitment: %v", err)
+	}
+	resolveBody, err := json.Marshal(types.CommitmentResolve{
+		Verdict: "confirmed", EvidenceRefs: []string{"evidence://legacy"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolve := yaegikernel.StagedIntent{
+		LocalID: "legacy-resolve", Kind: yaegikernel.IntentResolve,
+		TargetRef: legacy.RecordID, Resolve: string(resolveBody),
+	}
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: scope, ledger: rt.store}
-
-	// A resolve with no outcome is rejected at the cell-reduce gate — the
-	// outcome is required before the act ever reaches commit.
-	if err := validateSemanticActIntent(yaegikernel.StagedIntent{
-		LocalID: "res-empty", Kind: yaegikernel.IntentResolve, TargetRef: "act:x",
-	}); err == nil {
-		t.Fatal("validateSemanticActIntent accepted an empty-outcome resolve")
+	if _, err := reduction.commitActIntent(ctx, resolve); err != nil {
+		t.Fatalf("resolve legacy commitment: %v", err)
 	}
-
-	// A resolve with a verdict mints a resolution record carrying the class,
-	// observation, and score answer.
-	intent := yaegikernel.StagedIntent{
-		LocalID: "res-1", Kind: yaegikernel.IntentResolve,
-		TargetRef: "act:frozen-corpus", OutcomeVal: "confirmed",
+	records, err := s.ListCommitmentRecords(ctx, scope.OwnerID, scope.ComputerID, "", 10)
+	if err != nil {
+		t.Fatalf("list legacy commitment tape: %v", err)
 	}
-	if _, err := reduction.commitActIntent(ctx, intent); err != nil {
-		t.Fatalf("resolve reduce: %v", err)
-	}
-	if id := commitmentCanonicalID(t, s, scope, intent); id == "" {
-		t.Fatal("resolve record absent from the commitment ledger")
-	}
-
-	// The derived record carries the resolution fields the score layer reads.
-	rec := commitmentRecordForIntent(scope, intent)
-	if rec.Discrepancy != types.DiscrepancyConfirmed {
-		t.Fatalf("resolve discrepancy = %q, want confirmed", rec.Discrepancy)
-	}
-	if rec.Observation.Excerpt != "confirmed" || rec.Observation.SourceRef != "act:frozen-corpus" {
-		t.Fatalf("resolve observation = %+v", rec.Observation)
-	}
-	if rec.Provenance.ResolvedAt == "" {
-		t.Fatal("resolve record missing ResolvedAt")
-	}
-	if len(rec.Scores) != 1 || rec.Scores[0].Answers["outcome"] != "confirmed" {
-		t.Fatalf("resolve score answer = %+v", rec.Scores)
-	}
-	if rec.ParentID != "act:frozen-corpus" {
-		t.Fatalf("resolve record not linked to closed act: ParentID=%q", rec.ParentID)
+	resolved := types.ResolveCommitments(records, time.Now().UTC())
+	if len(resolved) != 1 || resolved[0].Act.RecordID != legacy.RecordID ||
+		resolved[0].Discrepancy != types.DiscrepancyConfirmed {
+		t.Fatalf("legacy string commitment did not resolve: %+v", resolved)
 	}
 }
 

@@ -147,11 +147,14 @@ func TestActingPackCarriesNoScoreFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The pack's JSON may contain "discrepancy" and observation excerpts,
-	// but no score-ish keys anywhere — the epistemic boundary holds on the
-	// wire, not just in the struct's field list.
-	for _, banned := range []string{`"scores"`, `"scored_at"`, `"scorer_model_id"`} {
+	// but no score, probability-distribution, or disagreement keys anywhere:
+	// the epistemic boundary holds on the wire, not just in the struct list.
+	for _, banned := range []string{
+		`"scores"`, `"scored_at"`, `"scorer_model_id"`,
+		`"distribution"`, `"probabilities"`, `"disagreement"`,
+	} {
 		if strings.Contains(string(raw), banned) {
-			t.Fatalf("acting pack carries score field %s: %s", banned, raw)
+			t.Fatalf("acting pack carries forbidden field %s: %s", banned, raw)
 		}
 	}
 	// Honest feedback IS present: the confirmed act carries its

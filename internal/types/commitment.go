@@ -36,6 +36,34 @@ type TypedQuestion struct {
 	Weight float64 `json:"weight,omitempty"`
 }
 
+// CommitmentPrecommit is the frozen, machine-scoreable prediction staged by
+// choir.Precommit. Distribution maps each possible answer to the probability
+// committed before evidence arrives; Resolver names the desk that may resolve
+// it. The objectgraph body deliberately accepts future JSON fields so readers
+// from either side of an additive rollout can retain the record.
+type CommitmentPrecommit struct {
+	Question     string             `json:"question"`
+	Distribution map[string]float64 `json:"distribution"`
+	Resolver     string             `json:"resolver"`
+}
+
+// CommitmentResolve is the evidence-bearing result staged by choir.Resolve.
+// It closes the linked commitment append-only; no score belongs to a resolver
+// verdict.
+type CommitmentResolve struct {
+	Verdict      string   `json:"verdict"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+}
+
+// CommitmentDisagreement preserves a scorer's differing verdict separately
+// from the resolver's result. It is supervision signal, not acting context.
+type CommitmentDisagreement struct {
+	CommitmentID    string   `json:"commitment_id"`
+	ScorerVerdict   string   `json:"scorer_verdict"`
+	ResolverVerdict string   `json:"resolver_verdict"`
+	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+}
+
 // CommitmentPrediction is the required frozen prediction: the hypothesis,
 // the assumptions it rests on, competing alternatives, and typed questions
 // with the agent's probabilities — all frozen at commit time.
@@ -128,6 +156,15 @@ type CommitmentRecord struct {
 	Revision     CommitmentRevision      `json:"revision,omitempty"`
 	Action       *CommitmentAction       `json:"action,omitempty"`
 	Consequences []CommitmentConsequence `json:"consequences,omitempty"`
+
+	// Precommit, Resolve, and Disagreement are the additive typed semantic-act
+	// schema on choir.commitment_record. Older bodies have these nil and retain
+	// their Prediction.Hypothesis string unchanged. A typed Resolve may target
+	// that legacy record, but it remains unscoreable because no distribution is
+	// inferred or rewritten from free text.
+	Precommit    *CommitmentPrecommit    `json:"precommit,omitempty"`
+	Resolve      *CommitmentResolve      `json:"resolve,omitempty"`
+	Disagreement *CommitmentDisagreement `json:"disagreement,omitempty"`
 
 	// Addressee is the desk/actor this act is addressed to (StagedIntent
 	// ToDesk, falling back to ResolverID). It is the ledger-side analogue of

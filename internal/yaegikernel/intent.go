@@ -54,13 +54,17 @@ const (
 	// management or the owner. Both are operational, unscored.
 	IntentCancel   = "cancel"
 	IntentEscalate = "escalate"
-	// IntentPrecommit freezes a typed prediction on the commitment ledger.
+	// IntentPrecommit freezes a machine-scoreable prediction on the
+	// commitment ledger.
 	IntentPrecommit = "precommit"
 	// IntentReport asserts a typed claim with evidence and names its
 	// resolver; it resolves when that resolver's acceptance lands.
 	IntentReport = "report"
-	// IntentResolve is the named resolver's act closing a Report/Ask.
+	// IntentResolve records an evidence-bearing resolver verdict.
 	IntentResolve = "resolve"
+	// IntentDisagreement records a scorer verdict that differs from the
+	// resolver verdict as a distinct supervision act.
+	IntentDisagreement = "disagreement"
 	// IntentTextureApply stages a full-RLM texture authoring turn (R3d):
 	// the texture cell edits its bound document and the reducer commits the
 	// staged edit as an AuthorAppAgent revision through the atomic
@@ -144,22 +148,20 @@ type StagedIntent struct {
 	Decision     string   `json:"decision,omitempty"`
 	VerifierRefs []string `json:"verifier_refs,omitempty"`
 	BundleDigest string   `json:"bundle_digest,omitempty"`
-	// Semantic-act fields (mission R2 commitment-ledger intents).
-	// TargetRef binds a Resolve/Reply/Cancel to the act it closes (the
-	// staged intent's canonical commitment or message id). Claim is a
-	// Report's typed claim text. ResolverID names the desk/actor that must
-	// accept a Report or resolve a Precommit. Question is an Ask's prompt;
-	// Answer is a Reply's/Resolve's body. Outcome is a Resolve verdict.
-	// Statement is a Precommit's frozen prediction body (JSON-encoded
-	// CommitmentRecord prediction). Deadline is a resolve-by bound.
-	TargetRef  string `json:"target_ref,omitempty"`
-	Claim      string `json:"claim,omitempty"`
-	ResolverID string `json:"resolver_id,omitempty"`
-	Question   string `json:"question,omitempty"`
-	Answer     string `json:"answer,omitempty"`
-	OutcomeVal string `json:"outcome_val,omitempty"`
-	Statement  string `json:"statement,omitempty"`
-	Deadline   string `json:"deadline,omitempty"`
+	// Semantic-act fields (mission R2 commitment-ledger intents). TargetRef
+	// binds a Resolve/Reply/Cancel to the act it closes. Claim is a Report's
+	// typed claim text; ResolverID names the desk that accepts a Report.
+	// Precommit, Resolve, and Disagreement are JSON-encoded typed commitment
+	// bodies, preserving objectgraph's additive unknown-field tolerance.
+	TargetRef    string `json:"target_ref,omitempty"`
+	Claim        string `json:"claim,omitempty"`
+	ResolverID   string `json:"resolver_id,omitempty"`
+	Question     string `json:"question,omitempty"`
+	Answer       string `json:"answer,omitempty"`
+	Statement    string `json:"statement,omitempty"`
+	Precommit    string `json:"precommit,omitempty"`
+	Resolve      string `json:"resolve,omitempty"`
+	Disagreement string `json:"disagreement,omitempty"`
 	// Actions carries an Escalate's guarded action schema (the execution_request
 	// packet kind on the carrier): a desk requests management execute typed
 	// actions under explicit safety annotations. JSON-encoded
@@ -349,14 +351,14 @@ func (t *Tray) EscalateActions(toDesk, issue, actionsJSON string) (string, error
 	return t.stage(StagedIntent{Kind: IntentEscalate, ToDesk: toDesk, Body: issue, Actions: actionsJSON})
 }
 
-// Precommit freezes a typed prediction on the commitment ledger. statement is
-// the JSON-encoded CommitmentRecord prediction body; resolverID names who
-// resolves it; deadline bounds resolution.
-func (t *Tray) Precommit(statement, resolverID, deadline string) (string, error) {
-	if statement == "" {
-		return "", fmt.Errorf("tray: precommit requires a frozen prediction statement")
+// Precommit freezes a typed prediction on the commitment ledger. precommitJSON
+// encodes types.CommitmentPrecommit; validation occurs before reduction so an
+// invalid body never reaches durable state.
+func (t *Tray) Precommit(precommitJSON string) (string, error) {
+	if strings.TrimSpace(precommitJSON) == "" {
+		return "", fmt.Errorf("tray: precommit requires a typed precommit body")
 	}
-	return t.stage(StagedIntent{Kind: IntentPrecommit, Statement: statement, ResolverID: resolverID, Deadline: deadline})
+	return t.stage(StagedIntent{Kind: IntentPrecommit, Precommit: precommitJSON})
 }
 
 // Report asserts a typed claim with evidence refs and names its resolver.
@@ -379,13 +381,20 @@ func (t *Tray) ReportPacket(toDesk, packetJSON, resolverID string) (string, erro
 	return t.stage(StagedIntent{Kind: IntentReport, ToDesk: toDesk, Packet: packetJSON, ResolverID: resolverID})
 }
 
-// Resolve is the named resolver's act closing a Report/Ask/Precommit;
-// targetRef is the act being resolved and outcome is the verdict.
-func (t *Tray) Resolve(targetRef, outcome string) (string, error) {
-	if targetRef == "" || outcome == "" {
-		return "", fmt.Errorf("tray: resolve requires the act ref and an outcome")
+// Resolve closes a commitment with a typed evidence-bearing resolver verdict.
+func (t *Tray) Resolve(targetRef, resolveJSON string) (string, error) {
+	if targetRef == "" || strings.TrimSpace(resolveJSON) == "" {
+		return "", fmt.Errorf("tray: resolve requires the act ref and typed resolve body")
 	}
-	return t.stage(StagedIntent{Kind: IntentResolve, TargetRef: targetRef, OutcomeVal: outcome})
+	return t.stage(StagedIntent{Kind: IntentResolve, TargetRef: targetRef, Resolve: resolveJSON})
+}
+
+// Disagreement records scorer and resolver verdicts separately from Resolve.
+func (t *Tray) Disagreement(disagreementJSON string) (string, error) {
+	if strings.TrimSpace(disagreementJSON) == "" {
+		return "", fmt.Errorf("tray: disagreement requires a typed disagreement body")
+	}
+	return t.stage(StagedIntent{Kind: IntentDisagreement, Disagreement: disagreementJSON})
 }
 
 // ApplyTexture stages a full-RLM texture authoring turn (R3d): editJSON is the
@@ -407,8 +416,8 @@ func (t *Tray) stage(in StagedIntent) (string, error) {
 		return "", fmt.Errorf("tray: cell intent quota exceeded (%d)", MaxIntentsPerCell)
 	}
 	size := len(in.Body) + len(in.Objective) + len(in.Summary) + len(in.Verdict) + len(in.BuildRecipeRef) + len(in.Decision) +
-		len(in.TargetRef) + len(in.Claim) + len(in.ResolverID) + len(in.Question) + len(in.Answer) + len(in.OutcomeVal) +
-		len(in.Statement) + len(in.Deadline)
+		len(in.TargetRef) + len(in.Claim) + len(in.ResolverID) + len(in.Question) + len(in.Answer) + len(in.Statement) +
+		len(in.Precommit) + len(in.Resolve) + len(in.Disagreement)
 	for _, refs := range [][]string{in.EvidenceRefs, in.ExecutionRefs, in.TestReceipts, in.DependencyToolchainRefs, in.VerifierRefs} {
 		for _, ref := range refs {
 			size += len(ref)

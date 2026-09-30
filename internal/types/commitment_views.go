@@ -82,10 +82,9 @@ type CommitmentMaterialityEntry struct {
 }
 
 // ActingPackItem is one entry of the pack injected into the acting desk's
-// cell frame. It deliberately has NO score fields: the epistemic boundary
-// (own-scores never re-enter the acting context — reward hacking) holds by
-// construction, not by instruction. The desk sees honest feedback —
-// observations and discrepancies — and nothing else.
+// cell frame. It deliberately has no score, distribution, or disagreement
+// fields: feedback is limited to a resolver's observation and discrepancy,
+// so supervision information cannot become reward-hacking context.
 type ActingPackItem struct {
 	RecordID    string           `json:"record_id"`
 	Claim       string           `json:"claim"`
@@ -94,7 +93,6 @@ type ActingPackItem struct {
 	// acts; empty while open.
 	ObservationExcerpt string `json:"observation_excerpt,omitempty"`
 	ResolvedAt         string `json:"resolved_at,omitempty"`
-	Disagreement       bool   `json:"disagreement,omitempty"`
 }
 
 // ActingPack is the acting desk's score-free commitment context, injected
@@ -106,11 +104,13 @@ type ActingPack struct {
 }
 
 // SupervisionPackItem is the supervising surface's full per-act view: the
-// acting pack fields plus the score stamps the acting desk never sees.
+// acting pack fields plus score stamps and disagreement signal. Never inject
+// it into an acting desk frame.
 type SupervisionPackItem struct {
 	ActingPackItem
-	Scores      []CommitmentScore `json:"scores"`
-	Resolutions []string          `json:"resolutions,omitempty"`
+	Scores       []CommitmentScore `json:"scores"`
+	Resolutions  []string          `json:"resolutions,omitempty"`
+	Disagreement bool              `json:"disagreement,omitempty"`
 }
 
 // SupervisionPack is the score-carrying pack for supervision surfaces
@@ -135,9 +135,23 @@ func resolutionTarget(rec CommitmentRecord) string {
 	return ""
 }
 
-// isResolutionRecord identifies records committed by IntentResolve: they
-// carry a governing link to the act they resolve and a ResolvedAt stamp.
+// isDisagreementRecord identifies a separate scorer-versus-resolver act.
+// It is deliberately not a resolution and therefore cannot replace the
+// governing resolver verdict during derivation.
+func isDisagreementRecord(rec CommitmentRecord) bool {
+	return rec.Disagreement != nil
+}
+
+// isResolutionRecord identifies records committed by IntentResolve. Typed
+// resolution records carry Resolve; legacy resolution records remain readable
+// through their established link plus ResolvedAt stamp.
 func isResolutionRecord(rec CommitmentRecord) bool {
+	if rec.Disagreement != nil {
+		return false
+	}
+	if rec.Resolve != nil {
+		return resolutionTarget(rec) != ""
+	}
 	return resolutionTarget(rec) != "" && strings.TrimSpace(rec.Provenance.ResolvedAt) != ""
 }
 
@@ -216,16 +230,26 @@ type ResolvedCommitment struct {
 
 // ResolveCommitments joins acts with their linked resolutions in one
 // deterministic pass: resolutions sort chronologically, the latest governs,
-// and conflicting verdicts or flagged scores surface as Disagreement —
-// preserved, never collapsed.
+// and conflicting verdicts or separate Disagreement records surface to
+// supervision without entering an ActingPack.
 func ResolveCommitments(records []CommitmentRecord, asOf time.Time) []ResolvedCommitment {
 	resolutions := map[string][]CommitmentRecord{}
+	disagreements := map[string][]CommitmentRecord{}
 	var acts []CommitmentRecord
 	for _, rec := range records {
-		if isResolutionRecord(rec) {
+		switch {
+		case isDisagreementRecord(rec):
+			target := strings.TrimSpace(rec.Disagreement.CommitmentID)
+			if target == "" {
+				target = resolutionTarget(rec)
+			}
+			if target != "" {
+				disagreements[target] = append(disagreements[target], rec)
+			}
+		case isResolutionRecord(rec):
 			target := resolutionTarget(rec)
 			resolutions[target] = append(resolutions[target], rec)
-		} else {
+		default:
 			acts = append(acts, rec)
 		}
 	}
@@ -235,6 +259,9 @@ func ResolveCommitments(records []CommitmentRecord, asOf time.Time) []ResolvedCo
 		if t, ok := parseCommitmentTime(act.Provenance.CommittedAt); ok {
 			rc.Age = asOf.Sub(t)
 			rc.HasAge = true
+		}
+		if len(disagreements[act.RecordID]) > 0 {
+			rc.Disagreement = true
 		}
 		res := resolutions[act.RecordID]
 		sort.SliceStable(res, func(i, j int) bool { return resolutionChronological(res[i], res[j]) })
@@ -435,7 +462,6 @@ func BuildActingPack(records []CommitmentRecord, agentID string, limit int) Acti
 			RecordID:     rc.Act.RecordID,
 			Claim:        commitmentClaimText(rc.Act),
 			Discrepancy:  rc.Discrepancy,
-			Disagreement: rc.Disagreement,
 		}
 		if rc.Observation != nil {
 			item.ObservationExcerpt = rc.Observation.Excerpt
@@ -464,11 +490,11 @@ func BuildSupervisionPack(records []CommitmentRecord, agentID string, limit int)
 		}
 		item := SupervisionPackItem{
 			ActingPackItem: ActingPackItem{
-				RecordID:     rc.Act.RecordID,
-				Claim:        commitmentClaimText(rc.Act),
-				Discrepancy:  rc.Discrepancy,
-				Disagreement: rc.Disagreement,
+				RecordID:    rc.Act.RecordID,
+				Claim:       commitmentClaimText(rc.Act),
+				Discrepancy: rc.Discrepancy,
 			},
+			Disagreement: rc.Disagreement,
 		}
 		if rc.Observation != nil {
 			item.ObservationExcerpt = rc.Observation.Excerpt

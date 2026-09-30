@@ -158,22 +158,22 @@ var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
 	// the filesystem (mutation is capsule-bound under engineering).
 	"management": {"Message", "Outcome", "Spawn", "Cast", "Ask", "Note", "Reply",
-		"CancelAct", "Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct"},
+		"CancelAct", "Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Engineering mutates inside its capsule and reports fate.
 	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Outcome", "Spawn",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct"},
+		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
 	"research": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct"},
+		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Texture authors document revisions and escalates; artifact writes are
 	// the staged ApplyTexture intent (committed through ApplyTextureTurn),
 	// not capsule file ops. Children (research probes, persistent management)
 	// open atomically inside the turn via the edit's controls arg — texture
 	// never free-spawns or casts.
 	"texture": {"Message", "Outcome", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "ResolveAct",
+		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"ReadDoc", "ApplyTexture"},
 }
 
@@ -219,14 +219,13 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"CancelAct":       func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
 		"Escalate":        func() reflect.Value { return reflect.ValueOf(s.Escalate) },
 		"EscalateActions": func() reflect.Value { return reflect.ValueOf(s.EscalateActions) },
-		"Precommit":       func() reflect.Value { return reflect.ValueOf(s.Precommit) },
-		"Report":          func() reflect.Value { return reflect.ValueOf(s.Report) },
-		"ReportPacket":    func() reflect.Value { return reflect.ValueOf(s.ReportPacket) },
-		"ReadDoc":         func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
-		"ApplyTexture":    func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
-		"ResolveAct": func() reflect.Value {
-			return reflect.ValueOf(s.ResolveAct)
-		},
+		"Precommit":    func() reflect.Value { return reflect.ValueOf(s.Precommit) },
+		"Report":       func() reflect.Value { return reflect.ValueOf(s.Report) },
+		"ReportPacket": func() reflect.Value { return reflect.ValueOf(s.ReportPacket) },
+		"Resolve":      func() reflect.Value { return reflect.ValueOf(s.Resolve) },
+		"Disagreement": func() reflect.Value { return reflect.ValueOf(s.Disagreement) },
+		"ReadDoc":      func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
+		"ApplyTexture": func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -628,13 +627,17 @@ func (s *ChoirScope) EscalateActions(toDesk, issue string, actions any) (string,
 	return t.EscalateActions(toDesk, issue, actionsJSON)
 }
 
-// Precommit freezes a typed prediction on the commitment ledger.
-func (s *ChoirScope) Precommit(statement, resolverID, deadline string) (string, error) {
+// Precommit freezes a typed, machine-scoreable prediction on the ledger.
+func (s *ChoirScope) Precommit(precommit any) (string, error) {
 	t, err := s.boundTray("precommit")
 	if err != nil {
 		return "", err
 	}
-	return t.Precommit(statement, resolverID, deadline)
+	precommitJSON, err := jsonCellArg(precommit)
+	if err != nil {
+		return "", err
+	}
+	return t.Precommit(precommitJSON)
 }
 
 // Report asserts a typed claim with evidence refs and a named resolver.
@@ -663,11 +666,28 @@ func (s *ChoirScope) ReportPacket(toDesk string, packet any, resolverID string) 
 	return t.ReportPacket(toDesk, packetJSON, resolverID)
 }
 
-// ResolveAct is the named resolver's act closing a Report/Ask/Precommit.
-func (s *ChoirScope) ResolveAct(targetRef, outcome string) (string, error) {
+// Resolve closes a commitment with a typed evidence-bearing resolver verdict.
+func (s *ChoirScope) Resolve(targetRef string, resolve any) (string, error) {
 	t, err := s.boundTray("resolve")
 	if err != nil {
 		return "", err
 	}
-	return t.Resolve(targetRef, outcome)
+	resolveJSON, err := jsonCellArg(resolve)
+	if err != nil {
+		return "", err
+	}
+	return t.Resolve(targetRef, resolveJSON)
+}
+
+// Disagreement preserves scorer versus resolver verdicts as a separate act.
+func (s *ChoirScope) Disagreement(disagreement any) (string, error) {
+	t, err := s.boundTray("disagreement")
+	if err != nil {
+		return "", err
+	}
+	disagreementJSON, err := jsonCellArg(disagreement)
+	if err != nil {
+		return "", err
+	}
+	return t.Disagreement(disagreementJSON)
 }

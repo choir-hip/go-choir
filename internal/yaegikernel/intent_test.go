@@ -188,6 +188,44 @@ func TestFreezeVerifyStaging(t *testing.T) {
 	}
 }
 
+// TestTypedCommitmentVerbsStageShape exercises the desk-cell surface: the
+// typed acts are accepted as structured values, remain separate staged intents,
+// and carry no free-text fallback fields.
+func TestTypedCommitmentVerbsStageShape(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	hooks := scope.BindCell()
+	hooks.Begin(SessionFrame{})
+	if _, err := scope.Precommit(map[string]any{
+		"question":     "will the retained tape replay?",
+		"distribution": map[string]float64{"yes": 0.8, "no": 0.2},
+		"resolver":     "management",
+	}); err != nil {
+		t.Fatalf("typed precommit: %v", err)
+	}
+	if _, err := scope.Resolve("commitment-1", map[string]any{
+		"verdict":       "confirmed",
+		"evidence_refs": []string{"evidence://replay"},
+	}); err != nil {
+		t.Fatalf("typed resolve: %v", err)
+	}
+	if _, err := scope.Disagreement(map[string]any{
+		"commitment_id":    "commitment-1",
+		"scorer_verdict":   "contradicted",
+		"resolver_verdict": "confirmed",
+		"evidence_refs":    []string{"evidence://counterexample"},
+	}); err != nil {
+		t.Fatalf("typed disagreement: %v", err)
+	}
+	staged := hooks.End()
+	if len(staged) != 3 || staged[0].Kind != IntentPrecommit ||
+		staged[1].Kind != IntentResolve || staged[2].Kind != IntentDisagreement {
+		t.Fatalf("typed commitment intents = %+v", staged)
+	}
+	if staged[0].Precommit == "" || staged[1].Resolve == "" || staged[2].Disagreement == "" {
+		t.Fatalf("typed commitment bodies missing: %+v", staged)
+	}
+}
+
 // TestVerifierSlotExports proves Verify/InspectBundle export only for the
 // verifier slot: implementation and researcher scopes never see them.
 func TestVerifierSlotExports(t *testing.T) {

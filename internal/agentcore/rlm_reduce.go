@@ -172,10 +172,10 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 	return nil
 }
 
-// validateSemanticActIntent accepts the mission-R2 commitment-ledger act
-// kinds (cast/ask/note/reply/cancel/escalate/precommit/report/resolve) and
-// rejects anything else. Each act needs the field it names; an unrecognized
-// kind is still rejected.
+// validateSemanticActIntent accepts commitment-ledger act kinds and rejects
+// anything else. Typed commitment bodies decode with encoding/json's default
+// unknown-field tolerance so an additive objectgraph rollout preserves newer
+// records for older reducers/readers.
 func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 	// needTo requires a non-empty destination desk that resolves to a known
 	// canonical profile — the R3b reject: an unknown desk is not a cast
@@ -227,12 +227,16 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		if in.TargetRef == "" {
 			return fmt.Errorf("reduce: %s %s missing the act ref it closes", in.Kind, in.LocalID)
 		}
-		if in.OutcomeVal == "" {
-			return fmt.Errorf("reduce: resolve %s missing the outcome verdict", in.LocalID)
+		if _, err := typedCommitmentResolve(in.Resolve); err != nil {
+			return fmt.Errorf("reduce: resolve %s: %w", in.LocalID, err)
 		}
 	case yaegikernel.IntentPrecommit:
-		if in.Statement == "" {
-			return fmt.Errorf("reduce: precommit %s missing the frozen prediction statement", in.LocalID)
+		if _, err := typedCommitmentPrecommit(in.Precommit); err != nil {
+			return fmt.Errorf("reduce: precommit %s: %w", in.LocalID, err)
+		}
+	case yaegikernel.IntentDisagreement:
+		if _, err := typedCommitmentDisagreement(in.Disagreement); err != nil {
+			return fmt.Errorf("reduce: disagreement %s: %w", in.LocalID, err)
 		}
 	case yaegikernel.IntentReport:
 		if err := needTo(); err != nil {
@@ -245,6 +249,47 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		return fmt.Errorf("reduce: unknown intent kind %q", in.Kind)
 	}
 	return nil
+}
+
+func typedCommitmentPrecommit(raw string) (types.CommitmentPrecommit, error) {
+	var value types.CommitmentPrecommit
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return value, fmt.Errorf("invalid typed body: %w", err)
+	}
+	if strings.TrimSpace(value.Question) == "" {
+		return value, fmt.Errorf("missing question")
+	}
+	if len(value.Distribution) == 0 {
+		return value, fmt.Errorf("missing distribution")
+	}
+	if strings.TrimSpace(value.Resolver) == "" {
+		return value, fmt.Errorf("missing resolver")
+	}
+	return value, nil
+}
+
+func typedCommitmentResolve(raw string) (types.CommitmentResolve, error) {
+	var value types.CommitmentResolve
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return value, fmt.Errorf("invalid typed body: %w", err)
+	}
+	if strings.TrimSpace(value.Verdict) == "" {
+		return value, fmt.Errorf("missing verdict")
+	}
+	return value, nil
+}
+
+func typedCommitmentDisagreement(raw string) (types.CommitmentDisagreement, error) {
+	var value types.CommitmentDisagreement
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return value, fmt.Errorf("invalid typed body: %w", err)
+	}
+	if strings.TrimSpace(value.CommitmentID) == "" ||
+		strings.TrimSpace(value.ScorerVerdict) == "" ||
+		strings.TrimSpace(value.ResolverVerdict) == "" {
+		return value, fmt.Errorf("requires commitment_id, scorer_verdict, and resolver_verdict")
+	}
+	return value, nil
 }
 
 type rlmEnvelope struct {
@@ -342,7 +387,8 @@ func stagedIntentEnvelope(scope ReductionScope, in yaegikernel.StagedIntent) (to
 	case yaegikernel.IntentReport:
 		to = in.ToDesk
 		content = encodeEnvelope(rlmEnvelope{Kind: "report", Body: in.Claim, EvidenceRefs: in.EvidenceRefs, Packet: in.Packet, From: scope.FromAgentID})
-	case yaegikernel.IntentResolve, yaegikernel.IntentCancel, yaegikernel.IntentPrecommit:
+	case yaegikernel.IntentResolve, yaegikernel.IntentDisagreement,
+		yaegikernel.IntentCancel, yaegikernel.IntentPrecommit:
 		// Resolved purely on the ledger path: the act lands on the target
 		// commitment record, not a desk mailbox. Handled by commitActIntent.
 		return "", "", false, nil
@@ -868,7 +914,8 @@ func isSemanticActKind(kind string) bool {
 	switch kind {
 	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentNote,
 		yaegikernel.IntentReply, yaegikernel.IntentCancel, yaegikernel.IntentEscalate,
-		yaegikernel.IntentPrecommit, yaegikernel.IntentReport, yaegikernel.IntentResolve:
+		yaegikernel.IntentPrecommit, yaegikernel.IntentReport, yaegikernel.IntentResolve,
+		yaegikernel.IntentDisagreement:
 		return true
 	}
 	return false
@@ -900,7 +947,15 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 	}
 	switch in.Kind {
 	case yaegikernel.IntentPrecommit:
-		rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Statement}
+		var precommit types.CommitmentPrecommit
+		_ = json.Unmarshal([]byte(in.Precommit), &precommit)
+		rec.Precommit = &precommit
+		rec.Prediction = types.CommitmentPrediction{
+			Hypothesis:  precommit.Question,
+			Questions:   []types.TypedQuestion{{Question: precommit.Question, Probabilities: precommit.Distribution}},
+			CommittedAt: rec.Provenance.CommittedAt,
+		}
+		rec.Addressee = precommit.Resolver
 	case yaegikernel.IntentReport:
 		// A packet-bodied report preserves the full coagent packet as the
 		// claim body; a thin report uses the claim text.
@@ -921,27 +976,31 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 			rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Claim}
 		}
 	case yaegikernel.IntentResolve:
-		// Resolution writes the outcome as a linked record on the ledger —
-		// never a rewrite of the target commitment (the ledger stays an
-		// auditable append-only event log). The record carries the verdict
-		// class, the resolver's observation, and the resolve timestamp so the
-		// score-accrual layer can read resolution→discrepancy without an
-		// index.
-		discrepancy := resolveOutcomeDiscrepancy(in.OutcomeVal)
+		// A resolution is a linked append, never a rewrite. It contains the
+		// resolver verdict and its evidence; scoring is reserved for a later
+		// Disagreement record and never fabricated from the resolver's act.
+		var resolve types.CommitmentResolve
+		_ = json.Unmarshal([]byte(in.Resolve), &resolve)
 		now := time.Now().UTC().Format(time.RFC3339Nano)
-		rec.Discrepancy = discrepancy
-		rec.Observation = types.CommitmentObservation{
-			Excerpt:    in.OutcomeVal,
-			SourceRef:  in.TargetRef,
-			ObservedAt: now,
+		sourceRef := in.TargetRef
+		if len(resolve.EvidenceRefs) > 0 {
+			sourceRef = resolve.EvidenceRefs[0]
 		}
-		rec.Scores = []types.CommitmentScore{{
-			ScorerModelID: scope.FromAgentID,
-			Answers:       map[string]string{"outcome": in.OutcomeVal, "discrepancy": string(discrepancy)},
-			ScoredAt:      now,
-		}}
+		rec.Resolve = &resolve
+		rec.Discrepancy = resolveOutcomeDiscrepancy(resolve.Verdict)
+		rec.Observation = types.CommitmentObservation{
+			Excerpt: resolve.Verdict, SourceRef: sourceRef, ObservedAt: now,
+		}
+		rec.EvidenceRefs = append(rec.EvidenceRefs, resolve.EvidenceRefs...)
 		rec.Provenance.ResolvedAt = now
 		rec.RelatedIDs = []string{in.TargetRef}
+	case yaegikernel.IntentDisagreement:
+		var disagreement types.CommitmentDisagreement
+		_ = json.Unmarshal([]byte(in.Disagreement), &disagreement)
+		rec.Disagreement = &disagreement
+		rec.EvidenceRefs = append(rec.EvidenceRefs, disagreement.EvidenceRefs...)
+		rec.ParentID = disagreement.CommitmentID
+		rec.RelatedIDs = []string{disagreement.CommitmentID}
 	}
 	if in.TargetRef != "" {
 		rec.ParentID = in.TargetRef

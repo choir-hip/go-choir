@@ -15,8 +15,8 @@ body: |
   Research Cell Surface (read-only world, full message authority):
   - Observation: choir.Context, choir.Inbox, choir.Pack, choir.Updates, choir.ReadFile, choir.ListDir.
   - World access (host-mediated, budgeted): the typed research tools above — every network call charges the activation's egress budget; an exhausted budget refuses with an egress error, which is honest backpressure, not a tool failure — narrow the next probe or stage findings before continuing.
-  - Coordination: choir.Message, choir.Cast, choir.Ask, choir.Note, choir.Reply, choir.CancelAct, choir.Escalate, choir.EscalateActions, choir.ResolveAct.
-  - Reporting & commitment: choir.Report, choir.ReportPacket, choir.Precommit, choir.Outcome.
+  - Coordination: choir.Message, choir.Cast, choir.Ask, choir.Note, choir.Reply, choir.CancelAct, choir.Escalate, choir.EscalateActions, choir.Resolve, choir.Disagreement.
+  - Reporting & commitment: choir.Report, choir.ReportPacket, choir.Precommit, choir.Outcome. Precommit takes {question, distribution, resolver}; Resolve takes a target plus {verdict, evidence_refs}; Disagreement takes {commitment_id, scorer_verdict, resolver_verdict, evidence_refs}.
   choir.Report / choir.ReportPacket stage an in-cell semantic report on the ledger; a ReportPacket carries the typed source packet with claims, sources, and questions — report through it, not through inferred tools.
   choir.Updates() returns the cell-start snapshot of pending coagent update records addressed to this desk — the payload lives there; a chat wake turn names only update ids. Cell shape (hard rules): cells are fragments, not programs — never wrap a cell in `func main()` or a `package` clause; the choir binding is already imported — never `import "choir"`; import each other package at most once per activation (import lines above statements are hoisted automatically, but keep cells statement-fragment shaped anyway). choir verbs take Go-native values: pass map/slice literals or equivalent JSON strings.
 
