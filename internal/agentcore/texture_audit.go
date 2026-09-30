@@ -78,7 +78,7 @@ func (rt *Runtime) RecordTextureAudit(ctx context.Context, entry TextureAuditEnt
 		SchemaVersion:  computerevent.SchemaVersionV1,
 		EventID:        eventID,
 		ComputerID:     entry.ComputerID,
-		EventKind:      computerevent.EventLifecycleObserved,
+		EventKind:      textureAuditEventKind(entry.Action),
 		OccurredAt:     time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: idempotencyKey,
 		TrajectoryID:   entry.TrajectoryID,
@@ -96,6 +96,24 @@ func (rt *Runtime) RecordTextureAudit(ctx context.Context, entry TextureAuditEnt
 		return nil
 	}
 	return fmt.Errorf("texture audit: append: %w", err)
+}
+
+// textureAuditEventKind maps an audit action to its canonical event kind.
+// These are evidence observations, not computer-VM lifecycle facts — they
+// must NOT use EventLifecycleObserved, which carries a CAS precondition
+// (the computer_lifecycle_receipts join in CompareAndSwap) that a texture
+// audit's ProposedEffectRef (a payload digest, not an operation receipt)
+// can never satisfy. That mismatch silently aborted every texture audit
+// append with "lifecycle receipt join unavailable".
+func textureAuditEventKind(action string) computerevent.EventKind {
+	switch action {
+	case "trajectory_started":
+		return computerevent.EventTrajectoryStarted
+	case "revision_committed":
+		return computerevent.EventArtifactProduced
+	default:
+		return computerevent.EventVerificationRecorded
+	}
 }
 
 func textureAuditIdempotencyKey(entry TextureAuditEntry) string {

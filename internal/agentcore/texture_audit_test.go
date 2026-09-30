@@ -79,7 +79,7 @@ func TestRecordTextureAuditAppendsOneIdempotentPrivateEvent(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("accepted audit event = %#v, %v", accepted, err)
 	}
-	if accepted.EventKind != computerevent.EventLifecycleObserved || accepted.ActorProfile != "texture" || accepted.AuthorityRef != "texture:context" || accepted.PrivacyClass != "private" {
+	if accepted.EventKind != computerevent.EventArtifactProduced || accepted.ActorProfile != "texture" || accepted.AuthorityRef != "texture:context" || accepted.PrivacyClass != "private" {
 		t.Fatalf("accepted audit envelope = %#v", accepted)
 	}
 	if len(accepted.OutputArtifactRefs) != 1 || len(pinner.envelopes) != 1 {
