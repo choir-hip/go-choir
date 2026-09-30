@@ -242,10 +242,17 @@ now:
     mid-leg -> v2 cannot form -> all deployed_proof items are unreachable.
     The stale-route/vmctl-unavailable flapping is a SYMPTOM of these re-mints;
     POST /internal/vmctl/refresh on the vmctl unix socket recovers the route
-    non-destructively but only until the next OOM kill. build.commit=9e3d6948
-    is deployed and the guest itself is READY/working when up. Fix needs
-    owner/ops capacity action (platform-dolt memory cap / tuning / larger
-    box). M2/M3/M5 remain dependency-blocked (M0a/M1 unsettled).'
+    non-destructively between reboots; build.commit=9e3d6948 is deployed and
+    the guest itself is READY/working when up. Also REPAIRED
+    this session: a second independent defect — texture audit events were
+    hardcoded EventKind=lifecycle_observed (texture_audit.go), which lands
+    them in the computer_lifecycle_receipts CAS join that a non-lifecycle
+    action can never satisfy -> every texture audit append aborted
+    "lifecycle receipt join unavailable"; the tape silently dropped the
+    whole texture audit trail since ~Aug 20. Fix 0a03783b maps
+    entry.Action->causal kind. Remaining host fault: owner/ops capacity
+    action (platform-dolt memory cap / tuning / larger box). M2/M3/M5
+    remain dependency-blocked (M0a/M1 unsettled).'
   next_action: 'owner/ops: cap or tune platform-dolt memory (or scale the
     box) so the OOM-killer stops killing the retained-computer VM; that is
     the single gate for every deployed_proof item. Meanwhile POST
