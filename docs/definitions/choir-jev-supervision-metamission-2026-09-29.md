@@ -254,20 +254,20 @@ now:
     submit 500): "computer event projection repair required" — an OOM-kill
     mid-append committed the platform CAS but killed the embedded finalize,
     so platformHead != embeddedHead and the appender refuses all appends.
-    Recovery = one guest boot with RUNTIME_RECOVERY_REPLAY_ONLY=1
-    (autoputer/run.go runReplayPhase re-materializes embedded projection
-    from canonical — non-destructive, vmctl/ops action). Net: the OOM is the
-    ROOT capacity fault; the stale route + the projection wedge + the audit
-    misroute are its fallout. All code fixes landed+green; M2/M3/M5 remain
-    dependency-blocked (M0a/M1 unsettled).'
+    UPDATE 13:20Z: a `choir computer refresh` rebooted the guest and the
+    autoputer ran the replay phase — "projection recovery resume for
+    computer-03335285 (local=174099 H=174100 tail=1)" then "computer event
+    authority reconstructed". THE PROJECTION WEDGE IS REPAIRED. Remaining
+    fault is the OOM itself + the stale vmctl route it re-mints (502
+    "resolve user autoputer"); audit fix 0a03783b is merged but its deploy
+    was concurrency-cancelled twice — build still 9e3d6948.'
   next_action: 'owner/ops: (a) cap/tune platform-dolt memory or scale Node B
-    so the kernel OOM-killer stops killing the retained VM; (b) run one
-    RUNTIME_RECOVERY_REPLAY_ONLY boot to re-materialize the wedged event
-    projection. Then (deployed_commit >= audit-fix SHA, stable guest):
-    M-SUB emit proofs -> M0a controlled-comparison verify -> deletion
-    commit -> M1 typed-commitment tape -> M2/M3/M5. POST
-    /internal/vmctl/refresh recovers the route between reboots. Station
-    recon done in M5/M2/M3 files (Recon 2026-09-30 notes).'
+    so the kernel OOM-killer stops killing the retained VM AND vmctl stays
+    up; (b) get 0a03783b actually deployed (its deploy leg keeps being
+    cancelled by newer doc commits — needs a code-bearing run or a manual
+    re-dispatch). Then (stable guest, vmctl ok): M-SUB emit proofs -> M0a
+    controlled-comparison verify -> deletion commit -> M1 typed-commitment
+    tape -> M2/M3/M5. Station recon done in M5/M2/M3 files.'
 
 receipts: []
 
