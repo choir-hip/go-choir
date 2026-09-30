@@ -118,7 +118,7 @@ if [ ${#ENVS[@]} -eq 0 ]; then
   echo "warning: no API-key provider credentials found in $SETTINGS" >&2
 fi
 
-for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION ZAI_API_KEY ZAI_BASE_URL OPENCODE_API_KEY; do
+for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION ZAI_API_KEY ZAI_BASE_URL OPENCODE_API_KEY OPENROUTER_API_KEY; do
   add_env_once "$key"
 done
 
