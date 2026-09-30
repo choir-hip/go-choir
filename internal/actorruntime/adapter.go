@@ -155,8 +155,9 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	// delivery_failed events (actorruntime/handler.go default case).
 	sinkMailbox := scopedActorMailboxID(cfg.ComputerID, cfg.ComputerID, "delivery-poison")
 	a.actorRT = actor.NewKernelRuntime(actorLog, actorLog, handler, actorOpts, actor.DispatcherOptions{
-		MaxAttempts: 8,
-		ErrorSink:   sinkMailbox,
+		MaxAttempts:  8,
+		MaxDeferrals: 64,
+		ErrorSink:    sinkMailbox,
 	})
 	rt.SetKernelMode()
 

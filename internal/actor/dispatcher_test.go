@@ -316,3 +316,100 @@ func TestDispatcherPanickingHandlerRoutesToErrorSink(t *testing.T) {
 		t.Fatal("OnActorFailure was not called for the panicking handler")
 	}
 }
+
+// An unbounded deferral is the dispatcher live-lock: ErrDeferUnprocessed rolls
+// back the attempt so it never consumed the poison budget. defer_count now
+// bounds the wait — after MaxDeferrals the event is poisoned to the error sink
+// and incorporated, not waited on forever.
+func TestDispatcherDeferralBoundedByMaxDeferrals(t *testing.T) {
+	l := openKernelLog(t)
+	ctx := context.Background()
+
+	var calls int32
+	h := HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		return nil, ErrDeferUnprocessed
+	})
+	d := NewDispatcher(l, h, DispatcherOptions{
+		PollInterval: 10 * time.Millisecond,
+		MaxAttempts:  8,
+		MaxDeferrals: 3,
+		ErrorSink:    "error-sink",
+	})
+	go d.Run(ctx)
+	defer d.Stop()
+
+	if _, err := l.Append(ctx, mkUpdate("def1", "agent-def")); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	d.Notify()
+
+	// The deferral must be incorporated (poisoned) after MaxDeferrals, not
+	// redelivered forever.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, processed, err := l.UpdateStatus(ctx, "agent-def", "def1")
+		if err == nil && processed {
+			break
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	_, processed, err := l.UpdateStatus(ctx, "agent-def", "def1")
+	if err != nil || !processed {
+		t.Fatalf("deferred event not incorporated as poison: processed=%v err=%v calls=%d", processed, err, calls)
+	}
+	exists, _, err := l.UpdateStatus(ctx, "error-sink", "def1:delivery_failed")
+	if err != nil || !exists {
+		t.Fatalf("delivery_failed not emitted to error sink for defer-bound: exists=%v err=%v", exists, err)
+	}
+}
+
+// A decided-invalid occurrence is an adjudicated drop: the handler proves the
+// event can never activate, so the dispatcher consumes it (incorporated, no
+// handler retry) and records a delivery_invalid fate to the error sink. It
+// must not defer or re-fire — that was the texture live-lock.
+func TestDispatcherDurableInvalidConsumesAndRecordsFate(t *testing.T) {
+	l := openKernelLog(t)
+	ctx := context.Background()
+
+	var calls int32
+	h := HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		if u.UpdateID == "inv1" {
+			atomic.AddInt32(&calls, 1)
+		}
+		return nil, fmt.Errorf("trigger undisposed: %w", ErrDurableInvalid)
+	})
+	d := NewDispatcher(l, h, DispatcherOptions{
+		PollInterval: 10 * time.Millisecond,
+		MaxAttempts:  8,
+		ErrorSink:    "error-sink",
+	})
+	go d.Run(ctx)
+	defer d.Stop()
+
+	if _, err := l.Append(ctx, mkUpdate("inv1", "agent-inv")); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	d.Notify()
+
+	// Incorporated after exactly one handler call — no retry, no defer.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, processed, err := l.UpdateStatus(ctx, "agent-inv", "inv1")
+		if err == nil && processed {
+			break
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	_, processed, err := l.UpdateStatus(ctx, "agent-inv", "inv1")
+	if err != nil || !processed {
+		t.Fatalf("durable-invalid event not incorporated: processed=%v err=%v", processed, err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("durable-invalid must consume in one pass, got %d handler calls", got)
+	}
+	exists, _, err := l.UpdateStatus(ctx, "error-sink", "inv1:delivery_invalid")
+	if err != nil || !exists {
+		t.Fatalf("delivery_invalid fate not recorded to error sink: exists=%v err=%v", exists, err)
+	}
+}

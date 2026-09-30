@@ -35,6 +35,16 @@ import (
 // head (tape order) and retries on the next projection read.
 var ErrDeferUnprocessed = errors.New("actor: defer unprocessed occurrence")
 
+// ErrDurableInvalid tells the dispatcher the occurrence is decided-invalid:
+// the handler inspected durable state and determined this update can never
+// produce a valid activation (a terminal run whose trigger stayed undisposed,
+// a foreign-trajectory envelope, a resolved-invalid occurrence). The
+// dispatcher consumes it — records the event processed and emits a
+// delivery_invalid fate to the error sink — instead of deferring or retrying
+// it forever. Use it for adjudicated drops; use ErrDeferUnprocessed only for
+// a genuine wait on an out-of-band wake.
+var ErrDurableInvalid = errors.New("actor: durably invalid occurrence")
+
 // Update is the one agent-to-agent message primitive (update_coagent).
 type Update struct {
 	UpdateID     string

@@ -127,10 +127,11 @@ type KernelLog interface {
 	// RecordAttempt durably increments the dispatch-attempt counter for an
 	// unprocessed update (retry accounting as tape state).
 	RecordAttempt(ctx context.Context, agentID, updateID string) (int, error)
-	// DeferUpdate re-arms an unprocessed update to a future not_before and
-	// rolls back the just-recorded attempt. Handler deferrals back off; they
-	// are waits for an out-of-band wake, not delivery failures.
-	DeferUpdate(ctx context.Context, agentID, updateID string, notBefore time.Time) error
+	// DeferUpdate re-arms an unprocessed update to a future not_before, rolls
+	// back the just-recorded attempt, and bumps defer_count. Handler deferrals
+	// back off; they are waits for an out-of-band wake, not delivery failures.
+	// The returned defer_count bounds the wait (MaxDeferrals poisons it).
+	DeferUpdate(ctx context.Context, agentID, updateID string, notBefore time.Time) (int, error)
 	// LoadSnapshot / SaveSnapshot persist the actor's compacted memory.
 	LoadSnapshot(ctx context.Context, agentID string) ([]byte, error)
 	SaveSnapshot(ctx context.Context, agentID string, memory []byte) error
@@ -148,6 +149,11 @@ type DispatcherOptions struct {
 	// ErrorSink is the agent ID that receives delivery_failed events. Empty
 	// disables poison routing.
 	ErrorSink string
+	// MaxDeferrals bounds how many times an event may defer (ErrDeferUnprocessed)
+	// before the dispatcher poisons it to the error sink. A deferral waits for
+	// an out-of-band wake, but an unbounded wait is a live-lock: if the wake
+	// never arrives, the event starves the dispatcher. 0 = default 64.
+	MaxDeferrals int
 	// MaxConcurrent bounds how many actor activations may run at once across
 	// all agents (0 = default 8). Prevents unbounded goroutine fan-out.
 	MaxConcurrent int
@@ -165,6 +171,9 @@ func NewDispatcher(log KernelLog, handler Handler, opts DispatcherOptions) *Disp
 	}
 	if opts.MaxConcurrent <= 0 {
 		opts.MaxConcurrent = 8
+	}
+	if opts.MaxDeferrals <= 0 {
+		opts.MaxDeferrals = 64
 	}
 	return &Dispatcher{
 		log:     log,
@@ -342,15 +351,52 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		newMemory, herr := d.safeHandleUpdate(actx, agentID, u, memory)
 		// Drain this event's emissions now so a failed handler's partial
 		evEmitted := buf.drain()
+		// A durable-invalid occurrence (ErrDurableInvalid) is an adjudicated
+		// drop: the handler proved from durable state the event can never
+		// activate. Consume it (mark incorporated, keep its emissions) and
+		// record a delivery_invalid fate to the sink — never defer or retry.
+		if errors.Is(herr, ErrDurableInvalid) {
+			emitted = append(emitted, evEmitted...)
+			if d.opts.ErrorSink != "" && u.Kind != "delivery_invalid" {
+				emitted = append(emitted, Update{
+					UpdateID:    u.UpdateID + ":delivery_invalid",
+					ToAgentID:   d.opts.ErrorSink,
+					FromAgentID: agentID,
+					Kind:        "delivery_invalid",
+					Content:     u.UpdateID,
+					CreatedAt:   time.Now().UTC(),
+				})
+			}
+			incorporated = append(incorporated, u.UpdateID)
+			log.Printf("dispatcher: durable-invalid %s/%s cause=%v", agentID, u.UpdateID, herr)
+			continue
+		}
 		// A handler deferral (ErrDeferUnprocessed) waits for an out-of-band
 		// wake: back it off by not_before and roll back the attempt so it
-		// neither hot-loops nor consumes the poison budget.
+		// neither hot-loops nor consumes the poison budget. defer_count bounds
+		// the wait; a deferral that outlives MaxDeferrals is a live-lock and
+		// is poisoned rather than waited on forever.
 		if errors.Is(herr, ErrDeferUnprocessed) {
 			backoff := time.Now().UTC().Add(deferralBackoff(attempts))
-			if derr := d.log.DeferUpdate(ctx, agentID, u.UpdateID, backoff); derr != nil {
+			n, derr := d.log.DeferUpdate(ctx, agentID, u.UpdateID, backoff)
+			if derr != nil {
 				log.Printf("dispatcher: defer %s/%s: %v", agentID, u.UpdateID, derr)
+				break
 			}
-			log.Printf("dispatcher: deferred %s/%s until %s cause=%v", agentID, u.UpdateID, backoff.Format(time.RFC3339), herr)
+			if d.opts.MaxDeferrals > 0 && n > d.opts.MaxDeferrals && d.opts.ErrorSink != "" && u.Kind != "delivery_failed" {
+				emitted = append(emitted, Update{
+					UpdateID:    u.UpdateID + ":delivery_failed",
+					ToAgentID:   d.opts.ErrorSink,
+					FromAgentID: agentID,
+					Kind:        "delivery_failed",
+					Content:     u.UpdateID,
+					CreatedAt:   time.Now().UTC(),
+				})
+				incorporated = append(incorporated, u.UpdateID)
+				log.Printf("dispatcher: poison %s/%s after %d deferrals -> %s", agentID, u.UpdateID, n, d.opts.ErrorSink)
+				continue
+			}
+			log.Printf("dispatcher: deferred %s/%s until %s deferrals=%d cause=%v", agentID, u.UpdateID, backoff.Format(time.RFC3339), n, herr)
 			break
 		}
 		if herr != nil {

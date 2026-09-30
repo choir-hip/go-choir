@@ -590,6 +590,13 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: verify Texture occurrence postcondition: %w", postErr))
 		}
 		if post == textureowner.TextureActorOccurrencePending {
+			// A run that reached a terminal state but left the trigger
+			// undisposed can never dispose it on retry: decided-invalid.
+			// A passivated/active run is genuinely parked awaiting its next
+			// wake — the deferral is real, not a live-lock.
+			if rec.State.Terminal() {
+				return nil, fmt.Errorf("%w: actorruntime: Texture activation terminated without disposing exact trigger (run=%s state=%s)", actor.ErrDurableInvalid, rec.RunID, rec.State)
+			}
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture activation returned without disposing exact trigger"))
 		}
 		return h.memoryFromRunState(rec)

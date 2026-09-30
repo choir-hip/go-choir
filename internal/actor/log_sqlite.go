@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS actor_updates (
   created_at    TIMESTAMP NOT NULL,
   processed_at  TIMESTAMP,
   not_before    TIMESTAMP,
-  epoch         INTEGER NOT NULL DEFAULT 0
+  epoch         INTEGER NOT NULL DEFAULT 0,
+  defer_count   INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_actor_updates_backlog
   ON actor_updates(to_agent_id, created_at) WHERE processed_at IS NULL;
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS actor_heads (
 		`ALTER TABLE actor_updates ADD COLUMN not_before TIMESTAMP`,
 		`ALTER TABLE actor_updates ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE actor_updates ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE actor_updates ADD COLUMN defer_count INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return nil, fmt.Errorf("actor log migrate %q: %w", col, err)
@@ -138,18 +140,26 @@ WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`, updateID, age
 	return attempts, nil
 }
 
-// DeferUpdate re-arms an unprocessed update to fire again after notBefore and
-// rolls back the just-recorded delivery attempt. A handler deferral
-// (ErrDeferUnprocessed) is a wait for an out-of-band wake, not a delivery
-// failure — it must back off (stop the hot retry loop) without consuming the
-// poison budget. The pre-handler RecordAttempt already incremented attempts;
-// a deferral decrements it back so only genuine failures/crashes count.
-func (l *SQLiteLog) DeferUpdate(ctx context.Context, agentID, updateID string, notBefore time.Time) error {
+// DeferUpdate re-arms an unprocessed update to fire again after notBefore,
+// rolls back the just-recorded delivery attempt, and bumps a separate
+// defer_count. A handler deferral (ErrDeferUnprocessed) is a wait for an
+// out-of-band wake, not a delivery failure — it backs off without consuming
+// the poison (attempt) budget. But an unbounded deferral is the dispatcher
+// live-lock: defer_count bounds it. Returns the post-increment defer_count;
+// the dispatcher poisons when it exceeds MaxDeferrals.
+func (l *SQLiteLog) DeferUpdate(ctx context.Context, agentID, updateID string, notBefore time.Time) (int, error) {
 	_, err := l.db.ExecContext(ctx, `
-UPDATE actor_updates SET not_before = ?, attempts = MAX(attempts - 1, 0)
+UPDATE actor_updates SET not_before = ?, attempts = MAX(attempts - 1, 0), defer_count = defer_count + 1
 WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`,
 		notBefore.UTC(), updateID, agentID)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	if err := l.db.QueryRowContext(ctx, `SELECT defer_count FROM actor_updates WHERE update_id = ?`, updateID).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // ErrEpochConflict is returned by Commit when the actor's durable epoch has

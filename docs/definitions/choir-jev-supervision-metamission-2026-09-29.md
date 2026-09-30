@@ -285,8 +285,14 @@ now:
     change the dispatcher contract, not just the error vocabulary: make
     defer explicit + bounded, let unclassified errors fall to
     poison/terminalize, and introduce a durable-invalid category the
-    handler treats as incorporate (nil,nil) so a decided-invalid
     occurrence records its fate and releases the slot.
+    LANDED (pending deploy): ErrDurableInvalid consumes the occurrence and
+    emits a delivery_invalid fate to the error sink; defer_count column +
+    MaxDeferrals=64 bound ErrDeferUnprocessed so a wait that outlives the
+    bound poisons instead of live-locking; texture pending-postcondition
+    classified by run state (terminal run -> durable-invalid, parked run ->
+    real defer). Files: internal/actor/{actor,dispatcher,log_sqlite},
+    actorruntime/{adapter,handler}. Tests prove the bound + the consume.
   '
   next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
     and fixed: exhausted restart recasts live-locked the guest. "recast
