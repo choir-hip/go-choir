@@ -261,13 +261,30 @@ now:
     fault is the OOM itself + the stale vmctl route it re-mints (502
     "resolve user autoputer"); audit fix 0a03783b is merged but its deploy
     was concurrency-cancelled twice — build still 9e3d6948.'
-  next_action: 'owner/ops: (a) cap/tune platform-dolt memory or scale Node B
-    so the kernel OOM-killer stops killing the retained VM AND vmctl stays
-    up; (b) get 0a03783b actually deployed (its deploy leg keeps being
-    cancelled by newer doc commits — needs a code-bearing run or a manual
-    re-dispatch). Then (stable guest, vmctl ok): M-SUB emit proofs -> M0a
-    controlled-comparison verify -> deletion commit -> M1 typed-commitment
-    tape -> M2/M3/M5. Station recon done in M5/M2/M3 files.'
+  next_action: 'STATUS 13:45Z — audit fix 0a03783b DEPLOYED (build.commit
+    now 0a03783b, vmctl ok). Projection wedge REPAIRED (replay ran). M1
+    typed-commitment proof ATTEMPTED: run start landed trajectory
+    b9f7f256 + a fresh 0c228ea4; both work items stay open/unexecuted —
+    the guest rebooted mid-flight (run passivated) and post-deploy the
+    texture reconcile is starved by the engineering desk''s recast storm
+    (every OOM-passivated engineering attempt now spam-loops "restart
+    recast: co-super assignment invalid transition" / "recast attempts
+    exhausted"). texture create/revise also time out — no desk write is
+    durable right now. Remaining gates (owner/ops, not code): (a) cap/tune
+    platform-dolt memory or scale Node B so OOM stops re-minting the VM
+    every ~20-40min; (b) a healthy window where ONE texture/engineering
+    desk write completes so a work item actually executes. Then M1
+    typed-commitment tape -> M0a verify -> deletion -> M2/M3/M5.'
+  receipts:
+  - id: m1-commit-proof-attempt-2026-09-30
+    boundary: execute
+    commit_or_artifact: 'trajectories b9f7f256-07ad + 0c228ea4-6fd5 on
+      computer-03335285; work items open, never executed (passivate on
+      reboot + recast-storm starvation)'
+    proof_refs: [prompt-bar run start accepted 2026-09-30T13:32Z + 13:42Z]
+    cannot_prove: 'a desk cell staging precommit/resolve/disagreement
+      intent -> choir.commitment_record objects on the OG ledger, because
+      no desk write survives the OOM/reboot/recast-storm window.'
 
 receipts: []
 
