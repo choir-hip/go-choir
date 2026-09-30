@@ -279,10 +279,9 @@ now:
     window), a fresh trajectory 5fc5b712 bound a texture work item
     (doc df78cc76) that STILL sits open/unexecuted — the prompt-bar
     texture work item is not a self-driving RLM cell; the
-    precommit/resolve/disagreement path needs the document-channel
-    sub-RLM cast to an agent desk, which is this mission's own
+    sub-RLM cast to an agent desk, which is this missions own
     deliverable and is not yet self-driving end-to-end. M1 proof now
-    needs EITHER the M2 document-channel cast wired (the mission's real
+    needs EITHER the M2 document-channel cast wired (the missions real
     work) OR a direct sub-RLM cell invocation surface, not more prompt
     retries.
 
