@@ -956,16 +956,37 @@ func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 				if outbox.CanonicalID == "" {
 					continue
 				}
-				// Not-exists condition makes re-minting idempotent: a wake already
-				// folded by a live commit or a prior migration run is skipped.
+				// Fresh obligation: mint only if no wake row exists yet.
 				condition := objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID, Exists: false}
 				if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{condition}, objectgraph.Batch{Objects: []objectgraph.Object{outbox}}); err != nil {
-					if errors.Is(err, objectgraph.ErrConflict) {
-						continue // already minted
+					if !errors.Is(err, objectgraph.ErrConflict) {
+						return minted, fmt.Errorf("migrate actor wake outbox: mint %s: %w", outbox.CanonicalID, err)
 					}
-					return minted, fmt.Errorf("migrate actor wake outbox: mint %s: %w", outbox.CanonicalID, err)
+					// A wake row already exists. If it is projected but its source
+					// obligation is still open (e.g. delivered-bound to a run that
+					// died before consuming), the projector has nothing left to
+					// drain — re-arm it so the pending work resumes from the tape.
+					existing, getErr := s.ogStore.GetObject(ctx, outbox.CanonicalID)
+					if getErr != nil {
+						continue
+					}
+					var existingMeta struct {
+						Projected bool `json:"projected"`
+					}
+					if json.Unmarshal(existing.Metadata, &existingMeta) != nil || !existingMeta.Projected {
+						continue // unprojected wake will drain; nothing to do
+					}
+					rearmed := outbox
+					rearmed.CreatedAt = existing.CreatedAt
+					rearmed.UpdatedAt = time.Now().UTC()
+					rearmed.ContentHash = objectgraph.ContentHash(rearmed.ObjectKind, rearmed.Body, rearmed.Metadata)
+					recond := objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID, Exists: true, ExpectedContentHash: existing.ContentHash}
+					if rerr := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{recond}, objectgraph.Batch{Objects: []objectgraph.Object{rearmed}}); rerr == nil {
+						minted++
+					}
+				} else {
+					minted++
 				}
-				minted++
 			}
 		}
 	}
