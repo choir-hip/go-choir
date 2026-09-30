@@ -325,7 +325,7 @@ func pendingCellEmits(ctx context.Context, rt *Runtime, execCtx toolregistry.Exe
 	if execCtx.RunRecord == nil {
 		return nil
 	}
-	return pendingEmitsForRun(ctx, rt, execCtx.RunRecord)
+	return pendingEmitsForRun(ctx, rt, execCtx.RunRecord, nil)
 }
 
 // pendingEmitsForRun drains emitted signals addressed to this desk's agent.
@@ -333,7 +333,7 @@ func pendingCellEmits(ctx context.Context, rt *Runtime, execCtx toolregistry.Exe
 // own-channel ChannelRead never sees them; this is the boundary-drain read.
 // The cell gets the full untrusted body (choir.Emits()); the chat boundary
 // turn carries only a fixed-format notice (sender/kind/seq/snippet).
-func pendingEmitsForRun(ctx context.Context, rt *Runtime, rec *types.RunRecord) []yaegikernel.PendingEmit {
+func pendingEmitsForRun(ctx context.Context, rt *Runtime, rec *types.RunRecord, seen map[string]bool) []yaegikernel.PendingEmit {
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil
 	}
@@ -369,6 +369,9 @@ func pendingEmitsForRun(ctx context.Context, rt *Runtime, rec *types.RunRecord) 
 		}
 		if kind != "emit" {
 			continue // only emission envelopes drain here; packets/other kinds use their own path
+		}
+		if seen != nil && seen[emitSeenKey(m.ChannelID, m.Seq)] {
+			continue // already delivered at a prior boundary — suppress re-notification
 		}
 		out = append(out, yaegikernel.PendingEmit{
 			ChannelID:   strings.TrimSpace(m.ChannelID),

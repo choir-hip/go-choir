@@ -2021,10 +2021,10 @@ func (rt *Runtime) lifecycleOwnerRevisionTurnForRun(ctx context.Context, rec *ty
 	return []json.RawMessage{message}, []string{head.RevisionID}, nil
 }
 
-func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.RunMemoryEntry) (map[string]bool, map[string]bool) {
-	updates, owners := map[string]bool{}, map[string]bool{}
+func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.RunMemoryEntry) (map[string]bool, map[string]bool, map[string]bool) {
+	updates, owners, emits := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	if rec == nil {
-		return updates, owners
+		return updates, owners, emits
 	}
 	for _, entry := range entries {
 		if entry.Kind != types.RunMemoryEntryMessage || entry.Role != types.RunMemoryRoleRuntimeInjection || len(entry.Message) == 0 {
@@ -2036,10 +2036,14 @@ func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.Ru
 			case strings.HasPrefix(text, "Choir authenticated owner revision packet.\n\n"):
 				packetType = "owner_revision"
 			default:
-				for _, phase := range []string{coagentPacketDeliveryMid, coagentPacketDeliveryFinal, coagentPacketDeliveryCold, coagentPacketDeliveryThread} {
-					if strings.HasPrefix(text, coagentUpdatePacketPreamble(phase)+"\n\n") {
-						packetType = coagentPacketTypeUpdate
-						break
+				if strings.HasPrefix(text, "Choir emit signal notice (boundary drain).\n\n") {
+					packetType = "emit_notice"
+				} else {
+					for _, phase := range []string{coagentPacketDeliveryMid, coagentPacketDeliveryFinal, coagentPacketDeliveryCold, coagentPacketDeliveryThread} {
+						if strings.HasPrefix(text, coagentUpdatePacketPreamble(phase)+"\n\n") {
+							packetType = coagentPacketTypeUpdate
+							break
+						}
 					}
 				}
 			}
@@ -2061,6 +2065,10 @@ func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.Ru
 				Revisions []struct {
 					RevisionID string `json:"revision_id"`
 				} `json:"revisions"`
+				EmitRefs []struct {
+					ChannelID  string `json:"channel_id"`
+					MessageSeq int64  `json:"message_seq"`
+				} `json:"emit_refs"`
 			}
 			expectedTrajectory := lifecycleControlTrajectoryForRun(rec)
 			if json.Unmarshal([]byte(text[start:]), &envelope) != nil {
@@ -2091,10 +2099,28 @@ func lifecycleInjectionIDsFromRunMemory(rec *types.RunRecord, entries []types.Ru
 						owners[id] = true
 					}
 				}
+			case "emit_notice":
+				for _, ref := range envelope.EmitRefs {
+					key := emitSeenKey(ref.ChannelID, ref.MessageSeq)
+					if key != "" {
+						emits[key] = true
+					}
+				}
 			}
 		}
 	}
-	return updates, owners
+	return updates, owners, emits
+}
+
+// emitSeenKey is the dedupe identity for an emitted signal in run memory:
+// the sender channel and its per-channel sequence. Stable across replays so
+// a re-noticed boundary suppresses already-delivered emissions.
+func emitSeenKey(channelID string, seq int64) string {
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" || seq <= 0 {
+		return ""
+	}
+	return channelID + ":" + strconv.FormatInt(seq, 10)
 }
 
 func runMemoryUserMessageTexts(raw json.RawMessage) []string {
@@ -2143,7 +2169,7 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		if err != nil {
 			return nil, fmt.Errorf("derive delivered lifecycle occurrences from run memory: %w", err)
 		}
-		seenUpdates, seenOwnerRevisions := lifecycleInjectionIDsFromRunMemory(rec, entries)
+		seenUpdates, seenOwnerRevisions, seenEmits := lifecycleInjectionIDsFromRunMemory(rec, entries)
 		phase := coagentPacketDeliveryMid
 		if finalCheckpoint {
 			phase = coagentPacketDeliveryFinal
@@ -2169,8 +2195,8 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 			}
 			fresh = append(fresh, update)
 		}
-		emits := pendingEmitsForRun(context.Background(), rt, rec)
-		emitMsgs, err := buildEmitNoticeUserMessages(emits, agentID)
+		emits := pendingEmitsForRun(context.Background(), rt, rec, seenEmits)
+		emitMsgs, err := buildEmitNoticeUserMessages(emits, rec)
 		if err != nil {
 			return nil, err
 		}
@@ -2233,7 +2259,7 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) toolregistry.ToolLoop
 			if err != nil {
 				return false, fmt.Errorf("derive parked delivery occurrences from run memory: %w", err)
 			}
-			seen, _ := lifecycleInjectionIDsFromRunMemory(rec, entries)
+			seen, _, _ := lifecycleInjectionIDsFromRunMemory(rec, entries)
 			for _, update := range updates {
 				id := strings.TrimSpace(update.UpdateID)
 				if id != "" && !seen[id] {
@@ -2288,7 +2314,7 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 	if err != nil {
 		return messages, fmt.Errorf("derive cold delivery occurrences from run memory: %w", err)
 	}
-	seen, _ := lifecycleInjectionIDsFromRunMemory(rec, entries)
+	seen, _, _ := lifecycleInjectionIDsFromRunMemory(rec, entries)
 	updates, err := rt.pendingCoagentUpdatesForRun(ctx, rec, ownerID, agentID, 100)
 	if err != nil {
 		return messages, fmt.Errorf("list pending coagent updates for cold delivery: %w", err)

@@ -190,7 +190,7 @@ func newReportPersistentManagementToTextureTool(rt *Runtime) toolregistry.Tool {
 			if err != nil {
 				return "", fmt.Errorf("report_to_texture load durable run memory: %w", err)
 			}
-			memorySeen, _ := lifecycleInjectionIDsFromRunMemory(parent, memoryEntries)
+			memorySeen, _, _ := lifecycleInjectionIDsFromRunMemory(parent, memoryEntries)
 			authenticatedDelivered := make([]types.CoagentSourcePacket, 0, len(delivered))
 			consumedDeliveryIDs := make([]string, 0, len(delivered))
 			allControls := make([]types.CoagentSourcePacket, 0, len(delivered))

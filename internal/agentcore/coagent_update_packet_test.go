@@ -91,7 +91,7 @@ func TestBuildEmitNoticeUserMessagesPointerNotPayload(t *testing.T) {
 		Kind:        "emit",
 		Body:        longBody,
 	}}
-	msgs, err := buildEmitNoticeUserMessages(emits, "texture:doc-1")
+	msgs, err := buildEmitNoticeUserMessages(emits, &types.RunRecord{OwnerID: "owner-1", ComputerID: "comp-1", AgentID: "texture:doc-1", RunID: "run-1"})
 	if err != nil {
 		t.Fatalf("build emit notice: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestBuildEmitNoticeUserMessagesPointerNotPayload(t *testing.T) {
 
 func TestBuildEmitNoticeUserMessagesEmpty(t *testing.T) {
 	t.Parallel()
-	msgs, err := buildEmitNoticeUserMessages(nil, "texture:doc-1")
+	msgs, err := buildEmitNoticeUserMessages(nil, &types.RunRecord{AgentID: "texture:doc-1"})
 	if err != nil {
 		t.Fatalf("build empty notice: %v", err)
 	}
