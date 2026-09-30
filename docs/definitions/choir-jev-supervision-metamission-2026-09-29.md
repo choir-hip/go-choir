@@ -270,21 +270,33 @@ now:
     texture create/revise timed out. The exhausted branch already fails
     the bound selfdev operation durably, so it now returns clean
     (occurrence incorporated, loop stops). Fix 886e5ce1 (impl+verify
-    branches), agentcore+actor+textureowner green. DEPLOYING.
-    Audit fix 0a03783b already live; projection wedge repaired. Remaining
-    gate = OOM capacity (platform-dolt 28GB on a 31GB box re-mints the VM
-    every ~20-40min). Once 886e5ce1 deploys AND a healthy window holds:
-    M1 typed-commitment tape -> M0a verify -> deletion -> M2/M3/M5.'
+    branches), agentcore+actor+textureowner green. DEPLOYED 14:36Z as
+    part of 14faf3d5 — guest rebooted onto it, recast spam went 83/90s
+    -> 0/30s, runtime: started clean.
+
+    M1 residual finding (14:38Z): with env now stable (audit fix live +
+    projection repaired + live-lock dead + vmctl ok + no OOM kill in the
+    window), a fresh trajectory 5fc5b712 bound a texture work item
+    (doc df78cc76) that STILL sits open/unexecuted — the prompt-bar
+    texture work item is not a self-driving RLM cell; the
+    precommit/resolve/disagreement path needs the document-channel
+    sub-RLM cast to an agent desk, which is this mission's own
+    deliverable and is not yet self-driving end-to-end. M1 proof now
+    needs EITHER the M2 document-channel cast wired (the mission's real
+    work) OR a direct sub-RLM cell invocation surface, not more prompt
+    retries.
+
+    Remaining gate = OOM capacity (platform-dolt 28GB on a 31GB box
+    re-mints the VM every ~20-40min) + the M2 document-channel-cast
+    mechanism for the M1 proof itself.'
   receipts:
   - id: m1-commit-proof-attempt-2026-09-30
     boundary: execute
-    commit_or_artifact: 'trajectories b9f7f256-07ad + 0c228ea4-6fd5 on
-      computer-03335285; work items open, never executed — run passivated
-      on reboot, then the recast live-lock starved the texture reconcile.'
-    proof_refs: [prompt-bar run start accepted 2026-09-30T13:32Z + 13:42Z]
-    cannot_prove: 'a desk cell staging precommit/resolve/disagreement
-      intent -> choir.commitment_record objects on the OG ledger; blocked
-      by the recast live-lock (fixed 886e5ce1) + OOM reboot cycle.'
+    commit_or_artifact: 'trajectories b9f7f256-07ad + 0c228ea4-6fd5 +
+      5fc5b712-825d on computer-03335285; work items open, never
+      executed — passivate-on-reboot, then recast live-lock starvation
+      (fixed 886e5ce1), then mechanism gap: texture-bound prompt work
+      item is not a self-driving commitment-cell.'
 
 receipts: []
 
