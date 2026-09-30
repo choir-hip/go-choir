@@ -18,6 +18,7 @@ const (
 	ActionListDir   BrokerAction = "list_dir"
 	ActionAssign    BrokerAction = "assign"
 	ActionMessage   BrokerAction = "message"
+	ActionEmit      BrokerAction = "emit"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -118,6 +119,19 @@ type MessageResult struct {
 	DeliveredAt string `json:"delivered_at"`
 }
 
+// EmitPayload defines the parameters for ActionEmit. Emits bypass the
+// cell tray: the host durably mails an rlm "emit" envelope immediately.
+type EmitPayload struct {
+	ToDesk string `json:"to_desk"`
+	Kind   string `json:"kind"`
+	Body   string `json:"body"`
+}
+
+// EmitResult identifies the durable channel record written by ActionEmit.
+type EmitResult struct {
+	Seq uint64 `json:"seq"`
+}
+
 // Validate checks internal consistency of a BrokerRequest.
 func (r *BrokerRequest) Validate() error {
 	if r.ProtocolVersion != ProtocolVersion {
@@ -135,7 +149,12 @@ func (r *BrokerRequest) Validate() error {
 	if r.Action == "" {
 		return fmt.Errorf("broker protocol: action is required")
 	}
-	return nil
+	switch r.Action {
+	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit:
+		return nil
+	default:
+		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)
+	}
 }
 
 // NewSuccessResponse creates a successful response.

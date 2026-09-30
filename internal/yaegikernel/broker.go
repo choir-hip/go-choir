@@ -16,6 +16,9 @@ import (
 	"time"
 )
 
+// EmitHandler performs the host-side durable write for ActionEmit.
+type EmitHandler func(context.Context, EmitPayload) (EmitResult, error)
+
 // BrokerConfig configures the trusted guest broker.
 type BrokerConfig struct {
 	ComputerID     string
@@ -23,6 +26,12 @@ type BrokerConfig struct {
 	AllowedRoot    string
 	MaxOutputBytes int64
 	DefaultTimeout time.Duration
+	// EmitRefused is the rollback gate. It refuses new emissions but never
+	// affects records already durably delivered by the host.
+	EmitRefused bool
+	// Emit performs the host-side durable channel write and recipient wake.
+	// A nil handler refuses emits rather than retaining an in-worker receipt.
+	Emit EmitHandler
 }
 
 // Broker executes authorized operations requested by untrusted Yaegi activations.
@@ -127,6 +136,8 @@ func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerR
 		return b.handleAssign(ctx, req, receiptID, start)
 	case ActionMessage:
 		return b.handleMessage(ctx, req, receiptID, start)
+	case ActionEmit:
+		return b.handleEmit(ctx, req, receiptID, start)
 	default:
 		return NewErrorResponse(req.RequestID, fmt.Sprintf("unsupported action %q", req.Action), time.Since(start))
 	}
@@ -344,6 +355,40 @@ func (b *Broker) handleMessage(ctx context.Context, req *BrokerRequest, receiptI
 		DeliveredAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
+	resp, err := NewSuccessResponse(req.RequestID, result, receiptID, time.Since(start))
+	if err != nil {
+		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
+	}
+	return resp
+}
+
+func (b *Broker) handleEmit(ctx context.Context, req *BrokerRequest, receiptID string, start time.Time) *BrokerResponse {
+	var payload EmitPayload
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		return NewErrorResponse(req.RequestID, fmt.Sprintf("unmarshal emit payload: %v", err), time.Since(start))
+	}
+	if strings.TrimSpace(payload.ToDesk) == "" {
+		return NewErrorResponse(req.RequestID, "emit requires a destination desk", time.Since(start))
+	}
+	if strings.TrimSpace(payload.Kind) == "" {
+		return NewErrorResponse(req.RequestID, "emit requires a kind", time.Since(start))
+	}
+	if len(payload.Body) > MaxIntentBody {
+		return NewErrorResponse(req.RequestID, fmt.Sprintf("emit body %d bytes exceeds egress budget %d", len(payload.Body), MaxIntentBody), time.Since(start))
+	}
+	b.mu.Lock()
+	refused, emit := b.cfg.EmitRefused, b.cfg.Emit
+	b.mu.Unlock()
+	if refused {
+		return NewErrorResponse(req.RequestID, "emit refused by gate", time.Since(start))
+	}
+	if emit == nil {
+		return NewErrorResponse(req.RequestID, "emit host unavailable", time.Since(start))
+	}
+	result, err := emit(ctx, payload)
+	if err != nil {
+		return NewErrorResponse(req.RequestID, fmt.Sprintf("emit: %v", err), time.Since(start))
+	}
 	resp, err := NewSuccessResponse(req.RequestID, result, receiptID, time.Since(start))
 	if err != nil {
 		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))

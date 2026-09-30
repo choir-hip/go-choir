@@ -35,6 +35,11 @@ const (
 	// tolerate and ignore them.
 	StreamStdout = 2
 	StreamStderr = 3
+	// StreamBrokerEmit carries one synchronous ActionEmit call from the
+	// isolated cell worker to its host; StreamBrokerEmitResult returns its
+	// durable sequence or refusal before cell evaluation continues.
+	StreamBrokerEmit       = 4
+	StreamBrokerEmitResult = 5
 )
 
 // MaxFramePayload bounds one frame. Cells exceeding it are rejected before

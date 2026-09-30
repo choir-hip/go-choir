@@ -70,9 +70,9 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 		return nil, fmt.Errorf("choir: handle issuer is required")
 	}
 	readOnly := role == SessionRoleResearch
-	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage}
+	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit}
 	if readOnly {
-		actions = []BrokerAction{ActionReadFile, ActionListDir}
+		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionEmit}
 	}
 	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, time.Hour)
 	if err != nil {
@@ -157,22 +157,22 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
 	// the filesystem (mutation is capsule-bound under engineering).
-	"management": {"Message", "Outcome", "Spawn", "Cast", "Ask", "Note", "Reply",
+	"management": {"Message", "Emit", "Outcome", "Spawn", "Cast", "Ask", "Note", "Reply",
 		"CancelAct", "Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Engineering mutates inside its capsule and reports fate.
-	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Outcome", "Spawn",
+	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit", "Outcome", "Spawn",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
-	"research": {"Message", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
+	"research": {"Message", "Emit", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Texture authors document revisions and escalates; artifact writes are
 	// the staged ApplyTexture intent (committed through ApplyTextureTurn),
 	// not capsule file ops. Children (research probes, persistent management)
 	// open atomically inside the turn via the edit's controls arg — texture
 	// never free-spawns or casts.
-	"texture": {"Message", "Outcome", "Ask", "Note", "Reply", "CancelAct",
+	"texture": {"Message", "Emit", "Outcome", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"ReadDoc", "ApplyTexture"},
 }
@@ -208,8 +208,8 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Exec":            func() reflect.Value { return reflect.ValueOf(s.Exec) },
 		"Assign":          func() reflect.Value { return reflect.ValueOf(s.Assign) },
 		"Message":         func() reflect.Value { return reflect.ValueOf(s.Message) },
+		"Emit":            func() reflect.Value { return reflect.ValueOf(s.Emit) },
 		"Outcome":         func() reflect.Value { return reflect.ValueOf(s.Outcome) },
-		"Spawn":           func() reflect.Value { return reflect.ValueOf(s.Spawn) },
 		"Complete":        func() reflect.Value { return reflect.ValueOf(s.Complete) },
 		"Freeze":          func() reflect.Value { return reflect.ValueOf(s.Freeze) },
 		"Cast":            func() reflect.Value { return reflect.ValueOf(s.Cast) },
@@ -329,6 +329,20 @@ func (s *ChoirScope) Message(recipientID, kind, body string) (MessageResult, err
 	var result MessageResult
 	if err := s.call(ActionMessage, MessagePayload{RecipientID: recipientID, Kind: kind, Body: body}, &result); err != nil {
 		return MessageResult{}, err
+	}
+	return result, nil
+}
+
+// Emit durably sends an immediate signal to another desk. Unlike Message, it
+// never enters the bound cell's tray: the host writes the "emit" envelope and
+// wakes the recipient before this call returns.
+func (s *ChoirScope) Emit(toDesk, kind, body string) (EmitResult, error) {
+	if err := s.mutateDenied("Emit"); err != nil {
+		return EmitResult{}, err
+	}
+	var result EmitResult
+	if err := s.call(ActionEmit, EmitPayload{ToDesk: toDesk, Kind: kind, Body: body}, &result); err != nil {
+		return EmitResult{}, err
 	}
 	return result, nil
 }
