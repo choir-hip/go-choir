@@ -187,9 +187,11 @@ now:
   # evidence_class deployed_proof — emit mid-cell + boundary notice, kill
   # divergence, parked-vs-working delivery contract, respawn cursor
   # continuity, hang timeout, runtime_restarted re-arm, advisory piggyback
-  # observation). These need a live staging activation; provider circuit is
-  # saturated this window — run on recovery, do not re-patch on a red
-  # environment.
+  # observation). These need a live staging activation. Environment state
+  # 2026-09-30: full outage — every choir.news endpoint (root, /health,
+  # /api/runs, /api/texture/*) returns 502, vmctl unavailable, Node B
+  # deploy-artifact jobs wedge in flight with expired logs. Run on
+  # recovery; do not re-patch on a dead environment.
   candidate:
     id: none
     state: none
