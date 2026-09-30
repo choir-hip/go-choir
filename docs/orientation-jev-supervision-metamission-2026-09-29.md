@@ -70,84 +70,73 @@ Owner's prompt-bar session on `computer-03335285269bdba4f94377e56879f9e6`
 
 ---
 
-## B. Jev in management — the owner steer vs the 9/27 dialectic
 
-**Owner direction 2026-09-29:** Jev integrates into management — management
-calls Jev for decisions, hitting the RLM only on low confidence, with the Jev
-output exposed as a variable in the RLM context. *"Also: conductor as
-router"* — Jev's `choice` primitive is the route-selection mechanism.
+## B. The ratified shape (owner, 2026-09-29)
 
-This steers past the 9/27 dialectic's runtime-only scorer position (B:
-cell-actuated won over A: hidden outbox). The reconciled shape:
+- **The commitment scorer IS management.** Not a separate async runtime
+  piece — scoring is management's job. Management can score with Jev,
+  other decision models, LLMs, or any combination; Jev is the default
+  starting method, escalating to an RLM sub-cast on low confidence. The
+  scoring surface and the decision surface are the same desk, not two
+  surfaces sharing a transport.
 
-- **Two Jev surfaces, not one.** (i) *Scorer for commitment records* —
-  async, runtime-driven, supervision-only, never in acting context (the
-  epistemic boundary). (ii) *Decision gate inside management's cell* —
-  synchronous `jev.decide(state, questions)` as an in-cell module verb;
-  on low confidence/probability, management escalates to a full RLM
-  sub-cast with the Jev distribution passed in as a context variable.
-  These are different authorities and different latency budgets; they share
-  only the transport.
+- **Management's routing is coupled to precommitment scoring.** The
+  passthrough (Jev agrees → route as-is) or translator work management
+  does between engineering and texture is downstream of the
+  precommitments — engineering executes what management scored. Routing
+  and scoring are one responsibility, not two stations.
 
-- **Epistemic boundary is preserved by kind, not by hiding.** Jev scores of
-  *commitments* stay out of ActingPack (that boundary holds). Jev
-  *judgments management calls for its own routing* are inputs the desk
-  chose to consult — like any tool result — and may enter its RLM context.
-  The boundary binds score records of others' commitments, not a desk's
-  own tool calls.
+- **Conductor does policy routing, not model routing.** Conductor
+  classifies user intent from the prompt bar and selects which appagent
+  receives it (texture is the default today; the prompt bar gets more
+  adaptive over time). Conductor never picks a model — appagents and
+  worker agents own model selection.
 
-- **Conductor routing via `choice`.** Model/provider/route selection is a
-  `choice` question to Jev; the returned option + distribution routes the
-  cast. This is where "model config via RLM code" lands — management picks
-  the model per task through Jev, not a static `model-policy.toml`.
+- **Model policy is an RLM module, not conductor's job.** A module gives
+  desks two capabilities: (i) *persistent* per-desk model policy changes
+  — e.g. texture changes its own model inside a Go cell and it sticks;
+  (ii) *parametric* selection — e.g. research casts sub-RLMs and chooses
+  the model at call time. This is what "RLM-driven model switching" means.
 
-- **What the 9/27 panels still govern** (ratified): pinned `typesafe/jev-1.13`
-  (never `jev-latest`); OpenRouter `/api/alpha/decisions` transport (owner
-  §12.2, supersedes the direct `/v1/systemone` the panels assumed); gateway
-  `POST /provider/v1/judgments` per-VM bearer + own rate bucket; scores land
-  as `choir.commitment_score` (distinct OG kind); full distributions in the
-  record, not flattened answers; `confidence` never gates; replay =
+- **Precommitments go from strings to types** (confirmed): typed questions
+  + frozen probabilities at `Precommit`; evidence refs at `Resolve`;
+  `Disagreement` split so scorer disagreement never reaches ActingPack.
+
+- **What still governs from the 9/27 panels:** pinned `typesafe/jev-1.13`
+  (never `jev-latest`); gateway `POST /provider/v1/judgments` → OpenRouter
+  `/api/alpha/decisions`; per-VM bearer + own rate bucket; scores land as
+  `choir.commitment_score`; full distributions recorded; replay =
   deterministic score ID bound to the resolution.
-
-- **Blocking prerequisite both panels flagged:** `Precommit` commits only a
-  hypothesis string; `Resolve` only a verdict word. Scoreable input needs
-  typed questions + frozen probabilities at precommit and evidence refs at
-  resolve — plus the `Disagreement` split so scorer disagreement never
-  reaches ActingPack.
 
 ---
 
-## C. Metamission skeleton — consensus-adjudicated order
+## C. Metamission skeleton (post-panel, post-owner-corrections)
 
-Reviewed by a 5-agent convergent panel (codex, gpt6-sol, glm53-flash,
-gemini38, devin; 2026-09-29, `.agentic-consensus/agentic-consensus-20260929-195929/`).
-Verdict: skeleton sound, but M0a hid a red-class kernel station, the silent
-stall had no owner, and management's RLM-ification was missing. Adjudicated
-order (each a separate `/goal` file):
+5-agent convergent panel reviewed 2026-09-29
+(`.agentic-consensus/agentic-consensus-20260929-195929/`). Then corrected
+by owner: scorer=management, conductor=policy-routing, model policy = RLM
+module. Station list:
 
 | # | Station | Delivers | Depends |
 |---|---|---|---|
-| M0 | **Debug + stabilize** | Redeploy owner computer onto today's build; reconcile the 7 pending mutations + 3 stale pending runs (counter → 0, not masked by the idle-sweep busy-check); SSE auto-resubscribe as a named fix (~20 lines, `frontend/src/lib/lifecycle.js` — `onerror` resumes via `?after=` cursor instead of terminal error); baseline per-leg timings; problem record. *No throughput bar here.* | none — first |
-| M-SUB | **Duplex cell IPC + eager emission + stall terminator** | (red-class kernel) Eager channel delivery mid-cell: evidence reaches texture while the cell still runs; ledger/commitment stays staged-atomic at cell end. Mid-cell inbox refresh so texture follow-ups reach a live research cell. Emission-divergence contract (cell emits then crashes → texture holds a delivered non-ledger message: rule stated). **Desk-consumption liveness**: every completed cell emits a terminal report-or-failure event that advances the reducer — the silent-stall gap gets an owner. Shared by research, texture follow-ups, management sub-cast, conductor routing. | M0 |
-| M0a-1 | **In-cell research verbs** | `choir.WebSearch`/`FetchURL`/evidence-ops as Go-callable verbs; egress budget rehomed onto the cell substrate (the typed tools carry per-activation egress + 8GiB cap — deleting them without rehoming deletes governance). Typed surface still live — verify stall fix in controlled comparison. | M-SUB |
-| M0a-2 | **Research tool-surface deletion** | Delete the 14-tool surface; capability-parity checklist as acceptance (each deleted capability reachable via `choir.*` or explicitly dropped with reason); prompt-overlay rewrites (`rlm_research_runtime.yaml`, `promptstore/defaults/research.yaml` instruct the deleted cadence — must ship in the same commit or it's an instant regression). | M0a-1 |
-| M1 | **Scoreable commitments** | `Precommit` freezes typed questions + probabilities; `Resolve` carries evidence refs; `Disagreement` split; string-commitment grandfathering stated. | parallel-safe with M-SUB→M0a — types/store change |
-| M2 | **Model/policy eval surface + instrumentation** | Model/provider/effort desk-chosen; evals as parallel RLM casts (fan-out size, owning desk, fixture location, score-matrix artifact all named); per-turn timing/token/cost records (folds most of old M6); eval fixture/golden set for the QA prompt family. Commitment-backed evals need M1; raw instrumentation doesn't. | M0a-2 for research-specific validity; M1 for scored evals |
-| M3 | **Research hill-climbing** | Multi-model/effort matrix on the QA family. **Owns the 10-in-5 bar**: ≥10 distinct committed texture revisions within 300s of prompt submission end-to-end, each revision attributable to a research emission; per-leg timings are diagnostics, not the bar. | M2 |
-| M4 | **Jev transport** | Gateway `POST /provider/v1/judgments` → OpenRouter `typesafe/jev-1.13` pinned; per-VM bearer + rate bucket; alpha-endpoint credential provisioning named. | none — parallel throughout |
-| M5a | **Async commitment scorer** | Reconciler scoring frozen commitments; `choir.commitment_score` OG kind; ActingPack isolation verified; full distributions retained; `confidence` never gates. | M1+M4 |
-| M5b | **`jev.decide` + management RLM-ification** | `jev.decide` in-cell verb; low-confidence → RLM sub-cast w/ distribution as context var; management's typed tools (`report_to_texture`, `cancel_co_super_assignment`, assignment family) become `choir.*` verbs — last desk reaches the one-tool doctrine. | M5a |
-| M5c | **Conductor `choice`-routing** | Route selection as a Jev `choice` question over M2's desk-chosen config surface; incremental override of `model-policy.toml`, not wholesale replacement (doctrine already schedules the broker-mediated cutover — this follows M5a's distribution evidence). Conductor call path (desk? direct judgments call?) resolved at charter. | M5b+M2 |
-| — | **World Wire** | Resumes on these foundations. Named entry gate required: which prerequisites actually block + a deployed ingress-to-artifact proof. | all above |
+| M0 | **Debug + stabilize** | Redeploy owner computer onto today's build; reconcile the 7 pending mutations + 3 stale runs (counter → 0, not masked by idle-sweep busy-check); SSE auto-resubscribe (~20 lines, `frontend/src/lib/lifecycle.js` — `onerror` resumes via `?after=` cursor, no terminal error); baseline per-leg timings; problem record. No throughput bar here. | none — first |
+| M-SUB | **Duplex cell IPC + eager emission + stall terminator** | (red-class kernel) Evidence reaches texture mid-cell while the cell still runs; ledger stays staged-atomic at cell end. Mid-cell inbox refresh so texture follow-ups reach a live cell. Emission-divergence rule stated (cell emits then crashes → texture holds a delivered non-ledger message). Every completed cell emits terminal report-or-failure that advances the reducer — the silent-stall gap gets an owner. Shared by research evidence, texture follow-ups, management sub-casts. | M0 |
+| M0a-1 | **In-cell research verbs** | `choir.WebSearch`/`FetchURL`/evidence ops as Go verbs; egress budget rehomed (typed tools carry per-activation egress + 8GiB cap — deleting without rehoming deletes governance). Typed surface still live — controlled-comparison verify of the stall fix. | M-SUB |
+| M0a-2 | **Research tool-surface deletion** | Delete the 14-tool surface; capability-parity checklist (each capability reachable via `choir.*` or dropped with reason); prompt-overlay rewrites in the same commit (`rlm_research_runtime.yaml`, `research.yaml` instruct the deleted cadence). | M0a-1 |
+| M1 | **Scoreable commitments** | `Precommit`/`Resolve`/`Disagreement` from strings to types; string-commitment grandfathering stated. | parallel-safe — types/store change |
+| M2 | **Model-policy RLM module + eval surface** | Persistent per-desk model policy (texture changes its own model in a Go cell) + parametric selection at cast time (research picks the sub-RLM's model). Evals as parallel RLM casts; per-turn timing/token/cost records; QA fixture/golden set. | M0a-2 for research-valid evals; M1 for scored evals |
+| M3 | **Research hill-climbing** | Multi-model/effort matrix on the QA family via M2's module. **Owns the 10-in-5 bar**: ≥10 distinct committed texture revisions in 300s end-to-end, each attributable to a research emission; per-leg timings are diagnostics. | M2 |
+| M4 | **Jev transport** | Gateway `POST /provider/v1/judgments` → OpenRouter `typesafe/jev-1.13`; per-VM bearer + rate bucket; alpha credential provisioning. | none — parallel |
+| M5 | **Management = scorer + `jev.decide` + mgmt RLM-ification** | Scoring is management's job (Jev default, pluggable with other decision models/LLMs later); low confidence → RLM sub-cast w/ distribution in context; passthrough-or-translate routing between eng and texture rides the same scoring loop; `choir.commitment_score` kind; management's typed tools → `choir.*` verbs (last desk to one-tool). | M1+M4 |
+| — | **World Wire** | Named entry gate: which prerequisites block + deployed ingress-to-artifact proof. | all above |
 
-### Open decisions for the owner
+### Remaining open questions
 
-1. **M0 scope**: restart/redeploy + retest vs instrument-first (panel:
-   redeploy first — cheap, and today's build carries the wake repairs).
-2. **M0a phase split**: land emission+verbs while the typed surface still
-   exists (rollback point, isolates the fix variable), or one cutover.
-3. **Management RLM-ification**: fold into M5b (panel majority) vs a thin
-   standalone station after M5c.
-4. **Conductor call path**: is conductor route selection a `jev.decide`
-   inside management's cell, or a direct judgments call from the conductor
-   run profile? Conductor is not a desk — the fork changes M5c's shape.
+1. **M0**: redeploy+retest first (panel rec: yes — cheap, today's build
+   carries the wake repairs) or instrument first?
+2. **M0a phase split**: verbs+emission land while typed tools still exist
+   (rollback point), or one cutover?
+3. **Emission-divergence rule**: a mid-cell emit from a cell that then
+   crashes leaves texture holding a delivered message with no ledger
+   commitment. Is the emit provisional (marked non-ledger until cell
+   commit reconciles) or is delivery itself the record?
