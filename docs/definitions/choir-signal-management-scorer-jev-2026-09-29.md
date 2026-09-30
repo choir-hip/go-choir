@@ -194,5 +194,32 @@ now:
   next_action: 'after M1+M4: author jev.decide verb + scorer reconciler +
     management verb migration + routing-through-scoring'
 
+  # Recon 2026-09-30 (M5 slice first move — reconciliation BEFORE authoring).
+  # Management desk cell facts on current main:
+  # - On the desk cell carrier (deskCarrierLive: management/texture/research
+  #   all true). Registry = desk_go_eval + management lifecycle tools
+  #   (report_to_texture, cancel_co_super_assignment via
+  #   RegisterPersistentManagementReportTools; RegisterAssignedEngineeringTools
+  #   when capsuleExecutor present).
+  # - Management's choir module set already grants the semantic verbs:
+  #   {Message, Emit, Outcome, Spawn, Cast, Ask, Note, Reply, CancelAct,
+  #   Escalate, EscalateActions, Precommit, Report, ReportPacket, Resolve,
+  #   Disagreement}. No Jev/score/scoring verb exists in-cell — the M5 gap.
+  # - JevTransport.Decide lives in the gateway (typesafe/jev-1.13) and is
+  #   NOT exposed as a choir.* verb — jev.decide must bridge the transport
+  #   into a desk-scoped verb (analogous to the M0a choir.WebSearch egress
+  #   pattern via the StreamBrokerEgress/frame round-trip).
+  # - Scoring substrate present but unwired: types.CommitmentScore records
+  #   exist (Disagreement flag, Disagreement record fans out on
+  #   rlm_reduce.go:1187-1192), but there is no scorer reconciler and no
+  #   consumer reading a score into a routing decision — exactly the M5
+  #   gap the conjecture test targets (score → routing influence).
+  # - Migration scope for "typed tools→choir.* verbs": the two host-side
+  #   lifecycle tools (report_to_texture, cancel_co_super_assignment) plus
+  #   the assigned-engineering tool family are the candidates to become
+  #   staged cell verbs under the one-tool doctrine; management's registry
+  #   then goes {desk_go_eval} like research's M0a deletion target.
+  #   Authoring gate remains M1+M4 settle; recon only.
+
 receipts: []
 ---
