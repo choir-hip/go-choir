@@ -345,16 +345,19 @@ now:
     calls fail on the provider until upstream recovers; not the seam.
   '
   '
-  next_action: 'STATUS 23:30Z — redrive chain (a2b87d69 + a7e31232 + 08a76896
-    + 766b3a53 + 37882e1d) DEPLOYED, guest epoch 979 on 37882e1d. Guest
-    rebooted ~22:52 (2495033, OOM): migration minted 1778 wakes at 23:16 —
-    cfa90b87 wake re-armed, queued in a serial drain racing the ~20-40min
-    platform-dolt OOM reboot cycle. Salted #redrive-1 rows are landing and
-    deferring on handler logic — the seam is proven live on staging.
-    cfa90b87 still passivated (queued deep). M-SUB trajectory 2491cb20
-    already PASSED on 9e3d6948; M1 items 2+3 verified at type+test level
-    (docs/evidence/m1-actingpack-legacy-grandfather-2026-09-30.md). Residual
-    gate: 362febb2 reactivation + provider chatgpt circuit recovery.'
+  next_action: 'STATUS 23:55Z — redrive chain DEPLOYED + seam proven live
+    (salted #redrive-1 rows appended + handled). Environment recovered:
+    provider circuit closed (chatgpt inference succeeding), deferral storm
+    self-poisoned (3 rows past MaxDeferrals=64, zero deferrals 25min), guest
+    stable 50min. cfa90b87 still passivated despite re-armed wake — new
+    strand class documented: docs/problems/coagent-result-parked-run-not-
+    reactivated-2026-09-30.md (leading candidate: handleCoagentResult rs.RunID
+    =="" arm consumes the obligation via reconcileCoagentWake without
+    reactivating the parked run; needs guest-internal actor-snapshot read).
+    M1 items 2+3 verified + committed (m1-actingpack-legacy-grandfather
+    -2026-09-30.md). M-SUB: mid-cell emit + boundary notice passively
+    confirmed live; 5 controlled-cell proofs blocked on stable window.
+    Gate: 362febb2 reactivation is now a diagnosed defect, not drain lag.'
 
     and fixed: exhausted restart recasts live-locked the guest. "recast
     attempts exhausted" returned a transient error, so the actor
