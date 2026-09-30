@@ -79,3 +79,18 @@ tray atomicity, the digest-conflict guard for genuinely-mutated commands.
   — the same wedge class from the texture leg.
 - Internal: `internal/textureowner/texture_controller.go:824-890, 983-1025`;
   `internal/store/lifecycle.go:988-1054`; `internal/store/lifecycle_update_delivery.go:27`.
+
+## Resolution — 2026-09-30
+
+Landed in `2404e7d2` (child of `f35118e3`): `reconcileTextureUpdateDelivery` now
+appends `textureDeliveryContentKey(req)` — a sha256 over the sorted item set,
+target run/agent, breaker state, and attempt cap — to the CommandID. Identical
+batches replay the stored receipt; drifted batches mint a fresh command and never
+conflict. Deployed to staging and verified: owner runtime PID 695 booted at
+06:44:27, `runtime: started`, stable with zero `startup refused` / digest
+conflict across subsequent boots. A transient `10.200.58.1:8086 connection
+refused` appeared once during the deploy's own restart window and cleared when
+`corpusd` came up. Regression tests:
+`internal/textureowner/texture_delivery_command_id_test.go`
+(TestTextureDeliveryContentKeyDriftsWithItems / StableAcrossItemOrder /
+DistinguishesSlotAndBreaker).
