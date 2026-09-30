@@ -231,9 +231,9 @@ now:
   blocker_or_risk: 'station files carry readiness: reviewed after the
     authoring panel — promotion to executable happens per-station as
     dependencies clear; M-SUB/M0a promoted on M0 settle'
-  next_action: 'land M1 + M4 deployed proofs (parallel-safe, running);
-    drive M-SUB sub-cuts cell_fate -> Emit -> inject -> piggyback, then
-    promote M0a (research RLM cutover)'
+  next_action: 'land M1 + M4 deployed proofs (running; wedge cleared —
+    texture-delivery crash loop fixed 2404e7d2); then M-SUB Emit sub-cut
+    (cell_fate+deadline landed), then inject + piggyback, then M0a'
 
 receipts: []
 
