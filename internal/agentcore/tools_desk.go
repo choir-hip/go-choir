@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -439,7 +441,17 @@ func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaeg
 	if rt == nil || rt.textureCellAuthorizer == nil || rec == nil {
 		return nil // not a texture run or no authorizer bound — nothing to do
 	}
+	// Only texture desk cells owe the owner-revision trigger a turn. Every
+	// other desk (engineering, management, research) reduces intents against
+	// the channel ledger and never touches the texture head — consuming here
+	// would be a non-texture cell reaching into the doc it does not own.
+	if !runHasProfile(rec, agentprofile.Texture) {
+		return nil
+	}
 	docID := strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))
+	if docID == "" {
+		docID = strings.TrimSpace(rec.ChannelID)
+	}
 	if docID == "" {
 		docID = strings.TrimSpace(execCtx.ChannelID)
 	}
@@ -447,8 +459,16 @@ func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaeg
 		return nil
 	}
 	doc, err := rt.store.GetLifecycleDocument(ctx, rec.OwnerID, rec.ComputerID, docID)
-	if err != nil || doc.CurrentRevisionID == "" {
+	if err != nil {
+		// A missing doc is not a cell failure — the desk ran but its doc moved
+		// out from under it; the trigger either consumed or the head is gone.
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
 		return err
+	}
+	if doc.CurrentRevisionID == "" {
+		return nil
 	}
 	body, err := json.Marshal(map[string]any{
 		"op":               "decide",
