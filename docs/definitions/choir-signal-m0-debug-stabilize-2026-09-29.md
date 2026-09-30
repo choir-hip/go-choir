@@ -121,7 +121,8 @@ now:
     own reactivation. Gate now requires State.Active(). Regression:
     TestTextureOwnerStartReactivatesPassivatedRunOnOpenWork (fails pre-fix).'
   source_ref: main@ac54317c
-  deploy_identity: 'staging build.commit=b85af274'
+  deploy_identity: 'staging build.commit=38e094fc — post-repair; residual
+    runtime_restarted re-wake fix d1d875a0 deployed + health-verified'
   candidate:
     id: none
     state: none

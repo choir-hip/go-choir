@@ -179,11 +179,12 @@ boundaries:
 
 now:
   status: working
-  slice: 'M0 (choir-signal-m0-debug-stabilize) — owner direction:
-    redeploy the owner computer first, reconcile wake debt, SSE fix,
-    QA repro, baseline timings'
+  slice: 'M0 settled (restart re-wake fix d1d875a0, deployed 38e094fc). Live
+    front: M1 typed-commitments deployed proof + M4 Jev VM->OpenRouter
+    round-trip (both parallel-safe, running); M-SUB first sub-cut
+    cell_fate+deadline in progress — unblocks M0a'
   source_ref: main@ac54317c
-  deploy_identity: 'staging build.commit=b85af274'
+  deploy_identity: 'staging build.commit=38e094fc'
   candidate:
     id: none
     state: none
@@ -224,21 +225,21 @@ now:
       serial tool loop; both are substrate problems, not tuning problems'
     main_uncertainty: 'whether the 7 pending mutations + 3 stale runs on
       the owner computer are the same wedge class or a second defect'
-    next_observation: 'M0 redeploy: does the QA repro pass on the current
-      build before any substrate change?'
+    next_observation: 'first M1 desk-cell commitment records + M4 live
+      round-trip distribution on the staging tape; first M-SUB cell_fate
+      record on a timed-out/killed cell'
   blocker_or_risk: 'station files carry readiness: reviewed after the
     authoring panel — promotion to executable happens per-station as
-    dependencies clear'
-  next_action: 'execute M0 (choir-signal-m0-debug-stabilize): it carries
-    readiness: executable — redeploy the owner computer onto the current
-    staging build first'
+    dependencies clear; M-SUB/M0a promoted on M0 settle'
+  next_action: 'land M1 + M4 deployed proofs (parallel-safe, running);
+    drive M-SUB sub-cuts cell_fate -> Emit -> inject -> piggyback, then
+    promote M0a (research RLM cutover)'
 
 receipts: []
 
 weak_measures:
-  - name: owner-computer-build-freshness
     kind: weak_signal
-    baseline: 'b85af274 (one build behind wake repairs)'
+    baseline: '38e094fc (post-M0-repair; staging tip)'
     desired: 'tracks staging tip within one deploy cycle'
     decision_use: 'a computer more than one build behind can mask repaired
       substrate defects — treat its symptoms as suspect'
