@@ -9,7 +9,7 @@ member_of: choir-jev-supervision-metamission-2026-09-29
 review:
   reviewer: 'agentic-consensus authoring panel (codex, claude, devin,
     gpt6-sol, gemini38) — send_back round resolved'
-  frozen_ref: 'pending-stamp'
+  frozen_ref: 'main@63be04e3'
   verdict: accept
   evidence_ref: '.agentic-consensus/agentic-consensus-20260929-215420/'
 
