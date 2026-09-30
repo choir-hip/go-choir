@@ -124,6 +124,28 @@ func TestCellBindingUpdates(t *testing.T) {
 	}
 }
 
+// TestCellBindingEmits proves the same prompt-as-variable contract for the
+// boundary-drained emission plane: Begin installs addressed emissions as an
+// isolated cell snapshot, scope.Emits() exposes them inside the cell, and
+// End clears them so a post-cell call never replays a stale body.
+func TestCellBindingEmits(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	hooks := scope.BindCell()
+	frame := SessionFrame{ID: "cell-3", Emits: []PendingEmit{
+		{ChannelID: "ch-sender", MessageSeq: 7, FromAgentID: "research:doc-1", Kind: "emit", Body: "typed signal body"},
+	}}
+	hooks.Begin(frame)
+	frame.Emits[0].Body = "mutated after inject"
+	got := scope.Emits()
+	if len(got) != 1 || got[0].MessageSeq != 7 || got[0].Body != "typed signal body" {
+		t.Fatalf("emits snapshot not bound/isolated: %+v", got)
+	}
+	hooks.End()
+	if len(scope.Emits()) != 0 {
+		t.Fatal("emits must clear at cell end")
+	}
+}
+
 // TestServeCellFailedDropsTray proves the two-phase ack gate at the cell
 // level: a poisoned cell ships no staged intents, so the reducer never sees
 // them and the inbox cursor cannot advance.
