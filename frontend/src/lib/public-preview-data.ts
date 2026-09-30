@@ -78,20 +78,67 @@ export const previewComputeStatus = {
   ],
 };
 
+/**
+ * The signed-out "What Choir Is" preview document.
+ *
+ * This is the first real sentence a signed-out visitor reads about the
+ * product, so it is written as an argument, not a glossary. The previous
+ * copy opened with "a private, Texture-centered computer for durable
+ * knowledge work" — accurate, and meaningless to anyone who has not been
+ * briefed on the ontology. It named the mechanism before it named the
+ * problem, so a visitor had no reason to care.
+ *
+ * The shape now is: the shared failure → the reframe → the mechanism →
+ * what the visitor can do next. Jargon is introduced only after the
+ * reader has a reason to want it.
+ */
 export const previewTextureDocument = {
   doc_id: 'preview-texture',
   title: 'What Choir Is',
   content: [
     '# What Choir Is',
     '',
-    'Choir is a private, Texture-centered computer for durable knowledge work. Documents are versioned artifacts, not chat transcripts, so drafts can be revised, compared, cited, published, and recovered.',
+    'Every AI session starts from zero. You re-explain the project, it re-guesses the rules, and the thread dies with the tab. That is fine for ten minutes of thinking and useless for three months of work.',
     '',
-    'The signed-out desktop is a preview of the reading and writing surface. Sign in to connect your durable computer, save revisions, import sources, run agents, publish work, and keep the evidence attached to the artifact.',
+    '**Choir is a computer, not a conversation.** A persistent machine made of many agents that coordinate over months instead of minutes. It keeps a versioned record of everything it does — every draft, every claim, every reversal — so the work survives you closing the tab.',
+    '',
+    '## How it is put together',
+    '',
+    'Four desks run on one machine, and you sit above all of them. **Texture** writes the durable documents. **Management** decides what is worth running. **Engineering** does the building, inside a sandbox it cannot escape. **Research** goes and gets evidence from the world. You state the intent; they do the work and show you the receipts.',
+    '',
+    '## Why you can trust it',
+    '',
+    'Nothing moves that you cannot read, cite, or undo. Every state change is a typed event with evidence attached, and every one of them rolls back. Before the agents act, they commit to typed predictions; afterwards those commitments are scored. The accumulated log is how the machine learns, and it is yours to inspect.',
+    '',
+    'That discipline applies to Choir itself. The computer proposes changes to its own environment, tools, and operating rules under the same evidence-and-approval rules as any other change. It is the essential capability, not a feature.',
+    '',
+    '## What you get',
+    '',
+    'A **web desktop** for durable writing, sources, files, and a repair console. A **native macOS app** wrapping the same computer. A **CLI** for agents and scripts. All three are projections of one persistent machine — not three products that disagree.',
+    '',
+    '---',
+    '',
+    '*You are looking at a local preview. Sign in to connect your own durable computer: your documents keep their revisions, sources stay attached, and the agents have somewhere to work.*',
   ].join('\n'),
   revisions: [
-    { revision_id: 'v1', label: 'v1', title: 'Artifact', summary: 'Texture is the durable surface for writing and revision.' },
-    { revision_id: 'v2', label: 'v2', title: 'Sources', summary: 'Sources and evidence stay connected to the work.' },
-    { revision_id: 'v3', label: 'v3', title: 'Publish', summary: 'Publishing and private computer actions unlock after sign-in.' },
+    {
+      revision_id: 'v1',
+      label: 'v1',
+      title: 'The problem',
+      summary: 'Why a session is the wrong unit of work.',
+    },
+    {
+      revision_id: 'v2',
+      label: 'v2',
+      title: 'The machine',
+      summary: 'Four desks, one computer, you on top.',
+    },
+    {
+      revision_id: 'v3',
+      label: 'v3',
+      title: 'The receipts',
+      summary: 'Every change typed, evidenced, and reversible.',
+    },
   ],
 };
 
