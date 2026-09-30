@@ -319,8 +319,10 @@ now:
     update with DeliveredToRunID set, so MigrateActorWakeOutbox never
     re-mints its wake and sweepActorWakeOutbox has nothing to project:
     a crash AFTER delivery-binding but BEFORE consumption strands the
-    pending control with no wake path. Needs: re-mint when the bound run
-    is not Active/never consumed (delivered!=consumed => wake owed).
+    pending control with no wake path. FIXED a2b87d69: suppress only when
+    the bound run is still Active; passivated/terminal/unresolvable bound
+    run re-mints the wake (actor_wake_strand_test.go proves both legs).
+    Awaiting deploy; cfa90b87 unstrands on the next guest boot migration.
   '
   next_action: 'STATUS 14:00Z — SECOND substrate code defect root-caused
     and fixed: exhausted restart recasts live-locked the guest. "recast
