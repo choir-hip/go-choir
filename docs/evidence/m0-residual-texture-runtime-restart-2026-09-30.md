@@ -8,6 +8,23 @@ Prompt-bar submit → conductor opened texture → texture activation `654acaec`
 created and **passivated** with `passivated_reason: runtime_restarted`,
 zero tokens, no result, no v1 revision. The trajectory (15590d6c) never
 produced a desk-authored revision. Doc `485859ad` holds only the owner's
+
+## Root-cause (confirmed against source 2026-09-30)
+
+`agentcore.Runtime.passivateInterruptedActivations` marks the run
+`passivated_reason=runtime_restarted` + `MarkAgentMutationStale`, then the
+actor-wake outbox projector (`sweepActorWakeOutbox`) is the sole
+post-restart delivery path. But the wake that fired the killed activation
+was already consumed, and `sweepActorWakeOutbox` hits
+`store.ErrNoPendingActorOccurrence` → `MarkActorWakeProjected` → the row is
+disposed as a dead wake. **No outbox row is re-minted for the still-open
+`owner_revision` obligation**, so the texture desk never re-runs it. The
+`textureowner.Handler.Start` reconcile *does* re-dispatch a `coagent_result`
+for passivated texture authority — but it runs only at process boot, not on
+the in-process `Runtime.Start` restart path that `passivateInterruptedActivations`
+serves. Gap = a runtime restart that isn't a full VM boot leaves the
+obligation armed-but-undelivered.
+
 seed revision (v0).
 
 ## Defect class
