@@ -120,7 +120,7 @@ module. Station list:
 | # | Station | Delivers | Depends |
 |---|---|---|---|
 | M0 | **Debug + stabilize** | Redeploy owner computer onto today's build; reconcile the 7 pending mutations + 3 stale runs (counter → 0, not masked by idle-sweep busy-check); SSE auto-resubscribe (~20 lines, `frontend/src/lib/lifecycle.js` — `onerror` resumes via `?after=` cursor, no terminal error); baseline per-leg timings; problem record. No throughput bar here. | none — first |
-| M-SUB | **Async signal plane + stall terminator** (red-class kernel — panel-adjudicated + corrected) | **OUT**: emissions = distinct durable channel kind via new broker action `ActionEmit`, synchronous mid-cell — NOT tray-staged (bound-cell `choir.Message` is tray-staged today; earlier premise that `ActionMessage` delivers mid-cell was wrong). Delivery-is-the-record: stands after crash, marked by kind, never tombstoned; `cell_fate` record per cell exit lets consumers join emission→outcome. **IN — async signals are feasible** (panel's "infeasible" was too strong): the wire is already duplex during eval (every `s.call` round-trips mid-cell). Three layers — (i) piggyback pending signals on every broker response for free; (ii) `choir.PollInbox` long-poll the host holds open + yaegi `go` statements (v0.16.1 supports them) so a cell spawns a watcher goroutine converting held responses into real async delivery — zero protocol change; (iii) deepest: native reader goroutine demuxing broker responses vs `StreamSignal` frames into an in-process queue, `choir.DrainSignals()` zero-latency. True push that *interrupts* eval is impossible (worker blocked in `sess.Eval`); async delivery that the cell drains at yield points is not. Stall terminator: durable `cell_fate` on every exit + armed terminal deadline per activation (`scheduleContinuation` pattern, no sweep) — today `ReduceCellIntents(failed)` persists nothing, that's the hole. Backpressure = admission-side emit budget; fanout = per-consumer cursors on the shared channel log. | M0 |
+| M-SUB | **Async signal plane + stall terminator** (red-class kernel — divergent+convergent panels adjudicated; design below) | Owner contract: any desk sends async anytime; parked desk receives immediately (`dispatchActor` — exists); working desk receives immediately after its current model call (drain at `injectUserTurns` seam — exists, needs a mid-run source). **SEND**: `choir.Emit` → broker `ActionEmit` → `channelCast` (durable append + tape event + wake + receipt), never tray-staged; kind path-derived so emissions can't masquerade as commitments. **RECEIVE mid-cell**: advisory piggyback on `s.call` responses v1; watcher-goroutine long-poll deferred behind request-ID mux proof; native demux deferred (highest blast radius). **Stall terminator ships first**: `cell_fate` record on every exit + armed terminal deadline (`scheduleContinuation` pattern) — `ReduceCellIntents(failed)` persists nothing today; that's the hole your QA hit. Unified channel log + store-layer kind whitelist (split plane deferred to World Wire). | M0 |
 | M0a-1 | **In-cell research verbs** | `choir.WebSearch`/`FetchURL`/evidence ops as Go verbs; egress budget rehomed (typed tools carry per-activation egress + 8GiB cap — deleting without rehoming deletes governance). Typed surface still live — controlled-comparison verify of the stall fix. | M-SUB |
 | M0a-2 | **Research tool-surface deletion** | Delete the 14-tool surface; capability-parity checklist (each capability reachable via `choir.*` or dropped with reason); prompt-overlay rewrites in the same commit (`rlm_research_runtime.yaml`, `research.yaml` instruct the deleted cadence). | M0a-1 |
 | M1 | **Scoreable commitments** | `Precommit`/`Resolve`/`Disagreement` from strings to types; string-commitment grandfathering stated. | parallel-safe — types/store change |
@@ -129,6 +129,59 @@ module. Station list:
 | M4 | **Jev transport** | Gateway `POST /provider/v1/judgments` → OpenRouter `typesafe/jev-1.13`; per-VM bearer + rate bucket; alpha credential provisioning. | none — parallel |
 | M5 | **Management = scorer + `jev.decide` + mgmt RLM-ification** | Scoring is management's job (Jev default, pluggable with other decision models/LLMs later); low confidence → RLM sub-cast w/ distribution in context; passthrough-or-translate routing between eng and texture rides the same scoring loop; `choir.commitment_score` kind; management's typed tools → `choir.*` verbs (last desk to one-tool). | M1+M4 |
 | — | **World Wire** | Named entry gate: which prerequisites block + deployed ingress-to-artifact proof. | all above |
+
+### The adjudicated signal-plane design (divergent + convergent panels, 2026-09-29)
+
+Two panels: divergent (7 agents, 13 lenses) generated the option space;
+convergent (7 agents) decided. Verdict: **A + advisory piggyback** —
+
+```text
+SEND   choir.Emit(payload) → broker ActionEmit → channelCast path:
+       durable append + channel.message tape event + dispatchActor wake
+       + receipt to cell. NEVER tray-staged. Kind is set by the handler
+       (path-derived, per rlm_reduce.go:309-353 precedent) — Emit takes
+       NO kind param, so emissions can never masquerade as commitments.
+
+PARKED recipient   existing dispatchActor wake — zero new code.
+
+WORKING recipient  drain at the injectUserTurns seam (toolloop.go:672):
+                   after the current model call returns, before the next
+                   model call, host reads durable inbox through committed
+                   high-water and injects provenance-stamped envelopes as
+                   user-role turns. Injection is a VIEW; never authority.
+
+MID-CELL (v1)      piggyback watermark on s.call responses — advisory
+                   visibility for broker-active cells; never authoritative.
+                   Watcher-goroutine long-poll deferred behind a request-ID
+                   mux proof (BrokerRequest.RequestID already exists — the
+                   remaining risk is yaegi-side concurrency, not protocol).
+                   Native demux push deferred: highest blast radius.
+
+SUBSTRATE          unified channel log + store-layer kind whitelist at
+                   AppendChannelMessage (same enforcement point as role
+                   canonicalization, channel_store.go:46-52). Separate
+                   emission plane deferred to World Wire (luna dissented
+                   for split-now on security; majority: path-derived kind +
+                   whitelist is proportionate for 4 desks).
+```
+
+Delivery contract (precise): an envelope appended at seq S is *available*
+at the first drain whose snapshot includes S — worst case while working =
+one in-flight model call + one tool batch. The ack cursor advances only
+when the injected turn commits (at-least-once; failed cells replay).
+**`rlm_inbox_cursor` is run-memory scoped to runID** — respawn replays
+from zero; must rekey to (channel, desk) — a named fix inside this work.
+
+Ship order (each independent): 1) `cell_fate` record + armed terminal
+deadline (closes the silent-stall hole first); 2) `Emit` verb + epoch
+fence + append-rate caps + egress charge; 3) durable cursor + injection
+seam + provenance rendering + aggregate drain caps; 4) piggyback.
+
+Residual risks the panel converged on: injection is a prompt-injection
+channel (needs a redline test corpus, not just caps); poison-envelope
+replay loop (a message that crashes rendering replays every respawn —
+needs seq-level quarantine on tape); wake-policy squint (emission wakes
+must coalesce differently than obligation wakes before World Wire).
 
 ### Open questions — resolved by owner 2026-09-29
 
