@@ -160,5 +160,25 @@ now:
     eval matrix, tune prompt+repl+search ergonomics, prove the
     iterative pattern'
 
+  # Recon 2026-09-30 (M3 slice first move — inspect before freezing).
+  # QA fixture / rubric / baseline on current main:
+  # - A prior M0 QA baseline exists:
+  #   docs/evidence/m0-qa-baseline-timings-2026-09-30.json — it recorded
+  #   ok=false at leg prompt_bar_submit (the stall itself, no research leg)
+  #   so it is a probe harness receipt, NOT a quality baseline.
+  # - There is NO frozen QA fixture, NO groundedness/attribution rubric, and
+  #   NO comparison rule anywhere in the repo — grep hits for rubric/
+  #   grounded/attribution/qa_fixture are texture-owner code + overlay
+  #   surfaces, not a frozen gold fixture. The conjecture's test (frozen-
+  #   rubric before/after on the QA fixture) therefore has no oracle yet.
+  # - The probe harness is reusable: scripts/m0_qa_probe.mjs already emits
+  #   per-leg wall_ms + input/output tokens + model into a JSON artifact —
+  #   that is the timing/cost side of the eval matrix. What's missing is
+  #   the fixture + the groundedness/attribution scoring + the frozen
+  #   before/after comparison rule (the oracle the conjecture test needs).
+  #   Implication: M3's first slice is authoring docs/evidence/<qa-fixture+
+  #   rubric>.md + a matrix runner — the eval-matrix instrument already
+  #   exists in the probe. Authoring gate remains M2 settle; recon only.
+
 receipts: []
 ---
