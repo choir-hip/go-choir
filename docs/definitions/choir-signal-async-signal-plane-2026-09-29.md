@@ -150,23 +150,46 @@ boundaries:
     - 'run-memory cursor keys'
 
 now:
-  status: blocked_incomplete
-  slice: 'injection seam — boundary-drain notice + repl-variable refresh'
+  status: in_progress
+  slice: 'signal plane residuals landed — pending deployed acceptance'
   evidence_refs:
-    - internal/agentcore/rlm_reduce_test.go#TestReduceFailedCellDropsTray
-    - internal/agentcore/rlm_reduce_test.go#TestCellTerminalDeadlineRecordsTimeoutForRestartPassivatedCell
-    - internal/agentcore/rlm_reduce_test.go#TestArmCellTerminalDeadlineCarriesReductionIdentity
-    - internal/agentcore/rlm_reduce_test.go#TestCellTerminalDeadlineDoesNotCancelReactivatedRun
-  source_ref: main@ac54317c
+    - internal/agentcore/rlm_reduce_test.go#TestInboxCursorSurvivesDeskRespawn
+    - internal/agentcore/rlm_reduce_test.go#TestReduceSuccessPersistsAndCommits
+    - internal/agentcore/coagent_update_packet_test.go#TestBuildEmitNoticeUserMessagesPointerNotPayload
+    - internal/store/graph_store_test.go#TestOGListChannelMessagesToDrainsAcrossSenderChannels
+    - internal/store/run_memory_test.go#TestListRunMemoryEntriesForAgentCrossRunKindFilter
+    - internal/yaegikernel/intent_test.go#TestCellBindingEmits
+  source_ref: main@7dcf488f
   deploy_identity: 'staging build.commit=6c229710'
-  # Emit is now end-to-end wired (6c229710): choir.Emit → worker
-  # StreamBrokerEmit frame → host EvalCell services it via cfg.Emit →
-  # deskEmitSignal writes the "emit" envelope through CastEnvelope (durable
-  # AppendChannelMessage + wakeChannelCastRecipient) → StreamBrokerEmitResult
-  # returns the durable Seq before the blocked cell resumes. Refused emits
-  # answer rather than hang (nil handler, gate). Remaining: injectUserTurns
-  # boundary-drain notice + repl-variable refresh, (channel,desk) cursor
-  # rekey + dual-read/backfill, advisory piggyback on s.call.
+  # M-SUB residuals landed 2026-09-30 (four commits on top of 6c229710 emit
+  # wiring):
+  # - 0c69f2f5 emit boundary-drain: emissions land on the *sender's* channel
+  #   with to_agent_id set, so a recipient desk's own-channel read missed
+  #   them. store.ListChannelMessagesTo[OG] drains addressed emissions across
+  #   sender channels; yaegikernel.PendingEmit + choir.Emits() binds bodies
+  #   as a repl variable; buildEmitNoticeUserMessages renders a fixed-format
+  #   pointer notice (sender/kind/seq/snippet) into injectUserTurns on both
+  #   the fresh-update and owner-only return paths.
+  # - 833abb5b emit-notice dedupe: emit_notice carries the full lifecycle
+  #   envelope; lifecycleInjectionIDsFromRunMemory parses it into a
+  #   channel:seq seen-set so a woken desk notices each emission once.
+  # - 0b73ec3e cursor rekey (runID,channel) -> (channel,desk): the named
+  #   biggest risk. ReductionScope.DeskAgentID keys load/commit/recover;
+  #   CommitInboxCursor stamps desk_agent_id; LoadInboxCursorForDesk reads
+  #   the desk's cursor across runs via ListRunMemoryEntriesForAgent — a
+  #   respawned desk resumes at the watermark; dual-read/backfill honors
+  #   pre-cutover cursors.
+  # - 7dcf488f advisory piggyback: EmitResult.AdvisorySeq carries the newest
+  #   emission seq addressed to the calling desk on the one synchronous
+  #   s.call — a mid-activation arrival is observable without waiting for
+  #   the next boundary.
+  # Remaining: the seven deployed-acceptance proofs in `acceptance:` (all
+  # evidence_class deployed_proof — emit mid-cell + boundary notice, kill
+  # divergence, parked-vs-working delivery contract, respawn cursor
+  # continuity, hang timeout, runtime_restarted re-arm, advisory piggyback
+  # observation). These need a live staging activation; provider circuit is
+  # saturated this window — run on recovery, do not re-patch on a red
+  # environment.
   candidate:
     id: none
     state: none
