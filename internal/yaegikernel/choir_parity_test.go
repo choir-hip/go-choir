@@ -227,6 +227,17 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 			t.Fatalf("researcher missing message authority %s", sym)
 		}
 	}
+	// Emit + the host-mediated egress verbs export: research's signal plane and
+	// world evidence surface ride the broker, not filesystem mutation (M-SUB /
+	// M0a). read-only denies WriteFile/Exec only — messaging stays open.
+	for _, sym := range []string{"Emit", "WebSearch", "FetchURL", "SourceSearch",
+		"ImportDocument", "ImportURL", "ReadContentItem", "ListContentSelectors",
+		"ReadContentSelector", "SearchWireCorpus", "SaveEvidence", "ReadEvidence",
+		"ListEvidence", "RunMemoryEntry"} {
+		if _, ok := exports[sym]; !ok {
+			t.Fatalf("researcher missing egress/message verb %s", sym)
+		}
+	}
 	// Method-level: mutation calls still deny even though they never export.
 	if _, err := scope.WriteFile("x.txt", "x"); err == nil {
 		t.Fatal("researcher WriteFile allowed")
@@ -236,6 +247,14 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	}
 	if _, err := scope.Assign("t", "p", "i"); err == nil {
 		t.Fatal("researcher Assign allowed")
+	}
+	// Messaging is NOT denied for research: Emit must reach the broker (failing
+	// on the nil host handler), never the read-only gate — the gap that
+	// silently blocked research findings on the M-SUB plane.
+	if _, err := scope.Emit("texture", "evidence", "found"); err == nil {
+		t.Fatal("Emit unexpectedly succeeded with nil host handler")
+	} else if strings.Contains(err.Error(), "read-only") {
+		t.Fatalf("Emit denied for read-only role — messaging authority broken: %v", err)
 	}
 	if _, err := scope.ReadFile("missing.txt"); err == nil {
 		t.Fatal("researcher ReadFile unexpectedly succeeded on missing file")

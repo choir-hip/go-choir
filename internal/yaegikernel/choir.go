@@ -279,9 +279,16 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 	return interp.Exports{"choir/choir": exports}
 }
 
-// mutateDenied rejects model-reachable mutation on a read-only scope.
+// mutateDenied rejects world mutation on a read-only scope. Read-only is the
+// research desk: it loses filesystem/capsule writes (WriteFile, Exec) but
+// KEEPS full semantic-act authority — Emit, Message, Cast, Report and the
+// rest are messaging, not world mutation, and are explicitly in research's
+// module set ("read-only world access is not read-only messaging"). The
+// export layer already blocks only WriteFile/Exec on readOnly; this gate
+// must match it or a research cell's emitted findings are denied at call
+// time while being advertised on the module surface.
 func (s *ChoirScope) mutateDenied(op string) error {
-	if s != nil && s.readOnly {
+	if s != nil && s.readOnly && (op == "WriteFile" || op == "Exec") {
 		return fmt.Errorf("choir: %s denied for read-only role", op)
 	}
 	return nil
