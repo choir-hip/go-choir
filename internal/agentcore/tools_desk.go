@@ -2,6 +2,8 @@ package agentcore
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -129,6 +131,13 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					MemoryLimitBytes: deskWorkerMemoryLimitBytes,
 				},
 				ProcessGroup: true,
+				// Emit is a durable host write: the worker's ActionEmit crosses
+				// the session socket and lands here. Scope is derived per-call
+				// from the evaluating ctx (a worker persists across cells, so
+				// spawn-time capture would bind a stale channel/agent).
+				Emit: func(emitCtx context.Context, payload yaegikernel.EmitPayload) (yaegikernel.EmitResult, error) {
+					return rt.deskEmitSignal(emitCtx, payload)
+				},
 			}
 			w, err := workers.deskWorkerFor(activationID, workerCfg)
 			if err != nil {
@@ -364,4 +373,41 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 	}
 	pack := types.BuildActingPack(records, agentID, actingPackMaxItems)
 	return &pack
+}
+
+// deskEmitSignal performs the host-side durable write for a desk cell's
+// choir.Emit call. Emits bypass the cell tray: the host mails the emit
+// envelope on the desk's channel and wakes the recipient before the blocked
+// cell resumes. The envelope kind stays "emit" with the caller's signal kind
+// preserved as msg_kind so the receiving desk sees the typed signal.
+func (rt *Runtime) deskEmitSignal(ctx context.Context, payload yaegikernel.EmitPayload) (yaegikernel.EmitResult, error) {
+	if rt == nil || rt.store == nil {
+		return yaegikernel.EmitResult{}, fmt.Errorf("emit: store unavailable")
+	}
+	execCtx := toolregistry.ExecutionContextFrom(ctx)
+	to := strings.TrimSpace(payload.ToDesk)
+	if to == "" {
+		return yaegikernel.EmitResult{}, fmt.Errorf("emit: destination desk required")
+	}
+	channel := channelIDForRun(execCtx.RunRecord)
+	if channel == "" {
+		channel = strings.TrimSpace(execCtx.ChannelID)
+	}
+	if channel == "" || strings.TrimSpace(execCtx.RunID) == "" {
+		return yaegikernel.EmitResult{}, fmt.Errorf("emit: no bound channel for desk cell")
+	}
+	from := strings.TrimSpace(execCtx.AgentID)
+	role := strings.TrimSpace(execCtx.Role)
+	if role == "" && execCtx.RunRecord != nil {
+		role = agentProfileForRun(execCtx.RunRecord)
+	}
+	content := encodeEnvelope(rlmEnvelope{Kind: "emit", MsgKind: strings.TrimSpace(payload.Kind), Body: payload.Body, From: from})
+	// A deterministic idempotency key makes a re-emitted identical signal
+	// collapse to the already-written record rather than duplicate it.
+	sum := sha256.Sum256([]byte(to + "\x1f" + payload.Kind + "\x1f" + payload.Body + "\x1f" + execCtx.RunID))
+	seq, err := rt.CastEnvelope(ctx, channel, to, from, role, content, "rlm-emit:"+hex.EncodeToString(sum[:8]))
+	if err != nil {
+		return yaegikernel.EmitResult{}, fmt.Errorf("emit: %w", err)
+	}
+	return yaegikernel.EmitResult{Seq: seq}, nil
 }

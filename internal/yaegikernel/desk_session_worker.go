@@ -44,6 +44,11 @@ type DeskSessionWorkerConfig struct {
 	// ExtraEnv appends worker-readable environment (test markers, child
 	// selectors) after the sanitized PATH/TMPDIR and session config vars.
 	ExtraEnv []string
+	// Emit services StreamBrokerEmit frames the worker sends mid-cell for
+	// ActionEmit. It performs the durable channel write + recipient wake on
+	// host authority. Nil refuses emits rather than recording an in-worker
+	// receipt that a cell death would silently lose.
+	Emit EmitHandler
 }
 
 // sessionReadyTimeout bounds the worker's post-prebind ready handshake. A
@@ -302,21 +307,31 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 	}
 	ch := make(chan result, 1)
 	go func() {
-		stream, payload, err := w.framed.ReadFrame()
-		if err != nil {
-			ch <- result{err: err}
+		for {
+			stream, payload, err := w.framed.ReadFrame()
+			if err != nil {
+				ch <- result{err: err}
+				return
+			}
+			// A mid-cell ActionEmit arrives on its own stream; the host performs
+			// the durable channel write + recipient wake, then answers and keeps
+			// waiting for the cell's StreamCell result.
+			if stream == StreamBrokerEmit {
+				w.serviceEmit(ctx, payload)
+				continue
+			}
+			if stream != StreamCell {
+				ch <- result{err: fmt.Errorf("desk eval: unexpected stream %d", stream)}
+				return
+			}
+			var res SessionResult
+			if uerr := json.Unmarshal(payload, &res); uerr != nil {
+				ch <- result{err: fmt.Errorf("desk eval decode: %w", uerr)}
+				return
+			}
+			ch <- result{res: res}
 			return
 		}
-		if stream != StreamCell {
-			ch <- result{err: fmt.Errorf("desk eval: unexpected stream %d", stream)}
-			return
-		}
-		var res SessionResult
-		if uerr := json.Unmarshal(payload, &res); uerr != nil {
-			ch <- result{err: fmt.Errorf("desk eval decode: %w", uerr)}
-			return
-		}
-		ch <- result{res: res}
 	}()
 	select {
 	case r := <-ch:
@@ -337,6 +352,47 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 		w.killLocked()
 		return SessionResult{}, ctx.Err()
 	}
+}
+
+// serviceEmit answers one StreamBrokerEmit frame. The worker sent a
+// BrokerRequest carrying an EmitPayload; the host performs the durable
+// channel write + recipient wake via cfg.Emit (host authority, never the
+// worker's in-memory tray), then replies on StreamBrokerEmitResult so the
+// blocked cell resumes.
+func (w *DeskSessionWorker) serviceEmit(ctx context.Context, payload []byte) {
+	var req BrokerRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		w.writeEmitResult(req.RequestID, nil, fmt.Errorf("emit decode request: %w", err))
+		return
+	}
+	var emit EmitPayload
+	if err := json.Unmarshal(req.Payload, &emit); err != nil {
+		w.writeEmitResult(req.RequestID, nil, fmt.Errorf("emit decode payload: %w", err))
+		return
+	}
+	handler := w.cfg.Emit
+	if handler == nil {
+		w.writeEmitResult(req.RequestID, nil, fmt.Errorf("emit host unavailable"))
+		return
+	}
+	res, err := handler(ctx, emit)
+	w.writeEmitResult(req.RequestID, &res, err)
+}
+
+func (w *DeskSessionWorker) writeEmitResult(requestID string, res *EmitResult, cause error) {
+	resp := NewErrorResponse(requestID, "", 0)
+	if cause != nil {
+		resp.Error = cause.Error()
+	} else if ok, serr := NewSuccessResponse(requestID, res, "", 0); serr == nil {
+		resp = ok
+	} else {
+		resp.Error = serr.Error()
+	}
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		return
+	}
+	_ = w.framed.WriteFrame(StreamBrokerEmitResult, raw)
 }
 
 // Kill terminates the worker's process group and marks it dead. Staged

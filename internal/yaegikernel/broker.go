@@ -79,6 +79,22 @@ func (b *Broker) SetEpoch(epoch uint64) {
 	b.cfg.CurrentEpoch = epoch
 }
 
+// SetEmit installs the durable-write handler for ActionEmit. The session
+// socket is only available after the worker's framed conn exists, so the
+// handler is bound post-construction rather than in BrokerConfig.
+func (b *Broker) SetEmit(h EmitHandler) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.cfg.Emit = h
+}
+
+// SetEmitRefused toggles the rollback gate for new emissions.
+func (b *Broker) SetEmitRefused(refused bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.cfg.EmitRefused = refused
+}
+
 // DrainReceipts returns worker-local assign/message entries recorded since
 // the last drain and clears them, so the session loop surfaces each receipt
 // to the host exactly once in SessionResult. Entries are host-reconciled,

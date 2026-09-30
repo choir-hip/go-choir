@@ -81,6 +81,9 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	return &ChoirScope{broker: broker, handleRef: handleRef, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: normalizeDeskRole(role), slot: slot}, nil
 }
 
+// HandleRef returns the bound session handle for host-bound frame requests.
+func (s *ChoirScope) HandleRef() string { return s.handleRef }
+
 // normalizeDeskRole maps a session role to the desk profile whose module set
 // applies. The four desks are management, engineering, research, texture;
 // co-super and unknown roles resolve to the engineering surface so the

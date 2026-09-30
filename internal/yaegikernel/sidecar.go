@@ -257,8 +257,44 @@ func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope
 // session socket (Step 2 transport). It emits one ready result frame after
 // prebind, then serves until a close frame, EOF, or a poisoned cell.
 func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
-	sess, broker, scope := buildSessionWorker(cfg)
 	fc := NewFramedConn(conn)
+	sess, broker, scope := buildSessionWorker(cfg)
+	// Emit crosses the socket so the host performs the durable channel write
+	// + recipient wake. The cell is blocked inside serveCell while this runs,
+	// so a synchronous frame round-trip on fc is the only reader — the host's
+	// Eval loop answers the emit then returns to the cell's pending StreamCell.
+	broker.SetEmit(func(ctx context.Context, payload EmitPayload) (EmitResult, error) {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return EmitResult{}, fmt.Errorf("emit marshal: %w", err)
+		}
+		req := BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: newReceiptID(),
+			HandleRef: scope.HandleRef(), Epoch: cfg.Epoch, Action: ActionEmit, Payload: raw}
+		enc, err := json.Marshal(req)
+		if err != nil {
+			return EmitResult{}, fmt.Errorf("emit request marshal: %w", err)
+		}
+		if err := fc.WriteFrame(StreamBrokerEmit, enc); err != nil {
+			return EmitResult{}, fmt.Errorf("emit write frame: %w", err)
+		}
+		stream, rraw, err := fc.ReadFrame()
+		if err != nil {
+			return EmitResult{}, fmt.Errorf("emit read result: %w", err)
+		}
+		if stream != StreamBrokerEmitResult {
+			return EmitResult{}, fmt.Errorf("emit: unexpected stream %d", stream)
+		}
+		var resp BrokerResponse
+		if err := json.Unmarshal(rraw, &resp); err != nil {
+			return EmitResult{}, fmt.Errorf("emit decode result: %w", err)
+		}
+		if !resp.Success {
+			return EmitResult{}, fmt.Errorf("emit: %s", resp.Error)
+		}
+		var out EmitResult
+		_ = json.Unmarshal(resp.Result, &out)
+		return out, nil
+	})
 	ready, err := json.Marshal(SessionResult{ID: "ready"})
 	if err != nil {
 		os.Exit(2)
