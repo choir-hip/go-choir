@@ -53,6 +53,35 @@ a reconciliation that survives restart. Fixing any one symptom in isolation
 leaves the class open; the durable fix is a single "armed-obligation re-drive"
 pass over `actor_wake_outbox` + desk work items at `Runtime.Start` (not just
 process boot), plus dedup of desk-target work items against open casts.
+## Post-fix receipts — same substrate, new symptoms (2026-09-30, later)
+
+The two M0-window fixes (`d1d875a0` passivation re-wake; `2404e7d2`
+texture-delivery content-derived CommandID) landed and cleared their exact
+defects — but each immediately exposed the next discontinuity-handling gap,
+confirming this is a substrate class, not three isolated bugs:
+
+4. **`lifecycle receipt join unavailable` (corpusd CAS 400)** — texture audit
+   appends (`trajectory_started`, `revision_committed`) are refused because the
+   `computer_event` CAS join expects the `lifecycle_observed` event's
+   `ProposedEffectRef` to match exactly one *unjoined* lifecycle receipt. The
+   crash loop minted 140+ pending `refresh`/`start`/`restart` receipts; the
+   join finds ≠1 or a digest that no longer matches, and the append fails.
+   Effect so far: audit-log loss (desk commits still land), not a hard block —
+   but it is the same "armed obligation left un-reconciled" shape at the CAS
+   boundary. (`internal/platform/computer_events.go:264-275`)
+
+5. **`Texture activation returned without disposing exact trigger`** — the desk
+   wake fires (`texture:86422cad...408c5b5e` for the M1 prompt doc) but the
+   activation returns without marking the wake obligation consumed, so the
+   dispatcher defers and re-arms it in a loop. Detected at
+   `internal/actorruntime/handler.go:593`.
+
+The invariant the substrate is missing remains: **every minted obligation
+(wake, work item, lifecycle receipt, delivery claim) needs a re-drive/reconcile
+pass that survives restart and bounds retry.** M-SUB's cell_fate+deadline is the
+desk-cell half; this cluster now adds the corpusd CAS join and the
+texture-trigger dispose as obligation types the reconcile must cover. The fix is
+still substrate-level, not five patches.
 
 ## Mutation class
 
