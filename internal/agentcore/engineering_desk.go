@@ -233,12 +233,18 @@ func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Docum
 		if objective == "" {
 			return nil, fmt.Errorf("engineering desk reconcile: admitting revision carries no objective")
 		}
-		nextAttempt := latest.Binding.Attempt + 1
-		if nextAttempt > engineeringMaxRecastAttempts {
-			rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID,
-				fmt.Sprintf("restart recast attempts exhausted at %d", latest.Binding.Attempt))
-			return nil, fmt.Errorf("engineering desk reconcile: recast attempts exhausted at attempt %d", latest.Binding.Attempt)
-		}
+	nextAttempt := latest.Binding.Attempt + 1
+	if nextAttempt > engineeringMaxRecastAttempts {
+		// Terminal, not transient: the bound operation is durably marked
+		// failed below; returning an error would re-deliver this reconcile
+		// occurrence forever (actor retry -> re-cast attempt -> same
+		// exhausted branch), a live-lock that starves every other desk
+		// reconcile on the guest. Return clean so the occurrence is
+		// incorporated and the loop stops.
+		rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID,
+			fmt.Sprintf("restart recast attempts exhausted at %d", latest.Binding.Attempt))
+		return nil, nil
+	}
 		deltaDigest := objectgraph.SHA256([]byte(strings.Join([]string{
 			"retry_after_block", assignmentID,
 			fmt.Sprint(latest.Binding.Attempt), fmt.Sprint(nextAttempt), restartCancelledAssignmentReason,
@@ -364,9 +370,11 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 		}
 		nextAttempt := vLatest.Binding.Attempt + 1
 		if nextAttempt > engineeringMaxRecastAttempts {
+			// Terminal (see implementation branch): the operation is durably
+			// failed; an error return re-delivers this reconcile forever.
 			rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID,
 				fmt.Sprintf("verification restart recast attempts exhausted at %d", vLatest.Binding.Attempt))
-			return nil, fmt.Errorf("engineering desk reconcile: verification recast attempts exhausted at attempt %d", vLatest.Binding.Attempt)
+			return nil, nil
 		}
 		deltaDigest := objectgraph.SHA256([]byte(strings.Join([]string{
 			"retry_after_block", verificationID,
