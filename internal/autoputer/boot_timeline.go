@@ -73,14 +73,16 @@ func bootMarkDetail(phase, detail string) {
 	bootTimelineClock.marks = append(bootTimelineClock.marks, mark)
 }
 
-// bootSetReplay records the post-replay volume snapshot (sequence/committed)
-// so the receipt carries not just when replay ran but how much tape it moved.
-func bootSetReplay(seq, committed uint64) {
+// bootSetReplay records the post-replay snapshot so the receipt carries head
+// position, committed position, and — separately — rows actually applied this
+// boot (applied_rows), which is what boot cost is made of.
+func bootSetReplay(seq, committed, applied uint64) {
 	bootTimelineClock.Lock()
 	defer bootTimelineClock.Unlock()
 	bootTimelineClock.replay = map[string]any{
 		"sequence":           seq,
 		"committed_sequence": committed,
+		"applied_rows":       applied,
 	}
 }
 

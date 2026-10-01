@@ -9,6 +9,7 @@
 package vmmanager
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -197,7 +198,12 @@ func (t *BootTimeline) fetchGuestBootTimeline(hostURL string) {
 	// first post-healthy request observed a connection EOF (listener at the
 	// boundary). Retry briefly so a transient startup EOF does not lose the
 	// receipt; a persistent failure still lands in guest_fetch_error.
-	for attempt := 0; attempt < 6; attempt++ {
+	// After the first successful fetch, keep polling until the receipt's
+	// marks include runtime_started (post-rt.Start), so the receipt covers
+	// past the health flip — bounded to 15s so a wedged runtime start is
+	// recorded as-is rather than waited on forever.
+	const maxAttempts = 25
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
 			time.Sleep(800 * time.Millisecond)
 		}
@@ -230,12 +236,31 @@ func (t *BootTimeline) fetchGuestBootTimeline(hostURL string) {
 		t.mu.Lock()
 		t.GuestReceipt = json.RawMessage(body)
 		t.mu.Unlock()
-		t.mark("guest_receipt_fetch_done")
-		return
+		if guestMarkPresent(body, "runtime_started") {
+			t.mark("guest_receipt_fetch_done")
+			return
+		}
+		if attempt == 0 {
+			// First healthy fetch landed before runtime_started; mark it so the
+			// later polls read as waiting-for-runtime-start, not retry noise.
+			t.mark("guest_receipt_awaiting_runtime_started")
+		}
 	}
+	// Exit loop on cap: the last successful body is already stored above.
 	t.mu.Lock()
-	t.GuestFetchError = lastErr
+	if t.GuestReceipt != nil {
+		t.mark("guest_receipt_fetch_done_partial") // no runtime_started inside window
+	} else {
+		t.GuestFetchError = lastErr
+	}
 	t.mu.Unlock()
+}
+
+// guestMarkPresent reports whether the receipt JSON marks array contains the
+// named phase. The payload is small; a string scan is sufficient and keeps the
+// verbatim body unparsed.
+func guestMarkPresent(body []byte, phase string) bool {
+	return bytes.Contains(body, []byte(`"phase":"`+phase+`"`))
 }
 
 // persist writes the receipt to the VM's state directory, atomically.

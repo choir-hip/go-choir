@@ -610,7 +610,12 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		// replayed zero events over a previously fenced store skips the
 		// rescan; the gate heartbeat keeps the host stall detector alive
 		// while scans run.
-		replayed := appender.ReplaySnapshot().Sequence > 0
+		// replayed means rows were actually applied this boot — not that the
+		// local head sits at a nonzero sequence. Sequence>0 conflates the
+		// head position with the delta (docs/problems/s0-vocab-rescan-fires-
+		// on-any-replay-2026-10-01.md): one applied row pushed it to 240k and
+		// forced a full-tape vocabulary rescan.
+		replayed := appender.ReplaySnapshot().AppliedRows > 0
 		bootMark("reconstruct_done") // raw tape apply complete
 		if _, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx, replayed, gate.tick); migErr != nil {
 			log.Fatalf("autoputer: vocabulary migration refused: %v", migErr)
@@ -632,7 +637,7 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		os.Exit(0)
 	}
 	replaySnap := appender.ReplaySnapshot()
-	bootSetReplay(replaySnap.Sequence, replaySnap.CommittedSequence)
+	bootSetReplay(replaySnap.Sequence, replaySnap.CommittedSequence, replaySnap.AppliedRows)
 	bootMark("replay_done")
 	gate.tick()
 	gate.setPending(false)

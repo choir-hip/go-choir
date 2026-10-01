@@ -138,6 +138,7 @@ type ComputerEventAppender struct {
 	replayActive             bool
 	replaySeq                uint64
 	replayCommittedSeq       uint64
+	replayAppliedRows        uint64 // rows applied during this Reconstruct call
 	replayCheckpointEvery    int
 	replayCheckpointInterval time.Duration
 }
@@ -176,6 +177,7 @@ type ReplaySnapshot struct {
 	InProgress        bool   `json:"in_progress"`
 	Sequence          uint64 `json:"sequence"`
 	CommittedSequence uint64 `json:"committed_sequence"`
+	AppliedRows       uint64 `json:"applied_rows"` // rows applied during the current/last Reconstruct
 }
 
 // ReplaySnapshot returns the current durable replay progress. Zero value means
@@ -186,7 +188,7 @@ func (a *ComputerEventAppender) ReplaySnapshot() ReplaySnapshot {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return ReplaySnapshot{InProgress: a.replayActive, Sequence: a.replaySeq, CommittedSequence: a.replayCommittedSeq}
+	return ReplaySnapshot{InProgress: a.replayActive, Sequence: a.replaySeq, CommittedSequence: a.replayCommittedSeq, AppliedRows: a.replayAppliedRows}
 }
 
 // SetReplayCheckpointPolicy configures the durable checkpoint cadence during a
@@ -750,6 +752,11 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		a.setReplayActive(true)
 		defer a.setReplayActive(false)
 	}
+	// Zero the per-boot applied counter so the snapshot's applied_rows names
+	// this reconstruct's delta, not the running process's cumulative history.
+	a.mu.Lock()
+	a.replayAppliedRows = 0
+	a.mu.Unlock()
 	if err := a.RecoverPrepared(ctx); err != nil {
 		return err
 	}
@@ -787,6 +794,9 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
 		}
 		a.setReplayProgress(record.Request.Event.Sequence, a.committedReplaySeq())
+		a.mu.Lock()
+		a.replayAppliedRows++
+		a.mu.Unlock()
 		if observer := a.replayObserver; observer != nil {
 			observer.RecordApplied(record.Request.Event.Sequence)
 		}
