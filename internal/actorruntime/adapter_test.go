@@ -845,22 +845,17 @@ func TestHandlerParkedLifecycleControlReconcilesBeforeRetryAcknowledgement(t *te
 		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
 		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
 	}
-	adapter := New(cfg, s, events.NewEventBus(), provider, nil)
-	t.Cleanup(func() {
-		adapter.Stop()
-		adapter.cleanupLog()
-		_ = s.Close()
-	})
-	if err := adapter.Start(ctx); err != nil {
-		t.Fatalf("start adapter: %v", err)
-	}
-	// Keep reconciliation dispatch observable but out of the live actor loop;
-	// this test invokes the handler synchronously at the actor boundary.
-	adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	// Bare runtime, never started: no dispatcher loop, so no deferred-producer
+	// activation retries race the synchronous handler boundary below (the
+	// texture agent's seeded wakes would otherwise defer forever on the
+	// unbound owner and mutate lifecycle state mid-assertion).
+	rt := agentcore.New(cfg, s, events.NewEventBus(), provider)
+	t.Cleanup(rt.Stop)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 
 	const suffix = "parked-handler-retry"
 	fixture := seedActorLifecycleControl(t, s, suffix)
-	initial, err := adapter.Runtime.ReconcileCoagentWake(ctx, fixture.ownerID, fixture.agentID)
+	initial, err := rt.ReconcileCoagentWake(ctx, fixture.ownerID, fixture.agentID)
 	if err != nil || initial == nil {
 		t.Fatalf("initial lifecycle reconcile: run=%+v err=%v", initial, err)
 	}
@@ -875,7 +870,7 @@ func TestHandlerParkedLifecycleControlReconcilesBeforeRetryAcknowledgement(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := newActorHandler(adapter.Runtime, nil)
+	handler := newActorHandler(rt, nil)
 	update := actor.Update{
 		UpdateID: "actor-parked-handler-b", ToAgentID: scopedActorMailboxID(fixture.ownerID, fixture.computerID, fixture.agentID),
 		FromAgentID: later.AgentID, Kind: "coagent_result", Content: later.UpdateID, TrajectoryID: fixture.trajectoryID, CreatedAt: time.Now().UTC(),
@@ -965,20 +960,19 @@ func TestHandlerCoagentResultRecoversBoundRunFromDeliveredToRunID(t *testing.T) 
 		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
 		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
 	}
-	adapter := New(cfg, s, events.NewEventBus(), provider, nil)
+	// Bare runtime, never started: same determinism fix as the parked-handler
+	// test above — the unbound texture owner's deferred activation retries must
+	// not run a producer loop in parallel with this synchronous wake.
+	rt := agentcore.New(cfg, s, events.NewEventBus(), provider)
 	t.Cleanup(func() {
-		adapter.Stop()
-		adapter.cleanupLog()
+		rt.Stop()
 		_ = s.Close()
 	})
-	if err := adapter.Start(ctx); err != nil {
-		t.Fatalf("start adapter: %v", err)
-	}
-	adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 
 	const suffix = "delivered-runid"
 	fixture := seedActorLifecycleControl(t, s, suffix)
-	initial, err := adapter.Runtime.ReconcileCoagentWake(ctx, fixture.ownerID, fixture.agentID)
+	initial, err := rt.ReconcileCoagentWake(ctx, fixture.ownerID, fixture.agentID)
 	if err != nil || initial == nil {
 		t.Fatalf("initial lifecycle reconcile: run=%+v err=%v", initial, err)
 	}
@@ -1019,7 +1013,7 @@ func TestHandlerCoagentResultRecoversBoundRunFromDeliveredToRunID(t *testing.T) 
 		t.Fatalf("passivate lifecycle run: %v", err)
 	}
 
-	handler := newActorHandler(adapter.Runtime, nil)
+	handler := newActorHandler(rt, nil)
 	// Empty resume memory — the snapshot lost resume.RunID.
 	emptyMemory, err := json.Marshal(resumeState{RunID: "", Phase: ""})
 	if err != nil {
