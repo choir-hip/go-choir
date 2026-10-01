@@ -288,7 +288,7 @@
          lunge as the hand has put it, and scrubbing back undoes it exactly. -->
     <section class="pane pane-title" aria-label="Choir">
       <div class="stack">
-        <div class="mark"><TetraMark label="Choir" /></div>
+        <div class="mark"><TetraMark label="Choir" size="clamp(120px, 17vw, 210px)" /></div>
         <div class="wordmark"><span>CHOIR</span></div>
         <p class="tagline">The automatic computer</p>
       </div>
@@ -392,6 +392,17 @@
     position: absolute; inset: 0; z-index: 0;
     background: color-mix(in srgb, var(--choir-bg) 97%, transparent);
   }
+  /*
+    Opaque on small viewports. The three percent of desktop showing through is
+    a depth cue on a wide screen, where the window sits inside a frame and
+    there is empty space to see around it. On a phone the window fills the
+    whole viewport, so the same three percent is body copy sitting directly
+    behind the hero mark, faintly legible. There is nothing to see around on
+    a phone, so the ghost is not paying for itself either.
+  */
+  @media (max-width: 720px) {
+    .scrim { background: var(--choir-bg); }
+  }
   .aurora { position: absolute; inset: 0; z-index: 0; }
   .aurora i { position: absolute; display: block; border-radius: 50%; will-change: transform; }
   .aurora i:nth-child(1) {
@@ -485,14 +496,24 @@
   /* ── pane 1 · leaving ─────────────────────────────────────────────────
      The mark lunges and blurs; the wordmark comes apart letter by letter
      as its tracking opens. A viewer scrolling slowly sees it stretch. */
+  /*
+    The mark is the hero of this pane, and it is sized through the component's
+    own `size` prop rather than by a CSS rule written from out here. Svelte
+    compiles a component's own class selector with the scoping class attached
+    twice, so it outranks any `.wrapper :global(svg)` a parent can write — the
+    rule lands, the mark stays 1.35rem, and the failure reads as a layout bug
+    instead of a cascade bug. It was exactly that: 22px, left-aligned inside
+    a 116px box, which is both too small and off-centre.
+
+    4.8:1 mark-to-wordmark, the ratio the standalone study reads at.
+  */
   .mark {
-    width: clamp(74px, 10vw, 116px);
-    justify-self: center;
+    display: flex;
+    justify-content: center;
     transform: scale(calc(1 + var(--arrive, 0) * 0.75)) translateY(calc(var(--arrive, 0) * -6vh));
     filter: blur(calc(var(--arrive, 0) * 10px));
     opacity: calc(1 - var(--arrive, 0) * 1.15);
   }
-  .mark :global(svg) { width: 100%; height: 100%; display: block; }
   .wordmark {
     justify-self: center;
     font-size: clamp(1.5rem, 4.4vw, 2.6rem); font-weight: 200;

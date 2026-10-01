@@ -139,9 +139,12 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .stack { width: min(100%, 60rem); display: grid; gap: clamp(.85rem, 2.2vh, 1.5rem); }
 
 /* ── pane 1 · leaving ─────────────────────────────────────────────────── */
-.mark { width: clamp(74px, 10vw, 116px); justify-self: center;
+/* The mark is the hero of this pane. 4.8:1 against the wordmark, which is
+   the ratio the shipped component reads at. */
+.mark { display: flex; justify-content: center;
   transform: scale(calc(1 + var(--arrive) * .75)) translateY(calc(var(--arrive) * -6vh));
   filter: blur(calc(var(--arrive) * 10px)); opacity: calc(1 - var(--arrive) * 1.15); }
+.mark svg { width: clamp(120px, 17vw, 210px); height: clamp(120px, 17vw, 210px); }
 .wordmark { justify-self: center; font-size: clamp(1.5rem, 4.4vw, 2.6rem);
   font-weight: 200; letter-spacing: calc(.52em + var(--arrive) * .62em); text-indent: .52em;
   transform: scale(calc(1 + var(--arrive) * .42)); opacity: calc(1 - var(--arrive) * 1.4); }
