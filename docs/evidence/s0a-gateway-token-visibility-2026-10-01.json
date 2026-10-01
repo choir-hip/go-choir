@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "kind": "s0a-gateway-token-visibility",
+  "collected_at": "2026-10-01T21:12:31.419Z",
+  "vm_id": "candidate-fleet-e15cb89f25d963c220319b7b",
+  "guest": {
+    "cmdline_has_gateway_token": true,
+    "env_has_runtime_gateway_token": true,
+    "autoputer_env_file": {
+      "gid": 0,
+      "mode": "0640",
+      "path": "/run/go-choir-autoputer.env",
+      "present": true,
+      "size": 848,
+      "uid": 0
+    },
+    "gateway_token_file": {
+      "error": "lstat /mnt/persistent/gateway-token: no such file or directory",
+      "path": "/mnt/persistent/gateway-token",
+      "present": false
+    }
+  },
+  "host": {
+    "firecracker_cmdline_has_token": false,
+    "firecracker_cmdline_config_path": true,
+    "fc_config_boot_args_has_token": true,
+    "fc_config_mode": "644 root:root",
+    "ps_shows_token": false
+  },
+  "finding": "see docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md"
+}

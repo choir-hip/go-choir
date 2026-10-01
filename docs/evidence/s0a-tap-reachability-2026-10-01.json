@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "kind": "s0a-tap-reachability",
+  "collected_at": "2026-10-01T21:12:29.858Z",
+  "source_vm": "candidate-fleet-e15cb89f25d963c220319b7b",
+  "source_url": "http://10.200.139.2:8085",
+  "targets": {
+    "other_guest_tap_8085": {
+      "addr": "10.200.136.2:8085",
+      "kind": "guest_tcp_dial",
+      "latency_ms": 0,
+      "local_addr": "10.200.139.2:47860",
+      "ok": true,
+      "schema_version": 1
+    },
+    "host_vmctl_8083": {
+      "addr": "10.200.139.1:8083",
+      "kind": "guest_tcp_dial",
+      "latency_ms": 0,
+      "local_addr": "10.200.139.2:37754",
+      "ok": true,
+      "schema_version": 1
+    },
+    "external_https_443": {
+      "addr": "1.1.1.1:443",
+      "kind": "guest_tcp_dial",
+      "latency_ms": 1,
+      "local_addr": "10.200.139.2:55798",
+      "ok": true,
+      "schema_version": 1
+    }
+  },
+  "interpretation": "other_guest_tap_8085 ok=true means tap->tap forwarding is open (S1 must isolate); host_vmctl_8083 ok=true is expected service reachability; external ok=true means unfiltered guest egress."
+}

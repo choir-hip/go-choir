@@ -1,0 +1,580 @@
+{
+  "schema_version": 1,
+  "kind": "vm_boot_timeline",
+  "vm_id": "candidate-fleet-e15cb89f25d963c220319b7b",
+  "computer_id": "computer-03335285269bdba4f94377e56879f9e6",
+  "boot_kind": "refresh",
+  "epoch": 994,
+  "marks": [
+    {
+      "phase": "boot_begin",
+      "at": "2026-10-01T21:10:14.38348554Z",
+      "offset_ms": 0
+    },
+    {
+      "phase": "host_port_allocated",
+      "at": "2026-10-01T21:10:14.385385372Z",
+      "offset_ms": 1,
+      "detail": "port=9139"
+    },
+    {
+      "phase": "boot_epoch",
+      "at": "2026-10-01T21:10:14.385464079Z",
+      "offset_ms": 1,
+      "detail": "epoch=994"
+    },
+    {
+      "phase": "data_image_ready",
+      "at": "2026-10-01T21:10:14.38547146Z",
+      "offset_ms": 1
+    },
+    {
+      "phase": "credential_disk_ready",
+      "at": "2026-10-01T21:10:14.393713329Z",
+      "offset_ms": 10
+    },
+    {
+      "phase": "firecracker_launch_begin",
+      "at": "2026-10-01T21:10:14.393743964Z",
+      "offset_ms": 10
+    },
+    {
+      "phase": "firecracker_spawned",
+      "at": "2026-10-01T21:10:14.441623897Z",
+      "offset_ms": 58
+    },
+    {
+      "phase": "first_http_response",
+      "at": "2026-10-01T21:10:23.634259575Z",
+      "offset_ms": 9250,
+      "detail": "status=503"
+    },
+    {
+      "phase": "replay_first_seen",
+      "at": "2026-10-01T21:10:23.634261957Z",
+      "offset_ms": 9250,
+      "detail": "seq=0 committed=0"
+    },
+    {
+      "phase": "first_healthy",
+      "at": "2026-10-01T21:10:24.174285262Z",
+      "offset_ms": 9790
+    },
+    {
+      "phase": "guest_receipt_fetch_begin",
+      "at": "2026-10-01T21:10:24.174288081Z",
+      "offset_ms": 9790
+    },
+    {
+      "phase": "guest_receipt_fetch_done",
+      "at": "2026-10-01T21:10:24.289106839Z",
+      "offset_ms": 9905
+    }
+  ],
+  "kernel_image_path": "/var/lib/go-choir/guest/vmlinux",
+  "initrd_path": "/var/lib/go-choir/guest/initrd",
+  "store_disk_path": "/var/lib/go-choir/guest/storedisk.erofs",
+  "data_image_path": "/var/lib/go-choir/vm-state/candidate-fleet-e15cb89f25d963c220319b7b/data.img",
+  "data_image_bytes": 34359738368,
+  "data_image_allocated_bytes": 21662216192,
+  "mem_size_mib": 4096,
+  "vcpu_count": 2,
+  "guest_ip": "10.200.139.2",
+  "host_url": "http://10.200.139.2:8085",
+  "firecracker_bin": "/nix/store/c4xn4qlry09b4rib1xxb310zxds0nzhr-firecracker-1.15.1/bin/firecracker",
+  "firecracker_version": "Firecracker v1.15.1",
+  "host_kernel_release": "6.18.16",
+  "guest_receipt": {
+    "collected_at": "2026-10-01T21:10:24.258885318Z",
+    "identity": {
+      "boot_id": "af23dcb5-961d-4ab9-933a-7e16aa2fd07b",
+      "build": {
+        "service": "autoputer",
+        "version": "0.1.0",
+        "commit": "1beed1a94211c9293850a5f295442759b8bfea8e",
+        "built_at": "20261001204628",
+        "deployed_at": "2026-10-01T21:10:20Z",
+        "deployed_commit": "1beed1a94211c9293850a5f295442759b8bfea8e"
+      },
+      "deploy_receipt": {
+        "activated_at": "2026-10-01T21:10:20Z",
+        "artifacts": {
+          "autoputer": {
+            "commit": "1beed1a94211c9293850a5f295442759b8bfea8e",
+            "status": "active"
+          }
+        },
+        "schema_version": 1,
+        "target_commit": "1beed1a94211c9293850a5f295442759b8bfea8e"
+      },
+      "executable": "/nix/store/lqxk2hk4d7rm0y9cncglp59qcn8nwq1z-autoputer-0.1.0/bin/autoputer",
+      "executable_resolved": "/nix/store/lqxk2hk4d7rm0y9cncglp59qcn8nwq1z-autoputer-0.1.0/bin/autoputer",
+      "kernel": "Linux 6.18.37 x86_64 GNU/Linux",
+      "pid": 656
+    },
+    "journal_events": [
+      {
+        "message": "Starting Configure guest network from kernel cmdline...",
+        "monotonic_ms": 5544,
+        "realtime_us": "1790889020027923",
+        "unit": "go-choir-configure-network.service"
+      },
+      {
+        "message": "Starting Extract go-choir secrets from kernel cmdline...",
+        "monotonic_ms": 5544,
+        "realtime_us": "1790889020028046",
+        "unit": "go-choir-extract-cmdline.service"
+      },
+      {
+        "message": "Starting Normalize retained guest-core signer state ownership...",
+        "monotonic_ms": 5552,
+        "realtime_us": "1790889020036493",
+        "unit": "go-choir-guest-receipt-signer-state-migration.service"
+      },
+      {
+        "message": "Starting Probe mandatory guest kernel isolation capabilities...",
+        "monotonic_ms": 5557,
+        "realtime_us": "1790889020041205",
+        "unit": "go-choir-kernel-capability-probe.service"
+      },
+      {
+        "message": "Finished Configure guest network from kernel cmdline.",
+        "monotonic_ms": 5582,
+        "realtime_us": "1790889020066286",
+        "unit": "go-choir-configure-network.service"
+      },
+      {
+        "message": "Starting Network Management...",
+        "monotonic_ms": 5596,
+        "realtime_us": "1790889020079944",
+        "unit": "systemd-networkd.service"
+      },
+      {
+        "message": "Finished Extract go-choir secrets from kernel cmdline.",
+        "monotonic_ms": 5612,
+        "realtime_us": "1790889020096213",
+        "unit": "go-choir-extract-cmdline.service"
+      },
+      {
+        "message": "Started Isolated verifier receipt signer.",
+        "monotonic_ms": 5618,
+        "realtime_us": "1790889020101945",
+        "unit": "go-choir-verifier-signer.service"
+      },
+      {
+        "message": "Finished Normalize retained guest-core signer state ownership.",
+        "monotonic_ms": 5814,
+        "realtime_us": "1790889020298278",
+        "unit": "go-choir-guest-receipt-signer-state-migration.service"
+      },
+      {
+        "message": "Starting Isolated guest-core receipt signer...",
+        "monotonic_ms": 5821,
+        "realtime_us": "1790889020305332",
+        "unit": "go-choir-guest-receipt-signer.service"
+      },
+      {
+        "message": "Started Network Management.",
+        "monotonic_ms": 5824,
+        "realtime_us": "1790889020308842",
+        "unit": "systemd-networkd.service"
+      },
+      {
+        "message": "Reached target Network is Online.",
+        "monotonic_ms": 5827,
+        "realtime_us": "1790889020311264",
+        "unit": "network-online.target"
+      },
+      {
+        "message": "Started Isolated guest-core receipt signer.",
+        "monotonic_ms": 5914,
+        "realtime_us": "1790889020398884",
+        "unit": "go-choir-guest-receipt-signer.service"
+      },
+      {
+        "message": "Finished Probe mandatory guest kernel isolation capabilities.",
+        "monotonic_ms": 6046,
+        "realtime_us": "1790889020530283",
+        "unit": "go-choir-kernel-capability-probe.service"
+      },
+      {
+        "message": "Starting Choir guest release updater...",
+        "monotonic_ms": 6049,
+        "realtime_us": "1790889020533861",
+        "unit": "go-choir-updater.service"
+      },
+      {
+        "message": "Started Choir guest release updater.",
+        "monotonic_ms": 6077,
+        "realtime_us": "1790889020561362",
+        "unit": "go-choir-updater.service"
+      },
+      {
+        "message": "Started go-choir Autoputer Runtime (VM guest).",
+        "monotonic_ms": 6081,
+        "realtime_us": "1790889020565482",
+        "unit": "go-choir-autoputer.service"
+      },
+      {
+        "message": "Reached target Multi-User System.",
+        "monotonic_ms": 6084,
+        "realtime_us": "1790889020568715",
+        "unit": "multi-user.target"
+      }
+    ],
+    "kind": "guest_boot_timeline",
+    "layout": {
+      "boot_id": "af23dcb5-961d-4ab9-933a-7e16aa2fd07b",
+      "cmdline": {
+        "8250.nr_uarts": true,
+        "choir.computer_id": true,
+        "choir.computer_kind": true,
+        "choir.desktop_id": true,
+        "choir.gateway_token": true,
+        "choir.gateway_url": true,
+        "choir.maild_url": true,
+        "choir.owner_id": true,
+        "choir.platform_url": true,
+        "choir.realization_id": true,
+        "choir.source_service_runtime_owner_id": true,
+        "choir.source_service_runtime_url": true,
+        "choir.source_service_url": true,
+        "choir.vmctl_url": true,
+        "choir.wire_publish_url": true,
+        "console": true,
+        "count": 32,
+        "epoch": true,
+        "guest_port": true,
+        "i8042.dumbkbd": true,
+        "i8042.noaux": true,
+        "i8042.nomux": true,
+        "i8042.nopnp": true,
+        "init": true,
+        "ip": true,
+        "loglevel": true,
+        "lsm": true,
+        "panic": true,
+        "persistent": true,
+        "reboot": true,
+        "regInfo": true,
+        "root": true,
+        "vm_id": true
+      },
+      "current_system": "/nix/store/rrks07f958vnvpxaf7b8hyyhp34kwwlk-nixos-system-go-choir-autoputer-26.11.20260701.ec84054",
+      "env_presence": {
+        "CHOIR_COMPUTER_CREDENTIAL_FILE": true,
+        "CHOIR_PRIVACY_KEY_FILE": true,
+        "RUNTIME_GATEWAY_TOKEN": true
+      },
+      "files": [
+        {
+          "gid": 0,
+          "mode": "0640",
+          "path": "/run/go-choir-autoputer.env",
+          "present": true,
+          "size": 848,
+          "uid": 0
+        },
+        {
+          "gid": 0,
+          "mode": "0644",
+          "path": "/run/go-choir-updater.env",
+          "present": true,
+          "size": 199,
+          "uid": 0
+        },
+        {
+          "gid": 0,
+          "mode": "0444",
+          "path": "/run/go-choir-guest-deploy-receipt.json",
+          "present": true,
+          "size": 263,
+          "uid": 0
+        },
+        {
+          "error": "lstat /mnt/persistent/gateway-token: no such file or directory",
+          "path": "/mnt/persistent/gateway-token",
+          "present": false
+        },
+        {
+          "gid": 0,
+          "mode": "0400",
+          "path": "/mnt/persistent/choir-credentials/privacy-key",
+          "present": true,
+          "size": 123,
+          "uid": 0
+        }
+      ],
+      "mounts": [
+        {
+          "device": "rootfs",
+          "point": "/",
+          "fstype": "tmpfs",
+          "read_only": false
+        },
+        {
+          "device": "tmpfs",
+          "point": "/run",
+          "fstype": "tmpfs",
+          "read_only": false
+        },
+        {
+          "device": "/dev/vdc",
+          "point": "/run/choir-bootstrap",
+          "fstype": "ext4",
+          "read_only": false
+        },
+        {
+          "device": "/dev/vda",
+          "point": "/nix/store",
+          "fstype": "erofs",
+          "read_only": true
+        },
+        {
+          "device": "/dev/vda",
+          "point": "/nix/store",
+          "fstype": "erofs",
+          "read_only": true
+        },
+        {
+          "device": "devtmpfs",
+          "point": "/dev",
+          "fstype": "devtmpfs",
+          "read_only": false
+        },
+        {
+          "device": "proc",
+          "point": "/proc",
+          "fstype": "proc",
+          "read_only": false
+        },
+        {
+          "device": "sysfs",
+          "point": "/sys",
+          "fstype": "sysfs",
+          "read_only": false
+        },
+        {
+          "device": "/dev/vdb",
+          "point": "/mnt/persistent",
+          "fstype": "ext4",
+          "read_only": false
+        }
+      ],
+      "nix_store_entries": 898,
+      "persistent_bytes_free": 23808675840,
+      "persistent_bytes_total": 33501757440,
+      "uptime_s": 9.77
+    },
+    "marks": [
+      {
+        "phase": "process_main_entry",
+        "at": "2026-10-01T21:10:20.75380519Z",
+        "since_start_ms": 0,
+        "since_boot_ms": 6260
+      },
+      {
+        "phase": "config_loaded",
+        "at": "2026-10-01T21:10:20.753914567Z",
+        "since_start_ms": 0,
+        "since_boot_ms": 6260
+      },
+      {
+        "phase": "runtime_store_open",
+        "at": "2026-10-01T21:10:23.008749742Z",
+        "since_start_ms": 2255,
+        "since_boot_ms": 8515
+      },
+      {
+        "phase": "credential_exchange_done",
+        "at": "2026-10-01T21:10:23.122480433Z",
+        "since_start_ms": 2368,
+        "since_boot_ms": 8628
+      },
+      {
+        "phase": "runtime_built",
+        "at": "2026-10-01T21:10:23.539109864Z",
+        "since_start_ms": 2785,
+        "since_boot_ms": 9045
+      },
+      {
+        "phase": "replay_begin",
+        "at": "2026-10-01T21:10:23.541206267Z",
+        "since_start_ms": 2787,
+        "since_boot_ms": 9047
+      },
+      {
+        "phase": "http_listen_ready",
+        "at": "2026-10-01T21:10:23.543079702Z",
+        "since_start_ms": 2789,
+        "since_boot_ms": 9049
+      },
+      {
+        "phase": "replay_done",
+        "at": "2026-10-01T21:10:23.998865805Z",
+        "since_start_ms": 3245,
+        "since_boot_ms": 9505
+      },
+      {
+        "phase": "lifecycle_reconciled",
+        "at": "2026-10-01T21:10:24.035303144Z",
+        "since_start_ms": 3281,
+        "since_boot_ms": 9541
+      }
+    ],
+    "missing_observers": [],
+    "process_started_at": "2026-10-01T21:10:20.75373524Z",
+    "replay": {
+      "committed_sequence": 0,
+      "sequence": 0
+    },
+    "schema_version": 1,
+    "systemd_analyze": {
+      "initrd_s": 2.701,
+      "target_reached_s": 2.982,
+      "target_unit": "multi-user.target",
+      "total_s": 6.084,
+      "userspace_s": 2.983
+    },
+    "units": [
+      {
+        "activeEnter_ms": 5582,
+        "activestate": "active",
+        "condition_ms": 5541,
+        "execMainExit_ms": 5582,
+        "execMainStart_ms": 5542,
+        "id": "go-choir-configure-network.service",
+        "loadstate": "loaded",
+        "result": "success",
+        "substate": "exited",
+        "unit": "go-choir-configure-network.service"
+      },
+      {
+        "activeEnter_ms": 5824,
+        "activestate": "active",
+        "condition_ms": 5592,
+        "execMainStart_ms": 5593,
+        "id": "systemd-networkd.service",
+        "loadstate": "loaded",
+        "result": "success",
+        "substate": "running",
+        "unit": "systemd-networkd.service"
+      },
+      {
+        "activestate": "inactive",
+        "id": "systemd-networkd-wait-online.service",
+        "loadstate": "masked",
+        "result": "success",
+        "substate": "dead",
+        "unit": "systemd-networkd-wait-online.service"
+      },
+      {
+        "activeEnter_ms": 5825,
+        "activestate": "active",
+        "condition_ms": 5825,
+        "id": "network-online.target",
+        "loadstate": "loaded",
+        "substate": "active",
+        "unit": "network-online.target"
+      },
+      {
+        "activeEnter_ms": 5612,
+        "activestate": "active",
+        "condition_ms": 5543,
+        "execMainExit_ms": 5612,
+        "execMainStart_ms": 5543,
+        "id": "go-choir-extract-cmdline.service",
+        "loadstate": "loaded",
+        "result": "success",
+        "substate": "exited",
+        "unit": "go-choir-extract-cmdline.service"
+      },
+      {
+        "activeEnter_ms": 5809,
+        "activestate": "active",
+        "condition_ms": 5545,
+        "execMainExit_ms": 5747,
+        "execMainStart_ms": 5550,
+        "id": "go-choir-guest-receipt-signer-state-migration.service",
+        "loadstate": "loaded",
+        "result": "success",
+        "substate": "exited",
+        "unit": "go-choir-guest-receipt-signer-state-migration.service"
+      },
+      {
+        "activeEnter_ms": 5913,
+        "activestate": "active",
+        "condition_ms": 5811,
+        "execMainStart_ms": 5840,
+        "id": "go-choir-guest-receipt-signer.service",
+        "loadstate": "loaded",
+        "result": "success",
+        "substate": "running",
+        "unit": "go-choir-guest-receipt-signer.service"
+      },
+      {
+        "activeEnter_ms": 5617,
+        "activestate": "active",
+        "condition_ms": 5613,
+        "execMainStart_ms": 5640,
+        "id": "go-choir-verifier-signer.service",
+        "loadstate": "loaded",
+        "result": "success",
+        "substate": "running",
+        "unit": "go-choir-verifier-signer.service"
+      },
+      {
+        "activestate": "inactive",
+        "condition_ms": 5552,
+        "execMainExit_ms": 6046,
+        "execMainStart_ms": 5552,
+        "id": "go-choir-kernel-capability-probe.service",
+        "inactiveEnter_ms": 6046,
+        "loadstate": "loaded",
+        "result": "success",
+        "substate": "dead",
+        "unit": "go-choir-kernel-capability-probe.service"
+      },
+      {
+        "activeEnter_ms": 6077,
+        "activestate": "active",
+        "condition_ms": 6048,
+        "execMainStart_ms": 6080,
+        "id": "go-choir-updater.service",
+        "loadstate": "loaded",
+        "result": "success",
+        "substate": "running",
+        "unit": "go-choir-updater.service"
+      },
+      {
+        "activeEnter_ms": 6081,
+        "activestate": "active",
+        "condition_ms": 6078,
+        "execMainStart_ms": 6078,
+        "id": "go-choir-autoputer.service",
+        "loadstate": "loaded",
+        "result": "success",
+        "substate": "running",
+        "unit": "go-choir-autoputer.service"
+      },
+      {
+        "activeEnter_ms": 6083,
+        "activestate": "active",
+        "condition_ms": 6083,
+        "id": "multi-user.target",
+        "loadstate": "loaded",
+        "substate": "active",
+        "unit": "multi-user.target"
+      }
+    ],
+    "uptime_at_start_s": 6.26
+  },
+  "outcome": "healthy",
+  "started_at": "2026-10-01T21:10:14.383483193Z",
+  "ended_at": "2026-10-01T21:10:24.289107976Z",
+  "total_ms": 9905,
+  "first_healthy_offset_ms": 9790,
+  "probe": {
+    "note": "written by the deploy-time refresh boot; computer-sized data volume replayed"
+  }
+}

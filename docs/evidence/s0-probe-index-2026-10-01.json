@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "kind": "s0-probe-index",
+  "run_started_at": "2026-10-01T21:12:14.893Z",
+  "base_url": "https://choir.news",
+  "receipts": {
+    "s0a-boot-timeline-fresh-2026-10-01": {
+      "path": "docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json"
+    },
+    "s0a-boot-timeline-owner-sized-2026-10-01": {
+      "path": "docs/evidence/s0a-boot-timeline-owner-sized-2026-10-01.json"
+    },
+    "s0a-guest-layout-2026-10-01": {
+      "path": "docs/evidence/s0a-guest-layout-2026-10-01.json"
+    },
+    "s0a-runtime-closure-2026-10-01": {
+      "path": "docs/evidence/s0a-runtime-closure-2026-10-01.json"
+    },
+    "s0a-tap-reachability-2026-10-01": {
+      "path": "docs/evidence/s0a-tap-reachability-2026-10-01.json"
+    },
+    "s0a-gateway-token-visibility-2026-10-01": {
+      "path": "docs/evidence/s0a-gateway-token-visibility-2026-10-01.json"
+    }
+  },
+  "findings": [
+    "gateway token exposed on kernel cmdline (guest /proc/cmdline) and host fc-config.json / ps — confirmed live"
+  ],
+  "errors": [
+    "owner re-refresh failed: Command failed: ssh -o BatchMode=yes -o ConnectTimeout=8 node-b curl -fsS -m 300 -H \"X-Internal-Caller: true\" -H \"Content-Type: application/json\" -d '{\"user_id\":\"5bd6de97-3b58-408c-bf89-c42c81b083de\",\"desktop_id\":\"primary\"}' http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null\ncurl: (28) Operation timed out after 300002 milliseconds with 0 bytes received\n"
+  ],
+  "fresh_computer": {
+    "vm_id": "vm-dc5a88b68356568a31b82b86408714c5",
+    "computer_id": "computer-4b78d707c9a15b5d0f1ce8f70dce2e5c",
+    "registration_ms": 9535
+  },
+  "run_finished_at": "2026-10-01T21:17:33.291Z"
+}
