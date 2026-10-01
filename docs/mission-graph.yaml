@@ -960,7 +960,7 @@ nodes:
     title: Platform-Dolt Capacity Stabilization — OOM/realization substrate
     path: docs/definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md
     ledger: ''
-    status: blocked
+    status: working
     kind: product_completion
     entrypoint: false
     execution_mode: draft_non_executable
@@ -971,8 +971,8 @@ nodes:
       Promoted to top priority by the 2026-10-01 convergent panel (verdict B).
       The platform-dolt OOM -> realization-flap -> serial-drain substrate blocks
       the parked-run repair's deployed_acceptance and owner task submission
-      (run start 502s). The durable lever is an ops/deploy-shape memory cap —
-      the permitted owner/ops blocking ask; now.status=blocked_on_owner.
+      (run start 502s). Cap applied live 2026-10-01 (MemoryHigh=12G
+      MemoryMax=14G, RSS 16.6→11.6GiB, OOMKills=0); owner authorized.
       Clustering assessment:
       docs/problems/platform-dolt-oom-realization-cluster-2026-10-01.md.
     sources:
@@ -990,7 +990,8 @@ nodes:
     depends_on:
       - choir-rectification-spine-2026-09-25
       - choir-platform-dolt-capacity-stabilization-2026-10-01
-    enables: []
+    enables:
+      - choir-world-wire-metamission-2026-10-01
     note: >-
       Owner-ratified 2026-09-29 metamission spine (definition_version 4,
       readiness ladder). Eight stations: M0 debug/stabilize (redeploy
@@ -1001,6 +1002,32 @@ nodes:
       review; continuous authority under the ratified spine.
     sources:
       - docs/orientation-jev-supervision-metamission-2026-09-29.md
+  - id: choir-world-wire-metamission-2026-10-01
+    title: World Wire Metamission — compounding self-citing KB, verticals sequenced
+    path: docs/definitions/choir-world-wire-metamission-2026-10-01.md
+    ledger: ''
+    status: intent
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-jev-supervision-metamission-2026-09-29
+      - choir-platform-dolt-capacity-stabilization-2026-10-01
+    enables: []
+    note: >-
+      Successor spine designed from the 2026-10-01 convergent panel + June
+      attempt-12 receipt. RLM-native compounding knowledge base on the object
+      graph; processor/reconciler stay non-desk but shift per-item->per-set.
+      Stations W0 (KB-graph schema, green/parallel) -> W1 tiered dedup -> W2
+      batched processor -> W3 corpus reconciler -> W4 edition assembly -> W5
+      AI vertical -> W6 Taiwan/geopolitics/semis/internal-democracy -> W7
+      region ladder -> W8 scale hardening. Live ingestion gated on capacity
+      acceptance; W0 design runs green in parallel. status=intent until the
+      Jev spine's remaining stations + capacity acceptance discharge.
+    sources:
+      - docs/definitions/choir-world-wire-metamission-2026-10-01.md
+      - docs/definitions/choir-wire-kb-graph-schema-w0-2026-10-01.md
+      - .agentic-consensus/manifest.tsv
   - id: choir-carrier-substrate-integrity-2026-09-25
     title: Carrier Substrate Integrity (R2x, station)
     path: docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md

@@ -108,22 +108,30 @@ conjecture:
     parked-run acceptance, overnight research QA, self-dev proposals.'
 
 now:
-  status: blocked_on_owner
-  slice: 'drafted on the panel''s B verdict. The memory cap is an ops/
-    deploy-shape decision — the one place a blocking owner ask is permitted.'
+  status: working
+  slice: 'owner authorized repairs in conversation 2026-10-01 ("lets do the
+    repairs and improvements ... and fix the oom issues"). Memory cap applied
+    to go-choir-corpus-dolt live (MemoryHigh=12G MemoryMax=14G): MemoryCurrent
+    dropped 16.6→13.0→11.6GiB, OOMKills=0, NRestarts=0, zero OOM-kill journal
+    lines in 20min; guest rebooted clean and is draining the dead-wake
+    backlog. Durable persistence + drain-latency bound remain.'
   decision:
-    what: 'cap platform-dolt memory so the guest survives an uptime window;
-      confirm the 502''s cause before any proxy patch; sequence capacity
-      changes so they don''t confound the 362febb2 observation.'
+    what: 'bounded the runaway corpus-dolt via cgroup MemoryHigh/MemoryMax
+      (the corpus store :13307 was the growth driver; platform-dolt :13306 is
+      healthy at ~0.8G). Next: persist the cap durably (drop-in file), bound
+      the serial drain latency, then confirm the 362febb2 transition +
+      a successful run start in a stable window.'
     kind: architecture
-    status: proposal
-    owner_ratification_ref: pending — the memory-cap/host-capacity ask
-  blocker_or_risk: 'the durable fix is a deploy-shape/host-capacity tradeoff
-    (cgroup MemoryMax, dolt buffer bound, or host capacity) — needs owner
-    direction on which lever. Everything else proceeds without waiting.'
-  next_action: 'owner decides the memory-cap lever; meanwhile watchers continue
-    the 362febb2 + QA submissions opportunistically and the substrate mission
-    stands ready to execute on the decision.'
+    status: settled
+    owner_ratification_ref: 'owner directive "fix the oom issues" 2026-10-01'
+  blocker_or_risk: 'the cap bounds growth but a sustained corpus-dolt load can
+    still thrash under reclaim (slower queries vs kill); drain-latency bound is
+    the second half of the artifact. The 502 flap may persist if its cause is
+    an independent routing lag — confirm before any proxy patch.'
+  next_action: 'persist the cap as a systemd drop-in file (durable across
+    reboots — set-property already wrote one; verify), measure drain-throughput
+    vs window, then land deployed_acceptance on a stable-window run start +
+    the 362febb2 transition.'
 
 receipts: []
 ---

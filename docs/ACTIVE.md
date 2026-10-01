@@ -8,17 +8,22 @@ the mission format is throughline (`skills/throughline/SKILL.md`).
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization
 
 [`definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md`](definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md)
-(`readiness: drafted`, `now.status: blocked_on_owner`) — promoted to top
+(`readiness: drafted`, `now.status: working`) — promoted to top
 priority by the 2026-10-01 convergent panel (verdict B): the platform-dolt OOM
 → realization-flap → serial-drain-starvation substrate now blocks both the
 parked-run repair's `deployed_acceptance` and owner task submission (the `run
 start` 502s). Clustering assessment:
 [`problems/platform-dolt-oom-realization-cluster-2026-10-01.md`](problems/platform-dolt-oom-realization-cluster-2026-10-01.md).
-The durable lever is an ops/deploy-shape memory cap — the permitted owner/ops
-blocking ask. It precedes the metamission's M0a/M-SUB stations, which are
-substrate-gated. The parked-run repair (`14f5682b`, deployed `4a718af4`) stays
-open with `deployed_acceptance` pending — discharged as a side effect once the
-guest holds an uptime window.
+**Repair applied live 2026-10-01** (owner authorized "fix the oom issues"):
+corpus-dolt cgroup cap `MemoryHigh=12G`/`MemoryMax=14G` — the corpus store
+(:13307) was the growth driver; platform-dolt (:13306) is healthy at ~0.8G.
+`MemoryCurrent` dropped 16.6→11.6GiB, `OOMKills=0`, `NRestarts=0`, guest
+rebooted clean and is draining the dead-wake backlog. Durable drop-in
+persistence + a stable-uptime `run start` + the `362febb2` discharge are the
+remaining acceptance. It precedes the metamission's M0a/M-SUB stations, which
+are substrate-gated. The parked-run repair (`14f5682b`, deployed `4a718af4`)
+stays open with `deployed_acceptance` pending — discharged as a side effect
+once the guest holds an uptime window.
 
 ## Current Mission — Jev / Supervision Metamission
 
@@ -33,6 +38,20 @@ is the live `/goal` entrypoint (owner-ratified spine 2026-09-29,
 Orientation: [`orientation-jev-supervision-metamission-2026-09-29.md`](orientation-jev-supervision-metamission-2026-09-29.md).
 Station goal files carry `readiness: drafted` pending authoring consensus
 review; they run continuously under the ratified spine once promoted.
+
+## Successor Spine — World Wire Metamission (designed, intent)
+
+[`definitions/choir-world-wire-metamission-2026-10-01.md`](definitions/choir-world-wire-metamission-2026-10-01.md)
+(`status: intent`, `entrypoint: false`) — designed from the 2026-10-01
+convergent panel (7/13) + the June attempt-12 receipt. RLM-native compounding
+knowledge base on the object graph: processor/reconciler stay non-desk but the
+unit of reasoning shifts per-item→per-set (bounded collection-manifest
+obligation), killing the June admission-freeze failure mode. Stations:
+**W0** KB-graph schema (green, parallel) → **W1** tiered dedup → **W2**
+batched processor → **W3** corpus reconciler → **W4** edition assembly →
+**W5** AI vertical → **W6** Taiwan/geopolitics/semis/internal-democracy →
+**W7** region ladder → **W8** scale hardening. Live W-stations are gated on
+the capacity mission's deployed acceptance; W0 design runs green in parallel.
 
 
 ## Archived Receipt — Strand-2 Freeze-Order Patch (R0)
