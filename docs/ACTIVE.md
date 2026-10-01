@@ -39,6 +39,18 @@ Orientation: [`orientation-jev-supervision-metamission-2026-09-29.md`](orientati
 Station goal files carry `readiness: drafted` pending authoring consensus
 review; they run continuously under the ratified spine once promoted.
 
+## Parallel Mission — Texture Latency Cutover
+
+[`definitions/choir-texture-latency-cutover-2026-10-01.md`](definitions/choir-texture-latency-cutover-2026-10-01.md)
+(`readiness: executable`, `now.status: working`) — owner-directed
+2026-10-01: bound Texture editor request latency end-to-end (proxy resolve +
+guest store + lifecycle snapshot). Three ordered cuts: trajectory-scoped or
+version-memoized snapshot read, TTL-cached vmctl route resolution, and —
+only if the timing matrix still fails — decoupling the objectgraph read
+mutex from writes. Evidence map:
+[`problems/texture-latency-layered-evidence-2026-10-01.md`](problems/texture-latency-layered-evidence-2026-10-01.md).
+Independent of the capacity mission's substrate work; runs parallel.
+
 ## Successor Spine — World Wire Metamission (designed, intent)
 
 [`definitions/choir-world-wire-metamission-2026-10-01.md`](definitions/choir-world-wire-metamission-2026-10-01.md)

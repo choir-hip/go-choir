@@ -979,6 +979,26 @@ nodes:
       - docs/problems/platform-dolt-oom-realization-cluster-2026-10-01.md
       - docs/problems/api-key-computer-resolution-flap-2026-10-01.md
       - docs/definitions/choir-jev-supervision-metamission-2026-09-29.md
+  - id: choir-texture-latency-cutover-2026-10-01
+    title: Texture Latency Cutover — bound editor request latency end-to-end
+    path: docs/definitions/choir-texture-latency-cutover-2026-10-01.md
+    ledger: ''
+    status: working
+    kind: product_completion
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: []
+    note: >-
+      Owner-directed 2026-10-01 after the texture read-path repair
+      (243665b4, aea62d05) still left ~1.4s quiet / 10s+ loaded latency.
+      Three ordered cuts: trajectory-scoped or version-memoized lifecycle
+      snapshot, TTL-cached vmctl route resolution in the proxy, and —
+      gated on the timing matrix — decoupling the objectgraph read mutex
+      from writes. Evidence: docs/problems/texture-latency-layered-evidence-2026-10-01.md.
+    sources:
+      - docs/definitions/choir-texture-latency-cutover-2026-10-01.md
+      - docs/problems/texture-latency-layered-evidence-2026-10-01.md
   - id: choir-jev-supervision-metamission-2026-09-29
     title: Jev / Supervision Metamission — signal plane to management-scored commitments
     path: docs/definitions/choir-jev-supervision-metamission-2026-09-29.md
