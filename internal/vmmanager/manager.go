@@ -861,9 +861,14 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	inst.LastHealthCheck = time.Now()
 	inst.LastHealthyAt = inst.LastHealthCheck
 	tl.firstHealthy()
+	m.mu.Unlock()
+	locked = false
 
 	// The guest-side receipt is fetched once the guest is healthy: the merged
-	// record carries both halves of the boot in one file.
+	// record carries both halves of the boot in one file. The fetch is
+	// observation, not shared-state mutation — like waitForGuestReady it must
+	// not run under m.mu, where a slow runtime_started would serialize every
+	// boot (docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md).
 	tl.fetchGuestBootTimeline(hostURL)
 	tl.finish("healthy", nil)
 	if perr := tl.persist(m.cfg.StateDir); perr != nil {
@@ -1030,6 +1035,12 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 	inst.LastHealthCheck = time.Now()
 	inst.LastHealthyAt = inst.LastHealthCheck
 	tl.firstHealthy()
+	m.mu.Unlock()
+	locked = false
+
+	// Same contract as bootVM: the guest-receipt fetch and final persist are
+	// observation work and must not hold m.mu
+	// (docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md).
 	tl.fetchGuestBootTimeline(hostURL)
 	tl.finish("healthy", nil)
 	if perr := tl.persist(m.cfg.StateDir); perr != nil {

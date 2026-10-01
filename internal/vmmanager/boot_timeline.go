@@ -82,6 +82,21 @@ type BootTimeline struct {
 	start time.Time
 }
 
+// bootTimelineJSON is the marshaling view of BootTimeline: identical layout,
+// no methods, so encoding/json walks the fields directly instead of
+// re-entering MarshalJSON. Pointer conversion only — never copy a struct that
+// carries a mutex.
+type bootTimelineJSON BootTimeline
+
+// MarshalJSON serializes under t.mu so readers of an in-flight receipt
+// (HandleBootTimeline marshals the live record) never race with append marks
+// or the guest-receipt write.
+func (t *BootTimeline) MarshalJSON() ([]byte, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return json.Marshal((*bootTimelineJSON)(t))
+}
+
 // newBootTimeline begins a record for one boot attempt.
 func newBootTimeline(vmID, bootKind string) *BootTimeline {
 	now := time.Now()
@@ -247,13 +262,18 @@ func (t *BootTimeline) fetchGuestBootTimeline(hostURL string) {
 		}
 	}
 	// Exit loop on cap: the last successful body is already stored above.
+	// Read GuestReceipt under the lock, release, then mark — markDetail
+	// re-acquires t.mu, so calling mark inside the critical section is a
+	// self-deadlock (docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md).
 	t.mu.Lock()
-	if t.GuestReceipt != nil {
-		t.mark("guest_receipt_fetch_done_partial") // no runtime_started inside window
-	} else {
+	hasReceipt := t.GuestReceipt != nil
+	if !hasReceipt {
 		t.GuestFetchError = lastErr
 	}
 	t.mu.Unlock()
+	if hasReceipt {
+		t.mark("guest_receipt_fetch_done_partial") // no runtime_started inside window
+	}
 }
 
 // guestMarkPresent reports whether the receipt JSON marks array contains the
@@ -269,7 +289,7 @@ func (t *BootTimeline) persist(stateDir string) error {
 		return nil
 	}
 	t.mu.Lock()
-	data, err := json.MarshalIndent(t, "", "  ")
+	data, err := json.MarshalIndent((*bootTimelineJSON)(t), "", "  ")
 	t.mu.Unlock()
 	if err != nil {
 		return err
