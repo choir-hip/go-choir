@@ -277,7 +277,14 @@ for them.
 
 Use disposable guest-local capsules inside the stable computer for risky
 mutation. Failed capsules should leave diagnostics, retained events, rollback
-refs, and next safe probes; do not create a candidate/worker computer or VM.
+refs, and next safe probes. Never use a candidate/worker VM as a
+self-development candidate of its parent; self-development candidates are
+capsules. A **forked computer** (owner-ratified 2026-10-01) is different: a new
+sibling computer with its own ComputerID, event chain, and freshly minted
+identity material, linked to a parent checkpoint by lineage. Forks may serve
+experiments and fleets, but only once fork re-keying and isolation have landed.
+Their results return to any other computer only through publication and
+adoption, never by direct merge.
 
 ## Final Evidence
 

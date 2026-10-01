@@ -395,7 +395,19 @@ Ideal direction:
   semantic promotion authority.
 - Do not use **background computer**, **candidate computer**, **worker VM**, or
   **candidate VM** for current product architecture; those forked-machine
-  concepts are retired.
+  concepts are retired as self-development candidates.
+- Use **forked computer** (owner-ratified 2026-10-01) for a new sibling
+  computer constructed from a parent's checkpoint or machine snapshot. It has
+  its own ComputerID, canonical event chain, and freshly minted identity
+  material, and records its parent by lineage. It is never a candidate of its
+  parent. Its results reach other computers only through publication and
+  adoption. A fork is **ephemeral** (no route, reclaimed first, discarded by
+  default) or **persistent**.
+- Use **machine snapshot** for a paired memory/VM-state + disk capture of one
+  realization, valid only for the same guest image and hypervisor version.
+  Use **semantic snapshot** for a ComputerVersion checkpoint (event head,
+  release, content witness), which is portable and the only distributable
+  form.
 - Use **autoputer** only for existing service/process names or legacy references.
 - Use **VM** or **microVM** only for the implementation substrate.
 

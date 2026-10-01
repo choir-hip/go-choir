@@ -1,6 +1,12 @@
 ---
 definition_version: 4
 
+# v2 2026-10-01: adds layering via guest Nix closures, fast resume /
+# machine-snapshot hibernate, forks and fleets (owner-ratified sibling-computer
+# model), and org templates. Stations reordered for development ease: the
+# substrate that shortens every later dev loop (security floor, layering,
+# fast resume) comes first.
+
 readiness: drafted
 
 review:
@@ -11,7 +17,7 @@ review:
 
 metamission:
   stations:
-    - id: S0-reality
+    - id: S0-reality-and-boot-timeline
       path: unauthored (intent)
       readiness: intent
       status: pending
@@ -20,42 +26,57 @@ metamission:
       path: unauthored (intent)
       readiness: intent
       status: pending
-      depends_on: [S0-reality]
-    - id: S2-runtime-from-release
+      depends_on: [S0-reality-and-boot-timeline]
+    - id: S2-layering-runtime-from-release
       path: unauthored (intent)
       readiness: intent
       status: pending
-      depends_on: [S0-reality]
-    - id: S3-capsule-open-world
+      depends_on: [S0-reality-and-boot-timeline]
+    - id: S3-fast-resume
+      path: unauthored (intent)
+      readiness: intent
+      status: pending
+      depends_on: [S1-security-floor, S2-layering-runtime-from-release]
+    - id: S4-capsule-open-world
       path: unauthored (intent)
       readiness: intent
       status: pending
       depends_on: [S1-security-floor]
-    - id: S4-live-preview-supervision
+    - id: S5-live-preview-supervision
       path: unauthored (intent)
       readiness: intent
       status: pending
-      depends_on: [S3-capsule-open-world]
-    - id: S5-commit-gate-full-release
+      depends_on: [S4-capsule-open-world]
+    - id: S6-commit-gate-full-release
       path: unauthored (intent)
       readiness: intent
       status: pending
-      depends_on: [S2-runtime-from-release, S4-live-preview-supervision]
-    - id: S6-app-packages
+      depends_on: [S2-layering-runtime-from-release, S5-live-preview-supervision]
+    - id: S7-app-packages
       path: unauthored (intent)
       readiness: intent
       status: pending
-      depends_on: [S5-commit-gate-full-release]
-    - id: S7-source-publication
+      depends_on: [S6-commit-gate-full-release]
+    - id: S8-source-publication
       path: unauthored (intent)
       readiness: intent
       status: pending
-      depends_on: [S5-commit-gate-full-release]
-    - id: S8-platform-mainline-and-security-push
+      depends_on: [S6-commit-gate-full-release]
+    - id: S9-forks-and-fleets
       path: unauthored (intent)
       readiness: intent
       status: pending
-      depends_on: [S7-source-publication]
+      depends_on: [S1-security-floor, S3-fast-resume, S8-source-publication]
+    - id: S10-org-templates
+      path: unauthored (intent)
+      readiness: intent
+      status: pending
+      depends_on: [S9-forks-and-fleets]
+    - id: S11-mainline-and-security-push
+      path: unauthored (intent)
+      readiness: intent
+      status: pending
+      depends_on: [S8-source-publication, S9-forks-and-fleets]
 
 start:
   captured_at: '2026-10-01T00:00:00Z'
@@ -105,6 +126,29 @@ start:
       does not filter FORWARD). The guest runtime unit runs as unconfined
       root. Unverified on staging. See
       docs/reports/nixos-agent-platform-redhat-deepseek-audit-2026-10-01.md.
+    - >-
+      Boot latency (owner-reported 2026-10-01): cold boot about 15-30 s,
+      warm boot about 5 s; both too slow. No per-phase boot timeline is
+      recorded. Hibernate is stop (vmmanager HibernateVM); resume is a cold
+      boot plus recovery planning. vmctl polls readiness every 250 ms.
+      Every guest-image deploy reboots active computers.
+    - >-
+      Semantic snapshots already exist: ProjectionBase blobs + replay
+      watermark W with PlanRecovery (rebase/resume/refuse, tail bound
+      10,000) landed 9341b5d1
+      (docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md).
+      The owner computer's blob is about 16 GB.
+    - >-
+      VM state lives on btrfs (nix/disks.nix), so reflink copies of
+      data.img are available. Firecracker snapshot create/load is unused.
+  start_corrections:
+    - date: '2026-10-01'
+      correction: >-
+        Owner ratified forked computers as sibling computers (not
+        self-dev candidates). The prior "no candidate/worker VM" rule
+        predates capsules. AGENTS.md (CLAUDE.md) Safety section and
+        docs/computer-ontology.md naming rules were amended in the same
+        commit as this v2.
 
 finish:
   deliver: >-
@@ -116,29 +160,38 @@ finish:
     curl | bash and nixpkgs, and all of it stays inside a capsule. The
     change lands only when automated tests pass and the owner approves.
     It then works on both the guest backend and the guest frontend, and
-    survives reboot and restore. The owner can then publish the change
-    to the host as source. Another computer's owner can review it, take
-    the source, customize it, build it locally in a capsule, and adopt
-    it through their own gate. The host can select a published change,
-    mainline it into the platform base, and push security fixes across
-    a divergent fleet without silently breaking computers whose
-    divergence conflicts with the fix.
+    survives reboot and restore. The owner can publish the change to the
+    host as source. Another owner can review it, take the source,
+    customize it, build it locally in a capsule, and adopt it through
+    their own gate. A long-running computer can be snapshotted and forked
+    into fleets of ephemeral or persistent sibling computers for parallel
+    experiments, and exported as a scrubbed org template. The host can
+    mainline a published change into the platform base and push security
+    fixes across a divergent fleet without silent breakage, testing
+    compatibility on ephemeral forks first. Computers resume from
+    hibernation in about a second, and app-layer updates apply without
+    rebooting the VM.
   artifact: >-
     A deployed product path on choir.news with these pieces:
-    (1) `choir run start` from an API-key client yields a supervised
-    trajectory.
-    (2) A capsule with recorded, policy-mediated egress and a capsule
-    Nix store.
-    (3) A preview route from the desktop into the capsule's frontend
-    and backend.
-    (4) A commit gate (tests + owner approval) that materializes a full
-    release (runtime + frontend + app backends) that the guest actually
-    executes.
-    (5) A source publication record (patch + base revision + pinned
-    inputs + build recipe + tests) on the host.
-    (6) An adopt flow on a second computer that builds from source.
-    (7) A platform security offer with per-computer rebase, exploit-test
-    classification, and a fail-closed fallback.
+    (1) A two-layer guest: a shared non-forkable NixOS base image and a
+    per-computer app layer (runtime + frontend + app backends) built as
+    a Nix closure against that base. The guest executes the app layer
+    from its committed release.
+    (2) Machine-snapshot hibernate/resume, with the pairing, one-shot and
+    fallback invariants, plus a recorded boot timeline per wake.
+    (3) Capsules with recorded, policy-mediated egress and a
+    capsule-private Nix store.
+    (4) A preview bridge from the desktop into the capsule.
+    (5) A commit gate (tests + owner approval) materializing a full
+    app-layer release.
+    (6) App packages.
+    (7) Source publication (patch + base rev + pinned inputs + recipe +
+    tests) and an adopt flow.
+    (8) Forks as sibling computers with re-keying and data-class
+    selection, plus fleet admission.
+    (9) Org template export/import.
+    (10) Platform security offers with per-computer rebase, exploit-test
+    classification on ephemeral forks, and a fail-closed fallback.
   acceptance:
     - action: >-
         Deployed Playwright + API proof. Computer A is driven only by an
@@ -149,52 +202,88 @@ finish:
         approves in the desktop, the app serves from A's guest after a
         guest reboot, and a pinned restore removes it.
       proves: >-
-        The single-computer deliverable works end to end on the product
-        path, including backend effect (not frontend only) and
-        reversibility.
+        The single-computer deliverable works end to end, including
+        backend effect and reversibility.
       evidence_class: deployed proof
     - action: >-
-        Same proof, modifying an existing app (for example a Mail or
-        Texture behavior change spanning backend and frontend).
-      proves: >-
-        Modification of existing app code, not only additive new apps.
+        Same proof, modifying an existing app across backend and
+        frontend.
+      proves: Modification of existing app code, not only additive apps.
       evidence_class: deployed proof
     - action: >-
-        A publishes. Computer B (a different owner) lists A's
-        publication, reviews the diff and the pinned inputs, adopts, and
-        builds from source in its own capsule with a local customization.
-        B's tests and B's owner approval land it. B serves the customized
-        app. No binary from A is executed on B.
-      proves: >-
-        Source-only publication and divergent adoption.
+        App-layer update without reboot. A committed app-layer release
+        (and a platform app-layer push) applies by updater swap + runtime
+        restart only. The Firecracker process and guest boot id are
+        unchanged. Time to healthy is recorded.
+      proves: Layering removes VM reboots from routine updates.
       evidence_class: deployed proof
     - action: >-
-        The host mainlines A's change into main and ships a security fix
-        touching an app-layer boundary. The fix lands automatically on a
-        tracking computer, lands after rebase on a non-conflicting
-        divergent computer, is classified exempt on a computer whose own
-        code already passes the exploit test, and fails closed (component
-        reverted or capability cut, owner notified) on a conflicting
-        vulnerable computer.
-      proves: >-
-        Fleet security push without silent breakage or silent skip.
+        Hibernate/resume. A computer with an open Texture doc and a
+        completed run is hibernated (quiesce, snapshot, process exits,
+        RAM freed on host) and woken by an owner request.
+        Recorded timeline: wake request to first healthy response within
+        the S3 target (proposed: p50 under 1 s, p95 under 3 s). The
+        resumed computer serves the same state and refreshes its clock,
+        gateway token and RNG. A deliberately invalidated snapshot (image
+        mismatch) falls back to a cold boot with the disk consistent. A
+        second resume of a consumed snapshot is refused.
+      proves: Fast resume without unsafe restores.
       evidence_class: deployed proof
     - action: >-
-        Negative proofs. A capsule cannot reach another tenant's guest or
-        the host's private services. A capsule cannot read the gateway
-        token. Uncommitted capsule changes do not survive capsule
-        disposal. A forged or misbound publication or offer is refused
+        A publishes. Computer B (different owner) lists A's publication,
+        reviews the diff and pinned inputs, adopts it, and builds from
+        source in its own capsule with a local customization. B's tests
+        and B's owner approval land it. No binary from A executes on B.
+      proves: Source-only publication and divergent adoption.
+      evidence_class: deployed proof
+    - action: >-
+        Fork and fleet. A long-running computer is forked into three
+        ephemeral forks and one persistent fork, each with a chosen data
+        class set. Each fork has a new ComputerID, signer keys, privacy
+        key and gateway token. Different experiments run in each, and
+        outcomes are visible from the parent's Texture doc. The winner
+        publishes and the parent adopts. Ephemeral forks are reclaimed.
+        Admission refuses a fork that would breach the host memory
+        budget.
+      proves: Forks are real sibling computers and fleets fit the host.
+      evidence_class: deployed proof
+    - action: >-
+        Org template. The parent is exported as a scrubbed semantic
+        template (base rev + patch stack + curated seed data + policy),
+        then installed as a fresh computer that builds from source and
+        carries none of the parent's private data classes or keys.
+      proves: Distributable organizational images.
+      evidence_class: deployed proof
+    - action: >-
+        Security push. The host mainlines A's change and ships an
+        app-layer security fix with an exploit test. Compatibility is
+        evaluated on an ephemeral fork of each divergent computer. The
+        fix auto-applies on a tracking computer, applies after rebase on
+        a non-conflicting divergent computer, is classified exempt where
+        the computer's own code passes the exploit test, and fails closed
+        (component reverted or capability cut, owner notified) on a
+        conflicting vulnerable computer.
+      proves: Fleet security push without silent breakage or silent skip.
+      evidence_class: deployed proof
+    - action: >-
+        Negative proofs. A capsule or a fork cannot reach another
+        tenant's guest or the host's private services. A fork cannot
+        sign as, or read undeclared data classes of, its parent.
+        Capsules cannot read the gateway token. Uncommitted capsule
+        changes do not survive disposal. Snapshot files are unreadable
+        outside the owning computer's state directory. Forged or
+        misbound publications, offers, or snapshot restores are refused
         before any mutation.
-      proves: >-
-        The open-world capsule did not widen authority.
+      proves: No authority widening across capsule, fork, snapshot, or publication.
       evidence_class: deployed proof
   rollback: >-
     Per station: git revert + redeploy. For a computer: pinned-head
-    restore through the existing tape/checkpoint path (M9a/M11 edge).
-    For publication: retract the record; adopters keep their own
-    committed copies because source-only means no remote kill switch.
-    A security offer that misclassifies a computer is reverted by
-    restoring that computer to its pre-offer head.
+    restore through the existing tape/checkpoint path. For hibernate:
+    discard the snapshot and cold boot from the paired consistent disk.
+    For a fork: delete it (ephemeral) or treat it as any other computer
+    (persistent). For publication: retract the record; adopters keep
+    their own committed copies. A misclassified security offer is
+    reverted by restoring that computer to its pre-offer head.
   landing:
     required: true
     environment: staging
@@ -204,65 +293,81 @@ value:
   better_means: >-
     Minimize the gap between "an agent with an API key asked for an app"
     and "the owner is running that app, backend and frontend, having
-    watched it built and having approved it, and other owners can adopt
-    it from source". Preserve the invariants: no authority widening, no
-    unreviewed code executing outside a capsule, every committed change
-    reversible, and every fleet push accounted for per computer.
+    watched it built and approved it; other owners and forks can adopt
+    it from source; and all of it is reached in seconds, not reboots".
+    Preserve the invariants: no authority widening, no unreviewed code
+    outside a capsule, every committed change reversible, every fork
+    re-keyed, and every fleet push accounted for per computer.
   goodharting_would_be: >-
     A demo that only touches frontend files (the M11 shape). A preview
-    that is a screenshot or a static file listing rather than the running
-    app. A "publish" that ships a binary or an opaque tarball. A
-    "security push" that skips divergent computers and reports success.
-    Network egress enabled by opening the VM wider instead of through a
-    recorded capsule proxy.
+    that is a screenshot. A "publish" that ships a binary. A "security
+    push" that skips divergent computers and reports success. Egress
+    enabled by opening the VM wider instead of through a recorded capsule
+    proxy. Resume latency measured on a tiny fresh computer instead of a
+    long-lived one, or achieved by restoring memory against a disk that
+    moved on. A "fork" that copies the parent's keys.
 
 homotopy:
   realism_axis: >-
-    The same pipeline (capsule -> preview -> gate -> release -> publish ->
-    adopt -> mainline/push) at increasing resolution:
-    one string change in an existing Go handler, then
+    The same pipeline at increasing resolution:
+    a Go string change in an existing handler, then
     a new frontend-only app, then
-    a new app with backend endpoint and persistent state, then
+    a new app with a backend endpoint and persistent state, then
     a build that fetches from the network and nixpkgs, then
+    hibernate and resume of a long-lived owner-sized computer, then
     a second computer adopting with customization, then
+    a fleet of forks of a months-old computer, then
+    an org template install, then
     a fleet security push across tracking, divergent-compatible,
-    divergent-exempt, and divergent-conflicting computers.
+    divergent-exempt and divergent-conflicting computers.
 
 boundaries:
   mutation_class: red
   authority_sources:
-    - owner direction in session 2026-10-01 (deliverable statement)
+    - owner direction in session 2026-10-01 (deliverable, source only, fork ratification, latency targets)
     - docs/choir-doctrine.md
-    - docs/computer-ontology.md (capsule, effect bundle, restore-set rules)
+    - docs/computer-ontology.md (capsule, effect bundle, restore-set, forked computer, snapshot naming)
     - docs/reports/choir-platform-update-system-consensus-2026-09-08.md (stratified layers)
   must_preserve:
     - Capsules own no semantic state; only an accepted event changes desired code.
     - Owner approval (or a stronger declared consensus policy) gates every commit.
     - Every committed change is restorable through the pinned-head path.
-    - No guest-side writable store or daemon outside a capsule boundary.
-    - The non-forkable base (kernel, capsule broker, updater, signers, network policy) stays platform-owned.
+    - No guest-side writable Nix store or daemon outside a capsule boundary.
+    - The non-forkable base (kernel, capsule broker, updater, signers, network policy) stays platform-owned and identical across computers on the same image.
     - Provider credentials never enter a capsule.
     - Publication is source plus pinned inputs; no cross-tenant binary execution.
+    - A machine snapshot is restored at most once, only against its paired disk and its exact image/hypervisor versions.
+    - A fork never holds its parent's identity material.
   excluded:
-    - Binary distribution between computers (owner decision 2026-10-01; may be revisited as a trusted host build cache, never as tenant-to-tenant binaries).
-    - Per-guest nixos-rebuild or per-tenant system closures for the base OS.
+    - Binary distribution between computers (owner decision 2026-10-01; a trusted host build cache is a later, separate decision).
+    - Per-guest nixos-rebuild of the base OS.
+    - cloud-hypervisor, CPU/RAM hotplug (owner 2026-10-01; keep a seam - snapshot format behind a vmmanager interface).
+    - Multi-host, cross-host snapshot migration, horizontal/vertical host scaling, zero-downtime host deploys (next frontier after 32 GiB utilization is efficient).
+    - Forking a computer mid-run (pending tool-call replay from the tape, audit pattern 2.3).
+    - Building a bespoke fleet dashboard; fleet view is Texture transclusion.
     - Marketplace, payments, or ranking of publications.
-    - Multi-host fleet / distributed store.
+  dependencies_external:
+    - >-
+      Texture transclusion and rich formatting in the RLM tool-call
+      cutover (owner 2026-10-01: not yet integrated). The S5 live work
+      view and S9 fleet view consume it. Until it lands, those stations
+      render plain ledger entries and record the gap.
   protected_surfaces:
-    - guest boot path and runtime exec (S2)
-    - VM networking / tap forwarding / capsule egress (S1, S3)
-    - updater trust boundary and release manifest (S2, S5)
-    - canonical event commit path (S5, S7, S8)
-    - checkpoint / route projection (S5, S8)
-    - platform-control signing domain (S7, S8)
+    - guest boot path and runtime exec (S2, S3)
+    - VM networking / tap forwarding / capsule egress (S1, S4, S9)
+    - Firecracker lifecycle, snapshot files and vmctl state machine (S3, S9)
+    - identity material minting (S9, S10)
+    - updater trust boundary and release manifest (S2, S6)
+    - canonical event commit path (S6, S8, S11)
+    - checkpoint / route projection (S6, S11)
+    - platform-control signing domain (S8, S11)
 
 now:
   status: working
   slice: >-
-    Authoring. This file is a drafted metamission. Stations are intent
-    only. Next is S0, a read-only reality probe that turns this file's
-    source inferences into staging observations before any station is
-    authored to the schema.
+    Authoring v2. Stations are intent only. Next is S0: read-only reality
+    probes plus a boot timeline instrument, so every later latency and
+    layering claim has a measured baseline.
   source_ref: main@81bbdd82014501a9a73004a09aefed899d92e002
   deploy_identity: unknown
   candidate:
@@ -275,163 +380,211 @@ now:
   conjecture:
     id: one-pipeline-two-layers
     claim: >-
-      The deliverable needs no new governance machinery. The M7/M11
-      self-dev control plane, the M9a offer transport, and capsule effect
-      bundles already carry it. What is missing is effect reach and
-      openness:
-      (a) the guest executes its own release, not the image baseline;
+      The deliverable needs no new governance machinery. M7/M11 self-dev,
+      M9a transport, capsule effect bundles and Restore-Zero semantic
+      snapshots carry it. What is missing is effect reach, openness and
+      speed:
+      (a) the guest executes a per-computer app-layer closure, not the
+      image baseline;
       (b) capsules get recorded egress and a private Nix store;
-      (c) a preview bridge exists;
-      (d) the release unit becomes base revision + patch stack + pinned
-      inputs, which makes source publication and per-computer rebase the
-      same object.
-      If (a) through (d) land under a two-layer model (shared
-      non-forkable base, per-computer forkable app layer), the whole
-      deliverable follows.
+      (c) a preview bridge;
+      (d) the change record is base rev + patch stack + pinned inputs;
+      (e) machine snapshots for resume, semantic snapshots for
+      distribution.
+      Layering (a) is also the largest latency lever, because most
+      updates stop rebooting VMs.
     test: >-
-      S0 confirms (a) is the actual blocker on staging: a Go-string
-      change via self-dev applies but /health does not reflect it. Each
-      later station is falsified if it needs a new authority path rather
-      than a new effect path.
+      S0 confirms (a) is the blocker on staging (a self-dev Go change
+      applies but the endpoint does not change) and produces a boot
+      timeline that attributes the 5-30 s. Each later station is
+      falsified if it needs a new authority path rather than a new effect
+      path.
     edge: missing_oracle
     delta_o: >-
-      A staging probe that asserts a runtime-observable effect (Go
-      handler output) after self-dev apply, not just events and release
-      digest.
+      A per-boot timeline receipt (host spawn, kernel, initrd, systemd
+      units, runtime boot phases, first healthy) and a staging probe
+      asserting a runtime-observable effect after self-dev apply.
     scope_if_supported: >-
-      Single-host Choir Community Cloud staging; Go runtime + Svelte
-      frontend + app backends.
+      Single-host Choir Community Cloud staging (32 GiB Node B), Go
+      runtime + Svelte frontend + app backends, Firecracker.
     status: proposed
     evidence_refs:
       - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
       - docs/reports/nixos-agent-platform-redhat-deepseek-audit-2026-10-01.md
       - docs/problems/guest-release-propagation-manual-2026-10-01.md
+      - docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md
   decision:
     what: >-
-      Source-only publication. Per-computer app layer expressed as
-      (platform base rev + patch stack + pinned inputs), built locally in
-      a capsule. Shared non-forkable base image.
+      Two-layer guest (shared non-forkable NixOS base; per-computer
+      app-layer Nix closure built against it). Source-only publication.
+      Machine snapshots for resume, semantic snapshots for fork and
+      distribution. Forks are sibling computers.
     kind: architecture
-    status: proposal
-    evidence_ref: owner direction in session 2026-10-01
-    owner_ratification_ref: pending (owner stated "source only" and the deliverable; layer split not yet ratified)
+    status: settled
+    evidence_ref: owner statements in session 2026-10-01
+    owner_ratification_ref: >-
+      owner 2026-10-01: "I like your suggestion for layering, and using
+      guest NixOS closures appropriately"; "permission granted" (forks);
+      "I ratify #1"; source only
   belief:
     believed_state: >-
       The control plane works. The effect plane stops at the frontend.
       Capsules are closed to the network. Apps are monoliths. Publication
-      does not exist. The VM network may be too open in exactly the
-      wrong direction (between tenants) while the capsule is closed in
-      the direction the deliverable needs (the internet, recorded).
+      does not exist. The VM network may be too open between tenants.
+      Hibernate is a cold boot. Every image deploy reboots every active
+      computer.
     main_uncertainty: >-
-      Whether the runtime-from-release cutover (S2) can keep the
-      restore-set and boot-path invariants without per-computer Nix
-      builds in the guest. Equivalently: can the capsule's go build of
-      the runtime (cgo, ICU) produce an artifact that stays valid across
-      base image updates, or must the per-computer app layer be a Nix
-      closure built against the base?
+      Where the 5-30 s actually goes (kernel/initrd vs the serialized
+      systemd chain vs runtime boot phases such as Dolt open and recovery
+      planning). And whether an owner-sized (8 GiB guest, about 11 GiB
+      store) machine snapshot hibernates and resumes within budget on
+      btrfs with lazy memory loading.
     next_observation: >-
-      S0 probe on staging: (1) self-dev apply of a Go handler change, then
-      check /health or an endpoint; (2) tap->tap reachability between two
-      test computers; (3) whether the runtime unit's children can read
-      RUNTIME_GATEWAY_TOKEN.
+      S0 boot timeline on staging for one fresh and one owner-sized
+      computer, plus the reality probes (self-dev Go effect, tap->tap
+      reachability, gateway token visibility, M9a full-bundle payload).
   blocker_or_risk: >-
-    S3 (open-world capsule) must not land before S1 (security floor).
-    curl | bash inside a guest whose VM network reaches other tenants and
-    whose runtime is root would turn a feature into a cross-tenant
-    exploit path.
+    S4 (open-world capsule) and S9 (forks) must not land before S1. A
+    machine snapshot restored against a moved disk corrupts the
+    filesystem, and a double resume duplicates RNG and key state. S3's
+    invariants are the safety case, not optional polish.
   next_action: >-
-    Author S0 as a throughline station file (read-only probes, green/
-    yellow) and run it. Problem-document any confirmed finding before
-    any fix (CLAUDE.md Problem Documentation First).
+    Author S0 as a throughline station file (read-only probes + boot
+    timeline instrument, green/yellow) and run it. Problem-document each
+    confirmed finding before any fix.
 
 receipts: []
 ---
 
-# Supervised App Development and Source Publication — Metamission
+# Supervised App Development, Fast Resume, Forks, and Source Publication — Metamission (v2)
 
-## Why this is one metamission
+## The one object
 
-Each station is a separable landing, but they share one object: **the
-per-computer change**. It starts as a capsule experiment. It becomes a
-committed release on one computer. It becomes a publication other
-computers adopt. It becomes a candidate for the platform base. If the
-stations each invented their own representation of "a change", the
-pieces would not compose. The design commitment is that the same record
-(base revision + patch stack + pinned inputs + build recipe + tests +
-receipts) flows through every station.
+Every station handles the same record: **base revision + patch stack +
+pinned inputs + build recipe + tests + receipts**. It starts as a capsule
+experiment. It becomes a committed app-layer release on one computer. It
+becomes a publication, a fork's merge-back, an org template's content,
+and a candidate for the platform base. Stations must not invent their own
+idea of what a change is.
 
 ## Two layers
 
-- **Non-forkable base.** Kernel, systemd, capsule broker, updater,
-  signers, kernel probe and network policy. One shared NixOS guest image,
-  platform-owned. Security fixes here are image pushes and cannot
-  conflict with anything, because no computer may diverge this layer.
-  Policy: put security boundaries here wherever possible.
-- **Forkable app layer.** The runtime, frontend, app modules and skills.
-  Per computer, defined as base revision + patch stack. This is what
-  self-dev edits, what gets published, and what security offers must
-  rebase onto.
+- **Non-forkable base.** One shared NixOS guest image: kernel, systemd,
+  capsule broker, updater, signers, kernel probe, network policy.
+  Platform-owned. Security boundaries live here wherever possible, so
+  fixes here are image pushes that cannot conflict with anything.
+- **Forkable app layer.** The runtime, frontend, app modules and skills,
+  as a per-computer Nix closure built against the base: base revision
+  plus patch stack. Self-dev edits it, publication carries it, forks
+  inherit it, and security offers rebase onto it. Updating it is an
+  updater swap plus a service restart, not a VM reboot.
+
+## Two kinds of snapshot
+
+- **Machine snapshot**: paired Firecracker memory + VM state + reflinked
+  disks. Fast, exact, and tied to one image and hypervisor version.
+  Contains live secrets. Restored at most once, by the same computer.
+  Used for hibernate/resume.
+- **Semantic snapshot**: the existing ComputerVersion checkpoint +
+  ProjectionBase. Portable, rebaseable. Used for forks, org templates,
+  and anything that leaves the host.
 
 ## Stations (intent)
 
-- **S0 reality.** Read-only staging probes. Does a self-dev Go change take
-  effect? Is tap-to-tap forwarding open? Can runtime children read the
-  gateway token? Does the M9a push handle a real frontend-sized payload?
-  Problem-document each confirmed finding first.
-- **S1 security floor.** Per-tap FORWARD isolation and default-deny egress
-  at the VM. Confine the guest runtime unit (non-root, ProtectSystem,
-  delegated cgroup). Scrub the gateway token from child environments.
-  Prerequisite for S3.
-- **S2 runtime from release.** The guest runs the runtime from its own
-  committed release, falling back to the image baseline. Each release
-  records the base image it was built against. The updater refuses a
-  release whose dynamic links do not resolve in the booted base. Decide
-  here between a cgo build in the capsule and a capsule-built Nix
-  closure.
-- **S3 capsule open world.** Per-capsule egress through a recording proxy
-  bridged into the capsule netns, so every fetch is logged with URL and
-  content hash to the trajectory. Policy: open-with-recording by default,
-  never reaching tap or host-private addresses. Add a capsule-private Nix
-  store, either a store in the capsule upper or the Nix local-overlay
-  store over the read-only base (experimental feature; verify) with
-  substitution through the proxy. Result: curl | bash and nixpkgs work,
-  and nothing leaves the capsule uncommitted.
-- **S4 live preview + supervision.** A broker-bridged unix socket from the
-  capsule's dev server to a desktop preview route. Texture work doc shows
-  commands, fetches, tests and the preview link live while the capsule
-  runs.
-- **S5 commit gate, full release.** Tests plus owner approval (existing M7
-  decision) materialize a full release: runtime + frontend + app backends.
-  Prove backend effect after reboot and restore.
-- **S6 app packages.** Dynamic app manifest (the 09-08 FrontendManifest
-  idea), so a new app is a package (frontend module + optional backend
-  service + manifest + recipe), not a monolith rebuild. Packages become
-  the unit of divergence (`DivergedComponents`) and of publication.
-  May run in parallel with S7.
-- **S7 source publication (M9b).** Publish = patch + base revision +
-  pinned inputs (every fetch from S3's log converted to a fixed-output
-  hash) + recipe + tests. Host-side registry. Adopters review the diff
-  and the inputs, then fork, customize, build in their own capsule, and
-  land through their own gate.
-- **S8 mainline + security push.** Host selects a publication, PRs it into
-  main, and ships a new base. Security offers carry severity, deadline and
-  an exploit regression test. Per computer: rebase the patch stack and
-  run the exploit test. The outcome is one of auto-apply, exempt
-  (already safe), proposal (agent rebase in capsule), or after the
-  deadline fail-closed (revert the component or cut the capability, and
-  notify the owner). Wire the M9a push into CI for tracking computers.
+- **S0 reality + boot timeline.** Read-only probes: self-dev Go effect,
+  tap-to-tap reachability, gateway token visibility, M9a full-bundle
+  payload, reflink on the VM state path, Firecracker snapshot support in
+  the pinned version (including VMGenID/RNG reseed on restore). Add a
+  per-boot timeline receipt: host spawn, kernel, initrd, each systemd
+  unit, each runtime boot phase, first healthy. Measure a fresh computer
+  and an owner-sized one.
+- **S1 security floor.** Per-tap FORWARD isolation, default-deny VM
+  egress, a confined non-root runtime unit, gateway token scrubbed from
+  child environments, and the Yaegi worker kernel floor. Prerequisite
+  for S4 and S9.
+- **S2 layering.** Split the guest into base image + app-layer closure.
+  The guest executes the runtime from its committed release (image
+  baseline as fallback). Each release records the base image it was
+  built against. Add a per-computer guest image reference with GC-rooted
+  retention (the bootc switch equivalent). The updater refuses a release
+  whose closure does not resolve in the booted base. Platform app-layer
+  pushes (M9a) apply without reboot. Wire the M9a push into CI for
+  tracking computers.
+- **S3 fast resume.** Machine-snapshot hibernate/resume with these
+  invariants: guest quiesce (sync + fsfreeze) before snapshot so the disk
+  alone is consistent; paired reflinked disks; one-shot consumption
+  recorded in vmctl before resume; exact image/kernel/Firecracker
+  pairing, otherwise discard and cold boot; a post-resume hook (clock
+  step, gateway token refresh, RNG reseed, process-local key
+  regeneration, reconnects, epoch handling); snapshot files root-only in
+  the computer's state directory; snapshot disk usage counted by
+  pressure reclaim. Then trim the cold boot critical path using the S0
+  timeline.
+- **S4 capsule open world.** A recording egress proxy bridged into each
+  capsule netns (URL + content hash of every fetch logged to the
+  trajectory; never private or tap ranges). A capsule-private Nix store:
+  either in the capsule upper, or the Nix local-overlay store over the
+  read-only base (experimental; verify). Substitution goes through the
+  proxy.
+- **S5 live preview + supervision.** A broker-bridged unix socket from
+  the capsule's dev server to a desktop preview route. Capsule commands,
+  fetches and tests stream into the Texture work doc. Consumes the
+  Texture transclusion work (external dependency).
+- **S6 commit gate, full release.** Tests + owner approval (existing M7
+  decision) materialize a full app-layer release. Prove backend effect
+  after reboot, after resume, and after restore.
+- **S7 app packages.** Dynamic app manifest (frontend module + optional
+  backend service + manifest + recipe). Packages are the unit of
+  divergence and publication.
+- **S8 source publication (M9b).** Publish = patch + base revision +
+  pinned inputs (S4's fetch log turned into fixed-output hashes) +
+  recipe + tests. Host registry. Review, fork, customize, build in own
+  capsule, adopt through own gate.
+- **S9 forks and fleets.** A fork is a new sibling computer built from a
+  semantic snapshot, or for speed from a reflinked disk with a cold boot
+  under new identity. It is never a resumed machine snapshot of the
+  parent unless every in-memory identity is re-keyed. It mints a new
+  ComputerID, signer keys, privacy key and gateway token, and declares
+  which data classes it carries. Forks are ephemeral or persistent, with
+  fleet admission and quotas under the 32 GiB budget. Merge-back happens
+  via S8. The fleet view is Texture transclusion of fork sources.
+- **S10 org templates.** Export a scrubbed semantic template (base rev +
+  patch stack + curated seed data + policy, encrypted at rest). Install
+  it as a fresh computer that builds from source.
+- **S11 mainline + security push.** Host selection into main. Security
+  offers carry severity, a deadline and an exploit test. Each divergent
+  computer is evaluated on an ephemeral fork: auto-apply, exempt,
+  proposal (agent rebase in a capsule), or after the deadline fail-closed.
+
+## Latency plan (S0, S2, S3)
+
+1. **Measure before cutting.** No optimization lands without the S0
+   timeline attributing the time.
+2. **Stop rebooting for updates.** Layering (S2) turns most deploys into
+   updater swap + runtime restart. That also keeps machine snapshots
+   valid across app-layer updates, because the base image does not
+   change.
+3. **Resume instead of boot.** Machine snapshots with lazy memory loading
+   target sub-second to low-second wakes, under the S3 invariants.
+   Shrink snapshots by releasing guest page cache only if S0 shows the
+   write cost matters; warm caches are part of what makes a resumed
+   computer fast.
+4. **Trim the cold path** with evidence. Likely candidates to check:
+   network-online waits, the serialized signer, probe, updater and
+   runtime chain, runtime boot phases that are not needed to serve, and
+   initrd modules. Cold boot remains the fallback after image changes
+   and failures.
 
 ## Open decisions (record, do not block)
 
-1. Capsule build of the runtime: plain toolchain (fast, fragile across
-   base updates) or a Nix closure built in the capsule store (reproducible,
-   slower first build). Leaning Nix for promotion, plain toolchain for
-   iteration.
-2. Default capsule egress policy: open-with-recording, or an allowlist.
-   Leaning open-with-recording plus never-private-ranges, because the
-   deliverable explicitly includes curl | bash.
-3. Whether a trusted host build cache keyed by derivation hash is allowed
-   later. It does not violate "source only" at the trust level (the
-   builder is trusted, not the publishing tenant), but it is deferred.
-4. Where S6 sits relative to S5. Additive new apps may be easier as
-   packages first; modifying existing in-runtime apps needs S2 regardless.
+1. Fork construction speed: semantic snapshot (slow for a 16 GB
+   ProjectionBase) vs reflinked disk + cold boot + re-key (fast). Leaning
+   reflink + re-key, with a scrub step for data classes not carried.
+2. Default capsule egress: open-with-recording + never-private-ranges
+   (leaning) vs allowlist.
+3. Trusted host build cache keyed by derivation hash (deferred).
+4. Whether hibernate snapshots are retained after resume for a fast
+   re-hibernate via diff snapshots, or always discarded (start with
+   discard).
+5. Snapshot encryption at rest on the host (needed before any export;
+   for on-host hibernate, root-only permissions match data.img today).
