@@ -163,7 +163,7 @@ now:
     kind: architecture
     status: settled
     evidence_ref: .agentic-consensus/agentic-consensus-20260930-213725/manifest.tsv
-    owner_ratification_ref: pending
+    owner_ratification_ref: 'owner approval in conversation 2026-09-30 ("approved")'
   belief:
     believed_state: 'the defect is a resume-authority gap: the obligation is
       bound (DeliveredToRunID set) but the run-id source is snapshot-only.
@@ -179,9 +179,10 @@ now:
     window is per-uptime-window. Sibling residual: an UNBOUND pending control
     (DeliveredToRunID=="") on the same arm still strands — named, out of
     scope (no bound run to recover; fail-closed is correct there).'
-  next_action: 'author the handler-arm fix: add a resolveDeliveredPacket helper
-    (content-digest match over actionable pending controls) feeding
-    rs.RunID=DeliveredToRunID, then land red-class and prove on staging.'
+  next_action: 'handler-arm fix landed locally (resolveBoundControlRunID +
+    regression test, package green). Next: commit red-class, push, monitor CI +
+    staging deploy, then run the deployed acceptance proof on the 362febb2-class
+    transition.'
 
 receipts: []
 ---
