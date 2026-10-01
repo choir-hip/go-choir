@@ -611,9 +611,11 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		// rescan; the gate heartbeat keeps the host stall detector alive
 		// while scans run.
 		replayed := appender.ReplaySnapshot().Sequence > 0
+		bootMark("reconstruct_done") // raw tape apply complete
 		if _, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx, replayed, gate.tick); migErr != nil {
 			log.Fatalf("autoputer: vocabulary migration refused: %v", migErr)
 		}
+		bootMark("vocab_fenced") // forward-migrate + serving fence complete
 	}
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
