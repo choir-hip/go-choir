@@ -10,10 +10,10 @@ definition_version: 4
 readiness: drafted
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: agentic-consensus panel (convergent 5/5 + divergent 7/7), 2026-10-01
+  frozen_ref: main@0bddb11aa2d27694cb760f8aebda52c95ba4e44d
+  verdict: promote-with-revisions — all required revisions applied in this revision
+  evidence_ref: .agentic-consensus/agentic-consensus-20261001-133535 (convergent), agentic-consensus-20261001-133637 (divergent)
 
 metamission:
   stations:
@@ -81,7 +81,7 @@ metamission:
 start:
   captured_at: '2026-10-01T00:00:00Z'
   source:
-    canonical_ref: main@81bbdd82014501a9a73004a09aefed899d92e002
+    canonical_ref: main@0bddb11aa2d27694cb760f8aebda52c95ba4e44d
     deploy_identity: unknown (not observed from this session; no staging access)
   worktrees:
     - path: /home/user/go-choir (cloud session clone)
@@ -218,14 +218,16 @@ finish:
       proves: Layering removes VM reboots from routine updates.
       evidence_class: deployed proof
     - action: >-
-        Hibernate/resume. A computer with an open Texture doc and a
-        completed run is hibernated (quiesce, snapshot, process exits,
-        RAM freed on host) and woken by an owner request.
-        Recorded timeline: wake request to first healthy response within
-        the S3 target (proposed: p50 under 1 s, p95 under 3 s). The
-        resumed computer serves the same state and refreshes its clock,
-        gateway token and RNG. A deliberately invalidated snapshot (image
-        mismatch) falls back to a cold boot with the disk consistent. A
+        Hibernate/resume. An owner-sized computer (>=10 GB persistent
+        state, 8 GiB RAM) with an open Texture doc and a completed run
+        is hibernated (quiesce, snapshot, process exits, RAM freed on
+        host) and woken by an owner request. Recorded timeline: wake
+        request to first healthy response within the S3 target
+        (proposed: p50 under 1 s, p95 under 3 s). The resumed computer
+        serves the same state and refreshes its clock, gateway token
+        and RNG. A deliberately invalidated snapshot (image mismatch
+        or moved paired-disk generation) is refused before Firecracker
+        load and falls back to a cold boot with the disk consistent. A
         second resume of a consumed snapshot is refused.
       proves: Fast resume without unsafe restores.
       evidence_class: deployed proof
@@ -268,12 +270,18 @@ finish:
     - action: >-
         Negative proofs. A capsule or a fork cannot reach another
         tenant's guest or the host's private services. A fork cannot
-        sign as, or read undeclared data classes of, its parent.
-        Capsules cannot read the gateway token. Uncommitted capsule
-        changes do not survive disposal. Snapshot files are unreadable
-        outside the owning computer's state directory. Forged or
-        misbound publications, offers, or snapshot restores are refused
-        before any mutation.
+        sign as, or read undeclared data classes of, its parent — and a
+        seeded excluded-class canary plus a deleted-data remnant are
+        unrecoverable from the fork's disk, Dolt history, logs and
+        artifact graph under offline scan. Capsules cannot read the
+        gateway token. Uncommitted capsule changes do not survive
+        disposal. Snapshot files are unreadable outside the owning
+        computer's state directory. A snapshot whose paired disk
+        generation moved is refused before Firecracker load. A preview
+        digest mismatch (owner approved a stale preview) refuses the
+        commit. No store path from publisher A's closure is substituted
+        on adopter B. Forged or misbound publications, offers, or
+        snapshot restores are refused before any mutation.
       proves: No authority widening across capsule, fork, snapshot, or publication.
       evidence_class: deployed proof
   rollback: >-
@@ -368,7 +376,7 @@ now:
     Authoring v2. Stations are intent only. Next is S0: read-only reality
     probes plus a boot timeline instrument, so every later latency and
     layering claim has a measured baseline.
-  source_ref: main@81bbdd82014501a9a73004a09aefed899d92e002
+  source_ref: main@0bddb11aa2d27694cb760f8aebda52c95ba4e44d
   deploy_identity: unknown
   candidate:
     id: none
@@ -491,41 +499,77 @@ idea of what a change is.
 
 ## Stations (intent)
 
-- **S0 reality + boot timeline.** Read-only probes: self-dev Go effect,
-  tap-to-tap reachability, gateway token visibility, M9a full-bundle
-  payload, reflink on the VM state path, Firecracker snapshot support in
-  the pinned version (including VMGenID/RNG reseed on restore). Add a
-  per-boot timeline receipt: host spawn, kernel, initrd, each systemd
-  unit, each runtime boot phase, first healthy. Measure a fresh computer
-  and an owner-sized one.
+- **S0 reality + boot timeline.** Two phases, classified separately.
+  **S0a (read-only):** per-boot timeline receipt (host spawn, kernel,
+  initrd, each systemd unit, each runtime boot phase, first healthy) for
+  one fresh and one owner-sized computer; guest store/mount layout,
+  runtime closure deps, image/runtime identity; tap→tap reachability,
+  gateway token visibility, reflink on the VM state path, Firecracker
+  snapshot support in the pinned version — **measured snapshot create
+  and resume wall time on an owner-sized computer and UFFD lazy-loading
+  on the pinned Firecracker/kernel, not feature presence alone**.
+  **S0b (scoped disposable-computer experiments, orange):** self-dev Go
+  effect, M9a full-bundle payload, capsule netns/userns mount of a
+  `/nix/store`-prefixed overlay, whether the base EROFS carries a valid
+  Nix DB, a sandboxed `nix build` of one nixpkgs package inside a
+  capsule, and a capsule-built runtime with a dep absent from the base
+  (dispose → activate → reboot → restore). Every S0b probe runs on a
+  disposable computer with recorded pre/post state.
 - **S1 security floor.** Per-tap FORWARD isolation, default-deny VM
   egress, a confined non-root runtime unit, gateway token scrubbed from
   child environments, and the Yaegi worker kernel floor. Prerequisite
   for S4 and S9.
 - **S2 layering.** Split the guest into base image + app-layer closure.
   The guest executes the runtime from its committed release (image
-  baseline as fallback). Each release records the base image it was
-  built against. Add a per-computer guest image reference with GC-rooted
-  retention (the bootc switch equivalent). The updater refuses a release
-  whose closure does not resolve in the booted base. Platform app-layer
-  pushes (M9a) apply without reboot. Wire the M9a push into CI for
-  tracking computers.
+  baseline as fallback). **Materialization mechanism (panel-required):
+  the shared EROFS store cannot hold per-computer paths — the release
+  carries its Nix closure unpacked at a GC-rooted path on the guest data
+  disk, and the runtime execs from it with the same store-path layout;
+  no writable global store or nix daemon is introduced.** Each release
+  records the base image it was built against. Add a per-computer guest
+  image reference with GC-rooted retention (the bootc switch
+  equivalent). The updater refuses a release whose closure does not
+  resolve in the booted base, and activation binds executable +
+  frontend + state compatibility + effective event head as one
+  transaction (stale-head or post-test mutation refuses). Platform
+  app-layer pushes (M9a) apply without reboot. Wire the M9a push into CI
+  for tracking computers.
+  **Builder substrate (panel-found gap):** four downstream stations
+  (S6 commit, S8 adopt, S9 fork, S10 install) assume something can
+  evaluate a Nix closure; nothing names it. S0b must resolve whether
+  the builder is a host-side service, a privileged builder-capsule
+  class, or a scoped guest service — and it lands as a dependency of
+  S2 itself.
 - **S3 fast resume.** Machine-snapshot hibernate/resume with these
-  invariants: guest quiesce (sync + fsfreeze) before snapshot so the disk
-  alone is consistent; paired reflinked disks; one-shot consumption
-  recorded in vmctl before resume; exact image/kernel/Firecracker
-  pairing, otherwise discard and cold boot; a post-resume hook (clock
-  step, gateway token refresh, RNG reseed, process-local key
-  regeneration, reconnects, epoch handling); snapshot files root-only in
-  the computer's state directory; snapshot disk usage counted by
-  pressure reclaim. Then trim the cold boot critical path using the S0
+  invariants: guest quiesce (sync + fsfreeze after guest health shows no
+  active engineMu work — quiesce polls guest state, not just fsfreeze)
+  before snapshot so the disk alone is consistent; paired reflinked
+  disks whose content generation (btrfs generation or content digest)
+  is recorded at snapshot time; one-shot consumption recorded in vmctl
+  before resume; exact image/kernel/Firecracker pairing **plus matching
+  disk generation, effective release and event head** — a moved disk or
+  advanced head invalidates unless explicitly reconciled; otherwise
+  discard and cold boot; a post-resume hook (clock step, gateway token
+  refresh, RNG reseed, process-local key regeneration, reconnects,
+  epoch handling); snapshot files root-only in the computer's state
+  directory; snapshot disk usage counted by pressure reclaim. Hibernate
+  write time and btrfs space of the memory file join the timeline next
+  to resume time. Then trim the cold boot critical path using the S0
   timeline.
 - **S4 capsule open world.** A recording egress proxy bridged into each
-  capsule netns (URL + content hash of every fetch logged to the
-  trajectory; never private or tap ranges). A capsule-private Nix store:
-  either in the capsule upper, or the Nix local-overlay store over the
-  read-only base (experimental; verify). Substitution goes through the
-  proxy.
+  capsule netns (URL + content hash + redirect chain + connected address
+  of every fetch logged to the trajectory; deny private, loopback,
+  link-local, host and tap ranges at connect time and on every redirect;
+  supported protocols declared, opaque bypasses denied). Fetched
+  payloads captured into content-addressed storage so S8 can rebuild
+  with origins unavailable. A capsule-private Nix store: the broker
+  owns the netns and drops capabilities before capsule exec; **done
+  requires exactly one proven mechanism — a capsule-private writable
+  upper or the Nix local-overlay store — selected by the S0b probe.**
+  Named falsifiers: the EROFS lower may ship no Nix DB; the capsule
+  userns may not mount overlay over `/nix/store`; Nix sandbox nesting
+  may fail; closure paths may not resolve after capsule disposal.
+  Substitution goes through the proxy.
 - **S5 live preview + supervision.** A broker-bridged unix socket from
   the capsule's dev server to a desktop preview route. Capsule commands,
   fetches and tests stream into the Texture work doc. Consumes the
@@ -540,30 +584,47 @@ idea of what a change is.
   pinned inputs (S4's fetch log turned into fixed-output hashes) +
   recipe + tests. Host registry. Review, fork, customize, build in own
   capsule, adopt through own gate.
-- **S9 forks and fleets.** A fork is a new sibling computer built from a
-  semantic snapshot, or for speed from a reflinked disk with a cold boot
-  under new identity. It is never a resumed machine snapshot of the
-  parent unless every in-memory identity is re-keyed. It mints a new
-  ComputerID, signer keys, privacy key and gateway token, and declares
-  which data classes it carries. Forks are ephemeral or persistent, with
-  fleet admission and quotas under the 32 GiB budget. Merge-back happens
-  via S8. The fleet view is Texture transclusion of fork sources.
+- **S9 forks and fleets.** A fork is a new sibling computer. Two
+  construction paths, classified by what it may carry: **(a) reflinked
+  disk + cold boot + host-side re-encryption + new genesis with parent
+  lineage** — permitted only for a fork authorized to inherit the
+  parent's *entire* disk state (same owner, all data classes);
+  post-copy scrub is not evidence of exclusion — Dolt history and
+  unallocated blocks retain deleted rows. **(b) selective-class or
+  cross-owner forks are built from a semantic snapshot via an
+  allowlisted export** into a fresh disk — the export contract names
+  each carried data class. Both mint a new ComputerID, signer keys,
+  privacy key and gateway token before any child runtime or network
+  access. Forks are ephemeral or persistent, with fleet admission and
+  quotas under the 32 GiB budget. Merge-back happens via S8. The fleet
+  view is Texture transclusion of fork sources.
 - **S10 org templates.** Export a scrubbed semantic template (base rev +
   patch stack + curated seed data + policy, encrypted at rest). Install
   it as a fresh computer that builds from source.
 - **S11 mainline + security push.** Host selection into main. Security
   offers carry severity, a deadline and an exploit test. Each divergent
-  computer is evaluated on an ephemeral fork: auto-apply, exempt,
-  proposal (agent rebase in a capsule), or after the deadline fail-closed.
+  computer is evaluated on an ephemeral fork. **The exploit test is a
+  regression witness, not an exemption oracle: it must fail on the
+  pre-fix build and pass on the post-fix build before the offer is
+  valid.** Classification: auto-apply (tracking), rebase-and-apply
+  (clean divergent), proposal (divergent), fail-closed at deadline.
+  **Exempt requires structural proof of component absence — never a
+  passing exploit test alone.** Inconclusive or timeout remains
+  proposal. Deadline enforcement is host-side: the host records the
+  per-computer disposition and can deny the vulnerable capability even
+  when the computer is asleep or cannot rebase; capability removal is
+  independently verified on the actual computer.
 
 ## Latency plan (S0, S2, S3)
 
 1. **Measure before cutting.** No optimization lands without the S0
    timeline attributing the time.
 2. **Stop rebooting for updates.** Layering (S2) turns most deploys into
-   updater swap + runtime restart. That also keeps machine snapshots
-   valid across app-layer updates, because the base image does not
-   change.
+   updater swap + runtime restart. Machine snapshots survive an
+   app-layer update only when the effective release and paired disk
+   generation are unchanged — an app-layer swap that mutates runtime
+   state invalidates the snapshot unless explicitly reconciled; the
+   base image staying put is necessary but not sufficient.
 3. **Resume instead of boot.** Machine snapshots with lazy memory loading
    target sub-second to low-second wakes, under the S3 invariants.
    Shrink snapshots by releasing guest page cache only if S0 shows the
@@ -577,9 +638,11 @@ idea of what a change is.
 
 ## Open decisions (record, do not block)
 
-1. Fork construction speed: semantic snapshot (slow for a 16 GB
-   ProjectionBase) vs reflinked disk + cold boot + re-key (fast). Leaning
-   reflink + re-key, with a scrub step for data classes not carried.
+1. Fork construction: resolved by panel 2026-10-01 — two paths, not a
+   choice. Reflink + cold boot + host-side re-encryption + new genesis
+   is whole-disk same-owner only; selective-class or cross-owner forks
+   are semantic-snapshot reconstructions via an allowlisted export.
+   See S9.
 2. Default capsule egress: open-with-recording + never-private-ranges
    (leaning) vs allowlist.
 3. Trusted host build cache keyed by derivation hash (deferred).
