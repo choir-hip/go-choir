@@ -1,11 +1,15 @@
 # coagent_result consumed without reactivating the parked run — deliverable-strand class
 
-**Status:** HYPOTHESIZED 2026-09-30 on staging (build `37882e1d`, guest
-`computer-03335285269bdba4f94377e56879f9e6`, epoch 979). Root-cause
-confirmation needs guest-internal actor-log / resume-snapshot reads, which are
-not host-reachable. Documented per
-`docs/memo-problem-documentation-first.md` — the redrive chain is deployed and
-proven live; this is the residual strand it was meant to close.
+**Status:** REPAIR DEPLOYED 2026-10-01 — fix `14f5682b` on staging
+`4a718af4`. `handleCoagentResult` `rs.RunID==""` arm now resolves the bound
+packet by occurrence-content digest and feeds `DeliveredToRunID` into the
+existing parked-run branch, so a lost `resume.RunID` no longer strands the
+bound run. Regression test `TestHandlerCoagentResultRecoversBoundRunFrom
+DeliveredToRunID` green; CI run `36802996830` green incl. Deploy to Staging;
+`x-choir-build-commit: 4a718af4` confirmed. Deployed acceptance (passivated→
+running transition on run `362febb2`) is pending a stable guest uptime window —
+the guest is OOM-cycling and wakes re-arm via `MigrateActorWakeOutbox` each
+boot, so the fixed path fires on the next drain that outlasts the OOM.
 
 ## Symptom
 

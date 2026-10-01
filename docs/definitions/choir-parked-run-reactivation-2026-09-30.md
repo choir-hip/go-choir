@@ -179,12 +179,30 @@ now:
     window is per-uptime-window. Sibling residual: an UNBOUND pending control
     (DeliveredToRunID=="") on the same arm still strands — named, out of
     scope (no bound run to recover; fail-closed is correct there).'
-  next_action: 'handler-arm fix landed locally (resolveBoundControlRunID +
-    regression test, package green). Next: commit red-class, push, monitor CI +
-    staging deploy, then run the deployed acceptance proof on the 362febb2-class
-    transition.'
-
-receipts: []
+  next_action: 'handler-arm fix landed (14f5682b) + pushed (4a718af4), CI run
+    36802996830 all-green incl Deploy to Staging. staging
+    x-choir-build-commit=4a718af4 confirmed; guest rebooted 02:04 UTC minting 3
+    pending wakes (cfa90b87 re-armed). Awaiting the drain-driven
+    passivated->running transition on run 362febb2 for deployed_acceptance.'
+receipts:
+- id: deployed_fix_landed
+  boundary: land
+  commit_or_artifact: 'fix 14f5682b (handler.go resolveBoundControlRunID +
+    adapter_test.go regression), pushed with docs commit 4a718af4; CI run
+    36802996830 all-green incl Deploy to Staging'
+  proof_refs:
+  - 'staging https://choir.news x-choir-build-commit: 4a718af4 (proxy header,
+    curl -sSI)'
+  - 'control 4158e48b verified pending + bound delivered_to_loop_id=362febb2 on
+    staging lifecycle snapshot'
+- id: deployed_acceptance_pending
+  boundary: accept
+  commit_or_artifact: 'guest OOM-cycling (platform-dolt, excluded substrate);
+    wakes re-arm each boot via MigrateActorWakeOutbox — the fixed handler fires
+    on the next drain that outlasts an OOM window. Awaiting passivated->running
+    transition on run 362febb2.'
+  proof_refs:
+  - 'pending — /tmp/watch-362febb2.sh polling journald'
 ---
 
 ## Context
