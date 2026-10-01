@@ -110,14 +110,35 @@
     if (!hinted) hinted = true;
   }
 
-  function advance(by: number) {
-    target = clamp(Math.round(target) + by, 0, LAST);
+  /**
+   * Route a "go to pane n" request to whichever driver is live, so the
+   * buttons, the rail and the keyboard all work identically on both.
+   */
+  function scrollToPane(index: number) {
+    const n = clamp(index, 0, LAST);
+    if (nativeScroll) {
+      const h = scroller?.clientHeight || window.innerHeight;
+      scroller?.scrollTo({ top: n * h, behavior: reduced ? 'auto' : 'smooth' });
+    } else {
+      target = n;
+    }
     beginGesture();
   }
 
+  function currentPane(): number {
+    if (nativeScroll) {
+      const h = scroller?.clientHeight || window.innerHeight;
+      return h > 0 ? Math.round((scroller?.scrollTop || 0) / h) : 0;
+    }
+    return Math.round(target);
+  }
+
+  function advance(by: number) {
+    scrollToPane(currentPane() + by);
+  }
+
   function goTo(index: number) {
-    target = clamp(index, 0, LAST);
-    beginGesture();
+    scrollToPane(index);
   }
 
   function onWheel(event: WheelEvent) {
@@ -190,11 +211,56 @@
   function onKeydown(event: KeyboardEvent) {
     // A dialog owns the keyboard while it is open.
     if (document.querySelector('[role="dialog"], [data-auth-overlay]')) return;
+    // Once the deck has arrived on a touch device it has stood down, and the
+    // machine underneath owns arrow keys for its own navigation.
+    if (nativeScroll && arrived) return;
     const k = event.key;
     if (k === 'ArrowDown' || k === 'PageDown' || k === ' ') { event.preventDefault(); advance(1); }
     else if (k === 'ArrowUp' || k === 'PageUp') { event.preventDefault(); advance(-1); }
     else if (k === 'Home') { event.preventDefault(); goTo(0); }
     else if (k === 'End') { event.preventDefault(); goTo(LAST); }
+  }
+
+  // ── two drivers, one choreography ───────────────────────────────────
+  /**
+   * Fine pointers scroll the deck by transform; coarse pointers scroll it
+   * natively. Both produce the same `pos`, and everything downstream is
+   * identical, so there is exactly one piece of choreography.
+   *
+   * Why two: the deck is deliberately `pointer-events: none` so the desktop
+   * underneath stays live, and a native scroll container covering the
+   * viewport cannot both scroll and let the desktop keep its clicks. But
+   * that trick is only available to a pointer the deck is allowed to see.
+   *
+   * Touch is not that pointer. A phone has no wheel, so on a phone the deck
+   * had exactly one input — the buttons — because the virtual scroll's
+   * touch path was being refused. `ownsDrag` declines a drag that starts on
+   * a window, which is correct for a laptop and useless on a phone, where
+   * the preview window covers the entire viewport and so claims essentially
+   * every touch on screen.
+   *
+   * On a coarse pointer the deck stops being transparent and starts being a
+   * real scroller: `overflow-y: scroll`, proximity snap, momentum and snap
+   * handled by the platform. That is what a phone expects,
+   * and it is better than anything a virtual scroll would have given us —
+   * rubber-banding, fling, and OS-level accessibility come free.
+   *
+   * The cost is honest: while the deck is up on a phone it owns the screen,
+   * because two full-screen surfaces cannot both have the touches. So on
+   * arrival it stands down — the root goes `pointer-events: none` and the
+   * machine underneath becomes live and touchable, which is the whole point
+   * of a third pane that is the desktop.
+   */
+  let scroller: HTMLElement | null = null;
+  let nativeScroll = false;
+
+  /** True once the deck has arrived, so the machine can take the touches. */
+  $: arrived = reveal > 0.985;
+
+  function backToStart() {
+    if (!scroller) return;
+    scroller.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+    beginGesture();
   }
 
   // ── the clock ───────────────────────────────────────────────────────
@@ -207,20 +273,28 @@
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
 
-    // Settle onto a pane once the gesture is genuinely over. While a gesture
-    // is alive the target is untouchable — that is the whole point of the
-    // flag, and it is why a notched wheel can now cross a pane.
-    if (!gestureActive && now - lastInteractionAt > IDLE_MS) {
-      const settled = Math.round(target);
-      if (Math.abs(target - settled) < 0.0015) target = settled;
-      else target = damp(target, settled, 9, dt);
+    if (nativeScroll) {
+      // The platform owns the rest position here, so the deck reads it
+      // rather than deciding it. Momentum and snap therefore drive the
+      // choreography directly, which is what makes it feel attached to the
+      // finger instead of animated alongside it.
+      const h = scroller?.clientHeight || window.innerHeight;
+      pos = h > 0 ? (scroller?.scrollTop || 0) / h : 0;
+    } else {
+      // Settle onto a pane once the gesture is genuinely over. While a
+      // gesture is alive the target is untouchable — that is the whole point
+      // of the flag, and it is why a notched wheel can now cross a pane.
+      if (!gestureActive && now - lastInteractionAt > IDLE_MS) {
+        const settled = Math.round(target);
+        if (Math.abs(target - settled) < 0.0015) target = settled;
+        else target = damp(target, settled, 9, dt);
+      }
+      if (gestureActive && now - lastInteractionAt > IDLE_MS) gestureActive = false;
+
+      pos = reduced ? target : damp(pos, target, dragging ? 26 : 7.5, dt);
+      if (Math.abs(pos - target) < 0.0004) pos = target;
+      trackY = pos;
     }
-    if (gestureActive && now - lastInteractionAt > IDLE_MS) gestureActive = false;
-
-    pos = reduced ? target : damp(pos, target, dragging ? 26 : 7.5, dt);
-    if (Math.abs(pos - target) < 0.0004) pos = target;
-
-    trackY = pos;
     // Pane 2 arriving, 0 .. 1 — drives its entrance AND pane 1's exit.
     arrive = clamp01(pos);
     // How far the desktop hand-off has progressed, 0 .. 1.
@@ -242,13 +316,21 @@
 
   onMount(() => {
     last = 0;
+    nativeScroll = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(pointer: coarse)').matches;
     raf = requestAnimationFrame(frame);
-    window.addEventListener('wheel', onWheel, { passive: false });
+    // Only the transform driver owns synthetic input. On touch the platform
+    // is already doing the scrolling, and claiming the wheel or the drag as
+    // well would be two implementations racing one gesture.
+    if (!nativeScroll) {
+      window.addEventListener('wheel', onWheel, { passive: false });
+      window.addEventListener('pointerdown', onPointerDown, { passive: true });
+      window.addEventListener('pointermove', onPointerMove, { passive: true });
+      window.addEventListener('pointerup', onPointerUp, { passive: true });
+      window.addEventListener('pointercancel', onPointerUp, { passive: true });
+    }
     window.addEventListener('keydown', onKeydown);
-    window.addEventListener('pointerdown', onPointerDown, { passive: true });
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
-    window.addEventListener('pointerup', onPointerUp, { passive: true });
-    window.addEventListener('pointercancel', onPointerUp, { passive: true });
     return () => {};
   });
 
@@ -267,12 +349,15 @@
 <div
   bind:this={root}
   class="deck"
+  class:deck-touch={nativeScroll}
+  class:deck-arrived={arrived}
   style:--arrive={arrive.toFixed(4)}
   style:--reveal={reveal.toFixed(4)}
   data-landing-intro
   data-landing-intro-pane={pane}
   data-landing-intro-reveal={reveal.toFixed(3)}
   data-landing-intro-desktop={reveal > 0.55 ? '1' : '0'}
+  data-landing-intro-driver={nativeScroll ? 'native' : 'transform'}
 >
   <!-- the environment. constant across the deck, dissolves for the handoff -->
   <div class="scrim" aria-hidden="true"></div>
@@ -281,7 +366,8 @@
   <div class="vignette" aria-hidden="true"></div>
 
   <!-- the track -->
-  <div class="track" style:transform="translate3d(0, calc({-trackY} * 100dvh), 0)">
+  <div class="scroller" bind:this={scroller} data-landing-intro-scroller>
+    <div class="track" style:transform={nativeScroll ? undefined : `translate3d(0, ${-trackY * 100}dvh, 0)`}>
     <!-- ══ PANE 1 · the title card ══
          Everything here is a function of --arrive. There is no "playing"
          state: at any scroll offset the mark is exactly as far into its
@@ -330,6 +416,7 @@
          Nothing renders here. The machine is already running underneath;
          this pane exists so the deck has somewhere to arrive. -->
     <section class="pane pane-desktop" aria-label="The Choir desktop"></section>
+    </div>
   </div>
 
   <!-- ══ CHROME ══ -->
@@ -357,6 +444,26 @@
       <span class="chev">&darr;</span>
     {/if}
   </button>
+
+  <!--
+    Once the deck has arrived on a touch device it has stood down, so the
+    machine underneath gets the touches — otherwise a phone user would arrive
+    at the desktop and be unable to touch it, which is a worse bug than the
+    one this control exists to balance. The trade is that the scroll position
+    is no longer theirs, so this puts it back. Touch-only: on a fine pointer
+    the deck never stood down and the wheel still works.
+  -->
+  {#if nativeScroll && arrived}
+    <button
+      class="again"
+      type="button"
+      data-landing-intro-again
+      on:click={backToStart}
+    >
+      <span class="chev">&uarr;</span>
+      <span>read the intro again</span>
+    </button>
+  {/if}
 </div>
 
 <style>
@@ -382,6 +489,33 @@
     pointer-events: none;
   }
   .deck button { pointer-events: auto; }
+
+  /*
+    The stand-down. On a touch device the deck has to own the screen while it
+    is up — two full-screen surfaces cannot both have the touches — so on
+    arrival it releases, and the machine underneath becomes live and
+    touchable. That is not a concession: a third pane that *is* the desktop is
+    the whole design, and a phone that arrives at an untouchable desktop has
+    failed at the one job the third pane has.
+
+    Fine pointers never needed this, and must not get it: on a laptop the
+    deck is transparent throughout and the wheel keeps working.
+  */
+  .deck-touch.deck-arrived .scroller { pointer-events: none; }
+
+  .again {
+    position: absolute; left: 50%;
+    bottom: calc(clamp(0.9rem, 2.4vh, 1.5rem) + 3.2rem);
+    transform: translateX(-50%);
+    z-index: 9;
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem 0.9rem; border-radius: 999px;
+    border: 1px solid var(--choir-border);
+    background: var(--choir-surface-control);
+    color: var(--choir-text-muted);
+    font-size: 0.68rem; font-weight: 740; letter-spacing: 0.05em;
+  }
+  .again:focus-visible { outline: 2px solid var(--choir-accent); outline-offset: 3px; }
 
   /* ── the environment ──────────────────────────────────────────────
      Deliberately cheap. This layer used a full-viewport backdrop blur, a
@@ -446,9 +580,15 @@
      once and was invisible, because each pane's own arrival maths happened
      to hide the two that were not supposed to be showing. Layout bugs hide
      behind animation that happens to compensate for them.
+
+     .scroller is inert for a fine pointer — it exists only so a touch
+     device can scroll this natively. See the driver note in the script.
   */
-  .track {
+  .scroller {
     position: absolute; inset: 0; z-index: 4;
+  }
+  .track {
+    position: relative;
     will-change: transform;
   }
   .pane {
@@ -456,6 +596,40 @@
     height: 100dvh;
     display: grid; place-items: center;
     padding: clamp(3.5rem, 9vh, 6rem) clamp(1.5rem, 7vw, 6rem);
+  }
+
+  /*
+    Touch gets the platform's scroll, not ours.
+
+    `proximity` rather than `mandatory`: the hand-off is built to be
+    scrubbed, and a mandatory snap makes it impossible to stop halfway and
+    look. Proximity gives real free scrolling and still tidies up when you
+    let go near a pane. `mandatory` would have made the deck feel like it
+    was refusing to scroll, which is the complaint this replaces.
+
+    The root also stops clipping on touch. `overflow: clip` is right for the
+    transform driver, but nesting a native scroller inside a clipped box is
+    the classic way to lose momentum scrolling on iOS, and there is nothing
+    here that needs clipping once the track is not transformed — the scroller
+    clips its own content.
+  */
+  @media (pointer: coarse) {
+    .deck { overflow: visible; }
+    .scroller {
+      overflow-y: scroll;
+      overflow-x: clip;
+      overscroll-behavior-y: contain;
+      scroll-snap-type: y proximity;
+      -webkit-overflow-scrolling: touch;
+      pointer-events: auto;
+      /* a visible scrollbar on a phone would just be furniture */
+      scrollbar-width: none;
+    }
+    .scroller::-webkit-scrollbar { display: none; }
+    .pane {
+      scroll-snap-align: start;
+    }
+    .track { transform: none !important; will-change: auto; }
   }
 
   .stack {
