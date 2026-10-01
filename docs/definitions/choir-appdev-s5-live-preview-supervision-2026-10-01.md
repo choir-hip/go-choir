@@ -2,7 +2,7 @@
 definition_version: 4
 definition_id: choir-appdev-s5-live-preview-supervision-2026-10-01
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-supervised-app-development-metamission-2026-10-01
 
 review:
@@ -55,18 +55,18 @@ finish:
   deliver: >-
     An owner watching an active capsule development session sees its commands,
     fetches and tests in Texture and sees the capsule app update live in a
-    safe desktop preview; approval is possible only for the candidate the
-    owner actually saw rendered.
+    safe desktop preview; the trusted serving path attests which candidate
+    digest the owner has rendered for S6's later approval decision.
   artifact: >-
     A staging desktop preview path fed by a capability-scoped broker bridge to
-    a capsule dev-server Unix socket, with Texture work entries and a rendered
-    candidate-digest approval binding.
+    a capsule dev-server Unix socket, with Texture work entries (or explicit
+    plain-ledger fallback) and a trusted rendered-candidate-digest attestation.
   acceptance:
     - action: >-
         On staging, drive an API-key-started capsule session through a source
         edit, fetch and test. In the logged-in owner desktop, observe their
         Texture entries and the preview change without reload; Playwright
-        records action-to-render latency with p95 at or below 2 seconds.
+        records the action-to-render latency.
       proves: >-
         The owner has live, causally attributable work supervision and a
         functioning capsule preview on the deployed product path.
@@ -81,19 +81,28 @@ finish:
         desktop surface.
       evidence_class: deployed negative proof
     - action: >-
-        Render candidate A, change the capsule subject to candidate B before
-        approval, then approve from the still-A preview. The deployed commit
-        gate refuses the request and records the rendered and candidate
-        digests; re-rendering B is required before a successful approval.
+        Render candidate A, change the capsule subject to candidate B, then
+        attempt to use the still-A preview binding. The trusted preview
+        broker/serving path refuses the stale binding and records the rendered
+        and current candidate digests; re-rendering B is required for a new
+        binding attestation.
       proves: >-
-        Owner approval binds the rendered preview digest to the committed
-        candidate digest and fails closed on stale preview.
+        Preview digest binding fails closed before any S6 approval or commit
+        decision and is never accepted from hostile preview JavaScript.
       evidence_class: deployed negative proof
+    - action: >-
+        If Texture transclusion remains unavailable at execution, repeat the
+        deployed session and observe ordered plain ledger entries for its
+        commands, fetches and tests, including a recorded transclusion gap.
+      proves: >-
+        Supervision remains honest and usable without falsely claiming that
+        the unavailable rich-transclusion dependency was delivered.
+      evidence_class: deployed proof
   rollback: >-
     Git revert and redeploy remove the bridge and preview route. Disable the
-    preview capability and refuse pending approvals whose rendered digest is
-    absent or mismatched; restore a computer through its pinned-head path if a
-    previously accepted change must be withdrawn.
+    preview capability and invalidate a pending preview binding whose rendered
+    digest is absent or mismatched; restore a computer through its pinned-head
+    path if a previously accepted change must be withdrawn.
   landing:
     required: true
     environment: staging
@@ -112,7 +121,19 @@ homotopy:
   realism_axis: >-
     One capsule-scoped dev-server stream at increasing resolution: a static
     response, then hot asset update, then commands/fetches/tests in Texture,
-    then an owner approval proven against a changed candidate digest.
+    then a trusted rendered-candidate-digest attestation for S6 to evaluate.
+
+weak_measures:
+  - name: preview-update-latency
+    kind: weak_signal
+    baseline: unknown until the first deployed action-to-render trace
+    desired: station-proposed p95 at or below 2 seconds without reload
+    decision_use: >-
+      Informs whether the preview transport is adequate for live supervision
+      or needs a bounded performance investigation.
+    cannot_prove: >-
+      Preview isolation, Texture attribution, digest binding, owner approval,
+      or station completion.
 
 boundaries:
   mutation_class: red
@@ -132,7 +153,18 @@ boundaries:
     - Texture transclusion implementation; consume it when available, otherwise use the shared plain-ledger fallback.
   protected_surfaces:
     - desktop preview route
+    - deployment routing for the isolated preview origin
     - approval binding
+
+heresy_delta:
+  discovered:
+    - >-
+      The requested capsule preview is a hostile-web authority boundary:
+      existing Unix-socket and lifecycle-projection seams do not establish
+      origin isolation or a trusted rendered-digest attestation.
+  introduced: []
+  repaired:
+    - none; this station remains checkpoint_incomplete pending S4.
 
 now:
   status: checkpoint_incomplete
@@ -155,9 +187,9 @@ now:
       owner live supervision without making hostile preview code a desktop or
       approval principal.
     test: >-
-      Deployed Playwright proves sub-2-second no-reload updates and proves
-      malicious preview JavaScript cannot read Texture, desktop cookies, or
-      invoke approval; a stale rendered digest is refused by the commit gate.
+      Deployed Playwright proves no-reload updates, malicious preview
+      JavaScript cannot read Texture, desktop cookies, or invoke approval, and
+      the trusted serving path refuses a stale rendered digest before S6.
     edge: missing_oracle
     delta_o: >-
       Instrument a deployed action-to-render correlation and record both the
@@ -170,8 +202,9 @@ now:
   decision:
     what: >-
       Use a broker-bridged Unix socket to a separately originated preview,
-      with strict CSP, no desktop cookies, a narrow postMessage bridge, and
-      approval refusal unless rendered and candidate digests match.
+      with strict CSP, no desktop cookies, a narrow postMessage bridge, and a
+      rendered-digest attestation issued only by the trusted broker/serving
+      path for S6 to evaluate.
     kind: architecture
     status: proposal
     evidence_ref: >-
@@ -184,8 +217,8 @@ now:
   belief:
     believed_state: >-
       Capsule broker Unix-socket transport, Texture lifecycle projection and
-      candidate subject-digest concepts provide seams, but no preview
-      supervision path is evidenced yet.
+      candidate subject-digest concepts provide seams, but no deployed capsule
+      preview supervision path is evidenced at this station's start.
     main_uncertainty: >-
       Whether one S4-compliant broker capability can carry dev-server updates
       with the required latency while preserving origin and approval isolation.
@@ -195,11 +228,12 @@ now:
       negative path.
   blocker_or_risk: >-
     S4 is incomplete. The critical risk is treating an embedded preview as
-    trusted desktop content, which would expose Texture or approval authority.
+    trusted desktop content, or accepting a preview-provided digest or message
+    as authority over the broker/serving-path attestation.
   next_action: >-
     Promotes to working when S4-capsule-open-world completes; then freeze a
-    disposable bridge candidate and rehearse the deployed proof and hostile
-    preview negative proof.
+    disposable bridge candidate and rehearse the deployed proof, explicit
+    plain-ledger fallback, and hostile-preview negative probes.
 
 receipts: []
 ---
@@ -211,31 +245,32 @@ receipts: []
 The desktop owns the preview capability and terminates the broker bridge; the
 capsule exposes only its development server through that capability. The bridge
 is scoped to one capsule, one owner desktop and one candidate lifetime. It does
-not become general capsule networking or a desktop reverse proxy.
+not become general capsule networking or a desktop reverse proxy. Its separate
+preview origin is a deployment-routing change, not a cosmetic iframe setting.
 
 The preview is served from an isolated origin, with no desktop cookies, strict
 CSP and a deliberately small, typed `postMessage` contract. The parent accepts
 only origin-checked preview lifecycle/render notifications; it never accepts
-approval commands, credentials, arbitrary URLs, HTML or executable payloads
-from preview JavaScript. The preview receives no Texture document, desktop
-session material or approval capability.
+approval commands, credentials, arbitrary URLs, HTML, executable payloads or a
+candidate digest from preview JavaScript. The preview receives no Texture
+document, desktop session material or approval capability.
 
 Capsule command, fetch and test receipts enter the existing Texture lifecycle
 projection. If Texture transclusion is available, the work document embeds the
-live preview/work source; otherwise it renders ordered plain ledger entries and
-records the transclusion gap rather than simulating a rich view.
+live preview/work source; otherwise the delivered fallback is ordered plain
+ledger entries plus a recorded transclusion gap, not a simulated rich view.
 
 ## Binding and challenge
 
-Each rendered state carries the candidate digest that produced it. The approval
-evaluation compares that rendered digest with the frozen candidate digest at the
-same decision boundary; absence or inequality is a refusal, never a warning or
-a best-effort refresh. A subsequent capsule mutation invalidates the prior
-preview binding.
+Each rendered state is attested with the candidate digest by the trusted broker
+and serving path, not by preview JavaScript. When the capsule subject changes,
+that path invalidates the prior attestation; absence or inequality is a
+refusal, never a warning or a best-effort refresh. This station produces no
+approval authorization: S6 alone consumes the attestation at its commit gate.
 
-The red-surface candidate must be independently challenged against cross-origin
-cookie access, Texture reads, forged or replayed preview messages, approval
-invocation and update ordering. Its receipts must identify the isolated origin,
-CSP, accepted message schema, rendered digest, candidate digest and the
-measured action-to-render bound. Rollback disables the capability before any
-retry, so a bad preview path cannot remain a privileged desktop route.
+The red-surface candidate must be independently challenged with negative probes
+for cross-origin cookie access, Texture reads, forged or replayed preview
+messages, approval invocation and update ordering. Its receipts must identify
+the isolated origin, CSP, accepted message schema, rendered digest, candidate
+digest and measured action-to-render bound. Rollback disables the capability
+before any retry, so a bad preview path cannot remain a privileged desktop route.

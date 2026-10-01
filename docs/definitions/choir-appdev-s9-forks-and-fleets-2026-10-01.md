@@ -2,7 +2,7 @@
 definition_version: 4
 definition_id: choir-appdev-s9-forks-and-fleets-2026-10-01
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-supervised-app-development-metamission-2026-10-01
 
 review:
@@ -35,9 +35,11 @@ start:
       Firecracker snapshot create/load is unused
       (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:142-143).
     - >-
-      Host-side data-image accounting distinguishes allocated file bytes,
-      virtual capacity, and total VM state-directory bytes
-      (internal/vmctl/data_image.go:10-18,27-57).
+      Data-image statistics expose file bytes, virtual capacity, and
+      state-directory bytes, but FileBytes and StateDirBytes currently report
+      the same state-directory total; allocation separate from state-directory
+      use is not yet measured, so fleet admission must establish it
+      (internal/vmctl/data_image.go:10-18,43-57).
     - >-
       The current host networking setup enables global IP forwarding and adds
       unconditional FORWARD ACCEPT rules for every tap device
@@ -68,12 +70,28 @@ finish:
         without inheriting parent identity material.
       evidence_class: deployed proof
     - action: >-
+        For a child made by each construction path, attempt parent
+        authentication and signing, access to a parent class not authorized to
+        that child (including the non-inheritable parent identity material on
+        the all-class path), and connections to another tenant and host-private
+        services. Record refusal in every case; on the whole-disk path also
+        scan the child for parent identity material and historical copies.
+      proves: >-
+        Fresh child credentials do not conceal retained parent authority, and
+        fork construction does not widen data or network access.
+      evidence_class: deployed proof
+    - action: >-
         Seed an excluded-class canary and a deleted-data remnant in the parent,
         create a selective-class child, then scan the child disk, Dolt history,
         logs, and artifact graph offline for both markers.
       proves: >-
         The semantic allowlist is evidence of exclusion; post-copy deletion is
         not being treated as a privacy boundary.
+      evidence_class: deployed proof
+    - action: >-
+        Attempt to fork a parent with active work and observe refusal before
+        any child disk, identity, lifecycle, or admission state is created.
+      proves: Forking mid-run is not silently converted into an inconsistent copy.
       evidence_class: deployed proof
     - action: >-
         Run a different experiment in each fork and inspect their sources from
@@ -139,6 +157,18 @@ boundaries:
   protected_surfaces:
     - identity material minting
     - VM networking / tap forwarding
+    - Firecracker lifecycle / vmctl state machine
+    - lifecycle / admission state
+  heresy_delta:
+    discovered: >-
+      Current data-image stats do not distinguish allocated disk bytes from
+      whole-state-directory use, and tap forwarding is broad
+      (internal/vmctl/data_image.go:43-57;
+      internal/vmmanager/manager.go:2707-2708,2726-2733).
+    introduced: none at authored baseline
+    repaired: >-
+      None yet; S9 must establish resource accounting, pre-access re-keying,
+      and refusal evidence before its deployed acceptance can settle.
 
 now:
   status: checkpoint_incomplete
@@ -162,15 +192,18 @@ now:
       useful parallel sibling computers without expanding parent authority or
       exceeding the single host's resource envelope.
     test: >-
-      The deployed four-fork proof exercises both paths, scans a selective
-      child offline for excluded and deleted parent data, verifies fresh child
-      identity before runtime/network access, follows winner publication and
-      parent adoption, reclaims ephemerals, and refuses an over-budget request.
+      The deployed four-fork proof exercises both paths; for each path it
+      proves refusals for parent authentication/signing, unauthorized class
+      access, and tenant/host-private networking; scans the selective child
+      offline for excluded and deleted parent data and the whole-disk child for
+      parent identity material including historical copies; follows winner
+      publication and parent adoption; reclaims ephemerals; refuses a mid-run
+      and an over-budget request.
     edge: missing_oracle
     delta_o: >-
-      A deployed construction receipt ordered before child boot/network access,
-      paired with offline disk/Dolt/log/artifact-graph scans and host admission
-      accounting for the tested fleet.
+      Construction and lifecycle receipts ordered before child boot/network
+      access, paired with offline disk/Dolt/log/artifact-graph scans and host
+      admission accounting for the tested fleet.
     scope_if_supported: >-
       Single-host Choir Community Cloud staging on the 32 GiB Node B budget,
       for quiescent parent computers and the two owner/class construction
@@ -221,11 +254,22 @@ partner (AGENTS.md:280-287). Its lineage names the parent checkpoint, the
 construction path, carried classes, and the child identity; it does not make a
 parent key or route transferable.
 
-The same-owner all-class path starts with a quiescent parent. It reflinks the
-whole `data.img`, cold-boots the child, re-encrypts host-side state, and records
-a new genesis plus parent lineage. `data.img` is the per-VM disk image under its
-state directory, and its allocated bytes differ from its virtual capacity
-(internal/vmctl/data_image.go:10-18,27-57).
+The same-owner all-class path first consumes S3's quiesce protocol: after guest
+health shows no active `engineMu` work, sync and fsfreeze make the source disk
+consistent (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:544-549).
+Only then may it reflink the whole `data.img`. Before any child execution —
+including Firecracker launch, guest runtime, route registration, or network
+setup — host-side re-encryption and new genesis mint the child ComputerID,
+signer keys, privacy key, and gateway token, and revoke access to parent
+identity material including historical copies. Only this all-class,
+same-owner route may copy the disk.
+
+`data.img` is the per-VM disk image under its state directory, but current
+statistics set FileBytes and StateDirBytes to the same state-directory total;
+they do not yet independently report allocated disk bytes
+(internal/vmctl/data_image.go:10-18,43-57). Fleet admission must establish the
+allocation accounting it relies on rather than treating virtual capacity as
+host use.
 
 Selective-class and cross-owner requests never begin with that disk copy. They
 export only named classes from a semantic snapshot into a fresh child disk;

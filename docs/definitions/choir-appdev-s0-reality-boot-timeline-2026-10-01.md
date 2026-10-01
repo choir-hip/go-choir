@@ -2,7 +2,7 @@
 definition_version: 4
 definition_id: choir-appdev-s0-reality-boot-timeline-2026-10-01
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: executable
 member_of: choir-supervised-app-development-metamission-2026-10-01
 
 review:
@@ -59,8 +59,9 @@ finish:
   artifact: >-
     A deployed staging boot-timeline instrument plus
     docs/evidence/s0-probe-index-2026-10-01.json, whose named entries retain
-    the per-phase receipts and the pre/post state of each disposable-computer
-    experiment; every confirmed defect has a preceding docs/problems record.
+    the per-phase receipts, the selected-or-falsified S2 builder substrate, and
+    the pre/post state of each disposable-computer experiment; every confirmed
+    defect has a preceding docs/problems record.
   acceptance:
     - action: >-
         On staging, boot one fresh and one owner-sized computer and fetch the
@@ -68,38 +69,47 @@ finish:
         s0a-boot-timeline-owner-sized-2026-10-01.json.
       proves: >-
         Each receipt attributes host spawn, kernel, initrd, every systemd unit,
-        runtime phases, and first healthy response for the real boot path.
-      evidence_class: deployed proof
-    - action: >-
-        On the owner-sized staging computer, create and resume a Firecracker
-        snapshot and capture s0a-snapshot-create-resume-2026-10-01.json and
-        s0a-uffd-lazy-load-2026-10-01.json, including wall times and the pinned
-        Firecracker/kernel identities.
-      proves: >-
-        Snapshot create/resume and UFFD lazy-load behavior are measured on the
-        pinned platform rather than inferred from feature presence.
+        runtime phases, first healthy response, and the booted image/runtime
+        identities for the real boot path.
       evidence_class: deployed proof
     - action: >-
         Capture the named S0a receipts s0a-guest-layout-2026-10-01.json,
         s0a-runtime-closure-2026-10-01.json, s0a-tap-reachability-2026-10-01.json,
-        s0a-gateway-token-visibility-2026-10-01.json, and
-        s0a-vm-state-reflink-2026-10-01.json on staging.
+        and s0a-gateway-token-visibility-2026-10-01.json on staging.
       proves: >-
         Store/mount layout, runtime closure dependency resolution, tenant-tap
-        reachability, token visibility, and the actual VM-state reflink path
-        have observed, separately attributable results.
+        reachability, and token visibility have observed, separately
+        attributable results.
       evidence_class: deployed proof
     - action: >-
-        Run every S0b probe only on a disposable staging computer; record its
-        computer identity and pre/post state in s0b-selfdev-go-effect-2026-10-01.json,
-        s0b-m9a-full-bundle-2026-10-01.json, s0b-capsule-store-overlay-2026-10-01.json,
-        s0b-erofs-nix-db-2026-10-01.json, s0b-nixpkgs-build-2026-10-01.json, and
-        s0b-runtime-dependency-lifecycle-2026-10-01.json.
+        Use a disposable owner-sized fixture, never the owner computer, to
+        create and resume a Firecracker snapshot and exercise the VM-state
+        reflink path; capture s0b-snapshot-create-resume-2026-10-01.json,
+        s0b-uffd-lazy-load-2026-10-01.json, and
+        s0b-vm-state-reflink-2026-10-01.json with wall times and pinned
+        Firecracker/kernel identities.
+      proves: >-
+        Snapshot create/resume, UFFD lazy-load, and reflink behavior are
+        measured on the pinned platform without mutating the owner computer.
+      evidence_class: deployed proof
+    - action: >-
+        Run every remaining S0b probe only on a disposable staging computer;
+        record its computer identity and pre/post state in
+        s0b-selfdev-go-effect-2026-10-01.json,
+        s0b-m9a-full-bundle-2026-10-01.json,
+        s0b-capsule-store-overlay-2026-10-01.json,
+        s0b-erofs-nix-db-2026-10-01.json,
+        s0b-nixpkgs-build-2026-10-01.json,
+        s0b-runtime-dependency-lifecycle-2026-10-01.json, and
+        s0b-builder-substrate-decision-2026-10-01.json.
       proves: >-
         The Go effect, full bundle transport, namespace/mount feasibility,
         EROFS Nix DB, sandboxed one-package build, and a base-absent runtime
-        dependency survive only the required dispose, activate, reboot, and
-        restore transitions.
+        dependency are observed through the declared lifecycle; the final
+        receipt selects host service, privileged builder capsule, or scoped
+        guest service as S2's builder substrate, or falsifies all three with
+        evidence. An unsupported transition is a valid S0 finding, not an
+        obligation to implement S2 or S4 inside this station.
       evidence_class: deployed proof
     - action: >-
         Inspect the probe index before any repair commit; each confirmed
@@ -155,7 +165,11 @@ boundaries:
     - S3 hibernate/resume implementation or cold-boot optimization
     - S4 capsule open-world implementation or selected writable-store mechanism
     - S6 commit-gate release materialization
-  protected_surfaces: []
+  protected_surfaces: [guest boot path, Firecracker lifecycle]
+  heresy_delta:
+    discovered: prospective — S0 probes may reveal boot, snapshot, token, or capsule-boundary heresies; each confirmed instance is first recorded as a problem.
+    introduced: none — S0 does not intentionally widen a runtime authority boundary.
+    repaired: none — this station observes and documents; remediation belongs to the receiving sibling station.
 
 now:
   status: working
@@ -180,8 +194,9 @@ now:
       widening authority.
     test: >-
       The named S0a and S0b deployed receipts reproduce their declared lifecycle
-      transitions, retain the required identities and pre/post state, and link
-      every confirmed defect to a problem document before repair.
+      transitions, retain the required identities and pre/post state, record an
+      evidence-backed S2 builder selection or falsify all candidate substrates,
+      and link every confirmed defect to a problem document before repair.
     edge: missing_oracle
     delta_o: >-
       Timeline instrumentation through first healthy response plus direct
@@ -208,9 +223,10 @@ now:
       lacks phase attribution, and source facts alone cannot establish the
       current security, snapshot, or builder boundaries.
     main_uncertainty: >-
-      Whether the owner-sized pinned platform can create/resume a lazily loaded
-      snapshot and whether a capsule can build a closure that remains usable
-      after the required lifecycle transitions.
+      Whether the disposable owner-sized fixture can create/resume a lazily
+      loaded snapshot and whether a capsule can build a closure that remains
+      usable after the required lifecycle transitions; S0b must select or
+      falsify the S2 builder substrate rather than assume one.
     next_observation: >-
       The first fresh and owner-sized deployed timeline receipts, followed by
       the disposable computer's scoped S0b pre/post evidence.
@@ -235,29 +251,32 @@ as the station moves from cold boot to snapshot resume.
 
 - Start one receipt at the host spawn boundary and preserve phase boundaries for
   kernel, initrd, each systemd unit, runtime initialization, and first health.
-- Use one fresh computer and one owner-sized computer; report identities,
-  monotonic timestamps, wall durations, and any missing observer boundary.
+- Use one fresh computer and one owner-sized computer; report booted
+  image/runtime identities, monotonic timestamps, wall durations, and any
+  missing observer boundary.
 - Inspect guest mounts, store layout, runtime closure dependencies and image
   identity without changing them. Source shows the runtime service follows the
   updater and signer services (nix/autoputer-vm.nix:654-764); timing must show
   the effective ordering on staging.
-- Treat tap-to-tap reachability, gateway-token visibility, reflink behavior,
-  snapshot create/load, and UFFD lazy loading as experiments with a negative
-  result as valuable as a positive one.
+- Treat tap-to-tap reachability and gateway-token visibility as observations
+  with a negative result as valuable as a positive one.
 
 ## S0b — disposable-computer boundary
 
 - Create the disposable computer before the first orange probe and retain its
   identity, baseline, probe input, result, and terminal disposition in the
   matching named receipt.
+- Use a disposable owner-sized fixture, never the owner computer, for snapshot
+  create/load, UFFD lazy-load, and VM-state reflink experiments.
 - Probe the self-dev Go effect and M9a full bundle independently: a transport
   acceptance is not evidence that the runtime executes the intended payload.
 - Mount only the proposed `/nix/store`-prefixed overlay inside the capsule
   namespace; observe EROFS Nix DB and a sandboxed one-package `nix build`
-  before selecting an S4 writable-store mechanism.
-- Build one runtime dependency absent from the base, then prove its behavior
-  through dispose → activate → reboot → restore. Do not generalize from a
-  capsule-local success.
+  before selecting the S2 builder substrate: host service, privileged builder
+  capsule, or scoped guest service.
+- Build one runtime dependency absent from the base, then observe it through
+  dispose → activate → reboot → restore. An unsupported transition is a valid
+  S0 finding; it must be documented, not repaired in S0.
 
 ## Handoff
 

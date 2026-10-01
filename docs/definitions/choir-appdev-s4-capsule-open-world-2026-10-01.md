@@ -2,7 +2,7 @@
 definition_version: 4
 definition_id: choir-appdev-s4-capsule-open-world-2026-10-01
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-supervised-app-development-metamission-2026-10-01
 
 review:
@@ -54,27 +54,51 @@ finish:
     capabilities before capsule execution; substitutions use the same proxy.
   acceptance:
     - action: >-
-        On staging, run a capsule build that fetches a nixpkgs dependency via
-        curl | bash; inspect its trajectory and content store after the build.
+        On staging, run a capsule workload whose declared public source is
+        fetched by curl | bash through the proxy; inspect its fetch trajectory.
       proves: >-
-        Every fetch records URL, content hash, redirect chain, and connected
-        address, and captured payloads support rebuilding when the origins are
-        unavailable.
+        The curl | bash fetch records its URL, content hash, redirect chain,
+        and connected address through the declared protocol path.
       evidence_class: deployed proof
     - action: >-
-        On staging, dispose the capsule after an uncommitted build, then attempt
-        host, private, loopback, link-local, and tap-range connections from a
-        new capsule and on redirect targets.
+        On staging, run a separate capsule workload that builds one nixpkgs
+        dependency through the proxy and its selected private-store mechanism.
       proves: >-
-        Uncommitted capsule state is gone and connect-time policy rejects every
-        prohibited address on the original request and every redirect.
+        A nixpkgs dependency can build in the selected capsule-private store
+        without a guest-global writable Nix store or direct substitution path.
       evidence_class: deployed proof
     - action: >-
-        Inspect the capsule process environment and perform the same build using
-        substitution through the egress proxy.
+        Stage a workload after its curl | bash and nixpkgs inputs are captured,
+        make the original fetch origins unavailable, and rebuild that workload
+        from the captured content-addressed payloads.
       proves: >-
-        Provider credentials never enter the capsule and opaque or direct
-        protocol bypasses are denied.
+        The captured payloads, rather than origin availability, reproduce the
+        staged workload's declared fetch inputs.
+      evidence_class: deployed proof
+    - action: >-
+        On staging, from the workload attempt direct-IP and DNS-rebinding
+        connections to host, private, loopback, link-local, and tap ranges;
+        attempt redirect-target, opaque-protocol, and direct egress bypasses.
+      proves: >-
+        Connect-time policy rejects every prohibited address on the original
+        request and every redirect, while direct and opaque bypasses fail.
+      evidence_class: deployed proof
+    - action: >-
+        Seed a unique uncommitted workspace and private-store marker, dispose
+        the capsule, then search the disposed capsule state; also attempt to
+        read gateway-token and provider-credential material from the workload's
+        environment, mounts, and process-visible state.
+      proves: >-
+        Disposal retains no uncommitted capsule state, provider credentials and
+        the gateway token are unreadable to the workload, and the selected
+        private-store boundary leaves no reusable capsule authority.
+      evidence_class: deployed proof
+    - action: >-
+        Inspect the workload's effective capability state and mount table after
+        broker launch, then attempt a privileged operation from the workload.
+      proves: >-
+        The broker drops capabilities before capsule execution and the selected
+        writable store is isolated to that capsule.
       evidence_class: deployed proof
   rollback: >-
     Git revert and redeploy the broker, namespace, store, and policy change;
@@ -124,14 +148,27 @@ boundaries:
     - S5-live-preview-supervision's desktop preview bridge and Texture streaming.
     - S6-commit-gate-full-release's test and owner-approval materialization gate.
     - S8-source-publication's host registry and publication/adoption flow.
-  protected_surfaces: [VM networking / tap forwarding / capsule egress]
+  protected_surfaces:
+    - VM networking / tap forwarding / capsule egress
+    - broker capability dropping before capsule execution
+    - capsule-private Nix store isolation
+  heresy_delta:
+    discovered:
+      - >-
+        Existing host networking permits tap forwarding and masquerading, while
+        capsules currently have no recorded egress or usable Nix store
+        (internal/vmmanager/manager.go:2686-2753;
+        docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:112-115).
+    introduced: []
+    repaired:
+      - none; this station remains checkpoint_incomplete pending S1 and S0b.
 
 now:
   status: checkpoint_incomplete
   slice: >-
-    Pending S1 security floor: define and prove recording capsule egress and
-    one S0b-selected private-store mechanism only after S1 closes the VM/tap
-    floor.
+    Pending S1 security floor and S0b mechanism-decision receipt: define and
+    prove recording capsule egress and exactly one S0b-selected private-store
+    mechanism only after both gates close.
   source_ref: main@8aa1dce9
   deploy_identity: 'staging https://choir.news deployed_commit=a3cfaa00; owner guest computer-03335285269bdba4f94377e56879f9e6 on a3cfaa00'
   candidate:
@@ -148,15 +185,15 @@ now:
       capture their exact fetch inputs while a single capsule-private Nix store
       mechanism supports nixpkgs builds without widening guest or host access.
     test: >-
-      Deployed curl | bash/nixpkgs build records every URL, hash, redirect, and
-      connected address; an origin-unavailable rebuild succeeds from captured
-      payloads; disposal removes uncommitted state; network and credential
+      Deployed curl | bash and nixpkgs builds separately record every URL, hash,
+      redirect, and connected address; an origin-unavailable rebuild succeeds
+      from captured payloads; disposal, capability, network, and credential
       negative proofs pass.
     edge: missing_oracle
     delta_o: >-
       S0b's disposable-computer mount, Nix DB, sandbox, and closure-resolution
-      probes select one mechanism; staging trajectory, content-store, and
-      connect/redirect negative-probe receipts observe the remaining claims.
+      probes select one mechanism; staging trajectory, content-store, capability,
+      and connect/redirect negative-probe receipts observe the remaining claims.
     scope_if_supported: >-
       Capsule builds on a staging Choir computer through the declared egress
       broker, not general guest egress or cross-computer publication.
@@ -183,14 +220,17 @@ now:
       an overlay at /nix/store, Nix sandbox nesting works, and closure paths
       still resolve after capsule disposal.
     next_observation: >-
-      The S0b disposable-computer probe of those four falsifiers, followed by
-      the S1 completion receipt that makes this egress work admissible.
+      The S0b disposable-computer probe of the four falsifiers and its
+      mechanism-decision receipt, followed by the S1 completion receipt that
+      makes this egress work admissible.
   blocker_or_risk: >-
     S1-security-floor is incomplete. Current host tap setup explicitly enables
     forwarding and masquerading, including guest access to host services
     (internal/vmmanager/manager.go:2686-2695,2707-2753); enabling S4 first
     would widen an unclosed protected surface.
-  next_action: promotes to working when S1-security-floor complete.
+  next_action: >-
+    Promotes to working when S1-security-floor completes and S0b records the
+    selected capsule-private Nix store mechanism.
 
 receipts: []
 ---

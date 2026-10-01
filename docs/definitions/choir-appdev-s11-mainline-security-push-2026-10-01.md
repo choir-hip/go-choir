@@ -2,7 +2,7 @@
 definition_version: 4
 definition_id: choir-appdev-s11-mainline-security-push-2026-10-01
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-supervised-app-development-metamission-2026-10-01
 
 review: {reviewer: none, frozen_ref: none, verdict: none, evidence_ref: none}
@@ -54,30 +54,45 @@ finish:
     - action: >-
         On staging, select a published source change into host main, issue a
         signed security offer, and exercise it against four computers: tracking,
-        clean divergent-compatible, divergent with structural component absence,
-        and divergent-conflicting.
+        clean divergent-compatible under a predeclared owner policy, divergent
+        with structural component absence, and divergent-conflicting.
       proves: >-
-        The host records and executes respectively auto-apply, rebase-and-apply,
-        exempt, and proposal dispositions without treating divergence as a
-        silent skip.
+        The host records and executes respectively auto-apply, authorized
+        rebase-and-apply, exempt, and proposal dispositions without treating
+        divergence as a silent skip.
       evidence_class: deployed proof
     - action: >-
-        Run the offer's exploit regression witness against the pre-fix and
-        post-fix builds on each required ephemeral-fork evaluation; submit a
-        passing-test-only exemption request.
+        Validate the offer's exploit regression witness on a known vulnerable
+        reference and its fixed counterpart, then evaluate every divergent fork
+        separately; submit a passing-test-only exemption request.
       proves: >-
-        The witness fails before the fix and passes after it before an offer is
-        valid, and a passing witness alone cannot establish exemption.
+        The witness fails on the vulnerable reference and passes on its fixed
+        counterpart before an offer is valid, while every divergent fork gets
+        its own compatibility result and a passing witness alone cannot exempt.
+      evidence_class: deployed proof
+    - action: >-
+        Force a divergent ephemeral-fork evaluation to reach its evaluation
+        deadline as timeout or inconclusive, then inspect its host disposition.
+      proves: >-
+        Timeout or inconclusive evaluation remains a proposal, never an
+        auto-apply, rebase-and-apply, or exemption result.
       evidence_class: deployed proof
     - action: >-
         Leave a vulnerable divergent-conflicting computer asleep through the
-        offer deadline, inspect the host's recorded disposition, then attempt
-        the vulnerable capability and independently verify its removal on the
-        actual computer.
+        offer deadline, inspect the host's recorded disposition and owner
+        notification, then attempt the vulnerable capability and independently
+        verify its removal on the actual computer.
       proves: >-
         Deadline enforcement is host-side, fail-closed does not depend on a
-        sleeping computer rebasing, and capability removal is real rather than
-        an unverified host record.
+        sleeping computer rebasing, owner notification is observable, and
+        capability removal is real rather than an unverified host record.
+      evidence_class: deployed proof
+    - action: >-
+        Submit forged, ComputerID-misbound, and realization-misbound offers to
+        the deployed apply path and inspect the event head and release state.
+      proves: >-
+        An unauthenticated or misbound offer is refused before any event-chain,
+        updater, checkpoint, or route mutation.
       evidence_class: deployed proof
   rollback: >-
     Git-revert and redeploy the host selection/offer implementation; retract an
@@ -94,9 +109,9 @@ value:
     safe per-computer outcome while preserving source authority, divergent work,
     checkpoint/route integrity, and host control at the deadline.
   goodharting_would_be: >-
-    Reporting fleet success after skipping divergent or sleeping computers, or
-    calling a passing exploit test an exemption without proving that the
-    vulnerable component is absent.
+    Reporting fleet success after skipping divergent or sleeping computers,
+    rebasing without a predeclared owner policy, or calling a passing exploit
+    test an exemption without proving that the vulnerable component is absent.
 
 homotopy:
   realism_axis: >-
@@ -116,6 +131,7 @@ boundaries:
     - Every committed change is restorable through the pinned-head path.
     - Publication is source plus pinned inputs; no cross-tenant binary execution.
     - A fork never holds its parent's identity material.
+    - A divergent rebase-and-apply occurs only under a predeclared owner policy; otherwise it remains a proposal.
   excluded:
     - S8-source-publication source publication, review, adoption, and cross-computer source transfer
     - S9-forks-and-fleets fork construction, re-keying, data-class selection, and fleet admission
@@ -123,7 +139,17 @@ boundaries:
     - bespoke fleet dashboard; fleet view remains Texture transclusion
   protected_surfaces:
     - platform-control signing domain
+    - canonical event commit path
     - checkpoint / route projection
+  heresy_delta:
+    discovered: >-
+      Existing platform updates are tracking-only; divergent-fleet disposition,
+      host-side deadline enforcement, and structural exemption evidence are not
+      established. (internal/selfdevprotocol/platform_update.go:68-78, 110-121)
+    introduced: none; this station file makes no runtime mutation.
+    repaired: >-
+      Not yet; S11 closes this only with deployed four-classification, forged-
+      offer refusal, timeout, and sleeping-deadline evidence.
 
 now:
   status: checkpoint_incomplete
@@ -148,10 +174,11 @@ now:
       an auditable, safe disposition by deadline; structural absence, not an
       exploit-test pass, can justify exemption.
     test: >-
-      Deployed four-computer proof exercises tracking auto-apply, clean
-      divergent rebase-and-apply, structurally absent exempt, and conflicting
-      proposal then sleeping-computer fail-closed; each valid offer's witness
-      fails pre-fix and passes post-fix.
+      Deployed proof validates the witness on a known vulnerable reference and
+      its fixed counterpart, then separately evaluates four computers:
+      tracking auto-apply, owner-policy-authorized clean divergent
+      rebase-and-apply, structural-absence exempt, and conflicting proposal
+      then sleeping-computer fail-closed; timeout remains proposal.
     edge: missing_oracle
     delta_o: >-
       Host disposition receipts joined to ephemeral-fork evidence and an
@@ -166,7 +193,8 @@ now:
   decision:
     what: >-
       Use host selection into main and signed security offers with the four
-      defined classifications; fail close host-side at deadline, and allow
+      defined classifications; permit divergent rebase-and-apply only under a
+      predeclared owner policy, fail close host-side at deadline, and allow
       exemption only on structural component-absence proof.
     kind: architecture
     status: settled
@@ -176,7 +204,8 @@ now:
     believed_state: >-
       The existing tracking-only signed update path preserves its own
       checkpoint/route evidence, but has no stated divergent-fleet disposition
-      or host-side deadline enforcement.
+      or host-side deadline enforcement; its offer includes ExpiresAt and its
+      route tail calls PublishRouteProjection.
     main_uncertainty: >-
       Whether S8's source record and S9's ephemeral forks expose sufficient
       evidence to prove structural absence and independently verify removal on
@@ -207,10 +236,12 @@ receipts: []
   authority and the platform-control signing domain.
 - A security offer binds severity, deadline, target component, signed content, and its
   regression witness to one canonical interpretation of the fix.
-- The witness is valid only when it fails on the pre-fix build and passes on the post-fix
-  build. It demonstrates regression coverage; it never proves exemption.
+- Validate that witness on a known vulnerable reference and its fixed counterpart. Then
+  evaluate each divergent fork independently; the witness is regression coverage, never
+  an exemption oracle.
 - For every divergent computer, the host evaluates compatibility on an S9 ephemeral fork.
-  A clean result can rebase and apply; a conflict or inconclusive result remains a proposal.
+  A clean result can rebase and apply only under a predeclared owner policy; otherwise it,
+  a conflict, or an inconclusive result remains a proposal.
   (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:605-617)
 - Tracking computers auto-apply through the signed update path. A divergent computer may
   be exempt only with structural proof that the affected component is absent.
@@ -222,11 +253,14 @@ receipts: []
 ## Safety case
 
 Existing tracking update processing verifies the offer before mutation and binds acceptance
-onto the event chain (internal/agentcore/platform_update.go:59-63, 75-90, 163-193). Its
-materialization receipt and health receipt are verified before the applied event is recorded
-(internal/agentcore/platform_update.go:264-291). S11 extends neither condition by treating
-an exploit test as an authority source: platform-control signature, source provenance,
-canonical-head constraints, and checkpoint/route joins remain separate protections.
+onto the event chain (internal/agentcore/platform_update.go:59-63, 75-90, 163-193). The
+offer binds its canonical head and `ExpiresAt` (internal/selfdevprotocol/platform_update.go:75-78,
+119-121); its route tail invokes `PublishRouteProjection`
+(internal/agentcore/platform_update.go:485-496). Materialization and health receipts are
+verified before the applied event is recorded (internal/agentcore/platform_update.go:264-291).
+S11 extends neither condition by treating an exploit test as an authority source:
+platform-control signature, source provenance, canonical-head constraints, and
+checkpoint/route joins remain separate protections.
 
 The critical risk is declaring a vulnerable divergent computer exempt or successful while it
 remains exposed. The deployed sleeping-computer proof is therefore a terminal safety proof,

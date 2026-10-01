@@ -2,7 +2,7 @@
 definition_version: 4
 definition_id: choir-appdev-s1-security-floor-2026-10-01
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-supervised-app-development-metamission-2026-10-01
 
 review:
@@ -28,8 +28,10 @@ start:
     - >-
       Guest VM egress is open and tap->tap forwarding appears permitted
       (internal/vmmanager/manager.go setupHostNetworking; host firewall
-      does not filter FORWARD). The guest runtime unit runs as unconfined
-      root. Unverified on staging. See
+      does not filter FORWARD). The guest runtime defaults to root because
+      its shown serviceConfig has no User, while its ReadWritePaths and
+      InaccessiblePaths impose only listed path restrictions. Staging behavior
+      is unverified. See
       docs/reports/nixos-agent-platform-redhat-deepseek-audit-2026-10-01.md.
     - >-
       setupHostNetworking enables forwarding and appends unqualified FORWARD
@@ -41,8 +43,9 @@ start:
       The runtime imports /run/go-choir-autoputer.env
       (nix/autoputer-vm.nix:751-764), whose producer writes
       RUNTIME_GATEWAY_TOKEN from choir.gateway_token and makes the file 0640
-      (nix/autoputer-vm.nix:256-258,344-345,368). Its shown serviceConfig
-      has no User or ProtectSystem setting (nix/autoputer-vm.nix:751-764).
+      (nix/autoputer-vm.nix:256-258,344-345,368). The shown serviceConfig
+      lacks User and ProtectSystem but does set ReadWritePaths and
+      InaccessiblePaths (nix/autoputer-vm.nix:751-764).
     - >-
       The capsule broker starts a Yaegi session worker with the default safe
       package list (cmd/capsule-broker/main.go:113-137). That list permits a
@@ -52,8 +55,9 @@ start:
 finish:
   deliver: >-
     Each deployed guest is isolated from every other guest and from unapproved
-    egress, while the guest runtime and every capsule child operate without an
-    inherited gateway token or ambient Yaegi escape path.
+    egress, while runtime children and capsule children inherit no gateway token
+    or ambient Yaegi escape path; the trusted runtime retains only its own
+    required credential.
   artifact: >-
     A deployed guest security floor: per-tap host FORWARD policy, default-deny
     VM egress with explicit allowlist, a confined non-root
@@ -61,10 +65,13 @@ finish:
     restricted Yaegi worker import/kernel boundary.
   acceptance:
     - action: >-
-        On staging, start two distinct guests and attempt a TCP connection from
-        guest A to guest B's tap-addressed runtime port; the connection returns
-        connection refused while each guest's own approved service path remains healthy.
-      proves: Per-tap FORWARD policy prevents guest-to-guest reachability.
+        On staging, start two distinct guests and verify guest B's
+        tap-addressed runtime port has a healthy listening destination. Attempt
+        a TCP connection from guest A: it is refused or times out with no
+        established connection, receiver-side evidence records no A connection,
+        and the host records the matching FORWARD deny while each guest's own
+        approved service path remains healthy.
+      proves: Per-tap FORWARD policy, rather than a closed destination port, prevents guest-to-guest reachability.
       evidence_class: deployed proof
     - action: >-
         From a staging guest, attempt TCP egress to a non-allowlisted public
@@ -79,10 +86,12 @@ finish:
       proves: The runtime unit does not retain root-wide guest authority.
       evidence_class: deployed proof
     - action: >-
-        Run a normal capsule child on staging and capture its environment names;
-        RUNTIME_GATEWAY_TOKEN is absent while the child remains able to use only
-        its intended broker-mediated capabilities.
-      proves: The gateway token is not inherited across the runtime-to-child boundary.
+        Run a normal runtime child and capsule child on staging; capture their
+        environment names and attempt reads of the gateway-token file path and
+        relevant process surfaces. RUNTIME_GATEWAY_TOKEN is absent and neither
+        child can recover the token, while each retains only its intended
+        broker-mediated capabilities.
+      proves: Runtime children and capsule children do not inherit or recover the gateway token.
       evidence_class: deployed proof
     - action: >-
         Submit a staging Yaegi worker cell importing os, os/exec, net, or net/http;
@@ -107,7 +116,8 @@ value:
   goodharting_would_be: >-
     Adding an allowlist-looking rule while the broad tap FORWARD ACCEPT or
     outbound MASQUERADE path still carries traffic, proving only unit metadata,
-    or hiding the token from a parent process while a capsule child inherits it.
+    or hiding the token from an environment listing while a child can read it
+    from a mounted file or process surface.
 
 homotopy:
   realism_axis: >-
@@ -138,6 +148,19 @@ boundaries:
     - S9 fork construction, re-keying, and fleet admission.
   protected_surfaces:
     - VM networking / tap forwarding
+    - runtime confinement
+    - gateway-token handoff
+    - Yaegi worker boundary
+
+heresy_delta:
+  discovered:
+    - >-
+      Source inspection indicates broad tap forwarding and VM egress; the
+      runtime defaults to root and receives the gateway token, while only
+      path restrictions are presently visible. Staging confirmation is pending S0.
+  introduced: []
+  repaired:
+    - none; this station remains checkpoint_incomplete pending S0.
 
 now:
   status: checkpoint_incomplete
@@ -161,13 +184,14 @@ now:
       kernel jointly remove the ambient authority that would otherwise make S4
       capsule egress and S9 sibling computers unsafe to operate.
     test: >-
-      The deployed negative network, runtime-identity, child-environment, and
-      Yaegi-import proofs in finish.acceptance all pass while approved paths remain healthy.
+      The deployed negative network, runtime-identity, token-recovery, and
+      Yaegi-import proofs in finish.acceptance pass while approved paths remain healthy.
     edge: missing_oracle
     delta_o: >-
-      Staging receipts that capture both sides of the two-guest connection,
-      actual guest egress results, systemd/process confinement, child environment
-      names, and Yaegi import refusals.
+      Staging receipts that capture a verified listener, both sides of the
+      two-guest connection, the observed FORWARD deny, actual guest egress
+      results, systemd/process confinement, child token-read attempts, and
+      Yaegi import refusals.
     scope_if_supported: >-
       Staging guests and their capsule children on the current single-host
       Firecracker deployment; not a claim about a future multi-host topology.
@@ -188,8 +212,9 @@ now:
   belief:
     believed_state: >-
       The checked source exposes broad tap forwarding and egress, imports the
-      gateway token into the runtime, and has not yet demonstrated a confined
-      non-root runtime or token-scrubbed child boundary on staging.
+      gateway token into a runtime that defaults to root with only the shown
+      ReadWritePaths and InaccessiblePaths restrictions, and has not demonstrated
+      a confined non-root runtime or token-scrubbed child boundary on staging.
     main_uncertainty: >-
       The exact deployed firewall and service behavior, including whether the
       desired negative proofs can be achieved without breaking approved guest paths.
@@ -210,7 +235,7 @@ receipts: []
 
 The host policy must make each tap a tenant boundary, not merely an address.
 A guest may reach only explicitly declared host services and egress targets;
-all guest-to-guest forwarding and every unlisted route must reject before it
+all guest-to-guest forwarding and every unlisted route must deny before it
 becomes a usable path. The broad per-interface ACCEPT rules currently appear at
 `internal/vmmanager/manager.go:2726-2732`; the general outbound MASQUERADE
 appears at `internal/vmmanager/manager.go:2747-2753`.

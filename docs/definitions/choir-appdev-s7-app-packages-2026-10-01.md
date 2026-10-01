@@ -2,7 +2,7 @@
 definition_version: 4
 definition_id: choir-appdev-s7-app-packages-2026-10-01
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-supervised-app-development-metamission-2026-10-01
 
 review:
@@ -68,11 +68,14 @@ finish:
         committed app release, not compiled into the baseline SPA or binary.
       evidence_class: deployed proof
     - action: >-
-        Reboot, resume, and pinned-head restore the computer after installation;
-        reopen the package and read the data it wrote before each transition.
+        Reboot and resume the computer after installation, reopen the package,
+        and read the data it wrote. Then restore first to a checkpoint before
+        installation and confirm the package is absent, and separately to a
+        package-bearing checkpoint and reopen it with its matching data.
       proves: >-
-        The package's frontend, backend, and declared app data survive restart
-        and recovery only when their release and restore compatibility bind.
+        Reboot and resume preserve the installed package, while pinned-head
+        restore selects the corresponding package presence and compatible data
+        state rather than claiming every restore retains the package.
       evidence_class: deployed proof
     - action: >-
         Deliberately interrupt the package's app-data migration during a staged
@@ -90,6 +93,13 @@ finish:
         package set.
       proves: Package disable and purge are real lifecycle transitions.
       evidence_class: deployed proof
+    - action: >-
+        Attempt staging activation from a mutable manifest URL or a direct
+        registry injection that is absent from the accepted package release.
+      proves: >-
+        Dynamic package activation refuses bytes and declarations not bound to
+        the accepted, content-addressed release manifest.
+      evidence_class: deployed negative proof
   rollback: >-
     Refuse an incompatible manifest before activation; use the S6-bound
     pinned-head restore to return to the prior package release and its declared
@@ -141,6 +151,29 @@ boundaries:
     - S9-forks-and-fleets package inheritance across sibling computers.
   protected_surfaces:
     - canonical event commit path
+  station_added_scope_extensions:
+    - >-
+      Package disable and purge are deliberately added lifecycle scope: they
+      make package divergence reversible rather than leaving enabled code
+      outside the pinned-head contract
+      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:341-343).
+    - >-
+      Package app-data migration compatibility and interruption recovery are
+      deliberately added scope: release restore must cover package state, and
+      S10's curated seed data makes unversioned package schemas non-portable
+      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:341-343,602-604).
+  heresy_delta:
+    discovered: >-
+      Static registry entries and monolithic release contents cannot represent
+      package-level divergence, schema compatibility, or package lifecycle as
+      release-bound evidence.
+    introduced: >-
+      No runtime heresy is introduced by this drafted goal; the implementation
+      risk is a second mutable package authority beside the canonical release.
+    repaired: >-
+      Require every installed, disabled, purged, migrated, and restored package
+      state to be selected by the accepted release manifest and its canonical
+      event head.
 
 now:
   status: checkpoint_incomplete
@@ -234,8 +267,8 @@ receipts: []
   (internal/autoputer/computer_surface.go:11-26,69-87).
 - Therefore dynamic package discovery must be derived from the accepted,
   content-addressed release manifest, not from a separately writable registry.
-- The release manifest already carries its accepted event head, code/artifact
-  refs, schema and reducer versions, and hashes every file
+- The existing release manifest already carries its accepted event head,
+  code/artifact refs, schema and reducer versions, and hashes every file
   (internal/updater/updater.go:38-65).
 
 ## Data evolution and recovery
@@ -272,9 +305,9 @@ receipts: []
   package from dynamic discovery and prevent its optional service from running;
   purge additionally removes its declared installed state only through the same
   release-bound authority.
-- S8 receives the package as the divergence/publication unit only after S7
-  proves that its manifest, recipe, tests, and data evolution requirements are
-  sufficient for a fresh adopter to build and validate.
+- S8 consumes the shared S6 change record for source publication and adoption;
+  package-specific publication integrates after S7 supplies a manifest, recipe,
+  tests, and data-evolution contract that an adopter can build and validate.
 
 ## Key risk
 

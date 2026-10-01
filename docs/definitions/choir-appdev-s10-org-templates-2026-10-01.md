@@ -2,7 +2,7 @@
 definition_version: 4
 definition_id: choir-appdev-s10-org-templates-2026-10-01
 execution_mode: mission_orchestrator
-readiness: drafted
+readiness: reviewed
 member_of: choir-supervised-app-development-metamission-2026-10-01
 
 review:
@@ -47,8 +47,9 @@ finish:
   artifact: >-
     A staging-accessible encrypted org-template record containing a base
     revision, patch stack, curated seed-data selection, policy, source-build
-    inputs, and integrity receipts; its installation creates a fresh computer
-    with independently minted identity material.
+    inputs, and encryption-key-binding plus integrity-binding receipts; its
+    installation creates a fresh computer with independently minted identity
+    material.
   acceptance:
     - action: >-
         On staging, export a parent computer as an encrypted template, install
@@ -60,20 +61,33 @@ finish:
         or machine image.
       evidence_class: deployed proof
     - action: >-
+        Attempt to read the stored export without its authorized decrypt
+        capability, then attempt install of a tampered or recipient-misbound
+        encrypted template; capture the encryption and integrity-binding
+        receipts and verify both attempts refuse before any fresh-computer
+        mutation.
+      proves: >-
+        Stored template confidentiality and ciphertext-to-intended-install
+        binding fail closed instead of being discovered after a child computer
+        exists.
+      evidence_class: deployed negative proof
+    - action: >-
         Seed excluded-class canaries and a deleted-data remnant on the parent;
-        after export and fresh installation, run the recorded offline scan of
-        the template and installed computer disk, Dolt history, logs, and
-        artifact graph, while checking distinct ComputerID and fresh signer,
-        privacy, and gateway identity material.
+        after authorized decryption, scan the template plaintext at that
+        boundary and the fresh installed computer disk, Dolt history, logs,
+        and artifact graph, while checking distinct ComputerID and fresh
+        signer, privacy, and gateway identity material.
       proves: >-
         Neither parent private data classes nor keys crossed the template
         boundary, including recoverable deleted remnants.
       evidence_class: deployed proof
   rollback: >-
-    Retract the template record and delete its fresh installed computer; retain
-    the parent unchanged. Revoke the template encryption material and refuse
-    further import if an export or scan receipt fails. Revert and redeploy any
-    platform implementation change through the normal landing loop.
+    Retract the template record to prevent future installs and retain the
+    parent unchanged; retraction does not revoke or delete independently
+    installed computers. Disable the template's future decrypt/import
+    authority if an export or scan receipt fails. Revert and redeploy any
+    platform implementation change through the normal landing loop; an
+    installed computer is reclaimed only through its own lifecycle authority.
   landing:
     required: true
     environment: staging
@@ -101,7 +115,7 @@ boundaries:
   mutation_class: red
   authority_sources:
     - owner-ratified metamission, docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:153-294
-    - org-template station intent, docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:601-603
+    - org-template station intent, docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:602-604
     - docs/computer-ontology.md:54-61
   must_preserve:
     - 'Publication is source plus pinned inputs; no cross-tenant binary execution.'
@@ -113,14 +127,34 @@ boundaries:
     - source publication review and adopter commit gate (S8-source-publication, S6-commit-gate-full-release)
     - machine-snapshot hibernate and resume (S3-fast-resume)
     - trusted host build-cache design (deferred open decision)
+  transitive_install_prerequisites:
+    - >-
+      S2 builder-substrate receipt: before S10 becomes executable, the S2
+      landing receipt must identify the working Nix-closure evaluation
+      substrate required by S10 install
+      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:538-543).
   protected_surfaces: [identity material minting]
+  heresy_delta:
+    discovered: >-
+      An encrypted stored export or a post-copy scrub alone does not establish
+      private-data exclusion or ciphertext-to-install binding; deleted data
+      and misbound template bytes can survive those proxies.
+    introduced: >-
+      No runtime heresy is introduced by this drafted goal; implementation
+      risks creating a second computer-creation or identity authority outside
+      S9's sibling-computer path.
+    repaired: >-
+      Require allowlisted semantic construction, encryption and integrity
+      binding receipts, pre-mutation refusal, authorized-boundary plaintext
+      scanning, and fresh identity minting through the existing path.
 
 now:
   status: checkpoint_incomplete
   slice: >-
-    Pending S9's sibling-computer construction and re-keying contract; S10
-    will define and implement an encrypted allowlisted semantic export and
-    fresh-computer install without treating machine state as a template.
+    Pending S9's sibling-computer construction and re-keying contract and the
+    transitive S2 builder-substrate receipt; S10 will define and implement an
+    encrypted allowlisted semantic export and fresh-computer install without
+    treating machine state as a template.
   source_ref: main@8aa1dce9
   deploy_identity: 'staging https://choir.news deployed_commit=a3cfaa00; owner guest computer-03335285269bdba4f94377e56879f9e6 on a3cfaa00'
   candidate:
@@ -138,19 +172,21 @@ now:
       recreate a useful organization setup as a fresh computer without copying
       parent private data classes, keys, or executable closures.
     test: >-
-      Export a parent on staging, install and source-build it as a fresh
-      computer, then independently scan template and installed state for
-      excluded-class canaries, deleted remnants, parent keys, and parent
-      closure substitution.
+      Export a parent on staging; prove unauthorized decrypt and tampered or
+      misbound import refuse before fresh-computer mutation; then authorizedly
+      decrypt, source-build, install, and independently scan template
+      plaintext and installed state for excluded-class canaries, deleted
+      remnants, parent keys, and parent closure substitution.
     edge: missing_oracle
-    delta_o: >-
-      A recorded offline scanner covering encrypted-template plaintext at the
-      authorized decrypt boundary, installed disk, Dolt history, logs, and
-      artifact graph, with seeded excluded-class and deleted-data witnesses.
     scope_if_supported: >-
       Choir Community Cloud staging templates whose selected source can be
       built against the receiving computer's declared base and pinned inputs.
     status: proposed
+    delta_o: >-
+      Recorded encryption-key and integrity-binding receipts, refusal evidence
+      before child mutation, and an offline scanner covering authorized-boundary
+      template plaintext, installed disk, Dolt history, logs, and artifact
+      graph, with seeded excluded-class and deleted-data witnesses.
     evidence_refs:
       - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:253-258
       - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:271-285
@@ -169,11 +205,13 @@ now:
       selected semantic reconstruction rather than a copied disk.
     main_uncertainty: >-
       Whether the selected semantic record contains every reproducible build
-      input and useful seed while the encryption and offline scan expose no
-      retained private class or identity material.
+      input and useful seed while encryption, integrity binding, and the
+      authorized-boundary offline scan expose no retained private class or
+      identity material.
     next_observation: >-
-      S9's landed allowlisted export and fresh-identity receipts, followed by
-      an encrypted template export/install scan on staging.
+      S9's landed allowlisted export and fresh-identity receipts plus S2's
+      builder-substrate receipt, followed by an encrypted template
+      export/install refusal and scan proof on staging.
   blocker_or_risk: >-
     A post-copy scrub is not evidence of exclusion: deleted rows and
     unallocated blocks can retain data, so template construction must start
@@ -212,10 +250,13 @@ requires at-rest encryption before export (docs/definitions/choir-supervised-app
 ## Evidence and risk
 
 The installer proof includes a real source build and running fresh computer,
-not a successful decrypt or a copied-image boot. The negative proof scans the
-template and fresh state for an excluded-class canary, deleted-data remnant,
-parent keys, and parent closure paths across disk, Dolt history, logs, and the
-artifact graph (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:271-285).
+not a successful decrypt or a copied-image boot. It first records refusal of
+unauthorized decrypt and tampered or misbound ciphertext before child mutation,
+with encryption and integrity bindings identified. The authorized decrypt
+boundary then scans template plaintext and fresh state for an excluded-class
+canary, deleted-data remnant, parent keys, and parent closure paths across disk,
+Dolt history, logs, and the artifact graph
+(docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:271-285).
 
 Current publication export metadata sets `private_material_omitted`, but that
 metadata assertion is not a scrub proof and does not define an org template

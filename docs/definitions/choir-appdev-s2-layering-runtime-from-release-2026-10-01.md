@@ -3,7 +3,7 @@ definition_version: 4
 definition_id: choir-appdev-s2-layering-runtime-from-release-2026-10-01
 execution_mode: mission_orchestrator
 member_of: choir-supervised-app-development-metamission-2026-10-01
-readiness: drafted
+readiness: reviewed
 review: {reviewer: none, frozen_ref: none, verdict: none, evidence_ref: none}
 
 start:
@@ -38,9 +38,10 @@ start:
       and execs the image-built autoputer binary
       (nix/autoputer-vm.nix:136-138).
     - >-
-      ComputerSurface serves current/frontend below the updater root and
-      refuses to serve when index.html is absent
-      (internal/autoputer/computer_surface.go:13-25,47-58).
+      ComputerSurface uses current/frontend below the updater root when it has
+      an index.html, otherwise it may serve the immutable baseline frontend;
+      only absence of both roots refuses service
+      (internal/autoputer/computer_surface.go:13-25,69-87).
     - >-
       The updater already verifies a manifest, stages an immutable release,
       atomically changes current, restarts the service, probes health, and
@@ -67,10 +68,11 @@ finish:
     data disk under the same store-path layout; a release record bound to its
     base-image identity and a GC-rooted retained per-computer guest-image
     reference; and an updater transaction joining executable, frontend, state
-    compatibility, and effective event head.
-    The route has no writable global Nix store or
-    Nix daemon, rejects a closure unresolved by the booted base, restarts only
-    the runtime for an app-layer swap, and makes M9a tracking pushes CI-driven.
+    compatibility, and effective event head. S2 lands the S0b-selected builder
+    substrate before any closure-consuming acceptance. The route has no
+    writable global Nix store or Nix daemon, rejects a closure unresolved by
+    the booted base, restarts only the runtime for an app-layer swap, and makes
+    M9a tracking pushes CI-driven.
   acceptance:
     - action: >-
         On staging, commit an app-layer release against the booted base and
@@ -82,16 +84,47 @@ finish:
         restart, not VM reboot.
       evidence_class: deployed proof
     - action: >-
+        From CI, drive a signed M9a app-layer offer to a staging tracking
+        computer; record request-to-healthy time and observe the same
+        updater-only apply while the Firecracker process and guest boot id are
+        unchanged.
+      proves: >-
+        Tracking-computer platform pushes use the no-reboot release path and
+        expose its time-to-healthy.
+      evidence_class: deployed proof
+    - action: >-
+        With a predecessor serving on staging, present releases whose closure
+        does not resolve against the booted base, whose accepted event head is
+        stale, and whose tested content changes before activation; observe
+        each refusal before pointer swap, runtime restart, or effective-head
+        mutation, with the predecessor backend and frontend still serving.
+      proves: >-
+        Base resolution, stale-head, and post-test-mutation fences fail closed
+        before a release can change the serving computer.
+      evidence_class: deployed negative proof
+    - action: >-
+        After disposal of the selected builder's build environment and a guest
+        reboot, present a release requiring a dependency absent from the
+        booted base; observe refusal before mutation and the retained
+        predecessor still serving.
+      proves: >-
+        A closure cannot rely on a disposed builder or silently substitute a
+        base-absent dependency.
+      evidence_class: deployed negative proof
+    - action: >-
+        On staging, inspect the guest after a successful apply: observe the
+        closure at its per-computer GC-rooted store layout and establish that
+        no writable guest-global Nix store or Nix daemon was introduced.
+      proves: >-
+        Materialization uses the required data-disk closure mechanism rather
+        than weakening the guest store boundary.
+      evidence_class: deployed proof
+    - action: >-
         Apply a prior retained app-layer release through the same release
         authority after the successful swap; observe its backend/frontend and
         effective release identity restored while the guest boot id remains
         unchanged.
       proves: The release-retention and rollback path restores the prior release.
-      evidence_class: deployed proof
-    - action: >-
-        Drive a signed M9a app-layer offer to a staging tracking computer from
-        CI and observe the identical updater-only apply evidence.
-      proves: Tracking-computer platform pushes use the no-reboot release path.
       evidence_class: deployed proof
   rollback: >-
     Revert and redeploy the platform change; for an affected computer, retain
@@ -134,7 +167,7 @@ boundaries:
     - No guest-side writable Nix store or daemon outside a capsule boundary.
     - The non-forkable base (kernel, capsule broker, updater, signers, network policy) stays platform-owned and identical across computers on the same image.
   excluded:
-    - S0 reality/boot measurement and the builder-substrate choice, except consuming its completed decision
+    - S0 reality/boot measurement and builder-substrate selection evidence; S2 lands the S0b-selected substrate
     - S1 networking, confinement, and credential-boundary work
     - S3 Firecracker snapshot/hibernate work
     - S4 capsule-private Nix-store and egress work
@@ -144,12 +177,21 @@ boundaries:
   protected_surfaces:
     - guest boot path and runtime exec
     - updater trust boundary and release manifest
+heresy_delta:
+  discovered: >-
+    The current computer surface can fall back to the immutable baseline when
+    a staged frontend is absent; a successful runtime restart alone therefore
+    does not prove the committed release served its frontend
+    (internal/autoputer/computer_surface.go:69-87).
+  introduced: none — this station must not add a writable guest-global store, daemon, or parallel release authority.
+  repaired: pending — require the executable/frontend/state/head serving join and its deployed negative proofs before completion.
 
 now:
   status: checkpoint_incomplete
   slice: >-
     Pending S0 reality-and-boot-timeline: consume its boot/base/store facts and
-    its S0b builder-substrate decision before changing the guest release path.
+    S0b's builder-substrate selection; S2 then lands that selected substrate
+    before closure-consuming acceptance changes the guest release path.
   source_ref: main@8aa1dce9
   deploy_identity: 'staging https://choir.news deployed_commit=a3cfaa00;
     owner guest computer-03335285269bdba4f94377e56879f9e6 on a3cfaa00'
@@ -170,9 +212,11 @@ now:
       event-head authority.
     test: >-
       On staging, CI drives an M9a release whose closure contains the committed
-      backend and frontend change; the updater refuses an incompatible base or
-      stale compatibility/head join, accepts the compatible release with only
-      a runtime restart, and restores the retained predecessor.
+      backend and frontend change and records time-to-healthy; the updater
+      refuses unresolved-base, stale-head, and post-test-mutated releases
+      before mutation, refuses a base-absent dependency after builder disposal
+      and reboot, accepts the compatible release with only a runtime restart,
+      and restores the retained predecessor.
     edge: missing_oracle
     delta_o: >-
       S0b's disposable-computer probe records the selected evaluator and a
@@ -189,8 +233,9 @@ now:
   decision:
     what: >-
       Adopt the owner-ratified two-layer guest: shared non-forkable NixOS base
-      plus per-computer app-layer closure; the concrete builder substrate is
-      explicitly deferred to S0b rather than guessed in S2.
+      plus per-computer app-layer closure. S0b selects the concrete builder
+      substrate from its probes; S2 includes landing that selection before
+      closure-consuming acceptance, rather than guessing or deferring it.
     kind: architecture
     status: settled
     evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437
@@ -208,16 +253,19 @@ now:
       writable guest-global store or daemon, and whether its dependency graph
       can resolve strictly against the booted base.
     next_observation: >-
-      S0's recorded base/store layout and the S0b evaluator/closure probe,
-      followed by a staging no-reboot app-layer apply.
+      S0's recorded base/store layout and S0b evaluator selection, then S2's
+      landed builder and a staging no-reboot app-layer apply with refusal and
+      retained-predecessor evidence.
   blocker_or_risk: >-
-    A closure that appears to start but bypasses the booted base, omits the
+    A closure that appears to start but bypasses the booted base, leaves the
+    computer surface on immutable-baseline fallback, omits the
     frontend/state/event-head atomic join, or leaks a writable global store
     violates the updater trust boundary rather than providing a valid speedup.
   next_action: >-
     Promotes to working when S0-reality-and-boot-timeline is complete; consume
-    its S0b builder-substrate decision and boot/base/store receipts, then make
-    the first base-bound closure transaction on a disposable staging computer.
+    S0b's builder-substrate selection and boot/base/store receipts, land the
+    selected builder in S2, then make the first base-bound closure transaction
+    on a disposable staging computer.
 
 receipts: []
 ---
@@ -253,11 +301,12 @@ receipts: []
 
 ## Builder dependency and handoff
 
-- S2 MUST NOT select an evaluator by convenience. S0b decides, from its
-  disposable-computer evidence, among the named host-side service, privileged
-  builder-capsule, or scoped guest-service substrates
-  (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:538-543).
-- The selected builder hands S2 a closure, its derivation/input evidence, and
+- S0b selects, from disposable-computer evidence, one of the named host-side
+  service, privileged builder-capsule, or scoped guest-service substrates;
+  **S2 includes landing that S0b-selected substrate before
+  closure-consuming acceptance**. It MUST NOT choose a substitute by
+  convenience (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:538-543).
+- The landed builder hands S2 a closure, its derivation/input evidence, and
   the base identity it resolves against. S2 hands S6 a materialization contract
   for full releases; it does not absorb S6's commit gate.
 - The dangerous failure is a nominally fast swap that crosses the base or

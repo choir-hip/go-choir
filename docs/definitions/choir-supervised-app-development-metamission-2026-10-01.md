@@ -11,8 +11,8 @@ readiness: executable
 
 review:
   reviewer: agentic-consensus panel (convergent 5/5 + divergent 7/7), 2026-10-01
-  frozen_ref: main@0bddb11aa2d27694cb760f8aebda52c95ba4e44d
-  verdict: promote-with-revisions — all required revisions applied in this revision
+  frozen_ref: main@523f6b45532aba99683575108bc9f1ba5fc9ed9c
+  verdict: accept
   evidence_ref: .agentic-consensus/agentic-consensus-20261001-133535 (convergent), agentic-consensus-20261001-133637 (divergent)
 
 metamission:
@@ -261,8 +261,9 @@ finish:
         app-layer security fix with an exploit test. Compatibility is
         evaluated on an ephemeral fork of each divergent computer. The
         fix auto-applies on a tracking computer, applies after rebase on
-        a non-conflicting divergent computer, is classified exempt where
-        the computer's own code passes the exploit test, and fails closed
+        a non-conflicting divergent computer, is classified exempt only
+        where structural proof shows the vulnerable component absent
+        (a passing exploit test alone never exempts), and fails closed
         (component reverted or capability cut, owner notified) on a
         conflicting vulnerable computer.
       proves: Fleet security push without silent breakage or silent skip.
@@ -458,9 +459,9 @@ now:
     filesystem, and a double resume duplicates RNG and key state. S3's
     invariants are the safety case, not optional polish.
   next_action: >-
-    Author S0 as a throughline station file (read-only probes + boot
-    timeline instrument, green/yellow) and run it. Problem-document each
-    confirmed finding before any fix.
+    Execute S0a (read-only probes + boot/resume timeline instrumentation)
+    under docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md.
+    Problem-document each confirmed finding before any fix.
 
 receipts: []
 ---
