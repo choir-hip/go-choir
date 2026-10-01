@@ -1,0 +1,223 @@
+Choir platform review. Updating, self development, and source publication. A listening report. October first, twenty twenty six.
+
+This report collects everything from one working session. It is written to be heard, not read, so it uses no tables, no code, and very few file names. When a file matters, I describe it in words. The written versions are the audit report and the draft metamission goal file, both committed to the repository.
+
+A note on evidence before anything else. Everything here comes from reading the source code at the current head of main. I did not run anything against staging, and I could not see the live system. When I say something is true, I mean the code says so. When I say something is likely, I mean the code suggests it but staging might differ. Several of the most important findings are marked as things to verify on staging first.
+
+The report has eight parts. One, how the platform is actually built. Two, the comparison with Red Hat and DeepSeek. Three, the security findings. Four, how updates reach guests today. Five, what self development can and cannot do today. Six, the design for a divergent fleet. Seven, your deliverable and my thoughts on it, including source only distribution. Eight, the mission plan and what to do first.
+
+
+Part one. How the platform is actually built.
+
+The audit prompt assumed a fleet of NixOS virtual machines, each with its own per tenant system closure. That is not what Choir is. Choir is closer to a single base image with many writable disks.
+
+There is one host NixOS configuration on Node B. Inside it sits exactly one guest image. That guest image is a kernel, an initial ramdisk, and one read only EROFS disk that holds the entire guest Nix store. Every user computer boots that same image. There are no per tenant Nix modules, no per tenant closures, and no per tenant flake attributes anywhere in the repository.
+
+Each computer's individuality lives on a per virtual machine data disk, mounted inside the guest at slash mnt slash persistent. That disk holds the embedded Dolt database, the user's files, the platform source checkout, Go build caches, signer keys, and something important called the updater's release store.
+
+The release store is Choir's own update mechanism, separate from Nix. A release is a content addressed list of files with their hashes. The updater stages a release into a directory, checks its health, and atomically swaps a symbolic link called current to point at it. If the health check fails it restores the prior release. Every release is bound to the computer's event chain, so it has a code reference, an artifact program reference, and an accepted event head.
+
+Inside each virtual machine, isolation comes from two mechanisms. The stronger one is capsules. A capsule is a set of Linux namespaces, an overlay filesystem over the guest root, a cgroup memory and CPU budget, Landlock filesystem rules, a seccomp system call filter, and no network at all. Every operation inside a capsule must present a signed, role scoped, revocable capability. The weaker mechanism is the Yaegi interpreter workers that the desks use for in cell Go evaluation. Those rely on a list of forbidden Go packages, and their network access is mediated by the host.
+
+So the honest comparison is this. Choir looks like DeepSeek's sandbox system with one shared base image and one writable block device per computer. It does not look like bootc running per tenant.
+
+
+Part two. The comparison with Red Hat and DeepSeek.
+
+I will go through the patterns in the order the audit prompt gave them, and say briefly where each stands.
+
+The three planes first. The base plane is the guest image. The divergence plane is the data disk plus the host side records for each computer. The working plane is the running Firecracker process, the runtime, and the capsules. I found three places where these planes are mixed together.
+
+The first mix: compilers and toolchains live in the base plane. Go, the C compiler, Node, LibreOffice, pandoc and Python document tools are all baked into the shared image and placed on the runtime's path. Updating a toolchain means rebuilding the whole image for everyone, and no computer can choose its own toolchain.
+
+The second mix: Go build caches sit on the same disk as durable state. They are disposable caches, but they share a volume with the Dolt database and the signer keys, nothing bounds their size, and nothing excludes them from the restore set.
+
+The third mix is the most important, and it comes back later. The computer's code identity is split in two. The updater's release serves the frontend. But the systemd unit that starts the runtime always launches the runtime binary from the image's Nix store, never from the release. So the user interface comes from the divergence plane, while the actual Go code comes from the base plane.
+
+One thing is clean. Agent generated state cannot leak into the base plane. The guest store is read only, there is no writable overlay store, and the nix command is not even on the runtime's path.
+
+Now the Red Hat patterns.
+
+Pattern one point one, the operating system as a versioned image, the bootc idea. This is present. The guest image is one Nix derivation, pinned by store path into the host configuration. When the host activates a new generation, a script swaps the guest image pointer atomically and handles conflicts. The gap is that the image is global. Every computer tracks whatever single image the host currently points at. There is no way to say that computer X should stay on image R. So a pinned or canary computer is pinned only while it keeps running. The moment it reboots, it takes the current image. The fix is a per computer guest image reference stored on the computer's ownership record, with old images kept alive as Nix garbage collection roots. That gives you bootc switch semantics. I rated this high priority.
+
+Pattern one point two, the three way merge for slash etc. The guest's slash etc is fully declarative and rebuilt on every boot, so there is nothing to merge there, and nothing needs to be. The real configuration divergence lives in releases and app state. For releases, Choir already has a per component policy. A computer is marked tracking, divergent, or canary, and has a follow policy of automatic, proposal, or pinned, plus a list of diverged components. The gap is granularity. A diverged component never receives upstream changes, even changes to files the user never touched. A file level three way merge using the release file hashes would let unchanged files move forward automatically and send only true conflicts to a proposal. Medium priority.
+
+Pattern one point three, Kagenti's per tool call isolation. Capsules are strong. The gaps are three. First, isolation is per capsule, not per call. One broker with one Landlock rule set serves every command in the capsule. Second, the Yaegi workers have no kernel sandbox at all underneath their package allowlist, and an interpreter is not designed to be a security boundary. Third, and most serious, the runtime service itself runs as root with no systemd sandboxing. More on that in part three.
+
+Pattern one point four, chunked image layers. Absent. The store disk is one monolithic image, so every deploy rebuilds the whole thing, whether the change was one Go line or a LibreOffice bump. Splitting it into a slow moving base layer and a fast moving app layer would make most deploys much cheaper. I rated this low to medium, because at single host scale it is a speed optimization. Measure first.
+
+Now the DeepSeek patterns.
+
+Pattern two point one, three layer composition: base, workspace, and toolkit. Base and workspace exist. The toolkit layer does not. A per computer, opt in toolkit disk would let heavy toolchains move out of the base and let computers choose them. Medium priority. It is an enabling step for later work.
+
+Pattern two point two, on demand loading from distributed storage. Not needed at the current scale. Everything is on one host, and the shared EROFS file already acts like a shared, page cache backed base. One correction is needed, though. Comments in the flake and the guest configuration claim kernel samepage merging deduplication. Nothing enables it, and Firecracker guest memory would not be merged even if it were enabled. Each guest keeps its own copy of hot pages in its own memory. Those comments should be fixed.
+
+Pattern two point three, the trajectory log for preemption safe resumption. Partly present. The semantic event chain is durable and ordered, and the actor runtime has a recovery log. But the replay tooling explicitly classifies runs, trajectories, run continuations, channel messages and work items as empty until supported. In plain terms: after a crash in the middle of a run, tool calls are either re-executed or lost. DeepSeek's idea is to record each tool call's request and result on the log and, on resume, fast forward by replaying cached results instead of executing again. Choir should do that through its existing event chain, not a new database, because a second store would create a second source of truth. High priority. It is the foundation for safe hibernation and restore.
+
+Pattern two point four, pack diff, the incremental snapshot of runtime changes. Present, and in some ways richer than DeepSeek's. The capsule effect bundle records the base event head, the source tree, the ordered file changes, the build recipe, the runtime artifact, the toolchain references, and the test and verifier receipts. The gap is that the artifacts are plain files, not Nix store paths. A compiled binary in a bundle links to libraries at the store paths of the current base image. When the base image changes, that binary can break silently.
+
+Pattern two point five, a unified backend interface. Partly present. There are three tiers, the Yaegi cell, the capsule, and the full virtual machine, but no single interface across them. The capsule broker's verbs are the closest thing. It has no terminal verb, which is why the terminal goes around it. I recommended one sandbox interface with a terminal verb, and recommended against adding systemd nspawn as yet another backend, because capsules already fill that role.
+
+Patterns three point one through three point three, selective propagation, per machine custom builds, and runtime compilation. These led into the bigger design conversation, which comes in parts five through seven.
+
+Pattern four point one, drift prevention. Present for the base, partial for the divergence plane. A cheap read only sweep comparing each guest's booted image and release hashes against what its record says it should run would close most of the gap.
+
+Pattern four point two, scheduler co-design, DeepSeek's Watcher. Partly present. Choir has idle sweeps, warmness classes, and pressure based reclaim driven by pressure stall information. That is good. But hibernate is just stop. Resume is a cold boot followed by a recovery replay that can take up to thirty minutes. That pushes the system to keep virtual machines running, which is exactly the problem the Watcher solves. Firecracker already has a snapshot interface that could make hibernate real. Be careful, though: memory snapshots capture in-memory keys, including the capsule signing key, so snapshot files need the same protection as the data disk.
+
+Pattern four point three, cross plane state ownership. The audit report has a table. The short version: if a computer's data disk is lost, the event chain and pinned content survive on the host, so the computer can be rebuilt by replay, but only up to the boundary of what replay supports. Runs, trajectories, messages, work items, unpinned capsule artifacts, and possibly the files tree would be lost. Signer and privacy keys survive only if escrow covers them, and that is worth confirming.
+
+
+Part three. The security findings.
+
+These are the most urgent items in the whole report.
+
+The first and most serious finding is about networking between guests, and it needs to be verified on staging. When the host sets up a virtual machine's network, it adds rules that accept all traffic forwarded to and from that machine's network interface, and it translates guest traffic out through every interface. A comment in the code says this is in case the guest needs internet access. The host firewall only filters incoming traffic to the host itself, not traffic forwarded between interfaces. If that holds on staging, then any process in any guest has unrestricted internet access, and, worse, one guest can probably reach another guest's runtime port directly. The guest runtime trusts an identity header that the proxy normally sets. A guest that can reach another guest's port can set that header itself. If that is real, it is a cross tenant authority problem, not just missing hardening. Following the repository's rule, the first step is to write a problem record. The fix is small: block forwarding between guest interfaces, allow only the specific host service ports, and either deny internet access or route it through a proxy.
+
+The second finding is the runtime service. The guest's main runtime runs as root, with no capability limits, no protected system, no restriction on network address families, and no no new privileges flag. Two code paths run shell commands outside any capsule with the full root environment: the terminal, and the zot coding agent session. The zot path passes the gateway token in as an OpenAI API key environment variable. So any non capsule execution inside the guest has root and the gateway credential.
+
+The third finding is the Yaegi workers, covered above. They need the same kernel floor as capsules: Landlock, seccomp, and an empty network namespace. Their egress is already mediated by the host, so cutting the network costs nothing.
+
+Why this matters for everything else: your deliverable asks for curl pipe to bash and nixpkgs inside capsules. Opening capsules to the internet inside a guest that can reach other tenants, and whose runtime is root, would turn a feature into an exploit path. So the security floor must come before the open world capsule. That ordering is built into the goal file.
+
+
+Part four. How updates reach guests today.
+
+You asked whether I had looked into updating. Here is what the code actually does.
+
+Two kinds of thing need updating, and they move differently.
+
+The operating system and the Go runtime binary live in the shared guest image. When continuous integration deploys, the host switches to the new configuration, which swaps the guest image pointer. Then the deploy script asks the virtual machine controller to refresh each active interactive computer, one at a time. Refresh means reboot onto the new image while keeping the data disk. Two groups are skipped. Computers marked as constructed computer versions are skipped, and that includes your owner computer. Computers under a maintenance hold are skipped too. Computers that were stopped pick up the new image the next time they boot, without any check.
+
+The frontend is different. Each guest serves its desktop frontend from its own release store, from the folder that current points to. At boot, the runtime checks whether current is valid. If it is missing or broken, the runtime copies the frontend in from the image. If it is valid, the runtime keeps it, even if the image now has a newer frontend. So after a deploy, a refreshed computer runs the new runtime against an old frontend. That is version skew, and it already happens.
+
+This was documented on September eighteenth. That document describes the emergency restage runbook. You stop the virtual machine, mount its data disk on the host over SSH, rename current so it is invalid, and refresh. The boot then copies in the new frontend from the image. It works, but it is manual, needs SSH, and leaves no audit trail.
+
+There is also a newer, proper mechanism called M nine A, finished on September twenty sixth. Corpus D signs a platform update offer for a specific computer. The virtual machine controller carries it to the guest, and the guest verifies the signature, the computer binding, the follow policy, and the event head. It then applies the offer through the updater, records it on the event chain, and can be restored. It was proven on staging, but with a single tiny index file, against a throwaway account. Nothing in continuous integration calls it. A full frontend has never gone through it, and offers carry files inline as base sixty four text, so a large bundle is untested.
+
+There is also a design consensus from September eighth that describes a stratified layer model. Layer zero is the host. Layer one is the non forkable guest appliance. Layer two is the forkable computer surface and apps. Layer three is the computer's data ledgers. Layer four is an agent that resolves conflicts. Its phase two step, automatically pushing updates to computers that have not diverged, was never built. Also, nothing classifies computers as divergent automatically, so in practice every computer is labeled tracking.
+
+For keeping things current by hand right now: refresh the computer to get the new runtime and operating system, and do the frontend restage at the same time so the two do not skew. A better manual tool would be a short script that reuses the M nine A path with a computer identifier parameter. That would give you the event record and rollback without SSH. It needs testing on a disposable account before your own computer, because it pushes to live guests.
+
+
+Part five. What self development can and cannot do today.
+
+You said you were not sure self development really works right now. Here is the precise answer.
+
+The governance side works, and has been proven. The M eleven mission landed on September twenty ninth on staging. A desk authored a self development operation. It was frozen, waited for approval, was approved under qualified consensus, and applied. A second candidate was rejected. The evidence appeared in the live Texture document, and the computer was restored to a pinned earlier head. That is a real end to end result for the control plane: proposals, approvals, the event chain, restore.
+
+But the change that probe made was described as a minimal reversible evidence change. The probe never checked that a change to Go code actually takes effect.
+
+And from the source, it cannot. Here is the chain. When a capsule finishes, whatever it wrote under a specific release folder inside the capsule becomes the new release. The materializer applies that release through the updater, which swaps current and restarts the runtime. But the restart runs the same systemd unit, which always launches the runtime binary from the image's Nix store. The only thing in the whole system that reads from current is the handler that serves the frontend. So self development can replace the frontend, and nothing else. A Go change the agent compiled in a capsule is recorded, with receipts, and then never runs.
+
+You remembered this working in earlier versions. My guess is that the runtime used to be launched through a release pointer, and the later image pinned launch replaced it.
+
+There is a second trap behind the first. Even if you simply pointed the launcher at the release, a Go binary built with cgo inside a capsule links against the ICU and C libraries at the store paths of the current image. When the image updates, that binary breaks silently.
+
+So the honest statement is: the self development control plane works. The effect plane only reaches the frontend.
+
+
+Part six. The design for a divergent fleet.
+
+You described the challenge this way. One virtual machine experiments in capsules, commits the result to its own state, and publishes code for other machines to optionally take, customize, and compile. The host can pick specific guest changes, merge them into the base image, and force push things like security fixes, without breaking divergent machines. The hard case: maybe a security fix is incompatible with some machines because they already have different functionality at that security boundary.
+
+You asked whether this means committing to a per guest closure. My answer is yes, but only at the app layer, and not for the operating system.
+
+Split the guest into two layers.
+
+The first layer is the non forkable base. Kernel, systemd, the capsule broker, the updater, the signers, the kernel capability probe, and the network policy. This stays one shared NixOS image, owned by the platform. No computer may diverge it.
+
+The second layer is the forkable app layer. The runtime, the frontend, the app modules and the skills. This is per computer, and it is defined as a platform base revision plus that computer's own stack of patches. That definition is the computer's code reference.
+
+Why Nix suits this second layer: it answers the question of whether to ship a binary or recompile, automatically. If two computers have identical inputs, their build has the same hash, and the result is the same. If their inputs differ, they rebuild from the same recipe. The recipe is the portable unit.
+
+Earlier in the session I suggested building these closures on the host rather than in the guest, for trust and cost reasons. Your later direction, source only and building locally, changes that, which I come back to in part seven. Either way, do not run a Nix daemon with a writable store in every guest outside a capsule. That would break the read only base, which is currently the strongest invariant in the system.
+
+Now the flow.
+
+Experiment in a capsule with ordinary tools, which already exists. Commit means the capsule produces a commit on the computer's own branch plus a build recipe, and the existing materializer applies it through the updater, with a receipt and rollback. Publish means offering the change as a patch, a base revision, pinned inputs, a recipe, and tests. Another computer adopting it either applies it cleanly to the same base, or rebases it onto a different base and rebuilds. If there is a conflict, an agent rebases it in a capsule and produces a proposal for that owner. The host mainlines a change through a normal pull request into main, which produces a new base.
+
+Now security fixes on divergent computers. There are two ideas here.
+
+The first idea is architectural. Keep security boundaries in the non forkable base wherever possible. A fix there is an image push. It cannot conflict with anything, because nobody is allowed to diverge that layer. The capsule broker, credential handling and network policy belong there. This alone prevents most of the scenario you are worried about.
+
+The second idea handles fixes in the forkable layer. Judge compatibility by behavior, not by whether the text merges. Every security fix ships with an exploit regression test: a test that fails on vulnerable code and passes on safe code. For each computer, rebase its patch stack onto the new base, build it, and run that test. Four outcomes are possible.
+
+One. The rebase is clean and the tests pass. Apply automatically. This should be most of the fleet.
+
+Two. The rebase conflicts, but the computer's original code already passes the exploit test. This is exactly your case of a computer that already has different functionality at that boundary. It is already safe. Record it as exempt from this fix and change nothing.
+
+Three. The rebase conflicts and the exploit test fails. The computer is vulnerable and cannot be merged automatically. Before a deadline, an agent rebases in a capsule and the owner gets a proposal.
+
+Four. After the deadline, fail closed. Revert that component to the platform version, or cut off the capability it exposes, and keep the owner's version on a side branch for later. Never quietly skip the fix and report success.
+
+Data needs the same discipline. Schema migrations ship as part of a change, and the updater refuses to apply a release whose declared schema range does not cover the computer's actual data.
+
+
+Part seven. Your deliverable, and my thoughts on it.
+
+You defined the deliverable as follows. An agent like me, holding only a Choir API key, can prompt Choir to build a new app or modify an existing one. The work in progress is supervisable live in your logged in web desktop, in the Texture document for that work. The new app works on both the backend and the frontend of the guest. Arbitrary shell commands are allowed, including curl pipe to bash, and using nixpkgs to pull in arbitrary code. All of that happens in a capsule, yet stays visible to the user in the frontend. The user is in control of committing, which happens only if automated tests pass and the user approves. Users can then publish their changes to the host, which lets other guests review the change, download the code, and build it themselves. And you are now thinking source only, no binary distribution.
+
+I think this covers it, and it is the right shape. Here is where it stands against the code, and the places where I would push back or add something.
+
+The API key entry point exists. The command line client has run, self dev, computer and API key commands, and the M eleven probe drove the whole governance loop through product endpoints.
+
+Live supervision in the Texture document exists in part. M eleven rendered evidence and a falsified commitment in the live document. What is missing is a live view of the capsule work itself: the commands, the fetches, and the tests as they happen.
+
+Backend plus frontend is the blocker described in part five. Today only the frontend can change. This is the first thing to fix, and I would make it the first engineering station after the reality probe.
+
+There is also an app structure issue worth knowing about. Apps are compiled into one frontend bundle through a static registry, and app backends are compiled into the one runtime binary. So today a new app means rebuilding both monoliths. A better long term model is app packages: a frontend module, an optional backend service, a manifest, and a recipe. The September eighth consensus already proposed a dynamic frontend manifest. App packages also make the unit of divergence and the unit of publication the same thing, which helps everything in part six. You do not need packages for the first proof, but you will want them before publication gets real use.
+
+Arbitrary shell, curl pipe to bash, and nixpkgs in a capsule is the biggest change of direction. Today capsules have no network at all, and there is no Nix inside the guest. My recommendation: give each capsule egress through a recording proxy bridged into its network namespace. Every fetch is logged with its address and the hash of what came back, onto the trajectory. The default policy is open with recording, but never allowed to reach other guests or the host's private services. For Nix, give the capsule its own private store. Either put a store inside the capsule's writable upper layer, or use Nix's local overlay store feature, which layers a writable store over a read only one. Verify that second option first, because it is experimental. Done this way, curl pipe to bash works, nixpkgs works, and nothing leaves the capsule unless it is committed.
+
+Visible in the frontend while still in the capsule needs a preview bridge. Capsules have no network, so the runtime cannot just proxy to a port. The capsule broker can bridge a unix socket from the app's development server inside the capsule to a preview route in your desktop. Then the preview window is the real running app, not a screenshot.
+
+The commit gate already exists as the M seven and M eleven owner decision, with tests as verifier receipts. What changes is that the release it materializes must include the runtime and app backends, not just the frontend, and the proof must show the backend change working after a reboot and after a restore.
+
+Publishing to the host, reviewing, downloading and custom building is the unbuilt M nine B. The existing publication code is for articles, not code.
+
+Now source only. I agree with it, with one important refinement.
+
+The reasons to agree: no computer ever runs a binary compiled by another tenant, which removes a whole class of trust problems. It also fits divergence naturally, because every adopter builds against their own base and their own customizations. And reviewers can read exactly what they will run.
+
+The refinement: source only is not enough on its own if the build itself runs curl pipe to bash against a moving web address. Then the published source does not determine what actually runs, and a reviewer cannot see it. So the rule should be this. During experiments, anything goes. At publication, every network fetch the build made is captured from the recording proxy's log and turned into a pinned, hash checked input, or vendored into the change. Publication then means source plus pinned inputs. That is reproducible and reviewable, and it is the natural payoff of recording egress in the first place.
+
+Two smaller notes on source only. First, the cost is that every adopter builds. With Go and frontend builds inside a guest with four to eight gigabytes of memory, that is minutes, which is fine. Later, a trusted host build cache keyed by build hash would not violate source only at the trust level, because the trusted party is the platform's builder, not the publishing tenant. I recorded that as a deferred decision, not part of the plan. Second, adopted source from another user is untrusted code. Its build and its tests must run in the adopter's capsule, and it must pass the adopter's own gate. That is already how the design works, but it is worth saying out loud.
+
+
+Part eight. The mission plan, and what to do first.
+
+I drafted one metamission goal file in the throughline format. Its readiness is drafted. It has nine stations, all at intent stage so far, each to be authored separately. The central design commitment is that one record, meaning base revision, patch stack, pinned inputs, recipe, tests and receipts, flows through every station. That way the stations compose instead of each inventing its own idea of what a change is.
+
+Station S zero is reality. Read only probes on staging. Does a self development Go change take effect? I expect not. Is guest to guest forwarding open? Can runtime child processes read the gateway token? Does the M nine A push handle a real frontend sized payload? Each confirmed finding gets a problem record before any fix.
+
+Station S one is the security floor. Isolate guests from each other at the host, default deny their egress, confine the runtime service as a non root user with systemd sandboxing, and strip the gateway token from child environments. This must land before capsules are opened to the internet.
+
+Station S two is runtime from release. The guest runs the runtime from its own committed release, with the image as fallback. Each release records the base image it was built against, and the updater refuses releases whose libraries do not resolve. This is where you decide between a plain cgo build and a Nix closure built in the capsule. I lean toward the plain toolchain for fast iteration and Nix for promotion.
+
+Station S three is the open world capsule: the recording egress proxy and the capsule private Nix store.
+
+Station S four is live preview and supervision: the socket bridge to a desktop preview, and the capsule's commands, fetches and tests streaming into the Texture work document.
+
+Station S five is the commit gate with a full release. Tests plus owner approval materialize runtime, frontend and app backends together, proven after reboot and restore.
+
+Station S six is app packages, the dynamic manifest so a new app is a package, not a monolith rebuild. It can run in parallel with S seven.
+
+Station S seven is source publication, the M nine B work: patch, base revision, pinned inputs, recipe and tests, a host registry, and the review, fork, customize, build and adopt flow.
+
+Station S eight is mainline and the security push: host selection into main, security offers with severity, deadline and exploit test, the four way classification per computer, and wiring the M nine A push into continuous integration for computers that are tracking.
+
+The acceptance for the whole metamission is a deployed proof on staging. It starts with an API key client and runs through live supervision, the capsule preview, tests and owner approval, the app working on backend and frontend after reboot, publication, and a second owner adopting from source with a customization. It ends with a fleet security push that handles all four cases correctly. Negative proofs are included as well: a capsule cannot reach other tenants, cannot read the gateway token, and loses uncommitted work when disposed. Forged offers are refused.
+
+On priority relative to World Wire. I agree with your instinct that this comes first. The world wire mission stack itself lists the updating system as a half developed dependency, and computer to computer code publication is the same mechanism World Wire needs for anything beyond articles.
+
+Finally, the shortest useful version of all of this, if you only remember four sentences.
+
+The self development control plane works, but its effect stops at the frontend, because the runtime always launches from the image.
+
+The guest network is probably too open between tenants and the capsule is too closed toward the internet. Fix the first before opening the second, and open the second through a recording proxy.
+
+Split the guest into a shared, non forkable base where security boundaries live, and a per computer app layer defined as a base revision plus a patch stack.
+
+Publish source plus pinned inputs, judge security fix compatibility by exploit tests rather than textual merges, and fail closed instead of silently skipping.
+
+End of report.
