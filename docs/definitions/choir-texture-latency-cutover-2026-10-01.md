@@ -142,8 +142,10 @@ decision:
 
 now:
   status: working
-  slice: 'cut 1: trajectory-scoped or lifecycle-version-memoized snapshot read'
+  slice: 'cuts 1+2 landed (c835c295): scoped lifecycle snapshot read + proxy
+    route cache; cut 3 gated on the deployed timing matrix'
   source_ref: main@db7f1063
+
   deploy_identity: 'staging aea62d05; owner guest f563200e'
   candidate:
     id: none
@@ -159,12 +161,18 @@ now:
     edge: missing_oracle
     delta_o: 'engineMu wait/hold instrumentation'
     scope_if_supported: 'all texture/lifecycle read paths'
-    status: active
+    status: 'partially_weakened — version-keyed memoization falsified by
+      TestLifecycleActivationAdmissionUsesCanonicalAgentCAS: activation
+      projection and title writes mutate snapshot-visible objects without
+      bumping trajectory.LifecycleVersion. Cut 1 shipped as the two-phase
+      filtered read instead.'
     evidence_refs:
       - docs/problems/texture-latency-layered-evidence-2026-10-01.md
   decision:
-    what: 'snapshot memoization first, route cache second, engine split only
-      if measured necessary'
+    what: 'cut 1 = two-phase filtered snapshot read (kind allowlist +
+      trajectory metadata filter in one serializable tx); cut 2 = 2s route
+      cache with transport-error invalidation; cut 3 = engine decoupling,
+      only if the timing matrix still fails'
     kind: operational
     status: settled
     evidence_ref: docs/problems/texture-latency-layered-evidence-2026-10-01.md
@@ -177,11 +185,11 @@ now:
       if so, cut 3 becomes mandatory, not optional'
     next_observation: 'deployed timing matrix after cuts 1+2; if loaded p95 is
       still >3s, instrument engineMu wait/hold'
-  blocker_or_risk: 'snapshot memoization correctness rests on the invariant
-    that every snapshot-relevant mutation bumps trajectory lifecycle_version —
-    verify against the write paths before landing'
-  next_action: 'verify lifecycle_version bump coverage; implement snapshot
-    memoization; implement route TTL cache; deploy; run the timing matrix'
+  blocker_or_risk: 'stale-route risk on the 2s cache is bounded by transport-
+    error invalidation; a missed invalidation path serves a dead upstream for
+    at most one TTL window'
+  next_action: 'CI + deploy for c835c295; then run the deployed timing matrix
+    (idle + drain) and decide cut 3'
 
 receipts: []
 
