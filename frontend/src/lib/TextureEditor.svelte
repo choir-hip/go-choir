@@ -110,6 +110,10 @@
   let newVersionAvailable = false;
   let streamSource = null;
   let streamDocId = '';
+  // Coalescing flags for the per-event lifecycle snapshot refresh — see
+  // connectDocumentStream's onEvent handler.
+  let lifecycleRefreshInFlight = false;
+  let lifecycleRefreshQueued = false;
   let showRecent = false;
   let recentLoading = false;
   let recentDocuments = [];
@@ -562,10 +566,24 @@
       const cleanup = await observeLifecycle(trajectoryId, {
         onSnapshot: (snapshot) => void handleLifecycleProjection(snapshot),
         onEvent: async () => {
+          // Coalesce burst events: each lifecycle event used to fire a full
+          // snapshot fetch (ReadObjectSnapshot scans every object for the
+          // computer under engineMu). One shared in-flight refresh plus a
+          // trailing re-run collapses an event storm into at most two reads.
+          if (lifecycleRefreshInFlight) {
+            lifecycleRefreshQueued = true;
+            return;
+          }
+          lifecycleRefreshInFlight = true;
           try {
-            await handleLifecycleProjection(await getLifecycleSnapshot(trajectoryId));
+            do {
+              lifecycleRefreshQueued = false;
+              await handleLifecycleProjection(await getLifecycleSnapshot(trajectoryId));
+            } while (lifecycleRefreshQueued);
           } catch (streamError) {
             error = streamError?.message || 'Lifecycle refresh failed';
+          } finally {
+            lifecycleRefreshInFlight = false;
           }
         },
         onReplayRequired: async () => {
@@ -579,6 +597,9 @@
           }
         },
         onError: (streamError) => {
+          error = streamError?.message || 'Lifecycle stream disconnected';
+        },
+        onStreamLost: (streamError) => {
           error = streamError?.message || 'Lifecycle stream disconnected';
         },
         onStreamRestored: () => {
@@ -617,18 +638,30 @@
     await loadRevisionAt(nextIndex);
   }
 
+  // Revision navigation: generation-guarded so a slow in-flight fetch cannot
+  // overwrite a newer selection, and errors surface instead of wedging the
+  // editor (a rejected getRevision used to propagate unhandled, leaving
+  // currentRevision stale and the chevrons feeling dead).
+  let revisionLoadSeq = 0;
   async function loadRevisionAt(index) {
     if (index < 0 || index >= revisions.length) return;
     resetCompareMergeState();
     sourcePanelError = '';
+    const seq = ++revisionLoadSeq;
     const summary = revisions[index];
-    const revision = await getRevision(summary.revision_id, { readOwner: textureReadOwner });
-    currentRevision = revision;
-    activeRevisionIndex = index;
-    setEditorFromRevision(revision);
-    const knownHeadId = latestHeadRevisionId || currentDoc?.current_revision_id || '';
-    if (summary.revision_id === knownHeadId) {
-      clearNewVersionIndicator();
+    try {
+      const revision = await getRevision(summary.revision_id, { readOwner: textureReadOwner });
+      if (seq !== revisionLoadSeq) return; // a newer navigation superseded this fetch
+      currentRevision = revision;
+      activeRevisionIndex = index;
+      setEditorFromRevision(revision);
+      const knownHeadId = latestHeadRevisionId || currentDoc?.current_revision_id || '';
+      if (summary.revision_id === knownHeadId) {
+        clearNewVersionIndicator();
+      }
+    } catch (loadError) {
+      if (seq !== revisionLoadSeq) return;
+      error = loadError?.message || 'Revision load failed';
     }
   }
 

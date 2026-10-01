@@ -170,19 +170,19 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', onResume);
 }
 
+let initialConnectError = null;
 try {
   await connect(0);
 } catch (error) {
-  closed = true;
-  if (stream) stream.close();
-  if (typeof document !== 'undefined') {
-    document.removeEventListener('visibilitychange', onResume);
-  }
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('pageshow', onResume);
-    window.removeEventListener('online', onResume);
-  }
-  throw error;
+  // Initial connect failed before the stream opened. Do NOT close the
+  // subscription: keep resume listeners armed so visibility/online events
+  // can retry, and mark the stream dead so the error surfaces and the
+  // caller still gets a cleanup function. Re-throw only for the caller's
+  // immediate feedback — the instance stays reconnectable.
+  initialConnectError = error;
+  streamDead = true;
+  handlers.onStreamLost?.(error);
+  void reconnect();
 }
 return () => {
   closed = true;
