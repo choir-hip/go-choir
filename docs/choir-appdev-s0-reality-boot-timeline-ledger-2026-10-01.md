@@ -83,3 +83,22 @@ Terse entries; consult only when auditing or `now` loses a thread.
 - Pending: deploy 21bbabff → manual owner refresh → epoch-996 receipt
   with reconstruct_done + vocab_fenced + applied_rows + runtime_started —
   the first complete owner-sized attribution.
+
+- OUTAGE (introduced by 21bbabff, repaired 7e412ca7): ~19:03-19:19 + a
+  recurrence under the restarted vmctl, no account could boot a computer.
+  fetchGuestBootTimeline's tail-out called t.mark() while holding t.mu →
+  self-deadlock on a non-reentrant mutex; the call ran under m.mu, so one
+  deadlocked owner fetch serialized every boot and every m.mu reader
+  (resolve, boot-timeline, health loop). SIGQUIT dump of pid 434015 proves
+  it: goroutine 351 [sync.Mutex.Lock 18min] fetch<-bootVM<-Refresh; ~15
+  parked on m.mu.RLock. vmctl restarted via SIGQUIT; same deadlock recurred
+  on the re-boot because runtime_started lands at ~407s on owner-sized
+  tapes, well past the ~30s fetch window. Problem doc:
+  docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md.
+  Fix 7e412ca7: tail marks outside t.mu; fetch+finish+persist moved off
+  m.mu in bootVM and ResumeVM; MarshalJSON under t.mu via pointer alias.
+  Owner guest verified healthy during the outage on its real tap
+  (10.200.149.2): vocab_fenced 10263ms, applied_rows=0 — the replayed-predicate
+  fix works; the wedge was purely host-side.
+- Divergent panel (in flight): hunting sibling lock/timeout defects in
+  vmmanager+vmctl before S1 inherits the structure.
