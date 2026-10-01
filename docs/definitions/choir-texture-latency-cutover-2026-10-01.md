@@ -145,7 +145,8 @@ now:
   slice: 'cuts 1+2 landed (c835c295): scoped lifecycle snapshot read + proxy
     route cache; cut 3 deployed as generated-column indexes (8f47a232)
     after engineMu attribution (cf0ef207) showed read-dominated holds —
-    drain-loaded re-measurement pending guest refresh'
+    drain-loaded re-measurement pending next drain window; guest now on
+    a3cfaa00 post-refresh'
   source_ref: main@db7f1063
 
   deploy_identity: 'staging aea62d05; owner guest f563200e'
@@ -189,8 +190,9 @@ now:
       with them'
   blocker_or_risk: 'ORDER BY updated_at over an index-seeked set is
     bounded but visible — acceptable'
-  next_action: 'guest refresh to 8f47a232 when deploy lands; re-run
-    matrix + engine_mutex under drain; record cut-3 verdict'
+  next_action: 'cut-3 verdict recorded; residual reads = kind-only
+    ListObjects event scan + snapshot phase-1 without kind predicate;
+    drain-loaded matrix pending next live drain window'
 
 receipts:
   - id: cuts-1-2-deployed
@@ -214,6 +216,35 @@ receipts:
       deploy_ref: '36875419303 success'
       environment_identity: 'staging 5439733b; guest 5439733b'
       deployed_acceptance: 'idle matrix recorded; drain-loaded pending'
+  - id: cut3-attribution-and-indexes-deployed
+    boundary: implement
+    identity: cf0ef207 + 8f47a232 + a3cfaa00
+    proof_refs:
+      - 'engineMutex instrumentation (cf0ef207) deployed; guest /health
+        exposed per-call-path wait/hold counters'
+      - 'drain measurement pre-fix (desk 33→37, runs 7): engineMu held
+        ~97% of wall; top holders all reads — ListObjectsByMetadata
+        128s/92 calls, ListObjects 89s/56, ReadObjectSnapshotFiltered
+        147s/254; putBatch max hold 17ms'
+      - 'CI+deploy 36894157990 success; proxy and guest on a3cfaa00'
+      - 'post-fix delta window (6x docs+traj idle, guest drained):
+        ListObjectsByMetadata 2 calls / 4ms (was ~1.3s/call), docs
+        0.27-2.4s, traj 0.68-1.4s; residual reads: ListObjects
+        (kind-only stream_seq scan) 2.2s/call, ReadObjectSnapshotFiltered
+        ~240ms/call'
+    rollback_ref: 'git revert a3cfaa00..8f47a232 — indexes/columns remain
+      inert, queries fall back to JSON_EXTRACT scan'
+    disposition: 'cut 3 shipped; read-lock queue collapsed for metadata
+      paths; residual = kind-only ListObjects event scan + snapshot
+      phase-1 without kind predicate'
+    landing:
+      source_commit: a3cfaa00
+      ci_ref: '36894157990 success'
+      deploy_ref: '36894157990 success'
+      environment_identity: 'staging a3cfaa00; guest a3cfaa00
+        (computer-03335285269bdba4f94377e56879f9e6, refreshed)'
+      deployed_acceptance: 'engine_mutex delta measured; docs p50 ~0.9s
+        idle; drain-loaded matrix pending next live drain window'
 
 weak_measures:
   - name: 'editor request p50/p95 through proxy'
