@@ -629,6 +629,8 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		log.Printf("autoputer: recovery replay-only drive complete (seq=%d committed=%d); exiting without runtime start or reconciliation", snap.Sequence, snap.CommittedSequence)
 		os.Exit(0)
 	}
+	replaySnap := appender.ReplaySnapshot()
+	bootSetReplay(replaySnap.Sequence, replaySnap.CommittedSequence)
 	bootMark("replay_done")
 	gate.tick()
 	gate.setPending(false)

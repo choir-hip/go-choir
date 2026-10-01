@@ -35,6 +35,7 @@ var bootTimelineClock = struct {
 	start      time.Time // wall clock at process init
 	uptimeBase float64   // /proc/uptime seconds at process init
 	marks      []bootTimelineMark
+	replay     map[string]any // replay volume captured at replay_done
 }{
 	start:      time.Now(),
 	uptimeBase: readProcUptimeSeconds(),
@@ -70,6 +71,17 @@ func bootMarkDetail(phase, detail string) {
 		mark.SinceBootMS = int64(sinceBoot)
 	}
 	bootTimelineClock.marks = append(bootTimelineClock.marks, mark)
+}
+
+// bootSetReplay records the post-replay volume snapshot (sequence/committed)
+// so the receipt carries not just when replay ran but how much tape it moved.
+func bootSetReplay(seq, committed uint64) {
+	bootTimelineClock.Lock()
+	defer bootTimelineClock.Unlock()
+	bootTimelineClock.replay = map[string]any{
+		"sequence":           seq,
+		"committed_sequence": committed,
+	}
 }
 
 // readProcUptimeSeconds reads /proc/uptime's first field (seconds since boot,
@@ -506,6 +518,13 @@ func handleBootTimeline(w http.ResponseWriter, r *http.Request) {
 	bootTimelineClock.Lock()
 	marks := make([]bootTimelineMark, len(bootTimelineClock.marks))
 	copy(marks, bootTimelineClock.marks)
+	var replay map[string]any
+	if bootTimelineClock.replay != nil {
+		replay = make(map[string]any, len(bootTimelineClock.replay))
+		for k, v := range bootTimelineClock.replay {
+			replay[k] = v
+		}
+	}
 	processStart := bootTimelineClock.start
 	uptimeBase := bootTimelineClock.uptimeBase
 	bootTimelineClock.Unlock()
@@ -539,6 +558,7 @@ func handleBootTimeline(w http.ResponseWriter, r *http.Request) {
 		"process_started_at": processStart.UTC().Format(time.RFC3339Nano),
 		"uptime_at_start_s":  uptimeBase,
 		"marks":              marks,
+		"replay":             replay,
 		"systemd_analyze":    analyze,
 		"units":              units,
 		"journal_events":     journal,
