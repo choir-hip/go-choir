@@ -12,18 +12,23 @@
   an authoritative value.
 
   Storage is session-scoped by design: a returning visitor within the same
-  tab session goes straight to their desktop. A fresh session gets the film.
+  tab session goes straight to their desktop. A fresh session gets the deck.
   `?intro=0` forces it off and `?intro=1` forces it on, which is how the
   E2E proof captures both states deterministically.
+
+  Note that `reduced` no longer suppresses the deck. Nothing in it autoplays
+  — it is driven entirely by the visitor's own scrolling — so a reduced-motion
+  visitor still gets the argument, standing still, by scrolling. Suppressing
+  it would have been a different decision than the one the previous, timed
+  film forced on us, and it would have taken the narrative away from the one
+  audience most likely to be reading rather than watching.
 */
 
 const KEY = 'choir.intro.seen.v1';
 
 export function shouldPlayLandingIntro(search: string, reduced: boolean): boolean {
-  const forced = introOverride(search);
-  if (forced !== null) return forced;
-  if (reduced) return false;
-  return !hasSeenIntro();
+  void reduced;
+  return introOverride(search) ?? !hasSeenIntro();
 }
 
 export function introOverride(search: string): boolean | null {

@@ -61,13 +61,20 @@
   let universalWirePublicStatus = '';
   let universalWirePublicError = '';
   /**
-   * Orientation film for first-time signed-out visitors. Decided once, after
+   * Orientation deck for first-time signed-out visitors. Decided once, after
    * the session check resolves to signed_out, so a returning authenticated
    * user never sees it. It is non-blocking by construction: it never captures
-   * pointer events over the desktop, and touching the desktop ends it.
+   * pointer events over the desktop, which stays live and operable at every
+   * pane, and its third pane *is* the desktop.
    */
   let showLandingIntro = false;
   let landingIntroReduced = false;
+  /**
+   * True once the deck has scrolled far enough that the desktop is the thing
+   * on screen. At that point the desktop mounts its own ambient field, so
+   * the landing never pays for two full-frame canvases at once.
+   */
+  let landingReachedDesktop = false;
   const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
 
   $: isAuthenticated = authState === 'signed_in';
@@ -382,9 +389,13 @@
     showLandingIntro = shouldPlayLandingIntro(window.location.search, landingIntroReduced);
   }
 
+  function handleLandingIntroEnterDesktop() {
+    // The desktop is the destination now, so it may bring up its own field.
+    landingReachedDesktop = true;
+  }
+
   function handleLandingIntroComplete() {
     markIntroSeen();
-    showLandingIntro = false;
   }
 
   async function handleLogout() {
@@ -644,7 +655,7 @@
       {appReplay}
       {publicRoutePath}
       theme={currentTheme}
-      introPlaying={showLandingIntro}
+      introPlaying={showLandingIntro && !landingReachedDesktop}
       on:logout={handleLogout}
       on:authexpired={handleAuthExpired}
       on:authrequired={handleAuthRequired}
@@ -652,6 +663,7 @@
     {#if showLandingIntro}
       <LandingIntro
         reduced={landingIntroReduced}
+        on:enterdesktop={handleLandingIntroEnterDesktop}
         on:complete={handleLandingIntroComplete}
       />
     {/if}

@@ -79,53 +79,70 @@ export const previewComputeStatus = {
 };
 
 /**
- * The signed-out "What Choir Is" preview document.
+ * The signed-out Texture document: "Introducing Choir".
  *
- * This is the first real sentence a signed-out visitor reads about the
- * product, so it is written as an argument, not a glossary. The previous
- * copy opened with "a private, Texture-centered computer for durable
- * knowledge work" — accurate, and meaningless to anyone who has not been
- * briefed on the ontology. It named the mechanism before it named the
- * problem, so a visitor had no reason to care.
+ * This is the third pane of the landing deck, restated. The deck says the
+ * thing in two slides; this says all of it in prose, for the visitor who
+ * scrolled to the machine and wants to read rather than be told.
  *
- * The shape now is: the shared failure → the reframe → the mechanism →
- * what the visitor can do next. Jargon is introduced only after the
- * reader has a reason to want it.
+ * It used to be titled "What Choir Is" and opened with "a private,
+ * Texture-centered computer for durable knowledge work" — accurate, and
+ * meaningless to anyone not already briefed on the ontology. It named the
+ * mechanism before the reader had a reason to want it.
+ *
+ * The shape now: the shared failure, the reframe, the machine, why you can
+ * trust it, and what you can actually do. Jargon is introduced only after
+ * the reader has a reason to want it.
  */
 export const previewTextureDocument = {
   doc_id: 'preview-texture',
-  title: 'What Choir Is',
+  title: 'Introducing Choir',
   content: [
-    '# What Choir Is',
+    '# Introducing Choir',
+    '',
+    '### A new species — of computer',
     '',
     'Every AI session starts from zero. You re-explain the project, it re-guesses the rules, and the thread dies with the tab. That is fine for ten minutes of thinking and useless for three months of work.',
     '',
-    '**Choir is a computer, not a conversation.** A persistent machine made of many agents that coordinate over months instead of minutes. It keeps a versioned record of everything it does — every draft, every claim, every reversal — so the work survives you closing the tab.',
+    '**Choir is not a chat. It is a computer.** A persistent machine made of many agents that coordinate over months instead of minutes. It keeps a versioned record of everything it does — every draft, every claim, every reversal — so the work survives you closing the tab.',
+    '',
+    '*Persistent. Versioned. Reversible. Self-improving.*',
     '',
     '## How it is put together',
     '',
-    'Four desks run on one machine, and you sit above all of them. **Texture** writes the durable documents. **Management** decides what is worth running. **Engineering** does the building, inside a sandbox it cannot escape. **Research** goes and gets evidence from the world. You state the intent; they do the work and show you the receipts.',
+    'Four desks run on one machine, and you sit above all of them.',
+    '',
+    '- **Texture** writes the durable documents.',
+    '- **Management** decides what is worth running.',
+    '- **Engineering** does the building, inside a sandbox it cannot escape.',
+    '- **Research** goes and gets evidence from the world.',
+    '',
+    'You state the intent. They do the work, and they show you the receipts.',
     '',
     '## Why you can trust it',
     '',
-    'Nothing moves that you cannot read, cite, or undo. Every state change is a typed event with evidence attached, and every one of them rolls back. Before the agents act, they commit to typed predictions; afterwards those commitments are scored. The accumulated log is how the machine learns, and it is yours to inspect.',
+    'Nothing moves that you cannot read, cite, or undo. Every state change is a typed event with evidence attached, and every one of them rolls back.',
+    '',
+    'Before the agents act, they commit to typed predictions. Afterwards those commitments are scored. The accumulated log is how the machine learns, and it is yours to inspect.',
     '',
     'That discipline applies to Choir itself. The computer proposes changes to its own environment, tools, and operating rules under the same evidence-and-approval rules as any other change. It is the essential capability, not a feature.',
     '',
     '## What you get',
     '',
-    'A **web desktop** for durable writing, sources, files, and a repair console. A **native macOS app** wrapping the same computer. A **CLI** for agents and scripts. All three are projections of one persistent machine — not three products that disagree.',
+    'A **web desktop** for durable writing, sources, files, and a repair console. A **native macOS app** wrapping the same computer. A **CLI** for agents and scripts.',
+    '',
+    'All three are projections of one persistent machine. Not three products that disagree.',
     '',
     '---',
     '',
-    '*You are looking at a local preview. Sign in to connect your own durable computer: your documents keep their revisions, sources stay attached, and the agents have somewhere to work.*',
+    '*You are looking at a live local preview. Sign in to connect your own durable computer: your documents keep their revisions, sources stay attached, and the agents have somewhere to work.*',
   ].join('\n'),
   revisions: [
     {
       revision_id: 'v1',
       label: 'v1',
-      title: 'The problem',
-      summary: 'Why a session is the wrong unit of work.',
+      title: 'A new species',
+      summary: 'Why a session is the wrong unit of work, and what replaces it.',
     },
     {
       revision_id: 'v2',

@@ -202,6 +202,42 @@
   opacity: 0.22;
 }
 
+/* ── the landing hand-off ──────────────────────────────────────────────
+   The landing deck's third pane IS the desktop — there is nothing to
+   press. It drives this plane's reveal through one custom property it
+   writes on :root, `--choir-landing-reveal` (0 = buried behind the deck,
+   1 = fully arrived), so neither component has to know about the other.
+
+   Applied to .desktop-area rather than [data-desktop] on purpose: a
+   transform on [data-desktop] would make it the containing block for the
+   prompt surface, which is position:fixed, and the prompt bar would jump
+   out of the viewport. .desktop-area is a sibling of the prompt surface,
+   so scaling the plane here moves the windows and the icons — the parts
+   that should feel like they are coming forward — and leaves the bar alone.
+
+   No opacity and no blur here, both on purpose.
+
+   · Opacity is owned by the settle animation above, whose `both` fill mode
+     pins it at 1 and outranks any plain declaration on the same element.
+   · Blur was here and cost more than everything else on the landing page
+     combined — a full-subtree blur over windows, icons and body text,
+     re-rasterised every frame, measured at 13fps. And it was refining a
+     difference nobody could see: the deck's own scrim already holds the
+     desktop at about three percent opacity, so what it was blurring was
+     already invisible. The defocus moment in the hand-off belongs on the
+     word "computer", which is what grows, not on the background.
+
+   What is left is a scale, which is free, and it is enough: the plane
+   starts a little too large and settles as the scrim lifts.
+*/
+:root {
+  --choir-landing-reveal: 1;
+}
+
+[data-desktop] .desktop-area {
+  transform: scale(calc(1.06 - 0.06 * var(--choir-landing-reveal)));
+}
+
 /* ── reduced motion ────────────────────────────────────────────────────
    Collapse every duration rather than deleting the rules, so nothing is
    left frozen in a `from` keyframe. */

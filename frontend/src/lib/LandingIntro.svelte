@@ -1,32 +1,47 @@
 <!--
-  LandingIntro — the signed-out orientation film.
+  LandingIntro — the signed-out landing, as a three pane deck.
 
-  Plays a five-act sequence over the live public desktop, then hands off.
-  It is deliberately NON-BLOCKING: the scrim never captures pointer events,
-  so the desktop underneath stays live, and any interaction with it dissolves
-  the film. A visitor who wants the machine can simply take it. A visitor
-  who wants the story gets the story. Neither is a trap.
+  Pane 1  the title card
+  Pane 2  "Choir isn't a chat. It's a computer."
+  Pane 3  the actual web desktop, live, with nothing to press
 
-  Contract notes (see frontend/tests for the specs that pin these):
-    - No [data-window] nodes are added; the seeded public preview Texture
-      window stays exactly as it is.
-    - Nothing here calls .focus(), so ui-keyboard-focus's assertion that
-      [data-prompt-input] holds focus after the desktop starts still holds.
-    - Escape is only claimed when no dialog is open, so the auth overlay
-      keeps its Escape contract.
-    - Colours are tokens only (theme-contract). No raw literals in this file.
-    - Motion is a pure function of (act, localTime) driven by one rAF clock.
-      Entrances are declarative: an element carries data-at and the loop
-      flips data-shown once when the act clock passes it, so scrubbing,
-      pausing and replaying are all frame-exact and idempotent.
+  ── Why it is a virtual scroll and not a native one ────────────────────
+  The desktop is mounted underneath this overlay and must stay operable at
+  every moment — that is what makes the landing non-blocking. A real scroll
+  container covering the viewport would eat every click and drag aimed at
+  the desktop, and would break every test that reaches for a desktop icon.
+
+  So the track is a transform. A single `translate3d` moves three panes past
+  a fixed viewport, wheel/touch/keys drive a float position, and the overlay
+  never captures a pointer event. Everything the deck does is a pure
+  function of that one float.
+
+  ── Why that matters for the motion ────────────────────────────────────
+  Because position is continuous, the choreography is scroll-linked rather
+  than timed. The mark does not "play" then "leave" — it is mid-flight at
+  any scroll offset, and it is exactly where the user's hand put it. The
+  big move is the handoff on pane 2: the word *computer* scales up through
+  the camera and dissolves, and the desktop is already running behind it.
+  The word is the doorway, which is the whole argument for a landing page
+  whose last pane is the product rather than a pitch for it.
+
+  ── Contracts this must not break ──────────────────────────────────────
+  · Adds no [data-window]; the seeded public preview window stays exactly one.
+  · Never calls .focus(), so the prompt autofocus contract holds.
+  · Never claims Escape, and never captures pointer events, so the auth
+    overlay and the live desktop keep their own behaviour.
+  · Tokens only — theme-contract forbids raw colour literals outside theme.ts.
+  · reduced-motion is not a retirement here. Nothing autoplays, so a visitor
+    who asked for stillness still gets the full narrative by scrolling — it
+    is simply standing still while they do it.
 
   Data attributes for test targeting:
-    data-landing-intro        — root overlay (only while the film is showing)
-    data-landing-intro-act    — current act id
-    data-landing-intro-handoff— "1" once the handoff has played
-    data-landing-intro-skip   — skip control
-    data-landing-intro-dot    — act rail control
-    data-landing-intro-enter  — primary invitation control
+    data-landing-intro            — root overlay while the deck is showing
+    data-landing-intro-pane       — nearest pane index, 0-based
+    data-landing-intro-reveal     — 0..1 hand-off progress into the desktop
+    data-landing-intro-desktop    — "1" once the desktop pane is reached
+    data-landing-intro-continue   — the advance control
+    data-landing-intro-rail       — the progress rail
 -->
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
@@ -34,589 +49,362 @@
   import TetraMark from './TetraMark.svelte';
 
   export let reduced = false;
-  /** Replay control hosted by the desktop's own chrome. */
-  export let replayToken = 0;
 
   const dispatch = createEventDispatcher();
 
-  type ActId = 'title' | 'amnesia' | 'rename' | 'ensemble' | 'receipts' | 'invitation';
-
-  const ACTS: { id: ActId; len: number; label: string }[] = [
-    { id: 'title', len: 2800, label: 'Choir' },
-    { id: 'amnesia', len: 6400, label: 'the amnesia' },
-    { id: 'rename', len: 6200, label: 'the rename' },
-    { id: 'ensemble', len: 6400, label: 'the ensemble' },
-    { id: 'receipts', len: 6400, label: 'the receipts' },
-    { id: 'invitation', len: 1e9, label: 'the invitation' },
-  ];
-  const TOTAL = ACTS.slice(0, 5).reduce((a, x) => a + x.len, 0);
-  const ANCHORS = [
-    [0.235, 0.285],
-    [0.715, 0.245],
-    [0.285, 0.755],
-    [0.745, 0.715],
-  ];
+  /** Total panes. The last one is the desktop, not a slide. */
+  const PANES = 3;
+  const LAST = PANES - 1;
 
   let root: HTMLElement | null = null;
-  let act = 0;
-  let localTime = 0;
-  let running = false;
-  let handedOff = false;
-  let progress = 0;
-  let elapsed = 0;
-  let last = 0;
-  let raf = 0;
-  let dotProgress: number[] = [0, 0, 0, 0, 0, 0];
-  let lastFrame = performance.now();
+  let pos = 0;          // current position, in pane units (0 .. LAST)
+  let target = 0;       // where we are heading
+  let velocity = 0;     // pane units per second, for snap projection
+  let dragging = false;
+  let dragFrom = 0;
+  let dragStartPos = 0;
+  let dragStartAt = 0;
+  let lastInteractionAt = 0;
+  let lastTouchY = 0;
+  let lastTouchAt = 0;
+  let hinted = false;
+  let desktopAnnounced = false;
 
-  // entrance release flags, one per data-at group, computed each frame
-  // continuous per-act properties
-  let tapeWidth = 0;
-  let transcriptOpacity = 1;
-  let meterWidth = 0;
-  let attractProgress = 0;
-  let attract: { x: number; y: number }[] = [];
+  let pane = 0;
+  let arrive = 0;
+  let reveal = 0;
+  let trackY = 0;
+  let railFill = 0;
+  let railPips = [0, 0, 0];
 
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
-  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-  const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+  const clamp01 = (v: number) => clamp(v, 0, 1);
+  /** Frame-rate independent damping. Feels the same at 30fps and 144fps. */
+  const damp = (a: number, b: number, rate: number, dt: number) =>
+    a + (b - a) * (1 - Math.exp(-rate * dt));
 
-  // ── entrances ────────────────────────────────────────────────────────
-  // Every timed element declares its release point once, in markup. The loop
-  // sets a flag; CSS does the transition. Nothing fires twice, nothing
-  // drifts, and scrubbing backwards un-releases cleanly.
-  const TIMED: Record<string, number> = {
-    'a0-mark': 40, 'a0-word': 620, 'a0-tag': 1150,
-    // act I: the conversation runs 0–1.4s, drains by 2.1s, and the
-    // argument only starts at 1.75s so nothing overlaps anything.
-    'a1-kicker': 1750, 'a1-h1a': 1900, 'a1-h1b': 2030, 'a1-sub': 2850, 'a1-voice': 3900,
-    'a2-kicker': 120, 'a2-h1a': 240, 'a2-h1b': 350, 'a2-sub': 2300,
-    'a2-pill1': 3050, 'a2-pill2': 3180, 'a2-pill3': 3310, 'a2-pill4': 3440,
-    'a3-kicker': 380, 'a3-h1a': 500, 'a3-h1b': 610, 'a3-sub': 1750,
-    'a3-desk0': 420, 'a3-desk1': 700, 'a3-desk2': 980, 'a3-desk3': 1260,
-    'a4-kicker': 100, 'a4-h1a': 220, 'a4-h1b': 330, 'a4-sub': 1300,
-    'a4-card0': 380, 'a4-card1': 680, 'a4-card2': 980,
-    'a5-kicker': 40, 'a5-h1': 170, 'a5-sub': 900, 'a5-cta': 1150, 'a5-note': 1500, 'a5-mark': 1500,
-  };
-  const ACT_KEYS: Record<number, string[]> = {
-    0: ['a0-mark', 'a0-word', 'a0-tag'],
-    1: ['a1-kicker', 'a1-h1a', 'a1-h1b', 'a1-sub', 'a1-voice'],
-    2: ['a2-kicker', 'a2-h1a', 'a2-h1b', 'a2-sub', 'a2-pill1', 'a2-pill2', 'a2-pill3', 'a2-pill4'],
-    3: ['a3-kicker', 'a3-h1a', 'a3-h1b', 'a3-sub', 'a3-desk0', 'a3-desk1', 'a3-desk2', 'a3-desk3'],
-    4: ['a4-kicker', 'a4-h1a', 'a4-h1b', 'a4-sub', 'a4-card0', 'a4-card1', 'a4-card2'],
-    5: ['a5-kicker', 'a5-h1', 'a5-sub', 'a5-cta', 'a5-note', 'a5-mark'],
-  };
+  // ── input ───────────────────────────────────────────────────────────
+  /**
+   * Gesture state, explicit rather than inferred from a timer.
+   *
+   * The first version decided a gesture was over by asking whether 110ms
+   * had passed since the last event. That is fine for a trackpad and broken
+   * for a notched wheel, which delivers a notch roughly every 100ms — so
+   * every notch looked like the end of a gesture, the deck snapped back
+   * toward the pane it had left, and a wheel user could not cross a single
+   * pane. The hint said "scroll", and the wheel did not work.
+   *
+   * So: a gesture stays alive until the input has genuinely paused, and
+   * nothing touches the target position while it is.
+   */
+  const IDLE_MS = 300;
+  /** Pane fraction per viewport-height of wheel delta. A notched wheel
+   *  sends ~45px a notch, so this puts a pane about six notches away. */
+  const WHEEL_GAIN = 0.34;
+
+  let gestureActive = false;
+
+  function beginGesture() {
+    gestureActive = true;
+    lastInteractionAt = performance.now();
+    if (!hinted) hinted = true;
+  }
+
+  function advance(by: number) {
+    target = clamp(Math.round(target) + by, 0, LAST);
+    beginGesture();
+  }
+
+  function goTo(index: number) {
+    target = clamp(index, 0, LAST);
+    beginGesture();
+  }
+
+  function onWheel(event: WheelEvent) {
+    if (event.ctrlKey) return;                       // pinch-zoom belongs to the browser
+    // Never claim the wheel from a real surface that wants it.
+    const el = event.target as HTMLElement | null;
+    if (el?.closest?.('[data-auth-overlay], [data-desk-sheet], [data-desktop-overview]')) return;
+    event.preventDefault();
+    const unit = event.deltaMode === 1 ? 32 : event.deltaMode === 2 ? 800 : 1;
+    const dy = event.deltaY * unit;
+    // A trackpad gives many small deltas and a wheel gives a few large ones.
+    // Both map to the same pane fraction, so the deck feels the same either way.
+    target = clamp(target + dy / Math.max(240, window.innerHeight * WHEEL_GAIN), 0, LAST);
+    beginGesture();
+  }
 
   /**
-   * Release the act's entrances.
-   *
-   * Idempotent by construction: a flag is only written when it actually
-   * changes. Allocating a fresh object every frame would look harmless but
-   * re-runs Svelte's diff over the whole component 60 times a second, and a
-   * component this size pays for it in dropped frames — which is exactly the
-   * wrong place to lose a millisecond when the whole point is smoothness.
+   * Touch scrub, opted out when the gesture starts on something that owns
+   * the gesture. Without this list a drag on a window would move the deck
+   * and a drag on the deck would do nothing — the exact inverse of correct.
    */
-  let shown: Record<string, boolean> = {};
-
-  function release() {
-    const keys = ACT_KEYS[act] || [];
-    let dirty = false;
-    for (const key of keys) {
-      const want = localTime >= TIMED[key];
-      if (shown[key] !== want) {
-        shown = { ...shown, [key]: want };
-        dirty = true;
-      }
-    }
-    return dirty;
+  function ownsDrag(target_: EventTarget | null): boolean {
+    const el = target_ as HTMLElement | null;
+    if (!el || typeof el.closest !== 'function') return true;
+    return !el.closest(
+      '[data-window], [data-floating-window], [data-prompt-surface], [data-desktop-icon], ' +
+        '[data-auth-overlay], [data-desk-sheet], [data-desktop-overview], button, a, input, textarea, ' +
+        '[contenteditable="true"], [data-settings-app], [data-file-browser]',
+    );
   }
 
-  function continuous() {
-    if (act === 1) {
-      // the transcript argues, then drains to a residue — it does not vanish,
-      // because the residue IS the argument
-      transcriptOpacity = clamp(1 - (localTime - 2100) / 1600, 0.14, 1);
-    }
-    if (act === 2) {
-      tapeWidth = easeOut(clamp((localTime - 120) / 1900, 0, 1));
-    }
-    if (act === 3) {
-      const vw = typeof window === 'undefined' ? 1440 : window.innerWidth;
-      const vh = typeof window === 'undefined' ? 900 : window.innerHeight;
-      attract = ANCHORS.map((a) => ({ x: a[0] * vw, y: a[1] * vh }));
-      attractProgress = clamp((localTime - 60) / 1700, 0, 1);
-    } else {
-      attractProgress = 0;
-    }
-    if (act === 4) {
-      meterWidth = easeOut(clamp((localTime - 1500) / 1700, 0, 1)) * 100;
-    }
+  function onPointerDown(event: PointerEvent) {
+    if (event.pointerType === 'mouse') return;
+    if (!ownsDrag(event.target)) return;
+    dragging = true;
+    dragFrom = event.clientY;
+    dragStartPos = target;
+    lastTouchY = event.clientY;
+    lastTouchAt = performance.now();
+    beginGesture();
   }
 
-  function setAct(next: number) {
-    act = clamp(next, 0, ACTS.length - 1);
-    localTime = 0;
-    last = 0;
-    if (act === 1) transcriptOpacity = 1;
-    if (act === 2) tapeWidth = 0;
-    if (act === 3) attractProgress = 0;
-    if (act === 4) meterWidth = 0;
-    release();
-    continuous();
+  function onPointerMove(event: PointerEvent) {
+    if (!dragging || event.pointerType === 'mouse') return;
+    const now = performance.now();
+    const dy = dragFrom - event.clientY;
+    const dt = Math.max(1, now - lastTouchAt) / 1000;
+    velocity = (lastTouchY - event.clientY) / dt / Math.max(360, window.innerHeight * 0.62);
+    lastTouchY = event.clientY;
+    lastTouchAt = now;
+    target = clamp(dragStartPos + dy / Math.max(240, window.innerHeight * WHEEL_GAIN), 0, LAST);
+    beginGesture();
   }
 
-  function gotoAct(next: number) {
-    if (handedOff) return;
-    setAct(next);
+  function onPointerUp() {
+    if (!dragging) return;
+    dragging = false;
+    // Project the throw, then land on the nearest pane. A flick goes one
+    // pane; a slow drag lands where you left it.
+    const thrown = target + velocity * 0.18;
+    const from = dragStartPos;
+    const moved = Math.abs(target - from);
+    target = moved < 0.12 && Math.abs(velocity) < 0.6
+      ? clamp(Math.round(from), 0, LAST)
+      : clamp(Math.round(thrown), 0, LAST);
+    velocity = 0;
+    beginGesture();
   }
 
-  function handoff() {
-    if (handedOff) return;
-    handedOff = true;
-    running = false;
-    dispatch('complete');
+  function onKeydown(event: KeyboardEvent) {
+    // A dialog owns the keyboard while it is open.
+    if (document.querySelector('[role="dialog"], [data-auth-overlay]')) return;
+    const k = event.key;
+    if (k === 'ArrowDown' || k === 'PageDown' || k === ' ') { event.preventDefault(); advance(1); }
+    else if (k === 'ArrowUp' || k === 'PageUp') { event.preventDefault(); advance(-1); }
+    else if (k === 'Home') { event.preventDefault(); goTo(0); }
+    else if (k === 'End') { event.preventDefault(); goTo(LAST); }
   }
 
-  function restart() {
-    handedOff = false;
-    elapsed = 0;
-    setAct(0);
-    running = !reduced;
-  }
-
-  $: if (replayToken > 0 && root && !handedOff) {
-    // caller asked for a replay
-  }
-  $: if (replayToken > 1) restart();
+  // ── the clock ───────────────────────────────────────────────────────
+  let last = 0;
+  let raf = 0;
 
   function frame(now: number) {
     raf = requestAnimationFrame(frame);
-    if (!last) {
-      last = now;
-      return;
-    }
-    const dt = Math.min(now - last, 64);
+    if (!last) { last = now; return; }
+    const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
-    if (running) {
-      localTime += dt;
-      elapsed += dt;
+
+    // Settle onto a pane once the gesture is genuinely over. While a gesture
+    // is alive the target is untouchable — that is the whole point of the
+    // flag, and it is why a notched wheel can now cross a pane.
+    if (!gestureActive && now - lastInteractionAt > IDLE_MS) {
+      const settled = Math.round(target);
+      if (Math.abs(target - settled) < 0.0015) target = settled;
+      else target = damp(target, settled, 9, dt);
     }
-    release();
-    continuous();
+    if (gestureActive && now - lastInteractionAt > IDLE_MS) gestureActive = false;
 
-    const base = ACTS.slice(0, act).reduce((a, x) => a + x.len, 0);
-    progress = clamp((base + Math.min(localTime, ACTS[act].len)) / TOTAL, 0, 1);
-    let dotsDirty = false;
-    for (let i = 0; i < dotProgress.length; i++) {
-      const target = i < act ? 1 : i === act ? clamp(localTime / ACTS[act].len, 0, 1) : 0;
-      const next = lerp(dotProgress[i], target, 0.22);
-      if (Math.abs(next - dotProgress[i]) > 0.002) { dotProgress[i] = next; dotsDirty = true; }
+    pos = reduced ? target : damp(pos, target, dragging ? 26 : 7.5, dt);
+    if (Math.abs(pos - target) < 0.0004) pos = target;
+
+    trackY = pos;
+    // Pane 2 arriving, 0 .. 1 — drives its entrance AND pane 1's exit.
+    arrive = clamp01(pos);
+    // How far the desktop hand-off has progressed, 0 .. 1.
+    reveal = clamp01(pos - 1);
+    pane = Math.round(pos);
+    railFill = clamp01(pos / LAST);
+    railPips = [clamp01(1 - pos), clamp01(1 - Math.abs(pos - 1)), reveal];
+
+    // The root property is how the deck drives the desktop plane's
+    // reveal without either component knowing about the other.
+    document.documentElement.style.setProperty('--choir-landing-reveal', reveal.toFixed(4));
+
+    if (reveal > 0.02 && !desktopAnnounced) {
+      desktopAnnounced = true;
+      dispatch('enterdesktop');
     }
-    if (dotsDirty) dotProgress = dotProgress.slice();
-
-    if (running && localTime >= ACTS[act].len && act < ACTS.length - 1) setAct(act + 1);
-  }
-
-  // ── input ───────────────────────────────────────────────────────────
-  function onKeydown(event: KeyboardEvent) {
-    if (handedOff) return;
-    // Never claim Escape while a real dialog owns it (the auth overlay).
-    if (document.querySelector('[role="dialog"], [data-auth-overlay]')) return;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      handoff();
-      return;
-    }
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      localTime = ACTS[act].len;
-      return;
-    }
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      gotoAct(act - 1);
-    }
-  }
-
-  let wheelLock = 0;
-  function onWheel(event: WheelEvent) {
-    if (handedOff || reduced) return;
-    if (Math.abs(event.deltaY) < 8) return;
-    const now = performance.now();
-    if (now - wheelLock < 620) return;
-    wheelLock = now;
-    gotoAct(act + (event.deltaY > 0 ? 1 : -1));
-  }
-
-  /**
-   * Any interaction with the live desktop underneath retires the film.
-   * This is what keeps the intro non-blocking: the scrim is pointer-events
-   * none, so the desktop is always operable, and touching it ends the film.
-   *
-   * The film's own control keys are excluded, otherwise a document-level
-   * capture listener would swallow every arrow and Escape before the film
-   * could act on them and the sequence would be unscrubbable.
-   */
-  const OWN_KEYS = new Set([
-    'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
-    'r', 'R', 'Shift', 'Control', 'Alt', 'Meta', 'Tab', 'CapsLock',
-  ]);
-
-  function onDesktopTouch(event: Event) {
-    if (handedOff) return;
-    if (event.type === 'keydown' && OWN_KEYS.has((event as KeyboardEvent).key)) return;
-    const target = event.target as HTMLElement | null;
-    if (!target || (root && root.contains(target))) return;
-    handoff();
+    if (reveal > 0.55) dispatch('complete');
   }
 
   onMount(() => {
-    if (reduced) {
-      // No film. The desktop is the experience; the story is in the document.
-      dispatch('complete');
-      return;
-    }
-    release();
-    continuous();
-    running = true;
+    last = 0;
     raf = requestAnimationFrame(frame);
+    window.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('keydown', onKeydown);
-    window.addEventListener('wheel', onWheel, { passive: true });
-    document.addEventListener('pointerdown', onDesktopTouch, true);
-    document.addEventListener('keydown', onDesktopTouch, true);
+    window.addEventListener('pointerdown', onPointerDown, { passive: true });
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerup', onPointerUp, { passive: true });
+    window.addEventListener('pointercancel', onPointerUp, { passive: true });
+    return () => {};
   });
 
   onDestroy(() => {
     if (raf) cancelAnimationFrame(raf);
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', onKeydown);
-      window.removeEventListener('wheel', onWheel);
-    }
-    if (typeof document !== 'undefined') {
-      document.removeEventListener('pointerdown', onDesktopTouch, true);
-      document.removeEventListener('keydown', onDesktopTouch, true);
-    }
+    document.documentElement.style.removeProperty('--choir-landing-reveal');
+    window.removeEventListener('wheel', onWheel);
+    window.removeEventListener('keydown', onKeydown);
+    window.removeEventListener('pointerdown', onPointerDown);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerUp);
   });
 </script>
 
 <div
   bind:this={root}
-  class="intro"
-  class:intro-still={reduced}
-  class:intro-done={handedOff}
+  class="deck"
+  style:--arrive={arrive.toFixed(4)}
+  style:--reveal={reveal.toFixed(4)}
   data-landing-intro
-  data-landing-intro-act={ACTS[act].id}
-  data-landing-intro-handoff={handedOff ? '1' : '0'}
+  data-landing-intro-pane={pane}
+  data-landing-intro-reveal={reveal.toFixed(3)}
+  data-landing-intro-desktop={reveal > 0.55 ? '1' : '0'}
 >
-  <div class="intro-scrim" aria-hidden="true"></div>
-  <div class="intro-aurora" aria-hidden="true"><i></i><i></i><i></i></div>
-  <ChoirField density="intro" {attract} {attractProgress} />
-  <div class="intro-vignette" aria-hidden="true"></div>
+  <!-- the environment. constant across the deck, dissolves for the handoff -->
+  <div class="scrim" aria-hidden="true"></div>
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+  <ChoirField density="intro" />
+  <div class="vignette" aria-hidden="true"></div>
 
-  <div class="intro-acts">
-    <!-- ══ ACT · TITLE ══ -->
-    <section class="act act-title" data-on={act === 0 ? '1' : '0'}>
-      <div class="frame frame-center">
-        <div class="mark" data-shown={shown['a0-mark'] ? '1' : '0'}>
-          <TetraMark label="Choir" />
-        </div>
-        <div class="ln wordmark" data-shown={shown['a0-word'] ? '1' : '0'}><span>CHOIR</span></div>
-        <div class="ln tagline" data-shown={shown['a0-tag'] ? '1' : '0'}><span>The automatic computer</span></div>
+  <!-- the track -->
+  <div class="track" style:transform="translate3d(0, calc({-trackY} * 100dvh), 0)">
+    <!-- ══ PANE 1 · the title card ══
+         Everything here is a function of --arrive. There is no "playing"
+         state: at any scroll offset the mark is exactly as far into its
+         lunge as the hand has put it, and scrubbing back undoes it exactly. -->
+    <section class="pane pane-title" aria-label="Choir">
+      <div class="stack">
+        <div class="mark"><TetraMark label="Choir" /></div>
+        <div class="wordmark"><span>CHOIR</span></div>
+        <p class="tagline">The automatic computer</p>
       </div>
+      <p class="hint" class:hidden={hinted || pane > 0}>scroll<span class="chev">&darr;</span></p>
     </section>
 
-    <!-- ══ ACT · THE AMNESIA ══
-         Timed so the conversation finishes and drains BEFORE the argument
-         lands. They share one frame, so overlapping them is a collision, not
-         a layering: the bubbles are crisp for 0–1.4s, they are gone by 2s,
-         and the headline arrives at 1.9s into clear space. What remains is
-         the residue at 12% — the memory of the thread, behind the claim. -->
-    <section class="act" data-on={act === 1 ? '1' : '0'}>
-      <div class="transcript" style:opacity={transcriptOpacity} aria-hidden="true">
-        <div class="bubbles">
-          <div class="bub" data-l={act === 1 && localTime > 180 ? '1' : '0'} data-d={act === 1 && localTime > 1500 ? '1' : '0'}>
-            <span>Let&#39;s design a market entry for the EU. Mid-market, budget around 200k.</span>
-          </div>
-          <div class="bub out" data-l={act === 1 && localTime > 480 ? '1' : '0'} data-d={act === 1 && localTime > 1610 ? '1' : '0'}>
-            <span>Got it — competitive landscape first, then a positioning brief and a launch sequence with KPIs.</span>
-          </div>
-          <div class="bub" data-l={act === 1 && localTime > 780 ? '1' : '0'} data-d={act === 1 && localTime > 1720 ? '1' : '0'}>
-            <span>Make it bold. We&#39;re not a commodity vendor.</span>
-          </div>
-          <div class="bub out" data-l={act === 1 && localTime > 1080 ? '1' : '0'} data-d={act === 1 && localTime > 1830 ? '1' : '0'}>
-            <span>Understood. Differentiated angle — premium positioning, narrow ICP, design-led narrative.</span>
-          </div>
-          <div class="bub" data-l={act === 1 && localTime > 1380 ? '1' : '0'} data-d={act === 1 && localTime > 1940 ? '1' : '0'}>
-            <span>Good. Keep going.</span>
-          </div>
-        </div>
-      </div>
-      <div class="frame">
-        <div class="kicker ln" data-shown={shown['a1-kicker'] ? '1' : '0'}>
-          <span>01 — The amnesia</span>
-        </div>
-        <h1>
-          <span class="ln" data-shown={shown['a1-h1a'] ? '1' : '0'}><span>Every AI session</span></span>
-          <span class="ln" data-shown={shown['a1-h1b'] ? '1' : '0'}><span>dies at the tab.</span></span>
-        </h1>
-        <p class="sub ln" data-shown={shown['a1-sub'] ? '1' : '0'}>
-          <span>You re-explain the project. It re-guesses the rules. The thread, the decisions, the dead ends — gone. Chat is a fine way to think for ten minutes and a bad way to run three months.</span>
-        </p>
-        <p class="voice ln" data-shown={shown['a1-voice'] ? '1' : '0'}>
-          <span>&ldquo;I have definitely started this conversation before.&rdquo;</span>
-        </p>
-      </div>
-    </section>
-
-    <!-- ══ ACT · THE RENAME ══ -->
-    <section class="act" data-on={act === 2 ? '1' : '0'}>
-      <div class="tape-glow" style:--w={tapeWidth} aria-hidden="true"></div>
-      <div class="tape" style:--w={tapeWidth} aria-hidden="true"></div>
+    <!-- ══ PANE 2 · not a chat ══ -->
+    <section class="pane pane-rename" aria-label="Not a chat, a computer">
+      <div class="tape-glow" aria-hidden="true"></div>
+      <div class="tape" aria-hidden="true"></div>
       <div class="ticks" aria-hidden="true">
-        {#each Array(26) as _, i}
-          <i class="tick" data-shown={tapeWidth > i / 26 + 0.04 ? '1' : '0'} style:left="{(i / 25) * 100}%"></i>
+        {#each Array(24) as _, i}
+          <i style:left="{(i / 23) * 86}%"></i>
         {/each}
       </div>
-      <div class="frame">
-        <div class="kicker ln" data-shown={shown['a2-kicker'] ? '1' : '0'}>
-          <span>02 — The rename</span>
-        </div>
+
+      <div class="stack">
+        <p class="kicker">02 — The rename</p>
         <h1>
-          <span class="ln" data-shown={shown['a2-h1a'] ? '1' : '0'}><span>Choir isn&#39;t a chat.</span></span>
-          <span class="ln" data-shown={shown['a2-h1b'] ? '1' : '0'}><span>It&#39;s a <em>computer</em>.</span></span>
+          <span class="line line-lead">Choir isn&rsquo;t a chat.</span>
+          <span class="line"><span class="dim">It&rsquo;s a</span> <em>computer</em><span class="dim">.</span></span>
         </h1>
-        <p class="sub ln" data-shown={shown['a2-sub'] ? '1' : '0'}>
-          <span>A persistent machine, not a session. Many agents coordinate on it for months, and every move they make lands on one versioned record you can read.</span>
+        <p class="sub">
+          A persistent machine, not a session. Many agents coordinate on it for months,
+          and every move they make lands on one versioned record you can read.
         </p>
-        <div class="pills">
-          <span class="pill" data-shown={shown['a2-pill1'] ? '1' : '0'}>persistent</span>
-          <span class="pill" data-shown={shown['a2-pill2'] ? '1' : '0'}>versioned</span>
-          <span class="pill" data-shown={shown['a2-pill3'] ? '1' : '0'}>reversible</span>
-          <span class="pill" data-shown={shown['a2-pill4'] ? '1' : '0'}>self-improving</span>
-        </div>
+        <ul class="pills">
+          <li>persistent</li>
+          <li>versioned</li>
+          <li>reversible</li>
+          <li>self-improving</li>
+        </ul>
       </div>
+
+      <p class="hint" class:hidden={hinted || pane > 1}>keep going<span class="chev">&darr;</span></p>
     </section>
 
-    <!-- ══ ACT · THE ENSEMBLE ══ -->
-    <section class="act act-center" data-on={act === 3 ? '1' : '0'}>
-      <div class="desks" aria-hidden="true">
-        <div class="desk desk-a" data-shown={shown['a3-desk0'] ? '1' : '0'} style:--orb="var(--choir-desk-texture)">
-          <div class="orb"></div><b>Texture</b><small>writes</small>
-        </div>
-        <div class="desk desk-b" data-shown={shown['a3-desk1'] ? '1' : '0'} style:--orb="var(--choir-desk-management)">
-          <div class="orb"></div><b>Management</b><small>decides</small>
-        </div>
-        <div class="desk desk-c" data-shown={shown['a3-desk2'] ? '1' : '0'} style:--orb="var(--choir-desk-engineering)">
-          <div class="orb"></div><b>Engineering</b><small>builds</small>
-        </div>
-        <div class="desk desk-d" data-shown={shown['a3-desk3'] ? '1' : '0'} style:--orb="var(--choir-desk-research)">
-          <div class="orb"></div><b>Research</b><small>verifies</small>
-        </div>
-      </div>
-      <div class="frame frame-center">
-        <div class="kicker ln" data-shown={shown['a3-kicker'] ? '1' : '0'}>
-          <span>03 — The ensemble</span>
-        </div>
-        <h1>
-          <span class="ln" data-shown={shown['a3-h1a'] ? '1' : '0'}><span>Four desks. One machine.</span></span>
-          <span class="ln" data-shown={shown['a3-h1b'] ? '1' : '0'}><span><em>You</em> on top.</span></span>
-        </h1>
-        <p class="sub ln" data-shown={shown['a3-sub'] ? '1' : '0'}>
-          <span>Texture writes. Management decides what runs. Engineering builds inside a sandbox. Research goes and gets evidence. You state the intent — they do the work, and they show you the receipts.</span>
-        </p>
-      </div>
-    </section>
-
-    <!-- ══ ACT · THE RECEIPTS ══ -->
-    <section class="act" data-on={act === 4 ? '1' : '0'}>
-      <div class="frame">
-        <div class="kicker ln" data-shown={shown['a4-kicker'] ? '1' : '0'}>
-          <span>04 — The receipts</span>
-        </div>
-        <h1>
-          <span class="ln" data-shown={shown['a4-h1a'] ? '1' : '0'}><span>Nothing moves that you</span></span>
-          <span class="ln" data-shown={shown['a4-h1b'] ? '1' : '0'}><span>can&#39;t read, cite, or undo.</span></span>
-        </h1>
-        <p class="sub ln" data-shown={shown['a4-sub'] ? '1' : '0'}>
-          <span>Every state change is a typed event with evidence welded to it — and every one of them rolls back. This is an agent that has to show its work, permanently.</span>
-        </p>
-        <div class="cards">
-          <article class="card" data-shown={shown['a4-card0'] ? '1' : '0'}>
-            <h3><span>revision</span><i>v2 &rarr; v3</i></h3>
-            <p>EU market entry brief</p>
-            <div class="row"><span class="del">&minus; 412 words</span><span class="plus">+ 1,180 words</span></div>
-            <div class="row"><span>authored by</span><b>texture</b></div>
-          </article>
-          <article class="card" data-shown={shown['a4-card1'] ? '1' : '0'}>
-            <h3><span>commitment</span><i>scored</i></h3>
-            <p>&ldquo;Regulatory filing lands in Q3.&rdquo;</p>
-            <div class="meter"><i style:width="{meterWidth}%"></i></div>
-            <div class="row"><span>resolved</span><b>0.81</b></div>
-          </article>
-          <article class="card" data-shown={shown['a4-card2'] ? '1' : '0'}>
-            <h3><span>restore</span><i>&crarr;</i></h3>
-            <p>Rolled back to event <b>#1,204</b></p>
-            <div class="row"><span>reconstruction</span><b>exact</b></div>
-            <div class="row"><span>receipt</span><b>retained</b></div>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <!-- ══ ACT · THE INVITATION ══ -->
-    <section class="act act-center" data-on={act === 5 ? '1' : '0'}>
-      <div class="mark mark-veil" data-shown={shown['a5-mark'] ? '1' : '0'} aria-hidden="true">
-        <TetraMark label="" />
-      </div>
-      <div class="frame frame-center">
-        <div class="kicker ln" data-shown={shown['a5-kicker'] ? '1' : '0'}><span>Choir</span></div>
-        <h1 class="h1-invite">
-          <span class="ln" data-shown={shown['a5-h1'] ? '1' : '0'}><span>Wake the machine.</span></span>
-        </h1>
-        <p class="sub ln" data-shown={shown['a5-sub'] ? '1' : '0'}>
-          <span>No password to forget. A passkey, and the computer is yours — a web desktop, a native app, and a CLI, all projections of the same persistent thing.</span>
-        </p>
-        <div class="cta" data-shown={shown['a5-cta'] ? '1' : '0'}>
-          <button class="btn btn-go" type="button" data-landing-intro-enter on:click={handoff}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4.5 10.5v-3a7.5 7.5 0 0 1 15 0v3" />
-              <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.4" />
-              <circle cx="12" cy="14.6" r="1.4" />
-            </svg>
-            Open the desktop
-          </button>
-          <button class="btn btn-ghost" type="button" on:click={restart}>Watch again</button>
-        </div>
-        <p class="footnote ln" data-shown={shown['a5-note'] ? '1' : '0'}>
-          <span>Early and fast-moving. Real substrate, early product — the repository is the honest version.</span>
-        </p>
-      </div>
-    </section>
+    <!-- ══ PANE 3 · the desktop, itself ══
+         Nothing renders here. The machine is already running underneath;
+         this pane exists so the deck has somewhere to arrive. -->
+    <section class="pane pane-desktop" aria-label="The Choir desktop"></section>
   </div>
 
   <!-- ══ CHROME ══ -->
-  <div class="meta" data-shown={handedOff ? '0' : '1'}>
-    <span class="pulse"></span>
-    <span>{ACTS[act].label}</span>
+  <div class="chrome" aria-hidden="true">
+    <div class="rail" data-landing-intro-rail>
+      {#each [0, 1, 2] as i}
+        <i style:transform="scaleX({railPips[i]})" class:lit={i === pane}></i>
+      {/each}
+    </div>
   </div>
 
-  <div class="dots" role="tablist" aria-label="Introduction acts">
-    {#each ACTS as entry, i}
-      <button
-        class="dot"
-        class:dot-on={i === act}
-        type="button"
-        role="tab"
-        aria-selected={i === act}
-        aria-label={entry.label}
-        data-landing-intro-dot
-        on:click={() => gotoAct(i)}
-      >
-        <i style:width="{dotProgress[i] * 100}%"></i>
-      </button>
-    {/each}
-  </div>
-
-  <button class="skip" type="button" data-shown={handedOff ? '0' : '1'} data-landing-intro-skip on:click={handoff}>
-    <span>Skip</span><kbd>esc</kbd>
+  <button
+    class="continue"
+    type="button"
+    data-landing-intro-continue
+    style:pointer-events={reveal > 0.6 ? 'none' : 'auto'}
+    aria-label="Continue to the desktop"
+    on:click={() => advance(1)}
+  >
+    {#if pane < LAST}
+      <!-- Deliberately never says "open". Nothing needs opening — the third
+           pane IS the desktop. This is a shortcut along the scroll, not a
+           gate, and the wording should not imply a gate. -->
+      <span>Keep going</span>
+      <span class="chev">&darr;</span>
+    {/if}
   </button>
-
-  <div class="rail"><div class="rail-fill" style:width="{progress * 100}%"></div></div>
 </div>
 
 <style>
-  .intro {
+  .deck {
     position: fixed;
     inset: 0;
-    /*
-      Stacking band. The film sits above the whole desktop plane — windows,
-      the prompt surface (10000), toasts — and below the real dialogs
-      (DeskSheet 9998/9999, auth overlay 20000, Desktop Overview 13000).
-
-      Every route to a dialog passes through an interaction that retires the
-      film first (onDesktopTouch), so nothing can end up trapped underneath
-      it. The one real conflict is the prompt bar, which shares the bottom
-      band with the act rail and the skip control: the film must cover it,
-      and because the scrim is pointer-events:none the bar stays operable
-      underneath. Touching it simply ends the film.
-    */
     z-index: 10001;
     color: var(--choir-text-primary);
     font-family: var(--choir-font-ui);
     isolation: isolate;
     /*
-      `overflow: clip`, deliberately not `hidden`.
+      overflow: clip, not hidden. Every transform in here animates, and
+      transformed boxes extend scrollable overflow — `hidden` would leave a
+      few hundred px of hidden scroll range and any scrollIntoView would
+      silently drag the whole deck out of frame.
 
-      `hidden` still creates a scroll container. Every entrance in this
-      component animates with a transform, and transformed boxes contribute
-      to scrollable overflow — so `hidden` gave this overlay 500px of hidden
-      scroll range, and anything that called scrollIntoView (a click, a
-      focus, a Playwright locator) silently scrolled the whole film upward
-      and broke every layout in it. `clip` clips without ever becoming
-      scrollable, which is the behaviour this overlay actually wants.
+      pointer-events: none throughout, at every pane. The desktop underneath
+      is live from the first frame; a click on an icon or the prompt bar
+      works while the deck is still on screen, and the deck is driven only
+      by the wheel, the keyboard and touch-drags it opts into.
     */
     overflow: clip;
-    /*
-      Non-blocking by construction: the scrim never captures pointer
-      events, so the live desktop underneath stays operable. Any touch of
-      that desktop ends the film.
-    */
     pointer-events: none;
   }
-  .intro :global(button) { pointer-events: auto; }
+  .deck button { pointer-events: auto; }
 
-  /* ── layers ───────────────────────────────────────────────────────
-     PERFORMANCE NOTE — this block used three expensive things at once and
-     together they cost roughly 90% of the frame budget:
-
-       1. `backdrop-filter: blur(38px)` across the full viewport.
-       2. `filter: blur(110px)` on the aurora.
-       3. A `mask-image: radial-gradient` on the animated lattice.
-
-     All three are gone, and none of them were buying anything:
-
-       · The scrim no longer blurs the desktop. At 98% opacity the desktop
-         behind is already a faint silhouette; the blur was refining a
-         difference nobody can see, at the cost of a full-viewport
-         read-back every frame.
-       · The aurora is three large soft radial-gradients with no filter at
-         all. Blurring an already-soft gradient is pure waste, and the
-         gradient can carry the same slow drift as a transform.
-       · The lattice lost its radial mask and its slide animation. A plain
-         low-alpha grid reads the same at 0.2 and costs nothing.
-
-     Measured on the local preview at 1440x900 under software rasterisation
-     this took the landing from 6fps to a locked frame rate. Motion that
-     costs a third of the budget is not motion design, it is a tax. */
-
-  /*
-    The scrim. Without it the film is unreadable: the public desktop is
-    mounted underneath, live, and a 106px headline over a live document is
-    not a design problem you can solve with type colour.
-  */
-  .intro-scrim {
+  /* ── the environment ──────────────────────────────────────────────
+     Deliberately cheap. This layer used a full-viewport backdrop blur, a
+     blur on gradients that were already soft, and a masked animated grid.
+     Together they cost about ninety percent of the frame budget and
+     changed nothing a viewer could name. */
+  .scrim {
     position: absolute; inset: 0; z-index: 0;
-    background: color-mix(in srgb, var(--choir-bg) 98%, transparent);
+    background: color-mix(in srgb, var(--choir-bg) 97%, transparent);
   }
-
-  .intro-aurora {
-    position: absolute; inset: 0; z-index: 0;
-  }
-  .intro-aurora i {
-    position: absolute; display: block; border-radius: 50%;
-    will-change: transform;
-  }
-  .intro-aurora i:nth-child(1) {
+  .aurora { position: absolute; inset: 0; z-index: 0; }
+  .aurora i { position: absolute; display: block; border-radius: 50%; will-change: transform; }
+  .aurora i:nth-child(1) {
     width: 88vw; height: 88vw; left: -34vw; top: -36vw;
     background: radial-gradient(circle, var(--choir-state-active-glow) 0%, transparent 52%);
     animation: drift-a 18s var(--choir-ease-drift) infinite;
   }
-  .intro-aurora i:nth-child(2) {
+  .aurora i:nth-child(2) {
     width: 80vw; height: 80vw; right: -32vw; bottom: -34vw;
     background: radial-gradient(circle, var(--choir-state-focus) 0%, transparent 52%);
     animation: drift-b 18s var(--choir-ease-drift) infinite;
   }
-  .intro-aurora i:nth-child(3) {
+  .aurora i:nth-child(3) {
     width: 62vw; height: 62vw; left: 30%; top: 24%;
     background: radial-gradient(circle, var(--choir-field-halo) 0%, transparent 54%);
     animation: drift-c 11s var(--choir-ease-drift) infinite;
@@ -633,81 +421,150 @@
     0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
     50% { transform: translate3d(-6vw, 9vh, 0) scale(1.24); }
   }
-
-  /* There is deliberately no lattice layer. It was here for two acts of this
-     piece and it earned neither: the ChoirField already supplies all the
-     structure the frame wants, and a 0.14-alpha grid over a star field only
-     competes with it. Removing it also removed a full-frame animated
-     repaint. Structure comes from the graph, not from graph paper. */
-
-  .intro :global(.choir-field) { z-index: 2; }
-
-  .intro-vignette {
+  .vignette {
     position: absolute; inset: 0; z-index: 5;
     background: radial-gradient(ellipse 78% 70% at 50% 46%, transparent 32%,
       color-mix(in srgb, var(--choir-shadow-color) 74%, transparent) 100%);
   }
 
-  .intro-acts { position: absolute; inset: 0; z-index: 4; }
-  /* ── acts ───────────────────────────────────────────────────────── */
-  .act {
-    position: absolute; inset: 0;
+  /* ── the track ──────────────────────────────────────────────────────
+     Three panes in normal flow, one viewport each, and the track slides
+     them past the window. They must be in flow, not absolutely positioned
+     at top:0 — three absolutely positioned panes share one slot, so the
+     deck would silently have no second or third pane at all. It happened
+     once and was invisible, because each pane's own arrival maths happened
+     to hide the two that were not supposed to be showing. Layout bugs hide
+     behind animation that happens to compensate for them.
+  */
+  .track {
+    position: absolute; inset: 0; z-index: 4;
+    will-change: transform;
+  }
+  .pane {
+    position: relative;
+    height: 100dvh;
     display: grid; place-items: center;
-    padding: clamp(2rem, 7vh, 5rem) clamp(1.5rem, 7vw, 6rem);
-    opacity: 0; visibility: hidden;
+    padding: clamp(3.5rem, 9vh, 6rem) clamp(1.5rem, 7vw, 6rem);
   }
-  .act[data-on='1'] { opacity: 1; visibility: visible; }
 
-  .frame {
-    width: min(100%, 62rem);
+  .stack {
+    width: min(100%, 60rem);
     display: grid;
-    gap: clamp(1rem, 2.4vh, 1.6rem);
+    gap: clamp(0.85rem, 2.2vh, 1.5rem);
   }
-  .frame-center { justify-items: center; text-align: center; }
 
-  /* ── entrance system ────────────────────────────────────────────────
-     Every entrance is a transform/opacity/filter transition, so nothing
-     in this component ever reflows and every entrance is composited.
+  /* ── scroll-linked choreography ──────────────────────────────────────
+     Two numbers run the whole piece and both are the live scroll position,
+     not a clock:
 
-     Duration and timing are composed from separate tokens rather than a
-     single composite value: naming a duration twice in one shorthand
-     (`opacity 0.8s var(--x)` where --x already carries a duration) voids
-     the entire declaration, and the failure is invisible — the elements
-     just never move. */
-  .ln, .mark, .pill, .card, .desk, .cta, .kicker, .meta, .skip {
-    opacity: 0;
-    transform: translate3d(0, 16px, 0);
-    filter: blur(7px);
-    transition-property: opacity, transform, filter;
-    transition-duration: 780ms, var(--choir-duration-entrance), 680ms;
-    transition-timing-function: var(--choir-ease);
+       --arrive   0 → 1   pane 2 coming up; drives its entrance and
+                          pane 1's exit simultaneously
+       --reveal   0 → 1   the hand-off into the desktop
+
+     Every value below is a calc() on one of them, so the deck has no
+     discrete states. Reverse the scroll and every element retraces its
+     path exactly, because at any offset each transform is a pure function
+     of the position rather than the residue of a transition that already
+     started. That is the whole difference between scroll-linked motion and
+     an animation you happen to be able to interrupt.
+  */
+  .scrim { opacity: calc(1 - var(--reveal, 0)); }
+  .aurora { opacity: calc(1 - var(--reveal, 0)); }
+  .vignette { opacity: calc((1 - var(--reveal, 0)) * 0.9); }
+  .chrome, .continue { opacity: calc(1 - var(--reveal, 0)); }
+  /*
+    The constellation fades out the same way the rest of the environment
+    does, by being faded directly. There was a "field fade" panel here that
+    faded *up* with --reveal, on the theory that it would cross-dissolve the
+    canvas into the background — which sounds reasonable and is exactly
+    backwards: by the time it was fully opaque it was covering the desktop
+    at the precise moment the desktop is the point.
+  */
+  .deck :global(.choir-field) { z-index: 1; opacity: calc(1 - var(--reveal, 0)); }
+
+  /* ── pane 1 · leaving ─────────────────────────────────────────────────
+     The mark lunges and blurs; the wordmark comes apart letter by letter
+     as its tracking opens. A viewer scrolling slowly sees it stretch. */
+  .mark {
+    width: clamp(74px, 10vw, 116px);
+    justify-self: center;
+    transform: scale(calc(1 + var(--arrive, 0) * 0.75)) translateY(calc(var(--arrive, 0) * -6vh));
+    filter: blur(calc(var(--arrive, 0) * 10px));
+    opacity: calc(1 - var(--arrive, 0) * 1.15);
   }
-  [data-shown='1'] { opacity: 1; transform: none; filter: none; }
-  .cta[data-shown='1'] { transform: none; }
-
-  .mark { width: clamp(74px, 10vw, 116px); }
-  .mark :global(svg) { width: 100%; height: 100%; }
-  .mark[data-shown='1'] { transform: none; transition-duration: 1500ms; }
-  .mark-veil {
-    position: absolute; left: 50%; top: 50%;
-    width: clamp(300px, 44vw, 620px);
-    margin: 0;
-    z-index: -1;
+  .mark :global(svg) { width: 100%; height: 100%; display: block; }
+  .wordmark {
+    justify-self: center;
+    font-size: clamp(1.5rem, 4.4vw, 2.6rem); font-weight: 200;
+    letter-spacing: calc(0.52em + var(--arrive, 0) * 0.62em);
+    text-indent: 0.52em;
+    transform: scale(calc(1 + var(--arrive, 0) * 0.42));
+    opacity: calc(1 - var(--arrive, 0) * 1.4);
   }
-  .mark-veil :global(path) { fill: var(--choir-tetramark-color); opacity: 0.13; }
-  .mark-veil[data-shown='1'] { transform: translate(-50%, -50%) scale(1); }
+  .tagline {
+    justify-self: center;
+    font-size: clamp(0.7rem, 1.2vw, 0.84rem); font-weight: 700;
+    letter-spacing: 0.3em; text-transform: uppercase; color: var(--choir-text-subtle);
+    transform: translateY(calc(var(--arrive, 0) * 5vh)) scale(calc(1 - var(--arrive, 0) * 0.08));
+    opacity: calc(1 - var(--arrive, 0) * 1.6);
+  }
+
+  /* ── pane 2 · arriving ────────────────────────────────────────────────
+     It rises out of the lower edge and comes into focus, and the record
+     draws itself beneath the claim as it settles. */
+  .pane-rename .stack {
+    /*
+      The `+ var(--reveal) * 100dvh` term pins the pane's content to the
+      centre of the viewport for the whole hand-off. Without it the content
+      rides the track upward and is off the top of the frame long before
+      the word has finished growing — which leaves a dead stretch of empty
+      screen between the claim and the machine. The track still moves; the
+      words just stop following it.
+    */
+    transform:
+      translateY(calc((1 - var(--arrive, 0)) * 9vh + var(--reveal, 0) * 100dvh))
+      scale(calc(0.97 + var(--arrive, 0) * 0.03));
+    filter: blur(calc((1 - var(--arrive, 0)) * 9px));
+    opacity: var(--arrive, 0);
+  }
+
+  /* ── pane 2 · the hand-off ────────────────────────────────────────────
+     The move. Everything on the pane falls away and the word "computer"
+     scales up through the camera instead, blurring as it goes, so the
+     word is the last thing on screen and it is the doorway.
+
+     Everything finishes by reveal 0.72, which leaves the last stretch of
+     the scroll with nothing on it but the arriving machine. A handoff that
+     fades out at the same moment the next thing fades in reads as a cut;
+     finishing early reads as an arrival.
+  */
+  .pane-rename h1 .line-lead { opacity: calc(1 - var(--reveal, 0) * 5); }
+  .pane-rename h1 em {
+    display: inline-block;                 /* so it can be scaled in place */
+    font-family: var(--choir-font-display);
+    font-style: italic; font-weight: 400; letter-spacing: -0.015em;
+    background: linear-gradient(96deg, var(--choir-text-accent), var(--choir-tetramark-color) 60%, var(--choir-accent));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    transform: scale(calc(1 + var(--reveal, 0) * 3.1));
+    filter: blur(calc(var(--reveal, 0) * 9px));
+    opacity: calc(1 - var(--reveal, 0) * 1.4);
+  }
+  .pane-rename h1 .dim { opacity: calc(1 - var(--reveal, 0) * 5.5); }
+  .pane-rename .sub,
+  .pane-rename .pills,
+  .pane-rename .kicker {
+    opacity: calc(1 - var(--reveal, 0) * 4.2);
+    transform: translateY(calc(var(--reveal, 0) * 4vh));
+  }
+  .pane-rename .tape,
+  .pane-rename .tape-glow,
+  .pane-rename .ticks { opacity: calc(1 - var(--reveal, 0) * 2.2); }
 
   .kicker {
-    display: flex; align-items: center; gap: 0.7rem;
     font-size: clamp(0.62rem, 1vw, 0.74rem);
     font-weight: 800; letter-spacing: 0.26em; text-transform: uppercase;
     color: var(--choir-text-accent);
   }
-  .kicker::before {
-    content: ''; width: clamp(24px, 4vw, 54px); height: 1px;
-    background: linear-gradient(90deg, var(--choir-accent), transparent);
-  }
-
   h1 {
     font-family: var(--choir-font-display);
     font-size: clamp(2.15rem, 7.4vw, 5.1rem);
@@ -715,117 +572,16 @@
     max-width: 19ch; text-wrap: balance;
     filter: drop-shadow(0 6px 34px var(--choir-state-active-glow));
   }
-  h1 em {
-    font-family: var(--choir-font-display);
-    font-style: italic; font-weight: 400; letter-spacing: -0.015em;
-    background: linear-gradient(96deg, var(--choir-text-accent), var(--choir-tetramark-color) 60%, var(--choir-accent));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  .frame-center h1 { margin-inline: auto; }
-  .h1-invite { font-size: clamp(2.5rem, 9vw, 6.2rem); max-width: none; }
-
+  h1 .line { display: block; }
   .sub {
     font-size: clamp(0.94rem, 1.55vw, 1.16rem);
     line-height: 1.62; color: var(--choir-text-muted);
     max-width: 56ch; font-weight: 380;
   }
-  .frame-center .sub { margin-inline: auto; }
-
-  .voice {
-    font-family: var(--choir-font-ui);
-    font-style: italic;
-    font-size: clamp(1rem, 1.9vw, 1.35rem);
-    color: var(--choir-tetramark-color);
-    padding-left: 1.05rem;
-    border-left: 1px solid var(--choir-border-strong);
-    max-width: 44ch;
+  .pills {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.3rem 0 0; padding: 0; list-style: none;
   }
-
-  .ln { display: block; overflow: hidden; padding-bottom: 0.06em; }
-  .ln > span {
-    display: block; transform: translate3d(0, 105%, 0); opacity: 0;
-    transition-property: transform, opacity;
-    transition-duration: var(--choir-duration-entrance), 800ms;
-    transition-timing-function: var(--choir-ease);
-  }
-  .ln[data-shown='1'] > span { transform: none; opacity: 1; }
-
-  .wordmark {
-    font-size: clamp(1.5rem, 4.4vw, 2.6rem); font-weight: 200;
-    letter-spacing: 0.52em; text-indent: 0.52em;
-  }
-  .tagline {
-    font-size: clamp(0.7rem, 1.2vw, 0.84rem); font-weight: 700;
-    letter-spacing: 0.3em; text-transform: uppercase; color: var(--choir-text-subtle);
-  }
-
-  /* ── act · amnesia ──────────────────────────────────────────────── */
-  .transcript {
-    position: absolute; inset: 0;
-    display: grid; place-items: center;
-    transition: opacity 1100ms var(--choir-ease-in);
-  }
-  .bubbles {
-    display: grid; gap: 0.72rem;
-    width: min(100%, 44rem);
-  }
-  .bub { display: flex; }
-  .bub.out { justify-content: flex-end; }
-  .bub span {
-    max-width: 78%; padding: 0.68rem 1.02rem; border-radius: 16px;
-    font-size: clamp(0.78rem, 1.28vw, 0.94rem); line-height: 1.5;
-    background: var(--choir-surface-control);
-    border: 1px solid var(--choir-border);
-    color: var(--choir-text-muted);
-    opacity: 0; transform: translate3d(0, 16px, 0) scale(0.97); filter: blur(5px);
-    transition-property: opacity, transform, filter, color, border-color;
-    transition-duration: 550ms, 550ms, 550ms, 900ms, 900ms;
-    transition-timing-function: var(--choir-ease), var(--choir-ease),
-      var(--choir-ease), var(--choir-ease-in), var(--choir-ease-in);
-  }
-  .bub.out span {
-    background: var(--choir-state-selected);
-    border-color: var(--choir-border-strong);
-    color: var(--choir-text-primary);
-  }
-  .bub[data-l='1'] span { opacity: 1; transform: none; filter: none; }
-  /* the amnesia: everything drains, blurs and falls away */
-  .bub[data-d='1'] span {
-    opacity: 0.16; transform: translate3d(0, 74px, 0) scale(0.9);
-    filter: blur(11px) saturate(0);
-    transition-duration: 1.1s;
-  }
-
-  /* ── act · rename ───────────────────────────────────────────────── */
-  .tape {
-    position: absolute; left: 0; right: 0; top: 82%; height: 2px; z-index: 1;
-    transform: translate3d(0, -50%, 0) scaleX(var(--w, 0)); transform-origin: 0 50%;
-    background: linear-gradient(90deg, transparent, var(--choir-accent) 8%, var(--choir-text-accent) 55%, transparent);
-    box-shadow: 0 0 26px var(--choir-state-focus), 0 0 70px var(--choir-state-active-glow);
-  }
-  .tape-glow {
-    position: absolute; left: 0; right: 0; top: 82%; height: 300px; z-index: 0;
-    transform: translate3d(0, -50%, 0) scaleX(var(--w, 0)); transform-origin: 0 50%;
-    background: radial-gradient(ellipse 70% 100% at 32% 50%, var(--choir-state-focus), transparent 74%);
-    filter: blur(30px);
-  }
-  .ticks { position: absolute; inset: 0; z-index: 2; }
-  .tick {
-    position: absolute; top: 82%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
-    border-radius: 50%; background: var(--choir-bg);
-    border: 1.5px solid var(--choir-text-accent);
-    box-shadow: 0 0 14px var(--choir-state-focus);
-    opacity: 0; transform: scale(0);
-  }
-  .tick[data-shown='1'] {
-    opacity: 1; transform: scale(1);
-    transition-property: opacity, transform;
-    transition-duration: 400ms, 700ms;
-    transition-timing-function: var(--choir-ease), var(--choir-ease-spring);
-  }
-
-  .pills { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem; }
-  .pill {
+  .pills li {
     font-family: var(--choir-font-mono);
     font-size: clamp(0.66rem, 1.1vw, 0.78rem);
     letter-spacing: 0.06em; padding: 0.4rem 0.8rem; border-radius: 999px;
@@ -834,221 +590,94 @@
     color: var(--choir-tetramark-color);
   }
 
-  /* ── act · ensemble ─────────────────────────────────────────────── */
-  .desks { position: absolute; inset: 0; z-index: 1; }
-  .desk {
-    position: absolute;
-    display: grid; justify-items: center; gap: 0.5rem;
-    width: min(23vw, 190px);
-    transform: translate(-50%, -50%) scale(0.32);
-    transition-property: opacity, transform, filter;
-    transition-duration: 900ms, 1150ms, 800ms;
-    transition-timing-function: var(--choir-ease), var(--choir-ease-spring), var(--choir-ease);
+  /* the record, drawn under the claim */
+  .tape {
+    position: absolute; left: 0; right: 0; top: 84%; height: 2px; z-index: -1;
+    transform: translate3d(0, -50%, 0) scaleX(calc(var(--arrive, 0) * 0.86));
+    transform-origin: 0 50%;
+    background: linear-gradient(90deg, transparent, var(--choir-accent) 8%, var(--choir-text-accent) 55%, transparent);
+    box-shadow: 0 0 18px var(--choir-state-focus);
   }
-  .desk[data-shown='1'] { transform: translate(-50%, -50%) scale(1); }
-  .desk-a { left: 23.5%; top: 28.5%; }
-  .desk-b { left: 71.5%; top: 24.5%; }
-  .desk-c { left: 28.5%; top: 75.5%; }
-  .desk-d { left: 74.5%; top: 71.5%; }
-  .orb {
-    width: clamp(48px, 5.6vw, 74px); aspect-ratio: 1; border-radius: 50%;
-    background: radial-gradient(circle at 34% 30%, var(--choir-text-primary), var(--orb) 42%, transparent 72%);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--orb) 55%, transparent),
-      0 0 30px color-mix(in srgb, var(--orb) 70%, transparent),
-      0 0 76px color-mix(in srgb, var(--orb) 38%, transparent);
-    position: relative;
+  .tape-glow {
+    position: absolute; left: 0; right: 0; top: 84%; height: 300px; z-index: -2;
+    background: radial-gradient(ellipse 70% 100% at 32% 50%, var(--choir-state-focus), transparent 74%);
+    filter: blur(40px);
   }
-  .orb::after {
-    content: ''; position: absolute; inset: -16%; border-radius: 50%;
-    border: 1px solid color-mix(in srgb, var(--orb) 34%, transparent);
-    animation: halo 3.4s var(--choir-duration-sheet) var(--choir-ease) infinite;
-  }
-  @keyframes halo {
-    0%, 100% { transform: scale(1); opacity: 0.7; }
-    50% { transform: scale(1.3); opacity: 0; }
-  }
-  .desk b {
-    font-size: clamp(0.6rem, 1.05vw, 0.74rem); font-weight: 800;
-    letter-spacing: 0.19em; text-transform: uppercase;
-    color: var(--choir-text-primary); white-space: nowrap;
-  }
-  .desk small {
-    font-family: var(--choir-font-mono);
-    font-size: clamp(0.58rem, 0.95vw, 0.68rem);
-    color: var(--choir-text-subtle); letter-spacing: 0.05em; white-space: nowrap;
-  }
-
-  /* ── act · receipts ─────────────────────────────────────────────── */
-  .cards {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: clamp(0.6rem, 1.4vw, 1.1rem);
-    perspective: 1200px;
-  }
-  .card {
-    border-radius: 16px; padding: clamp(0.8rem, 1.5vw, 1.15rem);
-    background: var(--choir-surface-pane);
-    border: 1px solid var(--choir-border);
-    box-shadow: var(--choir-shadow-soft);
-    display: grid; gap: 0.5rem; align-content: start;
-    transform: translate3d(0, 44px, -140px) rotateX(24deg);
-    filter: blur(8px);
-    transition-duration: 1s, 1.15s, 0.9s;
-  }
-  .card[data-shown='1'] { transform: none; filter: none; }
-  .card h3 {
-    font-family: var(--choir-font-mono);
-    font-size: clamp(0.6rem, 1.05vw, 0.72rem);
-    font-weight: 500; letter-spacing: 0.05em;
-    color: var(--choir-text-subtle); text-transform: uppercase;
-    display: flex; justify-content: space-between; gap: 0.5rem;
-  }
-  .card h3 i { font-style: normal; color: var(--choir-status-success); }
-  .card p {
-    font-size: clamp(0.74rem, 1.22vw, 0.88rem); line-height: 1.5;
-    color: var(--choir-text-muted);
-  }
-  .card .row {
-    font-family: var(--choir-font-mono);
-    font-size: clamp(0.6rem, 1vw, 0.7rem);
-    color: var(--choir-text-subtle);
-    display: flex; justify-content: space-between; gap: 0.6rem;
-    padding-top: 0.4rem; border-top: 1px solid var(--choir-border);
-  }
-  .card .row b { color: var(--choir-text-primary); font-weight: 600; }
-  .card .row .plus { color: var(--choir-status-success); }
-  .card .row .del { color: var(--choir-status-danger); }
-  .meter {
-    height: 3px; border-radius: 999px;
-    background: var(--choir-border); overflow: hidden;
-  }
-  .meter i {
-    display: block; height: 100%; border-radius: 999px;
-    background: linear-gradient(90deg, var(--choir-accent), var(--choir-text-accent), var(--choir-status-success));
-  }
-
-  /* ── act · invitation ───────────────────────────────────────────── */
-  .cta {
-    display: flex; flex-wrap: wrap; gap: 0.7rem;
-    justify-content: center; align-items: center; margin-top: 0.4rem;
-  }
-  .btn {
-    position: relative; overflow: hidden;
-    display: inline-flex; align-items: center; gap: 0.6rem;
-    padding: 1rem 1.7rem; border-radius: 999px;
-    font-size: clamp(0.82rem, 1.3vw, 0.95rem); font-weight: 800;
-    transition-property: transform, box-shadow, filter;
-    transition-duration: var(--choir-duration-sheet), var(--choir-duration-sheet), var(--choir-duration-sheet);
-    transition-timing-function: var(--choir-ease-spring), var(--choir-ease), ease;
-  }
-  .btn svg {
-    width: 1.05rem; height: 1.05rem;
-    fill: none; stroke: currentColor; stroke-width: 1.9;
-    stroke-linecap: round; stroke-linejoin: round;
-  }
-  .btn-go {
-    background: linear-gradient(120deg, var(--choir-accent), var(--choir-text-accent));
-    color: var(--choir-text-on-accent);
-    box-shadow: 0 14px 42px var(--choir-state-focus), 0 0 0 1px var(--choir-border-strong) inset;
-  }
-  .btn-go:hover { filter: brightness(1.08); transform: translateY(-2px); }
-  .btn-ghost {
-    color: var(--choir-text-muted);
-    border: 1px solid var(--choir-border);
-    background: var(--choir-surface-control);
-  }
-  .btn-ghost:hover { color: var(--choir-text-primary); background: var(--choir-state-hover); }
-  .btn:focus-visible { outline: 2px solid var(--choir-accent); outline-offset: 3px; }
-
-  .footnote {
-    font-size: clamp(0.66rem, 1.1vw, 0.78rem);
-    color: var(--choir-text-subtle); letter-spacing: 0.03em;
-  }
-
-  /* ── chrome ────────────────────────────────────────────────────── */
-  .meta {
-    position: absolute; z-index: 9;
-    top: clamp(1.1rem, 3vh, 1.9rem); right: clamp(1.2rem, 3vw, 2.4rem);
-    font-family: var(--choir-font-mono);
-    font-size: 0.63rem; letter-spacing: 0.13em; text-transform: uppercase;
-    color: var(--choir-text-subtle);
-    display: flex; gap: 0.7rem; align-items: center;
-  }
-  .pulse {
-    width: 5px; height: 5px; border-radius: 50%;
-    background: var(--choir-status-success);
-    box-shadow: 0 0 10px var(--choir-status-success);
-    animation: beat 1.7s var(--choir-duration-sheet) var(--choir-ease) infinite;
-  }
-  @keyframes beat {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.35; transform: scale(0.72); }
-  }
-
-  .dots {
-    position: absolute; z-index: 9;
-    left: clamp(1.2rem, 3vw, 2.4rem); bottom: clamp(1.1rem, 3vh, 1.9rem);
-    display: flex; gap: 0.5rem; align-items: center;
-  }
-  .dot {
-    position: relative; width: 26px; height: 3px; border-radius: 999px;
-    background: var(--choir-border); overflow: hidden;
-    transition-property: width, background;
-    transition-duration: 450ms, 450ms;
-    transition-timing-function: var(--choir-ease), ease;
-  }
-  .dot i {
-    position: absolute; inset: 0 auto 0 0;
-    background: var(--choir-text-accent);
-    box-shadow: 0 0 10px var(--choir-state-focus);
-  }
-  .dot-on { width: 44px; background: var(--choir-border-strong); }
-  .dot:hover { background: var(--choir-border-strong); }
-  .dot:focus-visible { outline: 2px solid var(--choir-accent); outline-offset: 4px; }
-
-  .skip {
-    position: absolute; z-index: 9;
-    right: clamp(1.2rem, 3vw, 2.4rem); bottom: clamp(1rem, 2.6vh, 1.7rem);
-    display: flex; align-items: center; gap: 0.6rem;
-    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.19em; text-transform: uppercase;
-    color: var(--choir-text-subtle);
-    padding: 0.55rem 0.95rem; border-radius: 999px;
-    border: 1px solid var(--choir-border); background: var(--choir-surface-control);
-    transition-property: color, border-color, transform, opacity, filter;
-    transition-duration: 300ms, 300ms, 300ms, 600ms, 500ms;
-    transition-timing-function: ease, ease, var(--choir-ease-spring), var(--choir-ease), var(--choir-ease);
-  }
-  .skip:hover { color: var(--choir-text-primary); border-color: var(--choir-border-strong); transform: translateY(-2px); }
-  .skip kbd {
-    font-family: var(--choir-font-mono); font-size: 0.6rem; letter-spacing: 0.04em;
-    padding: 0.14rem 0.4rem; border-radius: 5px;
-    background: var(--choir-state-hover); color: var(--choir-text-muted);
-  }
-
-  .rail { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; z-index: 8; background: var(--choir-border); }
-  .rail-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--choir-accent), var(--choir-text-accent));
+  .ticks { position: absolute; left: 0; right: 0; top: 84%; height: 0; z-index: -1; opacity: var(--arrive, 0); }
+  .ticks i {
+    position: absolute; top: 0; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
+    border-radius: 50%; background: var(--choir-bg);
+    border: 1.5px solid var(--choir-text-accent);
     box-shadow: 0 0 14px var(--choir-state-focus);
   }
 
-  /*
-    Reduced motion: the film does not play at all.
+  /* ── pane 3 ──────────────────────────────────────────────────────────
+     Intentionally empty. The desktop is underneath; this pane is only the
+     destination, so there is nothing to draw over it. */
+  .pane-desktop { background: transparent; }
 
-    An earlier draft had a static, scrollable "same story, standing still"
-    mode. It was cut. The argument this sequence makes is also made in full,
-    in prose, by the signed-out preview document — so a visitor who asked
-    for reduced motion gets a readable page instead of a film, and there is
-    no second layout mode to keep honest. Retiring the film here means the
-    desktop underneath is the whole experience for them, immediately.
-  */
-  .intro-still :global(.choir-field) { opacity: 0.4; }
+  /* ── chrome ──────────────────────────────────────────────────────── */
+  .chrome {
+    position: absolute; left: clamp(1.2rem, 3vw, 2.4rem);
+    bottom: clamp(1.1rem, 3vh, 1.9rem); z-index: 8;
+    transition: opacity 300ms var(--ease, ease);
+  }
+  .rail { display: flex; gap: 0.5rem; }
+  .rail i {
+    display: block; width: 30px; height: 3px; border-radius: 999px;
+    background: var(--choir-border-strong);
+    transform-origin: left center;
+  }
+  .rail i.lit { box-shadow: 0 0 10px var(--choir-state-focus); }
+
+  .continue {
+    position: absolute; right: clamp(1.2rem, 3vw, 2.4rem);
+    bottom: clamp(0.9rem, 2.4vh, 1.5rem); z-index: 8;
+    display: inline-flex; align-items: center; gap: 0.55rem;
+    padding: 0.6rem 1rem; border-radius: 999px;
+    border: 1px solid var(--choir-border);
+    background: var(--choir-surface-control);
+    color: var(--choir-text-muted);
+    font-size: 0.72rem; font-weight: 760; letter-spacing: 0.06em;
+    transition: opacity 300ms var(--ease, ease), color 0.2s, transform 0.3s var(--choir-ease-spring);
+  }
+  .continue:hover { color: var(--choir-text-primary); transform: translateY(-2px); }
+  .continue:focus-visible { outline: 2px solid var(--choir-accent); outline-offset: 3px; }
+  .chev { font-size: 0.95rem; line-height: 1; }
+
+  .hint {
+    position: absolute; bottom: clamp(1.1rem, 3vh, 1.9rem); left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: 0.5rem;
+    font-family: var(--choir-font-mono);
+    font-size: 0.62rem; letter-spacing: 0.24em; text-transform: uppercase;
+    color: var(--choir-text-subtle);
+    transition: opacity 400ms var(--ease, ease);
+  }
+  .hint.hidden { opacity: 0; }
+  .hint .chev { animation: nudge 2.4s var(--choir-ease-drift) infinite; }
+  @keyframes nudge {
+    0%, 100% { transform: translateY(0); opacity: 0.5; }
+    50% { transform: translateY(5px); opacity: 1; }
+  }
+
+  /* ── reduced motion ──────────────────────────────────────────────────
+     Nothing here autoplays, so reduced motion does not retire the deck —
+     it stops it moving. The narrative is still three scrolls away for
+     anyone who wants it; it is simply standing still while they get there. */
+  @media (prefers-reduced-motion: reduce) {
+    .aurora i,
+    .hint .chev { animation: none; }
+    .mark, .wordmark, .tagline, h1 .dim, .pane-rename .stack, .chrome, .continue, .hint {
+      transition-duration: 1ms !important;
+    }
+  }
 
   @media (max-width: 720px) {
-    .cards { grid-template-columns: 1fr; }
-    .desk { width: min(38vw, 150px); }
-    .desk-b, .desk-d { display: none; }
+    .pane { padding: 3.2rem 1.35rem 4.5rem; }
     h1 { max-width: 100%; }
-    .transcript .bub span { max-width: 92%; }
+    .stack { width: 100%; }
+    .sub { max-width: 100%; }
+    .hint { display: none; }
   }
 </style>
