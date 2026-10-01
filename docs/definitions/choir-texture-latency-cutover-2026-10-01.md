@@ -188,10 +188,32 @@ now:
   blocker_or_risk: 'stale-route risk on the 2s cache is bounded by transport-
     error invalidation; a missed invalidation path serves a dead upstream for
     at most one TTL window'
-  next_action: 'CI + deploy for c835c295; then run the deployed timing matrix
-    (idle + drain) and decide cut 3'
+  next_action: 'acceptance matrix recorded (idle, desk drained); cut 3
+    decision pending a drain-loaded re-measurement — idle p95 is ~1.9s on
+    trajectories, dominated by guest-side event/run scan work'
 
-receipts: []
+receipts:
+  - id: cuts-1-2-deployed
+    boundary: implement
+    identity: c835c295 (+5439733b empty retrigger)
+    proof_refs:
+      - 'CI run 36875419303 success; staging deployed_commit=5439733b; guest
+        computer-03335285269bdba4f94377e56879f9e6 rebooted onto 5439733b
+        via DEPLOY_ACTIVE_VM_REFRESH'
+      - 'proxy stage counters post-deploy: api.resolve n=10 avg=1ms max=4ms
+        (was avg=1392ms); route cache serving every request'
+      - 'deployed timing matrix idle (desk drained to 1): texture/documents
+        0.28-0.72s, trajectories 0.92-1.93s through choir.news'
+    rollback_ref: 'git revert c835c295 — cache falls back to per-request
+      vmctl resolve; snapshot falls back to whole-computer scan'
+    disposition: 'cuts 1+2 landed and measured; cut 3 gated on drain-loaded
+      p95 re-measurement'
+    landing:
+      source_commit: 5439733b
+      ci_ref: '36875419303 success'
+      deploy_ref: '36875419303 success'
+      environment_identity: 'staging 5439733b; guest 5439733b'
+      deployed_acceptance: 'idle matrix recorded; drain-loaded pending'
 
 weak_measures:
   - name: 'editor request p50/p95 through proxy'
