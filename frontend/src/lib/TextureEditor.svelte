@@ -581,6 +581,11 @@
         onError: (streamError) => {
           error = streamError?.message || 'Lifecycle stream disconnected';
         },
+        onStreamRestored: () => {
+          if (error === 'Lifecycle stream disconnected' || error === 'Lifecycle stream unavailable') {
+            error = '';
+          }
+        },
       });
       if (streamDocId !== expectedKey) cleanup();
       else streamSource = { close: cleanup };

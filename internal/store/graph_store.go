@@ -164,6 +164,50 @@ func (s *Store) ogListAllByMetadataPageSize(ctx context.Context, kind objectgrap
 	}
 }
 
+// ogGetByIdentityKey does a primary-key get when the object's identity key
+// (and optionally its lifecycle computer scope) is known. Canonical IDs are
+// deterministic: BuildCanonicalID(kind, ownerID, StableSuffixFromKey(key)),
+// with lifecycle-scoped objects keying on computerID+"\x00"+key. Returns
+// ErrNotFound on miss — callers decide whether a metadata-scan fallback is
+// warranted for legacy/edgeless rows.
+func (s *Store) ogGetByIdentityKey(ctx context.Context, kind objectgraph.ObjectKind, ownerID, computerID, identityKey string) (objectgraph.Object, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return objectgraph.Object{}, fmt.Errorf("store: object graph not initialized")
+	}
+	scoped := identityKey
+	if strings.TrimSpace(computerID) != "" {
+		scoped = lifecycleScopedKey(computerID, identityKey)
+	}
+	id, err := objectgraph.BuildCanonicalID(kind, strings.TrimSpace(ownerID), objectgraph.StableSuffixFromKey(scoped))
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	obj, err := store.GetObject(ctx, id)
+	if errors.Is(err, objectgraph.ErrNotFound) {
+		return objectgraph.Object{}, objectgraph.ErrNotFound
+	}
+	return obj, err
+}
+
+// ogListObjectsByEdgeTo returns objects that hold a live edge to canonicalID
+// of the given edge kind — an indexed join, not a metadata JSON scan. The
+// caller supplies the target's canonical ID (docs: StableSuffixFromKey of
+// docID, lifecycle-scoped via lifecycleScopedKey when the doc is scoped).
+func (s *Store) ogListObjectsByEdgeTo(ctx context.Context, kind objectgraph.ObjectKind, toCanonicalID string, edgeKind objectgraph.EdgeKind) ([]objectgraph.Object, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	return store.ListObjectsByEdgeTo(ctx, toCanonicalID, edgeKind, string(kind))
+}
+
 func (s *Store) ogForEachByMetadata(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string, fn func(objectgraph.Object) error) error {
 	return s.ogForEachByMetadataPageSize(ctx, kind, metadataField, value, ogMetadataPageSize, fn)
 }
@@ -2438,9 +2482,19 @@ func (s *Store) CreateTextureRevisionOG(ctx context.Context, rec types.Revision)
 	return nil
 }
 
-// GetTextureRevisionOG retrieves a texture revision by ID.
+// GetTextureRevisionOG retrieves an unscoped texture revision by ID. The
+// primary-key get (identity key = revision_id) replaces the metadata JSON
+// scan; the scan remains only as the fallback for rows whose canonical ID
+// predates identity-key derivation (e.g. scoped/lifecycle writes, which then
+// correctly resolve to ErrLifecycleAuthorityRequired).
 func (s *Store) GetTextureRevisionOG(ctx context.Context, ownerID, revisionID string) (types.Revision, error) {
-	obj, err := s.ogGetByKey(ctx, ogKindTexRev, "revision_id", revisionID)
+	obj, err := s.ogGetByIdentityKey(ctx, ogKindTexRev, ownerID, "", revisionID)
+	if err != nil {
+		if err != objectgraph.ErrNotFound {
+			return types.Revision{}, err
+		}
+		obj, err = s.ogGetByKey(ctx, ogKindTexRev, "revision_id", revisionID)
+	}
 	if err != nil {
 		if err == objectgraph.ErrNotFound {
 			return types.Revision{}, ErrNotFound
@@ -2465,20 +2519,36 @@ func (s *Store) ListTextureRevisionsByDocOG(ctx context.Context, ownerID, docID 
 	if limit <= 0 {
 		limit = 1000
 	}
+	// Indexed path: document_revision edges from the doc's canonical ID. The
+	// metadata doc_id JSON scan remains only as the legacy fallback for rows
+	// written before edges existed.
+	docCanonicalID, cerr := objectgraph.BuildCanonicalID(ogKindTexDoc, strings.TrimSpace(ownerID), objectgraph.StableSuffixFromKey(strings.TrimSpace(docID)))
+	if cerr == nil {
+		if objs, err := s.ogListObjectsByEdgeTo(ctx, ogKindTexRev, docCanonicalID, ogEdgeDocRevision); err == nil && len(objs) > 0 {
+			return decodeTextureRevisions(objs, func(rec types.Revision) bool {
+				return rec.OwnerID == ownerID && strings.TrimSpace(rec.ComputerID) == "" && strings.TrimSpace(rec.TrajectoryID) == ""
+			}, limit)
+		}
+	}
 	objs, err := s.ogListAllByMetadata(ctx, ogKindTexRev, "doc_id", docID)
 	if err != nil {
 		return nil, err
 	}
+	return decodeTextureRevisions(objs, func(rec types.Revision) bool {
+		return rec.OwnerID == ownerID && strings.TrimSpace(rec.ComputerID) == "" && strings.TrimSpace(rec.TrajectoryID) == ""
+	}, limit)
+}
+
+// decodeTextureRevisions decodes revision objects, keeps rows matching keep,
+// sorts newest-version-first, and applies limit.
+func decodeTextureRevisions(objs []objectgraph.Object, keep func(types.Revision) bool, limit int) ([]types.Revision, error) {
 	revisions := make([]types.Revision, 0, len(objs))
 	for _, obj := range objs {
 		var rec types.Revision
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		if rec.OwnerID != ownerID {
-			continue
-		}
-		if strings.TrimSpace(rec.ComputerID) != "" || strings.TrimSpace(rec.TrajectoryID) != "" {
+		if !keep(rec) {
 			continue
 		}
 		revisions = append(revisions, rec)
@@ -2501,30 +2571,21 @@ func (s *Store) ListTextureRevisionsByScopeOG(ctx context.Context, ownerID, comp
 	if limit <= 0 {
 		limit = 1000
 	}
+	docCanonicalID, cerr := objectgraph.BuildCanonicalID(ogKindTexDoc, ownerID, objectgraph.StableSuffixFromKey(lifecycleScopedKey(computerID, docID)))
+	if cerr == nil {
+		if objs, err := s.ogListObjectsByEdgeTo(ctx, ogKindTexRev, docCanonicalID, ogEdgeDocRevision); err == nil && len(objs) > 0 {
+			return decodeTextureRevisions(objs, func(rec types.Revision) bool {
+				return rec.OwnerID == ownerID && strings.TrimSpace(rec.ComputerID) == computerID && rec.DocID == docID
+			}, limit)
+		}
+	}
 	objs, err := s.ogListAllByMetadata(ctx, ogKindTexRev, "doc_id", docID)
 	if err != nil {
 		return nil, err
 	}
-	revisions := make([]types.Revision, 0, len(objs))
-	for _, obj := range objs {
-		if obj.OwnerID != ownerID || strings.TrimSpace(obj.ComputerID) != computerID {
-			continue
-		}
-		var rec types.Revision
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(rec.ComputerID) == computerID && rec.DocID == docID {
-			revisions = append(revisions, rec)
-		}
-	}
-	sort.Slice(revisions, func(i, j int) bool {
-		return revisions[i].VersionNumber > revisions[j].VersionNumber
-	})
-	if len(revisions) > limit {
-		revisions = revisions[:limit]
-	}
-	return revisions, nil
+	return decodeTextureRevisions(objs, func(rec types.Revision) bool {
+		return rec.OwnerID == ownerID && strings.TrimSpace(rec.ComputerID) == computerID && rec.DocID == docID
+	}, limit)
 }
 
 // =========================================================================
@@ -3033,7 +3094,23 @@ func (s *Store) ListTextureSourceEntitiesByScopeOG(ctx context.Context, ownerID,
 		limit = 500
 	}
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
-	objs, err := s.ogListAllObjectsByKind(ctx, TextureSourceEntityObjectKind)
+	// Indexed path: (object_kind, owner_id) index + the computer_id column
+	// filter — replaces the unfiltered all-objects-of-kind scan. Texture
+	// source entities are distinguished by the entity_version_key metadata
+	// field (the kind is shared with sourcecycled web captures).
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	objs, err := store.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:       TextureSourceEntityObjectKind,
+		OwnerID:    ownerID,
+		ComputerID: computerID,
+		Limit:      100000,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -3045,9 +3122,6 @@ func (s *Store) ListTextureSourceEntitiesByScopeOG(ctx context.Context, ownerID,
 	})
 	out := make([]TextureSourceEntityGraphRecord, 0, min(limit, len(objs)))
 	for _, obj := range objs {
-		if obj.OwnerID != ownerID || strings.TrimSpace(obj.ComputerID) != computerID {
-			continue
-		}
 		var meta map[string]any
 		if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
 			return nil, fmt.Errorf("list texture source entities: parse metadata: %w", err)
@@ -3146,25 +3220,17 @@ func (s *Store) ListTextureSourceRefsByRevisionAndScopeOG(ctx context.Context, o
 		limit = 500
 	}
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
-	objs, err := s.ogListAllByMetadata(ctx, TextureSourceRefObjectKind, "texture_revision_id", revisionID)
+	// One doc-scoped metadata scan covers the revision — no indexed
+	// texture_revision_id lookup exists; doc_id is the narrowest filter.
+	byRevision, err := s.listTextureSourceRefsForRevisions(ctx, ownerID, computerID, docID, []string{revisionID})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]TextureSourceRefGraphRecord, 0, min(limit, len(objs)))
-	for _, obj := range objs {
-		var rec TextureSourceRefGraphRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		if rec.OwnerID != ownerID || strings.TrimSpace(rec.ComputerID) != computerID || rec.DocID != docID {
-			continue
-		}
-		out = append(out, rec)
-		if len(out) >= limit {
-			break
-		}
+	refs := byRevision[strings.TrimSpace(revisionID)]
+	if len(refs) > limit {
+		refs = refs[:limit]
 	}
-	return out, nil
+	return refs, nil
 }
 
 // mustMarshalMetadata converts a map to json.RawMessage, returning {} on

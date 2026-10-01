@@ -1494,28 +1494,26 @@ func (h *Handler) textureDocumentResponse(ctx context.Context, doc types.Documen
 		CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
 	}
-	var count int
+	var revisions []types.Revision
 	var err error
 	if computerID := strings.TrimSpace(doc.ComputerID); computerID != "" {
-		count, err = h.Store.CountRevisionsByScope(ctx, doc.DocID, doc.OwnerID, computerID)
+		revisions, err = h.Store.ListRevisionsByScope(ctx, doc.DocID, doc.OwnerID, computerID, 100000)
 	} else {
-		count, err = h.Store.CountRevisionsByDoc(ctx, doc.DocID, doc.OwnerID)
+		revisions, err = h.Store.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 100000)
 	}
 	if err != nil {
-		log.Printf("texture api: count document revisions for recent metadata: %v", err)
+		log.Printf("texture api: list document revisions for recent metadata: %v", err)
 	} else {
-		resp.RevisionCount = count
-	}
-	var versionNumber int
-	if computerID := strings.TrimSpace(doc.ComputerID); computerID != "" {
-		versionNumber, err = h.Store.CurrentVersionNumberByScope(ctx, doc.DocID, doc.OwnerID, computerID)
-	} else {
-		versionNumber, err = h.Store.CurrentVersionNumberByDoc(ctx, doc.DocID, doc.OwnerID)
-	}
-	if err != nil {
-		log.Printf("texture api: get current document version number: %v", err)
-	} else if versionNumber >= 0 {
-		resp.CurrentVersionNumber = versionNumber
+		resp.RevisionCount = len(revisions)
+		maxVersion := -1
+		for _, revision := range revisions {
+			if revision.VersionNumber > maxVersion {
+				maxVersion = revision.VersionNumber
+			}
+		}
+		if maxVersion >= 0 {
+			resp.CurrentVersionNumber = maxVersion
+		}
 	}
 	if strings.TrimSpace(doc.CurrentRevisionID) != "" {
 		if rev, err := h.getTextureRevision(ctx, doc.OwnerID, doc.CurrentRevisionID); err == nil {

@@ -114,36 +114,85 @@ export async function observeLifecycle(trajectoryId, handlers = {}) {
       es.close();
       throw error;
     }
-    // Post-open errors arm the reconnect loop at the last durable cursor.
-    es.onerror = () => {
-      es.close();
-      if (!closed) void reconnect();
-    };
+  // Post-open errors arm the reconnect loop at the last durable cursor.
+  es.onerror = () => {
+    es.close();
+    if (!closed) void reconnect();
   };
+};
 
-  const reconnect = async () => {
+// reconnect backs off at the durable cursor. When attempts are exhausted the
+// stream is marked dead (onStreamLost) rather than silently abandoned: resume
+// events (tab visible again, pageshow, network back online) re-arm a fresh
+// reconnect loop so a laptop sleep or network flap does not leave the view
+// dead until reload.
+let streamDead = false;
+let reconnecting = false;
+const reconnect = async () => {
+  if (reconnecting) return;
+  reconnecting = true;
+  try {
     for (let attempt = 0; attempt < MAX_RECONNECT_ATTEMPTS && !closed; attempt += 1) {
       await sleep(Math.min(1000 * 2 ** attempt, 15000));
       if (closed) return;
       try {
         await connect(cursor);
+        if (streamDead) {
+          streamDead = false;
+          handlers.onStreamRestored?.();
+        }
         return;
       } catch {
         // keep backing off
       }
     }
-    if (!closed) handlers.onError?.(new Error('Lifecycle stream disconnected'));
-  };
-
-  try {
-    await connect(0);
-  } catch (error) {
-    closed = true;
-    if (stream) stream.close();
-    throw error;
+    if (!closed && !streamDead) {
+      streamDead = true;
+      handlers.onStreamLost?.(new Error('Lifecycle stream disconnected'));
+      handlers.onError?.(new Error('Lifecycle stream disconnected'));
+    }
+  } finally {
+    reconnecting = false;
   }
-  return () => {
-    closed = true;
-    if (stream) stream.close();
-  };
+};
+
+const onResume = () => {
+  if (closed) return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  const esClosed = typeof EventSource !== 'undefined' && stream?.readyState === EventSource.CLOSED;
+  if (streamDead || esClosed) void reconnect();
+};
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', onResume);
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('pageshow', onResume);
+  window.addEventListener('online', onResume);
+}
+
+try {
+  await connect(0);
+} catch (error) {
+  closed = true;
+  if (stream) stream.close();
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onResume);
+  }
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('pageshow', onResume);
+    window.removeEventListener('online', onResume);
+  }
+  throw error;
+}
+return () => {
+  closed = true;
+  if (stream) stream.close();
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onResume);
+  }
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('pageshow', onResume);
+    window.removeEventListener('online', onResume);
+  }
+};
 }

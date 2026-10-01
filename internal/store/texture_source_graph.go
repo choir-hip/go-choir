@@ -652,16 +652,22 @@ func (s *Store) listTextureSourceRefsForRevisions(ctx context.Context, ownerID, 
 	if len(ids) == 0 {
 		return out, nil
 	}
-	for _, revisionID := range ids {
-		// Pass a large limit to preserve the old SQL `IN (...)` unbounded
-		// semantics. Limit 0 would be rewritten to 500 by the OG helper.
-		refs, err := s.ListTextureSourceRefsByRevisionAndScopeOG(ctx, ownerID, computerID, docID, revisionID, 100000)
-		if err != nil {
-			return nil, fmt.Errorf("query texture source refs for revisions: %w", err)
+	// One metadata scan by doc_id covers every revision of the document —
+	// replaces the prior per-revision scan loop (N full-kind scans per call).
+	objs, err := s.ogListAllByMetadata(ctx, TextureSourceRefObjectKind, "doc_id", docID)
+	if err != nil {
+		return nil, fmt.Errorf("query texture source refs for revisions: %w", err)
+	}
+	for _, obj := range objs {
+		var rec TextureSourceRefGraphRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
 		}
-		if wanted[revisionID] {
-			out[revisionID] = refs
+		revID := strings.TrimSpace(rec.TextureRevisionID)
+		if rec.OwnerID != ownerID || strings.TrimSpace(rec.ComputerID) != computerID || rec.DocID != docID || !wanted[revID] {
+			continue
 		}
+		out[revID] = append(out[revID], rec)
 	}
 	return out, nil
 }

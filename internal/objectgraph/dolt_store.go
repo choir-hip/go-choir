@@ -579,6 +579,37 @@ func (s *DoltStore) ListObjectsByMetadataPage(ctx context.Context, kind, jsonPat
 	return out, rows.Err()
 }
 
+// ListObjectsByEdgeTo returns objects of one kind that hold a live edge of
+// edgeKind pointing at toID. The join rides the indexed og_edges.to_id lookup
+// plus the og_objects primary key — no metadata JSON scan.
+func (s *DoltStore) ListObjectsByEdgeTo(ctx context.Context, toID string, edgeKind EdgeKind, objKind string) ([]Object, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT o.canonical_id, o.object_kind, o.owner_id, o.computer_id, o.version_id, o.content_hash, o.body, o.metadata, o.created_at, o.updated_at, o.tombstone, o.superseded_by
+		 FROM og_objects o
+		 JOIN og_edges e ON e.from_id = o.canonical_id
+		 WHERE e.to_id = ? AND e.kind = ? AND o.object_kind = ? AND e.tombstone = FALSE
+		 ORDER BY o.canonical_id ASC`,
+		toID, string(edgeKind), objKind)
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: list objects by edge to: %w", err)
+	}
+	defer rows.Close()
+	var out []Object
+	for rows.Next() {
+		obj, scanErr := scanDoltObject(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
 // ListObjectsByOwnerAndBody finds objects by kind, owner, and an exact set of
 // predicates evaluated against the persisted JSON body. The body is the
 // canonical authority for record fields that must not be duplicated into
