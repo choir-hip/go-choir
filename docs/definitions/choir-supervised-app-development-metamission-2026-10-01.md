@@ -19,62 +19,62 @@ metamission:
   stations:
     - id: S0-reality-and-boot-timeline
       path: docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md
-      readiness: drafted
+      readiness: executable
       status: working
       depends_on: []
     - id: S1-security-floor
       path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S0-reality-and-boot-timeline]
     - id: S2-layering-runtime-from-release
       path: docs/definitions/choir-appdev-s2-layering-runtime-from-release-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S0-reality-and-boot-timeline]
     - id: S3-fast-resume
       path: docs/definitions/choir-appdev-s3-fast-resume-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S1-security-floor, S2-layering-runtime-from-release]
     - id: S4-capsule-open-world
       path: docs/definitions/choir-appdev-s4-capsule-open-world-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S1-security-floor]
     - id: S5-live-preview-supervision
       path: docs/definitions/choir-appdev-s5-live-preview-supervision-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S4-capsule-open-world]
     - id: S6-commit-gate-full-release
       path: docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S2-layering-runtime-from-release, S5-live-preview-supervision]
     - id: S7-app-packages
       path: docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S6-commit-gate-full-release]
     - id: S8-source-publication
       path: docs/definitions/choir-appdev-s8-source-publication-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S6-commit-gate-full-release]
     - id: S9-forks-and-fleets
       path: docs/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S1-security-floor, S3-fast-resume, S8-source-publication]
     - id: S10-org-templates
       path: docs/definitions/choir-appdev-s10-org-templates-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S9-forks-and-fleets]
     - id: S11-mainline-and-security-push
       path: docs/definitions/choir-appdev-s11-mainline-security-push-2026-10-01.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [S8-source-publication, S9-forks-and-fleets]
 
