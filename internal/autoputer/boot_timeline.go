@@ -154,38 +154,41 @@ var goChoirSystemdUnits = []string{
 //	multi-user.target reached after 9.256s in userspace
 func parseSystemdAnalyzeTime(raw string) map[string]any {
 	out := map[string]any{}
-	parseDur := func(label string) (float64, bool) {
+	// The summary line is "<n>s (kernel) + <n>s (initrd) + <n>s (userspace)
+	// = <n>s." — each duration precedes its label, so walk backward.
+	parseBefore := func(label string) (float64, bool) {
 		idx := strings.Index(raw, label)
 		if idx < 0 {
 			return 0, false
 		}
-		rest := raw[idx+len(label):]
-		// The label is followed by ")" then space and the duration for
-		// "(kernel) 1.234s" forms; for "in 9.257s" forms the label ends
-		// before the number. Find the next number token.
-		rest = strings.TrimLeft(rest, ") =")
-		tok := strings.Fields(rest)
-		if len(tok) == 0 {
+		fields := strings.Fields(raw[:idx])
+		if len(fields) == 0 {
 			return 0, false
 		}
-		s := strings.TrimSuffix(tok[0], "s")
-		v, err := strconv.ParseFloat(s, 64)
+		v, err := strconv.ParseFloat(strings.TrimSuffix(fields[len(fields)-1], "s"), 64)
 		if err != nil {
 			return 0, false
 		}
 		return v, true
 	}
-	if v, ok := parseDur("(kernel) +"); ok {
+	if v, ok := parseBefore("(kernel)"); ok {
 		out["kernel_s"] = v
 	}
-	if v, ok := parseDur("(initrd) +"); ok {
+	if v, ok := parseBefore("(initrd)"); ok {
 		out["initrd_s"] = v
 	}
-	if v, ok := parseDur("(userspace) ="); ok {
+	if v, ok := parseBefore("(userspace)"); ok {
 		out["userspace_s"] = v
 	}
-	if v, ok := parseDur("Startup finished in"); ok {
-		out["total_s"] = v
+	if eq := strings.LastIndex(raw, "="); eq >= 0 {
+		fields := strings.Fields(raw[eq+1:])
+		if len(fields) > 0 {
+			// "= 10.947s." — strip the trailing period before the suffix.
+			tok := strings.TrimSuffix(strings.TrimSuffix(fields[0], "."), "s")
+			if v, err := strconv.ParseFloat(tok, 64); err == nil {
+				out["total_s"] = v
+			}
+		}
 	}
 	if idx := strings.Index(raw, "reached after "); idx >= 0 {
 		rest := raw[idx+len("reached after "):]
@@ -195,11 +198,13 @@ func parseSystemdAnalyzeTime(raw string) map[string]any {
 				out["target_reached_s"] = v
 			}
 		}
-		// "<unit> reached after" — the line starts with the unit name.
-		line := raw
-		if nl := strings.Index(raw[idx-200:], "\n"); nl >= 0 {
-			line = raw[idx-200+nl+1:]
+		// "<unit> reached after" — extract exactly the line containing idx.
+		lineStart := strings.LastIndex(raw[:idx], "\n") + 1 // 0 when no newline
+		lineEnd := len(raw)
+		if nl := strings.Index(raw[idx:], "\n"); nl >= 0 {
+			lineEnd = idx + nl
 		}
+		line := raw[lineStart:lineEnd]
 		if sp := strings.Index(line, " reached after"); sp > 0 {
 			out["target_unit"] = strings.TrimSpace(line[:sp])
 		}

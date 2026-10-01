@@ -192,46 +192,50 @@ func (t *BootTimeline) fetchGuestBootTimeline(hostURL string) {
 	}
 	t.mark("guest_receipt_fetch_begin")
 	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, hostURL+"/internal/boot/timeline", nil)
-	if err != nil {
+	var lastErr string
+	// The guest can answer /health before its earliest window closes — the
+	// first post-healthy request observed a connection EOF (listener at the
+	// boundary). Retry briefly so a transient startup EOF does not lose the
+	// receipt; a persistent failure still lands in guest_fetch_error.
+	for attempt := 0; attempt < 6; attempt++ {
+		if attempt > 0 {
+			time.Sleep(800 * time.Millisecond)
+		}
+		req, err := http.NewRequest(http.MethodGet, hostURL+"/internal/boot/timeline", nil)
+		if err != nil {
+			lastErr = err.Error()
+			break
+		}
+		req.Header.Set("X-Internal-Caller", "true")
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err.Error()
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		_ = resp.Body.Close()
+		if readErr != nil {
+			lastErr = fmt.Sprintf("read body: %v", readErr)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Sprintf("guest returned %d", resp.StatusCode)
+			continue
+		}
+		// Keep the payload verbatim so guest-side attribution is unmodified.
+		if !json.Valid(body) {
+			lastErr = "guest receipt is not valid JSON"
+			continue
+		}
 		t.mu.Lock()
-		t.GuestFetchError = err.Error()
+		t.GuestReceipt = json.RawMessage(body)
 		t.mu.Unlock()
-		return
-	}
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := client.Do(req)
-	if err != nil {
-		t.mu.Lock()
-		t.GuestFetchError = err.Error()
-		t.mu.Unlock()
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		t.mu.Lock()
-		t.GuestFetchError = fmt.Sprintf("read body: %v", err)
-		t.mu.Unlock()
-		return
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.mu.Lock()
-		t.GuestFetchError = fmt.Sprintf("guest returned %d", resp.StatusCode)
-		t.mu.Unlock()
-		return
-	}
-	// Keep the payload verbatim so guest-side attribution is unmodified.
-	if !json.Valid(body) {
-		t.mu.Lock()
-		t.GuestFetchError = "guest receipt is not valid JSON"
-		t.mu.Unlock()
+		t.mark("guest_receipt_fetch_done")
 		return
 	}
 	t.mu.Lock()
-	t.GuestReceipt = json.RawMessage(body)
+	t.GuestFetchError = lastErr
 	t.mu.Unlock()
-	t.mark("guest_receipt_fetch_done")
 }
 
 // persist writes the receipt to the VM's state directory, atomically.

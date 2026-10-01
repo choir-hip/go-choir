@@ -1354,6 +1354,9 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	m.killFirecrackerProcess(inst)
 	inst.State = StateFailed
 	cfg := refreshConfigForCurrentDeploy(mergeVMConfigOverrides(inst.Config, overrides), m.cfg)
+	if overrides.BootKind == "" {
+		cfg.BootKind = "refresh"
+	}
 	if overrides.Epoch == 0 {
 		cfg.Epoch = 0
 	}
