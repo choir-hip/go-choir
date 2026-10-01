@@ -179,11 +179,14 @@ now:
     window is per-uptime-window. Sibling residual: an UNBOUND pending control
     (DeliveredToRunID=="") on the same arm still strands — named, out of
     scope (no bound run to recover; fail-closed is correct there).'
-  next_action: 'handler-arm fix landed (14f5682b) + pushed (4a718af4), CI run
-    36802996830 all-green incl Deploy to Staging. staging
-    x-choir-build-commit=4a718af4 confirmed; guest rebooted 02:04 UTC minting 3
-    pending wakes (cfa90b87 re-armed). Awaiting the drain-driven
-    passivated->running transition on run 362febb2 for deployed_acceptance.'
+  next_action: 'fix landed+deployed (4a718af4, CI green). Consensus panel
+    2026-10-01 (8/12 ok) verdict B: keep this goal open with
+    deployed_acceptance pending; promote the platform-dolt OOM/serial-drain
+    substrate to a separate top-priority mission (clustering assessment
+    docs/problems/platform-dolt-oom-realization-cluster-2026-10-01.md). Do NOT
+    close on tests/deploy receipts alone — that would Goodhart the value
+    criterion. Watcher polls journald for 362febb2 passivated->running; the
+    substrate mission''s stable-uptime win discharges it as a side effect.'
 receipts:
 - id: deployed_fix_landed
   boundary: land

@@ -5,6 +5,21 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
+## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization
+
+[`definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md`](definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md)
+(`readiness: drafted`, `now.status: blocked_on_owner`) — promoted to top
+priority by the 2026-10-01 convergent panel (verdict B): the platform-dolt OOM
+→ realization-flap → serial-drain-starvation substrate now blocks both the
+parked-run repair's `deployed_acceptance` and owner task submission (the `run
+start` 502s). Clustering assessment:
+[`problems/platform-dolt-oom-realization-cluster-2026-10-01.md`](problems/platform-dolt-oom-realization-cluster-2026-10-01.md).
+The durable lever is an ops/deploy-shape memory cap — the permitted owner/ops
+blocking ask. It precedes the metamission's M0a/M-SUB stations, which are
+substrate-gated. The parked-run repair (`14f5682b`, deployed `4a718af4`) stays
+open with `deployed_acceptance` pending — discharged as a side effect once the
+guest holds an uptime window.
+
 ## Current Mission — Jev / Supervision Metamission
 
 [`definitions/choir-jev-supervision-metamission-2026-09-29.md`](definitions/choir-jev-supervision-metamission-2026-09-29.md)

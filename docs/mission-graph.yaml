@@ -956,6 +956,29 @@ nodes:
     sources:
       - docs/desk-rlm-rectification-plan-2026-09-23.md
       - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
+  - id: choir-platform-dolt-capacity-stabilization-2026-10-01
+    title: Platform-Dolt Capacity Stabilization — OOM/realization substrate
+    path: docs/definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md
+    ledger: ''
+    status: blocked
+    kind: product_completion
+    entrypoint: false
+    execution_mode: draft_non_executable
+    depends_on: []
+    enables:
+      - choir-jev-supervision-metamission-2026-09-29
+    note: >-
+      Promoted to top priority by the 2026-10-01 convergent panel (verdict B).
+      The platform-dolt OOM -> realization-flap -> serial-drain substrate blocks
+      the parked-run repair's deployed_acceptance and owner task submission
+      (run start 502s). The durable lever is an ops/deploy-shape memory cap —
+      the permitted owner/ops blocking ask; now.status=blocked_on_owner.
+      Clustering assessment:
+      docs/problems/platform-dolt-oom-realization-cluster-2026-10-01.md.
+    sources:
+      - docs/problems/platform-dolt-oom-realization-cluster-2026-10-01.md
+      - docs/problems/api-key-computer-resolution-flap-2026-10-01.md
+      - docs/definitions/choir-jev-supervision-metamission-2026-09-29.md
   - id: choir-jev-supervision-metamission-2026-09-29
     title: Jev / Supervision Metamission — signal plane to management-scored commitments
     path: docs/definitions/choir-jev-supervision-metamission-2026-09-29.md
@@ -966,6 +989,7 @@ nodes:
     execution_mode: mission_orchestrator
     depends_on:
       - choir-rectification-spine-2026-09-25
+      - choir-platform-dolt-capacity-stabilization-2026-10-01
     enables: []
     note: >-
       Owner-ratified 2026-09-29 metamission spine (definition_version 4,
