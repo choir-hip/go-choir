@@ -62,3 +62,24 @@ Terse entries; consult only when auditing or `now` loses a thread.
   retries 6×800ms (post-healthy EOF window is real), RefreshVM stamps
   boot_kind=refresh. Pushed; CI 36920971343; second deploy will write the
   first complete merged receipt (epoch 992 refresh boot, owner-sized).
+
+- Boundary panel (convergent, partial: claude+gemini38+glm53 completed,
+  quota-capped rest): verdict S1-sufficient / S3-insufficient. Unanimous
+  real findings: (a) replay.sequence is head position not rows applied;
+  (b) `replayed := Sequence>0` in run.go defeats the vocab_migrate fast
+  path — any boot with ≥1 applied row triggers a full-tape rescan, which
+  is the 662.7s epoch-995 cost; (c) reconstruct_done/vocab_fenced were
+  never captured in a receipt (added post-evidence); (d) internal
+  endpoints header-gated + open tap → SSRF/read surface for S1; (e)
+  fetch happens at health-flip → receipts can miss runtime_started.
+- New problem docs: s0-vocab-rescan-fires-on-any-replay (the substrate
+  defect), s0-internal-surface-forgeable-caller (S1 amplifier).
+- Fix commit 21bbabff: applied_rows counter on ReplaySnapshot (reset per
+  Reconstruct, incremented per applied row), replayed = AppliedRows>0,
+  replay snapshot in guest receipt carries applied_rows; fetch polls
+  ~15s for runtime_started before finishing the receipt.
+- Report letter corrected: the 9s/11min split is labeled inference until
+  a receipt carries the marks.
+- Pending: deploy 21bbabff → manual owner refresh → epoch-996 receipt
+  with reconstruct_done + vocab_fenced + applied_rows + runtime_started —
+  the first complete owner-sized attribution.
