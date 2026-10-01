@@ -19,7 +19,7 @@ metamission:
   stations:
     - id: S0-reality-and-boot-timeline
       path: docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md
-      readiness: executable
+      readiness: reviewed
       status: working
       depends_on: []
     - id: S1-security-floor
@@ -459,9 +459,11 @@ now:
     filesystem, and a double resume duplicates RNG and key state. S3's
     invariants are the safety case, not optional polish.
   next_action: >-
-    Execute S0a (read-only probes + boot/resume timeline instrumentation)
-    under docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md.
-    Problem-document each confirmed finding before any fix.
+    S0a (read-only probes + boot/resume timeline instrumentation) under
+    docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md —
+    the live station. Problem-document each confirmed finding before any
+    fix. Station boundary: agentic-consensus + reporter + transition
+    receipt before S1 promotes.
 
 receipts: []
 ---
@@ -616,6 +618,31 @@ idea of what a change is.
   per-computer disposition and can deny the vulnerable capability even
   when the computer is asleep or cannot rebase; capability removal is
   independently verified on the actual computer.
+
+## Orchestration contract (station boundaries)
+
+This file is the executable `/goal`. Station files are authority-bearing
+contracts consumed by the orchestrator; none is slashed separately. On
+every station boundary — terminal receipt landed, `now.slice` about to
+advance — the orchestrator MUST run, in order:
+
+1. **agentic-consensus** (`skills/agentic-consensus/SKILL.md`,
+   `agentic-consensus-runner.sh`): convergent panel on the landing
+   station's receipts + the next station's readiness gate ("is the
+   landed evidence sufficient, and does the next station's file still
+   match reality?"). Send-back findings resolve before promotion.
+2. **reporter** (`skills/reporter/SKILL.md`): publish the station's
+   human-readable narrative report + evidence refs to the repo.
+3. **Station transition receipt** on the spine's `receipts:` block:
+   landed station id + terminal receipt ref, next station id +
+   promoted `now.slice`, panel verdict digest, report ref. Only then
+   may the next station's `now.status` move to `working`.
+
+Between-boundary continuous authority: within a station, the station
+file's own `now` card governs; the spine does not re-review mid-station.
+A station whose evidence falsifies its conjecture stops at
+`blocked_incomplete` and returns to this boundary protocol rather than
+self-promoting a successor.
 
 ## Latency plan (S0, S2, S3)
 

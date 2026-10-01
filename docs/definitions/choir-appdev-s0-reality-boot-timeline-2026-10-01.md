@@ -2,7 +2,7 @@
 definition_version: 4
 definition_id: choir-appdev-s0-reality-boot-timeline-2026-10-01
 execution_mode: mission_orchestrator
-readiness: executable
+readiness: reviewed
 member_of: choir-supervised-app-development-metamission-2026-10-01
 
 review:
