@@ -39,6 +39,7 @@
   } from './live-events.js';
   import FloatingDesktopIcons from './FloatingDesktopIcons.svelte';
   import PromptSurface from './PromptSurface.svelte';
+  import ChoirField from './ChoirField.svelte';
   import FloatingWindow from './FloatingWindow.svelte';
   import DesktopOverview from './DesktopOverview.svelte';
   import AppHost from './AppHost.svelte';
@@ -82,6 +83,13 @@
   export let appReplay = null;
   export let publicRoutePath = '';
   export let theme = null;
+  /**
+   * True while the signed-out orientation film is playing over this desktop.
+   * The desktop does not stop existing — it stays live and operable under
+   * the film — but it must not also be animating its own ambient field, or
+   * the landing page pays for two full-frame canvases at once.
+   */
+  export let introPlaying = false;
 
   const dispatch = createEventDispatcher();
 
@@ -1639,6 +1647,19 @@
 >
   <!-- Desktop surface (floating icons + windows, full viewport width) -->
   <div class="desktop-area {desktopReady ? 'state-loaded' : 'state-loading'}" data-desktop-windows>
+    <!--
+      Ambient constellation behind the plane. Atmosphere, not content: it is
+      dimmed in desktop-motion.css, is never interactive, and adds no DOM
+      that a test could mistake for a window. The signed-out preview is where
+      it earns its keep — it is the first signal that this is a running
+      machine and not a screenshot.
+    -->
+    {#if !introPlaying}
+      <div data-desktop-ambient-field aria-hidden="true">
+        <ChoirField density="ambient" />
+      </div>
+    {/if}
+
     <!-- Floating desktop icons (z-index below windows) -->
     <FloatingDesktopIcons on:launchapp={handleLaunchApp} on:iconpositionschanged={handleIconPositionsChanged} />
 

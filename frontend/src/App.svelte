@@ -23,9 +23,11 @@
 <script lang="ts">
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
+  import LandingIntro from './lib/LandingIntro.svelte';
   import LegalDocument from './lib/LegalDocument.svelte';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
+  import { shouldPlayLandingIntro, markIntroSeen } from './lib/landing-intro-preference';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
   import { addLiveEventListener, isOwnLiveEvent, liveEventPayload } from './lib/live-events.js';
@@ -58,11 +60,28 @@
   let universalWirePublicLink = null;
   let universalWirePublicStatus = '';
   let universalWirePublicError = '';
+  /**
+   * Orientation deck for first-time signed-out visitors. Decided once, after
+   * the session check resolves to signed_out, so a returning authenticated
+   * user never sees it. It is non-blocking by construction: it never captures
+   * pointer events over the desktop, which stays live and operable at every
+   * pane, and its third pane *is* the desktop.
+   */
+  let showLandingIntro = false;
+  let landingIntroReduced = false;
+  /**
+   * True once the deck has scrolled far enough that the desktop is the thing
+   * on screen. At that point the desktop mounts its own ambient field, so
+   * the landing never pays for two full-frame canvases at once.
+   */
+  let landingReachedDesktop = false;
   const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
 
   $: isAuthenticated = authState === 'signed_in';
   $: authIntentMessage = getAuthIntentMessage(pendingAuthIntent);
   $: isUniversalWirePublicReader = !!universalWirePublicToken;
+  // Authenticating retires the film: the owner is on the machine now.
+  $: if (isAuthenticated) showLandingIntro = false;
 
   function normalizeTextureAuthIntentKind(kind) {
     return String(kind || '');
@@ -101,6 +120,7 @@
       } else {
         authState = 'signed_out';
         currentUser = null;
+        decideLandingIntro();
         return { authenticated: false };
       }
     } catch (err) {
@@ -124,6 +144,7 @@
       // Permanent error (401/403) — server says not authenticated.
       authState = 'signed_out';
       currentUser = null;
+      decideLandingIntro();
       return { authenticated: false };
     }
   }
@@ -345,6 +366,36 @@
 
   function handleClearPasskeyError() {
     passkeyError = '';
+  }
+
+  /**
+   * Decide whether the orientation film plays. Signed-in users never get it,
+   * a public document route never gets it (that is a reading surface, not a
+   * first-run surface), and reduced-motion visitors get the static composed
+   * version inside the component instead of a timed sequence.
+   */
+  function decideLandingIntro() {
+    if (isAuthenticated || isLegalDocumentRoute || isUniversalWirePublicReader) {
+      showLandingIntro = false;
+      return;
+    }
+    if (typeof window === 'undefined') {
+      showLandingIntro = false;
+      return;
+    }
+    landingIntroReduced =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    showLandingIntro = shouldPlayLandingIntro(window.location.search, landingIntroReduced);
+  }
+
+  function handleLandingIntroEnterDesktop() {
+    // The desktop is the destination now, so it may bring up its own field.
+    landingReachedDesktop = true;
+  }
+
+  function handleLandingIntroComplete() {
+    markIntroSeen();
   }
 
   async function handleLogout() {
@@ -604,10 +655,18 @@
       {appReplay}
       {publicRoutePath}
       theme={currentTheme}
+      introPlaying={showLandingIntro && !landingReachedDesktop}
       on:logout={handleLogout}
       on:authexpired={handleAuthExpired}
       on:authrequired={handleAuthRequired}
     />
+    {#if showLandingIntro}
+      <LandingIntro
+        reduced={landingIntroReduced}
+        on:enterdesktop={handleLandingIntroEnterDesktop}
+        on:complete={handleLandingIntroComplete}
+      />
+    {/if}
     {#if authOverlayOpen && !isAuthenticated}
       <div class="auth-overlay" data-auth-overlay data-auth-intent-kind={pendingAuthIntent?.kind || ''}>
         <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Sign in to Choir">

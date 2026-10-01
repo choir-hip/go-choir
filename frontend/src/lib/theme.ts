@@ -17,7 +17,6 @@ export type ChoirTheme = {
   fonts: Record<string, string>;
   effects: Record<string, string>;
 };
-
 const base: Omit<ChoirTheme, 'id' | 'name' | 'colors' | 'effects'> = {
   schema_version: THEME_SCHEMA_VERSION,
   radii: {
@@ -28,8 +27,25 @@ const base: Omit<ChoirTheme, 'id' | 'name' | 'colors' | 'effects'> = {
     pill: '30px',
   },
   motion: {
+    // Composite values — duration and timing in one string, for the simple
+    // `transition: box-shadow var(--choir-motion-fast)` case.
     fast: '120ms ease',
     sheet: '260ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+    // Separated roles. A composite value cannot be safely embedded in a
+    // shorthand that also names a duration — `opacity 0.8s var(--motion-x)`
+    // expands to two time values and silently voids the whole declaration,
+    // which is an extremely quiet way to lose every animation on a surface.
+    // Anything that needs a per-property duration composes these instead.
+    durationFast: '120ms',
+    durationSheet: '260ms',
+    durationEntrance: '1000ms',
+    durationExit: '700ms',
+    durationWindowOpen: '340ms',
+    durationWindowClose: '200ms',
+    ease: 'cubic-bezier(0.16, 1, 0.3, 1)',
+    easeIn: 'cubic-bezier(0.7, 0, 0.84, 0)',
+    easeSpring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+    easeDrift: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)',
   },
   layout: {
     promptSurfacePlacement: 'bottom',
@@ -56,6 +72,19 @@ export const FUTURISTIC_NOIR: ChoirTheme = {
     promptSurfaceBg: 'linear-gradient(180deg, rgba(17, 28, 52, 0.88), rgba(8, 14, 27, 0.92))',
     sheetBg: 'linear-gradient(180deg, rgba(10, 17, 32, 0.96), rgba(7, 11, 21, 0.98))',
     controlBg: 'rgba(19, 32, 59, 0.84)', tetramarkColor: '#93B2FF',
+    // Landing intro field. Depth roles for the choir graph: far / mid / near
+    // node alphas plus the desk-orb hues. Kept in the token system so the
+    // canvas never hard-codes a colour (theme-contract contract).
+    fieldEdge: 'rgba(109,141,255,0.16)',
+    fieldNodeFar: 'rgba(133,159,211,0.5)',
+    fieldNodeMid: 'rgba(109,141,255,0.66)',
+    fieldNodeNear: 'rgba(69,215,255,0.9)',
+    fieldHalo: 'rgba(109,141,255,0.05)',
+    introGrain: 'rgba(247,250,255,0.5)',
+    deskTexture: '#6D8DFF',
+    deskManagement: '#45D7FF',
+    deskEngineering: '#20D686',
+    deskResearch: '#FFB339',
     chart1: '#6D8DFF', chart2: '#45D7FF', chart3: '#20D686', chart4: '#FFB339', chart5: '#FF5B6B',
   },
   effects: {
@@ -81,6 +110,16 @@ export const CARBON_FIBER_KINTSUGI: ChoirTheme = {
     promptSurfaceBg: 'linear-gradient(180deg, rgba(27,29,31,.92), rgba(12,13,15,.96))',
     sheetBg: 'linear-gradient(180deg, rgba(22,24,26,.96), rgba(10,11,12,.98))',
     controlBg: 'rgba(23, 25, 27, 0.88)', tetramarkColor: '#FFE18A',
+    fieldEdge: 'rgba(255,216,107,0.14)',
+    fieldNodeFar: 'rgba(182,170,138,0.46)',
+    fieldNodeMid: 'rgba(255,216,107,0.6)',
+    fieldNodeNear: 'rgba(255,241,188,0.86)',
+    fieldHalo: 'rgba(255,216,107,0.045)',
+    introGrain: 'rgba(242,239,231,0.42)',
+    deskTexture: '#FFD86B',
+    deskManagement: '#FFF1BC',
+    deskEngineering: '#55C27A',
+    deskResearch: '#A78BFA',
     chart1: '#FFD86B', chart2: '#FFF1BC', chart3: '#55C27A', chart4: '#A78BFA', chart5: '#E36B5A',
   },
   effects: {
@@ -106,6 +145,16 @@ export const LONDON_SALMON: ChoirTheme = {
     promptSurfaceBg: 'linear-gradient(180deg, rgba(255,254,252,.98), rgba(253,243,240,.98))',
     sheetBg: 'linear-gradient(180deg, rgba(255,254,252,.99), rgba(254,246,243,.98))',
     controlBg: 'rgba(255, 253, 250, 0.95)', tetramarkColor: '#682A28',
+    fieldEdge: 'rgba(156,88,82,0.16)',
+    fieldNodeFar: 'rgba(173,144,136,0.5)',
+    fieldNodeMid: 'rgba(156,88,82,0.6)',
+    fieldNodeNear: 'rgba(36,79,74,0.82)',
+    fieldHalo: 'rgba(156,88,82,0.05)',
+    introGrain: 'rgba(58,21,23,0.32)',
+    deskTexture: '#9C5852',
+    deskManagement: '#244F4A',
+    deskEngineering: '#1D6E45',
+    deskResearch: '#B46122',
     chart1: '#9C5852', chart2: '#244F4A', chart3: '#1D6E45', chart4: '#B46122', chart5: '#9F2F2D',
   },
   fonts: {
@@ -292,8 +341,28 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
     '--choir-shadow-floating': e.shadowFloating,
     '--choir-shadow-glow': e.shadowGlow,
     '--choir-control-shadow': e.controlShadow,
+    '--choir-field-edge': c.fieldEdge,
+    '--choir-field-node-far': c.fieldNodeFar,
+    '--choir-field-node-mid': c.fieldNodeMid,
+    '--choir-field-node-near': c.fieldNodeNear,
+    '--choir-field-halo': c.fieldHalo,
+    '--choir-intro-grain': c.introGrain,
+    '--choir-desk-texture': c.deskTexture,
+    '--choir-desk-management': c.deskManagement,
+    '--choir-desk-engineering': c.deskEngineering,
+    '--choir-desk-research': c.deskResearch,
     '--choir-motion-fast': normalized.motion.fast,
     '--choir-motion-sheet': normalized.motion.sheet,
+    '--choir-duration-fast': normalized.motion.durationFast,
+    '--choir-duration-sheet': normalized.motion.durationSheet,
+    '--choir-duration-entrance': normalized.motion.durationEntrance,
+    '--choir-duration-exit': normalized.motion.durationExit,
+    '--choir-duration-window-open': normalized.motion.durationWindowOpen,
+    '--choir-duration-window-close': normalized.motion.durationWindowClose,
+    '--choir-ease': normalized.motion.ease,
+    '--choir-ease-in': normalized.motion.easeIn,
+    '--choir-ease-spring': normalized.motion.easeSpring,
+    '--choir-ease-drift': normalized.motion.easeDrift,
     '--choir-prompt-surface-size': normalized.layout.promptSurfaceMinHeight,
     '--choir-prompt-surface-top-offset': normalized.layout.promptSurfacePlacement === 'top' ? normalized.layout.promptSurfaceMinHeight : '0px',
     '--choir-prompt-surface-bottom-offset': normalized.layout.promptSurfacePlacement === 'bottom' ? normalized.layout.promptSurfaceMinHeight : '0px',

@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Choir — the landing deck, in three panes</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   CHOIR — THE LANDING DECK
+   A motion study of the shipped signed-out landing, in one file.
+
+   Pane 1   the title card
+   Pane 2   "Choir isn't a chat. It's a computer."
+   Pane 3   the machine
+
+   The idea under the whole thing: the last pane is not a pitch for the
+   product, it IS the product. So the word "computer" on pane 2 scales up
+   through the camera and dissolves, and a running desktop is already
+   behind it. There is no button and no second click — you scroll, and you
+   have arrived.
+
+   Everything is scroll-linked. There is no timeline anywhere in this file.
+   Two numbers — --arrive and --reveal — are the live scroll position, and
+   every transform is a calc() on one of them. Reverse the scroll and the
+   whole piece retraces its path exactly, because nothing here is the
+   residue of a transition that already started.
+
+   Pane 3 is a *simulation* of the desktop, because this file has no
+   desktop under it. In the product that pane is the real, live, operable
+   machine, and this overlay never captures a single pointer event.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --ink: #F7FAFF;
+  --ink-2: #9AA9C0;
+  --ink-3: #65748D;
+  --void: #050912;
+  --accent: #6D8DFF;
+  --accent-2: #45D7FF;
+  --mark: #93B2FF;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+  --ease-in: cubic-bezier(.7, 0, .84, 0);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-drift: cubic-bezier(.45, .05, .55, .95);
+  --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --arrive: 0;
+  --reveal: 0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; background: var(--void); }
+body {
+  font-family: var(--font); color: var(--ink);
+  -webkit-font-smoothing: antialiased; overscroll-behavior: none;
+}
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+/* ── the machine, behind everything ─────────────────────────────────────
+   Stands in for the real desktop. Scaled by the same reveal value, so the
+   last pane behaves exactly as the product does. */
+#machine { position: fixed; inset: 0; z-index: 0; transform-origin: 50% 50%;
+  transform: scale(calc(1.06 - .06 * var(--reveal))); }
+#machine .win {
+  position: absolute; left: 8%; top: 6%; width: 84%; height: 76%;
+  border-radius: 20px; overflow: hidden;
+  background: linear-gradient(180deg, #0D1628, #070B15);
+  border: 1px solid rgba(133,159,211,.22);
+  box-shadow: 0 30px 90px rgba(0,0,0,.6);
+}
+#machine .win .bar {
+  height: 34px; display: flex; align-items: center; gap: .4rem; padding: 0 .8rem;
+  background: #0A1220; border-bottom: 1px solid rgba(133,159,211,.16);
+}
+#machine .win .bar i { width: 8px; height: 8px; border-radius: 50%; background: rgba(133,159,211,.24); }
+#machine .win .bar i:first-child { background: #FF5B6B; }
+#machine .win .bar i:nth-child(2) { background: #FFB339; }
+#machine .win .bar i:nth-child(3) { background: #20D686; }
+#machine .win .bar b { margin-left: .5rem; font-size: .6rem; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+#machine .win .doc { padding: 2.2% 2.6%; display: grid; gap: .62rem; align-content: start; }
+#machine .win .doc h4 { font-family: Georgia, serif; font-size: 1.5rem; color: var(--accent-2);
+  letter-spacing: -.01em; }
+#machine .win .doc h5 { font-family: Georgia, serif; font-size: .82rem; color: var(--accent-2);
+  margin-top: .3rem; }
+#machine .win .doc .r { height: 7px; border-radius: 4px; background: rgba(133,159,211,.13); }
+#machine .win .doc .r:nth-of-type(2) { width: 92%; }
+#machine .win .doc .r:nth-of-type(3) { width: 78%; }
+#machine .win .doc .r:nth-of-type(4) { width: 88%; }
+#machine .win .doc .r:nth-of-type(5) { width: 64%; }
+#machine .rail { position: absolute; left: 1.2%; top: 8%; display: grid; gap: .55rem; }
+#machine .rail i { display: block; width: 30px; height: 30px; border-radius: 9px;
+  background: rgba(19,32,59,.9); border: 1px solid rgba(133,159,211,.16); }
+#machine .rail i.on { background: rgba(109,141,255,.2); border-color: rgba(109,141,255,.5);
+  box-shadow: 0 0 18px rgba(109,141,255,.3); }
+#machine .prompt { position: absolute; left: 50%; bottom: 1.4%; transform: translateX(-50%);
+  width: 46%; height: 40px; border-radius: 999px;
+  background: linear-gradient(180deg, rgba(19,32,59,.95), rgba(9,15,28,.95));
+  border: 1px solid rgba(133,159,211,.22); display: flex; align-items: center;
+  padding: 0 1.1rem; gap: .6rem; box-shadow: 0 0 34px rgba(109,141,255,.18); }
+#machine .prompt em { font-style: normal; font-size: .68rem; color: var(--ink-3); }
+#machine .prompt .c { width: 1.5px; height: 1rem; background: var(--accent-2);
+  box-shadow: 0 0 10px var(--accent-2); animation: caret 1.25s steps(2) infinite; }
+@keyframes caret { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+
+/* ── the deck's own environment ─────────────────────────────────────────
+   No backdrop blur, no filter on the aurora, no masked grid. Every one of
+   those was in the first build of this and together they cost about ninety
+   percent of the frame budget while changing nothing a viewer could name. */
+#scrim { position: fixed; inset: 0; z-index: 2; pointer-events: none;
+  background: rgba(5,9,18,.97); opacity: calc(1 - var(--reveal)); }
+#aurora { position: fixed; inset: 0; z-index: 3; pointer-events: none;
+  opacity: calc(1 - var(--reveal)); }
+#aurora i { position: absolute; display: block; border-radius: 50%; will-change: transform; }
+#aurora i:nth-child(1) { width: 88vw; height: 88vw; left: -34vw; top: -36vw;
+  background: radial-gradient(circle, rgba(109,141,255,.34), transparent 52%);
+  animation: d1 18s var(--ease-drift) infinite; }
+#aurora i:nth-child(2) { width: 80vw; height: 80vw; right: -32vw; bottom: -34vw;
+  background: radial-gradient(circle, rgba(69,215,255,.26), transparent 52%);
+  animation: d2 18s var(--ease-drift) infinite; }
+@keyframes d1 { 0%,100% { transform: translate3d(0,0,0) scale(1) }
+  50% { transform: translate3d(9vw,7vh,0) scale(1.16) } }
+@keyframes d2 { 0%,100% { transform: translate3d(0,0,0) scale(1.08) }
+  50% { transform: translate3d(-8vw,-6vh,0) scale(.92) } }
+#field { position: fixed; inset: 0; z-index: 4; width: 100%; height: 100%;
+  display: block; pointer-events: none; opacity: calc(1 - var(--reveal)); }
+#vig { position: fixed; inset: 0; z-index: 8; pointer-events: none;
+  opacity: calc((1 - var(--reveal)) * .9);
+  background: radial-gradient(ellipse 78% 70% at 50% 46%, transparent 32%, rgba(2,4,10,.72) 100%); }
+
+/* ── the track ───────────────────────────────────────────────────────────
+   Three panes in normal flow, one viewport each. They must not be
+   absolutely positioned at the same offset — three panes in one slot is a
+   deck with one pane, and it hides easily because each pane's arrival
+   maths masks the two that should be invisible. */
+#track { position: fixed; inset: 0; z-index: 6; will-change: transform; }
+.pane { position: relative; height: 100vh; height: 100dvh;
+  display: grid; place-items: center; padding: 9vh 7vw; }
+.stack { width: min(100%, 60rem); display: grid; gap: clamp(.85rem, 2.2vh, 1.5rem); }
+
+/* ── pane 1 · leaving ─────────────────────────────────────────────────── */
+/* The mark is the hero of this pane. 4.8:1 against the wordmark, which is
+   the ratio the shipped component reads at. */
+.mark { display: flex; justify-content: center;
+  transform: scale(calc(1 + var(--arrive) * .75)) translateY(calc(var(--arrive) * -6vh));
+  filter: blur(calc(var(--arrive) * 10px)); opacity: calc(1 - var(--arrive) * 1.15); }
+.mark svg { width: clamp(120px, 17vw, 210px); height: clamp(120px, 17vw, 210px); }
+.wordmark { justify-self: center; font-size: clamp(1.5rem, 4.4vw, 2.6rem);
+  font-weight: 200; letter-spacing: calc(.52em + var(--arrive) * .62em); text-indent: .52em;
+  transform: scale(calc(1 + var(--arrive) * .42)); opacity: calc(1 - var(--arrive) * 1.4); }
+.tagline { justify-self: center; font-size: clamp(.7rem, 1.2vw, .84rem); font-weight: 700;
+  letter-spacing: .3em; text-transform: uppercase; color: var(--ink-3);
+  transform: translateY(calc(var(--arrive) * 5vh)) scale(calc(1 - var(--arrive) * .08));
+  opacity: calc(1 - var(--arrive) * 1.6); }
+
+/* ── pane 2 · arriving ───────────────────────────────────────────────────
+   The `+ var(--reveal) * 100dvh` pins the pane's content to the middle of
+   the viewport through the whole hand-off. Without it the content rides the
+   track upward and is off the top of the frame before the word has finished
+   growing, which leaves a dead stretch of empty screen. */
+#rename .stack {
+  transform: translateY(calc((1 - var(--arrive)) * 9vh + var(--reveal) * 100dvh))
+             scale(calc(.97 + var(--arrive) * .03));
+  filter: blur(calc((1 - var(--arrive)) * 9px));
+  opacity: var(--arrive);
+}
+.kicker { font-size: clamp(.62rem, 1vw, .74rem); font-weight: 800; letter-spacing: .26em;
+  text-transform: uppercase; color: var(--accent-2); }
+h1 { font-size: clamp(2.15rem, 7.4vw, 5.1rem); font-weight: 800; line-height: .94;
+  letter-spacing: -.035em; max-width: 19ch; }
+h1 .line { display: block; }
+h1 em { display: inline-block; font-style: italic; font-weight: 400;
+  background: linear-gradient(96deg, var(--accent-2), var(--mark) 60%, var(--accent));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  /* the move: the word grows through the camera and dissolves */
+  transform: scale(calc(1 + var(--reveal) * 3.1));
+  filter: blur(calc(var(--reveal) * 9px));
+  opacity: calc(1 - var(--reveal) * 1.4); }
+h1 .dim { opacity: calc(1 - var(--reveal) * 5.5); }
+#rename .lead { opacity: calc(1 - var(--reveal) * 5); }
+.sub { font-size: clamp(.94rem, 1.55vw, 1.16rem); line-height: 1.62;
+  color: var(--ink-2); max-width: 56ch; font-weight: 380; }
+#rename .sub, #rename .pills, #rename .kicker {
+  opacity: calc(1 - var(--reveal) * 4.2);
+  transform: translateY(calc(var(--reveal) * 4vh)); }
+.pills { display: flex; flex-wrap: wrap; gap: .5rem; margin: .3rem 0 0; padding: 0;
+  list-style: none; }
+.pills li { font-family: var(--mono); font-size: clamp(.66rem, 1.1vw, .78rem);
+  letter-spacing: .06em; padding: .4rem .8rem; border-radius: 999px;
+  border: 1px solid rgba(109,141,255,.3); background: rgba(109,141,255,.07);
+  color: var(--mark); }
+
+/* the record, drawn under the claim */
+.tape { position: absolute; left: 0; right: 0; top: 84%; height: 2px; z-index: -1;
+  transform: translate3d(0,-50%,0) scaleX(calc(var(--arrive) * .86)); transform-origin: 0 50%;
+  background: linear-gradient(90deg, transparent, var(--accent) 8%, var(--accent-2) 55%, transparent);
+  box-shadow: 0 0 18px rgba(69,215,255,.7); opacity: calc(1 - var(--reveal) * 2.2); }
+.tape-glow { position: absolute; left: 0; right: 0; top: 84%; height: 300px; z-index: -2;
+  background: radial-gradient(ellipse 70% 100% at 32% 50%, rgba(69,215,255,.16), transparent 74%);
+  filter: blur(40px); opacity: calc(1 - var(--reveal) * 2.2); }
+.ticks { position: absolute; left: 0; right: 0; top: 84%; height: 0; z-index: -1;
+  opacity: calc(var(--arrive) * (1 - var(--reveal) * 2.2)); }
+.ticks i { position: absolute; top: 0; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%; background: var(--void); border: 1.5px solid var(--accent-2);
+  box-shadow: 0 0 14px rgba(69,215,255,.9); }
+
+/* ── pane 3 · the machine ────────────────────────────────────────────── */
+#machine-pane { background: transparent; }
+
+/* ── chrome ─────────────────────────────────────────────────────────── */
+#chrome { position: fixed; left: clamp(1.2rem,3vw,2.4rem); bottom: clamp(1.1rem,3vh,1.9rem);
+  z-index: 9; opacity: calc(1 - var(--reveal)); }
+#rail { display: flex; gap: .5rem; }
+#rail i { display: block; width: 30px; height: 3px; border-radius: 999px;
+  background: rgba(133,159,211,.24); transform-origin: left center; }
+#rail i.lit { box-shadow: 0 0 10px rgba(69,215,255,.9); }
+#go { position: fixed; right: clamp(1.2rem,3vw,2.4rem); bottom: clamp(.9rem,2.4vh,1.5rem);
+  z-index: 9; display: inline-flex; align-items: center; gap: .55rem;
+  padding: .6rem 1rem; border-radius: 999px; font-size: .72rem; font-weight: 760;
+  letter-spacing: .06em; color: var(--ink-2);
+  border: 1px solid rgba(133,159,211,.24); background: rgba(19,32,59,.55);
+  opacity: calc(1 - var(--reveal)); transition: color .2s, transform .3s var(--ease-spring); }
+#go:hover { color: var(--ink); transform: translateY(-2px); }
+#hint { position: absolute; bottom: clamp(1.1rem,3vh,1.9rem); left: 50%;
+  transform: translateX(-50%); display: flex; align-items: center; gap: .5rem;
+  font-family: var(--mono); font-size: .62rem; letter-spacing: .24em;
+  text-transform: uppercase; color: var(--ink-3); transition: opacity .4s; }
+#hint.off { opacity: 0; }
+#hint b { font-size: .95rem; font-weight: 400; animation: nudge 2.4s var(--ease-drift) infinite; }
+@keyframes nudge { 0%,100% { transform: translateY(0); opacity: .5 }
+  50% { transform: translateY(5px); opacity: 1 } }
+
+@media (prefers-reduced-motion: reduce) {
+  #aurora i, #hint b, #machine .prompt .c { animation: none; }
+  #go { transition-duration: 1ms; }
+}
+@media (max-width: 720px) {
+  .pane { padding: 12vh 1.35rem 14vh; }
+  h1 { max-width: 100%; }
+  .stack { width: 100%; }
+  .sub { max-width: 100%; }
+  #hint { display: none; }
+  #machine .win { left: 4%; width: 92%; }
+}
+</style>
+</head>
+<body>
+
+<!-- the machine -->
+<div id="machine" aria-hidden="true">
+  <div class="rail"><i></i><i class="on"></i><i></i><i></i><i></i><i></i></div>
+  <div class="win">
+    <div class="bar"><i></i><i></i><i></i><b>Choir Preview</b></div>
+    <div class="doc">
+      <h4>Introducing Choir</h4>
+      <h5>A new species &mdash; of computer</h5>
+      <div class="r"></div><div class="r"></div>
+      <div class="r"></div><div class="r"></div><div class="r"></div>
+    </div>
+  </div>
+  <div class="prompt"><em>Tell your computer what to do&hellip;</em><span class="c"></span></div>
+</div>
+
+<div id="scrim"></div>
+<div id="aurora"><i></i><i></i></div>
+<canvas id="field"></canvas>
+<div id="vig"></div>
+
+<div id="track">
+  <section class="pane" id="title-pane">
+    <div class="stack">
+      <div class="mark">
+        <svg viewBox="0 0 512 512" style="width:100%;height:100%;display:block">
+          <path fill="var(--mark)" d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z"/>
+          <path fill="var(--mark)" d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z"/>
+          <path fill="var(--mark)" d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z"/>
+        </svg>
+      </div>
+      <div class="wordmark">CHOIR</div>
+      <p class="tagline">The automatic computer</p>
+    </div>
+    <p id="hint">scroll <b>&darr;</b></p>
+  </section>
+
+  <section class="pane" id="rename">
+    <div class="tape-glow"></div>
+    <div class="tape"></div>
+    <div class="ticks" id="ticks"></div>
+    <div class="stack">
+      <p class="kicker">02 &mdash; The rename</p>
+      <h1>
+        <span class="line lead">Choir isn&rsquo;t a chat.</span>
+        <span class="line"><span class="dim">It&rsquo;s a</span> <em>computer</em><span class="dim">.</span></span>
+      </h1>
+      <p class="sub">A persistent machine, not a session. Many agents coordinate on it for months,
+        and every move they make lands on one versioned record you can read.</p>
+      <ul class="pills">
+        <li>persistent</li><li>versioned</li><li>reversible</li><li>self-improving</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="pane" id="machine-pane"></section>
+</div>
+
+<div id="chrome"><div id="rail"><i></i><i></i><i></i></div></div>
+<button id="go" type="button">Keep going <b style="font-size:.95rem">&darr;</b></button>
+
+<script>
+(() => {
+'use strict';
+
+/* ── the field ─────────────────────────────────────────────────────────
+   A jittered-grid constellation. Nodes on a grid rather than at random:
+   random placement clumps, which reads as noise and piles every bright
+   node into one corner. The halo is one cached sprite — building a radial
+   gradient per node per frame was the single most expensive thing in the
+   first build of this. */
+const cv = document.getElementById('field'), ctx = cv.getContext('2d');
+let W = 0, H = 0, halo = null, nodes = [], edges = [], pulses = [];
+const t0 = performance.now();
+let raf = 0;
+
+const rng = (seed) => { let s = seed >>> 0; return () => {
+  s = (s + 0x6D2B79F5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+function buildHalo() {
+  const size = 128, c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d'), r = size / 2;
+  const grad = g.createRadialGradient(r, r, 0, r, r, r);
+  grad.addColorStop(0, 'rgba(109,141,255,.5)');
+  grad.addColorStop(.35, 'rgba(109,141,255,.16)');
+  grad.addColorStop(1, 'rgba(109,141,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, size, size);
+  return c;
+}
+
+function build() {
+  const r = rng(7331);
+  const cols = clamp(Math.round(W / 210), 4, 10), rows = clamp(Math.round(H / 190), 3, 8);
+  const cw = W / cols, ch = H / rows, cells = [];
+  for (let gy = 0; gy < rows; gy++) for (let gx = 0; gx < cols; gx++) {
+    cells.push({ x: (gx + .14 + r() * .72) * cw, y: (gy + .14 + r() * .72) * ch, d: r(), tw: r() * 6.283 });
+  }
+  const cx = W / 2, cy = H / 2, far = Math.hypot(cx, cy) || 1;
+  nodes = cells.map(c => {
+    const depth = clamp(1 - Math.hypot(c.x - cx, c.y - cy) / far, 0, 1) * .75 + c.d * .25;
+    return { x: c.x, y: c.y, depth, tw: c.tw,
+      ax: 7 + depth * 34, ay: 5 + depth * 24,
+      sx: 6e-5 + depth * 1.4e-4, sy: 5e-5 + depth * 1.3e-4, px: c.tw, py: c.tw * 1.7,
+      r: .9 + depth * 1.9,
+      col: depth > .72 ? '69,215,255' : depth > .42 ? '109,141,255' : '133,159,211',
+      a: .14 + depth * .42 };
+  });
+  edges = [];
+  const reach = Math.min(W, H) * .26;
+  for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+    const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+    if (d < reach) edges.push({ a: i, b: j, k: 1 - d / reach });
+  }
+  const q = rng(9091);
+  pulses = Array.from({ length: 5 }, (_, i) => ({ e: (q() * edges.length) | 0, t: -i * .55, sp: .0011 + q() * .0016 }));
+}
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 1.5);
+  W = cv.clientWidth || innerWidth; H = cv.clientHeight || innerHeight;
+  cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(H * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  halo = buildHalo(); build();
+}
+
+function draw(now) {
+  raf = requestAnimationFrame(draw);
+  const t = now - t0;
+  ctx.clearRect(0, 0, W, H);
+  const pos = nodes.map(n => ({
+    x: n.x + Math.sin(t * n.sx + n.px) * n.ax,
+    y: n.y + Math.cos(t * n.sy + n.py) * n.ay,
+  }));
+  for (const ed of edges) {
+    const a = pos[ed.a], b = pos[ed.b];
+    ctx.strokeStyle = `rgba(109,141,255,${(.04 + ed.k * .13).toFixed(3)})`;
+    ctx.lineWidth = .55 + ed.k * .7;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+  for (const p of pulses) {
+    p.t += p.sp * 16.6;
+    if (p.t > 1) { p.t = -.4; p.e = (p.e + 37) % Math.max(1, edges.length); continue; }
+    const ed = edges[p.e]; if (!ed) continue;
+    const a = pos[ed.a], b = pos[ed.b];
+    const x = lerp(a.x, b.x, p.t), y = lerp(a.y, b.y, p.t);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 22);
+    g.addColorStop(0, 'rgba(147,200,255,.85)');
+    g.addColorStop(1, 'rgba(69,215,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 22, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = 'rgba(220,238,255,.9)';
+    ctx.beginPath(); ctx.arc(x, y, 1.4, 0, 6.2832); ctx.fill();
+  }
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i], p = pos[i];
+    const tw = .72 + .28 * Math.sin(t * .0016 + n.tw);
+    if (halo && n.depth > .4) {
+      const rad = 74 + n.r * 52;
+      ctx.globalAlpha = tw * .55;
+      ctx.drawImage(halo, p.x - rad, p.y - rad, rad * 2, rad * 2);
+    }
+    ctx.globalAlpha = tw;
+    ctx.fillStyle = `rgba(${n.col},${n.a.toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, n.r, 0, 6.2832); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/* the revision ticks on the tape */
+{
+  const host = document.getElementById('ticks');
+  for (let i = 0; i < 24; i++) {
+    const t = document.createElement('i');
+    t.style.left = ((i / 23) * 86).toFixed(2) + '%';   // the tape's drawn extent
+    host.appendChild(t);
+  }
+}
+
+/* ── the scroll ────────────────────────────────────────────────────────
+   A virtual scroll, not a native one. The overlay never captures a pointer
+   event, so a real scroll container covering the viewport would be a
+   choice about who gets the clicks — and in the product the desktop
+   underneath has to stay operable at every pane. */
+const LAST = 2;
+let pos = 0, target = 0, velocity = 0, dragging = false;
+let dragFrom = 0, dragStart = 0, lastY = 0, lastAt = 0, idleSince = performance.now();
+let hinted = false;
+const railEls = Array.from(document.querySelectorAll('#rail i'));
+const hint = document.getElementById('hint');
+
+const damp = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt));
+const unit = () => Math.max(360, innerHeight * .62);
+
+function touch() { idleSince = performance.now(); if (!hinted) { hinted = true; hint.classList.add('off'); } }
+
+addEventListener('wheel', (e) => {
+  if (e.ctrlKey) return;
+  e.preventDefault();
+  const m = e.deltaMode === 1 ? 32 : e.deltaMode === 2 ? 800 : 1;
+  target = clamp(target + (e.deltaY * m) / unit(), 0, LAST);
+  touch();
+}, { passive: false });
+
+addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') return;
+  dragging = true; dragFrom = e.clientY; dragStart = target;
+  lastY = e.clientY; lastAt = performance.now(); touch();
+});
+addEventListener('pointermove', (e) => {
+  if (!dragging || e.pointerType === 'mouse') return;
+  const now = performance.now();
+  velocity = (lastY - e.clientY) / Math.max(1, now - lastAt) / 1000 / unit();
+  lastY = e.clientY; lastAt = now;
+  target = clamp(dragStart + (dragFrom - e.clientY) / unit(), 0, LAST);
+});
+addEventListener('pointerup', () => {
+  if (!dragging) return;
+  dragging = false;
+  const moved = Math.abs(target - dragStart);
+  target = moved < .12 && Math.abs(velocity) < .6
+    ? clamp(Math.round(dragStart), 0, LAST)
+    : clamp(Math.round(target + velocity * .18), 0, LAST);
+  velocity = 0; touch();
+});
+
+addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+    e.preventDefault(); target = clamp(Math.round(target) + 1, 0, LAST);
+  } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+    e.preventDefault(); target = clamp(Math.round(target) - 1, 0, LAST);
+  } else if (e.key === 'Home') { e.preventDefault(); target = 0; }
+  else if (e.key === 'End') { e.preventDefault(); target = LAST; }
+  else return;
+  touch();
+});
+
+document.getElementById('go').addEventListener('click', () => {
+  target = clamp(Math.round(target) + 1, 0, LAST); touch();
+});
+
+const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+let last = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (!last) { last = now; return; }
+  const dt = Math.min((now - last) / 1000, .05);
+  last = now;
+
+  if (!dragging && now - idleSince > 110) {
+    const settled = Math.round(target);
+    target = Math.abs(target - settled) < .0015 ? settled : damp(target, settled, 9, dt);
+  }
+  pos = reduced ? target : damp(pos, target, dragging ? 26 : 7.5, dt);
+  if (Math.abs(pos - target) < .0004) pos = target;
+
+  const arrive = clamp(pos, 0, 1);
+  const reveal = clamp(pos - 1, 0, 1);
+  const root = document.documentElement.style;
+  root.setProperty('--arrive', arrive.toFixed(4));
+  root.setProperty('--reveal', reveal.toFixed(4));
+  document.getElementById('track').style.transform =
+    `translate3d(0, ${(-pos * 100).toFixed(4)}dvh, 0)`;
+
+  const lit = Math.round(pos);
+  const pips = [clamp(1 - pos, 0, 1), clamp(1 - Math.abs(pos - 1), 0, 1), reveal];
+  railEls.forEach((el, i) => {
+    el.style.transform = `scaleX(${pips[i].toFixed(3)})`;
+    el.classList.toggle('lit', i === lit);
+  });
+}
+
+let rt = 0;
+addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 160); }, { passive: true });
+
+resize();
+draw(performance.now());
+requestAnimationFrame(frame);
+
+window.__deck = { go: (n) => { target = clamp(n, 0, LAST); touch(); },
+  pos: () => pos, reveal: () => clamp(pos - 1, 0, 1) };
+})();
+</script>
+</body>
+</html>
