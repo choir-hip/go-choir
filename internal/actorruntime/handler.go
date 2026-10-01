@@ -607,6 +607,19 @@ resumeGeneric:
 		return nil, fmt.Errorf("actorruntime: decode resume state for coagent_result: %w", err)
 	}
 	if rs.RunID == "" {
+		// The actor snapshot lost its resume pointer, but the obligation is
+		// canonical: when this occurrence resolves to exactly one pending
+		// lifecycle control bound to a passivated/blocked run, recover that
+		// exact run id from the packet's DeliveredToRunID and continue into the
+		// parked-run resume branch below — the packet is the same authority
+		// class as the snapshot, not a guessed selection.
+		if recoveredRunID, recoverErr := h.resolveBoundControlRunID(ctx, u, ownerID, computerID, agentID); recoverErr == nil && recoveredRunID != "" {
+			rs.RunID = recoveredRunID
+		} else if recoverErr != nil {
+			return nil, fmt.Errorf("%w: actorruntime: resolve bound control run for coagent_result: %v", actor.ErrDeferUnprocessed, recoverErr)
+		}
+	}
+	if rs.RunID == "" {
 		// No parked run to resume. The coagent update is in the store
 		// mailbox. Reconcile either creates a new run and dispatches it or
 		// reports the classified, durably terminal activation outcome.
@@ -716,6 +729,51 @@ resumeGeneric:
 		return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", retryErr)
 	}
 	return nil, nil
+}
+
+// resolveBoundControlRunID recovers the run id a coagent_result is bound to
+// when the actor snapshot lost its resume pointer. u.Content is a canonical
+// occurrence identity ("sha256:"+digest over UpdateID+ProducerUpdateID), so the
+// packet is resolved by exact content match over the agent's actionable pending
+// lifecycle controls — bound rows included. Returns the bound DeliveredToRunID
+// only when exactly one pending control matches; zero matches is not an error
+// (the caller falls through to generic reconcile), multiple is a fail-closed
+// error (never guess). The result feeds rs.RunID so the normal parked-run
+// resume branch — ReconcileParkedLifecycleCoagentWake — applies its own run
+// guards; this helper only supplies the authoritative run id.
+func (h *actorHandler) resolveBoundControlRunID(ctx context.Context, u actor.Update, ownerID, computerID, agentID string) (string, error) {
+	content := strings.TrimSpace(u.Content)
+	if !strings.HasPrefix(content, "sha256:") {
+		return "", nil // not a canonical lifecycle occurrence — nothing to resolve
+	}
+	updates, err := h.rt.Store().ListActionablePendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+	if err != nil {
+		return "", err
+	}
+	var runID string
+	for i := range updates {
+		update := updates[i]
+		if types.LifecycleControlActorOccurrenceContent(update) != content {
+			continue
+		}
+		// Exact occurrence match. Require the packet's own scope fields to agree
+		// with this delivery before trusting its binding.
+		if strings.TrimSpace(update.TrajectoryID) != strings.TrimSpace(u.TrajectoryID) ||
+			strings.TrimSpace(update.TargetAgentID) != strings.TrimSpace(agentID) ||
+			update.Disposition != types.UpdatePending ||
+			update.DeliveredAt == nil {
+			return "", nil // matched but not a live bound-pending obligation — let reconcile classify it
+		}
+		bound := strings.TrimSpace(update.DeliveredToRunID)
+		if bound == "" {
+			return "", nil
+		}
+		if runID != "" && runID != bound {
+			return "", fmt.Errorf("ambiguous bound control runs %s and %s for occurrence", runID, bound)
+		}
+		runID = bound
+	}
+	return runID, nil
 }
 
 func metadataString(metadata map[string]any, key string) string {

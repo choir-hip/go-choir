@@ -945,6 +945,122 @@ func TestHandlerParkedLifecycleControlReconcilesBeforeRetryAcknowledgement(t *te
 	}
 }
 
+// A parked lifecycle run whose actor snapshot lost resume.RunID still must
+// reactivate on its bound coagent_result. The regression: before the
+// DeliveredToRunID recovery, an empty resume memory dropped into
+// reconcileCoagentWake and stranded the parked run even though the packet was
+// bound to it. Now the handler resolves the packet by occurrence content and
+// recovers the exact run id.
+func TestHandlerCoagentResultRecoversBoundRunFromDeliveredToRunID(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "delivered-runid-recovery.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &countingLifecycleProvider{}
+	cfg := provideriface.Config{
+		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
+		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+	}
+	adapter := New(cfg, s, events.NewEventBus(), provider, nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+		_ = s.Close()
+	})
+	if err := adapter.Start(ctx); err != nil {
+		t.Fatalf("start adapter: %v", err)
+	}
+	adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	const suffix = "delivered-runid"
+	fixture := seedActorLifecycleControl(t, s, suffix)
+	initial, err := adapter.Runtime.ReconcileCoagentWake(ctx, fixture.ownerID, fixture.agentID)
+	if err != nil || initial == nil {
+		t.Fatalf("initial lifecycle reconcile: run=%+v err=%v", initial, err)
+	}
+
+	// Bind the control to the still-active run: BindLifecycleControlDelivery
+	// sets DeliveredToRunID+DeliveredAt and requires run.State.Active. This is
+	// the delivered-but-unconsumed shape — the packet is bound to the run but
+	// its result was never consumed before the run passivated.
+	later := commitActorLaterControl(t, s, fixture, suffix, "control-recover-b")
+	work, err := s.GetLifecycleWorkItem(ctx, fixture.ownerID, fixture.computerID, later.TargetWorkItemID)
+	if err != nil {
+		t.Fatalf("load bound work item: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID)
+	if err != nil {
+		t.Fatalf("lifecycle snapshot: %v", err)
+	}
+	bind := types.BindLifecycleControlDeliveryRequest{
+		OwnerID: fixture.ownerID, ComputerID: fixture.computerID, CommandID: "bind-delivery:" + initial.RunID,
+		TrajectoryID: fixture.trajectoryID, TargetAgentID: fixture.agentID, TargetRunID: initial.RunID,
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		Controls: []types.BindLifecycleControlDeliveryItem{{
+			UpdateID: later.UpdateID, ProducerAgentID: later.AgentID, ProducerUpdateID: later.ProducerUpdateID,
+			TargetWorkItemID:                later.TargetWorkItemID,
+			ExpectedControlLifecycleVersion: later.LifecycleVersion, ExpectedWorkLifecycleVersion: work.LifecycleVersion,
+		}},
+	}
+	bind.CommandDigest, _ = store.ComputeBindLifecycleControlDeliveryDigest(bind)
+	if _, err := s.BindLifecycleControlDelivery(ctx, bind); err != nil {
+		t.Fatalf("bind control to run: %v", err)
+	}
+
+	// Now the run passivates while the control stays bound-pending.
+	parked := *initial
+	parked.State = types.RunPassivated
+	parked.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, parked); err != nil {
+		t.Fatalf("passivate lifecycle run: %v", err)
+	}
+
+	handler := newActorHandler(adapter.Runtime, nil)
+	// Empty resume memory — the snapshot lost resume.RunID.
+	emptyMemory, err := json.Marshal(resumeState{RunID: "", Phase: ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The actor carries the canonical occurrence identity: a sha256 digest over
+	// the control's UpdateID+ProducerUpdateID, not the raw UpdateID.
+	update := actor.Update{
+		UpdateID: "actor-delivered-recover", ToAgentID: scopedActorMailboxID(fixture.ownerID, fixture.computerID, fixture.agentID),
+		FromAgentID: later.AgentID, Kind: "coagent_result", Content: agentcore.LifecycleControlActorOccurrenceContent(later),
+		TrajectoryID: fixture.trajectoryID, CreatedAt: time.Now().UTC(),
+	}
+
+	gotMemory, err := handler.HandleUpdate(ctx, fixture.agentID, update, emptyMemory)
+	if err != nil {
+		t.Fatalf("recover bound run from DeliveredToRunID: %v", err)
+	}
+	rec, recErr := s.GetLifecycleRun(ctx, fixture.ownerID, fixture.computerID, initial.RunID)
+	if recErr != nil {
+		t.Fatalf("load reactivated run: %v", recErr)
+	}
+	// The run must have reactivated off the packet's binding — anything but
+	// passivated. Under countingLifecycleProvider the resumed activation runs
+	// to completion; the regression shape is a run stranded at passivated.
+	if rec.State == types.RunPassivated {
+		t.Fatalf("run stayed passivated — DeliveredToRunID recovery did not fire: %+v", rec)
+	}
+	// The snapshot is healed when the handler returns one: memoryFromRunState
+	// restores resume.RunID so the next wake takes the normal parked path. A
+	// terminal run returns nil memory, which is also correct.
+	if gotMemory != nil {
+		var healed resumeState
+		if err := json.Unmarshal(gotMemory, &healed); err != nil {
+			t.Fatalf("decode healed memory: %v", err)
+		}
+		if healed.RunID != initial.RunID {
+			t.Fatalf("healed resume.RunID = %q, want %q", healed.RunID, initial.RunID)
+		}
+	}
+}
+
 func TestTextureWakeAcceptsExactResearchReportWithImplicitTargetWorkBinding(t *testing.T) {
 	env := newAdapterTestEnv(t)
 	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
