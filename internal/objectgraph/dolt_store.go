@@ -192,12 +192,23 @@ func (s *DoltStore) ensureMetadataColumns(ctx context.Context) {
 			idx).Scan(&idxCount)
 		if err == nil && idxCount == 0 {
 			if _, err = s.db.ExecContext(ctx, fmt.Sprintf(
-				`CREATE INDEX %s ON og_objects(object_kind, %s)`, idx, mc.Column)); err != nil {
+				`CREATE INDEX %s ON og_objects(object_kind, %s, updated_at)`, idx, mc.Column)); err != nil {
 				continue
 			}
 		}
 		s.metaColumns[mc.Field] = true
 	}
+}
+
+// InheritMetadataColumns copies the live generated-column set from the store
+// that ran EnsureSchema to a shared-engine read store. The read store shares
+// the same underlying og_objects table, so the columns exist for it — it just
+// never ran the DDL to learn which ones.
+func (s *DoltStore) InheritMetadataColumns(other *DoltStore) {
+	if s == nil || other == nil {
+		return
+	}
+	s.metaColumns = other.metaColumns
 }
 
 func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {

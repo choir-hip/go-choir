@@ -908,6 +908,12 @@ func Open(dbPath string) (*Store, error) {
 	if readDB != nil {
 		s.ogReadStore = objectgraph.NewDoltStore(readDB)
 		s.ogReadStore.ShareEngineMutex(ogDoltStore)
+		// Mirror the write store's live generated-column set so the read
+		// pool's metadata queries use the index path too. Without this the
+		// read store's metaColumns is empty and every hot metadata lookup
+		// silently falls back to a JSON_EXTRACT full scan (measured:
+		// ~1.4s/call under drain).
+		s.ogReadStore.InheritMetadataColumns(ogDoltStore)
 	}
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,
