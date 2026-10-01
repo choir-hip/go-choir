@@ -130,3 +130,60 @@ against a `GET /api/texture/revisions/{id}` (store) **while** logging
 "read queued behind a long store operation" in one observation, and it
 directly adjudicates direction 3 (separate read engine) versus 1+4
 (reduce the snapshot's scope and frequency).
+
+## engineMu attribution (cf0ef207, live 2026-10-01 ~15:37Z)
+
+The instrumentation cut asked for landed: `DoltStore.engineMu` is now a
+measuring mutex (same Lock/Unlock API, `runtime.Caller` attribution), and
+guest `/health` exposes cumulative per-call-path `engine_mutex` counters.
+Owner guest refreshed to `cf0ef207` mid-drain; two samples ~5 min apart:
+
+| op | calls | wait | hold | max wait | max hold |
+|---|---|---|---|---|---|
+| `GetObject` | 65,904 | 403s | 40s | 9.2s | 6.4s |
+| `putBatch` | 3,440 | 85s | 2.2s | 7.7s | 17ms |
+| `ListObjectRefsByKindOwner` | 116 | 47s | 1.6s | 6.0s | 115ms |
+| `ListObjectsByMetadataPage` | 325 | 15s | 8.6s | 6.1s | 240ms |
+| `ListObjectsPage` | 102 | 14s | 2.2s | 6.4s | 123ms |
+| `ListJSONBodyFieldsByKindOwner` | 267 | 8.3s | 58s | 1.1s | 370ms |
+| `ReadObjectSnapshotFiltered` | 254 | 1.8s | 147s | 257ms | 9.2s |
+| `ListObjectsByMetadata` | 92 | 1.3s | 128s | 248ms | 5.2s |
+| `ListObjects` | 56 | 20ms | 89s | 20ms | 4.3s |
+| **TOTAL** | | **577s** | **484s** | | |
+
+Over the ~5-minute window the lock was held ~97% of wall time and every
+op waited ~1.1s on average. Two decisive facts:
+
+1. **Holds are read-dominated, not write-dominated.** `putBatch` (the
+   only write path during drain) holds at most 17ms; the three heaviest
+   holders are all reads (`ReadObjectSnapshotFiltered` ~580ms/call,
+   `ListObjectsByMetadata` ~1.4s/call, `ListObjects` ~1.6s/call).
+   Write-splitting the engine (option "separate read pool") would not
+   shorten the queue — reads queue behind reads.
+
+2. **The slow reads are unindexed scans, not inherently heavy rows.**
+   `og_objects` has indexes on `(object_kind, owner_id)` and
+   `(updated_at)` only; `ReadObjectSnapshotFiltered` phase 1 filters on
+   `(owner_id, computer_id)` — unindexed → full-table scan plus
+   metadata extraction per row. `ListObjectsByMetadata` filters on
+   `JSON_EXTRACT(metadata, '$.<field>')` — structurally unindexable in
+   its current shape; hot fields are `run_id`, `trajectory_id`,
+   `channel_id` on `choir.run.event` / `choir.channel.message` /
+   `choir.work_item`.
+
+### Cut-3 decision (post-attribution)
+
+The bottleneck is **read-shape**: missing indexes for the two hottest
+filter patterns. The fix is additive and cheap:
+`(owner_id, computer_id, object_kind)` composite on `og_objects`
+(covers snapshot phase 1 + `ListObjects` owner filters), plus generated
+columns indexed over the three hot metadata fields
+(`meta_run_id`, `meta_trajectory_id`, `meta_channel_id`) so
+`ListObjectsByMetadata` resolves them as index seeks instead of
+JSON-extract full scans. Generated columns are maintained by Dolt on
+every write — no separate projection consistency surface needed, so the
+append-path audit precondition does not apply.
+
+Falsified: the divergent panel's projection/read-replica family (needed
+only if indexing cannot beat ~580ms/call), and read/write engine split
+(wait is real, but queue head is a slow read, not a writer).
