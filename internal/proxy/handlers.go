@@ -142,12 +142,32 @@ type Handler struct {
 	apiKeyValidator            APIKeyValidator // optional: enables Bearer token (API key) auth
 	authStore                  *auth.Store     // optional: owned auth store for API key validation
 	platformSignerDigest       string
+	// routeCacheTTL bounds the short-lived computer-route memo
+	// (resolveComputerURL + ensureComputerVersionRoute). vmctl remains the
+	// route of record; the cache only avoids paying two resolve RPCs on every
+	// request. Entries self-expire and are invalidated on upstream transport
+	// failure so a moved VM never wedges behind a stale URL.
+	routeCacheTTL time.Duration
+	routeCacheMu  sync.Mutex
+	routeCache    map[string]routeCacheEntry
+
 }
+
+// Context keys used to carry the resolved upstream URL and its invalidator
+// from the request handler into the reverse-proxy ErrorHandler (the Director
+// strips the header before the upstream request is issued).
+type proxyContextKey string
+
+const (
+	resolvedAutoputerURLContextKey proxyContextKey = "resolved_autoputer_url"
+	routeInvalidatorContextKey     proxyContextKey = "route_invalidator"
+)
 
 // NewHandler creates a proxy Handler with the given config and auth public key.
 // It initializes the reverse-proxy transport and WebSocket dialer. Production
 // request handling resolves an immutable D-ROUTE slot and then its vmctl-owned
 // disposable realization; missing route authority fails closed.
+
 func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 	if strings.TrimSpace(cfg.CorpusdURL) == "" {
 		cfg.CorpusdURL = DefaultCorpusdURL
@@ -161,6 +181,34 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(autoputerURL)
+
+// Context keys used to carry the resolved upstream URL and its invalidator
+// from the request handler into the reverse-proxy ErrorHandler (the Director
+// strips the header before the upstream request is issued).
+type proxyContextKey string
+
+const (
+	resolvedAutoputerURLContextKey proxyContextKey = "resolved_autoputer_url"
+	routeInvalidatorContextKey     proxyContextKey = "route_invalidator"
+)
+
+
+	// A transport failure against a cached route means the cached URL may
+	// point at a moved or dead VM — drop it so the next request re-resolves
+	// instead of wedging behind the stale target for the TTL window. The
+	// resolved URL is stashed in the request context because the Director
+	// strips the header before the upstream request is issued.
+	proxy.ErrorHandler = func(w http.ResponseWriter, req *http.Request, err error) {
+		if resolved, ok := req.Context().Value(resolvedAutoputerURLContextKey).(string); ok && resolved != "" {
+			if invalidator, ok := req.Context().Value(routeInvalidatorContextKey).(func(string)); ok {
+				invalidator(resolved)
+			}
+		}
+		log.Printf("proxy: upstream transport error path=%s err=%v", req.URL.Path, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":"upstream unavailable"}`))
+	}
 
 	// Flush immediately for SSE streaming responses (for example Trace) and
 	// other streaming endpoints. A value of -1 means flush after each
@@ -623,6 +671,7 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 
 	// If vmctl resolved a different URL, override the reverse proxy target.
 	if autoputerURL != h.cfg.ComputerURL {
+		h.setResolvedRouteContext(r, autoputerURL)
 		r.Header.Set("X-Resolved-Autoputer-URL", autoputerURL)
 	}
 
@@ -690,6 +739,7 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 
 	// If vmctl resolved a different URL, override the reverse proxy target.
 	if autoputerURL != h.cfg.ComputerURL {
+		h.setResolvedRouteContext(r, autoputerURL)
 		r.Header.Set("X-Resolved-Autoputer-URL", autoputerURL)
 	}
 
@@ -1128,6 +1178,13 @@ func (h *Handler) resolveComputerURL(ctx context.Context, userID, desktopID stri
 	}
 	ctx, cancel := h.vmctlOpContext(ctx)
 	defer cancel()
+	// Serve from the short-TTL route cache when it has a resolved URL —
+	// a hit skips both the immutable-route check and ResolveDesktopContext.
+	// Stale entries self-expire; a transport failure against a cached URL
+	// invalidates it via the reverse-proxy ErrorHandler.
+	if cached, ok := h.routeCacheGet(userID, desktopID); ok && cached.computerURL != "" {
+		return cached.computerURL, nil
+	}
 
 	start := time.Now()
 	delay := autoputerResolveRetryBaseDelay
@@ -1163,6 +1220,75 @@ func (h *Handler) resolveComputerURL(ctx context.Context, userID, desktopID stri
 	}
 }
 
+// routeCacheEntry is a short-TTL memo of one (user,desktop) resolution:
+// computer_url is the resolved autoputer base URL, route_ok records that the
+// immutable ComputerVersion route was confirmed inside the TTL window. Both
+// are advisory only — vmctl stays the route of record and a transport
+// failure against a cached URL invalidates the entry immediately.
+type routeCacheEntry struct {
+	computerURL string
+	routeOK     bool
+	expiresAt   time.Time
+}
+
+const defaultRouteCacheTTL = 2 * time.Second
+
+func (h *Handler) routeCacheTTLFor() time.Duration {
+	if h != nil && h.routeCacheTTL > 0 {
+		return h.routeCacheTTL
+	}
+	return defaultRouteCacheTTL
+}
+
+func routeCacheKey(userID, desktopID string) string {
+	return strings.TrimSpace(userID) + "\x00" + strings.TrimSpace(desktopID)
+}
+
+func (h *Handler) routeCacheGet(userID, desktopID string) (routeCacheEntry, bool) {
+	if h == nil {
+		return routeCacheEntry{}, false
+	}
+	key := routeCacheKey(userID, desktopID)
+	h.routeCacheMu.Lock()
+	entry, ok := h.routeCache[key]
+	h.routeCacheMu.Unlock()
+	if !ok || !entry.expiresAt.After(time.Now()) {
+		return routeCacheEntry{}, false
+	}
+	return entry, true
+}
+
+func (h *Handler) routeCachePut(userID, desktopID string, entry routeCacheEntry) {
+	if h == nil {
+		return
+	}
+	h.routeCacheMu.Lock()
+	defer h.routeCacheMu.Unlock()
+	if h.routeCache == nil {
+		h.routeCache = make(map[string]routeCacheEntry)
+	} else if len(h.routeCache) >= 1024 {
+		h.routeCache = make(map[string]routeCacheEntry)
+	}
+	entry.expiresAt = time.Now().Add(h.routeCacheTTLFor())
+	h.routeCache[routeCacheKey(userID, desktopID)] = entry
+}
+
+// invalidateRouteByURL drops every cached entry resolving to url (the
+// transports see only the URL, not the key) so a VM that moved or wedged
+// immediately re-resolves instead of serving a dead upstream for the TTL.
+func (h *Handler) invalidateRouteByURL(url string) {
+	if h == nil || url == "" {
+		return
+	}
+	h.routeCacheMu.Lock()
+	defer h.routeCacheMu.Unlock()
+	for key, entry := range h.routeCache {
+		if entry.computerURL == url {
+			delete(h.routeCache, key)
+		}
+	}
+}
+
 func (h *Handler) ensureComputerVersionRoute(ctx context.Context, userID, desktopID string) error {
 	if h.cfg != nil && h.cfg.AllowDirectAutoputerForTests {
 		return nil
@@ -1170,6 +1296,10 @@ func (h *Handler) ensureComputerVersionRoute(ctx context.Context, userID, deskto
 	if h.vmctlClient == nil {
 		return fmt.Errorf("ComputerVersion route authority is not configured")
 	}
+	if cached, ok := h.routeCacheGet(userID, desktopID); ok && cached.routeOK {
+		return nil
+	}
+	prior, hadPrior := h.routeCacheGet(userID, desktopID)
 	routeSlotID, err := routeledger.RouteSlotID(userID, desktopID)
 	if err != nil {
 		return err
@@ -1181,6 +1311,12 @@ func (h *Handler) ensureComputerVersionRoute(ctx context.Context, userID, deskto
 	if resolution.RouteAbsent &&
 		userID == vmctl.UniversalWirePlatformOwnerID && desktopID == vmctl.UniversalWirePlatformDesktopID {
 		return fmt.Errorf("platform computer requires an immutable ComputerVersion route")
+	}
+	if hadPrior {
+		prior.routeOK = true
+		h.routeCachePut(userID, desktopID, prior)
+	} else {
+		h.routeCachePut(userID, desktopID, routeCacheEntry{routeOK: true})
 	}
 	return nil
 }
@@ -1205,6 +1341,7 @@ func (h *Handler) resolveComputerURLOnce(ctx context.Context, userID, desktopID 
 	if err != nil {
 		return "", err
 	}
+	h.routeCachePut(userID, desktopID, routeCacheEntry{computerURL: resp.ComputerURL, routeOK: true})
 	return resp.ComputerURL, nil
 }
 
@@ -1258,6 +1395,20 @@ func writeResolveError(w http.ResponseWriter, err error) {
 		status = http.StatusGatewayTimeout
 	}
 	writeJSON(w, status, errorResponse{Error: "failed to resolve user autoputer"})
+}
+
+// setResolvedRouteContext stashes the resolved upstream URL and the route
+// invalidator on the request context so the reverse-proxy ErrorHandler can
+// drop a stale cache entry on transport failure even after the Director has
+// stripped the X-Resolved-Autoputer-URL header.
+func (h *Handler) setResolvedRouteContext(r *http.Request, resolvedURL string) {
+	if r == nil || resolvedURL == "" {
+		return
+	}
+	ctx := r.Context()
+	ctx = context.WithValue(ctx, resolvedAutoputerURLContextKey, resolvedURL)
+	ctx = context.WithValue(ctx, routeInvalidatorContextKey, h.invalidateRouteByURL)
+	*r = *r.WithContext(ctx)
 }
 
 // wsWriter serializes writes to a single websocket.Conn. gorilla/websocket

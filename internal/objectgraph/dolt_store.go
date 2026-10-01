@@ -268,6 +268,108 @@ func (s *DoltStore) ReadObjectSnapshot(ctx context.Context, ownerID, computerID 
 	return objects, nil
 }
 
+// ReadObjectSnapshotFiltered is the scoped variant of ReadObjectSnapshot for
+// hot paths that need only a subset of the computer's objects. It runs both
+// phases inside one serializable read-only transaction so the result is
+// consistent: phase one scans ref columns (no body LONGBLOB materialization)
+// for the requested kinds, applies keep(kind, metadata) to decide membership,
+// and phase two fetches full rows by primary key for survivors only.
+// Returned objects are sorted by canonical_id, matching ReadObjectSnapshot.
+func (s *DoltStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, computerID string, kinds []ObjectKind, keep func(kind ObjectKind, metadata json.RawMessage) bool) ([]Object, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" || computerID == "" {
+		return nil, fmt.Errorf("objectgraph dolt: snapshot owner_id and computer_id are required")
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: begin snapshot tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Phase 1: refs only for the requested kinds.
+	refsQuery := `SELECT canonical_id, object_kind, metadata FROM og_objects WHERE owner_id = ? AND computer_id = ?`
+	args := []any{ownerID, computerID}
+	if len(kinds) > 0 {
+		refsQuery += ` AND object_kind IN (`
+		for i, k := range kinds {
+			if i > 0 {
+				refsQuery += `,`
+			}
+			refsQuery += `?`
+			args = append(args, string(k))
+		}
+		refsQuery += `)`
+	}
+	refsQuery += ` ORDER BY canonical_id`
+	rows, err := tx.QueryContext(ctx, refsQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: snapshot refs: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id, kindStr, metadata string
+		if err := rows.Scan(&id, &kindStr, &metadata); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("objectgraph dolt: scan ref: %w", err)
+		}
+		if keep == nil || keep(ObjectKind(kindStr), json.RawMessage(metadata)) {
+			ids = append(ids, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("objectgraph dolt: iterate snapshot refs: %w", err)
+	}
+	rows.Close()
+	if len(ids) == 0 {
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("objectgraph dolt: snapshot commit: %w", err)
+		}
+		return nil, nil
+	}
+
+	// Phase 2: PK-fetch bodies for survivors, preserving canonical_id order.
+	// IDs arrive sorted from phase 1; batch them with an IN clause.
+	objectsQuery := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+		FROM og_objects WHERE canonical_id IN (`
+	objArgs := make([]any, 0, len(ids))
+	for i, id := range ids {
+		if i > 0 {
+			objectsQuery += `,`
+		}
+		objectsQuery += `?`
+		objArgs = append(objArgs, id)
+	}
+	objectsQuery += `) ORDER BY canonical_id`
+	objRows, err := tx.QueryContext(ctx, objectsQuery, objArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: snapshot bodies: %w", err)
+	}
+	var objects []Object
+	for objRows.Next() {
+		obj, scanErr := scanDoltObject(objRows)
+		if scanErr != nil {
+			objRows.Close()
+			return nil, scanErr
+		}
+		objects = append(objects, obj)
+	}
+	if err := objRows.Err(); err != nil {
+		objRows.Close()
+		return nil, fmt.Errorf("objectgraph dolt: iterate snapshot bodies: %w", err)
+	}
+	objRows.Close()
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: snapshot commit: %w", err)
+	}
+	return objects, nil
+}
+
 func (s *DoltStore) PutEdge(ctx context.Context, edge Edge) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")

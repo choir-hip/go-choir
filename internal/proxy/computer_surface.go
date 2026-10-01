@@ -78,7 +78,8 @@ func (h *Handler) HandleComputerSurface(w http.ResponseWriter, r *http.Request) 
 	h.lifecycle.record("surface.resolve", "ok", time.Since(resolveStarted))
 	h.setTrustedAuthHeaders(r, authResult)
 	if autoputerURL != h.cfg.ComputerURL {
-		r.Header.Set("X-Resolved-Autoputer-URL", autoputerURL)
+	h.setResolvedRouteContext(r, autoputerURL)
+	r.Header.Set("X-Resolved-Autoputer-URL", autoputerURL)
 	}
 
 	upstreamStarted := time.Now()

@@ -2037,7 +2037,28 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 	if graph == nil {
 		return types.LifecycleSnapshot{}, fmt.Errorf("lifecycle snapshot: object graph not initialized")
 	}
-	objects, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	// Scope the snapshot read to the kinds the assembly consumes and, within
+	// those, to the trajectory's rows — so the serializable read fetches
+	// bodies for this trajectory's lifecycle objects (plus the doc/revision
+	// chain, which is addressed by canonical id and may predate trajectory
+	// metadata) instead of every object in the computer.
+	snapshotKinds := []objectgraph.ObjectKind{
+		ogKindTrajectory, ogKindTexDoc, ogKindTexRev, ogKindWorkItem,
+		ogKindRun, ogKindAgent, ogKindWorkerUpdate, ogKindEngineeringAssignment,
+		ogKindLifecycleEvent,
+	}
+	objects, err := graph.ReadObjectSnapshotFiltered(ctx, ownerID, computerID, snapshotKinds, func(kind objectgraph.ObjectKind, metadata json.RawMessage) bool {
+		if kind == ogKindTexDoc || kind == ogKindTexRev {
+			return true
+		}
+		var meta struct {
+			TrajectoryID string `json:"trajectory_id"`
+		}
+		if json.Unmarshal(metadata, &meta) != nil {
+			return false
+		}
+		return meta.TrajectoryID == trajectoryID
+	})
 	if err != nil {
 		return types.LifecycleSnapshot{}, err
 	}
