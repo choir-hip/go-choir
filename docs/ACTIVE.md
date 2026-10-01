@@ -25,20 +25,30 @@ are substrate-gated. The parked-run repair (`14f5682b`, deployed `4a718af4`)
 stays open with `deployed_acceptance` pending — discharged as a side effect
 once the guest holds an uptime window.
 
-## Current Mission — Jev / Supervision Metamission
+## Current Mission — Supervised App Development Metamission
+
+[`definitions/choir-supervised-app-development-metamission-2026-10-01.md`](definitions/choir-supervised-app-development-metamission-2026-10-01.md)
+(`readiness: executable`, `now.status: working`) — **owner-approved
+2026-10-01** after agentic-consensus review (5/5 convergent + 7/7
+divergent; all required revisions applied in v3). Twelve stations:
+**S0** reality + boot timeline (live) → **S1** security floor →
+**S2** layering (per-computer app-layer Nix closure on data disk) →
+**S3** fast resume (machine snapshots, generation-bound) →
+**S4** capsule open world (recorded egress + one proven private store) →
+**S5** live preview + supervision → **S6** commit gate → **S7** app
+packages → **S8** source publication → **S9** forks/fleets (two classified
+construction paths) → **S10** org templates → **S11** mainline + security
+push. Station files: `definitions/choir-appdev-s*-2026-10-01.md`.
+Ordered ahead of the World Wire metamission per owner direction
+2026-10-01 ("a good prerequisite to it").
+
+## Parallel Mission — Jev / Supervision Metamission
 
 [`definitions/choir-jev-supervision-metamission-2026-09-29.md`](definitions/choir-jev-supervision-metamission-2026-09-29.md)
-is the live `/goal` entrypoint (owner-ratified spine 2026-09-29,
-`readiness: reviewed`). Eight stations:
-**M0** debug/stabilize (redeploy owner computer first — owner direction) →
-**M-SUB** async signal plane (Emit verb, cell_fate, notice-injection) →
-**M0a** research RLM cutover → **M1** typed commitments →
-**M2** model-policy RLM module → **M3** research hill-climb →
-**M4** Jev transport (parallel) → **M5** management-scorer.
-Orientation: [`orientation-jev-supervision-metamission-2026-09-29.md`](orientation-jev-supervision-metamission-2026-09-29.md).
-Station goal files carry `readiness: drafted` pending authoring consensus
-review; they run continuously under the ratified spine once promoted.
-
+is still `working` but no longer the live entrypoint — the app-dev
+metamission took spine position 2026-10-01 on owner approval. Its
+station files and receipts remain valid; it resumes as parallel work or
+is folded when its remaining stations intersect S1-S11.
 ## Parallel Mission — Texture Latency Cutover
 
 [`definitions/choir-texture-latency-cutover-2026-10-01.md`](definitions/choir-texture-latency-cutover-2026-10-01.md)

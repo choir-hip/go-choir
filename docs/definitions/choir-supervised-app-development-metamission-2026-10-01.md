@@ -7,7 +7,7 @@ definition_version: 4
 # substrate that shortens every later dev loop (security floor, layering,
 # fast resume) comes first.
 
-readiness: drafted
+readiness: executable
 
 review:
   reviewer: agentic-consensus panel (convergent 5/5 + divergent 7/7), 2026-10-01
@@ -18,63 +18,63 @@ review:
 metamission:
   stations:
     - id: S0-reality-and-boot-timeline
-      path: unauthored (intent)
-      readiness: intent
-      status: pending
+      path: docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md
+      readiness: drafted
+      status: working
       depends_on: []
     - id: S1-security-floor
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S0-reality-and-boot-timeline]
     - id: S2-layering-runtime-from-release
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s2-layering-runtime-from-release-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S0-reality-and-boot-timeline]
     - id: S3-fast-resume
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s3-fast-resume-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S1-security-floor, S2-layering-runtime-from-release]
     - id: S4-capsule-open-world
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s4-capsule-open-world-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S1-security-floor]
     - id: S5-live-preview-supervision
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s5-live-preview-supervision-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S4-capsule-open-world]
     - id: S6-commit-gate-full-release
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S2-layering-runtime-from-release, S5-live-preview-supervision]
     - id: S7-app-packages
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S6-commit-gate-full-release]
     - id: S8-source-publication
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s8-source-publication-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S6-commit-gate-full-release]
     - id: S9-forks-and-fleets
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S1-security-floor, S3-fast-resume, S8-source-publication]
     - id: S10-org-templates
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s10-org-templates-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S9-forks-and-fleets]
     - id: S11-mainline-and-security-push
-      path: unauthored (intent)
-      readiness: intent
+      path: docs/definitions/choir-appdev-s11-mainline-security-push-2026-10-01.md
+      readiness: drafted
       status: pending
       depends_on: [S8-source-publication, S9-forks-and-fleets]
 
@@ -373,9 +373,10 @@ boundaries:
 now:
   status: working
   slice: >-
-    Authoring v2. Stations are intent only. Next is S0: read-only reality
-    probes plus a boot timeline instrument, so every later latency and
-    layering claim has a measured baseline.
+    S0 reality + boot timeline — the live station. Owner approved the
+    metamission 2026-10-01 after agentic-consensus review (dirs 133535 +
+    133637); all required revisions applied in v3. Station goal files
+    authored under docs/definitions/choir-appdev-s*-2026-10-01.md.
   source_ref: main@0bddb11aa2d27694cb760f8aebda52c95ba4e44d
   deploy_identity: unknown
   candidate:

@@ -1005,7 +1005,7 @@ nodes:
     ledger: ''
     status: working
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
       - choir-rectification-spine-2026-09-25
@@ -1014,14 +1014,34 @@ nodes:
       - choir-world-wire-metamission-2026-10-01
     note: >-
       Owner-ratified 2026-09-29 metamission spine (definition_version 4,
-      readiness ladder). Eight stations: M0 debug/stabilize (redeploy
-      owner computer first), M-SUB signal plane, M0a research RLM
-      cutover, M1 typed commitments, M2 model-policy RLM module, M3
-      research hill-climb, M4 Jev transport, M5 management-scorer.
-      Stations carry readiness: drafted pending authoring consensus
-      review; continuous authority under the ratified spine.
+      readiness ladder). Still working; demoted from entrypoint
+      2026-10-01 when the owner approved the supervised-app-development
+      metamission as the live spine. Its stations remain valid and may
+      fold into S1-S11 or resume as parallel work.
     sources:
       - docs/orientation-jev-supervision-metamission-2026-09-29.md
+  - id: choir-supervised-app-development-metamission-2026-10-01
+    title: Supervised App Development, Fast Resume, Forks, Source Publication
+    path: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-platform-dolt-capacity-stabilization-2026-10-01
+    enables:
+      - choir-world-wire-metamission-2026-10-01
+    note: >-
+      Owner-approved 2026-10-01 after agentic-consensus review
+      (dirs agentic-consensus-20261001-133535 convergent +
+      133637 divergent; promote-with-revisions, all applied in v3).
+      Twelve stations S0-S11 authored under
+      docs/definitions/choir-appdev-s*-2026-10-01.md; S0 is live.
+      Ordered ahead of World Wire per owner direction.
+    sources:
+      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
+      - docs/problems/guest-release-propagation-manual-2026-10-01.md
   - id: choir-world-wire-metamission-2026-10-01
     title: World Wire Metamission — compounding self-citing KB, verticals sequenced
     path: docs/definitions/choir-world-wire-metamission-2026-10-01.md
