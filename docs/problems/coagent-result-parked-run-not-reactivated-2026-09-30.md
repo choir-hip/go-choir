@@ -78,8 +78,16 @@ agent, so the silent-incorporate arm is favored.
   path rather than relying solely on the snapshot — or to treat a parked
   run with an open bound obligation as resume-authoritative.
 
-## Related
+## Related — the second dependent on the same lost pointer
 
-The parked-run reactivation path `recoverParkedLifecycleMailboxSnapshots`
-(`adapter.go:524`) is the boot-time hedge for exactly this class; whether it
-fired for `cfa90b87` is the same guest-internal question.
+`recoverParkedLifecycleMailboxSnapshots` (`adapter.go:524`, invoked at boot
+`Start` line 602) is the boot-time hedge for this class — it iterates every
+durable actor mailbox snapshot and calls `ReconcileParkedLifecycleCoagentWake`
+when a parked snapshot and a pending control agree. It guards on
+`resume.RunID != ""` at line 542 (`decodeResumeState`). If `cfa90b87`'s
+snapshot lost `resume.RunID`, BOTH recovery paths — the boot hedge AND the
+live wake dispatch — collapse on the same missing pointer. That makes the
+lost `resume.RunID` the single shared root: the obligation is bound
+(DeliveredToRunID is set, UpdatePending) yet every reactivation path reads
+the run id only from the snapshot. The fix is obligation-authoritative run
+identity, not a third snapshot reader.
