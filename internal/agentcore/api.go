@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -250,6 +251,11 @@ type runtimeHealthResponse struct {
 	EventSchemaVersion    uint64                   `json:"event_schema_version,omitempty"`
 	ReducerVersion        uint64                   `json:"reducer_version,omitempty"`
 	ReleaseDigest         string                   `json:"release_digest,omitempty"`
+	// EngineMutex exposes cumulative per-call-path wait/hold counters for the
+	// embedded-Dolt engine lock (write + read pools share it). The latency
+	// mission's drain probe uses wait-vs-hold attribution to decide between
+	// read-pool separation and committed-state projection work.
+	EngineMutex map[string]objectgraph.EngineMutexOpStats `json:"engine_mutex,omitempty"`
 }
 
 // APIHandler provides HTTP handlers for the runtime API endpoints.
@@ -1039,6 +1045,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		status := persistentdisk.StatusFromGuestUsage(usage)
 		resp.PersistentDisk = &status
 	}
+	resp.EngineMutex = h.rt.store.EngineMutexStats()
 	_ = json.NewEncoder(w).Encode(resp)
 }
 

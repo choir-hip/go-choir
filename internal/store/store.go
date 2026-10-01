@@ -3038,6 +3038,17 @@ func (s *Store) DispatchWorkerUpdate(ctx context.Context, update types.CoagentSo
 	return update, true, nil
 }
 
+// EngineMutexStats returns cumulative per-call-path counters for the
+// embedded-Dolt engine lock shared by the write and read pools. Exposed via
+// guest /health so the latency mission's drain probe can distinguish engine
+// lock queueing (wait) from lock-held SQL work (hold) per call path.
+func (s *Store) EngineMutexStats() map[string]objectgraph.EngineMutexOpStats {
+	if s == nil || s.ogStore == nil {
+		return nil
+	}
+	return s.ogStore.EngineMutexStats()
+}
+
 // scanRun scans a run record from a single row.
 func scanRun(row interface{ Scan(...any) error }) (types.RunRecord, error) {
 	var rec types.RunRecord

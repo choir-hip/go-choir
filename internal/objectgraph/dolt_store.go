@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -64,7 +63,7 @@ type DoltStore struct {
 	// instances over one connector (write + read pools) share one engine,
 	// which is not safe for concurrent queries - they race on shared internal
 	// buffers (unescapeHTMLCodepoints mutating a JSON slice in place).
-	engineMu *sync.Mutex
+	engineMu *engineMutex
 }
 
 // MutationInterceptor receives durable object/edge mutations before SQL.
@@ -104,7 +103,7 @@ type JSONFieldMatch struct {
 // NewDoltStore returns a DoltStore backed by the given *sql.DB. The
 // caller must call EnsureSchema before using the store.
 func NewDoltStore(db *sql.DB) *DoltStore {
-	return &DoltStore{db: db, engineMu: &sync.Mutex{}}
+	return &DoltStore{db: db, engineMu: newEngineMutex()}
 }
 
 // ShareEngineMutex points this store at another store's engine mutex so two
