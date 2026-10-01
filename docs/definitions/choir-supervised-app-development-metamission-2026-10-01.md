@@ -305,6 +305,7 @@ now:
     evidence_refs:
       - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
       - docs/reports/nixos-agent-platform-redhat-deepseek-audit-2026-10-01.md
+      - docs/problems/guest-release-propagation-manual-2026-10-01.md
   decision:
     what: >-
       Source-only publication. Per-computer app layer expressed as
