@@ -143,7 +143,9 @@ decision:
 now:
   status: working
   slice: 'cuts 1+2 landed (c835c295): scoped lifecycle snapshot read + proxy
-    route cache; cut 3 gated on the deployed timing matrix'
+    route cache; cut 3 deployed as generated-column indexes (8f47a232)
+    after engineMu attribution (cf0ef207) showed read-dominated holds —
+    drain-loaded re-measurement pending guest refresh'
   source_ref: main@db7f1063
 
   deploy_identity: 'staging aea62d05; owner guest f563200e'
@@ -178,19 +180,17 @@ now:
     evidence_ref: docs/problems/texture-latency-layered-evidence-2026-10-01.md
     owner_ratification_ref: 'owner directive 2026-10-01'
   belief:
-    believed_state: 'reads are individually fast post-243665b4; latency is
-      resolve-RPC (1.4s) + whole-computer snapshot per event + mutex queueing
-      under desk drain'
-    main_uncertainty: 'whether writes hold engineMu across provider turns —
-      if so, cut 3 becomes mandatory, not optional'
-    next_observation: 'deployed timing matrix after cuts 1+2; if loaded p95 is
-      still >3s, instrument engineMu wait/hold'
-  blocker_or_risk: 'stale-route risk on the 2s cache is bounded by transport-
-    error invalidation; a missed invalidation path serves a dead upstream for
-    at most one TTL window'
-  next_action: 'acceptance matrix recorded (idle, desk drained); cut 3
-    decision pending a drain-loaded re-measurement — idle p95 is ~1.9s on
-    trajectories, dominated by guest-side event/run scan work'
+    believed_state: 'reads dominate engineMu hold time (~97% occupancy);
+      top holders are unindexed scans — resolved by attribution'
+    main_uncertainty: 'provider turns do not hold engineMu across calls —
+      intercept runs outside the lock; resolved'
+    next_observation: 'post-refresh matrix + engine_mutex counters: holds
+      should drop from ~1.4s/call scans to index seeks; waits collapse
+      with them'
+  blocker_or_risk: 'ORDER BY updated_at over an index-seeked set is
+    bounded but visible — acceptable'
+  next_action: 'guest refresh to 8f47a232 when deploy lands; re-run
+    matrix + engine_mutex under drain; record cut-3 verdict'
 
 receipts:
   - id: cuts-1-2-deployed
