@@ -41,12 +41,15 @@ type Server struct {
 	// so the read in Addr never races the write in Start. Without this lock the
 	// race detector reports a data race on the listener pointer and on the
 	// underlying net.TCPListener fields populated during net.Listen.
-	listener        net.Listener
-	listenerMu      sync.RWMutex
-	udsListener     net.Listener
-	once            sync.Once
-	done            chan struct{}
-	healthHandler   http.HandlerFunc
+	listener      net.Listener
+	listenerMu    sync.RWMutex
+	udsListener   net.Listener
+	once          sync.Once
+	done          chan struct{}
+	healthHandler http.HandlerFunc
+	// onListen, when set, runs once after the TCP listener is bound and
+	// published (S0a boot observer: marks the exact listen-ready boundary).
+	onListen        func()
 	shutdownTimeout time.Duration
 }
 
@@ -145,6 +148,12 @@ func (s *Server) HealthHandler() http.HandlerFunc {
 		return nil
 	}
 	return s.healthHandler
+}
+
+// SetOnListen registers a one-shot callback that fires immediately after the
+// TCP listener is bound inside Start. Must be called before Start.
+func (s *Server) SetOnListen(fn func()) {
+	s.onListen = fn
 }
 
 // HandleFunc registers a handler for the given pattern on the server's mux.
@@ -248,6 +257,9 @@ func (s *Server) Start() {
 	s.listenerMu.Lock()
 	s.listener = ln
 	s.listenerMu.Unlock()
+	if s.onListen != nil {
+		s.onListen()
+	}
 
 	if err := s.httpServer.Serve(ln); err != http.ErrServerClosed {
 		log.Fatalf("%s: server error: %v", s.serviceName, err)

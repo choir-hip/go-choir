@@ -177,16 +177,22 @@ now:
   status: working
   slice: >-
     S0a: deploy the boot-timeline instrument and collect the read-only staging
-    reality receipts before opening the separately bounded S0b disposable-computer experiments.
+    reality receipts before opening the separately bounded S0b disposable-computer
+    experiments.
   source_ref: main@8aa1dce9
   deploy_identity: 'staging https://choir.news deployed_commit=a3cfaa00; owner guest computer-03335285269bdba4f94377e56879f9e6 on a3cfaa00'
   candidate:
-    id: none
-    state: none
-    ref: none
-    base: none
-    digest: none
-    scope: []
+    id: s0a-boot-timeline-instrument
+    state: implemented_pending_landing
+    ref: worktree pending commit on main
+    base: main@5e789bef
+    digest: pending
+    scope:
+      - internal/autoputer/boot_timeline.go (guest collector + /internal/boot/timeline + /internal/diag/tcp-dial)
+      - internal/autoputer/run.go (phase marks, SetOnListen)
+      - internal/server/server.go (SetOnListen hook)
+      - internal/vmmanager/boot_timeline.go + manager.go (host marks, merged receipt, persistence)
+      - internal/vmctl/handlers.go + ownership.go + cmd/vmctl/main.go (boot-timeline endpoint + BootKind)
   conjecture:
     id: s0-observed-boot-and-builder-boundary
     claim: >-
@@ -206,10 +212,11 @@ now:
     scope_if_supported: >-
       The current pinned staging image, Firecracker/kernel pair, and disposable
       computers on the single-host Choir staging deployment.
-    status: active
+    status: testing
     evidence_refs:
       - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:503-518
       - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:619-638
+      - docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md
   decision:
     what: >-
       Run S0a as instrumentation/read-only evidence first; admit S0b only as
@@ -223,7 +230,9 @@ now:
     believed_state: >-
       The served release and the image-baseline runtime differ, the boot path
       lacks phase attribution, and source facts alone cannot establish the
-      current security, snapshot, or builder boundaries.
+      current security, snapshot, or builder boundaries. Newly recorded in
+      source: the gateway token rides the kernel cmdline into the guest
+      (docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md).
     main_uncertainty: >-
       Whether the disposable owner-sized fixture can create/resume a lazily
       loaded snapshot and whether a capsule can build a closure that remains
@@ -235,10 +244,16 @@ now:
   blocker_or_risk: >-
     A probe can expose a runtime-mutating or security defect; document it as a
     problem before any repair and do not widen S0 into a sibling's remediation.
+    Deploying the instrument runs the canonical guest boot refresh, which
+    serially reboots active computers (observed: deploy_active_vm_refresh ->
+    RefreshVM per computer) — that reboot is itself the owner-sized timeline
+    capture.
   next_action: >-
-    Begin S0a by landing and deploying the per-boot timeline instrument, then
-    capture the fresh-computer staging receipt before measuring the owner-sized
-    computer.
+    Commit + push the instrument; monitor CI deploy (guest-image rebuild +
+    serialized VM refresh reboots each active computer and writes a merged
+    host+guest receipt per boot); then run the S0a probe to capture the
+    named receipts (fresh computer via Playwright registration, owner-sized
+    via the deploy refresh, plus guest-layout/runtime-closure/tap/token).
 
 receipts: []
 ---

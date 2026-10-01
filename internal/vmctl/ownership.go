@@ -312,6 +312,11 @@ type VMManagerConfig struct {
 	// (RUNTIME_RECOVERY_REPLAY_ONLY=1): materialize to head, then exit
 	// without starting the runtime or appending.
 	RecoveryReplayOnly bool
+
+	// BootKind labels the boot attempt for the per-boot timeline receipt
+	// (cold | refresh | recover | resume). Optional; the manager defaults
+	// empty values to "cold".
+	BootKind string
 }
 
 // VMInstanceInfo holds the information returned by the VM manager
@@ -575,6 +580,14 @@ func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 	r.mu.Lock()
 	r.vmManager = mgr
 	r.mu.Unlock()
+}
+
+// VMManagerHandle returns the configured VM lifecycle manager, if any. The
+// boot-timeline endpoint uses it to read per-VM receipts.
+func (r *OwnershipRegistry) VMManagerHandle() VMManager {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.vmManager
 }
 
 // ReattachManagedVMs adopts VM processes that survived vmctl restart only

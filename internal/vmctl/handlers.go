@@ -1031,6 +1031,55 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// bootTimelineReader is the optional capability the real vmmanager adapter
+// provides. Mocks that don't implement it get a 503, not a panic.
+type bootTimelineReader interface {
+	BootTimeline(vmID string) (json.RawMessage, error)
+}
+
+// HandleBootTimeline serves GET /internal/vmctl/boot-timeline.
+// Query: computer_id, or user_id (+ desktop_id). Returns the VM's merged
+// host+guest boot receipt.
+func (h *Handler) HandleBootTimeline(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
+	if userID == "" && computerID == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id or computer_id query parameter is required"})
+		return
+	}
+	var own *VMOwnership
+	if computerID != "" {
+		own = h.registry.GetOwnershipByComputerID(computerID)
+	} else {
+		own = h.registry.GetOwnershipForDesktop(userID, normalizeDesktopID(r.URL.Query().Get("desktop_id")))
+	}
+	if own == nil {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "no VM found for target"})
+		return
+	}
+	provider, ok := h.registry.VMManagerHandle().(bootTimelineReader)
+	if !ok || provider == nil {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "boot timeline reader unavailable on this vm manager"})
+		return
+	}
+	raw, err := provider.BootTimeline(own.VMID)
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: fmt.Sprintf("no boot timeline for VM %s: %v", own.VMID, err)})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw)
+}
+
 // HandleRuntimePackage streams the current autoputer runtime package as a tar
 // archive. It is intended for guest VMs booting over the vmctl tap path; it
 // never exposes provider credentials and remains guarded by the same internal
@@ -1462,6 +1511,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/prune", h.HandlePrune)
 	s.HandleFunc("/internal/vmctl/runtime-package/autoputer", h.HandleRuntimePackage)
 	s.HandleFunc("/internal/vmctl/autoputer-proxy/", h.HandleAutoputerProxy)
+	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
 }
 
 // ResolveEndpoint returns the full resolve endpoint URL for the vmctl

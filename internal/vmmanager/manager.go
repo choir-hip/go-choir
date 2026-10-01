@@ -157,6 +157,11 @@ type VMConfig struct {
 	// without starting the runtime, reconciling, or appending (authorized
 	// recovery boot only).
 	RecoveryReplayOnly bool
+
+	// BootKind labels the boot attempt for the per-boot timeline receipt
+	// (cold | refresh | recover | resume). Callers set it before bootVM;
+	// bootVM defaults empty values to "cold".
+	BootKind string
 }
 
 // VMInstance represents a running or stopped Firecracker VM.
@@ -192,6 +197,10 @@ type VMInstance struct {
 
 	// cancel is a function to clean up the process (nil when stopped).
 	done chan struct{}
+	// BootTimeline is the per-boot receipt for the in-flight or most recent
+	// boot attempt (S0a). Persisted under the VM state dir on terminal
+	// observation; nil for instances reattached without a boot.
+	BootTimeline *BootTimeline
 }
 
 // ManagerConfig holds the global configuration for the VM manager.
@@ -666,6 +675,17 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		return nil, err
 	}
 
+	bootKind := cfg.BootKind
+	if bootKind == "" {
+		bootKind = "cold"
+	}
+	tl := newBootTimeline(cfg.VMID, bootKind)
+	tl.mark("boot_begin")
+	tl.FirecrackerBin = m.cfg.FirecrackerBinPath
+	tl.FirecrackerVer = firecrackerBuildVersion(m.cfg.FirecrackerBinPath)
+	tl.HostKernelRelease = hostKernelRelease()
+	tl.markDetail("host_port_allocated", fmt.Sprintf("port=%d", hostPort))
+
 	// Ensure VM state directory exists before creating data image.
 	vmStateDir := filepath.Join(m.cfg.StateDir, cfg.VMID)
 	if err := os.MkdirAll(vmStateDir, 0750); err != nil {
@@ -701,6 +721,7 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		return nil, err
 	}
 	cfg.Epoch = epoch
+	tl.markDetail("boot_epoch", fmt.Sprintf("epoch=%d", cfg.Epoch))
 
 	// Apply defaults from manager config.
 	if cfg.KernelImagePath == "" {
@@ -758,6 +779,16 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		cfg.RootfsPath = vmRootfs
 	}
 
+	tl.mark("data_image_ready")
+	if info, statErr := os.Stat(filepath.Join(vmStateDir, "data.img")); statErr == nil {
+		tl.DataImagePath = filepath.Join(vmStateDir, "data.img")
+		tl.DataImageBytes = info.Size()
+		if st, ok := info.Sys().(*syscall.Stat_t); ok {
+			// Blocks are 512-byte units; allocated bytes show reflink extent.
+			tl.DataImageAlloc = st.Blocks * 512
+		}
+	}
+
 	if cfg.ComputerCredentialEnvelope != "" {
 		credentialDiskPath, err := m.createCredentialDisk(vmStateDir, cfg.ComputerCredentialEnvelope)
 		if err != nil {
@@ -766,6 +797,7 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		cfg.credentialDiskPath = credentialDiskPath
 		cfg.ComputerCredentialEnvelope = ""
 	}
+	tl.mark("credential_disk_ready")
 
 	// Build the Firecracker configuration.
 	// Provider credentials are explicitly NOT included here (VAL-VM-011).
@@ -782,6 +814,18 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		done:      make(chan struct{}),
 	}
 
+	inst.BootTimeline = tl
+	tl.ComputerID = cfg.ComputerID
+	tl.Epoch = cfg.Epoch
+	tl.KernelImagePath = cfg.KernelImagePath
+	tl.InitrdPath = cfg.InitrdPath
+	tl.StoreDiskPath = cfg.StoreDiskPath
+	tl.MemSizeMiB = cfg.MachineMemSizeMib
+	tl.VCPUCount = cfg.MachineCPUCount
+	tl.GuestIP = guestIP
+	tl.HostURL = hostURL
+	tl.mark("firecracker_launch_begin")
+
 	m.vms[cfg.VMID] = inst
 
 	// Launch Firecracker.
@@ -789,19 +833,25 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		inst.State = StateFailed
 		return nil, fmt.Errorf("launch firecracker for VM %s: %w", cfg.VMID, err)
 	}
+	tl.mark("firecracker_spawned")
 
 	// Do not hold the global manager lock while waiting for guest readiness.
 	// Fresh boots should be allowed to overlap; only the shared state mutation
 	// needs serialization.
 	m.mu.Unlock()
 	locked = false
-	if err := m.waitForGuestReady(hostURL); err != nil {
+	if err := m.waitForGuestReady(hostURL, tl); err != nil {
 		m.mu.Lock()
 		locked = true
 		inst.State = StateFailed
 		inst.Healthy = false
 		m.killFirecrackerProcess(inst)
-		return nil, fmt.Errorf("wait for guest ready for VM %s: %w", cfg.VMID, err)
+		waitErr := fmt.Errorf("wait for guest ready for VM %s: %w", cfg.VMID, err)
+		tl.finish("failed", waitErr)
+		if perr := tl.persist(m.cfg.StateDir); perr != nil {
+			log.Printf("vmmanager: warning: could not persist boot timeline for VM %s: %v", cfg.VMID, perr)
+		}
+		return nil, waitErr
 	}
 	m.mu.Lock()
 	locked = true
@@ -810,6 +860,15 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	inst.Healthy = true
 	inst.LastHealthCheck = time.Now()
 	inst.LastHealthyAt = inst.LastHealthCheck
+	tl.firstHealthy()
+
+	// The guest-side receipt is fetched once the guest is healthy: the merged
+	// record carries both halves of the boot in one file.
+	tl.fetchGuestBootTimeline(hostURL)
+	tl.finish("healthy", nil)
+	if perr := tl.persist(m.cfg.StateDir); perr != nil {
+		log.Printf("vmmanager: warning: could not persist boot timeline for VM %s: %v", cfg.VMID, perr)
+	}
 
 	log.Printf("vmmanager: booted VM %s (host=%s epoch=%d)", cfg.VMID, hostURL, cfg.Epoch)
 
@@ -902,9 +961,36 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 		return nil, err
 	}
 
+	// The resume path duplicates bootVM's launch sequence; record the same
+	// receipt under boot_kind=resume so the S3 wake timeline lands on the
+	// same observer as cold boots.
+	tl := newBootTimeline(vmID, "resume")
+	tl.mark("boot_begin")
+	tl.FirecrackerBin = m.cfg.FirecrackerBinPath
+	tl.FirecrackerVer = firecrackerBuildVersion(m.cfg.FirecrackerBinPath)
+	tl.HostKernelRelease = hostKernelRelease()
+	tl.markDetail("host_port_allocated", fmt.Sprintf("port=%d", hostPort))
+	tl.ComputerID = inst.Config.ComputerID
+	tl.Epoch = inst.Config.Epoch
+	tl.KernelImagePath = inst.Config.KernelImagePath
+	tl.InitrdPath = inst.Config.InitrdPath
+	tl.StoreDiskPath = inst.Config.StoreDiskPath
+	tl.MemSizeMiB = inst.Config.MachineMemSizeMib
+	tl.VCPUCount = inst.Config.MachineCPUCount
 	guestIP, _ := m.guestAndHostIP(hostPort)
 	hostURL := fmt.Sprintf("http://%s:%d", guestIP, inst.Config.GuestPort)
 	inst.HostURL = hostURL
+	tl.GuestIP = guestIP
+	tl.HostURL = hostURL
+	if info, statErr := os.Stat(filepath.Join(m.cfg.StateDir, vmID, "data.img")); statErr == nil {
+		tl.DataImagePath = filepath.Join(m.cfg.StateDir, vmID, "data.img")
+		tl.DataImageBytes = info.Size()
+		if st, ok := info.Sys().(*syscall.Stat_t); ok {
+			tl.DataImageAlloc = st.Blocks * 512
+		}
+	}
+	inst.BootTimeline = tl
+	tl.mark("data_image_ready")
 
 	// Reuse the existing epoch (no increment on resume).
 	// This preserves the VM identity across stop/resume so callers
@@ -918,16 +1004,22 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 		inst.State = StateFailed
 		return nil, fmt.Errorf("resume firecracker for VM %s: %w", vmID, err)
 	}
+	tl.mark("firecracker_spawned")
 
 	m.mu.Unlock()
 	locked = false
-	if err := m.waitForGuestReady(hostURL); err != nil {
+	if err := m.waitForGuestReady(hostURL, tl); err != nil {
 		m.mu.Lock()
 		locked = true
 		inst.State = StateFailed
 		inst.Healthy = false
 		m.killFirecrackerProcess(inst)
-		return nil, fmt.Errorf("wait for resumed guest ready for VM %s: %w", vmID, err)
+		waitErr := fmt.Errorf("wait for resumed guest ready for VM %s: %w", vmID, err)
+		tl.finish("failed", waitErr)
+		if perr := tl.persist(m.cfg.StateDir); perr != nil {
+			log.Printf("vmmanager: warning: could not persist boot timeline for VM %s: %v", vmID, perr)
+		}
+		return nil, waitErr
 	}
 	m.mu.Lock()
 	locked = true
@@ -937,9 +1029,32 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 	inst.StartedAt = time.Now()
 	inst.LastHealthCheck = time.Now()
 	inst.LastHealthyAt = inst.LastHealthCheck
+	tl.firstHealthy()
+	tl.fetchGuestBootTimeline(hostURL)
+	tl.finish("healthy", nil)
+	if perr := tl.persist(m.cfg.StateDir); perr != nil {
+		log.Printf("vmmanager: warning: could not persist boot timeline for VM %s: %v", vmID, perr)
+	}
 
 	log.Printf("vmmanager: resumed VM %s (host=%s epoch=%d)", vmID, hostURL, epoch)
 	return inst, nil
+}
+
+// BootTimelineForVM returns the in-flight or persisted boot receipt for a VM.
+// The in-flight record wins while a boot is running; the persisted file is
+// the fallback after a vmctl restart reattaches without a live record.
+func (m *Manager) BootTimelineForVM(vmID string) (*BootTimeline, error) {
+	m.mu.RLock()
+	inst, ok := m.vms[vmID]
+	var live *BootTimeline
+	if ok {
+		live = inst.BootTimeline
+	}
+	m.mu.RUnlock()
+	if live != nil {
+		return live, nil
+	}
+	return readBootTimeline(m.cfg.StateDir, vmID)
 }
 
 // ReattachVM attaches a new manager process to a Firecracker process that
@@ -1310,6 +1425,11 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	// RUNTIME_MAINTENANCE_HOLD=1). Every caller sets these explicitly.
 	cfg.MaintenanceHold = overrides.MaintenanceHold
 	cfg.RecoveryReplayOnly = overrides.RecoveryReplayOnly
+	// BootKind merges only when the caller names it: an empty override must
+	// not erase a label the adapter already set (recover/refresh).
+	if overrides.BootKind != "" {
+		cfg.BootKind = overrides.BootKind
+	}
 	return cfg
 }
 
@@ -1950,7 +2070,7 @@ func (m *Manager) probeGuestHealth(hostURL string) bool {
 	return m.probeGuestHealthDetailed(hostURL).Healthy
 }
 
-func (m *Manager) waitForGuestReady(hostURL string) error {
+func (m *Manager) waitForGuestReady(hostURL string, tl *BootTimeline) error {
 	deadline := time.Now().Add(m.cfg.BootReadyTimeout)
 	stall := m.cfg.ReplayStallTimeout
 	if stall <= 0 {
@@ -1961,12 +2081,28 @@ func (m *Manager) waitForGuestReady(hostURL string) error {
 	var lastReplayProgress uint64
 	var lastSequenceAdvance time.Time
 	firstReplay := true
+	sawHTTP := false
+	sawHealthy := false
 	for {
 		lastProbe = m.probeGuestHealthDetailed(hostURL)
+		if !sawHTTP && lastProbe.Err == nil {
+			// First HTTP-level response (any status): the guest's listener is
+			// bound and answering. Distinct from healthy — replay gate may
+			// still be 503.
+			sawHTTP = true
+			tl.markDetail("first_http_response", fmt.Sprintf("status=%d", lastProbe.Status))
+		}
 		if lastProbe.Healthy {
+			if !sawHealthy {
+				sawHealthy = true
+				tl.mark("first_healthy")
+			}
 			return nil
 		}
 		if lastProbe.ReplayInProgress {
+			if firstReplay {
+				tl.markDetail("replay_first_seen", fmt.Sprintf("seq=%d committed=%d", lastProbe.ReplaySequence, lastProbe.ReplayCommittedSequence))
+			}
 			if firstReplay || lastProbe.ReplaySequence != lastReplaySeq || lastProbe.ReplayProgress != lastReplayProgress {
 				firstReplay = false
 				lastReplaySeq = lastProbe.ReplaySequence
@@ -1977,12 +2113,14 @@ func (m *Manager) waitForGuestReady(hostURL string) error {
 			// The deadline only applies to a guest that has never reported replay
 			// progress, and the stall window kills a genuinely stuck replay.
 			if !lastSequenceAdvance.IsZero() && time.Since(lastSequenceAdvance) > stall {
+				tl.markDetail("replay_stalled", fmt.Sprintf("seq=%d stall=%s", lastProbe.ReplaySequence, stall))
 				return fmt.Errorf("guest replay stalled at %s (no sequence advance for %s, seq=%d): %s", hostURL, stall, lastProbe.ReplaySequence, lastProbe.String())
 			}
 			time.Sleep(250 * time.Millisecond)
 			continue
 		}
 		if time.Now().After(deadline) {
+			tl.markDetail("deadline_exceeded", fmt.Sprintf("timeout=%s", m.cfg.BootReadyTimeout))
 			return fmt.Errorf("guest did not become healthy at %s within %s (last probe: %s)", hostURL, m.cfg.BootReadyTimeout, lastProbe.String())
 		}
 		time.Sleep(250 * time.Millisecond)

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -238,6 +239,7 @@ func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
 		DesktopID:                  cfg.DesktopID,
 		MaintenanceHold:            cfg.MaintenanceHold,
 		RecoveryReplayOnly:         cfg.RecoveryReplayOnly,
+		BootKind:                   cfg.BootKind,
 	}
 }
 
@@ -289,7 +291,11 @@ func (a *vmManagerAdapter) ReattachVMWithConfig(vmID, hostURL string, epoch int6
 }
 
 func (a *vmManagerAdapter) RecoverVM(vmID string, cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceInfo, error) {
-	inst, err := a.mgr.RecoverVMWithConfig(vmID, toManagerVMConfig(cfg))
+	mcfg := toManagerVMConfig(cfg)
+	if mcfg.BootKind == "" {
+		mcfg.BootKind = "recover"
+	}
+	inst, err := a.mgr.RecoverVMWithConfig(vmID, mcfg)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +303,11 @@ func (a *vmManagerAdapter) RecoverVM(vmID string, cfg vmctl.VMManagerConfig) (*v
 }
 
 func (a *vmManagerAdapter) RefreshVM(vmID string, cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceInfo, error) {
-	inst, err := a.mgr.RefreshVMWithConfig(vmID, toManagerVMConfig(cfg))
+	mcfg := toManagerVMConfig(cfg)
+	if mcfg.BootKind == "" {
+		mcfg.BootKind = "refresh"
+	}
+	inst, err := a.mgr.RefreshVMWithConfig(vmID, mcfg)
 	if err != nil {
 		return nil, err
 	}
@@ -319,6 +329,17 @@ func (a *vmManagerAdapter) CheckHealth(vmID string) (bool, error) {
 
 func (a *vmManagerAdapter) ReadGatewayToken(vmID string) (string, error) {
 	return a.mgr.ReadGatewayToken(vmID)
+}
+
+// BootTimeline implements the vmctl bootTimelineReader capability: it returns
+// the VM's merged host+guest boot receipt as raw JSON for the internal
+// endpoint to stream verbatim.
+func (a *vmManagerAdapter) BootTimeline(vmID string) (json.RawMessage, error) {
+	tl, err := a.mgr.BootTimelineForVM(vmID)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(tl)
 }
 
 func envOr(key, fallback string) string {

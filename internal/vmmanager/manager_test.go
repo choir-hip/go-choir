@@ -1788,7 +1788,7 @@ func TestWaitForGuestReady_EventuallySucceeds(t *testing.T) {
 	cfg.BootReadyTimeout = 2 * time.Second
 	mgr := NewManager(cfg)
 
-	if err := mgr.waitForGuestReady(srv.URL); err != nil {
+	if err := mgr.waitForGuestReady(srv.URL, nil); err != nil {
 		t.Fatalf("waitForGuestReady: %v", err)
 	}
 	if hits.Load() < 3 {
@@ -1808,7 +1808,7 @@ func TestWaitForGuestReady_TimesOut(t *testing.T) {
 	cfg.BootReadyTimeout = time.Nanosecond
 	mgr := NewManager(cfg)
 
-	err := mgr.waitForGuestReady(srv.URL)
+	err := mgr.waitForGuestReady(srv.URL, nil)
 	if err == nil {
 		t.Fatal("expected timeout waiting for guest readiness")
 	}
@@ -1837,7 +1837,7 @@ func TestWaitForGuestReadyReplayProgressExtendsAndStallFails(t *testing.T) {
 	}))
 	defer ready.Close()
 	m := &Manager{cfg: ManagerConfig{BootReadyTimeout: 10 * time.Second, ReplayStallTimeout: 5 * time.Second}}
-	if err := m.waitForGuestReady(ready.URL); err != nil {
+	if err := m.waitForGuestReady(ready.URL, nil); err != nil {
 		t.Fatalf("replay-progress then ready should boot: %v", err)
 	}
 	if seq.Load() < 4 {
@@ -1852,7 +1852,7 @@ func TestWaitForGuestReadyReplayProgressExtendsAndStallFails(t *testing.T) {
 	defer stall.Close()
 	m2 := &Manager{cfg: ManagerConfig{BootReadyTimeout: 30 * time.Second, ReplayStallTimeout: 300 * time.Millisecond}}
 	start := time.Now()
-	err := m2.waitForGuestReady(stall.URL)
+	err := m2.waitForGuestReady(stall.URL, nil)
 	if err == nil || !strings.Contains(err.Error(), "stalled") {
 		t.Fatalf("stalled replay must fail: %v", err)
 	}
@@ -1865,7 +1865,7 @@ func TestWaitForGuestReadyReplayProgressExtendsAndStallFails(t *testing.T) {
 	}))
 	defer deadline.Close()
 	m3 := &Manager{cfg: ManagerConfig{BootReadyTimeout: 300 * time.Millisecond, ReplayStallTimeout: time.Second}}
-	if err := m3.waitForGuestReady(deadline.URL); err == nil || !strings.Contains(err.Error(), "did not become healthy") {
+	if err := m3.waitForGuestReady(deadline.URL, nil); err == nil || !strings.Contains(err.Error(), "did not become healthy") {
 		t.Fatalf("non-replaying unhealthy guest must respect the deadline: %v", err)
 	}
 }

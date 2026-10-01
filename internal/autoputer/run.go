@@ -119,6 +119,7 @@ func RunZotSession(stdin io.Reader, stdout, stderr io.Writer) int {
 
 // Run starts the autoputer service.
 func Run() {
+	bootMark("process_main_entry")
 	cfg := LoadConfig()
 
 	s := server.NewServer("autoputer", cfg.Port)
@@ -137,6 +138,7 @@ func Run() {
 	// Initialize the runtime engine with persisted state.
 	rtRuntimeCfg := provideriface.LoadConfig()
 	rtCfg := buildRuntimeConfig(cfg, rtRuntimeCfg, filesRoot)
+	bootMark("config_loaded")
 
 	// Ensure the store directory exists.
 	if err := os.MkdirAll(storeDir(rtCfg.StorePath), 0o755); err != nil {
@@ -155,6 +157,7 @@ func Run() {
 		log.Fatalf("autoputer: open runtime store: %v", err)
 	}
 	log.Printf("autoputer: startup phase=runtime-store-open status=complete")
+	bootMark("runtime_store_open")
 	defer func() {
 		_ = db.Close()
 	}()
@@ -345,6 +348,7 @@ func Run() {
 			log.Printf("autoputer: owner-recovery and self-development mode credentials wired; proposal still requires signed propose_only")
 		}
 		log.Printf("autoputer: computer event authority reconstructed")
+		bootMark("credential_exchange_done")
 	}
 	if opt, ok, err := selfDevelopmentUpdaterOption(); err != nil {
 		log.Fatalf("autoputer: configure self-development updater: %v", err)
@@ -471,6 +475,7 @@ func Run() {
 	}
 
 	// Register canonical API routes (overrides default /health).
+	bootMark("runtime_built")
 	runtimeHandler := agentcore.NewAPIHandler(rt.Runtime)
 	apiHandler := apihandler.NewHandler(rt.Runtime.Store())
 	apihandler.RegisterRoutes(s, runtimeHandler, textureHandler, apiHandler, browserHandler, desktopHandler, contentService, mediaHandler, rtRuntimeCfg.EnableTestAPIs)
@@ -500,6 +505,13 @@ func Run() {
 	s.HandleFunc("/health/ready", health.ReadinessHandler("autoputer", readyAgg))
 	RegisterComputerSurface(s, NewComputerSurfaceFromEnv())
 
+	// S0a boot observer: read-only internal diagnostics for the per-boot
+	// timeline and tap reachability probes. Registered before Start so they
+	// answer during the replay-gated window too.
+	s.HandleFunc("/internal/boot/timeline", handleBootTimeline)
+	s.HandleFunc("/internal/diag/tcp-dial", handleDiagTCPDial)
+	s.SetOnListen(func() { bootMark("http_listen_ready") })
+
 	// Capture boot/reconcile log into a bounded ring before Start so guest
 	// observability is servable through the product API, not only shell access.
 	rt.Runtime.CaptureBootLog(512)
@@ -518,6 +530,7 @@ func Run() {
 		gate.appender = replayAppender
 		gate.mu.Unlock()
 		s.SetHealthHandler(gate.ServeHTTP)
+		bootMark("replay_begin")
 		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, rtCfg.StorePath, db, replayBootstrapCtx, replayBootstrapCancel, func() error {
 			if fileSyncService != nil {
 				restored, err := fileSyncService.HydrateIfNeeded(ctx)
@@ -616,15 +629,20 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		log.Printf("autoputer: recovery replay-only drive complete (seq=%d committed=%d); exiting without runtime start or reconciliation", snap.Sequence, snap.CommittedSequence)
 		os.Exit(0)
 	}
+	bootMark("replay_done")
+	gate.tick()
 	gate.setPending(false)
 	if err := reconcilePendingLifecycleReceipts(appender, credentials, computerID, bootstrapCtx); err != nil {
 		log.Fatalf("autoputer: reconcile pending lifecycle receipts: %v", err)
 	}
+	bootMark("lifecycle_reconciled")
+	gate.tick()
 	if afterReplay != nil {
 		if err := afterReplay(); err != nil {
 			log.Fatalf("autoputer: runtime startup refused: %v", err)
 		}
 	}
+	bootMark("runtime_started")
 	log.Printf("autoputer: computer event authority reconstructed (replay complete)")
 }
 
