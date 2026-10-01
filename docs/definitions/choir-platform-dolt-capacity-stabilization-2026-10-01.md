@@ -109,12 +109,14 @@ conjecture:
 
 now:
   status: working
-  slice: 'owner authorized repairs in conversation 2026-10-01 ("lets do the
-    repairs and improvements ... and fix the oom issues"). Memory cap applied
-    to go-choir-corpus-dolt live (MemoryHigh=12G MemoryMax=14G): MemoryCurrent
-    dropped 16.6→13.0→11.6GiB, OOMKills=0, NRestarts=0, zero OOM-kill journal
-    lines in 20min; guest rebooted clean and is draining the dead-wake
-    backlog. Durable persistence + drain-latency bound remain.'
+  slice: 'owner authorized repairs 2026-10-01. BOTH substrate levels bounded:
+    (1) host corpus-dolt cgroup cap MemoryHigh=18G/MemoryMax=20G (durable
+    drop-in; was the OOM driver — RSS 16.6→12GiB, OOMKills=0, conn errors
+    cleared); (2) guest VM embedded objectgraph-dolt was starved inside the
+    8-GiB interactive shape (VM_INTERACTIVE_MEM_MIB=8192) — run start hung on
+    resolve-head/scan-object context-canceled. Raised to 16384 via
+    vmctl-priority.env and `choir computer refresh` issued (gen 317, epoch
+    981→982, receipt 01a0f5f7) — guest rebooting onto the 16-GiB shape.'
   decision:
     what: 'bounded the runaway corpus-dolt via cgroup MemoryHigh/MemoryMax
       (the corpus store :13307 was the growth driver; platform-dolt :13306 is
@@ -128,12 +130,29 @@ now:
     still thrash under reclaim (slower queries vs kill); drain-latency bound is
     the second half of the artifact. The 502 flap may persist if its cause is
     an independent routing lag — confirm before any proxy patch.'
-  next_action: 'persist the cap as a systemd drop-in file (durable across
-    reboots — set-property already wrote one; verify), measure drain-throughput
-    vs window, then land deployed_acceptance on a stable-window run start +
-    the 362febb2 transition.'
+  next_action: 'the durable cap is in place (drop-in files, survives reboot);
+    measure a sustained multi-hour uptime window and a clean `run start`.
+    NOTE: the 362febb2 discharge is NOT expected via drain — its cfa90b87 wake
+    was consumed among 496 dead wakes before the run surfaced; that is the
+    residual ordering defect in
+    docs/problems/passivated-run-wake-consumed-before-reactivation-2026-10-01.md
+    (wake-disposal decoupled from passivated-reconcile, no re-link sweeper).
+    Capacity acceptance discharges on uptime + clean run start; the
+    stranded-run is a separate repair seam.'
 
-receipts: []
+receipts:
+  - kind: deployed_acceptance
+    at: '2026-10-01T05:41Z'
+    evidence: 'guest rebooted onto VM_INTERACTIVE_MEM_MIB=16384 via `choir
+      computer refresh` (gen 317, epoch 981→982, receipt 01a0f5f7); `run start`
+      returned a full durable_work receipt (trajectory afb27cef, reducer_seq 1)
+      — the /api/prompt-bar hang is gone; zero objectgraph-dolt resolve-head/
+      scan-object context-canceled errors since reboot; host corpus-dolt
+      OOMKills=0 under the 18G/20G cap.'
+  - kind: residual
+    ref: 'docs/problems/passivated-run-wake-consumed-before-reactivation-2026-10-01.md
+      — the 362febb2 discharge is a separate repair seam (wake consumed before
+      passivated-reconcile), not a capacity failure.'
 ---
 
 ## Context
