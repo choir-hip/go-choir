@@ -176,22 +176,22 @@ boundaries:
 now:
   status: working
   slice: >-
-    S0a: deploy the boot-timeline instrument and collect the read-only staging
-    reality receipts before opening the separately bounded S0b disposable-computer
-    experiments.
+    S0a complete: instrument deployed, six receipts captured, two new problem
+    docs filed. S0b is the live slice: bounded disposable-computer probes
+    (capsule health map, M9a bundle, Go effect, snapshot/resume).
   source_ref: main@8aa1dce9
-  deploy_identity: 'staging https://choir.news deployed_commit=a3cfaa00; owner guest computer-03335285269bdba4f94377e56879f9e6 on a3cfaa00'
+  deploy_identity: 'staging https://choir.news deployed_commit=ff513419 (docs-only) / autoputer guest=1beed1a9; owner guest computer-03335285269bdba4f94377e56879f9e6 epoch=995'
   candidate:
     id: s0a-boot-timeline-instrument
-    state: implemented_pending_landing
-    ref: worktree pending commit on main
+    state: landed
+    ref: main@ff513419
     base: main@5e789bef
-    digest: pending
+    digest: deployed_and_probed
     scope:
       - internal/autoputer/boot_timeline.go (guest collector + /internal/boot/timeline + /internal/diag/tcp-dial)
-      - internal/autoputer/run.go (phase marks, SetOnListen)
+      - internal/autoputer/run.go (phase marks, SetOnListen, replay volume)
       - internal/server/server.go (SetOnListen hook)
-      - internal/vmmanager/boot_timeline.go + manager.go (host marks, merged receipt, persistence)
+      - internal/vmmanager/boot_timeline.go + manager.go (host marks, merged receipt, persistence, refresh boot_kind)
       - internal/vmctl/handlers.go + ownership.go + cmd/vmctl/main.go (boot-timeline endpoint + BootKind)
   conjecture:
     id: s0-observed-boot-and-builder-boundary
@@ -214,9 +214,16 @@ now:
       computers on the single-host Choir staging deployment.
     status: testing
     evidence_refs:
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:503-518
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:619-638
+      - docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json
+      - docs/evidence/s0a-boot-timeline-owner-sized-2026-10-01.json
+      - docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
+      - docs/evidence/s0a-guest-layout-2026-10-01.json
+      - docs/evidence/s0a-runtime-closure-2026-10-01.json
+      - docs/evidence/s0a-tap-reachability-2026-10-01.json
+      - docs/evidence/s0a-gateway-token-visibility-2026-10-01.json
       - docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md
+      - docs/problems/s0-tap-egress-unfiltered-2026-10-01.md
+      - docs/problems/s0-deploy-refresh-skips-autoputer-internals-2026-10-01.md
   decision:
     what: >-
       Run S0a as instrumentation/read-only evidence first; admit S0b only as
@@ -228,32 +235,34 @@ now:
     owner_ratification_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379
   belief:
     believed_state: >-
-      The served release and the image-baseline runtime differ, the boot path
-      lacks phase attribution, and source facts alone cannot establish the
-      current security, snapshot, or builder boundaries. Newly recorded in
-      source: the gateway token rides the kernel cmdline into the guest
-      (docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md).
+      Guest tap/egress is fully open (guest->guest :8085, guest->host vmctl
+      :8083, guest->external :443 all reachable); the gateway token rides the
+      kernel cmdline (world-readable in the guest) and host fc-config; the
+      runtime closure is 11 requisites under the guest's Nix store path.
+      Deploy's active-VM refresh skips autoputer-internal pushes, leaving
+      stale guests until manual refresh. Owner-sized refresh replay is the
+      dominant boot cost: 240542 rows = ~653s of a 662.7s boot; a
+      caught-up refresh is ~10s.
     main_uncertainty: >-
       Whether the disposable owner-sized fixture can create/resume a lazily
       loaded snapshot and whether a capsule can build a closure that remains
       usable after the required lifecycle transitions; S0b must select or
       falsify the S2 builder substrate rather than assume one.
     next_observation: >-
-      The first fresh and owner-sized deployed timeline receipts, followed by
-      the disposable computer's scoped S0b pre/post evidence.
+      S0b disposable-computer receipts: capsule health map, M9a bundle
+      install/activate/reboot/restore, one Go effect, one runtime dep absent
+      from the base.
   blocker_or_risk: >-
-    A probe can expose a runtime-mutating or security defect; document it as a
-    problem before any repair and do not widen S0 into a sibling's remediation.
-    Deploying the instrument runs the canonical guest boot refresh, which
-    serially reboots active computers (observed: deploy_active_vm_refresh ->
-    RefreshVM per computer) — that reboot is itself the owner-sized timeline
-    capture.
+    The epoch-995 boot showed the owner tape is already large enough that a
+    refresh boot with real replay volume (~240k rows, ~11min) exceeds the
+    deploy refresh's 300s curl timeout — the 36924036358 deploy succeeded
+    only because it skipped the refresh, and a future deploy-classifier
+    refresh against this tape will hit that ceiling.
   next_action: >-
-    Commit + push the instrument; monitor CI deploy (guest-image rebuild +
-    serialized VM refresh reboots each active computer and writes a merged
-    host+guest receipt per boot); then run the S0a probe to capture the
-    named receipts (fresh computer via Playwright registration, owner-sized
-    via the deploy refresh, plus guest-layout/runtime-closure/tap/token).
+    S0b: run the disposable-computer probe suite (capsule health map, M9a
+    bundle lifecycle, one Go effect, one absent runtime dep, snapshot/resume)
+    against a fresh registration computer on staging; then the boundary panel
+    on the frozen S0a+S0b evidence and the transition receipt.
 
 receipts: []
 ---
