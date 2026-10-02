@@ -462,3 +462,36 @@ func TestChannelCastWakesAddressedActor(t *testing.T) {
 		t.Fatalf("broadcast must not wake: %v", wakes)
 	}
 }
+
+// TestChannelCastRejectsTextureTarget proves the reduce-time refusal: channel
+// mail addressed to a texture desk (agent-scoped or bare) is rejected at cast
+// time, not persisted as a durable dead letter that the actor boundary would
+// silently drop. Receipt: docs/problems/s0m-channel-mail-texture-dead-letter-2026-10-02.md.
+func TestChannelCastRejectsTextureTarget(t *testing.T) {
+	rt, s := testRuntime(t)
+	scope := testReductionScope()
+	ctx := testReductionCtx(scope)
+
+	for _, target := range []string{"texture", "texture:doc-dead-letter"} {
+		if _, err := rt.CastEnvelope(ctx, "chan-texture", target, scope.FromAgentID, "research", "body", "key-"+target); err == nil {
+			t.Fatalf("CastEnvelope to %q succeeded; want reduce-time reject", target)
+		} else if !strings.Contains(err.Error(), "not reachable by channel mail") {
+			t.Fatalf("CastEnvelope to %q error = %v, want texture unreachable message", target, err)
+		}
+	}
+	// Nothing was persisted: the texture channel log stays empty.
+	msgs, err := s.ListChannelMessagesTo(ctx, scope.OwnerID, "texture:doc-dead-letter", 0, 10)
+	if err != nil {
+		t.Fatalf("list texture channel messages: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("texture-targeted cast persisted %d messages as dead letters", len(msgs))
+	}
+	// A normal addressed cast and a broadcast still succeed.
+	if _, err := rt.CastEnvelope(ctx, "chan-ok", "research:doc-1", scope.FromAgentID, "research", "ok", "k1"); err != nil {
+		t.Fatalf("legitimate addressed cast rejected: %v", err)
+	}
+	if _, err := rt.ChannelPost(ctx, "chan-ok", "engineering:impl", "engineering", "broadcast"); err != nil {
+		t.Fatalf("broadcast rejected: %v", err)
+	}
+}

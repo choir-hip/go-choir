@@ -867,6 +867,24 @@ a staged act commits through the reducer, then wakes the recipient desk.
 `channel_messages` + per-turn inbox polling is legacy deletion residue and must
 receive no new callers.
 
+#### Record-native desk delivery (S0m)
+
+The five-kind desk acts (`precommit`, `report`, `resolve`, `disagreement`,
+`ask`) are **record-native**: the commitment record is the single authored
+artifact. An addressed act mints the record and derives its delivery packet
+atomically in one reduce transaction (`CommitLifecycleAct`) — the record is
+the delivery; no channel envelope follows it. `Addressee` is the delivery
+authority. A packet delivery failure therefore degrades to an open, aging
+commitment record (a scored failure), never a silently lost envelope. The
+`channel_message` row is retained only as an ephemeral wake hint to the
+recipient mailbox — it is never persisted as the delivery vehicle and is a
+no-op on `texture:*` targets. Channel mail addressed to `texture:*` rejects
+at reduce time (authority layer), not as a durable dead letter. `choir.Message`
+and `choir.ReportPacket` mint record-native packets for lifecycle-bound desks;
+the envelope carrier is retired. The retired raw-messaging surface
+(`Message`/`Outcome`/`Spawn` envelope paths, `EscalateActions`,
+controls-inside-`ApplyTexture`) is refused, not bypassed.
+
 ## Provider Neutrality
 
 No LLM provider, search provider, or auth-specific model gateway should be

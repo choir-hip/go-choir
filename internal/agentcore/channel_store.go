@@ -69,6 +69,16 @@ func (rt *Runtime) channelCast(ctx context.Context, channelID, toAgentID, toRunI
 		IdempotencyKey: strings.TrimSpace(idempotencyKey),
 		Timestamp:      time.Now().UTC(),
 	}
+	// Texture desks are reachable only through the lifecycle packet path —
+	// channel mail addressed to a texture desk would commit durably and then be
+	// dropped as a dead letter at the actor boundary (handleChannelMessage
+	// no-ops texture mailboxes). Refuse here so a texture-targeted send fails
+	// at reduce/cast time instead of silently dead-lettering. Covers both the
+	// agent-scoped form (texture:doc) and the bare profile name (texture).
+	// Unaddressed broadcasts (ToAgentID empty) are unaffected.
+	if to := message.ToAgentID; to == agentprofile.Texture || strings.HasPrefix(to, agentprofile.Texture+":") {
+		return 0, fmt.Errorf("channel cast: %q is not reachable by channel mail; use the lifecycle packet path (choir.Message/choir.ReportPacket)", to)
+	}
 	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 	if ownerID == "" && message.FromRunID != "" {
 		if rec, err := rt.store.GetRun(context.Background(), message.FromRunID); err == nil {
