@@ -149,3 +149,31 @@ Texture→research direct Message widening in `QueueLifecycleUpdate` (covered by
 the prompt fix via continuation controls); the delivered-vs-incorporated gap
 (consume-at-commit default can still mark a packet delivered without
 incorporation — next repair boundary may require explicit dispositions).
+
+## Residual defect discovered 2026-10-01 (dispatch layer, post-repair re-audit)
+
+The ProducerUpdateID repair fixed the queue internals, but staging evidence
+(research run 20cd8749 metadata: `work_item_ids` + `lifecycle_control_bindings`
+present, `assignment_id` **absent**, `requested_by_*` **absent** on run
+metadata — present only on `work.Details`) shows the defect is wider:
+
+5. **Dispatch predicate too narrow.** `isAssignedDesk()` tests only
+   `run.Metadata.assignment_id` (rlm_reduce.go:1239-1243). Lifecycle research
+   runs lack it, so even a packet-bodied `choir.Message` falls through to
+   `castStagedIntent` → channel row → texture channel_message no-op. The
+   repaired queue path is unreachable for the exact runs it was repaired for.
+6. **`IntentReport` never takes the queue path.** Only the `message` kind
+   checks `isAssignedDesk`; `Report`/`ReportPacket` always go
+   commitment-record + channel envelope. The research prompt instructs
+   `ReportPacket` — guaranteed dead for texture targets regardless of
+   assignment metadata.
+7. **`requested_by_*` provenance lives on `work.Details`, not run metadata.**
+   `loadLifecycleRequesterRun` reads `requested_by_run_id`/`requested_by_
+   agent_id` from the caller run's metadata (tools_worker_update.go). Even if
+   dispatch widened, authority resolution would fail until bind-time stamping
+   (alongside `work_item_ids`, management_controller.go:~1745) carries it over.
+
+Normalization options (a)/(b)/(c) are before the convergent panel
+(.agentic-consensus/messaging-normalize-20261001); the map doc
+docs/reports/agent-messaging-system-state-2026-10-01.md carries the full
+mechanism census.
