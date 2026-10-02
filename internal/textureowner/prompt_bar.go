@@ -1,11 +1,13 @@
 package textureowner
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
@@ -15,6 +17,12 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+// promptBarCommitTimeout bounds the durable conductor-decision commit. It is
+// deliberately decoupled from the client request context: a proxy/upstream
+// disconnect must not abort an in-flight Dolt projection batch mid-commit
+// (receipt: docs/problems/s0m-prompt-bar-submit-context-canceled-2026-10-02.md).
+const promptBarCommitTimeout = 120 * time.Second
 
 type promptBarSubmitRequest struct {
 	Text      string `json:"text"`
@@ -103,12 +111,19 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		metadata["content_app_hint"] = appHint
 	}
 	var handoff HandoffDecision
-	rec, err := h.Core.CompletePromptBarDecision(r.Context(), text, ownerID, metadata, agentcore.PromptBarDecisionSpec{
+	// The durable commit (conductor decision + texture handoff run mint) must
+	// outlive the HTTP request: the staging proxy's upstream timeout disconnects
+	// the client while the projection batch is still committing, and r.Context()
+	// cancels the in-flight write mid-batch. WithoutCancel + a bounded server
+	// timeout keeps the commit durable without making it unbounded.
+	commitCtx, commitCancel := context.WithTimeout(context.WithoutCancel(r.Context()), promptBarCommitTimeout)
+	defer commitCancel()
+	rec, err := h.Core.CompletePromptBarDecision(commitCtx, text, ownerID, metadata, agentcore.PromptBarDecisionSpec{
 		Action: "open_app", App: requestedApp, Title: title,
 		SourceURL: sourceURL, MediaType: mediaType, AppHint: appHint,
 	})
 	if err == nil && requestedApp == agentprofile.Texture {
-		handoff, err = h.EnsureTextureHandoff(r.Context(), rec, HandoffRequest{
+		handoff, err = h.EnsureTextureHandoff(commitCtx, rec, HandoffRequest{
 			Kind: HandoffKindUserPrompt, CallerProfile: agentprofile.Conductor,
 			Objective: text, Title: title,
 		})
