@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -33,6 +34,26 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 	persisted, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
 	if err != nil {
 		return fmt.Errorf("reload terminal run %s: %w", rec.RunID, err)
+	}
+	// A lifecycle research/management run that terminalized while still holding
+	// bound-but-unconsumed control packets strands them: bound rows are excluded
+	// from the pending list, so the stranded packet never generates the wake that
+	// would re-activate the desk, and unbindStrandedLifecycleControls only fires
+	// on the desk's own activation. Release the dead run's claims here — at the
+	// terminalization event — then re-drive the desk for each freed packet so it
+	// wakes, rebinds through bindLifecycleControlsToRun, and consumes. Past the
+	// attempt cap the packet terminalizes as delivery_attempts_exhausted.
+	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||
+		len(metadataStringSlice(persisted.Metadata["work_item_ids"])) > 0
+	if hasLifecycleMarker && persisted.State.Terminal() && strings.TrimSpace(persisted.ComputerID) != "" &&
+		(agentProfileForRun(&persisted) == agentprofile.Research || agentProfileForRun(&persisted) == agentprofile.Management) {
+		freed, unbindErr := rt.unbindStrandedLifecycleControls(ctx, persisted.OwnerID, persisted.ComputerID, persisted.AgentID)
+		if unbindErr != nil {
+			log.Printf("runtime: unbind stranded controls on terminalize run %s: %v", persisted.RunID, unbindErr)
+		}
+		for _, update := range freed {
+			rt.wakeUpdatedCoagent(ctx, update)
+		}
 	}
 	binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, &persisted)
 	if err != nil {

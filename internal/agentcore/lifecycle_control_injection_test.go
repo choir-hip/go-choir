@@ -1028,6 +1028,48 @@ func TestAtomicResearchOpenColdWakeHydratesExactLifecycleWorkAndReplaysOneRun(t 
 	}
 }
 
+
+func TestLifecycleRunTerminalizeReleasesStrandedControlAndRewakesDesk(t *testing.T) {
+	rt, s := testRuntime(t)
+	fixture := seedAtomicResearchControl(t, s, "stranded-terminalize")
+	var deskWakes int
+	rt.SetDispatchActor(func(_ context.Context, _, _, target, kind, _, _, _ string) error {
+		if kind == "coagent_result" && target == fixture.agentID {
+			deskWakes++
+		}
+		return nil
+	})
+	rec, err := rt.ReconcileCoagentWake(context.Background(), fixture.ownerID, fixture.agentID)
+	if err != nil || rec == nil {
+		t.Fatalf("reconcile carrier run=%+v err=%v", rec, err)
+	}
+	bound, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, fixture.control.AgentID, fixture.control.ProducerUpdateID)
+	if err != nil || bound.DeliveredToRunID != rec.RunID {
+		t.Fatalf("carrier-bound control=%+v err=%v", bound, err)
+	}
+	// Carrier terminalizes without consuming the control — the production
+	// stranded-bound wedge. TerminalizeRunCanonical + bindTerminalRunOutcome is
+	// the completion path.
+	rec.State = types.RunCompleted
+	rec.UpdatedAt = time.Now().UTC()
+	rec.FinishedAt = &rec.UpdatedAt
+	if err := rt.terminalizeRunCanonical(context.Background(), rec, "carrier completed without consuming control"); err != nil {
+		t.Fatalf("terminalize carrier: %v", err)
+	}
+	if err := rt.bindTerminalRunOutcome(context.Background(), rec, false); err != nil {
+		t.Fatalf("terminalize outcome: %v", err)
+	}
+	released, err := s.GetLifecycleUpdate(context.Background(), fixture.ownerID, fixture.computerID, fixture.trajectoryID, fixture.agentID, fixture.control.AgentID, fixture.control.ProducerUpdateID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(released.DeliveredToRunID) != "" {
+		t.Fatalf("stranded control still bound to dead run: %+v", released)
+	}
+	if deskWakes == 0 {
+		t.Fatal("terminalize did not re-drive the stranded control's desk")
+	}
+}
 func TestLifecycleControlDurableFailedAttemptSuppressesSameBuildReplay(t *testing.T) {
 	rt, s := testRuntime(t)
 	fixture := seedAtomicResearchControl(t, s, "failed-replay")
