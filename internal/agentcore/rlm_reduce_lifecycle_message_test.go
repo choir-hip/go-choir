@@ -663,3 +663,136 @@ func TestCommitTrayLifecycleAskPrecommitMintRecordNative(t *testing.T) {
 		}
 	}
 }
+
+// Reply cutover: a desk answering a staked question mints a report-kind
+// record plus a directive packet (Kind=evidence_update, reply_to: link) in
+// one CommitLifecycleAct — no envelope.
+func TestCommitTrayLifecycleReplyMintsRecordNative(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := seedTextureLifecycleControl(t, s, "owner-reply", "reply", "research:control-reply", agentprofile.Research)
+	caller, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, "texture-run-reply")
+	if err != nil {
+		t.Fatal(err)
+	}
+	researchID := agentprofile.Research + ":" + caller.ChannelID
+	now := time.Now().UTC()
+	if err := s.UpsertAgent(context.Background(), types.AgentRecord{
+		AgentID: researchID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: caller.ChannelID,
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	scope := ReductionScope{
+		FromAgentID: caller.AgentID, DeskAgentID: caller.AgentID,
+		FromRole: agentprofile.Texture, ChannelID: caller.ChannelID,
+		RunID: caller.RunID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		CellID: "cell-reply",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: caller.RunID, AgentID: caller.AgentID, OwnerID: caller.OwnerID,
+		ChannelID: caller.ChannelID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture,
+		RunRecord: &caller,
+	})
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
+
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "reply-1", Kind: yaegikernel.IntentReply, ToDesk: "research", Answer: "the build passes", TargetRef: "cell-ask:ask:ask-1"},
+	}, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, caller.OwnerID, caller.ComputerID, researchID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("reply did not queue on research: pending=%d", len(pending))
+	}
+	if pending[0].SourceRecordID != "cell-reply:reply:reply-1" ||
+		pending[0].Packet.Kind != "evidence_update" ||
+		!strings.Contains(strings.Join(pending[0].Packet.Notes, " "), "reply_to:cell-ask:ask:ask-1") {
+		t.Fatalf("reply packet malformed: %+v", pending[0])
+	}
+	rec, err := s.GetCommitmentRecord(ctx, caller.OwnerID, caller.ComputerID, "cell-reply:reply:reply-1")
+	if err != nil || rec == nil || rec.RecordKind() != types.CommitmentKindReport ||
+		len(rec.RelatedIDs) != 1 || rec.RelatedIDs[0] != "cell-ask:ask:ask-1" {
+		t.Fatalf("reply record malformed: rec=%+v err=%v", rec, err)
+	}
+	messages, err := s.ListChannelMessages(ctx, caller.OwnerID, caller.ChannelID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range messages {
+		if strings.Contains(m.Content, "reply-1") {
+			t.Fatalf("reply leaked channel envelope: %+v", m)
+		}
+	}
+}
+
+// RN4 wake retire: a lifecycle-bound caller's Message never touches the
+// channel mailbox — the packet queues durably and the envelope is a dead
+// letter class eliminated.
+func TestCommitTrayLifecycleMessageMintsPacketNoEnvelope(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := seedTextureLifecycleControl(t, s, "owner-msg", "msg", "research:control-msg", agentprofile.Research)
+	caller, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, "texture-run-msg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	managementID := agentprofile.Management + ":" + caller.OwnerID
+	now := time.Now().UTC()
+	if err := s.UpsertAgent(context.Background(), types.AgentRecord{
+		AgentID: managementID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Management, Role: agentprofile.Management,
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	scope := ReductionScope{
+		FromAgentID: caller.AgentID, DeskAgentID: caller.AgentID,
+		FromRole: agentprofile.Texture, ChannelID: caller.ChannelID,
+		RunID: caller.RunID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		CellID: "cell-msg",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: caller.RunID, AgentID: caller.AgentID, OwnerID: caller.OwnerID,
+		ChannelID: caller.ChannelID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture,
+		RunRecord: &caller,
+	})
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
+
+	// Packet-bodied message to persistent management by desk name —
+	// exactly what the overlay surfaces hand the tray.
+	body := `{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"msg probe","claims":[{"text":"msg probe"}]}`
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "msg-1", Kind: yaegikernel.IntentMessage, ToDesk: "management", MsgKind: "evidence_update", Body: body},
+	}, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, caller.OwnerID, caller.ComputerID, managementID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("message did not queue on management: pending=%d", len(pending))
+	}
+	messages, err := s.ListChannelMessages(ctx, caller.OwnerID, caller.ChannelID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range messages {
+		if strings.Contains(m.Content, "msg-1") || strings.Contains(m.Content, "msg probe") {
+			t.Fatalf("lifecycle message leaked channel envelope: %+v", m)
+		}
+	}
+}

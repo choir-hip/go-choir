@@ -816,10 +816,9 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 		case yaegikernel.IntentComplete:
 			// The fate commit runs detached so teardown cannot interrupt it;
 			// the completion envelope still mails to the requester after the
-			// fate lands. The timeout covers a slow frozen-capsule revocation
-			// (cgroup teardown plus typed receipt persistence on an
-			// fsync-bound store); 30s stranded assignment-9ec36ecb
-			// mid-revocation, so the window is minutes, not seconds.
+			// fate lands — UNLESS the requester is a lifecycle desk, which
+			// already receives the producer_report packet from
+			// recordAssignedEngineeringReport (dual delivery retired, RN4).
 			fateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Minute)
 			var terminal bool
 			terminal, err = r.commitCompleteIntent(fateCtx, in)
@@ -828,7 +827,11 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 				if terminal {
 					r.fateTerminal = true
 				}
-				seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
+				if r.requesterIsLifecycle() {
+					seq = 0
+				} else {
+					seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
+				}
 			}
 		case yaegikernel.IntentFreeze:
 			// Like Complete, freezing must outlive cell teardown: the cgroup
@@ -848,14 +851,17 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 				r.verifyResult = out
 			}
 		case yaegikernel.IntentMessage:
-			// Every staged message on an assigned desk carries the
-			// update_coagent authority contract. Lifecycle producer runs
-			// (research/processor/reconciler activations bound to a work
-			// item but carrying no assignment_id) take the same durable
-			// packet path — their addressed acts are lifecycle updates,
-			// not channel mail.
-			if r.isAssignedDesk() || r.isLifecycleProducer() {
+			// Every staged message on an assigned desk or lifecycle producer
+			// run carries the update_coagent authority contract. Other
+			// lifecycle-bound callers mint the packet record-natively through
+			// CommitLifecycleAct (RN4 — the envelope is the retired carrier;
+			// persistent-Management targets are channel-less and cannot take
+			// the authority arm at all). Non-lifecycle callers keep the
+			// envelope path.
+			if r.isAssignedDesk() {
 				seq, err = r.commitMessageIntent(ctx, in)
+			} else if r.lifecycleBound() || r.isLifecycleProducer() {
+				seq, err = r.commitLifecycleMessageIntent(ctx, in)
 			} else {
 				seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
 			}
@@ -896,19 +902,18 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.
 	rec := commitmentRecordForIntent(r.scope, in)
-	// Record-native cutover (S0m RN3): addressed notes, lifecycle producer
-	// reports, the addressed directive subtypes (escalate, cast, retract),
-	// and addressed staked questions (ask/precommit) mint record+packet
+	// Record-native cutover (S0m RN3): every staged semantic act from a
+	// lifecycle-bound caller mints record (+ packet when addressed)
 	// atomically via CommitLifecycleAct — the record IS the delivery act;
-	// no envelope follows it. Unaddressed acts (ledger-only resolve,
-	// disagreement, unaddressed precommit) mint through the same
-	// transaction with no packet. Non-lifecycle callers stay on the
+	// no envelope follows it. Unaddressed acts mint ledger-only through
+	// the same transaction. Non-lifecycle callers stay on the
 	// append+envelope path.
 	if (in.Kind == yaegikernel.IntentNote ||
 		(in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.ToDesk) != "") ||
 		in.Kind == yaegikernel.IntentEscalate || in.Kind == yaegikernel.IntentCast ||
 		in.Kind == yaegikernel.IntentCancel ||
 		in.Kind == yaegikernel.IntentAsk || in.Kind == yaegikernel.IntentPrecommit ||
+		in.Kind == yaegikernel.IntentReply ||
 		in.Kind == yaegikernel.IntentResolve || in.Kind == yaegikernel.IntentDisagreement) &&
 		r.ledger != nil && r.rt() != nil {
 		seq, actErr := r.commitLifecycleActIntent(ctx, in, rec)
@@ -1096,11 +1101,14 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 	case yaegikernel.IntentReply:
 		// reply is a report (adjudicated): the answering desk must not close
 		// the issuer's stake — it reports; the reducer derives the mechanical
-		// resolve. TargetRef links it to the ask.
+		// resolve. RelatedIDs links it to the ask's record.
 		rec.Kind = types.CommitmentKindReport
 		rec.Prediction = types.CommitmentPrediction{
 			Hypothesis:  in.Answer,
 			CommittedAt: rec.Provenance.CommittedAt,
+		}
+		if targetRef := strings.TrimSpace(in.TargetRef); targetRef != "" {
+			rec.RelatedIDs = []string{targetRef}
 		}
 	case yaegikernel.IntentReport:
 		rec.Kind = types.CommitmentKindReport
@@ -1223,6 +1231,53 @@ func (r *rlmCallReduction) isLifecycleProducer() bool {
 		return len(raw) > 0
 	}
 	return false
+}
+
+// lifecycleBound reports whether this reduction's caller run lives on the
+// lifecycle store (texture desk, bound desks, lifecycle producers). These
+// callers' addressed acts are lifecycle packets, never channel mail — the
+// record-native cutover (RN3/RN4) retires the envelope for them.
+func (r *rlmCallReduction) lifecycleBound() bool {
+	if r == nil {
+		return false
+	}
+	rt := r.rt()
+	if rt == nil || rt.store == nil {
+		return false
+	}
+	runID := strings.TrimSpace(r.scope.RunID)
+	ownerID := strings.TrimSpace(r.scope.OwnerID)
+	computerID := strings.TrimSpace(r.scope.ComputerID)
+	if computerID == "" {
+		computerID = rt.TextureComputerID()
+	}
+	if runID == "" || ownerID == "" || computerID == "" {
+		return false
+	}
+	_, err := rt.store.GetLifecycleRun(context.Background(), ownerID, computerID, runID)
+	return err == nil
+}
+
+// requesterIsLifecycle reports whether the run's requesting agent is a
+// lifecycle desk — the target of the complete-fate notice. When true, the
+// ReturnTo envelope is suppressed: recordAssignedEngineeringReport already
+// queued the producer_report packet to that agent in the same commit, and
+// the envelope is a dead-letter duplicate.
+func (r *rlmCallReduction) requesterIsLifecycle() bool {
+	if r == nil {
+		return false
+	}
+	rt := r.rt()
+	if rt == nil || rt.store == nil {
+		return false
+	}
+	to := strings.TrimSpace(r.scope.ReturnTo)
+	if to == "" {
+		return false
+	}
+	agent, err := rt.store.GetAgentByScope(context.Background(),
+		strings.TrimSpace(r.scope.OwnerID), strings.TrimSpace(r.scope.ComputerID), to)
+	return err == nil && agent.LifecycleVersion > 0
 }
 
 // commitFreezeIntent reduces a staged Freeze intent through the same freeze
@@ -1469,6 +1524,18 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	return result != types.EngineeringResultPartial, nil
 }
 
+// commitLifecycleMessageIntent routes a lifecycle-bound Message through the
+// record-native act: the message mints as a note-subtype directive record
+// (messages carry no stake — they ARE notices) addressed to ToDesk, with the
+// authored packet body preserved verbatim in the record body. The desk-to-desk
+// carrier replaces the retired channel envelope for lifecycle callers (RN4).
+func (r *rlmCallReduction) commitLifecycleMessageIntent(ctx context.Context, in yaegikernel.StagedIntent) (uint64, error) {
+	rec := commitmentRecordForIntent(r.scope, in)
+	rec.Kind = types.CommitmentKindDirective
+	rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: strings.TrimSpace(in.Body)}
+	return r.commitLifecycleActIntent(ctx, in, rec)
+}
+
 func (r *rlmCallReduction) rt() *Runtime {
 	if mb, ok := r.mb.(*Runtime); ok {
 		return mb
@@ -1579,6 +1646,35 @@ func precommitPacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePac
 	return payload
 }
 
+// replyPacketForRecord projects a reply (report-kind record answering a staked
+// question) onto the typed packet schema. Replies take the generic directive
+// arm — not the producer-report arm — because the target is whichever desk
+// asked, not authority-bound; the answering desk never closes the issuer's
+// stake (the mechanical resolve stays the issuer's ledger event).
+func replyPacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePacketPayload {
+	answer := strings.TrimSpace(rec.Prediction.Hypothesis)
+	summary := answer
+	if len(summary) > 160 {
+		summary = summary[:160]
+	}
+	if summary == "" {
+		summary = "reply"
+	}
+	payload := types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          "evidence_update",
+		Summary:       summary,
+		Notes:         []string{"directive:reply"},
+	}
+	if answer != "" {
+		payload.Claims = []types.CoagentPacketClaim{{Text: answer, Stance: "background"}}
+	}
+	for _, rel := range rec.RelatedIDs {
+		payload.Notes = append(payload.Notes, "reply_to:"+rel)
+	}
+	return payload
+}
+
 // directiveTargetAgentID resolves a record-native addressee to the exact desk
 // agent: "management" is the computer's persistent super; every other bare
 // profile resolves to the desk agent bound to the caller's channel document
@@ -1621,6 +1717,9 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 	}
 	ownerID := strings.TrimSpace(r.scope.OwnerID)
 	computerID := strings.TrimSpace(r.scope.ComputerID)
+	if computerID == "" {
+		computerID = rt.TextureComputerID()
+	}
 	callerAgentID := strings.TrimSpace(r.scope.FromAgentID)
 	callerRunID := strings.TrimSpace(r.scope.RunID)
 	callerAgent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, callerAgentID)
@@ -1685,9 +1784,12 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 			}
 		}
 		var packet types.CoagentSourcePacketPayload
-		if rec.RecordKind() == types.CommitmentKindPrecommit {
+		switch {
+		case in.Kind == yaegikernel.IntentReply:
+			packet = replyPacketForRecord(rec)
+		case rec.RecordKind() == types.CommitmentKindPrecommit:
 			packet = precommitPacketForRecord(rec)
-		} else {
+		default:
 			packet = directivePacketForRecord(rec)
 		}
 		if err := validateCoagentSourcePacketPayload(packet); err != nil {
