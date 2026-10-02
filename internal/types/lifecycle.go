@@ -240,12 +240,12 @@ type LifecycleActPacketSpec struct {
 	TargetAgentID string `json:"target_agent_id"`
 	// TrajectoryID binds delivery to the addressee's trajectory scope; may be
 	// empty for computer-scoped targets (persistent Management).
-	TrajectoryID    string                     `json:"trajectory_id,omitempty"`
-	ChannelID       string                     `json:"channel_id,omitempty"`
-	Direction       LifecyclePacketDirection   `json:"direction,omitempty"`
-	Packet          CoagentSourcePacketPayload `json:"packet"`
-	Content         string                     `json:"content,omitempty"`
-	PayloadDigest   string                     `json:"payload_digest"`
+	TrajectoryID  string                     `json:"trajectory_id,omitempty"`
+	ChannelID     string                     `json:"channel_id,omitempty"`
+	Direction     LifecyclePacketDirection   `json:"direction,omitempty"`
+	Packet        CoagentSourcePacketPayload `json:"packet"`
+	Content       string                     `json:"content,omitempty"`
+	PayloadDigest string                     `json:"payload_digest"`
 	// WorkItemID and WorkDisposition are required for a producer_report and
 	// identify the producer obligation whose bound run authored the report.
 	WorkItemID      string         `json:"work_item_id,omitempty"`
