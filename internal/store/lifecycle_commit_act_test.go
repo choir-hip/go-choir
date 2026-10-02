@@ -326,3 +326,96 @@ func TestCommitLifecycleActProducerReportLateEvidenceDoesNotMutateLifecycle(t *t
 		t.Fatalf("late report mutated terminal trajectory: before=%+v after=%+v", cancelled.Trajectory, after.Trajectory)
 	}
 }
+
+func TestCommitLifecycleActReportMechanicallyResolvesOpenAsk(t *testing.T) {
+	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	committedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	ask := types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    "cell-ask:ask:1",
+		Kind:        types.CommitmentKindPrecommit,
+		Discrepancy: types.DiscrepancyUnresolved,
+		Provenance:  types.CommitmentProvenance{AgentID: caller.AgentID, CommittedAt: committedAt},
+		Precommit:   &types.CommitmentPrecommit{Question: "did the build pass?"},
+		Prediction:  types.CommitmentPrediction{Hypothesis: "did the build pass?", CommittedAt: committedAt},
+	}
+	if _, err := s.CommitLifecycleAct(ctx, commitActRequestForTest(t, s, start, caller, ask, "")); err != nil {
+		t.Fatalf("commit ask: %v", err)
+	}
+
+	report := types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    "cell-report:report:1",
+		Kind:        types.CommitmentKindReport,
+		Discrepancy: types.DiscrepancyUnresolved,
+		Provenance:  types.CommitmentProvenance{AgentID: caller.AgentID, CommittedAt: time.Now().UTC().Format(time.RFC3339Nano)},
+		Prediction:  types.CommitmentPrediction{Hypothesis: "the build passes"},
+		ParentID:    ask.RecordID,
+		RelatedIDs:  []string{ask.RecordID},
+	}
+	reportReq := commitActRequestForTest(t, s, start, caller, report, "")
+	if _, err := s.CommitLifecycleAct(ctx, reportReq); err != nil {
+		t.Fatalf("commit answering report: %v", err)
+	}
+	derivedID := report.RecordID + ":resolve:answered"
+	derived, err := s.GetCommitmentRecord(ctx, start.OwnerID, start.ComputerID, derivedID)
+	if err != nil || derived == nil || derived.RecordKind() != types.CommitmentKindResolve ||
+		derived.Resolve == nil || derived.Resolve.Verdict != "answered" ||
+		derived.Discrepancy != types.DiscrepancyAnswered ||
+		derived.Provenance.AgentID != mechanicalResolveAgentID ||
+		derived.Provenance.ResolvedAt == "" ||
+		len(derived.RelatedIDs) != 1 || derived.RelatedIDs[0] != ask.RecordID ||
+		len(derived.Scores) != 0 {
+		t.Fatalf("derived mechanical resolve = %+v, %v", derived, err)
+	}
+	if replay, err := s.CommitLifecycleAct(ctx, reportReq); err != nil || !replay.Replay {
+		t.Fatalf("answering report replay = %+v, %v", replay, err)
+	}
+
+	records, err := s.ListCommitmentRecords(ctx, start.OwnerID, start.ComputerID, "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var askView *types.ResolvedCommitment
+	for _, resolved := range types.ResolveCommitments(records, time.Now().UTC()) {
+		if resolved.Act.RecordID == ask.RecordID {
+			askView = &resolved
+			break
+		}
+	}
+	if askView == nil || askView.Discrepancy != types.DiscrepancyAnswered || len(askView.Resolutions) != 1 ||
+		askView.Resolutions[0].RecordID != derivedID {
+		t.Fatalf("answered ask view = %+v", askView)
+	}
+
+	authoredAt := time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano)
+	authored := types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    "cell-resolve:resolve:1",
+		Kind:        types.CommitmentKindResolve,
+		Discrepancy: types.DiscrepancyConfirmed,
+		Resolve:     &types.CommitmentResolve{Verdict: "confirmed"},
+		Observation: types.CommitmentObservation{Excerpt: "confirmed", SourceRef: "verification", ObservedAt: authoredAt},
+		Provenance:  types.CommitmentProvenance{AgentID: caller.AgentID, CommittedAt: authoredAt, ResolvedAt: authoredAt},
+		ParentID:    ask.RecordID,
+		RelatedIDs:  []string{ask.RecordID},
+	}
+	if _, err := s.CommitLifecycleAct(ctx, commitActRequestForTest(t, s, start, caller, authored, "")); err != nil {
+		t.Fatalf("commit authored resolve: %v", err)
+	}
+	records, err = s.ListCommitmentRecords(ctx, start.OwnerID, start.ComputerID, "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, resolved := range types.ResolveCommitments(records, time.Now().UTC()) {
+		if resolved.Act.RecordID == ask.RecordID {
+			askView = &resolved
+			break
+		}
+	}
+	if askView.Discrepancy != types.DiscrepancyConfirmed || len(askView.Resolutions) != 2 ||
+		askView.Resolutions[1].RecordID != authored.RecordID {
+		t.Fatalf("authored resolve did not supersede mechanical resolve: %+v", askView)
+	}
+}

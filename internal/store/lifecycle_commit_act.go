@@ -127,6 +127,93 @@ func validateCommitLifecycleActShape(req types.CommitLifecycleActRequest) error 
 	return nil
 }
 
+const mechanicalResolveAgentID = "system:reducer"
+
+// mechanicalResolveForReport derives the reducer-owned arrival resolution for
+// a report that answers an open ask. It runs while CommitLifecycleAct holds
+// trajectoryMu and its returned record is appended in that same transition, so
+// report and resolve cannot split across a crash or replay.
+func (s *Store) mechanicalResolveForReport(ctx context.Context, ownerID, computerID string, report types.CommitmentRecord, now time.Time) (*types.CommitmentRecord, error) {
+	if report.RecordKind() != types.CommitmentKindReport {
+		return nil, nil
+	}
+	links := commitmentRecordLinks(report)
+	if len(links) == 0 {
+		return nil, nil
+	}
+	records, err := s.ListCommitmentRecords(ctx, ownerID, computerID, "", 10000)
+	if err != nil {
+		return nil, err
+	}
+	for _, targetID := range links {
+		target, err := s.GetCommitmentRecord(ctx, ownerID, computerID, targetID)
+		if err != nil {
+			return nil, err
+		}
+		if target == nil || target.RecordKind() != types.CommitmentKindPrecommit || target.Precommit == nil {
+			continue
+		}
+		resolved := false
+		for _, rec := range records {
+			if commitmentRecordResolvesTarget(rec, targetID) {
+				resolved = true
+				break
+			}
+		}
+		if resolved {
+			continue
+		}
+		stamp := now.UTC().Format(time.RFC3339Nano)
+		return &types.CommitmentRecord{
+			SchemaID:    types.CommitmentRecordSchemaV1,
+			RecordID:    report.RecordID + ":resolve:answered",
+			Kind:        types.CommitmentKindResolve,
+			Discrepancy: types.DiscrepancyAnswered,
+			Resolve:     &types.CommitmentResolve{Verdict: "answered"},
+			Observation: types.CommitmentObservation{
+				Excerpt: "answered", SourceRef: report.RecordID, ObservedAt: stamp,
+			},
+			Provenance: types.CommitmentProvenance{
+				AgentID: mechanicalResolveAgentID, ContextRef: report.Provenance.ContextRef,
+				CommittedAt: stamp, ResolvedAt: stamp,
+			},
+			RelatedIDs: []string{targetID},
+		}, nil
+	}
+	return nil, nil
+}
+
+func commitmentRecordLinks(rec types.CommitmentRecord) []string {
+	links := make([]string, 0, 1+len(rec.RelatedIDs))
+	seen := make(map[string]struct{}, cap(links))
+	add := func(id string) {
+		if id = strings.TrimSpace(id); id != "" {
+			if _, duplicate := seen[id]; !duplicate {
+				seen[id] = struct{}{}
+				links = append(links, id)
+			}
+		}
+	}
+	add(rec.ParentID)
+	for _, id := range rec.RelatedIDs {
+		add(id)
+	}
+	return links
+}
+
+func commitmentRecordResolvesTarget(rec types.CommitmentRecord, targetID string) bool {
+	if rec.Disagreement != nil || (rec.Resolve == nil &&
+		(rec.RecordKind() != types.CommitmentKindResolve || strings.TrimSpace(rec.Provenance.ResolvedAt) == "")) {
+		return false
+	}
+	for _, id := range commitmentRecordLinks(rec) {
+		if id == targetID {
+			return true
+		}
+	}
+	return false
+}
+
 // CommitLifecycleAct atomically mints the commitment record and its derived
 // directive packet. Record-only acts (no addressee) mint the record alone —
 // ledger-only is the correct shape for unaddressed acts.
@@ -233,6 +320,24 @@ func (s *Store) CommitLifecycleAct(ctx context.Context, req types.CommitLifecycl
 	}
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: recordObj.CanonicalID})
 	objects = append(objects, recordObj)
+	if mechanicalResolve, deriveErr := s.mechanicalResolveForReport(ctx, ownerID, computerID, rec, now); deriveErr != nil {
+		return types.LifecycleResult{}, fmt.Errorf("commit lifecycle act mechanical resolve: %w", deriveErr)
+	} else if mechanicalResolve != nil {
+		mechanicalObj, objErr := lifecycleObject(ogKindCommitmentRecord, ownerID, computerID, mechanicalResolve.RecordID, *mechanicalResolve, map[string]any{
+			"record_id":   mechanicalResolve.RecordID,
+			"agent_id":    mechanicalResolve.Provenance.AgentID,
+			"discrepancy": string(mechanicalResolve.Discrepancy),
+			"schema_id":   mechanicalResolve.SchemaID,
+			"record_kind": string(mechanicalResolve.RecordKind()),
+			"created_at":  now.UTC().Format(time.RFC3339Nano),
+			"updated_at":  now.UTC().Format(time.RFC3339Nano),
+		}, now, now)
+		if objErr != nil {
+			return types.LifecycleResult{}, objErr
+		}
+		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: mechanicalObj.CanonicalID})
+		objects = append(objects, mechanicalObj)
+	}
 
 	var packet types.CoagentSourcePacket
 	if spec := req.PacketSpec; spec != nil {
@@ -463,6 +568,25 @@ func (s *Store) commitLifecycleProducerReportAct(ctx context.Context, req types.
 		return types.LifecycleResult{}, err
 	}
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: recordObj.CanonicalID})
+	var mechanicalRecordObj *objectgraph.Object
+	if mechanicalResolve, deriveErr := s.mechanicalResolveForReport(ctx, ownerID, computerID, rec, now); deriveErr != nil {
+		return types.LifecycleResult{}, fmt.Errorf("commit lifecycle act mechanical resolve: %w", deriveErr)
+	} else if mechanicalResolve != nil {
+		mechanicalObj, objErr := lifecycleObject(ogKindCommitmentRecord, ownerID, computerID, mechanicalResolve.RecordID, *mechanicalResolve, map[string]any{
+			"record_id":   mechanicalResolve.RecordID,
+			"agent_id":    mechanicalResolve.Provenance.AgentID,
+			"discrepancy": string(mechanicalResolve.Discrepancy),
+			"schema_id":   mechanicalResolve.SchemaID,
+			"record_kind": string(mechanicalResolve.RecordKind()),
+			"created_at":  now.UTC().Format(time.RFC3339Nano),
+			"updated_at":  now.UTC().Format(time.RFC3339Nano),
+		}, now, now)
+		if objErr != nil {
+			return types.LifecycleResult{}, objErr
+		}
+		mechanicalRecordObj = &mechanicalObj
+		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: mechanicalObj.CanonicalID})
+	}
 
 	disposition, dispositionRef, dispositionReason := types.UpdatePending, "", ""
 	var sequenceUpdated objectgraph.Object
@@ -509,6 +633,9 @@ func (s *Store) commitLifecycleProducerReportAct(ctx context.Context, req types.
 	}
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID})
 	objects := []objectgraph.Object{recordObj, packetObj, eventObj}
+	if mechanicalRecordObj != nil {
+		objects = append(objects, *mechanicalRecordObj)
+	}
 	if lateEvidenceOnly {
 		objects = append(objects, sequenceUpdated)
 	} else {

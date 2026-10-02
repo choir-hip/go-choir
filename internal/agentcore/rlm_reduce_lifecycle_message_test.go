@@ -686,6 +686,19 @@ func TestCommitTrayLifecycleReplyMintsRecordNative(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	askID := "cell-ask:ask:ask-1"
+	if _, err := s.AppendCommitmentRecord(context.Background(), caller.OwnerID, caller.ComputerID, types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    askID,
+		Kind:        types.CommitmentKindPrecommit,
+		Discrepancy: types.DiscrepancyUnresolved,
+		Provenance:  types.CommitmentProvenance{AgentID: researchID, CommittedAt: now.Format(time.RFC3339Nano)},
+		Precommit:   &types.CommitmentPrecommit{Question: "does the build pass?", Resolver: agentprofile.Texture},
+		Prediction:  types.CommitmentPrediction{Hypothesis: "does the build pass?", CommittedAt: now.Format(time.RFC3339Nano)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	scope := ReductionScope{
 		FromAgentID: caller.AgentID, DeskAgentID: caller.AgentID,
 		FromRole: agentprofile.Texture, ChannelID: caller.ChannelID,
@@ -701,7 +714,7 @@ func TestCommitTrayLifecycleReplyMintsRecordNative(t *testing.T) {
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
 
 	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
-		{LocalID: "reply-1", Kind: yaegikernel.IntentReply, ToDesk: "research", Answer: "the build passes", TargetRef: "cell-ask:ask:ask-1"},
+		{LocalID: "reply-1", Kind: yaegikernel.IntentReply, ToDesk: "research", Answer: "the build passes", TargetRef: askID},
 	}, 1); err != nil {
 		t.Fatal(err)
 	}
@@ -720,8 +733,15 @@ func TestCommitTrayLifecycleReplyMintsRecordNative(t *testing.T) {
 	}
 	rec, err := s.GetCommitmentRecord(ctx, caller.OwnerID, caller.ComputerID, "cell-reply:reply:reply-1")
 	if err != nil || rec == nil || rec.RecordKind() != types.CommitmentKindReport ||
-		len(rec.RelatedIDs) != 1 || rec.RelatedIDs[0] != "cell-ask:ask:ask-1" {
+		len(rec.RelatedIDs) != 1 || rec.RelatedIDs[0] != askID {
 		t.Fatalf("reply record malformed: rec=%+v err=%v", rec, err)
+	}
+	derived, err := s.GetCommitmentRecord(ctx, caller.OwnerID, caller.ComputerID, "cell-reply:reply:reply-1:resolve:answered")
+	if err != nil || derived == nil || derived.Resolve == nil || derived.Resolve.Verdict != "answered" ||
+		derived.Discrepancy != types.DiscrepancyAnswered ||
+		derived.Provenance.AgentID != "system:reducer" || derived.Provenance.ResolvedAt == "" ||
+		len(derived.Scores) != 0 || len(derived.RelatedIDs) != 1 || derived.RelatedIDs[0] != askID {
+		t.Fatalf("reply mechanical resolve malformed: rec=%+v err=%v", derived, err)
 	}
 	messages, err := s.ListChannelMessages(ctx, caller.OwnerID, caller.ChannelID, 0, 100)
 	if err != nil {

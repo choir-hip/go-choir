@@ -1112,6 +1112,9 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 		}
 	case yaegikernel.IntentReport:
 		rec.Kind = types.CommitmentKindReport
+		if targetRef := strings.TrimSpace(in.TargetRef); targetRef != "" {
+			rec.RelatedIDs = []string{targetRef}
+		}
 		if strings.TrimSpace(in.Packet) != "" {
 			rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Packet}
 			// A packet-bodied report also lifts each source's target URI into
@@ -1191,6 +1194,8 @@ func commitmentIntentEvidenceRefs(in yaegikernel.StagedIntent) []string {
 // verifiable as a typed class) so resolution never fails on phrasing.
 func resolveOutcomeDiscrepancy(outcome string) types.DiscrepancyClass {
 	switch strings.ToLower(strings.TrimSpace(outcome)) {
+	case "answered":
+		return types.DiscrepancyAnswered
 	case "confirmed", "correct", "held", "true", "pass", "passed", "success", "succeeded":
 		return types.DiscrepancyConfirmed
 	case "qualified", "partial", "partially", "mostly", "mixed":

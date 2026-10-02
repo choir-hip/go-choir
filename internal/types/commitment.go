@@ -23,6 +23,9 @@ const (
 	DiscrepancyQualified DiscrepancyClass = "qualified"
 	// DiscrepancyContradicted: the prediction failed.
 	DiscrepancyContradicted DiscrepancyClass = "contradicted"
+	// DiscrepancyAnswered: a desk supplied the requested answer. It is an
+	// arrival-class resolution, not a scored material verdict.
+	DiscrepancyAnswered DiscrepancyClass = "answered"
 	// DiscrepancyUnresolved: the outcome never became verifiable.
 	DiscrepancyUnresolved DiscrepancyClass = "unresolved"
 )
