@@ -267,11 +267,15 @@ now:
     the repair is small and uses existing machinery.
   blocker: null
   next_action: >-
-    RN3: per-kind delivery-path cutover — route each desk-authored act
-    (note, report, resolve, disagreement, precommit+control, escalate,
-    cast, retract) through record+packet single-commit mint, retiring the
-    envelope path per kind. Landing loop for 1f7d0889/3b3ce3e2/7bbe9ec6
-    (push → CI → deploy → deployed_identity) runs first.
+    RN3a (note/directive cutover) is implemented and locally green:
+    CommitLifecycleAct mints record+packet atomically; directive direction
+    is armed across wake outbox (empty-trajectory pin), ReconcileUpdateDelivery
+    bind/unbind, persistent-Management live-occurrence resolution, admissible
+    injection (unbound), and desk-run binding; IntentNote routes through the
+    single commit; no envelope dual-delivery. Next: `note` deployed
+    acceptance on staging, then extend the cutover kind-by-kind — report,
+    resolve, disagreement, precommit+control, escalate, cast, retract —
+    through the same CommitLifecycleAct surface.
 
 receipts:
   - id: rn2-landing-2026-10-02
