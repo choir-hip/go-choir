@@ -2345,7 +2345,21 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 						// pending wake whose body changed means the source was
 						// concurrently transitioned by a different command — the
 						// canonical concurrent-state-change signal.
-						return types.LifecycleResult{}, ErrConcurrentStateChange
+						//
+						// CreatedAt is bookkeeping copied from the source object;
+						// the store rounds DATETIME writes to whole seconds, so a
+						// wake re-derived from a round-tripped source differs in
+						// that field alone without any obligation change. Decode
+						// both and compare the obligation fields before declaring
+						// drift.
+						var existingWake, newWake ActorWakeOutbox
+						if json.Unmarshal(existing.Body, &existingWake) != nil || json.Unmarshal(outbox.Body, &newWake) != nil {
+							return types.LifecycleResult{}, ErrConcurrentStateChange
+						}
+						existingWake.CreatedAt, newWake.CreatedAt = time.Time{}, time.Time{}
+						if existingWake != newWake {
+							return types.LifecycleResult{}, ErrConcurrentStateChange
+						}
 					}
 				}
 			}
