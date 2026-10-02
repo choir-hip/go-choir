@@ -1,23 +1,23 @@
 {
   "schema_version": 1,
   "kind": "s0a-tap-reachability",
-  "collected_at": "2026-10-01T21:12:29.858Z",
-  "source_vm": "candidate-fleet-e15cb89f25d963c220319b7b",
-  "source_url": "http://10.200.139.2:8085",
+  "collected_at": "2026-10-02T00:39:49.050Z",
+  "source_vm": "vm-48bc09812f3fce06d715f6c7f8e2db9a",
+  "source_url": "http://10.200.150.2:8085",
   "targets": {
     "other_guest_tap_8085": {
-      "addr": "10.200.136.2:8085",
+      "addr": "10.200.151.2:8085",
       "kind": "guest_tcp_dial",
       "latency_ms": 0,
-      "local_addr": "10.200.139.2:47860",
+      "local_addr": "10.200.150.2:53548",
       "ok": true,
       "schema_version": 1
     },
     "host_vmctl_8083": {
-      "addr": "10.200.139.1:8083",
+      "addr": "10.200.150.1:8083",
       "kind": "guest_tcp_dial",
       "latency_ms": 0,
-      "local_addr": "10.200.139.2:37754",
+      "local_addr": "10.200.150.2:38180",
       "ok": true,
       "schema_version": 1
     },
@@ -25,7 +25,7 @@
       "addr": "1.1.1.1:443",
       "kind": "guest_tcp_dial",
       "latency_ms": 1,
-      "local_addr": "10.200.139.2:55798",
+      "local_addr": "10.200.150.2:36762",
       "ok": true,
       "schema_version": 1
     }

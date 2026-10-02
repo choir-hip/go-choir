@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "kind": "s0-probe-index",
-  "run_started_at": "2026-10-01T21:12:14.893Z",
+  "run_started_at": "2026-10-02T00:39:33.333Z",
   "base_url": "https://choir.news",
   "receipts": {
     "s0a-boot-timeline-fresh-2026-10-01": {
@@ -21,18 +21,24 @@
     },
     "s0a-gateway-token-visibility-2026-10-01": {
       "path": "docs/evidence/s0a-gateway-token-visibility-2026-10-01.json"
+    },
+    "s0a-boot-timeline-owner-sized-post-refresh-2026-10-01": {
+      "path": "docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json"
     }
   },
   "findings": [
     "gateway token exposed on kernel cmdline (guest /proc/cmdline) and host fc-config.json / ps — confirmed live"
   ],
-  "errors": [
-    "owner re-refresh failed: Command failed: ssh -o BatchMode=yes -o ConnectTimeout=8 node-b curl -fsS -m 300 -H \"X-Internal-Caller: true\" -H \"Content-Type: application/json\" -d '{\"user_id\":\"5bd6de97-3b58-408c-bf89-c42c81b083de\",\"desktop_id\":\"primary\"}' http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null\ncurl: (28) Operation timed out after 300002 milliseconds with 0 bytes received\n"
-  ],
+  "errors": [],
   "fresh_computer": {
-    "vm_id": "vm-dc5a88b68356568a31b82b86408714c5",
-    "computer_id": "computer-4b78d707c9a15b5d0f1ce8f70dce2e5c",
-    "registration_ms": 9535
+    "vm_id": "vm-b8c15974392a8f387e137f1433c06a1d",
+    "computer_id": "computer-75ed0602d5d3d35e70219ea0a095d82b",
+    "registration_ms": 10190
   },
-  "run_finished_at": "2026-10-01T21:17:33.291Z"
+  "owner_replay_volume": {
+    "applied_rows": 0,
+    "committed_sequence": 0,
+    "sequence": 0
+  },
+  "run_finished_at": "2026-10-02T00:40:54.071Z"
 }

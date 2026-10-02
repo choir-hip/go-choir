@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "kind": "s0a-runtime-closure",
-  "collected_at": "2026-10-01T21:12:27.933Z",
-  "guest_executable_resolved": "/nix/store/lqxk2hk4d7rm0y9cncglp59qcn8nwq1z-autoputer-0.1.0/bin/autoputer",
-  "package_path": "/nix/store/lqxk2hk4d7rm0y9cncglp59qcn8nwq1z-autoputer-0.1.0",
+  "collected_at": "2026-10-02T00:39:46.991Z",
+  "guest_executable_resolved": "/nix/store/v6j6ngja92a81w6gsbcaf3477izyz2gi-autoputer-0.1.0/bin/autoputer",
+  "package_path": "/nix/store/v6j6ngja92a81w6gsbcaf3477izyz2gi-autoputer-0.1.0",
   "present_on_host": true,
   "requisites": [
     "/nix/store/657nyvrdribi7if64nhykz0vji7ljn1p-icu4c-76.1",
@@ -14,7 +14,7 @@
     "/nix/store/ga3b95jkyvknam1nxl25r95nyk87ix25-tzdata-2026b",
     "/nix/store/hngmi01i8wgi25a0byrxcn4ysz5j79mw-gcc-15.2.0-lib",
     "/nix/store/ipz4lbivx3q7gr79130d6g5ix35vibnw-libunistring-1.4.2",
-    "/nix/store/lqxk2hk4d7rm0y9cncglp59qcn8nwq1z-autoputer-0.1.0",
+    "/nix/store/v6j6ngja92a81w6gsbcaf3477izyz2gi-autoputer-0.1.0",
     "/nix/store/xakkd7mhg6dindq35ji8smr4j9ypwpn7-mailcap-2.1.54",
     "/nix/store/zlvydh6q1rv1jza79b21yhi07ic0dkkg-libidn2-2.3.8"
   ],

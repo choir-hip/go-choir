@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "kind": "s0a-gateway-token-visibility",
-  "collected_at": "2026-10-01T21:12:31.419Z",
+  "collected_at": "2026-10-02T00:39:50.520Z",
   "vm_id": "candidate-fleet-e15cb89f25d963c220319b7b",
   "guest": {
     "cmdline_has_gateway_token": true,
@@ -11,7 +11,7 @@
       "mode": "0640",
       "path": "/run/go-choir-autoputer.env",
       "present": true,
-      "size": 848,
+      "size": 850,
       "uid": 0
     },
     "gateway_token_file": {
