@@ -30,15 +30,19 @@ once the guest holds an uptime window.
 [`definitions/choir-supervised-app-development-metamission-2026-10-01.md`](definitions/choir-supervised-app-development-metamission-2026-10-01.md)
 (`readiness: executable`, `now.status: working`) — **owner-approved
 2026-10-01** after agentic-consensus review (5/5 convergent + 7/7
-divergent; all required revisions applied in v3). Twelve stations:
-**S0** reality + boot timeline (live) → **S1** security floor →
-**S2** layering (per-computer app-layer Nix closure on data disk) →
-**S3** fast resume (machine snapshots, generation-bound) →
-**S4** capsule open world (recorded egress + one proven private store) →
-**S5** live preview + supervision → **S6** commit gate → **S7** app
-packages → **S8** source publication → **S9** forks/fleets (two classified
-construction paths) → **S10** org templates → **S11** mainline + security
+divergent; all required revisions applied in v3). Thirteen stations:
+**S0** reality + boot timeline (S0a landed; S0b deferred behind S0m) → **S0m** record-native messaging (**live**,
+owner-inserted 2026-10-01: raw messaging retires; every addressed desk
+act is a commitment record whose Addressee is the delivery instruction;
+ApplyTexture narrows to doc edits; restores research→texture) →
+**S1** security floor → **S2** layering → **S3** fast resume →
+**S4** capsule open world → **S5** live preview + supervision →
+**S6** commit gate → **S7** app packages → **S8** source publication →
+**S9** forks/fleets → **S10** org templates → **S11** mainline + security
 push. Station files: `definitions/choir-appdev-s*-2026-10-01.md`.
+Design evidence:
+[`reports/agent-messaging-system-state-2026-10-01.md`](reports/agent-messaging-system-state-2026-10-01.md),
+[`desk-system-harness-architecture-2026-10-01.md`](desk-system-harness-architecture-2026-10-01.md).
 Ordered ahead of the World Wire metamission per owner direction
 2026-10-01 ("a good prerequisite to it").
 

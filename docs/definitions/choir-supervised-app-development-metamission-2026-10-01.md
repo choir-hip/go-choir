@@ -22,6 +22,11 @@ metamission:
       readiness: reviewed
       status: working
       depends_on: []
+    - id: S0m-record-native-messaging
+      path: docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
+      readiness: reviewed
+      status: working
+      depends_on: []
     - id: S1-security-floor
       path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
       readiness: reviewed
@@ -374,12 +379,12 @@ boundaries:
 now:
   status: working
   slice: >-
-    S0 reality + boot timeline — the live station. Owner approved the
-    metamission 2026-10-01 after agentic-consensus review (dirs 133535 +
-    133637); all required revisions applied in v3. Station goal files
-    authored under docs/definitions/choir-appdev-s*-2026-10-01.md.
+    S0m record-native messaging — the live station (owner-inserted
+    2026-10-01 ahead of S0b). S0 remains working; its S0b disposable-
+    computer slice resumes when S0m lands. Station files under
+    docs/definitions/choir-appdev-s*-2026-10-01.md.
   source_ref: main@0bddb11aa2d27694cb760f8aebda52c95ba4e44d
-  deploy_identity: unknown
+  deploy_identity: 'staging https://choir.news deployed_commit=fd8b2973'
   candidate:
     id: none
     state: none

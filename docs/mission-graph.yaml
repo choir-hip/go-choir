@@ -1036,12 +1036,38 @@ nodes:
       Owner-approved 2026-10-01 after agentic-consensus review
       (dirs agentic-consensus-20261001-133535 convergent +
       133637 divergent; promote-with-revisions, all applied in v3).
-      Twelve stations S0-S11 authored under
-      docs/definitions/choir-appdev-s*-2026-10-01.md; S0 is live.
+      Thirteen stations: S0 + S0m (record-native messaging, owner-inserted
+      ahead of S0b) + S1-S11 authored under
+      docs/definitions/choir-appdev-s*-2026-10-01.md; S0m is live.
       Ordered ahead of World Wire per owner direction.
     sources:
       - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
       - docs/problems/guest-release-propagation-manual-2026-10-01.md
+  - id: choir-appdev-s0m-record-native-messaging-2026-10-01
+    title: S0m Record-Native Messaging — records as acts, packets derived
+    path: docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
+    ledger: ''
+    status: working
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-supervised-app-development-metamission-2026-10-01
+    enables:
+      - choir-appdev-s0-reality-boot-timeline-2026-10-01
+    note: >-
+      Owner-inserted 2026-10-01 ahead of S0b. Raw messaging retires; every
+      addressed desk act mints a commitment record whose Addressee is the
+      delivery instruction and whose derived lifecycle packet wakes the
+      addressee. ApplyTexture narrows to document edits; controls extract
+      to IssueLifecycleControl. Design adjudicated by three convergent
+      panels (messaging-normalize 5/13, record-native 7/13, archdoc-review
+      7/13). Restores research→texture delivery; converts follow-up
+      quality into scored, improvable signal.
+    sources:
+      - docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
+      - docs/reports/agent-messaging-system-state-2026-10-01.md
+      - docs/desk-system-harness-architecture-2026-10-01.md
   - id: choir-world-wire-metamission-2026-10-01
     title: World Wire Metamission — compounding self-citing KB, verticals sequenced
     path: docs/definitions/choir-world-wire-metamission-2026-10-01.md
