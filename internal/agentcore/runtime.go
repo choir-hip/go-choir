@@ -2860,7 +2860,7 @@ func buildAssignedWorkItemPromptForCarrier(workItems []types.WorkItemRecord, cho
 	var b strings.Builder
 	b.WriteString("Resume the open trajectory work item records assigned to you.\n")
 	if choirCarrier {
-		b.WriteString("These durable obligations remain open in canonical state. Before ending this activation, use choir.Report to assert work_disposition=completed only when the assigned lifecycle work is fully satisfied; otherwise use choir.Report with work_disposition=open and a precise blocker. Use choir.EscalateActions for guarded execution requests and choir.Cast to open assignments. Final text and RunRecord completion do not settle work.\n")
+		b.WriteString("These durable obligations remain open in canonical state. Before ending this activation, use choir.Report to assert work_disposition=completed only when the assigned lifecycle work is fully satisfied; otherwise use choir.Report with work_disposition=open and a precise blocker. Use choir.Cast to open assignments. Final text and RunRecord completion do not settle work.\n")
 	} else {
 		b.WriteString("These durable obligations remain open in canonical state. Before ending this activation, call update_coagent with work_disposition=completed only when the assigned lifecycle work is fully satisfied; otherwise send work_disposition=open with a precise blocker. Final text and RunRecord completion do not settle work.\n")
 	}

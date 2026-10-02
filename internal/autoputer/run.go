@@ -459,8 +459,8 @@ func Run() {
 			agentprofile.Reconciler,
 		} {
 			// Full-RLM desks (management R3c, texture R3d) are sealed to
-			// desk_go_eval: no spawn_agent tool. They open children via the
-			// choir.Spawn/choir.Cast cell verbs, not a registry tool.
+			// desk_go_eval: no spawn_agent tool. They open children through
+			// choir.Cast, not a registry tool.
 			if profile == agentprofile.Management || profile == agentprofile.Texture {
 				continue
 			}

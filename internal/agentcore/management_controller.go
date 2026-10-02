@@ -25,7 +25,7 @@ const runMetadataProducerReportIDs = "producer_report_ids"
 const runMetadataEngineeringReplacementRequested = "cosuper_replacement_requested"
 const runMetadataEngineeringReplacementOmitReports = "cosuper_replacement_omit_reports"
 
-const persistentManagementCoagentInboxPrompt = "Process pending carrier packets for privileged execution. Use choir.Report to assert commitments, choir.EscalateActions for guarded execution requests, and choir.Cast to open assignments."
+const persistentManagementCoagentInboxPrompt = "Process pending carrier packets for privileged execution. Use choir.Report to assert commitments and choir.Cast to open assignments."
 const persistentManagementEngineeringCancelContinuationPrompt = "Prior implementation Engineering assignment is terminal. Open a fresh implementation Engineering assignment."
 
 const (
@@ -1421,7 +1421,7 @@ func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSo
 func buildPersistentManagementUpdatePrompt(updates []types.CoagentSourcePacket) string {
 	var b strings.Builder
 	b.WriteString("Process the pending carrier records addressed to you as the user's persistent super actor.\n\n")
-	b.WriteString("Each delivered packet is a validated packet.kind=execution_request with executable actions. When you have command output, diffs, tests, artifacts, questions, or blockers, use choir.Report to assert a typed commitment with the evidence. Use choir.EscalateActions for guarded execution requests and choir.Cast to open assignments.\n")
+	b.WriteString("Each delivered packet is a validated packet.kind=execution_request with executable actions. When you have command output, diffs, tests, artifacts, questions, or blockers, use choir.Report to assert a typed commitment with the evidence. Use choir.Cast to open assignments.\n")
 	for i, update := range updates {
 		b.WriteString("\nUpdate ")
 		b.WriteString(fmt.Sprintf("%d", i+1))

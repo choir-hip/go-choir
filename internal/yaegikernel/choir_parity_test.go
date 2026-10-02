@@ -97,10 +97,6 @@ func TestChoirParityAssignMessageReceipts(t *testing.T) {
 	if err != nil || messaged.MessageID == "" {
 		t.Fatalf("symbol message = %+v, %v", messaged, err)
 	}
-	outcome, err := scope.Outcome("arc complete")
-	if err != nil || outcome.MessageID == "" {
-		t.Fatalf("symbol outcome = %+v, %v", outcome, err)
-	}
 }
 
 // TestChoirSymbolsEnforceScopes proves a handle without a scope refuses the
@@ -186,10 +182,9 @@ func TestChoirPredeclaredInSession(t *testing.T) {
 
 // TestChoirResearchScopeIsReadOnly guards the read-only-world contract: a
 // researcher-bound scope observes files but cannot write, execute, or assign.
-// Mission R2 deliberately grants research full *message* authority (read-only
-// world access is not read-only messaging), so Message/Outcome/semantic verbs
-// export, but file/exec mutation stays absent from the table AND denied at
-// the method level.
+// Mission R2 deliberately grants research full message authority, so staged
+// messaging verbs export while file/exec mutation stays absent from the table
+// and denied at the method level.
 func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -221,8 +216,8 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 			t.Fatalf("researcher missing %s", sym)
 		}
 	}
-	// Message authority is present (R2): the staged verbs export for research.
-	for _, sym := range []string{"Message", "Outcome", "Cast", "Report", "Escalate"} {
+	// Message authority is present (R2): staged verbs export for research.
+	for _, sym := range []string{"Message", "Cast", "Report", "Escalate"} {
 		if _, ok := exports[sym]; !ok {
 			t.Fatalf("researcher missing message authority %s", sym)
 		}

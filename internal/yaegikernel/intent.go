@@ -16,13 +16,7 @@ import (
 // Intent kinds staged in the tray.
 const (
 	IntentMessage  = "message"
-	IntentSpawn    = "spawn"
 	IntentComplete = "complete"
-	// IntentOutcome is the cell's own result notice to its activation desk.
-	// It is a distinct kind, not a MsgKind on IntentMessage, so a staged
-	// message cannot claim the outcome envelope path and skip the assigned
-	// desk's update authority.
-	IntentOutcome = "outcome"
 	// IntentFreeze stages the self-development freeze (commit_transaction
 	// successor): the reducer freezes the capsule diff as a verifier-ready
 	// effect bundle on cell return.
@@ -105,11 +99,8 @@ type IncomingMessage struct {
 
 // PendingUpdate is one pending update_coagent record bound into the cell at
 // cell-start, readable via choir.Updates(). The RLM contract puts the update
-// payload here — a REPL variable — instead of inline in the model's context
-// window: the wake turn carries only the update ids. Packet is the canonical
-// source-packet payload (claims, sources, actions, questions); a desk
-// disposes each update through its terminal write (ApplyTexture's
-// update_dispositions, a Report, an Outcome).
+// payload in a REPL variable instead of inline in the model's context window;
+// the wake turn carries only update IDs. A terminal write disposes each update.
 type PendingUpdate struct {
 	UpdateID        string                           `json:"update_id"`
 	FromAgentID     string                           `json:"from_agent_id"`
@@ -144,7 +135,6 @@ type StagedIntent struct {
 	ToDesk        string   `json:"to_desk,omitempty"`
 	MsgKind       string   `json:"msg_kind,omitempty"`
 	Body          string   `json:"body,omitempty"`
-	Role          string   `json:"role,omitempty"`
 	Objective     string   `json:"objective,omitempty"`
 	Result        string   `json:"result,omitempty"`
 	Verdict       string   `json:"verdict,omitempty"`
@@ -177,11 +167,6 @@ type StagedIntent struct {
 	Precommit    string `json:"precommit,omitempty"`
 	Resolve      string `json:"resolve,omitempty"`
 	Disagreement string `json:"disagreement,omitempty"`
-	// Actions carries an Escalate's guarded action schema (the execution_request
-	// packet kind on the carrier): a desk requests management execute typed
-	// actions under explicit safety annotations. JSON-encoded
-	// []types.CoagentPacketAction; nil for a plain issue escalation.
-	Actions string `json:"actions,omitempty"`
 	// Packet carries a Report's full coagent source-packet body (the
 	// update_coagent packet schema surviving on the carrier) — JSON-encoded
 	// types.CoagentSourcePacketPayload. Set by ReportPacket; empty for a thin
@@ -205,15 +190,6 @@ func (t *Tray) Message(toDesk, body string) (string, error) {
 		return "", fmt.Errorf("tray: message requires a destination desk")
 	}
 	return t.stage(StagedIntent{Kind: IntentMessage, ToDesk: toDesk, Body: body})
-}
-
-// Spawn stages an asynchronous subtask delegation within role policy.
-// Non-blocking; returns a cell-local child handle.
-func (t *Tray) Spawn(role, objective string) (string, error) {
-	if role == "" || objective == "" {
-		return "", fmt.Errorf("tray: spawn requires a role and objective")
-	}
-	return t.stage(StagedIntent{Kind: IntentSpawn, Role: role, Objective: objective})
 }
 
 // Complete stages the assignment verdict. At most one complete intent is
@@ -284,17 +260,6 @@ func (t *Tray) Verify(decision string, verifierRefs []string, bundleDigest strin
 	return err
 }
 
-// Outcome stages the cell's own result notice to its activation desk. It is a
-// distinct intent kind, not a MsgKind on Message, so a staged message cannot
-// claim the outcome envelope path and skip the assigned desk's update
-// authority.
-func (t *Tray) Outcome(toDesk, body string) (string, error) {
-	if toDesk == "" {
-		return "", fmt.Errorf("tray: outcome requires a destination desk")
-	}
-	return t.stage(StagedIntent{Kind: IntentOutcome, ToDesk: toDesk, Body: body})
-}
-
 // --- Semantic-act tray methods (mission R2). All stage a single intent and
 // return the cell-local correlation id; the reducer authors the act and its
 // commitment-ledger record on cell return.
@@ -348,22 +313,6 @@ func (t *Tray) Escalate(toDesk, issue string) (string, error) {
 		return "", fmt.Errorf("tray: escalate requires a target and an issue")
 	}
 	return t.stage(StagedIntent{Kind: IntentEscalate, ToDesk: toDesk, Body: issue})
-}
-
-// EscalateActions stages a privileged-execution escalation: the desk asks
-// management to run a set of guarded actions (the execution_request packet
-// kind on the carrier). actionsJSON is a JSON-encoded
-// []types.CoagentPacketAction; each action must carry explicit safety
-// annotations (mutation_class, network, file_mutation). The reducer validates
-// the schema before mailing.
-func (t *Tray) EscalateActions(toDesk, issue, actionsJSON string) (string, error) {
-	if toDesk == "" || issue == "" {
-		return "", fmt.Errorf("tray: escalate_actions requires a target and an issue")
-	}
-	if strings.TrimSpace(actionsJSON) == "" {
-		return "", fmt.Errorf("tray: escalate_actions requires a non-empty actions array")
-	}
-	return t.stage(StagedIntent{Kind: IntentEscalate, ToDesk: toDesk, Body: issue, Actions: actionsJSON})
 }
 
 // Precommit freezes a typed prediction on the commitment ledger. precommitJSON

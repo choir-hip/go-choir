@@ -8,16 +8,12 @@ import (
 )
 
 // TestTrayStagesWithoutBlocking proves in-cell orchestration never touches
-// the network: Message/Spawn/Complete return cell-local IDs in microseconds
-// with no broker roundtrip.
+// the network: Message and Complete return in microseconds with no broker
+// roundtrip.
 func TestTrayStagesWithoutBlocking(t *testing.T) {
 	var tray Tray
 	start := time.Now()
 	msgID, err := tray.Message("research", "look at x")
-	if err != nil {
-		t.Fatal(err)
-	}
-	spawnID, err := tray.Spawn("research", "survey the tree")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,11 +24,11 @@ func TestTrayStagesWithoutBlocking(t *testing.T) {
 		t.Fatalf("tray staging took %v, want microseconds", elapsed)
 	}
 	staged := tray.Drain()
-	if len(staged) != 3 {
-		t.Fatalf("drained %d intents, want 3", len(staged))
+	if len(staged) != 2 {
+		t.Fatalf("drained %d intents, want 2", len(staged))
 	}
-	if staged[0].LocalID != msgID || staged[1].LocalID != spawnID {
-		t.Fatalf("local IDs not preserved: %+v", staged)
+	if staged[0].LocalID != msgID {
+		t.Fatalf("local ID not preserved: %+v", staged)
 	}
 	if len(tray.Drain()) != 0 {
 		t.Fatal("second drain must be empty")
@@ -84,18 +80,12 @@ func TestCellBindingInboxAndStaging(t *testing.T) {
 	if err != nil || res.MessageID == "" {
 		t.Fatalf("bound message = %+v, %v", res, err)
 	}
-	if _, err := scope.Spawn("research", "verify"); err != nil {
-		t.Fatalf("bound spawn: %v", err)
-	}
 	staged := hooks.End()
-	if len(staged) != 2 || staged[0].Kind != IntentMessage || staged[1].Kind != IntentSpawn {
+	if len(staged) != 1 || staged[0].Kind != IntentMessage {
 		t.Fatalf("drained = %+v", staged)
 	}
 	if len(scope.Inbox()) != 0 {
 		t.Fatal("inbox must clear at cell end")
-	}
-	if _, err := scope.Spawn("research", "late"); err == nil {
-		t.Fatal("spawn outside a cell must fail")
 	}
 	if err := scope.Complete(CompleteCompleted, "v", "s", nil, nil); err == nil {
 		t.Fatal("complete outside a cell must fail")

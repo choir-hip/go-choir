@@ -169,21 +169,21 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 // the yaegi carrier generalized to per-desk module sets). Every desk shares
 // the observation tier (ReadFile/ListDir/Context/Inbox); the semantic-act
 // verbs are grouped so messaging authority is separable from world mutation.
-// "file" = ReadFile+ListDir+WriteFile+Exec; "delegate" = Assign+Spawn;
+// "file" = ReadFile+ListDir+WriteFile+Exec; "delegate" = Assign+Cast;
 // "commit" = Complete+Freeze; "epistemic" = the full semantic-act surface.
 var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
 	// the filesystem (mutation is capsule-bound under engineering).
-	"management": {"Message", "Emit", "Outcome", "Spawn", "Cast", "Ask", "Note", "Reply",
-		"CancelAct", "Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
+	"management": {"Message", "Emit", "Cast", "Ask", "Note", "Reply",
+		"CancelAct", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Engineering mutates inside its capsule and reports fate.
-	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit", "Outcome", "Spawn",
+	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
+		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
-	"research": {"Message", "Emit", "Outcome", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
+	"research": {"Message", "Emit", "Cast", "Ask", "Note", "Reply", "CancelAct",
+		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"WebSearch", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
 		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
 		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry"},
@@ -192,8 +192,8 @@ var deskModuleSets = map[string][]string{
 	// not capsule file ops. Children (research probes, persistent management)
 	// open atomically inside the turn via the edit's controls arg — texture
 	// never free-spawns or casts.
-	"texture": {"Message", "Emit", "Outcome", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "EscalateActions", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
+	"texture": {"Message", "Emit", "Ask", "Note", "Reply", "CancelAct",
+		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"ReadDoc", "ApplyTexture"},
 }
 
@@ -230,7 +230,6 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Assign":               func() reflect.Value { return reflect.ValueOf(s.Assign) },
 		"Message":              func() reflect.Value { return reflect.ValueOf(s.Message) },
 		"Emit":                 func() reflect.Value { return reflect.ValueOf(s.Emit) },
-		"Outcome":              func() reflect.Value { return reflect.ValueOf(s.Outcome) },
 		"Complete":             func() reflect.Value { return reflect.ValueOf(s.Complete) },
 		"Freeze":               func() reflect.Value { return reflect.ValueOf(s.Freeze) },
 		"Cast":                 func() reflect.Value { return reflect.ValueOf(s.Cast) },
@@ -239,7 +238,6 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Reply":                func() reflect.Value { return reflect.ValueOf(s.Reply) },
 		"CancelAct":            func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
 		"Escalate":             func() reflect.Value { return reflect.ValueOf(s.Escalate) },
-		"EscalateActions":      func() reflect.Value { return reflect.ValueOf(s.EscalateActions) },
 		"Precommit":            func() reflect.Value { return reflect.ValueOf(s.Precommit) },
 		"Report":               func() reflect.Value { return reflect.ValueOf(s.Report) },
 		"ReportPacket":         func() reflect.Value { return reflect.ValueOf(s.ReportPacket) },
@@ -487,19 +485,6 @@ func (s *ChoirScope) RunMemoryEntry(entryID string) (json.RawMessage, error) {
 	return out, err
 }
 
-// Spawn asynchronously delegates a subtask within role policy. It stages
-// into the cell tray and returns a cell-local child handle; it requires a
-// bound cell because delegation only reduces after a successful cell.
-func (s *ChoirScope) Spawn(role, objective string) (string, error) {
-	if err := s.mutateDenied("Spawn"); err != nil {
-		return "", err
-	}
-	if s.tray == nil {
-		return "", fmt.Errorf("choir: spawn requires a bound cell")
-	}
-	return s.tray.Spawn(role, objective)
-}
-
 // Complete marks the assignment finished with a typed verdict. It stages
 // into the cell tray; the reducer authors the assignment fate from it. At
 // most one complete per cell. It requires a bound cell. executionRefs are
@@ -678,29 +663,6 @@ func (s *ChoirScope) Pack() types.ActingPack {
 	return *s.pack
 }
 
-// Outcome records the cell's outcome as a durable self-report message to the
-// owning activation, returning its receipt. It is the model-visible end of a
-// read->compute->write->assign arc: the value is retained broker-side where
-// the host reconciles it. It stages as IntentOutcome, a distinct kind, so a
-// staged Message cannot claim the outcome envelope path and skip the
-// assigned desk's update authority.
-func (s *ChoirScope) Outcome(value string) (MessageResult, error) {
-	if s == nil {
-		return MessageResult{}, fmt.Errorf("choir: scope unavailable")
-	}
-	if err := s.mutateDenied("Outcome"); err != nil {
-		return MessageResult{}, err
-	}
-	if s.tray != nil {
-		localID, err := s.tray.Outcome(s.activationID, value)
-		if err != nil {
-			return MessageResult{}, err
-		}
-		return MessageResult{MessageID: localID}, nil
-	}
-	return s.Message(s.activationID, "outcome", value)
-}
-
 // --- Semantic-act verbs (mission R2). Each delegates to the bound tray;
 // all require a bound cell and a non-read-only scope. The reducer authors
 // the act and its commitment-ledger record on cell return.
@@ -773,24 +735,6 @@ func (s *ChoirScope) Escalate(toDesk, issue string) (string, error) {
 		return "", err
 	}
 	return t.Escalate(toDesk, issue)
-}
-
-// EscalateActions surfaces a privileged-execution request to management: the
-// desk asks the target to run a set of guarded actions (the execution_request
-// packet kind on the carrier). actions is a JSON-encoded
-// []types.CoagentPacketAction or its equivalent Go value (a slice literal the
-// cell writes directly); the reducer validates the schema before the envelope
-// mails.
-func (s *ChoirScope) EscalateActions(toDesk, issue string, actions any) (string, error) {
-	t, err := s.boundTray("escalate")
-	if err != nil {
-		return "", err
-	}
-	actionsJSON, err := jsonCellArg(actions)
-	if err != nil {
-		return "", err
-	}
-	return t.EscalateActions(toDesk, issue, actionsJSON)
 }
 
 // Precommit freezes a typed, machine-scoreable prediction on the ledger.

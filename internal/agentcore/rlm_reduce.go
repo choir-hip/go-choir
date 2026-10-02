@@ -61,12 +61,12 @@ type ReductionScope struct {
 	// for a capsule call the exec-context agent can be the worker while the
 	// run record carries the durable desk.
 	DeskAgentID string
-	FromRole    string // validated sender role (spawn policy)
+	FromRole    string // validated sender role
 	ChannelID   string // durable mailbox channel
 	RunID       string // activation run carrying the inbox cursor
 	OwnerID     string // store owner for run memory
 	ComputerID  string // physical owner scope for ledger/OG objects
-	ReturnTo    string // supervisor desk: spawn requests and completion reports
+	ReturnTo    string // supervisor desk for completion reports
 	Cursor      uint64 // durable unread cursor entering the cell
 	CellID      string // stable cell identity for intent idempotency keys
 }
@@ -89,26 +89,6 @@ type ReductionReceipt struct {
 	Fate      string
 }
 
-// spawnRoleAllowed enforces role-bounded fan-out: research desks cannot mint
-// engineering authority. Management may spawn any role; Engineering may spawn
-// researchers and peers; researchers may only fan out to researchers.
-func spawnRoleAllowed(spawnerRole, childRole string) bool {
-	spawner := strings.ToLower(strings.TrimSpace(spawnerRole))
-	child := strings.ToLower(strings.TrimSpace(childRole))
-	// Frozen V2 spawn matrix (mapping §2): management allows any child;
-	// engineering allows engineering and research; research allows research;
-	// default false. No V1 token is accepted in any position.
-	switch spawner {
-	case "management":
-		return true
-	case "engineering":
-		return child == "engineering" || child == "research"
-	case "research":
-		return child == "research"
-	default:
-		return false
-	}
-}
 
 // validateCellIntents re-checks worker-produced intents at the trust
 // boundary. The worker is our binary but the model authors the cells, so the
@@ -126,20 +106,6 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			}
 			if len(in.Body) > yaegikernel.MaxIntentBody {
 				return fmt.Errorf("reduce: message %s exceeds body quota", in.LocalID)
-			}
-		case yaegikernel.IntentOutcome:
-			if in.ToDesk == "" {
-				return fmt.Errorf("reduce: outcome %s missing destination", in.LocalID)
-			}
-			if len(in.Body) > yaegikernel.MaxIntentBody {
-				return fmt.Errorf("reduce: outcome %s exceeds body quota", in.LocalID)
-			}
-		case yaegikernel.IntentSpawn:
-			if !spawnRoleAllowed(scope.FromRole, in.Role) {
-				return fmt.Errorf("reduce: role %q may not spawn %q", scope.FromRole, in.Role)
-			}
-			if in.Objective == "" {
-				return fmt.Errorf("reduce: spawn %s missing objective", in.LocalID)
 			}
 		case yaegikernel.IntentComplete:
 			complete++
@@ -311,7 +277,6 @@ type rlmEnvelope struct {
 	Kind         string   `json:"kind"`
 	Body         string   `json:"body,omitempty"`
 	MsgKind      string   `json:"msg_kind,omitempty"`
-	Role         string   `json:"role,omitempty"`
 	Objective    string   `json:"objective,omitempty"`
 	Result       string   `json:"result,omitempty"`
 	Verdict      string   `json:"verdict,omitempty"`
@@ -340,53 +305,6 @@ func intentIdempotencyKey(scope ReductionScope, localID, to, content string) str
 	return "rlm:" + cell + ":" + strings.TrimSpace(localID) + ":" + hex.EncodeToString(sum[:6])
 }
 
-// ReduceCellIntents commits one cell's staged tray. A failed cell never
-// commits its tray or cursor acknowledgement, but it does commit a separate
-// cell_fate record so recovery can distinguish a dead cell from an absent
-// result.
-func ReduceCellIntents(ctx context.Context, mb rlmMailbox, scope ReductionScope, intents []yaegikernel.StagedIntent, cellSucceeded bool) (ReductionReceipt, error) {
-	if !cellSucceeded {
-		st, ok := cellFateStoreForMailbox(mb)
-		if !ok {
-			return ReductionReceipt{Cursor: scope.Cursor}, fmt.Errorf("reduce: cell fate store unavailable")
-		}
-		if err := RecordCellFate(ctx, st, scope, cellFateFailure, "cell returned unsuccessfully"); err != nil {
-			return ReductionReceipt{Cursor: scope.Cursor}, err
-		}
-		return ReductionReceipt{Cursor: scope.Cursor, Fate: cellFateFailure}, nil
-	}
-	if err := validateCellIntents(scope, intents); err != nil {
-		return ReductionReceipt{Cursor: scope.Cursor}, err
-	}
-	receipt := ReductionReceipt{Cursor: scope.Cursor}
-	for _, in := range intents {
-		seq, err := castStagedIntent(ctx, mb, scope, in)
-		if err != nil {
-			return ReductionReceipt{Cursor: scope.Cursor}, fmt.Errorf("reduce: persist %s: %w", in.LocalID, err)
-		}
-		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: seq, Kind: in.Kind})
-	}
-	receipt.Committed = true
-	st, ok := cellFateStoreForMailbox(mb)
-	if !ok {
-		return ReductionReceipt{Cursor: scope.Cursor}, fmt.Errorf("reduce: cell fate store unavailable")
-	}
-	if err := RecordCellFate(ctx, st, scope, cellFateSuccess, "tray committed"); err != nil {
-		return ReductionReceipt{Cursor: scope.Cursor}, err
-	}
-	receipt.Fate = cellFateSuccess
-	return receipt, nil
-}
-
-func cellFateStoreForMailbox(mb rlmMailbox) (rlmCursorStore, bool) {
-	if st, ok := mb.(rlmCursorStore); ok {
-		return st, true
-	}
-	if rt, ok := mb.(*Runtime); ok && rt.store != nil {
-		return rt.store, true
-	}
-	return nil, false
-}
 
 // stagedIntentEnvelope builds the durable envelope for an intent. Keeping the
 // exact envelope derivation available to recovery makes the mailbox
@@ -396,12 +314,6 @@ func stagedIntentEnvelope(scope ReductionScope, in yaegikernel.StagedIntent) (to
 	case yaegikernel.IntentMessage:
 		to = in.ToDesk
 		content = encodeEnvelope(rlmEnvelope{Kind: "message", MsgKind: in.MsgKind, Body: in.Body, From: scope.FromAgentID})
-	case yaegikernel.IntentOutcome:
-		to = in.ToDesk
-		content = encodeEnvelope(rlmEnvelope{Kind: "message", MsgKind: "outcome", Body: in.Body, From: scope.FromAgentID})
-	case yaegikernel.IntentSpawn:
-		to = scope.ReturnTo
-		content = encodeEnvelope(rlmEnvelope{Kind: "spawn_request", Role: in.Role, Objective: in.Objective, From: scope.FromAgentID})
 	case yaegikernel.IntentComplete:
 		to = scope.ReturnTo
 		content = encodeEnvelope(rlmEnvelope{Kind: "complete", Result: in.Result, Verdict: in.Verdict, Summary: in.Summary, EvidenceRefs: in.EvidenceRefs, From: scope.FromAgentID})
@@ -471,9 +383,6 @@ func AssembleCellInbox(ctx context.Context, mb rlmMailbox, channelID string, cur
 				body = env.Body
 				if kind == "complete" {
 					body = env.Summary
-				}
-				if kind == "spawn_request" {
-					body = env.Objective
 				}
 			}
 		}
@@ -945,15 +854,12 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			// (research/processor/reconciler activations bound to a work
 			// item but carrying no assignment_id) take the same durable
 			// packet path — their addressed acts are lifecycle updates,
-			// not channel mail. The outcome envelope path is reachable
-			// only through IntentOutcome.
+			// not channel mail.
 			if r.isAssignedDesk() || r.isLifecycleProducer() {
 				seq, err = r.commitMessageIntent(ctx, in)
 			} else {
 				seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
 			}
-		case yaegikernel.IntentOutcome:
-			seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
 		case yaegikernel.IntentTextureApply:
 			// Full-RLM authoring (R3d): no mailbox envelope — commit the
 			// staged edit through ApplyTextureTurn via the bound owner.
@@ -1034,25 +940,6 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 				if resumeErr != nil {
 					return 0, fmt.Errorf("reduce: delegated cast spawn (non-kernel): %w", resumeErr)
 				}
-			}
-		}
-	}
-	// An escalate carrying an action payload is a privileged-execution request
-	// (the execution_request packet kind on the carrier): validate the guarded
-	// action schema — type/objective + explicit per-action safety — before the
-	// envelope mails. The safety contract is the same shape the retired
-	// update_coagent execution_request validation enforced.
-	if in.Kind == yaegikernel.IntentEscalate && strings.TrimSpace(in.Actions) != "" {
-		var actions []types.CoagentPacketAction
-		if err := json.Unmarshal([]byte(in.Actions), &actions); err != nil {
-			return 0, fmt.Errorf("reduce: escalate_actions payload is not a valid actions array: %w", err)
-		}
-		if len(actions) == 0 {
-			return 0, fmt.Errorf("reduce: escalate_actions requires at least one action")
-		}
-		for i, action := range actions {
-			if err := validateCoagentPacketAction(action, true); err != nil {
-				return 0, fmt.Errorf("reduce: escalate_actions actions[%d]: %w", i, err)
 			}
 		}
 	}
