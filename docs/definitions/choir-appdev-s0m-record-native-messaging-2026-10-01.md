@@ -287,14 +287,12 @@ now:
     every ~8-9min). Runs dispatch and execute — fresh texture run d11bfe9f
     running, pend draining 47→45, engineering+texture redrives live.
   blocker: >-
-    Finish-acceptance pending guest-recovery window, not a new defect:
-    prompt-bar submit timed out (45s/90s/120s) on persist conductor route —
-    guest saturated draining 290+ dead wakes + redriving backlogged desks
-    post-refresh; journal went quiet ~16:54 and health times out under load,
-    though 0 startup-refused and no restart storm (crash loop confirmed gone).
-    Re-submit the ask→research→resolve chain once the backlog drains and
-    /health returns ready. Residual: passivated runs (076f3379) don't
-    self-re-drive — ae47c8a4 covers pending only.
+    None blocking. Submit path repaired 01f2cf5a (commit decoupled from
+    request ctx via WithoutCancel+120s; verified — ask landed HTTP 202, traj
+    0bdcbf61 minted 3 work items incl. two research:*). Chain is live:
+    ask→research legs dispatched, reducer_seq advancing; awaiting
+    report→resolve leg on staging. Residual: passivated runs (076f3379)
+    don't self-re-drive — ae47c8a4 covers pending only.
 
 
 receipts:
