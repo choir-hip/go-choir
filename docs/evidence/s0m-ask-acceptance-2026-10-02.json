@@ -1,0 +1,22 @@
+{
+  "probe": "s0m_ask_acceptance",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "s0m-ask-1790946664086",
+  "started_at": "2026-10-02T13:11:04.087Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": 1790946728349,
+      "wall_ms": 64262,
+      "ok": true,
+      "trajectory": "aac766ff-2aa8-5b34-9ebe-0e1469e01636",
+      "doc": "f1d3764d-4658-573d-b42f-020d713573d8"
+    }
+  ],
+  "ok": false,
+  "failure": "timeout: asked=false replied=false resolved=false",
+  "finished_at": "2026-10-02T13:26:15.528Z",
+  "wall_ms": 911442,
+  "trajectory_id": "aac766ff-2aa8-5b34-9ebe-0e1469e01636",
+  "doc_id": "f1d3764d-4658-573d-b42f-020d713573d8"
+}
