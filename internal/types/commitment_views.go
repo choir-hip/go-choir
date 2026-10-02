@@ -101,6 +101,9 @@ type ActingPackItem struct {
 type ActingPack struct {
 	AgentID string           `json:"agent_id"`
 	Items   []ActingPackItem `json:"items"`
+	// IssuerTallies is the issuer-visible ask tally: per-issuer accrual over
+	// acts addressed to this desk. Derived per read — never stored.
+	IssuerTallies []CommitmentAccrual `json:"issuer_tallies,omitempty"`
 }
 
 // SupervisionPackItem is the supervising surface's full per-act view: the
@@ -461,6 +464,7 @@ func BuildActingPack(records []CommitmentRecord, agentID string, limit int) Acti
 	if agentID == "" {
 		return pack
 	}
+	tallies := map[string]*CommitmentAccrual{}
 	for _, rc := range ResolveCommitments(records, time.Now().UTC()) {
 		if !packEligible(rc.Act, agentID) {
 			continue
@@ -477,11 +481,18 @@ func BuildActingPack(records []CommitmentRecord, agentID string, limit int) Acti
 			item.ResolvedAt = rc.Resolutions[len(rc.Resolutions)-1].Provenance.ResolvedAt
 		}
 		pack.Items = append(pack.Items, item)
+		// Issuer tally: only acts addressed TO this desk accrue under the
+		// issuer's agent id. The desk's own acts live in Items only.
+		if rc.Act.Addressee == agentID && rc.Act.Provenance.AgentID != agentID {
+			issuer := rc.Act.Provenance.AgentID
+			accrue(tallies, issuer, func(a *CommitmentAccrual) { a.AgentID = issuer }, rc)
+		}
 	}
 	packOrder(pack.Items)
 	if limit > 0 && len(pack.Items) > limit {
 		pack.Items = pack.Items[:limit]
 	}
+	pack.IssuerTallies = sortedAccruals(tallies)
 	return pack
 }
 
