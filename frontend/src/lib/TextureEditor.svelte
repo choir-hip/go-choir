@@ -547,7 +547,7 @@
     }
   }
 
-  async function connectDocumentStream(docId, trajectoryId = '') {
+  async function connectDocumentStream(docId, trajectoryId = '', streamStartAfter = 0) {
     if (!docId) return;
     const streamKey = trajectoryId || docId;
     if (streamSource && streamDocId === streamKey) return;
@@ -587,12 +587,18 @@
           }
         },
         onReplayRequired: async () => {
+          // Reconnect at the fresh snapshot cursor, not 0: if the retained
+          // event window no longer covers cursor 0, a zero-restart replays
+          // the same expiry forever and the banner never clears.
+          let snapshotCursor = 0;
           try {
-            await handleLifecycleProjection(await getLifecycleSnapshot(trajectoryId));
+            const snapshot = await getLifecycleSnapshot(trajectoryId);
+            snapshotCursor = snapshot?.snapshot_cursor || 0;
+            await handleLifecycleProjection(snapshot);
           } finally {
             if (streamDocId === expectedKey) {
               streamSource = null;
-              void connectDocumentStream(docId, trajectoryId);
+              void connectDocumentStream(docId, trajectoryId, snapshotCursor);
             }
           }
         },
@@ -607,7 +613,7 @@
             error = '';
           }
         },
-      });
+      }, { startAfter: streamStartAfter });
       if (streamDocId !== expectedKey) cleanup();
       else streamSource = { close: cleanup };
     } catch (streamError) {

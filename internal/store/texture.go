@@ -1255,6 +1255,34 @@ func (s *Store) ListRevisionsByScope(ctx context.Context, docID, ownerID, comput
 	return s.ListTextureRevisionsByScopeOG(ctx, ownerID, computerID, docID, limit)
 }
 
+// TextureRevisionStatsByScope returns revision count and max version_number for
+// one scoped document via a metadata-only edge join — no revision bodies are
+// decoded. Falls back to the full list when the doc has no revision edges
+// (legacy rows) so the numbers stay correct across the edge migration.
+func (s *Store) TextureRevisionStatsByScope(ctx context.Context, docID, ownerID, computerID string) (count int, maxVersion int, err error) {
+	ownerID, computerID, docID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)
+	if ownerID == "" || computerID == "" || docID == "" {
+		return 0, -1, fmt.Errorf("texture revision stats: owner_id, computer_id, and doc_id are required")
+	}
+	docCanonicalID, cerr := objectgraph.BuildCanonicalID(ogKindTexDoc, ownerID, objectgraph.StableSuffixFromKey(lifecycleScopedKey(computerID, docID)))
+	if cerr == nil {
+		if count, maxVersion, err = s.ogCountObjectsByEdgeTo(ctx, ogKindTexRev, docCanonicalID, ogEdgeDocRevision); err == nil && count > 0 {
+			return count, maxVersion, nil
+		}
+	}
+	revs, lerr := s.ListTextureRevisionsByScopeOG(ctx, ownerID, computerID, docID, 100000)
+	if lerr != nil {
+		return 0, -1, lerr
+	}
+	maxVersion = -1
+	for _, rev := range revs {
+		if rev.VersionNumber > maxVersion {
+			maxVersion = rev.VersionNumber
+		}
+	}
+	return len(revs), maxVersion, nil
+}
+
 func (s *Store) CountRevisionsByScope(ctx context.Context, docID, ownerID, computerID string) (int, error) {
 	revs, err := s.ListTextureRevisionsByScopeOG(ctx, ownerID, computerID, docID, 100000)
 	if err != nil {

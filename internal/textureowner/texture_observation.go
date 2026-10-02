@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -328,12 +329,17 @@ func (h *Handler) handleLifecycleTextureDocumentStream(w http.ResponseWriter, r 
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	if rc := http.NewResponseController(w); rc != nil {
+		_ = rc.SetWriteDeadline(time.Time{})
+	}
+	flusher.Flush()
 	cursor := after
 	once := r.URL.Query().Get("once") == "true" || r.URL.Query().Get("once") == "1"
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
+	consecutiveErrors := 0
 	for {
 		page, pageErr := h.textureLifecycleEventPage(r.Context(), doc, cursor, limit)
 		if errors.Is(pageErr, store.ErrLifecycleCursorExpired) {
@@ -343,8 +349,16 @@ func (h *Handler) handleLifecycleTextureDocumentStream(w http.ResponseWriter, r 
 			return
 		}
 		if pageErr != nil {
-			return
+			consecutiveErrors++
+			log.Printf("texture doc stream: page error doc=%s cursor=%d attempt=%d: %v", doc.DocID, cursor, consecutiveErrors, pageErr)
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(min(time.Second*time.Duration(consecutiveErrors), 10*time.Second)):
+			}
+			continue
 		}
+		consecutiveErrors = 0
 		for _, event := range page.Events {
 			payload, _ := json.Marshal(event)
 			fmt.Fprintf(w, "id: %d\nevent: texture\ndata: %s\n\n", event.Cursor, payload)

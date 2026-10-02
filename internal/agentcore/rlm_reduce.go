@@ -623,8 +623,8 @@ func RecordCellFate(ctx context.Context, st rlmCursorStore, scope ReductionScope
 	sum := sha256.Sum256([]byte(scope.OwnerID + "\x00" + scope.RunID + "\x00" + cellID))
 	entry := types.RunMemoryEntry{
 		EntryID: "cell-fate:" + hex.EncodeToString(sum[:]),
-		RunID: scope.RunID, OwnerID: scope.OwnerID, AgentID: scope.FromAgentID,
-		Kind: types.RunMemoryEntryCellFate,
+		RunID:   scope.RunID, OwnerID: scope.OwnerID, AgentID: scope.FromAgentID,
+		Kind:    types.RunMemoryEntryCellFate,
 		Summary: fmt.Sprintf("cell fate %s for %s", fate, cellID),
 		Reason:  reason,
 		Details: map[string]any{
@@ -1334,7 +1334,24 @@ func (r *rlmCallReduction) commitMessageIntent(ctx context.Context, in yaegikern
 	if authority.callerProfile == agentprofile.Engineering && authority.targetProfile == agentprofile.Management {
 		update.Direction = types.LifecyclePacketDirectionProducerReport
 	}
-	update.UpdateID = deriveWorkerUpdateID(update)
+	// Lifecycle callers carry runtime-derived producer identity and re-keyed
+	// update identity — the same derivation the retired update_coagent tool ran
+	// (tools_worker_update.go:217-226). ProducerUpdateID is required by
+	// QueueLifecycleUpdate; WorkDisposition defaults to open so a bound
+	// work_item_id survives validateUpdateWorkConsequence.
+	if authority.lifecycle {
+		producerUpdateID, deriveErr := deriveLifecycleProducerUpdateID(execution, authority.callerRun)
+		if deriveErr != nil {
+			return 0, deriveErr
+		}
+		update.ProducerUpdateID = producerUpdateID
+		update.UpdateID = deriveLifecycleWorkerUpdateID(update, producerUpdateID)
+		if update.WorkDisposition == "" {
+			update.WorkDisposition = types.WorkItemOpen
+		}
+	} else {
+		update.UpdateID = deriveWorkerUpdateID(update)
+	}
 	update.Content = buildWorkerUpdateMessage(update)
 	message := &types.ChannelMessage{
 		ChannelID: update.ChannelID, From: update.SourceRunID,
@@ -1356,7 +1373,7 @@ func (r *rlmCallReduction) commitMessageIntent(ctx context.Context, in yaegikern
 			ProducerUpdateID: update.ProducerUpdateID, UpdateID: update.UpdateID,
 			ChannelID: update.ChannelID, Role: update.Role, SourceRunID: update.SourceRunID,
 			Packet: update.Packet, Content: update.Content, PayloadDigest: payloadDigest,
-			WorkItemID: authority.workItemID,
+			WorkItemID: authority.workItemID, WorkDisposition: update.WorkDisposition,
 		}
 		queue.CommandDigest, _ = store.ComputeQueueLifecycleUpdateDigest(queue)
 		queued, queueErr := rt.store.QueueLifecycleUpdate(ctx, queue)

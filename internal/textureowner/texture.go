@@ -1494,25 +1494,33 @@ func (h *Handler) textureDocumentResponse(ctx context.Context, doc types.Documen
 		CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		UpdatedAt:         doc.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
 	}
-	var revisions []types.Revision
-	var err error
+	// List metadata needs count + head version only — resolve both through a
+	// metadata-only edge join instead of decoding every revision body.
 	if computerID := strings.TrimSpace(doc.ComputerID); computerID != "" {
-		revisions, err = h.Store.ListRevisionsByScope(ctx, doc.DocID, doc.OwnerID, computerID, 100000)
-	} else {
-		revisions, err = h.Store.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 100000)
-	}
-	if err != nil {
-		log.Printf("texture api: list document revisions for recent metadata: %v", err)
-	} else {
-		resp.RevisionCount = len(revisions)
-		maxVersion := -1
-		for _, revision := range revisions {
-			if revision.VersionNumber > maxVersion {
-				maxVersion = revision.VersionNumber
+		count, maxVersion, err := h.Store.TextureRevisionStatsByScope(ctx, doc.DocID, doc.OwnerID, computerID)
+		if err != nil {
+			log.Printf("texture api: revision stats for recent metadata: %v", err)
+		} else {
+			resp.RevisionCount = count
+			if maxVersion >= 0 {
+				resp.CurrentVersionNumber = maxVersion
 			}
 		}
-		if maxVersion >= 0 {
-			resp.CurrentVersionNumber = maxVersion
+	} else {
+		revisions, err := h.Store.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 100000)
+		if err != nil {
+			log.Printf("texture api: list document revisions for recent metadata: %v", err)
+		} else {
+			resp.RevisionCount = len(revisions)
+			maxVersion := -1
+			for _, revision := range revisions {
+				if revision.VersionNumber > maxVersion {
+					maxVersion = revision.VersionNumber
+				}
+			}
+			if maxVersion >= 0 {
+				resp.CurrentVersionNumber = maxVersion
+			}
 		}
 	}
 	if strings.TrimSpace(doc.CurrentRevisionID) != "" {
@@ -2186,5 +2194,3 @@ func (h *Handler) HandleTextureBlame(w http.ResponseWriter, r *http.Request) {
 }
 
 // ----- Texture revise -----
-
-

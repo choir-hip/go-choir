@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -157,11 +158,21 @@ func (h *APIHandler) streamLifecycleEvents(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
+	// Disable the server-wide WriteTimeout for this stream: SSE responses are
+	// long-lived by definition, and the shared 120s default truncates every
+	// quiet stream regardless of heartbeats.
+	if rc := http.NewResponseController(w); rc != nil {
+		_ = rc.SetWriteDeadline(time.Time{})
+	}
+	// Flush headers immediately so EventSource.onopen resolves without waiting
+	// for the first event or heartbeat.
+	flusher.Flush()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
 	cursor := after
+	consecutiveErrors := 0
 	for {
 		page, pageErr := h.rt.Store().ListLifecycleEventPage(r.Context(), ownerID, h.rt.TextureComputerID(), trajectoryID, cursor, 256)
 		if errors.Is(pageErr, store.ErrLifecycleCursorExpired) {
@@ -171,8 +182,19 @@ func (h *APIHandler) streamLifecycleEvents(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		if pageErr != nil {
-			return
+			// Store errors (engine lock pressure, Dolt stalls) are transient:
+			// keep the connection and back off instead of silently dropping a
+			// stream the client then has to rebuild with a snapshot refetch.
+			consecutiveErrors++
+			log.Printf("lifecycle stream: page error trajectory=%s cursor=%d attempt=%d: %v", trajectoryID, cursor, consecutiveErrors, pageErr)
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(min(time.Second*time.Duration(consecutiveErrors), 10*time.Second)):
+			}
+			continue
 		}
+		consecutiveErrors = 0
 		for _, event := range page.Events {
 			event.Schema = types.DurableWorkSchemaV1
 			payload, _ := json.Marshal(event)

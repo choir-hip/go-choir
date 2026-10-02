@@ -809,6 +809,30 @@ func (s *DoltStore) ListObjectsByEdgeTo(ctx context.Context, toID string, edgeKi
 	return out, rows.Err()
 }
 
+// CountObjectsByEdgeTo returns the count of objects of one kind holding a live
+// edge of edgeKind to toID, plus the maximum version_number lifted from object
+// metadata — the indexed edge join without decoding a single body. Used by the
+// Texture recent-documents list, which needs count + head version only.
+func (s *DoltStore) CountObjectsByEdgeTo(ctx context.Context, toID string, edgeKind EdgeKind, objKind string) (count int, maxVersion int, err error) {
+	if s == nil || s.db == nil {
+		return 0, -1, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
+	maxVersion = -1
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*),
+				COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(o.metadata, '$.version_number')) AS SIGNED)), -1)
+		 FROM og_objects o
+		 JOIN og_edges e ON e.from_id = o.canonical_id
+		 WHERE e.to_id = ? AND e.kind = ? AND o.object_kind = ? AND e.tombstone = FALSE AND o.tombstone = FALSE`,
+		toID, string(edgeKind), objKind).Scan(&count, &maxVersion)
+	if err != nil {
+		return 0, -1, fmt.Errorf("objectgraph dolt: count objects by edge to: %w", err)
+	}
+	return count, maxVersion, nil
+}
+
 // ListObjectsByOwnerAndBody finds objects by kind, owner, and an exact set of
 // predicates evaluated against the persisted JSON body. The body is the
 // canonical authority for record fields that must not be duplicated into

@@ -208,6 +208,19 @@ func (s *Store) ogListObjectsByEdgeTo(ctx context.Context, kind objectgraph.Obje
 	return store.ListObjectsByEdgeTo(ctx, toCanonicalID, edgeKind, string(kind))
 }
 
+// ogCountObjectsByEdgeTo is the metadata-only count/max-version companion to
+// ogListObjectsByEdgeTo — same indexed join, no body decode.
+func (s *Store) ogCountObjectsByEdgeTo(ctx context.Context, kind objectgraph.ObjectKind, toCanonicalID string, edgeKind objectgraph.EdgeKind) (int, int, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return 0, -1, fmt.Errorf("store: object graph not initialized")
+	}
+	return store.CountObjectsByEdgeTo(ctx, toCanonicalID, edgeKind, string(kind))
+}
+
 func (s *Store) ogForEachByMetadata(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string, fn func(objectgraph.Object) error) error {
 	return s.ogForEachByMetadataPageSize(ctx, kind, metadataField, value, ogMetadataPageSize, fn)
 }

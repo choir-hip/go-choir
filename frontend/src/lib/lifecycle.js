@@ -46,9 +46,13 @@ export async function getLifecycleSnapshot(trajectoryId) {
 // with bounded exponential backoff; exhaustion surfaces onError.
 const MAX_RECONNECT_ATTEMPTS = 8;
 
-export async function observeLifecycle(trajectoryId, handlers = {}) {
+export async function observeLifecycle(trajectoryId, handlers = {}, options = {}) {
   if (!trajectoryId) throw new Error('Trajectory ID is required');
-  let cursor = 0;
+  // startAfter lets a post-replay observer resume inside retained history —
+  // connecting at after=0 after a cursor expiry replays the same expiry
+  // forever when 0 is no longer within the retained window.
+  const startAfter = Number.isFinite(options.startAfter) && options.startAfter > 0 ? Math.floor(options.startAfter) : 0;
+  let cursor = startAfter;
   let closed = false;
   let stream = null;
 
@@ -172,7 +176,7 @@ if (typeof window !== 'undefined') {
 
 let initialConnectError = null;
 try {
-  await connect(0);
+  await connect(cursor);
 } catch (error) {
   // Initial connect failed before the stream opened. Do NOT close the
   // subscription: keep resume listeners armed so visibility/online events
