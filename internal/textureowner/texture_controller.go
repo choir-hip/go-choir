@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -790,7 +789,6 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		ownerHeadPending = false
 	}
 
-
 	// Consume-at-commit stranded repair: a pending producer report bound to a
 	// run that terminated without a committed turn re-enters the eligible set
 	// — the dead run proved nothing. Packets whose delivery budget is spent
@@ -911,11 +909,24 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 	}, scheduledSeq)
 	if err != nil {
 		if errors.Is(err, errTextureLifecycleOpenWorkUnavailable) {
-			stillEligible, authorityErr := rt.textureLifecycleActivationEligible(ctx, doc)
-			if authorityErr != nil {
-				return nil, fmt.Errorf("recheck Texture lifecycle activation after work refusal: %w", authorityErr)
+			// The submit-time work gate is the durable guard against a run minted
+			// without lifecycle authority. A live trajectory whose texture-agent
+			// work item is already closed (drained, never minted, or settled after
+			// snapshot) is quiescent — not a boot-fatal. Recheck the exact open-work
+			// condition on a fresh snapshot; only propagate when work genuinely
+			// exists for this agent, which would be a real contract violation.
+			recheck, recheckErr := rt.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
+			if recheckErr != nil {
+				return nil, fmt.Errorf("recheck Texture lifecycle work after open-work refusal: %w", recheckErr)
 			}
-			if !stillEligible {
+			workNowOpen := false
+			for _, work := range recheck.WorkItems {
+				if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID {
+					workNowOpen = true
+					break
+				}
+			}
+			if !workNowOpen {
 				return nil, nil
 			}
 		}
@@ -1106,6 +1117,7 @@ func textureDeliveryContentKey(req types.ReconcileUpdateDeliveryRequest) string 
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])[:16]
 }
+
 // docWakeArmed reports that the document still carries wake pressure
 // independent of unbound packet coverage: an unconsumed owner head or open
 // desk work. It keeps a sleeping mutation reactivatable after consume-at-commit
