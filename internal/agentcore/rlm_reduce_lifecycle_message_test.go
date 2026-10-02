@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -366,5 +367,226 @@ func TestCommitTrayLifecycleProducerReportResolvesDeskName(t *testing.T) {
 	if pending[0].Direction != types.LifecyclePacketDirectionProducerReport ||
 		pending[0].SourceRecordID != "cell-desk-report:report:report-1" {
 		t.Fatalf("desk-name report packet malformed: %+v", pending[0])
+	}
+}
+
+// Ledger-only kinds (resolve, disagreement) mint through CommitLifecycleAct
+// under one replay-idempotent authority — no packet, no envelope, and the
+// caller lifecycle version bump marks the record-native path (the legacy
+// append arm never touches agent versions).
+func TestCommitTrayLifecycleResolveDisagreementMintRecordNative(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := seedTextureLifecycleControl(t, s, "owner-resolve", "resv", "research:control-resv", agentprofile.Research)
+	caller, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, "texture-run-resv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	callerAgent, err := s.GetAgentByScope(context.Background(), caller.OwnerID, caller.ComputerID, caller.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scope := ReductionScope{
+		FromAgentID: caller.AgentID, DeskAgentID: caller.AgentID,
+		FromRole: agentprofile.Texture, ChannelID: caller.ChannelID,
+		RunID: caller.RunID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		CellID: "cell-resolve",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: caller.RunID, AgentID: caller.AgentID, OwnerID: caller.OwnerID,
+		ChannelID: caller.ChannelID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture,
+		RunRecord: &caller,
+	})
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
+
+	resolveBody, _ := json.Marshal(types.CommitmentResolve{Verdict: "confirmed", EvidenceRefs: []string{"evidence://x"}})
+	disagreementBody, _ := json.Marshal(types.CommitmentDisagreement{CommitmentID: "cell-resolve:resolve:res-1", ScorerVerdict: "contradicted", ResolverVerdict: "confirmed"})
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "res-1", Kind: yaegikernel.IntentResolve, TargetRef: "some-ask", Resolve: string(resolveBody)},
+		{LocalID: "dis-1", Kind: yaegikernel.IntentDisagreement, Disagreement: string(disagreementBody)},
+	}, 1); err != nil {
+		t.Fatalf("commitTray resolve+disagreement failed: %v", err)
+	}
+
+	records, err := s.ListCommitmentRecords(ctx, caller.OwnerID, caller.ComputerID, "", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]types.CommitmentRecord{}
+	for _, rec := range records {
+		byID[rec.RecordID] = rec
+	}
+	if rec := byID["cell-resolve:resolve:res-1"]; rec.Resolve == nil || rec.Resolve.Verdict != "confirmed" {
+		t.Fatalf("resolve record malformed: %+v", rec)
+	}
+	if rec := byID["cell-resolve:disagreement:dis-1"]; rec.Disagreement == nil || rec.Disagreement.ScorerVerdict != "contradicted" {
+		t.Fatalf("disagreement record malformed: %+v", rec)
+	}
+	// Discriminator: CommitLifecycleAct bumps the caller agent version; the
+	// legacy append+envelope arm does not.
+	after, err := s.GetAgentByScope(context.Background(), caller.OwnerID, caller.ComputerID, caller.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.LifecycleVersion != callerAgent.LifecycleVersion+2 {
+		t.Fatalf("caller lifecycle version %d → %d, want +2 (two record-native acts)", callerAgent.LifecycleVersion, after.LifecycleVersion)
+	}
+	// No envelope leaked: the channel gains no message for ledger-only acts.
+	messages, err := s.ListChannelMessages(ctx, caller.OwnerID, caller.ChannelID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range messages {
+		if strings.Contains(m.Content, "resolve") || strings.Contains(m.Content, "disagreement") {
+			t.Fatalf("ledger-only act leaked channel envelope: %+v", m)
+		}
+	}
+}
+
+// Addressed directive subtypes (escalate, cast, retract) mint record+directive
+// packet atomically via CommitLifecycleAct. Escalate's addressee is the
+// persistent management desk; retract's addressee derives from the retracted
+// record (the intent itself is unaddressed).
+func TestCommitTrayLifecycleEscalateCastRetractMintRecordNative(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := seedTextureLifecycleControl(t, s, "owner-esc", "esc", "research:control-esc", agentprofile.Research)
+	caller, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, "texture-run-esc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	managementID := persistentManagementAgentID(caller.OwnerID)
+	now := time.Now().UTC()
+	if err := s.UpsertAgent(context.Background(), types.AgentRecord{
+		AgentID: managementID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Management, Role: agentprofile.Management,
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	scope := ReductionScope{
+		FromAgentID: caller.AgentID, DeskAgentID: caller.AgentID,
+		FromRole: agentprofile.Texture, ChannelID: caller.ChannelID,
+		RunID: caller.RunID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		CellID: "cell-directives",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: caller.RunID, AgentID: caller.AgentID, OwnerID: caller.OwnerID,
+		ChannelID: caller.ChannelID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture,
+		RunRecord: &caller,
+	})
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
+
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "esc-1", Kind: yaegikernel.IntentEscalate, ToDesk: "management", Body: "evidence window expired"},
+	}, 1); err != nil {
+		t.Fatalf("commitTray escalate failed: %v", err)
+	}
+
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, caller.OwnerID, caller.ComputerID, managementID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("escalate directive did not queue on management: pending=%d", len(pending))
+	}
+	if pending[0].Direction != types.LifecyclePacketDirectionDirective || pending[0].SourceRecordID != "cell-directives:escalate:esc-1" {
+		t.Fatalf("escalate packet malformed: %+v", pending[0])
+	}
+
+	// No envelope for the escalate act.
+	messages, _ := s.ListChannelMessages(ctx, caller.OwnerID, caller.ChannelID, 0, 100)
+	for _, m := range messages {
+		if strings.Contains(m.Content, "evidence window expired") {
+			t.Fatalf("escalate leaked channel envelope: %+v", m)
+		}
+	}
+
+	// Retract the escalation: the unaddressed cancel resolves its stand-down
+	// target from the retracted record's addressee (management).
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "cancel-1", Kind: yaegikernel.IntentCancel, TargetRef: "cell-directives:escalate:esc-1"},
+	}, 1); err != nil {
+		t.Fatalf("commitTray retract failed: %v", err)
+	}
+	pending, err = s.ListAllPendingLifecycleUpdates(ctx, caller.OwnerID, caller.ComputerID, managementID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("retract stand-down did not queue on management: pending=%d", len(pending))
+	}
+	retract := pending[1]
+	if retract.Direction != types.LifecyclePacketDirectionDirective ||
+		retract.SourceRecordID != "cell-directives:cancel:cancel-1" ||
+		!strings.Contains(strings.Join(retract.Packet.Notes, " "), "retract_target:cell-directives:escalate:esc-1") {
+		t.Fatalf("retract packet malformed: %+v", retract)
+	}
+}
+
+// Cast cutover mints record+directive packet via CommitLifecycleAct and then
+// invokes the delegated-cast admission hook against the record's canonical id
+// (LifecycleResult.RecordCanonicalID). testRuntime has no capsule executor, so
+// admission fails post-mint — the record and packet are durable regardless.
+func TestCommitTrayLifecycleCastMintsBeforeAdmission(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := seedTextureLifecycleControl(t, s, "owner-cast", "cast", "research:control-cast", agentprofile.Research)
+	caller, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, "texture-run-cast")
+	if err != nil {
+		t.Fatal(err)
+	}
+	engineeringID := agentprofile.Engineering + ":" + caller.ChannelID
+	now := time.Now().UTC()
+	if err := s.UpsertAgent(context.Background(), types.AgentRecord{
+		AgentID: engineeringID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Engineering, Role: agentprofile.Engineering, ChannelID: caller.ChannelID,
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	scope := ReductionScope{
+		FromAgentID: caller.AgentID, DeskAgentID: caller.AgentID,
+		FromRole: agentprofile.Texture, ChannelID: caller.ChannelID,
+		RunID: caller.RunID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		CellID: "cell-cast",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: caller.RunID, AgentID: caller.AgentID, OwnerID: caller.OwnerID,
+		ChannelID: caller.ChannelID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture,
+		RunRecord: &caller,
+	})
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
+
+	// The cast record+packet mint atomically; admission fails on the missing
+	// capsule executor in the test runtime — the same legacy-ordering defect,
+	// but now the record mint is inside the lifecycle transaction.
+	err = reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "cast-1", Kind: yaegikernel.IntentCast, ToDesk: "engineering", Objective: "build the widget", Statement: "spec body"},
+	}, 1)
+	if err == nil || !strings.Contains(err.Error(), "capsule authority unavailable") {
+		t.Fatalf("expected delegated-cast admission failure, got: %v", err)
+	}
+
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, caller.OwnerID, caller.ComputerID, engineeringID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("cast directive did not queue on engineering: pending=%d", len(pending))
+	}
+	if pending[0].Direction != types.LifecyclePacketDirectionDirective ||
+		pending[0].SourceRecordID != "cell-cast:cast:cast-1" ||
+		!strings.Contains(strings.Join(pending[0].Packet.Notes, " "), "cast_objective:build the widget") {
+		t.Fatalf("cast packet malformed: %+v", pending[0])
 	}
 }

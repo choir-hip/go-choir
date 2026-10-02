@@ -896,12 +896,17 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.
 	rec := commitmentRecordForIntent(r.scope, in)
-	// Record-native cutover (S0m RN3): addressed notes and lifecycle producer
-	// reports mint record+packet atomically via CommitLifecycleAct — the record
-	// IS the delivery act; no envelope follows it. Non-lifecycle callers stay
-	// on the append+envelope path until their kind's RN3 cutover.
+	// Record-native cutover (S0m RN3): addressed notes, lifecycle producer
+	// reports, and the remaining addressed directive subtypes (escalate, cast,
+	// retract) mint record+packet atomically via CommitLifecycleAct — the
+	// record IS the delivery act; no envelope follows it. Ledger-only kinds
+	// (resolve/disagreement) mint through the same transaction. Non-lifecycle
+	// callers stay on the append+envelope path until their kind's cutover.
 	if (in.Kind == yaegikernel.IntentNote ||
-		(in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.ToDesk) != "")) &&
+		(in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.ToDesk) != "") ||
+		in.Kind == yaegikernel.IntentEscalate || in.Kind == yaegikernel.IntentCast ||
+		in.Kind == yaegikernel.IntentCancel ||
+		in.Kind == yaegikernel.IntentResolve || in.Kind == yaegikernel.IntentDisagreement) &&
 		r.ledger != nil && r.rt() != nil {
 		seq, actErr := r.commitLifecycleActIntent(ctx, in, rec)
 		if actErr == nil {
@@ -1486,8 +1491,9 @@ func isLifecycleActNonLifecycleCaller(err error) bool {
 
 // directivePacketForRecord projects the desk-authored commitment record into
 // its delivery packet payload. The packet is wake+hint only — the record is
-// the authored act (RN3); Notes carry the subtype and body so a bound desk
-// can rank and skim without loading the ledger row.
+// the authored act (RN3); Notes carry the subtype and body, and Actions carry
+// the typed payload a bound desk needs without loading the ledger row
+// (cast objective, retract target).
 func directivePacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePacketPayload {
 	subtype := ""
 	body := ""
@@ -1506,12 +1512,25 @@ func directivePacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePac
 	if body != "" {
 		notes = append(notes, body)
 	}
-	return types.CoagentSourcePacketPayload{
+	payload := types.CoagentSourcePacketPayload{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "directive",
 		Summary:       summary,
 		Notes:         notes,
 	}
+	if rec.Directive != nil {
+		switch rec.Directive.Subtype {
+		case types.CommitmentDirectiveCast:
+			if objective := strings.TrimSpace(rec.Directive.Objective); objective != "" {
+				payload.Notes = append(payload.Notes, "cast_objective:"+objective)
+			}
+		case types.CommitmentDirectiveRetract:
+			if target := strings.TrimSpace(rec.Directive.TargetRef); target != "" {
+				payload.Notes = append(payload.Notes, "retract_target:"+target)
+			}
+		}
+	}
+	return payload
 }
 
 // directiveTargetAgentID resolves a record-native addressee to the exact desk
@@ -1571,6 +1590,16 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 	}
 	callerTrajectory := strings.TrimSpace(trajectoryIDForRun(&callerRun))
 
+	// A retract (CancelAct) derives its stand-down addressee from the target
+	// record — the intent itself is unaddressed; the retracted act's own
+	// addressee is the desk that must stand down. Resolve it before req
+	// construction so the record carries it.
+	if in.Kind == yaegikernel.IntentCancel && strings.TrimSpace(rec.Addressee) == "" {
+		if targetRec, recErr := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, strings.TrimSpace(in.TargetRef)); recErr == nil && targetRec != nil {
+			rec.Addressee = strings.TrimSpace(targetRec.Addressee)
+		}
+	}
+
 	req := types.CommitLifecycleActRequest{
 		OwnerID: ownerID, ComputerID: computerID,
 		CommandID:     "commit-act:" + rec.RecordID,
@@ -1596,10 +1625,18 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 		if targetErr != nil {
 			return 0, fmt.Errorf("commit lifecycle act target agent %s: %w", targetAgentID, targetErr)
 		}
-		callerProfile, _ := agentprofile.Canonical(firstNonEmpty(callerAgent.Profile, r.scope.FromRole))
-		targetProfile, _ := agentprofile.Canonical(firstNonEmpty(targetAgent.Profile, targetAgent.Role))
-		if ok, policyErr := agentprofile.CanMessage(callerProfile, targetProfile); policyErr != nil || !ok {
-			return 0, fmt.Errorf("commit lifecycle act: %s cannot direct %s", callerProfile, targetProfile)
+		// The desk-messaging matrix governs conversational acts; cast,
+		// escalate, and retract carry their own authority — delegated-cast
+		// admission opens the assignment post-commit, escalate's Addressee is
+		// the governance target, and retract's addressee derives from the
+		// retracted record. Applying CanMessage to them would block
+		// research→management escalations and management→engineering casts.
+		if rec.Kind == types.CommitmentKindDirective && rec.Directive != nil && rec.Directive.Subtype == types.CommitmentDirectiveNote {
+			callerProfile, _ := agentprofile.Canonical(firstNonEmpty(callerAgent.Profile, r.scope.FromRole))
+			targetProfile, _ := agentprofile.Canonical(firstNonEmpty(targetAgent.Profile, targetAgent.Role))
+			if ok, policyErr := agentprofile.CanMessage(callerProfile, targetProfile); policyErr != nil || !ok {
+				return 0, fmt.Errorf("commit lifecycle act: %s cannot direct %s", callerProfile, targetProfile)
+			}
 		}
 		packet := directivePacketForRecord(rec)
 		if err := validateCoagentSourcePacketPayload(packet); err != nil {
@@ -1631,6 +1668,35 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 		// live trigger so a resident desk binds immediately instead of waiting
 		// for the outbox sweep.
 		rt.wakeUpdatedCoagent(ctx, *result.Update)
+	}
+	// A cast is admission, not just a message: durably OPEN the engineering
+	// assignment under the delegated-cast authority, with the commitment
+	// record minted in the act transaction as the parent control. The
+	// spawn/bind/activate saga resumes from the deferred
+	// delegated_assignment_spawn_deadline wake (or synchronously off-kernel).
+	if in.Kind == yaegikernel.IntentCast && !result.Replay && result.RecordCanonicalID != "" && r.rec != nil {
+		opened, openErr := rt.openDelegatedCastAssignment(ctx, DelegatedCastRequest{
+			Objective:           in.Objective,
+			Kind:                types.EngineeringAssignmentImplementation,
+			CommitmentControlID: result.RecordCanonicalID,
+			CasterRun:           *r.rec,
+			CasterAgentID:       r.scope.FromAgentID,
+			TargetDocID:         in.ToDesk,
+			ScopeDigestSeed:     r.scope.CellID + ":" + in.LocalID,
+		})
+		if openErr != nil {
+			return 0, fmt.Errorf("reduce: delegated cast admission: %w", openErr)
+		}
+		if !(rt.kernelMode && rt.scheduleActor != nil) {
+			rt.engineeringAssignmentOpenMu.Lock()
+			_, resumeErr := rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, DelegatedCastRequest{
+				Objective: in.Objective, Kind: opened.Assignment.Binding.Kind,
+			})
+			rt.engineeringAssignmentOpenMu.Unlock()
+			if resumeErr != nil {
+				return 0, fmt.Errorf("reduce: delegated cast spawn (non-kernel): %w", resumeErr)
+			}
+		}
 	}
 	return uint64(result.Receipt.ReducerSeq), nil
 }

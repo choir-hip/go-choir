@@ -334,7 +334,7 @@ func (s *Store) CommitLifecycleAct(ctx context.Context, req types.CommitLifecycl
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
 	objects = append(objects, receiptObj)
 
-	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &callerAgent, Events: events}
+	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &callerAgent, Events: events, RecordCanonicalID: recordObj.CanonicalID}
 	if packet.UpdateID != "" {
 		result.Update = &packet
 		result.Controls = []types.CoagentSourcePacket{packet}
@@ -540,5 +540,5 @@ func (s *Store) commitLifecycleProducerReportAct(ctx context.Context, req types.
 	objects = append(objects, receiptObj)
 	edge := objectgraph.Edge{EdgeID: "packet-record:" + packetObj.CanonicalID, FromID: packetObj.CanonicalID, ToID: recordObj.CanonicalID, Kind: ogEdgeRecordPacket, Metadata: []byte(`{}`), CreatedAt: now}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects,
-		types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &callerAgent, Update: &packet, Controls: []types.CoagentSourcePacket{packet}, Events: []types.LifecycleEvent{event}}, edge)
+		types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &callerAgent, Update: &packet, Controls: []types.CoagentSourcePacket{packet}, Events: []types.LifecycleEvent{event}, RecordCanonicalID: recordObj.CanonicalID}, edge)
 }

@@ -640,6 +640,10 @@ type LifecycleResult struct {
 	TextureTurn     *TextureTurnRecord      `json:"texture_turn,omitempty"`
 	Controls        []CoagentSourcePacket   `json:"controls,omitempty"`
 	TargetWorkItems []WorkItemRecord        `json:"target_work_items,omitempty"`
+	// RecordCanonicalID is the canonical object id of the commitment record
+	// minted by CommitLifecycleAct — admission hooks (delegated cast open)
+	// bind to it, matching the legacy AppendCommitmentRecord return.
+	RecordCanonicalID string `json:"record_canonical_id,omitempty"`
 }
 
 type LifecycleActivationProjection struct {
