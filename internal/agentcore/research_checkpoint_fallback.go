@@ -28,10 +28,6 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 		strings.TrimSpace(rec.RunID) == "" {
 		return nil
 	}
-	persisted, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
-	if err != nil {
-		return fmt.Errorf("reload terminal run %s: %w", rec.RunID, err)
-	}
 	// Stranded-bound control repair (S0m RN3e): a lifecycle research/management
 	// run that terminalized while still holding bound-but-unconsumed control
 	// packets strands them — bound rows are excluded from the pending list, so
@@ -41,16 +37,22 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 	// event — then re-drive the desk for each freed packet so it wakes,
 	// rebinds through bindLifecycleControlsToRun, and consumes. Past the
 	// attempt cap the packet terminalizes as delivery_attempts_exhausted.
-	// This runs before the RequestedByRunID gate below: persistent-management
-	// desk runs carry no requester, so gating on it would strand management
-	// carriers exactly as it stranded research ones.
-	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||
-		len(metadataStringSlice(persisted.Metadata["work_item_ids"])) > 0
-	if hasLifecycleMarker && persisted.State.Terminal() && strings.TrimSpace(persisted.ComputerID) != "" &&
-		(agentProfileForRun(&persisted) == agentprofile.Research || agentProfileForRun(&persisted) == agentprofile.Management) {
-		freed, unbindErr := rt.unbindStrandedLifecycleControls(ctx, persisted.OwnerID, persisted.ComputerID, persisted.AgentID)
+	//
+	// This runs off the caller's own record — before the RequestedByRunID gate
+	// AND before the persisted reload — because persistent-management desk runs
+	// carry no requester (gating on it would strand management carriers exactly
+	// as it stranded research ones) and a root run must skip the store entirely
+	// (no store lookup: TestRootTerminalRunSkipsOutcomeBindingWithoutStoreLookup).
+	// The fields the release needs — owner, computer, agent, terminal state, the
+	// lifecycle marker — are stable on the caller record; only the delegated
+	// outcome-binding arm below needs the authoritative persisted row.
+	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" ||
+		len(metadataStringSlice(rec.Metadata["work_item_ids"])) > 0
+	if hasLifecycleMarker && rec.State.Terminal() && strings.TrimSpace(rec.ComputerID) != "" &&
+		(agentProfileForRun(rec) == agentprofile.Research || agentProfileForRun(rec) == agentprofile.Management) {
+		freed, unbindErr := rt.unbindStrandedLifecycleControls(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
 		if unbindErr != nil {
-			log.Printf("runtime: unbind stranded controls on terminalize run %s: %v", persisted.RunID, unbindErr)
+			log.Printf("runtime: unbind stranded controls on terminalize run %s: %v", rec.RunID, unbindErr)
 		}
 		for _, update := range freed {
 			rt.wakeUpdatedCoagent(ctx, update)
@@ -59,6 +61,10 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 	if strings.TrimSpace(rec.RequestedByRunID) == "" ||
 		!terminalOutcomeCapableProfile(agentProfileForRun(rec)) {
 		return nil
+	}
+	persisted, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
+	if err != nil {
+		return fmt.Errorf("reload terminal run %s: %w", rec.RunID, err)
 	}
 	binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, &persisted)
 	if err != nil {
