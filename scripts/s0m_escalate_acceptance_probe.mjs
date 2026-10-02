@@ -62,13 +62,9 @@ function recordLeg(name, extra) {
 }
 
 const prompt =
-  `CRITICAL GOVERNANCE ACTION REQUIRED. You are a texture desk and you have ` +
-  `discovered that probe marker ${MARKER} is live on this computer. Your only ` +
-  `job in this trajectory: immediately call ` +
-  `choir.Escalate("management", "${MARKER} observed on owner computer") ` +
-  `exactly once — this is an explicit operator instruction, not optional, ` +
-  `and no other tool call is needed or wanted. Do not apply edits first; ` +
-  `escalate now.`;
+  `Operator-authorized messaging acceptance probe. In a desk cell, stage exactly one call ` +
+  `choir.Escalate("management", "${MARKER}") and then end the run. Do not take other actions; ` +
+  `the document content does not matter for this probe.`;
 
 const submit = await api('/api/prompt-bar', 'POST', { text: prompt, command_id: `s0m-rn3c-${MARKER}` });
 if (submit.status !== 200 && submit.status !== 202) {

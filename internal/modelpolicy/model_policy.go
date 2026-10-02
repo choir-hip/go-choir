@@ -299,9 +299,9 @@ model = "gpt-5.6-luna"
 reasoning = "low"
 
 [roles.texture]
-provider = "chatgpt"
-model = "gpt-5.6-luna"
-reasoning = "xhigh"
+provider = "opencode-go"
+model = "deepseek-v4.1-flash"
+reasoning = "high"
 
 [roles.management]
 provider = "chatgpt"
@@ -348,8 +348,11 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 	// map-shaped ApplyTexture bodies with a typed packet schema the model must
 	// reproduce exactly. 2026-09-28 staging evidence: at effort=low the desk
 	// ignored the cell-import rule and invented packet fields until the run
-	// died; texture gets xhigh while processor/reconciler stay cheap.
-	chatGPTTexture := provideriface.LLMSelection{Provider: defaultChatGPTProvider, Model: defaultChatGPTForegroundModel, ReasoningEffort: "xhigh", Source: "platform_fallback"}
+	// died; texture needs the strongest reasoning available. Owner direction
+	// 2026-10-02: texture moves to the opencode-go/deepseek-v4.1-flash
+	// provider (same as engineering) at high effort — the desk's imperative
+	// verb calls (Ask/Escalate) keep failing at low.
+	textureDesk := provideriface.LLMSelection{Provider: "opencode-go", Model: "deepseek-v4.1-flash", ReasoningEffort: "high", Source: "platform_fallback"}
 	return Policy{
 		Defaults: defaults,
 		Roles: map[string]provideriface.LLMSelection{
@@ -357,7 +360,7 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 			agentprofile.Management:  chatGPTForeground,
 			agentprofile.Engineering: {Provider: "opencode-go", Model: "deepseek-v4.1-flash", Source: "platform_fallback"},
 			agentprofile.Research:    chatGPTMini,
-			agentprofile.Texture:     chatGPTTexture,
+			agentprofile.Texture:     textureDesk,
 			agentprofile.Processor:   chatGPTWire,
 			agentprofile.Reconciler:  chatGPTWire,
 			VerifierRole:             chatGPTMini,
