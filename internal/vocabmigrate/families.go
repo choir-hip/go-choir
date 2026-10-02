@@ -52,6 +52,7 @@ var frozenLifecycleCommandKinds = map[types.LifecycleCommandKind]bool{
 	types.LifecycleCancelTrajectory:                 true,
 	types.LifecycleArchiveArtifact:                  true,
 	types.LifecycleApplyTextureTurn:                 true,
+	types.LifecycleIssueControl:                     true,
 	types.LifecycleBindControlDelivery:              true,
 	types.LifecycleFailControlActivation:            true,
 	types.LifecycleOpenEngineeringAssignment:        true, // V1 "open_co_super_assignment"

@@ -304,6 +304,9 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 	}
 
 	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if unbindErr := rt.unbindStrandedLifecycleControls(ctx, ownerID, computerID, agentID); unbindErr != nil {
+		return nil, fmt.Errorf("unbind stranded lifecycle controls: %w", unbindErr)
+	}
 	updates, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, agentID, 100)
 	if err != nil {
 		return nil, err
@@ -1099,6 +1102,86 @@ func lifecycleControlWorkIDsForRun(rec *types.RunRecord) map[string]bool {
 	return out
 }
 
+// lifecycleControlDeliveryMaxAttempts bounds delivery claims per control
+// packet — the same cap texture producer reports use.
+const lifecycleControlDeliveryMaxAttempts = 3
+
+// unbindStrandedLifecycleControls clears control packets still claimed by
+// runs that terminated before consuming them. A stranded control is
+// invisible to the pending list (bound rows are excluded), so without this
+// pass a desk whose carrier run died mid-delivery never re-arms: the packet
+// sits bound-and-pending forever. Unbinding — rather than rebinding to the
+// new run — keeps activation-refresh metadata authoritative: the freed
+// packet re-enters the pending set and binds with full fingerprint/versions
+// through bindLifecycleControlsToRun. Exhausted packets terminalize with
+// delivery_attempts_exhausted inside the reconcile command.
+func (rt *Runtime) unbindStrandedLifecycleControls(ctx context.Context, ownerID, computerID, agentID string) error {
+	if rt == nil || rt.store == nil {
+		return nil
+	}
+	bound, err := rt.store.ListBoundPendingUpdatesForTarget(ctx, ownerID, computerID, agentID)
+	if err != nil {
+		return err
+	}
+	checked := map[string]bool{}
+	var items []types.ReconcileUpdateDeliveryItem
+	for _, update := range bound {
+		if update.Direction != types.LifecyclePacketDirectionControl {
+			continue
+		}
+		runID := strings.TrimSpace(update.DeliveredToRunID)
+		live, seen := checked[runID]
+		if !seen {
+			run, getErr := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID)
+			switch {
+			case errors.Is(getErr, store.ErrNotFound):
+				live = false
+			case getErr != nil:
+				return fmt.Errorf("check bound control run %s liveness: %w", runID, getErr)
+			default:
+				live = !run.State.Terminal()
+			}
+			checked[runID] = live
+		}
+		if live {
+			continue
+		}
+		items = append(items, types.ReconcileUpdateDeliveryItem{
+			UpdateID:                 update.UpdateID,
+			ProducerAgentID:          update.AgentID,
+			ProducerUpdateID:         update.ProducerUpdateID,
+			ExpectedLifecycleVersion: update.LifecycleVersion,
+			ExpectedRunID:            runID,
+			Exhaust:                  update.DeliveryAttempts+1 > lifecycleControlDeliveryMaxAttempts,
+		})
+	}
+	for _, item := range items {
+		req := types.ReconcileUpdateDeliveryRequest{
+			OwnerID: ownerID, ComputerID: computerID,
+			CommandID:     "unbind-stranded-control:" + item.UpdateID + ":" + item.ExpectedRunID,
+			TrajectoryID:  trajectoryIDForUpdate(item, bound),
+			TargetAgentID: agentID,
+			TargetRunID:   "", // unbind: clear the dead claim; rebind happens via the normal pending path
+			MaxAttempts:   lifecycleControlDeliveryMaxAttempts,
+			Items:         []types.ReconcileUpdateDeliveryItem{item},
+		}
+		req.CommandDigest, _ = store.ComputeReconcileUpdateDeliveryDigest(req)
+		if _, err := rt.store.ReconcileUpdateDelivery(ctx, req); err != nil {
+			return fmt.Errorf("unbind stranded control %s: %w", item.UpdateID, err)
+		}
+	}
+	return nil
+}
+
+func trajectoryIDForUpdate(item types.ReconcileUpdateDeliveryItem, updates []types.CoagentSourcePacket) string {
+	for _, update := range updates {
+		if update.UpdateID == item.UpdateID {
+			return strings.TrimSpace(update.TrajectoryID)
+		}
+	}
+	return ""
+}
+
 func selectLifecycleControlActivation(updates []types.CoagentSourcePacket, trajectoryID string, workIDs map[string]bool) []types.CoagentSourcePacket {
 	if len(updates) == 0 {
 		return nil
@@ -1637,6 +1720,18 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	var updates []types.CoagentSourcePacket
 	lifecycleControls := false
 	if lifecycleAgent {
+		// Stranded-control repair (S0m RN2c): a control packet bound to a run
+		// that died before consuming it is invisible to
+		// ListPendingLifecycleUpdates (bound rows are excluded). Unbind it
+		// here via ReconcileUpdateDelivery — the dead claim cleared — so it
+		// re-enters the pending set and rebinds with full activation-refresh
+		// metadata through the normal path. DeliveryAttempts increments on
+		// unbind (the dead binding was an attempt); past the cap the packet
+		// terminalizes as delivery_attempts_exhausted, which is scored
+		// delivery failure — never silent loss.
+		if unbindErr := rt.unbindStrandedLifecycleControls(ctx, ownerID, computerID, agentID); unbindErr != nil {
+			return nil, fmt.Errorf("unbind stranded lifecycle controls: %w", unbindErr)
+		}
 		updates, err = rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
 		if err == nil {
 			updates, err = rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, false)

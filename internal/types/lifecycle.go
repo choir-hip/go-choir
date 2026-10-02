@@ -24,6 +24,7 @@ const (
 	LifecyclePrepareCancelTrajectory          LifecycleCommandKind = "prepare_cancel_trajectory"
 	LifecycleArchiveArtifact                  LifecycleCommandKind = "archive_artifact"
 	LifecycleApplyTextureTurn                 LifecycleCommandKind = "apply_texture_turn"
+	LifecycleIssueControl                     LifecycleCommandKind = "issue_lifecycle_control"
 	LifecycleBindControlDelivery              LifecycleCommandKind = "bind_control_delivery"
 	LifecycleFailControlActivation            LifecycleCommandKind = "fail_control_activation"
 	LifecycleOpenEngineeringAssignment        LifecycleCommandKind = "open_co_super_assignment"
@@ -181,6 +182,24 @@ type TextureTurnControl struct {
 	Packet           CoagentSourcePacketPayload `json:"packet"`
 	Content          string                     `json:"content"`
 	PayloadDigest    string                     `json:"payload_digest"`
+}
+
+// IssueLifecycleControlRequest queues downward controls without requiring a
+// full Texture turn. The caller pins both the live trajectory and Texture
+// activation versions; they are execution preconditions, not command identity.
+type IssueLifecycleControlRequest struct {
+	OwnerID                        string               `json:"owner_id"`
+	ComputerID                     string               `json:"computer_id"`
+	CommandID                      string               `json:"command_id"`
+	CommandDigest                  string               `json:"command_digest"`
+	TrajectoryID                   string               `json:"trajectory_id"`
+	DocumentID                     string               `json:"document_id"`
+	CallerAgentID                  string               `json:"caller_agent_id"`
+	CallerRunID                    string               `json:"caller_run_id"`
+	ExpectedLifecycleVersion       int64                `json:"expected_lifecycle_version"`
+	ExpectedCallerLifecycleVersion int64                `json:"expected_caller_lifecycle_version"`
+	Controls                       []TextureTurnControl `json:"controls"`
+	Reason                         string               `json:"reason,omitempty"`
 }
 
 // ApplyTextureTurnRequest is the sole store mutation for a progressive Texture

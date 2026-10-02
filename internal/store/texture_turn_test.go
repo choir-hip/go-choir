@@ -154,6 +154,47 @@ func TestApplyTextureTurnOrderedControlsAtomicReplayAndLegacyIsolation(t *testin
 	}
 }
 
+func TestIssueLifecycleControlQueuesPendingPacketAndEvents(t *testing.T) {
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	trajectory, err := s.GetLifecycleTrajectory(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callerAgent, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, caller.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := types.IssueLifecycleControlRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "issue-control-standalone",
+		TrajectoryID: start.TrajectoryID, DocumentID: start.InitialDocument.DocID,
+		CallerAgentID: caller.AgentID, CallerRunID: caller.RunID,
+		ExpectedLifecycleVersion: trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: callerAgent.LifecycleVersion,
+		Controls: []types.TextureTurnControl{textureTurnControl(t, "standalone-control", researchWork.AssignedAgentID, researchWork.WorkItemID)},
+		Reason: "issue durable control without a turn",
+	}
+	req.CommandDigest, err = ComputeIssueLifecycleControlDigest(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.IssueLifecycleControl(ctx, req)
+	if err != nil || result.Receipt.Kind != types.LifecycleIssueControl || len(result.Controls) != 1 ||
+		result.TextureTurn == nil || len(result.TextureTurn.ControlUpdateIDs) != 1 {
+		t.Fatalf("issue lifecycle control = %+v, %v", result, err)
+	}
+	pending, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, researchWork.AssignedAgentID, 10)
+	if err != nil || len(pending) != 1 || pending[0].UpdateID != "standalone-control" || pending[0].Disposition != types.UpdatePending {
+		t.Fatalf("pending standalone control = %+v, %v", pending, err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Kind != types.LifecycleControlQueued || result.Events[0].UpdateID != "standalone-control" {
+		t.Fatalf("standalone control events = %+v", result.Events)
+	}
+	replay, err := s.IssueLifecycleControl(ctx, req)
+	if err != nil || !replay.Replay || len(replay.Controls) != 1 || replay.Controls[0].UpdateID != "standalone-control" {
+		t.Fatalf("standalone control replay = %+v, %v", replay, err)
+	}
+}
+
 func TestApplyTextureTurnResearchOpenerAgentWorkAndFirstControlAreAtomic(t *testing.T) {
 	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
 	ctx := context.Background()

@@ -485,6 +485,13 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 	if authority == nil {
 		return fmt.Errorf("update_coagent lifecycle authority is missing")
 	}
+	// A lifecycle producer report bound for the persistent Management desk
+	// (engineering's upward report under the management:* contract) has its
+	// own caller/target contract — check it before the texture-producer
+	// profile gate, which exists for producer reports into a document.
+	if authority.targetProfile == agentprofile.Management {
+		return validateLifecycleManagementReportAuthority(ctx, authorityStore, authority, requestedWorkItemID)
+	}
 	switch authority.callerProfile {
 	case agentprofile.Research, agentprofile.Processor, agentprofile.Reconciler:
 	default:
@@ -531,6 +538,72 @@ func validateLifecycleCoagentUpdateAuthority(ctx context.Context, authorityStore
 		metadataStringValue(work.Details, "requested_by_run_id") != parent.RunID ||
 		requesterProfile != agentprofile.Texture {
 		return fmt.Errorf("update_coagent lifecycle work lacks exact requesting Texture provenance")
+	}
+	authority.workItemID = workItemID
+	return nil
+}
+
+// validateLifecycleManagementReportAuthority is the management:* target
+// contract for lifecycle producer reports: an Engineering lifecycle run
+// reporting up to its owning persistent Management desk. The persistent
+// desk is legacy-versioned (LifecycleVersion==0) so the usual lifecycle
+// target checks don't apply; authority binds through exact requester
+// provenance on the caller run and the bound work item's own requester
+// fields.
+func validateLifecycleManagementReportAuthority(ctx context.Context, authorityStore coagentUpdateAuthorityStore, authority *coagentUpdateAuthority, requestedWorkItemID string) error {
+	if authority == nil {
+		return fmt.Errorf("update_coagent lifecycle management-report authority is missing")
+	}
+	if authority.callerProfile != agentprofile.Engineering {
+		return fmt.Errorf("update_coagent lifecycle management report requires an Engineering caller")
+	}
+	if authority.target.AgentID != persistentManagementAgentID(authority.callerRun.OwnerID) {
+		return fmt.Errorf("update_coagent lifecycle management target is not the persistent desk")
+	}
+	requesterProfile, _ := agentprofile.Canonical(metadataStringValue(authority.callerRun.Metadata, "requested_by_profile"))
+	if metadataStringValue(authority.callerRun.Metadata, "requested_by_agent_id") != authority.target.AgentID ||
+		requesterProfile != agentprofile.Management {
+		return fmt.Errorf("update_coagent lifecycle Engineering run was not requested by the target Management")
+	}
+	requesterRunID, err := exactRequesterRunID(authority.callerRun)
+	if err != nil {
+		return err
+	}
+	parent, err := authorityStore.GetLifecycleRun(ctx, authority.callerRun.OwnerID, authority.callerRun.ComputerID, requesterRunID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			if legacy, legacyErr := authorityStore.GetRunByOwner(ctx, authority.callerRun.OwnerID, requesterRunID); legacyErr == nil {
+				parent = legacy
+			} else {
+				return fmt.Errorf("resolve owning Management run: %w", legacyErr)
+			}
+		} else {
+			return fmt.Errorf("resolve owning Management run: %w", err)
+		}
+	}
+	parentProfile := configuredAgentProfileForRun(&parent)
+	parentRole := agentRoleForRun(&parent)
+	if parent.AgentID != authority.target.AgentID || parentProfile != agentprofile.Management || parentRole != agentprofile.Management {
+		return fmt.Errorf("update_coagent lifecycle owning Management run binding mismatch")
+	}
+	workItemID, err := lifecycleAssignedWorkItemID(authority.callerRun, requestedWorkItemID)
+	if err != nil {
+		return err
+	}
+	work, err := authorityStore.GetLifecycleWorkItem(ctx, authority.callerRun.OwnerID, authority.callerRun.ComputerID, workItemID)
+	if err != nil {
+		return fmt.Errorf("resolve lifecycle producer work: %w", err)
+	}
+	authorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)
+	if work.OwnerID != authority.callerRun.OwnerID || work.ComputerID != authority.callerRun.ComputerID ||
+		work.Status != types.WorkItemOpen || work.AssignedAgentID != authority.callerRun.AgentID ||
+		authorityProfile != authority.callerProfile {
+		return fmt.Errorf("update_coagent lifecycle producer work binding mismatch")
+	}
+	workRequesterProfile, _ := agentprofile.Canonical(metadataStringValue(work.Details, "requested_by_profile"))
+	if metadataStringValue(work.Details, "requested_by_agent_id") != authority.target.AgentID ||
+		workRequesterProfile != agentprofile.Management {
+		return fmt.Errorf("update_coagent lifecycle work lacks exact requesting Management provenance")
 	}
 	authority.workItemID = workItemID
 	return nil

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
@@ -233,45 +232,49 @@ func validateTextureTurnShape(req types.ApplyTextureTurnRequest, graph TextureSo
 			return fmt.Errorf("apply Texture turn: inbound must explicitly incorporate, reject, or deliver")
 		}
 	}
+	return validateTextureTurnControls(req.DocumentID, req.Controls, seenWork, "apply Texture turn")
+}
+
+func validateTextureTurnControls(documentID string, controls []types.TextureTurnControl, settledWork map[string]struct{}, operation string) error {
 	seenControl := map[string]struct{}{}
 	persistentManagementOpenerCount := 0
-	for _, control := range req.Controls {
-		if _, terminalInSameTurn := seenWork[control.TargetWorkItemID]; terminalInSameTurn {
-			return fmt.Errorf("apply Texture turn: control target work cannot be settled by the same turn")
+	for _, control := range controls {
+		if _, terminalInSameTurn := settledWork[control.TargetWorkItemID]; terminalInSameTurn {
+			return fmt.Errorf("%s: control target work cannot be settled by the same turn", operation)
 		}
 		if control.ControlID == "" || control.TargetAgentID == "" || control.TargetWorkItemID == "" || control.PayloadDigest == "" {
-			return fmt.Errorf("apply Texture turn: control requires identity, target, target work, and payload digest")
+			return fmt.Errorf("%s: control requires identity, target, target work, and payload digest", operation)
 		}
 		if _, duplicate := seenControl[control.ControlID]; duplicate {
-			return fmt.Errorf("apply Texture turn: duplicate control identity")
+			return fmt.Errorf("%s: duplicate control identity", operation)
 		}
 		seenControl[control.ControlID] = struct{}{}
 		if control.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 || control.Packet.Kind == "" {
-			return fmt.Errorf("apply Texture turn: control requires a normalized v1 packet")
+			return fmt.Errorf("%s: control requires a normalized v1 packet", operation)
 		}
 		payloadDigest, err := ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
 		if err != nil || payloadDigest != control.PayloadDigest {
-			return fmt.Errorf("apply Texture turn: control payload digest mismatch: %w", ErrLifecycleCommandConflict)
+			return fmt.Errorf("%s: control payload digest mismatch: %w", operation, ErrLifecycleCommandConflict)
 		}
 		if control.OpenAgent != nil && control.OpenWork == nil {
-			return fmt.Errorf("apply Texture turn: agent opener requires its work in the same turn")
+			return fmt.Errorf("%s: agent opener requires its work in the same turn", operation)
 		}
 		if control.OpenWork != nil {
 			if control.OpenWork.WorkItemID != control.TargetWorkItemID || control.Packet.Kind == "" {
-				return fmt.Errorf("apply Texture turn: opener requires exact work and first typed control packet")
+				return fmt.Errorf("%s: opener requires exact work and first typed control packet", operation)
 			}
 			if control.OpenAgent == nil {
 				persistentManagementOpenerCount++
 				if control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0 {
-					return fmt.Errorf("apply Texture turn: persistent-Management opener requires execution_request actions")
+					return fmt.Errorf("%s: persistent-Management opener requires execution_request actions", operation)
 				}
-			} else if control.OpenAgent.AgentID != control.TargetAgentID || control.OpenAgent.Profile != agentprofile.Research || control.OpenAgent.Role != agentprofile.Research || control.OpenAgent.ChannelID != req.DocumentID || control.OpenWork.AssignedAgentID != control.TargetAgentID || control.OpenWork.AuthorityProfile != agentprofile.Research {
-				return fmt.Errorf("apply Texture turn: Research opener requires exact runtime-derived agent and work binding")
+			} else if control.OpenAgent.AgentID != control.TargetAgentID || control.OpenAgent.Profile != agentprofile.Research || control.OpenAgent.Role != agentprofile.Research || control.OpenAgent.ChannelID != documentID || control.OpenWork.AssignedAgentID != control.TargetAgentID || control.OpenWork.AuthorityProfile != agentprofile.Research {
+				return fmt.Errorf("%s: Research opener requires exact runtime-derived agent and work binding", operation)
 			}
 		}
 	}
 	if persistentManagementOpenerCount > 1 {
-		return fmt.Errorf("apply Texture turn: at most one persistent-Management opener is allowed")
+		return fmt.Errorf("%s: at most one persistent-Management opener is allowed", operation)
 	}
 	return nil
 }
@@ -583,207 +586,11 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	targetWorkItems := make([]types.WorkItemRecord, 0, len(req.Controls))
 	controlIDs := make([]string, 0, len(req.Controls))
 	targetWorkIDs := make([]string, 0, len(req.Controls))
-	for _, control := range req.Controls {
-		var binding LifecycleTextureControlTargetBinding
-		var targetAgentObj objectgraph.Object
-		var targetAgent types.AgentRecord
-		if control.OpenAgent != nil {
-			targetAgent = *control.OpenAgent
-			targetAgent.OwnerID, targetAgent.ComputerID, targetAgent.ComputerID = ownerID, computerID, computerID
-			targetAgent.LifecycleVersion, targetAgent.LastReducerSeq = 1, seq+1
-			targetAgent.CreatedAt, targetAgent.UpdatedAt = now, now
-			if targetAgent.AgentID != control.TargetAgentID || targetAgent.Profile != agentprofile.Research || targetAgent.Role != agentprofile.Research || targetAgent.ChannelID != req.DocumentID || targetAgent.ActiveRunID != "" {
-				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-			}
-			targetCanonicalID, buildErr := lifecycleCanonicalID(ogKindAgent, ownerID, computerID, targetAgent.AgentID)
-			if buildErr != nil {
-				return types.LifecycleResult{}, buildErr
-			}
-			if _, getErr := s.lifecycleGraph().GetObject(ctx, targetCanonicalID); getErr == nil {
-				return types.LifecycleResult{}, ErrLifecycleCommandConflict
-			} else if !errors.Is(getErr, objectgraph.ErrNotFound) {
-				return types.LifecycleResult{}, getErr
-			}
-			targetAgentMeta := lifecycleMetadata("agent_id", targetAgent.AgentID, computerID, req.TrajectoryID, seq+1)
-			targetAgentMeta["channel_id"] = targetAgent.ChannelID
-			targetAgentObj, buildErr = lifecycleObject(ogKindAgent, ownerID, computerID, targetAgent.AgentID, targetAgent,
-				targetAgentMeta, now, now)
-			if buildErr != nil {
-				return types.LifecycleResult{}, buildErr
-			}
-			addCondition(objectgraph.ObjectCondition{CanonicalID: targetAgentObj.CanonicalID})
-			objects = append(objects, targetAgentObj)
-			binding = LifecycleTextureControlTargetBinding{TargetAgent: targetAgent, TargetProfile: agentprofile.Research}
-		} else {
-			validatorWorkID := control.TargetWorkItemID
-			if control.OpenWork != nil {
-				validatorWorkID = ""
-			}
-			var validateErr error
-			binding, validateErr = s.ValidateLifecycleTextureControlTarget(ctx, LifecycleTextureControlTargetRequest{
-				OwnerID: ownerID, ComputerID: computerID, DocumentID: req.DocumentID, TrajectoryID: req.TrajectoryID,
-				CallerAgentID: req.CallerAgentID, CallerRunID: req.CallerRunID, TargetAgentID: control.TargetAgentID,
-				TargetWorkItemID: validatorWorkID,
-			})
-			if validateErr != nil {
-				return types.LifecycleResult{}, validateErr
-			}
-			var targetErr error
-			targetAgentObj, targetAgent, targetErr = s.textureTurnAgentObject(ctx, ownerID, computerID, control.TargetAgentID)
-			if targetErr != nil || !reflect.DeepEqual(targetAgent, binding.TargetAgent) {
-				if targetErr != nil {
-					return types.LifecycleResult{}, targetErr
-				}
-				return types.LifecycleResult{}, ErrConcurrentStateChange
-			}
-			addCondition(objectgraph.ObjectCondition{CanonicalID: targetAgentObj.CanonicalID, Exists: true, ExpectedContentHash: targetAgentObj.ContentHash})
-		}
-		// Persistent Management has execution authority, so every continuation (not
-		// only its opener) must remain a typed executable request. Validate at
-		// the reducer boundary before constructing any backlog object.
-		if binding.TargetProfile == agentprofile.Management && (control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0) {
-			return types.LifecycleResult{}, fmt.Errorf("apply Texture turn: persistent-Management control requires execution_request actions")
-		}
-		if binding.TargetRun != nil {
-			targetRunObj, targetRun, runErr := s.textureTurnRunObject(ctx, ownerID, computerID, binding.TargetRun.RunID)
-			if runErr != nil || !reflect.DeepEqual(targetRun, *binding.TargetRun) {
-				if runErr != nil {
-					return types.LifecycleResult{}, runErr
-				}
-				return types.LifecycleResult{}, ErrConcurrentStateChange
-			}
-			addCondition(objectgraph.ObjectCondition{CanonicalID: targetRunObj.CanonicalID, Exists: true, ExpectedContentHash: targetRunObj.ContentHash})
-		}
-		var workObj objectgraph.Object
-		var work types.WorkItemRecord
-		if control.OpenWork == nil {
-			if binding.TargetWorkItem == nil {
-				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-			}
-			work = *binding.TargetWorkItem
-			var rawWork types.WorkItemRecord
-			workObj, rawWork, err = s.lifecycleWorkObject(ctx, ownerID, computerID, work.WorkItemID)
-			if err != nil {
-				return types.LifecycleResult{}, err
-			}
-			if !reflect.DeepEqual(rawWork, work) {
-				return types.LifecycleResult{}, ErrConcurrentStateChange
-			}
-			addCondition(objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash})
-		} else {
-			openerProfile := binding.TargetProfile
-			switch openerProfile {
-			case agentprofile.Management:
-				if control.OpenAgent != nil || binding.TargetAgent.AgentID != agentprofile.Management+":"+ownerID {
-					return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-				}
-			case agentprofile.Research:
-				if control.OpenAgent == nil || binding.TargetAgent.AgentID != control.TargetAgentID {
-					return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-				}
-			default:
-				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-			}
-			work, err = normalizeLifecycleWork(*control.OpenWork, ownerID, computerID, req.TrajectoryID, now)
-			if err != nil {
-				return types.LifecycleResult{}, err
-			}
-			if work.AssignedAgentID != control.TargetAgentID || work.AuthorityProfile != openerProfile || work.WorkItemID != control.TargetWorkItemID {
-				return types.LifecycleResult{}, ErrLifecycleInvalidTransition
-			}
-			work.CreatedByRunID = req.CallerRunID
-			work.Details = cloneTextureTurnDetails(work.Details)
-			if work.Details == nil {
-				work.Details = map[string]any{}
-			}
-			work.Details["requested_by_profile"] = agentprofile.Texture
-			work.Details["requested_by_agent_id"] = req.CallerAgentID
-			work.Details["requested_by_run_id"] = req.CallerRunID
-			workCanonicalID, buildErr := lifecycleCanonicalID(ogKindWorkItem, ownerID, computerID, work.WorkItemID)
-			if buildErr != nil {
-				return types.LifecycleResult{}, buildErr
-			}
-			existingObj, getErr := s.lifecycleGraph().GetObject(ctx, workCanonicalID)
-			switch {
-			case getErr == nil:
-				existing, decodeErr := decodeLifecycleObject[types.WorkItemRecord](existingObj)
-				if decodeErr != nil {
-					return types.LifecycleResult{}, decodeErr
-				}
-				validated, validateErr := s.ValidateLifecycleTextureControlTarget(ctx, LifecycleTextureControlTargetRequest{
-					OwnerID: ownerID, ComputerID: computerID, DocumentID: req.DocumentID, TrajectoryID: req.TrajectoryID,
-					CallerAgentID: req.CallerAgentID, CallerRunID: req.CallerRunID, TargetAgentID: control.TargetAgentID,
-					TargetWorkItemID: control.TargetWorkItemID,
-				})
-				if validateErr != nil || validated.TargetWorkItem == nil || !textureTurnWorkEquivalent(existing, work) {
-					return types.LifecycleResult{}, ErrLifecycleCommandConflict
-				}
-				work, workObj = existing, existingObj
-				addCondition(objectgraph.ObjectCondition{CanonicalID: existingObj.CanonicalID, Exists: true, ExpectedContentHash: existingObj.ContentHash})
-			case errors.Is(getErr, objectgraph.ErrNotFound):
-				seq++
-				work.LifecycleVersion, work.LastReducerSeq = 1, seq
-				workObj, buildErr = lifecycleObject(ogKindWorkItem, ownerID, computerID, work.WorkItemID, work,
-					lifecycleMetadata("work_item_id", work.WorkItemID, computerID, req.TrajectoryID, seq), now, now)
-				if buildErr != nil {
-					return types.LifecycleResult{}, buildErr
-				}
-				addCondition(objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID})
-				objects = append(objects, workObj)
-				if err := appendEventAtCurrent(&events, req, ownerID, computerID, seq, types.LifecycleWorkOpened, work.WorkItemID, "", []string{control.TargetAgentID}, "", now); err != nil {
-					return types.LifecycleResult{}, err
-				}
-			default:
-				return types.LifecycleResult{}, getErr
-			}
-		}
-
-		updateKey := req.TrajectoryID + "\x00" + control.TargetAgentID + "\x00" + req.CallerAgentID + "\x00" + control.ControlID
-		updateCanonicalID, buildErr := lifecycleCanonicalID(ogKindWorkerUpdate, ownerID, computerID, updateKey)
-		if buildErr != nil {
-			return types.LifecycleResult{}, buildErr
-		}
-		if _, getErr := s.lifecycleGraph().GetObject(ctx, updateCanonicalID); getErr == nil {
-			return types.LifecycleResult{}, ErrLifecycleCommandConflict
-		} else if !errors.Is(getErr, objectgraph.ErrNotFound) {
-			return types.LifecycleResult{}, getErr
-		}
-		seq++
-		packet := types.CoagentSourcePacket{
-			UpdateID: control.ControlID, ProducerUpdateID: control.ControlID, OwnerID: ownerID, ComputerID: computerID,
-			AgentID: req.CallerAgentID, TargetAgentID: control.TargetAgentID, ChannelID: req.DocumentID,
-			MessageSeq: seq, TrajectoryID: req.TrajectoryID, Direction: types.LifecyclePacketDirectionControl,
-			TargetWorkItemID: control.TargetWorkItemID, Role: agentprofile.Texture, SourceRunID: req.CallerRunID,
-			PayloadDigest: control.PayloadDigest, Disposition: types.UpdatePending, LifecycleVersion: 1, ReducerSeq: seq,
-			Packet: control.Packet, Content: control.Content, CreatedAt: now,
-		}
-		// Scheduling contract (I26): every execution_request bound for the
-		// persistent Management receives one durable computer-scoped arrival ordinal
-		// at mailbox entry so cross-trajectory FIFO selection is restart-safe.
-		// Ordinal allocation rides this turn's conditional batch; a concurrent
-		// allocator conflicts the whole command instead of reusing a number.
-		if packet.Packet.Kind == "execution_request" && control.TargetAgentID == agentprofile.Management+":"+ownerID {
-			ordinal, ordinalErr := s.nextArrivalOrdinal(ctx, ownerID, computerID)
-			if ordinalErr != nil {
-				return types.LifecycleResult{}, fmt.Errorf("apply Texture turn: allocate arrival ordinal: %w", ordinalErr)
-			}
-			packet.ArrivalOrdinal = ordinal
-		}
-		updateMeta := lifecycleMetadata("update_id", packet.UpdateID, computerID, req.TrajectoryID, seq)
-		updateMeta["producer_update_id"], updateMeta["target_agent_id"] = packet.ProducerUpdateID, packet.TargetAgentID
-		controlObj, buildErr := lifecycleObject(ogKindWorkerUpdate, ownerID, computerID, updateKey, packet, updateMeta, now, now)
-		if buildErr != nil {
-			return types.LifecycleResult{}, buildErr
-		}
-		addCondition(objectgraph.ObjectCondition{CanonicalID: controlObj.CanonicalID})
-		objects = append(objects, controlObj)
-		if err := appendEventAtCurrent(&events, req, ownerID, computerID, seq, types.LifecycleControlQueued, work.WorkItemID, packet.UpdateID, nil, "", now); err != nil {
-			return types.LifecycleResult{}, err
-		}
-		controlPackets = append(controlPackets, packet)
-		targetWorkItems = append(targetWorkItems, work)
-		controlIDs = append(controlIDs, packet.UpdateID)
-		targetWorkIDs = append(targetWorkIDs, work.WorkItemID)
+	accumulator := newLifecycleControlAccumulator(s, ctx, ownerID, computerID, req.DocumentID, req.TrajectoryID,
+		req.CallerAgentID, req.CallerRunID, req.CommandID, req.CommandDigest, "apply Texture turn", now, &seq,
+		&conditions, &objects, &events, &controlPackets, &targetWorkItems, &controlIDs, &targetWorkIDs)
+	if err := accumulator.issue(req.Controls); err != nil {
+		return types.LifecycleResult{}, err
 	}
 
 	if trajectory.SubjectRefs == nil {

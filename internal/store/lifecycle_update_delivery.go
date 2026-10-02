@@ -59,6 +59,12 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 		return types.LifecycleResult{}, fmt.Errorf("reconcile update delivery trajectory %s: %w", trajectoryID, err)
 	}
 
+	firstNonEmptyStore := func(a, b string) string {
+		if strings.TrimSpace(a) != "" {
+			return a
+		}
+		return b
+	}
 	now := time.Now().UTC()
 	var conditions []objectgraph.ObjectCondition
 	var objects []objectgraph.Object
@@ -74,7 +80,7 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 			OwnerID:        ownerID,
 			ComputerID:     computerID,
 			TrajectoryID:   trajectoryID,
-			WorkItemID:     update.ProducerWorkItemID,
+			WorkItemID:     firstNonEmptyStore(update.ProducerWorkItemID, update.TargetWorkItemID),
 			UpdateID:       update.UpdateID,
 			Kind:           kind,
 			ReducerVersion: types.LifecycleReducerVersion,
@@ -105,7 +111,7 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 		if getErr != nil {
 			return types.LifecycleResult{}, getErr
 		}
-		if update.UpdateID != updateID || update.Direction != types.LifecyclePacketDirectionProducerReport ||
+		if update.UpdateID != updateID || (update.Direction != types.LifecyclePacketDirectionProducerReport && update.Direction != types.LifecyclePacketDirectionControl) ||
 			update.TrajectoryID != trajectoryID || update.TargetAgentID != req.TargetAgentID ||
 			update.Disposition != types.UpdatePending ||
 			strings.TrimSpace(update.DeliveredToRunID) != strings.TrimSpace(item.ExpectedRunID) ||
@@ -137,11 +143,19 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID, Exists: true, ExpectedContentHash: updateObj.ContentHash})
 		objects = append(objects, updatedObj)
 		if exhausted {
-			if err := emit(types.LifecycleTextureActivationFailed, update, "delivery_attempts_exhausted"); err != nil {
+			failKind := types.LifecycleTextureActivationFailed
+			if update.Direction == types.LifecyclePacketDirectionControl {
+				failKind = types.LifecycleControlActivationFailed
+			}
+			if err := emit(failKind, update, "delivery_attempts_exhausted"); err != nil {
 				return types.LifecycleResult{}, err
 			}
 		} else {
-			if err := emit(types.LifecycleUpdateDelivered, update, "bound_to_activation"); err != nil {
+			deliverKind := types.LifecycleUpdateDelivered
+			if update.Direction == types.LifecyclePacketDirectionControl {
+				deliverKind = types.LifecycleControlDelivered
+			}
+			if err := emit(deliverKind, update, "bound_to_activation"); err != nil {
 				return types.LifecycleResult{}, err
 			}
 		}

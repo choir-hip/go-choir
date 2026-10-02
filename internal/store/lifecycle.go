@@ -5565,9 +5565,10 @@ func (s *Store) ListDeliveredPendingProducerReports(ctx context.Context, ownerID
 	return out, nil
 }
 
-// ListBoundPendingUpdatesForTarget returns pending producer reports already
-// claimed by a delivery run for ONE target agent — the stranded-repair input
-// for consume-at-commit. Unbound and non-pending rows never appear.
+// ListBoundPendingUpdatesForTarget returns pending updates already claimed by
+// a delivery run for ONE target agent — the stranded-repair input for
+// consume-at-commit. Producer reports and control packets both appear;
+// unbound and non-pending rows never do.
 func (s *Store) ListBoundPendingUpdatesForTarget(ctx context.Context, ownerID, computerID, targetAgentID string) ([]types.CoagentSourcePacket, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
 	if err != nil {
@@ -5610,7 +5611,7 @@ func (s *Store) ListBoundPendingUpdatesForTarget(ctx context.Context, ownerID, c
 			}
 			return nil, getErr
 		}
-		if update.Direction != types.LifecyclePacketDirectionProducerReport || update.Disposition != types.UpdatePending || strings.TrimSpace(update.DeliveredToRunID) == "" {
+		if update.Direction != types.LifecyclePacketDirectionProducerReport && update.Direction != types.LifecyclePacketDirectionControl || update.Disposition != types.UpdatePending || strings.TrimSpace(update.DeliveredToRunID) == "" {
 			continue
 		}
 		out = append(out, update)
