@@ -1,0 +1,22 @@
+{
+  "probe": "s0m_rn3c_escalate_acceptance",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "s0m-rn3c-escalate-1790948606525",
+  "started_at": "2026-10-02T13:43:26.526Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": 1790948688815,
+      "wall_ms": 82289,
+      "ok": true,
+      "trajectory": "5513dc30-04a4-550a-a9c5-6873ec87d964",
+      "doc": "2e85400a-2307-5c09-8cac-5abc321b8977"
+    }
+  ],
+  "ok": false,
+  "failure": "timeout: queued=false delivered=false",
+  "finished_at": "2026-10-02T13:55:41.186Z",
+  "wall_ms": 734660,
+  "trajectory_id": "5513dc30-04a4-550a-a9c5-6873ec87d964",
+  "doc_id": "2e85400a-2307-5c09-8cac-5abc321b8977"
+}
