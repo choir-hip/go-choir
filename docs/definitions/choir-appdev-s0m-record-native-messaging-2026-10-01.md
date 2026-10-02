@@ -290,20 +290,24 @@ now:
     releases its bound claim via bindTerminalRunOutcome -> unbindStranded
     LifecycleControls + re-drives the desk (regression
     TestLifecycleRunTerminalizeReleasesStrandedControlAndRewakesDesk). The
-    resolve leg is NOT "fires on texture activation": ConsumeLifecycleUpdate
-    only marks the report incorporated; no Resolve mints on consume, and
-    scorer independence (issuer never resolves its own stake; management is
-    scorer of record) means the resolve needs a management-scorer derivation
-    — machinery that does not yet exist on this owner trajectory. The resolve
-    leg is a missing scorer-derivation feature, not a delivery defect.
+    resolve leg is model agency, not a delivery defect and not a missing
+    mechanism: choir.Resolve(targetRef, verdict) is a live texture verb
+    (ChoirScope.Resolve -> IntentResolve -> CommitmentKindResolve record), so
+    the texture desk can mint a Resolve naming the ask's record after it
+    consumes the report. It consumed every producer_report (incorporated)
+    but never emitted Resolve — the desk did not take the resolve step, the
+    same agency limitation the escalate probes hit. Scorer independence is
+    not the blocker: the resolver is the asker recording satisfaction; the
+    independent scorer (management) is a separate verdict, not required to
+    mint the resolver's Resolve.
   blocker: >-
-    Mechanical resolve on report consume is not implemented: consume marks
-    the producer update incorporated but mints no Resolve, and the issuer
-    cannot resolve its own stake — a management-scorer resolve-derivation
-    path is required. Residual: passivated runs (076f3379) don't
-    self-re-drive — ae47c8a4 covers pending only. Remaining finish legs:
-    mechanical resolve (needs scorer-derivation machinery), deployed re-proof
-    of the c9180cd3 stranded-bound release, dual-delivery absence per kind.
+    Resolve leg is model agency: texture has choir.Resolve but did not emit
+    it after consuming the reports — the desk must be steered to mint the
+    Resolve (or the round-trip drives a fresh trajectory on the deployed
+    fix). Residual: passivated runs (076f3379) don't self-re-drive —
+    ae47c8a4 covers pending only. Remaining finish legs: a texture desk
+    minting Resolve on an ask's record, deployed re-proof of the c9180cd3
+    stranded-bound release, dual-delivery absence per kind.
 
 
 receipts:
