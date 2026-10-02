@@ -177,3 +177,16 @@ Normalization options (a)/(b)/(c) are before the convergent panel
 (.agentic-consensus/messaging-normalize-20261001); the map doc
 docs/reports/agent-messaging-system-state-2026-10-01.md carries the full
 mechanism census.
+
+**Residual repair landed 2026-10-01 under S0m RN0** (this commit). Items
+5-7 fixed: `commitTray` routes `IntentMessage` for lifecycle producers
+(`isLifecycleProducer()`: work_item_ids / lifecycle_work_item_id /
+lifecycle_control_bindings present, assignment_id absent) into
+`commitMessageIntent`; packet-bodied `IntentReport` with an explicit
+addressee commits through the same queue path (replacing only the
+envelope — the commitment record still mints); and the
+lifecycle-control activation path now stamps `requested_by_*` from bound
+work items (`management_controller.go` ~1747 + the replay-refresh
+branch). Dispatch-level regression tests:
+`TestCommitTrayLifecycleProducer{Message,Report}RoutesToQueue` in
+internal/agentcore/rlm_reduce_lifecycle_message_test.go.

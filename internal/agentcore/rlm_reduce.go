@@ -941,10 +941,13 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			}
 		case yaegikernel.IntentMessage:
 			// Every staged message on an assigned desk carries the
-			// update_coagent authority contract. The outcome envelope path is
-			// reachable only through IntentOutcome, which ChoirScope.Outcome
-			// stages — a model-authored MsgKind cannot claim it.
-			if r.isAssignedDesk() {
+			// update_coagent authority contract. Lifecycle producer runs
+			// (research/processor/reconciler activations bound to a work
+			// item but carrying no assignment_id) take the same durable
+			// packet path — their addressed acts are lifecycle updates,
+			// not channel mail. The outcome envelope path is reachable
+			// only through IntentOutcome.
+			if r.isAssignedDesk() || r.isLifecycleProducer() {
 				seq, err = r.commitMessageIntent(ctx, in)
 			} else {
 				seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
@@ -1055,8 +1058,16 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	}
 	// A packet-bodied report carries the coagent packet schema as its body
 	// (mission R2 — the update_coagent packet contract surviving on the
-	// carrier). Validate it with the same payload validator the retired tool
-	// enforced, so kind/claims/sources/actions/questions keep their contract.
+	// carrier). On a bound authority surface (assigned desk or lifecycle
+	// producer) with an explicit addressee, the report IS the durable
+	// lifecycle update: commit it through the same queue path as a staged
+	// Message instead of mailing a dead-letter envelope nothing wakes on.
+	// The commitment record above already minted; this replaces only the
+	// envelope.
+	if in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.Packet) != "" &&
+		strings.TrimSpace(in.ToDesk) != "" && (r.isAssignedDesk() || r.isLifecycleProducer()) {
+		return r.commitAddressedPacketIntent(ctx, in, in.Packet, "", "report")
+	}
 	if in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.Packet) != "" {
 		var packet types.CoagentSourcePacketPayload
 		if err := json.Unmarshal([]byte(in.Packet), &packet); err != nil {
@@ -1242,6 +1253,31 @@ func (r *rlmCallReduction) isAssignedDesk() bool {
 	return r != nil && r.rec != nil && metadataStringValue(r.rec.Metadata, "assignment_id") != ""
 }
 
+// isLifecycleProducer reports whether this reduction serves a lifecycle
+// producer run — a work-item-bound activation (research/processor/
+// reconciler) carrying work_item_ids or lifecycle_control_bindings but no
+// assignment_id. These runs' addressed acts are lifecycle updates with the
+// full producer authority contract; routing them to castStagedIntent dead-
+// letters the packet on a channel row nothing wakes on (the hollow-revision
+// defect documented in docs/problems/texture-research-hollow-revisions-
+// 2026-10-01.md).
+func (r *rlmCallReduction) isLifecycleProducer() bool {
+	if r == nil || r.rec == nil {
+		return false
+	}
+	if metadataStringValue(r.rec.Metadata, "lifecycle_work_item_id") != "" ||
+		len(metadataStringSlice(r.rec.Metadata["work_item_ids"])) > 0 {
+		return true
+	}
+	switch raw := r.rec.Metadata["lifecycle_control_bindings"].(type) {
+	case []any:
+		return len(raw) > 0
+	case []string:
+		return len(raw) > 0
+	}
+	return false
+}
+
 // commitFreezeIntent reduces a staged Freeze intent through the same freeze
 // body the commit_transaction tool runs; the capsule handle is the bound
 // handle, never model input. The mutation-role gate is the same predicate
@@ -1292,30 +1328,39 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 }
 
 // commitMessageIntent reduces one staged Message intent on an assigned desk
-// through the update_coagent authority path: the intent body is the
-// CoagentSourcePacketPayload JSON, the desk is the explicit target agent, and
-// the same durable update + wake sequence the retired tool ran executes here.
-// It returns the channel sequence of the emitted message event.
+// or lifecycle producer run through the update_coagent authority path: the
+// intent body is the CoagentSourcePacketPayload JSON, the desk is the
+// explicit target agent, and the same durable update + wake sequence the
+// retired tool ran executes here. It returns the channel sequence of the
+// emitted message event.
 func (r *rlmCallReduction) commitMessageIntent(ctx context.Context, in yaegikernel.StagedIntent) (uint64, error) {
+	return r.commitAddressedPacketIntent(ctx, in, in.Body, in.MsgKind, "message")
+}
+
+// commitAddressedPacketIntent decodes packetJSON as the coagent source
+// packet body for one staged addressed intent (message body or report
+// packet) and drives it through the shared update_coagent authority +
+// durable update + wake path. label names the intent kind in errors.
+func (r *rlmCallReduction) commitAddressedPacketIntent(ctx context.Context, in yaegikernel.StagedIntent, packetJSON, wantKind, label string) (uint64, error) {
 	rt := r.rt()
 	if rt == nil || rt.store == nil {
-		return 0, fmt.Errorf("reduce: message intent without update authority")
+		return 0, fmt.Errorf("reduce: %s intent without update authority", label)
 	}
 	var payload types.CoagentSourcePacketPayload
-	decoder := json.NewDecoder(strings.NewReader(in.Body))
+	decoder := json.NewDecoder(strings.NewReader(packetJSON))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&payload); err != nil {
-		return 0, fmt.Errorf("reduce: message %s body is not a coagent source packet: %w", in.LocalID, err)
+		return 0, fmt.Errorf("reduce: %s %s body is not a coagent source packet: %w", label, in.LocalID, err)
 	}
 	if decoder.More() {
-		return 0, fmt.Errorf("reduce: message %s body carries trailing data", in.LocalID)
+		return 0, fmt.Errorf("reduce: %s %s body carries trailing data", label, in.LocalID)
 	}
 	packet := normalizeCoagentSourcePacketPayload(payload)
 	if err := validateCoagentSourcePacketPayload(packet); err != nil {
 		return 0, err
 	}
-	if in.MsgKind != "" && in.MsgKind != packet.Kind {
-		return 0, fmt.Errorf("reduce: message %s kind %q does not match packet kind %q", in.LocalID, in.MsgKind, packet.Kind)
+	if wantKind != "" && wantKind != packet.Kind {
+		return 0, fmt.Errorf("reduce: %s %s kind %q does not match packet kind %q", label, in.LocalID, wantKind, packet.Kind)
 	}
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	execution.ToolCallID = intentIdempotencyKey(r.scope, in.LocalID, in.ToDesk, in.Body)

@@ -1744,6 +1744,15 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		if workItemIDs := workItemIDsForMetadata(workItems); len(workItemIDs) > 0 {
 			metadata["work_item_ids"] = workItemIDs
 		}
+		// Stamp requested_by_* provenance from the bound work items so the
+		// lifecycle producer's update_coagent authority chain (the exact
+		// requester-run binding in exactRequesterRunID) resolves. The sweep
+		// spawn path already inherits these; the control-activation path
+		// must too — without them the producer's report to Texture fails
+		// validation before the packet is ever queued.
+		for _, item := range workItems {
+			metadata = inheritRequesterMetadataFromWorkItem(ctx, rt.store, ownerID, metadata, item)
+		}
 
 		replay, replayErr := rt.store.ResolveLifecycleControlActivation(ctx, ownerID, computerID, trajectoryID, agentID, logicalKey, failedKey, lifecycleActivationVersionsForStore(versions))
 		if replayErr != nil {
@@ -1762,6 +1771,9 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 			active.Metadata["request_source"] = "lifecycle_texture_control"
 			active.Metadata[runMetadataTrajectoryID] = trajectoryID
 			active.Metadata["work_item_ids"] = workItemIDsForMetadata(workItems)
+			for _, item := range workItems {
+				active.Metadata = inheritRequesterMetadataFromWorkItem(ctx, rt.store, ownerID, active.Metadata, item)
+			}
 			return rt.bindOrReplayLifecycleControlActivation(ctx, active, updates)
 		}
 		if replay.DurablyFailed != nil {

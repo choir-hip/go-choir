@@ -201,11 +201,6 @@ boundaries:
     - directives are excluded from claim accrual/materiality aging.
     - Every cutover commit keeps tests deterministic and the staging
       computer serviceable.
-  excluded:
-    - S0b disposable-computer probes (sibling S0 slice)
-    - Commitment scoring algorithm internals beyond the tally fields named
-    - Chorus/provider routing changes
-    - World Wire station work
   protected_surfaces:
     - Texture canonical writes (ApplyTextureTurn)
     - Lifecycle delivery path (QueueLifecycleUpdate, outbox, actor tape)
@@ -227,12 +222,11 @@ boundaries:
 now:
   status: working
   slice: >-
-    RN0 narrow repair: widen commitTray dispatch so lifecycle-producer runs
-    (work_item_ids/lifecycle authority, no assignment_id) route addressed
-    Message and packet-bodied Report through QueueLifecycleUpdate; stamp
-    requested_by_* at control-activation bind via
-    inheritRequesterMetadataFromWorkItem. Restores research→texture on live
-    plumbing.
+    RN0 landed this commit: commitTray routes lifecycle producers'
+    addressed Message and packet-bodied Report intents through
+    QueueLifecycleUpdate; requested_by_* stamped at lifecycle-control
+    activation bind (management_controller.go). Research→texture is
+    live-path repaired. Next: RN1 prune + RN2 substrate.
   source_ref: main@3eb132c7
   deploy_identity: 'staging https://choir.news deployed_commit=fd8b2973'
   candidate: null

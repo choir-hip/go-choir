@@ -146,3 +146,146 @@ func TestCommitMessageIntentLifecycleResearchQueuesProducerReport(t *testing.T) 
 		t.Fatalf("replay minted duplicate: seq2=%d pending=%d", seq2, len(pending2))
 	}
 }
+
+// TestCommitTrayLifecycleProducerMessageRoutesToQueue is the dispatch-level
+// regression for the hollow-revision defect: commitTray routed IntentMessage
+// to commitMessageIntent only when isAssignedDesk() held (assignment_id), so
+// a lifecycle producer's addressed Message fell to castStagedIntent — a
+// channel row whose wake no-ops on texture:* — and the evidence never woke
+// the Texture actor. The widened gate must queue the update durably.
+func TestCommitTrayLifecycleProducerMessageRoutesToQueue(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := bindResearchControlFixture(t, rt, s, "owner-dispatch", "dispatch")
+	run := fixture.run
+	work, err := s.GetLifecycleWorkItem(context.Background(), run.OwnerID, run.ComputerID, fixture.workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Provenance stamping on the run (the RN0 fix to the activation path).
+	run.RequestedByRunID, _ = work.Details["requested_by_run_id"].(string)
+	run.Metadata["requested_by_run_id"] = work.Details["requested_by_run_id"]
+	run.Metadata["requested_by_agent_id"] = work.Details["requested_by_agent_id"]
+	run.Metadata["requested_by_profile"] = work.Details["requested_by_profile"]
+	reproject := types.ReplaceLifecycleActivationRequest{
+		OwnerID: run.OwnerID, ComputerID: run.ComputerID,
+		CommandID: "reproject-dispatch", TrajectoryID: run.TrajectoryID,
+		AgentID: run.AgentID, Run: run,
+	}
+	reproject.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(reproject)
+	if _, err := s.ReplaceLifecycleActivation(context.Background(), reproject); err != nil {
+		t.Fatal(err)
+	}
+
+	textureAgentID := fixture.control.AgentID
+	scope := ReductionScope{
+		FromAgentID: run.AgentID, DeskAgentID: run.AgentID,
+		FromRole: agentprofile.Research, ChannelID: run.ChannelID,
+		RunID: run.RunID, OwnerID: run.OwnerID, CellID: "cell-dispatch",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: run.RunID, AgentID: run.AgentID, OwnerID: run.OwnerID,
+		ChannelID: run.ChannelID, ComputerID: run.ComputerID,
+		Profile: agentprofile.Research, Role: agentprofile.Research,
+		RunRecord: &run,
+	})
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &run}
+
+	packet := types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          "evidence_update",
+		Summary:       "dispatch-path finding",
+		Claims:        []types.CoagentPacketClaim{{Text: "claim"}},
+		Sources:       []types.CoagentPacketSource{{SourceID: "s1", Kind: "web_page", Target: types.CoagentPacketSourceTarget{URI: "https://example.com/b", Title: "B"}}},
+	}
+	body, _ := json.Marshal(packet)
+
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "msg-dispatch", Kind: yaegikernel.IntentMessage, ToDesk: textureAgentID, MsgKind: "evidence_update", Body: string(body)},
+	}, 1); err != nil {
+		t.Fatalf("commitTray lifecycle producer message failed: %v", err)
+	}
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, run.OwnerID, run.ComputerID, textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("lifecycle producer message did not queue: pending=%d", len(pending))
+	}
+}
+
+// TestCommitTrayLifecycleProducerReportRoutesToQueue is the report-side twin:
+// a packet-bodied choir.Report addressed to Texture from a lifecycle producer
+// run previously minted a commitment record and then mailed an un-wakable
+// envelope. Under the repair it commits through the lifecycle queue path —
+// the packet itself is the delivery artifact.
+func TestCommitTrayLifecycleProducerReportRoutesToQueue(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := bindResearchControlFixture(t, rt, s, "owner-report", "report")
+	run := fixture.run
+	work, err := s.GetLifecycleWorkItem(context.Background(), run.OwnerID, run.ComputerID, fixture.workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.RequestedByRunID, _ = work.Details["requested_by_run_id"].(string)
+	run.Metadata["requested_by_run_id"] = work.Details["requested_by_run_id"]
+	run.Metadata["requested_by_agent_id"] = work.Details["requested_by_agent_id"]
+	run.Metadata["requested_by_profile"] = work.Details["requested_by_profile"]
+	reproject := types.ReplaceLifecycleActivationRequest{
+		OwnerID: run.OwnerID, ComputerID: run.ComputerID,
+		CommandID: "reproject-report", TrajectoryID: run.TrajectoryID,
+		AgentID: run.AgentID, Run: run,
+	}
+	reproject.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(reproject)
+	if _, err := s.ReplaceLifecycleActivation(context.Background(), reproject); err != nil {
+		t.Fatal(err)
+	}
+
+	textureAgentID := fixture.control.AgentID
+	scope := ReductionScope{
+		FromAgentID: run.AgentID, DeskAgentID: run.AgentID,
+		FromRole: agentprofile.Research, ChannelID: run.ChannelID,
+		RunID: run.RunID, OwnerID: run.OwnerID, CellID: "cell-report",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: run.RunID, AgentID: run.AgentID, OwnerID: run.OwnerID,
+		ChannelID: run.ChannelID, ComputerID: run.ComputerID,
+		Profile: agentprofile.Research, Role: agentprofile.Research,
+		RunRecord: &run,
+	})
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &run}
+
+	packet := types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          "evidence_update",
+		Summary:       "report-path finding",
+		Claims:        []types.CoagentPacketClaim{{Text: "claim"}},
+		Sources:       []types.CoagentPacketSource{{SourceID: "s1", Kind: "web_page", Target: types.CoagentPacketSourceTarget{URI: "https://example.com/c", Title: "C"}}},
+	}
+	packetJSON, _ := json.Marshal(packet)
+
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "report-1", Kind: yaegikernel.IntentReport, ToDesk: textureAgentID, Packet: string(packetJSON), Claim: "report-path finding"},
+	}, 1); err != nil {
+		t.Fatalf("commitTray lifecycle producer report failed: %v", err)
+	}
+
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, run.OwnerID, run.ComputerID, textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("lifecycle producer report did not queue: pending=%d", len(pending))
+	}
+	if pending[0].ProducerUpdateID == "" || pending[0].WorkItemID != fixture.workID {
+		t.Fatalf("queued report update malformed: %+v", pending[0])
+	}
+	// The commitment record for the report still mints — record + packet in
+	// one committed act, not an envelope.
+	if !reduction.receipt.Committed || len(reduction.receipt.Intents) != 1 {
+		t.Fatalf("reduction receipt = %+v", reduction.receipt)
+	}
+}
