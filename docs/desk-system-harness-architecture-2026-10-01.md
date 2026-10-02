@@ -52,6 +52,68 @@ Four desks hold authority; the ontology is deliberately small
 Processor/reconciler/conductor/email are legacy tool surfaces without staged
 verbs; they ride the same delivery substrate.
 
+## Why desks — the Luhmann/Simon frame
+
+Owner-supplied theoretical grounding (2026-10-01 note). This is explanatory
+frame, not derivation — it clarifies which design choices are principled.
+
+**Three forms of differentiation.** Luhmann classified societies by how they
+divide themselves: *segmentary* (identical units side by side — clans,
+villages), *stratified* (ranked layers — estates, castes), *functional*
+(subsystems specialized by function — economy, law, science, politics). The
+multi-agent landscape maps exactly:
+
+- a **swarm** is segmentary — many interchangeable agents coordinated by
+  volume; useful for breadth, structurally redundant;
+- **role-based multi-agent systems** are stratified — manager agents over
+  worker agents, org-chart personas;
+- **desks** are functional — differentiated by *what they do*, not by rank.
+
+**Operational closure and codes.** Each Luhmannian function system processes
+the world through its own binary code (science: true/false; law: legal/
+illegal; economy: pays/doesn't) and reacts only according to its own
+operations. A desk works the same way: research's code is roughly
+sourced/unsourced; texture's is canonical/not; management's is admitted/
+coherent/not. The desk's module surface plus its own context IS its closure.
+
+**Structural coupling = the records protocol.** Operationally closed systems
+cannot instruct each other; they can only *irritate*, and the receiver
+interprets the irritation under its own code. Society's couplings are stable
+interfaces (contracts couple law and economy; constitutions couple law and
+politics). The commitment record is ours: a typed record delivered to a desk
+is not obeyed — it is evaluated under that desk's code by its own cells.
+This is the security property in the cleanest form: **lateral prompt
+injection is an attempt to turn an irritation into a command**, and closure
+resists it by design. It is also the deepest argument against raw messaging:
+an untyped envelope carries no structure a code can evaluate — only typed
+records admit evaluation. Raw mail retiring in favor of records is not
+aesthetics; it is what makes closure enforceable.
+
+**Simon's near-decomposability** ("The Architecture of Complexity", 1962):
+working complex systems have strong interactions within subsystems and weak,
+well-defined ones between — which is why they evolve and repair one part at
+a time. Desks are the nearly-decomposable units; records are the weak,
+typed coupling. Empirical instance: the research→texture return-path bug
+was repaired entirely inside the coupling (dispatch + provenance), never
+inside either desk.
+
+**The Zettelkasten is the object graph.** Luhmann's ~90,000-card slip box
+was built so that following cross-references produces surprising
+connections — he described it (1981) as communicating with the card file as
+a partner. The object graph is the same construction: addressable, linked,
+content-hashed records a desk's cells navigate as a thinking surface.
+
+**The caveat is the supervision surface.** Function systems are blind outside
+their own codes — modern society's coordination failures are that blindness.
+Luhmann's answer is second-order observation: observing how other systems
+observe. For desks, the couplings themselves need a watcher: management is
+the early version (coherence, admission, scorer of record); texture's live
+supervision is a second instance; the owner is the final one.
+
+**On the name:** "desk" is already the newsroom's own unit — city desk,
+foreign desk, copy desk are a newspaper's function systems. The vocabulary
+fits the automatic newspaper it serves.
+
 ## The core idea — records, not messages
 
 **Live:** every staged *semantic* act (ask, note, report, precommit, …)
