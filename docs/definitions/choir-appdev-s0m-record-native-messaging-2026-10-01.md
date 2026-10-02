@@ -237,17 +237,18 @@ now:
     (no desk prompt instructs a retired verb; engineering Message→management
     mints a record-native note, not a retired envelope);
     docs/current-architecture.md updated with the record-native invariant.
-  source_ref: main@b18f3baf
+  source_ref: main@c9180cd3
   deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 active epoch 1022 (crash-loop fixed, stable since 15:58 refresh)'
   next_action: >-
-    Landed b18f3baf (texture-mail reduce-time reject + problem doc + arch
-    doc). Finish-acceptance remaining: (1) confirm the ask→research→report→
-    resolve round trip reaches the mechanical resolve on trajectory
-    0bdcbf61 — reports already delivered to texture, asks delivered to
-    research; the ask precommit resolves when the texture desk consumes the
-    report on its next activation; (2) stranded-bound rebind under run
-    death on a disposable computer; (3) dual-delivery absence per kind.
-  candidate: main@b18f3baf
+    Landed c9180cd3 (stranded-bound release at run terminalization +
+    regression). Finish-acceptance remaining: (1) the mechanical resolve on
+    report consume is not implemented — consume marks the report
+    incorporated but mints no Resolve, and issuer-independence forbids the
+    issuer resolving its own ask; a management-scorer resolve-derivation
+    path is required before this leg can pass; (2) deployed re-proof of the
+    c9180cd3 stranded-bound release once CI/deploy lands; (3)
+    dual-delivery absence per kind.
+  candidate: main@c9180cd3
   conjecture:
     id: record-native-coupling
     status: active
@@ -283,16 +284,26 @@ now:
     Both stall repairs deployed and verified (deployed_commit=734ce69b,
     2026-10-02T16:35Z); guest autoputer stable since 15:58 refresh. On
     trajectory 0bdcbf61 the ask legs delivered to research and the
-    producer_report packets delivered to texture (direction proof landed);
-    the mechanical resolve fires on the texture desk's next activation when
-    it consumes the report. Channel-mail-to-texture now rejects at reduce
-    time (b18f3baf) — the durable dead letter is closed; the only reachable
-    dead-letter was a non-lifecycle envelope arm, unreachable in production.
+    producer_report packets delivered to texture (direction proof landed).
+    Channel-mail-to-texture rejects at reduce time (b18f3baf). Stranded-bound
+    release landed c9180cd3: a carrier run terminalizing unconsumed now
+    releases its bound claim via bindTerminalRunOutcome -> unbindStranded
+    LifecycleControls + re-drives the desk (regression
+    TestLifecycleRunTerminalizeReleasesStrandedControlAndRewakesDesk). The
+    resolve leg is NOT "fires on texture activation": ConsumeLifecycleUpdate
+    only marks the report incorporated; no Resolve mints on consume, and
+    scorer independence (issuer never resolves its own stake; management is
+    scorer of record) means the resolve needs a management-scorer derivation
+    — machinery that does not yet exist on this owner trajectory. The resolve
+    leg is a missing scorer-derivation feature, not a delivery defect.
   blocker: >-
-    None blocking. Residual: passivated runs (076f3379) don't self-re-drive
-    — ae47c8a4 covers pending only. Finish-acceptance open legs: mechanical
-    resolve on report consume (awaiting texture activation), stranded-bound
-    rebind under run death, dual-delivery absence per kind.
+    Mechanical resolve on report consume is not implemented: consume marks
+    the producer update incorporated but mints no Resolve, and the issuer
+    cannot resolve its own stake — a management-scorer resolve-derivation
+    path is required. Residual: passivated runs (076f3379) don't
+    self-re-drive — ae47c8a4 covers pending only. Remaining finish legs:
+    mechanical resolve (needs scorer-derivation machinery), deployed re-proof
+    of the c9180cd3 stranded-bound release, dual-delivery absence per kind.
 
 
 receipts:
