@@ -39,12 +39,24 @@ A texture-desk fresh mint whose `initial_dispatch` drops therefore strands in
 
 Blocks the finish-acceptance chain (ask→report→resolve requires live desk
 cells). Per S0m boundaries this is substrate-level (delivery path), not a
-model-policy issue. Repair belongs to the next boundary: either generalize
-the fresh-mint watchdog beyond Management or route `initial_dispatch`
-through the durable actor-wake outbox so `sweepActorWakeOutbox` re-drives
-lost dispatches.
+model-policy issue. Repaired 2026-10-02 via the second route — see below.
+
+## Repair (landed)
+
+The mint's `initial_dispatch` obligation is now derivable: `actorWakeOutboxFromObject`
+gained an `ogKindRun` case — a run object projected `pending` at mint
+(`UpdatedAt==CreatedAt`, no `actor_reactivated_from_passivated`) mints an
+`initial_dispatch` outbox row to `run.AgentID` atomically in the same batch.
+`projectLifecycleRun` and `CreateRunOG` gained the derivation call (they
+bypass `commitLifecycleTransition`, where the loop used to live inline — now
+extracted to `appendActorWakeOutboxes`), and `MigrateActorWakeOutbox` now
+scans `ogKindRun`, so the 38 stranded pending runs re-drive on next guest
+boot. `wake.AgentID=""` keeps `fromAgentID` identical to `rt.activate`'s
+send, so a delivered dispatch dedups onto the same deterministic update_id;
+a duplicate that does land no-ops past pending.
 
 ## Evidence
+
 - `docs/evidence/s0m-rn3c-escalate-acceptance-2026-10-02.json` (v3: timeout)
 - `docs/evidence/s0m-rn3c-escalate-acceptance-v4-2026-10-02.json` (v4: timeout, deepseek pending)
 - `docs/evidence/s0m-ask-acceptance-2026-10-02.json` (ask probe: timeout)

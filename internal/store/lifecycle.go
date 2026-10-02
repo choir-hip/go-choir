@@ -769,6 +769,40 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 			return nil, err
 		}
 		return []objectgraph.Object{outbox}, nil
+	case ogKindRun:
+		run, err := decodeLifecycleObject[types.RunRecord](obj)
+		if err != nil {
+			return nil, err
+		}
+		// The mint's initial_dispatch obligation is derivable: a run object
+		// whose first durable projection is still pending owes its agent the
+		// activation wake. rt.activate dispatches it synchronously and only
+		// logs on loss — this outbox row is the re-drive authority that makes
+		// sweepActorWakeOutbox the retry path instead of a fresh-mint
+		// watchdog. UpdatedAt==CreatedAt names the mint projection only:
+		// every later durable write bumps UpdatedAt, so a pending run that was
+		// written again (passivate, reconcile, metadata refresh) does not
+		// re-emit — and if it did, handleInitialDispatch no-ops past pending
+		// and the deterministic update_id dedups against the activate row.
+		// Passivated runs are covered by the reactivation resume path, not a
+		// second initial dispatch.
+		if run.State != types.RunPending ||
+			!obj.UpdatedAt.Equal(obj.CreatedAt) ||
+			strings.TrimSpace(run.AgentID) == "" {
+			return nil, nil
+		}
+		if reactivated, _ := run.Metadata["actor_reactivated_from_passivated"].(bool); reactivated {
+			return nil, nil
+		}
+		// FromAgentID stays empty to match rt.activate's dispatch call, so the
+		// replayed occurrence collapses onto the same deterministic update_id.
+		sourceID := "run:" + run.RunID + ":initial_dispatch"
+		_, outbox, err := actorWakeOutbox(obj, sourceID, run.AgentID, run.TrajectoryID, "",
+			"initial_dispatch", run.RunID, time.Time{}, "wake:"+obj.CanonicalID+":"+sourceID)
+		if err != nil || outbox.CanonicalID == "" {
+			return nil, err
+		}
+		return []objectgraph.Object{outbox}, nil
 	default:
 		return nil, nil
 	}
@@ -942,7 +976,7 @@ func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 	}
 	kinds := []objectgraph.ObjectKind{
 		ogKindWorkerUpdate, ogKindWorkItem, ogKindLifecycleCancelIntent,
-		ogKindEngineeringAssignment, ogKindTexRev,
+		ogKindEngineeringAssignment, ogKindTexRev, ogKindRun,
 	}
 	minted := 0
 	for _, kind := range kinds {
@@ -2298,6 +2332,31 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	if !replacedReceipt {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle: transition receipt missing from atomic batch")
 	}
+	objects, conditions, err = s.appendActorWakeOutboxes(ctx, objects, conditions)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: edges}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, commandID, digest); found || replayErr != nil {
+				return replay, replayErr
+			}
+			return types.LifecycleResult{}, ErrConcurrentStateChange
+		}
+		return types.LifecycleResult{}, err
+	}
+	return result, nil
+}
+
+
+// appendActorWakeOutboxes derives every durable actor wake the batch's objects
+// owe and appends the new (or re-armed) outbox rows plus their commit
+// conditions. Idempotent: the wake key is deterministic, so a prior transition
+// on the same source may already have minted it — an existing unprojected wake
+// with identical body is kept (guard on its hash); an already-projected wake is
+// re-armed for this transition (the obligation it signals is still open); only
+// a body drift on a pending wake is a real conflict.
+func (s *Store) appendActorWakeOutboxes(ctx context.Context, objects []objectgraph.Object, conditions []objectgraph.ObjectCondition) ([]objectgraph.Object, []objectgraph.ObjectCondition, error) {
 	seenObjects := make(map[string]struct{}, len(objects))
 	for _, obj := range objects {
 		seenObjects[obj.CanonicalID] = struct{}{}
@@ -2309,19 +2368,13 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	for _, obj := range objects {
 		outboxes, outboxErr := actorWakeOutboxFromObject(obj, s.actorWakeResolverObjects(ctx, obj, objects))
 		if outboxErr != nil {
-			return types.LifecycleResult{}, fmt.Errorf("lifecycle: derive actor wake outbox: %w", outboxErr)
+			return nil, nil, fmt.Errorf("lifecycle: derive actor wake outbox: %w", outboxErr)
 		}
 		for _, outbox := range outboxes {
 			if outbox.CanonicalID == "" {
 				continue
 			}
 			if _, exists := seenObjects[outbox.CanonicalID]; !exists {
-				// The wake key is deterministic, so a prior transition on the same
-				// source may already have minted it. Re-minting is idempotent: an
-				// existing unprojected wake with identical body is kept (guard on
-				// its hash); an already-projected wake is re-armed for this
-				// transition (the obligation it signals is still open); only a body
-				// drift on a pending wake is a real conflict.
 				existing, getErr := s.lifecycleGraph().GetObject(ctx, outbox.CanonicalID)
 				switch {
 				case errors.Is(getErr, objectgraph.ErrNotFound):
@@ -2330,13 +2383,13 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 					conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID})
 					seenConditions[outbox.CanonicalID] = struct{}{}
 				case getErr != nil:
-					return types.LifecycleResult{}, getErr
+					return nil, nil, getErr
 				default:
 					var existingMeta struct {
 						Projected bool `json:"projected"`
 					}
 					if json.Unmarshal(existing.Metadata, &existingMeta) != nil {
-						return types.LifecycleResult{}, fmt.Errorf("lifecycle: decode actor wake outbox %s metadata", outbox.CanonicalID)
+						return nil, nil, fmt.Errorf("lifecycle: decode actor wake outbox %s metadata", outbox.CanonicalID)
 					}
 					conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: outbox.CanonicalID, Exists: true, ExpectedContentHash: existing.ContentHash})
 					seenConditions[outbox.CanonicalID] = struct{}{}
@@ -2361,11 +2414,11 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 						// drift.
 						var existingWake, newWake ActorWakeOutbox
 						if json.Unmarshal(existing.Body, &existingWake) != nil || json.Unmarshal(outbox.Body, &newWake) != nil {
-							return types.LifecycleResult{}, ErrConcurrentStateChange
+							return nil, nil, ErrConcurrentStateChange
 						}
 						existingWake.CreatedAt, newWake.CreatedAt = time.Time{}, time.Time{}
 						if existingWake != newWake {
-							return types.LifecycleResult{}, ErrConcurrentStateChange
+							return nil, nil, ErrConcurrentStateChange
 						}
 					}
 				}
@@ -2376,16 +2429,7 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 			}
 		}
 	}
-	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: edges}); err != nil {
-		if errors.Is(err, objectgraph.ErrConflict) {
-			if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, commandID, digest); found || replayErr != nil {
-				return replay, replayErr
-			}
-			return types.LifecycleResult{}, ErrConcurrentStateChange
-		}
-		return types.LifecycleResult{}, err
-	}
-	return result, nil
+	return objects, conditions, nil
 }
 
 func (s *Store) lifecycleTrajectoryObject(ctx context.Context, ownerID, computerID, trajectoryID string) (objectgraph.Object, types.TrajectoryRecord, error) {
@@ -2950,6 +2994,14 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		}
 		objects = append(objects, eventObj)
 		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID})
+	}
+	// A pending-mint run owes its agent the initial_dispatch wake; deriving it
+	// here commits the obligation atomically with the run instead of relying
+	// solely on rt.activate's synchronous send + log (the desk-run dispatch
+	// stall: a lost send stranded runs pending with no re-drive authority).
+	objects, conditions, err = s.appendActorWakeOutboxes(ctx, objects, conditions)
+	if err != nil {
+		return types.LifecycleResult{}, err
 	}
 	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects}); err != nil {
 		if errors.Is(err, objectgraph.ErrConflict) {

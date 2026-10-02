@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -597,7 +598,18 @@ func (s *Store) CreateRunOG(ctx context.Context, rec types.RunRecord) error {
 		return err
 	}
 
-	// Write structural edges.
+	// Non-lifecycle run mints (no trajectory) skip commitLifecycleTransition,
+	// so the pending-mint initial_dispatch wake is minted here best-effort —
+	// boot-time MigrateActorWakeOutbox is the backstop if this put is lost.
+	if wakeObjs, wakeErr := actorWakeOutboxFromObject(obj, nil); wakeErr == nil && len(wakeObjs) > 0 {
+		conds := make([]objectgraph.ObjectCondition, 0, len(wakeObjs))
+		for _, w := range wakeObjs {
+			conds = append(conds, objectgraph.ObjectCondition{CanonicalID: w.CanonicalID, Exists: false})
+		}
+		if werr := s.ogStore.PutBatchConditional(ctx, conds, objectgraph.Batch{Objects: wakeObjs}); werr != nil {
+			log.Printf("store: mint run %s initial-dispatch wake: %v", rec.RunID, werr)
+		}
+	}
 	if rec.AgentID != "" && rec.ComputerID != "" {
 		agentID, buildErr := scopedAgentCanonicalID(rec.OwnerID, rec.ComputerID, rec.AgentID)
 		if buildErr == nil {

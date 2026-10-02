@@ -391,6 +391,75 @@ func TestMigrateActorWakeOutboxMintsPendingWakes(t *testing.T) {
 	}
 }
 
+func TestPendingMintRunDerivesInitialDispatchWake(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+
+	// A pending run whose object carries mint timestamps owes its agent the
+	// initial_dispatch wake — the derivable re-drive for rt.activate's
+	// synchronous send (desk-run dispatch stall, 2026-10-02).
+	now := time.Now().UTC()
+	pendingRun := types.RunRecord{
+		RunID: "run-pending-mint-1", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		AgentID: start.Agent.AgentID, TrajectoryID: start.TrajectoryID,
+		State: types.RunPending, CreatedAt: now, UpdatedAt: now,
+	}
+	runCanon, err := lifecycleCanonicalID(ogKindRun, start.OwnerID, start.ComputerID, pendingRun.RunID)
+	if err != nil {
+		t.Fatalf("run canonical id: %v", err)
+	}
+	runObj, err := lifecycleObject(ogKindRun, start.OwnerID, start.ComputerID, pendingRun.RunID, pendingRun,
+		lifecycleMetadata("run_id", pendingRun.RunID, start.ComputerID, start.TrajectoryID, 1), now, now)
+	if err != nil {
+		t.Fatalf("build run object: %v", err)
+	}
+	runObj.CanonicalID = runCanon
+	if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{
+		{CanonicalID: runObj.CanonicalID, Exists: false},
+	}, objectgraph.Batch{Objects: []objectgraph.Object{runObj}}); err != nil {
+		t.Fatalf("write pending run: %v", err)
+	}
+
+	if _, err := s.MigrateActorWakeOutbox(ctx); err != nil {
+		t.Fatalf("migrate actor wake outbox: %v", err)
+	}
+	wakes, err := s.ListUnprojectedActorWakes(ctx)
+	if err != nil {
+		t.Fatalf("list wakes: %v", err)
+	}
+	found := false
+	for _, w := range wakes {
+		if w.Kind == "initial_dispatch" && w.Content == pendingRun.RunID && w.TargetAgentID == start.Agent.AgentID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("pending-mint run derived no initial_dispatch wake: %+v", wakes)
+	}
+
+	// A pending run that was written again after mint does not re-emit: the
+	// UpdatedAt>CreatedAt discriminator marks it as already-dispatched.
+	rewritten := pendingRun
+	rewritten.UpdatedAt = now.Add(time.Minute)
+	rewrittenObj, err := lifecycleObject(ogKindRun, start.OwnerID, start.ComputerID, pendingRun.RunID, rewritten,
+		lifecycleMetadata("run_id", pendingRun.RunID, start.ComputerID, start.TrajectoryID, 1), now, rewritten.UpdatedAt)
+	if err != nil {
+		t.Fatalf("build rewritten run object: %v", err)
+	}
+	rewrittenObj.CanonicalID = runCanon
+	outboxes, err := actorWakeOutboxFromObject(rewrittenObj, nil)
+	if err != nil {
+		t.Fatalf("derive rewritten run: %v", err)
+	}
+	if len(outboxes) != 0 {
+		t.Fatalf("rewritten pending run re-emitted %d wakes, want 0", len(outboxes))
+	}
+}
+
 func TestStartLifecyclePreparesStructuredRevision(t *testing.T) {
 	t.Run("derives readable content and preserves replay hash", func(t *testing.T) {
 		s := openTestStore(t)
