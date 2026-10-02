@@ -102,3 +102,16 @@ Terse entries; consult only when auditing or `now` loses a thread.
   fix works; the wedge was purely host-side.
 - Divergent panel (in flight): hunting sibling lock/timeout defects in
   vmmanager+vmctl before S1 inherits the structure.
+
+- RESOLVED (deploy fd8b2973, forced workflow_dispatch run 36945324052):
+  fixed binary live; vmctl pid 681489; owner VM reattached active epoch
+  1000; /boot-timeline instant 200. Post-fix probe (82s, zero errors):
+  fresh registration booted computer-75ed0602 in 10.2s; owner re-refresh
+  epoch 1001 healthy at 26.6s (vocab_fenced 26.2s, applied_rows=0) —
+  25x faster than pre-fix. Fetch completed inside its window on both.
+  Full receipt set re-captured into docs/evidence + probe index committed
+  (4708a034). Deploy-cancel footgun hit 3x tonight (concurrent pushes kill
+  in-flight deploys) — recorded as blocker in the station now card.
+- S0a boundary receipt recorded in the station file; S0b (disposable-
+  computer probes) is the live slice. The divergent panel's lock-substrate
+  findings feed S0b/S1 scoping.

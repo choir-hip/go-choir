@@ -176,22 +176,24 @@ boundaries:
 now:
   status: working
   slice: >-
-    S0a complete: instrument deployed, six receipts captured, two new problem
-    docs filed. S0b is the live slice: bounded disposable-computer probes
-    (capsule health map, M9a bundle, Go effect, snapshot/resume).
-  source_ref: main@8aa1dce9
-  deploy_identity: 'staging https://choir.news deployed_commit=ff513419 (docs-only) / autoputer guest=1beed1a9; owner guest computer-03335285269bdba4f94377e56879f9e6 epoch=995'
+    S0a complete: instrument deployed, deadlock hotfix landed and verified
+    on staging, seven receipts captured (fresh + owner-sized + post-refresh),
+    three new problem docs filed. S0b is the live slice: bounded
+    disposable-computer probes (capsule health map, M9a bundle, Go effect,
+    snapshot/resume).
+  source_ref: main@4708a034
+  deploy_identity: 'staging https://choir.news deployed_commit=fd8b2973 (deadlock fix live); owner guest computer-03335285269bdba4f94377e56879f9e6 epoch=1001'
   candidate:
     id: s0a-boot-timeline-instrument
     state: landed
-    ref: main@ff513419
+    ref: main@7e412ca7
     base: main@5e789bef
-    digest: deployed_and_probed
+    digest: deployed_and_probed_post_fix
     scope:
       - internal/autoputer/boot_timeline.go (guest collector + /internal/boot/timeline + /internal/diag/tcp-dial)
-      - internal/autoputer/run.go (phase marks, SetOnListen, replay volume)
+      - internal/autoputer/run.go (phase marks, SetOnListen, replay volume, applied_rows predicate)
       - internal/server/server.go (SetOnListen hook)
-      - internal/vmmanager/boot_timeline.go + manager.go (host marks, merged receipt, persistence, refresh boot_kind)
+      - internal/vmmanager/boot_timeline.go + manager.go (host marks, merged receipt, persistence, fetch outside m.mu, t.mu deadlock fix, locked MarshalJSON)
       - internal/vmctl/handlers.go + ownership.go + cmd/vmctl/main.go (boot-timeline endpoint + BootKind)
   conjecture:
     id: s0-observed-boot-and-builder-boundary
@@ -224,6 +226,9 @@ now:
       - docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md
       - docs/problems/s0-tap-egress-unfiltered-2026-10-01.md
       - docs/problems/s0-deploy-refresh-skips-autoputer-internals-2026-10-01.md
+      - docs/problems/s0-vocab-rescan-fires-on-any-replay-2026-10-01.md
+      - docs/problems/s0-internal-surface-forgeable-caller-2026-10-01.md
+      - docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md
   decision:
     what: >-
       Run S0a as instrumentation/read-only evidence first; admit S0b only as
@@ -240,9 +245,13 @@ now:
       kernel cmdline (world-readable in the guest) and host fc-config; the
       runtime closure is 11 requisites under the guest's Nix store path.
       Deploy's active-VM refresh skips autoputer-internal pushes, leaving
-      stale guests until manual refresh. Owner-sized refresh replay is the
-      dominant boot cost: 240542 rows = ~653s of a 662.7s boot; a
-      caught-up refresh is ~10s.
+      stale guests until manual refresh. The vocab-rescan-on-any-replay
+      substrate defect is repaired: owner-sized refresh (epoch 1001) reaches
+      healthy at 26.6s with applied_rows=0; fresh boot 8.6s. The fetch-guest-
+      timeline deadlock (t.mu reentry + fetch under m.mu) is repaired and
+      verified live; the lock-substrate class remains (bootVM pre-launch
+      exec under m.mu, r.mu held across manager calls) — problem-documented
+      for S0b/S1.
     main_uncertainty: >-
       Whether the disposable owner-sized fixture can create/resume a lazily
       loaded snapshot and whether a capsule can build a closure that remains
@@ -253,18 +262,42 @@ now:
       install/activate/reboot/restore, one Go effect, one runtime dep absent
       from the base.
   blocker_or_risk: >-
-    The epoch-995 boot showed the owner tape is already large enough that a
-    refresh boot with real replay volume (~240k rows, ~11min) exceeds the
-    deploy refresh's 300s curl timeout — the 36924036358 deploy succeeded
-    only because it skipped the refresh, and a future deploy-classifier
-    refresh against this tape will hit that ceiling.
+    The 300s deploy-refresh timeout stands (a refresh that runs >300s is
+    killed mid-boot — acceptable now that real boots land ~27s, but a
+    large-tape growth bound belongs to S3). Push-cancellation cancels in-
+    flight CI deploys — three deploys were eaten tonight by interleaved
+    pushes; a docs push between a fix push and its deploy is unsafe until
+    CI concurrency groups are scoped per-ref.
   next_action: >-
     S0b: run the disposable-computer probe suite (capsule health map, M9a
     bundle lifecycle, one Go effect, one absent runtime dep, snapshot/resume)
     against a fresh registration computer on staging; then the boundary panel
     on the frozen S0a+S0b evidence and the transition receipt.
 
-receipts: []
+receipts:
+  - id: s0a-boundary-close-2026-10-02
+    kind: slice_transition
+    status: closed
+    closed_at: '2026-10-02T00:45:00Z'
+    boundary: S0a landed → S0b live
+    panel: >-
+      Agentic-consensus boundary panel (authoring + divergent): S1-sufficient,
+      S3-insufficient-as-archived; the divergence forced the replayed-predicate
+      fix (21bbabff), the forgeable-caller problem doc, and the deadlock
+      hotfix (7e412ca7).
+    incident: >-
+      21bbabff's fetch-polling tail-out re-entered t.mu → self-deadlock while
+      holding m.mu → all boots serialized for ~40min on staging; problem-
+      documented, hotfixed, verified live (owner refresh healthy at 26.6s
+      post-fix vs 662.7s pre-fix).
+    evidence:
+      - docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json
+      - docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
+      - docs/problems/s0-vocab-rescan-fires-on-any-replay-2026-10-01.md
+      - docs/problems/s0-internal-surface-forgeable-caller-2026-10-01.md
+      - docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md
+      - docs/reports/s0a-boot-timeline-landing-2026-10-01.md
+      - docs/choir-appdev-s0-reality-boot-timeline-ledger-2026-10-01.md
 ---
 
 # S0 mechanism
