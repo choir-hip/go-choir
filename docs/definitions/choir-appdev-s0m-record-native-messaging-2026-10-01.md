@@ -233,15 +233,20 @@ now:
     live guest data.img edit, receipt
     docs/evidence/s0m-texture-model-swap-2026-10-02.md).
   source_ref: main@9eefbb8b
-  deploy_identity: 'staging https://choir.news deployed_commit=258916d5; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer 258916d5 (verified 2026-10-02T13:42Z)'
+  deploy_identity: 'staging https://choir.news deployed_commit=e4780c1a (in-flight); owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer aa2bd814 (was crash-looping — fix e4780c1a pending deploy)'
   next_action: >-
-    Dispatch-stall repair landed ae47c8a4 (run mint projects
-    initial_dispatch through the actor-wake outbox; migration re-drives
-    the 38 stranded pending runs on next boot) — pending deploy +
-    staging proof, then the finish-acceptance items: ask→research→
+    Two deploys stack: (1) ae47c8a4 dispatch-stall repair — run mint
+    projects initial_dispatch through the actor-wake outbox, migration
+    re-drives 38 stranded pending runs on boot; (2) e4780c1a crash-loop
+    fix — guest autoputer was restart-looping every ~8-9min on
+    texture:f1d3764d (live trajectory, zero open texture work →
+    submitTextureAgentRevisionRun refuses → ReconcileActorWake fails →
+    startup refused → exit); reconciler now treats no-open-texture-work
+    as quiescent. On deploy: confirm guest reaches stable running, verify
+    run 076f3379 executes, then finish-acceptance items: ask→research→
     report→resolve round trip, stranded-bound rebind under run death,
     texture-mail rejection, docs/current-architecture.md update.
-  candidate: main@ae47c8a4
+  candidate: main@e4780c1a
   conjecture:
     id: record-native-coupling
     status: active
