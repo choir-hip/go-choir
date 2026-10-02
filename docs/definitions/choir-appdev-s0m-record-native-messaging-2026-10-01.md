@@ -227,11 +227,20 @@ now:
     IssueLifecycleControl extracted from ApplyTextureTurn via the shared
     lifecycleControlAccumulator, stranded-bound unbind covering control and
     producer-report packets at both reconcile entry points, and the
-    management:* producer-report authority contract. 3b3ce3e2 repairs the
-    wake-outbox created_at drift defect RN2 verification surfaced
-    (docs/problems/actor-wake-outbox-createdat-drift-2026-10-02.md).
-  source_ref: main@7bbe9ec6
-  deploy_identity: 'staging https://choir.news deployed_commit=7f716ca1 (verified 2026-10-02T05:13Z)'
+    management:* producer-report authority contract. RN3b landed 758325af —
+    IntentReport routes through CommitLifecycleAct (record+producer_report
+    packet atomically, no envelope), overlay verb signatures documented, and
+    desk-name ToDesk resolution (texture→currentTextureAgentID(caller
+    trajectory doc), management→persistent desk) repaired after staging
+    probes exposed it.
+  source_ref: main@758325af
+  deploy_identity: 'staging https://choir.news deployed_commit=758325af; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer 758325af (verified 2026-10-02T10:45Z)'
+  next_action: >-
+    RN3b landed (758325af, deployed report acceptance proven: update_queued
+    → update_delivered bound_to_activation on trajectory 33032604). Next:
+    extend CommitLifecycleAct kind-by-kind — resolve, disagreement,
+    precommit+control, escalate, cast, retract — each behind its own
+    commit + landing receipt; then RN4 wake retire and RN5 pack tallies.
   candidate: null
   conjecture:
     id: record-native-coupling
@@ -266,14 +275,47 @@ now:
     The dispatch-predicate gap (not the queue internals) is the live defect;
     the repair is small and uses existing machinery.
   blocker: null
-  next_action: >-
-    RN3a landed (87549c17, CI+deploy green, deployed note acceptance
-    proven end-to-end). Next: extend the CommitLifecycleAct cutover
-    kind-by-kind — report (the live-bug kind), resolve, disagreement,
-    precommit+control, escalate, cast, retract — each behind its own
-    commit + landing receipt; then RN4 wake retire and RN5 pack tallies.
+
 
 receipts:
+
+  - id: rn3b-landing-2026-10-02
+    kind: slice_landing
+    status: closed
+    closed_at: '2026-10-02T10:50:00Z'
+    boundary: >-
+      RN3b record-native producer_report cutover landed on staging:
+      IntentReport commits via CommitLifecycleAct (record + producer_report
+      packet atomically, no envelope) with desk-name ToDesk resolution.
+    pushed_commits: [d4d10e27, 29a8bd95, 267998a6, 758325af]
+    ci: >-
+      run 36981204683 success (d4d10e27); run 36986554521 success on rerun
+      after a transient Nix builder crash (267998a6); run 36993877994
+      success (758325af).
+    deploy: >-
+      Deploy to Staging (Node B) success on each push; owner computer
+      refreshed owner-scoped to 758325af (fleet refresh preserves
+      constructed-computer-version by design).
+    environment_identity: >-
+      https://choir.news/health deployed_commit=758325af; owner guest
+      computer-03335285269bdba4f94377e56879f9e6 serving autoputer 758325af.
+    deployed_acceptance: >-
+      Prompt-bar research task on trajectory
+      33032604-f085-57b4-ad7d-379095266226 minted record-native
+      update_queued cell:…:report:tray-1:packet (no envelope), woke the
+      bound texture desk, and update_delivered bound_to_activation.
+      Evidence: docs/evidence/s0m-rn3b-report-acceptance-2026-10-02.json
+      (probe scripts/s0m_report_acceptance_probe.mjs; probe's own 25-min
+      window closed between queue and deliver — the trajectory event chain
+      is the oracle).
+    heresy_delta: >-
+      discovered: desk-name ToDesk was unreachable for lifecycle reports
+      (docs/problems/s0m-report-desk-target-resolution-2026-10-02.md,
+      repaired 758325af); research overlay lacked record-native verb
+      signatures (docs/problems/s0m-report-verb-signature-undocumented-
+      2026-10-02.md, repaired 267998a6). Residual: engineering-desk
+      directives mint but never bind (s0m-directive-engineering-desk).
+    rollback: git revert 758325af 267998a6 d4d10e27 (problem docs stand).
 
   - id: rn3a-landing-2026-10-02
     kind: slice_landing
