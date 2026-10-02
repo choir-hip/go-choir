@@ -34,7 +34,15 @@ divergent; all required revisions applied in v3). Thirteen stations:
 **S0** reality + boot timeline (S0a landed; S0b deferred behind S0m) → **S0m** record-native messaging (**live**,
 owner-inserted 2026-10-01: raw messaging retires; every addressed desk
 act is a commitment record whose Addressee is the delivery instruction;
-ApplyTexture narrows to doc edits; restores research→texture) →
+ApplyTexture narrows to doc edits; restores research→texture). S0m progress
+2026-10-02: RN0–RN4 landed + deployed through `65275e46` (note/report/
+resolve+escalate/ask+precommit/reply cutovers + envelope retirement);
+RN5 issuer tallies landed `e119755a`. Texture desk model moved to
+`opencode-go/deepseek-v4.1-flash@high` on owner direction (`258916d5` +
+live guest policy edit receipt `evidence/s0m-texture-model-swap-2026-10-02.md`).
+**Open blocker:** desk runs mint `pending` post-boot and never dispatch —
+documented `problems/s0m-desk-run-dispatch-stall-2026-10-02.md`; gates the
+finish-acceptance chain. →
 **S1** security floor → **S2** layering → **S3** fast resume →
 **S4** capsule open world → **S5** live preview + supervision →
 **S6** commit gate → **S7** app packages → **S8** source publication →
