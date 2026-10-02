@@ -279,12 +279,18 @@ now:
     Owner direction 2026-10-02: texture desk model →
     opencode-go/deepseek-v4.1-flash @ high reasoning.
   belief: >-
-    The dispatch-predicate gap is repaired at the derivation boundary —
-    initial_dispatch is now an outbox obligation, not a synchronous send.
-    Post-deploy proof: the 38 stranded pending runs re-drive on the next
-    guest boot and desk cells resume dispatching.
+    Both stall repairs are deployed and verified on staging
+    (deployed_commit=734ce69b, verified 2026-10-02T16:35Z):
+    ae47c8a4 initial_dispatch outbox re-drive + e4780c1a
+    texture-open-work-unavailable crash-loop fix. Guest autoputer now stable
+    (single start, zero startup-refused since 15:58 refresh; was crashing
+    every ~8-9min). Runs dispatch and execute — fresh texture run d11bfe9f
+    running, pend draining 47→45, engineering+texture redrives live.
   blocker: >-
-    Repair landing — staging deploy + guest-boot re-drive proof pending.
+    None blocking. Residual: passivated runs (e.g. 076f3379) don't self-
+    re-drive — ae47c8a4 covers pending only; passivated-with-lost-dispatch
+    needs reactivatePassivatedTextureRun via a live occurrence. Tracking
+    whether the acceptance chain needs a passivated-run re-drive too.
 
 
 receipts:
