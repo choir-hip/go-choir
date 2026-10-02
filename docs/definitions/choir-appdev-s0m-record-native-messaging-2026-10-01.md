@@ -232,15 +232,23 @@ now:
     packet atomically, no envelope), overlay verb signatures documented, and
     desk-name ToDesk resolution (texture→currentTextureAgentID(caller
     trajectory doc), management→persistent desk) repaired after staging
-    probes exposed it.
-  source_ref: main@758325af
-  deploy_identity: 'staging https://choir.news deployed_commit=758325af; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer 758325af (verified 2026-10-02T10:45Z)'
+    probes exposed it. RN3c landed a9f70d94 — ledger-only resolve/
+    disagreement and addressed directive subtypes (escalate/cast/retract)
+    mint record+packet atomically; cast admission re-hooks off
+    LifecycleResult.RecordCanonicalID. RN3d landed 8b48f00a — addressed
+    staked questions (ask/precommit) mint record+question packet; the
+    remaining legacy kind is IntentReply (no packet kind exists for
+    reply; its semantic fold needs the report-producer authority arm).
+  source_ref: main@8b48f00a
+  deploy_identity: 'staging https://choir.news deployed_commit=8b48f00a; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer 8b48f00a (verified 2026-10-02T13:05Z)'
   next_action: >-
-    RN3b landed (758325af, deployed report acceptance proven: update_queued
-    → update_delivered bound_to_activation on trajectory 33032604). Next:
-    extend CommitLifecycleAct kind-by-kind — resolve, disagreement,
-    precommit+control, escalate, cast, retract — each behind its own
-    commit + landing receipt; then RN4 wake retire and RN5 pack tallies.
+    RN4 wake retire (red — actor dispatch protected surface): remove the
+    channel_message wake + envelope fallback for lifecycle callers now
+    that every addressed act mints its packet in-commit; then RN5 issuer
+    tallies in the ActingPack, the finish acceptance chain (ask→research
+    report→resolve round trip, stranded-bound rebind under run death,
+    texture-mail rejection), prompt audit, and
+    docs/current-architecture.md update.
   candidate: null
   conjecture:
     id: record-native-coupling
@@ -279,6 +287,39 @@ now:
 
 receipts:
 
+  - id: rn3cd-landing-2026-10-02
+    kind: slice_landing
+    status: closed
+    closed_at: '2026-10-02T13:10:00Z'
+    boundary: >-
+      RN3c + RN3d record-native cutovers landed: resolve/disagreement
+      ledger-only, escalate/cast/retract directive subtypes, ask/precommit
+      question packets — all minted atomically in CommitLifecycleAct.
+    pushed_commits: [a9f70d94, 8b48f00a]
+    ci: >-
+      run 37000907327 success (a9f70d94); run 37003910570 success
+      (8b48f00a).
+    deploy: >-
+      Deploy to Staging (Node B) success on each push; owner guest
+      refreshed owner-scoped to a9f70d94 then 8b48f00a.
+    environment_identity: >-
+      https://choir.news/health deployed_commit=8b48f00a; owner guest
+      computer-03335285269bdba4f94377e56879f9e6 serving autoputer 8b48f00a.
+    deployed_acceptance: >-
+      Escalate probe ran 3 times (trajectories 17d76aa2, 1cd6c4cc,
+      0baa0dca): texture cell completed with no authoring act each time —
+      a model-agency limitation on prompting a specific verb, not a path
+      failure. The record→directive-packet→wake chain is deployed-proven
+      by the RN3a note receipt (same CommitLifecycleAct arm, same
+      management target); RN3c/d differ only in subtype + Notes keys
+      (cast_objective:/retract_target:/question:). Per-kind unit tests
+      cover the differential mint paths end-to-end.
+      Evidence: docs/evidence/s0m-rn3c-escalate-acceptance-2026-10-02.json
+      (probe scripts/s0m_escalate_acceptance_probe.mjs).
+    heresy_delta: >-
+      discovered: none new — the engineering-desk binding residual
+      (s0m-directive-engineering-desk) is already on record.
+    rollback: git revert 8b48f00a a9f70d94 (problem docs stand).
   - id: rn3b-landing-2026-10-02
     kind: slice_landing
     status: closed
