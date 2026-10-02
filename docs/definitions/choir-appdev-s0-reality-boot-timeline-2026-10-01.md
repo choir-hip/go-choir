@@ -265,9 +265,12 @@ now:
     The 300s deploy-refresh timeout stands (a refresh that runs >300s is
     killed mid-boot — acceptable now that real boots land ~27s, but a
     large-tape growth bound belongs to S3). Push-cancellation cancels in-
-    flight CI deploys — three deploys were eaten tonight by interleaved
-    pushes; a docs push between a fix push and its deploy is unsafe until
-    CI concurrency groups are scoped per-ref.
+    flight CI deploys — confirmed 2026-10-02: a docs push (734ce69b) between
+    the e4780c1a fix push and its deploy cancelled the fix's in-flight run
+    (37026635153), and the docs run then classified docs-only and skipped the
+    host deploy — the fix only reached staging via a manual
+    force_staging_deploy. A docs push between a fix push and its deploy is
+    unsafe until CI concurrency groups are scoped per-ref.
   next_action: >-
     S0b deferred behind S0m (owner direction 2026-10-01: record-native
     messaging station inserted first). On S0m landing, resume here: run the
