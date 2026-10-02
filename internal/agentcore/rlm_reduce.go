@@ -896,17 +896,19 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.
 	rec := commitmentRecordForIntent(r.scope, in)
-	// Record-native cutover (S0m RN3): an addressed note mints record+packet
-	// atomically via CommitLifecycleAct — the record IS the delivery act;
-	// no envelope follows it. Unaddressed acts and non-lifecycle callers stay
+	// Record-native cutover (S0m RN3): addressed notes and lifecycle producer
+	// reports mint record+packet atomically via CommitLifecycleAct — the record
+	// IS the delivery act; no envelope follows it. Non-lifecycle callers stay
 	// on the append+envelope path until their kind's RN3 cutover.
-	if in.Kind == yaegikernel.IntentNote && r.ledger != nil && r.rt() != nil {
+	if (in.Kind == yaegikernel.IntentNote ||
+		(in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.ToDesk) != "")) &&
+		r.ledger != nil && r.rt() != nil {
 		seq, actErr := r.commitLifecycleActIntent(ctx, in, rec)
 		if actErr == nil {
 			return seq, nil
 		}
 		if !isLifecycleActNonLifecycleCaller(actErr) {
-			return 0, fmt.Errorf("reduce: note commit_lifecycle_act: %w", actErr)
+			return 0, fmt.Errorf("reduce: %s commit_lifecycle_act: %w", in.Kind, actErr)
 		}
 		// Non-lifecycle caller (legacy run): fall through to record+envelope.
 	}
@@ -1466,6 +1468,8 @@ func (r *rlmCallReduction) rt() *Runtime {
 	return nil
 }
 
+var errLifecycleActLegacyCaller = errors.New("commit lifecycle act: caller is not lifecycle-bound")
+
 // isLifecycleActNonLifecycleCaller reports a CommitLifecycleAct failure whose
 // sole cause is the caller's run living outside the lifecycle store (a
 // pre-cutover legacy run). These callers stay on the record+envelope path.
@@ -1474,7 +1478,8 @@ func isLifecycleActNonLifecycleCaller(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return errors.Is(err, store.ErrNotFound) ||
+	return errors.Is(err, errLifecycleActLegacyCaller) ||
+		errors.Is(err, store.ErrNotFound) ||
 		strings.Contains(msg, "caller run") ||
 		strings.Contains(msg, "caller agent")
 }
@@ -1545,6 +1550,9 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 	rt := r.rt()
 	if rt == nil || rt.store == nil || r.ledger == nil {
 		return 0, fmt.Errorf("commit lifecycle act: store authority is unavailable")
+	}
+	if in.Kind == yaegikernel.IntentReport {
+		return r.commitLifecycleReportActIntent(ctx, in, rec)
 	}
 	ownerID := strings.TrimSpace(r.scope.OwnerID)
 	computerID := strings.TrimSpace(r.scope.ComputerID)
@@ -1623,6 +1631,89 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 		// live trigger so a resident desk binds immediately instead of waiting
 		// for the outbox sweep.
 		rt.wakeUpdatedCoagent(ctx, *result.Update)
+	}
+	return uint64(result.Receipt.ReducerSeq), nil
+}
+
+// commitLifecycleReportActIntent routes only lifecycle-bound producer reports
+// through the record-native act transaction. Legacy callers deliberately
+// return the sentinel so commitActIntent preserves their DispatchWorkerUpdate
+// plus envelope behavior.
+func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, in yaegikernel.StagedIntent, rec types.CommitmentRecord) (uint64, error) {
+	rt := r.rt()
+	if rt == nil || rt.store == nil {
+		return 0, fmt.Errorf("commit lifecycle act: store authority is unavailable")
+	}
+	execution := toolregistry.ExecutionContextFrom(ctx)
+	execution.ToolCallID = intentIdempotencyKey(r.scope, in.LocalID, in.ToDesk, in.Body)
+	toolCallCtx := toolregistry.WithExecutionContext(ctx, execution)
+	authority, err := resolveCoagentUpdateAuthorityWithStore(toolCallCtx, rt, rt.store, strings.TrimSpace(in.ToDesk), "")
+	if err != nil {
+		return 0, err
+	}
+	if !authority.lifecycle {
+		return 0, errLifecycleActLegacyCaller
+	}
+	var payload types.CoagentSourcePacketPayload
+	if packetJSON := strings.TrimSpace(in.Packet); packetJSON != "" {
+		decoder := json.NewDecoder(strings.NewReader(packetJSON))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&payload); err != nil {
+			return 0, fmt.Errorf("reduce: report %s body is not a coagent source packet: %w", in.LocalID, err)
+		}
+		if decoder.More() {
+			return 0, fmt.Errorf("reduce: report %s body carries trailing data", in.LocalID)
+		}
+		payload = normalizeCoagentSourcePacketPayload(payload)
+	} else {
+		claim := strings.TrimSpace(in.Claim)
+		payload = types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update",
+			Summary:       claim,
+			Claims:        []types.CoagentPacketClaim{{Text: claim}},
+		}
+	}
+	if err := validateCoagentSourcePacketPayload(payload); err != nil {
+		return 0, fmt.Errorf("reduce: report packet invalid: %w", err)
+	}
+	trajectory, err := rt.store.GetLifecycleTrajectory(toolCallCtx, authority.callerRun.OwnerID, authority.callerRun.ComputerID, authority.trajectoryID)
+	if err != nil {
+		return 0, fmt.Errorf("commit lifecycle act report trajectory %s: %w", authority.trajectoryID, err)
+	}
+	content := buildWorkerUpdateMessage(types.CoagentSourcePacket{
+		AgentID: authority.callerRun.AgentID, TargetAgentID: authority.target.AgentID,
+		ChannelID: authority.target.ChannelID, TrajectoryID: authority.trajectoryID,
+		Role: authority.callerProfile, SourceRunID: authority.callerRun.RunID, Packet: payload,
+	})
+	digest, err := store.ComputeLifecycleUpdatePayloadDigest(payload, content)
+	if err != nil {
+		return 0, err
+	}
+	req := types.CommitLifecycleActRequest{
+		OwnerID: authority.callerRun.OwnerID, ComputerID: authority.callerRun.ComputerID,
+		CommandID: "commit-act:" + rec.RecordID, TrajectoryID: authority.trajectoryID,
+		CallerAgentID: authority.callerRun.AgentID, CallerRunID: authority.callerRun.RunID,
+		ExpectedCallerLifecycleVersion: authority.callerAgent.LifecycleVersion,
+		ExpectedLifecycleVersion:       trajectory.LifecycleVersion,
+		Record:                         rec,
+		PacketSpec: &types.LifecycleActPacketSpec{
+			TargetAgentID: authority.target.AgentID, TrajectoryID: authority.trajectoryID,
+			ChannelID: authority.target.ChannelID, Direction: types.LifecyclePacketDirectionProducerReport,
+			Packet: payload, Content: content, PayloadDigest: digest,
+			WorkItemID: authority.workItemID, WorkDisposition: types.WorkItemOpen,
+		},
+	}
+	req.CommandDigest, err = store.ComputeCommitLifecycleActDigest(req)
+	if err != nil {
+		return 0, err
+	}
+	result, err := rt.store.CommitLifecycleAct(toolCallCtx, req)
+	if err != nil {
+		return 0, err
+	}
+	if result.Update != nil && !result.Replay {
+		rt.wakeUpdatedCoagent(toolCallCtx, *result.Update)
 	}
 	return uint64(result.Receipt.ReducerSeq), nil
 }

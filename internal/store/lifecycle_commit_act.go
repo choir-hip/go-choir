@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -31,6 +32,29 @@ func ComputeCommitLifecycleActDigest(req types.CommitLifecycleActRequest) (strin
 	req.CallerRunID = strings.TrimSpace(req.CallerRunID)
 	req.ExpectedLifecycleVersion, req.ExpectedCallerLifecycleVersion = 0, 0
 	req.Reason = strings.TrimSpace(req.Reason)
+	// Provenance commit time is store-adjacent observation metadata, not the
+	// authored act identity. A re-reduced cell stamps a fresh wall time but
+	// must replay its already committed record and derived packet.
+	req.Record.Provenance.CommittedAt = ""
+	if req.PacketSpec != nil {
+		spec := *req.PacketSpec
+		spec.TargetAgentID = strings.TrimSpace(spec.TargetAgentID)
+		spec.TrajectoryID = strings.TrimSpace(spec.TrajectoryID)
+		spec.ChannelID = strings.TrimSpace(spec.ChannelID)
+		spec.WorkItemID = strings.TrimSpace(spec.WorkItemID)
+		spec.Direction = types.LifecyclePacketDirection(strings.TrimSpace(string(spec.Direction)))
+		if spec.Direction == "" {
+			spec.Direction = types.LifecyclePacketDirectionDirective
+		}
+		if spec.Direction == types.LifecyclePacketDirectionProducerReport {
+			var err error
+			spec.WorkDisposition, err = normalizeUpdateWorkDisposition(spec.WorkDisposition)
+			if err != nil {
+				return "", err
+			}
+		}
+		req.PacketSpec = &spec
+	}
 	return lifecycleDigest(req)
 }
 
@@ -59,11 +83,27 @@ func validateCommitLifecycleActShape(req types.CommitLifecycleActRequest) error 
 	if rec.Provenance.AgentID != req.CallerAgentID {
 		return fmt.Errorf("commit lifecycle act: record provenance agent must equal the caller agent")
 	}
+	addressee := strings.TrimSpace(rec.Addressee)
+	if (addressee == "") != (req.PacketSpec == nil) {
+		return fmt.Errorf("commit lifecycle act: packet_spec is required exactly for addressed records")
+	}
 	if spec := req.PacketSpec; spec != nil {
+		if spec.Direction != types.LifecyclePacketDirectionDirective &&
+			spec.Direction != types.LifecyclePacketDirectionProducerReport {
+			return fmt.Errorf("commit lifecycle act: packet direction %q is invalid", spec.Direction)
+		}
+		if spec.Direction == types.LifecyclePacketDirectionProducerReport {
+			if strings.TrimSpace(spec.WorkItemID) == "" {
+				return fmt.Errorf("commit lifecycle act: producer report work_item_id is required")
+			}
+			if err := validateUpdateWorkConsequence(spec.WorkDisposition, spec.WorkItemID, "commit lifecycle act producer report"); err != nil {
+				return err
+			}
+		}
 		if strings.TrimSpace(spec.TargetAgentID) == "" {
 			return fmt.Errorf("commit lifecycle act: packet target_agent_id is required")
 		}
-		if addressee := strings.TrimSpace(rec.Addressee); addressee != "" {
+		if addressee != "" {
 			target := strings.TrimSpace(spec.TargetAgentID)
 			// Agent-scoped addressees ("profile:suffix") pin the exact agent;
 			// bare desk names pin the target's canonical profile — the runtime
@@ -99,6 +139,24 @@ func (s *Store) CommitLifecycleAct(ctx context.Context, req types.CommitLifecycl
 	req.CommandID = strings.TrimSpace(req.CommandID)
 	req.CommandDigest = strings.TrimSpace(req.CommandDigest)
 	req.TrajectoryID = strings.TrimSpace(req.TrajectoryID)
+	if req.PacketSpec != nil {
+		spec := *req.PacketSpec
+		spec.TargetAgentID = strings.TrimSpace(spec.TargetAgentID)
+		spec.TrajectoryID = strings.TrimSpace(spec.TrajectoryID)
+		spec.ChannelID = strings.TrimSpace(spec.ChannelID)
+		spec.WorkItemID = strings.TrimSpace(spec.WorkItemID)
+		spec.Direction = types.LifecyclePacketDirection(strings.TrimSpace(string(spec.Direction)))
+		if spec.Direction == "" {
+			spec.Direction = types.LifecyclePacketDirectionDirective
+		}
+		if spec.Direction == types.LifecyclePacketDirectionProducerReport {
+			spec.WorkDisposition, err = normalizeUpdateWorkDisposition(spec.WorkDisposition)
+			if err != nil {
+				return types.LifecycleResult{}, err
+			}
+		}
+		req.PacketSpec = &spec
+	}
 	if req.CommandID == "" {
 		return types.LifecycleResult{}, fmt.Errorf("commit lifecycle act: command_id is required")
 	}
@@ -114,6 +172,9 @@ func (s *Store) CommitLifecycleAct(ctx context.Context, req types.CommitLifecycl
 	defer s.trajectoryMu.Unlock()
 	if replay, found, replayErr := s.replayLifecycleCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
 		return replay, replayErr
+	}
+	if req.PacketSpec != nil && req.PacketSpec.Direction == types.LifecyclePacketDirectionProducerReport {
+		return s.commitLifecycleProducerReportAct(ctx, req, ownerID, computerID)
 	}
 
 	// Caller pins: the issuing agent object is the authority surface; a live
@@ -279,4 +340,205 @@ func (s *Store) CommitLifecycleAct(ctx context.Context, req types.CommitLifecycl
 		result.Controls = []types.CoagentSourcePacket{packet}
 	}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result, edges...)
+}
+
+// commitLifecycleProducerReportAct mints a report record and its upward
+// producer packet as one transition. Its authority and late-evidence rules
+// deliberately match QueueLifecycleUpdate: the record-native cutover changes
+// the transaction boundary, not who may report or how terminal trajectories
+// retain historical evidence.
+func (s *Store) commitLifecycleProducerReportAct(ctx context.Context, req types.CommitLifecycleActRequest, ownerID, computerID string) (types.LifecycleResult, error) {
+	spec := req.PacketSpec
+	if spec == nil || req.TrajectoryID == "" {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, req.TrajectoryID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	lateEvidenceOnly := trajectory.Status != types.TrajectoryLive
+	documentID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
+	channelID := strings.TrimSpace(spec.ChannelID)
+	if documentID == "" || channelID != documentID ||
+		(strings.TrimSpace(spec.TrajectoryID) != "" && strings.TrimSpace(spec.TrajectoryID) != req.TrajectoryID) ||
+		strings.TrimSpace(spec.TargetAgentID) != "texture:"+documentID {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	documentObj, err := s.lifecycleGetObject(ctx, ogKindTexDoc, ownerID, computerID, documentID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	document, err := decodeLifecycleObject[types.Document](documentObj)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if document.DocID != documentID || document.OwnerID != ownerID || document.ComputerID != computerID || document.TrajectoryID != req.TrajectoryID {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	targetAgentObj, targetAgent, err := s.textureTurnAgentObject(ctx, ownerID, computerID, spec.TargetAgentID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if targetAgent.AgentID != spec.TargetAgentID || targetAgent.OwnerID != ownerID || targetAgent.ComputerID != computerID ||
+		targetAgent.LifecycleVersion <= 0 || targetAgent.Profile != "texture" || targetAgent.Role != "texture" || targetAgent.ChannelID != documentID {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	callerAgentObj, callerAgent, err := s.textureTurnAgentObject(ctx, ownerID, computerID, req.CallerAgentID)
+	if err != nil {
+		return types.LifecycleResult{}, fmt.Errorf("commit lifecycle act caller agent %s: %w", req.CallerAgentID, err)
+	}
+	producerRunObj, err := s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, req.CallerRunID)
+	if err != nil {
+		return types.LifecycleResult{}, fmt.Errorf("commit lifecycle act caller run %s: %w", req.CallerRunID, err)
+	}
+	producerRun, err := decodeLifecycleObject[types.RunRecord](producerRunObj)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	boundWorkItemIDs, bindingErr := lifecycleActivationWorkItemIDs(producerRun.Metadata)
+	if bindingErr != nil || producerRun.RunID != req.CallerRunID || producerRun.OwnerID != ownerID ||
+		producerRun.ComputerID != computerID || producerRun.TrajectoryID != req.TrajectoryID ||
+		producerRun.AgentID != req.CallerAgentID || strings.TrimSpace(producerRun.AgentProfile) == "" ||
+		strings.TrimSpace(producerRun.AgentProfile) != strings.TrimSpace(producerRun.AgentRole) ||
+		strings.TrimSpace(producerRun.AgentRole) != strings.TrimSpace(callerAgent.Profile) ||
+		strings.TrimSpace(producerRun.ChannelID) != documentID || !producerRun.State.Valid() ||
+		!containsLifecycleIdentity(boundWorkItemIDs, spec.WorkItemID) {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	workObj, work, err := s.lifecycleWorkObject(ctx, ownerID, computerID, spec.WorkItemID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if work.TrajectoryID != req.TrajectoryID || work.AssignedAgentID != req.CallerAgentID ||
+		work.AuthorityProfile != producerRun.AgentProfile {
+		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	if !lateEvidenceOnly && (trajectory.LifecycleVersion != req.ExpectedLifecycleVersion ||
+		callerAgent.LifecycleVersion != req.ExpectedCallerLifecycleVersion || work.Status != types.WorkItemOpen) {
+		return types.LifecycleResult{}, ErrConcurrentStateChange
+	}
+
+	packetID := req.Record.RecordID + ":packet"
+	updateKey := req.TrajectoryID + "\x00" + spec.TargetAgentID + "\x00" + req.CallerAgentID + "\x00" + packetID
+	updateCanonicalID, err := lifecycleCanonicalID(ogKindWorkerUpdate, ownerID, computerID, updateKey)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if existing, getErr := s.lifecycleGraph().GetObject(ctx, updateCanonicalID); getErr == nil {
+		stored, decodeErr := decodeLifecycleObject[types.CoagentSourcePacket](existing)
+		if decodeErr != nil {
+			return types.LifecycleResult{}, decodeErr
+		}
+		if stored.UpdateID != packetID || stored.ProducerUpdateID != packetID ||
+			stored.Direction != types.LifecyclePacketDirectionProducerReport ||
+			stored.SourceRecordID != req.Record.RecordID || stored.PayloadDigest != spec.PayloadDigest ||
+			stored.ProducerWorkItemID != spec.WorkItemID || stored.WorkItemID != spec.WorkItemID ||
+			stored.WorkDisposition != spec.WorkDisposition {
+			return types.LifecycleResult{}, ErrLifecycleCommandConflict
+		}
+		return types.LifecycleResult{Trajectory: trajectory, Agent: &callerAgent, Update: &stored, Replay: true}, nil
+	} else if !errors.Is(getErr, objectgraph.ErrNotFound) {
+		return types.LifecycleResult{}, getErr
+	}
+
+	now := time.Now().UTC()
+	seq := trajectory.ReducerSeq
+	conditions := []objectgraph.ObjectCondition{
+		{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash},
+		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
+		{CanonicalID: targetAgentObj.CanonicalID, Exists: true, ExpectedContentHash: targetAgentObj.ContentHash},
+		{CanonicalID: producerRunObj.CanonicalID, Exists: true, ExpectedContentHash: producerRunObj.ContentHash},
+		{CanonicalID: workObj.CanonicalID, Exists: true, ExpectedContentHash: workObj.ContentHash},
+	}
+	if !lateEvidenceOnly {
+		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: callerAgentObj.CanonicalID, Exists: true, ExpectedContentHash: callerAgentObj.ContentHash})
+	}
+	rec := req.Record
+	recordObj, err := lifecycleObject(ogKindCommitmentRecord, ownerID, computerID, rec.RecordID, rec, map[string]any{
+		"record_id": rec.RecordID, "agent_id": rec.Provenance.AgentID, "model_id": rec.Provenance.ModelID,
+		"discrepancy": string(rec.Discrepancy), "schema_id": rec.SchemaID, "record_kind": string(rec.RecordKind()),
+		"addressee": strings.TrimSpace(rec.Addressee), "created_at": now.UTC().Format(time.RFC3339Nano), "updated_at": now.UTC().Format(time.RFC3339Nano),
+	}, now, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: recordObj.CanonicalID})
+
+	disposition, dispositionRef, dispositionReason := types.UpdatePending, "", ""
+	var sequenceUpdated objectgraph.Object
+	if lateEvidenceOnly {
+		var sequenceCondition objectgraph.ObjectCondition
+		seq, sequenceUpdated, sequenceCondition, err = s.nextPostTerminalSequence(ctx, ownerID, computerID, trajectory, now)
+		if err != nil {
+			return types.LifecycleResult{}, err
+		}
+		conditions = append(conditions, sequenceCondition)
+		disposition, dispositionRef, dispositionReason = types.UpdateLate, lifecycleTerminalTrajectoryRef(req.TrajectoryID), "trajectory is terminal"
+	} else {
+		seq++
+	}
+	packet := types.CoagentSourcePacket{
+		UpdateID: packetID, ProducerUpdateID: packetID, OwnerID: ownerID, ComputerID: computerID,
+		AgentID: req.CallerAgentID, TargetAgentID: spec.TargetAgentID, ChannelID: channelID,
+		MessageSeq: seq, TrajectoryID: req.TrajectoryID, Direction: types.LifecyclePacketDirectionProducerReport,
+		ProducerWorkItemID: spec.WorkItemID, WorkItemID: spec.WorkItemID, WorkDisposition: spec.WorkDisposition,
+		Role: producerRun.AgentRole, SourceRunID: req.CallerRunID, SourceRecordID: rec.RecordID,
+		PayloadDigest: spec.PayloadDigest, Disposition: disposition, DispositionRef: dispositionRef, DispositionReason: dispositionReason,
+		LifecycleVersion: 1, ReducerSeq: seq, Packet: spec.Packet, Content: spec.Content, CreatedAt: now,
+	}
+	updateMeta := lifecycleMetadata("update_id", packet.UpdateID, computerID, req.TrajectoryID, seq)
+	updateMeta["producer_update_id"], updateMeta["target_agent_id"], updateMeta["direction"], updateMeta["record_id"] = packet.ProducerUpdateID, packet.TargetAgentID, string(packet.Direction), rec.RecordID
+	packetObj, err := lifecycleObject(ogKindWorkerUpdate, ownerID, computerID, updateKey, packet, updateMeta, now, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: packetObj.CanonicalID})
+	eventKind := types.LifecycleUpdateQueued
+	if lateEvidenceOnly {
+		eventKind = types.LifecycleUpdateLate
+	}
+	event := types.LifecycleEvent{
+		EventID: req.CommandID + ":1", OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
+		UpdateID: packet.UpdateID, Kind: eventKind, ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq,
+		CommandID: req.CommandID, CommandDigest: req.CommandDigest, Reason: dispositionReason, CreatedAt: now,
+	}
+	eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event,
+		lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, seq), now, now)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID})
+	objects := []objectgraph.Object{recordObj, packetObj, eventObj}
+	if lateEvidenceOnly {
+		objects = append(objects, sequenceUpdated)
+	} else {
+		trajectory.ReducerSeq, trajectory.LifecycleVersion, trajectory.UpdatedAt = seq, trajectory.LifecycleVersion+1, now
+		targetAgent.LastReducerSeq, targetAgent.LifecycleVersion, targetAgent.UpdatedAt = seq, targetAgent.LifecycleVersion+1, now
+		callerAgent.LastReducerSeq, callerAgent.LifecycleVersion, callerAgent.UpdatedAt = seq, callerAgent.LifecycleVersion+1, now
+		trajectoryUpdated, buildErr := lifecycleObject(ogKindTrajectory, ownerID, computerID, req.TrajectoryID, trajectory,
+			lifecycleMetadata("trajectory_id", req.TrajectoryID, computerID, req.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		targetUpdated, buildErr := lifecycleObject(ogKindAgent, ownerID, computerID, targetAgent.AgentID, targetAgent,
+			lifecycleMetadata("agent_id", targetAgent.AgentID, computerID, req.TrajectoryID, seq), targetAgentObj.CreatedAt, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		callerUpdated, buildErr := lifecycleObject(ogKindAgent, ownerID, computerID, callerAgent.AgentID, callerAgent,
+			lifecycleMetadata("agent_id", callerAgent.AgentID, computerID, req.TrajectoryID, seq), callerAgentObj.CreatedAt, now)
+		if buildErr != nil {
+			return types.LifecycleResult{}, buildErr
+		}
+		objects = append(objects, trajectoryUpdated, targetUpdated, callerUpdated)
+	}
+	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID, req.CommandDigest, types.LifecycleCommitAct, seq, []objectgraph.Object{eventObj})
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
+	objects = append(objects, receiptObj)
+	edge := objectgraph.Edge{EdgeID: "packet-record:" + packetObj.CanonicalID, FromID: packetObj.CanonicalID, ToID: recordObj.CanonicalID, Kind: ogEdgeRecordPacket, Metadata: []byte(`{}`), CreatedAt: now}
+	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects,
+		types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Agent: &callerAgent, Update: &packet, Controls: []types.CoagentSourcePacket{packet}, Events: []types.LifecycleEvent{event}}, edge)
 }

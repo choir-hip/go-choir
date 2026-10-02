@@ -206,10 +206,9 @@ type IssueLifecycleControlRequest struct {
 // CommitLifecycleActRequest mints one addressed commitment record and its
 // derived lifecycle packet in a single reducer commit (record-native RN3).
 // The record is the authored act; the packet is delivery state derived from
-// it — packet UpdateID is always record.RecordID + ":packet" and the store
-// stamps direction=directive for desk-bound acts. When the addressee cannot
-// be bound the command fails whole — a record without its packet is the
-// split-brain defect this command exists to eliminate.
+// it — packet UpdateID is always record.RecordID + ":packet". When the
+// addressee cannot be bound the command fails whole — a record without its
+// packet is the split-brain defect this command exists to eliminate.
 type CommitLifecycleActRequest struct {
 	OwnerID       string `json:"owner_id"`
 	ComputerID    string `json:"computer_id"`
@@ -227,26 +226,30 @@ type CommitLifecycleActRequest struct {
 	ExpectedLifecycleVersion       int64            `json:"expected_lifecycle_version,omitempty"`
 	Record                         CommitmentRecord `json:"record"`
 	// PacketSpec is the derived delivery packet the store validates and
-	// persists as direction=directive with SourceRecordID bound to the record.
-	// Empty for a ledger-only act (no addressee) — allowed; ledger-only is
-	// the correct shape for unaddressed acts, never a fallback on failure.
+	// persists with SourceRecordID bound to the record. Empty for a ledger-only
+	// act (no addressee); an addressed act must provide it.
 	PacketSpec *LifecycleActPacketSpec `json:"packet_spec,omitempty"`
 	Reason     string                  `json:"reason,omitempty"`
 }
 
 // LifecycleActPacketSpec is the caller-supplied packet content for
-// CommitLifecycleAct. Identity fields (UpdateID, SourceRecordID, Direction,
+// CommitLifecycleAct. Identity fields (UpdateID, SourceRecordID, and
 // ProducerUpdateID) are store-derived; the caller names the target and the
 // typed packet body.
 type LifecycleActPacketSpec struct {
 	TargetAgentID string `json:"target_agent_id"`
 	// TrajectoryID binds delivery to the addressee's trajectory scope; may be
 	// empty for computer-scoped targets (persistent Management).
-	TrajectoryID  string                     `json:"trajectory_id,omitempty"`
-	ChannelID     string                     `json:"channel_id,omitempty"`
-	Packet        CoagentSourcePacketPayload `json:"packet"`
-	Content       string                     `json:"content,omitempty"`
-	PayloadDigest string                     `json:"payload_digest"`
+	TrajectoryID    string                     `json:"trajectory_id,omitempty"`
+	ChannelID       string                     `json:"channel_id,omitempty"`
+	Direction       LifecyclePacketDirection   `json:"direction,omitempty"`
+	Packet          CoagentSourcePacketPayload `json:"packet"`
+	Content         string                     `json:"content,omitempty"`
+	PayloadDigest   string                     `json:"payload_digest"`
+	// WorkItemID and WorkDisposition are required for a producer_report and
+	// identify the producer obligation whose bound run authored the report.
+	WorkItemID      string         `json:"work_item_id,omitempty"`
+	WorkDisposition WorkItemStatus `json:"work_disposition,omitempty"`
 }
 
 // ApplyTextureTurnRequest is the sole store mutation for a progressive Texture

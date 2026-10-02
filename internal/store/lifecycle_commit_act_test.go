@@ -138,6 +138,15 @@ func TestCommitLifecycleActReplayIsByteIdentical(t *testing.T) {
 		t.Fatalf("replay duplicated packet: %+v %v", pending, err)
 	}
 
+	// A reducer replay re-stamps provenance observation time; it is not part
+	// of the authored command identity, so the original record+packet replay.
+	restamped := req
+	restamped.Record.Provenance.CommittedAt = time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano)
+	restamped.CommandDigest, _ = ComputeCommitLifecycleActDigest(restamped)
+	if replayed, replayErr := s.CommitLifecycleAct(ctx, restamped); replayErr != nil || !replayed.Replay {
+		t.Fatalf("restamped replay = %+v, %v", replayed, replayErr)
+	}
+
 	// Changed content under the same CommandID is a digest conflict.
 	changed := req
 	changed.Record.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "different body"}
@@ -182,5 +191,138 @@ func TestCommitLifecycleActLedgerOnlyForUnaddressedAct(t *testing.T) {
 	stored, err := s.GetCommitmentRecord(ctx, start.OwnerID, start.ComputerID, rec.RecordID)
 	if err != nil || stored == nil || stored.RecordID != rec.RecordID {
 		t.Fatalf("unaddressed record = %+v, %v", stored, err)
+	}
+}
+
+func commitActReportFixture(recordID, callerAgentID, targetAgentID string) types.CommitmentRecord {
+	return types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    recordID,
+		Kind:        types.CommitmentKindReport,
+		Discrepancy: types.DiscrepancyUnresolved,
+		Provenance:  types.CommitmentProvenance{AgentID: callerAgentID, CommittedAt: time.Now().UTC().Format(time.RFC3339Nano)},
+		Addressee:   targetAgentID,
+		Prediction:  types.CommitmentPrediction{Hypothesis: "research finding"},
+	}
+}
+
+func commitActProducerReportRequest(t *testing.T, s *Store, start types.StartLifecycleRequest, caller types.RunRecord, work types.WorkItemRecord, rec types.CommitmentRecord) types.CommitLifecycleActRequest {
+	t.Helper()
+	ctx := context.Background()
+	callerAgent, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, caller.AgentID)
+	if err != nil {
+		t.Fatalf("load producer agent: %v", err)
+	}
+	trajectory, err := s.GetLifecycleTrajectory(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("load trajectory: %v", err)
+	}
+	packet := types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "research finding",
+		Claims: []types.CoagentPacketClaim{{Text: "the evidence supports the finding"}},
+	}
+	content := "Coagent source packet ready.\nRole: research.\nSchema: " + packet.SchemaVersion + "\nKind: " + packet.Kind + "\nSummary: " + packet.Summary
+	digest, err := ComputeLifecycleUpdatePayloadDigest(packet, content)
+	if err != nil {
+		t.Fatalf("packet digest: %v", err)
+	}
+	req := types.CommitLifecycleActRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "commit-act:" + rec.RecordID, TrajectoryID: start.TrajectoryID,
+		CallerAgentID: caller.AgentID, CallerRunID: caller.RunID,
+		ExpectedCallerLifecycleVersion: callerAgent.LifecycleVersion,
+		ExpectedLifecycleVersion:       trajectory.LifecycleVersion,
+		Record:                         rec,
+		PacketSpec: &types.LifecycleActPacketSpec{
+			TargetAgentID: start.Agent.AgentID, TrajectoryID: start.TrajectoryID, ChannelID: start.InitialDocument.DocID,
+			Direction: types.LifecyclePacketDirectionProducerReport, Packet: packet, Content: content, PayloadDigest: digest,
+			WorkItemID: work.WorkItemID, WorkDisposition: types.WorkItemOpen,
+		},
+	}
+	req.CommandDigest, err = ComputeCommitLifecycleActDigest(req)
+	if err != nil {
+		t.Fatalf("command digest: %v", err)
+	}
+	return req
+}
+
+func TestCommitLifecycleActProducerReportMintsPacketAndReplays(t *testing.T) {
+	s, start, _, researchWork := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	caller, err := s.GetLifecycleRun(ctx, start.OwnerID, start.ComputerID, "run-researcher-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := commitActReportFixture("cell-report:report:1", caller.AgentID, start.Agent.AgentID)
+	req := commitActProducerReportRequest(t, s, start, caller, researchWork, rec)
+
+	first, err := s.CommitLifecycleAct(ctx, req)
+	if err != nil {
+		t.Fatalf("commit report act: %v", err)
+	}
+	if first.Update == nil || first.Update.Direction != types.LifecyclePacketDirectionProducerReport ||
+		first.Update.UpdateID != rec.RecordID+":packet" || first.Update.ProducerUpdateID != rec.RecordID+":packet" ||
+		first.Update.SourceRecordID != rec.RecordID || first.Update.WorkItemID != researchWork.WorkItemID {
+		t.Fatalf("producer report packet = %+v", first.Update)
+	}
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if err != nil || len(pending) != 1 || pending[0].AgentID != caller.AgentID {
+		t.Fatalf("producer report pending set = %+v, %v", pending, err)
+	}
+	replay, err := s.CommitLifecycleAct(ctx, req)
+	if err != nil || !replay.Replay || replay.Update == nil || replay.Update.UpdateID != first.Update.UpdateID {
+		t.Fatalf("producer report replay = %+v, %v", replay, err)
+	}
+	bad := req
+	bad.CommandID = "commit-act:unbound-work"
+	bad.PacketSpec = &types.LifecycleActPacketSpec{}
+	*bad.PacketSpec = *req.PacketSpec
+	bad.PacketSpec.WorkItemID = "work-not-bound"
+	bad.CommandDigest, _ = ComputeCommitLifecycleActDigest(bad)
+	if _, err := s.CommitLifecycleAct(ctx, bad); !errors.Is(err, ErrLifecycleInvalidTransition) {
+		t.Fatalf("unbound producer work err=%v", err)
+	}
+}
+
+func TestCommitLifecycleActProducerReportLateEvidenceDoesNotMutateLifecycle(t *testing.T) {
+	s, start, _, researchWork := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	before, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel := types.CancelLifecycleRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "cancel-before-late-report",
+		TrajectoryID: start.TrajectoryID, ExpectedLifecycleVersion: before.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID: before.Document.CurrentRevisionID, Reason: "late evidence test",
+	}
+	cancel.CommandDigest, _ = ComputeCancelLifecycleDigest(cancel)
+	if _, err := s.CancelLifecycleTrajectory(ctx, cancel); err != nil {
+		t.Fatalf("cancel lifecycle: %v", err)
+	}
+	cancelled, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caller, err := s.GetLifecycleRun(ctx, start.OwnerID, start.ComputerID, "run-researcher-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := commitActReportFixture("cell-report:report:late", caller.AgentID, start.Agent.AgentID)
+	req := commitActProducerReportRequest(t, s, start, caller, researchWork, rec)
+	late, err := s.CommitLifecycleAct(ctx, req)
+	if err != nil {
+		t.Fatalf("commit late report act: %v", err)
+	}
+	if late.Update == nil || late.Update.Disposition != types.UpdateLate || late.Update.SourceRecordID != rec.RecordID {
+		t.Fatalf("late producer report = %+v", late.Update)
+	}
+	after, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Trajectory.LifecycleVersion != cancelled.Trajectory.LifecycleVersion ||
+		after.Trajectory.ReducerSeq != cancelled.Trajectory.ReducerSeq {
+		t.Fatalf("late report mutated terminal trajectory: before=%+v after=%+v", cancelled.Trajectory, after.Trajectory)
 	}
 }

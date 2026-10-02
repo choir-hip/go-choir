@@ -11,6 +11,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -215,12 +216,11 @@ func TestCommitTrayLifecycleProducerMessageRoutesToQueue(t *testing.T) {
 	}
 }
 
-// TestCommitTrayLifecycleProducerReportRoutesToQueue is the report-side twin:
-// a packet-bodied choir.Report addressed to Texture from a lifecycle producer
-// run previously minted a commitment record and then mailed an un-wakable
-// envelope. Under the repair it commits through the lifecycle queue path —
-// the packet itself is the delivery artifact.
-func TestCommitTrayLifecycleProducerReportRoutesToQueue(t *testing.T) {
+// TestCommitTrayLifecycleProducerReportMintsRecordNativePacket proves the
+// record-native report path: a lifecycle producer mints its commitment record
+// and producer_report packet in one commit, then wakes Texture without
+// mailing a dead-letter report envelope on the document channel.
+func TestCommitTrayLifecycleProducerReportMintsRecordNativePacket(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 
@@ -280,11 +280,20 @@ func TestCommitTrayLifecycleProducerReportRoutesToQueue(t *testing.T) {
 	if len(pending) != 1 {
 		t.Fatalf("lifecycle producer report did not queue: pending=%d", len(pending))
 	}
-	if pending[0].ProducerUpdateID == "" || pending[0].WorkItemID != fixture.workID {
-		t.Fatalf("queued report update malformed: %+v", pending[0])
+	if pending[0].ProducerUpdateID == "" || pending[0].WorkItemID != fixture.workID ||
+		pending[0].Direction != types.LifecyclePacketDirectionProducerReport ||
+		pending[0].SourceRecordID != "cell-report:report:report-1" {
+		t.Fatalf("record-native report packet malformed: %+v", pending[0])
 	}
-	// The commitment record for the report still mints — record + packet in
-	// one committed act, not an envelope.
+	messages, err := s.ListChannelMessages(ctx, run.OwnerID, run.ChannelID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range messages {
+		if strings.Contains(message.Content, "report-path finding") {
+			t.Fatalf("record-native report leaked channel envelope: %+v", message)
+		}
+	}
 	if !reduction.receipt.Committed || len(reduction.receipt.Intents) != 1 {
 		t.Fatalf("reduction receipt = %+v", reduction.receipt)
 	}
