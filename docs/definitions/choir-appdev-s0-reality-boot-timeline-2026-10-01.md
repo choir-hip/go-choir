@@ -269,10 +269,12 @@ now:
     pushes; a docs push between a fix push and its deploy is unsafe until
     CI concurrency groups are scoped per-ref.
   next_action: >-
-    S0b: run the disposable-computer probe suite (capsule health map, M9a
-    bundle lifecycle, one Go effect, one absent runtime dep, snapshot/resume)
-    against a fresh registration computer on staging; then the boundary panel
-    on the frozen S0a+S0b evidence and the transition receipt.
+    S0b deferred behind S0m (owner direction 2026-10-01: record-native
+    messaging station inserted first). On S0m landing, resume here: run the
+    disposable-computer probe suite (capsule health map, M9a bundle
+    lifecycle, one Go effect, one absent runtime dep, snapshot/resume)
+    against a fresh registration computer on staging; then the boundary
+    panel on the frozen S0a+S0b evidence and the transition receipt.
 
 receipts:
   - id: s0a-boundary-close-2026-10-02
