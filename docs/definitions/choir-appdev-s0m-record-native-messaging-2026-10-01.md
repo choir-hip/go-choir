@@ -231,22 +231,23 @@ now:
     choir.Ask/Note). Texture desk model moved to
     opencode-go/deepseek-v4.1-flash@high on owner direction (258916d5 +
     live guest data.img edit, receipt
-    docs/evidence/s0m-texture-model-swap-2026-10-02.md).
-  source_ref: main@9eefbb8b
-  deploy_identity: 'staging https://choir.news deployed_commit=e4780c1a (in-flight); owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer aa2bd814 (was crash-looping — fix e4780c1a pending deploy)'
+    docs/evidence/s0m-texture-model-swap-2026-10-02.md). Channel-mail-to-
+    texture:* reduce-time rejection landed b18f3baf (channelCast refuses
+    texture targets — closes the durable dead letter); prompt audit held
+    (no desk prompt instructs a retired verb; engineering Message→management
+    mints a record-native note, not a retired envelope);
+    docs/current-architecture.md updated with the record-native invariant.
+  source_ref: main@b18f3baf
+  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 active epoch 1022 (crash-loop fixed, stable since 15:58 refresh)'
   next_action: >-
-    Two deploys stack: (1) ae47c8a4 dispatch-stall repair — run mint
-    projects initial_dispatch through the actor-wake outbox, migration
-    re-drives 38 stranded pending runs on boot; (2) e4780c1a crash-loop
-    fix — guest autoputer was restart-looping every ~8-9min on
-    texture:f1d3764d (live trajectory, zero open texture work →
-    submitTextureAgentRevisionRun refuses → ReconcileActorWake fails →
-    startup refused → exit); reconciler now treats no-open-texture-work
-    as quiescent. On deploy: confirm guest reaches stable running, verify
-    run 076f3379 executes, then finish-acceptance items: ask→research→
-    report→resolve round trip, stranded-bound rebind under run death,
-    texture-mail rejection, docs/current-architecture.md update.
-  candidate: main@e4780c1a
+    Landed b18f3baf (texture-mail reduce-time reject + problem doc + arch
+    doc). Finish-acceptance remaining: (1) confirm the ask→research→report→
+    resolve round trip reaches the mechanical resolve on trajectory
+    0bdcbf61 — reports already delivered to texture, asks delivered to
+    research; the ask precommit resolves when the texture desk consumes the
+    report on its next activation; (2) stranded-bound rebind under run
+    death on a disposable computer; (3) dual-delivery absence per kind.
+  candidate: main@b18f3baf
   conjecture:
     id: record-native-coupling
     status: active
@@ -279,20 +280,19 @@ now:
     Owner direction 2026-10-02: texture desk model →
     opencode-go/deepseek-v4.1-flash @ high reasoning.
   belief: >-
-    Both stall repairs are deployed and verified on staging
-    (deployed_commit=734ce69b, verified 2026-10-02T16:35Z):
-    ae47c8a4 initial_dispatch outbox re-drive + e4780c1a
-    texture-open-work-unavailable crash-loop fix. Guest autoputer now stable
-    (single start, zero startup-refused since 15:58 refresh; was crashing
-    every ~8-9min). Runs dispatch and execute — fresh texture run d11bfe9f
-    running, pend draining 47→45, engineering+texture redrives live.
+    Both stall repairs deployed and verified (deployed_commit=734ce69b,
+    2026-10-02T16:35Z); guest autoputer stable since 15:58 refresh. On
+    trajectory 0bdcbf61 the ask legs delivered to research and the
+    producer_report packets delivered to texture (direction proof landed);
+    the mechanical resolve fires on the texture desk's next activation when
+    it consumes the report. Channel-mail-to-texture now rejects at reduce
+    time (b18f3baf) — the durable dead letter is closed; the only reachable
+    dead-letter was a non-lifecycle envelope arm, unreachable in production.
   blocker: >-
-    None blocking. Submit path repaired 01f2cf5a (commit decoupled from
-    request ctx via WithoutCancel+120s; verified — ask landed HTTP 202, traj
-    0bdcbf61 minted 3 work items incl. two research:*). Chain is live:
-    ask→research legs dispatched, reducer_seq advancing; awaiting
-    report→resolve leg on staging. Residual: passivated runs (076f3379)
-    don't self-re-drive — ae47c8a4 covers pending only.
+    None blocking. Residual: passivated runs (076f3379) don't self-re-drive
+    — ae47c8a4 covers pending only. Finish-acceptance open legs: mechanical
+    resolve on report consume (awaiting texture activation), stranded-bound
+    rebind under run death, dual-delivery absence per kind.
 
 
 receipts:
