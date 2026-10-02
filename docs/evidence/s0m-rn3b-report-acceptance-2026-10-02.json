@@ -1,0 +1,34 @@
+{
+  "probe": "s0m_rn3b_report_acceptance",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "s0m-rn3b-report-1790933014973",
+  "started_at": "2026-10-02T09:23:34.973Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": 1790933054006,
+      "wall_ms": 39033,
+      "ok": true,
+      "trajectory": "16059801-00ea-592d-acc5-fa0720d085b5",
+      "doc": "651508c1-2597-5144-9283-0e19b9096a82"
+    },
+    {
+      "name": "revisions",
+      "ended_at": 1790933059626,
+      "wall_ms": 44653,
+      "count": 1
+    },
+    {
+      "name": "revisions",
+      "ended_at": 1790933676507,
+      "wall_ms": 661534,
+      "count": 2
+    }
+  ],
+  "ok": false,
+  "failure": "timeout: queued=false delivered=false applied=false",
+  "finished_at": "2026-10-02T09:53:43.326Z",
+  "wall_ms": 1808353,
+  "trajectory_id": "16059801-00ea-592d-acc5-fa0720d085b5",
+  "doc_id": "651508c1-2597-5144-9283-0e19b9096a82"
+}
