@@ -12,6 +12,9 @@ On staging trajectory `0bdcbf61-9af0-5b49-b80f-f698e8df7fd5` (owner computer
 `baab2d12-1fdf-4a4a-9f88-cba25d97b273` (texture→research ask) bound to
 research run `5e1de937-c512-44e9-898c-38f5184f4736` at 18:40:38 and was
 delivered, but the run **completed** at 18:49:24 without consuming it. The
+packet stayed `pending` + `delivered_to_loop_id=5e1de937` for 5+ minutes —
+stranded, never rebound, never terminalized.
+
 ## Root cause — circular invisibility
 
 `unbindStrandedLifecycleControls` (`management_controller.go:1131`) exists
@@ -50,6 +53,7 @@ packet — not a coincidental path.
 Pre-existing wedges do not retro-heal under the fix (their carriers already
 terminalized before the release hook existed). The fix stops new wedges at
 the terminalization event.
+
 ## Why this is the failure the acceptance forbids
 
 S0m acceptance: "delivery-failure-degrades-to-scored-failure invariant holds
