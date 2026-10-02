@@ -897,15 +897,18 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// not-exists condition re-mints nothing.
 	rec := commitmentRecordForIntent(r.scope, in)
 	// Record-native cutover (S0m RN3): addressed notes, lifecycle producer
-	// reports, and the remaining addressed directive subtypes (escalate, cast,
-	// retract) mint record+packet atomically via CommitLifecycleAct — the
-	// record IS the delivery act; no envelope follows it. Ledger-only kinds
-	// (resolve/disagreement) mint through the same transaction. Non-lifecycle
-	// callers stay on the append+envelope path until their kind's cutover.
+	// reports, the addressed directive subtypes (escalate, cast, retract),
+	// and addressed staked questions (ask/precommit) mint record+packet
+	// atomically via CommitLifecycleAct — the record IS the delivery act;
+	// no envelope follows it. Unaddressed acts (ledger-only resolve,
+	// disagreement, unaddressed precommit) mint through the same
+	// transaction with no packet. Non-lifecycle callers stay on the
+	// append+envelope path.
 	if (in.Kind == yaegikernel.IntentNote ||
 		(in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.ToDesk) != "") ||
 		in.Kind == yaegikernel.IntentEscalate || in.Kind == yaegikernel.IntentCast ||
 		in.Kind == yaegikernel.IntentCancel ||
+		in.Kind == yaegikernel.IntentAsk || in.Kind == yaegikernel.IntentPrecommit ||
 		in.Kind == yaegikernel.IntentResolve || in.Kind == yaegikernel.IntentDisagreement) &&
 		r.ledger != nil && r.rt() != nil {
 		seq, actErr := r.commitLifecycleActIntent(ctx, in, rec)
@@ -1533,6 +1536,49 @@ func directivePacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePac
 	return payload
 }
 
+// precommitPacketForRecord projects a staked-question record (ask / precommit)
+// onto the typed packet schema. The packet is directive-direction like every
+// other addressed act minted through CommitLifecycleAct; Kind=question marks
+// it as a resolution-bound stake so the woken desk answers via choir.Reply
+// (record-native report) rather than closing the position itself.
+func precommitPacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePacketPayload {
+	question := ""
+	var distribution map[string]float64
+	resolver := ""
+	if rec.Precommit != nil {
+		question = strings.TrimSpace(rec.Precommit.Question)
+		distribution = rec.Precommit.Distribution
+		resolver = strings.TrimSpace(rec.Precommit.Resolver)
+	}
+	summary := question
+	if len(summary) > 160 {
+		summary = summary[:160]
+	}
+	if summary == "" {
+		summary = "precommit"
+	}
+	notes := []string{"directive:precommit"}
+	if question != "" {
+		notes = append(notes, "question:"+question)
+	}
+	if resolver != "" {
+		notes = append(notes, "resolver:"+resolver)
+	}
+	payload := types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          "question",
+		Summary:       summary,
+		Notes:         notes,
+	}
+	if question != "" {
+		payload.Questions = []string{question}
+	}
+	for outcome, p := range distribution {
+		payload.Notes = append(payload.Notes, fmt.Sprintf("distribution:%s=%v", outcome, p))
+	}
+	return payload
+}
+
 // directiveTargetAgentID resolves a record-native addressee to the exact desk
 // agent: "management" is the computer's persistent super; every other bare
 // profile resolves to the desk agent bound to the caller's channel document
@@ -1638,11 +1684,19 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 				return 0, fmt.Errorf("commit lifecycle act: %s cannot direct %s", callerProfile, targetProfile)
 			}
 		}
-		packet := directivePacketForRecord(rec)
+		var packet types.CoagentSourcePacketPayload
+		if rec.RecordKind() == types.CommitmentKindPrecommit {
+			packet = precommitPacketForRecord(rec)
+		} else {
+			packet = directivePacketForRecord(rec)
+		}
 		if err := validateCoagentSourcePacketPayload(packet); err != nil {
 			return 0, fmt.Errorf("commit lifecycle act: directive packet invalid: %w", err)
 		}
-		content := strings.TrimSpace(firstNonEmpty(packet.Summary, rec.Directive.Body))
+		content := strings.TrimSpace(packet.Summary)
+		if content == "" && rec.Directive != nil {
+			content = strings.TrimSpace(rec.Directive.Body)
+		}
 		digest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 		if digestErr != nil {
 			return 0, digestErr

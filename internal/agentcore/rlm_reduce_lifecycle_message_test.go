@@ -590,3 +590,76 @@ func TestCommitTrayLifecycleCastMintsBeforeAdmission(t *testing.T) {
 		t.Fatalf("cast packet malformed: %+v", pending[0])
 	}
 }
+
+// Ask/precommit cutover: an addressed staked question mints record+directive
+// packet (Kind=question) in one CommitLifecycleAct; an unaddressed precommit
+// mints the record ledger-only.
+func TestCommitTrayLifecycleAskPrecommitMintRecordNative(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := seedTextureLifecycleControl(t, s, "owner-ask", "ask", "research:control-ask", agentprofile.Research)
+	caller, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, "texture-run-ask")
+	if err != nil {
+		t.Fatal(err)
+	}
+	engineeringID := agentprofile.Engineering + ":" + caller.ChannelID
+	now := time.Now().UTC()
+	if err := s.UpsertAgent(context.Background(), types.AgentRecord{
+		AgentID: engineeringID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Engineering, Role: agentprofile.Engineering, ChannelID: caller.ChannelID,
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	scope := ReductionScope{
+		FromAgentID: caller.AgentID, DeskAgentID: caller.AgentID,
+		FromRole: agentprofile.Texture, ChannelID: caller.ChannelID,
+		RunID: caller.RunID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		CellID: "cell-ask",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: caller.RunID, AgentID: caller.AgentID, OwnerID: caller.OwnerID,
+		ChannelID: caller.ChannelID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture,
+		RunRecord: &caller,
+	})
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
+
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, ToDesk: "engineering", Question: "does the build pass?"},
+		{LocalID: "pre-1", Kind: yaegikernel.IntentPrecommit, Precommit: `{"question":"will deploy land today?"}`},
+	}, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, caller.OwnerID, caller.ComputerID, engineeringID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("ask did not queue on engineering: pending=%d", len(pending))
+	}
+	if pending[0].Packet.Kind != "question" ||
+		pending[0].SourceRecordID != "cell-ask:ask:ask-1" ||
+		!strings.Contains(strings.Join(pending[0].Packet.Notes, " "), "question:does the build pass?") {
+		t.Fatalf("ask packet malformed: %+v", pending[0])
+	}
+
+	// The unaddressed precommit minted ledger-only: record present, no second
+	// packet, no envelope.
+	rec, err := s.GetCommitmentRecord(ctx, caller.OwnerID, caller.ComputerID, "cell-ask:precommit:pre-1")
+	if err != nil || rec == nil || rec.RecordKind() != types.CommitmentKindPrecommit {
+		t.Fatalf("unaddressed precommit record missing: rec=%v err=%v", rec, err)
+	}
+	messages, err := s.ListChannelMessages(ctx, caller.OwnerID, caller.ChannelID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range messages {
+		if strings.Contains(m.Content, "ask-1") || strings.Contains(m.Content, "pre-1") {
+			t.Fatalf("lifecycle act leaked channel envelope: %+v", m)
+		}
+	}
+}
