@@ -25,6 +25,7 @@ const (
 	LifecycleArchiveArtifact                  LifecycleCommandKind = "archive_artifact"
 	LifecycleApplyTextureTurn                 LifecycleCommandKind = "apply_texture_turn"
 	LifecycleIssueControl                     LifecycleCommandKind = "issue_lifecycle_control"
+	LifecycleCommitAct                        LifecycleCommandKind = "commit_lifecycle_act"
 	LifecycleBindControlDelivery              LifecycleCommandKind = "bind_control_delivery"
 	LifecycleFailControlActivation            LifecycleCommandKind = "fail_control_activation"
 	LifecycleOpenEngineeringAssignment        LifecycleCommandKind = "open_co_super_assignment"
@@ -200,6 +201,52 @@ type IssueLifecycleControlRequest struct {
 	ExpectedCallerLifecycleVersion int64                `json:"expected_caller_lifecycle_version"`
 	Controls                       []TextureTurnControl `json:"controls"`
 	Reason                         string               `json:"reason,omitempty"`
+}
+
+// CommitLifecycleActRequest mints one addressed commitment record and its
+// derived lifecycle packet in a single reducer commit (record-native RN3).
+// The record is the authored act; the packet is delivery state derived from
+// it — packet UpdateID is always record.RecordID + ":packet" and the store
+// stamps direction=directive for desk-bound acts. When the addressee cannot
+// be bound the command fails whole — a record without its packet is the
+// split-brain defect this command exists to eliminate.
+type CommitLifecycleActRequest struct {
+	OwnerID       string `json:"owner_id"`
+	ComputerID    string `json:"computer_id"`
+	CommandID     string `json:"command_id"`
+	CommandDigest string `json:"command_digest"`
+	// TrajectoryID may be empty for computer-scoped callers (persistent
+	// Management); the caller agent/run pins still hold. Target-side
+	// trajectory resolves from the target agent's channel doc when present.
+	TrajectoryID  string `json:"trajectory_id,omitempty"`
+	CallerAgentID string `json:"caller_agent_id"`
+	CallerRunID   string `json:"caller_run_id"`
+	// ExpectedCallerLifecycleVersion pins the caller agent's version; the
+	// trajectory pin applies only when TrajectoryID is set.
+	ExpectedCallerLifecycleVersion int64            `json:"expected_caller_lifecycle_version"`
+	ExpectedLifecycleVersion       int64            `json:"expected_lifecycle_version,omitempty"`
+	Record                         CommitmentRecord `json:"record"`
+	// PacketSpec is the derived delivery packet the store validates and
+	// persists as direction=directive with SourceRecordID bound to the record.
+	// Empty for a ledger-only act (no addressee) — allowed; ledger-only is
+	// the correct shape for unaddressed acts, never a fallback on failure.
+	PacketSpec *LifecycleActPacketSpec `json:"packet_spec,omitempty"`
+	Reason     string                  `json:"reason,omitempty"`
+}
+
+// LifecycleActPacketSpec is the caller-supplied packet content for
+// CommitLifecycleAct. Identity fields (UpdateID, SourceRecordID, Direction,
+// ProducerUpdateID) are store-derived; the caller names the target and the
+// typed packet body.
+type LifecycleActPacketSpec struct {
+	TargetAgentID string `json:"target_agent_id"`
+	// TrajectoryID binds delivery to the addressee's trajectory scope; may be
+	// empty for computer-scoped targets (persistent Management).
+	TrajectoryID  string                     `json:"trajectory_id,omitempty"`
+	ChannelID     string                     `json:"channel_id,omitempty"`
+	Packet        CoagentSourcePacketPayload `json:"packet"`
+	Content       string                     `json:"content,omitempty"`
+	PayloadDigest string                     `json:"payload_digest"`
 }
 
 // ApplyTextureTurnRequest is the sole store mutation for a progressive Texture

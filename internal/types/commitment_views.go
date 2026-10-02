@@ -237,6 +237,13 @@ func ResolveCommitments(records []CommitmentRecord, asOf time.Time) []ResolvedCo
 	disagreements := map[string][]CommitmentRecord{}
 	var acts []CommitmentRecord
 	for _, rec := range records {
+		// Directives are operational acts (note/escalate/cast/retract) — they
+		// carry no scored claim. Keeping them out of the join is the
+		// projection-pollution repair: accruing them as open claims was the
+		// defect the explicit taxonomy names.
+		if rec.IsDirectiveRecord() {
+			continue
+		}
 		switch {
 		case isDisagreementRecord(rec):
 			target := strings.TrimSpace(rec.Disagreement.CommitmentID)
@@ -459,9 +466,9 @@ func BuildActingPack(records []CommitmentRecord, agentID string, limit int) Acti
 			continue
 		}
 		item := ActingPackItem{
-			RecordID:     rc.Act.RecordID,
-			Claim:        commitmentClaimText(rc.Act),
-			Discrepancy:  rc.Discrepancy,
+			RecordID:    rc.Act.RecordID,
+			Claim:       commitmentClaimText(rc.Act),
+			Discrepancy: rc.Discrepancy,
 		}
 		if rc.Observation != nil {
 			item.ObservationExcerpt = rc.Observation.Excerpt

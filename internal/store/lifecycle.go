@@ -577,7 +577,10 @@ func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object, resolver []objec
 		}
 	}
 	content := types.LifecycleControlActorOccurrenceContent(update)
-	if content == "" || strings.TrimSpace(update.TrajectoryID) == "" || strings.TrimSpace(update.AgentID) == "" {
+	// Directive packets deliver computer-scoped acts (persistent Management
+	// has no trajectory); producer/control packets stay trajectory-bound.
+	if content == "" || strings.TrimSpace(update.AgentID) == "" ||
+		(strings.TrimSpace(update.TrajectoryID) == "" && update.Direction != types.LifecyclePacketDirectionDirective) {
 		return ActorWakeOutbox{}, objectgraph.Object{}, ErrLifecycleInvalidTransition
 	}
 	// Generic worker updates are written through ogPut, whose object envelope
@@ -850,7 +853,11 @@ func actorWakeOutbox(source objectgraph.Object, sourceID, targetAgentID, traject
 	// per drain). It must never be wired into the tape append without a re-arm
 	// generation, or a consumed row would silently drop the re-drive.
 	wake.UpdateID = types.ActorWakeUpdateID(wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
-	if wake.Kind != "coagent_result" {
+	if wake.Kind != "coagent_result" || wake.TrajectoryID == "" {
+		// Non-coagent kinds — and coagent packets with no trajectory (record-
+		// native computer-scoped directives) — get no deterministic identity
+		// from ActorWakeUpdateID; it falls back to a random UUID, an unstable
+		// body that defeats the idempotent re-mint above. Pin to the key hash.
 		wake.UpdateID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:actor-wake-outbox:v1:"+key)).String()
 	}
 	metadata := map[string]any{"source_update_id": wake.SourceUpdateID, "update_id": wake.UpdateID, "target_agent_id": wake.TargetAgentID,
@@ -5489,7 +5496,8 @@ func (s *Store) ListPendingProducerReports(ctx context.Context, ownerID, compute
 	}
 	var out []types.CoagentSourcePacket
 	for _, u := range updates {
-		if u.Direction != types.LifecyclePacketDirectionProducerReport {
+		if u.Direction != types.LifecyclePacketDirectionProducerReport &&
+			u.Direction != types.LifecyclePacketDirectionDirective {
 			continue
 		}
 		if u.Disposition != types.UpdatePending {
@@ -5554,7 +5562,9 @@ func (s *Store) ListDeliveredPendingProducerReports(ctx context.Context, ownerID
 			}
 			return nil, getErr
 		}
-		if update.Direction != types.LifecyclePacketDirectionProducerReport || update.Disposition != types.UpdatePending || strings.TrimSpace(update.DeliveredToRunID) == "" {
+		if (update.Direction != types.LifecyclePacketDirectionProducerReport &&
+			update.Direction != types.LifecyclePacketDirectionDirective) ||
+			update.Disposition != types.UpdatePending || strings.TrimSpace(update.DeliveredToRunID) == "" {
 			continue
 		}
 		if requestedByAgentID != "" && strings.TrimSpace(update.AgentID) != strings.TrimSpace(requestedByAgentID) {
@@ -5611,7 +5621,10 @@ func (s *Store) ListBoundPendingUpdatesForTarget(ctx context.Context, ownerID, c
 			}
 			return nil, getErr
 		}
-		if update.Direction != types.LifecyclePacketDirectionProducerReport && update.Direction != types.LifecyclePacketDirectionControl || update.Disposition != types.UpdatePending || strings.TrimSpace(update.DeliveredToRunID) == "" {
+		if (update.Direction != types.LifecyclePacketDirectionProducerReport &&
+			update.Direction != types.LifecyclePacketDirectionControl &&
+			update.Direction != types.LifecyclePacketDirectionDirective) ||
+			update.Disposition != types.UpdatePending || strings.TrimSpace(update.DeliveredToRunID) == "" {
 			continue
 		}
 		out = append(out, update)

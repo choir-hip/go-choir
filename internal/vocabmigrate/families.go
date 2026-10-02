@@ -53,6 +53,7 @@ var frozenLifecycleCommandKinds = map[types.LifecycleCommandKind]bool{
 	types.LifecycleArchiveArtifact:                  true,
 	types.LifecycleApplyTextureTurn:                 true,
 	types.LifecycleIssueControl:                     true,
+	types.LifecycleCommitAct:                        true, // RN3 record-native mint 2026-10-02
 	types.LifecycleBindControlDelivery:              true,
 	types.LifecycleFailControlActivation:            true,
 	types.LifecycleOpenEngineeringAssignment:        true, // V1 "open_co_super_assignment"

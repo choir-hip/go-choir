@@ -650,7 +650,9 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 		if update.DeliveredToRunID != targetRunID {
 			continue
 		}
-		if update.OwnerID != ownerID || update.ComputerID != computerID || update.TrajectoryID != trajectoryID || update.TargetAgentID != targetAgentID ||
+		if update.OwnerID != ownerID || update.ComputerID != computerID || update.TargetAgentID != targetAgentID ||
+			(update.Direction != types.LifecyclePacketDirectionDirective && update.TrajectoryID != trajectoryID) ||
+			(update.Direction == types.LifecyclePacketDirectionDirective && update.TrajectoryID != "" && update.TrajectoryID != trajectoryID) ||
 			(update.Disposition != types.UpdatePending && update.Disposition != types.UpdateIncorporated) || update.DeliveredAt == nil || update.Packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 ||
 			strings.TrimSpace(update.Packet.Kind) == "" || strings.TrimSpace(update.Content) == "" {
 			return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
@@ -659,9 +661,13 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 		if digestErr != nil || payloadDigest != update.PayloadDigest {
 			return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 		}
-		producerWorkID, targetWorkID, bindingErr := ResolveLifecyclePacketWorkBindings(update)
-		if bindingErr != nil {
-			return LifecycleDeliveredPacketPage{}, bindingErr
+		producerWorkID, targetWorkID := "", ""
+		if update.Direction != types.LifecyclePacketDirectionDirective {
+			var bindingErr error
+			producerWorkID, targetWorkID, bindingErr = ResolveLifecyclePacketWorkBindings(update)
+			if bindingErr != nil {
+				return LifecycleDeliveredPacketPage{}, bindingErr
+			}
 		}
 		switch update.Direction {
 		case types.LifecyclePacketDirectionControl:
@@ -693,6 +699,10 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 			if producerRun.RunID != update.SourceRunID || producerRun.AgentID != update.AgentID || producerRun.TrajectoryID != trajectoryID ||
 				producerRun.AgentProfile != agentprofile.Engineering || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) ||
 				producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || producerWork.AuthorityProfile != agentprofile.Engineering {
+				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
+			}
+		case types.LifecyclePacketDirectionDirective:
+			if strings.TrimSpace(update.SourceRecordID) == "" || update.Packet.Kind != "directive" {
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 		default:

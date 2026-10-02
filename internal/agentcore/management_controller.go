@@ -142,7 +142,7 @@ func DecodePersistentManagementRecovery(content string) (PersistentManagementRec
 		version, versionErr := strconv.ParseInt(versionRaw, 10, 64)
 		seq, seqErr := strconv.ParseInt(seqRaw, 10, 64)
 		if strings.TrimSpace(updateID) == "" || strings.TrimSpace(agentID) != strings.TrimSpace(out.SourceAgentID) ||
-			(direction != string(types.LifecyclePacketDirectionControl) && direction != string(types.LifecyclePacketDirectionProducerReport)) ||
+			(direction != string(types.LifecyclePacketDirectionControl) && direction != string(types.LifecyclePacketDirectionProducerReport) && direction != string(types.LifecyclePacketDirectionDirective)) ||
 			version <= 0 || seq <= 0 || versionErr != nil || seqErr != nil ||
 			strconv.FormatInt(version, 10) != versionRaw || strconv.FormatInt(seq, 10) != seqRaw {
 			return PersistentManagementRecoveryOccurrence{}, fmt.Errorf("%w: invalid control authority", ErrInvalidPersistentManagementRecovery)
@@ -307,12 +307,39 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 	if unbindErr := rt.unbindStrandedLifecycleControls(ctx, ownerID, computerID, agentID); unbindErr != nil {
 		return nil, fmt.Errorf("unbind stranded lifecycle controls: %w", unbindErr)
 	}
-	updates, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, agentID, 100)
+	controls, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, agentID, 100)
 	if err != nil {
 		return nil, err
 	}
-	lifecycleControls := len(updates) > 0
-	if !lifecycleControls {
+	directives, err := rt.listPendingPersistentManagementDirectives(ctx, ownerID, computerID, agentID, 100)
+	if err != nil {
+		return nil, err
+	}
+	updates := controls
+	lifecycleControls := len(controls) > 0
+	if exact := strings.TrimSpace(exactUpdateID); exact != "" {
+		matched := false
+		for _, update := range append(append([]types.CoagentSourcePacket{}, controls...), directives...) {
+			if strings.TrimSpace(update.UpdateID) != exact {
+				continue
+			}
+			if update.Direction == types.LifecyclePacketDirectionDirective {
+				updates = []types.CoagentSourcePacket{update}
+				lifecycleControls = false
+			} else {
+				targetWork := firstNonEmpty(update.TargetWorkItemID, update.WorkItemID)
+				updates = selectLifecycleControlActivation(controls, update.TrajectoryID, map[string]bool{strings.TrimSpace(targetWork): true})
+			}
+			matched = true
+			break
+		}
+		if !matched {
+			return nil, fmt.Errorf("exact live Management update %s is not pending", exact)
+		}
+	} else if !lifecycleControls && len(directives) > 0 {
+		updates = directives
+	}
+	if !lifecycleControls && len(updates) == 0 {
 		updates, err = rt.listAndSettlePersistentManagementBacklog(ctx, ownerID, agentID)
 		if err != nil {
 			return nil, err
@@ -324,26 +351,6 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 	}
 
 	first := updates[0]
-	if exact := strings.TrimSpace(exactUpdateID); exact != "" {
-		matched := false
-		for _, update := range updates {
-			if strings.TrimSpace(update.UpdateID) != exact {
-				continue
-			}
-			targetWork := firstNonEmpty(update.TargetWorkItemID, update.WorkItemID)
-			selected := selectLifecycleControlActivation(updates, update.TrajectoryID, map[string]bool{strings.TrimSpace(targetWork): true})
-			if len(selected) == 0 {
-				selected = []types.CoagentSourcePacket{update}
-			}
-			updates = selected
-			first = selected[0]
-			matched = true
-			break
-		}
-		if !matched {
-			return nil, fmt.Errorf("exact live Management control %s is not pending", exact)
-		}
-	}
 	requestSource := "update_coagent"
 	if lifecycleControls {
 		requestSource = "lifecycle_texture_control"
@@ -371,7 +378,13 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 		metadata["work_item_ids"] = []string{targetWorkItemID}
 	}
 	if !lifecycleControls {
-		metadata["worker_update_ids"] = []string{first.UpdateID}
+		ids := make([]string, 0, len(updates))
+		for _, update := range updates {
+			if id := strings.TrimSpace(update.UpdateID); id != "" {
+				ids = append(ids, id)
+			}
+		}
+		metadata["worker_update_ids"] = ids
 	}
 
 	prompt := persistentManagementCoagentInboxPrompt
@@ -1126,7 +1139,8 @@ func (rt *Runtime) unbindStrandedLifecycleControls(ctx context.Context, ownerID,
 	checked := map[string]bool{}
 	var items []types.ReconcileUpdateDeliveryItem
 	for _, update := range bound {
-		if update.Direction != types.LifecyclePacketDirectionControl {
+		if update.Direction != types.LifecyclePacketDirectionControl &&
+			update.Direction != types.LifecyclePacketDirectionDirective {
 			continue
 		}
 		runID := strings.TrimSpace(update.DeliveredToRunID)
@@ -1402,6 +1416,23 @@ func (rt *Runtime) listPendingPersistentManagementLifecycleControls(ctx context.
 	return validated, valErr
 }
 
+func (rt *Runtime) listPendingPersistentManagementDirectives(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
+	updates, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("list persistent-Management directives: %w", err)
+	}
+	directives := make([]types.CoagentSourcePacket, 0, len(updates))
+	for _, update := range updates {
+		if persistentManagementAdmissibleDirective(update) {
+			directives = append(directives, update)
+		}
+	}
+	if limit > 0 && len(directives) > limit {
+		directives = directives[:limit]
+	}
+	return directives, nil
+}
+
 func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket, executionOnly bool) ([]types.CoagentSourcePacket, error) {
 	out := make([]types.CoagentSourcePacket, 0, len(updates))
 	for _, update := range updates {
@@ -1426,6 +1457,62 @@ func (rt *Runtime) validateTargetBoundLifecycleControls(ctx context.Context, own
 	return out, nil
 }
 
+// validateTargetBoundLifecycleDirectives proves the packet's delivery scope
+// without imposing a work binding. Directives are commitment-record carriers:
+// they may be computer-scoped (an empty trajectory) and never join work.
+func (rt *Runtime) validateTargetBoundLifecycleDirectives(ownerID, computerID, agentID string, updates []types.CoagentSourcePacket) ([]types.CoagentSourcePacket, error) {
+	out := make([]types.CoagentSourcePacket, 0, len(updates))
+	for _, update := range updates {
+		if update.Direction != types.LifecyclePacketDirectionDirective ||
+			update.TargetAgentID != agentID || update.OwnerID != ownerID ||
+			update.ComputerID != computerID || update.Disposition != types.UpdatePending ||
+			strings.TrimSpace(update.UpdateID) == "" ||
+			strings.TrimSpace(update.SourceRecordID) == "" ||
+			update.LifecycleVersion <= 0 {
+			return nil, fmt.Errorf("pending lifecycle directive %q has ambiguous target binding", update.UpdateID)
+		}
+		out = append(out, update)
+	}
+	return out, nil
+}
+
+// bindLifecycleDirectivesToRun claims directives through generic delivery
+// reconciliation. Unlike controls, directives carry no work binding, so they
+// must never enter BindLifecycleControlDelivery.
+func (rt *Runtime) bindLifecycleDirectivesToRun(ctx context.Context, rec *types.RunRecord, updates []types.CoagentSourcePacket) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	runTrajectoryID := lifecycleControlTrajectoryForRun(rec)
+	for _, update := range updates {
+		if update.Direction != types.LifecyclePacketDirectionDirective ||
+			update.TargetAgentID != rec.AgentID ||
+			(update.TrajectoryID != "" && strings.TrimSpace(update.TrajectoryID) != runTrajectoryID) {
+			continue
+		}
+		req := types.ReconcileUpdateDeliveryRequest{
+			OwnerID: rec.OwnerID, ComputerID: rec.ComputerID,
+			CommandID:    "bind-directive-delivery:" + rec.RunID + ":" + update.UpdateID,
+			TrajectoryID: update.TrajectoryID, TargetAgentID: rec.AgentID, TargetRunID: rec.RunID,
+			MaxAttempts: lifecycleControlDeliveryMaxAttempts,
+			Items: []types.ReconcileUpdateDeliveryItem{{
+				UpdateID: update.UpdateID, ProducerAgentID: update.AgentID,
+				ProducerUpdateID:         update.ProducerUpdateID,
+				ExpectedLifecycleVersion: update.LifecycleVersion,
+			}},
+		}
+		digest, err := store.ComputeReconcileUpdateDeliveryDigest(req)
+		if err != nil {
+			return err
+		}
+		req.CommandDigest = digest
+		if _, err := rt.store.ReconcileUpdateDelivery(ctx, req); err != nil {
+			return fmt.Errorf("bind lifecycle directive %s: %w", update.UpdateID, err)
+		}
+	}
+	return nil
+}
+
 func persistentManagementSenderAuthorized(update types.CoagentSourcePacket) bool {
 	role, _ := agentprofile.Canonical(update.Role)
 	return role == agentprofile.Texture &&
@@ -1445,6 +1532,19 @@ func persistentManagementAdmissibleReport(update types.CoagentSourcePacket) bool
 	default:
 		return false
 	}
+}
+
+// persistentManagementAdmissibleDirective admits a record-native directive
+// packet addressed to the persistent Management desk. The commitment record
+// is the authored act; the packet only wakes and locates it
+// (SourceRecordID). Any desk profile may direct; kind "directive" is
+// record-native vocabulary minted only by CommitLifecycleAct.
+func persistentManagementAdmissibleDirective(update types.CoagentSourcePacket) bool {
+	if update.Direction != types.LifecyclePacketDirectionDirective || strings.TrimSpace(update.SourceRecordID) == "" {
+		return false
+	}
+	packet := normalizeCoagentSourcePacketPayload(update.Packet)
+	return packet.Kind == "directive" && validateCoagentSourcePacketPayload(packet) == nil
 }
 
 func persistentManagementExecutablePacket(update types.CoagentSourcePacket) bool {
@@ -1488,12 +1588,12 @@ func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSo
 		return false
 	}
 	if isPersistentManagementAgentRun(rec) {
-		if persistentManagementAdmissibleReport(update) || persistentManagementExecutablePacket(update) {
+		if persistentManagementAdmissibleReport(update) || persistentManagementExecutablePacket(update) || persistentManagementAdmissibleDirective(update) {
 			return persistentManagementMailboxInjectable(rec, update)
 		}
 		return false
 	}
-	if update.Direction == types.LifecyclePacketDirectionControl || metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
+	if update.Direction == types.LifecyclePacketDirectionControl || update.Direction == types.LifecyclePacketDirectionDirective || metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control" {
 		if strings.TrimSpace(update.DeliveredToRunID) != strings.TrimSpace(rec.RunID) || update.DeliveredAt == nil {
 			return false
 		}
@@ -1718,6 +1818,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	}
 
 	var updates []types.CoagentSourcePacket
+	var directives []types.CoagentSourcePacket
 	lifecycleControls := false
 	if lifecycleAgent {
 		// Stranded-control repair (S0m RN2c): a control packet bound to a run
@@ -1733,9 +1834,25 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 			return nil, fmt.Errorf("unbind stranded lifecycle controls: %w", unbindErr)
 		}
 		updates, err = rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
-		if err == nil {
-			updates, err = rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, updates, false)
+		if err != nil {
+			return nil, err
 		}
+		controls := make([]types.CoagentSourcePacket, 0, len(updates))
+		for _, update := range updates {
+			switch update.Direction {
+			case types.LifecyclePacketDirectionControl:
+				controls = append(controls, update)
+			case types.LifecyclePacketDirectionDirective:
+				directives = append(directives, update)
+			default:
+				return nil, fmt.Errorf("pending lifecycle packet %q has unsupported direction", update.UpdateID)
+			}
+		}
+		updates, err = rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, controls, false)
+		if err != nil {
+			return nil, err
+		}
+		directives, err = rt.validateTargetBoundLifecycleDirectives(ownerID, computerID, agentID, directives)
 		if err != nil {
 			return nil, err
 		}
@@ -1747,7 +1864,21 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 			if canonicallyBound {
 				appendUpdates := selectLifecycleControlActivation(updates, lifecycleControlTrajectoryForRun(&resident), lifecycleControlWorkIDsForRun(&resident))
 				if len(appendUpdates) > 0 {
-					return rt.bindAppendedLifecycleControlsToResident(ctx, &resident, appendUpdates)
+					bound, bindErr := rt.bindAppendedLifecycleControlsToResident(ctx, &resident, appendUpdates)
+					if bindErr != nil {
+						return bound, bindErr
+					}
+					if err := rt.bindLifecycleDirectivesToRun(ctx, bound, directives); err != nil {
+						return bound, err
+					}
+					return bound, nil
+				}
+				if err := rt.bindLifecycleDirectivesToRun(ctx, &resident, directives); err != nil {
+					return &resident, err
+				}
+				if len(directives) > 0 {
+					rt.activate(&resident)
+					return &resident, nil
 				}
 			}
 		}
@@ -1756,6 +1887,9 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		// activation selection behavior, not cross-trajectory hydration.
 		updates = selectLifecycleControlActivation(updates, "", nil)
 		lifecycleControls = len(updates) > 0
+		if !lifecycleControls && len(directives) > 0 {
+			updates = directives
+		}
 		if lifecycleControls && !residentFound {
 			parked, parkedErr := rt.parkedLifecycleControlCandidate(ctx, ownerID, computerID, agentID, updates)
 			if parkedErr != nil {
@@ -1776,12 +1910,15 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 				return nil, fmt.Errorf("verify canonical lifecycle control delivery: %w", deliveryErr)
 			}
 			if delivered {
+				if err := rt.bindLifecycleDirectivesToRun(ctx, &resident, directives); err != nil {
+					return &resident, err
+				}
 				rt.activate(&resident)
 				return &resident, nil
 			}
 		}
 	}
-	if !lifecycleControls {
+	if !lifecycleControls && len(directives) == 0 {
 		// Deliberately unchanged legacy mailbox/projection path.
 		updates, err = rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
 		if err != nil {
@@ -1907,7 +2044,17 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		return nil, err
 	}
 	if lifecycleControls {
-		return rt.bindOrReplayLifecycleControlActivation(ctx, rec, updates)
+		bound, bindErr := rt.bindOrReplayLifecycleControlActivation(ctx, rec, updates)
+		if bindErr != nil {
+			return bound, bindErr
+		}
+		if err := rt.bindLifecycleDirectivesToRun(ctx, bound, directives); err != nil {
+			return bound, err
+		}
+		return bound, nil
+	}
+	if err := rt.bindLifecycleDirectivesToRun(ctx, rec, directives); err != nil {
+		return rec, err
 	}
 	rt.activate(rec)
 	return rec, nil
@@ -2036,30 +2183,45 @@ func (rt *Runtime) pendingCoagentUpdatesForRun(ctx context.Context, rec *types.R
 				return nil, nil
 			}
 			trajectoryID := lifecycleControlTrajectoryForRun(rec)
-			if trajectoryID != "" {
-				pending, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
-				if listErr == nil {
-					omitClaimed := metadataBoolValue(rec.Metadata, runMetadataEngineeringReplacementOmitReports)
-					claimed := map[string]bool{}
-					if omitClaimed {
-						for _, id := range metadataStringSlice(rec.Metadata[runMetadataProducerReportIDs]) {
-							if id = strings.TrimSpace(id); id != "" {
-								claimed[id] = true
-							}
+			pending, listErr := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+			if listErr == nil {
+				omitClaimed := metadataBoolValue(rec.Metadata, runMetadataEngineeringReplacementOmitReports)
+				claimed := map[string]bool{}
+				if omitClaimed {
+					for _, id := range metadataStringSlice(rec.Metadata[runMetadataProducerReportIDs]) {
+						if id = strings.TrimSpace(id); id != "" {
+							claimed[id] = true
 						}
 					}
-					for _, p := range pending {
-						if p.TrajectoryID != trajectoryID || !persistentManagementAdmissibleReport(p) {
-							continue
-						}
-						if omitClaimed && claimed[strings.TrimSpace(p.UpdateID)] {
-							continue
-						}
+				}
+				for _, p := range pending {
+					if persistentManagementAdmissibleDirective(p) {
 						packets = append(packets, p)
+						continue
 					}
+					if trajectoryID == "" || p.TrajectoryID != trajectoryID || !persistentManagementAdmissibleReport(p) {
+						continue
+					}
+					if omitClaimed && claimed[strings.TrimSpace(p.UpdateID)] {
+						continue
+					}
+					packets = append(packets, p)
 				}
 			}
 			return packets, err
+		}
+		pending, err := rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
+		if err != nil {
+			return nil, err
+		}
+		packets := make([]types.CoagentSourcePacket, 0, len(pending))
+		for _, update := range pending {
+			if persistentManagementAdmissibleDirective(update) {
+				packets = append(packets, update)
+			}
+		}
+		if len(packets) > 0 {
+			return packets, nil
 		}
 		return rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, limit)
 	}
@@ -2721,6 +2883,17 @@ func (rt *Runtime) persistentManagementResidentMatchesExact(rec *types.RunRecord
 			return nil
 		}
 	}
+	if isPersistentManagementAgentRun(rec) {
+		directives, err := rt.listPendingPersistentManagementDirectives(context.Background(), rec.OwnerID, rec.ComputerID, rec.AgentID, 100)
+		if err != nil {
+			return err
+		}
+		for _, directive := range directives {
+			if strings.TrimSpace(directive.UpdateID) == exact {
+				return nil
+			}
+		}
+	}
 	return fmt.Errorf("%w: persistent Management slot occupied by run %s", ErrActivationOccurrenceMustRemainUnprocessed, rec.RunID)
 }
 
@@ -2785,6 +2958,11 @@ func (rt *Runtime) ResolvePersistentManagementLiveOccurrence(ctx context.Context
 	if err != nil {
 		return nil, false, err
 	}
+	directives, err := rt.listPendingPersistentManagementDirectives(ctx, ownerID, computerID, agentID, 100)
+	if err != nil {
+		return nil, false, err
+	}
+	pending = append(pending, directives...)
 	var matched types.CoagentSourcePacket
 	found := false
 	for _, update := range pending {

@@ -1260,7 +1260,7 @@ func validateCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload)
 
 func validCoagentPacketKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request":
+	case "evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request", "directive":
 		return true
 	default:
 		return false

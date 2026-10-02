@@ -111,7 +111,7 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 		if getErr != nil {
 			return types.LifecycleResult{}, getErr
 		}
-		if update.UpdateID != updateID || (update.Direction != types.LifecyclePacketDirectionProducerReport && update.Direction != types.LifecyclePacketDirectionControl) ||
+		if update.UpdateID != updateID || (update.Direction != types.LifecyclePacketDirectionProducerReport && update.Direction != types.LifecyclePacketDirectionControl && update.Direction != types.LifecyclePacketDirectionDirective) ||
 			update.TrajectoryID != trajectoryID || update.TargetAgentID != req.TargetAgentID ||
 			update.Disposition != types.UpdatePending ||
 			strings.TrimSpace(update.DeliveredToRunID) != strings.TrimSpace(item.ExpectedRunID) ||
@@ -144,7 +144,7 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 		objects = append(objects, updatedObj)
 		if exhausted {
 			failKind := types.LifecycleTextureActivationFailed
-			if update.Direction == types.LifecyclePacketDirectionControl {
+			if update.Direction == types.LifecyclePacketDirectionControl || update.Direction == types.LifecyclePacketDirectionDirective {
 				failKind = types.LifecycleControlActivationFailed
 			}
 			if err := emit(failKind, update, "delivery_attempts_exhausted"); err != nil {
@@ -152,7 +152,7 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 			}
 		} else {
 			deliverKind := types.LifecycleUpdateDelivered
-			if update.Direction == types.LifecyclePacketDirectionControl {
+			if update.Direction == types.LifecyclePacketDirectionControl || update.Direction == types.LifecyclePacketDirectionDirective {
 				deliverKind = types.LifecycleControlDelivered
 			}
 			if err := emit(deliverKind, update, "bound_to_activation"); err != nil {

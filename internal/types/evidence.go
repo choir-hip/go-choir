@@ -162,6 +162,13 @@ type LifecyclePacketDirection string
 const (
 	LifecyclePacketDirectionProducerReport LifecyclePacketDirection = "producer_report"
 	LifecyclePacketDirectionControl        LifecyclePacketDirection = "control"
+	// LifecyclePacketDirectionDirective is a record-derived desk-to-desk act
+	// (directive{note, escalate, cast, retract}): agent+trajectory bound with
+	// no work-item obligation. It follows the producer-report delivery shape
+	// — pending → wake → ReconcileUpdateDelivery bind → consumed at the
+	// recipient's next committed turn — minus control's work-item fingerprint.
+	// Direction is runtime-derived; model payloads never author it.
+	LifecyclePacketDirectionDirective LifecyclePacketDirection = "directive"
 )
 
 // CoagentSourcePacket is the persisted delivery envelope for one addressed
@@ -180,20 +187,25 @@ type CoagentSourcePacket struct {
 	Direction        LifecyclePacketDirection `json:"direction,omitempty"`
 	// ControlBindingID authenticates the exact downward control occurrence that
 	// authorizes a direction-specific upward report. It is runtime-derived.
-	ControlBindingID    string            `json:"control_binding_id,omitempty"`
-	ProducerWorkItemID  string            `json:"producer_work_item_id,omitempty"`
-	TargetWorkItemID    string            `json:"target_work_item_id,omitempty"`
-	WorkItemID          string            `json:"work_item_id,omitempty"` // legacy producer-work alias
-	WorkDisposition     WorkItemStatus    `json:"work_disposition,omitempty"`
-	Role                string            `json:"role,omitempty"`
-	SourceRunID         string            `json:"source_run_id,omitempty"`
-	SourceOutcomeSHA256 string            `json:"source_outcome_sha256,omitempty"`
-	PayloadDigest       string            `json:"payload_digest,omitempty"`
-	Disposition         UpdateDisposition `json:"disposition,omitempty"`
-	DispositionRef      string            `json:"disposition_ref,omitempty"`
-	DispositionReason   string            `json:"disposition_reason,omitempty"`
-	LifecycleVersion    int64             `json:"lifecycle_version,omitempty"`
-	ReducerSeq          int64             `json:"reducer_seq,omitempty"`
+	ControlBindingID    string         `json:"control_binding_id,omitempty"`
+	ProducerWorkItemID  string         `json:"producer_work_item_id,omitempty"`
+	TargetWorkItemID    string         `json:"target_work_item_id,omitempty"`
+	WorkItemID          string         `json:"work_item_id,omitempty"` // legacy producer-work alias
+	WorkDisposition     WorkItemStatus `json:"work_disposition,omitempty"`
+	Role                string         `json:"role,omitempty"`
+	SourceRunID         string         `json:"source_run_id,omitempty"`
+	SourceOutcomeSHA256 string         `json:"source_outcome_sha256,omitempty"`
+	PayloadDigest       string         `json:"payload_digest,omitempty"`
+	// SourceRecordID links a record-derived packet to the commitment record
+	// it was minted from (record-native RN3). Empty on producer/control
+	// packets minted before the record-native cutover; the derived UpdateID
+	// (recordID + ":packet") remains the dedupe identity either way.
+	SourceRecordID    string            `json:"source_record_id,omitempty"`
+	Disposition       UpdateDisposition `json:"disposition,omitempty"`
+	DispositionRef    string            `json:"disposition_ref,omitempty"`
+	DispositionReason string            `json:"disposition_reason,omitempty"`
+	LifecycleVersion  int64             `json:"lifecycle_version,omitempty"`
+	ReducerSeq        int64             `json:"reducer_seq,omitempty"`
 	// ArrivalOrdinal is the durable computer-scoped FIFO position assigned when
 	// this control entered the scheduling mailbox. Zero means unassigned
 	// (pre-ordinal legacy row); the scheduler treats those as oldest-first.

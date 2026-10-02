@@ -495,7 +495,10 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			return types.LifecycleResult{}, getErr
 		}
 		producerWorkID, targetWorkID, bindingErr := ResolveLifecyclePacketWorkBindings(update)
-		if bindingErr != nil || update.Direction != types.LifecyclePacketDirectionProducerReport ||
+		// Directives consume like producer reports: pending, bound, then marked
+		// delivered/incorporated at the desk's committed turn. They carry no
+		// work item — the targetWorkID guard already skips empty bindings.
+		if bindingErr != nil || (update.Direction != types.LifecyclePacketDirectionProducerReport && update.Direction != types.LifecyclePacketDirectionDirective) ||
 			(targetWorkID != "" && targetWorkID != req.CallerWorkItemID) ||
 			update.UpdateID != disposition.UpdateID ||
 			update.ProducerUpdateID != disposition.ProducerUpdateID || update.AgentID != disposition.ProducerAgentID ||

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -88,7 +89,6 @@ type ReductionReceipt struct {
 	Committed bool
 	Fate      string
 }
-
 
 // validateCellIntents re-checks worker-produced intents at the trust
 // boundary. The worker is our binary but the model authors the cells, so the
@@ -304,7 +304,6 @@ func intentIdempotencyKey(scope ReductionScope, localID, to, content string) str
 	sum := sha256.Sum256([]byte(strings.TrimSpace(to) + "\x1f" + content))
 	return "rlm:" + cell + ":" + strings.TrimSpace(localID) + ":" + hex.EncodeToString(sum[:6])
 }
-
 
 // stagedIntentEnvelope builds the durable envelope for an intent. Keeping the
 // exact envelope derivation available to recovery makes the mailbox
@@ -897,6 +896,20 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.
 	rec := commitmentRecordForIntent(r.scope, in)
+	// Record-native cutover (S0m RN3): an addressed note mints record+packet
+	// atomically via CommitLifecycleAct — the record IS the delivery act;
+	// no envelope follows it. Unaddressed acts and non-lifecycle callers stay
+	// on the append+envelope path until their kind's RN3 cutover.
+	if in.Kind == yaegikernel.IntentNote && r.ledger != nil && r.rt() != nil {
+		seq, actErr := r.commitLifecycleActIntent(ctx, in, rec)
+		if actErr == nil {
+			return seq, nil
+		}
+		if !isLifecycleActNonLifecycleCaller(actErr) {
+			return 0, fmt.Errorf("reduce: note commit_lifecycle_act: %w", actErr)
+		}
+		// Non-lifecycle caller (legacy run): fall through to record+envelope.
+	}
 	var controlID string
 	var err error
 	if r.ledger != nil {
@@ -1034,6 +1047,7 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 	}
 	switch in.Kind {
 	case yaegikernel.IntentPrecommit:
+		rec.Kind = types.CommitmentKindPrecommit
 		var precommit types.CommitmentPrecommit
 		_ = json.Unmarshal([]byte(in.Precommit), &precommit)
 		rec.Precommit = &precommit
@@ -1043,9 +1057,43 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 			CommittedAt: rec.Provenance.CommittedAt,
 		}
 		rec.Addressee = precommit.Resolver
+	case yaegikernel.IntentAsk:
+		// ask ⊂ precommit (adjudicated): the ask IS a staked request. The
+		// question must live on the record — the retiring envelope can no
+		// longer be its only copy.
+		rec.Kind = types.CommitmentKindPrecommit
+		rec.Precommit = &types.CommitmentPrecommit{
+			Question: in.Question,
+			Resolver: strings.TrimSpace(in.ToDesk),
+		}
+		rec.Prediction = types.CommitmentPrediction{
+			Hypothesis:  in.Question,
+			Questions:   []types.TypedQuestion{{Question: in.Question}},
+			CommittedAt: rec.Provenance.CommittedAt,
+		}
+	case yaegikernel.IntentNote:
+		rec.Kind = types.CommitmentKindDirective
+		rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: in.Body}
+	case yaegikernel.IntentEscalate:
+		rec.Kind = types.CommitmentKindDirective
+		rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveEscalate, Body: in.Body}
+	case yaegikernel.IntentCast:
+		rec.Kind = types.CommitmentKindDirective
+		rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Body: in.Statement, Objective: in.Objective}
+	case yaegikernel.IntentCancel:
+		rec.Kind = types.CommitmentKindDirective
+		rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveRetract, TargetRef: in.TargetRef}
+	case yaegikernel.IntentReply:
+		// reply is a report (adjudicated): the answering desk must not close
+		// the issuer's stake — it reports; the reducer derives the mechanical
+		// resolve. TargetRef links it to the ask.
+		rec.Kind = types.CommitmentKindReport
+		rec.Prediction = types.CommitmentPrediction{
+			Hypothesis:  in.Answer,
+			CommittedAt: rec.Provenance.CommittedAt,
+		}
 	case yaegikernel.IntentReport:
-		// A packet-bodied report preserves the full coagent packet as the
-		// claim body; a thin report uses the claim text.
+		rec.Kind = types.CommitmentKindReport
 		if strings.TrimSpace(in.Packet) != "" {
 			rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Packet}
 			// A packet-bodied report also lifts each source's target URI into
@@ -1063,6 +1111,7 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 			rec.Prediction = types.CommitmentPrediction{Hypothesis: in.Claim}
 		}
 	case yaegikernel.IntentResolve:
+		rec.Kind = types.CommitmentKindResolve
 		// A resolution is a linked append, never a rewrite. It contains the
 		// resolver verdict and its evidence; scoring is reserved for a later
 		// Disagreement record and never fabricated from the resolver's act.
@@ -1082,6 +1131,7 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 		rec.Provenance.ResolvedAt = now
 		rec.RelatedIDs = []string{in.TargetRef}
 	case yaegikernel.IntentDisagreement:
+		rec.Kind = types.CommitmentKindDisagreement
 		var disagreement types.CommitmentDisagreement
 		_ = json.Unmarshal([]byte(in.Disagreement), &disagreement)
 		rec.Disagreement = &disagreement
@@ -1414,4 +1464,165 @@ func (r *rlmCallReduction) rt() *Runtime {
 		return mb
 	}
 	return nil
+}
+
+// isLifecycleActNonLifecycleCaller reports a CommitLifecycleAct failure whose
+// sole cause is the caller's run living outside the lifecycle store (a
+// pre-cutover legacy run). These callers stay on the record+envelope path.
+func isLifecycleActNonLifecycleCaller(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return errors.Is(err, store.ErrNotFound) ||
+		strings.Contains(msg, "caller run") ||
+		strings.Contains(msg, "caller agent")
+}
+
+// directivePacketForRecord projects the desk-authored commitment record into
+// its delivery packet payload. The packet is wake+hint only — the record is
+// the authored act (RN3); Notes carry the subtype and body so a bound desk
+// can rank and skim without loading the ledger row.
+func directivePacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePacketPayload {
+	subtype := ""
+	body := ""
+	if rec.Directive != nil {
+		subtype = string(rec.Directive.Subtype)
+		body = strings.TrimSpace(rec.Directive.Body)
+	}
+	summary := body
+	if len(summary) > 160 {
+		summary = summary[:160]
+	}
+	if summary == "" {
+		summary = "directive:" + subtype
+	}
+	notes := []string{"directive:" + subtype}
+	if body != "" {
+		notes = append(notes, body)
+	}
+	return types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          "directive",
+		Summary:       summary,
+		Notes:         notes,
+	}
+}
+
+// directiveTargetAgentID resolves a record-native addressee to the exact desk
+// agent: "management" is the computer's persistent super; every other bare
+// profile resolves to the desk agent bound to the caller's channel document
+// (the shared doc channel is the desk coupling — profile:docID). An already
+// agent-scoped addressee ("profile:suffix") resolves to itself.
+func directiveTargetAgentID(scope ReductionScope, addressee string) (string, error) {
+	addressee = strings.TrimSpace(addressee)
+	if addressee == "" {
+		return "", fmt.Errorf("reduce: directive addressee is empty")
+	}
+	if strings.Contains(addressee, ":") {
+		return addressee, nil
+	}
+	profile, err := agentprofile.Canonical(addressee)
+	if err != nil {
+		return "", fmt.Errorf("reduce: directive addressee %q is not a known desk: %w", addressee, err)
+	}
+	if profile == agentprofile.Management {
+		return persistentManagementAgentID(scope.OwnerID), nil
+	}
+	docID := strings.TrimSpace(scope.ChannelID)
+	if docID == "" {
+		return "", fmt.Errorf("reduce: directive addressee %q needs a channel document scope", addressee)
+	}
+	return profile + ":" + docID, nil
+}
+
+// commitLifecycleActIntent commits one desk-authored act through the
+// record-native path: the commitment record and its derived directive packet
+// mint in ONE CommitLifecycleAct transaction (S0m RN3 — retiring the
+// append+envelope split). The packet binds the target desk's pending set and
+// wakes it; the record is the act the consuming desk answers.
+func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaegikernel.StagedIntent, rec types.CommitmentRecord) (uint64, error) {
+	rt := r.rt()
+	if rt == nil || rt.store == nil || r.ledger == nil {
+		return 0, fmt.Errorf("commit lifecycle act: store authority is unavailable")
+	}
+	ownerID := strings.TrimSpace(r.scope.OwnerID)
+	computerID := strings.TrimSpace(r.scope.ComputerID)
+	callerAgentID := strings.TrimSpace(r.scope.FromAgentID)
+	callerRunID := strings.TrimSpace(r.scope.RunID)
+	callerAgent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, callerAgentID)
+	if err != nil {
+		return 0, fmt.Errorf("commit lifecycle act caller agent %s: %w", callerAgentID, err)
+	}
+	callerRun, err := rt.store.GetLifecycleRun(ctx, ownerID, computerID, callerRunID)
+	if err != nil {
+		return 0, fmt.Errorf("commit lifecycle act caller run %s: %w", callerRunID, err)
+	}
+	if callerRun.AgentID != callerAgentID || callerRun.OwnerID != ownerID {
+		return 0, fmt.Errorf("commit lifecycle act: caller run %s is not bound to agent %s", callerRunID, callerAgentID)
+	}
+	callerTrajectory := strings.TrimSpace(trajectoryIDForRun(&callerRun))
+
+	req := types.CommitLifecycleActRequest{
+		OwnerID: ownerID, ComputerID: computerID,
+		CommandID:     "commit-act:" + rec.RecordID,
+		CallerAgentID: callerAgentID, CallerRunID: callerRunID,
+		ExpectedCallerLifecycleVersion: callerAgent.LifecycleVersion,
+		Record:                         rec,
+	}
+	if callerTrajectory != "" {
+		trajectory, trajErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, callerTrajectory)
+		if trajErr != nil {
+			return 0, fmt.Errorf("commit lifecycle act caller trajectory %s: %w", callerTrajectory, trajErr)
+		}
+		req.TrajectoryID = callerTrajectory
+		req.ExpectedLifecycleVersion = trajectory.LifecycleVersion
+	}
+
+	if addressee := strings.TrimSpace(rec.Addressee); addressee != "" {
+		targetAgentID, resolveErr := directiveTargetAgentID(r.scope, addressee)
+		if resolveErr != nil {
+			return 0, resolveErr
+		}
+		targetAgent, targetErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, targetAgentID)
+		if targetErr != nil {
+			return 0, fmt.Errorf("commit lifecycle act target agent %s: %w", targetAgentID, targetErr)
+		}
+		callerProfile, _ := agentprofile.Canonical(firstNonEmpty(callerAgent.Profile, r.scope.FromRole))
+		targetProfile, _ := agentprofile.Canonical(firstNonEmpty(targetAgent.Profile, targetAgent.Role))
+		if ok, policyErr := agentprofile.CanMessage(callerProfile, targetProfile); policyErr != nil || !ok {
+			return 0, fmt.Errorf("commit lifecycle act: %s cannot direct %s", callerProfile, targetProfile)
+		}
+		packet := directivePacketForRecord(rec)
+		if err := validateCoagentSourcePacketPayload(packet); err != nil {
+			return 0, fmt.Errorf("commit lifecycle act: directive packet invalid: %w", err)
+		}
+		content := strings.TrimSpace(firstNonEmpty(packet.Summary, rec.Directive.Body))
+		digest, digestErr := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+		if digestErr != nil {
+			return 0, digestErr
+		}
+		req.PacketSpec = &types.LifecycleActPacketSpec{
+			TargetAgentID: targetAgent.AgentID,
+			ChannelID:     strings.TrimSpace(targetAgent.ChannelID),
+			Packet:        packet,
+			Content:       content,
+			PayloadDigest: digest,
+		}
+	}
+	req.CommandDigest, err = store.ComputeCommitLifecycleActDigest(req)
+	if err != nil {
+		return 0, err
+	}
+	result, err := rt.store.CommitLifecycleAct(ctx, req)
+	if err != nil {
+		return 0, err
+	}
+	if result.Update != nil && !result.Replay {
+		// The wake obligation outbox minted with the commit; also dispatch the
+		// live trigger so a resident desk binds immediately instead of waiting
+		// for the outbox sweep.
+		rt.wakeUpdatedCoagent(ctx, *result.Update)
+	}
+	return uint64(result.Receipt.ReducerSeq), nil
 }
