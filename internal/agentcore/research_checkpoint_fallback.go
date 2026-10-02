@@ -35,13 +35,14 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 	if err != nil {
 		return fmt.Errorf("reload terminal run %s: %w", rec.RunID, err)
 	}
-	// A lifecycle research/management run that terminalized while still holding
-	// bound-but-unconsumed control packets strands them: bound rows are excluded
-	// from the pending list, so the stranded packet never generates the wake that
-	// would re-activate the desk, and unbindStrandedLifecycleControls only fires
-	// on the desk's own activation. Release the dead run's claims here — at the
-	// terminalization event — then re-drive the desk for each freed packet so it
-	// wakes, rebinds through bindLifecycleControlsToRun, and consumes. Past the
+	// Stranded-bound control repair (S0m RN3e): a lifecycle research/management
+	// run that terminalized while still holding bound-but-unconsumed control
+	// packets strands them — bound rows are excluded from the pending list, so
+	// the stranded packet never generates the wake that would re-activate the
+	// desk, and unbindStrandedLifecycleControls only fires on the desk's own
+	// activation. Release the dead run's claims here — at the terminalization
+	// event — then re-drive the desk for each freed packet so it wakes,
+	// rebinds through bindLifecycleControlsToRun, and consumes. Past the
 	// attempt cap the packet terminalizes as delivery_attempts_exhausted.
 	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||
 		len(metadataStringSlice(persisted.Metadata["work_item_ids"])) > 0
