@@ -231,7 +231,7 @@ now:
     wake-outbox created_at drift defect RN2 verification surfaced
     (docs/problems/actor-wake-outbox-createdat-drift-2026-10-02.md).
   source_ref: main@7bbe9ec6
-  deploy_identity: 'staging https://choir.news deployed_commit=3b3ce3e2 pending push→deploy of 7bbe9ec6'
+  deploy_identity: 'staging https://choir.news deployed_commit=7f716ca1 (verified 2026-10-02T05:13Z)'
   candidate: null
   conjecture:
     id: record-native-coupling
@@ -272,3 +272,33 @@ now:
     cast, retract) through record+packet single-commit mint, retiring the
     envelope path per kind. Landing loop for 1f7d0889/3b3ce3e2/7bbe9ec6
     (push → CI → deploy → deployed_identity) runs first.
+
+receipts:
+  - id: rn2-landing-2026-10-02
+    kind: slice_landing
+    status: closed
+    closed_at: '2026-10-02T05:20:00Z'
+    boundary: RN2 substrate landed on staging
+    pushed_commits: [1f7d0889, 3b3ce3e2, 7bbe9ec6]
+    ci: 'run 36966746881 — success (all shards, vocab gates, heresy detector)'
+    deploy: 'Deploy to Staging (Node B) success'
+    environment_identity: >-
+      https://choir.news/health deployed_commit=7f716ca1 (includes
+      3b3ce3e2+7bbe9ec6); corpusd started 2026-10-02T05:13:00Z; zero
+      post-deploy errors; 156-computer vmctl inventory healthy.
+    deployed_acceptance: >-
+      RN2 is internal substrate — no user-visible acceptance act in this
+      slice; per-kind deployed acceptance lands with RN3. Local proof:
+      internal/store lifecycle suite + internal/agentcore stranded-control /
+      persistent-Management / scheduling-readiness tests green; the 7 tests
+      that exposed the wake-drift defect now pass with 3b3ce3e2.
+    heresy_delta: >-
+      discovered+repaired: actor-wake-outbox created_at drift
+      (docs/problems/actor-wake-outbox-createdat-drift-2026-10-02.md), fixed
+      in 3b3ce3e2.
+    rollback: git revert 3b3ce3e2 7bbe9ec6 (docs commit 1f7d0889 stands).
+  - id: rn1-landing-2026-10-01
+    kind: slice_landing
+    status: closed
+    boundary: RN0 (fc82e3be) + RN1 (7a14f1c8) landed; CI run 36963159655
+      success; staging deployed fd8b2973→7a14f1c8 range on 2026-10-02.
