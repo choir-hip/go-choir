@@ -1,0 +1,31 @@
+{
+  "probe": "s0m_rn3a_note_acceptance",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "s0m-rn3a-note-1790924244627",
+  "started_at": "2026-10-02T06:57:24.627Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": 1790924294082,
+      "wall_ms": 49455,
+      "ok": true,
+      "trajectory": "8516bff0-2ea8-5ae5-b1be-5cc84dcfa3f0",
+      "doc": "45379cf6-8f85-5ceb-8260-6d3f5bea266a"
+    },
+    {
+      "name": "management_directive_wake",
+      "ended_at": 1790925073213,
+      "wall_ms": 828586,
+      "run_id": "06781638-cda3-4858-9c6e-609f69bd0822",
+      "note_packet": "cell:572f074b-74f6-4d3a-9bbc-9a31af1730ba:call_p4oV8QED22yTUbzGDJle3LT3:note:tray-1:packet",
+      "state": "pending"
+    }
+  ],
+  "ok": true,
+  "failure": null,
+  "note_packet_id": "cell:572f074b-74f6-4d3a-9bbc-9a31af1730ba:call_p4oV8QED22yTUbzGDJle3LT3:note:tray-1:packet",
+  "management_run_id": "06781638-cda3-4858-9c6e-609f69bd0822",
+  "finished_at": "2026-10-02T07:11:13.214Z",
+  "wall_ms": 828587,
+  "trajectory_id": "8516bff0-2ea8-5ae5-b1be-5cc84dcfa3f0"
+}

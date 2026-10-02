@@ -267,17 +267,41 @@ now:
     the repair is small and uses existing machinery.
   blocker: null
   next_action: >-
-    RN3a (note/directive cutover) is implemented and locally green:
-    CommitLifecycleAct mints record+packet atomically; directive direction
-    is armed across wake outbox (empty-trajectory pin), ReconcileUpdateDelivery
-    bind/unbind, persistent-Management live-occurrence resolution, admissible
-    injection (unbound), and desk-run binding; IntentNote routes through the
-    single commit; no envelope dual-delivery. Next: `note` deployed
-    acceptance on staging, then extend the cutover kind-by-kind — report,
-    resolve, disagreement, precommit+control, escalate, cast, retract —
-    through the same CommitLifecycleAct surface.
+    RN3a landed (87549c17, CI+deploy green, deployed note acceptance
+    proven end-to-end). Next: extend the CommitLifecycleAct cutover
+    kind-by-kind — report (the live-bug kind), resolve, disagreement,
+    precommit+control, escalate, cast, retract — each behind its own
+    commit + landing receipt; then RN4 wake retire and RN5 pack tallies.
 
 receipts:
+
+  - id: rn3a-landing-2026-10-02
+    kind: slice_landing
+    status: closed
+    closed_at: '2026-10-02T07:15:00Z'
+    boundary: RN3a record-native directive mint + note cutover landed
+    pushed_commits: [ed9fa123, 87549c17]
+    ci: 'run 36973968895 — success (all shards, SBOM, Deploy to Staging)'
+    deploy: 'Deploy to Staging (Node B) success; vmctl restarted, active VMs refreshed'
+    environment_identity: >-
+      https://choir.news/health deployed_commit=87549c17; owner guest
+      computer-03335285269bdba4f94377e56879f9e6 active epoch 1003 serving
+      autoputer commit 87549c17.
+    deployed_acceptance: >-
+      Owner-computer prompt-bar run staged choir.Note("management",
+      marker); CommitLifecycleAct minted record + directive packet
+      cell:572f074b-…:note:tray-1:packet (record-derived UpdateID, no
+      envelope), directive wake minted persistent-Management run
+      06781638-cda3-4858-9c6e-609f69bd0822 with the packet in
+      metadata.worker_update_ids — record→packet→wake→injection proven
+      end-to-end on staging. Evidence:
+      docs/evidence/s0m-rn3a-note-acceptance-2026-10-02.json
+      (probe scripts/s0m_note_acceptance_probe.mjs).
+    heresy_delta: >-
+      discovered: engineering-desk directives mint but never bind
+      (docs/problems/s0m-directive-engineering-desk-2026-10-02.md) —
+      residual for RN3b, not a RN3a regression.
+    rollback: git revert 87549c17 (docs commit ed9fa123 stands).
   - id: rn2-landing-2026-10-02
     kind: slice_landing
     status: closed
