@@ -235,15 +235,13 @@ now:
   source_ref: main@9eefbb8b
   deploy_identity: 'staging https://choir.news deployed_commit=258916d5; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer 258916d5 (verified 2026-10-02T13:42Z)'
   next_action: >-
-    Finish-acceptance is blocked on the desk-run dispatch stall
-    (docs/problems/s0m-desk-run-dispatch-stall-2026-10-02.md): texture
-    runs mint pending and never dispatch — initial_dispatch is
-    synchronous + Management-only watchdog. Repair belongs to the next
-    boundary (generalize the watchdog or route initial_dispatch through
-    the durable actor-wake outbox). Then: ask→research→report→resolve
-    round trip, stranded-bound rebind under run death, texture-mail
-    rejection, docs/current-architecture.md update.
-  candidate: null
+    Dispatch-stall repair landed ae47c8a4 (run mint projects
+    initial_dispatch through the actor-wake outbox; migration re-drives
+    the 38 stranded pending runs on next boot) — pending deploy +
+    staging proof, then the finish-acceptance items: ask→research→
+    report→resolve round trip, stranded-bound rebind under run death,
+    texture-mail rejection, docs/current-architecture.md update.
+  candidate: main@ae47c8a4
   conjecture:
     id: record-native-coupling
     status: active
@@ -276,13 +274,12 @@ now:
     Owner direction 2026-10-02: texture desk model →
     opencode-go/deepseek-v4.1-flash @ high reasoning.
   belief: >-
-    The dispatch-predicate gap (not the queue internals) is the live defect;
-    the repair is small and uses existing machinery.
+    The dispatch-predicate gap is repaired at the derivation boundary —
+    initial_dispatch is now an outbox obligation, not a synchronous send.
+    Post-deploy proof: the 38 stranded pending runs re-drive on the next
+    guest boot and desk cells resume dispatching.
   blocker: >-
-    Desk-run dispatch stall on staging guest (running_runs=0, pending
-    mutations climbing): runs mint pending and never receive
-    initial_dispatch execution. Documented in
-    docs/problems/s0m-desk-run-dispatch-stall-2026-10-02.md.
+    Repair landing — staging deploy + guest-boot re-drive proof pending.
 
 
 receipts:
