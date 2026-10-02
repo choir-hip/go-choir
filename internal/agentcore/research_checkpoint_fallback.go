@@ -23,12 +23,9 @@ type terminalOutcomeBinding struct {
 
 // bindTerminalRunOutcome binds one delegated child's final safe update_coagent
 // packet to the authoritative terminal RunRecord. Root runs have no requester
-// and return before any store access.
 func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRecord, activate bool) error {
 	if rt == nil || rt.store == nil || rec == nil ||
-		strings.TrimSpace(rec.RunID) == "" ||
-		strings.TrimSpace(rec.RequestedByRunID) == "" ||
-		!terminalOutcomeCapableProfile(agentProfileForRun(rec)) {
+		strings.TrimSpace(rec.RunID) == "" {
 		return nil
 	}
 	persisted, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
@@ -44,6 +41,9 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 	// event — then re-drive the desk for each freed packet so it wakes,
 	// rebinds through bindLifecycleControlsToRun, and consumes. Past the
 	// attempt cap the packet terminalizes as delivery_attempts_exhausted.
+	// This runs before the RequestedByRunID gate below: persistent-management
+	// desk runs carry no requester, so gating on it would strand management
+	// carriers exactly as it stranded research ones.
 	hasLifecycleMarker := strings.TrimSpace(metadataStringValue(persisted.Metadata, "lifecycle_work_item_id")) != "" ||
 		len(metadataStringSlice(persisted.Metadata["work_item_ids"])) > 0
 	if hasLifecycleMarker && persisted.State.Terminal() && strings.TrimSpace(persisted.ComputerID) != "" &&
@@ -55,6 +55,10 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 		for _, update := range freed {
 			rt.wakeUpdatedCoagent(ctx, update)
 		}
+	}
+	if strings.TrimSpace(rec.RequestedByRunID) == "" ||
+		!terminalOutcomeCapableProfile(agentProfileForRun(rec)) {
+		return nil
 	}
 	binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, &persisted)
 	if err != nil {
