@@ -222,13 +222,16 @@ boundaries:
 now:
   status: working
   slice: >-
-    RN0 landed this commit: commitTray routes lifecycle producers'
-    addressed Message and packet-bodied Report intents through
-    QueueLifecycleUpdate; requested_by_* stamped at lifecycle-control
-    activation bind (management_controller.go). Research→texture is
-    live-path repaired. Next: RN1 prune + RN2 substrate.
-  source_ref: main@3eb132c7
-  deploy_identity: 'staging https://choir.news deployed_commit=fd8b2973'
+    RN0 landed earlier (research→texture dispatch + requested_by_* at bind);
+    RN1 landed 7a14f1c8 (dead machinery prune). RN2 landed 7bbe9ec6 —
+    IssueLifecycleControl extracted from ApplyTextureTurn via the shared
+    lifecycleControlAccumulator, stranded-bound unbind covering control and
+    producer-report packets at both reconcile entry points, and the
+    management:* producer-report authority contract. 3b3ce3e2 repairs the
+    wake-outbox created_at drift defect RN2 verification surfaced
+    (docs/problems/actor-wake-outbox-createdat-drift-2026-10-02.md).
+  source_ref: main@7bbe9ec6
+  deploy_identity: 'staging https://choir.news deployed_commit=3b3ce3e2 pending push→deploy of 7bbe9ec6'
   candidate: null
   conjecture:
     id: record-native-coupling
@@ -264,8 +267,8 @@ now:
     the repair is small and uses existing machinery.
   blocker: null
   next_action: >-
-    Implement RN0: widen the IntentMessage/IntentReport dispatch condition
-    (isAssignedDesk OR lifecycle-producer), stamp requested_by_* in the
-    lifecycle-control activation metadata path, and add the per-kind tests.
-    Problem documentation for the dispatch defect is already landed
-    (docs/problems/texture-research-hollow-revisions-2026-10-01.md).
+    RN3: per-kind delivery-path cutover — route each desk-authored act
+    (note, report, resolve, disagreement, precommit+control, escalate,
+    cast, retract) through record+packet single-commit mint, retiring the
+    envelope path per kind. Landing loop for 1f7d0889/3b3ce3e2/7bbe9ec6
+    (push → CI → deploy → deployed_identity) runs first.
