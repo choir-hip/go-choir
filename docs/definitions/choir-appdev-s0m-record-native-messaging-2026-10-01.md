@@ -222,33 +222,27 @@ boundaries:
 now:
   status: working
   slice: >-
-    RN0 landed earlier (research→texture dispatch + requested_by_* at bind);
-    RN1 landed 7a14f1c8 (dead machinery prune). RN2 landed 7bbe9ec6 —
-    IssueLifecycleControl extracted from ApplyTextureTurn via the shared
-    lifecycleControlAccumulator, stranded-bound unbind covering control and
-    producer-report packets at both reconcile entry points, and the
-    management:* producer-report authority contract. RN3b landed 758325af —
-    IntentReport routes through CommitLifecycleAct (record+producer_report
-    packet atomically, no envelope), overlay verb signatures documented, and
-    desk-name ToDesk resolution (texture→currentTextureAgentID(caller
-    trajectory doc), management→persistent desk) repaired after staging
-    probes exposed it. RN3c landed a9f70d94 — ledger-only resolve/
-    disagreement and addressed directive subtypes (escalate/cast/retract)
-    mint record+packet atomically; cast admission re-hooks off
-    LifecycleResult.RecordCanonicalID. RN3d landed 8b48f00a — addressed
-    staked questions (ask/precommit) mint record+question packet; the
-    remaining legacy kind is IntentReply (no packet kind exists for
-    reply; its semantic fold needs the report-producer authority arm).
-  source_ref: main@8b48f00a
-  deploy_identity: 'staging https://choir.news deployed_commit=8b48f00a; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer 8b48f00a (verified 2026-10-02T13:05Z)'
+    RN0-RN4 all landed + deployed: note (ed9fa123/87549c17), report
+    (758325af, deployed acceptance proven), resolve/disagreement +
+    escalate/cast/retract (a9f70d94), ask/precommit (8b48f00a), reply +
+    envelope retire for lifecycle callers (65275e46). RN5 issuer tallies
+    landed e119755a (ActingPack.IssuerTallies, derived per read). Prompt
+    audit landed 93564de5 (retired choir.Message follow-up offers →
+    choir.Ask/Note). Texture desk model moved to
+    opencode-go/deepseek-v4.1-flash@high on owner direction (258916d5 +
+    live guest data.img edit, receipt
+    docs/evidence/s0m-texture-model-swap-2026-10-02.md).
+  source_ref: main@9eefbb8b
+  deploy_identity: 'staging https://choir.news deployed_commit=258916d5; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer 258916d5 (verified 2026-10-02T13:42Z)'
   next_action: >-
-    RN4 wake retire (red — actor dispatch protected surface): remove the
-    channel_message wake + envelope fallback for lifecycle callers now
-    that every addressed act mints its packet in-commit; then RN5 issuer
-    tallies in the ActingPack, the finish acceptance chain (ask→research
-    report→resolve round trip, stranded-bound rebind under run death,
-    texture-mail rejection), prompt audit, and
-    docs/current-architecture.md update.
+    Finish-acceptance is blocked on the desk-run dispatch stall
+    (docs/problems/s0m-desk-run-dispatch-stall-2026-10-02.md): texture
+    runs mint pending and never dispatch — initial_dispatch is
+    synchronous + Management-only watchdog. Repair belongs to the next
+    boundary (generalize the watchdog or route initial_dispatch through
+    the durable actor-wake outbox). Then: ask→research→report→resolve
+    round trip, stranded-bound rebind under run death, texture-mail
+    rejection, docs/current-architecture.md update.
   candidate: null
   conjecture:
     id: record-native-coupling
@@ -279,10 +273,16 @@ now:
     Owner rulings 2026-10-01 recorded in map §10-11: records are the acts;
     Addressee is delivery; ApplyTexture edits only; issuer tallies enter the
     acting pack (aggregate, doctrine wording promotes at cutover).
+    Owner direction 2026-10-02: texture desk model →
+    opencode-go/deepseek-v4.1-flash @ high reasoning.
   belief: >-
     The dispatch-predicate gap (not the queue internals) is the live defect;
     the repair is small and uses existing machinery.
-  blocker: null
+  blocker: >-
+    Desk-run dispatch stall on staging guest (running_runs=0, pending
+    mutations climbing): runs mint pending and never receive
+    initial_dispatch execution. Documented in
+    docs/problems/s0m-desk-run-dispatch-stall-2026-10-02.md.
 
 
 receipts:
