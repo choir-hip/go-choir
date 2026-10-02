@@ -298,3 +298,73 @@ func TestCommitTrayLifecycleProducerReportMintsRecordNativePacket(t *testing.T) 
 		t.Fatalf("reduction receipt = %+v", reduction.receipt)
 	}
 }
+
+// Desk-name ToDesk ("texture", as overlays document it) resolves to the
+// caller trajectory's current Texture agent — the record-native report must
+// not require the cell to spell texture:<doc_id>. (s0m-report-desk-target-resolution)
+func TestCommitTrayLifecycleProducerReportResolvesDeskName(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := bindResearchControlFixture(t, rt, s, "owner-desk-report", "desk-report")
+	run := fixture.run
+	work, err := s.GetLifecycleWorkItem(context.Background(), run.OwnerID, run.ComputerID, fixture.workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.RequestedByRunID, _ = work.Details["requested_by_run_id"].(string)
+	run.Metadata["requested_by_run_id"] = work.Details["requested_by_run_id"]
+	run.Metadata["requested_by_agent_id"] = work.Details["requested_by_agent_id"]
+	run.Metadata["requested_by_profile"] = work.Details["requested_by_profile"]
+	reproject := types.ReplaceLifecycleActivationRequest{
+		OwnerID: run.OwnerID, ComputerID: run.ComputerID,
+		CommandID: "reproject-desk-report", TrajectoryID: run.TrajectoryID,
+		AgentID: run.AgentID, Run: run,
+	}
+	reproject.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(reproject)
+	if _, err := s.ReplaceLifecycleActivation(context.Background(), reproject); err != nil {
+		t.Fatal(err)
+	}
+
+	textureAgentID := fixture.control.AgentID
+	scope := ReductionScope{
+		FromAgentID: run.AgentID, DeskAgentID: run.AgentID,
+		FromRole: agentprofile.Research, ChannelID: run.ChannelID,
+		RunID: run.RunID, OwnerID: run.OwnerID, ComputerID: run.ComputerID,
+		CellID: "cell-desk-report",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: run.RunID, AgentID: run.AgentID, OwnerID: run.OwnerID,
+		ChannelID: run.ChannelID, ComputerID: run.ComputerID,
+		Profile: agentprofile.Research, Role: agentprofile.Research,
+		RunRecord: &run,
+	})
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &run}
+
+	packet := types.CoagentSourcePacketPayload{
+		SchemaVersion: types.CoagentSourcePacketSchemaV1,
+		Kind:          "evidence_update",
+		Summary:       "desk-name report finding",
+		Claims:        []types.CoagentPacketClaim{{Text: "claim"}},
+		Sources:       []types.CoagentPacketSource{{SourceID: "s1", Kind: "web_page", Target: types.CoagentPacketSourceTarget{URI: "https://example.com/c", Title: "C"}}},
+	}
+	packetJSON, _ := json.Marshal(packet)
+
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "report-1", Kind: yaegikernel.IntentReport, ToDesk: "texture", Packet: string(packetJSON), Claim: "desk-name report finding"},
+	}, 1); err != nil {
+		t.Fatalf("commitTray desk-name producer report failed: %v", err)
+	}
+
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, run.OwnerID, run.ComputerID, textureAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("desk-name producer report did not queue: pending=%d", len(pending))
+	}
+	if pending[0].Direction != types.LifecyclePacketDirectionProducerReport ||
+		pending[0].SourceRecordID != "cell-desk-report:report:report-1" {
+		t.Fatalf("desk-name report packet malformed: %+v", pending[0])
+	}
+}

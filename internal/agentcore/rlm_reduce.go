@@ -1647,7 +1647,49 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	execution.ToolCallID = intentIdempotencyKey(r.scope, in.LocalID, in.ToDesk, in.Body)
 	toolCallCtx := toolregistry.WithExecutionContext(ctx, execution)
-	authority, err := resolveCoagentUpdateAuthorityWithStore(toolCallCtx, rt, rt.store, strings.TrimSpace(in.ToDesk), "")
+	// Cells address reports by desk name (choir.Report/ReportPacket toDesk),
+	// not agent id — resolve the name to the durable target the authority
+	// contract demands: the persistent Management desk, or the current
+	// Texture agent of the caller run's trajectory document (the lifecycle
+	// validator pins exactly that id). A non-lifecycle caller has no
+	// trajectory document — surface the legacy sentinel so commitActIntent
+	// falls back to the envelope path.
+	toDesk := strings.TrimSpace(in.ToDesk)
+	targetHint := toDesk
+	if !strings.Contains(toDesk, ":") {
+		profile, profileErr := agentprofile.Canonical(toDesk)
+		if profileErr != nil {
+			return 0, fmt.Errorf("reduce: report addressee %q is not a known desk: %w", toDesk, profileErr)
+		}
+		switch profile {
+		case agentprofile.Management:
+			targetHint = persistentManagementAgentID(strings.TrimSpace(execution.OwnerID))
+		case agentprofile.Texture:
+			callerRun, runErr := rt.store.GetLifecycleRun(toolCallCtx, strings.TrimSpace(execution.OwnerID), strings.TrimSpace(execution.ComputerID), strings.TrimSpace(execution.RunID))
+			if runErr != nil {
+				if errors.Is(runErr, store.ErrNotFound) {
+					return 0, errLifecycleActLegacyCaller
+				}
+				return 0, fmt.Errorf("commit lifecycle act report caller run: %w", runErr)
+			}
+			trajectoryID := strings.TrimSpace(trajectoryIDForRun(&callerRun))
+			if trajectoryID == "" {
+				return 0, fmt.Errorf("commit lifecycle act report: caller run %s has no lifecycle trajectory", execution.RunID)
+			}
+			trajectory, trajErr := rt.store.GetLifecycleTrajectory(toolCallCtx, callerRun.OwnerID, callerRun.ComputerID, trajectoryID)
+			if trajErr != nil {
+				return 0, fmt.Errorf("commit lifecycle act report caller trajectory %s: %w", trajectoryID, trajErr)
+			}
+			docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
+			if docID == "" {
+				return 0, fmt.Errorf("commit lifecycle act report: caller trajectory %s has no doc_id subject", trajectoryID)
+			}
+			targetHint = currentTextureAgentID(docID)
+		default:
+			return 0, fmt.Errorf("reduce: report addressee %q is not an addressable desk", toDesk)
+		}
+	}
+	authority, err := resolveCoagentUpdateAuthorityWithStore(toolCallCtx, rt, rt.store, targetHint, "")
 	if err != nil {
 		return 0, err
 	}
