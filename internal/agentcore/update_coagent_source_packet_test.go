@@ -1153,10 +1153,22 @@ func TestLifecycleResearchAdmissionErrorPassivationRecoversOnce(t *testing.T) {
 	if counting.Count() != 1 || recovered.State != types.RunCompleted {
 		t.Fatalf("recovered provider calls=%d state=%s", counting.Count(), recovered.State)
 	}
-	projectedBeforeRepeat := len(controlWakes)
+	// The recovered run completed while still holding its bound-but-unconsumed
+	// control. The stranded-release path in bindTerminalRunOutcome (hoisted
+	// above the RequestedByRunID gate) frees it, and the freed packet
+	// legitimately mints a re-drive wake — so a frozen wake count would pin
+	// the pre-fix bound-leak. Assert the real invariant instead: the stranded
+	// control is released back to pending/unbound for the desk to re-drive.
 	rt.sweepActorWakeOutbox(ctx)
-	if len(controlWakes) != projectedBeforeRepeat || counting.Count() != 1 {
-		t.Fatalf("repeated projector control wakes=%d want %d; provider calls=%d", len(controlWakes), projectedBeforeRepeat, counting.Count())
+	released, err := s.GetLifecycleUpdate(ctx, fixture.run.OwnerID, fixture.run.ComputerID, fixture.trajectoryID, fixture.control.TargetAgentID, fixture.control.AgentID, fixture.control.ProducerUpdateID)
+	if err != nil {
+		t.Fatalf("reload released control: %v", err)
+	}
+	if released.Disposition != types.UpdatePending || strings.TrimSpace(released.DeliveredToRunID) != "" {
+		t.Fatalf("stranded control not freed to pending/unbound after recovery: disposition=%s delivered_to=%q", released.Disposition, released.DeliveredToRunID)
+	}
+	if counting.Count() != 1 {
+		t.Fatalf("recovery re-invoked provider: calls=%d", counting.Count())
 	}
 	work, err := s.GetLifecycleWorkItem(ctx, fixture.run.OwnerID, fixture.run.ComputerID, fixture.workID)
 	if err != nil {
