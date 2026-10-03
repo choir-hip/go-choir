@@ -1,4 +1,4 @@
-# S0m finding: texture desk runs but authors no act — the agency boundary
+# S0m finding: "desk authors no act" is a contract split + mask, not agency
 
 **Date observed**: 2026-10-03
 **Computer**: `computer-03335285269bdba4f94377e56879f9e6` (owner guest,
@@ -37,45 +37,77 @@ The full dispatch + delivery substrate is now landed and verified:
 Result: desks that used to stay `pending` forever now execute. The wedge
 moved from *delivery* to *agency*.
 
-## The boundary
+## Panel verdict (divergent, 2026-10-03 — claude / muse-spark / gemini38 /
+## devin + direct code verification)
 
-Two kinds of "no act":
+The "desk runs but authors no act" reading was **wrong in mechanism**. Four
+independent framings converge:
 
-1. **Model agency** (established, `s0m` now-card): the desk *has*
-   `choir.Ask`/`choir.Resolve` but does not emit them after consuming —
-   the escalate probes already hit this (`texture cell completed with no
-   authoring act`). A prompting/steering limitation, not a missing
-   mechanism.
-2. **Act surface** (open question): is `choir.Ask` actually reachable as
-   a callable verb in the texture desk's tool surface on `4dbb4a5a`, or
-   is the cell completing because the verb it wants isn't presented?
-   `choir.Resolve` is confirmed a live texture verb (`ChoirScope.Resolve`
-   → `IntentResolve` → `CommitmentKindResolve`). `choir.Ask` needs the
-   same reachability check.
+### 1. `consumeIdleTextureTrigger` is a masking false-label
+`tools_desk.go:563-625` writes reason `"desk cell completed with no authoring
+act"` whenever the cell staged zero `IntentTextureApply`. It does **not**
+inspect `IntentAsk`/`Note`/`Resolve`. A cell that staged only an `Ask` reads
+identically. The string cannot distinguish "model authored nothing" from
+"model authored a non-ApplyTexture act". Worse (gemini38 framing 3): the
+consume fires after **any** `desk_go_eval` with `Error==""` and no
+`IntentTextureApply` — an exploratory first cell (read doc, prep) commits
+`no_worker_needed` and ends the run before a second cell can stage the act.
+The trigger-disposal fix (#5) short-circuits the multi-cell notebook the
+prompt requires.
 
-## Why this is substrate-shaped, not just prompting
+### 2. The demanded act was prompt-forbidden (contract split)
+The texture overlay (`run_system.yaml`, `revision_policy.yaml:59`) routes ALL
+research through `ApplyTexture{controls:[{open_researcher:true, packet:...}]}`
+— "Research follow-ups ride the SAME control mechanism that opened the desk"
+and "Direct choir.Message/choir.Note to a research desk is rejected by the
+lifecycle queue." `choir.Ask` is permitted only as a **follow-up to an
+already-bound research desk** (`texture.yaml:76-77`, `run_system.yaml:19`).
+The stranded-bound probe demanded a bare `choir.Ask("research", …)` first —
+the desk's prompt contract forbids exactly that.
 
-This is the third boundary in the same delivery/wake substrate in <24h
-(dispatch-stall → stranded-rebind → no-authoring-act). Per *Convergence
-Before Patching* / *Root Cause Clustering*, the next action is a
-structural assessment, not another point patch: the desk-authoring act
-surface may share a single authority gap with the delivery fixes already
-landed — the cell completes "cleanly" (commits a turn) precisely because
-no act was emitted, so there is no failure to retry against.
+### 3. The demanded act was also store-rejected (addressing precondition)
+`choir.Ask("research",…)` → `directiveTargetAgentID` (`rlm_reduce.go:1688`)
+resolves `research`→`research:<docID>` → `GetAgentByScope` → `ErrNotFound`
+because `research:<docID>` is only minted by an `ApplyTexture` controls
+`open_researcher` turn. Even a perfectly-agenced model calling Ask-first gets
+a commit-time reject. Addressing requires a prior bound desk.
 
-## Admissible evidence / next probe
+### 4. Ontological split (gemini38 framing 4 — the real question)
+Texture was never cut over to record-native peer messaging. S0m migrated the
+delivery plumbing under `management_controller`, but Texture's contract stays
+document-carrier controls. A bare texture `choir.Ask` is arguably an
+architectural heresy — Texture is the document owner, not a tape peer like
+Management.
 
-- Whether `choir.Ask` is presented to the texture desk's tool surface on
-  `4dbb4a5a` (reachability check).
-- Whether an explicit `choir.Ask` in a desk prompt produces a bound
-  control (separates "verb reachable" from "model didn't choose it").
-- If reachable but unchosen: prompt/pack steering so the desk authors
-  the act the trajectory needs — that is a `yellow` (prompt) change, not
-  substrate.
+## Corrected boundary
+
+**Not** "model agency" and **not** a 4th delivery defect. The rebind re-proof
+cannot be driven by a bare texture `choir.Ask`. Options (a doctrine choice,
+not a patch):
+- **(i)** Drive the rebind leg through a record-native peer caller — a
+  Management-desk `Ask`→carrier→kill→rebind — decoupling rebind verification
+  (substrate, already unit-tested) from texture authoring. Cheapest, keeps
+  texture out of the loop.
+- **(ii)** Re-proof through texture's *designed* path:
+  `ApplyTexture{controls:open_researcher}` → bound research → `Ask`
+  follow-up → Reply → Resolve. Exercises the full record-native loop but is
+  the heavy path.
+- **(iii)** Accept texture-Ask as out of S0m scope; verify rebind via a
+  deterministic in-store harness (inject a control, terminalize its carrier,
+  assert rebind).
+
+The `consumeIdleTextureTrigger` mask is a real latent defect regardless of
+which proof path is chosen — it manufactures "no act" for non-ApplyTexture
+authored cells and can pre-empt a multi-cell turn. That is a separate
+substrate item (red, Texture canonical writes), worth its own problem doc if
+pursued.
 
 ## Boundary for S0m
 
-Blocks the finish-acceptance chain (stranded-bound rebind re-proof needs
-an authored Ask control to kill-and-rebind; mechanical-resolve needs Ask
-then Resolve). All delivery invariants are now green; the residual is the
-desk-authoring surface.
+Blocks the finish-acceptance chain — but the correct re-proof instrument is a
+doctrine choice (rebind via Management `Ask`, via texture's designed
+`open_researcher` controls path, or via a deterministic in-store harness),
+NOT a bare texture `choir.Ask`, which is both prompt-forbidden and
+store-rejected. All delivery invariants are green; `consumeIdleTextureTrigger`
+is a confirmed latent mask worth its own substrate fix (red, Texture
+canonical writes).

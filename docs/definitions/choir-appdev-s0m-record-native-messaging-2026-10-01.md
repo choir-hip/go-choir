@@ -240,20 +240,20 @@ now:
   source_ref: main@558afe86
   deploy_identity: 'staging https://choir.news deployed_commit=4dbb4a5a; owner guest computer-03335285269bdba4f94377e56879f9e6 refreshed 2026-10-03 -> autoputer 4dbb4a5a (stranded-bound-rebind repair landed + deployed)'
   next_action: >-
-    Desk-mint dispatch is repaired end-to-end (boot-time outbox ae47c8a4 +
-    post-boot starvation ebfd2e98 + restart-recast 39e924aa) — desks now
-    dispatch and RUN on 4dbb4a5a (running_runs>0, fresh cells executing).
-    The stranded-bound rebind repair landed c31bf43a and is deployed
-    (DeliveredAt cleared on pure unbind so freed packets re-enter the
-    pending scan; union liveness oracle stops spurious frees; tri-state
-    claim fate settles completed carriers; replay.Completed suppresses
-    discharged-turn re-mints). In-store + agentcore + actorruntime suites
-    green. The remaining finish legs are all DESK AUTHORING (model
-    agency): the desk runs and consumes but does not emit choir.Ask /
-    choir.Resolve within the probe window. Deployed re-proof of the
-    rebind leg needs a desk-authored control to bind->kill->rebind; the
-    mechanical-resolve leg needs the desk to emit Ask then Resolve.
-    Steering the desk to author is the live boundary — see
+    Delivery substrate fully landed + deployed (4dbb4a5a): boot-time outbox
+    ae47c8a4, desk-mint starvation ebfd2e98, restart-recast 39e924aa,
+    stranded-bound rebind c31bf43a. Desks dispatch, run, consume, commit
+    turns. The "no authoring act" boundary is resolved by the 2026-10-03
+    divergent panel + code verification: NOT model agency and NOT a 4th
+    delivery defect — (a) consumeIdleTextureTrigger masks any
+    non-ApplyTexture authored cell as "no act" and can pre-empt multi-cell
+    turns; (b) the probe's demanded bare choir.Ask is prompt-forbidden
+    (texture contract routes research via ApplyTexture{controls:
+    open_researcher}; Ask is only a bound-desk follow-up); (c) bare
+    choir.Ask("research") also store-rejects (research:<docID> not yet
+    minted). The finish-acceptance re-proof needs a doctrine choice of
+    instrument: rebind via Management Ask, via texture open_researcher
+    controls, or via deterministic in-store harness — see
     docs/problems/s0m-desk-no-authoring-act-2026-10-03.md.
   candidate: main@558afe86
   conjecture:
@@ -308,16 +308,14 @@ now:
     independent scorer (management) is a separate verdict, not required to
     mint the resolver's Resolve.
   blocker: >-
-    The delivery substrate is fully landed + verified (boot-time dispatch
-    outbox ae47c8a4, desk-mint starvation ebfd2e98, restart-recast 39e924aa,
-    stranded-bound rebind c31bf43a — all deployed on 4dbb4a5a). Desks now
-    dispatch, run, consume, and commit turns. The sole remaining blocker is
-    DESK AUTHORING (model agency): the texture desk completes turns with
-    "no authoring act" — does not emit choir.Ask / choir.Resolve /
-    choir.Note within the probe window. Finish legs: (a) confirm choir.Ask
-    reachability on the texture tool surface; (b) steer the desk to author
-    the act (yellow prompt change); (c) then re-run stranded-bound rebind
-    (kill->rebind) + mechanical resolve (Ask->Resolve) live. See
+    Delivery substrate fully landed + verified (ae47c8a4, ebfd2e98, 39e924aa,
+    c31bf43a — deployed 4dbb4a5a). The "no authoring act" blocker is resolved
+    as a contract split + mask, not model agency: consumeIdleTextureTrigger
+    masks non-ApplyTexture authored cells; a bare choir.Ask is prompt-forbidden
+    AND store-rejected (research:<docID> needs an open_researcher turn first).
+    Finish legs need a doctrine choice of re-proof instrument (Management Ask
+    vs texture open_researcher controls vs in-store harness) plus a separate
+    red fix for the consumeIdleTextureTrigger mask. See
     docs/problems/s0m-desk-no-authoring-act-2026-10-03.md.
 
 

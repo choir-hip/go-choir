@@ -64,10 +64,12 @@ function finish(code) {
 
 const prompt =
   `Operator-authorized stranded-bound acceptance probe (marker ${MARKER}). ` +
-  `Task: record the current UTC date into this document. To get it right you ` +
-  `MUST ask the research desk — call choir.Ask("research", "What is today's ` +
-  `UTC date? Answer in one short line.") — then wait for the reply, write the ` +
-  `answer into the document, and end. The document is disposable.`;
+  `Task: record the current UTC date into this document. Do it by opening a ` +
+  `research desk: stage a choir.ApplyTexture apply turn with a controls entry ` +
+  `{open_researcher:true, objective:"Find today's UTC date", packet:` +
+  `{kind:"question", summary:"UTC date", questions:["What is today's UTC date?"]}} ` +
+  `as your FIRST act in your FIRST cell — do not explore first. Then wait for ` +
+  `the research reply, incorporate it, and end. The document is disposable.`;
 
 let TRAJ = EXISTING_TRAJ;
 if (!TRAJ) {
@@ -79,7 +81,8 @@ if (!TRAJ) {
     for (let i = 0; i < 8 && !TRAJ; i++) {
       const list = await api('/api/trajectories?limit=8');
       const cutoff = Date.now() - 3 * 60 * 1000;
-      for (const t of (list.body?.trajectories || list.body || [])) {
+      const trajList = Array.isArray(list.body?.trajectories) ? list.body.trajectories : (Array.isArray(list.body) ? list.body : []);
+      for (const t of trajList) {
         const ts = Date.parse(t.created_at || '');
         if (t.status === 'live' && ts >= cutoff) { TRAJ = t.trajectory_id; break; }
       }
