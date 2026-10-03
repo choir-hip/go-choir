@@ -5039,6 +5039,27 @@ func (s *Store) TerminalizeRun(ctx context.Context, req types.TerminalizeRunRequ
 		{CanonicalID: receiptObj.CanonicalID},
 	}
 	objects := []objectgraph.Object{runUpdated, trajectoryUpdated, eventObj, receiptObj}
+	// Clear agent.ActiveRunID when the terminalizing run is the agent's live
+	// activation. TerminalizeRun is the canonical cancel path; without this the
+	// agent keeps a dead run as ActiveRunID, and
+	// ResolveLifecycleControlActivation's active-run gate
+	// (lifecycleRunOwnsActivation fails on the terminal state) rejects the next
+	// carrier reconcile — the freed control re-strands. Mirrors the clear in
+	// projectLifecycleRun: a terminal run must never remain ActiveRunID.
+	if agentObj, agentErr := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.AgentID); agentErr == nil {
+		if agent, decodeErr := decodeLifecycleObject[types.AgentRecord](agentObj); decodeErr == nil {
+			if strings.TrimSpace(agent.ActiveRunID) == run.RunID {
+				agent.ActiveRunID = ""
+				agent.UpdatedAt = now
+				agentMeta := lifecycleMetadata("agent_id", agent.AgentID, computerID, req.TrajectoryID, agent.LastReducerSeq)
+				agentMeta["channel_id"] = agent.ChannelID
+				if updatedAgentObj, objErr := lifecycleObject(ogKindAgent, ownerID, computerID, agent.AgentID, agent, agentMeta, agentObj.CreatedAt, now); objErr == nil {
+					objects = append(objects, updatedAgentObj)
+					conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash})
+				}
+			}
+		}
+	}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{
 		Receipt: receipt, Trajectory: trajectory, Events: []types.LifecycleEvent{event},
 	})
