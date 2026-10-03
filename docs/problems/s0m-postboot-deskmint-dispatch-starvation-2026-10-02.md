@@ -81,3 +81,24 @@ re-drive does not extend to post-boot mints. Next boundary: make post-mint
 `initial_dispatch` drops re-drivable outside boot (a live pending-run sweep, or a
 mint-time durable obligation that does not depend on the synchronous dispatch
 succeeding).
+
+## Repair verification (2026-10-03, commit `ebfd2e98`)
+
+Landed `fix(s0m): retry lifecycle activation commit on deadline-exceeded` in
+`internal/agentcore/runtime_persistence.go`: `persistLifecycleSubmittedRun`
+now wraps `ReplaceLifecycleActivation` in a bounded retry that re-attempts on
+`context.DeadlineExceeded` with `context.WithoutCancel` + a fresh 60s deadline.
+The commit is idempotent via `CommandDigest`, so a re-attempted mint cannot
+double-submit.
+
+**Measured on guest `ebfd2e98` (staging):** submit `ffc400c2` returned ok and,
+~51s later, minted and ran desk cell `e9bdff26`, which authored `apply` on
+`4461a4c9`. Previously the mint error'd `context deadline exceeded` and no cell
+existed. The activation-commit starvation is repaired.
+
+**Residual:** the minted cell completed its turn (`apply`) without calling
+`activate_control` — the `Ask` never became a control packet bound to research.
+The mint blocker is gone; a separate gap remains where a desk cell turn ends
+without routing the control plane. Probe `s0m-stranded-bound` still times out at
+"no control packet bound." Next: why a healthy desk-cell turn terminates without
+emitting `activate_control` (cell prompt/steering path, not the commit store).
