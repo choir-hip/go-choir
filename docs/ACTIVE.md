@@ -40,9 +40,11 @@ resolve+escalate/ask+precommit/reply cutovers + envelope retirement);
 RN5 issuer tallies landed `e119755a`. Texture desk model moved to
 `opencode-go/deepseek-v4.1-flash@high` on owner direction (`258916d5` +
 live guest policy edit receipt `evidence/s0m-texture-model-swap-2026-10-02.md`).
-**Open blocker:** desk runs mint `pending` post-boot and never dispatch —
-documented `problems/s0m-desk-run-dispatch-stall-2026-10-02.md`; gates the
-finish-acceptance chain. →
+**Live blocker:** consume-marking — rebind repaired + re-proven on staging
+`ed406f45`, but the rebound carrier does the work/reports while the bound
+control is never marked incorporated, so `system:reducer` resolve can't
+fire. `problems/s0m-bound-control-not-marked-incorporated-2026-10-03.md`;
+gates the finish-acceptance chain. →
 **S1** security floor → **S2** layering → **S3** fast resume →
 **S4** capsule open world → **S5** live preview + supervision →
 **S6** commit gate → **S7** app packages → **S8** source publication →
