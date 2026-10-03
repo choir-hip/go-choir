@@ -39,6 +39,29 @@ re-drive loop has no convergence invariant ("each wake must either discharge
 the obligation, rebind it, or score it exhausted") — not three independent
 bugs.
 
+## Mechanism refinement (2026-10-03)
+
+Deeper read: each `persistent Management live occurrence received` line is a
+**distinct durable occurrence** (one per pending control/directive across many
+trajectories), not the same row redelivering — the `bound run=cf5a70ca` path
+returns clean (`nil, nil`) so those occurrences are consumed. The "storm" is
+therefore a **thundering-herd drain**: the post-boot backlog (~2009 re-armed
+deadline rows + N pending controls) fired its `wakeUpdatedCoagent` /
+`coagent_result` occurrences en masse; each wake runs
+`ResolvePersistentManagementLiveOccurrence`, which takes
+`managementReconcileMu` + the serialized Dolt `engineMu`, and does a full
+pending-list scan per occurrence. Compounding it, `redrive-N` deferrals
+(`defer unprocessed occurrence: Texture activation`) reschedule wakes with
+`not_before`, re-adding to the herd faster than it drains.
+
+Observable blast radius: the staging API 502s under load (reads starve behind
+the serialized writes); the freed control `1ed83383` released its claim
+(release fix works) but its rebind is queued behind the herd, not deadlocked —
+that distinction matters. Whether any single obligation *loops* forever is
+unproven; what is proven is the re-drive issue rate exceeds the drain rate for
+10+ minutes, which is the convergence defect: no backpressure/cap on re-drive
+issuance vs. serialized Dolt throughput.
+
 ## Evidence
 
 - Guest journal `go-choir-vmctl` 2026-10-03 01:55–02:20: repeating
