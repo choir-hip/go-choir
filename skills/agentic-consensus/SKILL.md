@@ -48,24 +48,26 @@ External CLIs intentionally use their default model unless the user asks for a m
 
 ### GPT tier ladder
 
-The GPT tiers are separate models across two generations, priced per tier:
+The panel carries two GPT anchors, deliberately: the strongest and the
+cheapest.
 
 | id | model | default thinking | role |
 | --- | --- | --- | --- |
 | `omp-gpt61-sol` | `openai-codex/gpt-6.1-sol` | `xhigh` | flagship; hardest reasoning |
-| `omp-gpt6-sol` | `openai-codex/gpt-6-sol` | `medium` | previous flagship; still current-generation |
-| `omp-gpt6-astra` | `openai-codex/gpt-6-astra` | `high` | balanced workhorse |
 | `omp-gpt6-luna` | `openai-codex/gpt-6-luna` | `max` | cost champion; fastest/cheapest |
 
-`omp-gpt61-sol` and `omp-gpt6-luna` are in the default panel. Add Astra for the full GPT sub-panel on the hardest problems:
+Both are in the default panel. `gpt-6.1-sol` is the only OpenAI flagship —
+`gpt-6-sol`, `gpt-6-astra` and the retired `gpt-6-terra` were dropped by owner
+direction on 2026-10-03, so do not reintroduce them as panel ids. To pull a
+different GPT tier in for a one-off, override the pin rather than adding an id:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
-  --include omp-gpt61-sol,omp-gpt6-astra,omp-gpt6-luna \
+  --omp-gpt61-sol-model openai-codex/gpt-6-astra \
+  --omp-gpt61-sol-thinking high \
+  --include omp-gpt61-sol,omp-gpt6-luna \
   --prompt-file .agentic-consensus/prompt.md
 ```
-
-`omp-gpt6-sol` is kept as a supported id because in-flight `/goal` files pass it in `--include`; it is no longer the default flagship.
 
 Supported runner ids:
 
@@ -76,8 +78,6 @@ claude
 cursor          (quota-gated; not default)
 opencode
 omp-gpt61-sol   (default)
-omp-gpt6-sol
-omp-gpt6-astra
 omp-gpt6-luna   (default)
 omp-gemini38    (default)
 omp-claude-opus46
@@ -85,17 +85,21 @@ omp-space-bunny (default)
 omp-muse-spark  (default)
 omp-qwen38max   (default)
 omp-glm53-flash (default)
-omp-grok47
 omp-deepseek-v4-pro
 omp-kimi-k3
 omp-minimax-m3
 ```
 
+An unsupported id in `--include` is a **hard error**, not a silent drop: a
+panel that quietly runs fewer panelists than asked for reports a success it
+did not deliver. `--exclude` stays forgiving.
+
 ### Retired ids
 
-These were removed on 2026-10-03. Do not reintroduce them; re-probe first if
-you think one is back. Full evidence in
+Removed 2026-10-03. Do not reintroduce without re-probing. Full evidence in
 `docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md`.
+
+Retired because the pin was **broken**:
 
 | retired id | was pinned to | why |
 | --- | --- | --- |
@@ -104,11 +108,18 @@ you think one is back. Full evidence in
 | `omp-nemotron-3-ultra` | `opencode-zen/nemotron-3-ultra-free` | `403 OpenCode's free tier can only be used from within OpenCode` |
 | `omp-ling` | `opencode-zen/ling-3.0-flash-fin-free` | same `403` free-tier refusal |
 
+Retained working, then dropped by **owner direction** (the models were fine;
+the panel was simply trimmed):
+
+| retired id | was pinned to |
+| --- | --- |
+| `omp-gpt6-sol` | `openai-codex/gpt-6-sol` |
+| `omp-gpt6-astra` | `openai-codex/gpt-6-astra` |
+| `omp-grok47` | `opencode-go/grok-4.7` |
+
 The whole `opencode-zen/*-free` tier is unusable from OMP with that 403. The
 `opencode-go/*` equivalents serve the same model families and are verified, so
-the default panel routes through `opencode-go`. Use `omp-grok47`
-(`opencode-go/grok-4.7`) when you want an xAI-family voice; the `cursor/*`
-provider cannot name models at all on a free plan.
+the default panel routes through `opencode-go`.
 
 ## Anchor Health
 
@@ -316,20 +327,17 @@ Optional overrides — one `--<id-without-omp->-model` and
 `--<id-without-omp->-thinking` pair per anchor:
 
 ```bash
---omp-gpt61-sol-model MODEL      --omp-gpt61-sol-thinking LEVEL
---omp-gpt6-sol-model MODEL       --omp-gpt6-sol-thinking LEVEL
---omp-gpt6-astra-model MODEL     --omp-gpt6-astra-thinking LEVEL
---omp-gpt6-luna-model MODEL      --omp-gpt6-luna-thinking LEVEL
---omp-gemini38-model MODEL       --omp-gemini38-thinking LEVEL
---omp-claude-opus46-model MODEL  --omp-claude-opus46-thinking LEVEL
---omp-space-bunny-model MODEL    --omp-space-bunny-thinking LEVEL
---omp-muse-spark-model MODEL     --omp-muse-spark-thinking LEVEL
---omp-qwen38max-model MODEL      --omp-qwen38max-thinking LEVEL
---omp-glm53-flash-model MODEL    --omp-glm53-flash-thinking LEVEL
---omp-grok47-model MODEL         --omp-grok47-thinking LEVEL
+--omp-gpt61-sol-model MODEL       --omp-gpt61-sol-thinking LEVEL
+--omp-gpt6-luna-model MODEL       --omp-gpt6-luna-thinking LEVEL
+--omp-gemini38-model MODEL        --omp-gemini38-thinking LEVEL
+--omp-claude-opus46-model MODEL   --omp-claude-opus46-thinking LEVEL
+--omp-space-bunny-model MODEL     --omp-space-bunny-thinking LEVEL
+--omp-muse-spark-model MODEL      --omp-muse-spark-thinking LEVEL
+--omp-qwen38max-model MODEL       --omp-qwen38max-thinking LEVEL
+--omp-glm53-flash-model MODEL     --omp-glm53-flash-thinking LEVEL
 --omp-deepseek-v4-pro-model MODEL --omp-deepseek-v4-pro-thinking LEVEL
---omp-kimi-k3-model MODEL        --omp-kimi-k3-thinking LEVEL
---omp-minimax-m3-model MODEL     --omp-minimax-m3-thinking LEVEL
+--omp-kimi-k3-model MODEL         --omp-kimi-k3-thinking LEVEL
+--omp-minimax-m3-model MODEL      --omp-minimax-m3-thinking LEVEL
 --no-tools-omp
 ```
 
@@ -382,7 +390,7 @@ Run a subset:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
-  --include codex,claude,opencode,omp-gpt6-sol \
+  --include codex,claude,opencode,omp-gpt61-sol \
   --prompt-file .agentic-consensus/prompt.md
 ```
 

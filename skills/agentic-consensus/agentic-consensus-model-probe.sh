@@ -55,10 +55,7 @@ DEFAULT_SPECS=(
 )
 ALL_SPECS=(
   "${DEFAULT_SPECS[@]}"
-  "openai-codex/gpt-6-sol:medium"
-  "openai-codex/gpt-6-astra:high"
   "google-antigravity/claude-opus-4-6:high"
-  "opencode-go/grok-4.7:high"
   "opencode-go/deepseek-v4-pro:high"
   "opencode-go/kimi-k3:high"
   "opencode-go/minimax-m3:high"

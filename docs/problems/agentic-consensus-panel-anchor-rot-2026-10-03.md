@@ -69,6 +69,13 @@ retirement (terra, and every `opencode-zen/*-free` tier model), and CLI
 flag drift (`opencode run --dir`) all surface as the same `status=failed`
 row. They have different fixes and different recovery times.
 
+**4. Panel selection failed open.** `--include` intersected against
+`SUPPORTED_AGENTS` and dropped anything unrecognized without a word, so a
+retired id — or a typo — silently shrank the panel and the run still exited
+0. Demonstrated 2026-10-03: `--include omp-gpt6-sol,omp-gpt6-luna` ran 2
+agents and reported `Failed/skipped: 0`. An id list that fails open converts
+any future rename into a quiet reduction in coverage.
+
 ## Fix shape (same change, after this record)
 
 - Retire the dead anchors; repoint each slot at an identity-verified model
@@ -80,6 +87,8 @@ row. They have different fixes and different recovery times.
   instead of quietly downgrading.
 - Document each remaining anchor's failure domain (plan entitlement vs
   quota vs catalog) so a red row is diagnosable without re-probing.
+- Make panel selection fail closed: an unsupported id in `--include` is now a
+  hard error (root cause 4).
 
 ## Residual
 

@@ -148,3 +148,30 @@ skills/agentic-consensus/agentic-consensus-runner.sh --dry-run --prompt probe
   and `opencode-zen/grok-4.7` did answer, so the refusal is not a blanket
   provider ban; it is undocumented and inconsistent. Prefer `opencode-go`.
 - `cursor` needs purchased Agent usage before it can rejoin the default panel.
+
+## Follow-up — owner trim, same day
+
+Owner direction later on 2026-10-03: remove `omp-grok47`, `omp-gpt6-astra` and
+`omp-gpt6-sol`; `gpt-6.1-sol` is the wanted OpenAI flagship. These three pins
+were healthy when measured above — this is a panel trim, not a rot repair, and
+the tables above are left as measured rather than rewritten.
+
+Removed: `omp-grok47` (`opencode-go/grok-4.7`), `omp-gpt6-astra`
+(`openai-codex/gpt-6-astra`), `omp-gpt6-sol` (`openai-codex/gpt-6-sol`).
+Supported ids 16 → 14 (default panel unchanged at 11).
+
+`omp-gpt6-sol` had been retained specifically because 14 in-flight `/goal`
+files name it. Checked before removing: all 14 occurrences are inside `review:`
+frontmatter recording panels that **already ran** on 2026-09-30 / 2026-10-01,
+with `evidence_ref` manifests. None is a live invocation — no doc in the repo
+passes `--include` to the runner. They are receipts of what actually served,
+so they are left untouched; rewriting them would falsify the record.
+
+Re-verified after the trim: 11/11 anchors OK with serving model == requested,
+and a full default-panel run 11/11 `ok`, exit 0.
+
+Also found and fixed while checking the above: **`--include` failed open.**
+`--include omp-gpt6-sol,omp-gpt6-luna` ran 2 agents and reported
+`Failed/skipped: 0` — a retired id silently shrank the panel. An unsupported
+id in `--include` is now a hard error (exit 2) listing the supported ids;
+`--exclude` stays forgiving. This is root cause 4 in the problem record.

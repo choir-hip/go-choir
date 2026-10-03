@@ -31,7 +31,10 @@ Thinking mode:
                                 a panelist; it does not confine them.
 
 Panel selection:
-  --include LIST                Comma-separated agent ids to run.
+  --include LIST                Comma-separated agent ids to run. An id that is
+                                not supported is a hard error, not a silent drop:
+                                a panel that quietly runs fewer panelists than
+                                asked for reports success it did not deliver.
                                 Default: codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-space-bunny,omp-muse-spark,omp-qwen38max,omp-glm53-flash
   --exclude LIST                Comma-separated agent ids to skip.
   --list-agents                 Print supported agent ids and exit.
@@ -40,13 +43,8 @@ Panel selection:
     cursor            Cursor `agent` CLI. Quota-gated: the account must have
                       Agent usage left, otherwise it exits with
                       "ActionRequiredError: You've hit your usage limit".
-    omp-gpt6-sol      Previous flagship; still current generation. Kept because
-                      in-flight /goal files pass it in --include.
-    omp-gpt6-astra    GPT-6 balanced tier (replaces the retired gpt-6-terra).
     omp-claude-opus46 Anthropic route via antigravity, independent of the
                       `claude` CLI's credential path.
-    omp-grok47        xAI family, routed via opencode-go. The cursor/* provider
-                      cannot name models on a free plan (429).
     omp-deepseek-v4-pro, omp-kimi-k3, omp-minimax-m3
                       Additional independent families for the full sub-panel.
 
@@ -58,32 +56,26 @@ Model overrides, optional:
   --cursor-model MODEL          Pass --model MODEL to Cursor agent.
   --opencode-model MODEL        Pass -m MODEL to opencode run.
   --omp-gpt61-sol-model MODEL   Default: openai-codex/gpt-6.1-sol.
-  --omp-gpt6-sol-model MODEL    Default: openai-codex/gpt-6-sol.
-  --omp-gpt6-astra-model MODEL  Default: openai-codex/gpt-6-astra.
   --omp-gpt6-luna-model MODEL   Default: openai-codex/gpt-6-luna.
-  --omp-gemini-model MODEL      Default: google-antigravity/gemini-3.8-flash.
+  --omp-gemini38-model MODEL    Default: google-antigravity/gemini-3.8-flash.
   --omp-claude-opus46-model MODEL Default: google-antigravity/claude-opus-4-6.
   --omp-space-bunny-model MODEL Default: opencode-go/space-bunny-free.
   --omp-muse-spark-model MODEL  Default: opencode-go/muse-spark-1.3-contributor.
   --omp-qwen38max-model MODEL   Default: opencode-go/qwen3.8-max.
   --omp-glm53-flash-model MODEL Default: opencode-go/glm-5.3-flash.
-  --omp-grok47-model MODEL      Default: opencode-go/grok-4.7.
   --omp-deepseek-v4-pro-model MODEL Default: opencode-go/deepseek-v4-pro.
   --omp-kimi-k3-model MODEL     Default: opencode-go/kimi-k3.
   --omp-minimax-m3-model MODEL  Default: opencode-go/minimax-m3.
 
   Thinking levels, each with its default:
   --omp-gpt61-sol-thinking LEVEL      xhigh
-  --omp-gpt6-sol-thinking LEVEL       medium
-  --omp-gpt6-astra-thinking LEVEL     high
   --omp-gpt6-luna-thinking LEVEL      max
-  --omp-gemini-thinking LEVEL         high
+  --omp-gemini38-thinking LEVEL       high
   --omp-claude-opus46-thinking LEVEL  high
   --omp-space-bunny-thinking LEVEL    high
   --omp-muse-spark-thinking LEVEL     high
   --omp-qwen38max-thinking LEVEL      high
   --omp-glm53-flash-thinking LEVEL    high
-  --omp-grok47-thinking LEVEL         high
   --omp-deepseek-v4-pro-thinking LEVEL high
   --omp-kimi-k3-thinking LEVEL        high
   --omp-minimax-m3-thinking LEVEL     high
@@ -107,7 +99,7 @@ USAGE
 }
 
 DEFAULT_INCLUDE="codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-space-bunny,omp-muse-spark,omp-qwen38max,omp-glm53-flash"
-SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt61-sol omp-gpt6-sol omp-gpt6-astra omp-gpt6-luna omp-gemini38 omp-claude-opus46 omp-space-bunny omp-muse-spark omp-qwen38max omp-glm53-flash omp-grok47 omp-deepseek-v4-pro omp-kimi-k3 omp-minimax-m3)
+SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt61-sol omp-gpt6-luna omp-gemini38 omp-claude-opus46 omp-space-bunny omp-muse-spark omp-qwen38max omp-glm53-flash omp-deepseek-v4-pro omp-kimi-k3 omp-minimax-m3)
 
 PROMPT=""
 PROMPT_FILE=""
@@ -131,8 +123,6 @@ CLAUDE_MODEL="opus"
 CURSOR_MODEL=""
 OPENCODE_MODEL=""
 OMP_GPT61_SOL_MODEL="openai-codex/gpt-6.1-sol"
-OMP_GPT6_SOL_MODEL="openai-codex/gpt-6-sol"
-OMP_GPT6_ASTRA_MODEL="openai-codex/gpt-6-astra"
 OMP_GPT6_LUNA_MODEL="openai-codex/gpt-6-luna"
 OMP_GEMINI38_MODEL="google-antigravity/gemini-3.8-flash"
 OMP_CLAUDE_OPUS46_MODEL="google-antigravity/claude-opus-4-6"
@@ -140,13 +130,10 @@ OMP_SPACE_BUNNY_MODEL="opencode-go/space-bunny-free"
 OMP_MUSE_SPARK_MODEL="opencode-go/muse-spark-1.3-contributor"
 OMP_QWEN38MAX_MODEL="opencode-go/qwen3.8-max"
 OMP_GLM53_FLASH_MODEL="opencode-go/glm-5.3-flash"
-OMP_GROK47_MODEL="opencode-go/grok-4.7"
 OMP_DEEPSEEK_V4_PRO_MODEL="opencode-go/deepseek-v4-pro"
 OMP_KIMI_K3_MODEL="opencode-go/kimi-k3"
 OMP_MINIMAX_M3_MODEL="opencode-go/minimax-m3"
 OMP_GPT61_SOL_THINKING="xhigh"
-OMP_GPT6_SOL_THINKING="medium"
-OMP_GPT6_ASTRA_THINKING="high"
 OMP_GPT6_LUNA_THINKING="max"
 OMP_GEMINI38_THINKING="high"
 OMP_CLAUDE_OPUS46_THINKING="high"
@@ -154,7 +141,6 @@ OMP_SPACE_BUNNY_THINKING="high"
 OMP_MUSE_SPARK_THINKING="high"
 OMP_QWEN38MAX_THINKING="high"
 OMP_GLM53_FLASH_THINKING="high"
-OMP_GROK47_THINKING="high"
 OMP_DEEPSEEK_V4_PRO_THINKING="high"
 OMP_KIMI_K3_THINKING="high"
 OMP_MINIMAX_M3_THINKING="high"
@@ -189,10 +175,6 @@ unset _agent _stem _pin_model _pin_thinking
 OMP_FLAG_VARS=(
   "omp-gpt61-sol-model:OMP_GPT61_SOL_MODEL"
   "omp-gpt61-sol-thinking:OMP_GPT61_SOL_THINKING"
-  "omp-gpt6-sol-model:OMP_GPT6_SOL_MODEL"
-  "omp-gpt6-sol-thinking:OMP_GPT6_SOL_THINKING"
-  "omp-gpt6-astra-model:OMP_GPT6_ASTRA_MODEL"
-  "omp-gpt6-astra-thinking:OMP_GPT6_ASTRA_THINKING"
   "omp-gpt6-luna-model:OMP_GPT6_LUNA_MODEL"
   "omp-gpt6-luna-thinking:OMP_GPT6_LUNA_THINKING"
   "omp-gemini38-model:OMP_GEMINI38_MODEL"
@@ -207,8 +189,6 @@ OMP_FLAG_VARS=(
   "omp-qwen38max-thinking:OMP_QWEN38MAX_THINKING"
   "omp-glm53-flash-model:OMP_GLM53_FLASH_MODEL"
   "omp-glm53-flash-thinking:OMP_GLM53_FLASH_THINKING"
-  "omp-grok47-model:OMP_GROK47_MODEL"
-  "omp-grok47-thinking:OMP_GROK47_THINKING"
   "omp-deepseek-v4-pro-model:OMP_DEEPSEEK_V4_PRO_MODEL"
   "omp-deepseek-v4-pro-thinking:OMP_DEEPSEEK_V4_PRO_THINKING"
   "omp-kimi-k3-model:OMP_KIMI_K3_MODEL"
@@ -378,6 +358,29 @@ for agent in "${SUPPORTED_AGENTS[@]}"; do
     selected_agents+=("$agent")
   fi
 done
+
+# An unsupported id in --include used to be dropped without a word: the panel
+# quietly ran fewer panelists than asked for and still exited 0. That is the
+# same silent-degradation class as a retired model pin
+# (docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md), so it is a
+# hard error here. --exclude stays forgiving: excluding an absent id is a
+# no-op, not a mistake.
+unknown_included=()
+IFS=',' read -r -a _include_items <<< "$INCLUDE"
+for item in "${_include_items[@]}"; do
+  [[ -z "$item" ]] && continue
+  if ! contains_csv "$(IFS=','; echo "${SUPPORTED_AGENTS[*]}")" "$item"; then
+    unknown_included+=("$item")
+  fi
+done
+unset _include_items
+if [[ ${#unknown_included[@]} -gt 0 ]]; then
+  echo "Unsupported agent id(s) in --include: ${unknown_included[*]}" >&2
+  echo "Supported ids:" >&2
+  printf '  %s\n' "${SUPPORTED_AGENTS[@]}" >&2
+  exit 2
+fi
+
 if [[ ${#selected_agents[@]} -eq 0 ]]; then
   echo "No agents selected" >&2
   exit 2
