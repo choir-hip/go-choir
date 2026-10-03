@@ -239,23 +239,18 @@ now:
     docs/current-architecture.md updated with the record-native invariant.
   source_ref: main@558afe86
   deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer d61c9b1b (stranded-bound release + consume-marking verified live 2026-10-03)'
-  next_action: >-
-    Re-prove the stranded-bound consume/resolve via the CORRECT instrument:
-    the bare-texture-Ask probe cannot drive it (panel 2026-10-03 — a texture
-    `choir.Ask("research",…)` is prompt-forbidden AND store-rejected;
-    `research:<docID>` only exists after an `ApplyTexture{open_researcher}`
-    turn). Options per the divergent panel: (a) a Management-desk `Ask`->
-    carrier->kill->rebind (cheapest, decouples substrate from texture
-    authoring); (b) texture's designed `ApplyTexture{open_researcher}` full
-    loop (heavy); (c) deterministic in-store harness — inject a bound
-    control, terminalize its carrier, assert unbind+rebind+consume-mark.
-    Recommended (c) for determinism: it directly asserts
-    `UpdateIncorporated`/`ConsumedDeliveryUpdateIDs` coverage on a rebound
-    carrier (the `3fbf9bb4` edge) without depending on stochastic desk
-    agency. Then the mechanical ask->report->resolve acceptance leg +
-    per-kind dual-delivery suite remain for station completion. Residual
-    defect to schedule: `consumeIdleTextureTrigger` masks non-ApplyTexture
-    cells as "no act" (red, Texture canonical writes).
+    Consume-marking is RESOLVED — the stranded-bound + `3fbf9bb4` boundary
+    closed by `d61c9b1b` (panel convergent verdict
+    agentic-consensus-20261003-190021): `commitLifecycleProducerReportAct`
+    marks the carrier's bound control `incorporated` in the same commit as
+    its report; `3fbf9bb4`'s report predated the fix (pre-fix evidence, not
+    a live gap). Verified live: 5 controls incorporated with reason
+    `"...by carrier producer report"`. Residuals now: (i) the mechanical
+    ask->report->`system:reducer`-resolve acceptance leg (desk emits
+    Resolve); (ii) audit whether `update_coagent`/legacy runs can still
+    write a bound control via the un-marked `QueueLifecycleUpdate` research
+    branch (path parity); (iii) `consumeIdleTextureTrigger` masks
+    non-ApplyTexture cells as "no act" (red, Texture canonical writes).
   candidate: main@558afe86
   conjecture:
     id: record-native-coupling
@@ -309,25 +304,22 @@ now:
     independent scorer (management) is a separate verdict, not required to
     mint the resolver's Resolve.
   blocker: >-
-    Stranded-bound release fix VERIFIED deployed (autoputer d61c9b1b): bound
-    control packets terminalize scored on carrier death (`33e9f35c` ->
-    `delivery_attempts_exhausted`); live-carrier consume-marking works on the
-    persistent-Management path (3 control packets `incorporated`); 0
-    dual-terminal dispositions across the control scan. `3fbf9bb4` root cause
-    CONFIRMED in source: a research carrier's producer report cannot carry
-    `ControlBindingID` (`commitAddressedPacketIntent` omits it; the
-    `QueueLifecycleUpdate` research else-branch rejects it), so the
-    consume-side `bindingMatches` check is skipped and the upstream control
-    is orphaned (never incorporated, released on terminalize). DESIGN FORK
-    for the fix: (a) extend research reports to carry `ControlBindingID`, or
-    (b) consume-side inference via `lifecycleActivationVersionsForRun` — the
-    latter matches existing authority since `ValidateLifecycleProducerReport
-    Authority` already derives the research binding from the run's
-    activation fingerprint when `ControlBindingID` is empty. Recommend (b):
-    no report-field change, authority stays on the durable fingerprint.
-    See docs/problems/s0m-bound-control-not-marked-incorporated-2026-10-03.md
-    (root cause + design fork) + s0m-stranded-bound-control-deadlock
-    -2026-10-02.md (deployed-verified).
+    Stranded-bound + consume-marking RESOLVED (panel convergent verdict
+    agentic-consensus-20261003-190021): `d61c9b1b` folds the carrier's bound
+    control into its report commit as `incorporated`; `3fbf9bb4` was pre-fix
+    evidence (report ~43 min before the fix). Verified live: 5 controls
+    incorporated with reason `"...by carrier producer report"`; 0
+    dual-terminal dispositions. The remaining S0m blockers are downstream of
+    delivery, not the consume-marking substrate: (i) the mechanical
+    ask->report->resolve acceptance leg — the desk must emit `choir.Resolve`
+    after consuming the report (model agency, not a delivery defect); (ii)
+    the `consumeIdleTextureTrigger` mask (non-ApplyTexture cells read as "no
+    act", red surface); (iii) a path-parity audit — whether
+    `update_coagent`/legacy runs can write a bound control via the
+    un-marked `QueueLifecycleUpdate` research branch. See
+    docs/problems/s0m-bound-control-not-marked-incorporated-2026-10-03.md
+    (panel resolution) + s0m-stranded-bound-control-deadlock-2026-10-02.md
+    (deployed-verified).
 
 
 receipts:

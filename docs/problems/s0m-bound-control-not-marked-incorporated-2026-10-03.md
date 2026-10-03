@@ -1,10 +1,12 @@
 # S0m finding: bound carrier consumes the work but the control packet is never marked incorporated
 
-**Status**: open — ROOT CAUSE CONFIRMED in source 2026-10-03 (see Root cause).
-The record-native `report` intent never consumes a bound control for a
-research carrier.
-**Date observed**: 2026-10-03 (mechanism corrected after trace inspection;
-root cause in `rlm_reduce.go` confirmed same day).
+**Status**: closed by `d61c9b1b` (2026-10-03 18:24 UTC) — consume-marking
+at report-commit landed `commitLifecycleProducerReportAct`
+(`lifecycle_commit_act.go:621-670`), verified live same day. `3fbf9bb4`'s
+rebound carrier reported ~17:41 UTC, ~43 min BEFORE the fix — the incident
+predates the repair, not a live gap.
+**Date observed**: 2026-10-03 (mechanism corrected; resolved by panel
+convergent verdict agentic-consensus-20261003-190021).
 **Computer**: `computer-03335285269bdba4f94377e56879f9e6` (owner guest)
 **Deployed when observed**: autoputer `ed406f45` (the ActiveRunID fix already live).
 **Mutation class**: red when repaired (lifecycle consume/marking — protected surface).
@@ -54,123 +56,68 @@ Separability confirmed: `consumeIdleTextureTrigger` is `Texture`-profile-gated
 (`tools_desk.go`) — it cannot affect research carrier `c55287d3`. This defect
 (A) and the idle-mask (B) are distinct; (A) is the in-contract blocker.
 
-## First probe target
+## Resolution — panel convergent verdict (agentic-consensus-20261003-190021)
 
-`internal/store/lifecycle.go:3454-3513` — the `expectedConsumed`/
-`ConsumedDeliveryUpdateIDs` gate and `memorySeen` check. The carrier's report
-commit either didn't list `3fbf9bb4` in `ConsumedDeliveryUpdateIDs`, or
-`memorySeen` was false for it (the control packet never entered the run's
-authenticated memory even though its work item did). Repro: re-run
-`s0m_stranded_bound_probe`, then read the rebound carrier's run-memory entries
-for update `3fbf9bb4`.
+**The repair already landed today in `d61c9b1b`.** `commitLifecycleProducer
+ReportAct` (`lifecycle_commit_act.go:621-670`) folds every bound-pending
+control for the reported work item into the same atomic commit as the
+producer report: `Disposition=incorporated`, `DispositionRef=<report id>`,
+reason `"bound lifecycle control incorporated by carrier producer report"`.
+Regression `TestCommitLifecycleActProducerReportMarksBoundControl
+Incorporated` passes; the 5 incorporated controls seen live carry exactly
+that reason.
 
-## Root cause (confirmed in source 2026-10-03) — design gap, not a dropped write
+`3fbf9bb4` is **pre-fix evidence, not a live gap**: its rebound carrier
+`c55287d3` committed its report ~17:41 UTC, ~43 min before `d61c9b1b`
+(18:24 UTC) was committed/deployed. At that moment no consume-marking
+existed for research carriers — correct diagnosis, since repaired.
 
-The upstream control `3fbf9bb4` can only be released/incorporated when its
-producer_report carries a `ControlBindingID` back-link, and the consume side
-validates it (`texture_controller.go:1523-1535` — `producerBindingID =
-canonical.ControlBindingID`, `bindingMatches` requires exactly 1 matching
-control update).
+### Why the panel rejected the other framings
+- **Not (a) report-carried binding:** the run's `lifecycle_activation_versions`
+  fingerprint already carries the binding authoritatively
+  (`version.UpdateID == control.UpdateID`, matched on `ProducerWorkItemID`);
+  a caller-supplied `ControlBindingID` would be a second, weaker, digest-arm
+  source that must be re-validated anyway. Same field, different
+  `TargetWorkItemID` meaning per path — the smell.
+- **Not (b) consume-at-texture-read:** `report commit → carrier terminalize
+  → texture consume` leaves the re-pend/rebind window open; consume must be
+  atomic with the report, not its later read. (b)'s *authority* (fingerprint
+  derivation) is right, but its *commit point* is too late.
+- **Not (c) carrier-terminalize settle:** consumes the instruction even if
+  the carrier never reported (crash/empty turn) — masks real failure, breaks
+  the open-work retry contract, and `runtime.go:3090` requires
+  `pending|incorporated` for the texture consume check anyway.
 
-But the research→texture report path **cannot carry `ControlBindingID`**:
-- `commitAddressedPacketIntent` (`rlm_reduce.go:1421`) omits
-  `ControlBindingID`/`TargetWorkItemID`/`ConsumedDeliveryUpdateIDs`.
-- `QueueLifecycleUpdate` sends them down the `persistentManagementProducer`
-  branch (`lifecycle.go:3392-3514`, which walks `deliveredPacketConsumptions`
-  → `UpdateIncorporated`); the research `else` branch (`:3516-3519`)
-  **rejects** a non-empty `ControlBindingID`/`TargetWorkItemID`.
+### Consume-point invariant (settled)
+A research `control` is **consumed when its carrier commits a
+`producer_report` for that control's target work item** — atomically in the
+same reducer commit as the report packet. A partial report still consumes
+the delivery (the instruction was acted on); a carrier that terminalizes
+*without* reporting still releases the control for rebind. This is the same
+rule the persistent-Management path already followed.
 
-So a research carrier's report always has empty `ControlBindingID`, the
-consume-side `bindingMatches` check is skipped (`producerBindingID == ""`),
-and the upstream control is orphaned — never marked `incorporated`, never
-released. `3fbf9bb4` is exactly this: carrier `c55287d3` did the work and
-reported, but its report had no back-link, so the control stayed bound until
-`bindTerminalRunOutcome` released it on terminalize.
-
-The only report that CAN carry the binding is the persistent-Management→
-texture report (`tools_engineering_assignment.go:269-278`), which derives
-`consumedDeliveryIDs` from the carrier's `memorySeen`∩delivered set. The 3
-"incorporated by carrier process" packets seen 2026-10-03 used that path.
-
-### Design fork (next boundary — red surface)
-The binding semantics differ per path and can't be reused blindly:
-- persistent-Management: `TargetWorkItemID` = the *texture-side* work item
-  (validated `targetWork.AssignedAgentID == req.TargetAgentID`, texture).
-- research: `TargetWorkItemID` = the *research* work item the control targets
-  (`control.TargetWorkItemID` = research work, `AssignedAgentID` = research).
-
-Options — recommend (b), which is the existing-authority path:
-- **(a)** Extend the research producer-report request to carry
-  `ControlBindingID` + its own (research-scoped) work-item validation +
-  digest, so the report self-identifies its upstream control — then a
-  consume-side release marks the control incorporated. Costs a new
-  request-digest arm + a second producer-authority validation branch
-  (research `TargetWorkItemID` semantics differ from Management's).
-- **(b)** RECOMMENDED — consume-side inference: when the texture turn
-  consumes a producer_report with empty `ControlBindingID` from a research
-  producer, derive `producerBindingID` from the carrier run's
-  `lifecycleActivationVersionsForRun` (`version.UpdateID` where
-  `TargetWorkItemID == report.ProducerWorkItemID`). `version.UpdateID` IS
-  the control's `UpdateID` (management_controller.go:199 stamps
-  `update.UpdateID` into the activation version), so `bindingMatches`
-  (texture_controller.go:1523-1535) then runs and the control can be marked
-  incorporated. This matches existing authority:
-  `ValidateLifecycleProducerReportAuthority` already derives the research
-  binding from the run's activation fingerprint exactly this way when
-  `ControlBindingID` is empty (texture_lifecycle_api.go:613-636) — no
-  report-field change, authority stays on the durable fingerprint.
-
-### Functional consequence (why it matters, not cosmetic)
-An orphaned control stays `pending`. On carrier terminalize,
-`bindTerminalRunOutcome`/`unbindStrandedLifecycleControls` releases it back
-to pending; it can then **rebind to a fresh carrier and re-run already-
-completed work** — the restart-recast heresy (a completed work item
-re-executed as new). Marking `incorporated` on report consume closes the
-control so it cannot re-pend. For `3fbf9bb4` the carrier had already
-completed `e320d40d`, so a rebind would re-run finished research.
-
-Existing regression `TestLifecycleRunTerminalizeReleasesStrandedControlAnd
-RewakesDesk` covers the release half only; add a test asserting the control
-is marked `incorporated`/`delivered-without-consume` when its carrier did the
-work (not released to re-pend).
-
-### Open semantic question for the fix
-When does a research control count "consumed"? Two candidate commit points:
-- **carrier-terminalize**: research `boundClaimRelease`-on-any-terminal
-  (management_controller.go:1170-1172) is what re-pends a completed-work
-  control. A `boundClaimSettle` for a carrier that completed its bound work
-  (or emitted its report) would terminalize delivered-without-consume
-  instead of re-pending — arguably the smallest fix, no consume-path
-  change. The risk: it consumes the instruction even if the carrier never
-  truly incorporated it.
-- **report-consume (option b)**: mark the control when the texture desk
-  consumes the carrier's report — consume is tied to evidence of delivery,
-  not just carrier liveness. Stronger, but ties control fate to a downstream
-  event.
-
-The (b) consume-side inference is still recommended for authority
-cleanliness; pick the commit point at implementation time with the
-"what counts as consumed" invariant written into the test.
+### Residual coverage flag (worth one audit, not a blocker)
+Two store entry paths can write a research `producer_report`: the record-
+native `CommitLifecycleAct` (consume-marked, `commitLifecycleProducerReport
+Act`) and the legacy `QueueLifecycleUpdate` research `else` branch
+(`lifecycle.go:3516`, which omits consume-marking). A lifecycle-bound
+carrier's `IntentReport` routes to `commitLifecycleActIntent`
+(`rlm_reduce.go:919`) first and only falls to `commitAddressedPacketIntent`
+on the `errLifecycleActLegacyCaller` sentinel — which requires the caller
+run to be absent from the lifecycle store, a state that cannot hold a bound
+control. So the gap is believed **unreachable for bound controls**; the only
+residuals are (i) the `update_coagent` tool path (`tools_worker_update.go:248`,
+same `QueueLifecycleUpdate` research branch, no consume fields) and (ii)
+pre-cutover legacy runs. If those can still mint a bound control, port the
+same fold to `QueueLifecycleUpdate`'s research else-branch for path parity.
 
 ## Deployed re-check (2026-10-03, autoputer d61c9b1b)
 
 Post-recovery control-packet scan on the owner computer (post guest reboot
-+ outbox drain): **3 bound control packets reached `disposition=incorporated`
-with reason `bound lifecycle control incorporated by carrier process`**
-(`1db9be5a`→`8b5bc6db`, `bc34f0fc`→`27bd9a26`, `c1e9e1cf`→`c8399a11`) — the
-`UpdateIncorporated`/`ConsumedDeliveryUpdateIDs` marking path works when the
-bound carrier's report commit lists the update. This narrows `3fbf9bb4`: its
-carrier's report commit apparently did NOT list the update (or `memorySeen`
-was false for it specifically), so the defect is a per-carrier consume-mark
-omission, not a dead marking path. Repro still requires the stranded-bound
-probe reaching a consume on a rebound carrier — the probe's bind window
-repeatedly missed the stochastic `open_researcher` desk-act under post-boot
-recovery latency (desk-mint ~10-35 min behind the draining queue).
-
-## Next boundary
-
-Repair the consume-marking linkage: a bound control whose carrier consumes the
-work and emits a report must be marked incorporated (`UpdateIncorporated`) so
-the record can mechanically resolve. Then re-run the stranded-bound probe to a
-terminal (consumed or `delivery_attempts_exhausted` — both contract-legal) and
-a clean non-cancel leg to `system:reducer` resolve.
++ outbox drain): **5 bound control packets `disposition=incorporated` with
+reason `bound lifecycle control incorporated by carrier producer report`**
+(`1db9be5a`, `bc34f0fc`, `c1e9e1cf`, `99a04fff`, `eed8bc04`) — the
+`d61c9b1b` consume-marking is live and working. (Earlier draft said
+`"...by carrier process"`; the actual reason string is `"...by carrier
+producer report"` — provenance confirmed in source.) `3fbf9bb4`'s
+non-incorporation was a pre-fix event.
