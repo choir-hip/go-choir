@@ -11,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -259,6 +260,17 @@ func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Docum
 			},
 		})
 		if openErr != nil {
+			// A durable-invalid supersede (prior-attempt object gone, malformed
+			// tuple, receipt mismatch) can never succeed on retry — the missing
+			// durable object is not transient. Re-delivering the reconcile
+			// occurrence re-runs this same branch forever and starves every
+			// other desk reconcile (same live-lock class as the exhausted
+			// branch above). Incorporate: fail the bound op and return clean.
+			if errors.Is(openErr, store.ErrEngineeringAssignmentInvalid) {
+				rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID,
+					fmt.Sprintf("restart recast durably invalid: %v", openErr))
+				return nil, nil
+			}
 			return nil, fmt.Errorf("engineering desk reconcile: restart recast: %w", openErr)
 		}
 		return &started.Assignment, nil
