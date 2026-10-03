@@ -28,28 +28,36 @@ trajectory runs and updates `updated_at` continuously.
 - Model stall: `running` texture cells update `updated_at`; the failure is the
   cell never existing, not a hung inference.
 
-## Mechanism (hypothesis from code + observation)
+## Mechanism (confirmed by guest log)
 
-`Runtime.activate` dispatches `initial_dispatch` synchronously at mint; a drop
-leaves the fresh run `pending` with no live trigger. The boot repair added an
-`ogKindRun` outbox + `MigrateActorWakeOutbox` re-drive, but that sweep runs at
-boot and drains the pre-existing backlog serially (`startProjector` sweeps every
-500 ms, each dispatch is a network CAS). Two gaps remain:
+The desk-cell mint is not missing a dispatch — it is erroring inside
+`submitTextureAgentRevisionRun` -> `persistLifecycleSubmittedRun` ->
+`ReplaceLifecycleActivation`. The guest autoputer journal records:
 
-1. **Post-boot mints have no outbox row** if the `initial_dispatch` obligation
-   was not derivable at mint for this desk-cell shape — they are invisible to
-   both `MigrateActorWakeOutbox` (already ran) and the live projector.
-2. **Pre-existing pending desk cells are queued behind a 2009-row backlog** and,
-   where their backing `ActorOccurrence` was consumed or terminalized before the
-   wake projected, are `disposed dead wake` (mark-projected) rather than
-   re-driven — the run stays `pending` with no re-dispatch authority.
+```
+texture prompt bar: submit: start initial Texture agent revision:
+  replace durable activation: objectgraph dolt: scan object: context deadline exceeded
+```
 
-The desk-cell mint for the probe trajectory appears to drop its `initial_dispatch`
-entirely (no pending `texture:` row in the run list at all) — consistent with a
-mint-time store write that fails before the run object projects, or a
-`prompt-bar`→conductor→desk handoff that completes the conductor without minting
-the desk cell. Either way the trajectory is left `live` with `pending_updates: 0`
-and no desk.
+`StartRunWithMetadata` -> `persistLifecycleSubmittedRun` -> `ReplaceLifecycleActivation`
+performs the run-object write through the objectgraph Dolt store; under the
+post-boot outbox backlog (2009 re-armed rows draining serially) plus the
+`selfdev_active_operations` churn, the scan exceeds its deadline, the commit
+fails, `submitTextureAgentRevisionRun` returns the error, `ensureConductorTextureRoute`
+returns error, and `HandlePromptBar` writes 500 (the staging proxy surfaces it
+as the observed 502). The lifecycle trajectory + work item commit in the first
+`StartLifecycle` step, but the run mint does not — leaving the trajectory `live`
+with `pending_updates: 0`, an open `InitialWork` work item assigned to
+`texture:<docID>`, and no desk run. Cells for earlier submissions minted fine;
+only submissions landing inside the backlog-drain window fail.
+
+Two consequences:
+1. The mint-time `ogKindRun` outbox is irrelevant — the run object never
+   projects, so there is nothing to re-drive.
+2. This is a store-write-timeout-under-load defect, not a missing-dispatch
+   obligation: the fix is either making `ReplaceLifecycleActivation` tolerate
+   the load (bounded retry on `context deadline exceeded` for the activation
+   commit) or backpressure / a lighter scan, not another outbox kind.
 
 ## Evidence
 

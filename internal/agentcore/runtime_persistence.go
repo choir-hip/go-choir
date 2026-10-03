@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -63,7 +64,7 @@ func persistLifecycleSubmittedRun(ctx context.Context, st *store.Store, bus *eve
 		TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: *rec,
 	}
 	req.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(req)
-	if _, err := st.ReplaceLifecycleActivation(ctx, req); err != nil {
+	if _, err := replaceLifecycleActivationWithDeadlineRetry(ctx, st, req); err != nil {
 		if mutation != nil {
 			rollbackCtx := context.WithoutCancel(ctx)
 			if staleErr := st.MarkAgentMutationStale(rollbackCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID); staleErr != nil {
@@ -101,6 +102,42 @@ func persistLifecycleSubmittedRun(ctx context.Context, st *store.Store, bus *eve
 		return err
 	}
 	return nil
+}
+
+// replaceLifecycleActivationRetryTimeout bounds each fresh-deadline attempt at
+// the durable activation commit. The caller's ctx may already be dead by the
+// time the Dolt scan wins the serialized engine mutex behind a post-boot
+// outbox backlog; the activation commit is idempotent via CommandDigest, so a
+// fresh WithoutCancel deadline is safe to retry.
+const replaceLifecycleActivationRetryTimeout = 60 * time.Second
+
+// replaceLifecycleActivationWithDeadlineRetry commits the lifecycle activation
+// through ReplaceLifecycleActivation, retrying on context.DeadlineExceeded with
+// a fresh WithoutCancel deadline. CAS-conflict retries still happen inside the
+// store; this wrapper only survives transient scan starvation (the documented
+// post-boot desk-mint timeout that left the trajectory live with no desk run).
+func replaceLifecycleActivationWithDeadlineRetry(ctx context.Context, st *store.Store, req types.ReplaceLifecycleActivationRequest) (types.LifecycleResult, error) {
+	var lastErr error
+	for attempt := 0; attempt < 4; attempt++ {
+		attemptCtx := ctx
+		var cancel context.CancelFunc
+		if attempt > 0 {
+			attemptCtx, cancel = context.WithTimeout(context.WithoutCancel(ctx), replaceLifecycleActivationRetryTimeout)
+		}
+		result, err := st.ReplaceLifecycleActivation(attemptCtx, req)
+		if cancel != nil {
+			cancel()
+		}
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if !errors.Is(err, context.DeadlineExceeded) && !strings.Contains(err.Error(), "context deadline exceeded") {
+			return result, err
+		}
+		log.Printf("runtime: replace lifecycle activation deadline exceeded (attempt %d), retrying with fresh deadline: %v", attempt+1, err)
+	}
+	return types.LifecycleResult{}, lastErr
 }
 
 func persistSubmittedRunProjections(ctx context.Context, st runSubmissionStore, bus *events.EventBus, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
