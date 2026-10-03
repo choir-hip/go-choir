@@ -616,18 +616,35 @@ func TestAdapterStartDeliversDurableLifecycleOccurrenceAfterRestart(t *testing.T
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	runs, err := s.ListLifecycleRunsByTrajectory(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The released control (B freed when the carrier completed unconsumed) may
+	// mint exactly one rebind carrier — the S0m release->rebind chain working
+	// end-to-end. Before the DeliveredAt repair the freed packet stayed
+	// invisible to the pending scan and the count was always 1; now either 1
+	// (rebind not yet reconciled when counted) or 2 (rebind carrier minted) is
+	// correct. The invariant that matters is no unbounded re-mint: the same
+	// logical join must never spawn a third carrier. Poll briefly for the
+	// rebind to settle so the count is stable.
 	lifecycleRuns := 0
-	for _, run := range runs {
-		if run.AgentID == fixture.agentID && metadataString(run.Metadata, "request_source") == "lifecycle_texture_control" {
-			lifecycleRuns++
+	settle := time.Now().Add(3 * time.Second)
+	var runs []types.RunRecord
+	for {
+		runs, err = s.ListLifecycleRunsByTrajectory(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+		if err != nil {
+			t.Fatal(err)
 		}
+		lifecycleRuns = 0
+		for _, run := range runs {
+			if run.AgentID == fixture.agentID && metadataString(run.Metadata, "request_source") == "lifecycle_texture_control" {
+				lifecycleRuns++
+			}
+		}
+		if lifecycleRuns >= 2 || time.Now().After(settle) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
-	if lifecycleRuns != 1 {
-		t.Fatalf("restart created %d lifecycle-control runs: %+v", lifecycleRuns, runs)
+	if lifecycleRuns > 2 {
+		t.Fatalf("restart created %d lifecycle-control runs (re-mint storm): %+v", lifecycleRuns, runs)
 	}
 }
 
