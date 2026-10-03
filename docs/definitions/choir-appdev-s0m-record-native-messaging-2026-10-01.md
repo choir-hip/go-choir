@@ -308,16 +308,18 @@ now:
     independent scorer (management) is a separate verdict, not required to
     mint the resolver's Resolve.
   blocker: >-
-    Rebind substrate proven on staging (ed406f45: freed packet rebinds a
-    fresh carrier). The live finish blocker is a CONSUME-side defect: the
-    rebound carrier c55287d3 bound its control then completed without
-    consuming it (packet stayed pending, second release freed it) — a
-    bound-but-unconsumed carrier is a separate defect from rebind. Plus the
-    consumeIdleTextureTrigger mask (any non-ApplyTexture authored cell reads
-    as "no act"; can pre-empt multi-cell turns). Mechanical resolve needs
-    the consume path to produce a producer_report; dual-delivery absence is
-    per-kind. See docs/problems/s0m-freed-control-stale-activerunid-blocks-
-    rebind-2026-10-03.md (resolution + residual).
+    Rebind substrate proven on staging (ed406f45). Live blocker is a
+    consume-MARKING defect, corrected after trace inspection: rebound
+    carrier c55287d3 DID the work (research done, work e320d40d completed,
+    report to texture) but bound control 3fbf9bb4 was never marked
+    incorporated — UpdateIncorporated/ConsumedDeliveryUpdateIDs didn't cover
+    it (lifecycle.go:3454-3513, memorySeen gate), so terminalize released it
+    and no system:reducer resolve can fire. Distinct from the Texture-gated
+    consumeIdleTextureTrigger mask (tools_desk.go). Divergent panel
+    (agentic-consensus-20261003-134902): non-re-scoping majority holds the
+    finish contract needs a consumed-or-exhausted terminal / resolve —
+    consume-marking is in-contract, S0m stays working. See
+    docs/problems/s0m-bound-control-not-marked-incorporated-2026-10-03.md.
 
 
 receipts:
