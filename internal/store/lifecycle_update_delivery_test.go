@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -234,5 +235,100 @@ func TestReconcileUpdateDeliveryForcedExhaust(t *testing.T) {
 	}
 	if failed != 2 { // one per-item exhaustion event + one breaker event
 		t.Fatalf("expected 2 activation_failed events, got %d: %+v", failed, res.Events)
+	}
+}
+
+// Regression for the stranded-rebind defect: a control packet bound to a dead
+// carrier must, on pure unbind (TargetRunID=""), clear DeliveredAt so the
+// pending scan sees it again. Before the fix the reducer re-stamped
+// DeliveredAt=&now on unbind, so the freed packet failed the
+// DeliveredAt==nil filter in ListPendingLifecycleUpdates and never rebound.
+// Receipt: docs/problems/s0m-freed-control-never-rebinds-2026-10-03.md
+func seedBoundControlPacket(t *testing.T, s *Store, start types.StartLifecycleRequest, updateID, producerUpdateID, deliveredToRunID, workItemID string, attempts int) types.CoagentSourcePacket {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	var deliveredAt *time.Time
+	if strings.TrimSpace(deliveredToRunID) != "" {
+		deliveredAt = &now
+	}
+	update := types.CoagentSourcePacket{
+		UpdateID:         updateID,
+		OwnerID:          start.OwnerID,
+		ComputerID:       start.ComputerID,
+		AgentID:          "research:desk-dead",
+		ProducerUpdateID: producerUpdateID,
+		TargetAgentID:    start.Agent.AgentID,
+		TargetWorkItemID: workItemID,
+		ChannelID:        start.Agent.ChannelID,
+		TrajectoryID:     start.TrajectoryID,
+		Role:             "texture",
+		Direction:        types.LifecyclePacketDirectionControl,
+		Disposition:      types.UpdatePending,
+		DeliveredToRunID: deliveredToRunID,
+		DeliveredAt:      deliveredAt,
+		DeliveryAttempts: attempts,
+		LifecycleVersion: 3,
+		Packet:           types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "ask"},
+		Content:          "control ask",
+		CreatedAt:        now,
+	}
+	key := start.TrajectoryID + "\x00" + start.Agent.AgentID + "\x00" + update.AgentID + "\x00" + producerUpdateID
+	obj, err := lifecycleObject(ogKindWorkerUpdate, start.OwnerID, start.ComputerID, key, update,
+		lifecycleMetadata("update_id", updateID, start.ComputerID, start.TrajectoryID, 3), update.CreatedAt, update.CreatedAt)
+	if err != nil {
+		t.Fatalf("build control update: %v", err)
+	}
+	if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{
+		{CanonicalID: obj.CanonicalID, Exists: false},
+	}, objectgraph.Batch{Objects: []objectgraph.Object{obj}}); err != nil {
+		t.Fatalf("seed control update: %v", err)
+	}
+	return update
+}
+
+func TestReconcileUpdateDeliveryUnbindClearsDeliveredAtForPendingRescan(t *testing.T) {
+	s := openTestStore(t)
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(context.Background(), start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	// Control bound to a dead run, DeliveredAt set — the live claim the unbind
+	// must clear so the freed packet re-enters the pending scan.
+	u := seedBoundControlPacket(t, s, start, "update-unbind-1", "producer-update-ub", "run-dead-carrier", "work-ask-1", 1)
+
+	// Pure unbind: TargetRunID="" reclaims the dead claim, must NOT re-stamp
+	// DeliveredAt. Attempts increments (the dead-claim retry budget).
+	res := reconcileDeliveryForTest(t, s, start, "cmd-unbind-1", "", "",
+		[]types.ReconcileUpdateDeliveryItem{deliveryItemFor(u, "run-dead-carrier", false)})
+
+	got := getSeededUpdate(t, s, start, u)
+	if got.Disposition != types.UpdatePending || got.DeliveredToRunID != "" {
+		t.Fatalf("unbind did not release the claim: %+v", got)
+	}
+	if got.DeliveredAt != nil {
+		t.Fatalf("unbind left DeliveredAt stamped — packet invisible to pending scan: %+v", got)
+	}
+	if got.DeliveryAttempts != 2 {
+		t.Fatalf("dead-claim reclaim should count one attempt, got %d", got.DeliveryAttempts)
+	}
+	// Re-queue event, not a false bound_to_activation.
+	if len(res.Events) != 1 || res.Events[0].Kind != types.LifecycleControlQueued || res.Events[0].Reason != "released_to_pending" {
+		t.Fatalf("expected released_to_pending requeue event, got %+v", res.Events)
+	}
+	// The freed packet is now visible to the pending scan — the exact predicate
+	// reconcileUpdatedCoagentActor uses to mint a fresh carrier.
+	pending, err := s.ListAllPendingLifecycleUpdates(context.Background(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	if err != nil {
+		t.Fatalf("list pending: %v", err)
+	}
+	found := false
+	for _, p := range pending {
+		if p.UpdateID == "update-unbind-1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("freed control packet still invisible to pending scan: %+v", pending)
 	}
 }

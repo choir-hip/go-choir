@@ -126,6 +126,17 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 			update.DispositionRef = req.CommandID
 			update.DeliveredToRunID = ""
 			update.DeliveredAt = nil
+		} else if strings.TrimSpace(req.TargetRunID) == "" {
+			// Pure unbind (a dead run claim reclaimed): the packet returns to
+			// the pending set, so the claim timestamp must clear too. Leaving
+			// DeliveredAt set reads as still-claimed to the pending scan
+			// (lifecycle.go:1955 filters DeliveredAt==nil) while the bound scan
+			// sees an empty DeliveredToRunID — the packet falls between both and
+			// is stranded forever. DeliveryAttempts++ is kept: a dead-claim
+			// reclaim is the only bound on strand cycles, so it stays the budget.
+			update.DeliveredToRunID = ""
+			update.DeliveredAt = nil
+			update.DeliveryAttempts++
 		} else {
 			update.DeliveredToRunID = strings.TrimSpace(req.TargetRunID)
 			update.DeliveredAt = &now
@@ -148,6 +159,17 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 				failKind = types.LifecycleControlActivationFailed
 			}
 			if err := emit(failKind, update, "delivery_attempts_exhausted"); err != nil {
+				return types.LifecycleResult{}, err
+			}
+		} else if strings.TrimSpace(req.TargetRunID) == "" {
+			// Unbind re-queues the packet to pending, not a bind — emit the
+			// queue event so the audit trail records release-to-pending, never
+			// a false bound_to_activation.
+			requeueKind := types.LifecycleUpdateQueued
+			if update.Direction == types.LifecyclePacketDirectionControl || update.Direction == types.LifecyclePacketDirectionDirective {
+				requeueKind = types.LifecycleControlQueued
+			}
+			if err := emit(requeueKind, update, "released_to_pending"); err != nil {
 				return types.LifecycleResult{}, err
 			}
 		} else {

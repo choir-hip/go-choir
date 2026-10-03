@@ -236,6 +236,11 @@ func normalizeLifecycleControlActivationRefresh(refresh *types.LifecycleControlA
 type LifecycleControlActivationReplay struct {
 	Active        *types.RunRecord
 	DurablyFailed *types.RunRecord
+	// Completed is the terminal-discharged carrier for this logical key. It is
+	// not an active replay and not a failed attempt — it is evidence that the
+	// activation already ran to completion, so a re-pended packet for the same
+	// logical join must not mint a successor through the generic reconcile.
+	Completed *types.RunRecord
 }
 
 // ResolveLifecycleControlActivation returns the unique active logical
@@ -294,7 +299,39 @@ func (s *Store) ResolveLifecycleControlActivation(ctx context.Context, ownerID, 
 		return LifecycleControlActivationReplay{}, err
 	}
 	result.DurablyFailed = failed
+	completed, completedErr := s.resolveLifecycleControlActivationCompleted(ctx, ownerID, computerID, trajectoryID, agentID, logicalKey)
+	if completedErr != nil {
+		return LifecycleControlActivationReplay{}, completedErr
+	}
+	result.Completed = completed
 	return result, nil
+}
+
+// resolveLifecycleControlActivationCompleted finds the unique completed
+// carrier that owns this logical activation key. It distinguishes a control
+// that was bound-and-discharged (re-pending it is a discharged-turn re-mint,
+// not a strand) from a control that never activated. Multiple completed
+// carriers for one key are ambiguous and fail closed.
+func (s *Store) resolveLifecycleControlActivationCompleted(ctx context.Context, ownerID, computerID, trajectoryID, agentID, logicalKey string) (*types.RunRecord, error) {
+	var completed *types.RunRecord
+	runs, err := s.listLifecycleRunsByScope(ctx, ownerID, computerID, 0, func(run types.RunRecord) bool {
+		return run.AgentID == agentID && run.TrajectoryID == trajectoryID &&
+			run.State == types.RunCompleted &&
+			metadataStringValueStore(run.Metadata, "request_source") == "lifecycle_texture_control" &&
+			metadataStringValueStore(run.Metadata, "lifecycle_logical_activation_key") == logicalKey
+	})
+	if err != nil {
+		return nil, err
+	}
+	switch len(runs) {
+	case 0:
+		return nil, nil
+	case 1:
+		completed = &runs[0]
+		return completed, nil
+	default:
+		return nil, ErrLifecycleInvalidTransition
+	}
 }
 
 // BindLifecycleControlDelivery atomically binds ordered committed controls to

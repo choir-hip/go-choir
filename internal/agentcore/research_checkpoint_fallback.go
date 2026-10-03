@@ -50,7 +50,7 @@ func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRec
 		len(metadataStringSlice(rec.Metadata["work_item_ids"])) > 0
 	if hasLifecycleMarker && rec.State.Terminal() && strings.TrimSpace(rec.ComputerID) != "" &&
 		(agentProfileForRun(rec) == agentprofile.Research || agentProfileForRun(rec) == agentprofile.Management) {
-		freed, unbindErr := rt.unbindStrandedLifecycleControls(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
+		freed, unbindErr := rt.unbindStrandedLifecycleControls(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, true)
 		if unbindErr != nil {
 			log.Printf("runtime: unbind stranded controls on terminalize run %s: %v", rec.RunID, unbindErr)
 		}

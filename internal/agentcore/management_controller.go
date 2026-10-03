@@ -304,7 +304,7 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 	}
 
 	computerID := strings.TrimSpace(rt.TextureComputerID())
-	if _, unbindErr := rt.unbindStrandedLifecycleControls(ctx, ownerID, computerID, agentID); unbindErr != nil {
+	if _, unbindErr := rt.unbindStrandedLifecycleControls(ctx, ownerID, computerID, agentID, false); unbindErr != nil {
 		return nil, fmt.Errorf("unbind stranded lifecycle controls: %w", unbindErr)
 	}
 	controls, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, agentID, 100)
@@ -1128,7 +1128,22 @@ const lifecycleControlDeliveryMaxAttempts = 3
 // packet re-enters the pending set and binds with full fingerprint/versions
 // through bindLifecycleControlsToRun. Exhausted packets terminalize with
 // delivery_attempts_exhausted inside the reconcile command.
-func (rt *Runtime) unbindStrandedLifecycleControls(ctx context.Context, ownerID, computerID, agentID string) ([]types.CoagentSourcePacket, error) {
+type boundClaimFate int
+
+const (
+	boundClaimLive    boundClaimFate = iota // live carrier: keep the claim
+	boundClaimRelease                       // abnormal death/vanished carrier: release to pending
+	boundClaimSettle                        // completed carrier in a reconcile sweep: terminalize unconsumed claim
+)
+
+// terminalizeRelease distinguishes the two callers. bindTerminalRunOutcome
+// (terminalizeRelease=true) is the release authority: a carrier that just
+// terminalized releases every bound claim, completed or not, and wakes the
+// desk. The two reconcile paths (terminalizeRelease=false) are a sweep for
+// claims whose carrier died abnormally — there a RunCompleted claim means
+// terminalize never ran, so settle (delivered-without-consume) is the honest
+// terminal rather than re-pending a discharged turn into a fresh mint.
+func (rt *Runtime) unbindStrandedLifecycleControls(ctx context.Context, ownerID, computerID, agentID string, terminalizeRelease bool) ([]types.CoagentSourcePacket, error) {
 	if rt == nil || rt.store == nil {
 		return nil, nil
 	}
@@ -1136,7 +1151,7 @@ func (rt *Runtime) unbindStrandedLifecycleControls(ctx context.Context, ownerID,
 	if err != nil {
 		return nil, err
 	}
-	checked := map[string]bool{}
+	checked := map[string]boundClaimFate{}
 	var items []types.ReconcileUpdateDeliveryItem
 	var freed []types.CoagentSourcePacket
 	for _, update := range bound {
@@ -1145,31 +1160,65 @@ func (rt *Runtime) unbindStrandedLifecycleControls(ctx context.Context, ownerID,
 			continue
 		}
 		runID := strings.TrimSpace(update.DeliveredToRunID)
-		live, seen := checked[runID]
+		// Claim fate is a tri-state per bound packet, resolved once per carrier
+		// run. A live carrier (any non-terminal state) keeps its claim. A carrier
+		// that died abnormally (cancelled/failed) or vanished from both run
+		// authorities releases the packet back to pending so it can rebind. A
+		// persistent-Management super that completed its turn already discharged
+		// responsibility, so a bound-but-unconsumed packet terminalizes as
+		// delivered-without-consume rather than re-pending to an endless mint.
+		// Research carriers are different: a completed research turn does not
+		// settle the control work-item (the trajectory owns that obligation), so
+		// an unconsumed bound research packet releases on ANY terminal.
+		// Liveness reads the union authority (getRunForComputer: generic store
+		// then lifecycle fallback) because persistent-Management runs are not
+		// lifecycle-authority rows — GetLifecycleRun reads them as spuriously dead.
+		fate, seen := checked[runID]
 		if !seen {
-			run, getErr := rt.store.GetLifecycleRun(ctx, ownerID, computerID, runID)
+			run, getErr := rt.getRunForComputer(ctx, ownerID, runID)
 			switch {
 			case errors.Is(getErr, store.ErrNotFound):
-				live = false
+				fate = boundClaimRelease
 			case getErr != nil:
 				return nil, fmt.Errorf("check bound control run %s liveness: %w", runID, getErr)
+			case run.State == types.RunCompleted && !terminalizeRelease:
+				fate = boundClaimSettle
+			case run.State.Terminal():
+				fate = boundClaimRelease
 			default:
-				live = !run.State.Terminal()
+				fate = boundClaimLive
 			}
-			checked[runID] = live
+			checked[runID] = fate
 		}
-		if live {
+		switch fate {
+		case boundClaimLive:
+			// Live carrier keeps its claim.
 			continue
+		case boundClaimSettle:
+			// A completed carrier still bound here means terminalize never
+			// released the claim: the packet was abandoned unconsumed. Settle
+			// it as delivered-without-consume (Exhaust) rather than re-pending —
+			// re-pending would mint a fresh carrier for a discharged turn.
+			items = append(items, types.ReconcileUpdateDeliveryItem{
+				UpdateID:                 update.UpdateID,
+				ProducerAgentID:          update.AgentID,
+				ProducerUpdateID:         update.ProducerUpdateID,
+				ExpectedLifecycleVersion: update.LifecycleVersion,
+				ExpectedRunID:            runID,
+				Exhaust:                  true,
+			})
+			continue // settled packets are not freed for rebind
+		default:
+			items = append(items, types.ReconcileUpdateDeliveryItem{
+				UpdateID:                 update.UpdateID,
+				ProducerAgentID:          update.AgentID,
+				ProducerUpdateID:         update.ProducerUpdateID,
+				ExpectedLifecycleVersion: update.LifecycleVersion,
+				ExpectedRunID:            runID,
+				Exhaust:                  update.DeliveryAttempts+1 > lifecycleControlDeliveryMaxAttempts,
+			})
+			freed = append(freed, update)
 		}
-		items = append(items, types.ReconcileUpdateDeliveryItem{
-			UpdateID:                 update.UpdateID,
-			ProducerAgentID:          update.AgentID,
-			ProducerUpdateID:         update.ProducerUpdateID,
-			ExpectedLifecycleVersion: update.LifecycleVersion,
-			ExpectedRunID:            runID,
-			Exhaust:                  update.DeliveryAttempts+1 > lifecycleControlDeliveryMaxAttempts,
-		})
-		freed = append(freed, update)
 	}
 	for _, item := range items {
 		req := types.ReconcileUpdateDeliveryRequest{
@@ -1832,7 +1881,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		// unbind (the dead binding was an attempt); past the cap the packet
 		// terminalizes as delivery_attempts_exhausted, which is scored
 		// delivery failure — never silent loss.
-		if _, unbindErr := rt.unbindStrandedLifecycleControls(ctx, ownerID, computerID, agentID); unbindErr != nil {
+		if _, unbindErr := rt.unbindStrandedLifecycleControls(ctx, ownerID, computerID, agentID, false); unbindErr != nil {
 			return nil, fmt.Errorf("unbind stranded lifecycle controls: %w", unbindErr)
 		}
 		updates, err = rt.store.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, agentID)
@@ -2012,6 +2061,15 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		}
 		if replay.DurablyFailed != nil {
 			return replay.DurablyFailed, fmt.Errorf("%w: run=%s failed_attempt=%s", ErrDurablyTerminalLifecycleControlActivation, replay.DurablyFailed.RunID, failedKey)
+		}
+		if replay.Completed != nil {
+			// A carrier already ran this exact logical join to completion. The
+			// re-pended packet is a discharged-turn rebind, not a new obligation —
+			// minting a successor here replays a turn the desk already discharged.
+			// Re-drive belongs to the scoped work wake
+			// (ReconcileLifecycleWorkAssignment), which binds the packet to its
+			// own trajectory's activation, not the flat coagent mint.
+			return nil, nil
 		}
 		if residentFound {
 			// Another active run owns this lifecycle agent but not this exact
