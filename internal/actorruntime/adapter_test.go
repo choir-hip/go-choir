@@ -923,11 +923,12 @@ func TestHandlerParkedLifecycleControlReconcilesBeforeRetryAcknowledgement(t *te
 	final, finalErr := s.GetLifecycleRun(ctx, fixture.ownerID, fixture.computerID, initial.RunID)
 	// The carrier completed while control B was bound — the stranded wedge.
 	// bindTerminalRunOutcome releases the dead claim so the packet re-enters
-	// pending: DeliveredToRunID clears (the unbind counts as a delivery
-	// attempt, stamping DeliveredAt + incrementing DeliveryAttempts). A live
-	// desk wake would rebind it; the dispatch mock is a no-op so it stays
-	// released+pending here.
-	if boundErr != nil || finalErr != nil || bound.DeliveredToRunID != "" || bound.DeliveredAt == nil ||
+	// pending: DeliveredToRunID AND DeliveredAt both clear (a bound-but-nil-
+	// DeliveredAt packet is the pending-scan shape; leaving DeliveredAt set
+	// stranded it between the bound and pending scans — the S0m defect).
+	// The unbind still counts as a delivery attempt. A live desk wake would
+	// rebind it; the dispatch mock is a no-op so it stays released+pending.
+	if boundErr != nil || finalErr != nil || bound.DeliveredToRunID != "" || bound.DeliveredAt != nil ||
 		metadataString(final.Metadata, "request_source") != "lifecycle_texture_control" || provider.calls.Load() != 1 {
 		t.Fatalf("retried parked wake final=%+v bound=%+v final_err=%v bound_err=%v provider_calls=%d", final, bound, finalErr, boundErr, provider.calls.Load())
 	}
