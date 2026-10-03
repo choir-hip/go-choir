@@ -1,0 +1,21 @@
+{
+  "probe": "s0m_stranded_bound",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "s0m-strand-1791055455194",
+  "started_at": "2026-10-03T19:24:15.195Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": 1791055503173,
+      "wall_ms": 47978,
+      "ok": true,
+      "trajectory": "14491482-a648-5241-b781-30fc8e241274",
+      "submitted": true
+    }
+  ],
+  "ok": false,
+  "failure": "no control packet bound to a live carrier within window — ask never reached research",
+  "trajectory_id": "14491482-a648-5241-b781-30fc8e241274",
+  "finished_at": "2026-10-03T19:37:11.566Z",
+  "wall_ms": 776371
+}

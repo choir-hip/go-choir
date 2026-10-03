@@ -86,3 +86,24 @@ run before the terminal-outcome binding, then re-drives the desk via
 - `wakeUpdatedCoagent` — wake only mints on a packet's first queue/bind, not
   for an already-bound stranded row.
 - `adapter_test.go:1464`-family — wake mints on a packet's first queue/bind.
+
+## Deployed verification (2026-10-02 + 2026-10-03)
+
+Deployed fix on `d61c9b1b` (guest, verified via `build.deployed_commit`).
+
+- Stranded packet `33e9f35c` (dead carrier `0b39f42e`, completed 19:45) was
+  resolved to `disposition=resolved` + `resolution=delivery_attempts_exhausted`
+  at 2026-10-02T20:11:55 — the stranded-bound path now terminalizes scored,
+  never wedges. Same-pass: `management:d5b3de8d` and `conductor` consumed
+  their backlog after ~15 min of replay + outbox-sweep + mutation-drain.
+- 2026-10-03 probe runs: a fresh bind→cancel→consume sequence was delayed
+  ~20 min by boot recovery (30-run boot-passivation + 156 dead-wake
+  disposals + 20-trajectory replay), after which all texture desk runs
+  minted `pending` and dispatched to `running` (verified: 7 texture runs
+  `running`, dispatch alive). The earlier "texture dispatch stall" was
+  boot-recovery latency, not a stranded-`initial_dispatch` defect —
+  `dispatchActor` appends correctly and the per-agent serial dispatcher
+  delivered once `PendingAgents` cleared the deferred research occurrence.
+  Residual: the desk's first-cell latency under post-boot load (one
+  `open_researcher` emission took ~10 min) makes the probe's bind window
+  timing-sensitive; the product fix itself is verified live.

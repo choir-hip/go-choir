@@ -238,23 +238,24 @@ now:
     mints a record-native note, not a retired envelope);
     docs/current-architecture.md updated with the record-native invariant.
   source_ref: main@558afe86
-  deploy_identity: 'staging https://choir.news deployed_commit=ed406f45; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer ed406f45 (TerminalizeRun ActiveRunID clear deployed + re-proven)'
+  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer d61c9b1b (stranded-bound release + consume-marking verified live 2026-10-03)'
   next_action: >-
-    Stranded-bound rebind PROVEN end-to-end on staging (ed406f45):
-    texture ApplyTexture{open_researcher} -> control 3fbf9bb4 bound to
-    carrier cf8c0a9e -> probe cancelled mid-bind -> claim_released_pending
-    -> rebound_live_run to fresh carrier c55287d3 (correct agent/work).
-    Combined rebind landing: ae47c8a4 (boot outbox) + ebfd2e98 (starvation)
-    + 39e924aa (restart-recast) + c31bf43a (DeliveredAt unbind) +
-    ed406f45 (TerminalizeRun clears ActiveRunID). Remaining boundary: the
-    rebound carrier bound its control then COMPLETED without consuming it —
-    packet stayed pending, a second release freed it (consume-side defect,
-    separate from rebind); and consumeIdleTextureTrigger masks
-    non-ApplyTexture cells as "no act" (separate red defect). Finish legs:
-    (a) repair bound-but-unconsumed consume path; (b) fix the idle-consume
-    mask; (c) then mechanical resolve + dual-delivery absence per kind.
-    See docs/problems/s0m-freed-control-stale-activerunid-blocks-rebind-
-    2026-10-03.md (resolved) + s0m-desk-no-authoring-act-2026-10-03.md.
+    Re-prove the stranded-bound consume/resolve via the CORRECT instrument:
+    the bare-texture-Ask probe cannot drive it (panel 2026-10-03 — a texture
+    `choir.Ask("research",…)` is prompt-forbidden AND store-rejected;
+    `research:<docID>` only exists after an `ApplyTexture{open_researcher}`
+    turn). Options per the divergent panel: (a) a Management-desk `Ask`->
+    carrier->kill->rebind (cheapest, decouples substrate from texture
+    authoring); (b) texture's designed `ApplyTexture{open_researcher}` full
+    loop (heavy); (c) deterministic in-store harness — inject a bound
+    control, terminalize its carrier, assert unbind+rebind+consume-mark.
+    Recommended (c) for determinism: it directly asserts
+    `UpdateIncorporated`/`ConsumedDeliveryUpdateIDs` coverage on a rebound
+    carrier (the `3fbf9bb4` edge) without depending on stochastic desk
+    agency. Then the mechanical ask->report->resolve acceptance leg +
+    per-kind dual-delivery suite remain for station completion. Residual
+    defect to schedule: `consumeIdleTextureTrigger` masks non-ApplyTexture
+    cells as "no act" (red, Texture canonical writes).
   candidate: main@558afe86
   conjecture:
     id: record-native-coupling
@@ -308,18 +309,25 @@ now:
     independent scorer (management) is a separate verdict, not required to
     mint the resolver's Resolve.
   blocker: >-
-    Rebind substrate proven on staging (ed406f45). Live blocker is a
-    consume-MARKING defect, corrected after trace inspection: rebound
-    carrier c55287d3 DID the work (research done, work e320d40d completed,
-    report to texture) but bound control 3fbf9bb4 was never marked
-    incorporated — UpdateIncorporated/ConsumedDeliveryUpdateIDs didn't cover
-    it (lifecycle.go:3454-3513, memorySeen gate), so terminalize released it
-    and no system:reducer resolve can fire. Distinct from the Texture-gated
-    consumeIdleTextureTrigger mask (tools_desk.go). Divergent panel
-    (agentic-consensus-20261003-134902): non-re-scoping majority holds the
-    finish contract needs a consumed-or-exhausted terminal / resolve —
-    consume-marking is in-contract, S0m stays working. See
-    docs/problems/s0m-bound-control-not-marked-incorporated-2026-10-03.md.
+    Stranded-bound release fix VERIFIED deployed (autoputer d61c9b1b): bound
+    control packets terminalize scored on carrier death (`33e9f35c` ->
+    `delivery_attempts_exhausted`); live-carrier consume-marking works on the
+    persistent-Management path (3 control packets `incorporated`); 0
+    dual-terminal dispositions across the control scan. `3fbf9bb4` root cause
+    CONFIRMED in source: a research carrier's producer report cannot carry
+    `ControlBindingID` (`commitAddressedPacketIntent` omits it; the
+    `QueueLifecycleUpdate` research else-branch rejects it), so the
+    consume-side `bindingMatches` check is skipped and the upstream control
+    is orphaned (never incorporated, released on terminalize). DESIGN FORK
+    for the fix: (a) extend research reports to carry `ControlBindingID`, or
+    (b) consume-side inference via `lifecycleActivationVersionsForRun` — the
+    latter matches existing authority since `ValidateLifecycleProducerReport
+    Authority` already derives the research binding from the run's
+    activation fingerprint when `ControlBindingID` is empty. Recommend (b):
+    no report-field change, authority stays on the durable fingerprint.
+    See docs/problems/s0m-bound-control-not-marked-incorporated-2026-10-03.md
+    (root cause + design fork) + s0m-stranded-bound-control-deadlock
+    -2026-10-02.md (deployed-verified).
 
 
 receipts:

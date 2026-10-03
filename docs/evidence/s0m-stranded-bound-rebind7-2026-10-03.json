@@ -1,0 +1,19 @@
+{
+  "probe": "s0m_stranded_bound",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "s0m-strand-1791056248305",
+  "started_at": "2026-10-03T19:37:28.306Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": 1791056424654,
+      "wall_ms": 176348,
+      "ok": false,
+      "submitted": true
+    }
+  ],
+  "ok": false,
+  "failure": null,
+  "finished_at": "2026-10-03T19:40:24.655Z",
+  "wall_ms": 176349
+}
