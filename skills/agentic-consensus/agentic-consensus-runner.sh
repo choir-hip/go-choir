@@ -6,8 +6,14 @@ usage() {
 agentic-consensus-runner.sh --prompt TEXT | --prompt-file FILE [options]
 
 Runs one prompt across an agentic consensus panel and writes one output file per agent.
-Default panel: codex, devin, claude, cursor, opencode, omp-gpt6-sol, omp-gpt6-luna, omp-gemini38, omp-cursor-grok46, omp-muse-spark, omp-nemotron-3-ultra, omp-glm53-flash, omp-ling.
+Default panel: codex, devin, claude, opencode, omp-gpt61-sol, omp-gpt6-luna, omp-gemini38,
+omp-space-bunny, omp-muse-spark, omp-qwen38max, omp-glm53-flash.
 External CLIs use their configured default model unless a --*-model override is passed.
+
+Every pinned OMP model was identity-verified with agentic-consensus-model-probe.sh.
+Re-verify with that script after touching this file; a retired model id silently
+fuzzy-matches onto an older generation instead of failing.
+See docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md.
 
 Required input:
   --prompt TEXT                 Inline prompt.
@@ -26,9 +32,23 @@ Thinking mode:
 
 Panel selection:
   --include LIST                Comma-separated agent ids to run.
-                                Default: codex,devin,claude,cursor,opencode,omp-gpt6-sol,omp-gpt6-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-ling
+                                Default: codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-space-bunny,omp-muse-spark,omp-qwen38max,omp-glm53-flash
   --exclude LIST                Comma-separated agent ids to skip.
   --list-agents                 Print supported agent ids and exit.
+
+  Supported ids beyond the default panel:
+    cursor            Cursor `agent` CLI. Quota-gated: the account must have
+                      Agent usage left, otherwise it exits with
+                      "ActionRequiredError: You've hit your usage limit".
+    omp-gpt6-sol      Previous flagship; still current generation. Kept because
+                      in-flight /goal files pass it in --include.
+    omp-gpt6-astra    GPT-6 balanced tier (replaces the retired gpt-6-terra).
+    omp-claude-opus46 Anthropic route via antigravity, independent of the
+                      `claude` CLI's credential path.
+    omp-grok47        xAI family, routed via opencode-go. The cursor/* provider
+                      cannot name models on a free plan (429).
+    omp-deepseek-v4-pro, omp-kimi-k3, omp-minimax-m3
+                      Additional independent families for the full sub-panel.
 
 Model overrides, optional:
   --codex-model MODEL           Pass -m MODEL to codex exec.
@@ -37,24 +57,36 @@ Model overrides, optional:
                                  fable is request-only.
   --cursor-model MODEL          Pass --model MODEL to Cursor agent.
   --opencode-model MODEL        Pass -m MODEL to opencode run.
-  --omp-gpt6-sol-model MODEL   Default: openai-codex/gpt-6-sol.
-  --omp-gpt6-terra-model MODEL Default: openai-codex/gpt-6-terra.
-  --omp-gpt6-luna-model MODEL  Default: openai-codex/gpt-6-luna.
+  --omp-gpt61-sol-model MODEL   Default: openai-codex/gpt-6.1-sol.
+  --omp-gpt6-sol-model MODEL    Default: openai-codex/gpt-6-sol.
+  --omp-gpt6-astra-model MODEL  Default: openai-codex/gpt-6-astra.
+  --omp-gpt6-luna-model MODEL   Default: openai-codex/gpt-6-luna.
   --omp-gemini-model MODEL      Default: google-antigravity/gemini-3.8-flash.
-  --omp-cursor-grok-model MODEL Default: cursor/cursor-grok-4.6-high.
-  --omp-muse-spark-model MODEL       Default: opencode-zen/muse-spark-1.3-contributor-free.
-  --omp-nemotron-3-ultra-model MODEL Default: opencode-zen/nemotron-3-ultra-free.
-  --omp-glm53-flash-model MODEL      Default: opencode-go/glm-5.3-flash.
-  --omp-ling-model MODEL              Default: opencode-zen/ling-3.0-flash-fin-free.
-  --omp-gpt6-sol-thinking LEVEL    Default: medium.
-  --omp-gpt6-terra-thinking LEVEL   Default: xhigh.
-  --omp-gpt6-luna-thinking LEVEL    Default: max.
-  --omp-gemini-thinking LEVEL   Default: high.
-  --omp-cursor-grok-thinking LEVEL   Default: high.
-  --omp-muse-spark-thinking LEVEL       Default: high.
-  --omp-nemotron-3-ultra-thinking LEVEL Default: high.
-  --omp-glm53-flash-thinking LEVEL      Default: high.
-  --omp-ling-thinking LEVEL              Default: high.
+  --omp-claude-opus46-model MODEL Default: google-antigravity/claude-opus-4-6.
+  --omp-space-bunny-model MODEL Default: opencode-go/space-bunny-free.
+  --omp-muse-spark-model MODEL  Default: opencode-go/muse-spark-1.3-contributor.
+  --omp-qwen38max-model MODEL   Default: opencode-go/qwen3.8-max.
+  --omp-glm53-flash-model MODEL Default: opencode-go/glm-5.3-flash.
+  --omp-grok47-model MODEL      Default: opencode-go/grok-4.7.
+  --omp-deepseek-v4-pro-model MODEL Default: opencode-go/deepseek-v4-pro.
+  --omp-kimi-k3-model MODEL     Default: opencode-go/kimi-k3.
+  --omp-minimax-m3-model MODEL  Default: opencode-go/minimax-m3.
+
+  Thinking levels, each with its default:
+  --omp-gpt61-sol-thinking LEVEL      xhigh
+  --omp-gpt6-sol-thinking LEVEL       medium
+  --omp-gpt6-astra-thinking LEVEL     high
+  --omp-gpt6-luna-thinking LEVEL      max
+  --omp-gemini-thinking LEVEL         high
+  --omp-claude-opus46-thinking LEVEL  high
+  --omp-space-bunny-thinking LEVEL    high
+  --omp-muse-spark-thinking LEVEL     high
+  --omp-qwen38max-thinking LEVEL      high
+  --omp-glm53-flash-thinking LEVEL    high
+  --omp-grok47-thinking LEVEL         high
+  --omp-deepseek-v4-pro-thinking LEVEL high
+  --omp-kimi-k3-thinking LEVEL        high
+  --omp-minimax-m3-thinking LEVEL     high
 
 Execution:
   --cwd DIR                     Working directory/context root. Default: current directory.
@@ -74,8 +106,8 @@ Output:
 USAGE
 }
 
-DEFAULT_INCLUDE="codex,devin,claude,cursor,opencode,omp-gpt6-sol,omp-gpt6-luna,omp-gemini38,omp-cursor-grok46,omp-muse-spark,omp-nemotron-3-ultra,omp-glm53-flash,omp-ling"
-SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt6-sol omp-gpt6-terra omp-gpt6-luna omp-gemini38 omp-cursor-grok46 omp-muse-spark omp-nemotron-3-ultra omp-glm53-flash omp-ling)
+DEFAULT_INCLUDE="codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-space-bunny,omp-muse-spark,omp-qwen38max,omp-glm53-flash"
+SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt61-sol omp-gpt6-sol omp-gpt6-astra omp-gpt6-luna omp-gemini38 omp-claude-opus46 omp-space-bunny omp-muse-spark omp-qwen38max omp-glm53-flash omp-grok47 omp-deepseek-v4-pro omp-kimi-k3 omp-minimax-m3)
 
 PROMPT=""
 PROMPT_FILE=""
@@ -98,24 +130,93 @@ DEVIN_MODEL=""
 CLAUDE_MODEL="opus"
 CURSOR_MODEL=""
 OPENCODE_MODEL=""
+OMP_GPT61_SOL_MODEL="openai-codex/gpt-6.1-sol"
 OMP_GPT6_SOL_MODEL="openai-codex/gpt-6-sol"
-OMP_GPT6_TERRA_MODEL="openai-codex/gpt-6-terra"
+OMP_GPT6_ASTRA_MODEL="openai-codex/gpt-6-astra"
 OMP_GPT6_LUNA_MODEL="openai-codex/gpt-6-luna"
-OMP_GEMINI_MODEL="google-antigravity/gemini-3.8-flash"
-OMP_CURSOR_GROK_MODEL="cursor/cursor-grok-4.6-high"
-OMP_MUSE_SPARK_MODEL="opencode-zen/muse-spark-1.3-contributor-free"
-OMP_NEMOTRON_3_ULTRA_MODEL="opencode-zen/nemotron-3-ultra-free"
+OMP_GEMINI38_MODEL="google-antigravity/gemini-3.8-flash"
+OMP_CLAUDE_OPUS46_MODEL="google-antigravity/claude-opus-4-6"
+OMP_SPACE_BUNNY_MODEL="opencode-go/space-bunny-free"
+OMP_MUSE_SPARK_MODEL="opencode-go/muse-spark-1.3-contributor"
+OMP_QWEN38MAX_MODEL="opencode-go/qwen3.8-max"
 OMP_GLM53_FLASH_MODEL="opencode-go/glm-5.3-flash"
-OMP_LING_MODEL="opencode-zen/ling-3.0-flash-fin-free"
+OMP_GROK47_MODEL="opencode-go/grok-4.7"
+OMP_DEEPSEEK_V4_PRO_MODEL="opencode-go/deepseek-v4-pro"
+OMP_KIMI_K3_MODEL="opencode-go/kimi-k3"
+OMP_MINIMAX_M3_MODEL="opencode-go/minimax-m3"
+OMP_GPT61_SOL_THINKING="xhigh"
 OMP_GPT6_SOL_THINKING="medium"
-OMP_GPT6_TERRA_THINKING="xhigh"
+OMP_GPT6_ASTRA_THINKING="high"
 OMP_GPT6_LUNA_THINKING="max"
-OMP_GEMINI_THINKING="high"
-OMP_CURSOR_GROK_THINKING="high"
+OMP_GEMINI38_THINKING="high"
+OMP_CLAUDE_OPUS46_THINKING="high"
+OMP_SPACE_BUNNY_THINKING="high"
 OMP_MUSE_SPARK_THINKING="high"
-OMP_NEMOTRON_3_ULTRA_THINKING="high"
+OMP_QWEN38MAX_THINKING="high"
 OMP_GLM53_FLASH_THINKING="high"
-OMP_LING_THINKING="high"
+OMP_GROK47_THINKING="high"
+OMP_DEEPSEEK_V4_PRO_THINKING="high"
+OMP_KIMI_K3_THINKING="high"
+OMP_MINIMAX_M3_THINKING="high"
+
+# Self-check: every supported omp-* id must resolve to a pinned model and
+# thinking level under the mechanical name mapping used by build_cmd. This is
+# the guard against the drift class in
+# docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md -- an anchor
+# whose id no longer matches its pin would otherwise run against an empty
+# --model and fuzzy-match onto whatever happened to be closest.
+for _agent in "${SUPPORTED_AGENTS[@]}"; do
+  case "$_agent" in
+    omp-*)
+      _stem="$(printf '%s' "$_agent" | tr '[:lower:]-' '[:upper:]_')"
+      eval "_pin_model=\"\${${_stem}_MODEL:-}\""
+      eval "_pin_thinking=\"\${${_stem}_THINKING:-}\""
+      if [[ -z "$_pin_model" ]]; then
+        echo "runner self-check: $_agent has no \$${_stem}_MODEL pin" >&2
+        exit 2
+      fi
+      if [[ -z "$_pin_thinking" ]]; then
+        echo "runner self-check: $_agent has no \$${_stem}_THINKING pin" >&2
+        exit 2
+      fi
+      ;;
+  esac
+done
+unset _agent _stem _pin_model _pin_thinking
+
+# flag-suffix:variable table for every OMP anchor's --*-model / --*-thinking
+# override. Consumed by the `--omp-*)` parse arm below.
+OMP_FLAG_VARS=(
+  "omp-gpt61-sol-model:OMP_GPT61_SOL_MODEL"
+  "omp-gpt61-sol-thinking:OMP_GPT61_SOL_THINKING"
+  "omp-gpt6-sol-model:OMP_GPT6_SOL_MODEL"
+  "omp-gpt6-sol-thinking:OMP_GPT6_SOL_THINKING"
+  "omp-gpt6-astra-model:OMP_GPT6_ASTRA_MODEL"
+  "omp-gpt6-astra-thinking:OMP_GPT6_ASTRA_THINKING"
+  "omp-gpt6-luna-model:OMP_GPT6_LUNA_MODEL"
+  "omp-gpt6-luna-thinking:OMP_GPT6_LUNA_THINKING"
+  "omp-gemini38-model:OMP_GEMINI38_MODEL"
+  "omp-gemini38-thinking:OMP_GEMINI38_THINKING"
+  "omp-claude-opus46-model:OMP_CLAUDE_OPUS46_MODEL"
+  "omp-claude-opus46-thinking:OMP_CLAUDE_OPUS46_THINKING"
+  "omp-space-bunny-model:OMP_SPACE_BUNNY_MODEL"
+  "omp-space-bunny-thinking:OMP_SPACE_BUNNY_THINKING"
+  "omp-muse-spark-model:OMP_MUSE_SPARK_MODEL"
+  "omp-muse-spark-thinking:OMP_MUSE_SPARK_THINKING"
+  "omp-qwen38max-model:OMP_QWEN38MAX_MODEL"
+  "omp-qwen38max-thinking:OMP_QWEN38MAX_THINKING"
+  "omp-glm53-flash-model:OMP_GLM53_FLASH_MODEL"
+  "omp-glm53-flash-thinking:OMP_GLM53_FLASH_THINKING"
+  "omp-grok47-model:OMP_GROK47_MODEL"
+  "omp-grok47-thinking:OMP_GROK47_THINKING"
+  "omp-deepseek-v4-pro-model:OMP_DEEPSEEK_V4_PRO_MODEL"
+  "omp-deepseek-v4-pro-thinking:OMP_DEEPSEEK_V4_PRO_THINKING"
+  "omp-kimi-k3-model:OMP_KIMI_K3_MODEL"
+  "omp-kimi-k3-thinking:OMP_KIMI_K3_THINKING"
+  "omp-minimax-m3-model:OMP_MINIMAX_M3_MODEL"
+  "omp-minimax-m3-thinking:OMP_MINIMAX_M3_THINKING"
+)
+
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -152,60 +253,22 @@ while [[ $# -gt 0 ]]; do
     --opencode-model)
       [[ $# -ge 2 ]] || { echo "--opencode-model requires a value" >&2; exit 2; }
       OPENCODE_MODEL="$2"; shift 2 ;;
-    --omp-gpt6-sol-model)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt6-sol-model requires a value" >&2; exit 2; }
-      OMP_GPT6_SOL_MODEL="$2"; shift 2 ;;
-    --omp-gpt6-terra-model)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt6-terra-model requires a value" >&2; exit 2; }
-      OMP_GPT6_TERRA_MODEL="$2"; shift 2 ;;
-    --omp-gpt6-luna-model)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt6-luna-model requires a value" >&2; exit 2; }
-      OMP_GPT6_LUNA_MODEL="$2"; shift 2 ;;
-    --omp-gemini-model)
-      [[ $# -ge 2 ]] || { echo "--omp-gemini-model requires a value" >&2; exit 2; }
-      OMP_GEMINI_MODEL="$2"; shift 2 ;;
-    --omp-cursor-grok-model)
-      [[ $# -ge 2 ]] || { echo "--omp-cursor-grok-model requires a value" >&2; exit 2; }
-      OMP_CURSOR_GROK_MODEL="$2"; shift 2 ;;
-    --omp-muse-spark-model)
-      [[ $# -ge 2 ]] || { echo "--omp-muse-spark-model requires a value" >&2; exit 2; }
-      OMP_MUSE_SPARK_MODEL="$2"; shift 2 ;;
-    --omp-nemotron-3-ultra-model)
-      [[ $# -ge 2 ]] || { echo "--omp-nemotron-3-ultra-model requires a value" >&2; exit 2; }
-      OMP_NEMOTRON_3_ULTRA_MODEL="$2"; shift 2 ;;
-    --omp-glm53-flash-model)
-      [[ $# -ge 2 ]] || { echo "--omp-glm53-flash-model requires a value" >&2; exit 2; }
-      OMP_GLM53_FLASH_MODEL="$2"; shift 2 ;;
-    --omp-ling-model)
-      [[ $# -ge 2 ]] || { echo "--omp-ling-model requires a value" >&2; exit 2; }
-      OMP_LING_MODEL="$2"; shift 2 ;;
-    --omp-gpt6-sol-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt6-sol-thinking requires a value" >&2; exit 2; }
-      OMP_GPT6_SOL_THINKING="$2"; shift 2 ;;
-    --omp-gpt6-terra-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt6-terra-thinking requires a value" >&2; exit 2; }
-      OMP_GPT6_TERRA_THINKING="$2"; shift 2 ;;
-    --omp-gpt6-luna-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-gpt6-luna-thinking requires a value" >&2; exit 2; }
-      OMP_GPT6_LUNA_THINKING="$2"; shift 2 ;;
-    --omp-gemini-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-gemini-thinking requires a value" >&2; exit 2; }
-      OMP_GEMINI_THINKING="$2"; shift 2 ;;
-    --omp-cursor-grok-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-cursor-grok-thinking requires a value" >&2; exit 2; }
-      OMP_CURSOR_GROK_THINKING="$2"; shift 2 ;;
-    --omp-muse-spark-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-muse-spark-thinking requires a value" >&2; exit 2; }
-      OMP_MUSE_SPARK_THINKING="$2"; shift 2 ;;
-    --omp-nemotron-3-ultra-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-nemotron-3-ultra-thinking requires a value" >&2; exit 2; }
-      OMP_NEMOTRON_3_ULTRA_THINKING="$2"; shift 2 ;;
-    --omp-glm53-flash-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-glm53-flash-thinking requires a value" >&2; exit 2; }
-      OMP_GLM53_FLASH_THINKING="$2"; shift 2 ;;
-    --omp-ling-thinking)
-      [[ $# -ge 2 ]] || { echo "--omp-ling-thinking requires a value" >&2; exit 2; }
-      OMP_LING_THINKING="$2"; shift 2 ;;
+    --omp-*)
+      # Table-driven: one entry per anchor, instead of one hand-written case
+      # per flag. Adding, renaming or dropping an anchor is a single-line edit
+      # here plus one line in build_cmd, which is what keeps the flag surface
+      # from drifting out of sync with the panel.
+      key="${1#--}"
+      for entry in "${OMP_FLAG_VARS[@]}"; do
+        if [[ "$key" == "${entry%%:*}" ]]; then
+          [[ $# -ge 2 ]] || { echo "$1 requires a value" >&2; exit 2; }
+          varname="${entry##*:}"
+          printf -v "$varname" '%s' "$2"
+          shift 2
+          continue 2
+        fi
+      done
+      echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
     --debug) DEBUG_PERMISSIONS=1; shift ;;
     --sequential) SEQUENTIAL=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -362,43 +425,24 @@ build_cmd() {
       [[ -n "$CURSOR_MODEL" ]] && CMD+=(--model "$CURSOR_MODEL")
       CMD+=("$AGENT_PROMPT") ;;
     opencode)
-      CMD=(opencode run --dir "$CWD")
+      # `opencode run --dir` is gone in opencode v2.x; it exits 1 printing
+      # usage. run_one already cd's into $CWD, so the working directory is
+      # correct without the flag.
+      CMD=(opencode run)
       [[ -n "$OPENCODE_MODEL" ]] && CMD+=(-m "$OPENCODE_MODEL")
       CMD+=("$AGENT_PROMPT") ;;
-    omp-gpt6-sol)
-      CMD=(omp -p --mode text --model "$OMP_GPT6_SOL_MODEL" --thinking "$OMP_GPT6_SOL_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
-      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
-      CMD+=("$AGENT_PROMPT") ;;
-    omp-gpt6-terra)
-      CMD=(omp -p --mode text --model "$OMP_GPT6_TERRA_MODEL" --thinking "$OMP_GPT6_TERRA_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
-      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
-      CMD+=("$AGENT_PROMPT") ;;
-    omp-gpt6-luna)
-      CMD=(omp -p --mode text --model "$OMP_GPT6_LUNA_MODEL" --thinking "$OMP_GPT6_LUNA_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
-      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
-      CMD+=("$AGENT_PROMPT") ;;
-    omp-gemini38)
-      CMD=(omp -p --mode text --model "$OMP_GEMINI_MODEL" --thinking "$OMP_GEMINI_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
-      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
-      CMD+=("$AGENT_PROMPT") ;;
-    omp-cursor-grok46)
-      CMD=(omp -p --mode text --model "$OMP_CURSOR_GROK_MODEL" --thinking "$OMP_CURSOR_GROK_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
-      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
-      CMD+=("$AGENT_PROMPT") ;;
-    omp-muse-spark)
-      CMD=(omp -p --mode text --model "$OMP_MUSE_SPARK_MODEL" --thinking "$OMP_MUSE_SPARK_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
-      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
-      CMD+=("$AGENT_PROMPT") ;;
-    omp-nemotron-3-ultra)
-      CMD=(omp -p --mode text --model "$OMP_NEMOTRON_3_ULTRA_MODEL" --thinking "$OMP_NEMOTRON_3_ULTRA_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
-      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
-      CMD+=("$AGENT_PROMPT") ;;
-    omp-glm53-flash)
-      CMD=(omp -p --mode text --model "$OMP_GLM53_FLASH_MODEL" --thinking "$OMP_GLM53_FLASH_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
-      [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
-      CMD+=("$AGENT_PROMPT") ;;
-    omp-ling)
-      CMD=(omp -p --mode text --model "$OMP_LING_MODEL" --thinking "$OMP_LING_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
+    omp-*)
+      # Anchor id -> pin variable is mechanical: uppercase, '-' becomes '_',
+      # suffix _MODEL / _THINKING. asserted at startup so a renamed id fails
+      # loudly there instead of running with an empty --model here.
+      stem="$(printf '%s' "$agent" | tr '[:lower:]-' '[:upper:]_')"
+      eval "model=\"\${${stem}_MODEL:-}\""
+      eval "thinking=\"\${${stem}_THINKING:-}\""
+      if [[ -z "$model" || -z "$thinking" ]]; then
+        echo "No model pin for $agent" >&2
+        return 2
+      fi
+      CMD=(omp -p --mode text --model "$model" --thinking "$thinking" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$AGENT_PROMPT") ;;
     *) return 2 ;;

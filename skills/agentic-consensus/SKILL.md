@@ -7,53 +7,65 @@ description: Run a prompt across a default panel of agent CLIs and OMP models us
 
 Use this skill when the user wants multiple independent model/agent opinions: "consensus", "ask several agents", "run this by Devin/Claude/Codex/Cursor/opencode", "model panel", "multi-agent review", "planning review", or "code review across models".
 
-The skill bundles a script:
+The skill bundles two scripts:
 
 ```text
-skill://agentic-consensus/agentic-consensus-runner.sh
+skill://agentic-consensus/agentic-consensus-runner.sh      # run a panel
+skill://agentic-consensus/agentic-consensus-model-probe.sh  # verify the pins
 ```
 
-Use the script instead of hand-assembling commands unless the user explicitly requests a one-off command. The script handles panel selection, model overrides, parallel execution, output capture, and a manifest.
+Use the runner instead of hand-assembling commands unless the user explicitly requests a one-off command. It handles panel selection, model overrides, parallel execution, output capture, and a manifest.
+
+Every pinned OMP model in the panel was identity-verified with the probe script on 2026-10-03. Run the probe before trusting a panel result, and after any edit to the runner's model list:
+
+```bash
+skill://agentic-consensus/agentic-consensus-model-probe.sh            # default panel
+skill://agentic-consensus/agentic-consensus-model-probe.sh --all      # every anchor
+```
 
 ## Default Panel
 
-The default panel is:
+The default panel is 11 members, all verified live with exact served-model
+identity:
 
 1. `codex` CLI with its configured default model.
 2. Devin CLI/API with its configured default model/agent (currently free-tier `swe-1-6-slow`; lowest-capability route but free, so it still adds an independent opinion).
 3. `claude` CLI pinned to `opus` (`--model opus`).
-4. Cursor `agent` CLI with its configured default model.
-5. `opencode` CLI with its configured default model.
-6. OMP `openai-codex/gpt-6-sol` with `--thinking medium`.
-7. OMP `openai-codex/gpt-6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-6 tier (weak long-context recall).
-8. OMP `google-antigravity/gemini-3.8-flash` with `--thinking high`.
-9. OMP `cursor/cursor-grok-4.6-high` with `--thinking high`.
-10. OMP `opencode-zen/muse-spark-1.3-contributor-free` with `--thinking high`.
-11. OMP `opencode-zen/nemotron-3-ultra-free` with `--thinking high`.
-12. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
-13. OMP `opencode-zen/ling-3.0-flash-fin-free` with `--thinking high`.
+4. `opencode` CLI with its configured default model.
+5. OMP `openai-codex/gpt-6.1-sol` with `--thinking xhigh` — the flagship.
+6. OMP `openai-codex/gpt-6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-6 tier (weak long-context recall).
+7. OMP `google-antigravity/gemini-3.8-flash` with `--thinking high`.
+8. OMP `opencode-go/space-bunny-free` with `--thinking high` — 1M context, 524K output.
+9. OMP `opencode-go/muse-spark-1.3-contributor` with `--thinking high`.
+10. OMP `opencode-go/qwen3.8-max` with `--thinking high`.
+11. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
 
 `claude` is in the default panel, pinned to `opus`. `fable` is request-only: pass `--claude-model fable` when the user explicitly asks for it — never in the default panel.
 
 External CLIs intentionally use their default model unless the user asks for a model override. OMP entries are pinned because they are the stable built-in comparison anchors.
 
-### GPT-6 tier ladder
+`cursor` (the Cursor `agent` CLI) is supported but **not** in the default panel: it is quota-gated and fails with `ActionRequiredError: You've hit your usage limit`. Add it with `--include ...,cursor` when the account has Agent usage left.
 
-The three GPT-6 tiers are separate models on the same generation, priced per tier:
+### GPT tier ladder
+
+The GPT tiers are separate models across two generations, priced per tier:
 
 | id | model | default thinking | role |
 | --- | --- | --- | --- |
-| `omp-gpt6-sol` | `openai-codex/gpt-6-sol` | `medium` | flagship; hardest reasoning |
-| `omp-gpt6-terra` | `openai-codex/gpt-6-terra` | `xhigh` | balanced; GPT-5.5-class at lower cost |
-| `omp-gpt6-luna` | `openai-codex/gpt-6-luna` | `max` | fastest/cheapest; weak long-context recall |
+| `omp-gpt61-sol` | `openai-codex/gpt-6.1-sol` | `xhigh` | flagship; hardest reasoning |
+| `omp-gpt6-sol` | `openai-codex/gpt-6-sol` | `medium` | previous flagship; still current-generation |
+| `omp-gpt6-astra` | `openai-codex/gpt-6-astra` | `high` | balanced workhorse |
+| `omp-gpt6-luna` | `openai-codex/gpt-6-luna` | `max` | cost champion; fastest/cheapest |
 
-Sol is the strongest, Terra is the everyday workhorse, Luna is the cost champion. Sol and Luna are in the default panel; add Terra for the full GPT-6 sub-panel on the hardest problems:
+`omp-gpt61-sol` and `omp-gpt6-luna` are in the default panel. Add Astra for the full GPT sub-panel on the hardest problems:
 
 ```bash
 skill://agentic-consensus/agentic-consensus-runner.sh \
-  --include omp-gpt6-sol,omp-gpt6-terra,omp-gpt6-luna \
+  --include omp-gpt61-sol,omp-gpt6-astra,omp-gpt6-luna \
   --prompt-file .agentic-consensus/prompt.md
 ```
+
+`omp-gpt6-sol` is kept as a supported id because in-flight `/goal` files pass it in `--include`; it is no longer the default flagship.
 
 Supported runner ids:
 
@@ -61,18 +73,70 @@ Supported runner ids:
 codex
 devin
 claude
-cursor
+cursor          (quota-gated; not default)
 opencode
+omp-gpt61-sol   (default)
 omp-gpt6-sol
-omp-gpt6-terra
-omp-gpt6-luna
-omp-gemini38
-omp-cursor-grok46
-omp-muse-spark
-omp-nemotron-3-ultra
-omp-glm53-flash
-omp-ling
+omp-gpt6-astra
+omp-gpt6-luna   (default)
+omp-gemini38    (default)
+omp-claude-opus46
+omp-space-bunny (default)
+omp-muse-spark  (default)
+omp-qwen38max   (default)
+omp-glm53-flash (default)
+omp-grok47
+omp-deepseek-v4-pro
+omp-kimi-k3
+omp-minimax-m3
 ```
+
+### Retired ids
+
+These were removed on 2026-10-03. Do not reintroduce them; re-probe first if
+you think one is back. Full evidence in
+`docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md`.
+
+| retired id | was pinned to | why |
+| --- | --- | --- |
+| `omp-gpt6-terra` | `openai-codex/gpt-6-terra` | retired upstream; omp **silently** fuzzy-matched it to `gpt-5.6-terra` and exited 0 |
+| `omp-cursor-grok46` | `cursor/cursor-grok-4.6-high` | `429 Cursor RATE_LIMITED_CHANGEABLE: Named models unavailable: Free plans can only use Auto` |
+| `omp-nemotron-3-ultra` | `opencode-zen/nemotron-3-ultra-free` | `403 OpenCode's free tier can only be used from within OpenCode` |
+| `omp-ling` | `opencode-zen/ling-3.0-flash-fin-free` | same `403` free-tier refusal |
+
+The whole `opencode-zen/*-free` tier is unusable from OMP with that 403. The
+`opencode-go/*` equivalents serve the same model families and are verified, so
+the default panel routes through `opencode-go`. Use `omp-grok47`
+(`opencode-go/grok-4.7`) when you want an xAI-family voice; the `cursor/*`
+provider cannot name models at all on a free plan.
+
+## Anchor Health
+
+Pinned model ids rot. A retirement is invisible in `--mode text`: the run
+exits 0 with plausible prose, so a stale pin reads as a working panelist while
+quietly serving an older generation. `agentic-consensus-model-probe.sh` runs
+each anchor in `--mode json`, which reports the provider/model that actually
+served the turn, and grades it:
+
+| verdict | meaning |
+| --- | --- |
+| `OK` | exit 0, serving model == requested model, output contract met |
+| `MISROUTE` | exit 0 but a **different** model served the turn — the dangerous case |
+| `WRONG-ANSWER` | right model, failed the one-line output contract |
+| `DEAD` | non-zero exit: retired id, plan entitlement, 403/429 |
+| `TIMEOUT` | exceeded the hard deadline |
+
+The runner also self-checks at startup that every supported `omp-*` id maps to
+a non-empty pin, so a renamed anchor fails loudly instead of fuzzy-matching.
+
+Known failure domains, so a red row is diagnosable without re-probing:
+
+| surface | failure domain | recovery |
+| --- | --- | --- |
+| `cursor` (agent CLI) | account quota | buy Agent usage; not a code problem |
+| `cursor/*` via OMP | plan entitlement | free plan cannot name models at all |
+| `opencode-zen/*-free` via OMP | plan entitlement | use the `opencode-go` route |
+| `openai-codex`, `opencode-go`, `google-antigravity` | catalog retirement | re-probe, repin, commit |
 
 ## Verified CLI Invocation Contracts
 
@@ -192,6 +256,10 @@ Notes:
   without this, Cursor detects an interactive terminal and prompts for command
   approvals despite `--force`.
 - `--workspace` points Cursor at the review/planning root.
+- Quota-gated: with no Agent usage left this exits 1 with
+  `ActionRequiredError: You've hit your usage limit`. That is an account
+  condition, not a broken pin, which is why `cursor` is not in the default
+  panel.
 
 ### opencode CLI
 
@@ -204,7 +272,7 @@ opencode run [message..]
 Runner contract:
 
 ```bash
-opencode run --dir "$CWD" "$PROMPT"
+opencode run "$PROMPT"
 ```
 
 Optional model override:
@@ -217,6 +285,9 @@ Notes:
 
 - `opencode run` also supports `--format json`, `--agent`, `--variant`, and `--auto`.
 - The runner does not pass `--auto` by default; consensus should gather opinions, not mutate the workspace.
+- There is **no `--dir` flag** on opencode v2.x. Passing it makes the command
+  exit 1 printing usage text. The runner `cd`s into `$CWD` before invoking, so
+  the working directory is already correct.
 
 ### OMP CLI
 
@@ -229,39 +300,36 @@ omp -p --model MODEL --thinking LEVEL --no-session "PROMPT"
 Runner contracts:
 
 ```bash
-omp -p --mode text --model openai-codex/gpt-6-sol --thinking medium --no-session "$PROMPT"
+omp -p --mode text --model openai-codex/gpt-6.1-sol --thinking xhigh --no-session "$PROMPT"
+omp -p --mode text --model openai-codex/gpt-6-luna --thinking max --no-session "$PROMPT"
 omp -p --mode text --model google-antigravity/gemini-3.8-flash --thinking high --no-session "$PROMPT"
-omp -p --mode text --model cursor/cursor-grok-4.6-high --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-zen/muse-spark-1.3-contributor-free --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-zen/nemotron-3-ultra-free --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-go/space-bunny-free --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-go/muse-spark-1.3-contributor --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-go/qwen3.8-max --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/glm-5.3-flash --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-zen/ling-3.0-flash-fin-free --thinking high --no-session "$PROMPT"
 ```
 
 The runner also passes `--auto-approve` and `--max-time` to OMP so a tool call
 cannot block on an invisible approval prompt or run without a deadline.
 
-Optional overrides:
+Optional overrides — one `--<id-without-omp->-model` and
+`--<id-without-omp->-thinking` pair per anchor:
 
 ```bash
---omp-gpt6-sol-model MODEL
---omp-gpt6-sol-thinking LEVEL
---omp-gpt6-terra-model MODEL
---omp-gpt6-terra-thinking LEVEL
---omp-gpt6-luna-model MODEL
---omp-gpt6-luna-thinking LEVEL
---omp-gemini-model MODEL
---omp-gemini-thinking LEVEL
---omp-cursor-grok-model MODEL
---omp-cursor-grok-thinking LEVEL
---omp-muse-spark-model MODEL
---omp-muse-spark-thinking LEVEL
---omp-nemotron-3-ultra-model MODEL
---omp-nemotron-3-ultra-thinking LEVEL
---omp-glm53-flash-model MODEL
---omp-glm53-flash-thinking LEVEL
---omp-ling-model MODEL
---omp-ling-thinking LEVEL
+--omp-gpt61-sol-model MODEL      --omp-gpt61-sol-thinking LEVEL
+--omp-gpt6-sol-model MODEL       --omp-gpt6-sol-thinking LEVEL
+--omp-gpt6-astra-model MODEL     --omp-gpt6-astra-thinking LEVEL
+--omp-gpt6-luna-model MODEL      --omp-gpt6-luna-thinking LEVEL
+--omp-gemini38-model MODEL       --omp-gemini38-thinking LEVEL
+--omp-claude-opus46-model MODEL  --omp-claude-opus46-thinking LEVEL
+--omp-space-bunny-model MODEL    --omp-space-bunny-thinking LEVEL
+--omp-muse-spark-model MODEL     --omp-muse-spark-thinking LEVEL
+--omp-qwen38max-model MODEL      --omp-qwen38max-thinking LEVEL
+--omp-glm53-flash-model MODEL    --omp-glm53-flash-thinking LEVEL
+--omp-grok47-model MODEL         --omp-grok47-thinking LEVEL
+--omp-deepseek-v4-pro-model MODEL --omp-deepseek-v4-pro-thinking LEVEL
+--omp-kimi-k3-model MODEL        --omp-kimi-k3-thinking LEVEL
+--omp-minimax-m3-model MODEL     --omp-minimax-m3-thinking LEVEL
 --no-tools-omp
 ```
 
@@ -269,7 +337,11 @@ Notes:
 
 - Do not use `--no-tools` for OMP if the OMP agent needs to see skills; OMP only lists skills when the `read` tool is available.
 - Use `--no-tools-omp` for pure opinion prompts where tool use would be wasteful.
-- Model IDs are `provider/model` exactly as `omp models` lists them (e.g. `openai-codex/gpt-6-sol`, `opencode-zen/muse-spark-1.3-contributor-free`).
+- Model IDs are `provider/model` exactly as `omp models` lists them (e.g. `openai-codex/gpt-6.1-sol`, `opencode-go/muse-spark-1.3-contributor`).
+- `omp --model` **fuzzy-matches**. A retired id does not fail — it silently
+  resolves to the nearest older generation and exits 0. That is how
+  `gpt-6-terra` kept serving `gpt-5.6-terra`. Never trust a pin you have not
+  probed; use `--mode json` to see the serving model.
 
 ## Runner Usage
 
