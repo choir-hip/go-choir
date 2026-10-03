@@ -238,23 +238,23 @@ now:
     mints a record-native note, not a retired envelope);
     docs/current-architecture.md updated with the record-native invariant.
   source_ref: main@558afe86
-  deploy_identity: 'staging https://choir.news deployed_commit=4dbb4a5a; owner guest computer-03335285269bdba4f94377e56879f9e6 refreshed 2026-10-03 -> autoputer 4dbb4a5a (stranded-bound-rebind repair landed + deployed)'
+  deploy_identity: 'staging https://choir.news deployed_commit=ed406f45; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer ed406f45 (TerminalizeRun ActiveRunID clear deployed + re-proven)'
   next_action: >-
-    Delivery substrate fully landed + deployed (4dbb4a5a): boot-time outbox
-    ae47c8a4, desk-mint starvation ebfd2e98, restart-recast 39e924aa,
-    stranded-bound rebind c31bf43a. Desks dispatch, run, consume, commit
-    turns. The "no authoring act" boundary is resolved by the 2026-10-03
-    divergent panel + code verification: NOT model agency and NOT a 4th
-    delivery defect — (a) consumeIdleTextureTrigger masks any
-    non-ApplyTexture authored cell as "no act" and can pre-empt multi-cell
-    turns; (b) the probe's demanded bare choir.Ask is prompt-forbidden
-    (texture contract routes research via ApplyTexture{controls:
-    open_researcher}; Ask is only a bound-desk follow-up); (c) bare
-    choir.Ask("research") also store-rejects (research:<docID> not yet
-    minted). The finish-acceptance re-proof needs a doctrine choice of
-    instrument: rebind via Management Ask, via texture open_researcher
-    controls, or via deterministic in-store harness — see
-    docs/problems/s0m-desk-no-authoring-act-2026-10-03.md.
+    Stranded-bound rebind PROVEN end-to-end on staging (ed406f45):
+    texture ApplyTexture{open_researcher} -> control 3fbf9bb4 bound to
+    carrier cf8c0a9e -> probe cancelled mid-bind -> claim_released_pending
+    -> rebound_live_run to fresh carrier c55287d3 (correct agent/work).
+    Combined rebind landing: ae47c8a4 (boot outbox) + ebfd2e98 (starvation)
+    + 39e924aa (restart-recast) + c31bf43a (DeliveredAt unbind) +
+    ed406f45 (TerminalizeRun clears ActiveRunID). Remaining boundary: the
+    rebound carrier bound its control then COMPLETED without consuming it —
+    packet stayed pending, a second release freed it (consume-side defect,
+    separate from rebind); and consumeIdleTextureTrigger masks
+    non-ApplyTexture cells as "no act" (separate red defect). Finish legs:
+    (a) repair bound-but-unconsumed consume path; (b) fix the idle-consume
+    mask; (c) then mechanical resolve + dual-delivery absence per kind.
+    See docs/problems/s0m-freed-control-stale-activerunid-blocks-rebind-
+    2026-10-03.md (resolved) + s0m-desk-no-authoring-act-2026-10-03.md.
   candidate: main@558afe86
   conjecture:
     id: record-native-coupling
@@ -308,15 +308,16 @@ now:
     independent scorer (management) is a separate verdict, not required to
     mint the resolver's Resolve.
   blocker: >-
-    Delivery substrate fully landed + verified (ae47c8a4, ebfd2e98, 39e924aa,
-    c31bf43a — deployed 4dbb4a5a). The "no authoring act" blocker is resolved
-    as a contract split + mask, not model agency: consumeIdleTextureTrigger
-    masks non-ApplyTexture authored cells; a bare choir.Ask is prompt-forbidden
-    AND store-rejected (research:<docID> needs an open_researcher turn first).
-    Finish legs need a doctrine choice of re-proof instrument (Management Ask
-    vs texture open_researcher controls vs in-store harness) plus a separate
-    red fix for the consumeIdleTextureTrigger mask. See
-    docs/problems/s0m-desk-no-authoring-act-2026-10-03.md.
+    Rebind substrate proven on staging (ed406f45: freed packet rebinds a
+    fresh carrier). The live finish blocker is a CONSUME-side defect: the
+    rebound carrier c55287d3 bound its control then completed without
+    consuming it (packet stayed pending, second release freed it) — a
+    bound-but-unconsumed carrier is a separate defect from rebind. Plus the
+    consumeIdleTextureTrigger mask (any non-ApplyTexture authored cell reads
+    as "no act"; can pre-empt multi-cell turns). Mechanical resolve needs
+    the consume path to produce a producer_report; dual-delivery absence is
+    per-kind. See docs/problems/s0m-freed-control-stale-activerunid-blocks-
+    rebind-2026-10-03.md (resolution + residual).
 
 
 receipts:

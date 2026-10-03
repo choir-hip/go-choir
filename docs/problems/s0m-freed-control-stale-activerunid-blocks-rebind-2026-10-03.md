@@ -1,10 +1,10 @@
-# S0m finding: freed control re-strands — TerminalizeRun never clears agent.ActiveRunID
+# S0m finding: freed control re-strand — RESOLVED (TerminalizeRun clears ActiveRunID)
 
+**Status**: repaired, deployed, re-proven on staging.
 **Date observed**: 2026-10-03
 **Computer**: `computer-03335285269bdba4f94377e56879f9e6` (owner guest)
-**Deployed**: autoputer `4dbb4a5a`
-**Mutation class**: red candidate (lifecycle run/agent projection — protected
-surface)
+**Deployed**: autoputer `ed406f45` (the fix) — staging `/health` confirmed.
+**Mutation class**: red (lifecycle run/agent projection — protected surface).
 
 ## Symptom (probe `s0m-stranded-bound-rebind2-2026-10-03.json`)
 
@@ -111,3 +111,27 @@ correct repair — same "fix the write, not the read" reasoning as the
   propagation).
 - CI test that masks the bug: `lifecycle_control_injection_test.go:1044`
   (terminalizes `running`→`completed`, hits `replay.Completed` early-return).
+
+## Resolution (deployed + re-proven)
+
+`TerminalizeRun` now clears `agent.ActiveRunID` when the terminalizing run is
+the agent's live activation — folded into the same atomic commit batch
+(run+trajectory+event+receipt+agent). Commit `ed406f45`; deployed to staging.
+
+Deployed re-proof `docs/evidence/s0m-stranded-bound-rebind3-2026-10-03.json`:
+texture `ApplyTexture{open_researcher}` → control `3fbf9bb4` bound to carrier
+`cf8c0a9e` → probe cancelled it mid-bind → `claim_released_pending` →
+**`rebound_live_run`** to fresh carrier `c55287d3` (correct agent
+`research:9bdc8055`, work `e320d40d`). The freed packet rebound through the
+repaired path — the stranded-bound rebind is proven end-to-end.
+
+Regression `TestFreedLifecycleControlRebindsAfterCarrierCancel`
+(`lifecycle_control_rebind_cancel_test.go`): seed → mint carrier →
+`CancelRun` mid-bind → assert re-pend + `ActiveRunID=""` + fresh carrier
+minted. Fails on the old code (`ErrLifecycleInvalidTransition` → nil
+rebound), passes on the fix.
+
+Residual (next boundary, separate defect): the rebound carrier `c55287d3`
+bound the packet then **completed without consuming it** — the packet stayed
+`pending` and a second release freed it. A bound-but-unconsumed carrier is a
+delivery/consume defect, not a rebind defect; rebind is verified.
