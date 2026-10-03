@@ -138,6 +138,18 @@ discovery alone as repair.
 Most bug churn in this repo shares one cause: patching a symptom instead of
 fixing the substrate. Before you add code, run this check in order.
 
+
+**Review the traces before attributing behavior.** When debugging why an agent
+or desk did or didn't do something — chose `apply` over `open_researcher`,
+dropped a dispatch, ignored an instruction — read the run's actual ledger
+first: turn-commit reasons, emitted `controls[]`, bound `delivered_to_loop_id`,
+work items, and event order. Do not infer a model "chose not to" or "missed"
+an instruction from the absence of a downstream effect; latency, a starved
+mutex, a closed probe window, or a lost context surface all imitate
+disobedience. An instruction that *was* followed but committed late looks
+identical to one that was never heeded — only the trace distinguishes them.
+A behavior claim made without trace evidence is a hypothesis, not a finding;
+write it as a hypothesis in the problem doc until the ledger confirms it.
 **Classify substrate vs symptom.** A *substrate* problem lives in a foundational
 layer (concurrency model, message delivery, data persistence, runtime engine,
 provider interface, VM lifecycle, event bus). A *symptom* problem lives in code
