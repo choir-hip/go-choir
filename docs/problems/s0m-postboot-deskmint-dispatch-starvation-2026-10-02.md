@@ -102,3 +102,24 @@ The mint blocker is gone; a separate gap remains where a desk cell turn ends
 without routing the control plane. Probe `s0m-stranded-bound` still times out at
 "no control packet bound." Next: why a healthy desk-cell turn terminates without
 emitting `activate_control` (cell prompt/steering path, not the commit store).
+
+## Residual disambiguation (2026-10-03)
+
+Two distinct residuals now share the "no control bound" symptom. Separate them:
+
+1. **Steering (this probe's current blocker).** On `ffc400c2`, cell
+   `e9bdff26` ran WITH the lifecycle control overlay armed
+   (`lifecycle_work_item_id=4b5eb882`, `trajectory_id=ffc400c2`) yet emitted
+   `op:"apply"` with zero `controls[]` — it self-answered instead of opening
+   `open_researcher`. The affordance and the instruction both exist; the model
+   did not follow the steer. Both `s0m_stranded_bound` and `s0m_ask` probes
+   stall here. This is a desk-cell steering/faithfulness gap, not the dispatch
+   substrate.
+2. **Dispatch-obligation (the code defect this doc names).** The fresh-mint
+   resume watchdog `armFreshMintManagementResumeWatchdog` gates on
+   `isPersistentManagementAgentRun`, which is false for Texture desk cells
+   (`agentprofile.Texture`, agent id `texture:<doc>`). A desk-cell mint whose
+   `initial_dispatch` drops has NO re-drive — `e9bdff26` survived only because
+   the guest refresh triggered boot rewarm (`actor_reactivated_from_passivated`).
+   Next boundary: a dispatch watchdog for lifecycle-minted non-Management runs
+   (re-send `initial_dispatch`, not a Management recovery occurrence).
