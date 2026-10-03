@@ -237,18 +237,20 @@ now:
     (no desk prompt instructs a retired verb; engineering Message→management
     mints a record-native note, not a retired envelope);
     docs/current-architecture.md updated with the record-native invariant.
-  source_ref: main@c9180cd3
-  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 active epoch 1022 (crash-loop fixed, stable since 15:58 refresh)'
+  source_ref: main@558afe86
+  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 refreshed 2026-10-02 -> autoputer 558afe86 epoch 1025 (constructed-computer-version; owner-scoped vmctl refresh, not global deploy)'
   next_action: >-
-    Landed c9180cd3 (stranded-bound release at run terminalization +
-    regression). Finish-acceptance remaining: (1) the mechanical resolve on
-    report consume is not implemented — consume marks the report
-    incorporated but mints no Resolve, and issuer-independence forbids the
-    issuer resolving its own ask; a management-scorer resolve-derivation
-    path is required before this leg can pass; (2) deployed re-proof of the
-    c9180cd3 stranded-bound release once CI/deploy lands; (3)
-    dual-delivery absence per kind.
-  candidate: main@c9180cd3
+    Stranded-bound + mechanical-resolve deployed proofs are BLOCKED by a
+    substrate defect: fresh prompt-bar submits mint a live trajectory but never
+    mint the texture desk cell (no pending row, no control) - the
+    s0m-desk-run-dispatch-stall repair heals boot-time drops but NOT post-boot
+    mint-time initial_dispatch drops. See
+    docs/problems/s0m-postboot-deskmint-dispatch-starvation-2026-10-02.md.
+    In-store evidence for both fixes is green (MigrateActorWakeOutbox auto-healed
+    all 10 stranded wedges on 0bdcbf61 -> pending; mechanical resolve mints a
+    system:reducer resolve on report-consume). Deployed acceptance resumes once
+    the desk-mint dispatch path is repaired; then dual-delivery absence per kind.
+  candidate: main@558afe86
   conjecture:
     id: record-native-coupling
     status: active
