@@ -1,96 +1,119 @@
-# S0m finding: persistent-Management live-occurrence storm — third live-lock in the reconcile/redrive path
+# S0m finding: persistent-Management live-occurrence storm — substrate dispatch defect
 
 Written 2026-10-03. Mutation class: red (protected surface — persistent
-Management reconcile + lifecycle control re-drive).
+Management reconcile + lifecycle control re-drive + serialized Dolt engine).
 
 ## Symptom
 
-On guest `ebfd2e98` (staging), after the stranded-bound probe killed research
-carrier `d8a17dee`, the freed control `1ed83383` re-entered `pending`/unbound
-and stayed there for 12+ minutes (148 probe polls). During the same window the
-guest journal shows `persistent Management live occurrence received → bound
-run=cf5a70ca → terminal` repeating dozens of times across many trajectories
-(`07aece4`, `24693e8`, `91492b4`, `5242ca0`, `3fa254b`, `d6f1b0e`, `d8ccd11`…).
-The released research packet never re-bound; the desk re-drive is being
-consumed by a Management occurrence churn.
+On guest `ebfd2e98` (staging), after a VM refresh, the staging HTTP API returns
+502 for tens of minutes, one Dolt process sits ~43% CPU, and the journal shows
+`persistent Management live occurrence received → bound run=<resident> →
+terminal` repeating dozens of times across many distinct trajectories, with
+interleaved `redrive-N … deferrals=9,10 cause=defer unprocessed occurrence:
+Texture activation`. The stranded-bound probe's released control `1ed83383`
+released its claim back to `pending` (release works) but never re-bound inside
+the window — its re-drive is queued behind the herd.
 
-## Root-cause cluster (3 live-locks, one subsystem)
+## Root cause — verified in source (not hypothesized)
 
-This is the **third** live-lock recorded in the persistent-Management /
-lifecycle-control reconcile path:
+Three compounding substrate facts, each confirmed by reading the code:
 
-1. `886e5ce1` — *exhausted-recast live-lock*: a transient error returned by an
-   exhausted restart recast caused the dispatcher to re-deliver the reconcile
-   occurrence forever, saturating the guest and starving every other desk
-   reconcile. Fixed by returning clean so the occurrence is incorporated.
-2. `3b0a1ed2` + `b7f59cc9` — *reactivated-resident* and *producer-report
-   authority* live-locks: a stranded reactivated resident and an
-   `ErrEngineeringAssignmentInvalid` deferred forever, re-driving reconcile.
-3. **This** — *live-occurrence storm*: `bindTerminalRunOutcome` fires
-   `wakeUpdatedCoagent` for every freed control; the persistent-Management
-   branch keeps receiving+binding+terminalizing occurrences for the same
-   resident run without ever discharging the obligation that triggered them.
+1. **One serialized engine.** Every `DoltStore` query path takes
+   `engineMu.Lock()` (`dolt_store.go` throughout). It is *not* an overcautious
+   lock: the comment documents embedded-Dolt shared-buffer races on concurrent
+   queries (`dolt_store.go:62–66`). So a process-wide mutex is currently
+   **required for correctness**, and every write/occurrence holds it against
+   the HTTP API's reads.
 
-Common shape: a durable obligation is re-delivered by a re-drive that never
-reaches the state transition that discharges it, so the re-drive loops. Each
-prior fix returned a *terminal* verdict for one trigger class; the storm
-recurs on the next unhandled trigger class. This is a substrate defect — the
-re-drive loop has no convergence invariant ("each wake must either discharge
-the obligation, rebind it, or score it exhausted") — not three independent
-bugs.
+2. **Per-occurrence O(history) resolve.** `ResolvePersistentManagementLiveOccurrence`
+   (`management_controller.go:2942`) takes `managementReconcileMu`, then calls
+   `listPendingPersistentManagementLifecycleControls` **and**
+   `listPendingPersistentManagementDirectives`. Each delegates to
+   `ListAllPendingLifecycleUpdates` (`lifecycle.go:1987`) which calls
+   `ListPendingLifecycleUpdates` with `limit = maxInt` — an owner-wide
+   `ListJSONBodyFieldsByKindOwner` scan over `worker_update` (scanCap) followed
+   by a per-pending-row `GetCoagentSourcePacket`/`GetObject`. So **each**
+   `coagent_result` occurrence = owner-history scan + N point reads, under two
+   serializing mutexes. N obligations × O(history) serialized.
 
-## Mechanism refinement (2026-10-03)
+3. **Unbounded re-drive issuance.** `wakeUpdatedCoagent` emits one
+   `coagent_result` occurrence per freed packet (`bindTerminalRunOutcome`,
+   `research_checkpoint_fallback.go:57-59`), and `scheduleContinuation` mints a
+   durable `not_before` row per watchdog. On boot, the ~2009 stale continuations
+   plus N freed packets all fire at once. Deferred occurrences
+   (`ErrDeferUnprocessed`, "Texture activation") reschedule via `not_before`,
+   re-adding to the herd faster than drain — and `deferralBackoff` reportedly
+   uses a reset `attempts` counter (fixed ~500ms), not the defer_count, so no
+   exponential decay.
 
-Deeper read: each `persistent Management live occurrence received` line is a
-**distinct durable occurrence** (one per pending control/directive across many
-trajectories), not the same row redelivering — the `bound run=cf5a70ca` path
-returns clean (`nil, nil`) so those occurrences are consumed. The "storm" is
-therefore a **thundering-herd drain**: the post-boot backlog (~2009 re-armed
-deadline rows + N pending controls) fired its `wakeUpdatedCoagent` /
-`coagent_result` occurrences en masse; each wake runs
-`ResolvePersistentManagementLiveOccurrence`, which takes
-`managementReconcileMu` + the serialized Dolt `engineMu`, and does a full
-pending-list scan per occurrence. Compounding it, `redrive-N` deferrals
-(`defer unprocessed occurrence: Texture activation`) reschedule wakes with
-`not_before`, re-adding to the herd faster than it drains.
+This is the **third** live-lock family in the reconcile/redrive path after
+`886e5ce1` (exhausted-recast) and `3b0a1ed2`/`b7f59cc9`. Each prior fix returned
+a terminal verdict for ONE trigger class; the storm recurs on the next because
+the substrate has no convergence invariant.
 
-Observable blast radius: the staging API 502s under load (reads starve behind
-the serialized writes); the freed control `1ed83383` released its claim
-(release fix works) but its rebind is queued behind the herd, not deadlocked —
-that distinction matters. Whether any single obligation *loops* forever is
-unproven; what is proven is the re-drive issue rate exceeds the drain rate for
-10+ minutes, which is the convergence defect: no backpressure/cap on re-drive
-issuance vs. serialized Dolt throughput.
+## Consensus synthesis (divergent panel, 2026-10-03)
+
+Independent analyses by gpt-6-sol, gemini-3.8, gpt-6-terra, and claude-opus on
+`.agentic-consensus/agentic-consensus-20261002-233322` (raw outputs in
+`.agentic-consensus/mgmt-storm-*.out`). They converge on the mechanism above and
+generate ~30 option families across these dimensions:
+
+- **Where scheduling authority lives**: actor tape vs. durable obligation table
+  vs. a purpose-built dispatch queue vs. an external broker.
+- **Push vs. pull**: per-packet `coagent_result` occurrences vs. a
+  level-triggered per-desk drain ("doorbell, not identity").
+- **Granularity**: per-packet event vs. one bounded FIFO batch.
+- **Storage**: prove Dolt concurrency / keep `engineMu`+fairness / add a
+  versioned read projection / replace the store.
+- **Overload**: pace/coalesce, one-outstanding-wake gate, or explicit terminal
+  fate (`delivery_attempts_exhausted` generalized to a recovery budget).
+
+**Consensus sharpest proposal** (all four independently): the durable
+obligation table — not a content-hash re-scan — should be the wake authority.
+A `coagent_result` occurrence should be an O(1) doorbell, not an identity that
+must be re-matched by scanning all pending rows. Two concrete sub-moves get the
+broadest support:
+
+- **Identity-bearing occurrence + O(1) resolve.** Carry the canonical
+  `UpdateID`/dispatch key in the occurrence and fetch it by primary key
+  (`GetCoagentSourcePacket`), or index `(owner,computer,content_hash)` — either
+  removes the N+1 scan. (sol #4/#5, gemini #2, terra #4/#13, claude #7)
+- **Bounded drain gate + obligation discharge state.** At most one outstanding
+  wake per desk; a reconcile claims an indexed FIFO page and either discharges,
+  retries-on-state, or scores `delivery_attempts_exhausted` — never loops.
+  (sol #1/#3, gemini #3/#4, terra #5/#6/#7, claude #6/#14)
+
+**Dissent that matters:** gemini + claude warn that an O(1) lookup alone may
+only *accelerate the churn* — if bound runs still never consume/terminalize,
+faster resolve just spins faster. So the load fix and the
+discharge-convergence fix must land together: O(1) resolve AND a discharge
+invariant, not resolve alone. Claude also flags that the O(history) amplifier
+may be **terminal-row history**, not pending count — pruning/archival may be
+required, not just faster scans.
+
+**Hidden assumption to challenge (all four):** should Management reconcile be
+actor-occurrence-driven at all? A `sha256:` occurrence that must re-derive its
+obligation by scanning is a *second, competing state authority* alongside the
+durable pending table — the source of every salted-`#redrive-N` and unbind
+sweep. The durable table with a level trigger is the candidate replacement.
+
+## Next boundary (substrate, not per-trigger)
+
+Define the convergence invariant: **every pending obligation must, on
+processing, either bind, discharge, or score a bounded terminal fate — never
+loop a Management occurrence without changing obligation state, and never scan
+history to find it.** Candidate shape (panel consensus): a durable
+per-desk dispatch gate (`generation`/`draining`/`retry_at`) + indexed FIFO
+claim page + O(1) occurrence resolve + HTTP reads on a versioned projection so
+the writer can saturate without 502s. Boot quarantines stale continuations into
+a paced drain cursor rather than mass-firing.
 
 ## Evidence
 
-- Guest journal `go-choir-vmctl` 2026-10-03 01:55–02:20: repeating
-  `persistent Management live occurrence received/bound/terminal` for
-  `run=cf5a70ca`.
-- Trajectory `ffc400c2-d70e-58b3-b00c-c2a0917af6b9` (staging): control
-  `1ed83383` `disposition=pending`, `delivered_to_loop_id` cleared, never
-  re-bound; work item `00cccb50` (research) still `open`.
-- Probe evidence `docs/evidence/s0m-stranded-bound-2026-10-03.json`:
-  `carrier_cancelled` (200) → 148× `claim_released_pending` → timeout at
-  recover window, `final_update.disposition=pending`.
-
-## Correction
-
-Earlier commit `1e285a3e` attributed the bind failure to a "steering gap —
-the cell chose apply over open_researcher." The trace disproves that:
-`e9bdff26` turn seq 3 (`texture_turn_committed` 2026-10-03T01:52:30) reason =
-"atomically open a research desk to confirm that date"; `work_opened` minted
-`research:8764897c`; `control_queued` + `control_delivered` `1ed83383`. The
-instruction was not missed — the whole Ask→control→bind→deliver chain worked.
-The first probe's bind window simply closed before the (backlog-latent) turn
-landed. The residual is the rebind-after-release storm documented here.
-
-## Next boundary
-
-Stop patching the re-drive at the trigger level. Define a convergence
-invariant for the lifecycle-control re-drive: every freed/pending control
-obligation must, on wake, either (a) bind to a live carrier, (b) discharge
-(consumed/replied), or (c) score `delivery_attempts_exhausted` — never loop a
-Management occurrence without changing obligation state. A substrate-level
-fix owns this: an obligation-state-aware dispatcher, or a bounded re-drive
-budget per obligation, not another per-trigger terminal return.
+- Guest journal `go-choir-vmctl` 2026-10-03 ~01:55–02:20+.
+- Trajectory `ffc400c2-d70e-58b3-b00c-c2a0917af6b9` (staging).
+- Probe `docs/evidence/s0m-stranded-bound-2026-10-03.json` (carrier cancelled
+  → claim released → no rebind in window).
+- Code refs: `dolt_store.go:62`, `management_controller.go:1393,2942,3057`,
+  `lifecycle.go:1908,1987`, `research_checkpoint_fallback.go:26`,
+  `handler.go:472`.

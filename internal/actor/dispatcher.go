@@ -131,7 +131,10 @@ type KernelLog interface {
 	// back the just-recorded attempt, and bumps defer_count. Handler deferrals
 	// back off; they are waits for an out-of-band wake, not delivery failures.
 	// The returned defer_count bounds the wait (MaxDeferrals poisons it).
-	DeferUpdate(ctx context.Context, agentID, updateID string, notBefore time.Time) (int, error)
+	// notBeforeFor computes the next fire time from the post-increment
+	// defer_count, so escalation uses the monotonic defer counter — not the
+	// rolled-back delivery-attempt count that never grows across deferrals.
+	DeferUpdate(ctx context.Context, agentID, updateID string, notBeforeFor func(deferCount int) time.Time) (int, error)
 	// LoadSnapshot / SaveSnapshot persist the actor's compacted memory.
 	LoadSnapshot(ctx context.Context, agentID string) ([]byte, error)
 	SaveSnapshot(ctx context.Context, agentID string, memory []byte) error
@@ -377,8 +380,14 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		// the wait; a deferral that outlives MaxDeferrals is a live-lock and
 		// is poisoned rather than waited on forever.
 		if errors.Is(herr, ErrDeferUnprocessed) {
-			backoff := time.Now().UTC().Add(deferralBackoff(attempts))
-			n, derr := d.log.DeferUpdate(ctx, agentID, u.UpdateID, backoff)
+			// Escalate on the monotonic defer_count, not the delivery attempt:
+			// DeferUpdate rolls the attempt back, so `attempts` stays ~1 and
+			// would pin every deferral at the 500ms floor (the live-lock churn
+			// seen in `deferrals=N` that never backs off). Pass the backoff
+			// func so the log applies it to the post-increment defer_count.
+			n, derr := d.log.DeferUpdate(ctx, agentID, u.UpdateID, func(deferCount int) time.Time {
+				return time.Now().UTC().Add(deferralBackoff(deferCount))
+			})
 			if derr != nil {
 				log.Printf("dispatcher: defer %s/%s: %v", agentID, u.UpdateID, derr)
 				break
@@ -396,7 +405,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 				log.Printf("dispatcher: poison %s/%s after %d deferrals -> %s", agentID, u.UpdateID, n, d.opts.ErrorSink)
 				continue
 			}
-			log.Printf("dispatcher: deferred %s/%s until %s deferrals=%d cause=%v", agentID, u.UpdateID, backoff.Format(time.RFC3339), n, herr)
+			log.Printf("dispatcher: deferred %s/%s deferrals=%d cause=%v", agentID, u.UpdateID, n, herr)
 			break
 		}
 		if herr != nil {

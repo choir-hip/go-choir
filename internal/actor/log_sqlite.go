@@ -147,16 +147,26 @@ WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`, updateID, age
 // the poison (attempt) budget. But an unbounded deferral is the dispatcher
 // live-lock: defer_count bounds it. Returns the post-increment defer_count;
 // the dispatcher poisons when it exceeds MaxDeferrals.
-func (l *SQLiteLog) DeferUpdate(ctx context.Context, agentID, updateID string, notBefore time.Time) (int, error) {
+func (l *SQLiteLog) DeferUpdate(ctx context.Context, agentID, updateID string, notBeforeFor func(deferCount int) time.Time) (int, error) {
+	// Atomically roll back the attempt and bump defer_count, then read the
+	// post-increment counter so the backoff scales on it (not on the
+	// rolled-back delivery attempt, which never grows across deferrals).
 	_, err := l.db.ExecContext(ctx, `
-UPDATE actor_updates SET not_before = ?, attempts = MAX(attempts - 1, 0), defer_count = defer_count + 1
+UPDATE actor_updates SET attempts = MAX(attempts - 1, 0), defer_count = defer_count + 1
 WHERE update_id = ? AND to_agent_id = ? AND processed_at IS NULL`,
-		notBefore.UTC(), updateID, agentID)
+		updateID, agentID)
 	if err != nil {
 		return 0, err
 	}
 	var n int
 	if err := l.db.QueryRowContext(ctx, `SELECT defer_count FROM actor_updates WHERE update_id = ?`, updateID).Scan(&n); err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return 0, nil // already processed or absent
+	}
+	notBefore := notBeforeFor(n)
+	if _, err := l.db.ExecContext(ctx, `UPDATE actor_updates SET not_before = ? WHERE update_id = ? AND to_agent_id = ?`, notBefore.UTC(), updateID, agentID); err != nil {
 		return 0, err
 	}
 	return n, nil

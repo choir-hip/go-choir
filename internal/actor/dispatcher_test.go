@@ -345,8 +345,10 @@ func TestDispatcherDeferralBoundedByMaxDeferrals(t *testing.T) {
 	d.Notify()
 
 	// The deferral must be incorporated (poisoned) after MaxDeferrals, not
-	// redelivered forever.
-	deadline := time.Now().Add(3 * time.Second)
+	// redelivered forever. Backoff escalates on defer_count (500ms,1s,2s,4s…),
+	// so reaching defer_count>3 takes ~3.5s+; allow headroom over the old
+	// fixed-500ms timing.
+	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
 		_, processed, err := l.UpdateStatus(ctx, "agent-def", "def1")
 		if err == nil && processed {
