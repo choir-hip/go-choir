@@ -103,23 +103,28 @@ without routing the control plane. Probe `s0m-stranded-bound` still times out at
 "no control packet bound." Next: why a healthy desk-cell turn terminates without
 emitting `activate_control` (cell prompt/steering path, not the commit store).
 
-## Residual disambiguation (2026-10-03)
+## Residual disambiguation (2026-10-03) — CORRECTED
 
-Two distinct residuals now share the "no control bound" symptom. Separate them:
+An earlier read blamed a desk-cell "steering gap" (the cell chose `apply`
+over `open_researcher`). The trajectory ledger **disproves** that. On
+`ffc400c2`, cell `e9bdff26` committed `texture_turn` seq 3 at 01:52:30 with
+reason "atomically open a research desk to confirm that date" → `work_opened`
+minted `research:8764897c` → `control_queued` + `control_delivered` for
+`1ed83383`. The instruction was NOT missed; the full
+Ask→control→bind→deliver chain worked, just ~50 min after the submit under
+the post-boot backlog — after the first probe's bind window elapsed.
 
-1. **Steering (this probe's current blocker).** On `ffc400c2`, cell
-   `e9bdff26` ran WITH the lifecycle control overlay armed
-   (`lifecycle_work_item_id=4b5eb882`, `trajectory_id=ffc400c2`) yet emitted
-   `op:"apply"` with zero `controls[]` — it self-answered instead of opening
-   `open_researcher`. The affordance and the instruction both exist; the model
-   did not follow the steer. Both `s0m_stranded_bound` and `s0m_ask` probes
-   stall here. This is a desk-cell steering/faithfulness gap, not the dispatch
-   substrate.
-2. **Dispatch-obligation (the code defect this doc names).** The fresh-mint
-   resume watchdog `armFreshMintManagementResumeWatchdog` gates on
-   `isPersistentManagementAgentRun`, which is false for Texture desk cells
-   (`agentprofile.Texture`, agent id `texture:<doc>`). A desk-cell mint whose
-   `initial_dispatch` drops has NO re-drive — `e9bdff26` survived only because
-   the guest refresh triggered boot rewarm (`actor_reactivated_from_passivated`).
-   Next boundary: a dispatch watchdog for lifecycle-minted non-Management runs
-   (re-send `initial_dispatch`, not a Management recovery occurrence).
+The real residual is downstream and is a substrate defect, now its own doc:
+
+- **`docs/problems/s0m-management-live-occurrence-storm-2026-10-03.md`** —
+  after the probe killed carrier `d8a17dee`, the freed control `1ed83383`
+  released its claim back to `pending` (the c9180cd3 release works) but never
+  re-bound: the persistent-Management re-drive is in a live-occurrence storm
+  across many trajectories. This is the third live-lock in the
+  Management/lifecycle reconcile path — a substrate convergence defect, not a
+  per-trigger fix.
+
+The dispatch-obligation note below stands: the fresh-mint resume watchdog is
+still persistent-Management-only, so a dropped `initial_dispatch` on a
+lifecycle-minted Texture/Research desk cell has no re-drive (only boot rewarm
+caught `e9bdff26`). That is real but secondary to the storm.

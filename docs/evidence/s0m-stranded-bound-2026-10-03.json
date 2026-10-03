@@ -1,21 +1,921 @@
 {
   "probe": "s0m_stranded_bound",
   "computer": "computer-03335285269bdba4f94377e56879f9e6",
-  "marker": "s0m-strand-1790989345925",
-  "started_at": "2026-10-03T01:02:25.925Z",
+  "marker": "s0m-strand-1790992935684",
+  "started_at": "2026-10-03T02:02:15.684Z",
   "legs": [
     {
       "name": "prompt_bar_submit",
-      "ended_at": 1790989390993,
-      "wall_ms": 45068,
+      "ended_at": 1790992935684,
+      "wall_ms": 0,
       "ok": true,
       "trajectory": "ffc400c2-d70e-58b3-b00c-c2a0917af6b9",
-      "submitted": true
+      "existing": true
+    },
+    {
+      "name": "carrier_cancelled",
+      "ended_at": 1790992967235,
+      "wall_ms": 31551,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63",
+      "carrier_run_id": "d8a17dee-0dba-4443-a3fd-98fa0e1d96a2",
+      "carrier_state": "running",
+      "cancel_status": 200
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790992970442,
+      "wall_ms": 34758,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790992974387,
+      "wall_ms": 38703,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790992978473,
+      "wall_ms": 42789,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790992991884,
+      "wall_ms": 56200,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993005323,
+      "wall_ms": 69639,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993008788,
+      "wall_ms": 73104,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993012226,
+      "wall_ms": 76542,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993015729,
+      "wall_ms": 80045,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993019147,
+      "wall_ms": 83463,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993032773,
+      "wall_ms": 97089,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993036386,
+      "wall_ms": 100702,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993039980,
+      "wall_ms": 104296,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993043507,
+      "wall_ms": 107823,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993056936,
+      "wall_ms": 121252,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993063926,
+      "wall_ms": 128242,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993067610,
+      "wall_ms": 131926,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993071044,
+      "wall_ms": 135360,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993074521,
+      "wall_ms": 138837,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993078007,
+      "wall_ms": 142323,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993081492,
+      "wall_ms": 145808,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993084939,
+      "wall_ms": 149255,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993088427,
+      "wall_ms": 152743,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993092262,
+      "wall_ms": 156578,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993098115,
+      "wall_ms": 162431,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993101620,
+      "wall_ms": 165936,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993105085,
+      "wall_ms": 169401,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993108578,
+      "wall_ms": 172894,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993122112,
+      "wall_ms": 186428,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993135633,
+      "wall_ms": 199949,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993139707,
+      "wall_ms": 204023,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993143149,
+      "wall_ms": 207465,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993146995,
+      "wall_ms": 211311,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993160507,
+      "wall_ms": 224823,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993163905,
+      "wall_ms": 228221,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993167361,
+      "wall_ms": 231677,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993170820,
+      "wall_ms": 235136,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993174314,
+      "wall_ms": 238630,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993177816,
+      "wall_ms": 242132,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993181269,
+      "wall_ms": 245585,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993186702,
+      "wall_ms": 251018,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993190156,
+      "wall_ms": 254472,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993193621,
+      "wall_ms": 257937,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993197173,
+      "wall_ms": 261489,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993200650,
+      "wall_ms": 264966,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993204509,
+      "wall_ms": 268825,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993207955,
+      "wall_ms": 272271,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993211450,
+      "wall_ms": 275766,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993218678,
+      "wall_ms": 282994,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993232186,
+      "wall_ms": 296502,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993235673,
+      "wall_ms": 299989,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993239145,
+      "wall_ms": 303461,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993245220,
+      "wall_ms": 309536,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993248674,
+      "wall_ms": 312990,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993252150,
+      "wall_ms": 316466,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993255744,
+      "wall_ms": 320060,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993259548,
+      "wall_ms": 323864,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993263103,
+      "wall_ms": 327419,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993266626,
+      "wall_ms": 330942,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993270079,
+      "wall_ms": 334395,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993273526,
+      "wall_ms": 337842,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993277107,
+      "wall_ms": 341423,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993280784,
+      "wall_ms": 345100,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993284242,
+      "wall_ms": 348558,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993287718,
+      "wall_ms": 352034,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993291378,
+      "wall_ms": 355694,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993294836,
+      "wall_ms": 359152,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993298290,
+      "wall_ms": 362606,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993303873,
+      "wall_ms": 368189,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993307348,
+      "wall_ms": 371664,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993310825,
+      "wall_ms": 375141,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993314326,
+      "wall_ms": 378642,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993317759,
+      "wall_ms": 382075,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993321234,
+      "wall_ms": 385550,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993324829,
+      "wall_ms": 389145,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993330271,
+      "wall_ms": 394587,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993333779,
+      "wall_ms": 398095,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993337224,
+      "wall_ms": 401540,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993341290,
+      "wall_ms": 405606,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993344738,
+      "wall_ms": 409054,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993348191,
+      "wall_ms": 412507,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993353673,
+      "wall_ms": 417989,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993364851,
+      "wall_ms": 429167,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993374462,
+      "wall_ms": 438778,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993378005,
+      "wall_ms": 442321,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993381392,
+      "wall_ms": 445708,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993385135,
+      "wall_ms": 449451,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993388658,
+      "wall_ms": 452974,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993399105,
+      "wall_ms": 463421,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993402778,
+      "wall_ms": 467094,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993406449,
+      "wall_ms": 470765,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993410061,
+      "wall_ms": 474377,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993413540,
+      "wall_ms": 477856,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993417123,
+      "wall_ms": 481439,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993420666,
+      "wall_ms": 484982,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993430730,
+      "wall_ms": 495046,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993434293,
+      "wall_ms": 498609,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993439953,
+      "wall_ms": 504269,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993444168,
+      "wall_ms": 508484,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993447606,
+      "wall_ms": 511922,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993451535,
+      "wall_ms": 515851,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993455009,
+      "wall_ms": 519325,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993458495,
+      "wall_ms": 522811,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993462079,
+      "wall_ms": 526395,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993465603,
+      "wall_ms": 529919,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993471550,
+      "wall_ms": 535866,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993475085,
+      "wall_ms": 539401,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993478601,
+      "wall_ms": 542917,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993482351,
+      "wall_ms": 546667,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993486036,
+      "wall_ms": 550352,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993489657,
+      "wall_ms": 553973,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993494033,
+      "wall_ms": 558349,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993497547,
+      "wall_ms": 561863,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993501032,
+      "wall_ms": 565348,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993504583,
+      "wall_ms": 568899,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993508067,
+      "wall_ms": 572383,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993511642,
+      "wall_ms": 575958,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993516940,
+      "wall_ms": 581256,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993520493,
+      "wall_ms": 584809,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993524030,
+      "wall_ms": 588346,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993527515,
+      "wall_ms": 591831,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993531000,
+      "wall_ms": 595316,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993534514,
+      "wall_ms": 598830,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993538010,
+      "wall_ms": 602326,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993543690,
+      "wall_ms": 608006,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993547247,
+      "wall_ms": 611563,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993550760,
+      "wall_ms": 615076,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993554226,
+      "wall_ms": 618542,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993560616,
+      "wall_ms": 624932,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993564250,
+      "wall_ms": 628566,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993570099,
+      "wall_ms": 634415,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993583693,
+      "wall_ms": 648009,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993587516,
+      "wall_ms": 651832,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993590962,
+      "wall_ms": 655278,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993594351,
+      "wall_ms": 658667,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993597737,
+      "wall_ms": 662053,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993604960,
+      "wall_ms": 669276,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993608440,
+      "wall_ms": 672756,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993612397,
+      "wall_ms": 676713,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993622403,
+      "wall_ms": 686719,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993625818,
+      "wall_ms": 690134,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993632161,
+      "wall_ms": 696477,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993642587,
+      "wall_ms": 706903,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993656026,
+      "wall_ms": 720342,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993659642,
+      "wall_ms": 723958,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993663137,
+      "wall_ms": 727453,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993668708,
+      "wall_ms": 733024,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993672183,
+      "wall_ms": 736499,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1790993685753,
+      "wall_ms": 750069,
+      "update_id": "1ed83383-35a7-4603-a6eb-3c67e42add63"
     }
   ],
   "ok": false,
-  "failure": "no control packet bound to a live carrier within window — ask never reached research",
+  "failure": "stranded packet did not recover: final={\"disposition\":\"pending\"}",
   "trajectory_id": "ffc400c2-d70e-58b3-b00c-c2a0917af6b9",
-  "finished_at": "2026-10-03T01:28:11.873Z",
-  "wall_ms": 1545948
+  "final_update": {
+    "disposition": "pending"
+  },
+  "finished_at": "2026-10-03T02:14:49.808Z",
+  "wall_ms": 754124
 }
