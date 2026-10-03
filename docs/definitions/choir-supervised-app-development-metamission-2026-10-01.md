@@ -384,7 +384,7 @@ now:
     computer slice resumes when S0m lands. Station files under
     docs/definitions/choir-appdev-s*-2026-10-01.md.
   source_ref: main@0bddb11aa2d27694cb760f8aebda52c95ba4e44d
-  deploy_identity: 'staging https://choir.news deployed_commit=fd8b2973'
+  deploy_identity: 'staging https://choir.news deployed_commit=ed406f45 (repo head 65399d3e; 424141a7/65399d3e were docs-only, no deploy)'
   candidate:
     id: none
     state: none
@@ -464,11 +464,14 @@ now:
     filesystem, and a double resume duplicates RNG and key state. S3's
     invariants are the safety case, not optional polish.
   next_action: >-
-    S0a (read-only probes + boot/resume timeline instrumentation) under
-    docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md —
-    the live station. Problem-document each confirmed finding before any
-    fix. Station boundary: agentic-consensus + reporter + transition
-    receipt before S1 promotes.
+    S0m finish legs under docs/definitions/choir-appdev-s0m-record-native-
+    messaging-2026-10-01.md. Stranded-bound rebind is PROVEN on staging
+    (ed406f45): freed packet rebinds a fresh carrier. Open residual before
+    completion candidacy: bound carrier completes WITHOUT consuming its
+    delivered control (docs/problems/s0m-bound-carrier-completes-unconsumed-
+    2026-10-03.md) + consumeIdleTextureTrigger mask. S0b resumes after S0m
+    closure. Station boundary: divergent agentic-consensus + reporter +
+    transition receipt before the next station promotes.
 
 receipts: []
 ---
