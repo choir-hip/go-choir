@@ -238,18 +238,23 @@ now:
     mints a record-native note, not a retired envelope);
     docs/current-architecture.md updated with the record-native invariant.
   source_ref: main@558afe86
-  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 refreshed 2026-10-02 -> autoputer 558afe86 epoch 1025 (constructed-computer-version; owner-scoped vmctl refresh, not global deploy)'
+  deploy_identity: 'staging https://choir.news deployed_commit=4dbb4a5a; owner guest computer-03335285269bdba4f94377e56879f9e6 refreshed 2026-10-03 -> autoputer 4dbb4a5a (stranded-bound-rebind repair landed + deployed)'
   next_action: >-
-    Stranded-bound + mechanical-resolve deployed proofs are BLOCKED by a
-    substrate defect: fresh prompt-bar submits mint a live trajectory but never
-    mint the texture desk cell (no pending row, no control) - the
-    s0m-desk-run-dispatch-stall repair heals boot-time drops but NOT post-boot
-    mint-time initial_dispatch drops. See
-    docs/problems/s0m-postboot-deskmint-dispatch-starvation-2026-10-02.md.
-    In-store evidence for both fixes is green (MigrateActorWakeOutbox auto-healed
-    all 10 stranded wedges on 0bdcbf61 -> pending; mechanical resolve mints a
-    system:reducer resolve on report-consume). Deployed acceptance resumes once
-    the desk-mint dispatch path is repaired; then dual-delivery absence per kind.
+    Desk-mint dispatch is repaired end-to-end (boot-time outbox ae47c8a4 +
+    post-boot starvation ebfd2e98 + restart-recast 39e924aa) — desks now
+    dispatch and RUN on 4dbb4a5a (running_runs>0, fresh cells executing).
+    The stranded-bound rebind repair landed c31bf43a and is deployed
+    (DeliveredAt cleared on pure unbind so freed packets re-enter the
+    pending scan; union liveness oracle stops spurious frees; tri-state
+    claim fate settles completed carriers; replay.Completed suppresses
+    discharged-turn re-mints). In-store + agentcore + actorruntime suites
+    green. The remaining finish legs are all DESK AUTHORING (model
+    agency): the desk runs and consumes but does not emit choir.Ask /
+    choir.Resolve within the probe window. Deployed re-proof of the
+    rebind leg needs a desk-authored control to bind->kill->rebind; the
+    mechanical-resolve leg needs the desk to emit Ask then Resolve.
+    Steering the desk to author is the live boundary — see
+    docs/problems/s0m-desk-no-authoring-act-2026-10-03.md.
   candidate: main@558afe86
   conjecture:
     id: record-native-coupling
@@ -303,13 +308,17 @@ now:
     independent scorer (management) is a separate verdict, not required to
     mint the resolver's Resolve.
   blocker: >-
-    Resolve leg is model agency: texture has choir.Resolve but did not emit
-    it after consuming the reports — the desk must be steered to mint the
-    Resolve (or the round-trip drives a fresh trajectory on the deployed
-    fix). Residual: passivated runs (076f3379) don't self-re-drive —
-    ae47c8a4 covers pending only. Remaining finish legs: a texture desk
-    minting Resolve on an ask's record, deployed re-proof of the c9180cd3
-    stranded-bound release, dual-delivery absence per kind.
+    The delivery substrate is fully landed + verified (boot-time dispatch
+    outbox ae47c8a4, desk-mint starvation ebfd2e98, restart-recast 39e924aa,
+    stranded-bound rebind c31bf43a — all deployed on 4dbb4a5a). Desks now
+    dispatch, run, consume, and commit turns. The sole remaining blocker is
+    DESK AUTHORING (model agency): the texture desk completes turns with
+    "no authoring act" — does not emit choir.Ask / choir.Resolve /
+    choir.Note within the probe window. Finish legs: (a) confirm choir.Ask
+    reachability on the texture tool surface; (b) steer the desk to author
+    the act (yellow prompt change); (c) then re-run stranded-bound rebind
+    (kill->rebind) + mechanical resolve (Ask->Resolve) live. See
+    docs/problems/s0m-desk-no-authoring-act-2026-10-03.md.
 
 
 receipts:
