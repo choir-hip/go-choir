@@ -1,0 +1,20 @@
+{
+  "probe": "s0m_ask_acceptance",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "s0m-ask-1790992784765",
+  "started_at": "2026-10-03T01:59:44.768Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": 1790992913162,
+      "wall_ms": 128394,
+      "ok": false,
+      "status": 502,
+      "body": null
+    }
+  ],
+  "ok": false,
+  "failure": null,
+  "finished_at": "2026-10-03T02:01:53.162Z",
+  "wall_ms": 128394
+}
