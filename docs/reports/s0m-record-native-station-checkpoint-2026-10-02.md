@@ -105,15 +105,26 @@ re-attempted mint cannot double-submit. Verified on staging: submit
 `ffc400c2` minted and ran cell `e9bdff26`, which authored a turn on the
 coordination doc — where before the mint error'd and no cell existed.
 
-One residual remains, now named precisely: a minted desk cell that finishes
-its turn without emitting a control packet still strands the `Ask`, and the
-fresh-mint resume watchdog only covers persistent-Management runs — desk
-cells minted through the lifecycle activation path fall outside its arming
-predicate, so a dropped `initial_dispatch` has no re-drive. That is the next
-repair boundary.
+The full Ask->control->bind->deliver chain then proved out end to end on
+staging: the cell's turn reason read "atomically open a research desk to
+confirm that date," it minted `research:8764897c`, and control `1ed83383`
+queued and delivered. Cancelling that carrier released the claim back to
+pending — the stranded-bound release fix works.
+
+The remaining residual is a substrate defect, not a steering gap: when the
+freed control tried to re-bind, the persistent-Management desk was already in
+a live-occurrence storm — a thundering-herd drain of post-boot obligations
+fired en masse through the serialized Dolt engine, starving reads (staging
+API 502'd) and queuing the rebind behind hundreds of other wakes. This is the
+third live-lock family in the Management reconcile/redrive path; the fix is a
+convergence invariant on re-drive issuance vs. drain rate, a substrate repair
+named as the next boundary in
+docs/problems/s0m-management-live-occurrence-storm-2026-10-03.md.
 
 Receipts: fix `ebfd2e98` (deployed, guest refreshed); verification doc
-`d138ff54`; problem doc
-docs/problems/s0m-postboot-deskmint-dispatch-starvation-2026-10-02.md;
-evidence docs/evidence/s0m-stranded-bound-2026-10-03.json; trajectory
-ffc400c2-d70e-58b3-b00c-c2a0917af6b9, cell run e9bdff26.
+`d138ff54`; storm doc + clustering assessment `f3959a12`/`d07bcb4e`; problem
+docs docs/problems/s0m-postboot-deskmint-dispatch-starvation-2026-10-02.md and
+docs/problems/s0m-management-live-occurrence-storm-2026-10-03.md; evidence
+docs/evidence/s0m-stranded-bound-2026-10-03.json; trajectory
+ffc400c2-d70e-58b3-b00c-c2a0917af6b9, cell run e9bdff26, research carrier
+d8a17dee.
