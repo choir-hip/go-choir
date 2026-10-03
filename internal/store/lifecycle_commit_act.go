@@ -617,10 +617,59 @@ func (s *Store) commitLifecycleProducerReportAct(ctx context.Context, req types.
 		return types.LifecycleResult{}, err
 	}
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: packetObj.CanonicalID})
-	eventKind := types.LifecycleUpdateQueued
-	if lateEvidenceOnly {
-		eventKind = types.LifecycleUpdateLate
+
+	// Consume-marking for the carrier path: the bound lifecycle control that
+	// activated this carrier's work item is what the report consumed. Management
+	// marks delivered controls via QueueLifecycleUpdate's expectedConsumed batch
+	// and Texture via ApplyTextureTurn inbound dispositions, but a research
+	// carrier's CommitLifecycleAct has neither channel — without this the bound
+	// control stays pending, terminalize releases it, and no system:reducer
+	// resolve fires. Fold every bound pending control for the reported work
+	// item into this atomic commit so the carrier's report incorporates it.
+	var consumeObjects []objectgraph.Object
+	if !lateEvidenceOnly {
+		boundObjs, bindErr := s.listWorkerUpdateObjects(ctx, ownerID, computerID, req.CallerRunID)
+		if bindErr != nil {
+			return types.LifecycleResult{}, bindErr
+		}
+		for _, boundObj := range boundObjs {
+			control, decErr := decodeLifecycleObject[types.CoagentSourcePacket](boundObj)
+			if decErr != nil {
+				return types.LifecycleResult{}, decErr
+			}
+			if control.Direction != types.LifecyclePacketDirectionControl ||
+				control.Disposition != types.UpdatePending ||
+				strings.TrimSpace(control.DeliveredToRunID) != req.CallerRunID ||
+				strings.TrimSpace(control.TargetAgentID) != req.CallerAgentID ||
+				strings.TrimSpace(control.TargetWorkItemID) != spec.WorkItemID ||
+				strings.TrimSpace(control.TrajectoryID) != req.TrajectoryID {
+				continue
+			}
+			key := req.TrajectoryID + "\x00" + control.TargetAgentID + "\x00" + control.AgentID + "\x00" + control.ProducerUpdateID
+			storedObj, storedControl, lookErr := s.textureTurnUpdateObject(ctx, ownerID, computerID, key)
+			if lookErr != nil {
+				return types.LifecycleResult{}, lookErr
+			}
+			if storedControl.UpdateID != control.UpdateID || storedControl.DeliveredToRunID != req.CallerRunID ||
+				storedControl.Disposition != types.UpdatePending {
+				return types.LifecycleResult{}, ErrConcurrentStateChange
+			}
+			storedControl.Disposition = types.UpdateIncorporated
+			storedControl.DispositionRef = packet.UpdateID
+			storedControl.DispositionReason = "bound lifecycle control incorporated by carrier producer report"
+			storedControl.LifecycleVersion++
+			storedControl.ReducerSeq = seq
+			updatedObj, buildErr := lifecycleObject(ogKindWorkerUpdate, ownerID, computerID, key, storedControl,
+				lifecycleMetadata("update_id", storedControl.UpdateID, computerID, req.TrajectoryID, seq), storedObj.CreatedAt, now)
+			if buildErr != nil {
+				return types.LifecycleResult{}, buildErr
+			}
+			conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: storedObj.CanonicalID, Exists: true, ExpectedContentHash: storedObj.ContentHash})
+			consumeObjects = append(consumeObjects, updatedObj)
+		}
 	}
+
+	eventKind := types.LifecycleUpdateQueued
 	event := types.LifecycleEvent{
 		EventID: req.CommandID + ":1", OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID,
 		UpdateID: packet.UpdateID, Kind: eventKind, ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq,
@@ -636,6 +685,7 @@ func (s *Store) commitLifecycleProducerReportAct(ctx context.Context, req types.
 	if mechanicalRecordObj != nil {
 		objects = append(objects, *mechanicalRecordObj)
 	}
+	objects = append(objects, consumeObjects...)
 	if lateEvidenceOnly {
 		objects = append(objects, sequenceUpdated)
 	} else {
