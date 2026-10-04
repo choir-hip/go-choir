@@ -196,22 +196,20 @@ heresy_delta:
 now:
   status: working
   slice: >-
-    Live. Effect plane proven + host-service builder landed 2026-10-04
-    (commit 4b5255d1, deployed). Guest-side layering halves done 2026-10-04:
-    (1) ReleaseManifest carries base_image_manifest_digest + closure_digest;
-    Apply fails closed on base mismatch (NewWithBase wires the booted
-    guest-image-manifest path; commit 20880d75). (2) Pure-Go narchive
-    reader + GC-rooted data-disk store materializer landed
-    (internal/updater/closure.go, commit b68357a1): decodes the real
-    nix-store --export wire format, replays each object to a read-only
-    per-computer store via stage-then-atomic-rename; no nix binary needed
-    in the guest. Next: wire the materializer into Apply (closure replay +
-    private-store GC root) and the runtime-exec change so the guest
-    autoputer runs the applied release's binary — tracked in
-    docs/problems/s2-runtime-exec-still-baseline-2026-10-04.md (releases
-    never exec; ExecStart hard-execs the base binary).
-    source_ref: main@b68357a1
-    deploy_identity: 'staging https://choir.news deployed_commit=4b5255d1; builder + Go-effect proof + base-join + closure-materializer code live (guest binary unchanged until image rebuild)'
+    Live. Full layering mechanism landed end-to-end 2026-10-04, deployed
+    at df23219c: (1) base-join manifest (20880d75); (2) pure-Go narchive
+    reader + GC-rooted store materializer (b68357a1), wired into Apply
+    (a7052d2a); (3) guest runtime exec — autoputerRuntimeExec resolves
+    current/bin/autoputer and runs it in a mount namespace with an
+    overlayfs (updater private store upper over base /nix/store lower),
+    falling back to the base binary on any layering failure (df23219c,
+    DEPLOYED — verified overlay+exec works on Node B kernel); (4) producer —
+    buildPlatformUpdateOffer propagates the layering join into the release
+    manifest so an offer can carry closure.nar (f5460bdc). Remaining: the
+    deployed layering acceptance — drive a layered platform-update into a
+    disposable computer and observe the guest exec the release binary.
+    source_ref: main@f5460bdc
+    deploy_identity: 'staging https://choir.news deployed_commit=df23219c; layering exec image live (overlay+exec kernel-verified)'
   candidate:
     id: none
     state: none
@@ -279,14 +277,13 @@ now:
     frontend/state/event-head atomic join, or leaks a writable global store
     violates the updater trust boundary rather than providing a valid speedup.
   next_action: >-
-    Base-join + closure materializer landed 2026-10-04 (20880d75 + b68357a1).
-    Next is the runtime-exec slice (docs/problems/s2-runtime-exec-still-baseline):
-    wire MaterializeClosure into Apply so a layered release replays its nar
-    into the GC-rooted data-disk store, then change the guest autoputer exec
-    to run the applied release's binary from the private store (mount
-    namespace over /nix/store) instead of the base image — the layering
-    acceptance is a deployed proof that an applied app-layer change becomes
-    the running process, plus refusal on unresolved base.
+    Full layering mechanism landed + exec image deployed (df23219c, staging).
+    Next is the deployed layering acceptance (docs/problems/s2-runtime-exec-still-baseline):
+    on a disposable staging computer, mint a layered platform-update
+    (closure.nar carrying an app-layer binary + base_image_manifest_digest),
+    transport it in, apply, and observe the guest process exec the release
+    binary (store paths resolve through the overlay) — then a
+    deliberately-broken release rolls back to the prior/base binary.
 
 receipts: []
 ---
