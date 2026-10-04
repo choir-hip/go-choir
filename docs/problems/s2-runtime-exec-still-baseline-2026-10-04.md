@@ -101,3 +101,35 @@ Deployed: apply an app-layer release whose `bin/autoputer` reports a
 different version/build than the base; observe the restarted guest process
 exec the release binary (comm/exe link or a logged resolved-exec path),
 then a deliberately-broken release rolls back to the prior/base binary.
+
+## Deployed failure receipt (2026-10-04) — overlay exec fell back to base
+
+The `s2_layered_update_probe.mjs` acceptance ran a real layered apply on a
+disposable staging computer. The full chain — offer sign, push, stage,
+closure.nar replay into `$CHOIR_UPDATER_ROOT/store/<hash>-layerdir-work`,
+`layering-entrypoint` record (`za7slrais…/bin/autoputer`), `current` swap,
+guest restart, route projection — committed and promoted. **But the guest
+kept exec'ing the base binary:** `exec_resolved` =
+`/nix/store/9v7ps5br…-autoputer-0.1.0/bin/autoputer` (the immutable EROFS
+base), not the applied layerdir binary.
+
+Every layering guard passed on the post-apply disk — `release_bin` non-empty,
+executable, `priv_store` populated — so the failure is inside
+`unshare -m`/`mount -t overlay`/`exec` in the guest's systemd private
+mount namespace (`ReadWritePaths`/`InaccessiblePaths`). The same
+`unshare`+`mount -t overlay`+`exec` sequence reproduces cleanly on the host
+(EROFS lower + ext4 rw upper + the exact `dr-xr-xr-x` store upper), so it is
+a guest-only divergence whose stderr is untrappable from outside (no serial
+sink on disposable VMs; `journal_events` captures only unit lifecycle).
+
+**Fix decision:** make the exec degrade gracefully rather than wedging on
+the overlay. `autoputer` is a static Go binary — the store overlay exists
+only so a release can pull *new* `/nix/store` dep paths; a same-toolchain
+release needs none. The wrapper now (a) points
+`CHOIR_BASELINE_RELEASE_ROOT`/skills at the applied layerdir so the served
+frontend + any env-resolved assets come from the release, (b) tries the
+overlay exec, and (c) on overlay failure `exec`s the release binary directly
+with a logged reason. A release needing genuinely new closure deps still
+gets the full overlay path; a fallback-exec release reports its own
+`exec_resolved` store path, which the deployed acceptance reads as the
+layering receipt.
