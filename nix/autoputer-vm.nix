@@ -155,12 +155,28 @@ let
     fi
     if [ -n "$release_bin" ] && [ -x "$release_bin" ] && [ -d "$priv_store" ] && [ -n "$(ls -A "$priv_store" 2>/dev/null)" ]; then
       mkdir -p "$overlay_work" || true
+      # The release's own root (frontend, share, skills) is its layerdir —
+      # point the baseline root at it so the computer surface serves the
+      # new release even when the store overlay is not in effect. Keep the
+      # base skills root unless the release actually ships its own skills.
+      export CHOIR_BASELINE_RELEASE_ROOT="$(dirname "$(dirname "$release_bin")")"
+      if [ -d "$CHOIR_BASELINE_RELEASE_ROOT/share/go-choir/skills" ]; then
+        export RUNTIME_SKILLS_ROOT="$CHOIR_BASELINE_RELEASE_ROOT/share/go-choir/skills"
+      fi
       echo "go-choir-autoputer: layering release $release_bin over private store" >&2
       ${pkgs.util-linux}/bin/unshare -m --propagation private ${pkgs.runtimeShell} -c "
         ${pkgs.util-linux}/bin/mount -t overlay overlay -o lowerdir=/nix/store,upperdir='$priv_store',workdir='$overlay_work' /nix/store &&
         exec '$release_bin' \"\$@\"
-      " -- "$@" || \
-        echo "go-choir-autoputer: layering overlay failed; falling back to base release" >&2
+      " -- "$@" || {
+        # The overlay failed (private mount-ns semantics, or a guest kernel
+        # constraint). Fall back to exec'ing the release directly: autoputer
+        # is a static binary whose frontend/skills resolve through the
+        # release root env above, so same-toolchain releases run correctly
+        # without the store overlay. Log the specific stage so the journal
+        # carries why the overlay was skipped.
+        echo "go-choir-autoputer: store overlay unavailable; exec'ing release directly" >&2
+        exec "$release_bin" "$@"
+      }
     fi
     exec ${goChoirPackages.autoputer}/bin/autoputer "$@"
   '';
