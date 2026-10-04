@@ -164,6 +164,19 @@ let
         export RUNTIME_SKILLS_ROOT="$CHOIR_BASELINE_RELEASE_ROOT/share/go-choir/skills"
       fi
       echo "go-choir-autoputer: layering release $release_bin over private store" >&2
+      # Diagnostics: capture each layering stage's outcome to a durable file.
+      # The guest journal is not host-readable and disposables carry no serial
+      # sink, so this file is the only record of why the overlay failed.
+      diag="$CHOIR_UPDATER_ROOT/layering-diag.log"
+      {
+        echo "=== layering attempt $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true) ==="
+        echo "release_bin=$release_bin"
+        ${pkgs.util-linux}/bin/unshare -m --propagation private ${pkgs.runtimeShell} -c "
+          echo unshare_ok
+          ${pkgs.util-linux}/bin/mount -t overlay overlay -o lowerdir=/nix/store,upperdir='$priv_store',workdir='$overlay_work' /nix/store && echo mount_ok || echo mount_fail:\$?
+          [ -x '$release_bin' ] && echo exec_path_resolves || echo exec_path_missing
+        " -- "$@" 2>&1 || echo unshare_or_stage_failed:\$?
+      } > "$diag" 2>&1 || true
       ${pkgs.util-linux}/bin/unshare -m --propagation private ${pkgs.runtimeShell} -c "
         ${pkgs.util-linux}/bin/mount -t overlay overlay -o lowerdir=/nix/store,upperdir='$priv_store',workdir='$overlay_work' /nix/store &&
         exec '$release_bin' \"\$@\"
