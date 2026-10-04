@@ -220,7 +220,7 @@ boundaries:
       control path.
 
 now:
-  status: working
+  status: complete
   slice: >-
     RN0-RN4 all landed + deployed: note (ed9fa123/87549c17), report
     (758325af, deployed acceptance proven), resolve/disagreement +
@@ -232,33 +232,31 @@ now:
     opencode-go/deepseek-v4.1-flash@high on owner direction (258916d5 +
     live guest data.img edit, receipt
     docs/evidence/s0m-texture-model-swap-2026-10-02.md). Channel-mail-to-
-    texture:* reduce-time rejection landed b18f3baf (channelCast refuses
-    texture targets — closes the durable dead letter); prompt audit held
-    (no desk prompt instructs a retired verb; engineering Message→management
-    mints a record-native note, not a retired envelope);
+    texture:* reduce-time rejection landed b18f3baf; prompt audit held.
     docs/current-architecture.md updated with the record-native invariant.
-  source_ref: main@558afe86
-  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer d61c9b1b (stranded-bound release + consume-marking verified live 2026-10-03); idle-mask fix d20483e8 pushed, deploying'
+    S0m acceptance leg ask->report->resolve DEPLOYED-VERIFIED 2026-10-04
+    (trajectory 684ddcb1, docs/evidence/s0m-ask-acceptance-2026-10-04.json):
+    texture opened a researcher via ApplyTexture{open_researcher}, the bound
+    control woke research, the report returned bound_to_activation, texture
+    consumed it and applied the grounded UTC date, work settled.
+  source_ref: main@a4fcdb8d
+  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer d61c9b1b (acceptance-verified); mask fix d20483e8 + probe fix a4fcdb8d pushed, deploy blocked on node-b disk headroom'
   next_action: >-
-    Consume-marking is RESOLVED — the stranded-bound + `3fbf9bb4` boundary
-    closed by `d61c9b1b` (panel convergent verdict
-    agentic-consensus-20261003-190021): `commitLifecycleProducerReportAct`
-    marks the carrier's bound control `incorporated` in the same commit as
-    its report; `3fbf9bb4`'s report predated the fix (pre-fix evidence, not
-    a live gap). Verified live: 5 controls incorporated with reason
-    `"...by carrier producer report"`. The `consumeIdleTextureTrigger` mask
-    is FIXED (d20483e8): a cell staging a non-apply semantic act now records
-    `delegation_skipped` (honest "act off the doc"), not `no_worker_needed`;
-    the pending mutation survives so a follow-up ApplyTexture cell is not
-    pre-empted. Path-parity audit CLEAN: `QueueLifecycleUpdate`'s research
-    else-branch rejects ControlBindingID (lifecycle.go:3517) so it cannot
-    mint a bound control needing consume-marking — only management's path
-    does, already covered. Remaining: drive the ask->report->resolve
-    acceptance leg on staging (probe in flight, trajectory 91cd4f36).
-  candidate: main@558afe86
+    S0m station COMPLETE — all 4 finish acceptance actions evidence-covered.
+    Consume-marking resolved (d61c9b1b, panel agentic-consensus-20261003-
+    190021). Idle-mask fixed (d20483e8): non-apply acts record honest
+    delegation_skipped, pending mutation survives for follow-up ApplyTexture.
+    Path-parity audit CLEAN (lifecycle.go:3517 rejects ControlBindingID for
+    non-management producers — no un-marked bound-control path). Per-kind
+    cutover + dual-delivery-absence regression green. RESIDUAL (not an
+    acceptance blocker): node-b deploy disk headroom — 84G free vs ~90G
+    required; d20483e8/a4fcdb8d parked pending reclaim/rollback-ref decision
+    (docs/problems/node-b-deploy-disk-headroom-2026-10-04.md). Next station:
+    S0a reality boot timeline / next metamission gate.
+  candidate: main@a4fcdb8d
   conjecture:
     id: record-native-coupling
-    status: active
+    status: supported
     claim: >-
       Making the commitment record the sole authored act with delivery as
       its derived projection eliminates the silent-loss failure class on
@@ -327,6 +325,47 @@ now:
 
 
 receipts:
+
+  - id: s0m-ask-acceptance-2026-10-04
+    kind: deployed_acceptance
+    status: closed
+    closed_at: '2026-10-04T01:40:00Z'
+    boundary: >-
+      S0m finish acceptance action 1 — the texture->research->texture
+      record->packet->wake->consume->apply->settle chain, deployed-verified.
+    trajectory: 684ddcb1-3f65-5033-b23d-736fba71787c
+    doc_id: e73dd5ec-148d-581e-ac71-5e0e1148efbf
+    pushed_commits: [d20483e8, a4fcdb8d]
+    ci: >-
+      d20483e8 shard green (run 37164284057, cancelled on supersede);
+      a4fcdb8d run 37165170516 — code tests green, Deploy-to-Staging failed
+      on node-b disk headroom (infra, not code).
+    deploy: >-
+      Acceptance ran on deployed autoputer d61c9b1b (the chain mechanics
+      predate the two parked commits). d20483e8/a4fcdb8d are pushed+CI but
+      deploy-blocked on node-b disk headroom; see
+      docs/problems/node-b-deploy-disk-headroom-2026-10-04.md.
+    environment_identity: >-
+      https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6
+      serving autoputer d61c9b1b.
+    deployed_acceptance: >-
+      Prompt-bar task -> texture staged ApplyTexture{controls:[open_researcher]}
+      -> control_queued+control_delivered e236bd2c on work 6255cf09 ->
+      research report packets returned update_delivered bound_to_activation +
+      update_applied -> texture_turn_committed applied the grounded UTC date
+      (head revision bcc44317: "the current UTC date is 2026-10-04") ->
+      work_settled; a work-closure packet correctly update_rejected.
+      Evidence: docs/evidence/s0m-ask-acceptance-2026-10-04.json
+      (probe scripts/s0m_ask_acceptance_probe.mjs corrected a4fcdb8d).
+    heresy_delta: >-
+      repaired: consumeIdleTextureTrigger mislabelled any non-apply act as
+      no_worker_needed (d20483e8); probe drove retired-ish choir.Ask-to-
+      nonexistent-desk instead of the designed open_researcher (a4fcdb8d).
+      discovered: node-b deploy disk headroom is a standing blocker for all
+      main commits (docs/problems/node-b-deploy-disk-headroom-2026-10-04.md).
+    rollback: >-
+      git revert d20483e8 a4fcdb8d (label/probe only; no behavior the
+      acceptance depends on).
 
   - id: rn3cd-landing-2026-10-02
     kind: slice_landing

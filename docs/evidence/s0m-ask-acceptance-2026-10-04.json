@@ -1,0 +1,43 @@
+{
+  "probe": "s0m ask -> report -> resolve acceptance (open_researcher path)",
+  "date": "2026-10-04",
+  "environment": "staging https://choir.news",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "deployed_commit": "d61c9b1bd1c9fc5f88da148c9710b94a63dd182a",
+  "trajectory_id": "684ddcb1-3f65-5033-b23d-736fba71787c",
+  "doc_id": "e73dd5ec-148d-581e-ac71-5e0e1148efbf",
+  "head_revision_id": "bcc44317-dc32-51bc-8fc1-ad33f0e6d915",
+  "marker": "s0m-ask-1791073845083",
+  "instrument": "scripts/s0m_ask_acceptance_probe.mjs (corrected a4fcdb8d: open_researcher control, not choir.Ask to a nonexistent desk)",
+  "ok": true,
+  "legs": {
+    "ask": {
+      "proven": true,
+      "mechanism": "texture staged ApplyTexture{controls:[{open_researcher:true, packet:{kind:question}}]}",
+      "control_update_id": "e236bd2c-0ff5-4760-8629-dcc54edd5e5e",
+      "work_item_id": "6255cf09-8957-4fad-8dde-ef5e6d5a4987",
+      "events": ["work_opened (seq 3)", "control_queued (seq 4)", "control_delivered (seq 5)"]
+    },
+    "report": {
+      "proven": true,
+      "packets": [
+        "cell:5a05afab-4fee-4161-8e91-67c2e851eea0:call_epE5ehe32eCFFFZJacwzOYNG:report:tray-1:packet",
+        "cell:5a05afab-4fee-4161-8e91-67c2e851eea0:call_epE5ehe32eCFFFZJacwzOYNG:report:tray-2:packet"
+      ],
+      "events": ["update_queued+update_delivered bound_to_activation (seq 14-17)", "update_applied (seq 20)"]
+    },
+    "consume_apply": {
+      "proven": true,
+      "texture_turn_seq": 18,
+      "reason": "Replaces the interim probe line with the grounded result: the research desk's evidence_update reports the current UTC date/time as 2026-10-04T01:13:07Z, so the document now reports the UTC date 2026-10-04."
+    },
+    "resolve": {
+      "proven": true,
+      "mechanism": "work_settled mechanically on report application (seq 19)",
+      "note": "update_rejected (seq 21) correctly dropped a work-closure metadata packet (work_disposition=completed) — audit-only reject, not doc content."
+    }
+  },
+  "doc_head_content": "Acceptance probe s0m-ask-1791073845083: the current UTC date is 2026-10-04 (UTC), per the research desk's report at 2026-10-04T01:13:07Z.",
+  "proves": "record->packet->wake->consume->apply->settle works end-to-end on deployed staging for texture->research->texture (the direction that was broken), satisfying S0m finish acceptance action 1.",
+  "first_attempt_note": "A first probe run (trajectory 91cd4f36) instructed choir.Ask('research',...) — wrong verb shape; texture correctly recorded no_worker_needed since Ask queries an already-bound desk. Probe corrected to drive the designed open_researcher control."
+}
