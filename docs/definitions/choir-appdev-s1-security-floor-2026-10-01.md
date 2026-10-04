@@ -283,6 +283,13 @@ tap-sourced discriminator.
    - Delete the dead `-o lo -j MASQUERADE` rules (0 packets ever; misleading).
    - Guest->internet egress stays open in S1a (DNS/NTP/resolution paths not
      fully resolved; S1's recording-proxy default-deny owns egress policy).
+   - Reconcile: the drop/anti-spoof set applies to **existing** taps at
+     service start (reconcile pass per tap device), not only on new-tap
+     create — otherwise already-running guests stay open until reboot.
+   - RemoteAddr evidence leg (cheap, lands first): log RemoteAddr on one
+     host service for one guest-originated request to confirm the
+     loopback-leg claim (S0a `x-choir-remote-addr` trace already recorded
+     `SRC=10.200.207.2` post-DNAT; this verifies it at the socket layer).
    - The NixOS `networking.firewall.filterForward` flag is NOT used — it
      would kill guest->internet too; vmmanager emits the drops directly.
    - Cleanup: stale `vm-vm-*-tap` iptables rules for deleted devices are
@@ -295,6 +302,10 @@ tap-sourced discriminator.
      capabilities (keep). The `X-Internal-Caller` host-read bypass and the
      platform-update mint become **loopback-only** (RemoteAddr must be
      `127.0.0.1`); header alone can no longer satisfy them.
+     The guest self-dev corpusd mint (platform-control calls a guest's own
+     self-development run may issue) stays a credentialed guest operation,
+     not the bypass: bound to the calling computer's capability, never to
+     `X-Internal-Caller`.
    - **:8083 vmctl** — `isInternalCaller` tightens to loopback RemoteAddr
      **except** a guest-scoped route family: the four ComputerVersion
      endpoints (`computer-version-inputs/resolve`,
