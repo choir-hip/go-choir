@@ -99,6 +99,75 @@ func TestUpdaterAppliesIdempotentlyAndRestoresPriorHealthyRelease(t *testing.T) 
 	}
 }
 
+func TestUpdaterRefusesApplyWhenReleaseBaseDoesNotMatchBooted(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+
+	// Booted base image manifest (the running guest's choir-guest-image-v1).
+	baseDir := t.TempDir()
+	baseManifestPath := filepath.Join(baseDir, "guest-image-manifest.json")
+	if err := os.WriteFile(baseManifestPath, []byte(`{"schema":"choir-guest-image-v1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bootedDigest, err := DigestFile(baseManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	engine, err := NewWithBase(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{},
+		testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}},
+		baseManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "operation-base", "idem-base", "layered release")
+	// Declare a base digest that does not match the booted base.
+	request.Manifest.BaseImageManifestDigest = strings.Repeat("0", 64)
+	request.Manifest.ClosureDigest = strings.Repeat("1", 64)
+	if err := refinalizeRequest(&request); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := engine.Apply(context.Background(), request)
+	if err == nil {
+		t.Fatalf("apply succeeded against mismatched base: %+v", result)
+	}
+	if !strings.Contains(err.Error(), "does not match booted base") {
+		t.Fatalf("unexpected refusal error: %v", err)
+	}
+
+	// A release declaring the matching booted base applies.
+	matching := updaterRequestFixture(t, root, "computer-test", "realization-test", "operation-base-ok", "idem-base-ok", "layered release")
+	matching.Manifest.BaseImageManifestDigest = bootedDigest
+	if err := refinalizeRequest(&matching); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Apply(context.Background(), matching); err != nil {
+		t.Fatalf("matching-base apply refused: %v", err)
+	}
+}
+
+// refinalizeRequest recomputes the manifest content digest and request
+// commitment after mutating manifest fields, mirroring how a producer signs.
+func refinalizeRequest(request *ApplyRequest) error {
+	finalized, err := FinalizeManifest(request.Manifest)
+	if err != nil {
+		return err
+	}
+	request.Manifest = finalized
+	commitment, err := computeApplyRequestCommitment(*request)
+	if err != nil {
+		return err
+	}
+	request.RequestCommitment = commitment
+	return nil
+}
+
 type processRestartManager struct {
 	root    string
 	output  string

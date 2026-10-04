@@ -54,7 +54,7 @@ func main() {
 	if err != nil {
 		fatal("configure guest signer: %v", err)
 	}
-	engine, err := updater.New(filepath.Clean(root), computerID, realizationID, updater.RestartRequestManager{Path: restartRequestPath, RecoveryPath: recoveryRequestPath, CleanupPath: cleanupRequestPath, PrepareURL: restartPrepareURL}, updater.HTTPHealthProber{URL: healthURL}, guestSigner)
+	engine, err := updater.NewWithBase(filepath.Clean(root), computerID, realizationID, updater.RestartRequestManager{Path: restartRequestPath, RecoveryPath: recoveryRequestPath, CleanupPath: cleanupRequestPath, PrepareURL: restartPrepareURL}, updater.HTTPHealthProber{URL: healthURL}, guestSigner, guestImageManifestPath)
 	if err != nil {
 		fatal("initialize: %v", err)
 	}

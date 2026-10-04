@@ -50,6 +50,16 @@ type ReleaseManifest struct {
 	EventSchemaVersion uint64         `json:"event_schema_version"`
 	ReducerVersion     uint64         `json:"reducer_version"`
 	Marker             string         `json:"marker"`
+	// BaseImageManifestDigest is the sha256 of the booted guest base image's
+	// choir-guest-image-v1 manifest the app-layer closure resolves against.
+	// When present, Apply refuses before mutation if it does not equal the
+	// actually booted base's digest (base-resolution fail-closed). Empty
+	// keeps the file-release baseline path (no base join yet).
+	BaseImageManifestDigest string         `json:"base_image_manifest_digest,omitempty"`
+	// ClosureDigest is the sha256 of the app-layer narchive (nix-store
+	// --export) carrying the base-absent store paths. Set when the release
+	// is a layered app-layer release rather than a plain file release.
+	ClosureDigest      string         `json:"closure_digest,omitempty"`
 	Files              []ManifestFile `json:"files"`
 	ContentDigest      string         `json:"content_digest"`
 }
@@ -106,10 +116,24 @@ type Updater struct {
 	service       ServiceManager
 	health        HealthProber
 	signer        ReceiptSigner
+	// guestImageManifestPath is the booted base image's choir-guest-image-v1
+	// manifest. Set when the updater must enforce the app-layer base join.
+	guestImageManifestPath string
 	now           func() time.Time
 }
 
 func New(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner) (*Updater, error) {
+	return newUpdater(root, computerID, realizationID, service, health, signer, "")
+}
+
+// NewWithBase wires the booted base image manifest path so Apply can enforce
+// the app-layer base join (fail-closed when a release's declared base digest
+// differs from the booted base's).
+func NewWithBase(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner, guestImageManifestPath string) (*Updater, error) {
+	return newUpdater(root, computerID, realizationID, service, health, signer, guestImageManifestPath)
+}
+
+func newUpdater(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner, guestImageManifestPath string) (*Updater, error) {
 	root = filepath.Clean(root)
 	if root == "." || !filepath.IsAbs(root) || strings.TrimSpace(computerID) == "" || strings.TrimSpace(realizationID) == "" || service == nil || health == nil || signer == nil {
 		return nil, fmt.Errorf("updater: complete absolute root, identity, service, health probe, and isolated guest-core signer are required")
@@ -119,7 +143,7 @@ func New(root, computerID, realizationID string, service ServiceManager, health 
 			return nil, fmt.Errorf("updater: create state: %w", err)
 		}
 	}
-	return &Updater{root: root, computerID: computerID, realizationID: realizationID, service: service, health: health, signer: signer, now: func() time.Time { return time.Now().UTC() }}, nil
+	return &Updater{root: root, computerID: computerID, realizationID: realizationID, service: service, health: health, signer: signer, guestImageManifestPath: guestImageManifestPath, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
 func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult, error) {
@@ -167,6 +191,21 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			return journal.Result, errors.New(journal.Failure)
 		}
 		return journal.Result, nil
+	}
+
+	// App-layer base join: a layered release declares the base image manifest
+	// digest its closure resolves against. Refuse before mutation when the
+	// booted base differs (base-resolution fail-closed). Only enforced when the
+	// updater was constructed with a base manifest path; a guest without the
+	// wired base cannot prove a join and keeps the plain file-release path.
+	if request.Manifest.BaseImageManifestDigest != "" && u.guestImageManifestPath != "" {
+		booted, digestErr := DigestFile(u.guestImageManifestPath)
+		if digestErr != nil {
+			return ApplyResult{}, fmt.Errorf("updater: resolve booted base image digest: %w", digestErr)
+		}
+		if booted != request.Manifest.BaseImageManifestDigest {
+			return ApplyResult{}, fmt.Errorf("updater: release base %s does not match booted base %s", request.Manifest.BaseImageManifestDigest, booted)
+		}
 	}
 	releaseDigest := request.Manifest.ContentDigest
 	sourceDir, err := u.trustedSourceDir(request.SourceDir, releaseDigest)
