@@ -46,11 +46,17 @@ reject `b18f3baf`; per-kind + dual-delivery-absence regression green.
 Node-b deploy disk headroom resolved 2026-10-04 (dump-20260918 rollback ref
 + nix gc, 84G→103G); `a4fcdb8d` deployed — mask fix + corrected probe live.
 →
-**Next (2026-10-04 review):** close the S0m boundary (panel + report +
-transition receipt, not yet run) → **S1a** host-boundary hotfix, pulled
-ahead of S0b: any guest currently inherits host-internal and cross-tenant
-authority ([`problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`](problems/s0-guest-reaches-host-internal-authority-2026-10-04.md))
-→ CI deploy-cancellation fix → **S0b** →
+**Next (2026-10-04 close):** S0m boundary CLOSED — convergent panel
+adjudicated (`.agentic-consensus/agentic-consensus-20261003-224612`,
+send-backs resolved via disposable-computer stranded-bound leg
+`computer-ca3a2cf9` + channel-mail deployed refusal `aef9a197`),
+reporter letter `reports/s0m-record-native-station-close-2026-10-04.md`,
+transition receipt `s0m-to-next-transition-2026-10-04` closed.
+**S1a** host-boundary hotfix **working**: network isolation +
+authority binding landed and deployed `a3f0d48e`; refusal-matrix
+acceptance proof (`b15f012a` diag `mode=http` oracle +
+`scripts/s1a_refusal_matrix_probe.mjs`) deploying; CI deploy-cancellation
+fixed `520a998f` + stale-deploy guard `a06f179e`. Then **S0b** →
 **S1** security floor → **S2** layering → **S3** fast resume →
 **S4** capsule open world → **S5** live preview + supervision →
 **S6** commit gate → **S7** app packages → **S8** source publication →
