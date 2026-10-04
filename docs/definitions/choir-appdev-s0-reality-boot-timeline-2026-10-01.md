@@ -176,13 +176,20 @@ boundaries:
 now:
   status: working
   slice: >-
-    S0a complete: instrument deployed, deadlock hotfix landed and verified
-    on staging, seven receipts captured (fresh + owner-sized + post-refresh),
-    three new problem docs filed. S0b is the live slice: bounded
-    disposable-computer probes (capsule health map, M9a bundle, Go effect,
-    snapshot/resume).
-  source_ref: main@4708a034
-  deploy_identity: 'staging https://choir.news deployed_commit=fd8b2973 (deadlock fix live); owner guest computer-03335285269bdba4f94377e56879f9e6 epoch=1001'
+    S0a complete (7 receipts + deadlock hotfix). S0b disposable-computer
+    probe suite ran on computer-ac1808b4f04fc749c0781083ee747403
+    (2026-10-04): 9 evidence receipts — M9a lifecycle partial (applied +
+    witnessed restore, route slot never promoted -> confirmed defect
+    docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md),
+    builder-substrate decision deferred to S2 (weakened scoped-guest-service,
+    host service + privileged builder capsule open), and four unreached-
+    transition/gap receipts (sealed guest hides capsule/desk projection,
+    Nix DB, build surface, snapshot surface). Self-dev Go effect re-running
+    on a second disposable (keydriver scope fix applied). Boundary panel:
+    8 accept_with_edge / 3 send_back; send-back named gaps closed by the
+    substrate-decision receipt + Go-effect re-run.
+  source_ref: main@c76ba308
+  deploy_identity: 'staging https://choir.news deployed_commit=e87f3294 (S1a send-back POST legs + prebind-flake fix live); disposable computer-a99366facf24b872703de326d3b33832 armed propose_only for the Go-effect re-run'
   candidate:
     id: s0a-boot-timeline-instrument
     state: landed
@@ -272,16 +279,19 @@ now:
     force_staging_deploy. A docs push between a fix push and its deploy is
     unsafe until CI concurrency groups are scoped per-ref.
   next_action: >-
-    S0b disposable-computer probe suite ran on
-    computer-ac1808b4f04fc749c0781083ee747403 (2026-10-04): five evidence
-    receipts under docs/evidence/s0b-*.json — one partial (M9a lifecycle:
-    applied+restored, route slot never promoted -> confirmed defect
-    docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md) and
-    three honest boundary gaps (sealed guest hides capsule/desk projection,
-    no dependency-build surface, no vmctl snapshot/UFFD/reflink endpoint;
-    Go effect blocked by keydriver scope miss — fixed in scripts/s0b_).
-    Next: boundary panel on the frozen S0a+S0b evidence, then the transition
-    receipt and S1a->S0b close record.
+    S0b probe suite executed on disposable computer-ac1808b4f04fc749c0781083ee747403
+    (2026-10-04); nine receipts under docs/evidence/s0b-*.json, one confirmed
+    defect docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md,
+    builder-substrate decision deferred to S2 with named edges (Go-effect
+    re-run armed on computer-a99366facf24b872703de326d3b33832, capsule-
+    namespace probe precondition for the builder-capsule branch, host-level
+    snapshot surface for S3). Boundary panel ran 2026-10-04
+    (.agentic-consensus/s0b-boundary-panel-20261004): 8 accept_with_edge /
+    3 send_back; the named send-back gaps (missing substrate-decision
+    receipt, void Go-effect cell) were closed post-panel by
+    s0b-builder-substrate-decision-2026-10-04.json and the second-disposable
+    Go-effect re-run in flight. Next: land the Go-effect marker evidence,
+    then write the S0->S2 transition receipt and update the metamission.
 
 receipts:
   - id: s0a-boundary-close-2026-10-02
