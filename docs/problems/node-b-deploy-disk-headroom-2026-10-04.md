@@ -1,6 +1,10 @@
 # Node B deploy disk headroom — deploys blocked below 90 GiB
 
-**Status**: open — blocks Deploy-to-Staging for any commit on `main`.
+**Status**: RESOLVED 2026-10-04 — owner authorized deleting what's not needed.
+Deleted `dump-20260918/platform-dump.sql` (20G rollback ref; split live ~2
+weeks) + `nix-env --delete-generations old` + `nix store gc` (23.5 GiB). Free
+space 84G → 103G (≥90G floor cleared). `a4fcdb8d` deployed to node-b at
+2026-10-04T02:01:45Z. Recurring risk remains — see Residual.
 **Date observed**: 2026-10-04 (deploy run 37165170516, commit `a4fcdb8d`).
 **Computer**: Node B staging host (`/var/lib/go-choir`, root `/dev/md127`).
 **Mutation class**: black to repair (candidate/rollback-ref deletion) — needs

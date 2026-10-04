@@ -43,9 +43,8 @@ UTC date, work settled — `evidence/s0m-ask-acceptance-2026-10-04.json`);
 consume-marking resolved `d61c9b1b` (bound control folds incorporated in
 the carrier's report commit); idle-mask fixed `d20483e8`; channel-mail
 reject `b18f3baf`; per-kind + dual-delivery-absence regression green.
-Residual (not an acceptance blocker): node-b deploy disk headroom — 84G
-free vs ~90G required; `d20483e8`/`a4fcdb8d` parked pending reclaim /
-rollback-ref decision (`problems/node-b-deploy-disk-headroom-2026-10-04.md`).
+Node-b deploy disk headroom resolved 2026-10-04 (dump-20260918 rollback ref
++ nix gc, 84G→103G); `a4fcdb8d` deployed — mask fix + corrected probe live.
 →
 **S1** security floor → **S2** layering → **S3** fast resume →
 **S4** capsule open world → **S5** live preview + supervision →

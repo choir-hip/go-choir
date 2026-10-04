@@ -240,7 +240,7 @@ now:
     control woke research, the report returned bound_to_activation, texture
     consumed it and applied the grounded UTC date, work settled.
   source_ref: main@a4fcdb8d
-  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer d61c9b1b (acceptance-verified); mask fix d20483e8 + probe fix a4fcdb8d pushed, deploy blocked on node-b disk headroom'
+  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer a4fcdb8d (mask fix + corrected probe deployed 2026-10-04T02:01:45Z); node-b disk headroom resolved'
   next_action: >-
     S0m station COMPLETE — all 4 finish acceptance actions evidence-covered.
     Consume-marking resolved (d61c9b1b, panel agentic-consensus-20261003-
@@ -248,11 +248,12 @@ now:
     delegation_skipped, pending mutation survives for follow-up ApplyTexture.
     Path-parity audit CLEAN (lifecycle.go:3517 rejects ControlBindingID for
     non-management producers — no un-marked bound-control path). Per-kind
-    cutover + dual-delivery-absence regression green. RESIDUAL (not an
-    acceptance blocker): node-b deploy disk headroom — 84G free vs ~90G
-    required; d20483e8/a4fcdb8d parked pending reclaim/rollback-ref decision
-    (docs/problems/node-b-deploy-disk-headroom-2026-10-04.md). Next station:
-    S0a reality boot timeline / next metamission gate.
+    cutover + dual-delivery-absence regression green. Node-b deploy disk
+    headroom RESOLVED 2026-10-04 (owner authorized: deleted the 20G
+    dump-20260918 rollback ref + nix gc, 84G→103G; a4fcdb8d deployed).
+    Recurring headroom risk noted in
+    docs/problems/node-b-deploy-disk-headroom-2026-10-04.md. Next station:
+    S0b reality boot timeline / next metamission gate.
   candidate: main@a4fcdb8d
   conjecture:
     id: record-native-coupling
@@ -342,12 +343,12 @@ receipts:
       on node-b disk headroom (infra, not code).
     deploy: >-
       Acceptance ran on deployed autoputer d61c9b1b (the chain mechanics
-      predate the two parked commits). d20483e8/a4fcdb8d are pushed+CI but
-      deploy-blocked on node-b disk headroom; see
-      docs/problems/node-b-deploy-disk-headroom-2026-10-04.md.
+      predate the two parked commits). Node-b disk headroom resolved
+      2026-10-04 (dump-20260918 rollback ref + nix gc, 84G→103G);
+      a4fcdb8d deployed at 2026-10-04T02:01:45Z (carries d20483e8 mask fix).
     environment_identity: >-
-      https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6
-      serving autoputer d61c9b1b.
+      https://choir.news deployed_commit=a4fcdb8d; owner guest
+      computer-03335285269bdba4f94377e56879f9e6 serving autoputer a4fcdb8d.
     deployed_acceptance: >-
       Prompt-bar task -> texture staged ApplyTexture{controls:[open_researcher]}
       -> control_queued+control_delivered e236bd2c on work 6255cf09 ->
@@ -361,8 +362,10 @@ receipts:
       repaired: consumeIdleTextureTrigger mislabelled any non-apply act as
       no_worker_needed (d20483e8); probe drove retired-ish choir.Ask-to-
       nonexistent-desk instead of the designed open_researcher (a4fcdb8d).
-      discovered: node-b deploy disk headroom is a standing blocker for all
-      main commits (docs/problems/node-b-deploy-disk-headroom-2026-10-04.md).
+      discovered: node-b deploy disk headroom was a standing blocker for all
+      main commits — RESOLVED 2026-10-04 by reclaim
+      (docs/problems/node-b-deploy-disk-headroom-2026-10-04.md); recurring
+      risk flagged for ops.
     rollback: >-
       git revert d20483e8 a4fcdb8d (label/probe only; no behavior the
       acceptance depends on).
