@@ -26,7 +26,7 @@ metamission:
     - id: S0-reality-and-boot-timeline
       path: docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md
       readiness: reviewed
-      status: working
+      status: complete
       depends_on: []
     - id: S0m-record-native-messaging
       path: docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
@@ -40,7 +40,7 @@ metamission:
       # open registration. Authored as the S1 file's first slice.
       path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
       readiness: reviewed
-      status: pending
+      status: complete
       depends_on: [S0m-record-native-messaging]
     - id: S1-security-floor
       path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
@@ -50,7 +50,7 @@ metamission:
     - id: S2-layering-runtime-from-release
       path: docs/definitions/choir-appdev-s2-layering-runtime-from-release-2026-10-01.md
       readiness: reviewed
-      status: pending
+      status: working
       depends_on: [S0-reality-and-boot-timeline]
     - id: S3-fast-resume
       path: docs/definitions/choir-appdev-s3-fast-resume-2026-10-01.md
@@ -414,22 +414,17 @@ boundaries:
 now:
   status: working
   slice: >-
-    S1a host-boundary hotfix CLOSED on deployed evidence: network
-    isolation + authority binding live (a3f0d48e), diag mode=http
-    oracle live (b15f012a), deployed refusal matrix PASSED on two
-    disposable accounts (d37408ee — 5/5 refusals incl. tap->tap
-    FORWARD drop + forged-identity 403/405; 5/5 legitimate flows
-    green: gateway, bound-owner CV resolve + maild, egress, product
-    page). Station S0 resumes at slice S0b (disposable-computer
-    probes). Discovered heresy carried: guest 'zot' PATH-shadowed by
-    third-party TUI agent (problem-doc addendum).
-    Remaining in order:
-    (1) S0b disposable-computer probe suite (S0 station next_action:
-        capsule health map, M9a bundle, Go effect, snapshot/resume);
-    (2) the rest of S1 (runtime identity, token scrubbing,
-        capsule/yaegi floor), then S2.
-  source_ref: main@d37408ee
-  deploy_identity: 'staging https://choir.news deployed_commit=b15f012a (S1a boundary live + diag oracle, deployed 2026-10-04); owner guest computer-03335285269bdba4f94377e56879f9e6; Node B ~93G free'
+    S0 COMPLETE 2026-10-04 (s0b-boundary-close receipt): boot attribution
+    and disposable-computer probes both closed with named edges into S2 —
+    (1) selfdev executing->frozen wedge must be repaired before any Go
+    effect can execute, (2) capsule-namespace probe is the precondition
+    for the privileged-builder-capsule substrate branch, (3) snapshot/
+    UFFD surface is host-level and belongs to S3, not guest probes.
+    S1a host-boundary hotfix closed before it (deployed refusal matrix
+    PASSED, 5/5 refusals + 5/5 legitimate flows). Next: S2
+    builder-substrate selection + landing.
+  source_ref: main@ea4b35cd
+  deploy_identity: 'staging https://choir.news deployed_commit=e87f3294 (S1a boundary + POST legs + prebind-flake fix live)'
   candidate:
     id: none
     state: none
@@ -575,17 +570,18 @@ now:
     filesystem, and a double resume duplicates RNG and key state. S3's
     invariants are the safety case, not optional polish.
   next_action: >-
-    1. Close the S0m boundary: convergent agentic-consensus on the S0m
-       terminal receipt + S1a/S0b readiness, a reporter narrative, and a
-       transition receipt on this file.
-    2. S1a: author the slice in the S1 station file from
-       docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md.
-       Inventory the legitimate guest->host flows first; then network
-       isolation + authority binding; deployed refusal matrix on two
-       disposable accounts.
-    3. CI: move the deploy job to its own concurrency group with
-       cancel-in-progress false (yellow/orange; .github/workflows/ci.yml).
-    4. Resume S0b.
+    1. S2 builder-substrate: select between the scoped-guest-service
+       (weakened by S0b), host-service, and privileged-builder-capsule
+       branches; land the selected substrate; then the layering slice
+       (per-computer app-layer Nix closure) begins. The S0 wedge
+       (docs/problems/s0-selfdev-executing-wedge-2026-10-04.md) and the
+       capsule-namespace probe are the first named obligations.
+    2. S1 remainder (runtime identity, token scrubbing, capsule/yaegi
+       floor) runs in parallel or before S2's layering per the S1 station
+       file.
+    3. The 'zot' PATH-shadowing heresy and the M9a route-projection
+       owner-binding defect are carried named residuals on the S1/S0
+       records.
 receipts:
   - id: s0a-slice-landed-2026-10-02
     kind: slice_transition
