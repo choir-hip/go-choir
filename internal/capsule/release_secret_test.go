@@ -147,7 +147,7 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 	}
 	files := staged.Files
 	if len(files) != 2 || files[0].Path != "bin/autoputer" || files[1].Path != "frontend/index.html" || staged.TemporaryRoot == "" {
-		t.Fatalf("staged release files=%+v path=%q", files, staged)
+		t.Fatalf("staged release files=%+v staged=%+v", files, staged)
 	}
 	if content, err := os.ReadFile(filepath.Join(staged.TemporaryRoot, "bin/autoputer")); err != nil || string(content) != "autoputer" {
 		t.Fatalf("staged autoputer = %q, %v", content, err)
