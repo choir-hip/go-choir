@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -569,11 +570,18 @@ func handleBootTimeline(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDiagTCPDial serves GET /internal/diag/tcp-dial?addr=host:port. It
-// performs one bounded TCP connect from inside the guest and reports the
-// outcome. This is the tap->tap isolation oracle: a capsule-vs-host failure
-// here is reachability evidence, a success is an openness finding. Bounded to
-// IP literals + a 2s timeout; DNS names are refused so the probe can't be
-// turned into a resolver oracle.
+// performs one bounded connect from inside the guest and reports the outcome.
+// This is the tap->tap isolation oracle: a capsule-vs-host failure here is
+// reachability evidence, a success is an openness finding. Bounded to IP
+// literals + a 2s timeout; DNS names are refused so the probe can't be turned
+// into a resolver oracle.
+//
+// mode=http (S1a): upgrades the dial to a single HTTP/1.1 GET. This is the
+// refusal-matrix oracle for the cross-tenant authority chain: the guest can
+// assert X-Internal-Caller / X-Authenticated-User, and the service under test
+// must ignore them. Headers are bounded to that forged-identity pair; the
+// endpoint is host-sourced-only, so exposing an HTTP oracle grants a
+// guest-local process nothing it could not already send on its own socket.
 func handleDiagTCPDial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -598,6 +606,10 @@ func handleDiagTCPDial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid port", http.StatusBadRequest)
 		return
 	}
+	if strings.EqualFold(r.URL.Query().Get("mode"), "http") {
+		handleDiagHTTPProbe(w, r, addr)
+		return
+	}
 	started := time.Now()
 	dialer := net.Dialer{Timeout: 2 * time.Second}
 	conn, err := dialer.Dial("tcp", addr)
@@ -615,6 +627,89 @@ func handleDiagTCPDial(w http.ResponseWriter, r *http.Request) {
 		local := conn.LocalAddr().String()
 		_ = conn.Close()
 		result["local_addr"] = local
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+// diagHTTPProbeHeaderAllowlist bounds which request headers the HTTP probe may
+// carry. Only the forged-identity pair the S1a refusal matrix exercises is
+// permitted; arbitrary headers would turn the oracle into a credential relay.
+var diagHTTPProbeHeaderAllowlist = map[string]bool{
+	"x-internal-caller":    true,
+	"x-authenticated-user": true,
+}
+
+// handleDiagHTTPProbe issues one bounded GET http://addr<path> from inside the
+// guest and reports status + a truncated body prefix. GET-only: the oracle
+// measures whether host-internal endpoints honor forged identity headers, it
+// must never mutate state on the target service.
+func handleDiagHTTPProbe(w http.ResponseWriter, r *http.Request, addr string) {
+	path := strings.TrimSpace(r.URL.Query().Get("path"))
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		http.Error(w, "path must start with /", http.StatusBadRequest)
+		return
+	}
+	if strings.ContainsAny(path, " \t\r\n@") {
+		http.Error(w, "path contains invalid characters", http.StatusBadRequest)
+		return
+	}
+	headers := map[string]string{}
+	for _, h := range r.URL.Query()["header"] {
+		name, value, ok := strings.Cut(h, ":")
+		if !ok {
+			http.Error(w, "header must be Name: value", http.StatusBadRequest)
+			return
+		}
+		if !diagHTTPProbeHeaderAllowlist[strings.ToLower(strings.TrimSpace(name))] {
+			http.Error(w, "header not in allowlist", http.StatusBadRequest)
+			return
+		}
+		if len(headers) >= 4 {
+			http.Error(w, "too many headers", http.StatusBadRequest)
+			return
+		}
+		headers[strings.TrimSpace(name)] = strings.TrimSpace(value)
+	}
+	started := time.Now()
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+path, nil)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+		// No redirects: a 3xx is itself a refusal-matrix answer.
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Do(req)
+	latency := time.Since(started)
+	result := map[string]any{
+		"schema_version": 1,
+		"kind":           "guest_http_probe",
+		"addr":           addr,
+		"path":           path,
+		"latency_ms":     latency.Milliseconds(),
+	}
+	if err != nil {
+		result["ok"] = false
+		result["error"] = err.Error()
+	} else {
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		result["ok"] = true
+		result["status"] = resp.StatusCode
+		result["body_prefix"] = string(body)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)

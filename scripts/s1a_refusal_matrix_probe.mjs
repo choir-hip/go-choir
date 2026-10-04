@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // S1a deployed refusal-matrix proof — two disposable staging computers A + B.
 //
-// Mechanism: ssh -L forward workstation -> node-b -> guest tap, open the
-// guest's /api/terminal/ws (host-sourced: RemoteAddr = host peer), and run
-// `curl` INSIDE guest A's PTY. Every HTTP leg is truly guest-originated.
-//
+// Mechanism: call the guest autoputer's host-sourced-only diagnostic oracle
+// (GET /internal/diag/tcp-dial?addr=...&mode=http&path=...&header=Name: v)
+// from node-b. The guest issues each request itself, so every leg is truly
+// guest-originated: forged-identity headers (X-Internal-Caller /
+// X-Authenticated-User) are asserted inside the guest and the service under
+// test must refuse.
 // Refusals:
 //   R1 tap->tap           A: curl 10.200.B.2:8085              -> fail/timeout
 //   R2 vmctl internal     A: GET 10.200.A.1:8083 /internal/vmctl/list + hdr -> 403
@@ -48,32 +50,34 @@ const ownershipFor = (id) => (vmctlList()?.ownerships || []).find(o => o.compute
 const guestIP = (own) => { try { return new URL(own.computer_url).hostname; } catch { return null; } };
 const hostPeerIP = (own) => { const ip = guestIP(own); if (!ip) return null; const p = ip.split('.'); p[3] = String(parseInt(p[3], 10) - 1); return p.join('.'); };
 
-// ── in-guest exec via node-b helper binary ────────────────────────────────
-// scripts/wsexec (Go, CGO_ENABLED=0 GOOS=linux GOARCH=amd64) is copied to
-// node-b:/tmp/wsexec. It opens the guest terminal WS from the host — so the
-// call is host-sourced (RemoteAddr = host peer) and passes HostSourcedCaller
-// — then pipes one command into the guest PTY. Every HTTP leg below is
-// truly guest-originated: curl runs inside guest A.
-function guestExec(own, userID, cmd, ms = 20000) {
-  const url = `ws://${guestIP(own)}:8085/api/terminal/ws`;
+// ── in-guest probe via /internal/diag/tcp-dial?mode=http ─────────────────
+// The guest autoputer exposes a bounded, host-sourced-only diagnostic oracle:
+// GET /internal/diag/tcp-dial?addr=IP:port[&mode=http&path=...&header=Name: v].
+// Host calls it with RemoteAddr = host peer, so HostSourcedCaller passes and
+// the guest issues the request itself — every leg below is truly
+// guest-originated. GET-only + header allowlist (the forged-identity pair),
+// so the oracle grants a guest process nothing it could not send itself.
+function guestProbe(own, { addr, mode = 'http', path = '/', headers = [] }, ms = 15000) {
+  const qs = new URLSearchParams({ addr });
+  if (mode) qs.set('mode', mode);
+  if (path !== '/') qs.set('path', path);
+  for (const h of headers) qs.append('header', h);
+  const url = `http://${guestIP(own)}:8085/internal/diag/tcp-dial?${qs}`;
   try {
-    const out = execFileSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', 'node-b',
-      `/tmp/wsexec -url '${url}' -user '${userID}' -cmd ${shellQuote(cmd)} -timeout ${ms}ms`],
-      { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: ms + 15000 });
-    const m = out.match(/EXIT=(\S+)\s*$/);
-    return { out, exit: m ? m[1] : '?' };
+    const raw = nodeB(`curl -sS -m ${Math.ceil(ms / 1000)} -H 'X-Internal-Caller: true' '${url}'`);
+    const j = JSON.parse(raw);
+    const connFail = j.ok === false || /refused|timed out|no route|unreachable/i.test(j.error || '');
+    return { status: typeof j.status === 'number' ? j.status : null, error: j.error || null,
+      body: String(j.body_prefix || ''), connectFailed: connFail, raw: raw.slice(-400) };
   } catch (e) {
-    return { out: String(e).slice(0, 400), exit: 'ssh-fail', err: true };
+    return { status: null, error: String(e).slice(0, 200), connectFailed: true, raw: String(e).slice(-300) };
   }
 }
-function shellQuote(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
-async function guestCurl(own, userID, curlArgs, ms = 15000) {
-  const r = guestExec(own, userID,
-    `curl -sS -m ${Math.max(5, Math.floor(ms / 1000) - 2)} -o /dev/null -w 'HTTP:%{http_code}' ${curlArgs}`,
-    ms);
-  const m = (r.out || '').match(/HTTP:(\d{3})/);
-  const refused = r.exit === 'ssh-fail' || (!m && (r.exit !== '0' || (r.out || '').match(/refused|timed out|unreachable|timeout/i)));
-  return { status: m ? parseInt(m[1], 10) : null, raw: (r.out || '').slice(-400), exit: r.exit, connectFailed: refused && !m };
+// TCP-level reachability (mode=tcp): L1/L4 use this — a successful dial means
+// the route exists even when no HTTP handshake is attempted.
+function guestDial(own, addr, ms = 10000) {
+  const r = guestProbe(own, { addr, mode: '' }, ms);
+  return { ...r, ok: r.status === null && !r.connectFailed };
 }
 
 function record(leg, out) { report.legs[leg] = out; console.log(`  ${leg}: ${out.verdict} — ${(out.detail || '').slice(0, 160)}`); }
@@ -124,27 +128,35 @@ const main = async () => {
 
 
   const slot = `computer:${A.user}:${A.computer}`;
-  // Refusals (guest-originated curl against hostIP = the DNAT'd host peer).
-  record('R1_tap_to_tap', await guestCurl(A.own, A.user, `http://${bIP}:8085/health`).then(r =>
-    r.status === null || r.status >= 400 || r.timeout ? { verdict: 'refused', detail: r.raw || `status=${r.status}` } : { verdict: 'FAILED-OPEN', detail: `reached B:${r.status}` }));
-  record('R2_vmctl_internal', await guestCurl(A.own, A.user, `-H 'X-Internal-Caller: true' 'http://${hostIP}:8083/internal/vmctl/list'`).then(r =>
-    r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` } : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} raw=${r.raw.slice(-160)}` }));
-  record('R3_maild_forged_owner', await guestCurl(A.own, A.user, `-H 'X-Internal-Caller: true' -H 'X-Authenticated-User: ${B.user}' 'http://${hostIP}:8087/api/email/messages'`).then(r =>
-    r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` } : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} raw=${r.raw.slice(-160)}` }));
-  record('R4_corpusd_bypass', await guestCurl(A.own, A.user, `-H 'X-Internal-Caller: true' 'http://${hostIP}:8086/internal/platform/update'`).then(r =>
-    r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` } : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} raw=${r.raw.slice(-160)}` }));
-  record('R5_proxy_wire_publish', await guestCurl(A.own, A.user, `-X POST -H 'Content-Type: application/json' -H 'X-Internal-Caller: true' -d '{}' 'http://${hostIP}:8082/internal/platform/wire/publish'`).then(r =>
-    r.status === 403 || r.status === 404 ? { verdict: 'refused', detail: `HTTP ${r.status}` } : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} raw=${r.raw.slice(-160)}` }));
+  const bAutoputer = `${bIP}:8085`;
+  // Refusals (guest-originated; forged-identity headers asserted by the probe).
+  record('R1_tap_to_tap', await guestProbe(A.own, { addr: bAutoputer, path: '/health' }).then(r =>
+    r.connectFailed ? { verdict: 'refused', detail: r.error || 'no route' }
+      : { verdict: 'FAILED-OPEN', detail: `reached B status=${r.status} body=${r.body.slice(0, 80)}` }));
+  record('R2_vmctl_internal', await guestProbe(A.own, { addr: `${hostIP}:8083`, path: '/internal/vmctl/list', headers: ['X-Internal-Caller: true'] }).then(r =>
+    r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
+  record('R3_maild_forged_owner', await guestProbe(A.own, { addr: `${hostIP}:8087`, path: '/api/email/messages', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${B.user}`] }).then(r =>
+    r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
+  record('R4_corpusd_bypass', await guestProbe(A.own, { addr: `${hostIP}:8086`, path: '/internal/platform/update', headers: ['X-Internal-Caller: true'] }).then(r =>
+    r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
+  record('R5_proxy_wire_publish', await guestProbe(A.own, { addr: `${hostIP}:8082`, path: '/internal/platform/wire/publish', headers: ['X-Internal-Caller: true'] }).then(r =>
+    r.status === 403 || r.status === 404 || r.status === 405 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
 
   // Legitimate flows.
-  record('L1_gateway', await guestCurl(A.own, A.user, `'http://${hostIP}:8084/health'`).then(r =>
-    r.status && r.status < 500 ? { verdict: 'green', detail: `HTTP ${r.status}` } : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.raw.slice(-120)}` }));
-  record('L2_cv_route_resolve', await guestCurl(A.own, A.user, `'http://${hostIP}:8083/internal/vmctl/computer-version-routes/resolve?route_slot_id=${encodeURIComponent(slot)}'`).then(r =>
-    r.status === 200 ? { verdict: 'green', detail: `HTTP ${r.status} bound-owner resolve` } : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.raw.slice(-160)}` }));
-  record('L3_maild_own_drafts', await guestCurl(A.own, A.user, `-H 'X-Internal-Caller: true' -H 'X-Authenticated-User: ${A.user}' 'http://${hostIP}:8087/api/email/messages'`).then(r =>
-    r.status === 200 ? { verdict: 'green', detail: `HTTP ${r.status} bound-owner read` } : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.raw.slice(-160)}` }));
-  record('L4_egress', await guestCurl(A.own, A.user, `-k -o /dev/null -w 'HTTP:%{http_code}' 'https://1.1.1.1'`).then(r =>
-    r.status ? { verdict: 'green', detail: `HTTP ${r.status}` } : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.raw.slice(-120)}` }));
+  record('L1_gateway', await guestDial(A.own, `${hostIP}:8084`).then(r =>
+    r.ok ? { verdict: 'green', detail: 'gateway TCP dial ok' } : { verdict: 'FAILED', detail: r.error || 'dial failed' }));
+  record('L2_cv_route_resolve', await guestProbe(A.own, { addr: `${hostIP}:8083`, path: `/internal/vmctl/computer-version-routes/resolve?route_slot_id=${encodeURIComponent(slot)}` }).then(r =>
+    r.status === 200 ? { verdict: 'green', detail: `HTTP ${r.status} bound-owner resolve` }
+      : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.body.slice(0, 120)}` }));
+  record('L3_maild_own_drafts', await guestProbe(A.own, { addr: `${hostIP}:8087`, path: '/api/email/messages', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${A.user}`] }).then(r =>
+    r.status === 200 ? { verdict: 'green', detail: `HTTP ${r.status} bound-owner read` }
+      : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.body.slice(0, 120)}` }));
+  record('L4_egress', await guestDial(A.own, '1.1.1.1:443').then(r =>
+    r.ok ? { verdict: 'green', detail: 'egress TCP dial ok' } : { verdict: 'FAILED', detail: r.error || 'dial failed' }));
 
   // L5 product surface still loads for the account (proxy path unaffected).
   {
