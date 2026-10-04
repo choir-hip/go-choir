@@ -238,19 +238,23 @@ now:
     mints a record-native note, not a retired envelope);
     docs/current-architecture.md updated with the record-native invariant.
   source_ref: main@558afe86
-  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer d61c9b1b (stranded-bound release + consume-marking verified live 2026-10-03)'
+  deploy_identity: 'staging https://choir.news; owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer d61c9b1b (stranded-bound release + consume-marking verified live 2026-10-03); idle-mask fix d20483e8 pushed, deploying'
+  next_action: >-
     Consume-marking is RESOLVED — the stranded-bound + `3fbf9bb4` boundary
     closed by `d61c9b1b` (panel convergent verdict
     agentic-consensus-20261003-190021): `commitLifecycleProducerReportAct`
     marks the carrier's bound control `incorporated` in the same commit as
     its report; `3fbf9bb4`'s report predated the fix (pre-fix evidence, not
     a live gap). Verified live: 5 controls incorporated with reason
-    `"...by carrier producer report"`. Residuals now: (i) the mechanical
-    ask->report->`system:reducer`-resolve acceptance leg (desk emits
-    Resolve); (ii) audit whether `update_coagent`/legacy runs can still
-    write a bound control via the un-marked `QueueLifecycleUpdate` research
-    branch (path parity); (iii) `consumeIdleTextureTrigger` masks
-    non-ApplyTexture cells as "no act" (red, Texture canonical writes).
+    `"...by carrier producer report"`. The `consumeIdleTextureTrigger` mask
+    is FIXED (d20483e8): a cell staging a non-apply semantic act now records
+    `delegation_skipped` (honest "act off the doc"), not `no_worker_needed`;
+    the pending mutation survives so a follow-up ApplyTexture cell is not
+    pre-empted. Path-parity audit CLEAN: `QueueLifecycleUpdate`'s research
+    else-branch rejects ControlBindingID (lifecycle.go:3517) so it cannot
+    mint a bound control needing consume-marking — only management's path
+    does, already covered. Remaining: drive the ask->report->resolve
+    acceptance leg on staging (probe in flight, trajectory 91cd4f36).
   candidate: main@558afe86
   conjecture:
     id: record-native-coupling
