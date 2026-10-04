@@ -208,8 +208,8 @@ now:
     layering acceptance — PUT the nar blob, mint by ref, apply to a
     disposable, observe the guest exec the release store-path binary in the
     overlay + a base-mismatched offer fail closed.
-    source_ref: main@ef2e607d
-    deploy_identity: 'staging https://choir.news deployed_commit=ef2e607d; layering exec + CAS-ref transport live'
+  source_ref: main@ef2e607d
+  deploy_identity: 'staging https://choir.news deployed_commit=ef2e607d; layering exec + CAS-ref transport live'
   candidate:
     id: none
     state: none
