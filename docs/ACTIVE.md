@@ -30,39 +30,34 @@ once the guest holds an uptime window.
 [`definitions/choir-supervised-app-development-metamission-2026-10-01.md`](definitions/choir-supervised-app-development-metamission-2026-10-01.md)
 (`readiness: executable`, `now.status: working`) — **owner-approved
 2026-10-01** after agentic-consensus review (5/5 convergent + 7/7
-divergent; all required revisions applied in v3). Thirteen stations:
-**S0** reality + boot timeline (S0a landed; S0b deferred behind S0m) → **S0m** record-native messaging (**COMPLETE 2026-10-04**,
-owner-inserted 2026-10-01: raw messaging retires; every addressed desk
-act is a commitment record whose Addressee is the delivery instruction;
-ApplyTexture narrows to doc edits; restores research→texture). RN0–RN5
-landed + deployed; finish acceptance all 4 actions evidence-covered:
-ask→report→resolve deployed-verified on trajectory `684ddcb1` (texture
-opened a researcher via `ApplyTexture{open_researcher}`, bound control woke
-research, report returned bound_to_activation + applied, doc grounded the
-UTC date, work settled — `evidence/s0m-ask-acceptance-2026-10-04.json`);
-consume-marking resolved `d61c9b1b` (bound control folds incorporated in
-the carrier's report commit); idle-mask fixed `d20483e8`; channel-mail
-reject `b18f3baf`; per-kind + dual-delivery-absence regression green.
-Node-b deploy disk headroom resolved 2026-10-04 (dump-20260918 rollback ref
-+ nix gc, 84G→103G); `a4fcdb8d` deployed — mask fix + corrected probe live.
-→
-**Next (2026-10-04 close):** S0m boundary CLOSED — convergent panel
-adjudicated (`.agentic-consensus/agentic-consensus-20261003-224612`,
-send-backs resolved via disposable-computer stranded-bound leg
-`computer-ca3a2cf9` + channel-mail deployed refusal `aef9a197`),
-reporter letter `reports/s0m-record-native-station-close-2026-10-04.md`,
-transition receipt `s0m-to-next-transition-2026-10-04` closed.
-**S1a** host-boundary hotfix **working**: network isolation +
-authority binding landed and deployed `a3f0d48e`; refusal-matrix
-acceptance proof (`b15f012a` diag `mode=http` oracle +
-`scripts/s1a_refusal_matrix_probe.mjs`) deploying; CI deploy-cancellation
-fixed `520a998f` + stale-deploy guard `a06f179e`. Then **S0b** →
-**S1** security floor → **S2** layering → **S3** fast resume →
-**S4** capsule open world → **S5** live preview + supervision →
-**S6** commit gate → **S7** app packages → **S8** source publication →
-**S9** forks/fleets → **S10** org templates → **S11** mainline + security
-push. Station files: `definitions/choir-appdev-s*-2026-10-01.md`.
-Design evidence:
+divergent; all required revisions applied in v3). Thirteen stations;
+2026-10-04 three closed in one pass:
+
+- **S0m** record-native messaging **complete** (boundary
+  `s0m-to-next-transition-2026-10-04`; ask→report→resolve
+  deployed-verified on trajectory `684ddcb1`; consume-marking `d61c9b1b`;
+  reporter letter `reports/s0m-record-native-station-close-2026-10-04.md`).
+- **S1a** host-boundary hotfix **complete** (boundary
+  `s1a-to-s0b-transition-2026-10-04`; deployed refusal matrix PASSED —
+  5/5 refusals incl. tap→tap FORWARD drop + forged-identity 403/405,
+  5/5 legitimate flows green; reporter letter
+  `reports/s1a-host-boundary-station-close-2026-10-04.md`).
+- **S0** reality + boot timeline **complete** (boundary
+  `s0b-boundary-close-2026-10-04` on the S0 station file; 10 probe
+  receipts on disposable `computer-ac1808b4` + second disposable for the
+  Go-effect re-run; two new problem docs: M9a route-projection
+  owner-binding defect + selfdev ops-launch freeze-authority gap;
+  builder-substrate decision narrowed to host-service vs
+  privileged-builder-capsule).
+
+**S2** layering-runtime-from-release is **live** — first named slice is
+the selfdev ops-launch repair (an ops POST creates no engineering
+assignment so `OperationStore` never binds and `choir.Freeze` refuses
+in-cell with the refusal invisible outside; Go-effect probes must launch
+through a management engineering cast, and cell refusals must surface on
+the op record), then the capsule-namespace probe for the
+privileged-builder-capsule branch. Station files:
+`definitions/choir-appdev-s*-2026-10-01.md`. Design evidence:
 [`reports/agent-messaging-system-state-2026-10-01.md`](reports/agent-messaging-system-state-2026-10-01.md),
 [`desk-system-harness-architecture-2026-10-01.md`](desk-system-harness-architecture-2026-10-01.md).
 Ordered ahead of the World Wire metamission per owner direction
