@@ -104,6 +104,33 @@ then a deliberately-broken release rolls back to the prior/base binary.
 
 ## Deployed failure receipt (2026-10-04) — overlay exec fell back to base
 
+## Root cause found (2026-10-04) — exec works; the release binary is stale
+
+The `layering-diag.log` instrumentation (`3c1cbaf6`) resolved the exec
+question on staging: on `vm-3dc68688` the layered apply ran
+`unshare_ok` → `mount_ok` → `exec_path_resolves` — **all three layering
+stages succeed in the guest**. The service then crash-loops because the
+applied release binary is build `43310064` (an August autoputer) running
+against an October persistent store — a state-compatibility failure, not a
+mount/exec failure. The base image is `672eb193`; the release is ~6 weeks
+stale.
+
+Two real defects fall out:
+
+1. **The runtime exec was never the wedge** — the earlier `exec_resolved`
+   pointing at base was the pre-`e605cdde` wrapper that had no fallback
+   *and* no diag; with both, the layering chain is proven green on guest.
+2. **Activation does not enforce state compatibility.** S2's contract
+   requires `executable + frontend + state compatibility + effective event
+   head` bound as one transaction; the apply execs a stale-binary release
+   and crash-loops instead of failing closed or rolling back. The health
+   gate / `restorePrior` path needs to cover "exec succeeded but the
+   release cannot serve."
+
+The overlay-vs-direct-exec question is now settled by the diag: the overlay
+works; the prior `exec_resolved=base` reading was the no-fallback wrapper.
+The open work is the state-compat/health gate, not the mount machinery.
+
 The `s2_layered_update_probe.mjs` acceptance ran a real layered apply on a
 disposable staging computer. The full chain — offer sign, push, stage,
 closure.nar replay into `$CHOIR_UPDATER_ROOT/store/<hash>-layerdir-work`,
