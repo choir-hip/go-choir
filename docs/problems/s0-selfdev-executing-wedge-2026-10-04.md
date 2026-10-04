@@ -30,38 +30,38 @@ prompt) on `computer-a99366facf24b872703de326d3b33832` and
 - `replay-completeness` is `equivalent` (91 events applied, zero gaps) —
   the tape is not the blocker.
 
-## Mechanism (root cause — freeze intent refuses inside the cell; error never reaches the op record)
+## Mechanism (confirmed — ops launch carries no freeze authority)
 
-`choir.Freeze` exists on the cell surface
-(`internal/yaegikernel/choir.go:507`, staging `IntentFreeze`). The
+`choir.Freeze` exists (`internal/yaegikernel/choir.go:507`) and the
 reducer commits it via `commitFreezeIntent`
-(`internal/agentcore/rlm_reduce.go:1292`), which requires:
+(`internal/agentcore/rlm_reduce.go:1292`), which calls
+`freezeCapsuleEffectBundle` against `r.toolCtx.OperationStore`.
 
-- `r.toolCtx.OperationStore != nil` (op-store authority on the run)
-- `trajectoryIDForRun(r.rec)` resolves the op via
-  `OperationStore.GetByTrajectory`
-- `requireCapsuleMutationRole(ctx)` — the run must carry the author
-  mutation role, not the verifier role.
+`OperationStore` is populated on exactly one path:
+`assignedEngineeringCapsuleToolCtx`
+(`internal/agentcore/engineering_assignment_tools_overlay.go:79`), and
+that builder only runs when `assignedEngineeringToolOverlay` binds —
+which requires `rec.Metadata["assignment_id"]` +
+`["assignment_attempt"]` to name a **bound Engineering assignment**
+(`:24-31`). A `POST /api/computers/{id}/self-development/operations`
+creates a document lifecycle and a desk run with `trajectory_id` set
+(`selfdev_texture_join.go:53-88`) but NO engineering assignment — the
+metadata keys are never stamped. The run either fails the overlay
+(`"unassigned Engineering cannot execute"`) or starts with
+`toolCtx.OperationStore = nil`; either way `choir.Freeze` inside the
+cell returns `"freeze intent without assignment authority"` and the
+op can never leave `executing`.
 
-The ops-API launch path (`POST /api/computers/{id}/self-development/
-operations` → trajectory → guest run) is built for the M11 engineering
-**assignment** trajectory. A raw ops launch may not bind
-`OperationStore` on the run's `toolCtx`, or may not bind the op to
-`trajectoryIDForRun(rec)`, so `choir.Freeze` inside the cell returns
-`"freeze intent without trajectory binding"` /
-`"without self-development operation authority"` as a cell result.
+The cell refusal surfaces only as a `capsule_go_eval` result value —
+not a tool-call error, not an op transition — so the model retries the
+same eval and the loop never converges. The refusal reason never
+leaves the cell.
 
-The model sees the refusal as an eval result and retries
-`capsule_go_eval` — the cell error is never promoted to
-`operation.terminal_error` because a failed cell is a normal run
-outcome, not an op transition. All three runs wedge `executing`
-because the model can call the tool surface but never satisfy the
-binding precondition; and the refusal reason never leaves the cell.
-
-**Run 1** (vague prompt): model never called the tool — declined.
-**Runs 3/4** (directive prompts): model called `capsule_go_eval` 18+
-times (`tools=1`, `text_len=0`) — the cell ran, `choir.Freeze` refused,
-the model retried, the loop never converged.
+**Run 1** (vague prompt): model never called `capsule_go_eval` —
+declined.
+**Runs 3/4** (directive prompts): 18+ `capsule_go_eval` calls —
+the cell ran, `choir.Freeze` refused on nil OperationStore, the model
+retried, the loop never converged.
 
 ## Why it matters
 
@@ -77,23 +77,27 @@ the model retried, the loop never converged.
 
 ## Fix direction
 
-1. **Bind the ops trajectory to the freeze authority.** The launch
-   path must wire `OperationStore` into the run's `toolCtx` and bind
-   the op's `trajectory_id` to `trajectoryIDForRun(rec)` so
-   `commitFreezeIntent`'s `GetByTrajectory` resolves. If the ops
-   launch is assignment-scoped by design, the Go-effect probe needs
-   an engineering-assignment launch instead of a raw ops POST.
-2. **Surface cell refusals.** When `choir.Freeze`/`choir.Verify`
-   refuse inside `capsule_go_eval`, the reason must reach
-   `operation.terminal_error` (or a new `last_intent_error` field) —
-   a refused authority is not a normal cell error; it is the op's
-   real blocker.
+1. **Launch Go-effect probes through an engineering assignment, not a
+   raw ops POST.** The ops path creates a document lifecycle but no
+   `assignment_id` metadata, so `assignedEngineeringToolOverlay` never
+   binds `OperationStore`. A self-dev Go effect requires the M11
+   assignment trajectory: management casts an engineering assignment →
+   the assigned run spawns with `assignment_id` + `assignment_attempt`
+   stamped → `choir.Freeze` resolves the op via `trajectoryIDForRun`.
+   The ops POST is the wrong surface for an effect probe; it can
+   propose a document but can never freeze.
+2. **Surface cell refusals on the op record.** When `choir.Freeze` or
+   `choir.Verify` refuse inside `capsule_go_eval`, promote the refusal
+   reason to `operation.terminal_error` (or a new `last_intent_error`
+   field). A refused authority is the op's real blocker, not a normal
+   cell error.
 
 The state machine is correct; the ops→cell binding is not.
 
 ## Verification
 
-Re-run the same op on a fresh disposable. Passing = op reaches
-`awaiting_approval` or `failed` with a recorded reason within the
-proposal timeout. Failing = `executing` persists past the last gateway
-round with `verifier_refs` still empty.
+Re-run the Go effect through an engineering-assignment launch (management
+desk casts `kind=engineering` → bound capsule run). Passing = op reaches
+`awaiting_approval` with `bundle_digest` set and a committed
+`freeze_capsule_effect_bundle` event. Failing = op persists `executing`
+with `verifier_refs` still empty or the refusal reason absent.
