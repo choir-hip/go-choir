@@ -567,7 +567,13 @@ now:
       still strands runtime undeployed. VM_INTERACTIVE_MEM_MIB=16384 is set
       in the mutable vmctl-priority.env, outside its declared purpose and
       outside the repo: untracked drift that sizes every interactive guest
-      at half the host.
+      at half the host. MEMORY ROOT CAUSE (2026-10-05): the 2->16 GiB
+      ratchet followed store and journal growth, not hot-set growth. The
+      live store is about 5 GiB against a 22 GiB garbage journal, because
+      the guest GC guard (dolt_maintenance.go:290) precedes the journal
+      trigger (:309). There is no GOMEMLIMIT or Dolt cache bound. Owner
+      target: 2-4 GiB ceilings, oversubscribed, with residency tiers making
+      computers feel always on.
       S3 INPUT GAP: S0b took no snapshot measurement (no vmctl snapshot
       surface; sealed guest). S3 must measure first.
       OPEN RESIDUALS CARRIED: registration-computer-missing-genesis; M9a
@@ -612,7 +618,9 @@ now:
     with no VM reboot for app-layer-only changes and time-to-healthy
     recorded.
     In parallel: author the SO station file (scope in "Orientation
-    2026-10-05"); S1 remainder.
+    2026-10-05"), starting with the guest memory receipt + host offline GC
+    of the owner store (measure before/after), then the GC-ordering fix;
+    S1 remainder.
 receipts:
   - id: s0-to-s2-transition-2026-10-04
     kind: station_transition
@@ -1123,17 +1131,81 @@ guest observability.
   journal (Firecracker serial to a per-VM rotated log, or journal
   forwarding) so exec, boot and apply failures are host-visible without
   bespoke diag files. `layering-diag.log` becomes a special case.
-- **Declared VM shapes:**
-  - Move `VM_INTERACTIVE_MEM_MIB=16384` out of `vmctl-priority.env` into
-    tracked config, or revert it.
-  - Budget shapes against 32 GiB explicitly: at 16 GiB, one interactive
-    guest is half the host.
-  - S3 sizes snapshots against this decision.
+- **Guest memory budget (owner direction 2026-10-05: "shouldn't need 16gb
+  at all"; target 2-4 GiB, oversubscribed):**
+  - **Diagnosis.** The owner guest went 2 → 4 → 8 → 16 GiB, each step
+    justified by "the store outgrew the guest"
+    (`internal/vmctl/ownership.go:1220-1224`,
+    `guest-vm-embedded-dolt-memory-starved`). On 10-03 the live store was
+    about 5 GiB and the noms journal held about 22 GiB of garbage
+    (`guest-dolt-journal-and-host-image-leak`), because
+    `store.MaybeRunDoltGC` returns at the live-size guard
+    (`internal/store/dolt_maintenance.go:290`) before the journal trigger
+    (`:309`). Once live exceeds 5 GiB, the guest never GCs again.
+  - **Hypotheses to measure, not assume.** Guest memory demand tracks
+    journal and store size rather than the hot working set, because of:
+    (a) Dolt journal/index state proportional to the journal;
+    (b) O(store) scans at boot (reconstruct takes 15.6 s with
+    `applied_rows=0`) and in request paths (`scan object`);
+    (c) guest page cache filling whatever ceiling it is given;
+    (d) an unbounded Go heap (no `GOMEMLIMIT`).
+  - **Measure.** Add a memory receipt (guest `/proc/meminfo`, Go runtime
+    metrics, Dolt cache/journal sizes) and the host-side committed RSS per
+    Firecracker process. Record before and after a host offline GC of the
+    owner store. This is the decisive observation: if memory falls with
+    the journal, the 16 GiB was paying for garbage.
+  - **Shrink the working set (root cause).**
+    - Fix the GC ordering: routine journal GC must be reachable. Above the
+      in-guest safety threshold, schedule host-side offline GC
+      automatically rather than via a manual runbook.
+    - Bound Dolt caches and set `GOMEMLIMIT`.
+    - Remove O(store) scans from boot and request paths with indexes, or
+      cursors from the last applied point.
+    - Longer-term: move cold Texture revision history out of the guest's
+      embedded store into content-addressed blobs.
+    - S2's host builder already removes compile spikes from guests.
+  - **Elastic memory and oversubscription.**
+    - The guest shape becomes a ceiling, not a reservation (target 4 GiB
+      for interactive, 2 GiB for fresh/disposable).
+    - Each Firecracker VM runs in its own cgroup: `MemoryHigh` as the soft
+      target, `MemoryMax` as the ceiling.
+    - Use the Firecracker balloon (deflate-on-OOM; free-page reporting if
+      v1.15.1 supports it — verify) so idle guests return pages to the host.
+    - Use host zswap over the existing swap device so cold guest pages
+      compress instead of OOMing.
+    - Admission: the sum of ceilings may exceed host RAM by a declared
+      oversubscription ratio, with pressure reclaim choosing hibernation
+      (S3) over OOM.
+  - **Declared shapes.** Remove `VM_INTERACTIVE_MEM_MIB=16384` from the
+    mutable `vmctl-priority.env`. That file is declared for priority IDs
+    only, so the value is untracked drift. Shapes live in tracked config,
+    and the owner computer comes down to the 4 GiB ceiling once the GC fix
+    and measurement show it fits.
+  - **Host side.** corpus-dolt is capped at 18-20 GiB on a 32 GiB host and
+    is the largest single consumer. Hand it a number through the capacity
+    mission. Guests cannot be dense while one host database takes over
+    half the RAM.
 - **CI deploy gating:** compute deploy need against the deployed identity,
   not the push delta, so a docs-only head never strands runtime code
   (`ci-docs-only-head-strands-runtime-deploy`).
 
-### S3 adjustment
+### S3 adjustment — residency tiers ("feels always on")
+
+S3 is framed as residency tiers rather than hibernate alone. The goal is
+that every computer behaves as always on without being resident:
+- **Hot:** running, serving, with runs active.
+- **Warm-idle:** running and ballooned down to a small floor (~0.5-1 GiB),
+  for instant response at small cost.
+- **Cold:** a machine snapshot on disk, resumed in about 1 s.
+
+Waking is driven by triggers, not residency:
+- the proxy holds an HTTP request while the computer resumes;
+- a host-side scheduler (the DSec Watcher pattern) wakes computers for due
+  timers, mail arrival and agent continuations.
+
+Smaller, ballooned guests make snapshots smaller and resumes faster. SO's
+memory work and S3 are one lever pulled from both ends.
+
 
 S0b could not measure snapshots: there is no vmctl snapshot surface and the
 guest is sealed. S3's first slice is therefore the measurement:
