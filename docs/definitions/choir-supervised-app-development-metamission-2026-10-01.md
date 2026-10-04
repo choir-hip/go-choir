@@ -6,6 +6,12 @@ definition_version: 4
 # model), and org templates. Stations reordered for development ease: the
 # substrate that shortens every later dev loop (security floor, layering,
 # fast resume) comes first.
+# v3.1 2026-10-04: post-S0a/S0m review. S0a evidence folded in (boot
+# attribution, confirmed open tap/egress, gateway token exposure), S0m
+# recorded complete with an INCOMPLETE boundary protocol, a source-traced
+# cross-tenant authority chain recorded in full (owner: prerelease, include
+# security detail), S1a host-boundary hotfix pulled ahead of S0b, CI
+# deploy-cancellation and ops hazards named.
 
 readiness: executable
 
@@ -27,11 +33,20 @@ metamission:
       readiness: reviewed
       status: complete
       depends_on: []
+    - id: S1a-host-boundary-hotfix
+      # First slice of S1, pulled ahead of S0b on 2026-10-04: it needs no
+      # S0b evidence (reachability is already confirmed by S0a) and closes
+      # a source-traced cross-tenant authority chain on a deployment with
+      # open registration. Authored as the S1 file's first slice.
+      path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
+      readiness: reviewed
+      status: pending
+      depends_on: [S0m-record-native-messaging]
     - id: S1-security-floor
       path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
       readiness: reviewed
       status: pending
-      depends_on: [S0-reality-and-boot-timeline]
+      depends_on: [S0-reality-and-boot-timeline, S1a-host-boundary-hotfix]
     - id: S2-layering-runtime-from-release
       path: docs/definitions/choir-appdev-s2-layering-runtime-from-release-2026-10-01.md
       readiness: reviewed
@@ -154,6 +169,21 @@ start:
         predates capsules. AGENTS.md (CLAUDE.md) Safety section and
         docs/computer-ontology.md naming rules were amended in the same
         commit as this v2.
+    - date: '2026-10-04'
+      correction: >-
+        The baseline line "Guest VM egress is open and tap->tap forwarding
+        appears permitted ... Unverified on staging" is now CONFIRMED on
+        staging by S0a (docs/evidence/s0a-tap-reachability-2026-10-01.json:
+        guest->other guest :8085, guest->host vmctl :8083, guest->1.1.1.1:443
+        all ok). Its consequence is larger than egress: guest traffic to
+        host services is DNATed to 127.0.0.1 and MASQUERADEd to loopback, and
+        host-internal authority checks accept caller-controlled headers, so
+        any guest inherits host-internal and cross-tenant authority
+        (docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md).
+        The baseline line "Boot latency ... cold 15-30 s, warm ~5 s; no
+        per-phase timeline" is superseded by measured S0a receipts: fresh
+        cold 8.6 s, owner-sized refresh 26.6 s (was 662.7 s before the
+        vocab-rescan repair). See now.belief.
 
 finish:
   deliver: >-
@@ -352,6 +382,11 @@ boundaries:
     - Publication is source plus pinned inputs; no cross-tenant binary execution.
     - A machine snapshot is restored at most once, only against its paired disk and its exact image/hypervisor versions.
     - A fork never holds its parent's identity material.
+    - >-
+      Guest-originated traffic never carries host-internal authority or
+      another tenant's identity. TARGET invariant; currently VIOLATED
+      (docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md);
+      S1a restores it before S4 opens capsule egress or S9 creates forks.
   excluded:
     - Binary distribution between computers (owner decision 2026-10-01; a trusted host build cache is a later, separate decision).
     - Per-guest nixos-rebuild of the base OS.
@@ -379,12 +414,18 @@ boundaries:
 now:
   status: working
   slice: >-
-    S0m record-native messaging — the live station (owner-inserted
-    2026-10-01 ahead of S0b). S0 remains working; its S0b disposable-
-    computer slice resumes when S0m lands. Station files under
-    docs/definitions/choir-appdev-s*-2026-10-01.md.
-  source_ref: main@0bddb11aa2d27694cb760f8aebda52c95ba4e44d
-  deploy_identity: 'staging https://choir.news deployed_commit=ed406f45 (repo head 65399d3e; 424141a7/65399d3e were docs-only, no deploy)'
+    Post-S0m review (2026-10-04). S0m COMPLETE (terminal receipt
+    s0m-ask-acceptance-2026-10-04, deployed a4fcdb8d). Its station-boundary
+    protocol is NOT yet closed: no closing consensus panel, no reporter
+    report, and no transition receipt before this update (recorded below as
+    incomplete). Next live slice, in order:
+    (1) close the S0m boundary;
+    (2) S1a host-boundary hotfix (security, pulled ahead of S0b);
+    (3) CI deploy-cancellation fix;
+    (4) S0b disposable-computer probes;
+    (5) the rest of S1, then S2.
+  source_ref: main@fca4f65dfabd4c220a061ac6d77177ecd9b08bd7
+  deploy_identity: 'staging https://choir.news deployed_commit=a4fcdb8d (deployed 2026-10-04T02:01:45Z); owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer a4fcdb8d; Node B free disk 103G after reclaim'
   candidate:
     id: none
     state: none
@@ -396,84 +437,218 @@ now:
     id: one-pipeline-two-layers
     claim: >-
       The deliverable needs no new governance machinery. M7/M11 self-dev,
-      M9a transport, capsule effect bundles and Restore-Zero semantic
-      snapshots carry it. What is missing is effect reach, openness and
-      speed:
+      M9a transport, capsule effect bundles, Restore-Zero semantic
+      snapshots and (since S0m) record-native desk couplings carry it.
+      What is missing is effect reach, openness, speed, and a host
+      boundary that actually holds:
       (a) the guest executes a per-computer app-layer closure, not the
       image baseline;
       (b) capsules get recorded egress and a private Nix store;
       (c) a preview bridge;
       (d) the change record is base rev + patch stack + pinned inputs;
       (e) machine snapshots for resume, semantic snapshots for
-      distribution.
+      distribution;
+      (f) guest traffic carries no host-internal authority (new
+      2026-10-04).
       Layering (a) is also the largest latency lever, because most
       updates stop rebooting VMs.
     test: >-
-      S0 confirms (a) is the blocker on staging (a self-dev Go change
-      applies but the endpoint does not change) and produces a boot
-      timeline that attributes the 5-30 s. Each later station is
-      falsified if it needs a new authority path rather than a new effect
-      path.
+      S0b confirms (a) on a disposable computer (a self-dev Go change
+      applies but the endpoint does not change), selects or falsifies the
+      S2 builder substrate, and measures snapshot create/resume on an
+      owner-sized fixture. S1a's deployed refusals confirm (f). Each later
+      station is falsified if it needs a new authority path rather than
+      a new effect path.
     edge: missing_oracle
     delta_o: >-
-      A per-boot timeline receipt (host spawn, kernel, initrd, systemd
-      units, runtime boot phases, first healthy) and a staging probe
-      asserting a runtime-observable effect after self-dev apply.
+      Landed in S0a: a per-boot timeline receipt (host marks + guest
+      systemd + runtime phases + first healthy). Still needed: S0b's
+      runtime-effect probe, snapshot/UFFD measurement, and S1a's
+      guest-origin refusal receipts.
     scope_if_supported: >-
       Single-host Choir Community Cloud staging (32 GiB Node B), Go
-      runtime + Svelte frontend + app backends, Firecracker.
-    status: proposed
+      runtime + Svelte frontend + app backends, Firecracker v1.15.1.
+    status: testing
     evidence_refs:
       - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
       - docs/reports/nixos-agent-platform-redhat-deepseek-audit-2026-10-01.md
       - docs/problems/guest-release-propagation-manual-2026-10-01.md
       - docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md
+      - docs/reports/s0a-boot-timeline-landing-2026-10-01.md
+      - docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json
+      - docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
+      - docs/evidence/s0a-tap-reachability-2026-10-01.json
+      - docs/evidence/s0a-gateway-token-visibility-2026-10-01.json
+      - docs/evidence/s0m-ask-acceptance-2026-10-04.json
+      - docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md
+      - docs/problems/s0m-guest-runtime-deploy-gap-2026-10-02.md
   decision:
     what: >-
       Two-layer guest (shared non-forkable NixOS base; per-computer
       app-layer Nix closure built against it). Source-only publication.
       Machine snapshots for resume, semantic snapshots for fork and
-      distribution. Forks are sibling computers.
+      distribution. Forks are sibling computers. 2026-10-04: S1a
+      host-boundary hotfix runs before S0b (operational ordering under
+      continuous authority; security precedes further probing on a
+      deployment with open registration).
     kind: architecture
     status: settled
-    evidence_ref: owner statements in session 2026-10-01
+    evidence_ref: owner statements in session 2026-10-01; owner 2026-10-04 "update the metamission ... don't exclude the security relevant info"
     owner_ratification_ref: >-
       owner 2026-10-01: "I like your suggestion for layering, and using
       guest NixOS closures appropriately"; "permission granted" (forks);
-      "I ratify #1"; source only
+      "I ratify #1"; source only. 2026-10-04: prerelease; considerable
+      hardening work follows this metamission.
   belief:
     believed_state: >-
-      The control plane works. The effect plane stops at the frontend.
-      Capsules are closed to the network. Apps are monoliths. Publication
-      does not exist. The VM network may be too open between tenants.
-      Hibernate is a cold boot. Every image deploy reboots every active
-      computer.
+      CONTROL PLANE: self-dev governance works (M11). Desk couplings are
+      record-native (S0m): every addressed act is a commitment record whose
+      Addressee is the delivery instruction; ask->report->resolve is
+      deployed-verified (trajectory 684ddcb1).
+      EFFECT PLANE: still stops at the frontend. The guest runtime execs
+      from the image's Nix store. Deploys skip constructed-computer-version
+      guests, so their runtime lags main until a manual refresh
+      (s0m-guest-runtime-deploy-gap). The Texture desk model was changed by
+      a manual live data.img edit (docs/evidence/s0m-texture-model-swap-2026-10-02.md):
+      untracked state drift that S2 must turn into a release.
+      BOOT (S0a, measured): fresh cold boot 8.6 s to first healthy. That is
+      host data-image creation ~1.1 s, guest kernel+initrd+systemd ~5.9 s
+      (initrd 2.8 s, userspace 3.0 s; network-online is immediate because
+      wait-online is masked), and runtime ~1.1 s. The owner-sized refresh
+      is 26.6 s: the same ~6 s OS, store open 3.2 s, reconstruct 15.6 s with
+      applied_rows=0, vocab fence 0.5 s. Reconstruct-with-nothing-to-apply
+      is the largest cold-path target; initrd is next. The 662.7 s
+      vocab-rescan boot is repaired.
+      SHAPES: the fresh computer booted with 16384 MiB while the owner
+      computer runs 4096 MiB; node-b.nix declares 4096 default / 8192
+      interactive. The source of 16384 is unexplained and matters for S3
+      snapshot size and the 32 GiB budget.
+      SECURITY (prerelease, recorded in full by owner direction):
+      - guest->other guest, guest->host internal ports, and guest->internet
+        are all open (confirmed).
+      - Guest->host traffic arrives as loopback. vmctl, corpusd, maild, the
+        gateway and guest /internal/runtime/* accept caller-controlled
+        X-Internal-Caller / X-Authenticated-User / Host headers
+        (source-traced).
+      - Hence any account holder can, from source, control any computer's
+        lifecycle, read other tenants' mail and guest routes, and inject a
+        frontend into tracking computers via a genuinely platform-signed
+        offer. The owner computer is canary and refuses offers.
+      - The gateway token rides the guest kernel cmdline.
+      - The guest runtime is unconfined root.
+      - Yaegi workers have no kernel floor.
+      - vmctl's lock substrate has a blocks-all class (10 siblings, S0a
+        panel).
+      OPS: a docs push cancels an in-flight CI deploy (ci.yml concurrency
+      group ci-${{ github.ref }}, cancel-in-progress: true; confirmed
+      2026-10-02, fix reached staging only by manual force deploy).
+      Node B deploy headroom is 103G vs a ~90G floor, reached by deleting
+      the 09-18 rollback ref. Guest Dolt journal leak and host dead-image
+      accumulation remain open (capacity mission). The Management
+      live-occurrence storm's live-locks are repaired, but its convergence
+      invariant (O(1) resolve + durable dispatch gate) is unbuilt.
     main_uncertainty: >-
-      Where the 5-30 s actually goes (kernel/initrd vs the serialized
-      systemd chain vs runtime boot phases such as Dolt open and recovery
-      planning). And whether an owner-sized (8 GiB guest, about 11 GiB
-      store) machine snapshot hibernates and resumes within budget on
-      btrfs with lazy memory loading.
+      (1) Whether the S1a fix can refuse guest-origin authority without
+      breaking the legitimate guest->host flows (gateway inference, maild
+      drafts, corpusd event CAS, wire publish, source service), which today
+      ride the same header/loopback path. (2) Whether an owner-sized
+      machine snapshot creates and resumes within budget with UFFD lazy
+      loading on Firecracker v1.15.1. (3) Which builder substrate
+      (host-side service, privileged builder capsule, or scoped guest
+      service) S2 uses.
     next_observation: >-
-      S0 boot timeline on staging for one fresh and one owner-sized
-      computer, plus the reality probes (self-dev Go effect, tap->tap
-      reachability, gateway token visibility, M9a full-bundle payload).
+      Two disposable accounts on staging: log RemoteAddr on one host
+      service for a guest-originated request (confirms the loopback leg),
+      then the S1a refusal matrix pre/post fix. Then the S0b probe suite.
   blocker_or_risk: >-
-    S4 (open-world capsule) and S9 (forks) must not land before S1. A
-    machine snapshot restored against a moved disk corrupts the
+    SECURITY: the cross-tenant authority chain is live on a deployment with
+    open registration until S1a lands. Treat S1a as the next code change.
+    No S0b probe or later station may assume tenant isolation before it.
+    PROCESS: the S0m boundary protocol is incomplete. CI cancels deploys on
+    any docs push, which collides with Problem-Documentation-First on every
+    red fix. S4 (open-world capsule) and S9 (forks) must not land before
+    S1. A machine snapshot restored against a moved disk corrupts the
     filesystem, and a double resume duplicates RNG and key state. S3's
     invariants are the safety case, not optional polish.
   next_action: >-
-    S0m finish legs under docs/definitions/choir-appdev-s0m-record-native-
-    messaging-2026-10-01.md. Stranded-bound rebind is PROVEN on staging
-    (ed406f45): freed packet rebinds a fresh carrier. Open residual before
-    completion candidacy: bound carrier completes WITHOUT consuming its
-    delivered control (docs/problems/s0m-bound-carrier-completes-unconsumed-
-    2026-10-03.md) + consumeIdleTextureTrigger mask. S0b resumes after S0m
-    closure. Station boundary: divergent agentic-consensus + reporter +
-    transition receipt before the next station promotes.
-
-receipts: []
+    1. Close the S0m boundary: convergent agentic-consensus on the S0m
+       terminal receipt + S1a/S0b readiness, a reporter narrative, and a
+       transition receipt on this file.
+    2. S1a: author the slice in the S1 station file from
+       docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md.
+       Inventory the legitimate guest->host flows first; then network
+       isolation + authority binding; deployed refusal matrix on two
+       disposable accounts.
+    3. CI: move the deploy job to its own concurrency group with
+       cancel-in-progress false (yellow/orange; .github/workflows/ci.yml).
+    4. Resume S0b.
+receipts:
+  - id: s0a-slice-landed-2026-10-02
+    kind: slice_transition
+    station: S0-reality-and-boot-timeline
+    status: closed
+    boundary: S0a landed -> S0b (S0b then deferred behind S0m)
+    identity: main@7e412ca7 (instrument + deadlock hotfix), evidence refresh 4708a034, deployed fd8b2973
+    proof_refs:
+      - docs/reports/s0a-boot-timeline-landing-2026-10-01.md
+      - docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json
+      - docs/evidence/s0a-boot-timeline-owner-sized-2026-10-01.json
+      - docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
+      - docs/evidence/s0a-guest-layout-2026-10-01.json
+      - docs/evidence/s0a-runtime-closure-2026-10-01.json
+      - docs/evidence/s0a-tap-reachability-2026-10-01.json
+      - docs/evidence/s0a-gateway-token-visibility-2026-10-01.json
+    panel: >-
+      S0a boundary panel recorded in the S0 station file (S1-sufficient,
+      S3-insufficient-as-archived); forced 21bbabff, the forgeable-caller
+      problem doc, and the 7e412ca7 deadlock hotfix.
+    heresy_delta: >-
+      discovered: open tap/egress, gateway token on the kernel cmdline,
+      forgeable internal caller, deploy-refresh skipping autoputer
+      internals, vocab rescan on any replay, vmctl fetch-under-lock
+      deadlock (plus 10 sibling lock sites).
+      introduced: the 21bbabff fetch-polling deadlock (~40 min serialized
+      boots on staging).
+      repaired: the deadlock (7e412ca7) and the vocab rescan (owner boot
+      662.7 s -> 26.6 s).
+    rollback_ref: git revert of the S0a instrument commits (90af3b2..7e412ca)
+  - id: s0m-station-terminal-2026-10-04
+    kind: station_terminal
+    station: S0m-record-native-messaging
+    status: closed
+    terminal_receipt: docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md#s0m-ask-acceptance-2026-10-04
+    identity: main@a4fcdb8d deployed 2026-10-04T02:01:45Z
+    landing:
+      source_commit: a4fcdb8d
+      ci_ref: run 37165170516 (code green; first deploy failed on Node B disk headroom, redeployed after reclaim)
+      deploy_ref: Node B deploy 2026-10-04T02:01:45Z
+      environment_identity: https://choir.news deployed_commit=a4fcdb8d
+      deployed_acceptance: ask->report->resolve on trajectory 684ddcb1 (docs/evidence/s0m-ask-acceptance-2026-10-04.json)
+    heresy_delta: >-
+      repaired: research->texture return path, desk-run dispatch stall,
+      startup-refused crash loop, prompt-bar submit cancel, stranded-bound
+      control deadlock + rebind, consume-marking, idle-trigger mask,
+      channel-mail dead letter, actor-wake created_at drift.
+      discovered: Management live-occurrence storm (live-locks repaired;
+      convergence invariant unbuilt), guest Dolt journal leak + host
+      dead-image accumulation, Node B deploy disk headroom, guest runtime
+      deploy gap for constructed computers, CI deploy cancellation by docs
+      push.
+      introduced: an untracked live data.img edit for the Texture model swap.
+  - id: s0m-to-next-transition-2026-10-04
+    kind: station_transition
+    status: INCOMPLETE
+    landed: S0m-record-native-messaging
+    next: S1a-host-boundary-hotfix, then S0b (S0 resumes)
+    panel: MISSING. Required by the orchestration contract; not run at S0m close.
+    report: >-
+      MISSING closing report (only
+      docs/reports/s0m-record-native-station-checkpoint-2026-10-02.md
+      exists).
+    note: >-
+      Recorded by the 2026-10-04 review so the gap is visible. The next
+      orchestrator pass runs the panel and reporter, then rewrites this
+      receipt to closed with the panel digest and report ref.
 ---
 
 # Supervised App Development, Fast Resume, Forks, and Source Publication — Metamission (v2)
@@ -626,6 +801,61 @@ idea of what a change is.
   per-computer disposition and can deny the vulnerable capability even
   when the computer is asleep or cannot rebase; capability removal is
   independently verified on the actual computer.
+
+## Security posture (prerelease, 2026-10-04)
+
+Owner direction: record security findings in full. Choir is prerelease,
+and considerable hardening follows this metamission. This section lists
+what is known now. It is the input to that hardening pass.
+
+**Confirmed on staging (S0a):**
+- A guest can open TCP to other guests' runtime port, every
+  host-internal service port, and the internet.
+- The gateway token is on the guest kernel cmdline and readable inside the
+  guest.
+
+**Source-traced, not exercised against another tenant:**
+- Guest->host traffic is DNATed to 127.0.0.1 and MASQUERADEd to loopback.
+- vmctl (`isInternalCaller`), corpusd (platform-update mint), maild, the
+  gateway's internal check, and guest `/internal/runtime/*` all accept
+  caller-controlled `X-Internal-Caller`, `X-Authenticated-User` or `Host`
+  headers.
+- From any account's own guest, that yields:
+  - lifecycle control over every computer;
+  - cross-tenant reads/writes on mail and guest user routes;
+  - frontend injection into tracking computers through a genuinely
+    platform-signed update offer.
+- Full chain and fix shape:
+  `docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`.
+
+**Known weaker boundaries (audit and S0a):**
+- The guest runtime runs as unconfined root.
+- Non-capsule shells (terminal, zot) inherit its environment, including
+  the gateway token.
+- Yaegi session workers have only a package allowlist, with no Landlock,
+  seccomp or netns.
+- Capsule isolation is per capsule, not per call.
+- The S0a instrument's `/internal/diag/tcp-dial` and boot-timeline
+  surfaces are header-gated.
+- vmctl has a lock-substrate blocks-all class.
+
+**In-metamission repairs:**
+- **S1a:** host boundary — network isolation + authority binding.
+- **S1:** runtime confinement, token off the cmdline and out of child
+  environments, Yaegi kernel floor, removal or credentialing of the S0a
+  diag surfaces.
+- **S3:** snapshot secrecy and one-shot invariants.
+- **S4:** recorded egress.
+- **S9:** fork re-keying.
+
+**Deferred to the post-metamission hardening pass (named so it is not
+lost):**
+- per-tool-call Landlock;
+- encryption at rest for snapshots and exports;
+- a full review of every host-internal endpoint's authority model;
+- signer and credential lifecycle review;
+- supply-chain review of the S4 pinned-input capture;
+- an external review before public launch.
 
 ## Orchestration contract (station boundaries)
 

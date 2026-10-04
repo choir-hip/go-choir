@@ -46,6 +46,11 @@ reject `b18f3baf`; per-kind + dual-delivery-absence regression green.
 Node-b deploy disk headroom resolved 2026-10-04 (dump-20260918 rollback ref
 + nix gc, 84G→103G); `a4fcdb8d` deployed — mask fix + corrected probe live.
 →
+**Next (2026-10-04 review):** close the S0m boundary (panel + report +
+transition receipt, not yet run) → **S1a** host-boundary hotfix, pulled
+ahead of S0b: any guest currently inherits host-internal and cross-tenant
+authority ([`problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`](problems/s0-guest-reaches-host-internal-authority-2026-10-04.md))
+→ CI deploy-cancellation fix → **S0b** →
 **S1** security floor → **S2** layering → **S3** fast resume →
 **S4** capsule open world → **S5** live preview + supervision →
 **S6** commit gate → **S7** app packages → **S8** source publication →
