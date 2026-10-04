@@ -196,20 +196,20 @@ heresy_delta:
 now:
   status: working
   slice: >-
-    Live. Full layering mechanism landed end-to-end 2026-10-04, deployed
-    at df23219c: (1) base-join manifest (20880d75); (2) pure-Go narchive
-    reader + GC-rooted store materializer (b68357a1), wired into Apply
-    (a7052d2a); (3) guest runtime exec — autoputerRuntimeExec resolves
-    current/bin/autoputer and runs it in a mount namespace with an
-    overlayfs (updater private store upper over base /nix/store lower),
-    falling back to the base binary on any layering failure (df23219c,
-    DEPLOYED — verified overlay+exec works on Node B kernel); (4) producer —
-    buildPlatformUpdateOffer propagates the layering join into the release
-    manifest so an offer can carry closure.nar (f5460bdc). Remaining: the
-    deployed layering acceptance — drive a layered platform-update into a
-    disposable computer and observe the guest exec the release binary.
-    source_ref: main@f5460bdc
-    deploy_identity: 'staging https://choir.news deployed_commit=df23219c; layering exec image live (overlay+exec kernel-verified)'
+    Live. Full layering mechanism + transport landed end-to-end 2026-10-04:
+    (1) base-join manifest (20880d75); (2) pure-Go narchive reader +
+    GC-rooted store materializer (b68357a1), wired into Apply (a7052d2a);
+    (3) guest runtime exec via recorded store-path entrypoint + mount-ns
+    overlay (c7bb4a12 + 1be8bd72 stale-entrypoint fix); (4) producer layering
+    join (f5460bdc); (5) CAS-ref transport for the ~146MB closure.nar —
+    PlatformUpdateFile.ref + corpusd PUT/GET blob endpoint + guest
+    FetchBlobRaw streaming (ef2e607d, convergent-panel adjudicated). Deployed
+    image = 3142979b (exec) + ef2e607d (transport). Remaining: the deployed
+    layering acceptance — PUT the nar blob, mint by ref, apply to a
+    disposable, observe the guest exec the release store-path binary in the
+    overlay + a base-mismatched offer fail closed.
+    source_ref: main@ef2e607d
+    deploy_identity: 'staging https://choir.news deployed_commit=ef2e607d; layering exec + CAS-ref transport live'
   candidate:
     id: none
     state: none
