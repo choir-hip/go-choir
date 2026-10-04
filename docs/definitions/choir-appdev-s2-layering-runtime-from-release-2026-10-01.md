@@ -278,13 +278,14 @@ now:
     frontend/state/event-head atomic join, or leaks a writable global store
     violates the updater trust boundary rather than providing a valid speedup.
   next_action: >-
-    Wedge repaired and Go-effect proven on staging (op
-    selfdev-b72a48565061c35c0a22246cb6fc06c3 FROZEN, bundle 9d2be524,
-    fix f61de45b deployed). Next: the capsule-namespace probe — prove a
-    capsule can carry a writable /nix/store bind + nix-daemon socket
-    inside its NS_MNT (mechanically viable per the overlay mount), which
-    selects the privileged-builder-capsule substrate; else fall back to
-    host-service. Then land the selected builder substrate.
+    Builder-substrate decision made 2026-10-04 (host-service; see
+    docs/problems/s2-builder-substrate-2026-10-04.md): the
+    privileged-builder-capsule branch needs new privileged-capsule
+    machinery (drop NEWNET, writable-store override, relax NS_USER),
+    not a config flip, and duplicates what the host already provides.
+    Next: land the host-service builder — produce the app-layer closure
+    + base-image identity the S2 contract requires, then the layering
+    slice (per-computer Nix closure, GC-rooted, no writable guest store).
 
 receipts: []
 ---
