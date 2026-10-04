@@ -27,7 +27,7 @@ import (
 //   - local < W: staged rebase (sibling install + quarantine/swap)
 //   - local ≥ W and tail in bound: resume from the retained head
 //
-// A non-empty store is never skipped. Silent genesis fallback is deleted.
+// A non-empty store is never skipped; silent genesis fallback is deleted.
 func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerID, platformURL string, capability func(context.Context) (string, error), live *choirstore.Store) (bool, error) {
 	storePath = filepath.Clean(storePath)
 	markerName := filepath.Base(storePath)
