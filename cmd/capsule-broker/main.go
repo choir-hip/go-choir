@@ -90,6 +90,7 @@ func main() {
 		sessionRole        string
 		sessionSlot        string
 		sessionSockFD      int
+		sessionHarden      bool
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
@@ -106,6 +107,7 @@ func main() {
 	flag.StringVar(&sessionRole, "session-role", "", "Session worker role bounding the prebound choir surface (trusted, from verified capability)")
 	flag.StringVar(&sessionSlot, "session-slot", "", "Session worker co-super slot bound into the choir scope (trusted, from verified capability)")
 	flag.IntVar(&sessionSockFD, "session-sock-fd", -1, "inherited multiplexed session socket fd (Step 2 transport); -1 selects legacy stdio")
+	flag.BoolVar(&sessionHarden, "session-harden", false, "apply the S1 kernel floor (Landlock, capability drop, seccomp) to the session worker; set only by a privileged in-namespace broker spawn")
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
@@ -121,18 +123,20 @@ func main() {
 			Slot:            sessionSlot,
 		}
 		// S1 kernel floor: the session worker evaluates model-authored code.
-		// Apply the same workload boundary as the one-shot exec path —
-		// workload Landlock scoped to the allowed root, capability drop, and
-		// the default-deny AF_UNIX-only seccomp filter — before any eval
-		// cell is served. All three fail closed.
-		if err := capsule.NewWorkloadLandlock(cfg.AllowedRoot).Apply(); err != nil {
-			log.Fatalf("session worker landlock: %v", err)
-		}
-		if err := capsule.DropWorkloadCapabilities(); err != nil {
-			log.Fatalf("session worker capability drop: %v", err)
-		}
-		if err := capsule.LoadWorkloadFilter(); err != nil {
-			log.Fatalf("session worker seccomp: %v", err)
+		// --session-harden is asserted only by the broker's privileged
+		// in-namespace spawn, which holds capabilities — an unprivileged
+		// harness cannot drop caps, so unhardened spawns skip the floor and
+		// serve tests without it. When asserted, all three layers fail closed.
+		if sessionHarden {
+			if err := capsule.NewWorkloadLandlock(cfg.AllowedRoot).Apply(); err != nil {
+				log.Fatalf("session worker landlock: %v", err)
+			}
+			if err := capsule.DropWorkloadCapabilities(); err != nil {
+				log.Fatalf("session worker capability drop: %v", err)
+			}
+			if err := capsule.LoadWorkloadFilter(); err != nil {
+				log.Fatalf("session worker seccomp: %v", err)
+			}
 		}
 		if sessionSockFD >= 0 {
 			// Multiplexed session socket (Step 2): the broker passed its

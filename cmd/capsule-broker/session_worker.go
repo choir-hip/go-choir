@@ -32,6 +32,13 @@ type workerSessionConfig struct {
 	timeout     time.Duration
 	role        string
 	slot        string
+	// hardened tells the worker stage to apply the S1 kernel floor (workload
+	// Landlock, capability drop, seccomp) before serving cells. Only the
+	// broker's production spawn sets it — it holds capabilities inside the
+	// capsule user namespace. Unprivileged test spawns leave it false;
+	// an unprivileged process cannot drop caps, so hardening would fail
+	// closed and the worker would never become ready.
+	hardened    bool
 }
 
 // sessionWorker owns one persistent worker process serving framed eval cells
@@ -90,6 +97,7 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 		"--session-role", cfg.role,
 		"--session-slot", cfg.slot,
 		"--session-sock-fd", "3",
+		fmt.Sprintf("--session-harden=%t", cfg.hardened),
 	}
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = cfg.allowedRoot
@@ -288,6 +296,7 @@ func (b *Broker) sessionConfigFor(activationID, role, slot string) workerSession
 		timeout:     60 * time.Second,
 		role:        role,
 		slot:        slot,
+		hardened:    true,
 	}
 }
 
