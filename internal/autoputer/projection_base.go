@@ -85,7 +85,7 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 
 	plan, err := projectionbase.PlanRecovery(empty, localSeq, chainExists, watermarkSeq, targetSeq)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("projection recovery plan refused for %s (empty=%t local=%d W=%d H=%d): %w", computerID, empty, localSeq, watermarkSeq, targetSeq, err)
 	}
 	switch plan.Action {
 	case projectionbase.RecoveryGenesis, projectionbase.RecoveryResume:
