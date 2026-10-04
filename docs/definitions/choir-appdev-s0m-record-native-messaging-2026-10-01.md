@@ -180,7 +180,7 @@ boundaries:
     RN2-substrate: orange (IssueLifecycleControl extraction, selectors,
       management:* contract, stranded-bound repair)
     RN3-cutover: orange→red per kind (delivery-path cutover)
-    RN4-wake-retire: red (protected surface: actor dispatch)
+    RN4-wake-retire: "red (protected surface: actor dispatch)"
     RN5-pack-tallies: orange (issuer feedback surface)
   authority_sources:
     - owner direction 2026-10-01 (record-native, ApplyTexture edits only,
@@ -196,9 +196,9 @@ boundaries:
       dual-delivery (envelope + packet) for one act is a defect.
     - The commitment ledger stays append-only; records never re-derive
       packets (packets own delivery state; records own obligation).
-    - Scorer independence: issuer never resolves its own stake; target never
-      resolves the issuer's stake; management is scorer of record.
-    - directives are excluded from claim accrual/materiality aging.
+    - "Scorer independence: issuer never resolves its own stake; target never
+      resolves the issuer's stake; management is scorer of record."
+    - Directives are excluded from claim accrual/materiality aging.
     - Every cutover commit keeps tests deterministic and the staging
       computer serviceable.
   protected_surfaces:
@@ -339,8 +339,10 @@ receipts:
     pushed_commits: [d20483e8, a4fcdb8d]
     ci: >-
       d20483e8 shard green (run 37164284057, cancelled on supersede);
-      a4fcdb8d run 37165170516 — code tests green, Deploy-to-Staging failed
-      on node-b disk headroom (infra, not code).
+      a4fcdb8d run 37165170516 — code tests green AND Deploy-to-Staging
+      green; deployed identity confirmed by x-choir-build-commit=a4fcdb8d.
+      (Prior wording conflated a4fcdb8d's run with the node-b disk-headroom
+      failure that was repaired by fca4f65d's housekeeping.)
     deploy: >-
       Acceptance ran on deployed autoputer d61c9b1b (the chain mechanics
       predate the two parked commits). Node-b disk headroom resolved
