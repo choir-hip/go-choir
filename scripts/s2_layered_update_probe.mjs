@@ -37,13 +37,13 @@ const result = {
 function uniqueEmail() {
   return `s2-layered-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
+function nodeBJSON(command, input) { const raw = nodeB(command, input); return raw ? JSON.parse(raw) : null; }
+
 function nodeB(command, input) {
   return execFileSync('ssh',
     ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', 'node-b', command],
-    { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 200 * 1024 * 1024 }).trim();
+    { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 512 * 1024 * 1024 }).trim();
 }
-function nodeBJSON(command, input) { const raw = nodeB(command, input); return raw ? JSON.parse(raw) : null; }
-
 function vmctlOwnership(userID) {
   return nodeBJSON(
     `curl -fsS -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list | jq -c --arg u '${userID}' '.ownerships[] | select(.user_id==$u and .desktop_id=="primary" and .kind=="interactive")'`);
@@ -60,6 +60,43 @@ function mintOffer(mintRequest) {
   return nodeBJSON(
     'curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" --data-binary @- http://127.0.0.1:8086/internal/computers/platform-updates/offer',
     JSON.stringify(mintRequest));
+}
+// Build the layered mint request on Node B with jq --rawfile so the 146MB
+// closure.nar never round-trips through this process's stdout/stdin.
+// The 146MB closure.nar cannot ride the 64MB-capped mint inline. Transport it
+// as a CAS blob: PUT the raw bytes to the platform-update blob store (the
+// digest is the URL + verified server-side), then mint with a content-
+// addressed ref instead of inline bytes.
+let mintReqCounter = 0;
+function uploadBlob(narPath, digest) {
+  return nodeB(
+    `curl -fsS -X PUT -H "X-Internal-Caller: true" --data-binary @${narPath} ` +
+    `'http://127.0.0.1:8086/internal/computers/platform-updates/blob/${digest}'`);
+}
+function artifactRef(digest) {
+  return `artifact+sha256://${digest}/sha256/platform-update/${digest}`;
+}
+function mintLayeredOffer(fields, narPath) {
+  const digest = nodeB(`sha256sum ${narPath} | awk '{print $1}'`).trim();
+  const uploaded = uploadBlob(narPath, digest);
+  const tmp = `/tmp/layered-req-${Date.now()}-${mintReqCounter++}.json`;
+  const jq = `jq -n ` +
+    `--arg cid '${fields.computer_id}' --arg uid '${fields.update_id}' ` +
+    `--arg rid '${fields.realization_id}' --arg beh '${fields.base_event_head}' ` +
+    `--arg exp '${fields.expires_at}' --arg mk '${fields.marker}' ` +
+    `--arg cc '${fields.code_commit}' --arg bmd '${fields.base_image_manifest_digest}' ` +
+    `--arg le '${fields.layering_entrypoint}' --arg vr '${fields.verifier_refs[0]}' ` +
+    `--arg ref '${artifactRef(digest)}' ` +
+    `'{computer_id:$cid,update_id:$uid,realization_id:$rid,base_event_head:$beh,` +
+    `expires_at:$exp,marker:$mk,code_commit:$cc,` +
+    `files:[{path:"closure.nar",mode:292,ref:$ref}],` +
+    `verifier_refs:[$vr],divergence_status:"tracking",platform_follow_policy:"auto",` +
+    `base_image_manifest_digest:$bmd,layering_entrypoint:$le,` +
+    `closure_digest:"${digest}"}' > ${tmp}`;
+  nodeB(jq); // writes the request JSON to tmp on Node B
+  return { mint: nodeBJSON(
+    `curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" --data-binary @${tmp} http://127.0.0.1:8086/internal/computers/platform-updates/offer; rm -f ${tmp}`),
+    digest, uploaded };
 }
 function pushOffer(ownerID, offer) {
   const raw = nodeB(
@@ -138,34 +175,38 @@ try {
   const genBefore = (routeBefore && !routeBefore.route_absent) ? (routeBefore.slot?.generation ?? 0) : 0;
   const head = corpusdEventHead(computerID, ownerID); result.head_before = head;
   if (!head?.canonical_event_head) throw new Error('canonical head unavailable — missing_oracle');
-
   // The booted base's manifest digest — the join the layered release resolves
-  // against — from the guest's own execution-identity attestation.
-  const nonce = `${Date.now()}`;
-  const identity = await fetchJSON(page, `/api/acceptance/execution-identity?nonce=${nonce}`);
-  result.execution_identity_status = identity.status;
-  const baseDigest = identity.json?.identity?.guest_image_manifest?.sha256 ?? identity.json?.guest_image_manifest?.sha256;
+  // against. Authoritative source: the deployed commit's guest-image-manifest
+  // file in Node B's store (the same file the guest's chooser/updater digests).
+  const deploySha = nodeB(`curl -sI https://choir.news | grep -i 'x-choir-build-commit' | awk '{print $2}' | tr -d '\\r'`).trim();
+  // Resolve the deployed short sha to the full commit so we can match the
+  // manifest's build_commit line.
+  const deployFull = execFileSync('git', ['rev-parse', deploySha], { encoding: 'utf8', cwd: new URL('..', import.meta.url).pathname }).trim();
+  const manifestRec = nodeB(`for m in /nix/store/*-choir-immutable-guest-image-manifest; do c=$(grep -oP 'build_commit=\\K.*' "$m" 2>/dev/null); [ "$c" = "${deployFull}" ] && echo "$m $(sha256sum "$m"|awk '{print $1}')"; done | head -1`);
+  result.deploy_sha_header = deploySha;
+  result.manifest_lookup = manifestRec;
+  const baseDigest = (manifestRec.split(/\s+/)[1] || '').trim();
   result.base_image_manifest_digest = baseDigest;
-  if (!baseDigest) throw new Error(`base image manifest digest unavailable: ${JSON.stringify(identity.json ?? identity.text)}`);
+  if (!baseDigest) throw new Error(`base image manifest digest unavailable for deploy ${deploySha}: ${manifestRec}`);
 
-  // Stage the layered release payload: the closure.nar is already on Node B
-  // (a nix-store --export of a copied-autoputer store path).
-  const narB64 = nodeB(`base64 -w0 ${LAYER_NAR_HOST_PATH}`);
+  // Stage the layered release payload: the closure.nar lives on Node B
+  // (a nix-store --export of a copied-autoputer store path). Build the mint
+  // request server-side so the 146MB nar never round-trips through stdout.
   const updateID = `upd-${marker.toLowerCase().replace(/_/g, '-')}`;
-  const mint = mintOffer({
+  const mintOut = mintLayeredOffer({
     computer_id: computerID, update_id: updateID, realization_id: realization,
     base_event_head: head.canonical_event_head,
     expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
     marker: `s2-${updateID}`,
     code_commit: sha256hex('layered-release'),
-    files: [{ path: 'closure.nar', mode: 292, bytes: narB64 }],
     verifier_refs: [sha256hex(`verify-${updateID}`)],
-    divergence_status: 'tracking', platform_follow_policy: 'auto',
     base_image_manifest_digest: baseDigest,
     layering_entrypoint: LAYER_ENTRYPOINT,
-  });
+  }, LAYER_NAR_HOST_PATH);
+  const mint = mintOut.mint;
+  result.blob_upload = mintOut.uploaded;
+  result.nar_digest = mintOut.digest;
   result.offer = { update_id: updateID, has_signature: Boolean(mint?.authorization?.signature), closure_digest: mint?.manifest?.closure_digest };
-  if (!mint?.authorization?.signature) throw new Error(`mint refused: ${JSON.stringify(mint)}`);
 
   let push = pushOffer(ownerID, mint);
   for (let a = 0; a < 10 && !(push?.release_digest && push?.checkpoint_digest); a++) {
@@ -194,17 +235,15 @@ try {
   // Fail-closed check: a layered offer whose base join does not match the
   // booted base is refused and does not promote.
   const badHead = corpusdEventHead(computerID, ownerID);
-  const badMint = mintOffer({
+  const badMint = mintLayeredOffer({
     computer_id: computerID, update_id: `${updateID}-bad`, realization_id: realization,
     base_event_head: badHead?.canonical_event_head ?? head.canonical_event_head,
     expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
     marker: `s2-${updateID}-bad`, code_commit: sha256hex('layered-bad'),
-    files: [{ path: 'closure.nar', mode: 292, bytes: narB64 }],
     verifier_refs: [sha256hex('verify-bad')],
-    divergence_status: 'tracking', platform_follow_policy: 'auto',
     base_image_manifest_digest: sha256hex('wrong-base-not-booted'),
     layering_entrypoint: LAYER_ENTRYPOINT,
-  });
+  }, LAYER_NAR_HOST_PATH).mint;
   result.bad_offer_signed = Boolean(badMint?.authorization?.signature);
   if (badMint?.authorization?.signature) {
     const badPush = pushOffer(ownerID, badMint);

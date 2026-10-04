@@ -36,7 +36,21 @@ type PlatformUpdateFile struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
 	Mode   uint32 `json:"mode"`
-	Bytes  string `json:"bytes"` // base64
+	Bytes  string `json:"bytes,omitempty"` // base64
+	// Ref is a content-addressed fetch URI for a payload too large to ride the
+	// signed offer inline. Exactly one of Bytes/Ref is set. Ref is digest-
+	// locked: it must equal the canonical
+	// artifact+sha256://<SHA256>/sha256/platform-update/<SHA256> form, so the
+	// signed SHA256 — not a caller-chosen URI — names the object fetched. The
+	// guest resolves Ref and re-hashes the bytes at staging; the signature
+	// still covers SHA256 either way.
+	Ref string `json:"ref,omitempty"`
+}
+
+// PlatformUpdateArtifactRef returns the canonical CAS fetch URI for a payload
+// digest. Corpusd mint emits this for ref-carried files; the guest resolves it.
+func PlatformUpdateArtifactRef(sha256Hex string) string {
+	return "artifact+sha256://" + sha256Hex + "/sha256/platform-update/" + sha256Hex
 }
 
 // PlatformUpdateOffer is the platform's signed instruction to a tracking
@@ -139,6 +153,17 @@ func PlatformUpdateOfferFromRequest(offer PlatformUpdateOffer, now time.Time) er
 			return fmt.Errorf("platform update offer: payload file %q does not match the manifest", file.Path)
 		}
 		raw, err := base64.StdEncoding.DecodeString(file.Bytes)
+		if file.Ref != "" {
+			// Ref-carried payload: bytes are fetched and re-hashed at staging.
+			// Validate only the digest-locked canonical ref form.
+			if file.Bytes != "" {
+				return fmt.Errorf("platform update offer: payload file %q carries both bytes and ref", file.Path)
+			}
+			if file.Ref != PlatformUpdateArtifactRef(file.SHA256) {
+				return fmt.Errorf("platform update offer: payload file %q ref is not the canonical artifact digest", file.Path)
+			}
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf("platform update offer: payload file %q does not decode", file.Path)
 		}

@@ -2,10 +2,13 @@ package agentcore
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -233,7 +236,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 		return report, err
 	}
 	releaseDigest := manifest.ContentDigest
-	incomingDir, err := rt.stagePlatformUpdatePayload(offer, releaseDigest)
+	incomingDir, err := rt.stagePlatformUpdatePayload(ctx, offer, releaseDigest)
 	if err != nil {
 		return report, err
 	}
@@ -575,7 +578,7 @@ func (rt *Runtime) resumePlatformUpdateTail(ctx context.Context, offer selfdevpr
 // Bytes were already digest-verified against the manifest during offer
 // validation; staging rewrites them deterministically for the updater's own
 // verifyManifest pass.
-func (rt *Runtime) stagePlatformUpdatePayload(offer selfdevprotocol.PlatformUpdateOffer, releaseDigest string) (string, error) {
+func (rt *Runtime) stagePlatformUpdatePayload(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, releaseDigest string) (string, error) {
 	incomingDir := filepath.Join(rt.selfdevUpdaterRoot, "incoming", releaseDigest)
 	_ = os.RemoveAll(incomingDir)
 	if err := os.MkdirAll(incomingDir, 0o700); err != nil {
@@ -586,7 +589,27 @@ func (rt *Runtime) stagePlatformUpdatePayload(offer selfdevprotocol.PlatformUpda
 		if filepath.IsAbs(clean) || clean == ".." || len(clean) >= 3 && clean[:3] == "../" {
 			return "", fmt.Errorf("platform update: payload path %q escapes the incoming store", file.Path)
 		}
-		raw, err := base64.StdEncoding.DecodeString(file.Bytes)
+		var raw []byte
+		if file.Ref != "" {
+			// Ref-carried payload: stream the content-addressed blob from corpusd,
+			// re-hash at staging (never trust the wire), then atomically rename.
+			fetcher, ok := rt.eventPayloadReader.(interface {
+				FetchBlobRaw(context.Context, string, string) (io.ReadCloser, error)
+			})
+			if !ok || fetcher == nil {
+				return "", fmt.Errorf("platform update: ref payload %q needs a CAS blob fetcher", file.Path)
+			}
+			target := filepath.Join(incomingDir, clean)
+			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+				return "", err
+			}
+			if err := rt.fetchRefPayload(ctx, offer.ComputerID, file, target); err != nil {
+				return "", err
+			}
+			continue
+		}
+		var err error
+		raw, err = base64.StdEncoding.DecodeString(file.Bytes)
 		if err != nil {
 			return "", fmt.Errorf("platform update: payload file %q does not decode", file.Path)
 		}
@@ -599,6 +622,52 @@ func (rt *Runtime) stagePlatformUpdatePayload(offer selfdevprotocol.PlatformUpda
 		}
 	}
 	return incomingDir, nil
+}
+
+// fetchRefPayload streams a ref-carried payload blob into target, verifying
+// the content digest after the full read — the wire bytes are never trusted.
+func (rt *Runtime) fetchRefPayload(ctx context.Context, computerID string, file selfdevprotocol.PlatformUpdateFile, target string) error {
+	// The ref is digest-locked to the canonical form; verify it matches the
+	// manifest sha before fetching (defense in depth — the offer validation
+	// already enforced this).
+	if file.Ref != selfdevprotocol.PlatformUpdateArtifactRef(file.SHA256) {
+		return fmt.Errorf("platform update: payload file %q ref is not the canonical artifact digest", file.Path)
+	}
+	fetcher, ok := rt.eventPayloadReader.(interface {
+		FetchBlobRaw(context.Context, string, string) (io.ReadCloser, error)
+	})
+	if !ok || fetcher == nil {
+		return fmt.Errorf("platform update: ref payload %q needs a CAS blob fetcher", file.Path)
+	}
+	body, err := fetcher.FetchBlobRaw(ctx, computerID, file.SHA256)
+	if err != nil {
+		return fmt.Errorf("platform update: ref blob fetch %q: %w", file.Path, err)
+	}
+	defer body.Close()
+	tmp := target + ".tmp-dl"
+	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fs.FileMode(file.Mode)&0o777)
+	if err != nil {
+		return fmt.Errorf("platform update: stage ref temp %q: %w", file.Path, err)
+	}
+	hasher := sha256.New()
+	if _, err := io.Copy(out, io.TeeReader(body, hasher)); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("platform update: ref blob read %q: %w", file.Path, err)
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("platform update: ref blob write %q: %w", file.Path, err)
+	}
+	if hex.EncodeToString(hasher.Sum(nil)) != file.SHA256 {
+		os.Remove(tmp)
+		return fmt.Errorf("platform update: ref blob %q digest mismatch", file.Path)
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("platform update: stage ref %q: %w", file.Path, err)
+	}
+	return nil
 }
 
 // recordPlatformUpdateFailed commits a materialization_failed event when the

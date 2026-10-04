@@ -175,6 +175,52 @@ func (c *HTTPClient) FetchPayload(ctx context.Context, computerID, artifactDiges
 	return raw, nil
 }
 
+// FetchBlobRaw streams a content-addressed blob from the corpusd
+// platform-update artifact namespace over the guest's authenticated
+// connection. The body is not buffered: the caller streams it to disk and
+// verifies the digest itself. Gated by the same Bearer capability as
+// FetchPayload; the path namespace is platform-update, not event payloads.
+func (c *HTTPClient) FetchBlobRaw(ctx context.Context, computerID, artifactDigest string) (io.ReadCloser, error) {
+	if c == nil {
+		return nil, ErrPayloadResolverRequired
+	}
+	computerID = strings.TrimSpace(computerID)
+	artifactDigest = strings.TrimSpace(artifactDigest)
+	if computerID == "" || !IsSHA256(artifactDigest) {
+		return nil, fmt.Errorf("computer event client: computer and blob digest are required")
+	}
+	endpoint := *c.baseURL
+	endpoint.Path = strings.TrimRight(c.baseURL.Path, "/") + "/internal/computers/platform-updates/blob/" + artifactDigest
+	q := endpoint.Query()
+	q.Set("computer_id", computerID)
+	endpoint.RawQuery = q.Encode()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	token, err := c.capability(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("computer event client: capability: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	result, err := c.http.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	if result.StatusCode < 200 || result.StatusCode >= 300 {
+		defer result.Body.Close()
+		var failure struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(io.LimitReader(result.Body, 1<<20)).Decode(&failure)
+		if failure.Error == "" {
+			failure.Error = http.StatusText(result.StatusCode)
+		}
+		return nil, fmt.Errorf("computer event client: corpusd blob fetch returned %d: %s", result.StatusCode, failure.Error)
+	}
+	return result.Body, nil
+}
+
 func (c *HTTPClient) EventsPage(ctx context.Context, computerID string, afterSequence uint64, pageSize int) ([]DurableEvent, error) {
 	if pageSize <= 0 || pageSize > EventReplayMaxPageSize {
 		return nil, fmt.Errorf("computer event client: replay page size %d is invalid", pageSize)
@@ -316,8 +362,10 @@ func NewGuestHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClien
 		return nil, fmt.Errorf("computer event client: guest HTTP requires a private host address")
 	}
 	return &HTTPClient{
-		baseURL:    parsed,
-		http:       &http.Client{Timeout: 60 * time.Second},
+		baseURL: parsed,
+		// Host-tap traffic is fast, but a ~150MB blob fetch can exceed a tight
+		// deadline under load; the request context remains the real bound.
+		http:       &http.Client{Timeout: 10 * time.Minute},
 		capability: capability,
 	}, nil
 }
