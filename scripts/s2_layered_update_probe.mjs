@@ -19,9 +19,11 @@ const BASE_URL = runtimeProcess?.env?.CHOIR_DEPLOYED_BASE_URL || 'https://choir.
 const marker = `S2_LAYERED_${Date.now()}`;
 
 // The layered release staged on Node B: a copied autoputer at a distinct
-// synthetic store path (nix-store --add'd then --export'ed). Its basename is
+// synthetic store path whose bin/autoputer carries a trailing marker byte —
+// so its sha256 differs from the base binary (a byte-identical copy would
+// make the execution-identity witness non-discriminating). The basename is
 // the private-store-relative layering_entrypoint.
-const LAYER_STORE_BASENAME = 'mf7fi4pn43s4fm6wh0srw2mbgi4xccv1-layerdir';
+const LAYER_STORE_BASENAME = 'za7slrais323qs41fxsi07z3iqy8j0k1-layerdir-work';
 const LAYER_ENTRYPOINT = `${LAYER_STORE_BASENAME}/bin/autoputer`;
 const LAYER_NAR_HOST_PATH = '/tmp/closure.nar';
 
@@ -137,6 +139,19 @@ function guestLayeringEvidence(ownerID) {
   return log || null;
 }
 
+// executionIdentity returns the guest's nonce-bound sha256 of os.Executable()
+// — the discriminating exec witness the panel required. Serving the release
+// SPA cannot distinguish base-vs-release (the base serves current/frontend
+// too); only the executable digest does.
+async function executionIdentity(page) {
+  const nonce = `s2nonce${Date.now()}${Math.random().toString(36).slice(2, 10)}`;
+  const res = await fetchJSON(page, `/api/acceptance/execution-identity?nonce=${nonce}`);
+  const id = res.json?.identity ?? res.json;
+  return { status: res.status, executable_sha256: id?.executable?.sha256, build_commit: id?.build?.commit, nonce };
+}
+// The marked layerdir binary's sha256 — what the layered exec must serve.
+const MARKED_EXEC_SHA256 = 'sha256:45743b5eb920e233ee2c86748df686a3e7f701d79276cefb1962e91ee6b3ac00';
+
 async function waitForDesktopReady(page, timeout = 180_000) { await page.waitForSelector('[data-prompt-input]', { timeout }); }
 async function fetchJSON(page, path) {
   return page.evaluate(async (p) => {
@@ -175,6 +190,8 @@ try {
 
   const boot = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/bootstrap-chain`, {});
   if (boot.status !== 200 && boot.status !== 201) throw new Error(`bootstrap refused: ${JSON.stringify(boot.json ?? boot.text)}`);
+  // Exec witness baseline: the executable the guest serves before apply.
+  result.exec_id_before = await executionIdentity(page);
   const routeBefore = resolveRoute(ownerID); result.route_before = routeBefore;
   const genBefore = (routeBefore && !routeBefore.route_absent) ? (routeBefore.slot?.generation ?? 0) : 0;
   const head = corpusdEventHead(computerID, ownerID); result.head_before = head;
@@ -239,9 +256,19 @@ try {
     throw new Error(`route slot did not promote after layered apply: ${JSON.stringify(routeAfter)}`);
   }
 
-  // The layering observable: the guest runtime exec'd the release store-path
-  // binary inside the mount-ns overlay.
+  // The layering observable (panel-adjudicated): the guest's serving
+  // executable IS the layered release binary — proved by the nonce-bound
+  // execution-identity sha256, not by which SPA is served (the base binary
+  // would serve the staged release SPA too, after silent overlay fallback).
   result.layering_evidence = guestLayeringEvidence(ownerID);
+  await waitGuestUp(ownerID, 120);
+  result.exec_id_after = await executionIdentity(page);
+  const execSha = result.exec_id_after?.executable_sha256;
+  if (execSha !== MARKED_EXEC_SHA256) {
+    result.exec_in_overlay = false;
+    throw new Error(`guest did not exec the layered release binary: executable=${execSha} expected=${MARKED_EXEC_SHA256} (base=${result.exec_id_before?.executable_sha256}) — silent overlay fallback`);
+  }
+  result.exec_in_overlay = true;
 
   // Fail-closed check: a layered offer whose base join does not match the
   // booted base is refused and does not promote.
@@ -267,7 +294,7 @@ try {
       result.fail_closed = true;
     }
   }
-  result.predicate_result = 'satisfied';
+  result.predicate_result = (result.exec_in_overlay && result.fail_closed) ? 'satisfied' : 'refused';
 } catch (error) {
   result.predicate_result = 'refused';
   result.error = String(error && error.stack ? error.stack : error);
