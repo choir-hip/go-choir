@@ -165,16 +165,17 @@ heresy_delta:
     - none; this station remains checkpoint_incomplete pending S0.
 
 now:
-  status: checkpoint_incomplete
+  status: working
   slice: >-
-    S1a host-boundary hotfix authored 2026-10-04 (see section below the
-    mechanism sketch): per-tap anti-spoof + tap->tap deny, :8085 DNAT
-    removal, dead lo-MASQUERADE removal, and authority binding by guest
-    source IP to computer/owner for maild, vmctl CV routes, proxy publish,
-    and source service; corpusd mint and host-read bypasses go
-    loopback-only. Pending S0m boundary promotion to working.
-  source_ref: main@520a998f
-  deploy_identity: 'staging https://choir.news deployed_commit=a4fcdb8d; owner guest computer-03335285269bdba4f94377e56879f9e6 on a4fcdb8d'
+    S1a host-boundary hotfix — implementation landed and deployed
+    (network isolation + authority binding per the repair record in
+    docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md;
+    deploy a3f0d48e). Remaining acceptance leg: the deployed
+    refusal-matrix receipt on two disposable accounts via the guest
+    HTTP probe oracle (b15f012a diag tcp-dial mode=http);
+    scripts/s1a_refusal_matrix_probe.mjs runs all legs guest-originated.
+  source_ref: main@6ee52de5
+  deploy_identity: 'staging https://choir.news deployed_commit=a3f0d48e (S1a network+authority live); refusal-matrix oracle deploys with b15f012a'
   candidate:
     id: none
     state: none
@@ -230,7 +231,7 @@ now:
   blocker_or_risk: >-
     S4 and S9 must not execute against the current assumed guest boundary; an
     over-broad fix could sever the gateway or other approved guest services.
-  next_action: promotes to working when S0-reality-and-boot-timeline complete.
+  next_action: run the deployed refusal matrix on two disposable accounts once b15f012a is live; close S1a when its receipt lands.
 
 receipts: []
 ---

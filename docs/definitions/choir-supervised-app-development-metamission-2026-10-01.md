@@ -414,21 +414,22 @@ boundaries:
 now:
   status: working
   slice: >-
-    Post-S0m boundary close (2026-10-04). S0m COMPLETE and its
-    station-boundary protocol CLOSED: convergent panel adjudicated
-    (send-backs resolved), reporter letter published
-    (docs/reports/s0m-record-native-station-close-2026-10-04.md),
-    transition receipt below rewritten to closed. Boundary-close deployed
-    legs landed: stranded-bound on a real disposable computer
-    (computer-ca3a2cf9) and the channel-mail reduce-time refusal
-    (trajectory aef9a197). The CI stale-deploy guard landed (a06f179e).
-    The S1a slice is authored in the S1 station file. Next live slice,
-    in order:
-    (1) S1a host-boundary hotfix implementation;
+    S1a host-boundary hotfix working (S1 station now.status=working).
+    Implementation landed and deployed: per-tap anti-spoof + tap->tap
+    deny, :8085 DNAT removal, dead lo-MASQUERADE removal, authority
+    binding by guest source IP to computer/owner (maild, vmctl CV,
+    proxy publish, source service), corpusd mint + host bypasses
+    loopback-only — deployed a3f0d48e; probe-oracle (diag tcp-dial
+    mode=http) + refusal-matrix script in b15f012a pending deploy.
+    Discovered heresy recorded: guest 'zot' resolves to the third-party
+    TUI agent — management-console spawn is PATH-shadowed and no
+    in-guest exec surface exists (tracked in the problem doc addendum).
+    Remaining in order:
+    (1) S1a deployed refusal-matrix receipt on two disposable accounts;
     (2) S0b disposable-computer probes;
     (3) the rest of S1, then S2.
-  source_ref: main@fca4f65dfabd4c220a061ac6d77177ecd9b08bd7
-  deploy_identity: 'staging https://choir.news deployed_commit=a4fcdb8d (deployed 2026-10-04T02:01:45Z); owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer a4fcdb8d; Node B free disk 103G after reclaim'
+  source_ref: main@6ee52de5
+  deploy_identity: 'staging https://choir.news deployed_commit=a3f0d48e (S1a network+authority live, deployed 2026-10-04); owner guest computer-03335285269bdba4f94377e56879f9e6; Node B free disk ~96G after recurrence-2 reclaim'
   candidate:
     id: none
     state: none
