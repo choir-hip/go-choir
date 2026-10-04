@@ -10,15 +10,19 @@ S2 builder-substrate decision (Go-effect execution is blocked on this).
 
 ## Evidence
 
-Operation `selfdev-0280c6cf2eac90dffb5c77912c0766a9` on disposable computer
-`computer-a99366facf24b872703de326d3b33832`, armed `propose_only` at
-`2026-10-04T07:28:53Z`.
+Operation `selfdev-0280c6cf2eac90dffb5c77912c0766a9` (run 1, vague
+prompt) on `computer-a99366facf24b872703de326d3b33832` and
+`selfdev-772a70c9bc63da3197c39a9ba8ae798e` (run 3, directive prompt) on
+`computer-efef241fa2a8652758e4105e89412a76`, both armed `propose_only`.
 
-- Gateway log: ten inference rounds
+- Gateway log, run 1: ten inference rounds
   (`provider=opencode-go model=deepseek-v4.1-flash`, messages climbing
   5→17), last round `07:29:57` returning `text_len=93` — a terminal
   non-tool answer. No `freeze_capsule_effect_bundle` or
-  `record_self_development_verification` tool call was ever issued.
+  `record_self_development_verification` call was ever issued.
+- Gateway log, run 3: 18+ rounds (messages climbing 11→37), `tools=1`,
+  `text_len=0` every response — the model IS issuing tool calls but the
+  call never satisfies; the loop is a retry, not a converge.
 - Op record: `state=executing`, `verifier_refs=[]`, `bundle_digest=null`,
   `error=null`, `updated_at` never advanced past `created_at`.
 - Guest `/health`: `running_runs=0`, `running_processor_runs=0` — the
@@ -26,23 +30,30 @@ Operation `selfdev-0280c6cf2eac90dffb5c77912c0766a9` on disposable computer
 - `replay-completeness` is `equivalent` (91 events applied, zero gaps) —
   the tape is not the blocker.
 
-## Mechanism (corrected — model agency, not a transport defect)
+## Mechanism (sharpened — tool-call loop never converges)
 
-`freeze_capsule_effect_bundle` is a tool call, not an automatic step.
-`internal/agentcore/tools_capsule.go:367` only runs when the model
-invokes it; the verifier transition `:488` runs when the model calls
-`record_self_development_verification`. The gateway log shows the model
-ended its turn on a terminal non-tool response (`text_len=93`) after 10
-rounds — it never called either tool, so the op legitimately stays
-`executing` with `verifier_refs` empty. This is the same class as S0m's
-`choir.Ask` non-call (recorded as an accepted edge there): the mechanism
-is intact; the model declined to use it.
+`freeze_capsule_effect_bundle` is a tool call, not an automatic step
+(`tools_capsule.go:367` runs only when the model invokes it). Two runs
+on two disposables show the loop's two failure shapes:
 
-The honest "proposal produced nothing committable" state has no
-representation: an op whose model never calls the freeze tool sits in
-`executing` forever with `error=null`, indistinguishable from a wedged
-transport. That is the real defect — not that the op didn't progress,
-but that a no-op proposal and a wedge look identical from outside.
+**Run 1** (op `selfdev-0280c6cf…`, vague prompt): 10 rounds, ended on a
+terminal non-tool answer — model declined to call the tool. Op stays
+`executing`.
+
+**Run 3** (op `selfdev-772a70c9…`, directive prompt): 18+ rounds with
+`tools=1`/`text_len=0` — the model IS calling the tool repeatedly, but
+the call returns an error it retries instead of escalating. Op stays
+`executing` past 15 minutes. Likely cause: `freeze_capsule_effect_bundle`
+requires a worktree handle + build recipe ref the model cannot produce
+because nothing in the loop granted a writable worktree or authored a
+change — the model has no prior `capsule_write`/`edit` to freeze.
+
+The state machine is honest: `executing` is correct for both — a
+declined proposal and an error-retry loop are both genuinely still
+executing. The defect is that **neither shape is distinguishable from
+outside**: `verifier_refs=[]`, `error=null`, `updated_at` frozen. An
+operator cannot tell "model declined" from "model is retrying a
+doomed tool call" without reading gateway logs.
 
 ## Why it matters
 
