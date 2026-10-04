@@ -13,9 +13,14 @@ on:
   pull_request:
     branches: [main]
 
+# Main runs must never cancel in-flight work: this workflow carries the
+# Node B staging deploy, and a docs push landing mid-deploy previously
+# killed the running deploy (Problem-Documentation-First collided with
+# deploy cancellation). Deploys serialize through the deploy-staging job's
+# own concurrency group instead, newest-first. PR runs keep superseding.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -791,12 +796,13 @@ jobs:
   deploy-staging:
     name: Deploy to Staging (Node B)
     runs-on: ubuntu-latest
-    # Own lane: a docs-only (or any non-deploy) push must never cancel an
-    # in-flight deploy via the workflow-level ci- group, while a newer deploy
-    # still supersedes a stale one in flight.
+    # Own lane: a running deploy is never cancelled — killing a deploy
+    # mid-refresh is more dangerous than deploying a stale commit (a newer
+    # queued deploy always supersedes an older queued one, so the newest
+    # main lands next). Queued behind a running deploy: latest wins.
     concurrency:
       group: staging-deploy-node-b
-      cancel-in-progress: true
+      cancel-in-progress: false
     needs: [check, build-frontend, deploy-impact]
     if: always() && github.ref == 'refs/heads/main' && needs.deploy-impact.outputs.deploy_needed == 'true' && needs.check.result == 'success' && (needs.deploy-impact.outputs.deploy_frontend != 'true' || needs.build-frontend.result == 'success')
     timeout-minutes: 60
