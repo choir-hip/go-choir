@@ -1,0 +1,92 @@
+{
+  "probe": "s0m_stranded_bound",
+  "computer": "computer-ca3a2cf9b7d921460ba990cefca57c97",
+  "marker": "s0m-strand-1791082974635",
+  "started_at": "2026-10-04T03:02:54.636Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": 1791082975486,
+      "wall_ms": 850,
+      "ok": true,
+      "trajectory": "907722a8-c0e1-580a-a0b8-1b26b927c325",
+      "submitted": true
+    },
+    {
+      "name": "carrier_cancelled",
+      "ended_at": 1791082985970,
+      "wall_ms": 11334,
+      "update_id": "bcb40c05-a8e0-4bf8-b532-c4f4bd74dbcd",
+      "carrier_run_id": "b64f495c-ffe8-4111-9c6f-48a8c765ec79",
+      "carrier_state": "running",
+      "cancel_status": 200
+    },
+    {
+      "name": "claim_released_pending",
+      "ended_at": 1791082986029,
+      "wall_ms": 11393,
+      "update_id": "bcb40c05-a8e0-4bf8-b532-c4f4bd74dbcd"
+    },
+    {
+      "name": "rebound_live_run",
+      "ended_at": 1791082989133,
+      "wall_ms": 14497,
+      "update_id": "bcb40c05-a8e0-4bf8-b532-c4f4bd74dbcd",
+      "new_run_id": "2a648639-bd0e-450c-8f50-886c1c6efd3d",
+      "disp": "pending"
+    },
+    {
+      "name": "rebound_live_run",
+      "ended_at": 1791082992242,
+      "wall_ms": 17606,
+      "update_id": "bcb40c05-a8e0-4bf8-b532-c4f4bd74dbcd",
+      "new_run_id": "2a648639-bd0e-450c-8f50-886c1c6efd3d",
+      "disp": "pending"
+    },
+    {
+      "name": "rebound_live_run",
+      "ended_at": 1791082995533,
+      "wall_ms": 20897,
+      "update_id": "bcb40c05-a8e0-4bf8-b532-c4f4bd74dbcd",
+      "new_run_id": "2a648639-bd0e-450c-8f50-886c1c6efd3d",
+      "disp": "pending"
+    },
+    {
+      "name": "rebound_live_run",
+      "ended_at": 1791082998642,
+      "wall_ms": 24006,
+      "update_id": "bcb40c05-a8e0-4bf8-b532-c4f4bd74dbcd",
+      "new_run_id": "2a648639-bd0e-450c-8f50-886c1c6efd3d",
+      "disp": "pending"
+    },
+    {
+      "name": "rebound_live_run",
+      "ended_at": 1791083001759,
+      "wall_ms": 27123,
+      "update_id": "bcb40c05-a8e0-4bf8-b532-c4f4bd74dbcd",
+      "new_run_id": "2a648639-bd0e-450c-8f50-886c1c6efd3d",
+      "disp": "pending"
+    },
+    {
+      "name": "rebound_live_run",
+      "ended_at": 1791083004861,
+      "wall_ms": 30225,
+      "update_id": "bcb40c05-a8e0-4bf8-b532-c4f4bd74dbcd",
+      "new_run_id": "2a648639-bd0e-450c-8f50-886c1c6efd3d",
+      "disp": "incorporated"
+    },
+    {
+      "name": "recovered_consumed",
+      "ended_at": 1791083004861,
+      "wall_ms": 30225,
+      "update_id": "bcb40c05-a8e0-4bf8-b532-c4f4bd74dbcd",
+      "disp": "incorporated",
+      "bound_to": "2a648639-bd0e-450c-8f50-886c1c6efd3d"
+    }
+  ],
+  "ok": true,
+  "failure": null,
+  "trajectory_id": "907722a8-c0e1-580a-a0b8-1b26b927c325",
+  "finished_at": "2026-10-04T03:03:24.862Z",
+  "wall_ms": 30226
+}

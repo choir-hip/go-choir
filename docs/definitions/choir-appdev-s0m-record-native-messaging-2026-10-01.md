@@ -250,10 +250,19 @@ now:
     non-management producers — no un-marked bound-control path). Per-kind
     cutover + dual-delivery-absence regression green. Node-b deploy disk
     headroom RESOLVED 2026-10-04 (owner authorized: deleted the 20G
-    dump-20260918 rollback ref + nix gc, 84G→103G; a4fcdb8d deployed).
+    dump-20260918 rollback ref + nix gc, 84G→103G; a4fcdb8d deployed under
+    run 37165170516). Boundary-close receipts landed 2026-10-04:
+    stranded-bound probe re-run on a real DISPOSABLE computer
+    (computer-ca3a2cf9, docs/evidence/s0m-stranded-bound-disposable-2026-10-04.json —
+    cancel → claim released → rebound → incorporated) and the channel-mail
+    reduce-time refusal verified live (trajectory aef9a197,
+    docs/evidence/s0m-channel-mail-reject-2026-10-04.json). New discovery
+    filed: fresh registered computers reach active pre-genesis and the
+    first write 500s until bootstrap-chain
+    (docs/problems/s0b-registration-computer-missing-genesis-2026-10-04.md).
     Recurring headroom risk noted in
     docs/problems/node-b-deploy-disk-headroom-2026-10-04.md. Next station:
-    S0b reality boot timeline / next metamission gate.
+    S1a host-boundary hotfix, then S0b resumes.
   candidate: main@a4fcdb8d
   conjecture:
     id: record-native-coupling

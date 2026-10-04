@@ -1,0 +1,25 @@
+{
+  "probe": "s0m_channel_mail_reject",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "s0m-cm-1791083592274",
+  "started_at": "2026-10-04T03:13:12.275Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "at": "2026-10-04T03:13:12.275Z",
+      "ok": true,
+      "trajectory": "aef9a197-c816-503b-8b2f-be00299ce9d6"
+    },
+    {
+      "name": "refusal_observed",
+      "at": "2026-10-04T03:13:13.213Z",
+      "source": "snapshot",
+      "excerpt": "tent\":\"choir.Emit(\\\"texture\\\", \\\"ping\\\", \\\"s0m-cm-1791082974673\\\") returned result {0 0} and error: choir: emit: emit: emit: emit: channel cast: \\\"texture\\\" is not reachable by channel mail; use the lifecycle packet path (choir.Message/choir.ReportPacket)\",\"body_doc\":{\"schema\":\"choir.texture_doc.v1\",\"doc\":{\""
+    }
+  ],
+  "ok": true,
+  "failure": null,
+  "trajectory_id": "aef9a197-c816-503b-8b2f-be00299ce9d6",
+  "doc_id": null,
+  "finished_at": "2026-10-04T03:13:13.213Z"
+}
