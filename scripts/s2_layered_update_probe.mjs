@@ -196,7 +196,7 @@ try {
   const mintOut = mintLayeredOffer({
     computer_id: computerID, update_id: updateID, realization_id: realization,
     base_event_head: head.canonical_event_head,
-    expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+    expires_at: new Date(Date.now() + 4 * 60_000).toISOString(),
     marker: `s2-${updateID}`,
     code_commit: sha256hex('layered-release'),
     verifier_refs: [sha256hex(`verify-${updateID}`)],
@@ -206,8 +206,15 @@ try {
   const mint = mintOut.mint;
   result.blob_upload = mintOut.uploaded;
   result.nar_digest = mintOut.digest;
+  result.mint_response = mint;
   result.offer = { update_id: updateID, has_signature: Boolean(mint?.authorization?.signature), closure_digest: mint?.manifest?.closure_digest };
-
+  // A mint that returned an error object has no signed offer — pushing it
+  // surfaces on the guest as the misleading "binds a different computer"
+  // (empty computer_id). Fail fast with the real mint error instead.
+  if (mint?.error || !mint?.authorization?.signature) {
+    result.predicate_result = 'mint_failed';
+    throw new Error(`layered mint did not return a signed offer: ${JSON.stringify(mint)}`);
+  }
   let push = pushOffer(ownerID, mint);
   for (let a = 0; a < 10 && !(push?.release_digest && push?.checkpoint_digest); a++) {
     const recoverable = push?.error === '' || /materialization failed|canonical head unavailable|connection|EOF|reset/.test(push?.error ?? '');
@@ -238,7 +245,7 @@ try {
   const badMint = mintLayeredOffer({
     computer_id: computerID, update_id: `${updateID}-bad`, realization_id: realization,
     base_event_head: badHead?.canonical_event_head ?? head.canonical_event_head,
-    expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+    expires_at: new Date(Date.now() + 4 * 60_000).toISOString(),
     marker: `s2-${updateID}-bad`, code_commit: sha256hex('layered-bad'),
     verifier_refs: [sha256hex('verify-bad')],
     base_image_manifest_digest: sha256hex('wrong-base-not-booted'),
