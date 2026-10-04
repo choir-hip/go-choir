@@ -129,7 +129,7 @@ const main = async () => {
     r.status === null || r.status >= 400 || r.timeout ? { verdict: 'refused', detail: r.raw || `status=${r.status}` } : { verdict: 'FAILED-OPEN', detail: `reached B:${r.status}` }));
   record('R2_vmctl_internal', await guestCurl(A.own, A.user, `-H 'X-Internal-Caller: true' 'http://${hostIP}:8083/internal/vmctl/list'`).then(r =>
     r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` } : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} raw=${r.raw.slice(-160)}` }));
-  record('R3_maild_forged_owner', await guestCurl(A.own, A.user, `-X POST -H 'Content-Type: application/json' -H 'X-Internal-Caller: true' -H 'X-Authenticated-User: ${B.user}' -d '{"to_addresses":[],"subject":"s1a","text_body":"x"}' 'http://${hostIP}:8087/api/email/drafts'`).then(r =>
+  record('R3_maild_forged_owner', await guestCurl(A.own, A.user, `-H 'X-Internal-Caller: true' -H 'X-Authenticated-User: ${B.user}' 'http://${hostIP}:8087/api/email/messages'`).then(r =>
     r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` } : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} raw=${r.raw.slice(-160)}` }));
   record('R4_corpusd_bypass', await guestCurl(A.own, A.user, `-H 'X-Internal-Caller: true' 'http://${hostIP}:8086/internal/platform/update'`).then(r =>
     r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` } : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} raw=${r.raw.slice(-160)}` }));
@@ -141,8 +141,8 @@ const main = async () => {
     r.status && r.status < 500 ? { verdict: 'green', detail: `HTTP ${r.status}` } : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.raw.slice(-120)}` }));
   record('L2_cv_route_resolve', await guestCurl(A.own, A.user, `'http://${hostIP}:8083/internal/vmctl/computer-version-routes/resolve?route_slot_id=${encodeURIComponent(slot)}'`).then(r =>
     r.status === 200 ? { verdict: 'green', detail: `HTTP ${r.status} bound-owner resolve` } : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.raw.slice(-160)}` }));
-  record('L3_maild_own_drafts', await guestCurl(A.own, A.user, `-X POST -H 'Content-Type: application/json' -H 'X-Internal-Caller: true' -H 'X-Authenticated-User: ${A.user}' -d '{"to_addresses":[],"subject":"s1a","text_body":"x"}' 'http://${hostIP}:8087/api/email/drafts'`).then(r =>
-    r.status && r.status < 400 ? { verdict: 'green', detail: `HTTP ${r.status}` } : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.raw.slice(-160)}` }));
+  record('L3_maild_own_drafts', await guestCurl(A.own, A.user, `-H 'X-Internal-Caller: true' -H 'X-Authenticated-User: ${A.user}' 'http://${hostIP}:8087/api/email/messages'`).then(r =>
+    r.status === 200 ? { verdict: 'green', detail: `HTTP ${r.status} bound-owner read` } : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.raw.slice(-160)}` }));
   record('L4_egress', await guestCurl(A.own, A.user, `-k -o /dev/null -w 'HTTP:%{http_code}' 'https://1.1.1.1'`).then(r =>
     r.status ? { verdict: 'green', detail: `HTTP ${r.status}` } : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.raw.slice(-120)}` }));
 
