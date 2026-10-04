@@ -174,22 +174,22 @@ boundaries:
     repaired: none — this station observes and documents; remediation belongs to the receiving sibling station.
 
 now:
-  status: working
+  status: complete
   slice: >-
-    S0a complete (7 receipts + deadlock hotfix). S0b disposable-computer
-    probe suite ran on computer-ac1808b4f04fc749c0781083ee747403
-    (2026-10-04): 9 evidence receipts — M9a lifecycle partial (applied +
-    witnessed restore, route slot never promoted -> confirmed defect
-    docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md),
-    builder-substrate decision deferred to S2 (weakened scoped-guest-service,
-    host service + privileged builder capsule open), and four unreached-
-    transition/gap receipts (sealed guest hides capsule/desk projection,
-    Nix DB, build surface, snapshot surface). Self-dev Go effect re-running
-    on a second disposable (keydriver scope fix applied). Boundary panel:
-    8 accept_with_edge / 3 send_back; send-back named gaps closed by the
-    substrate-decision receipt + Go-effect re-run.
-  source_ref: main@c76ba308
-  deploy_identity: 'staging https://choir.news deployed_commit=e87f3294 (S1a send-back POST legs + prebind-flake fix live); disposable computer-a99366facf24b872703de326d3b33832 armed propose_only for the Go-effect re-run'
+    COMPLETE. S0a: 7 receipts + deadlock hotfix, booted image identities and
+    per-phase timings captured, three problem docs filed (vocab-rescan,
+    forgeable-caller, fetch-timeline-deadlock). S0b: disposable-computer
+    probe suite on computer-ac1808b4f04fc749c0781083ee747403 (2026-10-04) —
+    nine receipts: M9a partial (applied+witnessed restore, route slot never
+    promoted -> s0-m9a-route-projection-owner-binding defect), builder-
+    substrate decision (scoped-guest weakened, host-service + privileged-
+    builder-capsule open), selfdev executing->frozen wedge on the Go-effect
+    re-run (s0-selfdev-executing-wedge), five unreached/gap receipts.
+    Boundary panel 8 accept_with_edge / 3 send_back; named gaps closed.
+    Transition receipt s0b-boundary-close-2026-10-04 carries named edges
+    into S2 (wedge fix, capsule-namespace probe, host-level snapshot).
+  source_ref: main@d0b6a8d8
+  deploy_identity: 'staging https://choir.news deployed_commit=e87f3294; disposable computer-a99366facf24b872703de326d3b33832 carried the wedged Go-effect op'
   candidate:
     id: s0a-boot-timeline-instrument
     state: landed
@@ -279,19 +279,15 @@ now:
     force_staging_deploy. A docs push between a fix push and its deploy is
     unsafe until CI concurrency groups are scoped per-ref.
   next_action: >-
-    S0b probe suite executed on disposable computer-ac1808b4f04fc749c0781083ee747403
-    (2026-10-04); nine receipts under docs/evidence/s0b-*.json, one confirmed
-    defect docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md,
-    builder-substrate decision deferred to S2 with named edges (Go-effect
-    re-run armed on computer-a99366facf24b872703de326d3b33832, capsule-
-    namespace probe precondition for the builder-capsule branch, host-level
-    snapshot surface for S3). Boundary panel ran 2026-10-04
-    (.agentic-consensus/s0b-boundary-panel-20261004): 8 accept_with_edge /
-    3 send_back; the named send-back gaps (missing substrate-decision
-    receipt, void Go-effect cell) were closed post-panel by
-    s0b-builder-substrate-decision-2026-10-04.json and the second-disposable
-    Go-effect re-run in flight. Next: land the Go-effect marker evidence,
-    then write the S0->S2 transition receipt and update the metamission.
+    STATION COMPLETE — boundary closed 2026-10-04
+    (s0b-boundary-close-2026-10-04). Named edges carried into S2:
+    (1) repair the selfdev executing->frozen wedge
+    (docs/problems/s0-selfdev-executing-wedge-2026-10-04.md) before a
+    Go effect can be observed; (2) run the capsule-namespace probe
+    before committing to the privileged-builder-capsule substrate branch;
+    (3) the snapshot/UFFD surface is host-level and belongs to S3, not a
+    guest probe. Metamission now card should mark S0 complete and
+    S2 live next.
 
 receipts:
   - id: s0a-boundary-close-2026-10-02
@@ -316,6 +312,47 @@ receipts:
       - docs/problems/s0-internal-surface-forgeable-caller-2026-10-01.md
       - docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md
       - docs/reports/s0a-boot-timeline-landing-2026-10-01.md
+  - id: s0b-boundary-close-2026-10-04
+    kind: slice_transition
+    status: closed
+    closed_at: '2026-10-04T07:50:00Z'
+    boundary: S0b landed → S2 live (substrate landing; S3 snapshot surface open)
+    panel: >-
+      Agentic-consensus boundary panel (11 models): 8 accept_with_edge /
+      3 send_back. The three send-backs (gpt6-luna, glm53-flash, claude) named
+      (a) a missing builder-substrate select-or-falsify receipt and (b) a
+      void Go-effect cell (keydriver scope miss). Both closed post-panel:
+      s0b-builder-substrate-decision-2026-10-04.json selects/falsifies all
+      three, and the Go-effect re-run on a second disposable produced the
+      wedge receipt s0b-selfdev-executing-wedge-2026-10-04.json (op
+      selfdev-0280c6cf2eac90dffb5c77912c0766a9 wedged executing->frozen).
+      The wedge IS the Go-effect observation: the current substrate cannot
+      carry the effect to a commit.
+    substrate_decision: >-
+      docs/evidence/s0b-builder-substrate-decision-2026-10-04.json —
+      weakens the S2 scoped-guest-service branch (gateway maild only); leaves
+      host-level service (S1a-adjacent) and privileged-builder-capsule
+      branches open pending the capsule-namespace probe and wedge fix.
+    named_edges_into_S2: >-
+      (1) selfdev executing->frozen wedge must be repaired before a Go
+      effect can be observed; (2) capsule-namespace probe is the precondition
+      for the builder-capsule substrate branch; (3) snapshot/UFFD surface is
+      host-level (S3), not guest-observable.
+    evidence:
+      - docs/evidence/s0b-disposable-lifecycle-2026-10-04.json
+      - docs/evidence/s0b-m9a-bundle-probe-2026-10-04.json
+      - docs/evidence/s0b-capsule-health-map-2026-10-04.json
+      - docs/evidence/s0b-go-effect-probe-2026-10-04.json
+      - docs/evidence/s0b-builder-substrate-decision-2026-10-04.json
+      - docs/evidence/s0b-selfdev-executing-wedge-2026-10-04.json
+      - docs/evidence/s0b-egress-lifecycle-capsule-2026-10-04.json
+      - docs/evidence/s0b-absent-runtime-dep-2026-10-04.json
+      - docs/evidence/s0b-absent-snapshot-surface-2026-10-04.json
+      - docs/evidence/s0b-absent-nix-db-2026-10-04.json
+      - docs/evidence/s0b-absent-build-surface-2026-10-04.json
+      - docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md
+      - docs/problems/s0-selfdev-executing-wedge-2026-10-04.md
+      - .agentic-consensus/s0b-boundary-panel-20261004
       - docs/choir-appdev-s0-reality-boot-timeline-ledger-2026-10-01.md
 ---
 
