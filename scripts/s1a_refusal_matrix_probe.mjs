@@ -96,7 +96,13 @@ async function ensureComputer(label, reuseId, browser) {
   const reg = await registerPasskey(page, email, BASE_URL);
   if (!reg || reg.ok === false) throw new Error(`registration failed for ${label}: ${JSON.stringify(reg)?.slice(0, 200)}`);
   const userId = reg.user?.id || '';
-  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
+  for (let a = 0; a < 4; a++) {
+    try { await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 }); break; }
+    catch (e) {
+      if (a === 3 || !/ERR_NETWORK_CHANGED|ERR_ABORTED|TIMED_OUT/i.test(String(e))) throw e;
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
   const createdAfter = new Date(regStarted - 5000).toISOString();
   let own = null;
   for (let i = 0; i < 150; i++) {
@@ -130,33 +136,33 @@ const main = async () => {
   const slot = `computer:${A.user}:${A.computer}`;
   const bAutoputer = `${bIP}:8085`;
   // Refusals (guest-originated; forged-identity headers asserted by the probe).
-  record('R1_tap_to_tap', await guestProbe(A.own, { addr: bAutoputer, path: '/health' }).then(r =>
+  record('R1_tap_to_tap', ((r) =>
     r.connectFailed ? { verdict: 'refused', detail: r.error || 'no route' }
-      : { verdict: 'FAILED-OPEN', detail: `reached B status=${r.status} body=${r.body.slice(0, 80)}` }));
-  record('R2_vmctl_internal', await guestProbe(A.own, { addr: `${hostIP}:8083`, path: '/internal/vmctl/list', headers: ['X-Internal-Caller: true'] }).then(r =>
+      : { verdict: 'FAILED-OPEN', detail: `reached B status=${r.status} body=${r.body.slice(0, 80)}` })(guestProbe(A.own, { addr: bAutoputer, path: '/health' })));
+  record('R2_vmctl_internal', ((r) =>
     r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
-      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
-  record('R3_maild_forged_owner', await guestProbe(A.own, { addr: `${hostIP}:8087`, path: '/api/email/messages', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${B.user}`] }).then(r =>
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8083`, path: '/internal/vmctl/list', headers: ['X-Internal-Caller: true'] })));
+  record('R3_maild_forged_owner', ((r) =>
     r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
-      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
-  record('R4_corpusd_bypass', await guestProbe(A.own, { addr: `${hostIP}:8086`, path: '/internal/computers/platform-updates/offer', headers: ['X-Internal-Caller: true'] }).then(r =>
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8087`, path: '/api/email/messages', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${B.user}`] })));
+  record('R4_corpusd_bypass', ((r) =>
     r.status === 403 || r.status === 405 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
-      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
-  record('R5_proxy_wire_publish', await guestProbe(A.own, { addr: `${hostIP}:8082`, path: '/internal/wire/platform/publications/texture', headers: ['X-Internal-Caller: true'] }).then(r =>
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8086`, path: '/internal/computers/platform-updates/offer', headers: ['X-Internal-Caller: true'] })));
+  record('R5_proxy_wire_publish', ((r) =>
     r.status === 403 || r.status === 404 || r.status === 405 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
-      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8082`, path: '/internal/wire/platform/publications/texture', headers: ['X-Internal-Caller: true'] })));
 
   // Legitimate flows.
-  record('L1_gateway', await guestDial(A.own, `${hostIP}:8084`).then(r =>
-    r.ok ? { verdict: 'green', detail: 'gateway TCP dial ok' } : { verdict: 'FAILED', detail: r.error || 'dial failed' }));
-  record('L2_cv_route_resolve', await guestProbe(A.own, { addr: `${hostIP}:8083`, path: `/internal/vmctl/computer-version-routes/resolve?route_slot_id=${encodeURIComponent(slot)}` }).then(r =>
+  record('L1_gateway', ((r) =>
+    r.ok ? { verdict: 'green', detail: 'gateway TCP dial ok' } : { verdict: 'FAILED', detail: r.error || 'dial failed' })(guestDial(A.own, `${hostIP}:8084`)));
+  record('L2_cv_route_resolve', ((r) =>
     r.status === 200 ? { verdict: 'green', detail: `HTTP ${r.status} bound-owner resolve` }
-      : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.body.slice(0, 120)}` }));
-  record('L3_maild_own_drafts', await guestProbe(A.own, { addr: `${hostIP}:8087`, path: '/api/email/messages', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${A.user}`] }).then(r =>
+      : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8083`, path: `/internal/vmctl/computer-version-routes/resolve?route_slot_id=${encodeURIComponent(slot)}` })));
+  record('L3_maild_own_drafts', ((r) =>
     r.status === 200 ? { verdict: 'green', detail: `HTTP ${r.status} bound-owner read` }
-      : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.body.slice(0, 120)}` }));
-  record('L4_egress', await guestDial(A.own, '1.1.1.1:443').then(r =>
-    r.ok ? { verdict: 'green', detail: 'egress TCP dial ok' } : { verdict: 'FAILED', detail: r.error || 'dial failed' }));
+      : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8087`, path: '/api/email/messages', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${A.user}`] })));
+  record('L4_egress', ((r) =>
+    r.ok ? { verdict: 'green', detail: 'egress TCP dial ok' } : { verdict: 'FAILED', detail: r.error || 'dial failed' })(guestDial(A.own, '1.1.1.1:443')));
 
   // L5 product surface still loads for the account (proxy path unaffected).
   {

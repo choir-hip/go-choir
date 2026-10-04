@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "probe": "s1a-refusal-matrix",
+  "base_url": "https://choir.news",
+  "started_at": "2026-10-04T05:34:34.454Z",
+  "legs": {
+    "R1_tap_to_tap": {
+      "verdict": "refused",
+      "detail": "Get \"http://10.200.221.2:8085/health\": context deadline exceeded"
+    },
+    "R2_vmctl_internal": {
+      "verdict": "refused",
+      "detail": "HTTP 403"
+    },
+    "R3_maild_forged_owner": {
+      "verdict": "refused",
+      "detail": "HTTP 403"
+    },
+    "R4_corpusd_bypass": {
+      "verdict": "refused",
+      "detail": "HTTP 405"
+    },
+    "R5_proxy_wire_publish": {
+      "verdict": "refused",
+      "detail": "HTTP 405"
+    },
+    "L1_gateway": {
+      "verdict": "green",
+      "detail": "gateway TCP dial ok"
+    },
+    "L2_cv_route_resolve": {
+      "verdict": "green",
+      "detail": "HTTP 200 bound-owner resolve"
+    },
+    "L3_maild_own_drafts": {
+      "verdict": "green",
+      "detail": "HTTP 200 bound-owner read"
+    },
+    "L4_egress": {
+      "verdict": "green",
+      "detail": "egress TCP dial ok"
+    },
+    "L5_product_page": {
+      "verdict": "green",
+      "detail": "GET / -> 200"
+    }
+  },
+  "ok": true,
+  "iptables": {
+    "filter_drops": "6\n12",
+    "tap_isolate_rules": "18"
+  },
+  "computers": {
+    "a": {
+      "computer": "computer-6450a253b8b6ebc0866471973694f5be",
+      "user": "a85b8fee-c7f5-4d04-b1f1-0e0ce8e4c335",
+      "guest_ip": "10.200.220.2"
+    },
+    "b": {
+      "computer": "computer-cbcce1fa4e5dd8e3fda0c5880fbd7824",
+      "user": "69377e81-cb13-440e-86f7-eece03007da3",
+      "guest_ip": "10.200.221.2"
+    }
+  },
+  "failed_legs": [],
+  "finished_at": "2026-10-04T05:34:44.479Z"
+}
