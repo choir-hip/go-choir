@@ -196,22 +196,22 @@ heresy_delta:
 now:
   status: working
   slice: >-
-    Live. Effect plane proven + host-service builder landed 2026-10-04.
-    Wedge fix f61de45b deployed, Go-effect op
-    selfdev-b72a48565061c35c0a22246cb6fc06c3 FROZEN with bundle
-    9d2be524fa6657b6 on staging. Builder substrate = host-service, code
-    landed in internal/builder + cmd/choir-builder (commit 4b5255d1,
-    deployed): Build resolves the deployed base (choir-guest-image-v1
-    manifest digest + storedisk digest + bound store paths), diffs the
-    installable's nix path-info -r closure against the base, exports only
-    the base-absent delta via nix-store --export, writes a canonical
-    receipt. Host-proven: .#frontend at f61de45b -> 1-path nar that
-    nix-store --import resolves
-    (docs/problems/s2-host-builder-landed-2026-10-04.md). Next: updater
-    manifest extension (closure + base-identity fields) + GC-rooted
-    data-disk store-path materialization + runtime exec from it.
-  source_ref: main@4b5255d1
-  deploy_identity: 'staging https://choir.news deployed_commit=4b5255d1; builder + Go-effect proof live'
+    Live. Effect plane proven + host-service builder landed 2026-10-04
+    (commit 4b5255d1, deployed). Guest-side layering halves done 2026-10-04:
+    (1) ReleaseManifest carries base_image_manifest_digest + closure_digest;
+    Apply fails closed on base mismatch (NewWithBase wires the booted
+    guest-image-manifest path; commit 20880d75). (2) Pure-Go narchive
+    reader + GC-rooted data-disk store materializer landed
+    (internal/updater/closure.go, commit b68357a1): decodes the real
+    nix-store --export wire format, replays each object to a read-only
+    per-computer store via stage-then-atomic-rename; no nix binary needed
+    in the guest. Next: wire the materializer into Apply (closure replay +
+    private-store GC root) and the runtime-exec change so the guest
+    autoputer runs the applied release's binary — tracked in
+    docs/problems/s2-runtime-exec-still-baseline-2026-10-04.md (releases
+    never exec; ExecStart hard-execs the base binary).
+    source_ref: main@b68357a1
+    deploy_identity: 'staging https://choir.news deployed_commit=4b5255d1; builder + Go-effect proof + base-join + closure-materializer code live (guest binary unchanged until image rebuild)'
   candidate:
     id: none
     state: none
@@ -279,14 +279,14 @@ now:
     frontend/state/event-head atomic join, or leaks a writable global store
     violates the updater trust boundary rather than providing a valid speedup.
   next_action: >-
-    Host-service builder landed 2026-10-04 (internal/builder +
-    cmd/choir-builder, commit 4b5255d1 deployed). Next: extend the
-    updater release contract so a manifest carries the app-layer closure
-    blob + the base-image identity it resolves against
-    (base_image_manifest_digest + store_disk digest + exported nar
-    store-path set), then materialization: replay the nar to GC-rooted
-    data-disk store paths + exec the runtime from them — the actual
-    layering acceptance.
+    Base-join + closure materializer landed 2026-10-04 (20880d75 + b68357a1).
+    Next is the runtime-exec slice (docs/problems/s2-runtime-exec-still-baseline):
+    wire MaterializeClosure into Apply so a layered release replays its nar
+    into the GC-rooted data-disk store, then change the guest autoputer exec
+    to run the applied release's binary from the private store (mount
+    namespace over /nix/store) instead of the base image — the layering
+    acceptance is a deployed proof that an applied app-layer change becomes
+    the running process, plus refusal on unresolved base.
 
 receipts: []
 ---
