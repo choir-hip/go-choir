@@ -39,7 +39,7 @@ func (h *Handler) HandleCompletionEmail(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	ownerID, ok := authenticatedInternalOwner(w, r)
+	ownerID, ok := h.authenticatedInternalOwner(w, r)
 	if !ok {
 		return
 	}
@@ -88,7 +88,7 @@ func (h *Handler) HandleRiskAlert(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	ownerID, ownerEmail, ok := authenticatedInternalOwnerWithEmail(w, r)
+	ownerID, ownerEmail, ok := h.authenticatedInternalOwnerWithEmail(w, r)
 	if !ok {
 		return
 	}

@@ -20,6 +20,7 @@ type Config struct {
 	SigningKeyPath        string
 	KeyEscrowKeyPath      string
 	KeyEscrowOperatorsRaw string
+	VmctlURL              string
 }
 
 func LoadConfig() (*Config, error) {
@@ -31,6 +32,7 @@ func LoadConfig() (*Config, error) {
 		SigningKeyPath:        envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
 		KeyEscrowKeyPath:      envOr("CHOIR_KEY_ESCROW_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "key-escrow-key")),
 		KeyEscrowOperatorsRaw: os.Getenv("CHOIR_KEY_ESCROW_OPERATORS"),
+		VmctlURL:              os.Getenv("CORPUSD_VMCTL_URL"),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

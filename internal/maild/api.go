@@ -2,10 +2,13 @@ package maild
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/mail"
 	"strconv"
@@ -88,7 +91,7 @@ type ingressEventsResponse struct {
 
 // HandleMessages handles /api/email/messages and /api/email/messages/*.
 func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := authenticatedInternalOwner(w, r)
+	ownerID, ok := h.authenticatedInternalOwner(w, r)
 	if !ok {
 		return
 	}
@@ -158,22 +161,106 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 }
 
-func authenticatedInternalOwner(w http.ResponseWriter, r *http.Request) (string, bool) {
-	ownerID, _, ok := authenticatedInternalOwnerWithEmail(w, r)
+// s1aBindTapCallerToOwner checks S1a authority binding: when the request
+// arrives over a guest tap (non-loopback RemoteAddr), the guest's source
+// IP must resolve via vmctl to a live ownership whose user_id equals the
+// asserted ownerID. Loopback callers are host services and keep header
+// trust. Returns the verified ownerID, or "" with a 403 already written.
+func (h *Handler) s1aBindTapCallerToOwner(w http.ResponseWriter, r *http.Request, ownerID string) (string, bool) {
+	srcHost := maildRemoteAddrHost(r)
+	if srcHost == "" || isMaildLoopbackHost(srcHost) {
+		return ownerID, true // loopback: host service, header trust is fine
+	}
+	if h.cfg == nil || strings.TrimSpace(h.cfg.VmctlURL) == "" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "guest caller binding unavailable"})
+		return "", false
+	}
+	bound, err := maildLookupGuestOwnership(r.Context(), h.cfg.VmctlURL, r.RemoteAddr)
+	if err != nil || bound == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "guest caller not bound to a live computer"})
+		return "", false
+	}
+	if !strings.EqualFold(strings.TrimSpace(bound.UserID), ownerID) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "guest caller not bound to asserted owner"})
+		return "", false
+	}
+	return ownerID, true
+}
+
+func maildRemoteAddrHost(r *http.Request) string {
+	if host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr)); err == nil {
+		return host
+	}
+	return strings.TrimSpace(r.RemoteAddr)
+}
+
+func isMaildLoopbackHost(host string) bool {
+	return host == "127.0.0.1" || host == "::1" || host == "" || host == "@" ||
+		strings.HasPrefix(host, "192.0.2.") || strings.HasPrefix(host, "/")
+}
+
+type maildGuestOwnership struct {
+	Found      bool   `json:"found"`
+	UserID     string `json:"user_id"`
+	ComputerID string `json:"computer_id"`
+}
+
+func maildLookupGuestOwnership(ctx context.Context, vmctlURL, remoteAddr string) (*maildGuestOwnership, error) {
+	body, _ := json.Marshal(map[string]string{"remote_addr": remoteAddr})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		strings.TrimRight(strings.TrimSpace(vmctlURL), "/")+"/internal/vmctl/lookup-guest",
+		bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("vmctl lookup-guest status %d", resp.StatusCode)
+	}
+	var out maildGuestOwnership
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	if !out.Found {
+		return nil, nil
+	}
+	return &out, nil
+}
+
+func (h *Handler) authenticatedInternalOwner(w http.ResponseWriter, r *http.Request) (string, bool) {
+	ownerID, _, ok := h.authenticatedInternalOwnerWithEmail(w, r)
 	return ownerID, ok
 }
 
-func authenticatedInternalOwnerWithEmail(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+func (h *Handler) authenticatedInternalOwnerWithEmail(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
 	if ownerID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
 		return "", "", false
 	}
-	if !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Internal-Caller")), "true") {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal caller required"})
+	// S1a: the caller must be either a host service on a trusted transport
+	// (loopback / unix socket / TEST-NET-1 test harness) or a bound guest
+	// whose tap IP resolves to a live ownership for the asserted owner.
+	srcHost := maildRemoteAddrHost(r)
+	if isMaildLoopbackHost(srcHost) {
+		if !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Internal-Caller")), "true") {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal caller required"})
+			return "", "", false
+		}
+		return ownerID, normalizedTrustedEmail(r.Header.Get("X-Authenticated-Email")), true
+	}
+	boundID, ok := h.s1aBindTapCallerToOwner(w, r, ownerID)
+	if !ok {
 		return "", "", false
 	}
-	return ownerID, normalizedTrustedEmail(r.Header.Get("X-Authenticated-Email")), true
+	return boundID, normalizedTrustedEmail(r.Header.Get("X-Authenticated-Email")), true
 }
 
 func normalizedTrustedEmail(value string) string {

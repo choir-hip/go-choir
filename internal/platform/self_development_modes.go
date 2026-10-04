@@ -347,7 +347,7 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "computer_id is required"})
 		return
 	}
-	internalCaller := r.Header.Get("X-Internal-Caller") == "true"
+	internalCaller := trustedInternalCaller(r)
 	switch r.Method {
 	case http.MethodGet:
 		if !internalCaller && (h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:read") != nil) {

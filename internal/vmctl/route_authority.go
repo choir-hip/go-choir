@@ -9,6 +9,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	"log"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -353,7 +355,7 @@ func (h *Handler) HandleResolveComputerVersionInputs(w http.ResponseWriter, r *h
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
 		return
 	}
-	if !isInternalCaller(r) {
+	if !isInternalCaller(r) && !h.callerBoundToAnyOwnership(r) {
 		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
 		return
 	}
@@ -382,9 +384,26 @@ func (h *Handler) HandleResolveComputerVersionRoute(w http.ResponseWriter, r *ht
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
 		return
 	}
+	// S1a evidence leg: log the socket-layer identity of non-loopback
+	// callers reaching the CV route surface. Confirms (or refutes) the
+	// iptables trace claim that guest-originated packets preserve the tap
+	// IP post-DNAT — RemoteAddr is the bound-authority input.
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host != "127.0.0.1" && host != "::1" {
+		log.Printf("vmctl: cv-route non-loopback caller remote_addr=%s host=%q x-internal-caller=%q", r.RemoteAddr, r.Host, r.Header.Get("X-Internal-Caller"))
+	}
 	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
-		return
+		// S1a: tap-sourced callers are admitted only for their own slot —
+		// the slot ID embeds owner:computer; the caller's tap IP must bind
+		// to that computer's ownership record.
+		_, slotComputerID, parseErr := routeledger.ParseRouteSlotID(r.URL.Query().Get("route_slot_id"))
+		if parseErr != nil {
+			writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid route slot id"})
+			return
+		}
+		if bindErr := h.bindRequestToGuestComputer(r, slotComputerID); bindErr != nil {
+			writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "caller not bound to route slot computer: " + bindErr.Error()})
+			return
+		}
 	}
 	if h.routeAuthority == nil {
 		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "ComputerVersion route authority unavailable"})

@@ -396,6 +396,9 @@ func Run() {
 	// mutations publish owner-scoped product events after the filesystem write
 	// succeeds so other devices can refresh Files without manual reload UI.
 	fileHandler := NewFilesHandlerWithObserver(filesRoot, func(r *http.Request, event FileChangeEvent) {
+		if !server.HostSourcedCaller(r) {
+			return
+		}
 		ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
 		if ownerID == "" {
 			return

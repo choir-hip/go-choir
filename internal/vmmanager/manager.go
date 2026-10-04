@@ -1135,6 +1135,7 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 	m.mu.Unlock()
 
 	m.ensureTapHostServiceInputRules(tapNameForVMID(vmID))
+	m.reconcileTapIsolation(vmID, hostURL)
 	log.Printf("vmmanager: reattached VM %s (host=%s pid=%d epoch=%d)", vmID, hostURL, pid, epoch)
 	return inst, nil
 }
@@ -2875,6 +2876,14 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 	acceptLocal := fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/accept_local", tapName)
 	_ = os.WriteFile(acceptLocal, []byte("1"), 0o644)
 
+	// S1a: tap isolation + anti-spoofing, placed before the broad ACCEPTs.
+	// 1. Anti-spoof: only the guest's own /30 source may enter this tap.
+	//    Covers INPUT (guest->host service) and FORWARD (guest->guest, egress)
+	//    alike — without it a root guest can emit SRC=10.200.x.1 (the host
+	//    peer IP) or another guest's address and defeat IP-bound authority.
+	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
+	m.ensureTapIsolationRules(tapName, guestIP, comment)
+
 	// Allow forwarding to/from the tap device.
 	// These ACCEPT rules ensure packets can flow between the tap device
 	// and the rest of the host networking stack.
@@ -2882,21 +2891,15 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 		"-i", tapName, "-j", "ACCEPT").Run()
 	_ = exec.Command(iptBin, "-A", "FORWARD",
 		"-o", tapName, "-j", "ACCEPT").Run()
-	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
+
 	m.ensureTapHostServiceInputRules(tapName)
 
-	// Set up MASQUERADE (SNAT) for outbound guest traffic.
-	// This is critical: without it, the guest can send packets to the
-	// host (e.g., to 127.0.0.1:8084 for gateway) but the host's reply
-	// packets don't route back to the guest. MASQUERADE rewrites the
-	// source IP to the host's IP so replies come back through the tap.
-	_ = exec.Command(iptBin, "-t", "nat", "-A", "POSTROUTING",
-		"-s", guestIP+"/30",
-		"-o", "lo",
-		"-j", "MASQUERADE",
-		"-m", "comment", "--comment", comment).Run()
+	// S1a: the "-o lo" MASQUERADE rule was removed — the guest-originated
+	// packets it claimed to catch do not exist (post-DNAT they carry the
+	// real tap IP, not 127.0.0.1; 0-packet counters observed live). What
+	// remains is the outbound masquerade that carries host replies back.
 
-	// Also masquerade traffic going out through the default interface
+	// Masquerade traffic going out through the default interface
 	// (in case the guest needs internet access for any reason).
 	_ = exec.Command(iptBin, "-t", "nat", "-A", "POSTROUTING",
 		"-s", guestIP+"/30",
@@ -2948,6 +2951,60 @@ func (m *Manager) ensureTapHostServiceInputRules(tapName string) {
 	}
 }
 
+// ensureTapIsolationRules enforces the S1a tap boundary on a tap that is
+// already being (re)configured: anti-spoofing (only the guest's own /30
+// source may enter its tap) and tap->tap denial (no FORWARD path into
+// the shared 10.200.0.0/16 guest space). Rules are inserted with -I so
+// they precede the broad per-tap ACCEPTs appended by setupHostNetworking
+// — order is load-bearing, so each rule is checked then inserted at the
+// head of its chain. Idempotent: a reconcile pass or reattach reuses the
+// same spec and no-ops when the rule already exists.
+func (m *Manager) ensureTapIsolationRules(tapName, guestIP, comment string) {
+	if strings.TrimSpace(tapName) == "" || strings.TrimSpace(guestIP) == "" {
+		return
+	}
+	iptBin := findBinary("iptables", "/run/current-system/sw/bin/iptables")
+	ensure := func(chain string, spec ...string) {
+		full := append([]string{"-C", chain}, spec...)
+		if err := exec.Command(iptBin, full...).Run(); err == nil {
+			return
+		}
+		ins := append([]string{"-I", chain, "1"}, spec...)
+		if err := exec.Command(iptBin, ins...).Run(); err != nil {
+			log.Printf("vmmanager: warning: could not install tap isolation rule on %s/%s: %v", tapName, chain, err)
+		}
+	}
+	withComment := func(spec ...string) []string {
+		return append(append([]string{}, spec...), "-m", "comment", "--comment", comment)
+	}
+	// Anti-spoof: packets entering this tap must carry the guest's own
+	// /30 address. Applies to INPUT (guest->host services) and FORWARD
+	// (guest->guest / guest->egress) so a root guest cannot forge the host
+	// peer IP or a neighbour's address.
+	ensure("INPUT", withComment("-i", tapName, "!", "-s", guestIP+"/32", "-j", "DROP")...)
+	ensure("FORWARD", withComment("-i", tapName, "!", "-s", guestIP+"/32", "-j", "DROP")...)
+	// Tap->tap deny: no guest may forward into the shared guest space.
+	// Inserted before the per-tap ACCEPTs so the deny wins for cross-tap
+	// traffic while ordinary egress (non-10.200 destinations) still passes.
+	ensure("FORWARD", withComment("-i", tapName, "-d", "10.200.0.0/16", "-j", "DROP")...)
+}
+
+// reconcileTapIsolation brings already-live taps under the S1a boundary
+// without requiring a VM restart: for each managed VM it derives the
+// guest subnet from the bound host port and installs the same isolation
+// set that setupHostNetworking now writes on fresh boots. Called from
+// ReattachVMWithConfig after the input rules so a reattached computer
+// gains the boundary immediately.
+func (m *Manager) reconcileTapIsolation(vmID, hostURL string) {
+	hostPort, ok := m.hostPortFromHostURL(hostURL)
+	if !ok {
+		return
+	}
+	guestIP, _ := m.guestAndHostIP(hostPort)
+	tapName := tapNameForVMID(vmID)
+	m.ensureTapIsolationRules(tapName, guestIP, fmt.Sprintf("go-choir-vm-%s", tapName))
+}
+
 func tapHostServiceInputRuleSpec(tapName, port, comment string) []string {
 	return []string{
 		"-i", tapName,
@@ -2962,7 +3019,8 @@ func tapReachableHostServicePorts() []string {
 		"8082", // proxy / platform publish path
 		"8083", // vmctl
 		"8084", // gateway
-		"8085", // host autoputer runtime lifecycle evidence
+		// :8085 removed 2026-10-04 (S1a): no production host autoputer serves
+		// it; the rule only let guests reach a dead port.
 		"8086", // corpusd durable Texture verification
 		"8087", // maild draft persistence
 		"8787", // source service retrieval

@@ -13,6 +13,7 @@ import (
 
 	"github.com/creack/pty/v2"
 	"github.com/gorilla/websocket"
+	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
 // TerminalMessage represents a JSON message exchanged over the terminal WebSocket.
@@ -124,9 +125,12 @@ func (th *TerminalHandler) Manager() *TerminalManager {
 // On connection it spawns a new PTY shell session and relays data
 // bidirectionally between the WebSocket client and the PTY.
 func (th *TerminalHandler) HandleTerminalWS(w http.ResponseWriter, r *http.Request) {
-	// Check that the request has been authenticated by the proxy.
-	// The proxy sets X-Authenticated-User for valid sessions.
-	user := r.Header.Get("X-Authenticated-User")
+	// The proxy-authenticated identity is valid only over the host peer
+	// transport; guests can otherwise assert the header themselves.
+	user := ""
+	if server.HostSourcedCaller(r) {
+		user = r.Header.Get("X-Authenticated-User")
+	}
 	if user == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)

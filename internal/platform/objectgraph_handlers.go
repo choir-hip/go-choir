@@ -23,8 +23,9 @@ func RegisterObjectGraphRoutes(s *server.Server, h *ObjectGraphHandler) {
 }
 
 type ObjectGraphHandler struct {
-	service *objectgraph.Service
-	store   objectgraph.Store
+	service     *objectgraph.Service
+	store       objectgraph.Store
+	guestLookup guestOwnershipLookup
 }
 
 // NewObjectGraphHandler builds a handler that exposes both Service-level
@@ -35,21 +36,31 @@ func NewObjectGraphHandler(svc *objectgraph.Service, store objectgraph.Store) *O
 	return &ObjectGraphHandler{service: svc, store: store}
 }
 
+// ConfigureGuestBinding installs vmctl's ownership lookup for tap-sourced
+// object graph calls. Guest requests fail closed until this is configured.
+func (h *ObjectGraphHandler) ConfigureGuestBinding(lookup guestOwnershipLookup) error {
+	if h == nil || lookup == nil {
+		return fmt.Errorf("objectgraph handler: guest ownership lookup is required")
+	}
+	h.guestLookup = lookup
+	return nil
+}
+
 // HandleObjects handles POST /internal/platform/objects (Service create),
 // PUT /internal/platform/objects (Store put with a pre-built Object), and
 // GET /internal/platform/objects (list with optional kind/owner/limit filters).
 func (h *ObjectGraphHandler) HandleObjects(w http.ResponseWriter, r *http.Request) {
-	if err := requireInternalCaller(r); err != nil {
-		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
-		return
-	}
 	switch r.Method {
+	case http.MethodGet:
+		if err := h.requireInternalOrBoundGuest(r, "", "", true); err != nil {
+			writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
+			return
+		}
+		h.listObjects(w, r)
 	case http.MethodPost:
 		h.createObject(w, r)
 	case http.MethodPut:
 		h.putObject(w, r)
-	case http.MethodGet:
-		h.listObjects(w, r)
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
@@ -57,8 +68,8 @@ func (h *ObjectGraphHandler) HandleObjects(w http.ResponseWriter, r *http.Reques
 
 // HandleObjectByID handles GET /internal/platform/objects/{id} (get one).
 func (h *ObjectGraphHandler) HandleObjectByID(w http.ResponseWriter, r *http.Request) {
-	if err := requireInternalCaller(r); err != nil {
-		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
+	if !trustedInternalCaller(r) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: errInternalCallerRequired.Error()})
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -88,17 +99,17 @@ func (h *ObjectGraphHandler) HandleObjectByID(w http.ResponseWriter, r *http.Req
 // PUT /internal/platform/edges (Store put with a pre-built Edge), and
 // GET /internal/platform/edges (list with optional from/to/kind/limit filters).
 func (h *ObjectGraphHandler) HandleEdges(w http.ResponseWriter, r *http.Request) {
-	if err := requireInternalCaller(r); err != nil {
-		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
-		return
-	}
 	switch r.Method {
+	case http.MethodGet:
+		if err := h.requireInternalOrBoundGuest(r, "", "", true); err != nil {
+			writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
+			return
+		}
+		h.listEdges(w, r)
 	case http.MethodPost:
 		h.createEdge(w, r)
 	case http.MethodPut:
 		h.putEdge(w, r)
-	case http.MethodGet:
-		h.listEdges(w, r)
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
@@ -123,6 +134,10 @@ func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request
 	var req createObjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if err := h.requireInternalOrBoundGuest(r, req.OwnerID, req.ComputerID, false); err != nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 		return
 	}
 	now := time.Now().UTC()
@@ -167,6 +182,10 @@ func (h *ObjectGraphHandler) putObject(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateObject(obj); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	if err := h.requireInternalOrBoundGuest(r, obj.OwnerID, obj.ComputerID, false); err != nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 		return
 	}
 	if err := h.store.PutObject(r.Context(), obj); err != nil {
@@ -219,6 +238,10 @@ func (h *ObjectGraphHandler) createEdge(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
+	if err := h.requireInternalOrBoundGuestEdge(r, req.FromID, req.ToID); err != nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
+		return
+	}
 	edge, err := h.service.PutEdge(r.Context(), req.FromID, req.ToID, objectgraph.EdgeKind(req.Kind), req.Metadata)
 	if err != nil {
 		log.Printf("corpusd: create edge: %v", err)
@@ -245,6 +268,10 @@ func (h *ObjectGraphHandler) putEdge(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateEdge(edge); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	if err := h.requireInternalOrBoundGuestEdge(r, edge.FromID, edge.ToID); err != nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 		return
 	}
 	if err := h.store.PutEdge(r.Context(), edge); err != nil {
@@ -280,9 +307,38 @@ func (h *ObjectGraphHandler) listEdges(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, edges)
 }
 
-func requireInternalCaller(r *http.Request) error {
-	if r.Header.Get("X-Internal-Caller") != "true" {
+func (h *ObjectGraphHandler) requireInternalOrBoundGuest(r *http.Request, ownerID, computerID string, allowAnyGuest bool) error {
+	if trustedInternalCaller(r) {
+		return nil
+	}
+	ownership, err := bindTapCaller(r.Context(), h.guestLookup, r)
+	if err != nil {
 		return errInternalCallerRequired
+	}
+	if allowAnyGuest {
+		return nil
+	}
+	if strings.TrimSpace(ownerID) != strings.TrimSpace(ownership.UserID) ||
+		strings.TrimSpace(computerID) != strings.TrimSpace(ownership.ComputerID) {
+		return errInternalCallerRequired
+	}
+	return nil
+}
+
+func (h *ObjectGraphHandler) requireInternalOrBoundGuestEdge(r *http.Request, fromID, toID string) error {
+	if trustedInternalCaller(r) {
+		return nil
+	}
+	ownership, err := bindTapCaller(r.Context(), h.guestLookup, r)
+	if err != nil || h.service == nil {
+		return errInternalCallerRequired
+	}
+	for _, id := range []string{fromID, toID} {
+		object, err := h.service.GetObject(r.Context(), id)
+		if err != nil || strings.TrimSpace(object.OwnerID) != strings.TrimSpace(ownership.UserID) ||
+			strings.TrimSpace(object.ComputerID) != strings.TrimSpace(ownership.ComputerID) {
+			return errInternalCallerRequired
+		}
 	}
 	return nil
 }

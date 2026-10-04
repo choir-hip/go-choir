@@ -79,7 +79,7 @@ func (h *Handler) draftAttachmentMaxBytes() int64 {
 // HandleAttachments routes /api/email/attachments and
 // /api/email/attachments/{id}.
 func (h *Handler) HandleAttachments(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := authenticatedInternalOwner(w, r)
+	ownerID, ok := h.authenticatedInternalOwner(w, r)
 	if !ok {
 		return
 	}

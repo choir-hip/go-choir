@@ -94,7 +94,7 @@ func (h *Handler) HandleAliases(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	ownerID, ok := authenticatedInternalOwner(w, r)
+	ownerID, ok := h.authenticatedInternalOwner(w, r)
 	if !ok {
 		return
 	}
@@ -117,7 +117,7 @@ func (h *Handler) HandleAliases(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleDrafts(w http.ResponseWriter, r *http.Request) {
-	ownerID, ownerEmail, ok := authenticatedInternalOwnerWithEmail(w, r)
+	ownerID, ownerEmail, ok := h.authenticatedInternalOwnerWithEmail(w, r)
 	if !ok {
 		return
 	}

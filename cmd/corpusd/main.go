@@ -8,6 +8,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 func main() {
@@ -38,6 +39,11 @@ func main() {
 
 	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
 	handler := platform.NewHandler(svc)
+	if cfg.VmctlURL != "" {
+		if err := handler.ConfigureGuestBinding(vmctl.NewClient(cfg.VmctlURL)); err != nil {
+			log.Fatalf("corpusd guest binding: %v", err)
+		}
+	}
 	eventCAS, eventArtifacts, eventAuth, err := svc.ComputerEventRuntime()
 	if err != nil {
 		log.Fatalf("corpusd computer event runtime: %v", err)
@@ -69,6 +75,11 @@ func main() {
 		Durable: ogStore,
 	})
 	ogHandler := platform.NewObjectGraphHandler(ogService, ogStore)
+	if cfg.VmctlURL != "" {
+		if err := ogHandler.ConfigureGuestBinding(vmctl.NewClient(cfg.VmctlURL)); err != nil {
+			log.Fatalf("corpusd object graph guest binding: %v", err)
+		}
+	}
 	platform.RegisterObjectGraphRoutes(s, ogHandler)
 
 	s.Start()

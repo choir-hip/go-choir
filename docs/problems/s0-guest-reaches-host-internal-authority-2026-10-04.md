@@ -1,10 +1,11 @@
 # S0 finding: any guest inherits host-internal authority — cross-tenant control-plane reach and a frontend-injection chain
 
 **Date:** 2026-10-04
-**Status:** open. Source-traced. The reachability leg is confirmed on staging
-(S0a). The authority legs are confirmed in source only: no request was replayed
-against another tenant. Owner direction 2026-10-04: record in full (prerelease;
-considerable hardening follows the metamission).
+**Status:** repair landed 2026-10-04 (S1a), pending deployed verification.
+Source-traced. The reachability leg was confirmed on staging (S0a); the
+authority legs were confirmed in source only: no request was replayed
+against another tenant. Owner direction 2026-10-04: record in full
+(prerelease; considerable hardening follows the metamission).
 **Mutation class of this record:** green. The fix is red (VM networking,
 vmctl, corpusd platform-control signing, auth identity propagation).
 **Station receiving it:** S1-security-floor, as a new first slice **S1a
@@ -136,6 +137,40 @@ endpoint bugs. Patching individual handlers would leave the class open.
    refused from guest A against guest B and against the host services, while
    the legitimate guest→gateway/maild/corpusd flows still work. Record
    pre/post `iptables-save` and the refusal receipts.
+
+## Repair record (S1a, landed 2026-10-04)
+
+Network (vmmanager): per-tap INPUT+FORWARD anti-spoof DROP for sources
+outside the guest's /32; FORWARD DROP into 10.200.0.0/16 (tap->tap);
+:8085 removed from `tapReachableHostServicePorts`; dead `-o lo` MASQUERADE
+rules deleted; `reconcileTapIsolation` applies the set to live taps on
+reattach.
+
+Authority (transport-bound; X-Internal-Caller demoted to marker):
+- vmctl `isInternalCaller` = loopback/UDS/TEST-NET-1 only; the four CV
+  endpoints admit tap callers bound by source IP to the owning computer
+  (slot/projection computer_id for resolve/apply, any bound ownership for
+  inputs-resolve).
+- NEW `POST /internal/vmctl/lookup-guest` (loopback-only): tap IP ->
+  ownership join; consumed by maild, corpusd, proxy, source service.
+- maild: tap callers must bind to a live ownership whose user_id equals
+  `X-Authenticated-User`.
+- corpusd: `trustedInternalCaller` = trusted transport + header for all
+  host bypasses; objectgraph writes bound to payload owner/computer via
+  the bound guest (edges via endpoint owners); collection GETs admit any
+  bound guest. `CORPUSD_VMCTL_URL` wired in nix/node-b.nix.
+- proxy: wire-platform publish bound to the universal-wire platform
+  computer; objectgraph passthrough bound per object/edge owner+computer.
+- source service :8787: tap callers require bound ownership;
+  `SOURCE_SERVICE_VMCTL_URL` wired.
+- guest side: `server.HostSourcedCaller` = loopback/UDS/TEST-NET-1 or
+  RemoteAddr == default gateway (host peer) parsed from /proc/net/route
+  (fail closed). `X-Authenticated-User` honored only on that transport in
+  autoputer + agentcore; /internal/runtime + /internal/diag gated.
+
+Deployed verification (two disposable accounts + legitimate-flows matrix)
+follows in the S1a evidence file; staging iptables receipts land with the
+deployed proof.
 
 ## Rollback
 

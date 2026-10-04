@@ -150,7 +150,6 @@ type Handler struct {
 	routeCacheTTL time.Duration
 	routeCacheMu  sync.Mutex
 	routeCache    map[string]routeCacheEntry
-
 }
 
 // Context keys used to carry the resolved upstream URL and its invalidator
@@ -182,16 +181,15 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 
 	proxy := httputil.NewSingleHostReverseProxy(autoputerURL)
 
-// Context keys used to carry the resolved upstream URL and its invalidator
-// from the request handler into the reverse-proxy ErrorHandler (the Director
-// strips the header before the upstream request is issued).
-type proxyContextKey string
+	// Context keys used to carry the resolved upstream URL and its invalidator
+	// from the request handler into the reverse-proxy ErrorHandler (the Director
+	// strips the header before the upstream request is issued).
+	type proxyContextKey string
 
-const (
-	resolvedAutoputerURLContextKey proxyContextKey = "resolved_autoputer_url"
-	routeInvalidatorContextKey     proxyContextKey = "route_invalidator"
-)
-
+	const (
+		resolvedAutoputerURLContextKey proxyContextKey = "resolved_autoputer_url"
+		routeInvalidatorContextKey     proxyContextKey = "route_invalidator"
+	)
 
 	// A transport failure against a cached route means the cached URL may
 	// point at a moved or dead VM — drop it so the next request re-resolves
@@ -1670,24 +1668,12 @@ func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Reque
 }
 
 // HandlePlatformObjectGraph forwards object graph API requests from the
-// runtime (inside a VM) to corpusd. The runtime's objectgraph.HTTPStore
-// sets X-Internal-Caller: true; the proxy checks this header on the incoming
-// request and then sets its own X-Internal-Caller header when forwarding to
-// corpusd, so the caller cannot forge arbitrary header values.
-//
-// Security model: this route uses the same X-Internal-Caller trust signal as
-// HandleInternalWirePlatformPublish. The Caddy edge (nix/node-b.nix) blocks
-// all /internal/* routes from the public internet with a 403, so this handler
-// is only reachable from inside VMs via the VM-to-host network. VM processes
-// are already trusted to run runtime code. A hard cryptographic boundary
-// (shared secret between proxy and corpusd) is out of scope for this PR.
-// Both /internal/platform/objects and /internal/platform/edges (with optional
-// sub-paths and query strings) are forwarded as-is.
+// runtime (inside a VM) to corpusd. Guest requests are bound by their tap
+// source address to the owning computer before the proxy becomes corpusd's
+// loopback internal caller.
 func (h *Handler) HandlePlatformObjectGraph(w http.ResponseWriter, r *http.Request) {
-	// Require the internal-caller header on the incoming request, matching
-	// the HandleInternalWirePlatformPublish pattern.
-	if r.Header.Get("X-Internal-Caller") != "true" {
-		writeJSON(w, http.StatusForbidden, errorResponse{Error: "internal caller required"})
+	if err := h.requirePlatformObjectGraphCaller(r); err != nil {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: err.Error()})
 		return
 	}
 	target, err := joinBasePath(h.cfg.CorpusdURL, r.URL.Path)

@@ -1436,12 +1436,13 @@ func TestIsInternalCaller(t *testing.T) {
 		header     string
 		want       bool
 	}{
-		{"localhost host", "localhost:8083", "127.0.0.1:12345", "", true},
-		{"127.0.0.1 host", "127.0.0.1:8083", "127.0.0.1:12345", "", true},
-		{"::1 host", "[::1]:8083", "[::1]:12345", "", true},
-		{"external host", "192.168.1.1:8083", "10.0.0.1:12345", "", false},
-		{"internal header", "external:8083", "10.0.0.1:12345", "true", true},
-		{"empty header", "external:8083", "10.0.0.1:12345", "false", false},
+		// S1a: authority is transport-bound; only loopback RemoteAddr admits.
+		{"localhost remote", "localhost:8083", "127.0.0.1:12345", "", true},
+		{"127.0.0.1 remote", "external:8083", "127.0.0.1:12345", "", true},
+		{"::1 remote", "[::1]:8083", "[::1]:12345", "", true},
+		{"localhost host with non-loopback remote", "localhost:8083", "10.0.0.1:12345", "", false},
+		{"internal header from non-loopback", "external:8083", "10.0.0.1:12345", "true", false},
+		{"empty header non-loopback", "external:8083", "10.0.0.1:12345", "false", false},
 	}
 
 	for _, tt := range tests {

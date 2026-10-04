@@ -107,10 +107,9 @@ func (h *Handler) HandleApplySelfDevelopmentRouteProjection(w http.ResponseWrite
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal authorization required"})
-		return
-	}
+	// S1a: admit loopback host callers outright; admit a tap-sourced caller
+	// only when its source IP binds to the projection's computer_id. The
+	// X-Internal-Caller header alone grants nothing from a guest.
 	if h == nil || h.routeAuthority == nil || h.registry == nil {
 		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "route authority unavailable"})
 		return
@@ -121,6 +120,12 @@ func (h *Handler) HandleApplySelfDevelopmentRouteProjection(w http.ResponseWrite
 	if err := decoder.Decode(&request); err != nil {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid self-development route projection"})
 		return
+	}
+	if !isInternalCaller(r) {
+		if bindErr := h.bindRequestToGuestComputer(r, request.Projection.ComputerID); bindErr != nil {
+			writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "caller not bound to projection computer: " + bindErr.Error()})
+			return
+		}
 	}
 	resolution, err := h.routeAuthority.ApplySelfDevelopmentProjection(r.Context(), h.registry, request, time.Now().UTC())
 	if err != nil {
@@ -145,10 +150,8 @@ func (h *Handler) HandleApplyPlatformFollowRouteProjection(w http.ResponseWriter
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal authorization required"})
-		return
-	}
+	// S1a: admit loopback host callers outright; admit a tap-sourced caller
+	// only when its source IP binds to the projection's computer_id.
 	if h == nil || h.routeAuthority == nil || h.registry == nil {
 		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "route authority unavailable"})
 		return
@@ -159,6 +162,12 @@ func (h *Handler) HandleApplyPlatformFollowRouteProjection(w http.ResponseWriter
 	if err := decoder.Decode(&request); err != nil {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid platform-follow route projection"})
 		return
+	}
+	if !isInternalCaller(r) {
+		if bindErr := h.bindRequestToGuestComputer(r, request.Projection.ComputerID); bindErr != nil {
+			writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "caller not bound to projection computer: " + bindErr.Error()})
+			return
+		}
 	}
 	resolution, err := h.routeAuthority.ApplyPlatformFollowRouteProjection(r.Context(), h.registry, request, time.Now().UTC())
 	if err != nil {

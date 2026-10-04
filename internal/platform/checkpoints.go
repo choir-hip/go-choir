@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -440,8 +439,7 @@ func (h *Handler) HandleExecutionIdentityAttestation(w http.ResponseWriter, r *h
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	host, _, splitErr := net.SplitHostPort(r.RemoteAddr)
-	if splitErr != nil || !net.ParseIP(host).IsLoopback() || r.Header.Get("X-Internal-Caller") != "true" || h == nil || h.eventCAS == nil {
+	if !trustedInternalCaller(r) || h == nil || h.eventCAS == nil {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "loopback internal authorization required"})
 		return
 	}
@@ -484,7 +482,7 @@ func (h *Handler) HandlePlatformControlPublicKey(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" || h == nil || h.eventCAS == nil {
+	if !trustedInternalCaller(r) || h == nil || h.eventCAS == nil {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal authorization required"})
 		return
 	}

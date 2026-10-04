@@ -38,8 +38,8 @@ func (h *Handler) HandleInternalWirePlatformPublish(w http.ResponseWriter, r *ht
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
-		writeJSON(w, http.StatusForbidden, errorResponse{Error: "internal caller required"})
+	if err := h.requireWirePlatformPublishCaller(r); err != nil {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: err.Error()})
 		return
 	}
 	platformOwner := wirepublish.PlatformOwnerID()

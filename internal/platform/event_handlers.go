@@ -44,7 +44,7 @@ func (h *Handler) HandleComputerCredentialIssue(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" || h == nil || h.service == nil {
+	if !trustedInternalCaller(r) || h == nil || h.service == nil {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "credential issuance refused"})
 		return
 	}
@@ -144,7 +144,7 @@ func (h *Handler) HandleComputerLifecycleControl(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" || strings.TrimSpace(r.Header.Get("X-Authenticated-User")) == "" || h == nil || h.service == nil {
+	if !trustedInternalCaller(r) || strings.TrimSpace(r.Header.Get("X-Authenticated-User")) == "" || h == nil || h.service == nil {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "lifecycle control receipt refused"})
 		return
 	}
@@ -329,7 +329,7 @@ func (h *Handler) authorizeComputerEvent(w http.ResponseWriter, r *http.Request,
 	// X-Authenticated-User; cross-tenant is prevented by the subsequent
 	// ownership/route check in vmctl which re-derives owner from the registry.
 	// Only event:read is allowlisted; append/pin still require capabilities.
-	if scope == "event:read" && r.Header.Get("X-Internal-Caller") == "true" && strings.TrimSpace(r.Header.Get("X-Authenticated-User")) != "" {
+	if scope == "event:read" && trustedInternalCaller(r) && strings.TrimSpace(r.Header.Get("X-Authenticated-User")) != "" {
 		return true
 	}
 	if err := h.eventAuth.Authorize(r, computerID, scope); err != nil {

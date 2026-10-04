@@ -20,6 +20,7 @@ type Handler struct {
 	selfDevelopmentModes *SelfDevelopmentModeCAS
 	checkpointAuthority  *CheckpointAuthority
 	keyEscrow            *keyEscrowRuntime
+	guestLookup          guestOwnershipLookup
 }
 type healthResponse struct {
 	Status  string         `json:"status"`
@@ -64,6 +65,16 @@ func (h *Handler) ConfigureSelfDevelopmentModes(modes *SelfDevelopmentModeCAS) e
 	return nil
 }
 
+// ConfigureGuestBinding installs vmctl's ownership lookup for guest-scoped
+// corpusd routes. Without it, tap-sourced requests fail closed.
+func (h *Handler) ConfigureGuestBinding(lookup guestOwnershipLookup) error {
+	if h == nil || lookup == nil {
+		return fmt.Errorf("corpusd handler: guest ownership lookup is required")
+	}
+	h.guestLookup = lookup
+	return nil
+}
+
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -88,7 +99,7 @@ func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -115,7 +126,7 @@ func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *htt
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -142,7 +153,7 @@ func (h *Handler) HandleInternalExportPublication(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -170,7 +181,7 @@ func (h *Handler) HandleInternalRetrievalSearch(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -188,7 +199,7 @@ func (h *Handler) HandleInternalUniversalWireStories(w http.ResponseWriter, r *h
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -206,7 +217,7 @@ func (h *Handler) HandleInternalPublicationProposal(w http.ResponseWriter, r *ht
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -235,7 +246,7 @@ func (h *Handler) HandleInternalProposalDeliveryState(w http.ResponseWriter, r *
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -258,7 +269,7 @@ func (h *Handler) HandleInternalSyncTextureDocument(w http.ResponseWriter, r *ht
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -281,7 +292,7 @@ func (h *Handler) HandleInternalGetTextureDocument(w http.ResponseWriter, r *htt
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -314,7 +325,7 @@ func (h *Handler) HandleInternalListTextureRevisions(w http.ResponseWriter, r *h
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}
@@ -344,7 +355,7 @@ func (h *Handler) HandleInternalGetTextureRevision(w http.ResponseWriter, r *htt
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
+	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return
 	}

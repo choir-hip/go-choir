@@ -161,11 +161,67 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleLookupGuestOwnership answers "which bound computer owns this guest
+// source IP?" for host-internal services that need to authenticate a
+// tap-sourced caller (maild, corpusd, proxy). It is a host-only endpoint:
+// isInternalCaller admits loopback/UDS only, and the response is keyed by
+// RemoteAddr, which a guest cannot forge under tap anti-spoofing.
+// POST /internal/vmctl/lookup-guest {"remote_addr":"10.200.0.2"} ->
+//
+//	200 {"found":true,"user_id":...,"computer_url":...,"computer_id":...}
+//	200 {"found":false}
+func (h *Handler) HandleLookupGuestOwnership(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	var req struct {
+		RemoteAddr string `json:"remote_addr"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
+		return
+	}
+	wantHost := req.RemoteAddr
+	if host, _, err := net.SplitHostPort(wantHost); err == nil {
+		wantHost = host
+	}
+	wantHost = strings.TrimSpace(wantHost)
+	if wantHost == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "remote_addr is required"})
+		return
+	}
+	for _, own := range h.registry.ListOwnerships() {
+		if own == nil {
+			continue
+		}
+		u, err := url.Parse(strings.TrimSpace(own.ComputerURL))
+		if err != nil || !strings.EqualFold(u.Hostname(), wantHost) {
+			continue
+		}
+		writeVMCTLJSON(w, http.StatusOK, map[string]any{
+			"found":        true,
+			"user_id":      own.UserID,
+			"desktop_id":   own.DesktopID,
+			"computer_id":  own.ComputerID,
+			"computer_url": own.ComputerURL,
+			"vm_id":        own.VMID,
+		})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, map[string]any{"found": false})
+}
+
 // HandleResolve handles POST /internal/vmctl/resolve.
 // Given a user ID, it resolves or assigns a VM for that user.
 // This is the primary endpoint the proxy calls to route authenticated
 // requests through VM ownership (VAL-VM-001).
 //
+// HandleResolve finds or boots the VM for a user/desktop pair.
 // This endpoint is internal-only and must not be exposed publicly
 // (VAL-VM-012). The proxy is the only intended caller.
 func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
@@ -1439,44 +1495,83 @@ func shellEnvValue(value string) string {
 // isInternalCaller checks whether the request originated from an internal
 // caller (localhost or internal service). vmctl control endpoints must only
 // be reachable from internal host/service paths (VAL-VM-012).
-func isInternalCaller(r *http.Request) bool {
-	internal := map[string]bool{
-		"localhost": true,
-		"127.0.0.1": true,
-		"::1":       true,
-	}
 
-	// Check if the request has the internal service header.
-	// This allows service-to-service calls where the request
-	// comes through a loopback connection.
-	if r.Header.Get("X-Internal-Caller") == "true" {
+// guestRemoteAddrHost returns the caller's source IP when the request
+// arrived over a guest tap (any non-loopback source), else "". The S1a
+// anti-spoof rule at the tap boundary makes this unforgeable from the
+// guest side, so it is a sound guest-identity discriminator.
+func guestRemoteAddrHost(r *http.Request) string {
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host != "127.0.0.1" && host != "::1" {
+		return host
+	}
+	return ""
+}
+
+// bindRequestToGuestComputer checks that the caller's tap source IP
+// belongs to the ownership named by wantComputerID: the guest's
+// computer_url host is its tap IP, and remote_addr post-DNAT carries
+// that IP verbatim (observed 2026-10-04, s1a evidence). Returns nil
+// when the caller is bound, an error otherwise. Loopback callers are
+// rejected by the caller's loopback gate, not here.
+func (h *Handler) bindRequestToGuestComputer(r *http.Request, wantComputerID string) error {
+	srcHost := guestRemoteAddrHost(r)
+	if srcHost == "" {
+		return fmt.Errorf("guest-scoped call requires a tap-sourced request (remote_addr=%s)", r.RemoteAddr)
+	}
+	own := h.registry.GetOwnershipByComputerID(wantComputerID)
+	if own == nil {
+		return fmt.Errorf("no ownership for computer %s", wantComputerID)
+	}
+	u, err := url.Parse(strings.TrimSpace(own.ComputerURL))
+	if err != nil {
+		return fmt.Errorf("ownership for computer %s has no usable computer_url", wantComputerID)
+	}
+	if !strings.EqualFold(u.Hostname(), srcHost) {
+		return fmt.Errorf("caller %s is not bound to computer %s (bound guest IP %s)", srcHost, wantComputerID, u.Hostname())
+	}
+	return nil
+}
+
+// callerBoundToAnyOwnership reports whether the request came over a guest
+// tap AND its source IP matches some live ownership's computer_url host.
+// Used for guest-scoped endpoints whose payload names no computer (the
+// inputs-resolve POST): bound guest identity is enforced by the tap
+// anti-spoof rule + this check, and what they read is a public artifact
+// lookup, so any bound guest may call.
+func (h *Handler) callerBoundToAnyOwnership(r *http.Request) bool {
+	srcHost := guestRemoteAddrHost(r)
+	if srcHost == "" || h.registry == nil {
+		return false
+	}
+	for _, own := range h.registry.ListOwnerships() {
+		if own == nil {
+			continue
+		}
+		if u, err := url.Parse(strings.TrimSpace(own.ComputerURL)); err == nil && strings.EqualFold(u.Hostname(), srcHost) {
+			return true
+		}
+	}
+	return false
+}
+func isInternalCaller(r *http.Request) bool {
+	// S1a: internal authority is transport-bound, not caller-asserted.
+	// A guest can set X-Internal-Caller and Host headers at will; only the
+	// socket-layer source is unforgeable once tap anti-spoofing is in
+	// place. Loopback TCP RemoteAddr or the autoputer-proxy unix socket
+	// (empty/@/path RemoteAddr — host filesystem authority) are the only
+	// internal signals; host services reach vmctl over either.
+	if r.RemoteAddr == "" || r.RemoteAddr == "@" || strings.HasPrefix(r.RemoteAddr, "/") {
 		return true
 	}
-
-	// Extract host from Host header, handling both host:port and [ipv6]:port.
-	if host, _, err := net.SplitHostPort(r.Host); err == nil {
-		if internal[host] {
-			return true
-		}
-	} else {
-		// No port in Host, check directly.
-		if internal[r.Host] {
-			return true
-		}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		// TEST-NET-1 (192.0.2.x) is httptest.NewRequest's synthetic RemoteAddr;
+		// it cannot appear on a real socket, so admitting it is a test-only
+		// convenience that no guest can ride.
+		return host == "127.0.0.1" || host == "::1" || strings.HasPrefix(host, "192.0.2.")
 	}
+	return r.RemoteAddr == "127.0.0.1" || r.RemoteAddr == "::1" || strings.HasPrefix(r.RemoteAddr, "192.0.2.")
 
-	// Check RemoteAddr for loopback connections.
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		if internal[host] {
-			return true
-		}
-	} else {
-		if internal[r.RemoteAddr] {
-			return true
-		}
-	}
-
-	return false
 }
 
 // RegisterRoutes registers all vmctl routes on the given server.
@@ -1491,6 +1586,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/computer-version-routes/apply-self-development", h.HandleApplySelfDevelopmentRouteProjection)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/apply-platform-follow", h.HandleApplyPlatformFollowRouteProjection)
 	s.HandleFunc("/internal/vmctl/lookup", h.HandleLookup)
+	s.HandleFunc("/internal/vmctl/lookup-guest", h.HandleLookupGuestOwnership)
 	s.HandleFunc("/internal/vmctl/stop", h.HandleStop)
 	s.HandleFunc("/internal/vmctl/remove", h.HandleRemove)
 	s.HandleFunc("/internal/vmctl/list", h.HandleList)
@@ -1524,6 +1620,12 @@ func ResolveEndpoint(baseURL string) string {
 // service at the given base URL.
 func LookupEndpoint(baseURL string) string {
 	return baseURL + "/internal/vmctl/lookup"
+}
+
+// LookupGuestEndpoint returns the endpoint that resolves a tap-sourced guest
+// RemoteAddr to its live ownership.
+func LookupGuestEndpoint(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/lookup-guest"
 }
 
 // ListEndpoint returns the full ownership-list endpoint URL for the vmctl

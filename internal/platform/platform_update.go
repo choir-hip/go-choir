@@ -57,7 +57,7 @@ func (h *Handler) HandlePlatformUpdateOfferMint(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" || h == nil || h.checkpointAuthority == nil {
+	if !trustedInternalCaller(r) || h == nil || h.checkpointAuthority == nil {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "platform update mint is not publicly accessible"})
 		return
 	}

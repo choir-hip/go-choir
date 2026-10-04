@@ -22,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/workitem"
@@ -268,11 +269,13 @@ func NewAPIHandler(rt *Runtime) *APIHandler {
 	return &APIHandler{rt: rt}
 }
 
-// authenticateUser extracts the authenticated user identity from the
-// X-Authenticated-User header injected by the proxy. It returns an error if
-// the header is missing, which provides defense-in-depth auth gating at the
-// autoputer level (VAL-RUNTIME-002).
+// authenticateUser extracts a proxy-authenticated identity only when it
+// arrived over the host peer transport. A guest can otherwise forge this
+// caller-asserted header.
 func authenticateUser(r *http.Request) (string, error) {
+	if !server.HostSourcedCaller(r) {
+		return "", fmt.Errorf("missing authenticated user identity")
+	}
 	user := r.Header.Get("X-Authenticated-User")
 	if user == "" {
 		return "", fmt.Errorf("missing authenticated user identity")
@@ -293,8 +296,8 @@ func authenticatedUserEmail(r *http.Request) string {
 }
 
 func requireInternalRuntimeCaller(r *http.Request) error {
-	if r.Header.Get("X-Internal-Caller") != "true" {
-		return fmt.Errorf("missing internal caller marker")
+	if !server.HostSourcedCaller(r) {
+		return fmt.Errorf("request was not host sourced")
 	}
 	return nil
 }

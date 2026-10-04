@@ -343,6 +343,51 @@ func (c *Client) lookupComputerContext(ctx context.Context, userID, computerID s
 	return &result, nil
 }
 
+// GuestOwnership is the live ownership bound to a guest tap source address.
+// Found is false when the source does not belong to any current computer.
+type GuestOwnership struct {
+	Found       bool   `json:"found"`
+	UserID      string `json:"user_id"`
+	DesktopID   string `json:"desktop_id"`
+	ComputerID  string `json:"computer_id"`
+	ComputerURL string `json:"computer_url"`
+	VMID        string `json:"vm_id"`
+}
+
+// LookupGuestContext resolves the ownership for a guest source RemoteAddr
+// without creating or modifying a VM.
+func (c *Client) LookupGuestContext(ctx context.Context, remoteAddr string) (*GuestOwnership, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	body, err := json.Marshal(map[string]string{"remote_addr": strings.TrimSpace(remoteAddr)})
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: marshal guest lookup request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, LookupGuestEndpoint(c.baseURL), bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: create guest lookup request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: guest lookup call failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("vmctl client: guest lookup failed with status %s", resp.Status)
+	}
+	var result GuestOwnership
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("vmctl client: decode guest lookup response: %w", err)
+	}
+	if !result.Found {
+		return nil, nil
+	}
+	return &result, nil
+}
+
 // ListOwnershipsContext returns current ownership records for internal proxy
 // inspection. Callers must filter the result before exposing it to users.
 func (c *Client) ListOwnershipsContext(ctx context.Context) ([]ownershipResponse, error) {

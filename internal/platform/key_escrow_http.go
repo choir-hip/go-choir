@@ -334,7 +334,7 @@ func (h *Handler) authorizeKeyEscrowGuest(r *http.Request, computerID, requiredS
 }
 
 func internalKeyEscrowCaller(r *http.Request) bool {
-	return r.Header.Get("X-Internal-Caller") == "true"
+	return trustedInternalCaller(r)
 }
 
 func decodeKeyEscrowJSON(r *http.Request, target any) bool {

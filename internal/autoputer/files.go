@@ -14,15 +14,14 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
-// requireAuth checks that the X-Authenticated-User header exists, providing
-// defense-in-depth auth gating at the autoputer level. The proxy validates the
-// JWT and injects this header; this check ensures direct access to the autoputer
-// without proxy authentication is denied.
+// requireAuth checks that the proxy-authenticated user identity arrived over
+// the host peer transport. A guest can assert the header itself, so it is not
+// an identity unless its transport is host-sourced.
 func requireAuth(r *http.Request) error {
-	user := r.Header.Get("X-Authenticated-User")
-	if user == "" {
+	if !server.HostSourcedCaller(r) || r.Header.Get("X-Authenticated-User") == "" {
 		return fmt.Errorf("missing authenticated user identity")
 	}
 	return nil

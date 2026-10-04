@@ -320,7 +320,7 @@ func (h *Handler) HandleFileCASRoots(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) authorizeFileCAS(r *http.Request, computerID, scope string) bool {
-	return h != nil && strings.TrimSpace(computerID) != "" && (r.Header.Get("X-Internal-Caller") == "true" || (h.eventAuth != nil && h.eventAuth.Authorize(r, computerID, scope) == nil))
+	return h != nil && strings.TrimSpace(computerID) != "" && (trustedInternalCaller(r) || (h.eventAuth != nil && h.eventAuth.Authorize(r, computerID, scope) == nil))
 }
 
 func decodeFileCASJSON(r *http.Request, target any) bool {

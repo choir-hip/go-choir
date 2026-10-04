@@ -25,6 +25,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 const (
@@ -277,6 +278,10 @@ func sourceServiceObjectGraphBaseURL() string {
 	)), "/")
 }
 
+func sourceServiceVMCTLURL() string {
+	return strings.TrimRight(strings.TrimSpace(firstEnv("SOURCE_SERVICE_VMCTL_URL", "SOURCECYCLED_VMCTL_URL")), "/")
+}
+
 func sourceServiceObjectGraphBackfillLimit() int {
 	return parsePositiveInt(firstEnv("SOURCE_SERVICE_OBJECTGRAPH_BACKFILL_LIMIT", "SOURCECYCLED_OBJECTGRAPH_BACKFILL_LIMIT"), defaultObjectGraphBackfillLimit)
 }
@@ -498,7 +503,45 @@ func sourceServiceAPIHandler(store cycle.Store) http.Handler {
 	// existing /internal/source-service/* routes.
 	mux.HandleFunc("/health", health.LivenessHandler("sourcecycled"))
 	mux.HandleFunc("/health/ready", health.ReadinessHandler("sourcecycled", health.NewAggregator("sourcecycled", 5*time.Second)))
-	return server.WithBuildIdentity("sourcecycled", mux)
+	var guestLookup *vmctl.Client
+	if vmctlURL := sourceServiceVMCTLURL(); vmctlURL != "" {
+		guestLookup = vmctl.NewClient(vmctlURL)
+	}
+	return sourceServiceAuthority(server.WithBuildIdentity("sourcecycled", mux), guestLookup)
+}
+
+func sourceServiceAuthority(next http.Handler, guestLookup *vmctl.Client) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if sourceServiceTrustedInternalTransport(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if guestLookup == nil {
+			http.Error(w, "guest caller binding unavailable", http.StatusForbidden)
+			return
+		}
+		ownership, err := guestLookup.LookupGuestContext(r.Context(), r.RemoteAddr)
+		if err != nil || ownership == nil || !ownership.Found || strings.TrimSpace(ownership.ComputerID) == "" {
+			http.Error(w, "guest caller not bound to a live computer", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func sourceServiceTrustedInternalTransport(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	remoteAddr := strings.TrimSpace(r.RemoteAddr)
+	if remoteAddr == "" || remoteAddr == "@" || strings.HasPrefix(remoteAddr, "/") {
+		return true
+	}
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	return host == "127.0.0.1" || host == "::1" || strings.HasPrefix(host, "192.0.2.")
 }
 
 func handleSourceServiceDispatchState(store cycle.Store) http.HandlerFunc {

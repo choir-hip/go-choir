@@ -3,8 +3,8 @@
 // systemd's monotonic unit timestamps, then serves one consolidated receipt at
 // GET /internal/boot/timeline. Also serves GET /internal/diag/tcp-dial, a
 // bounded guest-egress reachability probe used to measure tap->tap isolation.
-// Both endpoints require the X-Internal-Caller marker; they emit presence
-// flags and timings only — never token or credential material.
+// The boot timeline retains its internal marker; the diagnostic endpoint
+// requires a host-sourced transport.
 package autoputer
 
 import (
@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
 // bootTimelineClock is the process-local monotonic base. time.Now() in Go
@@ -113,9 +114,7 @@ func readBootID() string {
 	return strings.TrimSpace(string(data))
 }
 
-// guestInternalCaller gates the diagnostics surface the same way the runtime
-// API gates internal routes: the vmctl host caller and the autoputer-proxy
-// forwarder both set X-Internal-Caller.
+// guestInternalCaller gates the boot timeline's existing internal marker.
 func guestInternalCaller(r *http.Request) bool {
 	return r.Header.Get("X-Internal-Caller") == "true"
 }
@@ -583,8 +582,8 @@ func handleDiagTCPDial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !guestInternalCaller(r) {
-		http.Error(w, "internal caller marker required", http.StatusForbidden)
+	if !server.HostSourcedCaller(r) {
+		http.Error(w, "host-sourced caller required", http.StatusForbidden)
 		return
 	}
 	addr := strings.TrimSpace(r.URL.Query().Get("addr"))

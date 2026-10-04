@@ -538,6 +538,7 @@ in
         "CORPUSD_PORT=8086"
         "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
+        "CORPUSD_VMCTL_URL=http://127.0.0.1:8083"
       ];
     };
   };
@@ -569,6 +570,7 @@ in
         "SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform"
         "SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=1"
         "SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60"
+        "SOURCE_SERVICE_VMCTL_URL=http://127.0.0.1:8083"
         "VMCTL_AUTOPUTER_PROXY_SOCK=/run/go-choir/vmctl.sock"
       ];
     };
