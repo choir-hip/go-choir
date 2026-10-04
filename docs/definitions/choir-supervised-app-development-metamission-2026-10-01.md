@@ -414,17 +414,20 @@ boundaries:
 now:
   status: working
   slice: >-
-    S0 COMPLETE 2026-10-04 (s0b-boundary-close receipt): boot attribution
-    and disposable-computer probes both closed with named edges into S2 —
-    (1) selfdev executing->frozen wedge must be repaired before any Go
-    effect can execute, (2) capsule-namespace probe is the precondition
-    for the privileged-builder-capsule substrate branch, (3) snapshot/
-    UFFD surface is host-level and belongs to S3, not guest probes.
-    S1a host-boundary hotfix closed before it (deployed refusal matrix
-    PASSED, 5/5 refusals + 5/5 legitimate flows). Next: S2
-    builder-substrate selection + landing.
-  source_ref: main@ea4b35cd
-  deploy_identity: 'staging https://choir.news deployed_commit=e87f3294 (S1a boundary + POST legs + prebind-flake fix live)'
+    S0 COMPLETE 2026-10-04 (s0b-boundary-close receipt). S2 effect plane
+    PROVEN 2026-10-04: wedge fix f61de45b deployed, Go-effect op
+    selfdev-b72a48565061c35c0a22246cb6fc06c3 FROZEN with bundle
+    9d2be524fa6657b6 on staging
+    (docs/problems/s0-selfdev-executing-wedge-2026-10-04.md).
+    Builder-substrate decided: host-service
+    (docs/problems/s2-builder-substrate-2026-10-04.md —
+    privileged-builder-capsule needs new machinery: drop NEWNET,
+    writable-store override, relax NS_USER). S1a host-boundary hotfix
+    closed (deployed refusal matrix PASSED). Next: land the
+    host-service builder producing the app-layer closure + base-image
+    identity; then the S2 layering slice.
+  source_ref: main@7da99b14
+  deploy_identity: 'staging https://choir.news deployed_commit=f61de45b (S2a wedge fix + Go-effect proof live)'
   candidate:
     id: none
     state: none
@@ -570,12 +573,11 @@ now:
     filesystem, and a double resume duplicates RNG and key state. S3's
     invariants are the safety case, not optional polish.
   next_action: >-
-    1. S2 builder-substrate: select between the scoped-guest-service
-       (weakened by S0b), host-service, and privileged-builder-capsule
-       branches; land the selected substrate; then the layering slice
-       (per-computer app-layer Nix closure) begins. The S0 wedge
-       (docs/problems/s0-selfdev-executing-wedge-2026-10-04.md) and the
-       capsule-namespace probe are the first named obligations.
+    1. S2: wedge repaired + Go-effect proven (f61de45b); builder
+       substrate = host-service. Land the host-service builder that
+       produces the app-layer Nix closure + base-image identity, then
+       the layering slice (per-computer GC-rooted closure, no writable
+       guest store). The S0 wedge and capsule-namespace probe are closed.
     2. S1 remainder (runtime identity, token scrubbing, capsule/yaegi
        floor) runs in parallel or before S2's layering per the S1 station
        file.
