@@ -38,13 +38,13 @@ configuration, product-path verification, run acceptance). Long-running mission
 rules live in [skills/throughline/SKILL.md](skills/throughline/SKILL.md)
 (throughline: the current executable `/goal <doc>.md` mission format — goal
 file, value criterion, realism axis, typed conjecture, current-state card).
-[skills/definition/SKILL.md](skills/definition/SKILL.md) is the goal-file
-contract the existing corpus is written in; throughline is the authoring
-discipline layered on the same `/goal` artifact. The earlier generations of
-the lineage (mission-gradient → parallax → throughline) are deprecated and
-kept for reference only: `skills/mission-gradient/SKILL.md`,
-`skills/parallax/SKILL.md`, and `skills/definition/SKILL.md` — do not author
-new `/goal` files with them; existing goal files remain valid. The
+[skills/throughline/SKILL.md](skills/throughline/SKILL.md) is the only
+authoring discipline for new `/goal` files and the goal-file contract the
+existing corpus is written in. The earlier generations of the lineage
+(mission-gradient → parallax → definition → throughline) are deprecated and
+kept for reference only under `docs/archive/skills/` (mirrored in the
+`choir-hip/skills` repo under `archived/`) — do not author new `/goal` files
+with them; existing goal files remain valid. The
 mission roadmap from here to World Wire live is
 [docs/world-wire-mission-stack-2026-09-22.md](docs/world-wire-mission-stack-2026-09-22.md);
 the product mechanism is precommitment records

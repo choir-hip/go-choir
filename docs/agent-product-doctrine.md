@@ -6,7 +6,8 @@ Texture, runtime configuration, product-path verification, or run acceptance.
 Long-running missions execute as `/goal <doc>.md` goal files. New missions are
 authored with [skills/throughline/SKILL.md](../skills/throughline/SKILL.md);
 the older `skills/definition/SKILL.md` format remains valid for the existing
-goal-file corpus but is deprecated for new authoring. The
+goal-file corpus but is deprecated for new authoring (now archived at
+`docs/archive/skills/definition`). The
 [durable-computer convergence Definition](archive/choir-coherent-computer-convergence-2026-07-21.md)
 completed on 2026-07-24 and is historical product-evidence authority. The
 current executable product mission is named only by `docs/ACTIVE.md`; this file
