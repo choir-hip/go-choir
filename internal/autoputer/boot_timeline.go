@@ -114,11 +114,6 @@ func readBootID() string {
 	return strings.TrimSpace(string(data))
 }
 
-// guestInternalCaller gates the boot timeline's existing internal marker.
-func guestInternalCaller(r *http.Request) bool {
-	return r.Header.Get("X-Internal-Caller") == "true"
-}
-
 // runGuestDiagTool executes a read-only observer command with a hard timeout
 // and bounded output. Every collection failure is evidence: the receipt
 // records missing observers rather than substituting silence.
@@ -512,8 +507,10 @@ func handleBootTimeline(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !guestInternalCaller(r) {
-		http.Error(w, "internal caller marker required", http.StatusForbidden)
+	// S1a: host-sourced transport only; a guest could assert the marker
+	// header but cannot forge the host peer source address.
+	if !server.HostSourcedCaller(r) {
+		http.Error(w, "host-sourced caller required", http.StatusForbidden)
 		return
 	}
 	bootTimelineClock.Lock()
