@@ -33,6 +33,7 @@ const (
 var (
 	ErrConflict          = errors.New("self-development operation conflict")
 	ErrInvalidTransition = errors.New("invalid self-development operation transition")
+	ErrOperationNotFound = errors.New("self-development operation not found")
 )
 
 type DBProvider interface {
@@ -78,6 +79,12 @@ type Operation struct {
 	LifecycleReceipt       string   `json:"lifecycle_receipt,omitempty"`
 	State                  string   `json:"state"`
 	TerminalError          string   `json:"error,omitempty"`
+	// LastIntentError is the most recent non-terminal authority refusal
+	// recorded by a bound cell (freeze/verify rejected in reduce). It is
+	// informational, never a state: a later successful intent does not
+	// imply the field is stale, and terminal failure lands in
+	// TerminalError instead.
+	LastIntentError        string   `json:"last_intent_error,omitempty"`
 	CreatedAt              string   `json:"created_at"`
 	UpdatedAt              string   `json:"updated_at"`
 }
@@ -439,7 +446,7 @@ func (s *Store) Transition(ctx context.Context, computerID, operationID, expecte
 	if err != nil {
 		return Operation{}, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE self_development_operations SET capsule_id=?, bundle_digest=?, release_digest=?, code_ref=?, artifact_program_ref=?, verifier_refs_json=?, decision_actor=?, decision_event=?, decision_receipt=?, desired_head=?, effective_head=?, materialization_receipt=?, checkpoint_ref=?, route_certificate=?, route_generation=?, route_receipt=?, mode_receipt=?, lifecycle_receipt=?, state=?, terminal_error=?, updated_at=? WHERE computer_id=? AND operation_id=? AND state=?`, operation.CapsuleID, operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef, string(verifiers), operation.DecisionActor, operation.DecisionEvent, operation.DecisionReceipt, operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef, operation.RouteCertificate, operation.RouteGeneration, operation.RouteReceipt, operation.ModeReceipt, operation.LifecycleReceipt, operation.State, operation.TerminalError, now, strings.TrimSpace(computerID), strings.TrimSpace(operationID), expectedState)
+	result, err := tx.ExecContext(ctx, `UPDATE self_development_operations SET capsule_id=?, bundle_digest=?, release_digest=?, code_ref=?, artifact_program_ref=?, verifier_refs_json=?, decision_actor=?, decision_event=?, decision_receipt=?, desired_head=?, effective_head=?, materialization_receipt=?, checkpoint_ref=?, route_certificate=?, route_generation=?, route_receipt=?, mode_receipt=?, lifecycle_receipt=?, state=?, terminal_error=?, last_intent_error=?, updated_at=? WHERE computer_id=? AND operation_id=? AND state=?`, operation.CapsuleID, operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef, string(verifiers), operation.DecisionActor, operation.DecisionEvent, operation.DecisionReceipt, operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef, operation.RouteCertificate, operation.RouteGeneration, operation.RouteReceipt, operation.ModeReceipt, operation.LifecycleReceipt, operation.State, operation.TerminalError, operation.LastIntentError, now, strings.TrimSpace(computerID), strings.TrimSpace(operationID), expectedState)
 	if err != nil {
 		return Operation{}, err
 	}
@@ -451,6 +458,33 @@ func (s *Store) Transition(ctx context.Context, computerID, operationID, expecte
 	}
 	return operation, nil
 }
+
+// RecordIntentError stamps the most recent non-terminal intent refusal on a
+// bound operation without touching its state: a freeze or verify that was
+// rejected inside a cell (missing receipts, wrong bundle digest, wrong slot)
+// leaves the operation executing while the cell retries or is re-attempted.
+// The op record is the owner-visible surface; a refused authority is the
+// op's real blocker and must be visible there, not only inside the cell
+// transcript. Empty reason clears the stamp (a successful freeze clears a
+// prior refusal). The update tolerates any live state; a terminal
+// operation may still collect a late-arriving refusal from a parallel
+// attempt.
+func (s *Store) RecordIntentError(ctx context.Context, computerID, operationID, reason string) error {
+	reason = strings.TrimSpace(reason)
+	if len(reason) > 512 {
+		reason = reason[:512]
+	}
+	now := s.now().UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano)
+	result, err := s.db.ExecContext(ctx, `UPDATE self_development_operations SET last_intent_error=?, updated_at=? WHERE computer_id=? AND operation_id=?`, reason, now, strings.TrimSpace(computerID), strings.TrimSpace(operationID))
+	if err != nil {
+		return err
+	}
+	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
+		return ErrOperationNotFound
+	}
+	return nil
+}
+
 
 func (s *Store) byIdempotency(ctx context.Context, computerID, idempotencyKey string) (Operation, bool, error) {
 	operation, err := scanOperation(s.db.QueryRowContext(ctx, operationSelect+` WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey))
@@ -513,7 +547,7 @@ func (s *Store) appendOperationProjection(ctx context.Context, operation Operati
 	return nil
 }
 
-const operationSelect = `SELECT operation_id, idempotency_key, request_commitment, computer_id, trajectory_id, capsule_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt, mode_receipt, lifecycle_receipt, state, terminal_error, created_at, updated_at FROM self_development_operations`
+const operationSelect = `SELECT operation_id, idempotency_key, request_commitment, computer_id, trajectory_id, capsule_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt, mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at FROM self_development_operations`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -522,7 +556,7 @@ func scanOperation(row rowScanner) (Operation, error) {
 	var verifiers string
 	var routeGeneration sql.NullInt64
 	var createdAt, updatedAt time.Time
-	err := row.Scan(&operation.OperationID, &operation.IdempotencyKey, &operation.RequestCommitment, &operation.ComputerID, &operation.TrajectoryID, &operation.CapsuleID, &operation.BaseHead, &operation.PromptArtifactRef, &operation.BundleDigest, &operation.ReleaseDigest, &operation.CodeRef, &operation.ArtifactProgramRef, &verifiers, &operation.DecisionActor, &operation.DecisionEvent, &operation.DecisionReceipt, &operation.DesiredHead, &operation.EffectiveHead, &operation.MaterializationReceipt, &operation.CheckpointRef, &operation.RouteCertificate, &routeGeneration, &operation.RouteReceipt, &operation.ModeReceipt, &operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &createdAt, &updatedAt)
+	err := row.Scan(&operation.OperationID, &operation.IdempotencyKey, &operation.RequestCommitment, &operation.ComputerID, &operation.TrajectoryID, &operation.CapsuleID, &operation.BaseHead, &operation.PromptArtifactRef, &operation.BundleDigest, &operation.ReleaseDigest, &operation.CodeRef, &operation.ArtifactProgramRef, &verifiers, &operation.DecisionActor, &operation.DecisionEvent, &operation.DecisionReceipt, &operation.DesiredHead, &operation.EffectiveHead, &operation.MaterializationReceipt, &operation.CheckpointRef, &operation.RouteCertificate, &routeGeneration, &operation.RouteReceipt, &operation.ModeReceipt, &operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &operation.LastIntentError, &createdAt, &updatedAt)
 	if err != nil {
 		return Operation{}, err
 	}

@@ -986,6 +986,7 @@ func (s *Store) bootstrap() error {
 		{"self_development_operations", "code_ref", "VARCHAR(96) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "artifact_program_ref", "VARCHAR(128) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "decision_receipt", "VARCHAR(255) NOT NULL DEFAULT ''"},
+		{"self_development_operations", "last_intent_error", "LONGTEXT NOT NULL DEFAULT ''"},
 		{"desktop_workspaces", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"desktop_sessions", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"desktop_app_instances", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},

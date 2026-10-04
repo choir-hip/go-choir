@@ -14,7 +14,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // TestFreezeAcceptsAdvancedBookkeepingHead replays the M11 wedge: the
@@ -103,6 +105,96 @@ func TestFreezeAcceptsAdvancedBookkeepingHead(t *testing.T) {
 	}
 	if err := freeze(); err == nil || !strings.Contains(err.Error(), "base head unavailable, stale, or pending") {
 		t.Fatalf("freeze must refuse after a competing transition moved the state surface, got %v", err)
+	}
+}
+
+// TestFreezeRefusalStampsOperationIntentError replays the S0 wedge's
+// observability gap: a freeze refused inside the cell (here, missing
+// receipts — the exact refusal the S0 workers hit) must be visible on the
+// operation record, not only inside the cell transcript. The stamp is
+// informational: the operation stays executing for retry.
+func TestFreezeRefusalStampsOperationIntentError(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-freeze-stamp"
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signingKey := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "test"}, PrivateKey: privateKey}
+	appender, err := computerevent.NewComputerEventAppender(computerID, rollbackTestPinner{signingKey}, productStore, rollbackTestCAS{key: signingKey, projection: productStore}, rollbackTestReceiptVerifier{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesisID, _ := computerevent.NewEventID()
+	genesis := computerevent.Event{SchemaVersion: 1, EventID: genesisID, ComputerID: computerID, EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64), ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: 1}
+	if _, err := appender.AppendNew(ctx, genesis, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("a", 64)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := operations.Start(ctx, selfdev.StartRequest{
+		ComputerID: computerID, IdempotencyKey: "freeze-stamp-op",
+		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateRequested, selfdev.StateExecuting, nil); err != nil {
+		t.Fatal(err)
+	}
+	rec := &types.RunRecord{
+		RunID: "run-freeze-stamp", TrajectoryID: operation.TrajectoryID,
+		Metadata: map[string]any{
+			"assignment_id": "assignment-freeze-stamp", "assignment_attempt": 1,
+			"assignment_kind": string(types.EngineeringAssignmentImplementation),
+		},
+	}
+	toolCtx := &CapsuleToolCtx{
+		ComputerID:                computerID,
+		AgentRunID:                rec.RunID,
+		UpdaterRoot:               t.TempDir(),
+		Executor:                  capsule.NewExecutor(t.TempDir(), t.TempDir(), "", 0),
+		OperationStore:            operations,
+		EventProjection:           freezeTestProjection{store: productStore},
+		EventAppender:             appender,
+		TransactionBuilder:        transaction.NewTransactionBuilder(transaction.NewClassifier()),
+		Role:                      capsule.RoleEngineering,
+		CapsuleHandle:             "bound-handle",
+		ValidateCurrentObligation: func(context.Context) error { return nil },
+	}
+	reduction := &rlmCallReduction{rec: rec, toolCtx: toolCtx}
+	cellCtx := WithCapsuleCtx(ctx, toolCtx)
+	cellCtx = toolregistry.WithExecutionContext(cellCtx, toolregistry.ExecutionContext{RunID: rec.RunID, RunRecord: rec})
+	// Freeze with no refs — the exact refusal every S0 probe hit.
+	_, err = reduction.commitFreezeIntent(cellCtx, yaegikernel.StagedIntent{Kind: yaegikernel.IntentFreeze})
+	if err == nil {
+		t.Fatal("freeze with empty refs must refuse")
+	}
+	t.Logf("freeze refused as expected: %v", err)
+	loaded, err := operations.Get(ctx, computerID, operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.LastIntentError == "" || !strings.Contains(loaded.LastIntentError, "freeze") {
+		t.Fatalf("refused freeze left no intent-error stamp: %q", loaded.LastIntentError)
+	}
+	if loaded.State != selfdev.StateExecuting {
+		t.Fatalf("intent refusal must not move state, got %q", loaded.State)
+	}
+	// A clearing write (the successful path stamps "" over the residue).
+	if err := operations.RecordIntentError(ctx, computerID, operation.OperationID, ""); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _ = operations.Get(ctx, computerID, operation.OperationID)
+	if loaded.LastIntentError != "" {
+		t.Fatalf("clearing stamp must empty the field, got %q", loaded.LastIntentError)
 	}
 }
 

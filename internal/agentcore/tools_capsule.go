@@ -683,7 +683,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				// RLM prompt-as-variable: pending update_coagent records ride
 				// the request so choir.Updates() exposes them in the cell.
 				req.Updates = pendingCellUpdates(ctx, rt, toolregistry.ExecutionContextFrom(ctx))
-				rt.armCellTerminalDeadline(evalCtx, reduction)
+				rt.armCellTerminalDeadline(ctx, reduction)
 			}
 			result, err := toolCtx.Executor.GoEval(evalCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
 			if err != nil {

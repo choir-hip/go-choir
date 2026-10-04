@@ -184,7 +184,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			updates := pendingCellUpdates(ctx, rt, execCtx)
 			emits := pendingCellEmits(ctx, rt, execCtx)
 			if reduction.active {
-				rt.armCellTerminalDeadline(evalCtx, reduction)
+				rt.armCellTerminalDeadline(ctx, reduction)
 			}
 			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits)
 

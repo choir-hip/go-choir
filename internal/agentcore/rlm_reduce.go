@@ -1303,11 +1303,44 @@ func (r *rlmCallReduction) commitFreezeIntent(ctx context.Context, in yaegikerne
 	if trajectoryID == "" {
 		return nil, fmt.Errorf("reduce: freeze intent without trajectory binding")
 	}
-	if _, err := r.toolCtx.OperationStore.GetByTrajectory(ctx, r.toolCtx.ComputerID, trajectoryID); err != nil {
+	operation, err := r.toolCtx.OperationStore.GetByTrajectory(ctx, r.toolCtx.ComputerID, trajectoryID)
+	if err != nil {
 		return nil, fmt.Errorf("reduce: resolve self-development operation: %w", err)
 	}
-	return freezeCapsuleEffectBundle(ctx, r.toolCtx, r.rec, r.toolCtx.CapsuleHandle,
+	out, err := freezeCapsuleEffectBundle(ctx, r.toolCtx, r.rec, r.toolCtx.CapsuleHandle,
 		in.BuildRecipeRef, in.TestReceipts, in.DependencyToolchainRefs)
+	// Surface the refusal on the operation record either way: a rejected
+	// freeze was invisible to the owner (S0 wedge finding), and a
+	// successful freeze clears a prior refusal stamp.
+	if err != nil {
+		r.recordOperationIntentError(operation.OperationID, "freeze: "+err.Error())
+		return nil, err
+	}
+	if rejected, _ := out["rejected"].(bool); rejected {
+		if reason, _ := out["reject_reason"].(string); strings.TrimSpace(reason) != "" {
+			r.recordOperationIntentError(operation.OperationID, "freeze rejected: "+reason)
+		}
+	} else if operation.LastIntentError != "" {
+		r.recordOperationIntentError(operation.OperationID, "")
+	}
+	return out, nil
+}
+
+// recordOperationIntentError best-effort stamps a non-terminal intent
+// refusal on the bound self-development operation. It must never fail the
+// reduce: the cell error already carries the reason back to the model;
+// losing the stamp degrades observability, not correctness. The write runs
+// on a detached context because the cell's context can be cancelled at
+// teardown while the operation record still wants the reason.
+func (r *rlmCallReduction) recordOperationIntentError(operationID, reason string) {
+	if r.toolCtx == nil || r.toolCtx.OperationStore == nil || strings.TrimSpace(operationID) == "" {
+		return
+	}
+	writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := r.toolCtx.OperationStore.RecordIntentError(writeCtx, r.toolCtx.ComputerID, operationID, reason); err != nil {
+		log.Printf("agentcore: record self-development intent error on %s failed (run %s): %v", operationID, r.toolCtx.AgentRunID, err)
+	}
 }
 
 // commitVerifyIntent reduces a staged Verify intent through the same
@@ -1329,9 +1362,19 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 		return nil, fmt.Errorf("reduce: resolve self-development operation: %w", err)
 	}
 	if in.BundleDigest != operation.BundleDigest {
-		return nil, fmt.Errorf("reduce: verify %s bundle digest does not match the operation's frozen bundle", in.LocalID)
+		reason := fmt.Sprintf("verify %s bundle digest does not match the operation's frozen bundle", in.LocalID)
+		r.recordOperationIntentError(operation.OperationID, reason)
+		return nil, fmt.Errorf("reduce: %s", reason)
 	}
-	return recordSelfDevelopmentVerification(ctx, r.toolCtx, r.rec, operation.OperationID, operation.BundleDigest, in.Decision, in.VerifierRefs)
+	out, verifyErr := recordSelfDevelopmentVerification(ctx, r.toolCtx, r.rec, operation.OperationID, operation.BundleDigest, in.Decision, in.VerifierRefs)
+	if verifyErr != nil {
+		r.recordOperationIntentError(operation.OperationID, "verify: "+verifyErr.Error())
+		return nil, verifyErr
+	}
+	if operation.LastIntentError != "" {
+		r.recordOperationIntentError(operation.OperationID, "")
+	}
+	return out, nil
 }
 
 // commitMessageIntent reduces one staged Message intent on an assigned desk
