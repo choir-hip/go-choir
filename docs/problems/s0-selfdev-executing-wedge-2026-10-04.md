@@ -30,38 +30,44 @@ prompt) on `computer-a99366facf24b872703de326d3b33832` and
 - `replay-completeness` is `equivalent` (91 events applied, zero gaps) —
   the tape is not the blocker.
 
-## Mechanism (confirmed — ops launch carries no freeze authority)
+## Mechanism (ledger-confirmed — the freeze intent is unreachable for an eval-only probe)
 
-`choir.Freeze` exists (`internal/yaegikernel/choir.go:507`) and the
-reducer commits it via `commitFreezeIntent`
-(`internal/agentcore/rlm_reduce.go:1292`), which calls
-`freezeCapsuleEffectBundle` against `r.toolCtx.OperationStore`.
+Guest tape (`state-actor.db` on the dead VM's `data.img`, mounted
+read-only) shows the full chain **works as designed**:
+ops POST → `trajectory_started` → `lifecycle_work_assigned` to the
+engineering desk → desk casts `assignment-e69fd5d6` → capsule worker
+`run:assignment-…` spawned (`initial_dispatch` → `attempt-2` after the
+platform restart). The assignment machinery is intact, and the worker
+run does carry the bound capsule context (the earlier
+"OperationStore unbound" hypothesis is hereby corrected).
 
-`OperationStore` is populated on exactly one path:
-`assignedEngineeringCapsuleToolCtx`
-(`internal/agentcore/engineering_assignment_tools_overlay.go:79`), and
-that builder only runs when `assignedEngineeringToolOverlay` binds —
-which requires `rec.Metadata["assignment_id"]` +
-`["assignment_attempt"]` to name a **bound Engineering assignment**
-(`:24-31`). A `POST /api/computers/{id}/self-development/operations`
-creates a document lifecycle and a desk run with `trajectory_id` set
-(`selfdev_texture_join.go:53-88`) but NO engineering assignment — the
-metadata keys are never stamped. The run either fails the overlay
-(`"unassigned Engineering cannot execute"`) or starts with
-`toolCtx.OperationStore = nil`; either way `choir.Freeze` inside the
-cell returns `"freeze intent without assignment authority"` and the
-op can never leave `executing`.
+The wedge sits at the end of the chain: the capsule worker ran ~30+
+`capsule_go_eval` cells over two attempts (each hitting
+`cell_terminal_deadline` ≈5 min) and never staged `choir.Freeze`.
+Two compounding causes:
 
-The cell refusal surfaces only as a `capsule_go_eval` result value —
-not a tool-call error, not an op transition — so the model retries the
-same eval and the loop never converges. The refusal reason never
-leaves the cell.
+1. **Freeze is semantically unreachable for an eval-only probe.**
+   `Tray.Freeze(buildRecipeRef, testReceipts, dependencyToolchainRefs)`
+   (`internal/yaegikernel/intent.go:229`) only *stages* the intent; the
+   reducer rejects it unless all three are non-empty
+   (`rlm_reduce.go:123`: "freeze requires build recipe, test receipts,
+   and dependency/toolchain refs"). A Go-eval health probe produces
+   none of these — no recipe, no test run, no toolchain. The
+   acceptance contract "a safe capsule Go effect runs" cannot be met
+   by any prompt, because the effect path *requires* a build context
+   a marker/eval probe structurally does not have.
+2. **Cell refusals never reach the op record.** A rejected or
+   unstageable `Freeze` is a cell-level result; the worker retries
+   evals until `cell_terminal_deadline`, parks, and the op stays
+   `executing` — `verifier_refs=[]`, `error=null`, `updated_at`
+   frozen. "Worker declined", "freeze rejected in reduce", and a
+   wedged transport are indistinguishable on the op record; only the
+   guest actor DB and gateway logs distinguish them.
 
-**Run 1** (vague prompt): model never called `capsule_go_eval` —
-declined.
-**Runs 3/4** (directive prompts): 18+ `capsule_go_eval` calls —
-the cell ran, `choir.Freeze` refused on nil OperationStore, the model
-retried, the loop never converged.
+**Runs:** `selfdev-0280c6cf` (vague prompt, worker declined),
+`selfdev-772a70c9` (directive, parked at platform restart →
+attempt-2), `selfdev-39ce659c` (directive naming `choir.Freeze` with
+empty refs — unfulfillable by design).
 
 ## Why it matters
 
@@ -77,22 +83,25 @@ retried, the loop never converged.
 
 ## Fix direction
 
-1. **Launch Go-effect probes through an engineering assignment, not a
-   raw ops POST.** The ops path creates a document lifecycle but no
-   `assignment_id` metadata, so `assignedEngineeringToolOverlay` never
-   binds `OperationStore`. A self-dev Go effect requires the M11
-   assignment trajectory: management casts an engineering assignment →
-   the assigned run spawns with `assignment_id` + `assignment_attempt`
-   stamped → `choir.Freeze` resolves the op via `trajectoryIDForRun`.
-   The ops POST is the wrong surface for an effect probe; it can
-   propose a document but can never freeze.
+1. **Make the probe fulfill the contract or split the contract.** Either
+   (a) the Go-effect probe must produce a freezeable artifact —
+   buildRecipeRef + real test receipts + toolchain refs — i.e. become a
+   real capsule change with build context, not a bare eval; or (b) the
+   selfdev pipeline needs a lightweight effect path for eval-type
+   probes whose output is a receipt, not a bundle. Option (a) is the
+   faithful test for S2: "the runtime executes the intended payload"
+   means a real change with a real recipe.
 2. **Surface cell refusals on the op record.** When `choir.Freeze` or
-   `choir.Verify` refuse inside `capsule_go_eval`, promote the refusal
-   reason to `operation.terminal_error` (or a new `last_intent_error`
-   field). A refused authority is the op's real blocker, not a normal
-   cell error.
+   `choir.Verify` fail validation or authority inside
+   `capsule_go_eval`, promote the reason to
+   `operation.terminal_error`/`last_intent_error`. A refused authority
+   is the op's real blocker, not a normal cell error.
+3. **Op-level proposal timeout.** An op whose worker runs N cells
+   without staging a freeze should transition `executing → failed`
+   (`proposal_timeout`) instead of parking forever.
 
-The state machine is correct; the ops→cell binding is not.
+The state machine and the assignment machinery are correct; the probe
+contract and the error surface are not.
 
 ## Verification
 
