@@ -414,16 +414,19 @@ boundaries:
 now:
   status: working
   slice: >-
-    Post-S0m review (2026-10-04). S0m COMPLETE (terminal receipt
-    s0m-ask-acceptance-2026-10-04, deployed a4fcdb8d). Its station-boundary
-    protocol is NOT yet closed: no closing consensus panel, no reporter
-    report, and no transition receipt before this update (recorded below as
-    incomplete). Next live slice, in order:
-    (1) close the S0m boundary;
-    (2) S1a host-boundary hotfix (security, pulled ahead of S0b);
-    (3) CI deploy-cancellation fix;
-    (4) S0b disposable-computer probes;
-    (5) the rest of S1, then S2.
+    Post-S0m boundary close (2026-10-04). S0m COMPLETE and its
+    station-boundary protocol CLOSED: convergent panel adjudicated
+    (send-backs resolved), reporter letter published
+    (docs/reports/s0m-record-native-station-close-2026-10-04.md),
+    transition receipt below rewritten to closed. Boundary-close deployed
+    legs landed: stranded-bound on a real disposable computer
+    (computer-ca3a2cf9) and the channel-mail reduce-time refusal
+    (trajectory aef9a197). The CI stale-deploy guard landed (a06f179e).
+    The S1a slice is authored in the S1 station file. Next live slice,
+    in order:
+    (1) S1a host-boundary hotfix implementation;
+    (2) S0b disposable-computer probes;
+    (3) the rest of S1, then S2.
   source_ref: main@fca4f65dfabd4c220a061ac6d77177ecd9b08bd7
   deploy_identity: 'staging https://choir.news deployed_commit=a4fcdb8d (deployed 2026-10-04T02:01:45Z); owner guest computer-03335285269bdba4f94377e56879f9e6 serving autoputer a4fcdb8d; Node B free disk 103G after reclaim'
   candidate:
@@ -637,18 +640,38 @@ receipts:
       introduced: an untracked live data.img edit for the Texture model swap.
   - id: s0m-to-next-transition-2026-10-04
     kind: station_transition
-    status: INCOMPLETE
+    status: closed
     landed: S0m-record-native-messaging
     next: S1a-host-boundary-hotfix, then S0b (S0 resumes)
-    panel: MISSING. Required by the orchestration contract; not run at S0m close.
+    closed_at: '2026-10-04T03:30:00Z'
+    panel: >-
+      Convergent agentic-consensus panel run 2026-10-03/04
+      (.agentic-consensus/agentic-consensus-20261003-224612). Verdicts:
+      mixed — 1 land, 4 send_back, 1 narrow-send_back — converging on real
+      gaps only: action-2 needed a DISPOSABLE computer (done:
+      computer-ca3a2cf9), a4fcdb8d's deploy run ID was missing (resolved:
+      37165170516), channel-mail problem doc was stale (fix b18f3baf had
+      landed — deployed refusal verified live, trajectory aef9a197), S1a
+      ordering/design gaps (slice authored + adopted: wildcard/pair-drop
+      rules, tap reconcile, RemoteAddr leg, self-dev mint note,
+      stale-deploy guard). Refuted findings: space-bunny's
+      MASQUERADE-blackhole claim (0-packet counters + live SRC trace)
+      and gemini's paths-ignore proposal (docs pushes must not run any
+      deploy steps at all).
     report: >-
-      MISSING closing report (only
-      docs/reports/s0m-record-native-station-checkpoint-2026-10-02.md
-      exists).
+      docs/reports/s0m-record-native-station-close-2026-10-04.md
+      (reporter, iCloud PDF same title).
     note: >-
-      Recorded by the 2026-10-04 review so the gap is visible. The next
-      orchestrator pass runs the panel and reporter, then rewrites this
-      receipt to closed with the panel digest and report ref.
+      Action-1's precommit->resolve leg: record->packet->wake->consume->
+      settle deployed-verified (684ddcb1); mechanical resolve minted by
+      system:reducer is unit-covered and ledger-internal — the resolve
+      record itself has no owner-visible API surface, so deployed evidence
+      shows the resolve's effect (report consumed, work settled) rather
+      than the record row. The desk was twice prompted to choir.Ask cold
+      and completed with no authoring act (model agency, recorded as an
+      accepted edge: the mechanism is proven by the unit suite + the
+      ask-acceptance chain; desk-agency at authoring an ask on demand is
+      not a transport defect).
 ---
 
 # Supervised App Development, Fast Resume, Forks, and Source Publication — Metamission (v2)
