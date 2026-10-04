@@ -3002,7 +3002,16 @@ func (m *Manager) reconcileTapIsolation(vmID, hostURL string) {
 	}
 	guestIP, _ := m.guestAndHostIP(hostPort)
 	tapName := tapNameForVMID(vmID)
-	m.ensureTapIsolationRules(tapName, guestIP, fmt.Sprintf("go-choir-vm-%s", tapName))
+	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
+	m.ensureTapIsolationRules(tapName, guestIP, comment)
+	// S1a: remove the retired guest->8085 DNAT rule from this tap. The port
+	// no longer exists, but a stale DNAT widens the tap surface until boot;
+	// clean it on the same reconcile pass that installs the DROP set.
+	iptBin := findBinary("iptables", "/run/current-system/sw/bin/iptables")
+	// Match the rendered substring including the quoted comment value:
+	// iptables -S emits `--dport 8085 -m comment --comment "go-choir-vm-X"`.
+	deleteMatchingIPTablesRules(iptBin, "nat", "PREROUTING",
+		fmt.Sprintf("--dport 8085 -m comment --comment %q", comment))
 }
 
 func tapHostServiceInputRuleSpec(tapName, port, comment string) []string {
