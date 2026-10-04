@@ -173,7 +173,11 @@ now:
     docs/evidence/s1a-refusal-matrix-2026-10-04.json — 5/5 refusals,
     5/5 legitimate flows green). S0b resumes next; the rest of S1
     (runtime identity, token scrubbing, capsule/yaegi floor) remains.
-  source_ref: main@d37408ee
+    Landed 2026-10-04 (deploy pending): gateway token off the kernel
+    cmdline onto the root-only credential disk with RUNTIME_GATEWAY_TOKEN_FILE
+    resolution (619d6458); zot PATH-shadowing fallback removed (a80d2146);
+    diag tcp-dial oracle restricted to the host peer (98cf3875).
+  source_ref: main@98cf3875
   deploy_identity: 'staging https://choir.news deployed_commit=b15f012a (S1a network+authority + diag oracle live)'
   candidate:
     id: none
