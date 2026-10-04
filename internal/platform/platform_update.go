@@ -41,6 +41,13 @@ type platformUpdateOfferMintRequest struct {
 	BaseImageManifestDigest string `json:"base_image_manifest_digest,omitempty"`
 	ClosureDigest           string `json:"closure_digest,omitempty"`
 	LayeringEntrypoint      string `json:"layering_entrypoint,omitempty"`
+	// S2-d state-compat join: the release declares the store schema epoch it
+	// was built against, the oldest epoch it migrates from, and the base
+	// commit it resolves. The updater refuses before mutation when the
+	// guest's persisted epoch or booted base commit falls outside.
+	StoreSchemaVersion    uint64 `json:"store_schema_version,omitempty"`
+	MinStoreSchemaVersion uint64 `json:"min_store_schema_version,omitempty"`
+	BaseCommit            string `json:"base_commit,omitempty"`
 
 	Marker     string `json:"marker"`
 	CodeCommit string `json:"code_commit"`
@@ -215,6 +222,9 @@ func buildPlatformUpdateOffer(request platformUpdateOfferMintRequest, now time.T
 		BaseImageManifestDigest: request.BaseImageManifestDigest,
 		ClosureDigest:           request.ClosureDigest,
 		LayeringEntrypoint:      request.LayeringEntrypoint,
+		StoreSchemaVersion:      request.StoreSchemaVersion,
+		MinStoreSchemaVersion:   request.MinStoreSchemaVersion,
+		BaseCommit:              request.BaseCommit,
 	})
 	if err != nil {
 		return selfdevprotocol.PlatformUpdateOffer{}, err

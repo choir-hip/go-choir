@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 	"io"
 	"os"
 	"path/filepath"
@@ -149,15 +150,16 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 	}
 
 	res := &ClosureResult{
-		Base:           base,
-		RuntimePath:    outputPath,
-		ClosurePaths:   delta,
-		ExportedDigest: exportedDigest,
-		ExportedPath:   blobPath,
-		DerivationPath: drvPath,
-		OutputPath:     outputPath,
-		CodeCommit:     req.CodeCommit,
-		BuiltAt:        nowRFC3339(),
+		Base:               base,
+		RuntimePath:        outputPath,
+		ClosurePaths:       delta,
+		ExportedDigest:     exportedDigest,
+		ExportedPath:       blobPath,
+		DerivationPath:     drvPath,
+		OutputPath:         outputPath,
+		CodeCommit:         req.CodeCommit,
+		StoreSchemaVersion: storeschema.Version,
+		BuiltAt:            nowRFC3339(),
 	}
 	if err := res.WriteReceipt(filepath.Join(req.OutDir, "builder-receipt.json")); err != nil {
 		return nil, err

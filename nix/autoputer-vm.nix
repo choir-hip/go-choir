@@ -721,6 +721,7 @@ EOF
     environment.CHOIR_UPDATER_ROOT = "/mnt/persistent/choir-updater";
     environment.CHOIR_GUEST_IMAGE_MANIFEST = guestImageManifest;
     environment.CHOIR_KERNEL_CONFIG = config.boot.kernelPackages.kernel.configfile;
+    environment.CHOIR_STORE_SCHEMA_PATH = "/mnt/persistent/state.texture/store-schema.json";
     serviceConfig = {
       Type = "simple";
       User = "root";

@@ -35,6 +35,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -927,6 +928,15 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: bootstrap texture: %w", err)
 	}
 	log.Printf("store: open phase=texture-schema status=complete")
+
+	// Persist the running build's store schema epoch inside the workspace so
+	// the updater's pre-mutation state-compat gate (S2-d) can refuse a release
+	// whose binary does not understand this store — the vm-3dc68688
+	// stale-binary failure class.
+	if err := storeschema.Write(workspacePath); err != nil {
+		_ = s.Close()
+		return nil, err
+	}
 
 	if freshStore {
 		if err := os.WriteFile(dbPath, nil, 0o644); err != nil {

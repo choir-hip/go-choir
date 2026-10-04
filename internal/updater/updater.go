@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 )
 
 const ManifestVersion = 1
@@ -64,9 +65,24 @@ type ReleaseManifest struct {
 	// exec binary (e.g. "<hash>-autoputer/bin/autoputer"). The guest runtime
 	// execs $UPDATER_ROOT/store/<layering_entrypoint> inside the mount-ns
 	// overlay instead of the base binary.
-	LayeringEntrypoint string         `json:"layering_entrypoint,omitempty"`
-	Files              []ManifestFile `json:"files"`
-	ContentDigest      string         `json:"content_digest"`
+	LayeringEntrypoint string `json:"layering_entrypoint,omitempty"`
+	// StoreSchemaVersion is the persistent-store schema epoch the release was
+	// built against (store.StoreSchemaVersion). The updater refuses before
+	// mutation when the guest's persisted epoch is newer — a binary older
+	// than its store is the vm-3dc68688 crash-loop failure class.
+	StoreSchemaVersion uint64 `json:"store_schema_version,omitempty"`
+	// MinStoreSchemaVersion is the oldest persisted store epoch the release
+	// can migrate forward. Refused before mutation when the persisted epoch
+	// is older.
+	MinStoreSchemaVersion uint64 `json:"min_store_schema_version,omitempty"`
+	// BaseCommit is the repo commit of the base image the release was built
+	// against (guest-image-manifest build_commit). The updater refuses a
+	// declared BaseCommit that differs from the booted base's — the
+	// commit-level provenance half of the base join (S2-d); the digest join
+	// stays the identity half.
+	BaseCommit    string         `json:"base_commit,omitempty"`
+	Files         []ManifestFile `json:"files"`
+	ContentDigest string         `json:"content_digest"`
 }
 
 type ApplyRequest struct {
@@ -125,6 +141,11 @@ type Updater struct {
 	// manifest. Set when the updater must enforce the app-layer base join.
 	guestImageManifestPath string
 	now                    func() time.Time
+	// storeSchemaPath is the guest persistent store's schema receipt
+	// (store.StoreSchemaFile inside the Dolt workspace). When wired, a
+	// release declaring a store schema window is refused before mutation if
+	// the persisted epoch falls outside it.
+	storeSchemaPath string
 }
 
 func New(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner) (*Updater, error) {
@@ -136,6 +157,14 @@ func New(root, computerID, realizationID string, service ServiceManager, health 
 // differs from the booted base's).
 func NewWithBase(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner, guestImageManifestPath string) (*Updater, error) {
 	return newUpdater(root, computerID, realizationID, service, health, signer, guestImageManifestPath)
+}
+
+// WithStoreSchemaPath wires the guest persistent store's schema receipt so
+// Apply can enforce a release's declared store schema window before any
+// mutation (S2-d). Returns the updater for chaining after construction.
+func (u *Updater) WithStoreSchemaPath(path string) *Updater {
+	u.storeSchemaPath = filepath.Clean(strings.TrimSpace(path))
+	return u
 }
 
 func newUpdater(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner, guestImageManifestPath string) (*Updater, error) {
@@ -212,6 +241,16 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			return ApplyResult{}, fmt.Errorf("updater: release base %s does not match booted base %s", request.Manifest.BaseImageManifestDigest, booted)
 		}
 	}
+	// S2-d state-compat gate: a layered release declares the store schema
+	// window and base commit it was built against. Refuse before any
+	// mutation (staging, store replay, pointer swap) when the guest's
+	// persisted epoch or booted base commit falls outside the declaration —
+	// the vm-3dc68688 stale-binary failure class, caught pre-restart instead
+	// of by a post-mortem health probe.
+	if err := u.checkStateCompatibility(request.Manifest); err != nil {
+		return ApplyResult{}, err
+	}
+
 	releaseDigest := request.Manifest.ContentDigest
 	sourceDir, err := u.trustedSourceDir(request.SourceDir, releaseDigest)
 	if err != nil {
@@ -334,6 +373,78 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 		return result, err
 	}
 	return result, failure
+}
+
+// checkStateCompatibility enforces a release's declared state-compat window
+// before Apply mutates anything: the guest persistent store's schema epoch
+// must satisfy [min_store_schema_version, store_schema_version], and a
+// declared base_commit must equal the booted base image's build_commit.
+// Plain file releases declare nothing and pass; a layered release that
+// declares a window on a guest with an unwired receipt fails closed —
+// compat cannot be proven.
+func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
+	if manifest.StoreSchemaVersion == 0 && manifest.MinStoreSchemaVersion == 0 {
+		// No schema window declared; the base-commit join may still apply.
+	} else {
+		if strings.TrimSpace(u.storeSchemaPath) == "" {
+			return fmt.Errorf("updater: release declares store schema window but no store schema receipt is wired")
+		}
+		receipt, found, readErr := u.readStoreSchema()
+		if readErr != nil {
+			return readErr
+		}
+		if !found {
+			return fmt.Errorf("updater: release declares store schema window but guest store has no schema receipt")
+		}
+		persisted := receipt.Version
+		if manifest.StoreSchemaVersion != 0 && persisted > manifest.StoreSchemaVersion {
+			return fmt.Errorf("updater: guest store schema %d is newer than release's built schema %d; refusing stale binary", persisted, manifest.StoreSchemaVersion)
+		}
+		if manifest.MinStoreSchemaVersion != 0 && persisted < manifest.MinStoreSchemaVersion {
+			return fmt.Errorf("updater: guest store schema %d is older than release's minimum migratable schema %d; refusing unmigratable store", persisted, manifest.MinStoreSchemaVersion)
+		}
+	}
+	if manifest.BaseCommit != "" && u.guestImageManifestPath != "" {
+		booted, commitErr := u.bootedBaseCommit()
+		if commitErr != nil {
+			return fmt.Errorf("updater: resolve booted base commit: %w", commitErr)
+		}
+		if booted == "" {
+			return fmt.Errorf("updater: release declares base_commit %s but the booted base carries no build_commit", manifest.BaseCommit)
+		}
+		if booted != manifest.BaseCommit {
+			return fmt.Errorf("updater: release base commit %s does not match booted base commit %s", manifest.BaseCommit, booted)
+		}
+	}
+	return nil
+}
+
+// readStoreSchema loads the guest store's persisted schema epoch.
+// found=false means no receipt — the store predates the contract or the
+// workspace is fresh.
+func (u *Updater) readStoreSchema() (storeschema.Receipt, bool, error) {
+	receipt, found, err := storeschema.Read(u.storeSchemaPath)
+	if err != nil {
+		return receipt, found, fmt.Errorf("updater: %w", err)
+	}
+	return receipt, found, nil
+}
+
+// bootedBaseCommit parses build_commit out of the booted choir-guest-image-v1
+// manifest (key=value lines). Absent key returns empty without error so a
+// guest whose base predates the field degrades observably rather than
+// breaking unrelated applies.
+func (u *Updater) bootedBaseCommit() (string, error) {
+	raw, err := os.ReadFile(u.guestImageManifestPath)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if key, value, ok := strings.Cut(strings.TrimSpace(line), "="); ok && key == "build_commit" {
+			return strings.TrimSpace(value), nil
+		}
+	}
+	return "", nil
 }
 
 func (u *Updater) trustedSourceDir(source, releaseDigest string) (string, error) {

@@ -46,6 +46,8 @@ func main() {
 	flag.StringVar(&guestImageManifestPath, "guest-image-manifest", os.Getenv("CHOIR_GUEST_IMAGE_MANIFEST"), "Immutable guest image manifest")
 	flag.StringVar(&kernelConfigPath, "kernel-config", os.Getenv("CHOIR_KERNEL_CONFIG"), "Realized guest kernel config")
 	flag.StringVar(&kernelProbePath, "kernel-probe", "/run/choir/kernel-capabilities.json", "Boot-time kernel capability probe artifact")
+	var storeSchemaPath string
+	flag.StringVar(&storeSchemaPath, "store-schema-path", os.Getenv("CHOIR_STORE_SCHEMA_PATH"), "Guest persistent store schema receipt (S2-d state-compat gate)")
 	flag.Parse()
 	if strings.TrimSpace(computerID) == "" || strings.TrimSpace(realizationID) == "" {
 		fatal("computer and realization identities are required")
@@ -57,6 +59,9 @@ func main() {
 	engine, err := updater.NewWithBase(filepath.Clean(root), computerID, realizationID, updater.RestartRequestManager{Path: restartRequestPath, RecoveryPath: recoveryRequestPath, CleanupPath: cleanupRequestPath, PrepareURL: restartPrepareURL}, updater.HTTPHealthProber{URL: healthURL}, guestSigner, guestImageManifestPath)
 	if err != nil {
 		fatal("initialize: %v", err)
+	}
+	if strings.TrimSpace(storeSchemaPath) != "" {
+		engine.WithStoreSchemaPath(storeSchemaPath)
 	}
 	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
 		fatal("create socket directory: %v", err)

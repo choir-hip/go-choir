@@ -48,6 +48,13 @@ type ClosureResult struct {
 	OutputPath     string       `json:"output_path"`
 	CodeCommit     string       `json:"code_commit"`
 	BuiltAt        string       `json:"built_at"`
+	// StoreSchemaVersion is the guest persistent-store schema epoch the
+	// builder itself was compiled against (store.StoreSchemaVersion). It is
+	// exact when the builder binary and the built source come from the same
+	// commit — the normal path — and a recorded approximation otherwise
+	// (named edge: a cross-commit patch build must carry the source's own
+	// epoch, S2-c/S2-f carry that join).
+	StoreSchemaVersion uint64 `json:"store_schema_version,omitempty"`
 }
 
 // nixTimeout caps a single nix invocation. Eval and export on a warm store
