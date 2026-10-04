@@ -42,24 +42,35 @@ Two landed halves make this slice executable:
   per-release under `$CHOIR_UPDATER_ROOT/gc-roots/<releaseDigest>`. Wired
   into Apply between stageRelease and the pointer swap — fail-closed.
 
-Remaining: the guest autoputer must exec the release's binary, resolving its
-`/nix/store` closure paths. The base store is EROFS read-only, so the
-materialized private store must appear at the canonical `/nix/store` paths
-for the release's own deps. Mechanism: the autoputer systemd `ExecStart`
-wrapper resolves the release binary path — `$CHOIR_UPDATER_ROOT/current/
-bin/autoputer` when a current release exists — and exec's it inside a mount
-namespace (`unshare -m`) that bind-mounts each materialized private-store
-path onto its canonical `/nix/store/<base>` target (base-present paths
-resolve through the read-only EROFS unchanged). CAP_SYS_ADMIN in the
-autoputer unit or a `unshare`-based wrapper supplies the mount namespace;
-rollback is `restorePrior` re-pointing `current` and restarting onto the
-prior/base binary. Refuses to layer when a closure ref is absent from both
-the private store and the read-only base.
-the base binary reads from the release dir). The deployed autoputer's own
-code never changes without a VM image rebuild. This is exactly the gap the
-S2 layering station exists to close — most updates should stop rebooting
-VMs, and an app-layer change should land a *new runtime*, not just new
-served assets.
+## Resolution (2026-10-04) — committed, deployed acceptance pending
+
+The exec gap is closed in source across four commits; the deployed
+acceptance (a real layered apply on a disposable staging computer) is the
+remaining step and is staged in `scripts/s2_layered_update_probe.mjs`.
+
+- **Producer** (`f5460bdc`): `platformUpdateOfferMintRequest` gained
+  `base_image_manifest_digest`, `closure_digest`, and `layering_entrypoint`;
+  `buildPlatformUpdateOffer` joins them into the release manifest.
+- **Runtime exec** (`c7bb4a12`): `ReleaseManifest.LayeringEntrypoint` names
+  the release's private-store-relative exec path; `materializeReleaseClosure`
+  resolves it to the materialized absolute path and records it at
+  `$CHOIR_UPDATER_ROOT/layering-entrypoint`. The `autoputerRuntimeExec`
+  wrapper reads that record, enters `unshare -m`, and overlay-mounts the
+  private store over `/nix/store` (lower=base EROFS, upper=priv store, work=
+  `.overlay-work`), then `exec`s the recorded entrypoint — the release's own
+  store-path binary, whose deps resolve through the merged view. Falls back
+  to the base binary when no entrypoint is recorded or the overlay fails.
+- **Stale-entrypoint fix** (`1be8bd72`): `materializeReleaseClosure` clears
+  `layering-entrypoint` at the top of every apply, so a plain release after a
+  layered one does not re-exec a stale layered binary.
+
+Remaining before close: run `scripts/s2_layered_update_probe.mjs` on the
+`1be8bd72` image — mint a real layered offer (closure.nar of a copied
+autoputer store path + the disposable's base_image_manifest_digest), confirm
+route promotion + the guest exec's the release store-path binary, and confirm
+a base-mismatched layered offer fails closed (materialization_failed, base
+keeps serving).
+
 
 ## What the fix must do
 
