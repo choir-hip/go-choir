@@ -28,6 +28,33 @@ binary. Nothing in the release's `bin/` becomes the process image.
 Consequence: a self-dev "apply" changes only what the *running base
 binary* decides to serve off `current/` (the SPA frontend via
 `internal/autoputer/computer_surface.go` `resolvedRoot`, plus whatever else
+
+## Design (2026-10-04)
+
+Two landed halves make this slice executable:
+
+- **Base join** (`20880d75`): `ReleaseManifest.BaseImageManifestDigest` +
+  `ClosureDigest`; `NewWithBase` wires the booted guest-image-manifest path;
+  Apply refuses a base-mismatched release before mutation.
+- **Closure materializer** (`b68357a1` + `a7052d2a`): `internal/updater/
+  closure.go` decodes the real `nix-store --export` stream and replays it
+  into a per-computer GC-rooted store (`$CHOIR_UPDATER_ROOT/store`), rooted
+  per-release under `$CHOIR_UPDATER_ROOT/gc-roots/<releaseDigest>`. Wired
+  into Apply between stageRelease and the pointer swap — fail-closed.
+
+Remaining: the guest autoputer must exec the release's binary, resolving its
+`/nix/store` closure paths. The base store is EROFS read-only, so the
+materialized private store must appear at the canonical `/nix/store` paths
+for the release's own deps. Mechanism: the autoputer systemd `ExecStart`
+wrapper resolves the release binary path — `$CHOIR_UPDATER_ROOT/current/
+bin/autoputer` when a current release exists — and exec's it inside a mount
+namespace (`unshare -m`) that bind-mounts each materialized private-store
+path onto its canonical `/nix/store/<base>` target (base-present paths
+resolve through the read-only EROFS unchanged). CAP_SYS_ADMIN in the
+autoputer unit or a `unshare`-based wrapper supplies the mount namespace;
+rollback is `restorePrior` re-pointing `current` and restarting onto the
+prior/base binary. Refuses to layer when a closure ref is absent from both
+the private store and the read-only base.
 the base binary reads from the release dir). The deployed autoputer's own
 code never changes without a VM image rebuild. This is exactly the gap the
 S2 layering station exists to close — most updates should stop rebooting
