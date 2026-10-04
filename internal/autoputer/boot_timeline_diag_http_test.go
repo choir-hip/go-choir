@@ -10,11 +10,12 @@ import (
 	"testing"
 )
 
-// hostSourcedRequest builds a GET request that satisfies server.HostSourcedCaller
-// via a loopback RemoteAddr (the in-guest / host-peer transport class).
+// hostSourcedRequest builds a GET request that satisfies server.HostPeerCaller
+// via a TEST-NET-1 synthetic host RemoteAddr. Loopback is refused by the
+// strict gate: in-guest callers must not drive the diag oracle.
 func hostSourcedRequest(rawURL string) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, rawURL, nil)
-	req.RemoteAddr = "127.0.0.1:40000"
+	req.RemoteAddr = "192.0.2.44:40000"
 	return req
 }
 
@@ -117,7 +118,7 @@ func TestDiagHTTPProbePostRefusesNonAllowlistedPath(t *testing.T) {
 // or body to the target.
 func TestDiagTCPDialRejectsNonGet(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/internal/diag/tcp-dial?addr=127.0.0.1:8083&mode=http", nil)
-	req.RemoteAddr = "127.0.0.1:40000"
+	req.RemoteAddr = "192.0.2.44:40000"
 	rec := httptest.NewRecorder()
 	handleDiagTCPDial(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
@@ -135,5 +136,18 @@ func TestDiagHTTPProbeRefusesGuestCaller(t *testing.T) {
 	handleDiagTCPDial(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+}
+
+// An in-guest caller (loopback) is refused: the diag oracle is a host-peer
+// instrument only. Terminal/zot/capsule children must not run host-internal
+// probes from inside the guest even though they share the guest's tap address.
+func TestDiagHTTPProbeRefusesLoopbackCaller(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/internal/diag/tcp-dial?addr=127.0.0.1:8083&mode=http", nil)
+	req.RemoteAddr = "127.0.0.1:40000"
+	rec := httptest.NewRecorder()
+	handleDiagTCPDial(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 for in-guest loopback caller", rec.Code)
 	}
 }

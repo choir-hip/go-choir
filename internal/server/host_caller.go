@@ -60,6 +60,43 @@ func HostSourcedCaller(r *http.Request) bool {
 	return gateway != nil && remote == *gateway
 }
 
+// HostPeerCaller is the strict form of HostSourcedCaller: only the host peer
+// itself (the guest's default gateway on the tap link) qualifies. In-guest
+// callers — loopback and the guest's own services — do not, so diagnostic
+// surfaces like /internal/diag/tcp-dial cannot be driven by untrusted guest
+// children (terminal, zot, capsule workloads). Synthetic callers (empty and
+// TEST-NET-1 addresses) still pass for tests; loopback does not.
+func HostPeerCaller(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.RemoteAddr == "" || strings.HasPrefix(r.RemoteAddr, "@") || strings.HasPrefix(r.RemoteAddr, "/") {
+		return true
+	}
+	remote, ok := remoteAddrIP(r.RemoteAddr)
+	if !ok {
+		return false
+	}
+	if remote.IsLoopback() {
+		return false
+	}
+	if isTestNet1(remote) {
+		return true
+	}
+	hostGatewayOnce.Do(cacheHostGateway)
+	gateway := hostGateway.Load()
+	if gateway == nil {
+		if parsed, err := defaultGateway(); err != nil {
+			log.Printf("server: refusing host-peer request: cannot determine default gateway: %v", err)
+			return false
+		} else {
+			hostGateway.CompareAndSwap(nil, &parsed)
+			gateway = hostGateway.Load()
+		}
+	}
+	return gateway != nil && remote == *gateway
+}
+
 func cacheHostGateway() {
 	gateway, err := defaultGateway()
 	if err != nil {

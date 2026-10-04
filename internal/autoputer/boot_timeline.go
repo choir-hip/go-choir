@@ -587,8 +587,8 @@ func handleDiagTCPDial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !server.HostSourcedCaller(r) {
-		http.Error(w, "host-sourced caller required", http.StatusForbidden)
+	if !server.HostPeerCaller(r) {
+		http.Error(w, "host peer required", http.StatusForbidden)
 		return
 	}
 	addr := strings.TrimSpace(r.URL.Query().Get("addr"))
