@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -412,6 +413,11 @@ func writeNarFile(target string, contents []byte, mode os.FileMode) error {
 // ClosureDigest). Runs inside Apply between stageRelease and the pointer
 // swap, so a replay failure leaves the running release untouched.
 func (u *Updater) materializeReleaseClosure(releaseDir string, manifest ReleaseManifest) error {
+	// A prior layered release may have recorded an entrypoint; remove it so a
+	// later plain (or replacement-layered) apply does not exec stale state.
+	if err := os.Remove(filepath.Join(u.root, "layering-entrypoint")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("updater: clear stale layering entrypoint: %w", err)
+	}
 	if manifest.ClosureDigest == "" {
 		return nil
 	}
