@@ -1,10 +1,15 @@
 package updater
 
 import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 // closure-single.nar is a real `nix-store --export` of a one-file store path
@@ -93,5 +98,69 @@ func TestParseClosureRejectsNonExport(t *testing.T) {
 		if _, _, err := ParseClosure(blob); err == nil {
 			t.Fatalf("ParseClosure(%s) succeeded on malformed input", name)
 		}
+	}
+}
+
+// A layered apply must replay closure.nar into the private store and GC-root
+// it, while the file release still lands under releases/<digest>.
+func TestApplyMaterializesLayeredClosureAndGcRoots(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+
+	baseDir := t.TempDir()
+	baseManifestPath := filepath.Join(baseDir, "guest-image-manifest.json")
+	if err := os.WriteFile(baseManifestPath, []byte(`{"schema":"choir-guest-image-v1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bootedDigest, err := DigestFile(baseManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	engine, err := NewWithBase(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{},
+		testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}},
+		baseManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "op-layered", "idem-layered", "layered payload")
+	closurePath := filepath.Join(request.SourceDir, "closure.nar")
+	if err := os.WriteFile(closurePath, blob, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	closureSum, err := fileSHA256(closurePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Manifest.Files = append(request.Manifest.Files, ManifestFile{Path: "closure.nar", SHA256: closureSum, Mode: 0o444})
+	request.Manifest.ClosureDigest = closureSum
+	request.Manifest.BaseImageManifestDigest = bootedDigest
+	if err := refinalizeRequest(&request); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := engine.Apply(context.Background(), request)
+	if err != nil {
+		t.Fatalf("layered apply refused: %v", err)
+	}
+	if result.Outcome != "applied" {
+		t.Fatalf("layered apply outcome = %q", result.Outcome)
+	}
+	materialized := filepath.Join(root, "store", "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	if _, err := os.Stat(materialized); err != nil {
+		t.Fatalf("closure path not materialized: %v", err)
+	}
+	gcLink := filepath.Join(root, "gc-roots", result.ReleaseDigest, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	if target, err := os.Readlink(gcLink); err != nil || target != materialized {
+		t.Fatalf("gc-root link = %q err=%v, want %q", target, err, materialized)
 	}
 }

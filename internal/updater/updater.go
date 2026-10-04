@@ -42,26 +42,26 @@ type ManifestFile struct {
 }
 
 type ReleaseManifest struct {
-	Version            int            `json:"version"`
-	ComputerID         string         `json:"computer_id"`
-	AcceptedEventHead  string         `json:"accepted_event_head"`
-	CodeRef            string         `json:"code_ref"`
-	ArtifactProgramRef string         `json:"artifact_program_ref"`
-	EventSchemaVersion uint64         `json:"event_schema_version"`
-	ReducerVersion     uint64         `json:"reducer_version"`
-	Marker             string         `json:"marker"`
+	Version            int    `json:"version"`
+	ComputerID         string `json:"computer_id"`
+	AcceptedEventHead  string `json:"accepted_event_head"`
+	CodeRef            string `json:"code_ref"`
+	ArtifactProgramRef string `json:"artifact_program_ref"`
+	EventSchemaVersion uint64 `json:"event_schema_version"`
+	ReducerVersion     uint64 `json:"reducer_version"`
+	Marker             string `json:"marker"`
 	// BaseImageManifestDigest is the sha256 of the booted guest base image's
 	// choir-guest-image-v1 manifest the app-layer closure resolves against.
 	// When present, Apply refuses before mutation if it does not equal the
 	// actually booted base's digest (base-resolution fail-closed). Empty
 	// keeps the file-release baseline path (no base join yet).
-	BaseImageManifestDigest string         `json:"base_image_manifest_digest,omitempty"`
+	BaseImageManifestDigest string `json:"base_image_manifest_digest,omitempty"`
 	// ClosureDigest is the sha256 of the app-layer narchive (nix-store
 	// --export) carrying the base-absent store paths. Set when the release
 	// is a layered app-layer release rather than a plain file release.
-	ClosureDigest      string         `json:"closure_digest,omitempty"`
-	Files              []ManifestFile `json:"files"`
-	ContentDigest      string         `json:"content_digest"`
+	ClosureDigest string         `json:"closure_digest,omitempty"`
+	Files         []ManifestFile `json:"files"`
+	ContentDigest string         `json:"content_digest"`
 }
 
 type ApplyRequest struct {
@@ -119,7 +119,7 @@ type Updater struct {
 	// guestImageManifestPath is the booted base image's choir-guest-image-v1
 	// manifest. Set when the updater must enforce the app-layer base join.
 	guestImageManifestPath string
-	now           func() time.Time
+	now                    func() time.Time
 }
 
 func New(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner) (*Updater, error) {
@@ -215,6 +215,13 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	request.SourceDir = sourceDir
 	releaseDir := filepath.Join(u.root, "releases", releaseDigest)
 	if err := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); err != nil {
+		return ApplyResult{}, err
+	}
+	// Layered release: replay the app-layer narchive into the private store
+	// and GC-root it before the pointer swap. A failure here leaves `current`
+	// untouched and never publishes a restart — the running release keeps
+	// serving (fail-closed on the data path).
+	if err := u.materializeReleaseClosure(releaseDir, request.Manifest); err != nil {
 		return ApplyResult{}, err
 	}
 	if !found {

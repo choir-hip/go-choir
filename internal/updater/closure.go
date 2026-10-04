@@ -2,6 +2,7 @@ package updater
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -404,3 +405,45 @@ func writeNarFile(target string, contents []byte, mode os.FileMode) error {
 	}
 	return os.Chmod(target, mode)
 }
+
+// materializeReleaseClosure replays a layered release's `closure.nar` into
+// the updater's private store (u.root/store) and GC-roots it under
+// u.root/gc-roots/<releaseDigest>. No-op for plain file releases (empty
+// ClosureDigest). Runs inside Apply between stageRelease and the pointer
+// swap, so a replay failure leaves the running release untouched.
+func (u *Updater) materializeReleaseClosure(releaseDir string, manifest ReleaseManifest) error {
+	if manifest.ClosureDigest == "" {
+		return nil
+	}
+	narPath := filepath.Join(releaseDir, "closure.nar")
+	blob, err := os.ReadFile(narPath)
+	if err != nil {
+		return fmt.Errorf("updater: layered release missing closure.nar: %w", err)
+	}
+	sum := fmt.Sprintf("%x", sha256Hex(blob))
+	if sum != manifest.ClosureDigest {
+		return fmt.Errorf("updater: closure.nar digest %s != manifest closure_digest %s", sum, manifest.ClosureDigest)
+	}
+	storeRoot := filepath.Join(u.root, "store")
+	paths, err := MaterializeClosure(blob, storeRoot)
+	if err != nil {
+		return fmt.Errorf("updater: replay app-layer closure: %w", err)
+	}
+	gcDir := filepath.Join(u.root, "gc-roots", filepath.Base(releaseDir))
+	if err := os.MkdirAll(gcDir, 0o700); err != nil {
+		return fmt.Errorf("updater: create gc-root dir: %w", err)
+	}
+	for _, base := range paths {
+		link := filepath.Join(gcDir, base)
+		target := filepath.Join(storeRoot, base)
+		if _, err := os.Lstat(link); err == nil {
+			continue
+		}
+		if err := os.Symlink(target, link); err != nil {
+			return fmt.Errorf("updater: gc-root %s: %w", base, err)
+		}
+	}
+	return nil
+}
+
+func sha256Hex(b []byte) [32]byte { return sha256.Sum256(b) }
