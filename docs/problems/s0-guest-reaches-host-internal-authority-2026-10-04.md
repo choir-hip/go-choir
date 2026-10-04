@@ -137,6 +137,28 @@ endpoint bugs. Patching individual handlers would leave the class open.
    refused from guest A against guest B and against the host services, while
    the legitimate guest→gateway/maild/corpusd flows still work. Record
    pre/post `iptables-save` and the refusal receipts.
+## Addendum 2026-10-04b — proof channel + a second discovered defect
+
+**Deployed refusal-matrix mechanism.** The guest autoputer already exposed
+`GET /internal/diag/tcp-dial` behind `server.HostSourcedCaller` (S0a
+reachability oracle). Commit `b15f012a` extends it with `mode=http` — a
+GET-only, 3s-bound, 2KiB-capped HTTP dial whose header allowlist is exactly
+the forged-identity pair (`X-Internal-Caller`, `X-Authenticated-User`). The
+oracle adds no authority a guest-local process lacks; it exists so
+host-sourced proof traffic can originate requests inside the guest. The
+refusal matrix (`scripts/s1a_refusal_matrix_probe.mjs`) now runs all legs
+through it.
+
+**Discovered: management-console spawn is PATH-shadowed (heresy: discovered,
+unfixed).** `resolveManagementConsoleCommand` prefers `exec.LookPath("zot")`;
+in the guest image that resolves to the third-party TUI agent
+(`zot-0.2.6`, `patriceckhart/zot`), not `autoputer zot-session`. Two
+consequences: (a) the earlier claim that "the owner has a root shell via the
+terminal app" is stale — `/api/terminal/ws` was retired (proxy returns 410)
+and `RegisterTerminalRoutes` is defined but never wired, so no in-guest exec
+surface exists at all; (b) the management console spawns an agent TUI
+instead of the intended repair session. Track as its own repair; not part
+of the S1a boundary fix.
 
 ## Repair record (S1a, landed 2026-10-04)
 
