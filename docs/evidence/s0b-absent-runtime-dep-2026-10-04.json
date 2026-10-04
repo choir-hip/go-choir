@@ -1,0 +1,29 @@
+{
+  "probe": "S0b absent runtime dependency lifecycle",
+  "computer": "computer-ac1808b4f04fc749c0781083ee747403",
+  "user": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+  "vm": "vm-b59963240d2cd8da769b92cacb213802",
+  "observed_at": "2026-10-04T07:10:41Z",
+  "inputs": {
+    "required_flow": "build dependency absent from the base closure, then dispose -> activate -> reboot -> restore",
+    "available_observation": "authenticated guest kernel-capabilities and replay-completeness routes; sealed guest HTTP; host VM-state directory"
+  },
+  "raw_observations": {
+    "build": "52ee562f769fc90197e0aa68de9d7022dcd2ab81",
+    "guest_layout_precondition": {
+      "nix_store_mount": {"device": "/dev/vda", "fstype": "erofs", "read_only": true},
+      "nix_store_entries": 898
+    },
+    "kernel_capabilities_response": {"status": 503, "body": {"error": "computer route identity unavailable"}},
+    "replay_completeness_response": {"status": 409, "body": {"error": "projection base refused: tail application is not exactly-once (6 events, [1,6], want (0,5])"}},
+    "available_runtime_package_surface": "GET /internal/vmctl/runtime-package/autoputer streams the current autoputer package; it is not a dependency build/install/activation API.",
+    "host_state_entries": ["boot-timeline.json", "credential.img", "data.img", "epoch", "fc-config.json", "firecracker.pid", "persist/gateway-token"]
+  },
+  "verdict": "gap",
+  "findings": [
+    "The base /nix/store is EROFS, and the sealed guest boundary exposes no one-package nix build, runtime dependency install, dependency activation, or dispose endpoint.",
+    "The kernel capability route is unavailable because the ComputerVersion route identity is absent; replay completeness is also refused after the M9a/restore tape state.",
+    "Consequently no dependency can be truthfully selected as absent, built, or observed through the requested lifecycle. No lifecycle mutation was made for this probe."
+  ],
+  "cleanup": "No dependency artifact, overlay, or capsule was created."
+}

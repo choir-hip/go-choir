@@ -1,0 +1,38 @@
+{
+  "probe": "S0b one self-development Go effect",
+  "computer": "computer-ac1808b4f04fc749c0781083ee747403",
+  "user": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+  "vm": "vm-b59963240d2cd8da769b92cacb213802",
+  "started_at": "2026-10-04T07:09:52Z",
+  "finished_at": "2026-10-04T07:14:39Z",
+  "inputs": {
+    "marker": "S0B_GO_EFFECT_20261004_0710",
+    "operation_idempotency_key": "s0b-go-effect-op-2026-10-04-0710",
+    "requested_payload": "Run exactly one safe capsule_go_eval Go cell that prints the literal marker; no filesystem write, network I/O, freeze, proposal, or approval.",
+    "mode_arm_key": "s0b-go-effect-arm-2026-10-04-0710",
+    "mode_disarm_key": "s0b-go-effect-disarm-2026-10-04-0711",
+    "replacement_key_request": {
+      "label": "s0b-go-effect-2026-10-04",
+      "scopes": ["computer:self_development:propose", "computer:self_development:mode", "read:runtime", "write:runtime"],
+      "computer_id": "computer-ac1808b4f04fc749c0781083ee747403"
+    }
+  },
+  "raw_observations": {
+    "build": "52ee562f769fc90197e0aa68de9d7022dcd2ab81",
+    "mode_before": {"mode": "off", "generation": 0},
+    "mode_arm": {"mode": "propose_only", "generation": 1, "receipt_id": "01a105bf-678f-72b1-a923-88c8ce54c1bd"},
+    "public_start_response": {"status": 403, "body": {"error": "missing required scope: computer:self_development:propose"}},
+    "replacement_key_mint_response": {"status": 403, "body": {"error": "api key requires manage:keys or admin to create keys"}},
+    "available_browser_session": {"user_id": "4b579d04-1227-4803-b3d7-7c7cccb237e1", "matches_probe_owner": false, "used": false},
+    "guest_runs_after_refusal": {"runs": []},
+    "mode_cleanup": {"mode": "off", "generation": 2, "receipt_id": "01a105c0-7174-77de-91f6-e88594c18e5b"}
+  },
+  "verdict": "keydriver_scope_gap_go_effect_not_executed",
+  "findings": [
+    "No Go cell executed: the keydriver minted the probe key without computer:self_development:propose, so the product operation correctly refused it.",
+    "A second, correctly scoped key could not be minted from that attenuated key because it lacks manage:keys/admin; bearer callers may delegate only their own scopes.",
+    "The only stored staging browser session belongs to another user and was not used, preserving the single-disposable-account boundary.",
+    "No execution receipt, capsule, run, or output marker exists; treating the mode-arm or request transport as execution would be fabricated evidence."
+  ],
+  "cleanup": "Disarmed self-development mode to off at generation 2. No operation was created."
+}

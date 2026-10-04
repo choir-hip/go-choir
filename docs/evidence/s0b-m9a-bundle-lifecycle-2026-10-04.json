@@ -1,0 +1,52 @@
+{
+  "probe": "S0b M9a bundle lifecycle",
+  "computer": "computer-ac1808b4f04fc749c0781083ee747403",
+  "user": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+  "vm": "vm-b59963240d2cd8da769b92cacb213802",
+  "started_at": "2026-10-04T07:07:41Z",
+  "completed_at": "2026-10-04T07:08:47Z",
+  "inputs": {
+    "update_id": "s0b-m9a-20261004-0707",
+    "marker": "S0B_M9A_20261004_0707",
+    "base_event_head": "76ab098ac45a72c556bd76cf5be8d1c2079e672f55f9e34b0c405fca935ed54d",
+    "realization_id": "vm-b59963240d2cd8da769b92cacb213802-epoch-12873",
+    "offer": "corpusd platform-control signed offer for frontend/index.html (the reference M9a shape)",
+    "restore_checkpoint_digest": "128b9d7d294e235b935816d27d15d75162b8deb4973d72c0cc99e5945abe63b6"
+  },
+  "raw_observations": {
+    "build_before_and_after": "52ee562f769fc90197e0aa68de9d7022dcd2ab81",
+    "push_transport_body": "",
+    "guest_after_apply": {
+      "status": "ready",
+      "self_development_marker": "S0B_M9A_20261004_0707",
+      "release_digest": "2e874fb951940e8156c4e50882ca96180763a51289555bbbab8433540f7739f1",
+      "running_runs": 0
+    },
+    "canonical_tape": [
+      {"sequence": 2, "kind": "effect_accepted", "idempotency_key": "platform-update-accepted-s0b-m9a-20261004-0707"},
+      {"sequence": 3, "kind": "materialization_started", "idempotency_key": "platform-update-started-s0b-m9a-20261004-0707"},
+      {"sequence": 4, "kind": "materialization_applied", "idempotency_key": "platform-update-applied-s0b-m9a-20261004-0707"},
+      {"sequence": 5, "kind": "checkpoint_published", "idempotency_key": "platform-update-checkpoint-published-s0b-m9a-20261004-0707"},
+      {"sequence": 6, "kind": "restore_requested", "idempotency_key": "restore-intent-128b9d7d294e235b935816d27d15d75162b8deb4973d72c0cc99e5945abe63b6"}
+    ],
+    "restore": {
+      "status": 200,
+      "method": "tape_reconstruct",
+      "witness_matched": true,
+      "frontend_restaged": true,
+      "tail_target_sequence": 5,
+      "tail_events_applied": 5,
+      "original_denied": true
+    },
+    "route_after_apply": {"route_absent": true, "generation": 0},
+    "guest_runtime_log": "platform update resume: vmctl client: ComputerVersion route resolution failed (status 403): caller not bound to route slot computer: no ownership for computer primary",
+    "route_contract_check": "The M9a reference driver defines the fresh route slot as computer:<owner-id>:primary and requires its first update to bootstrap it to generation 1. The guest-side vmctl binding instead looked up primary as a stable computer ID."
+  },
+  "verdict": "partial_with_confirmed_defect",
+  "findings": [
+    "The signed offer was accepted, materialized, restarted the guest, and produced the requested marker in the running runtime; the empty POST body was not treated as success evidence.",
+    "A product checkpoint was published and the product restore completed with a matched witness and restaged frontend.",
+    "Fresh-route absence is expected before the first M9a update, but not afterwards: the platform-follow bootstrap did not run because vmctl's guest binding treated the valid slot's desktop component (primary) as a stable computer ID."
+  ],
+  "cleanup": "The restore left the M9a release active. No run is active; self-development mode was disarmed separately."
+}

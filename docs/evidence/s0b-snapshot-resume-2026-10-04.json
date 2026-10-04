@@ -1,0 +1,38 @@
+{
+  "probe": "S0b VM-state snapshot/resume",
+  "computer": "computer-ac1808b4f04fc749c0781083ee747403",
+  "user": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+  "vm": "vm-b59963240d2cd8da769b92cacb213802",
+  "observed_at": "2026-10-04T07:10:41Z",
+  "inputs": {
+    "required_experiment": "VM-state snapshot create/load, UFFD lazy-load, or reflink on this disposable VM",
+    "host_surface": "node-b vmctl internal list and /var/lib/go-choir/vm-state/vm-b59963240d2cd8da769b92cacb213802"
+  },
+  "raw_observations": {
+    "ownership": {
+      "state": "active",
+      "desktop_id": "primary",
+      "epoch": 12873,
+      "computer_url": "http://10.200.227.2:8085"
+    },
+    "state_directory": [
+      {"path": "data.img", "bytes": 34359738368},
+      {"path": "credential.img", "bytes": 8388608},
+      {"path": "boot-timeline.json", "bytes": 17754},
+      {"path": "fc-config.json", "bytes": 1985},
+      {"path": "epoch", "bytes": 5},
+      {"path": "firecracker.pid", "bytes": 7},
+      {"path": "persist/gateway-token", "bytes": 100}
+    ],
+    "snapshot_inventory": [],
+    "vmctl_static_surface": "The deployed vmctl handlers expose resolve/resume/recover/refresh/runtime-package and no snapshot create/load, UFFD lazy-load, or reflink handler.",
+    "guest_access_constraint": "The disposable guest is sealed: no shell, vsock, serial, or guest filesystem access was supplied."
+  },
+  "verdict": "gap",
+  "findings": [
+    "No supported snapshot create/load, UFFD lazy-load, or reflink experiment surface is present for this VM.",
+    "The host state directory contains only the live Firecracker configuration and disk images; no snapshot metadata, memory image, or reflink target exists.",
+    "No unsupported host-side copy, mount, or direct image mutation was attempted."
+  ],
+  "cleanup": "Read-only snapshot inventory; the VM remains active."
+}

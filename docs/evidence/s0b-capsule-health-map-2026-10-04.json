@@ -1,0 +1,48 @@
+{
+  "probe": "S0b capsule health map",
+  "computer": "computer-ac1808b4f04fc749c0781083ee747403",
+  "user": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+  "vm": "vm-b59963240d2cd8da769b92cacb213802",
+  "started_at": "2026-10-04T07:04:51Z",
+  "observed_at": "2026-10-04T07:10:42Z",
+  "inputs": {
+    "guest_health": "GET http://10.200.227.2:8085/health from node-b",
+    "guest_desk_projection": "GET /api/desktop/state and /api/runs with the computer-bound guest headers",
+    "capsule_probe": "GET /api/capsules with the authenticated guest header",
+    "host_state": "/var/lib/go-choir/vm-state/vm-b59963240d2cd8da769b92cacb213802",
+    "required_guest_path": "/run/choir/capsules (sealed; no shell, vsock, serial, or file API was supplied)"
+  },
+  "raw_observations": {
+    "build": "52ee562f769fc90197e0aa68de9d7022dcd2ab81",
+    "health": {
+      "status": "ready",
+      "runtime_health": "ready",
+      "running_runs": 0,
+      "running_processor_runs": 0,
+      "researcher_count": 3,
+      "self_development_marker": "S0B_M9A_20261004_0707"
+    },
+    "desktop_state": {
+      "owner_id": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+      "desktop_id": "primary",
+      "session_id": "legacy",
+      "windows": []
+    },
+    "runs": {"runs": []},
+    "capsule_endpoint": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body": "<!doctype html><html><body>${marker}</body></html>",
+      "interpretation": "SPA fallback, not a capsule or desk-session JSON projection"
+    },
+    "host_vm_state_entries": ["boot-timeline.json", "credential.img", "data.img", "epoch", "fc-config.json", "firecracker.pid", "persist/gateway-token"],
+    "host_capsule_directories": []
+  },
+  "verdict": "gap",
+  "findings": [
+    "The guest reports a ready runtime and an empty desktop/runs projection, but it supplies no capsule inventory or desk-session state projection.",
+    "The required /run/choir/capsules path cannot be observed through the sealed VM boundary; it is not represented in the host VM-state directory.",
+    "The /api/capsules candidate route is masked by the computer-surface SPA fallback, so it cannot distinguish an empty capsule set from an unavailable endpoint."
+  ],
+  "cleanup": "Read-only probe; no capsule or desk session was created."
+}
