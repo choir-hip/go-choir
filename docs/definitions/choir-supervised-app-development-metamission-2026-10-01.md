@@ -414,22 +414,22 @@ boundaries:
 now:
   status: working
   slice: >-
-    S1a host-boundary hotfix working (S1 station now.status=working).
-    Implementation landed and deployed: per-tap anti-spoof + tap->tap
-    deny, :8085 DNAT removal, dead lo-MASQUERADE removal, authority
-    binding by guest source IP to computer/owner (maild, vmctl CV,
-    proxy publish, source service), corpusd mint + host bypasses
-    loopback-only — deployed a3f0d48e; probe-oracle (diag tcp-dial
-    mode=http) + refusal-matrix script in b15f012a pending deploy.
-    Discovered heresy recorded: guest 'zot' resolves to the third-party
-    TUI agent — management-console spawn is PATH-shadowed and no
-    in-guest exec surface exists (tracked in the problem doc addendum).
+    S1a host-boundary hotfix CLOSED on deployed evidence: network
+    isolation + authority binding live (a3f0d48e), diag mode=http
+    oracle live (b15f012a), deployed refusal matrix PASSED on two
+    disposable accounts (d37408ee — 5/5 refusals incl. tap->tap
+    FORWARD drop + forged-identity 403/405; 5/5 legitimate flows
+    green: gateway, bound-owner CV resolve + maild, egress, product
+    page). Station S0 resumes at slice S0b (disposable-computer
+    probes). Discovered heresy carried: guest 'zot' PATH-shadowed by
+    third-party TUI agent (problem-doc addendum).
     Remaining in order:
-    (1) S1a deployed refusal-matrix receipt on two disposable accounts;
-    (2) S0b disposable-computer probes;
-    (3) the rest of S1, then S2.
-  source_ref: main@6ee52de5
-  deploy_identity: 'staging https://choir.news deployed_commit=a3f0d48e (S1a network+authority live, deployed 2026-10-04); owner guest computer-03335285269bdba4f94377e56879f9e6; Node B free disk ~96G after recurrence-2 reclaim'
+    (1) S0b disposable-computer probe suite (S0 station next_action:
+        capsule health map, M9a bundle, Go effect, snapshot/resume);
+    (2) the rest of S1 (runtime identity, token scrubbing,
+        capsule/yaegi floor), then S2.
+  source_ref: main@d37408ee
+  deploy_identity: 'staging https://choir.news deployed_commit=b15f012a (S1a boundary live + diag oracle, deployed 2026-10-04); owner guest computer-03335285269bdba4f94377e56879f9e6; Node B ~93G free'
   candidate:
     id: none
     state: none

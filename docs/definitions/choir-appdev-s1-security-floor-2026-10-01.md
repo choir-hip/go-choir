@@ -167,15 +167,14 @@ heresy_delta:
 now:
   status: working
   slice: >-
-    S1a host-boundary hotfix — implementation landed and deployed
-    (network isolation + authority binding per the repair record in
-    docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md;
-    deploy a3f0d48e). Remaining acceptance leg: the deployed
-    refusal-matrix receipt on two disposable accounts via the guest
-    HTTP probe oracle (b15f012a diag tcp-dial mode=http);
-    scripts/s1a_refusal_matrix_probe.mjs runs all legs guest-originated.
-  source_ref: main@6ee52de5
-  deploy_identity: 'staging https://choir.news deployed_commit=a3f0d48e (S1a network+authority live); refusal-matrix oracle deploys with b15f012a'
+    S1a host-boundary hotfix COMPLETE on deployed evidence: network
+    isolation + authority binding deployed (a3f0d48e) and the refusal
+    matrix passed on two disposable accounts (d37408ee,
+    docs/evidence/s1a-refusal-matrix-2026-10-04.json — 5/5 refusals,
+    5/5 legitimate flows green). S0b resumes next; the rest of S1
+    (runtime identity, token scrubbing, capsule/yaegi floor) remains.
+  source_ref: main@d37408ee
+  deploy_identity: 'staging https://choir.news deployed_commit=b15f012a (S1a network+authority + diag oracle live)'
   candidate:
     id: none
     state: none
@@ -231,9 +230,28 @@ now:
   blocker_or_risk: >-
     S4 and S9 must not execute against the current assumed guest boundary; an
     over-broad fix could sever the gateway or other approved guest services.
-  next_action: run the deployed refusal matrix on two disposable accounts once b15f012a is live; close S1a when its receipt lands.
+  next_action: S1a closed on the refusal-matrix receipt; run the S1a→S0b boundary protocol (panel + reporter + transition receipt) as S0b's disposable-computer probe suite begins.
 
-receipts: []
+receipts:
+  - id: s1a-refusal-matrix-2026-10-04
+    kind: deployed_acceptance
+    status: closed
+    closed_at: '2026-10-04T05:35:00Z'
+    deploy_identity: 'b15f012acab6e2e9d947c90d22739de947dfcee6 (S1a network+authority + diag mode=http oracle live on staging)'
+    evidence: docs/evidence/s1a-refusal-matrix-2026-10-04.json
+    note: >-
+      Two disposable accounts (A=computer-6450a253/10.200.220.2,
+      B=computer-cbcce1fa/10.200.221.2). All guest-originated through the
+      host-sourced diag oracle: R1 tap->tap FORWARD drop (connect timeout),
+      R2 vmctl internal 403, R3 maild forged owner 403, R4 corpusd mint
+      405 (loopback-only bypass), R5 proxy publish 405. Legitimate:
+      L1 gateway dial, L2 bound-owner CV resolve 200, L3 bound-owner
+      maild read 200, L4 egress dial, L5 product page 200.
+    heresy: >-
+      discovered: guest 'zot' resolves to the third-party TUI agent —
+      management-console spawn PATH-shadowed, no in-guest exec surface
+      (problem-doc addendum). introduced: none beyond the oracle itself
+      (host-sourced-only, GET, header-allowlisted).
 ---
 
 # S1 Security Floor
