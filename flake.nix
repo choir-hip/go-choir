@@ -283,6 +283,14 @@
 
     in
     let
+      # Host builder (S2): produces layered app-layer releases (nar +
+      # builder-receipt.json) for tracking-computer pushes. Deployed to
+      # Node B as a service pointer; no host systemd unit.
+      choirBuilder = mkGoService {
+        pname = "choir-builder";
+        subPackage = "cmd/choir-builder";
+      };
+
       # ── Guest VM artifacts ──────────────────────────────────────────────
       # The autoputer guest VM is defined as a NixOS configuration using
       # microvm.nix. From it we extract the individual artifacts that
@@ -326,6 +334,7 @@ EOF
         cat > $out/kernel-params <<'EOF'
 ${builtins.concatStringsSep " " vmConfig.microvm.kernelParams}
 EOF
+        cp ${vmConfig.environment.etc."choir-guest-image-manifest".source} $out/guest-image-manifest
       '';
 
       # Convenience package that bundles the canonical guest artifacts.
@@ -358,6 +367,7 @@ EOF
 
       packages.${system} = goChoirPackages // {
         default = self.packages.${system}.auth;
+        choir-builder = choirBuilder;
         # Expose the guest image as a top-level package for easy building:
         #   nix build .#guest-image
         inherit guest-image;

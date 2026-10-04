@@ -188,11 +188,19 @@ assert_contains "$autoputer_runtime_output" "autoputer runtime selected -> canon
 skill_runtime_output="$(run_classifier "skills/definition/SKILL.md")"
 assert_contains "$skill_runtime_output" "deploy_needed=true"
 assert_contains "$skill_runtime_output" "deploy_host_service=true"
-assert_contains "$skill_runtime_output" "deploy_host_os=true"
-assert_contains "$skill_runtime_output" "deploy_vmctl_restart=true"
-assert_contains "$skill_runtime_output" "deploy_active_vm_refresh=true"
+assert_contains "$skill_runtime_output" "deploy_host_os=false"
+assert_contains "$skill_runtime_output" "deploy_vmctl_restart=false"
+assert_contains "$skill_runtime_output" "deploy_active_vm_refresh=false"
+assert_contains "$skill_runtime_output" "deploy_app_layer=true"
 assert_contains "$skill_runtime_output" "host_services=autoputer"
 assert_contains "$skill_runtime_output" "skills/definition/SKILL.md -> autoputer runtime skill package"
+assert_contains "$skill_runtime_output" "autoputer runtime selected -> layered app-layer release push (no VM reboot)"
+
+skill_app_layer_output="$(run_classifier "skills/definition/SKILL.md")"
+assert_contains "$skill_app_layer_output" "deploy_app_layer=true"
+assert_contains "$skill_app_layer_output" "autoputer runtime selected -> layered app-layer release push (no VM reboot)"
+assert_contains "$skill_app_layer_output" "deploy_active_vm_refresh=false"
+assert_contains "$skill_app_layer_output" "deploy_host_os=false"
 
 tooling_scripts_output="$(
   run_classifier \

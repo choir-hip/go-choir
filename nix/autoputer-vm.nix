@@ -239,6 +239,12 @@ let
   '';
 in
 {
+  # The base-image identity contract in a stable guest-facing location: the
+  # updater reads it via --guest-image-manifest, and mkGuestImage exports it
+  # beside vmlinux/storedisk so the host builder's base-join inputs come
+  # from the deployed image itself (S2-g).
+  environment.etc."choir-guest-image-manifest".source = guestImageManifest;
+
   networking.hostName = "go-choir-autoputer";
 
   # Capsule overlays and the enforcing boot probe both require the module to

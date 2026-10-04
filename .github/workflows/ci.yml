@@ -558,6 +558,7 @@ jobs:
       deploy_host_os: ${{ steps.detect.outputs.deploy_host_os }}
       deploy_vmctl_restart: ${{ steps.detect.outputs.deploy_vmctl_restart }}
       deploy_active_vm_refresh: ${{ steps.detect.outputs.deploy_active_vm_refresh }}
+      deploy_app_layer: ${{ steps.detect.outputs.deploy_app_layer }}
       host_services: ${{ steps.detect.outputs.host_services }}
       class_explanation: ${{ steps.detect.outputs.class_explanation }}
     steps:
@@ -855,6 +856,7 @@ jobs:
           DEPLOY_FRONTEND: ${{ needs.deploy-impact.outputs.deploy_frontend }}
           DEPLOY_VMCTL_RESTART: ${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}
           DEPLOY_ACTIVE_VM_REFRESH: ${{ needs.deploy-impact.outputs.deploy_active_vm_refresh }}
+          DEPLOY_APP_LAYER: ${{ needs.deploy-impact.outputs.deploy_app_layer }}
           DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
           HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
         run: |
@@ -866,6 +868,7 @@ jobs:
             "DEPLOY_FRONTEND=$DEPLOY_FRONTEND"
             "DEPLOY_VMCTL_RESTART=$DEPLOY_VMCTL_RESTART"
             "DEPLOY_ACTIVE_VM_REFRESH=$DEPLOY_ACTIVE_VM_REFRESH"
+            "DEPLOY_APP_LAYER=$DEPLOY_APP_LAYER"
             "DEPLOY_HOST_OS=$DEPLOY_HOST_OS"
             "HOST_SERVICES=$HOST_SERVICES"
           )
@@ -1344,8 +1347,8 @@ jobs:
               autoputer_commit=$(verify_artifact_manifest /var/lib/go-choir/services/autoputer/share/go-choir/build.json autoputer)
               record_receipt_artifact autoputer "$autoputer_commit" installed
             fi
-            if [ "$autoputer_service_selected" = "true" ] && [ "${DEPLOY_ACTIVE_VM_REFRESH}" != "true" ]; then
-              echo "Autoputer runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact" >&2
+            if [ "$autoputer_service_selected" = "true" ] && [ "${DEPLOY_ACTIVE_VM_REFRESH}" != "true" ] && [ "${DEPLOY_APP_LAYER:-false}" != "true" ]; then
+              echo "Autoputer runtime selected without canonical guest boot refresh or app-layer push; refusing an undeployable service-pointer-only artifact" >&2
               exit 1
             fi
             if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ] && [ "$autoputer_service_selected" != "true" ]; then
@@ -1435,6 +1438,152 @@ jobs:
               echo "==> Skipping active computer refresh; ordinary guest image and autoputer runtime package unchanged"
             fi
             note_phase "active computer refresh"
+
+            if [ "${DEPLOY_APP_LAYER:-false}" = "true" ]; then
+              echo "==> App-layer release push: building layered release for tracking computers"
+              app_layer_start=$(date +%s)
+              builder_root=/var/lib/go-choir/builder
+              release_dir="$builder_root/releases/${DEPLOY_COMMIT}"
+              mkdir -p "$release_dir"
+              # choir-builder is deployed as a service pointer. Build the
+              # package at DEPLOY_COMMIT when the pointer is absent or stale
+              # (first deploy carrying this wiring), then install the pointer
+              # through the same atomic path as other host packages.
+              builder_bin=/var/lib/go-choir/services/choir-builder/bin/choir-builder
+              builder_commit=$(verify_artifact_manifest /var/lib/go-choir/services/choir-builder/share/go-choir/build.json choir-builder 2>/dev/null || true)
+              if [ "$builder_commit" != "$DEPLOY_COMMIT" ]; then
+                echo "    choir-builder pointer absent/stale (${builder_commit:-none}); building package at ${DEPLOY_COMMIT}"
+                nix build '.#choir-builder' -o /tmp/go-choir-choir-builder-result
+                install_service_pointer_from_src choir-builder "$(readlink -f /tmp/go-choir-choir-builder-result)"
+              fi
+              builder_bin=/var/lib/go-choir/services/choir-builder/bin/choir-builder
+              guest_manifest=/var/lib/go-choir/guest/guest-image-manifest
+              if [ ! -f "$guest_manifest" ]; then
+                echo "Guest image manifest missing at $guest_manifest - base join impossible" >&2
+                exit 1
+              fi
+              base_commit=$(awk -F= '$1=="build_commit"{print $2}' "$guest_manifest")
+              base_manifest_sha=$(sha256sum "$guest_manifest" | awk '{print $1}')
+              builder_out="$release_dir/out"
+              "$builder_bin" \
+                --installable '.#autoputer' \
+                --source-dir /opt/go-choir \
+                --base-manifest "$guest_manifest" \
+                --base-storedisk /var/lib/go-choir/guest/storedisk.erofs \
+                --out "$builder_out"
+              builder_receipt="$builder_out/builder-receipt.json"
+              nar="$builder_out/app-layer-closure.nar"
+              if [ ! -f "$nar" ] || [ ! -f "$builder_receipt" ]; then
+                echo "choir-builder did not produce app-layer-closure.nar + receipt" >&2
+                exit 1
+              fi
+              nar_sha=$(sha256sum "$nar" | awk '{print $1}')
+              receipt_sha=$(sha256sum "$builder_receipt" | awk '{print $1}')
+              runtime_path=$(jq -r '.runtime_path' "$builder_receipt")
+              entrypoint="${runtime_path#/nix/store/}/bin/autoputer"
+              code_commit=$(jq -r '.code_commit' "$builder_receipt")
+              schema_version=$(jq -r '.store_schema_version // 0' "$builder_receipt")
+              # Stage the nar through the platform-update blob endpoint so the
+              # guest's ref-carried payload fetch resolves it.
+              curl -fsS -X PUT -H "X-Internal-Caller: true" -H "Content-Type: application/octet-stream" \
+                --data-binary "@$nar" \
+                "http://127.0.0.1:8086/internal/computers/platform-updates/blob/${nar_sha}"
+              # Active tracking/canary computers accept a platform-follow update.
+              ownerships_json=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list)
+              mapfile -t app_layer_targets < <(printf '%s' "$ownerships_json" | jq -r '
+                .ownerships[]
+                | select(.state == "active")
+                | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
+                | select((.held // false) == false)
+                | select((.divergence_status // "tracking") == "tracking" or (.divergence_status // "") == "canary")
+                | [.user_id, .computer_id, .vm_id, .epoch]
+                | @tsv
+              ')
+              if [ "${#app_layer_targets[@]}" -eq 0 ]; then
+                echo "    No active tracking/canary computers; app-layer release built and staged (no push target)"
+                record_receipt_artifact app_layer_release "$code_commit" staged
+              else
+                app_layer_pushed=0
+                app_layer_failed=0
+                declare -A pushed_users=()
+                for record in "${app_layer_targets[@]}"; do
+                  IFS=$'\t' read -r t_user t_computer t_vm t_epoch <<< "$record"
+                  t_realization="${t_vm}-epoch-${t_epoch}"
+                  # Guest canonical head over corpusd (the apply's base binding).
+                  t_head=$(curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${t_user}" \
+                    "http://127.0.0.1:8086/internal/computers/events/head?computer_id=${t_computer}" 2>/dev/null | jq -r '.canonical_event_head // empty' || true)
+                  if [ -z "$t_head" ]; then
+                    echo "    ${t_vm}: canonical head unavailable; skipping"
+                    app_layer_failed=$((app_layer_failed + 1))
+                    continue
+                  fi
+                  t_update="app-layer-${DEPLOY_COMMIT:0:12}-$(date +%s)-${t_vm:0:12}"
+                  mint_payload=$(jq -n \
+                    --arg computer_id "$t_computer" \
+                    --arg update_id "$t_update" \
+                    --arg realization_id "$t_realization" \
+                    --arg base_event_head "$t_head" \
+                    --arg expires_at "$(date -u -d '+30 minutes' +%Y-%m-%dT%H:%M:%SZ)" \
+                    --arg marker "app-layer-${DEPLOY_COMMIT:0:12}" \
+                    --arg code_commit "$code_commit" \
+                    --arg base_manifest_digest "$base_manifest_sha" \
+                    --arg closure_digest "$nar_sha" \
+                    --arg entrypoint "$entrypoint" \
+                    --argjson schema_version "$schema_version" \
+                    --arg base_commit "$base_commit" \
+                    --arg receipt_digest "$receipt_sha" \
+                    --arg nar_sha "$nar_sha" \
+                    '{computer_id:$computer_id, update_id:$update_id, realization_id:$realization_id, base_event_head:$base_event_head, expires_at:$expires_at, marker:$marker, code_commit:$code_commit, base_image_manifest_digest:$base_manifest_digest, closure_digest:$closure_digest, layering_entrypoint:$entrypoint, store_schema_version:$schema_version, base_commit:$base_commit, builder_receipt_digest:$receipt_digest, files:[{path:"closure.nar", mode:420, ref:("artifact+sha256://" + $nar_sha + "/sha256/platform-update/" + $nar_sha)}], verifier_refs:[], divergence_status:"tracking", platform_follow_policy:"auto"}')
+                  offer=$(curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" \
+                    --data-binary "$mint_payload" \
+                    "http://127.0.0.1:8086/internal/computers/platform-updates/offer" || true)
+                  if ! echo "$offer" | jq -e '.authorization.signature' >/dev/null 2>&1; then
+                    echo "    ${t_vm}: offer mint refused: ${offer:0:400}" >&2
+                    app_layer_failed=$((app_layer_failed + 1))
+                    continue
+                  fi
+                  # Push through the autoputer proxy; the guest restarts
+                  # mid-apply, so the dead response is expected - the route
+                  # slot is the oracle.
+                  t_push=$(curl -sS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" \
+                    --data-binary "$(jq -n --argjson offer "$offer" '{offer:$offer}')" \
+                    "http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${t_user}/internal/runtime/platform-update?desktop=primary" 2>/dev/null || true)
+                  echo "    ${t_vm}: push response: ${t_push:0:200}"
+                  pushed_users[$t_computer]=$t_user
+                  app_layer_pushed=$((app_layer_pushed + 1))
+                done
+                # Time-to-healthy: poll every pushed computer's guest health
+                # through the autoputer proxy; the apply's own restart makes
+                # the push response unreliable, so the healthy window is the
+                # oracle.
+                push_deadline=$(( $(date +%s) + 420 ))
+                app_layer_healthy=0
+                while [ "$(date +%s)" -lt "$push_deadline" ]; do
+                  app_layer_healthy=0
+                  for t_computer in "${!pushed_users[@]}"; do
+                    t_user="${pushed_users[$t_computer]}"
+                    h=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' -H "X-Internal-Caller: true" \
+                      "http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${t_user}/health?desktop=primary" 2>/dev/null || true)
+                    if [ "$h" = "200" ]; then
+                      app_layer_healthy=$((app_layer_healthy + 1))
+                    fi
+                  done
+                  if [ "${#pushed_users[@]}" -gt 0 ] && [ "$app_layer_healthy" -ge "${#pushed_users[@]}" ]; then
+                    break
+                  fi
+                  sleep 10
+                done
+                t2h=$(( $(date +%s) - app_layer_start ))
+                echo "    app-layer push: ${app_layer_healthy}/${#pushed_users[@]} healthy, ${app_layer_failed} skipped, time-to-healthy=${t2h}s"
+                record_receipt_artifact app_layer_release "$code_commit" pushed
+                if [ "${#pushed_users[@]}" -gt 0 ] && [ "$app_layer_healthy" -eq 0 ]; then
+                  echo "App-layer push produced no healthy computer" >&2
+                  dump_deploy_service_diagnostics "app-layer push unhealthy"
+                  exit 1
+                fi
+              fi
+            fi
+            note_phase "app-layer release push"
 
             echo "==> Smoke test: health endpoints"
             for port in 8081 8082 8083 8084 8086 8087 8787; do
