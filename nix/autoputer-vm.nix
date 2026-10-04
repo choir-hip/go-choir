@@ -447,9 +447,8 @@ EOF
           choir.runtime_recovery_replay_only=*)
             echo "RUNTIME_RECOVERY_REPLAY_ONLY=''${param#choir.runtime_recovery_replay_only=}" >> "$ENV_FILE"
             ;;
-          choir.gateway_token=*)
-            echo "RUNTIME_GATEWAY_TOKEN=''${param#choir.gateway_token=}" >> "$ENV_FILE"
-            ;;
+          # The gateway token never rides kernel argv; it arrives on the
+          # root-only credential disk (S1 security-floor remainder).
         esac
       done
 
@@ -831,6 +830,9 @@ EOF
       PKG_CONFIG_PATH = "${pkgs.icu.dev}/lib/pkgconfig";
       RUNTIME_SKILLS_ROOT = "${goChoirPackages.autoputer}/share/go-choir/skills";
       CHOIR_BASELINE_RELEASE_ROOT = "${goChoirPackages.autoputer}";
+      # Autoputer identity token: read through the file on the root-only
+      # credential disk, never inherited via env by children.
+      RUNTIME_GATEWAY_TOKEN_FILE = "/run/choir-bootstrap/gateway-token";
       CHOIR_CAPSULE_BROKER_PATH = "${goChoirPackages.capsuleBroker}/bin/capsule-broker";
       CHOIR_CAPSULE_STATE_DIR = "/run/choir/capsules";
       CHOIR_CAPSULE_ARTIFACT_DIR = "/mnt/persistent/capsule-artifacts";

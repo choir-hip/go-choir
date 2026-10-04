@@ -789,8 +789,8 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		}
 	}
 
-	if cfg.ComputerCredentialEnvelope != "" {
-		credentialDiskPath, err := m.createCredentialDisk(vmStateDir, cfg.ComputerCredentialEnvelope)
+	if cfg.ComputerCredentialEnvelope != "" || strings.TrimSpace(cfg.GatewayToken) != "" {
+		credentialDiskPath, err := m.createCredentialDisk(vmStateDir, cfg.ComputerCredentialEnvelope, cfg.GatewayToken)
 		if err != nil {
 			return nil, fmt.Errorf("prepare appender credential disk for VM %s: %w", cfg.VMID, err)
 		}
@@ -1529,9 +1529,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	// can configure its network interface at boot time.
 	//
 	// The autoputer gateway token is a per-VM autoputer identity credential, not a
-	// provider secret. We pass it through kernel cmdline bootstrap because the
-	// guest's persistent data disk is not pre-seeded from the host-side
-	// PersistentDir before first boot.
+	// provider secret. It rides the root-only credential disk (gateway-token,
+	// mode 0400) instead of kernel argv so guest children cannot read it from
+	// world-readable /proc/cmdline (S1 security-floor remainder).
 	//
 	// With the upstream microvm.nix approach:
 	//   - start from the microvm-provided kernel params (`root=fstab`,
@@ -1570,9 +1570,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("ip=%s::%s:255.255.255.252::eth0:off", guestIP, hostIP),
 		}
 		runtimeArgs = append(runtimeArgs, guestIdentityKernelParams(cfg)...)
-		if cfg.GatewayToken != "" {
-			runtimeArgs = append(runtimeArgs, fmt.Sprintf("choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken)))
-		}
 		if cfg.RecoveryReplayOnly {
 			runtimeArgs = append(runtimeArgs, "choir.runtime_recovery_replay_only=1")
 		}
@@ -1605,9 +1602,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		}
 		for _, arg := range append(legacyRuntimeArgs, guestIdentityKernelParams(cfg)...) {
 			bootArgs += " " + arg
-		}
-		if cfg.GatewayToken != "" {
-			bootArgs += fmt.Sprintf(" choir.gateway_token=%s", kernelParamValue(cfg.GatewayToken))
 		}
 	}
 
@@ -2198,9 +2192,9 @@ func (m *Manager) copyFile(src, dst string) error {
 	return nil
 }
 
-func (m *Manager) createCredentialDisk(vmStateDir, encodedEnvelope string) (string, error) {
-	if strings.TrimSpace(encodedEnvelope) == "" {
-		return "", fmt.Errorf("credential envelope is required")
+func (m *Manager) createCredentialDisk(vmStateDir, encodedEnvelope, gatewayToken string) (string, error) {
+	if strings.TrimSpace(encodedEnvelope) == "" && strings.TrimSpace(gatewayToken) == "" {
+		return "", fmt.Errorf("credential disk requires an envelope or gateway token")
 	}
 	if os.Geteuid() != 0 || os.Getegid() != 0 {
 		return "", fmt.Errorf("credential disk construction requires root uid/gid")
@@ -2210,17 +2204,32 @@ func (m *Manager) createCredentialDisk(vmStateDir, encodedEnvelope string) (stri
 		return "", err
 	}
 	defer os.RemoveAll(stagingRoot)
-	credentialPath := filepath.Join(stagingRoot, "computer-event-envelope")
-	if err := os.WriteFile(credentialPath, []byte(encodedEnvelope+"\n"), 0o400); err != nil {
-		return "", err
+	if env := strings.TrimSpace(encodedEnvelope); env != "" {
+		if err := os.WriteFile(filepath.Join(stagingRoot, "computer-event-envelope"), []byte(env+"\n"), 0o400); err != nil {
+			return "", err
+		}
 	}
-	info, err := os.Lstat(credentialPath)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o400 {
-		return "", fmt.Errorf("credential staging inode must be a regular mode-0400 file")
+	// The autoputer gateway token rides the same root-only credential disk
+	// (read inside the guest via RUNTIME_GATEWAY_TOKEN_FILE), replacing the
+	// world-readable kernel-cmdline channel (S1 security-floor remainder).
+	if token := strings.TrimSpace(gatewayToken); token != "" {
+		if err := os.WriteFile(filepath.Join(stagingRoot, "gateway-token"), []byte(token+"\n"), 0o400); err != nil {
+			return "", err
+		}
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != 0 || stat.Gid != 0 {
-		return "", fmt.Errorf("credential staging inode must be root-owned")
+	for _, name := range []string{"computer-event-envelope", "gateway-token"} {
+		path := filepath.Join(stagingRoot, name)
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o400 {
+			return "", fmt.Errorf("credential staging inode %s must be a regular mode-0400 file", name)
+		}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || stat.Uid != 0 || stat.Gid != 0 {
+			return "", fmt.Errorf("credential staging inode %s must be root-owned", name)
+		}
 	}
 	temporaryImage, err := os.CreateTemp(vmStateDir, ".credential-*.img")
 	if err != nil {

@@ -181,9 +181,9 @@ func Run() {
 	}
 
 	if gatewayURL != "" {
-		gatewayToken := os.Getenv("RUNTIME_GATEWAY_TOKEN")
-		if strings.TrimSpace(gatewayToken) == "" {
-			log.Printf("autoputer: gateway provider configured without RUNTIME_GATEWAY_TOKEN; LLM calls will fail until the VM receives a autoputer credential")
+		gatewayToken := provideriface.GatewayToken()
+		if gatewayToken == "" {
+			log.Printf("autoputer: gateway provider configured without a token (RUNTIME_GATEWAY_TOKEN_FILE or RUNTIME_GATEWAY_TOKEN); LLM calls will fail until the VM receives a autoputer credential")
 		}
 		bridge := gatewayruntime.New(gatewayURL, gatewayToken)
 		bridge.SetRuntimeLLMConfig(rtCfg.LLMProvider, rtCfg.LLMModel, rtCfg.LLMReasoningEffort)

@@ -274,3 +274,20 @@ func float32Or(key string, fallback float32) float32 {
 	}
 	return float32(n)
 }
+
+// GatewayToken resolves the per-computer autoputer credential used to
+// authenticate to the host-side gateway. In guest images the token is
+// delivered on the root-only bootstrap credential disk and referenced by
+// RUNTIME_GATEWAY_TOKEN_FILE (readable by the autoputer, not by non-root
+// children); RUNTIME_GATEWAY_TOKEN remains the fallback for dev hosts and
+// older guests. File first so a dev env never shadows the delivered file.
+func GatewayToken() string {
+	if path := strings.TrimSpace(os.Getenv("RUNTIME_GATEWAY_TOKEN_FILE")); path != "" {
+		if data, err := os.ReadFile(path); err == nil {
+			if token := strings.TrimSpace(string(data)); token != "" {
+				return token
+			}
+		}
+	}
+	return strings.TrimSpace(os.Getenv("RUNTIME_GATEWAY_TOKEN"))
+}

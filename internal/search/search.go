@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
 // Client searches through the canonical runtime gateway.
@@ -71,7 +73,7 @@ func NewGatewayClientFromEnv() Client {
 	if baseURL == "" {
 		baseURL = strings.TrimSpace(os.Getenv("PROXY_VMCTL_URL"))
 	}
-	token := strings.TrimSpace(os.Getenv("RUNTIME_GATEWAY_TOKEN"))
+	token := provideriface.GatewayToken()
 	if baseURL == "" || token == "" {
 		return nil
 	}

@@ -1565,7 +1565,7 @@ func TestBuildFirecrackerConfig_IPConfigInBootArgs(t *testing.T) {
 	}
 }
 
-func TestBuildFirecrackerConfig_IncludesGatewayTokenBootstrapParam(t *testing.T) {
+func TestBuildFirecrackerConfig_GatewayTokenAbsentFromKernelArgs(t *testing.T) {
 	cfg := DefaultManagerConfig()
 	cfg.StateDir = t.TempDir()
 	cfg.KernelImagePath = "/opt/go-choir/guest/vmlinux"
@@ -1589,8 +1589,10 @@ func TestBuildFirecrackerConfig_IncludesGatewayTokenBootstrapParam(t *testing.T)
 
 	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9000)
 	bootArgs := fcConfig["boot-source"].(map[string]interface{})["boot_args"].(string)
-	if !containsStr(bootArgs, "choir.gateway_token=vm-gateway-token-test:abcdef123456") {
-		t.Fatalf("expected gateway token bootstrap arg in %q", bootArgs)
+	// The token rides the root-only credential disk; kernel argv is
+	// world-readable inside the guest (S1 security-floor remainder).
+	if strings.Contains(bootArgs, "choir.gateway_token") || strings.Contains(bootArgs, "vm-gateway-token-test:abcdef123456") {
+		t.Fatalf("gateway token leaked into kernel arguments: %q", bootArgs)
 	}
 }
 
@@ -1611,13 +1613,13 @@ func TestComputerCredentialUsesDedicatedDiskNotKernelArguments(t *testing.T) {
 		t.Fatal(err)
 	}
 	if os.Geteuid() != 0 || os.Getegid() != 0 {
-		if _, err := mgr.createCredentialDisk(vmStateDir, "signed-envelope-secret"); err == nil || !strings.Contains(err.Error(), "requires root") {
+		if _, err := mgr.createCredentialDisk(vmStateDir, "signed-envelope-secret", ""); err == nil || !strings.Contains(err.Error(), "requires root") {
 			t.Fatalf("non-root credential construction error = %v", err)
 		}
 		return
 	}
 	secret := "signed-envelope-secret"
-	credentialDisk, err := mgr.createCredentialDisk(vmStateDir, secret)
+	credentialDisk, err := mgr.createCredentialDisk(vmStateDir, secret, "gw-token-for-disk")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1648,7 +1650,7 @@ func TestComputerCredentialUsesDedicatedDiskNotKernelArguments(t *testing.T) {
 	}
 }
 
-func TestBuildFirecrackerConfig_LoadsPersistedGatewayTokenBootstrapParam(t *testing.T) {
+func TestBuildFirecrackerConfig_PersistedGatewayTokenStaysOffKernelArgs(t *testing.T) {
 	cfg := DefaultManagerConfig()
 	cfg.StateDir = t.TempDir()
 	cfg.KernelImagePath = "/opt/go-choir/guest/vmlinux"
@@ -1681,8 +1683,8 @@ func TestBuildFirecrackerConfig_LoadsPersistedGatewayTokenBootstrapParam(t *test
 
 	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9000)
 	bootArgs := fcConfig["boot-source"].(map[string]interface{})["boot_args"].(string)
-	if !containsStr(bootArgs, "choir.gateway_token="+token) {
-		t.Fatalf("expected persisted gateway token bootstrap arg in %q", bootArgs)
+	if strings.Contains(bootArgs, "choir.gateway_token") || strings.Contains(bootArgs, token) {
+		t.Fatalf("persisted gateway token leaked into kernel arguments: %q", bootArgs)
 	}
 }
 

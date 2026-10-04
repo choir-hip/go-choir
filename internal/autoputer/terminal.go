@@ -13,6 +13,7 @@ import (
 
 	"github.com/creack/pty/v2"
 	"github.com/gorilla/websocket"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -248,7 +249,7 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 			"CHOIR_BUILD_MOUNT=",
 		)
 		if !isFallbackZotSessionCommand(th.command) {
-			if token := strings.TrimSpace(os.Getenv("RUNTIME_GATEWAY_TOKEN")); token != "" {
+			if token := provideriface.GatewayToken(); token != "" {
 				env = append(env, "OPENAI_API_KEY="+token)
 			}
 		}
