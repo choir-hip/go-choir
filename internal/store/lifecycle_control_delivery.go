@@ -493,7 +493,7 @@ func (s *Store) BindLifecycleControlDelivery(ctx context.Context, req types.Bind
 			return types.LifecycleResult{}, err
 		}
 		objects = append(objects, updatedObj)
-		event := types.LifecycleEvent{EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1), OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID, WorkItemID: item.TargetWorkItemID, UpdateID: item.UpdateID, Kind: types.LifecycleControlDelivered, ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq, CommandID: req.CommandID, CommandDigest: req.CommandDigest, CreatedAt: now}
+		event := types.LifecycleEvent{EventID: req.CommandID + ":" + fmt.Sprintf("%d", len(events)+1), OwnerID: ownerID, ComputerID: computerID, TrajectoryID: req.TrajectoryID, WorkItemID: item.TargetWorkItemID, UpdateID: item.UpdateID, RunID: req.TargetRunID, AgentID: req.TargetAgentID, Kind: types.LifecycleControlDelivered, ReducerVersion: types.LifecycleReducerVersion, ReducerSeq: seq, CommandID: req.CommandID, CommandDigest: req.CommandDigest, CreatedAt: now}
 		events = append(events, event)
 		eventObj, err := lifecycleObject(ogKindLifecycleEvent, ownerID, computerID, event.EventID, event, lifecycleMetadata("event_id", event.EventID, computerID, req.TrajectoryID, seq), now, now)
 		if err != nil {

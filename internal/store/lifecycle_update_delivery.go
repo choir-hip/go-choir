@@ -82,6 +82,8 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 			TrajectoryID:   trajectoryID,
 			WorkItemID:     firstNonEmptyStore(update.ProducerWorkItemID, update.TargetWorkItemID),
 			UpdateID:       update.UpdateID,
+			RunID:          strings.TrimSpace(update.DeliveredToRunID),
+			AgentID:        update.TargetAgentID,
 			Kind:           kind,
 			ReducerVersion: types.LifecycleReducerVersion,
 			ReducerSeq:     seq,

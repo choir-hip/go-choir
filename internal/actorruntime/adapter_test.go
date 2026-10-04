@@ -2564,9 +2564,26 @@ func TestAdapterSQLitePreBindResearchRecoveryBindsAndExecutesWithoutSnapshot(t *
 	if loadErr != nil || stored.State != types.RunCompleted || counting.calls.Load() != 1 {
 		t.Fatalf("pre-bind recovery state=%s calls=%d err=%v metadata=%+v run=%s", stored.State, counting.calls.Load(), loadErr, stored.Metadata, stored.RunID)
 	}
-	delivered, deliveryErr := s.ListLifecycleControlsDeliveredToRun(ctx, ownerID, computerID, rec.TrajectoryID, rec.AgentID, rec.RunID, 10)
-	if deliveryErr != nil || len(delivered) != 1 || delivered[0].DeliveredToRunID != rec.RunID {
-		t.Fatalf("pre-bind recovery delivery=%+v err=%v", delivered, deliveryErr)
+	// Post-S0m invariant: a carrier run that terminalizes unconsumed releases
+	// its bound claim back to pending (research_checkpoint_fallback.go), so the
+	// live DeliveredToRunID must not be asserted. The durable delivery receipt is
+	// the control_delivered lifecycle event emitted inside the bind commit.
+	lifecycleEvents, eventErr := s.ListLifecycleEvents(ctx, ownerID, computerID, rec.TrajectoryID)
+	if eventErr != nil {
+		t.Fatalf("pre-bind recovery list lifecycle events: %v", eventErr)
+	}
+	deliveryEvents := 0
+	for _, event := range lifecycleEvents {
+		if event.Kind == types.LifecycleControlDelivered && event.RunID == rec.RunID && event.UpdateID != "" {
+			deliveryEvents++
+		}
+	}
+	if deliveryEvents != 1 {
+		runs, _ := s.ListLifecycleRunsByOwner(ctx, ownerID, computerID, 50)
+		for i, r := range runs {
+			t.Logf("fail-dump run[%d] id=%s agent=%s state=%s", i, r.RunID, r.AgentID, r.State)
+		}
+		t.Fatalf("pre-bind recovery control_delivered events=%d want=1", deliveryEvents)
 	}
 	if memory, err := adapter.log.LoadSnapshot(ctx, mailboxID); err != nil || len(memory) != 0 {
 		t.Fatalf("pre-bind recovery relied on snapshot memory=%q err=%v", memory, err)
