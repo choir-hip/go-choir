@@ -48,6 +48,10 @@ type platformUpdateOfferMintRequest struct {
 	StoreSchemaVersion    uint64 `json:"store_schema_version,omitempty"`
 	MinStoreSchemaVersion uint64 `json:"min_store_schema_version,omitempty"`
 	BaseCommit            string `json:"base_commit,omitempty"`
+	// S2-c provenance: the release declares the commit its binary was built
+	// from and the builder receipt digest it came from. The updater verifies
+	// the entrypoint's build.json commit before the pointer swap.
+	BuilderReceiptDigest string `json:"builder_receipt_digest,omitempty"`
 
 	Marker     string `json:"marker"`
 	CodeCommit string `json:"code_commit"`
@@ -225,6 +229,8 @@ func buildPlatformUpdateOffer(request platformUpdateOfferMintRequest, now time.T
 		StoreSchemaVersion:      request.StoreSchemaVersion,
 		MinStoreSchemaVersion:   request.MinStoreSchemaVersion,
 		BaseCommit:              request.BaseCommit,
+		CodeCommit:              request.CodeCommit,
+		BuilderReceiptDigest:    request.BuilderReceiptDigest,
 	})
 	if err != nil {
 		return selfdevprotocol.PlatformUpdateOffer{}, err

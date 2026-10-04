@@ -29,8 +29,16 @@ type Request struct {
 	BaseStoreDiskPath string
 	// OutDir is where the exported closure blob + evidence receipt land.
 	OutDir string
-	// CodeCommit is the repo commit the installable was built from.
+	// CodeCommit is the repo commit the installable was built from. When
+	// SourceDir is set the builder DERIVES it (git rev-parse HEAD) and
+	// this field is ignored — S2-c makes the builder the authority on what
+	// it built; a caller-supplied commit is not provenance.
 	CodeCommit string
+	// SourceDir is the checkout the installable is evaluated against. The
+	// builder derives CodeCommit from it and records whether the tree was
+	// dirty; when empty the caller's CodeCommit is used with
+	// provenance=caller.
+	SourceDir string
 }
 
 // parseBaseManifest reads the Nix-generated guest-image-manifest and returns
@@ -128,6 +136,20 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	// S2-c: the builder is the authority on what it built. Derive the code
+	// commit from the source checkout rather than trusting the caller.
+	codeCommit := req.CodeCommit
+	codeCommitSource := "caller"
+	sourceDirty := false
+	if req.SourceDir != "" {
+		derived, dirty, err := deriveSourceCommit(ctx, req.SourceDir)
+		if err != nil {
+			return nil, fmt.Errorf("builder: derive source commit: %w", err)
+		}
+		codeCommit = derived
+		codeCommitSource = "derived"
+		sourceDirty = dirty
+	}
 	closure, err := pathInfoClosure(ctx, outputPath)
 	if err != nil {
 		return nil, err
@@ -157,7 +179,9 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		ExportedPath:       blobPath,
 		DerivationPath:     drvPath,
 		OutputPath:         outputPath,
-		CodeCommit:         req.CodeCommit,
+		CodeCommit:         codeCommit,
+		CodeCommitSource:   codeCommitSource,
+		SourceDirty:        sourceDirty,
 		StoreSchemaVersion: storeschema.Version,
 		BuiltAt:            nowRFC3339(),
 	}

@@ -74,3 +74,4 @@ specs/states/
 # Agentic consensus session diagnostics (prompts, transcripts, manifests)
 .agentic-consensus/
 /choir-updater
+/choir-builder

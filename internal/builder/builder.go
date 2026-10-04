@@ -55,6 +55,14 @@ type ClosureResult struct {
 	// (named edge: a cross-commit patch build must carry the source's own
 	// epoch, S2-c/S2-f carry that join).
 	StoreSchemaVersion uint64 `json:"store_schema_version,omitempty"`
+	// CodeCommitSource records how CodeCommit was established: "derived"
+	// (git rev-parse HEAD inside SourceDir — S2-c provenance) or "caller"
+	// (trusted input, kept only for callers that cannot supply a checkout).
+	CodeCommitSource string `json:"code_commit_source,omitempty"`
+	// SourceDirty is true when SourceDir carried uncommitted changes at
+	// build time; recorded so the release's provenance is honest about
+	// reproducibility.
+	SourceDirty bool `json:"source_dirty,omitempty"`
 }
 
 // nixTimeout caps a single nix invocation. Eval and export on a warm store

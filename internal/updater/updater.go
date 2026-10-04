@@ -80,9 +80,18 @@ type ReleaseManifest struct {
 	// declared BaseCommit that differs from the booted base's — the
 	// commit-level provenance half of the base join (S2-d); the digest join
 	// stays the identity half.
-	BaseCommit    string         `json:"base_commit,omitempty"`
-	Files         []ManifestFile `json:"files"`
-	ContentDigest string         `json:"content_digest"`
+	BaseCommit string `json:"base_commit,omitempty"`
+	// CodeCommit is the repo commit the release binary was built from (S2-c
+	// provenance). When set on a layered release, the updater verifies the
+	// materialized entrypoint's share/go-choir/build.json commit before the
+	// pointer swap — a manifest cannot claim a commit the binary lacks.
+	CodeCommit string `json:"code_commit,omitempty"`
+	// BuilderReceiptDigest binds the release to a specific host-builder
+	// evidence receipt (sha256 of builder-receipt.json). Carried through the
+	// mint so the release's provenance chain is auditable end to end.
+	BuilderReceiptDigest string         `json:"builder_receipt_digest,omitempty"`
+	Files                []ManifestFile `json:"files"`
+	ContentDigest        string         `json:"content_digest"`
 }
 
 type ApplyRequest struct {

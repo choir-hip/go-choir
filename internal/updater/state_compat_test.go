@@ -208,3 +208,39 @@ func TestApplyRefusesDeclaredWindowWithoutReceipt(t *testing.T) {
 		t.Fatalf("unwired apply err=%v, want fail-closed refusal", err)
 	}
 }
+
+// S2-c: a layered release that names a code_commit must carry that commit in
+// the entrypoint's own share/go-choir/build.json — provenance fails closed
+// before the pointer swap.
+func TestApplyVerifiesEntrypointBuildCommit(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("testdata", "closure-layerdir.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	basePath, baseDigest := compatTestBase(t, "commit-abc123")
+	engine, _ := compatEngine(t, root, basePath, "")
+
+	entrypoint := "3l816rvxd4qv5xdf3r9lnm1mr1a0cgb1-layerdir/bin/autoputer"
+
+	// Matching commit: the fixture's build.json carries c8fb7834… — apply lands.
+	good := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-prov-ok", baseDigest, blob, entrypoint)
+	good.Manifest.CodeCommit = "c8fb78349781faef5ab648623919d394171d37ca"
+	if err := refinalizeRequest(&good); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := engine.Apply(context.Background(), good); err != nil || result.Outcome != "applied" {
+		t.Fatalf("provenance-matched apply = %+v err=%v", result, err)
+	}
+
+	// Mismatched commit: a manifest claiming a commit the binary lacks refuses.
+	bad := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-prov-bad", baseDigest, blob, entrypoint)
+	bad.Manifest.CodeCommit = strings.Repeat("9", 40)
+	if err := refinalizeRequest(&bad); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Apply(context.Background(), bad); err == nil || !strings.Contains(err.Error(), "build.json says") {
+		t.Fatalf("provenance-mismatched apply err=%v, want build.json refusal", err)
+	}
+}

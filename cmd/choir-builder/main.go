@@ -25,6 +25,7 @@ func main() {
 	baseDisk := flag.String("base-storedisk", "", "path to the deployed storedisk.erofs")
 	out := flag.String("out", "/var/lib/go-choir/builder", "output dir for closure blob + receipt")
 	commit := flag.String("commit", "", "repo commit the installable was built from")
+	sourceDir := flag.String("source-dir", "", "git checkout the installable is evaluated against; code_commit is derived from it (S2-c)")
 	resultLink := flag.String("result-link", "", "nix build result symlink path (default <out>/builder-result)")
 	flag.Parse()
 
@@ -37,6 +38,7 @@ func main() {
 	res, err := builder.Build(context.Background(), builder.Request{
 		Installable:       *installable,
 		ResultLink:        *resultLink,
+		SourceDir:         *sourceDir,
 		BaseManifestPath:  *baseManifest,
 		BaseStoreDiskPath: *baseDisk,
 		OutDir:            *out,
@@ -49,4 +51,5 @@ func main() {
 	fmt.Printf("runtime_path=%s\nclosure_paths=%d\nexported=%s sha256=%s\nbase_manifest_sha256=%s\nbase_storedisk_sha256=%s\nreceipt=%s\n",
 		res.RuntimePath, len(res.ClosurePaths), res.ExportedPath, res.ExportedDigest,
 		res.Base.GuestImageManifestDigest, res.Base.StoreDiskSHA256, *out+"/builder-receipt.json")
+	fmt.Printf("code_commit=%s (%s, dirty=%t)\n", res.CodeCommit, res.CodeCommitSource, res.SourceDirty)
 }

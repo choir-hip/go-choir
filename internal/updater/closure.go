@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -495,6 +496,39 @@ func (u *Updater) materializeReleaseClosure(releaseDir string, manifest ReleaseM
 		if strings.TrimSpace(string(staged)) != entry {
 			return fmt.Errorf("updater: staged layering entrypoint %q != resolved %q", strings.TrimSpace(string(staged)), entry)
 		}
+		// S2-c provenance: a release that names the commit its binary was
+		// built from must carry that commit in the binary's own build.json.
+		// The check runs before the pointer swap so a manifest that claims a
+		// commit the binary lacks can never activate — the hand-staged stale
+		// binary that crash-looped vm-3dc68688 could not mint this way.
+		if manifest.CodeCommit != "" {
+			if err := verifyEntrypointBuildCommit(entry, manifest.CodeCommit); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// verifyEntrypointBuildCommit reads share/go-choir/build.json from the
+// layer dir the entrypoint binary lives in (<layerdir>/bin/autoputer →
+// <layerdir>/share/go-choir/build.json) and requires its commit field to
+// equal the manifest's declared code_commit. buildGoModule binaries embed
+// their source commit there via the flake's mkGoService postInstall.
+func verifyEntrypointBuildCommit(entrypoint, wantCommit string) error {
+	layerDir := filepath.Dir(filepath.Dir(entrypoint))
+	raw, err := os.ReadFile(filepath.Join(layerDir, "share", "go-choir", "build.json"))
+	if err != nil {
+		return fmt.Errorf("updater: provenance check: read entrypoint build.json: %w", err)
+	}
+	var build struct {
+		Commit string `json:"commit"`
+	}
+	if err := json.Unmarshal(raw, &build); err != nil {
+		return fmt.Errorf("updater: provenance check: decode entrypoint build.json: %w", err)
+	}
+	if strings.TrimSpace(build.Commit) != strings.TrimSpace(wantCommit) {
+		return fmt.Errorf("updater: release declares code_commit %s but entrypoint build.json says %s", wantCommit, build.Commit)
 	}
 	return nil
 }
