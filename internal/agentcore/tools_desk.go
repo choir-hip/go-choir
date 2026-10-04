@@ -560,10 +560,26 @@ func (rt *Runtime) newestEmissionSeqTo(ctx context.Context, execCtx toolregistry
 // the trigger head, which only a turn commit writes. A cell that authored no
 // revision/decision still must answer the wake — the desk observed the owner
 // revision and chose to change nothing, which is the no_semantic_change turn.
+//
+// The decision_kind must describe what the cell actually did, because the
+// desk's authored acts (Ask/Resolve/Note/Report) are real work — the cell only
+// declined a *doc* write. Recording "no_worker_needed" for a cell that staged
+// an Ask launders a real act into "no act" (the s0m idle-mask defect): the
+// audit row then claims the desk did nothing and the run reads as a completed
+// no-op, destroying the retry signal. A cell that staged a semantic act but no
+// apply disposes the wake as delegation_skipped — the work went elsewhere, the
+// doc needed no edit. Only a cell that staged nothing at all is a true
+// no_semantic_change.
 func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaegikernel.StagedIntent) error {
+	stagedAct := false
 	for _, in := range intents {
 		if in.Kind == yaegikernel.IntentTextureApply {
 			return nil // the cell committed a real turn; the trigger consumed
+		}
+		// Any semantic act (ask/resolve/note/report/reply/message/…) counts as
+		// an act — the cell was not idle even though it authored no revision.
+		if strings.TrimSpace(in.Kind) != "" {
+			stagedAct = true
 		}
 	}
 	execCtx := toolregistry.ExecutionContextFrom(ctx)
@@ -600,12 +616,21 @@ func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaeg
 	if doc.CurrentRevisionID == "" {
 		return nil
 	}
+	// decision_kind names what the cell actually did so the audit row is honest:
+	// a staged act means the desk routed work off the doc (delegation_skipped);
+	// no staged act means it genuinely did nothing (no_worker_needed).
+	decisionKind := "no_worker_needed"
+	reason := "desk cell completed with no authoring act; consuming the owner revision"
+	if stagedAct {
+		decisionKind = "delegation_skipped"
+		reason = "desk cell committed an act off the texture doc (no revision needed); consuming the owner revision"
+	}
 	body, err := json.Marshal(map[string]any{
 		"op":               "decide",
 		"doc_id":           docID,
 		"base_revision_id": doc.CurrentRevisionID,
-		"decision_kind":    "no_worker_needed",
-		"reason":           "desk cell completed with no authoring act; consuming the owner revision",
+		"decision_kind":    decisionKind,
+		"reason":           reason,
 	})
 	if err != nil {
 		return err
