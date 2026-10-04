@@ -1,4 +1,4 @@
-# S0 finding: self-development operation wedges in `executing` after the proposal loop ends
+# S0 finding: self-development op sits in `executing` after the model's turn ends — no-op proposals are indistinguishable from a transport wedge
 
 **Date:** 2026-10-04
 **Status:** open. Observed on staging; no guest-side root cause yet (host
@@ -14,36 +14,35 @@ Operation `selfdev-0280c6cf2eac90dffb5c77912c0766a9` on disposable computer
 `computer-a99366facf24b872703de326d3b33832`, armed `propose_only` at
 `2026-10-04T07:28:53Z`.
 
-- Guest ran ten gateway inference rounds
+- Gateway log: ten inference rounds
   (`provider=opencode-go model=deepseek-v4.1-flash`, messages climbing
   5→17), last round `07:29:57` returning `text_len=93` — a terminal
-  (non-tool) response.
-- The operation record stayed `state: executing` for ≥16 minutes past
-  that round with `verifier_refs: []`, `bundle_digest: null`,
-  `error: null`, `updated_at` never advancing.
-- No guest-side `running_runs`/`running_processor_runs` — the loop is not
-  doing work; it is wedged between proposal-end and bundle-commit.
+  non-tool answer. No `freeze_capsule_effect_bundle` or
+  `record_self_development_verification` tool call was ever issued.
+- Op record: `state=executing`, `verifier_refs=[]`, `bundle_digest=null`,
+  `error=null`, `updated_at` never advanced past `created_at`.
+- Guest `/health`: `running_runs=0`, `running_processor_runs=0` — the
+  model's turn is over; nothing is doing work.
 - `replay-completeness` is `equivalent` (91 events applied, zero gaps) —
-  the tape is not the blocker; the op-state transition is.
+  the tape is not the blocker.
 
-## Mechanism (source-traced, not runtime-verified)
+## Mechanism (corrected — model agency, not a transport defect)
 
-`internal/selfdev/operations.go` state machine:
+`freeze_capsule_effect_bundle` is a tool call, not an automatic step.
+`internal/agentcore/tools_capsule.go:367` only runs when the model
+invokes it; the verifier transition `:488` runs when the model calls
+`record_self_development_verification`. The gateway log shows the model
+ended its turn on a terminal non-tool response (`text_len=93`) after 10
+rounds — it never called either tool, so the op legitimately stays
+`executing` with `verifier_refs` empty. This is the same class as S0m's
+`choir.Ask` non-call (recorded as an accepted edge there): the mechanism
+is intact; the model declined to use it.
 
-```text
-executing -> frozen (tools_capsule.go:367 FreezeGrantedWorktree commit)
-frozen    -> verified (tools_capsule.go:604)
-verified  -> awaiting_approval (tools_capsule.go:488)
-```
-
-The op is stuck at `executing` with `capsule_id` unset and `bundle_digest`
-null — the freeze never committed. The last gateway round at `07:29:57`
-returned a terminal non-tool response (`text_len=93`), which is where the
-model's turn ended; the executor-side `Freeze` + op-record transition that
-should have followed produced no journal entry and no error. Either the
-freeze call never returned, or it returned before the
-`Transition(executing, frozen)` write — both paths are silent from the
-host's view.
+The honest "proposal produced nothing committable" state has no
+representation: an op whose model never calls the freeze tool sits in
+`executing` forever with `error=null`, indistinguishable from a wedged
+transport. That is the real defect — not that the op didn't progress,
+but that a no-op proposal and a wedge look identical from outside.
 
 ## Why it matters
 
@@ -59,12 +58,15 @@ host's view.
 
 ## Fix direction
 
-Either (a) transition `executing → failed` with a recorded reason when
-the proposal loop ends without a bundle, or (b) commit a
-`proposal_uncommitable` marker so the op state is honest. (a) is simpler
-and matches the existing failure surface. Guest-side instrumentation is
-the real gap: the wedge is invisible because the loop's exit path is not
-logged.
+This is not a transport bug to fix but a visibility gap to close: the op
+state machine honestly records that the model's turn ended, and it stays
+`executing` because no terminal transition is warranted (the model may
+still call the freeze tool on a future turn — there is no op-level
+timeout that makes "model declined" a terminal verdict). The repair is
+instrumentation: log the proposal loop's terminal tool-name (or
+"end_of_turn_no_tool") so a no-op proposal is distinguishable from a
+wedge without reading gateway logs, and surface `model_turn_ended` on
+the op record. The state machine itself is correct.
 
 ## Verification
 

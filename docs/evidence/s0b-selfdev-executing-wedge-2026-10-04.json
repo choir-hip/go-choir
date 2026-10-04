@@ -34,13 +34,12 @@
       "result": "equivalent",
       "tail_events_applied": 91,
       "live_only": 0,
-      "replay_only": 0,
-      "different": 0
+      "replay_only": 0
     }
   },
-  "verdict": "wedge",
-  "wedge_kind": "proposal_loop_end_without_bundle_or_error",
-  "mechanism": "propose_only op: proposal loop ran 10 inference rounds and returned a terminal non-tool answer; no bundle committed, no failure transition fired; op state stuck at 'executing' with verifier_refs empty",
+  "verdict": "no_op_proposal_wedged_executing",
+  "wedge_kind": "model_ended_turn_without_freeze_tool_call",
+  "mechanism": "propose_only op: model ran 10 inference rounds and ended on a terminal non-tool answer; freeze_capsule_effect_bundle (tools_capsule.go:367) is a model tool call, never invoked -> op legitimately stays executing; no error representation for 'model declined to propose'",
   "evidence_chain": [
     "gateway journal (node-b): ten opencode-go inference rounds ending 07:29:57 text_len=93",
     "ops record: state=executing, verifier_refs=[], bundle_digest=null, error=null, updated_at==created_at",
@@ -52,7 +51,7 @@
     "observed": false,
     "cell_evaluated": false,
     "marker_written": false,
-    "reason": "op wedged in executing before bundle formed; no apply, no checkpoint publish, no marker"
+    "reason": "model ended turn without calling freeze_capsule_effect_bundle; op legitimately stays executing — not a transport defect"
   },
   "boundary_implication": "S2 builder-substrate decision remains without a runtime-observed Go effect; the send_back panel named this exact gap"
 }
