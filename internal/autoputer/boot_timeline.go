@@ -640,10 +640,22 @@ var diagHTTPProbeHeaderAllowlist = map[string]bool{
 	"x-authenticated-user": true,
 }
 
-// handleDiagHTTPProbe issues one bounded GET http://addr<path> from inside the
-// guest and reports status + a truncated body prefix. GET-only: the oracle
-// measures whether host-internal endpoints honor forged identity headers, it
-// must never mutate state on the target service.
+// diagHTTPProbePostPathAllowlist bounds which paths accept method=post. Only
+// the two S1a refusal endpoints that are POST-only — the corpusd
+// platform-update mint and the proxy wire publish — may carry a method other
+// than GET; anything else would let the oracle mutate arbitrary
+// guest-reachable state.
+var diagHTTPProbePostPathAllowlist = map[string]bool{
+	"/internal/computers/platform-updates/offer":   true,
+	"/internal/wire/platform/publications/texture": true,
+}
+
+// handleDiagHTTPProbe issues one bounded http://addr<path> request from inside
+// the guest and reports status + a truncated body prefix. GET by default;
+// method=post is accepted only for the path allowlist above so the refusal
+// matrix can exercise the real POST authority legs. The oracle measures
+// whether host-internal endpoints honor forged identity headers; it must
+// never mutate state on the target service.
 func handleDiagHTTPProbe(w http.ResponseWriter, r *http.Request, addr string) {
 	path := strings.TrimSpace(r.URL.Query().Get("path"))
 	if path == "" {
@@ -674,13 +686,30 @@ func handleDiagHTTPProbe(w http.ResponseWriter, r *http.Request, addr string) {
 		}
 		headers[strings.TrimSpace(name)] = strings.TrimSpace(value)
 	}
+	// POST is permitted only to path-allowlisted refusal targets: the S1a
+	// authority-binding legs are POST-only endpoints (corpusd mint, proxy
+	// wire publish), and the refusal matrix needs the real method to
+	// distinguish a 403 authority denial from a pre-fix 405 method reject.
+	method := http.MethodGet
+	if strings.EqualFold(r.URL.Query().Get("method"), "post") {
+		if !diagHTTPProbePostPathAllowlist[path] {
+			http.Error(w, "path not post-allowlisted", http.StatusBadRequest)
+			return
+		}
+		method = http.MethodPost
+	}
 	started := time.Now()
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+path, nil)
+	// Empty body: the refusal matrix measures whether authority is denied,
+	// not whether a payload is accepted. Every POST probe carries "{}".
+	req, err := http.NewRequestWithContext(ctx, method, "http://"+addr+path, strings.NewReader("{}"))
 	if err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
+	}
+	if method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	for name, value := range headers {
 		req.Header.Set(name, value)

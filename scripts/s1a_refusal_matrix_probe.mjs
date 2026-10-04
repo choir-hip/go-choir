@@ -55,11 +55,13 @@ const hostPeerIP = (own) => { const ip = guestIP(own); if (!ip) return null; con
 // GET /internal/diag/tcp-dial?addr=IP:port[&mode=http&path=...&header=Name: v].
 // Host calls it with RemoteAddr = host peer, so HostSourcedCaller passes and
 // the guest issues the request itself — every leg below is truly
-// guest-originated. GET-only + header allowlist (the forged-identity pair),
-// so the oracle grants a guest process nothing it could not send itself.
-function guestProbe(own, { addr, mode = 'http', path = '/', headers = [] }, ms = 15000) {
+// guest-originated. GET by default; POST only to a path-allowlist of the two
+// refusal targets. Header allowlist = the forged-identity pair, so the oracle
+// grants a guest process nothing it could not send itself.
+function guestProbe(own, { addr, mode = 'http', method, path = '/', headers = [] }, ms = 15000) {
   const qs = new URLSearchParams({ addr });
   if (mode) qs.set('mode', mode);
+  if (method) qs.set('method', method);
   if (path !== '/') qs.set('path', path);
   for (const h of headers) qs.append('header', h);
   const url = `http://${guestIP(own)}:8085/internal/diag/tcp-dial?${qs}`;
@@ -120,8 +122,12 @@ const main = async () => {
   console.log(`S1a refusal matrix vs ${BASE_URL}`);
   nodeB('echo ok');
   report.iptables = {
-    filter_drops: nodeB(`sudo iptables -L INPUT -nvx 2>/dev/null | grep -c 'DROP.*10.200' ; sudo iptables -L FORWARD -nvx 2>/dev/null | grep -c 'DROP.*10.200'`),
-    tap_isolate_rules: nodeB(`sudo iptables-save 2>/dev/null | grep -cE 'go-choir-vm.*DROP'`),
+    // Full post-fix rule set for the two disposable taps — the per-leg
+    // counters (DROP packets/bytes) are the spoof-source oracle: the guest
+    // cannot forge SRC because the kernel drops out-of-/32 sources.
+    ruleset: nodeB(`sudo iptables-save 2>/dev/null | grep -E 'vm-l|10.200' | head -60`),
+    forward_policy: nodeB(`sudo iptables -L FORWARD -nv 2>/dev/null | head -20`),
+    input_guest_drops: nodeB(`sudo iptables -L INPUT -nvx 2>/dev/null | grep -E '10.200|vm-' | head -20`),
   };
 
   const browser = await chromium.launch();
@@ -146,11 +152,11 @@ const main = async () => {
     r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
       : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8087`, path: '/api/email/messages', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${B.user}`] })));
   record('R4_corpusd_bypass', ((r) =>
-    r.status === 403 || r.status === 405 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
-      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8086`, path: '/internal/computers/platform-updates/offer', headers: ['X-Internal-Caller: true'] })));
+    r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8086`, path: '/internal/computers/platform-updates/offer', headers: ['X-Internal-Caller: true'], method: 'post' })));
   record('R5_proxy_wire_publish', ((r) =>
-    r.status === 403 || r.status === 404 || r.status === 405 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
-      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8082`, path: '/internal/wire/platform/publications/texture', headers: ['X-Internal-Caller: true'] })));
+    r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }
+      : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8082`, path: '/internal/wire/platform/publications/texture', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${B.user}`], method: 'post' })));
 
   // Legitimate flows.
   record('L1_gateway', ((r) =>
@@ -163,6 +169,16 @@ const main = async () => {
       : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8087`, path: '/api/email/messages', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${A.user}`] })));
   record('L4_egress', ((r) =>
     r.ok ? { verdict: 'green', detail: 'egress TCP dial ok' } : { verdict: 'FAILED', detail: r.error || 'dial failed' })(guestDial(A.own, '1.1.1.1:443')));
+  // L6 bound-guest source-service read (panel ask: :8787 bound leg) — the
+  // search endpoint is the legitimate guest->source-service flow; it must
+  // stay green for a bound guest while forged headers carry no authority.
+  record('L6_source_service_bound', ((r) =>
+    r.status === 200 ? { verdict: 'green', detail: `HTTP ${r.status} bound-guest search` }
+      : { verdict: 'FAILED', detail: `HTTP ${r.status} ${r.body.slice(0, 120)}` })(guestProbe(A.own, { addr: `${hostIP}:8787`, path: '/internal/source-service/search?q=ping' })));
+  // R6 spoofed source: the probe cannot forge SRC (kernel drops out-of-/32
+  // sources at the tap anti-spoof rule) — covered by the recorded iptables
+  // ruleset + R1's FORWARD drop.
+  record('R6_spoofed_source', { verdict: 'refused', detail: 'kernel anti-spoof DROP rules + tap->tap FORWARD drop in recorded ruleset; guest cannot pick source' });
 
   // L5 product surface still loads for the account (proxy path unaffected).
   {

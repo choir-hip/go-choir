@@ -69,6 +69,50 @@ func TestDiagHTTPProbeRefusesNonAllowlistedHeader(t *testing.T) {
 	}
 }
 
+// The POST legs are the ones that prove authority binding: a GET to a
+// POST-only route is 405 pre- and post-fix. POST is gated to a path
+// allowlist so the oracle cannot mutate arbitrary state.
+func TestDiagHTTPProbePostReachesAllowlistedRefusalTarget(t *testing.T) {
+	var gotMethod, gotInternal string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotInternal = r.Header.Get("X-Internal-Caller")
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer target.Close()
+	addr := strings.TrimPrefix(target.URL, "http://")
+
+	q := fmt.Sprintf("addr=%s&mode=http&method=post&path=/internal/computers/platform-updates/offer"+
+		"&header=X-Internal-Caller%%3A%%20true", addr)
+	req := hostSourcedRequest("/internal/diag/tcp-dial?" + q)
+	rec := httptest.NewRecorder()
+	handleDiagTCPDial(rec, req)
+
+	var out map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out["status"] != float64(http.StatusForbidden) {
+		t.Fatalf("status = %v, want 403", out["status"])
+	}
+	if gotMethod != http.MethodPost {
+		t.Fatalf("target saw method %q, want POST", gotMethod)
+	}
+	if gotInternal != "true" {
+		t.Fatalf("target saw X-Internal-Caller %q, want true", gotInternal)
+	}
+}
+
+// POST to a non-allowlisted path must be refused by the oracle itself.
+func TestDiagHTTPProbePostRefusesNonAllowlistedPath(t *testing.T) {
+	req := hostSourcedRequest("/internal/diag/tcp-dial?addr=127.0.0.1:8086&mode=http&method=post&path=/internal/vmctl/refresh")
+	rec := httptest.NewRecorder()
+	handleDiagTCPDial(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for non-allowlisted POST path", rec.Code)
+	}
+}
+
 // The probe is GET-only by construction: it must never carry a caller's method
 // or body to the target.
 func TestDiagTCPDialRejectsNonGet(t *testing.T) {
