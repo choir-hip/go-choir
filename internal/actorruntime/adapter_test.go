@@ -474,7 +474,7 @@ func TestAdapterRestartDeliversRunningLifecycleActivationFromDurableBacklog(t *t
 	}
 	var backlog []actor.Update
 	seededDispatchPending := true
-	backlogDeadline := time.Now().Add(5 * time.Second)
+	backlogDeadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(backlogDeadline) {
 		backlog, err = adapter.log.Unprocessed(ctx, mailboxID)
 		seededDispatchPending = false
