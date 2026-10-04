@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -164,12 +165,177 @@ func TestApplyMaterializesLayeredClosureAndGcRoots(t *testing.T) {
 	if target, err := os.Readlink(gcLink); err != nil || target != materialized {
 		t.Fatalf("gc-root link = %q err=%v, want %q", target, err, materialized)
 	}
-	// The runtime wrapper reads the recorded entrypoint path.
-	entryBytes, err := os.ReadFile(filepath.Join(root, "layering-entrypoint"))
+	// The exec pointer travels inside the release dir so the current/ swap
+	// moves it atomically (S2-e); the wrapper reads current/layering-entrypoint.
+	current, err := os.Readlink(filepath.Join(root, "current"))
 	if err != nil {
-		t.Fatalf("layering entrypoint not recorded: %v", err)
+		t.Fatalf("read current: %v", err)
+	}
+	entryBytes, err := os.ReadFile(filepath.Join(current, "layering-entrypoint"))
+	if err != nil {
+		t.Fatalf("layering entrypoint not recorded in release dir: %v", err)
 	}
 	if strings.TrimSpace(string(entryBytes)) != materialized {
 		t.Fatalf("layering-entrypoint = %q, want %q", entryBytes, materialized)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "layering-entrypoint")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy root layering-entrypoint must not exist: %v", err)
+	}
+}
+
+// layeredRequestFixture builds a layered apply request carrying the given
+// narchive blob and private-store-relative exec path. blobName makes each
+// release's closure.nar digest distinct so two layered releases stage as
+// different release dirs.
+func layeredRequestFixture(t *testing.T, root, computerID, realizationID, operationID, baseDigest string, blob []byte, entrypoint string) ApplyRequest {
+	t.Helper()
+	request := updaterRequestFixture(t, root, computerID, realizationID, operationID, "idem-"+operationID, "layered payload")
+	closurePath := filepath.Join(request.SourceDir, "closure.nar")
+	if err := os.WriteFile(closurePath, blob, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	closureSum, err := fileSHA256(closurePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Manifest.Files = append(request.Manifest.Files, ManifestFile{Path: "closure.nar", SHA256: closureSum, Mode: 0o444})
+	request.Manifest.ClosureDigest = closureSum
+	request.Manifest.BaseImageManifestDigest = baseDigest
+	request.Manifest.LayeringEntrypoint = entrypoint
+	if err := refinalizeRequest(&request); err != nil {
+		t.Fatal(err)
+	}
+	return request
+}
+
+func layeredTestBase(t *testing.T) (string, string) {
+	t.Helper()
+	baseDir := t.TempDir()
+	baseManifestPath := filepath.Join(baseDir, "guest-image-manifest.json")
+	if err := os.WriteFile(baseManifestPath, []byte(`{"schema":"choir-guest-image-v1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := DigestFile(baseManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return baseManifestPath, digest
+}
+
+func currentEntrypoint(t *testing.T, root string) string {
+	t.Helper()
+	current, err := os.Readlink(filepath.Join(root, "current"))
+	if err != nil {
+		return ""
+	}
+	raw, err := os.ReadFile(filepath.Join(current, "layering-entrypoint"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+// S2-e rollback atomicity: the exec pointer lives inside the release dir,
+// so a failed layered apply's recovery swap restores the prior release's
+// exec entrypoint with the same pointer — no global file can keep pointing
+// at the failed release.
+func TestApplyRestoresPriorLayeredEntrypoint(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	dirBlob, err := os.ReadFile(filepath.Join("testdata", "closure-dir.nar"))
+	if err != nil {
+		t.Skipf("dir closure fixture absent: %v", err)
+	}
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	baseManifestPath, bootedDigest := layeredTestBase(t)
+	prober := &fakeHealthProber{}
+	engine, err := NewWithBase(root, "computer-test", "realization-test", &fakeServiceManager{}, prober,
+		testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}},
+		baseManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	good := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-good", bootedDigest, blob, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	if result, err := engine.Apply(context.Background(), good); err != nil || result.Outcome != "applied" {
+		t.Fatalf("prior layered apply = %+v, %v", result, err)
+	}
+	priorEntry := currentEntrypoint(t, root)
+	wantPrior := filepath.Join(root, "store", "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	if priorEntry != wantPrior {
+		t.Fatalf("prior entrypoint = %q, want %q", priorEntry, wantPrior)
+	}
+
+	// A health-failing layered apply whose own exec pointer resolves must be
+	// rolled back to the prior release's entrypoint, not left pointing at the
+	// failed release (the pre-S2-e global-file defect).
+	dirPaths, err := MaterializeClosure(dirBlob, filepath.Join(root, "probe-store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dirPaths) == 0 {
+		t.Fatal("dir fixture materialized no store paths")
+	}
+	// The dir fixture's store basename resolves under the private store, so
+	// the apply stages and probes before failing — exercising recovery.
+	bad := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-bad", bootedDigest, dirBlob, dirPaths[0])
+	prober.failDigest = bad.Manifest.ContentDigest
+	result, err := engine.Apply(context.Background(), bad)
+	if err == nil || result.Outcome != "failed" || result.RecoveryReceipt == nil {
+		t.Fatalf("failed layered apply = %+v err=%v", result, err)
+	}
+	if got := currentEntrypoint(t, root); got != wantPrior {
+		t.Fatalf("entrypoint after recovery = %q, want restored prior %q", got, wantPrior)
+	}
+}
+
+// Pre-S2-e staged layered releases carry no in-dir entrypoint; restaging one
+// must backfill the pointer so exec follows the swap.
+func TestRestagePinnedBackfillsLegacyLayeredEntrypoint(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	baseManifestPath, bootedDigest := layeredTestBase(t)
+	engine, err := NewWithBase(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{},
+		testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}},
+		baseManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-legacy", bootedDigest, blob, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	if _, err := engine.Apply(context.Background(), request); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	releaseDir := filepath.Join(root, "releases", request.Manifest.ContentDigest)
+	entryPath := filepath.Join(releaseDir, "layering-entrypoint")
+	// Simulate a pre-S2-e staged dir: remove the pointer file.
+	makeTreeWritable(releaseDir)
+	if err := os.Remove(entryPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestagePinnedRelease(root, request.Manifest.ContentDigest); err != nil {
+		t.Fatalf("restage: %v", err)
+	}
+	raw, err := os.ReadFile(entryPath)
+	if err != nil {
+		t.Fatalf("backfilled entrypoint missing: %v", err)
+	}
+	want := filepath.Join(root, "store", "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	if strings.TrimSpace(string(raw)) != want {
+		t.Fatalf("backfilled entrypoint = %q, want %q", raw, want)
 	}
 }

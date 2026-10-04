@@ -147,13 +147,53 @@ let
     # guest boot is a worse failure than running the baseline.
     priv_store="$CHOIR_UPDATER_ROOT/store"
     overlay_work="$CHOIR_UPDATER_ROOT/.overlay-work"
-    # The updater records the applied release's store-path entrypoint; exec
-    # it (inside the overlay) so the release binary's own deps resolve.
+    # The exec pointer lives inside the release dir, so the updater's
+    # current/ swap moves served frontend and exec atomically and recovery
+    # restores the prior exec with the same pointer (S2-e rollback
+    # atomicity). A plain release carries no pointer and execs the base.
     release_bin=""
-    if [ -f "$CHOIR_UPDATER_ROOT/layering-entrypoint" ]; then
-      release_bin="$(head -1 "$CHOIR_UPDATER_ROOT/layering-entrypoint" 2>/dev/null)"
+    if [ -f "$CHOIR_UPDATER_ROOT/current/layering-entrypoint" ]; then
+      release_bin="$(head -1 "$CHOIR_UPDATER_ROOT/current/layering-entrypoint" 2>/dev/null)"
     fi
-    if [ -n "$release_bin" ] && [ -x "$release_bin" ] && [ -d "$priv_store" ] && [ -n "$(ls -A "$priv_store" 2>/dev/null)" ]; then
+    # Boot-loop guard: a layered release that fails to stay started 3 times
+    # inside 60s is refused further exec attempts; the base runtime serves
+    # instead with CHOIR_LAYERING_BOOTGUARD set so /health reports
+    # layering_bootguard (failing the apply probe and flagging the trip),
+    # and a host-readable receipt records the key, the count, and the time.
+    # The guard key is the release dir basename, so recovery/restage of a
+    # different release — or the same release after a manual retry — is not
+    # penalized by the failed release's count.
+    layering_guarded=""
+    if [ -n "$release_bin" ]; then
+      g_key="$(basename "$(readlink "$CHOIR_UPDATER_ROOT/current" 2>/dev/null || echo unknown)")"
+      g_dir="$CHOIR_UPDATER_ROOT/bootguard"
+      mkdir -p "$g_dir" 2>/dev/null || true
+      g_file="$g_dir/$g_key"
+      now_s="$(date +%s 2>/dev/null || echo 0)"
+      g_count=0
+      g_since=0
+      if [ -f "$g_file" ]; then
+        g_count="$(sed -n '1p' "$g_file" 2>/dev/null || echo 0)"
+        g_since="$(sed -n '2p' "$g_file" 2>/dev/null || echo 0)"
+      fi
+      [ -z "$g_count" ] && g_count=0
+      [ -z "$g_since" ] && g_since=0
+      case $g_count in *[!0-9]*) g_count=0 ;; esac
+      case $g_since in *[!0-9]*) g_since=0 ;; esac
+      if [ "$((now_s - g_since))" -gt 60 ]; then
+        g_count=0
+        g_since="$now_s"
+      fi
+      g_count=$((g_count + 1))
+      printf '%s\n%s\n' "$g_count" "$g_since" > "$g_file" 2>/dev/null || true
+      if [ "$g_count" -ge 3 ]; then
+        layering_guarded="$g_key"
+        printf '{"release_key":"%s","starts":%s,"first_start_epoch":%s,"tripped_epoch":%s}\n' \
+          "$g_key" "$g_count" "$g_since" "$now_s" > "$g_dir/$g_key.tripped" 2>/dev/null || true
+        echo "go-choir-autoputer: layering bootguard tripped for release $g_key after $g_count starts; serving base runtime" >&2
+      fi
+    fi
+    if [ -z "$layering_guarded" ] && [ -n "$release_bin" ] && [ -x "$release_bin" ] && [ -d "$priv_store" ] && [ -n "$(ls -A "$priv_store" 2>/dev/null)" ]; then
       mkdir -p "$overlay_work" || true
       # The release's own root (frontend, share, skills) is its layerdir —
       # point the baseline root at it so the computer surface serves the
@@ -171,6 +211,7 @@ let
       {
         echo "=== layering attempt $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true) ==="
         echo "release_bin=$release_bin"
+        echo "guard_key=$(basename "$(readlink "$CHOIR_UPDATER_ROOT/current" 2>/dev/null || echo unknown)")"
         ${pkgs.util-linux}/bin/unshare -m --propagation private ${pkgs.runtimeShell} -c "
           echo unshare_ok
           ${pkgs.util-linux}/bin/mount -t overlay overlay -o lowerdir=/nix/store,upperdir='$priv_store',workdir='$overlay_work' /nix/store && echo mount_ok || echo mount_fail:\$?
@@ -190,6 +231,9 @@ let
         echo "go-choir-autoputer: store overlay unavailable; exec'ing release directly" >&2
         exec "$release_bin" "$@"
       }
+    fi
+    if [ -n "$layering_guarded" ]; then
+      export CHOIR_LAYERING_BOOTGUARD="$layering_guarded"
     fi
     exec ${goChoirPackages.autoputer}/bin/autoputer "$@"
   '';

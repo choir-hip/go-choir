@@ -407,16 +407,33 @@ func writeNarFile(target string, contents []byte, mode os.FileMode) error {
 	return os.Chmod(target, mode)
 }
 
+// resolveLayeringEntrypoint maps the manifest's private-store-relative
+// exec path to its absolute materialized path under storeRoot. It refuses
+// a path that escapes the private store; empty LayeringEntrypoint means a
+// plain file release (no exec override).
+func resolveLayeringEntrypoint(storeRoot string, manifest ReleaseManifest) (string, error) {
+	if manifest.LayeringEntrypoint == "" {
+		return "", nil
+	}
+	rel := filepath.Clean("/" + manifest.LayeringEntrypoint)
+	if rel == "/" || strings.HasPrefix(rel, "/../") || rel == "/.." {
+		return "", fmt.Errorf("updater: layering entrypoint %q escapes the private store", manifest.LayeringEntrypoint)
+	}
+	return filepath.Join(storeRoot, rel), nil
+}
+
 // materializeReleaseClosure replays a layered release's `closure.nar` into
 // the updater's private store (u.root/store) and GC-roots it under
 // u.root/gc-roots/<releaseDigest>. No-op for plain file releases (empty
 // ClosureDigest). Runs inside Apply between stageRelease and the pointer
 // swap, so a replay failure leaves the running release untouched.
 func (u *Updater) materializeReleaseClosure(releaseDir string, manifest ReleaseManifest) error {
-	// A prior layered release may have recorded an entrypoint; remove it so a
-	// later plain (or replacement-layered) apply does not exec stale state.
+	// Pre-S2-e updater roots recorded a global layering-entrypoint file
+	// outside the release dir. The entrypoint now travels inside each
+	// release dir so the current/ swap moves exec atomically; remove the
+	// legacy pointer so nothing can exec or mistake the stale path.
 	if err := os.Remove(filepath.Join(u.root, "layering-entrypoint")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("updater: clear stale layering entrypoint: %w", err)
+		return fmt.Errorf("updater: clear legacy layering entrypoint: %w", err)
 	}
 	if manifest.ClosureDigest == "" {
 		return nil
@@ -450,17 +467,33 @@ func (u *Updater) materializeReleaseClosure(releaseDir string, manifest ReleaseM
 		}
 	}
 
-	// Record the release's exec entrypoint for the runtime wrapper. The
-	// manifest declares it private-store-relative; resolve it to the absolute
-	// materialized path and write it so the ExecStart wrapper can exec the
-	// release binary inside the mount-ns overlay.
+	// The release dir was sealed by stageRelease with its exec pointer
+	// inside; verify the declared entrypoint resolved under the private
+	// store and that the staged pointer matches the materialized path. The
+	// wrapper execs current/layering-entrypoint, so a release whose
+	// entrypoint never materialized must fail the apply here rather than
+	// crash-loop after activation.
 	if manifest.LayeringEntrypoint != "" {
-		entry := filepath.Join(storeRoot, filepath.Clean("/"+manifest.LayeringEntrypoint))
+		entry, err := resolveLayeringEntrypoint(storeRoot, manifest)
+		if err != nil {
+			return err
+		}
 		if _, err := os.Stat(entry); err != nil {
 			return fmt.Errorf("updater: layering entrypoint %s not materialized: %w", entry, err)
 		}
-		if err := writeNarFile(filepath.Join(u.root, "layering-entrypoint"), []byte(entry+"\n"), 0o444); err != nil {
-			return fmt.Errorf("updater: record layering entrypoint: %w", err)
+		staged, readErr := os.ReadFile(filepath.Join(releaseDir, "layering-entrypoint"))
+		if errors.Is(readErr, os.ErrNotExist) {
+			// The staged dir predates the in-dir pointer (or was
+			// hand-materialized); record it now that the entrypoint is
+			// verified materialized. A mismatch below still refuses.
+			ensureReleaseEntrypoint(u.root, releaseDir, manifest)
+			staged, readErr = os.ReadFile(filepath.Join(releaseDir, "layering-entrypoint"))
+		}
+		if readErr != nil {
+			return fmt.Errorf("updater: read staged layering entrypoint: %w", readErr)
+		}
+		if strings.TrimSpace(string(staged)) != entry {
+			return fmt.Errorf("updater: staged layering entrypoint %q != resolved %q", strings.TrimSpace(string(staged)), entry)
 		}
 	}
 	return nil

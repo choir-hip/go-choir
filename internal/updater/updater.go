@@ -392,6 +392,20 @@ func (u *Updater) stageRelease(sourceDir, releaseDir string, manifest ReleaseMan
 			return err
 		}
 	}
+	// Layered releases carry their exec entrypoint inside the release dir so
+	// the current/ pointer swap moves served frontend and exec together —
+	// one state authority (S2-e). restorePrior then reverts exec with the
+	// same swap; a release that predates the in-dir entrypoint is backfilled
+	// by ensureReleaseEntrypoint on the restore path.
+	entrypoint, err := resolveLayeringEntrypoint(filepath.Join(u.root, "store"), manifest)
+	if err != nil {
+		return err
+	}
+	if entrypoint != "" {
+		if err := os.WriteFile(filepath.Join(temporary, "layering-entrypoint"), []byte(entrypoint+"\n"), 0o444); err != nil {
+			return fmt.Errorf("updater: stage layering entrypoint: %w", err)
+		}
+	}
 	manifestBytes, err := computerevent.CanonicalJSON(manifest)
 	if err != nil {
 		return err
@@ -580,11 +594,48 @@ func RestagePinnedRelease(root, releaseDigest string) error {
 	if root == "." || !filepath.IsAbs(root) {
 		return fmt.Errorf("updater: restage requires an absolute updater root")
 	}
-	_, releaseDir, err := ReadPinnedManifest(root, releaseDigest)
+	manifest, releaseDir, err := ReadPinnedManifest(root, releaseDigest)
 	if err != nil {
 		return err
 	}
+	ensureReleaseEntrypoint(root, releaseDir, manifest)
 	return swapCurrentPointer(root, releaseDir)
+}
+
+// ensureReleaseEntrypoint backfills releaseDir/layering-entrypoint for a
+// layered release staged before the entrypoint moved inside the release dir
+// (pre-S2-e). A release whose declared entrypoint cannot resolve against the
+// private store degrades to base exec — the boot guard and the health
+// identity surface that honestly — so backfill failure logs and returns
+// rather than blocking the pointer swap.
+func ensureReleaseEntrypoint(root, releaseDir string, manifest ReleaseManifest) {
+	if manifest.LayeringEntrypoint == "" {
+		return
+	}
+	entryPath := filepath.Join(releaseDir, "layering-entrypoint")
+	if _, err := os.Lstat(entryPath); err == nil {
+		return
+	}
+	entry, err := resolveLayeringEntrypoint(filepath.Join(root, "store"), manifest)
+	if err != nil {
+		log.Printf("updater: layering entrypoint %q unresolvable; base exec remains: %v", manifest.LayeringEntrypoint, err)
+		return
+	}
+	if _, err := os.Stat(entry); err != nil {
+		log.Printf("updater: layering entrypoint %s not materialized; base exec remains: %v", entry, err)
+		return
+	}
+	// Staged releases are read-only (0555 dir). Relax the directory just long
+	// enough to record the pointer, then restore the seal.
+	if err := os.Chmod(releaseDir, 0o755); err != nil {
+		log.Printf("updater: layering entrypoint backfill chmod: %v", err)
+		return
+	}
+	writeErr := os.WriteFile(entryPath, []byte(entry+"\n"), 0o444)
+	_ = os.Chmod(releaseDir, 0o555)
+	if writeErr != nil {
+		log.Printf("updater: layering entrypoint backfill: %v", writeErr)
+	}
 }
 
 func ReadCurrentManifest(root string) (ReleaseManifest, error) {
@@ -735,6 +786,15 @@ func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorT
 			return nil, err
 		}
 	}
+	// The restored release's exec entrypoint travels inside its release dir
+	// (S2-e). Read its manifest and backfill pre-S2-e dirs before publishing
+	// the restart so the recovery start execs the release the pointer now
+	// selects; the probe below reuses this manifest.
+	priorManifest, err := readReleaseManifest(priorTarget)
+	if err != nil {
+		return nil, fmt.Errorf("updater: read restored release manifest: %w", err)
+	}
+	ensureReleaseEntrypoint(u.root, priorTarget, priorManifest)
 	if !journal.RecoveryRestartPublished {
 		if err := u.service.RecoveryRestart(ctx); err != nil {
 			return nil, fmt.Errorf("updater: restart restored release: %w", err)
@@ -746,10 +806,6 @@ func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorT
 	}
 	// Resumed after publish: the prior release is already restarting — just
 	// probe it. Republishing would kill the guest mid-recovery forever.
-	priorManifest, err := readReleaseManifest(priorTarget)
-	if err != nil {
-		return nil, fmt.Errorf("updater: read restored release manifest: %w", err)
-	}
 	observations, err := u.health.Probe(ctx, priorDigest, priorManifest)
 	if err != nil {
 		return nil, fmt.Errorf("updater: restored release unhealthy: %w", err)

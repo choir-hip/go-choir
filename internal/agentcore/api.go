@@ -252,6 +252,12 @@ type runtimeHealthResponse struct {
 	EventSchemaVersion    uint64                   `json:"event_schema_version,omitempty"`
 	ReducerVersion        uint64                   `json:"reducer_version,omitempty"`
 	ReleaseDigest         string                   `json:"release_digest,omitempty"`
+	// LayeringBootguard carries the release key whose layered exec the
+	// boot-loop guard refused (S2-e). Non-empty means the base runtime is
+	// serving instead of current/'s layered release; /health returns 503 so
+	// the updater probe fails closed and hosts see the trip, not a healthy
+	// report from a binary that is not the applied release.
+	LayeringBootguard string `json:"layering_bootguard,omitempty"`
 	// EngineMutex exposes cumulative per-call-path wait/hold counters for the
 	// embedded-Dolt engine lock (write + read pools share it). The latency
 	// mission's drain probe uses wait-vs-hold attribution to decide between
@@ -1022,6 +1028,16 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		httpStatus = http.StatusOK // degraded is still serving, just observable
 	}
 
+	// The layering boot-loop guard execs the base runtime after N rapid
+	// failed starts of a layered release. Reporting that as healthy would
+	// pass the updater's identity probe on a binary that is not the applied
+	// release, so the guard marks the guest failed until a release that can
+	// exec — restored prior or a new apply — replaces the guarded one.
+	guard := strings.TrimSpace(os.Getenv("CHOIR_LAYERING_BOOTGUARD"))
+	if guard != "" {
+		httpStatus = http.StatusServiceUnavailable
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
 	runningProcessorRuns := h.rt.RunningCountByProfile(r.Context(), agentprofile.Processor)
@@ -1044,6 +1060,11 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	resp.EventSchemaVersion = h.rt.selfdevStartupEventSchema
 	resp.ReducerVersion = h.rt.selfdevStartupReducer
 	resp.ReleaseDigest = h.rt.selfdevStartupReleaseDigest
+	// Guard trip (computed above, before WriteHeader) marks the response.
+	if guard != "" {
+		resp.Status = "layering_bootguard"
+		resp.LayeringBootguard = guard
+	}
 	if usage, err := persistentdisk.Statfs(filepath.Dir(h.rt.cfg.StorePath)); err == nil {
 		status := persistentdisk.StatusFromGuestUsage(usage)
 		resp.PersistentDisk = &status
