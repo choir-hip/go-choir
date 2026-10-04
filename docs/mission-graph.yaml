@@ -1047,7 +1047,7 @@ nodes:
     title: S0m Record-Native Messaging — records as acts, packets derived
     path: docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
     ledger: ''
-    status: working
+    status: complete
     kind: station
     entrypoint: false
     execution_mode: mission_orchestrator

@@ -25,7 +25,7 @@ metamission:
     - id: S0m-record-native-messaging
       path: docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
       readiness: reviewed
-      status: working
+      status: complete
       depends_on: []
     - id: S1-security-floor
       path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md

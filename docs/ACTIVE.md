@@ -31,20 +31,22 @@ once the guest holds an uptime window.
 (`readiness: executable`, `now.status: working`) — **owner-approved
 2026-10-01** after agentic-consensus review (5/5 convergent + 7/7
 divergent; all required revisions applied in v3). Thirteen stations:
-**S0** reality + boot timeline (S0a landed; S0b deferred behind S0m) → **S0m** record-native messaging (**live**,
+**S0** reality + boot timeline (S0a landed; S0b deferred behind S0m) → **S0m** record-native messaging (**COMPLETE 2026-10-04**,
 owner-inserted 2026-10-01: raw messaging retires; every addressed desk
 act is a commitment record whose Addressee is the delivery instruction;
-ApplyTexture narrows to doc edits; restores research→texture). S0m progress
-2026-10-02: RN0–RN4 landed + deployed through `65275e46` (note/report/
-resolve+escalate/ask+precommit/reply cutovers + envelope retirement);
-RN5 issuer tallies landed `e119755a`. Texture desk model moved to
-`opencode-go/deepseek-v4.1-flash@high` on owner direction (`258916d5` +
-live guest policy edit receipt `evidence/s0m-texture-model-swap-2026-10-02.md`).
-**Live blocker:** consume-marking — rebind repaired + re-proven on staging
-`ed406f45`, but the rebound carrier does the work/reports while the bound
-control is never marked incorporated, so `system:reducer` resolve can't
-fire. `problems/s0m-bound-control-not-marked-incorporated-2026-10-03.md`;
-gates the finish-acceptance chain. →
+ApplyTexture narrows to doc edits; restores research→texture). RN0–RN5
+landed + deployed; finish acceptance all 4 actions evidence-covered:
+ask→report→resolve deployed-verified on trajectory `684ddcb1` (texture
+opened a researcher via `ApplyTexture{open_researcher}`, bound control woke
+research, report returned bound_to_activation + applied, doc grounded the
+UTC date, work settled — `evidence/s0m-ask-acceptance-2026-10-04.json`);
+consume-marking resolved `d61c9b1b` (bound control folds incorporated in
+the carrier's report commit); idle-mask fixed `d20483e8`; channel-mail
+reject `b18f3baf`; per-kind + dual-delivery-absence regression green.
+Residual (not an acceptance blocker): node-b deploy disk headroom — 84G
+free vs ~90G required; `d20483e8`/`a4fcdb8d` parked pending reclaim /
+rollback-ref decision (`problems/node-b-deploy-disk-headroom-2026-10-04.md`).
+→
 **S1** security floor → **S2** layering → **S3** fast resume →
 **S4** capsule open world → **S5** live preview + supervision →
 **S6** commit gate → **S7** app packages → **S8** source publication →
