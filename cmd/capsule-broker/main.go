@@ -120,6 +120,20 @@ func main() {
 			Role:            sessionRole,
 			Slot:            sessionSlot,
 		}
+		// S1 kernel floor: the session worker evaluates model-authored code.
+		// Apply the same workload boundary as the one-shot exec path —
+		// workload Landlock scoped to the allowed root, capability drop, and
+		// the default-deny AF_UNIX-only seccomp filter — before any eval
+		// cell is served. All three fail closed.
+		if err := capsule.NewWorkloadLandlock(cfg.AllowedRoot).Apply(); err != nil {
+			log.Fatalf("session worker landlock: %v", err)
+		}
+		if err := capsule.DropWorkloadCapabilities(); err != nil {
+			log.Fatalf("session worker capability drop: %v", err)
+		}
+		if err := capsule.LoadWorkloadFilter(); err != nil {
+			log.Fatalf("session worker seccomp: %v", err)
+		}
 		if sessionSockFD >= 0 {
 			// Multiplexed session socket (Step 2): the broker passed its
 			// socketpair end as an inherited fd. Raw stdio piping is gone.
