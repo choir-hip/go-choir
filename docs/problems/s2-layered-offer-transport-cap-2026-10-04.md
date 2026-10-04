@@ -123,3 +123,19 @@ path.
 request, the guest stages `closure.nar`, replays it into the private store,
 and execs the recorded store-path entrypoint inside the mount-ns overlay; a
 base-mismatched layered offer fails closed.
+
+## Deployed defect found during acceptance (2026-10-04, fixed `1518abc1`)
+
+The first live probe mint attempt 400'd: the corpusd mint decodes the request
+with `DisallowUnknownFields`, but `platformUpdateOfferMintRequest` had no
+`layering_entrypoint` field — so the layered mint was rejected outright. The
+probe pushed the returned error object, which surfaced on the guest as the
+misleading refusal `"platform update: offer binds a different computer"`
+(empty `computer_id` ≠ guest's bound computer). Two defects, one fix:
+
+1. mint request gained `layering_entrypoint` (else the layered mint 400s);
+2. `buildPlatformUpdateOffer` now forwards it into `updater.FinalizeManifest`
+   (else even a parsing mint could never let the guest exec the overlay
+   binary — the entrypoint would silently drop).
+
+Deployed acceptance pending on `1518abc1` going live.
