@@ -1,0 +1,22 @@
+Still starting after 11s — phase: createAgentSession > discoverSkills > capability:skills:agents
+  logs: /Users/wiz/.omp/logs/omp.2026-10-04.13205.log · re-run with PI_DEBUG_STARTUP=1 for streaming phase markers
+Working...
+1. **Verdict: `send_back`** — named gap: **the self-development Go effect was never executed**. Retry that probe with a correctly scoped key before closing S0b. The capsule, dependency-build, and snapshot API gaps are valid negative findings; the missing Go execution is a probe-setup failure, not an unsupported product transition.
+
+2. **Top findings**
+   - S0’s contract requires the Go effect and M9a bundle probe independently. The Go receipt records a 403 for the missing `computer:self_development:propose` scope and no run or output. The updated keydriver is not a substitute for an execution receipt.
+   - No generic successful lifecycle beyond M9a is required: unsupported transitions can be valid S0 findings. M9a did apply the update and restore with a matched witness, but route promotion failed; it is partial, not a clean end-to-end pass.
+   - The capsule projection, dependency-build, and snapshot-surface absences are documented observations. **They do not falsify** host service, privileged builder capsule, or scoped guest service as future S2 substrates. Carry them to S2 as constraints; do not claim S0 selected or eliminated those options.
+   - The M9a route defect is already problem-documented and does not require an S0 repair. Route-dependent downstream acceptance must account for it; S2/S3 should own the repair before relying on that route identity.
+
+3. **Risks / edge cases**
+   - Before retrying, verify the minted key’s *effective* scopes. The current keydriver requests `computer:self_development:propose`, but its fallback retries key creation without explicit scopes; a successful mint alone may not fix the probe.
+   - Preserve the boundary against using the other owner’s browser session. The snapshot surface probe already found no supported endpoint; do not substitute direct host mutation. Reattempt snapshot operations only if a supported surface becomes available.
+   - **Dissent:** accepting now is defensible because S0 permits documented unsupported transitions and the other gaps are honest findings. That does not cover the Go probe: no product transition was attempted.
+
+4. **Evidence or assumptions**
+   - **Verified locally:** the S0 definition requires the Go effect and M9a independently and says unsupported transitions may be documented rather than repaired (`docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md`, lines 97–115, 332–347).
+   - **Verified locally:** the Go receipt records no execution (`docs/evidence/s0b-go-effect-2026-10-04.json`); the snapshot receipt records no supported snapshot/UFFD/reflink surface (`docs/evidence/s0b-snapshot-resume-2026-10-04.json`); M9a records successful apply/restore but absent route promotion (`docs/evidence/s0b-m9a-bundle-lifecycle-2026-10-04.json`).
+   - **Verified locally:** the keydriver fallback omits explicit scopes (`scripts/s0b_disposable_keydriver.mjs`, lines 76–99). No retry or staging behavior was exercised for this panel decision.
+
+5. **Confidence: high.**

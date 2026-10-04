@@ -1,0 +1,83 @@
+Still starting after 10s — phase: createAgentSession > discoverSkills > capability:skills:agent-plugins
+  logs: /Users/wiz/.omp/logs/omp.2026-10-04.13202.log · re-run with PI_DEBUG_STARTUP=1 for streaming phase markers
+Working...
+## 1. Verdict
+
+**`send_back`** — with three named gaps (G1 blocking, G2 blocking, G3 blocking-soft) and one evidence-hygiene correction (G4). The station's *documentation* discipline is sound; its *precondition discharge* is not.
+
+The measurement is honest. The station did not do what its downstream owner-ratified consumer requires of it.
+
+---
+
+## 2. Top findings
+
+**G1 (blocking) — S0b never selected the S2 builder substrate; S2's settled decision forecloses deferring it.**
+`docs/definitions/choir-appdev-s2-layering-runtime-from-release-2026-10-01.md:243-245` (settled, owner-ratified): *"S0b selects the concrete builder substrate from its probes; S2 includes landing that selection before closure-consuming acceptance, **rather than guessing or deferring it**."* Line 229-231 (`delta_o`) requires the receipt to record *"the selected evaluator and a closure containing a dependency absent from the base."* Neither exists in the frozen set. S0's own `main_uncertainty` (S0 def:255-259 — *"S0b must select or falsify the S2 builder substrate rather than assume one"*) is unchanged by this station. The disposition effectively takes the "defer it" branch the owner-ratified wording names as unacceptable.
+
+**G2 (blocking) — the M9a defect is an S1a-introduced red-surface regression, not S2/S3's problem.**
+
+Verified in source, not just from the doc:
+- `internal/vmctl/route_authority.go:398` — `_, slotComputerID, _ := routeledger.ParseRouteSlotID(...)`; the second return of `ParseRouteSlotID` is `(ownerID, computerID)` where that second value is the **desktop** ID (`internal/routeledger/ledger.go:106-117`; every constructor is `RouteSlotID(userID, desktopID)`, and `PrimaryDesktopID = "primary"` at `internal/types/desktop.go:22`).
+- That value is passed to `bindRequestToGuestComputer(r, slotComputerID)` → `GetOwnershipByComputerID("primary")` (`handlers.go:1516-1523`), which compares against `stableComputerID(...)` (`ownership.go:1750-1762`). Always nil.
+- Same-package proof of schema disagreement: `internal/vmctl/self_development_route.go:56-61` parses the same slot as `(ownerID, desktopID)` and looks up `registry.ownerships[ownershipKey(ownerID, desktopID)]`. `cold_recover.go:451-456` shows the correct round-trip too.
+- `git log -L` on those lines attributes the bind to **`525f282b red(s1a)`** — the same-day red commit whose close record was `55df9418 docs(metamission): S1a->S0b transition receipt closed`.
+
+So this is **universal**, not disposable-specific: every guest on a `primary` desktop slot 403s route resolution. The S1a anti-spoof gate shipped a type error on the exact route the M9a/self-dev path consumes. Filing it as "S2/S3's problem" leaves a red-surface regression ownerless across a boundary and contradicts the S1a close record. Per doctrine, S0b must still *not repair* it — but it must name the owning repair boundary (an S1a repair receipt), not "S2/S3".
+
+**G2b — CI could not have caught it.** `isInternalCaller` (`handlers.go:1556-1575`) admits both loopback **and** httptest's synthetic `192.0.2.x` RemoteAddr. The only test of `HandleResolveComputerVersionRoute` (`self_development_route_test.go:325`) builds the correct `RouteSlotID("ordinary-owner", PrimaryDesktopID)` slot but over loopback — so the tap-bind branch has **zero coverage**. Green CI and a broken production path are consistent, not contradictory.
+
+**G3 (blocking-soft) — probe 3 was blocked by the station's own harness and never re-run.** The keydriver under-scoped itself; `57613ddc scripts(s0b): disposable keydriver mints selfdev+manage:keys scopes` fixed it, and the panel was convened anyway. The self-dev effect plane is S2's entire product premise, and it is still unmeasured. One re-run on the already-corrected script is the cheapest remaining measurement in the whole station.
+
+**G4 (evidence hygiene, must correct before close) — probes 1 and 5 are misclassified.** Both are filed as "sealed-boundary gaps," i.e. an observer boundary hid a real surface. Source says otherwise:
+- No `/api/capsules` handler exists anywhere in `internal/` (grep across `internal/autoputer`, `internal/proxy`). It is **unimplemented**, not sealed.
+- No Firecracker snapshot / UFFD / reflink code exists in `internal/vmctl` at all; the only `reflink` hit repo-wide is an unrelated comment (`internal/vmmanager/manager.go:787`).
+
+S0's mechanism section distinguishes "missing observer boundary" as a category. Conflating "instrument never existed" with "boundary hid it" is the same error class in reverse: an unverified claim presented as observation. It also **changes the downstream input** — the S3 snapshot axis moves from *unknown* to *known-unsupported*.
+
+---
+
+## 3. Answers to the four questions
+
+**Q1 — sufficiency.** Mixed, and the split is the verdict. S0 def:345-347 makes "an unsupported transition is a valid S0 finding; document, don't repair" — the disposition honors this and should be credited. But that clause licenses *gaps that were reached by attempting a transition*. It does not license three receipts where **no observation was made** standing in for the named selection. S0b produced: one partial lifecycle, one source-traced defect, one harness self-inflicted miss, and two absences-of-code. Under a pure documentation standard that passes; under S2's stated precondition it does not.
+
+**Q2 — does the gap set falsify any S2 substrate candidate?** No. It falsifies the *current* substrate's adequacy and relocates the decision — and the differentiation is thinner than the disposition implies:
+- **scoped guest service**: negatively indicated. EROFS `/nix/store` + no build surface is a real, correctly observed constraint.
+- **host-side service**: **untouched** by all five probes. It needs no guest build surface at all.
+- **privileged builder capsule**: **untouched**, and *prerequisite-blocked* — probe 1 shows there is no capsule projection, so it could not have been evaluated even if attempted.
+
+Two of three candidates remain entirely unevaluated. That is not a S2 decision to relocate; it is an S0b decision that was not made. If the panel wants the honest read: the gaps are the finding, but they are a finding *about the absence of the instrument S0b was chartered to use*, not a finding that discriminates among candidates.
+
+**Q3 — does the M9a defect block S0→S2?** It blocks the *transition receipt*, on ownership grounds, not repair grounds. G2 makes it an unowned red-surface regression introduced by the station that closed immediately prior. It also couples to G3: a correctly-scoped self-dev Go effect will likely hit the same route-resolution failure at the self-dev projection, so re-running probe 3 *before* the S1a repair risks a second uninterpretable negative. Sequence: repair receipt → re-run probe 3 → re-attempt the M9a route leg.
+
+**Q4 — unretried S0b-class experiments.** Four, in priority order: (a) Go effect with the corrected keydriver; (b) guest-tap route-resolve leg post-repair, asserting generation-1 bootstrap; (c) an explicitly-posed three-candidate builder evaluation rather than a generic "no build surface" probe; (d) capsule-projection existence check, reframed as an implementation-gap check rather than a reachability check.
+
+---
+
+## 4. Risks / edge cases
+
+- **Over-correction risk.** Pushing S0b back on G1 could stall a station that already produced its highest-value artifact (the defect). Mitigation: the re-attempt set is one script run plus one source fix outside the disposable boundary. That is cheap.
+- **Under-correction risk if accepted.** S2 lands a builder substrate nobody selected, against wording that explicitly rejects guessing; and a red-surface route regression sits in `main` with no owning station while self-dev acceptance work begins against it.
+- **Test-shape hazard.** Any future repair must include a *tap-sourced* (non-loopback, non-192.0.2.x) route-resolve test. A loopback-only regression test will re-green this exact bug — that is how it shipped.
+- **Coupling blind spot.** Nobody has yet established whether the M9a route failure is the *only* thing blocking a working self-dev effect, or the first of several. G3 re-run is the discriminator and should be scoped to answer that.
+- **Disposable left running.** Disposition leaves the VM active with an active M9a release. Acceptable for a disposable fixture, but it is now the only artifact holding the defect's pre-repair state.
+
+## 5. Evidence
+
+**Verified locally (read-only, this session):**
+- `ParseRouteSlotID` returns `(ownerID, computerID)` where component 2 is the desktop ID — `internal/routeledger/ledger.go:106-117`; `PrimaryDesktopID = "primary"` — `internal/types/desktop.go:22`; every construction site is `RouteSlotID(userID, desktopID)`.
+- Defective bind at `internal/vmctl/route_authority.go:394-407` → `handlers.go:1516-1533` → `GetOwnershipByComputerID` comparing `stableComputerID` — `ownership.go:1750-1762`.
+- Correct pattern in the same package: `self_development_route.go:56-61` (`ownershipKey(ownerID, desktopID)`), `cold_recover.go:451-456`. Other `GetOwnershipByComputerID` call sites (`handlers.go:361,1116`, `cold_recover.go:451`) take an explicit `computer_id` param and are not affected — the defect is confined to `route_authority.go:398`.
+- Regression attribution: `git log -L 394,407:internal/vmctl/route_authority.go` → `525f282b red(s1a)`.
+- `isInternalCaller` admits loopback and `192.0.2.x` — `handlers.go:1556-1575`; the only route-resolve test uses `httptest.NewServer` (loopback) — `internal/vmctl/self_development_route_test.go:314-325`.
+- S2 precondition and `delta_o` wording — S2 def:229-231, 243-245, 311-316. S0 `main_uncertainty` — S0 def:255-259. S0b contract lines — S0 def:332-347.
+- No `/api/capsules` handler and no snapshot/UFFD/reflink implementation (grep across `internal/`, `cmd/`).
+- Evidence JSON contents (probe 2 tape sequences 2-6, `route_absent:true generation:0`, guest 403 log line; probe 3 `mode_arm` succeeded then `403 missing required scope`, replacement mint `403`, foreign session unused).
+
+**Unverified (no staging access in this session; do not treat as confirmed):**
+- That the 403 is the *sole* cause of `route_absent` / `generation:0`. The chain is plausible (guest resolve → 403 → resume aborts before projection) but I have not read the staging trace that proves the resolve failure precedes and causes the absent bootstrap.
+- That no computer on staging currently holds a promoted route. If one does, the blast radius is narrower than "universal" — though the bind bug is still unconditional.
+- Actual deploy identity of `e87f3294` and the claimed S1a POST legs.
+
+**Assumption stated:** I treat S2's settled, owner-ratified precondition as binding on S0b's scope, and I do not treat the panel as authorized to waive it. If the owner intends S0b to be measurement-only with the selection deferred, that is a decision to ratify explicitly in the S2 record — not something the panel should infer from a disposition line.
+
+**Confidence: high** on all source-verified claims (G2, G2b, G4, and S2's wording). **Medium** on the boundary weighting — specifically on whether G1 alone justifies `send_back` over `accept_with_edge`; I judge it does, because the owner-ratified text names "deferring it" as the excluded option, but a reasonable panel could weigh the defect-find value higher.

@@ -1,0 +1,38 @@
+Still starting after 10s — phase: createAgentSession > discoverSkills > capability:skills:agent-plugins
+  logs: /Users/wiz/.omp/logs/omp.2026-10-04.13210.log · re-run with PI_DEBUG_STARTUP=1 for streaming phase markers
+Working...
+## 1. Verdict
+
+**`accept_with_edge`** — accept the S0b probe suite as the slice's evidence set; three named edges must land before S0 station close / S2 entry (below).
+
+## 2. Top findings
+
+**F1 — Q1: Slice contract satisfied; station aggregation artifacts are not.** All five receipts exist with the required structure (`computer`, `vm`, `user`, `inputs`, `raw_observations`, `verdict`, `findings`, `cleanup` — verified by parsing each file). M9a *is* a successful lifecycle observation beyond transport: accept → materialize → apply → checkpoint → restarted guest serving the marker → restore with `witness_matched=true`. Gaps are documented as findings with honest "no observation was made" verdicts, exactly what the mechanism contract demands ("an unsupported transition is a valid S0 finding"). **But:** `docs/evidence/s0-probe-index-2026-10-01.json` was last touched at `4708a034` (S0a close) and contains **zero S0b entries** — the definition calls it "the single S0 evidence map" (`finish.artifact`). And the acceptance-required `s0b-builder-substrate-decision` receipt does not exist. Both are writable from the frozen evidence with no new staging observation.
+
+**F2 — Q3: The M9a defect is source-confirmed *and is an S1a-introduced regression*.** Chain verified locally:
+- `internal/vmctl/route_authority.go:398-406` — non-internal callers: `ParseRouteSlotID(route_slot_id)` → `bindRequestToGuestComputer(r, slotComputerID)` → 403 `"caller not bound to route slot computer"` (exact error string matches the guest log).
+- `internal/routeledger/ledger.go:106-109` — `ParseRouteSlotID` returns `parts[2]` as `computerID`; for `computer:<owner>:primary` that is `"primary"`.
+- `internal/vmctl/handlers.go:1521-1523` — `GetOwnershipByComputerID("primary")` → nil → `"no ownership for computer primary"`.
+- `git log`: the binding gate was introduced by **`525f282b` (2026-10-04, `red(s1a)`)** — the same day S1a "closed" and S0b probed. Heresy delta: **introduced by S1a, discovered by S0b, unrepaired**. S1a's acceptance evidently did not exercise the guest-tap route-resolution leg — a Landing Loop miss that should be recorded in the close note.
+- Does not block S0b acceptance (S0 forbids repair), but it breaks route bootstrap for **every fresh computer on staging** and sits directly on the "effect and closure facts" S2 receives → repair-gate item for S2 entry.
+
+**F3 — Q2: Gaps falsify no candidate substrate; they falsify the observation premise.** The definition conditions substrate *selection* on observing "EROFS Nix DB and a sandboxed one-package `nix build`" — unreachable through the sealed boundary, so per the mechanism contract the honest builder-substrate-decision receipt is "all three candidates unselected; selection preconditions unobservable; decision transfers to S2 with gaps as constraint." One additional S2 input the panel should elevate: the capsule-health receipt records **"no shell, vsock, serial, or file API was supplied"** into the disposable guest — so *every* candidate (host service, privileged builder capsule, scoped guest service) requires new surface, and S2 must first choose a diagnostic/observation channel or it will be blind in the same way.
+
+**F4 — Q4: The Go effect must be re-run; the other gaps must not.** The Go-effect gap is the only one caused by a probe-driver bug rather than missing platform surface: `scripts/s0b_disposable_keydriver.mjs:80` now mints `computer:self_development:propose` + `manage:keys` (verified). Re-attempt costs one disposable run and needs no new platform code; S2 inheriting "effect facts" with zero effect-execution observations is the suite's largest evidence hole. Snapshot/capsule/dep-build re-attempts are futile until S3/S4 build the surfaces — correctly deferred.
+
+## 3. Risks / edge cases
+
+- **Edge 1 (paperwork):** probe index S0b refresh + builder-substrate-decision receipt (deferral-framed per F3) before the S0 close/transition receipt. Without them, `finish.artifact` and two acceptance items are unmet and a strict-textualist panelist can argue `send_back` — that dissent is the reason this is not plain `accept`.
+- **Edge 2 (red regression):** M9a route-binding defect named as blocking-repair prerequisite for route/effect-dependent S2 work in the S0→S2 transition receipt; repair boundary per the problem doc (bind owner+desktop pair to the stable computer, or change both slot contracts atomically; add the fresh-computer generation-1 E2E assertion).
+- **Edge 3 (evidence hole):** Go-effect probe re-run with the fixed keydriver before S2 consumes effect facts.
+- Risk if accepted without edges: S2 plans against a substrate map missing its own evidence index, and a known route-bootstrap breakage silently poisons S2's first fresh-computer runs.
+
+## 4. Evidence vs assumptions
+
+**Verified locally:** defect chain (route_authority.go, handlers.go, ledger.go, exact 403 string); S1a provenance `525f282b`; five receipts' structure and verdicts; keydriver scope fix (line 80); probe index staleness (git log, no S0b keys); staging head `e87f3294` exists; problem doc content matches source.
+**Unverified (taken from frozen evidence, not re-derived):** live staging state (VM active, self-dev off), tape sequences 2-5, `witness_matched=true`, release digest, guest marker after restart.
+**Assumption:** the definition's `2026-10-01` receipt filenames vs actual `2026-10-04` names is a tolerated date drift, not a mapping failure — except for the two genuinely missing artifacts (index, substrate decision).
+
+## 5. Confidence
+
+**High** — the decisive claims (defect root cause, S1a provenance, missing aggregation artifacts, keydriver fix) are all source- or git-verified; only the live staging terminal state rests on the frozen evidence.

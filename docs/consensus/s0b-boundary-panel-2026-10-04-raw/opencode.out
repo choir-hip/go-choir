@@ -1,0 +1,231 @@
+[0m
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+I'll verify the frozen evidence against the repo before issuing a verdict. Let me start by reading the S0 station contract and the S0b evidence files.
+[0m→ [0mRead docs/evidence/s0b-capsule-health-map-2026-10-04.json 
+[0m→ [0mRead docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md 
+[0m→ [0mRead docs/evidence/s0b-snapshot-resume-2026-10-04.json 
+[0m→ [0mRead docs/evidence/s0b-go-effect-2026-10-04.json 
+[0m→ [0mRead docs/evidence/s0b-absent-runtime-dep-2026-10-04.json 
+[0m→ [0mRead docs/evidence/s0b-m9a-bundle-lifecycle-2026-10-04.json 
+[0m→ [0mRead docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md 
+> build · inclusionai/ling-3.1-flash
+[0m→ [0mRead scripts/s0b_disposable_keydriver.mjs 
+[0m✱ [0mGrep "route slot|route-slot|route_slot" [90min internal/vmctl · 9 matches[0m
+[0m✱ [0mGrep "GetOwnershipByComputerID" [90min . · 10 matches[0m
+> build · inclusionai/ling-3.1-flash
+Now let me verify the root-cause claim in the vmctl route authority code — the alleged `GetOwnershipByComputerID` call on the slot's second component:
+[0m✱ [0mGrep "func ParseRouteSlotID" [90min internal/vmctl · 0 matches[0m
+[0m→ [0mRead internal/vmctl/route_authority.go [90m[limit=90, offset=370][0m
+[0m✱ [0mGrep "func .*bindCaller|bindRouteCaller|caller not bound" [90min . · 6 matches[0m
+> build · inclusionai/ling-3.1-flash
+Let me trace `bindRequestToGuestComputer` and `ParseRouteSlotID` to confirm or refute the stated root cause
+[0m✱ [0mGrep "func ParseRouteSlotID" [90min . · 1 match[0m
+[0m✱ [0mGrep "func (h \*Handler) bindRequestToGuestComputer" [90min . · 0 matches[0m
+> build · inclusionai/ling-3.1-flash
+[0m✱ [0mGrep "bindRequestToGuestComputer" [90min internal/vmctl · 5 matches[0m
+[0m→ [0mRead internal/routeledger/ledger.go [90m[limit=80, offset=80][0m
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+[0m→ [0mRead internal/vmctl/handlers.go [90m[limit=60, offset=1505][0m
+[0m✱ [0mGrep "computer:%s:%s|computer:" \+|route_slot_id" [90min . · 36 matches[0m
+[0m✱ [0mGrep "RouteSlotID\(" [90min . · 49 matches[0m
+> build · inclusionai/ling-3.1-flash
+The source confirms the defect mechanism. Now let me check the git state, the probe index, and whether a builder-substrate decision receipt exists (the S0 contract names one as required
+[0m✱ [0mGlob "docs/evidence/s0*" [90min . · 39 matches[0m
+[0m✱ [0mGrep "builder.?substrate|builder_substrate" [90min docs/evidence · 0 matches[0m
+[0m$ [0mgit log --oneline -25 && echo ---- && git cat-file -t e87f3294 2>&1; git cat-file -t 52ee562f769fc90197e0aa68de9d7022dcd2ab81 2>&1
+c76ba308 docs(s0b): disposable-computer probe suite evidence + M9a route-binding defect
+57613ddc scripts(s0b): disposable keydriver mints selfdev+manage:keys scopes
+d5483265 docs(problems): node-b headroom recurrence 3 - live-candidate quarantine remnants
+e39ef6be docs(problems): resolve prebind flake - terminalize-release vs stale live-claim assert
+e87f3294 test(s0m): prebind recovery asserts delivered event, not live claim — terminalize-release race
+afcdf0b1 docs(problems): prebind-research-recovery delivery flake (~80%) - S0m rebind race
+55df9418 docs(metamission): S1a->S0b transition receipt closed; repair record gains POST evidence
+86d79c63 red(s1a): POST refusal legs + bound source-service + iptables record (panel send-back)
+1f0bf022 s1a: station closed — refusal-matrix receipt + S0b resume + boundary letter
+d37408ee s1a: deployed refusal matrix PASSED — 5/5 refusals, 5/5 legitimate flows
+52ee562f s1a: refusal-matrix legs use canonical internal paths
+eebcaf67 docs(ACTIVE): S0m boundary closed; S1a working with implementation deployed
+b12b48a8 docs(stations): S1a to working — implementation landed/deployed a3f0d48e; refusal-matrix receipt remaining
+6ee52de5 docs(problems): S1a proof channel = diag http oracle; zot PATH-shadowing discovery
+b15f012a red(s1a): guest HTTP probe oracle + diag-probe refusal matrix
+3e4d1392 docs(problems): disk-headroom recurrence 2 — 16G stale forensic reclaim, preflight doesn't see /tmp or .pre-*
+a3f0d48e s1a: reconcile removes stale guest->8085 DNAT on live taps
+def2a8a7 s1a: use GET /api/email/messages for maild legs — draft POST needs owned alias
+a712a56f red(s1a): boot-timeline host-source gate + refusal-matrix probe
+525f282b red(s1a): host-boundary authority binding — transport-bound internal authority, IP-bound guest identity
+46c6708d docs(metamission): S0m boundary CLOSED — panel adjudicated, letter published, receipt closed
+ca74a8ea docs(s0m): boundary-close receipts — disposable stranded-bound + channel-mail reject
+70a4fa96 docs(s1a): adopt panel asks; docs(problems): registration genesis gap
+ff0c36a4 docs(s0m/s0): repair broken YAML + reconcile stale lines
+a06f179e ci+s1a: stale-deploy guard; S1a slice authored; boundary-close probes
+----
+commit
+commit
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+[0m→ [0mRead docs/evidence/s0b-disposition-2026-10-04.md 
+[0m✱ [0mGrep "s0b|builder|substrate" [90min docs/evidence · 0 matches[0m
+[0m$ [0mgit show --stat c76ba308 | head -40; echo ----; git show --stat 86d79c63 | head -30
+commit c76ba308c7d9731594f17efe895a76d98c205948
+Author: Yusef Mosiah Nathanson <yusefnathanson@me.com>
+Date:   Sun Oct 4 03:18:38 2026 -0400
+
+    docs(s0b): disposable-computer probe suite evidence + M9a route-binding defect
+    
+    Five probes on disposable computer-ac1808b4f04fc749c0781083ee747403 (owner
+    69fcbf14-7fa7-442b-9e69-9c2666274b9e):
+    - capsule-health-map: gap (sealed guest, no capsule/desk projection endpoint)
+    - m9a-bundle-lifecycle: partial — applied+restored with witness match, but
+      route slot never promoted (vmctl resolves computer:<owner>:primary but
+      looks up 'primary' as a stable computer ID -> 403) -> problem doc
+    - go-effect: gap (keydriver scope miss; probe key lacked self_development:propose)
+    - absent-runtime-dep: gap (sealed guest, no dependency-build surface)
+    - snapshot-resume: gap (vmctl exposes no snapshot/UFFD/reflink surface)
+    
+    M9a defect is real: platform-follow bootstrap binds the route slot's desktop
+    component as a computer ID. Filed s0-m9a-route-projection-owner-binding.
+
+ .../s0b-absent-runtime-dep-2026-10-04.json         | 29 ++++++++++++
+ .../s0b-capsule-health-map-2026-10-04.json         | 48 ++++++++++++++++++++
+ docs/evidence/s0b-disposition-2026-10-04.md        | 26 +++++++++++
+ docs/evidence/s0b-go-effect-2026-10-04.json        | 38 ++++++++++++++++
+ .../s0b-m9a-bundle-lifecycle-2026-10-04.json       | 52 ++++++++++++++++++++++
+ docs/evidence/s0b-snapshot-resume-2026-10-04.json  | 38 ++++++++++++++++
+ ...9a-route-projection-owner-binding-2026-10-04.md | 39 ++++++++++++++++
+ 7 files changed, 270 insertions(+)
+----
+commit 86d79c63ab006b5d811dc695ae3cb35b22ecea2f
+Author: Yusef Mosiah Nathanson <yusefnathanson@me.com>
+Date:   Sun Oct 4 01:51:14 2026 -0400
+
+    red(s1a): POST refusal legs + bound source-service + iptables record (panel send-back)
+    
+    Panel send-back adjudication (agentic-consensus-20261004-013636):
+    - R4/R5 were GET -> 405 method refusals carrying no evidence (the
+      exploit chain is POST). Oracle gains a bounded method=post gated to a
+      path allowlist of exactly the two refusal targets; body fixed to {}.
+    - Legs rewritten: corpusd mint + proxy publish now POST with forged
+      headers — a 403 proves authority denial, not method reject.
+    - L6 bound-guest source-service search leg (:8787) added; R6 spoofed-
+      source recorded via post-fix iptables ruleset + FORWARD counters.
+    Protected surfaces: same as b15f012a; POST adds no authority — the two
+    targets refuse guests at the application layer.
+    Rollback: git revert; guests keep old diag binary until refresh.
+
+ internal/autoputer/boot_timeline.go                | 39 ++++++++++++++++---
+ internal/autoputer/boot_timeline_diag_http_test.go | 44 ++++++++++++++++++++++
+ scripts/s1a_refusal_matrix_probe.mjs               | 34 ++++++++++++-----
+ 3 files changed, 103 insertions(+), 14 deletions(-)
+> build · inclusionai/ling-3.1-flash
+Let me verify when the defective binding leg was introduced, and check the probe index and mission state docs
+[0m→ [0mRead docs/ACTIVE.md 
+[0m→ [0mRead docs/evidence/s0-probe-index-2026-10-01.json 
+[0m$ [0mgit log --oneline -3 -L 394,407:internal/vmctl/route_authority.go 2>/dev/null | head -30
+525f282b red(s1a): host-boundary authority binding — transport-bound internal authority, IP-bound guest identity
+
+diff --git a/internal/vmctl/route_authority.go b/internal/vmctl/route_authority.go
+index fa4d9fd4..d5b018c4 100644
+--- a/internal/vmctl/route_authority.go
++++ b/internal/vmctl/route_authority.go
+@@ -385,4 +394,14 @@ func (h *Handler) RequireRouteAuthority() {
+ 	if !isInternalCaller(r) {
+-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
+-		return
++		// S1a: tap-sourced callers are admitted only for their own slot —
++		// the slot ID embeds owner:computer; the caller's tap IP must bind
++		// to that computer's ownership record.
++		_, slotComputerID, parseErr := routeledger.ParseRouteSlotID(r.URL.Query().Get("route_slot_id"))
++		if parseErr != nil {
++			writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid route slot id"})
++			return
++		}
++		if bindErr := h.bindRequestToGuestComputer(r, slotComputerID); bindErr != nil {
++			writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "caller not bound to route slot computer: " + bindErr.Error()})
++			return
++		}
+ 	}
+7d310551 feat(computer): establish immutable route authority
+
+diff --git a/internal/vmctl/route_authority.go b/internal/vmctl/route_authority.go
+new file mode 100644
+index 00000000..aba26cb1
+--- /dev/null
++++ b/internal/vmctl/route_authority.go
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+[0m✱ [0mGrep "legitimate|legit|flow" [90min scripts · 2 matches[0m
+[0m✱ [0mGrep "s0b-m9a|platform-update|apply-platform-follow" [90min scripts · 5 matches[0m
+[0m✱ [0mGrep "selfdevRouteDesktopID|selfdevRouteOwnerID" [90min internal/vmctl · 0 matches[0m
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+[0m→ [0mRead scripts/m9a_platform_update_probe.mjs 
+[0m→ [0mRead scripts/s1a_refusal_matrix_probe.mjs [90m[limit=80, offset=140][0m
+> build · inclusionai/ling-3.1-flash
+Critical lead: the S1a refusal matrix's legitimate leg L2 uses slot `computer:${A.user}:${A.computer}`. Let me check what `A.computer` actually is — that determines whether S1a's acceptance exercised the canonical owner:desktop slot form or a different one
+[0m→ [0mRead scripts/s1a_refusal_matrix_probe.mjs [90m[limit=140][0m
+> build · inclusionai/ling-3.1-flash
+[0m→ [0mRead internal/vmctl/self_development_route_test.go [90m[limit=80, offset=160][0m
+[0m✱ [0mGrep "HandleResolveComputerVersionRoute|computer-version-routes/resolve" [90min . · 10 matches[0m
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+> build · inclusionai/ling-3.1-flash
+[0m→ [0mRead internal/vmctl/self_development_route_test.go [90m[limit=115, offset=270][0m
+> build · inclusionai/ling-3.1-flash
+[0m✱ [0mGrep "s0b|S0b|s1a|S1a" [90min docs · 4 matches[0m
+[0m✱ [0mGrep "S1a->S0b|S1a→S0b|s1a-to-s0b|S1a->S0b transition" [90min docs/definitions · 1 match[0m
+> build · inclusionai/ling-3.1-flash
+[0m→ [0mRead docs/mission-graph.yaml [90m[limit=45, offset=1025][0m
+[0m→ [0mRead docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md [90m[limit=60, offset=660][0m
+> build · inclusionai/ling-3.1-flash
+I have verified all the load-bearing claims against source and git history. Here is my panel output.
+
+---
+
+## 1. Verdict / recommendation
+
+**`accept_with_edge`**
+
+The S0b evidence satisfies the station's own mechanism contract — "an unsupported transition is a valid S0 finding; it must be documented, not repaired in S0" (`docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md:346-347`). One partial-with-confirmed-defect + three honest boundary gaps + one scope-miss, all on a disposable fixture with identity, pre/post state, and terminal disposition recorded, is precisely the observation set this station exists to produce. No fabrication anywhere — the Go-effect receipt explicitly refuses to treat transport as execution.
+
+Named edges accepted:
+- **E1 — S2 builder-substrate decision is deferred, not made.** No candidate substrate was exercised; the gaps are input to S2, not falsification of any candidate. The `s0b-builder-substrate-decision` receipt must NOT be backfilled now — writing either a selection or a "falsified all three" claim would fabricate. The transition receipt must carry "decision deferred, gaps as input" explicitly, and the probe index (`docs/evidence/s0-probe-index-2026-10-01.json`) still lists only S0a receipts — the `finish.artifact` obligation is unmet and must be completed with the transition record.
+- **E2 — the self-dev Go effect remains unexecuted.** Re-attempt is a named obligation for the next slice; the fixture is still alive and `scripts/s0b_disposable_keydriver.mjs` is already fixed (verified: it now mints `computer:self_development:propose` + `mode` + `manage:keys`, commit 57613ddc).
+- **E3 — S1a acceptance coverage hole (regression provenance).** The M9a defect is a regression introduced by the S1a hotfix itself (commit 525f282b added the binding leg at `internal/vmctl/route_authority.go:394-407`). The S1a refusal matrix's legitimate leg L2 passed only because it used a **non-canonical** slot form `computer:${A.user}:${A.computer}` (stable computer ID — `scripts/s1a_refusal_matrix_probe.mjs:142,166`), while the product's canonical form everywhere else is `RouteSlotID(ownerID, desktopID)` = `computer:<owner>:primary` (materializer, proxy, cold_recover, maild — 20+ call sites). No unit test covers the tap-sourced path: `TestResolveComputerVersionRouteReturnsTypedCanonicalAbsence` goes through httptest loopback, so `isInternalCaller` short-circuits the binding.
+
+## 2. Top findings
+
+- **M9a defect confirmed at source.** `HandleResolveComputerVersionRoute` parses the canonical slot and passes the desktop component to `bindRequestToGuestComputer` → `GetOwnershipByComputerID("primary")` → nil → 403 (`route_authority.go:398-406` + `handlers.go:1516-1533`). Matches the guest log verbatim. Update transport, materialization, restart, checkpoint, and product restore all worked (`witness_matched:true`, `frontend_restaged:true`); the failure is confined to the route-projection tail. Problem-doc-first ordering satisfied (`docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md` predates any fix — no fix exists yet).
+- **Does not block S0→S2**, but is a mandatory named input to S2 (and to S1, its actual author). Any S2/S3 probe needing ComputerVersion route identity will fail until repaired — the probe already observed `kernel-capabilities` 503 "computer route identity unavailable".
+- **Gaps relocate the S2 substrate decision; they falsify nothing.** Host service / privileged builder capsule / scoped guest service were never exercised. The gaps do falsify the *as-is base* as a builder substrate without new surface work — that is the input S2 needs.
+- **Go-effect refusal behavior was correct** (403 missing scope; re-mint refused; other owner's session untouched — single-disposable-account boundary preserved). The defect is in the probe driver, now fixed.
+
+## 3. Risks / edge cases
+
+- "accept_with_edge" must not be read as "substrate is fine": fresh-computer platform-follow bootstrap is broken in its current shape.
+- Disposable left running (mode off, no runs) — enables the E2 re-attempt, but the rollback clause says discard S0b disposables; teardown is a recorded obligation for the next boundary. Disposition doc already warns not to reuse the M9a route result as healthy.
+- Named-receipt drift: acceptance named 10 receipts (`s0b-snapshot-create-resume`, `-uffd-lazy-load`, `-vm-state-reflink`, `-capsule-store-overlay`, `-erofs-nix-db`, `-nixpkgs-build`, …); delivered 5 differently-named receipts that collapse snapshot/UFFD/reflink into one gap and fold overlay/EROFS/nixpkgs into two gaps. Acceptable as documented absence, but the transition record should name the mapping so S3/S4 inherit the right inputs.
+
+## 4. Evidence or assumptions
+
+**Verified locally:** vmctl binding-leg source + its S1a introduction commit (525f282b, via `git log -L`); `ParseRouteSlotID`/`RouteSlotID` desktop-component convention; `bindRequestToGuestComputer` → `GetOwnershipByComputerID`; S1a matrix L2's non-canonical slot construction; loopback short-circuit in `isInternalCaller`; keydriver scope fix; probe index contains no S0b entries; all five evidence JSONs + disposition + problem doc present in commit c76ba308; git objects `e87f3294` and `52ee562f` exist.
+
+**Unverified (taken from brief/evidence, not re-derived):** staging actually serves deploy `e87f3294` with build `52ee562f…` — I have no staging access from this session; the raw observations (403 body, `route_absent:true`, restore receipts) are frozen evidence, not re-measured.
+
+## 5. Confidence
+
+**High** on the defect root cause, regression provenance, and contract interpretation; **medium** on the live deploy identity (unverified against staging).
+
+**Bottom line for the transition record:** accept S0b as an observation slice; carry three named inputs forward — (a) deferred S2 substrate decision with the four gaps as evidence, (b) `s0-m9a-route-projection-owner-binding` as a blocking pre-repair for any CV-route-dependent S2/S3 probe, with the end-to-end fresh-computer assertion (marker + route generation 1) and a non-loopback unit test as the required regression cover, (c) Go-effect re-attempt with the fixed keydriver on the live disposable.

@@ -1,0 +1,36 @@
+Still starting after 10s — phase: capability:hooks:omp-plugins
+  logs: /Users/wiz/.omp/logs/omp.2026-10-04.13200.log · re-run with PI_DEBUG_STARTUP=1 for streaming phase markers
+Working...
+## 1. Verdict / recommendation: `send_back`
+
+**Named gaps: an unattempted, correctly authorized Go-effect probe and an unresolved builder-substrate acceptance obligation.** Accept the recorded boundary gaps and M9a defect as valid findings. Do not require S0 to implement missing infrastructure or repair M9a.
+
+## 2. Top findings
+
+- **No additional successful-lifecycle quota is justified.** The contract explicitly permits unsupported transitions as findings. M9a’s applied marker and matched-witness restore are meaningful positive observations, although route promotion failed. The problem is incomplete coverage, not insufficient successes.
+
+- **The Go scope miss is a probe-driver failure, not an unsupported product transition.** The archived receipt states that authorization correctly refused the request and no Go cell executed. The driver now includes `computer:self_development:propose`; that source correction is not execution evidence. Re-attempt the independent Go probe on a clean disposable computer using its own correctly authorized account. A subsequent genuine boundary refusal may qualify as a valid gap.
+
+- **The gaps do not falsify any of the three future S2 architectures.** Missing projections and entry points show that the *current exposed substrate* cannot support these observations. They do not establish that a host service, privileged builder capsule, or scoped guest service is infeasible. However, the canonical finish explicitly requires selecting a substrate or falsifying all three with evidence—not merely forwarding uncertainty to S2. Resolve that contract mismatch before closure; relocating the decision requires an explicit authoritative scope change.
+
+- **M9a’s defect does not itself block measurement handoff.** Filing it for the receiving repair boundary follows S0’s observe-and-document mandate. It does block claims of successful route promotion and operations requiring that route identity. Assign a concrete receiving owner; do not make repair an S0 completion requirement.
+
+## 3. Risks / edge cases
+
+- **Correlated observations:** the dependency receipt records both `503 computer route identity unavailable` and a replay-completeness refusal after M9a/restore. Separate independently observed surface absence from capability discovery obstructed by fixture state.
+- **Snapshot coverage:** the surface inventory is a valid gap. No repeat is needed against the unchanged surface. S3 must perform actual create/load, UFFD, and reflink experiments once an authorized mechanism exists; current evidence establishes no performance or correctness result.
+- **Evidence-map completeness:** the inspected canonical probe index still contains only S0a receipts. Add S0b mappings, including explicit dispositions for overlay, Nix DB, sandboxed build, and substrate selection. “Not observed” must remain distinct from “falsified.”
+- **Dissent:** the strongest alternative is `accept_with_edge`, because unsupported transitions are expressly admissible. I reject it **for closure under the current contract**: a correctable authorization mistake is not such a transition, and the substrate-decision obligation remains unresolved. No other panelists’ verdicts were provided.
+
+## 4. Evidence or assumptions
+
+**Locally inspected:**
+- [S0 definition](docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md), especially lines 98–114 and 339–347: independent Go probe, substrate disposition, unsupported-transition allowance.
+- [Go receipt](docs/evidence/s0b-go-effect-2026-10-04.json) and [corrected driver](scripts/s0b_disposable_keydriver.mjs), line 80.
+- [M9a problem record](docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md), dependency/snapshot receipts, terminal disposition, and canonical probe index.
+
+**Accepted as frozen evidence, not independently re-exercised:** deployed identity `e87f3294` and staging API/VM outcomes. I verified their archived records, not live behavior. The source-traced ownership-binding root cause was not independently inspected in implementation code.
+
+## 5. Confidence: **high**
+
+High on the narrow send-back and evidence limits; insufficient evidence to rank or eliminate S2 substrate candidates.

@@ -1,0 +1,42 @@
+Still starting after 10s — phase: createAgentSession > discoverSkills > capability:skills:agent-plugins
+  logs: /Users/wiz/.omp/logs/omp.2026-10-04.13208.log · re-run with PI_DEBUG_STARTUP=1 for streaming phase markers
+Working...
+## Panel member verdict — S0b boundary (convergent)
+
+### 1. Verdict: `send_back` — but narrow (named gaps below, not a full re-run)
+
+### 2. Top findings
+
+- **The M9a defect is source-confirmed, not just log-inferred.** `internal/routeledger/ledger.go:106-117` — `ParseRouteSlotID("computer:<owner>:<desktop>")` returns `(ownerID, computerID)` where `computerID` is the *desktop component* (`primary`). `internal/vmctl/route_authority.go:398-405` passes that component into `bindRequestToGuestComputer` → `GetOwnershipByComputerID("primary")` → nil → 403. Slot contract (`computer:<owner>:<desktop>`) and guest binding contract disagree on what the second component means. Problem doc is accurate; repair is correctly out of S0b. Route projection is a red protected surface — the repair must be owned by the receiving station with full red ceremony.
+- **"Gap" receipts are honest, but they are absences of measurement, not findings.** The definition's own Goodhart guard applies symmetrically: reporting "Firecracker supports snapshots" as *source layout* is flagged as Goodharting — but so is reporting "no vmctl snapshot endpoint" as if it measured Firecracker snapshot/UFFD feasibility. Probes 1, 4, 5 measured only **product surfaces** (guest `/api`, vmctl endpoints, sealed-boundary routes); none touched the substrate capability the definition named (snapshot create/resume, UFFD, reflink, capsule build).
+- **The strongest positive lifecycle evidence is real and durable**: M9a transport signed→accept→materialize→apply→checkpoint→**product restore `witness_matched=true frontend_restaged=true`**, on a disposable fixture, with the marker served post-restart. That materially de-risks S2's release-transport legs — even though its route tail failed.
+- **The S0b receipt `s0b-builder-substrate-decision-2026-10-01.json` does not exist and cannot be written from current evidence.** The definition's acceptance is explicit: the final receipt "selects host service, privileged builder capsule, or scoped guest service … or falsifies all three with evidence." None of the three is falsified: host service unmeasured, privileged-capsule build unobserved (probe 1 made no observation), and only "scoped guest service with the *existing* EROFS store" is genuinely excluded — writable-store is S4 scope, so even that exclusion is conditional.
+
+### 3. Risks / edge cases
+
+- **Main risk of accepting now**: the substrate decision silently migrates to an S1→S2 entry gate with *zero* capability measurements behind it — exactly the "assume rather than select" failure the definition forbids. Re-deriving it inside S2 costs more than one host-side snapshot probe + one capsule-lifecycle probe did.
+- **The Go-effect gap is self-inflicted and cheap**: keydriver lacked `computer:self_development:propose`; the scope fix is already in `scripts/s0b_disposable_keydriver.mjs` (unverified that it's complete — check the mint scope list). Re-run is one session, and "one Go effect" is a named acceptance.
+- **Fixture hygiene is clean** (disposition doc: terminal state active/0 runs/self-dev off, no repair commits, no route result reused). No teardown obligation blocks a re-probe round; a *fresh* disposable fixture is better than reusing the M9a-loaded one for substrate probes.
+- **Scope-miss precedent is mild, not project-fatal** — the panel should not let "honest documentation of a no-observation" become precedent for satisfying acceptance lists with frontier rejections. The definition permits unsupported *transitions* as findings; never-attempted boundaries are neither transitions nor findings.
+
+### 4. Named gaps for send-back (minimum decisive set)
+
+1. **Substrate capability measurement + `s0b-builder-substrate-decision`**: one host-side snapshot create/resume (direct Firecracker on the disposable VM's state dir, or the existing `scripts/node-b-data-img-snapshot` helper — read-only verified it exists per the definition's baseline; behavior unverified) + one capsule-internal build/overlay observation. Either selects or falsifies; either is a valid receipt.
+2. **Snapshot/UFFD/reflink receipts** (`s0b-snapshot-create-resume`, `uffd-lazy-load`, `vm-state-reflink`): measurable host-side against the disposable fixture; product-surface absence is documented as a gap and need not be re-run.
+3. **`s0b-selfdev-go-effect` with the fixed keydriver** — the scope miss is fixed; one cheap re-attempt satisfies the named acceptance or turns "refused" into a measured unsupported transition.
+
+**Probes that need NOT re-run**: M9a bundle lifecycle (ran; defect filed), capsule-health-map and absent-runtime-dep as *product-surface gap* documentation (valid as filed, as regards sealed-boundary facts).
+
+### 5. Answers to the panel's four questions
+
+1. **Sufficiency**: No as-specified. M9a is one partial lifecycle; the remaining four produced no observations. The definition's acceptance list is explicit and only partially discharged.
+2. **S2 signal**: The gaps relocate, not decide. Only exclusion earned: scoped guest service *with existing* EROFS store cannot build closures. Host-service and privileged-builder-capsule remain fully open, unmeasured.
+3. **M9a defect severity**: Confirmed product defect (source-traced, not boundary noise); does **not** block S0→S2 — problem doc precedes repair per the definition's own ordering. Rollback path exists (git revert of the binding fix when it lands; the product restore verified separately).
+4. **Residual risk**: Yes — the three named gaps above; the disposable fixture is cleanly disposed for fresh probes; the stable computer ID / route-slot contract mismatch should also get an end-to-end fresh-computer M9a assertion *after* repair (per the problem doc's own repair boundary).
+
+### 6. Evidence status
+
+- Verified locally: `routeledger.ParseRouteSlotID` semantics, `route_authority.go:398-405` binding call, `GetOwnershipByComputerID` contract (`internal/vmctl/ownership.go:1747-1753`), missing S0b receipts on disk (only 5 of ~10 named receipts exist), disposition doc contents.
+- Unverified: content of each `docs/evidence/s0b-*.json` receipt beyond the frozen summary; `s0b_disposable_keydriver.mjs` scope-list fix; behavior of `scripts/node-b-data-img-snapshot` helper.
+
+### 7. Confidence: **high** on the defect and on the missing-receipt reading of the definition; **medium** on the verdict only because an explicit owner-driven re-scope of S0b (not cited in the frozen evidence) would convert the gaps into sanctioned narrowing — absent that record, send_back is the defensible call.

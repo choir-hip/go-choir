@@ -1,0 +1,70 @@
+Still starting after 10s — phase: capability:hooks:codex
+  logs: /Users/wiz/.omp/logs/omp.2026-10-04.13203.log · re-run with PI_DEBUG_STARTUP=1 for streaming phase markers
+Working...
+### 1. Verdict / Recommendation
+
+**`accept_with_edge`**
+
+Accept the S0b disposable-computer probe suite and close Station S0, carrying four explicit edges into S1 and S2:
+1. **Edge 1 (Unobserved Go effect):** Probe 3 did not exercise `capsule_go_eval`. The rejection was an API key scope refusal (`computer:self_development:propose` missing from harness minting), not a runtime execution finding. Capsule execution remains unmeasured; handed to S1 (capsule/yaegi floor).
+2. **Edge 2 (S2 builder substrate deferred):** S0b did not select an S2 builder substrate. It empirically falsified an unprivileged in-guest build service against the stock base; selection between a host-side build service versus a privileged builder capsule relocates to S2 as an architecture input.
+3. **Edge 3 (Unrepaired M9a route-projection defect):** The route-projection owner-binding bug (`docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md`) blocks ComputerVersion route identity (`generation: 0`, `kernel-capabilities` 503) on fresh computers after first update. Correctly documented per Problem-Documentation-First; handed to S2.
+4. **Edge 4 (Absence of snapshot/lazy-load substrate):** vmctl has no snapshot create/load, UFFD lazy-load, or reflink endpoints; Firecracker hibernate/resume remains unmeasured; handed to S3.
+
+---
+
+### 2. Top Findings
+
+1. **M9a lifecycle proves materialization and restore, but isolates route promotion as a product defect.**
+   - Offer `s0b-m9a-20261004-0707` progressed through sequences 2–5 (`effect_accepted` $\rightarrow$ `materialization_started` $\rightarrow$ `materialization_applied` $\rightarrow$ `checkpoint_published`).
+   - Guest restart served marker `S0B_M9A_20261004_0707`; restore completed with `witness_matched: true, frontend_restaged: true`.
+   - Defect confirmed: `vmctl`'s guest binding parses `computer:<owner>:primary` and passes the second segment (`"primary"`) to `GetOwnershipByComputerID("primary")`, failing with 403. Route slot stayed at `generation: 0`.
+2. **Probes 1, 4, and 5 are valid negative findings of the sealed substrate.**
+   - Probe 1: `/api/capsules` returns SPA fallback HTML (`200 OK text/html`), masking capsule inventory; `/run/choir/capsules` is sealed and unobservable from outside.
+   - Probe 4: `/nix/store` is an EROFS mount on `/dev/vda` (898 entries). Sealed guest exposes no Nix build, package install, or activation endpoint.
+   - Probe 5: vmctl exposes only `resolve/resume/recover/refresh/runtime-package`. No snapshot, UFFD, or reflink handlers exist in host code or `/var/lib/go-choir/vm-state/`.
+3. **Probe 3 was an operator harness scope fault, not a substrate transition failure.**
+   - Mode armed cleanly to `propose_only` (generation 1, receipt `01a105bf-678f-72b1-a923-88c8ce54c1bd`).
+   - Operation request failed 403 (`missing required scope: computer:self_development:propose`). Replacement mint failed 403 because attenuated bearer keys cannot mint `manage:keys`.
+   - The product correctly enforced authorization, but `capsule_go_eval` never executed.
+4. **The S2 builder candidate space is narrowed by elimination, not empirical selection.**
+   - Unprivileged in-guest builds are impossible on the current immutable base.
+   - S2 must choose between host-side Nix closure builds or a privileged builder capsule with custom mounts/namespaces.
+
+---
+
+### 3. Dissent & Disagreements
+
+- **Dissent A (Send-back advocates):** Argue that Probe 3 is an operator blunder, already fixed in `scripts/s0b_disposable_keydriver.mjs` (`57613ddc`). Since the disposable VM is still running (`docs/evidence/s0b-disposition-2026-10-04.md`), a 3-minute re-run would turn an unobserved blank into a real Go effect receipt.
+  - *Counter:* The boundary prompt freezes the evidence. S1's immediate next slice covers the capsule and yaegi floor; forcing S0b into another deploy/re-run cycle for one cell eval stalls the metamission without changing S0's primary output (the reality boot timeline and gap map).
+- **Dissent B (Unconditional Accept advocates):** Argue that S0's contract states "an unsupported transition is a valid S0 finding" and that all 5 probes ran and generated receipts.
+  - *Counter:* An operator harness failure (Probe 3 scope omission) is not an unsupported transition of the system. Calling it an unqualified `accept` misrepresents an untested path as an observed negative.
+
+---
+
+### 4. Risks & Edge Cases
+
+1. **Downstream cascade of the M9a route defect:** Any test in S1 or S2 querying endpoints gated on ComputerVersion route identity will receive `503 computer route identity unavailable` (observed in Probe 4) until S2 repairs the `primary` vs `computer-id` binding.
+2. **Yaegi / capsule execution blindspot:** Because Probe 3 did not execute, any hidden runtime regression in Go cell parsing, execution timeout, or namespace isolation remains undetected until S1.
+3. **Host-vs-capsule builder architectural debt:** If S2 defaults to a host builder service to bypass the sealed guest, it risks entangling host privileges with tenant builds. If it chooses a privileged builder capsule, it must design new mount/namespace plumbing without S0 benchmark data.
+
+---
+
+### 5. Evidence or Assumptions
+
+- **Verified (Locally Inspected):**
+  - S0 finish contract (`docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md:106-114, 345-348`).
+  - Five S0b probe receipts (`docs/evidence/s0b-*-2026-10-04.json`).
+  - Terminal disposition of `computer-ac1808b4f04fc749c0781083ee747403` (`docs/evidence/s0b-disposition-2026-10-04.md`).
+  - Problem doc `docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md`.
+  - Harness fix commit `57613ddc` updating `scripts/s0b_disposable_keydriver.mjs:80` with `computer:self_development:propose` and `manage:keys`.
+  - Metamission pipeline ordering (`choir-supervised-app-development-metamission-2026-10-01.md:426-430`).
+- **Unverified (Assumptions from Frozen Staging Data):**
+  - Assumed that Firecracker hypervisor on Node B has no undocumented out-of-band snapshot tooling running outside `vmctl`.
+  - Assumed that the disposable VM `vm-b59963240d2cd8da769b92cacb213802` remains active on Node B as stated in the disposition document.
+
+---
+
+### 6. Confidence
+
+**High.** The boundary contract, frozen JSON receipts, harness commit, and problem documentation are mutually consistent and verified against the repository tree.

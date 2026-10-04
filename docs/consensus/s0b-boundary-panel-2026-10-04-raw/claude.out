@@ -1,0 +1,60 @@
+## 1. Verdict: `send_back`
+
+Documented gaps are valid S0 findings, so the problem is not the lack of successful probes. Four things are wrong:
+
+- **(a) The required decision receipt is missing.** S0 requires `s0b-builder-substrate-decision`, which must either select an S2 builder substrate or rule out all three with evidence. There is no such receipt.
+- **(b) The M9a defect was introduced by S1a and is being sent to the wrong owner.** It came in with the S1a hotfix (`525f282b`), but it has been filed for S2/S3 to own.
+- **(c) The S0b work is not in the probe index.** Several receipts the definition names were never attempted.
+- **(d) Two probes failed for driver/method reasons, not because the platform lacks support.** Probe 3 hit a key-scope miss and probe 5 checked the wrong surface, so neither is a valid "unsupported transition."
+
+If the owner wants to move faster, `accept_with_edge` is defensible only if (a) and (b) are fixed first. In that case the accepted edge is "snapshot/UFFD/reflink and Nix-build feasibility unmeasured; S3/S4 inherit `missing_oracle`."
+
+## 2. Top findings
+
+1. **The M9a defect is an S1a regression and blocks the transition.** I checked the code:
+   - `internal/vmctl/route_authority.go:395-406` parses `route_slot_id` with `routeledger.ParseRouteSlotID` and passes its second component to `bindRequestToGuestComputer`.
+   - That function (`handlers.go:1514-1532`) calls `GetOwnershipByComputerID(wantComputerID)`.
+   - For a `computer:<owner>:primary` slot, that becomes a lookup of `"primary"`, which fails.
+   - `git log -L` attributes this block to `525f282b` ("red(s1a): host-boundary authority binding"), landed the same day.
+
+   So the S1a close receipt landed a red-class change that breaks platform-follow route promotion for every guest calling with an owner/desktop slot. The probe also saw `kernel-capabilities` return `503 computer route identity unavailable`. In the heresy delta this belongs under **introduced by S1a**, not "discovered in S0b." It should re-open S1a, or get its own S1a-follow-up repair, before S0 hands off. Leaving it for S2/S3 means S2 builds on a route plane that can't promote.
+
+2. **There is no builder-substrate decision.** The definition (lines 106-114, 258-259) says S0b "must select or falsify the S2 builder substrate rather than assume one."
+   - The gaps found (no capsule projection, read-only EROFS store, no dependency-build surface) show the *current sealed guest exposes nothing*.
+   - That is not evidence that host service, privileged builder capsule, or scoped guest service is infeasible.
+   - So nothing is ruled out; the decision just moves to S2. That is only acceptable if a decision receipt says so explicitly and lists the gaps as its inputs. A rough cut: the read-only store plus the sealed boundary weigh against an unprivileged scoped guest service and toward a host service or privileged capsule. That is a lean, not a falsification.
+
+3. **Probe 5 checked the wrong surface.** The required experiment is to measure Firecracker snapshot create/resume on the pinned platform. The probe only checked vmctl handlers and the state directory, and explicitly avoided any host-side work. Firecracker's own snapshot API on a disposable VM's socket is the real test. "vmctl has no handler" is a gap in vmctl, not a property of the platform.
+
+4. **Probe 3 is a driver bug, not a finding.** The fix is already in `scripts/s0b_disposable_keydriver.mjs`. Re-running it is cheap, and the definition requires the Go effect to be probed independently of M9a transport.
+
+5. **S0b is not in the probe index.** `s0-probe-index-2026-10-01.json` has no s0b entries. Per the artifact clause it is the single evidence map, so the S0b receipts must be indexed.
+
+6. **Several named receipts were never attempted:** `capsule-store-overlay`, `erofs-nix-db`, `nixpkgs-build`, `uffd-lazy-load`, `vm-state-reflink`. If they can't be run, each needs at least a gap receipt.
+
+## 3. Risks / edge cases
+
+- **Dissent I expect:** "The S0 contract says unsupported transitions are valid findings, so accept." That holds for probes 1 and 4. It does not hold for probe 3 (driver error) or probe 5 (the method avoided the platform surface), and it does not cover the missing decision receipt.
+- **Repair-boundary risk:** S0 says not to repair inside S0. But this defect was introduced by S1a, so fixing it is S1a's job, not an S0 repair. That keeps doctrine intact.
+- **Owner computer may be affected (unverified).** If the owner computer resolves through a `:primary` slot from the guest, platform-follow promotion is likely broken there too.
+- **The disposable VM is still running** with the M9a release active. It needs teardown, or it should be reused for the re-runs, before Node B headroom (recent recurrence 3) bites again.
+
+## 4. Evidence
+
+**Verified (read locally):**
+- The binding code path and its blame to `525f282b`.
+- The definition's acceptance and S0b clauses (lines 86-114, 332-347).
+- The problem doc and disposition file.
+- The snapshot receipt's inputs/findings (no host-side Firecracker attempt).
+- The probe index has no s0b entries.
+
+**Unverified:**
+- Whether the owner computer's slot is affected.
+- Whether the Firecracker API socket on Node B is reachable without SSH. The no-SSH operability standing question may push the snapshot probe toward a vmctl-mediated path, which would make it implementation rather than measurement.
+
+## 5. Confidence: medium-high
+
+- **High** on finding 1 (S1a introduced the defect) and finding 2 (no decision receipt).
+- **Medium** on whether the snapshot gap should be re-attempted in S0b or accepted as an edge for S3.
+
+I didn't edit anything; plan mode only allowed writing the scratch plan file, where I left a short summary. The Gmail, Google Calendar, Google Drive and Linear connectors need authorizing in claude.ai connector settings before I can use them; none were needed here.

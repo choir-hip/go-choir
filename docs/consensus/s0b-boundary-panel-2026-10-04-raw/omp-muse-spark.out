@@ -1,0 +1,32 @@
+Still starting after 11s — phase: createAgentSession > discoverSkills > capability:skills:agents
+  logs: /Users/wiz/.omp/logs/omp.2026-10-04.13207.log · re-run with PI_DEBUG_STARTUP=1 for streaming phase markers
+Working...
+## 1. Verdict / recommendation: `accept_with_edge`
+
+S0b satisfies its mechanism contract. The accepted edge: **re-run the self-dev Go effect with the corrected keydriver scopes as an S2-entry condition** — it is the only probe that failed from driver error rather than substrate absence, and the fix is already landed.
+
+## 2. Top findings
+
+- **Contract explicitly blesses gaps as findings.** Verified in `docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md:112-114,345-347`: "An unsupported transition is a valid S0 finding… it must be documented, not repaired in S0." 3 boundary gaps + 1 scope-miss + 1 partial-with-defect, each with machine-readable evidence JSON, is contract compliance, not shortfall. Demanding a fully green lifecycle would rewrite the contract retroactively.
+- **M9a still delivered a successful lifecycle leg.** `effect_accepted → materialization_started → materialization_applied → checkpoint_published`, restarted guest serving the marker, product restore `witness_matched=true frontend_restaged=true`. The apply+restore path works; only the route-projection tail failed. S0b therefore contains one genuine positive observation, answering the "no successful lifecycle" objection.
+- **M9a defect is real, source-traced, correctly scoped.** Guest binds `computer:<owner>:primary` slot but calls `GetOwnershipByComputerID("primary")` → 403. Problem doc `docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md` names repair boundary and rollback, made no repair in S0. Per contract this is exactly right: document in S0, own in S2/S3.
+- **Gaps relocate, not falsify, the S2 substrate decision.** No capsule-health projection, no dep-build/install surface (EROFS `/nix/store`, package-stream ≠ build API), no snapshot/UFFD/reflink handler — these are absence-of-surface facts, recorded read-only without host-side hacks. They eliminate no candidate (host service / privileged builder capsule / scoped guest service all remain open) and constitute the input S2 needs.
+- **Probe 3 is the lone re-runnable miss.** Keydriver minted without `computer:self_development:propose`; re-mint refused without `manage:keys`; foreign-owner session correctly unused. Fix verified landed in `scripts/s0b_disposable_keydriver.mjs:80` (now mints both selfdev scopes + `manage:keys`). Zero substrate change needed — just re-run.
+
+## 3. Risks / edge cases
+
+- **Route defect cascades into future probes.** Probe 4's `kernel-capabilities` 503 (`computer route identity unavailable`) is downstream of the unpromoted route, and `replay_completeness` 409 reflects post-M9a/restore tape position (6 events, `[1,6]` vs `(0,5]`). Any S2 experiment needing ComputerVersion identity is gated on the route-binding repair; next boundary should use a fresh disposable or explicitly account for tape position.
+- **`/api/capsules` ambiguity unresolved.** SPA-fallback 200 masks empty-set vs missing-endpoint. S2 should define the canonical capsule projection endpoint rather than re-probing blindly.
+- **`send_back` dissent considered and rejected.** The steelman: "nothing fully worked end-to-end." Counter: M9a apply+restore with witness match worked; the contract counts documented gaps as findings; the one true miss (Go effect) is a cheap re-run, not a station failure. Sending back the whole station for one re-runnable probe would cost more than the edge.
+- **Do not re-attempt dep/snapshot probes without new substrate.** Re-running them on the same sealed boundary reproduces the same gaps. They re-enter only once S2 proposes a builder surface.
+
+## 4. Evidence or assumptions (verified vs unverified)
+
+- **Verified (read locally):** all 5 evidence JSONs (verdicts: gap / partial_with_confirmed_defect / scope-gap / gap / gap); problem doc with tape sequences 2–6 and guest 403 log line; S0 contract wording; keydriver scope fix at `scripts/s0b_disposable_keydriver.mjs:80`; evidence commit `c76ba308` on top of staging `e87f3294`.
+- **Unverified (taken as frozen):** deployed staging behavior itself (guest health, route_absent, 403/503/409 bodies) — accepted as recorded probe output, not independently re-exercised; no secrets inspected.
+- **Assumption:** terminal state claim (VM active, no runs, self-dev off) per mission brief; S1a→S0b transition closure.
+
+## 5. Confidence: **high**
+
+Contract reading and defect trace are directly verified; S2 non-falsification is architectural judgment (medium in isolation) but does not move the verdict.
+
