@@ -135,6 +135,28 @@ let
 
     export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
     export RUNTIME_SKILLS_ROOT="${goChoirPackages.autoputer}/share/go-choir/skills"
+
+    # S2 layering: when the updater has pinned a layered release, exec its
+    # binary instead of the base-image autoputer. The release's delta store
+    # paths live in the updater's private store ($CHOIR_UPDATER_ROOT/store);
+    # the base store is a read-only EROFS. Run the release inside a private
+    # mount namespace that overlays the private store (upper) over the base
+    # /nix/store (lower) so the release's own closure paths resolve while
+    # base-present paths come through the EROFS unchanged. Any layering
+    # failure must fall back to the base binary — a wedged ExecStart on every
+    # guest boot is a worse failure than running the baseline.
+    release_bin="$CHOIR_UPDATER_ROOT/current/bin/autoputer"
+    priv_store="$CHOIR_UPDATER_ROOT/store"
+    overlay_work="$CHOIR_UPDATER_ROOT/.overlay-work"
+    if [ -x "$release_bin" ] && [ -d "$priv_store" ] && [ -n "$(ls -A "$priv_store" 2>/dev/null)" ]; then
+      mkdir -p "$overlay_work" || true
+      echo "go-choir-autoputer: layering release $release_bin over private store" >&2
+      ${pkgs.util-linux}/bin/unshare -m --propagation private ${pkgs.runtimeShell} -c "
+        ${pkgs.util-linux}/bin/mount -t overlay overlay -o lowerdir=/nix/store,upperdir='$priv_store',workdir='$overlay_work' /nix/store &&
+        exec '$release_bin' \"\$@\"
+      " -- "$@" || \
+        echo "go-choir-autoputer: layering overlay failed; falling back to base release" >&2
+    fi
     exec ${goChoirPackages.autoputer}/bin/autoputer "$@"
   '';
 in
