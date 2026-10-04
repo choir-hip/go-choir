@@ -13,7 +13,6 @@ import (
 
 	"github.com/creack/pty/v2"
 	"github.com/gorilla/websocket"
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -238,7 +237,7 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 			rootDir = "."
 		}
 		zotHome := filepath.Join(rootDir, ".choir", "zot")
-		env := append(os.Environ(),
+		env := append(terminalChildEnv(),
 			"HOME="+rootDir,
 			"TERM=xterm-256color",
 			"ZOT_HOME="+zotHome,
@@ -250,11 +249,8 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 			"CHOIR_USER_SOURCE_MOUNT=",
 			"CHOIR_BUILD_MOUNT=",
 		)
-		if !isFallbackZotSessionCommand(th.command) {
-			if token := provideriface.GatewayToken(); token != "" {
-				env = append(env, "OPENAI_API_KEY="+token)
-			}
-		}
+		// S1: the gateway token is never injected into children — a zot/terminal
+		// session is an untrusted guest workload, not a credential consumer.
 		cmd.Dir = rootDir
 		cmd.Env = env
 		return cmd, nil
@@ -263,8 +259,29 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 		return nil, fmt.Errorf("no zot command configured")
 	}
 	cmd := exec.Command(th.shell)
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	cmd.Env = append(terminalChildEnv(), "TERM=xterm-256color")
 	return cmd, nil
+}
+
+// terminalChildEnv returns the inherited environment minus credential-shaped
+// entries. Terminal and zot children are untrusted guest workloads; the
+// gateway token and any *_KEY/TOKEN/SECRET must not leak via os.Environ.
+func terminalChildEnv() []string {
+	base := os.Environ()
+	out := make([]string, 0, len(base))
+	for _, kv := range base {
+		name, _, _ := strings.Cut(kv, "=")
+		upper := strings.ToUpper(name)
+		if strings.HasPrefix(upper, "CHOIR_") ||
+			strings.Contains(upper, "TOKEN") ||
+			strings.Contains(upper, "SECRET") ||
+			strings.Contains(upper, "_KEY") ||
+			strings.HasSuffix(upper, "KEY") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 func (th *TerminalHandler) managementConsoleCommandWithGatewayDefaults() []string {

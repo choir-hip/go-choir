@@ -529,8 +529,16 @@ func TestSessionCommandConfiguresRealZotForGateway(t *testing.T) {
 			env[key] = value
 		}
 	}
-	if env["OPENAI_API_KEY"] != "autoputer-secret-token" {
-		t.Fatalf("OPENAI_API_KEY = %q, want gateway token", env["OPENAI_API_KEY"])
+	// S1: the autoputer identity token is never injected into a terminal/zot
+	// child — it would authenticate every /provider/v1/* call the child makes,
+	// not just the openai passthrough it was injected for.
+	for key, value := range env {
+		if value == "autoputer-secret-token" {
+			t.Fatalf("gateway token leaked into child env via %s", key)
+		}
+	}
+	if env["OPENAI_API_KEY"] != "" {
+		t.Fatalf("OPENAI_API_KEY = %q, want absent", env["OPENAI_API_KEY"])
 	}
 }
 
