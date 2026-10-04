@@ -65,10 +65,14 @@ function recordLeg(name, extra) {
 const prompt =
   `Operator-authorized record-native acceptance probe (marker ${MARKER}). ` +
   `Task: write one line into this document reporting the current UTC date. ` +
-  `To get it right you MUST ask the research desk — call ` +
-  `choir.Ask("research", "What is today's UTC date? Cite a time.is or ` +
-  `worldtimeapi.org page.") — then wait for the reply, incorporate the ` +
-  `answer into the document, and end. The document is disposable.`;
+  `To get it right you MUST gather the date from the research desk. Open a ` +
+  `researcher atomically: stage one choir.ApplyTexture apply turn whose ` +
+  `controls[] contains {"open_researcher": true, "objective": "Report the ` +
+  `current UTC date", "packet": {"kind": "question", "summary": "What is ` +
+  `today's UTC date?", "questions": ["What is today's UTC date? Cite a ` +
+  `time.is or worldtimeapi.org page."]}}. When the research report arrives, ` +
+  `incorporate the answer into the document, and end. The document is ` +
+  `disposable.`;
 
 const submit = await api('/api/prompt-bar', 'POST', { text: prompt, command_id: `s0m-ask-${MARKER}` });
 let TRAJ = submit.body?.trajectory_id;
@@ -92,13 +96,22 @@ while (Date.now() < deadline) {
       seen.add(key);
       const uid = String(e.update_id || '');
       if ((e.kind === 'update_queued' || e.kind === 'control_queued' || e.kind === 'control_delivered' || e.kind === 'update_delivered')) {
-        if (uid.includes(':ask:') || uid.includes(':precommit:')) {
+        // The "ask" is the open_researcher control packet the desk mints —
+        // a bound control/question directed at research. Also catch an
+        // explicit ask/precommit record if the desk stakes one.
+        if (uid.includes(':ask:') || uid.includes(':precommit:') ||
+            e.kind === 'control_queued' || e.kind === 'control_delivered' ||
+            e.direction === 'control' ||
+            String(e.packet_kind || '') === 'question') {
           if (!asked || !asked.delivered) {
             asked = { ...asked, e, delivered: e.kind.includes('delivered') };
             recordLeg('ask_' + e.kind, { update_id: uid });
           }
         }
-        if (uid.includes(':reply:')) {
+        if (uid.includes(':reply:') || uid.includes(':report:') ||
+            e.direction === 'producer_report' ||
+            String(e.packet_kind || '') === 'execution_result' ||
+            String(e.packet_kind || '') === 'evidence_update') {
           replied = e;
           recordLeg('reply_' + e.kind, { update_id: uid });
         }
