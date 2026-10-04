@@ -37,3 +37,30 @@ The guest request binding and route-slot schema must agree on the identity being
 ## Rollback
 
 No repair was made. The disposable computer remains active on the M9a release and has a successful product restore checkpoint; it can be torn down as a disposable fixture.
+
+## Boundary panel adjudication (2026-10-04)
+
+The S0b boundary panel (11 agents, convergent;
+`docs/consensus/s0b-boundary-panel-2026-10-04.md`) confirmed the
+source-traced chain and refined the repair-boundary reading:
+
+- **Provenance:** the binding leg was introduced by the S1a red commit
+  `525f282b` (`git log -L` on `internal/vmctl/route_authority.go:394-407`),
+  so the heresy delta is `discovered` by S0b, `introduced` by S1a,
+  `unrepaired`. The owning repair boundary is S1a (or a named S1a
+  follow-up receipt), not "S2/S3": S1a closed the same day the regression
+  shipped, and the defect breaks fresh-computer route promotion for every
+  guest, not just this fixture.
+- **Why the S1a matrix missed it:** the refusal matrix's green leg L2 built
+  the slot as `computer:<owner>:<stable-computer-id>` (non-canonical —
+  `scripts/s1a_refusal_matrix_probe.mjs:141`), and the only route-resolve
+  unit test runs over httptest loopback, where `isInternalCaller`
+  short-circuits before the tap bind. The required regression test must use
+  a tap-sourced (non-loopback, non-192.0.2.x) caller and the canonical
+  `computer:<owner>:primary` slot form.
+- **Confined blast radius:** the defect is confined to
+  `route_authority.go:398` — the other `GetOwnershipByComputerID` call
+  sites (`handlers.go:361,1116`, `cold_recover.go:451`) take real computer
+  IDs and are unaffected; the correct owner+desktop binding pattern exists
+  in the same package (`self_development_route.go:56-61`,
+  `ownershipKey(ownerID, desktopID)`).
