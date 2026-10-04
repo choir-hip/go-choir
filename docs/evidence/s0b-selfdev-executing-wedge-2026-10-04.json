@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "kind": "s0b_disposable_computer_probe",
+  "probe": "go_effect_lifecycle (re-run, second disposable)",
+  "computer_id": "computer-a99366facf24b872703de326d3b33832",
+  "vm_id": "vm-017fdc197059abe48f87e73962b02605",
+  "api_key_label": "s0b-go-retry-admin",
+  "operation_id": "selfdev-0280c6cf2eac90dffb5c77912c0766a9",
+  "captured_at": "2026-10-04T07:44:00Z",
+  "probe_script": "scripts/s0b_disposable_keydriver.mjs (scope list extended with computer:self_development:read/propose/mode + manage:keys)",
+  "keydriver_scope_fix": {
+    "original_failure": "first disposable run passed computer:lifecycle + read/write scopes but lacked computer:self_development:* -> ops POST returned 403 'self-development' and no Go cell ever ran",
+    "fix": "added computer:self_development:read + computer:self_development:propose + computer:self_development:mode to the minted scope list",
+    "verification": "second disposable's key authorized ops POST + mode PUT; op created and mode armed propose_only"
+  },
+  "timeline": {
+    "op_created": "2026-10-04T07:28:53.531082Z",
+    "mode_armed_propose_only": "generation 1",
+    "proposal_loop_start": "2026-10-04T07:28:53.657001Z",
+    "gateway_rounds": 10,
+    "gateway_model": "opencode-go / deepseek-v4.1-flash",
+    "gateway_messages_climbed": "5 -> 17",
+    "last_gateway_round": "2026-10-04T07:29:57",
+    "last_round_text_len": 93,
+    "op_state_at_last_observation": "executing",
+    "executing_duration_observed": ">= 16 minutes post last gateway round",
+    "verifier_refs": [],
+    "bundle_digest": null,
+    "error": null,
+    "updated_at": "never advanced past op-created timestamp",
+    "running_runs": 0,
+    "running_processor_runs": 0,
+    "replay_completeness": {
+      "result": "equivalent",
+      "tail_events_applied": 91,
+      "live_only": 0,
+      "replay_only": 0,
+      "different": 0
+    }
+  },
+  "verdict": "wedge",
+  "wedge_kind": "proposal_loop_end_without_bundle_or_error",
+  "mechanism": "propose_only op: proposal loop ran 10 inference rounds and returned a terminal non-tool answer; no bundle committed, no failure transition fired; op state stuck at 'executing' with verifier_refs empty",
+  "evidence_chain": [
+    "gateway journal (node-b): ten opencode-go inference rounds ending 07:29:57 text_len=93",
+    "ops record: state=executing, verifier_refs=[], bundle_digest=null, error=null, updated_at==created_at",
+    "replay-completeness: result=equivalent, 91 events applied",
+    "guest /health: running_runs=0 running_processor_runs=0 status=ready"
+  ],
+  "problem_doc": "docs/problems/s0-selfdev-executing-wedge-2026-10-04.md",
+  "go_effect_execution": {
+    "observed": false,
+    "cell_evaluated": false,
+    "marker_written": false,
+    "reason": "op wedged in executing before bundle formed; no apply, no checkpoint publish, no marker"
+  },
+  "boundary_implication": "S2 builder-substrate decision remains without a runtime-observed Go effect; the send_back panel named this exact gap"
+}
