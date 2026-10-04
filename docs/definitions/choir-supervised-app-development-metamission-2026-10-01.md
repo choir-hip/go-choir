@@ -73,10 +73,9 @@ metamission:
       # one substrate: the platform has no storage lifecycle and no durable
       # guest observability. Runs in parallel with S2; S3 cannot start
       # without it (memory snapshots add GiBs per hibernated computer).
-      # Station file to be authored from "Orientation 2026-10-05".
-      path: unauthored (scope in this file, "Orientation 2026-10-05" -> SO)
-      readiness: intent
-      status: pending
+      path: docs/definitions/choir-appdev-so-ops-substrate-2026-10-05.md
+      readiness: reviewed
+      status: working
       depends_on: []
     - id: S3-fast-resume
       path: docs/definitions/choir-appdev-s3-fast-resume-2026-10-01.md
