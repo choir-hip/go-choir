@@ -10,9 +10,9 @@
 // Refusals:
 //   R1 tap->tap           A: curl 10.200.B.2:8085              -> fail/timeout
 //   R2 vmctl internal     A: GET 10.200.A.1:8083 /internal/vmctl/list + hdr -> 403
-//   R3 maild forge        A: POST :8087 drafts as B's owner    -> 403
-//   R4 corpusd bypass     A: GET  :8086 /internal/platform/update hdr -> 403
-//   R5 proxy wire publish A: POST :8082 wire-platform publish  -> 403
+//   R3 maild forge        A: GET :8087 /api/email/messages as B's owner -> 403
+//   R4 corpusd bypass     A: GET :8086 /internal/computers/platform-updates/offer -> 403/405
+//   R5 proxy wire publish A: GET :8082 /internal/wire/platform/publications/texture -> 403/404/405
 //   R6 spoofed source     covered by anti-spoof rule + R1 (kernel drops
 //                          forged SRC; tcp-dial from guest can't pick src)
 // Legitimate (still green):
@@ -139,10 +139,10 @@ const main = async () => {
   record('R3_maild_forged_owner', await guestProbe(A.own, { addr: `${hostIP}:8087`, path: '/api/email/messages', headers: ['X-Internal-Caller: true', `X-Authenticated-User: ${B.user}`] }).then(r =>
     r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
       : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
-  record('R4_corpusd_bypass', await guestProbe(A.own, { addr: `${hostIP}:8086`, path: '/internal/platform/update', headers: ['X-Internal-Caller: true'] }).then(r =>
-    r.status === 403 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
+  record('R4_corpusd_bypass', await guestProbe(A.own, { addr: `${hostIP}:8086`, path: '/internal/computers/platform-updates/offer', headers: ['X-Internal-Caller: true'] }).then(r =>
+    r.status === 403 || r.status === 405 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
       : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
-  record('R5_proxy_wire_publish', await guestProbe(A.own, { addr: `${hostIP}:8082`, path: '/internal/platform/wire/publish', headers: ['X-Internal-Caller: true'] }).then(r =>
+  record('R5_proxy_wire_publish', await guestProbe(A.own, { addr: `${hostIP}:8082`, path: '/internal/wire/platform/publications/texture', headers: ['X-Internal-Caller: true'] }).then(r =>
     r.status === 403 || r.status === 404 || r.status === 405 ? { verdict: 'refused', detail: `HTTP ${r.status}` }
       : { verdict: 'FAILED-OPEN', detail: `HTTP ${r.status} body=${r.body.slice(0, 120)}` }));
 
