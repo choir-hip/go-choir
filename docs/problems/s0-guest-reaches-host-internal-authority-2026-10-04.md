@@ -21,21 +21,32 @@ only). This record covers the general authority consequence.
 TCP dials succeeded to another guest's `:8085`, the host's vmctl `:8083`, and
 `1.1.1.1:443`.
 
-### Leg 2: guest traffic to host services arrives as loopback (source)
+### Leg 2: guest traffic to host services arrives with the REAL guest source IP (CORRECTED 2026-10-04, deployed-observed)
 
 `internal/vmmanager/manager.go` `setupHostNetworking`:
 - PREROUTING DNATs `hostIP:<port>` to `127.0.0.1:<port>` for every port in
   `tapReachableHostServicePorts()`: 8082 proxy, 8083 vmctl, 8084 gateway,
   8085 host autoputer, 8086 corpusd, 8087 maild, 8787 source service.
-- `POSTROUTING -s guestIP/30 -o lo -j MASQUERADE` rewrites the source to the
-  loopback address.
-- `FORWARD -i tap -j ACCEPT` / `-o tap -j ACCEPT` and a general outbound
-  MASQUERADE leave tap→tap and tap→internet open. The NixOS firewall filters
-  INPUT only (`nix/node-b.nix`, no `filterForward`).
+- `route_localnet=1` is set on the guest tap so the DNAT'd packet to a local
+  destination is delivered via INPUT rather than dropped as martian.
+- The packet therefore takes the **INPUT path, not POSTROUTING**: the
+  per-tap `-o lo -j MASQUERADE` rules exist but have 0 packets/0 bytes and
+  cannot fire; **no source NAT occurs**.
+- Deployed proof (`docs/evidence/s1a-guest-to-host-addr-preservation-2026-10-04.json`):
+  a guest-originated SYN to `hostIP:8086` was captured at host INPUT with
+  `SRC=10.200.207.2 DST=127.0.0.1` — the real guest tap IP, not loopback.
+- `FORWARD -i tap -j ACCEPT` / `-o tap -j ACCEPT` plus a general outbound
+  MASQUERADE leave tap->tap and tap->internet open; FORWARD has no drop
+  chain (policy ACCEPT). The INPUT tail does jump to `nixos-fw`
+  (log-refuse), so guest->host port reach is already limited to the 7
+  DNAT'd service ports; the exposure is **authority inside those
+  services**, not port reach.
 
-Inference: a host service sees guest-originated requests with a loopback
-`RemoteAddr`. **Confirm by logging `RemoteAddr` on one host service for a
-guest-originated request (disposable computer).**
+Consequence for the fix: `RemoteAddr` at host services is the guest's real
+tap IP, so tap-sourced requests are distinguishable at the application
+layer (`isLocalhost`-style checks already exclude guests; only
+header-only checks pass). The earlier inference that traffic "arrives as
+loopback" is withdrawn.
 
 ### Leg 3: host-internal authority checks accept caller-controlled inputs (source)
 
@@ -46,7 +57,7 @@ guest-originated request (disposable computer).**
 | guest autoputer `:8085` `/internal/runtime/*` | `X-Internal-Caller == "true"` only | `internal/agentcore/api.go:295` `requireInternalRuntimeCaller`; `/internal/runtime/platform-update` at `internal/apihandler/routes.go:50` |
 | guest autoputer (user routes) | trusts proxy-set `X-Authenticated-User` | `internal/proxy/computer_lifecycle.go:203` sets it; guests reachable directly |
 | maild `:8087` | owner from `X-Authenticated-User` + `X-Internal-Caller` | `internal/maild/api.go:165-176` |
-| gateway `:8084` internal | `isLocalhost(r) && X-Internal-Caller` (loopback satisfied via Leg 2) | `internal/gateway/handlers.go:787` |
+| gateway `:8084` internal | `isLocalhost(r) && X-Internal-Caller` — with leg 2 corrected, guest RemoteAddr is a tap IP, so guests already fail `isLocalhost`; guest->gateway internal is closed by network position | `internal/gateway/handlers.go:787` |
 
 vmctl internal routes behind that check include resolve, list (every
 ownership: computer IDs, VM IDs, guest URLs), refresh, stop/start/recover,
@@ -92,22 +103,25 @@ runtime environment
 ## Root cause (substrate)
 
 Host-internal authority is inferred from **network position plus a
-self-asserted header**. The VM network makes every guest network-local to
-the host's loopback services. Identity for user routes is a header
-assertion that the proxy adds, but the proxy is not the only path to a guest.
-This is one substrate defect, not several endpoint bugs. Patching individual
-handlers would leave the class open.
+self-asserted header**. The VM network makes every guest able to
+TCP-connect to the host's loopback-bound services through the DNAT
+bridge, while carrying a forgeable internal-caller header — and guest
+traffic to other guests and the internet is unfiltered. Identity for
+user routes is a header assertion that the proxy adds, but the proxy is
+not the only path to a guest. This is one substrate defect, not several
+endpoint bugs. Patching individual handlers would leave the class open.
 
 ## Fix shape (S1a, red — design to be settled in the S1 station file)
 
 1. **Network (smallest, first).**
-   - Drop tap→tap forwarding.
-   - Default-deny guest→internet, with research egress through the gateway
+   - Drop tap->tap forwarding.
+   - Default-deny guest->internet, with research egress through the gateway
      or a recording proxy.
-   - Restrict guest→host to the ports each guest flow actually needs, and
-     stop MASQUERADEing guest→host into loopback, so services can tell a
-     guest source from a host source.
-   - Set `networking.firewall.filterForward = true` on Node B.
+   - Keep guest->host restricted to the service ports each guest flow
+     actually needs (the INPUT rules already scope this; drop the
+     `lo` MASQUERADE rules which provably never fire).
+   - Set `networking.firewall.filterForward = true` on Node B (or an
+     equivalent explicit FORWARD policy in vmmanager).
 2. **Authority.**
    - Host-internal endpoints refuse any tap-sourced request, or bind a
      per-realization credential (the existing credential disk / receipt

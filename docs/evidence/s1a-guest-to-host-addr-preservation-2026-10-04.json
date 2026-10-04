@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "kind": "s1a-guest-to-host-addr-preservation",
+  "collected_at": "2026-10-04T02:50:00Z",
+  "method": "temporary iptables LOG rule at INPUT position 1 on the guest's tap (vm-f2yfsua3klyk, dport 8086, limit 10/min), one guest-originated SYN via /internal/diag/tcp-dial, journal read, rule removed",
+  "observation": {
+    "in_interface": "vm-f2yfsua3klyk",
+    "src": "10.200.207.2",
+    "dst": "127.0.0.1",
+    "dpt": 8086,
+    "note": "packet arrives at the host INPUT chain post-DNAT with the real guest source IP preserved. Kernel log lines recorded 2026-10-04T02:50:04Z."
+  },
+  "supporting_facts": {
+    "route_localnet": "net.ipv4.conf.vm-f2yfsua3klyk.route_localnet = 1 (all/lo = 0); required for DNAT-to-127.0.0.1 delivery from a non-lo interface",
+    "lo_masquerade_rules": "POSTROUTING -o lo MASQUERADE rules exist per tap but have 0 packets/0 bytes on every tap; guest->host traffic takes the INPUT path after DNAT to a local address and never traverses POSTROUTING, so no source NAT occurs",
+    "input_chain": "per-tap ACCEPT rules for dports 8082-8087, 8787 exist (guest->host reaches exactly the DNAT'd service set); INPUT tail jumps to nixos-fw whose final rule is log-refuse",
+    "forward_chain": "policy ACCEPT; unqualified per-tap ACCEPT rules in both directions; no DROP/filter chain - guest->guest and guest->internet forwarding confirmed open",
+    "heavy_guest_to_vmctl": "vm-vm-unive-tap (10.202.17.0/30) has 6.9M packets / 361MB cumulative to dport 8083 - an existing high-volume guest->vmctl flow that must be identified before restricting"
+  },
+  "correction": "docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md leg 2 inferred guest->host traffic arrives with a loopback RemoteAddr. Observed: it arrives with the real guest tap IP (10.200.207.2) at DST=127.0.0.1. Host services CAN distinguish tap-sourced requests by RemoteAddr; isLocalhost-style checks already exclude guests. The exposure is the header-only X-Internal-Caller/X-Authenticated-User paths, not RemoteAddr ambiguity.",
+  "source_vm": "vm-f2yfsua3klyk (computer-25d14d0efb88319567f6722a84986403, state active, guest 10.200.207.2)"
+}
