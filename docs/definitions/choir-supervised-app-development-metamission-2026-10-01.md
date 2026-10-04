@@ -12,6 +12,11 @@ definition_version: 4
 # cross-tenant authority chain recorded in full (owner: prerelease, include
 # security detail), S1a host-boundary hotfix pulled ahead of S0b, CI
 # deploy-cancellation and ops hazards named.
+# v3.2 2026-10-04 (addendum only, not a revision): S2 layering exec
+# stabilization in flight. Overlay exec confirmed guest-only-failing on
+# staging; a durable stderr/observability hole blocked root-causing it.
+# Four substrate issues recorded for the next revision; a full metamission
+# revision is deferred until S2 is stable. See "Addendum 2026-10-04".
 
 readiness: executable
 
@@ -983,3 +988,53 @@ self-promoting a successor.
    discard).
 5. Snapshot encryption at rest on the host (needed before any export;
    for on-host hibernate, root-only permissions match data.img today).
+
+## Addendum 2026-10-04 — S2 layering exec stabilization in flight
+
+This is an addendum, not a revision: the mission ordering, station contracts,
+and `now` card are unchanged. A full revision is scheduled once S2 is stable.
+Recorded here so the next session and the revision both start from the same
+evidence.
+
+**S2 status.** The layered-apply chain lands end-to-end on staging — offer
+mint/sign, push, nar replay into the guest's private store,
+`layering-entrypoint` record, `current` swap, guest restart, route promotion.
+The remaining defect is the exec step: the guest's `unshare -m` +
+`mount -t overlay` + `exec` over the EROFS base fails in the guest's systemd
+private mount namespace (works identically on the host; fails deterministically
+in the guest). Two mitigation commits shipped (`e605cdde` direct-exec
+fallback + env roots; `3c1cbaf6` durable `layering-diag.log` stage
+recording). Whether the overlay or direct-exec path wins is being settled by
+re-probe on the deployed `e605cdde` image.
+
+**Substrate issues this mission surfaced — all feeding future stations:**
+
+1. **Guest stderr is unreachable after cold boot** — disposable/interactive
+   VMs carry no serial sink and `journal_events` covers only the cold-boot
+   window, so a guest-side exec failure is host-invisible. Root-causing the
+   layering fallback required a dedicated diag file. Every later station
+   (S0b probes, S3 resume, S4 capsule exec, S6 rollback) inherits this hole.
+   `docs/problems/guest-stderr-unreachable-after-cold-boot-2026-10-04.md`.
+
+2. **Node B deploy disk headroom — recurrence 4.** The bounded reclaim
+   misses dead `vm-state` dirs (no live `go-choir-vm@` unit); freed 19 GiB
+   manually. `corpus-dolt` + `platform-artifacts` are the structural
+   consumers and grow each deploy; the 90 GiB floor keeps eroding.
+   `docs/problems/node-b-deploy-disk-headroom-2026-10-04.md` (Recurrence 4).
+
+3. **S4's overlay-over-`/nix/store` falsifier is now live evidence.** The
+   service hit exactly the guest-side failure S4 names for the capsule
+   userns — the overlay mechanism is sound but the guest execution context
+   diverges. The S0b builder-mechanism decision and S4's private-store
+   choice now have a deployed data point: overlay needs a verified guest
+   fallback before S4 commits to it.
+
+4. **Apply-restart can wedge the runtime silently.** A guest that was
+   healthy at cold boot failed to re-listen on 8085 after the apply restart;
+   the guest IP still pings. The self-restart kills the in-flight handler
+   and a failed new exec crash-loops with no receipt — the S6/S11 failure
+   mode that must be observable.
+
+**For the next revision (when S2 stabilizes):** fold the guest observability
+substrate and Node B disk structure into the station contract as named
+prerequisites, not incidentals.
