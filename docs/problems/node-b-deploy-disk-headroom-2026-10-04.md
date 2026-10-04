@@ -1,5 +1,23 @@
 # Node B deploy disk headroom — deploys blocked below 90 GiB
 
+## Recurrence 4 — 2026-10-04T18:57Z, deploy run 37226102819 (e605cdde)
+
+Fifth hit. `root_available_kib_after_reclaim=92040604` (~87.8 GiB) vs the
+94371840 floor (~90 GiB) — the bounded reclaim's vmctl pass returned
+`vms_reclaimed:0` (`no unprotected active ownerships`) and nix gc freed
+only 4.2 GiB. This time the bounded reclaim also could not see ~19 GiB of
+allocated `data.img` files in **`vm-state` dirs for VMs with no live
+`go-choir-vm@*` unit** — dead disposable/probe VMs the reclaim treats as
+ownerships-untouchable even though no unit exists to reattach them.
+Cleared by deleting those dead `vm-state/vm-*` dirs + `nix store gc` +
+`journalctl --vacuum`; 112 GiB free after, deploy rerun passed.
+
+**New lever class (in addition to the `.corrupt`/`.pre-*` arms):**
+`comm -23 <(all vm-state ids) <(live go-choir-vm@ ids)` — dead-state dirs
+the bounded reclaim never inspects. corpus-dolt (97G) +
+platform-artifacts (77G) are now the dominant structural consumers and
+grow on every deploy; the 90 GiB floor will keep eroding.
+
 ## Recurrence 3 — 2026-10-04T07:06Z, deploy run 37184188348 (e87f3294)
 
 Fourth hit. 88 GiB free after the bounded reclaim; preflight refused. Cleared
