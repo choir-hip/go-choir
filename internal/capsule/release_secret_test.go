@@ -91,7 +91,7 @@ func TestStageGrantedReleaseRefusesSecrets(t *testing.T) {
 			if err := os.Chmod(incoming, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			_, _, err = executor.StageGrantedRelease(context.Background(), "cosuper-1", "grant-1", incoming)
+			_, err = executor.StageGrantedRelease(context.Background(), "cosuper-1", "grant-1", incoming)
 			if err == nil || !strings.Contains(err.Error(), "refuses secret") {
 				t.Fatalf("secret release error = %v", err)
 			}
@@ -141,19 +141,20 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 	if err := os.Chmod(incoming, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	files, staged, err := executor.StageGrantedRelease(context.Background(), "cosuper-success", "grant-success", incoming)
+	staged, err := executor.StageGrantedRelease(context.Background(), "cosuper-success", "grant-success", incoming)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 2 || files[0].Path != "bin/autoputer" || files[1].Path != "frontend/index.html" || staged == "" {
+	files := staged.Files
+	if len(files) != 2 || files[0].Path != "bin/autoputer" || files[1].Path != "frontend/index.html" || staged.TemporaryRoot == "" {
 		t.Fatalf("staged release files=%+v path=%q", files, staged)
 	}
-	if content, err := os.ReadFile(filepath.Join(staged, "bin/autoputer")); err != nil || string(content) != "autoputer" {
+	if content, err := os.ReadFile(filepath.Join(staged.TemporaryRoot, "bin/autoputer")); err != nil || string(content) != "autoputer" {
 		t.Fatalf("staged autoputer = %q, %v", content, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, err := executor.StageGrantedRelease(ctx, "cosuper-success", "grant-success", incoming); !errors.Is(err, context.Canceled) {
+	if _, err := executor.StageGrantedRelease(ctx, "cosuper-success", "grant-success", incoming); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled release staging error = %v", err)
 	}
 }
@@ -193,7 +194,7 @@ func TestStageGrantedReleaseRefusesMissingFrontend(t *testing.T) {
 	if err := os.Chmod(incoming, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-missing-spa", "grant-missing-spa", incoming); err == nil || !strings.Contains(err.Error(), "frontend") {
+	if _, err := executor.StageGrantedRelease(context.Background(), "cosuper-missing-spa", "grant-missing-spa", incoming); err == nil || !strings.Contains(err.Error(), "frontend") {
 		t.Fatalf("missing frontend freeze error = %v", err)
 	}
 }
@@ -249,12 +250,12 @@ func TestStageGrantedReleaseAdmitsBinaryStringBlob(t *testing.T) {
 	if err := os.Chmod(incoming, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	files, staged, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming)
+	stagedBinary, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming)
 	if err != nil {
 		t.Fatalf("genuine binary release refused: %v", err)
 	}
-	if len(files) != 2 || staged == "" {
-		t.Fatalf("staged release files=%+v path=%q", files, staged)
+	if len(stagedBinary.Files) != 2 || stagedBinary.TemporaryRoot == "" {
+		t.Fatalf("staged release files=%+v root=%q", stagedBinary.Files, stagedBinary.TemporaryRoot)
 	}
 
 	// A structural secret embedded in binary content still refuses — including
@@ -267,7 +268,7 @@ func TestStageGrantedReleaseAdmitsBinaryStringBlob(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(merged, "var/lib/artifact/release/bin/autoputer"), badBinary, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming); err == nil || !strings.Contains(err.Error(), "refuses secret") {
+	if _, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming); err == nil || !strings.Contains(err.Error(), "refuses secret") {
 		t.Fatalf("secret-bearing binary release error = %v", err)
 	}
 
@@ -281,7 +282,7 @@ func TestStageGrantedReleaseAdmitsBinaryStringBlob(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(merged, "var/lib/artifact/release/bin/autoputer"), straddler, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming); err == nil || !strings.Contains(err.Error(), "refuses secret") {
+	if _, err := executor.StageGrantedRelease(context.Background(), "cosuper-binary", "grant-binary", incoming); err == nil || !strings.Contains(err.Error(), "refuses secret") {
 		t.Fatalf("boundary-straddling secret release error = %v", err)
 	}
 }
@@ -306,7 +307,7 @@ func TestExtractGrantedFreezesBeforeDiff(t *testing.T) {
 		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-freeze", Handle: "grant-freeze"}: capability},
 		revokedCaps:  map[string]bool{}, publicKey: publicKey,
 	}
-	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-freeze", "grant-freeze", t.TempDir()); err == nil || !strings.Contains(err.Error(), "requires frozen capsule") {
+	if _, err := executor.StageGrantedRelease(context.Background(), "cosuper-freeze", "grant-freeze", t.TempDir()); err == nil || !strings.Contains(err.Error(), "requires frozen capsule") {
 		t.Fatalf("active capsule stage error = %v", err)
 	}
 	if _, err := executor.ExtractGranted(context.Background(), "cosuper-freeze", "grant-freeze"); err != nil {
@@ -359,7 +360,7 @@ func TestStageGrantedReleaseRefusesSymlinkComponents(t *testing.T) {
 	if err := os.Chmod(incoming, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-symlink", "grant-symlink", incoming); err == nil || !strings.Contains(err.Error(), "unavailable") {
+	if _, err := executor.StageGrantedRelease(context.Background(), "cosuper-symlink", "grant-symlink", incoming); err == nil || !strings.Contains(err.Error(), "unavailable") {
 		t.Fatalf("symlink component stage error = %v", err)
 	}
 }

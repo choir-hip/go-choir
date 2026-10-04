@@ -48,6 +48,12 @@ type CapsuleEffectBundle struct {
 	Rejected                bool                        `json:"rejected"`
 	RejectReason            string                      `json:"reject_reason,omitempty"`
 	RuntimeFiles            []capsule.FrozenReleaseFile `json:"runtime_files"`
+	// S2-f: when the effect touches workspace/platform sources, the freeze
+	// stages a unified-diff artifact and records it here. The host builder
+	// consumes the patch to produce a layered release — runtime changes are
+	// source-carried, not binary payloads.
+	SourcePatchSHA256     string `json:"source_patch_sha256,omitempty"`
+	SourcePatchBaseCommit string `json:"source_patch_base_commit,omitempty"`
 }
 
 // ChangeRecord is a single file change in the transaction record.

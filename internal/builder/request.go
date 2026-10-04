@@ -39,6 +39,14 @@ type Request struct {
 	// dirty; when empty the caller's CodeCommit is used with
 	// provenance=caller.
 	SourceDir string
+	// SourcePatch is a unified-diff file applied to a detached worktree at
+	// BaseCommit (or CodeCommit) before nix evaluates. This is the S2-f
+	// self-dev→builder join: capsules ship source patches, not binaries.
+	SourcePatch string
+	// SourcePatchBaseCommit is the commit the patch was authored against
+	// (the capsule's pinned source snapshot). Required when SourcePatch is
+	// set; the builder checks out exactly this commit before applying.
+	SourcePatchBaseCommit string
 }
 
 // parseBaseManifest reads the Nix-generated guest-image-manifest and returns
@@ -126,16 +134,6 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 	for _, p := range basePaths {
 		baseSet[p] = true
 	}
-
-	// 2. Build/eval the app-layer installable.
-	outputPath, err := buildResult(ctx, req.Installable, req.ResultLink)
-	if err != nil {
-		return nil, err
-	}
-	drvPath, err := evalDrvPath(ctx, req.Installable)
-	if err != nil {
-		return nil, err
-	}
 	// S2-c: the builder is the authority on what it built. Derive the code
 	// commit from the source checkout rather than trusting the caller.
 	codeCommit := req.CodeCommit
@@ -149,6 +147,35 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		codeCommit = derived
 		codeCommitSource = "derived"
 		sourceDirty = dirty
+	}
+	installable := req.Installable
+	patchSHA, patchBase := "", ""
+	if req.SourcePatch != "" {
+		// S2-f: the release is built from the patch's pinned base plus the
+		// diff, never the caller's live tree. Worktree-isolate the patch,
+		// commit it to a synthetic rev, and evaluate that rev through
+		// git+file: so the flake's self.rev and the build receipt agree.
+		patchBase = req.SourcePatchBaseCommit
+		if patchBase == "" {
+			return nil, fmt.Errorf("builder: source patch requires a base commit")
+		}
+		patchedRef, patchedCommit, sha, cleanup, patchErr := patchedFlakeRef(ctx, req.SourceDir, req.SourcePatch, req.Installable, patchBase)
+		if patchErr != nil {
+			return nil, fmt.Errorf("builder: apply source patch: %w", patchErr)
+		}
+		defer cleanup()
+		installable = patchedRef
+		patchSHA = sha
+		codeCommit, codeCommitSource, sourceDirty = patchedCommit, "derived-patch", false
+	}
+	// 2. Build/eval the app-layer installable.
+	outputPath, err := buildResult(ctx, installable, req.ResultLink)
+	if err != nil {
+		return nil, err
+	}
+	drvPath, err := evalDrvPath(ctx, installable)
+	if err != nil {
+		return nil, err
 	}
 	closure, err := pathInfoClosure(ctx, outputPath)
 	if err != nil {
@@ -172,18 +199,20 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 	}
 
 	res := &ClosureResult{
-		Base:               base,
-		RuntimePath:        outputPath,
-		ClosurePaths:       delta,
-		ExportedDigest:     exportedDigest,
-		ExportedPath:       blobPath,
-		DerivationPath:     drvPath,
-		OutputPath:         outputPath,
-		CodeCommit:         codeCommit,
-		CodeCommitSource:   codeCommitSource,
-		SourceDirty:        sourceDirty,
-		StoreSchemaVersion: storeschema.Version,
-		BuiltAt:            nowRFC3339(),
+		Base:                  base,
+		RuntimePath:           outputPath,
+		ClosurePaths:          delta,
+		ExportedDigest:        exportedDigest,
+		ExportedPath:          blobPath,
+		DerivationPath:        drvPath,
+		OutputPath:            outputPath,
+		CodeCommit:            codeCommit,
+		CodeCommitSource:      codeCommitSource,
+		SourceDirty:           sourceDirty,
+		SourcePatchSHA256:     patchSHA,
+		SourcePatchBaseCommit: patchBase,
+		StoreSchemaVersion:    storeschema.Version,
+		BuiltAt:               nowRFC3339(),
 	}
 	if err := res.WriteReceipt(filepath.Join(req.OutDir, "builder-receipt.json")); err != nil {
 		return nil, err

@@ -120,7 +120,7 @@ type GoEvalRequest struct {
 	// Updates carries the pending update_coagent records bound for this
 	// cell (RLM prompt-as-variable): the cell reads them via
 	// choir.Updates(); the wake turn in chat carries only their ids.
-	Updates         []yaegikernel.PendingUpdate   `json:"updates,omitempty"`
+	Updates []yaegikernel.PendingUpdate `json:"updates,omitempty"`
 }
 
 // GoEvalResult is the result of evaluating Go source in the capsule. Intents
@@ -237,6 +237,20 @@ type FrozenReleaseFile struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
 	Mode   uint32 `json:"mode"`
+}
+
+// StagedRelease is the freeze's materialized payload: the release/ file set
+// plus, when the capsule modified workspace/platform sources, a unified
+// source patch the host builder consumes to produce a layered release
+// (S2-f — runtime changes are source-carried, not binary payloads).
+type StagedRelease struct {
+	Files []FrozenReleaseFile
+	// SourcePatch is the staged unified-diff artifact (<dir>/source.patch).
+	// Empty when the capsule made no source changes.
+	SourcePatch      string
+	SourcePatchSHA   string
+	SourceBaseCommit string
+	TemporaryRoot    string
 }
 
 // FileManifest is a snapshot of a file's metadata at commit time.

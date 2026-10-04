@@ -311,11 +311,12 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if record.Rejected {
 		return map[string]any{"handle": handle, "rejected": true, "reject_reason": record.RejectReason}, nil
 	}
-	files, temporary, err := toolCtx.Executor.StageGrantedRelease(ctx, toolCtx.AgentRunID, handle, filepath.Join(toolCtx.UpdaterRoot, "incoming"))
+	staged, err := toolCtx.Executor.StageGrantedRelease(ctx, toolCtx.AgentRunID, handle, filepath.Join(toolCtx.UpdaterRoot, "incoming"))
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(temporary)
+	files := staged.Files
+	defer os.RemoveAll(staged.TemporaryRoot)
 	sourceTreeDigest, err := toolCtx.Executor.ResolveGrantedSourceSnapshotDigest(toolCtx.AgentRunID, handle)
 	if err != nil {
 		return nil, err
@@ -345,6 +346,8 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	record.VerifierReceipts = []string{}
 	record.DependencyToolchainRefs = dependencyToolchainRefs
 	record.ResourceReceipts = []string{resourceReceipt}
+	record.SourcePatchSHA256 = staged.SourcePatchSHA
+	record.SourcePatchBaseCommit = staged.SourceBaseCommit
 	record.RuntimeFiles = files
 	record.ContentDigest, err = record.ComputeContentDigest()
 	if err != nil || record.Validate(false) != nil {
@@ -354,11 +357,11 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if err != nil {
 		return nil, fmt.Errorf("canonical capsule effect bundle draft: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(temporary, "bundle.draft.json"), draft, 0o400); err != nil {
+	if err := os.WriteFile(filepath.Join(staged.TemporaryRoot, "bundle.draft.json"), draft, 0o400); err != nil {
 		return nil, err
 	}
 	frozenRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", record.ContentDigest)
-	if err := os.Rename(temporary, frozenRoot); err != nil {
+	if err := os.Rename(staged.TemporaryRoot, frozenRoot); err != nil {
 		existing, readErr := os.ReadFile(filepath.Join(frozenRoot, "bundle.draft.json"))
 		if readErr != nil || !bytes.Equal(existing, draft) {
 			return nil, fmt.Errorf("freeze immutable bundle draft: %w", err)

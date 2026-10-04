@@ -74,7 +74,6 @@ func TestWriteCapsuleIdentityEtcHidesLowerHostsSymlink(t *testing.T) {
 	}
 }
 
-
 func TestPrepareCapsuleRootMasksGuestProc(t *testing.T) {
 	lower := t.TempDir()
 	upper := t.TempDir()

@@ -63,6 +63,10 @@ type ClosureResult struct {
 	// build time; recorded so the release's provenance is honest about
 	// reproducibility.
 	SourceDirty bool `json:"source_dirty,omitempty"`
+	// S2-f patch provenance: the unified diff applied and the base it
+	// applied to. Empty for unpatched builds.
+	SourcePatchSHA256     string `json:"source_patch_sha256,omitempty"`
+	SourcePatchBaseCommit string `json:"source_patch_base_commit,omitempty"`
 }
 
 // nixTimeout caps a single nix invocation. Eval and export on a warm store

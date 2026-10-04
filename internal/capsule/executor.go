@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pmezard/go-difflib/difflib"
 	"io"
 	"net"
 	"os"
@@ -1341,41 +1342,41 @@ func (e *Executor) ResolveGrantedFreezeBindings(agentRunID, handle string) (stri
 	return computerevent.DigestBytes(capabilityBytes), "resource:sha256:" + computerevent.DigestBytes(resourceBytes), nil
 }
 
-func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, incomingRoot string) ([]FrozenReleaseFile, string, error) {
+func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, incomingRoot string) (*StagedRelease, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
 	if err != nil || capability.AgentRole != RoleEngineering {
-		return nil, "", fmt.Errorf("capsule release staging unavailable")
+		return nil, fmt.Errorf("capsule release staging unavailable")
 	}
 	e.mu.RLock()
 	caps := e.capsules[capability.TargetCapsule]
 	e.mu.RUnlock()
 	if caps == nil {
-		return nil, "", fmt.Errorf("capsule release staging unavailable")
+		return nil, fmt.Errorf("capsule release staging unavailable")
 	}
 	caps.mu.RLock()
 	state := caps.State
 	caps.mu.RUnlock()
 	if state != StateFrozen {
-		return nil, "", fmt.Errorf("capsule release staging requires frozen capsule")
+		return nil, fmt.Errorf("capsule release staging requires frozen capsule")
 	}
 	incomingRoot = filepath.Clean(incomingRoot)
 	if !filepath.IsAbs(incomingRoot) {
-		return nil, "", fmt.Errorf("capsule release incoming root must be absolute")
+		return nil, fmt.Errorf("capsule release incoming root must be absolute")
 	}
 	if err := os.MkdirAll(incomingRoot, 0o700); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if info, err := os.Stat(incomingRoot); err != nil || info.Mode().Perm()&0o077 != 0 {
-		return nil, "", fmt.Errorf("capsule release incoming root must be private")
+		return nil, fmt.Errorf("capsule release incoming root must be private")
 	}
 	changes, err := caps.Diff(ctx)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	const releasePrefix = "var/lib/artifact/release/"
 	temporary, err := os.MkdirTemp(incomingRoot, ".freeze-")
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	cleanup := true
 	defer func() {
@@ -1385,14 +1386,14 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	}()
 	rootFD, err := unix.Open(caps.MergedDir, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
-		return nil, "", fmt.Errorf("capsule release root is unavailable: %w", err)
+		return nil, fmt.Errorf("capsule release root is unavailable: %w", err)
 	}
 	defer unix.Close(rootFD)
 	var files []FrozenReleaseFile
 	var total int64
 	for _, change := range changes {
 		if err := ctx.Err(); err != nil {
-			return nil, "", err
+			return nil, err
 		}
 		if !strings.HasPrefix(change.Path, releasePrefix) {
 			continue
@@ -1400,7 +1401,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		relative := strings.TrimPrefix(change.Path, releasePrefix)
 		clean := filepath.Clean(filepath.FromSlash(relative))
 		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) || change.Kind == ChangeDeleted {
-			return nil, "", fmt.Errorf("capsule release contains unsafe path %q", change.Path)
+			return nil, fmt.Errorf("capsule release contains unsafe path %q", change.Path)
 		}
 		sourcePath := filepath.FromSlash(strings.TrimPrefix(change.Path, "/"))
 		sourceFD, err := unix.Openat2(rootFD, sourcePath, &unix.OpenHow{
@@ -1408,13 +1409,13 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
 		})
 		if err != nil {
-			return nil, "", fmt.Errorf("capsule release file %q is unavailable: %w", change.Path, err)
+			return nil, fmt.Errorf("capsule release file %q is unavailable: %w", change.Path, err)
 		}
 		input := os.NewFile(uintptr(sourceFD), change.Path)
 		info, err := input.Stat()
 		if err != nil {
 			_ = input.Close()
-			return nil, "", fmt.Errorf("capsule release file %q is unavailable", change.Path)
+			return nil, fmt.Errorf("capsule release file %q is unavailable", change.Path)
 		}
 		if info.IsDir() {
 			_ = input.Close()
@@ -1422,17 +1423,17 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		}
 		if !info.Mode().IsRegular() {
 			_ = input.Close()
-			return nil, "", fmt.Errorf("capsule release file %q is not regular", change.Path)
+			return nil, fmt.Errorf("capsule release file %q is not regular", change.Path)
 		}
 		total += info.Size()
 		if total > caps.MemoryMax {
 			_ = input.Close()
-			return nil, "", fmt.Errorf("capsule release exceeds resource budget")
+			return nil, fmt.Errorf("capsule release exceeds resource budget")
 		}
 		target := filepath.Join(temporary, clean)
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			_ = input.Close()
-			return nil, "", err
+			return nil, err
 		}
 		secretPath := false
 		for _, component := range strings.Split(filepath.ToSlash(clean), "/") {
@@ -1447,7 +1448,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		}
 		if secretPath {
 			_ = input.Close()
-			return nil, "", fmt.Errorf("capsule release refuses secret-bearing path %q", change.Path)
+			return nil, fmt.Errorf("capsule release refuses secret-bearing path %q", change.Path)
 		}
 		// Content peek: text payloads scan with the full redaction-grade
 		// pattern set; binary payloads (NUL byte in the initial chunk, the
@@ -1460,12 +1461,12 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		n, readErr := input.Read(initial[:])
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
 			_ = input.Close()
-			return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, readErr)
+			return nil, fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, readErr)
 		}
 		binary := bytes.IndexByte(initial[:n], 0) >= 0
 		if _, err := input.Seek(0, io.SeekStart); err != nil {
 			_ = input.Close()
-			return nil, "", err
+			return nil, err
 		}
 		if binary {
 			// Binary payloads have no meaningful line structure and can
@@ -1483,14 +1484,14 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 				window = append(window, chunk[:nr]...)
 				if findings := computerevent.DetectBinarySecrets(window); len(findings) != 0 {
 					_ = input.Close()
-					return nil, "", fmt.Errorf("capsule release refuses secret content in %q", change.Path)
+					return nil, fmt.Errorf("capsule release refuses secret content in %q", change.Path)
 				}
 				if chunkErr != nil {
 					if errors.Is(chunkErr, io.EOF) {
 						break
 					}
 					_ = input.Close()
-					return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, chunkErr)
+					return nil, fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, chunkErr)
 				}
 				if nr > 512 {
 					carry = append([]byte(nil), chunk[nr-512:nr]...)
@@ -1507,41 +1508,41 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 				// minified member accesses) just as it did compiled binaries.
 				if findings := computerevent.DetectRefusalSecrets(scanner.Bytes()); len(findings) != 0 {
 					_ = input.Close()
-					return nil, "", fmt.Errorf("capsule release refuses secret content in %q", change.Path)
+					return nil, fmt.Errorf("capsule release refuses secret content in %q", change.Path)
 				}
 			}
 			if scanErr := scanner.Err(); scanErr != nil {
 				_ = input.Close()
-				return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, scanErr)
+				return nil, fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, scanErr)
 			}
 		}
 		if _, err := input.Seek(0, io.SeekStart); err != nil {
 			_ = input.Close()
-			return nil, "", err
+			return nil, err
 		}
 		output, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err != nil {
 			_ = input.Close()
-			return nil, "", err
+			return nil, err
 		}
 		hash := sha256.New()
 		_, copyErr := io.Copy(io.MultiWriter(output, hash), &contextReader{ctx: ctx, reader: input})
 		closeErr := errors.Join(input.Close(), output.Sync(), output.Close())
 		if copyErr != nil || closeErr != nil {
-			return nil, "", errors.Join(copyErr, closeErr)
+			return nil, errors.Join(copyErr, closeErr)
 		}
 		mode := uint32(info.Mode().Perm() & 0o555)
 		if mode == 0 {
 			mode = 0o444
 		}
 		if err := os.Chmod(target, os.FileMode(mode)); err != nil {
-			return nil, "", err
+			return nil, err
 		}
 		files = append(files, FrozenReleaseFile{Path: filepath.ToSlash(clean), SHA256: hex.EncodeToString(hash.Sum(nil)), Mode: mode})
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	if len(files) == 0 || files[0].Path == "" {
-		return nil, "", fmt.Errorf("capsule release contains no frozen runtime artifacts")
+		return nil, fmt.Errorf("capsule release contains no frozen runtime artifacts")
 	}
 	hasAutoputer, hasFrontend := false, false
 	for _, file := range files {
@@ -1553,13 +1554,107 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		}
 	}
 	if !hasAutoputer {
-		return nil, "", fmt.Errorf("capsule release must contain executable bin/autoputer")
+		return nil, fmt.Errorf("capsule release must contain executable bin/autoputer")
 	}
 	if !hasFrontend {
-		return nil, "", fmt.Errorf("capsule freeze: computer-surface frontend artifacts are underivable")
+		return nil, fmt.Errorf("capsule freeze: computer-surface frontend artifacts are underivable")
+	}
+	// S2-f: source changes (workspace/platform, classified LedgerSource) are
+	// source-carried. Emit a unified diff the host builder can apply to the
+	// same checkout and rebuild into a layered release — the bundle records
+	// the patch + base commit as provenance.
+	patch, patchSHA, baseCommit, err := e.emitSourcePatch(caps, changes, temporary)
+	if err != nil {
+		return nil, err
 	}
 	cleanup = false
-	return files, temporary, nil
+	return &StagedRelease{
+		Files:            files,
+		SourcePatch:      patch,
+		SourcePatchSHA:   patchSHA,
+		SourceBaseCommit: baseCommit,
+		TemporaryRoot:    temporary,
+	}, nil
+}
+
+// emitSourcePatch writes <temporary>/source.patch as a unified diff of every
+// workspace/platform change the capsule made, against the pinned source
+// snapshot. Returns ("","","") when the capsule made no source changes. The
+// base commit is recovered from the capsule's pinned source artifact ref
+// (capsule-source-git:<commit>:sha256:<digest>) so the builder applies the
+// patch to the commit the capsule actually worked on.
+func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporary string) (patchPath, patchSHA, baseCommit string, err error) {
+	var sourceChanges []FileChange
+	for _, change := range changes {
+		p := change.Path
+		if !strings.HasPrefix(p, "/") {
+			p = "/" + p
+		}
+		if strings.HasPrefix(p, "/workspace/platform/") {
+			sourceChanges = append(sourceChanges, change)
+		}
+	}
+	if len(sourceChanges) == 0 {
+		return "", "", "", nil
+	}
+	// Recover the pinned base commit from the source artifact ref.
+	if ref := caps.Spec.SourceArtifactRef; strings.HasPrefix(ref, "capsule-source-git:") {
+		raw := strings.TrimPrefix(ref, "capsule-source-git:")
+		if idx := strings.Index(raw, ":sha256:"); idx > 0 {
+			baseCommit = raw[:idx]
+		}
+	}
+	var buf bytes.Buffer
+	lowerBase := filepath.Join(caps.MergedDir, "..", "source-lower", "workspace", "platform")
+	for _, change := range sourceChanges {
+		rel := strings.TrimPrefix(change.Path, "/")
+		rel = strings.TrimPrefix(rel, "workspace/platform/")
+		if rel == "" || strings.HasPrefix(rel, "..") || strings.Contains(rel, "/../") {
+			continue
+		}
+		var oldBytes, newBytes []byte
+		fromFile, toFile := "a/"+rel, "b/"+rel
+		oldPath := filepath.Join(lowerBase, filepath.FromSlash(rel))
+		var oldErr error
+		oldBytes, oldErr = os.ReadFile(oldPath)
+		if oldErr != nil && !errors.Is(oldErr, os.ErrNotExist) {
+			return "", "", "", fmt.Errorf("capsule source patch reads base %q: %w", change.Path, oldErr)
+		}
+		if errors.Is(oldErr, os.ErrNotExist) {
+			fromFile = "/dev/null" // added file
+		}
+		switch change.Kind {
+		case ChangeDeleted:
+			newBytes = nil
+			toFile = "/dev/null"
+		default:
+			newPath := filepath.Join(caps.MergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
+			newBytes, err = os.ReadFile(newPath)
+			if err != nil {
+				return "", "", "", fmt.Errorf("capsule source patch reads %q: %w", change.Path, err)
+			}
+		}
+		ud, udErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+			A:        difflib.SplitLines(string(oldBytes)),
+			B:        difflib.SplitLines(string(newBytes)),
+			FromFile: fromFile,
+			ToFile:   toFile,
+			Context:  3,
+		})
+		if udErr != nil {
+			return "", "", "", fmt.Errorf("capsule source patch %q: %w", change.Path, udErr)
+		}
+		buf.WriteString(ud)
+	}
+	if buf.Len() == 0 {
+		return "", "", "", nil
+	}
+	patchPath = filepath.Join(temporary, "source.patch")
+	if err := os.WriteFile(patchPath, buf.Bytes(), 0o444); err != nil {
+		return "", "", "", err
+	}
+	sum := sha256.Sum256(buf.Bytes())
+	return patchPath, hex.EncodeToString(sum[:]), baseCommit, nil
 }
 
 // ResolveOwnedCapsuleID is a trusted-core bridge for semantic event binding.

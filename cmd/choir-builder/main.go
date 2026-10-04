@@ -26,6 +26,7 @@ func main() {
 	out := flag.String("out", "/var/lib/go-choir/builder", "output dir for closure blob + receipt")
 	commit := flag.String("commit", "", "repo commit the installable was built from")
 	sourceDir := flag.String("source-dir", "", "git checkout the installable is evaluated against; code_commit is derived from it (S2-c)")
+	sourcePatch := flag.String("source-patch", "", "unified-diff patch applied to a worktree at the base commit before build (S2-f)")
 	resultLink := flag.String("result-link", "", "nix build result symlink path (default <out>/builder-result)")
 	flag.Parse()
 
@@ -39,6 +40,7 @@ func main() {
 		Installable:       *installable,
 		ResultLink:        *resultLink,
 		SourceDir:         *sourceDir,
+		SourcePatch:       *sourcePatch,
 		BaseManifestPath:  *baseManifest,
 		BaseStoreDiskPath: *baseDisk,
 		OutDir:            *out,
@@ -52,4 +54,7 @@ func main() {
 		res.RuntimePath, len(res.ClosurePaths), res.ExportedPath, res.ExportedDigest,
 		res.Base.GuestImageManifestDigest, res.Base.StoreDiskSHA256, *out+"/builder-receipt.json")
 	fmt.Printf("code_commit=%s (%s, dirty=%t)\n", res.CodeCommit, res.CodeCommitSource, res.SourceDirty)
+	if res.SourcePatchSHA256 != "" {
+		fmt.Printf("source_patch_sha256=%s base=%s\n", res.SourcePatchSHA256, res.SourcePatchBaseCommit)
+	}
 }

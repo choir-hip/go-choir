@@ -74,8 +74,8 @@ func (e *Executor) ResolveGrantedSourceSnapshotDigest(string, string) (string, e
 func (e *Executor) ResolveGrantedFreezeBindings(string, string) (string, string, error) {
 	return "", "", stubErr("resolve")
 }
-func (e *Executor) StageGrantedRelease(context.Context, string, string, string) ([]FrozenReleaseFile, string, error) {
-	return nil, "", stubErr("stage")
+func (e *Executor) StageGrantedRelease(context.Context, string, string, string) (*StagedRelease, error) {
+	return nil, stubErr("stage")
 }
 func (e *Executor) ListOwned(string) []CapsuleControlSummary { return nil }
 func (e *Executor) MintCapability(string, AgentRole, string, time.Duration) (*Capability, error) {
