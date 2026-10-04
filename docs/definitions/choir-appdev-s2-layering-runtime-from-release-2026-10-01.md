@@ -196,20 +196,26 @@ heresy_delta:
 now:
   status: working
   slice: >-
-    Live. Full layering mechanism + transport landed end-to-end 2026-10-04:
-    (1) base-join manifest (20880d75); (2) pure-Go narchive reader +
-    GC-rooted store materializer (b68357a1), wired into Apply (a7052d2a);
-    (3) guest runtime exec via recorded store-path entrypoint + mount-ns
-    overlay (c7bb4a12 + 1be8bd72 stale-entrypoint fix); (4) producer layering
-    join (f5460bdc); (5) CAS-ref transport for the ~146MB closure.nar —
-    PlatformUpdateFile.ref + corpusd PUT/GET blob endpoint + guest
-    FetchBlobRaw streaming (ef2e607d, convergent-panel adjudicated). Deployed
-    image = 3142979b (exec) + ef2e607d (transport). Remaining: the deployed
-    layering acceptance — PUT the nar blob, mint by ref, apply to a
-    disposable, observe the guest exec the release store-path binary in the
-    overlay + a base-mismatched offer fail closed.
-  source_ref: main@ef2e607d
-  deploy_identity: 'staging https://choir.news deployed_commit=ef2e607d; layering exec + CAS-ref transport live'
+    Live. Deployed layering acceptance PROVEN 2026-10-04 on choir.news
+    (deployed_commit=672eb193): PUT the 146MB closure.nar to the corpusd
+    blob endpoint, minted a signed layered offer by ref (PlatformUpdateFile.
+    ref), applied to a disposable tracking computer — tape shows
+    materialization_applied -> checkpoint_published ->
+    route_projection_updated, route slot promoted to generation 1 with
+    closure.nar + frontend/index.html in the code closure. A base-mismatched
+    layered offer refused 'updater refused apply' (fail-closed, base kept
+    serving). Exec-in-overlay confirmed by live serving: the guest serves
+    the release's own frontend/index.html (title 's2-layered'), not the
+    base SPA — the release binary+artifacts are the serving surface.
+    Deployed fixes required: mint layering_entrypoint accept+forward
+    (1518abc1), route-resolve tap bind by owner:desktop not computer
+    (69983b0e), probe expiry within the 5-min mint window + minimal SPA so
+    the checkpoint can derive FrontendIdentity (77f2e691, 5bce87c3).
+    Residual: the disposable's serial console isn't journaled on the host,
+    so the journal-marker 'go-choir-autoputer: layering release' is an
+    observability gap, not evidence — closed by the live-serving check.
+  source_ref: main@672eb193
+  deploy_identity: 'staging https://choir.news deployed_commit=672eb193; layering exec + CAS-ref transport + mint/route-bind fixes live'
   candidate:
     id: none
     state: none
