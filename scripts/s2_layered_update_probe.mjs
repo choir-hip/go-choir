@@ -80,16 +80,20 @@ function mintLayeredOffer(fields, narPath) {
   const digest = nodeB(`sha256sum ${narPath} | awk '{print $1}'`).trim();
   const uploaded = uploadBlob(narPath, digest);
   const tmp = `/tmp/layered-req-${Date.now()}-${mintReqCounter++}.json`;
+  // The checkpoint binds a served-SPA FrontendIdentity from frontend/* files,
+  // so the release must carry at least a minimal SPA index. closure.nar rides
+  // the CAS ref; the tiny index rides inline.
+  const spaB64 = Buffer.from('<!doctype html><title>s2-layered</title><div id=app></div>').toString('base64');
   const jq = `jq -n ` +
     `--arg cid '${fields.computer_id}' --arg uid '${fields.update_id}' ` +
     `--arg rid '${fields.realization_id}' --arg beh '${fields.base_event_head}' ` +
     `--arg exp '${fields.expires_at}' --arg mk '${fields.marker}' ` +
     `--arg cc '${fields.code_commit}' --arg bmd '${fields.base_image_manifest_digest}' ` +
     `--arg le '${fields.layering_entrypoint}' --arg vr '${fields.verifier_refs[0]}' ` +
-    `--arg ref '${artifactRef(digest)}' ` +
+    `--arg ref '${artifactRef(digest)}' --arg spa '${spaB64}' ` +
     `'{computer_id:$cid,update_id:$uid,realization_id:$rid,base_event_head:$beh,` +
     `expires_at:$exp,marker:$mk,code_commit:$cc,` +
-    `files:[{path:"closure.nar",mode:292,ref:$ref}],` +
+    `files:[{path:"closure.nar",mode:292,ref:$ref},{path:"frontend/index.html",mode:420,bytes:$spa}],` +
     `verifier_refs:[$vr],divergence_status:"tracking",platform_follow_policy:"auto",` +
     `base_image_manifest_digest:$bmd,layering_entrypoint:$le,` +
     `closure_digest:"${digest}"}' > ${tmp}`;
