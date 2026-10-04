@@ -31,6 +31,12 @@ type platformUpdateOfferMintRequest struct {
 	BaseEventHead string `json:"base_event_head"`
 	ExpiresAt     string `json:"expires_at"`
 
+	// Layering join: when the release carries an app-layer closure, the mint
+	// names the booted base manifest digest it resolves against and the
+	// sha256 of the exported narchive payload file (closure.nar).
+	BaseImageManifestDigest string `json:"base_image_manifest_digest,omitempty"`
+	ClosureDigest           string `json:"closure_digest,omitempty"`
+
 	Marker     string `json:"marker"`
 	CodeCommit string `json:"code_commit"`
 	Files      []struct {
@@ -165,6 +171,8 @@ func buildPlatformUpdateOffer(request platformUpdateOfferMintRequest, now time.T
 		CodeRef: string(closure.Ref), ArtifactProgramRef: string(program.Ref),
 		EventSchemaVersion: computerevent.SchemaVersionV1, ReducerVersion: computerevent.ReducerVersionV1,
 		Marker: strings.TrimSpace(request.Marker), Files: manifestFiles,
+		BaseImageManifestDigest: request.BaseImageManifestDigest,
+		ClosureDigest:           request.ClosureDigest,
 	})
 	if err != nil {
 		return selfdevprotocol.PlatformUpdateOffer{}, err
