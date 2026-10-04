@@ -1038,3 +1038,12 @@ re-probe on the deployed `e605cdde` image.
 **For the next revision (when S2 stabilizes):** fold the guest observability
 substrate and Node B disk structure into the station contract as named
 prerequisites, not incidentals.
+
+**S2 root cause (resolved the exec question):** `layering-diag.log` proved
+`unshare_ok`/`mount_ok`/`exec_path_resolves` — the layering mechanism works
+in the guest. The guest crash-loop is a **state-compatibility failure**: the
+applied release binary is build `43310064` (August) against an October
+persistent store. S2's "activation binds executable + frontend + state
+compatibility + effective event head" is not enforced — the apply execs a
+stale-binary release instead of failing closed. The real S2 residual is the
+state-compat/health gate, not the mount machinery.
