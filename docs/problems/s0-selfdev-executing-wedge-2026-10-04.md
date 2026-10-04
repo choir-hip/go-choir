@@ -30,30 +30,38 @@ prompt) on `computer-a99366facf24b872703de326d3b33832` and
 - `replay-completeness` is `equivalent` (91 events applied, zero gaps) —
   the tape is not the blocker.
 
-## Mechanism (sharpened — tool-call loop never converges)
+## Mechanism (root cause — freeze intent refuses inside the cell; error never reaches the op record)
 
-`freeze_capsule_effect_bundle` is a tool call, not an automatic step
-(`tools_capsule.go:367` runs only when the model invokes it). Two runs
-on two disposables show the loop's two failure shapes:
+`choir.Freeze` exists on the cell surface
+(`internal/yaegikernel/choir.go:507`, staging `IntentFreeze`). The
+reducer commits it via `commitFreezeIntent`
+(`internal/agentcore/rlm_reduce.go:1292`), which requires:
 
-**Run 1** (op `selfdev-0280c6cf…`, vague prompt): 10 rounds, ended on a
-terminal non-tool answer — model declined to call the tool. Op stays
-`executing`.
+- `r.toolCtx.OperationStore != nil` (op-store authority on the run)
+- `trajectoryIDForRun(r.rec)` resolves the op via
+  `OperationStore.GetByTrajectory`
+- `requireCapsuleMutationRole(ctx)` — the run must carry the author
+  mutation role, not the verifier role.
 
-**Run 3** (op `selfdev-772a70c9…`, directive prompt): 18+ rounds with
-`tools=1`/`text_len=0` — the model IS calling the tool repeatedly, but
-the call returns an error it retries instead of escalating. Op stays
-`executing` past 15 minutes. Likely cause: `freeze_capsule_effect_bundle`
-requires a worktree handle + build recipe ref the model cannot produce
-because nothing in the loop granted a writable worktree or authored a
-change — the model has no prior `capsule_write`/`edit` to freeze.
+The ops-API launch path (`POST /api/computers/{id}/self-development/
+operations` → trajectory → guest run) is built for the M11 engineering
+**assignment** trajectory. A raw ops launch may not bind
+`OperationStore` on the run's `toolCtx`, or may not bind the op to
+`trajectoryIDForRun(rec)`, so `choir.Freeze` inside the cell returns
+`"freeze intent without trajectory binding"` /
+`"without self-development operation authority"` as a cell result.
 
-The state machine is honest: `executing` is correct for both — a
-declined proposal and an error-retry loop are both genuinely still
-executing. The defect is that **neither shape is distinguishable from
-outside**: `verifier_refs=[]`, `error=null`, `updated_at` frozen. An
-operator cannot tell "model declined" from "model is retrying a
-doomed tool call" without reading gateway logs.
+The model sees the refusal as an eval result and retries
+`capsule_go_eval` — the cell error is never promoted to
+`operation.terminal_error` because a failed cell is a normal run
+outcome, not an op transition. All three runs wedge `executing`
+because the model can call the tool surface but never satisfy the
+binding precondition; and the refusal reason never leaves the cell.
+
+**Run 1** (vague prompt): model never called the tool — declined.
+**Runs 3/4** (directive prompts): model called `capsule_go_eval` 18+
+times (`tools=1`, `text_len=0`) — the cell ran, `choir.Freeze` refused,
+the model retried, the loop never converged.
 
 ## Why it matters
 
@@ -69,15 +77,19 @@ doomed tool call" without reading gateway logs.
 
 ## Fix direction
 
-This is not a transport bug to fix but a visibility gap to close: the op
-state machine honestly records that the model's turn ended, and it stays
-`executing` because no terminal transition is warranted (the model may
-still call the freeze tool on a future turn — there is no op-level
-timeout that makes "model declined" a terminal verdict). The repair is
-instrumentation: log the proposal loop's terminal tool-name (or
-"end_of_turn_no_tool") so a no-op proposal is distinguishable from a
-wedge without reading gateway logs, and surface `model_turn_ended` on
-the op record. The state machine itself is correct.
+1. **Bind the ops trajectory to the freeze authority.** The launch
+   path must wire `OperationStore` into the run's `toolCtx` and bind
+   the op's `trajectory_id` to `trajectoryIDForRun(rec)` so
+   `commitFreezeIntent`'s `GetByTrajectory` resolves. If the ops
+   launch is assignment-scoped by design, the Go-effect probe needs
+   an engineering-assignment launch instead of a raw ops POST.
+2. **Surface cell refusals.** When `choir.Freeze`/`choir.Verify`
+   refuse inside `capsule_go_eval`, the reason must reach
+   `operation.terminal_error` (or a new `last_intent_error` field) —
+   a refused authority is not a normal cell error; it is the op's
+   real blocker.
+
+The state machine is correct; the ops→cell binding is not.
 
 ## Verification
 
