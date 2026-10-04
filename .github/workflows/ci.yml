@@ -827,7 +827,26 @@ jobs:
             ServerAliveCountMax 6
           EOF
 
+      - name: Guard against stale deploy target
+        id: stale-guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          live=$(curl -fsSI https://choir.news | tr -d '\r' | awk 'tolower($1)=="x-choir-build-commit:"{print $2; exit}')
+          if [ -z "$live" ]; then
+            echo "no x-choir-build-commit on choir.news; proceeding (no baseline)"
+            exit 0
+          fi
+          status=$(gh api "repos/${{ github.repository }}/compare/${live}...${{ github.sha }}" --jq '.status')
+          echo "live=$live target=${{ github.sha }} compare=$status"
+          if [ "$status" = "behind" ] || [ "$status" = "diverged" ]; then
+            echo "deploy target is stale relative to live; skipping deploy"
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy to staging
+        if: steps.stale-guard.outputs.stale != 'true'
         env:
           DEPLOY_COMMIT: ${{ github.sha }}
           DEPLOY_RUN_ID: ${{ github.run_id }}

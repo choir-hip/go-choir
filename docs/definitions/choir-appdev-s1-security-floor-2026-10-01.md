@@ -167,10 +167,14 @@ heresy_delta:
 now:
   status: checkpoint_incomplete
   slice: >-
-    Pending S1 security floor after S0 establishes the staging networking,
-    token-visibility, and runtime reality receipts.
-  source_ref: main@8aa1dce9
-  deploy_identity: 'staging https://choir.news deployed_commit=a3cfaa00; owner guest computer-03335285269bdba4f94377e56879f9e6 on a3cfaa00'
+    S1a host-boundary hotfix authored 2026-10-04 (see section below the
+    mechanism sketch): per-tap anti-spoof + tap->tap deny, :8085 DNAT
+    removal, dead lo-MASQUERADE removal, and authority binding by guest
+    source IP to computer/owner for maild, vmctl CV routes, proxy publish,
+    and source service; corpusd mint and host-read bypasses go
+    loopback-only. Pending S0m boundary promotion to working.
+  source_ref: main@520a998f
+  deploy_identity: 'staging https://choir.news deployed_commit=a4fcdb8d; owner guest computer-03335285269bdba4f94377e56879f9e6 on a4fcdb8d'
   candidate:
     id: none
     state: none
@@ -254,6 +258,93 @@ at `cmd/capsule-broker/main.go:113-137`, and the kernel refuses ambient OS,
 process, and network imports at `internal/yaegikernel/allowlist.go:29-42,86-95`.
 The runtime and capsule containment must make that floor meaningful even when
 model-authored code is adversarial.
+## S1a slice — host-boundary hotfix (pulled ahead of S0b, 2026-10-04)
+
+Scoped by `docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`
+and the deployed correction
+`docs/evidence/s1a-guest-to-host-addr-preservation-2026-10-04.json`:
+guest-originated packets arrive at host INPUT post-DNAT with the **real
+guest tap IP** (`SRC=10.200.207.2 DST=127.0.0.1` observed); the `lo`
+MASQUERADE rules provably never fire. RemoteAddr is therefore a usable
+tap-sourced discriminator.
+
+### Design (mutation class: red — VM networking, vmctl, corpusd mint, maild, guest /internal surface)
+
+1. **Network (vmmanager `setupHostNetworking`).**
+   - Drop tap->tap forwarding: per-tap FORWARD DROP for traffic whose
+     destination is any other tap's /30 or the 10.200.0.0/16 guest space,
+     placed before the per-tap ACCEPTs.
+   - Anti-spoofing: drop packets entering a tap whose source is not the
+     guest's own /30 address. A guest is root; without this it can emit
+     `SRC=10.200.x.1` (host peer IP) or another guest's IP and defeat every
+     IP-bound authority check below.
+   - Remove `:8085` from `tapReachableHostServicePorts()` — no production
+     host autoputer exists; the rule only lets guests reach a dead port.
+   - Delete the dead `-o lo -j MASQUERADE` rules (0 packets ever; misleading).
+   - Guest->internet egress stays open in S1a (DNS/NTP/resolution paths not
+     fully resolved; S1's recording-proxy default-deny owns egress policy).
+   - The NixOS `networking.firewall.filterForward` flag is NOT used — it
+     would kill guest->internet too; vmmanager emits the drops directly.
+   - Cleanup: stale `vm-vm-*-tap` iptables rules for deleted devices are
+     left alone (inert); new rules land on current taps at boot/refresh.
+2. **Authority (bind identity to transport, delete header trust for
+   tap-sourced callers).** Legitimate flows identified by inventory:
+   - **:8084 gateway** — bearer per-VM token + peer check; already sound.
+     No change beyond what token scrubbing does in S1.
+   - **:8086 corpusd** — event/file CAS already uses per-computer Bearer
+     capabilities (keep). The `X-Internal-Caller` host-read bypass and the
+     platform-update mint become **loopback-only** (RemoteAddr must be
+     `127.0.0.1`); header alone can no longer satisfy them.
+   - **:8083 vmctl** — `isInternalCaller` tightens to loopback RemoteAddr
+     **except** a guest-scoped route family: the four ComputerVersion
+     endpoints (`computer-version-inputs/resolve`,
+     `computer-version-routes/{resolve,apply-self-development,
+     apply-platform-follow}`) accept tap-sourced requests bound by source
+     IP to the owning computer (vmctl owns tap IP -> computer/owner
+     mapping; anti-spoofing rule makes the binding sound). Every other
+     vmctl internal endpoint refuses non-loopback callers outright.
+   - **:8087 maild** — tap-sourced requests bound by source IP to the
+     owning computer; `X-Authenticated-User` must equal that computer's
+     owner. `X-Internal-Caller` grants nothing from a guest source.
+   - **:8082 proxy** — guest wire/platform publish paths accept tap-sourced
+     requests bound by source IP to computer identity (the publish's
+     computer must be the caller's); other proxy internal surfaces refuse
+     non-loopback.
+   - **:8787 source service** — gains a caller floor: tap-sourced requests
+     bound to a known computer's guest IP (or loopback); unknown sources
+     refused.
+   - **Guest `/internal/runtime/*` and `/internal/diag/*`** — accept only
+     host-sourced requests (RemoteAddr = the tap's host peer IP; anti-
+     spoofing rules make that unforgeable from the guest side). `X-
+     Internal-Caller` stops being the credential; it may stay as a marker.
+   - **Guest user routes** (`X-Authenticated-User`) — honored only when
+     RemoteAddr is the host peer IP (proxy-authenticated transport); a
+     guest-asserted owner header is ignored.
+3. **Verification (deployed, two disposable computers).**
+   - Pre/post `iptables-save` per tap recorded.
+   - From guest A: tap->tap to guest B :8085 refused/times out; spoofed-
+     source packets dropped; :8083 vmctl non-CV endpoints refused;
+     corpusd mint refused; maild with a forged other-owner
+     `X-Authenticated-User` refused; proxy publish naming another
+     computer refused; source-service from bound IP works.
+   - Legitimate flows verified green post-deploy: gateway inference
+     (bearer), corpusd event CAS (capability), maild drafts (bound owner),
+     guest->vmctl CV-route resolve (bound computer), wire publish (bound),
+     source-service search, and a product user route through the proxy.
+
+### Rollback
+
+`git revert` + redeploy; rules are per-tap at boot/refresh so refresh
+restores the open set. Authority checks revert with the binary.
+
+### Heresy delta for this slice
+
+- discovered: none expected beyond the problem doc (loopback leg already
+  corrected).
+- introduced: none intended; the fix removes authority paths, adds no
+  credential surface (reuses IP binding + existing capability tokens).
+- repaired: the entire cross-tenant chain in the problem doc.
+
 
 ## Risk and handoff
 
