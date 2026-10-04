@@ -1,5 +1,26 @@
 # Node B deploy disk headroom — deploys blocked below 90 GiB
 
+## Recurrence 2 — 2026-10-04T04:43Z, deploy run 37177170737 (a3f0d48e)
+
+Third hit of the same gate within ~10 days. Headroom eroded back below 90
+GiB: 88 GiB free after the script's bounded reclaim. Cleared by deleting
+~16 GiB of stale forensic material the bounded reclaim cannot see:
+
+- `/var/lib/go-choir/vm-state/*/​*.pre-upgrade-20260824T074931Z*` (incl. an
+  11 GiB `data.img` backup on a stopped UWP VM) — 8 files;
+- `/tmp/{texture-live,texture-ro,texture-snap,texture-dolt-ro,
+  guest-data-ro,vm-live-e15cb,vminspect,sa.db*}` — 10–24 day-old forensic
+  clones the owner had already mined; none referenced by any live service.
+
+After reclaim: 96 GiB free, deploy rerun passed the gate. Live computers
+untouched (owner VM 65G + stopped UWP disk preserved).
+**Root-cause observation:** the bounded reclaim only reclaims *unprotected
+active* VMs and nix generations; it never inspects `/tmp` or `*.pre-*`
+stale artifacts inside vm-state. A third lever for the next recurrence:
+`find /var/lib/go-choir/vm-state -name '*.pre-*' -mtime +7` +
+`find /tmp -maxdepth 1 -mtime +7 -name 'texture-*' -o -name 'vm-*' -o
+-name 'guest-*'` in the preflight script itself.
+
 **Status**: RESOLVED 2026-10-04 — owner authorized deleting what's not needed.
 Deleted `dump-20260918/platform-dump.sql` (20G rollback ref; split live ~2
 weeks) + `nix-env --delete-generations old` + `nix store gc` (23.5 GiB). Free
