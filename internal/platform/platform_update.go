@@ -40,6 +40,7 @@ type platformUpdateOfferMintRequest struct {
 	// sha256 of the exported narchive payload file (closure.nar).
 	BaseImageManifestDigest string `json:"base_image_manifest_digest,omitempty"`
 	ClosureDigest           string `json:"closure_digest,omitempty"`
+	LayeringEntrypoint      string `json:"layering_entrypoint,omitempty"`
 
 	Marker     string `json:"marker"`
 	CodeCommit string `json:"code_commit"`
@@ -213,6 +214,7 @@ func buildPlatformUpdateOffer(request platformUpdateOfferMintRequest, now time.T
 		Marker: strings.TrimSpace(request.Marker), Files: manifestFiles,
 		BaseImageManifestDigest: request.BaseImageManifestDigest,
 		ClosureDigest:           request.ClosureDigest,
+		LayeringEntrypoint:      request.LayeringEntrypoint,
 	})
 	if err != nil {
 		return selfdevprotocol.PlatformUpdateOffer{}, err
