@@ -190,9 +190,14 @@ Authority (transport-bound; X-Internal-Caller demoted to marker):
   (fail closed). `X-Authenticated-User` honored only on that transport in
   autoputer + agentcore; /internal/runtime + /internal/diag gated.
 
-Deployed verification (two disposable accounts + legitimate-flows matrix)
-follows in the S1a evidence file; staging iptables receipts land with the
-deployed proof.
+Deployed verification (two disposable accounts, builds b15f012a + POST
+legs on the follow-up deploy): `docs/evidence/s1a-refusal-matrix-2026-10-04.json`
+— tap->tap FORWARD timeout, vmctl internal 403, maild forged owner 403,
+corpusd mint POST 403, proxy publish POST 403; bound-owner CV resolve +
+maild read + source-service search + egress + product page all green;
+post-fix iptables ruleset + per-tap counters recorded in the same file.
+Panel send-back resolved: POST legs (not GET) exercise the real exploit
+path.
 
 ## Rollback
 

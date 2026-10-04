@@ -673,6 +673,49 @@ receipts:
       accepted edge: the mechanism is proven by the unit suite + the
       ask-acceptance chain; desk-agency at authoring an ask on demand is
       not a transport defect).
+  - id: s1a-to-s0b-transition-2026-10-04
+    kind: station_transition
+    status: closed
+    landed: S1a-host-boundary-hotfix (slice of station S1, executed as its
+      own boundary per the v3.1 first-slice rule)
+    next: S0b-disposable-computer-probes (station S0 resumes)
+    closed_at: '2026-10-04T05:55:00Z'
+    landed_receipts: >-
+      Deployed refusal matrix PASSED —
+      docs/evidence/s1a-refusal-matrix-2026-10-04.json (builds a3f0d48e
+      boundary + b15f012a oracle + POST legs): R1 tap->tap FORWARD
+      timeout, R2 vmctl internal 403, R3 maild forged owner 403, R4
+      corpusd mint POST 403, R5 proxy publish POST 403; L1 gateway dial,
+      L2 bound-owner CV resolve 200, L3 bound-owner maild 200, L4 egress
+      dial, L5 product page 200, L6 bound-guest source-service search.
+      Post-fix iptables ruleset + per-tap DROP counters recorded in the
+      same evidence file.
+    panel: >-
+      Convergent agentic-consensus panel run 2026-10-04
+      (.agentic-consensus/agentic-consensus-20261004-013636). Verdict:
+      send_back (5/10, 4 accept, 1 silent) — resolved in place: the R4/R5
+      GET-405 legs carried no evidence (POST is the real exploit path),
+      so the oracle gained a bounded method=post gated to a path
+      allowlist of exactly the two refusal targets and the legs were
+      rerun as POST with forged headers -> 403. Second findings adopted:
+      bound-guest source-service leg (:8787) added green, post-fix
+      iptables ruleset recorded. Refuted/declined: widening the oracle
+      beyond the two POST targets (would violate its no-authority
+      invariant on open registration).
+    report: >-
+      docs/reports/s1a-host-boundary-station-close-2026-10-04.md
+      (reporter, iCloud PDF same title).
+    residuals: >-
+      Egress remains open by design (default-deny internet is deferred to
+      the S1/S4 recording-proxy work; the metamission security posture
+      keeps open-with-recording). Source-service /internal/* stays
+      bound-guest-open by design (researchtools consumes it inside the
+      guest). The 'zot' PATH-shadowing heresy (management console spawns
+      a third-party TUI; no in-guest exec surface) is carried as
+      discovered-unrepaired with repair owner TBD (S1 or hardening).
+      The S0b registration-genesis defect
+      (docs/problems/s0b-registration-computer-missing-genesis-2026-10-04.md)
+      is S0b's first named blocker.
 ---
 
 # Supervised App Development, Fast Resume, Forks, and Source Publication — Metamission (v2)
