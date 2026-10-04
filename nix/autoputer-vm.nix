@@ -145,10 +145,15 @@ let
     # base-present paths come through the EROFS unchanged. Any layering
     # failure must fall back to the base binary — a wedged ExecStart on every
     # guest boot is a worse failure than running the baseline.
-    release_bin="$CHOIR_UPDATER_ROOT/current/bin/autoputer"
     priv_store="$CHOIR_UPDATER_ROOT/store"
     overlay_work="$CHOIR_UPDATER_ROOT/.overlay-work"
-    if [ -x "$release_bin" ] && [ -d "$priv_store" ] && [ -n "$(ls -A "$priv_store" 2>/dev/null)" ]; then
+    # The updater records the applied release's store-path entrypoint; exec
+    # it (inside the overlay) so the release binary's own deps resolve.
+    release_bin=""
+    if [ -f "$CHOIR_UPDATER_ROOT/layering-entrypoint" ]; then
+      release_bin="$(head -1 "$CHOIR_UPDATER_ROOT/layering-entrypoint" 2>/dev/null)"
+    fi
+    if [ -n "$release_bin" ] && [ -x "$release_bin" ] && [ -d "$priv_store" ] && [ -n "$(ls -A "$priv_store" 2>/dev/null)" ]; then
       mkdir -p "$overlay_work" || true
       echo "go-choir-autoputer: layering release $release_bin over private store" >&2
       ${pkgs.util-linux}/bin/unshare -m --propagation private ${pkgs.runtimeShell} -c "

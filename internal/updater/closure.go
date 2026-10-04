@@ -443,6 +443,20 @@ func (u *Updater) materializeReleaseClosure(releaseDir string, manifest ReleaseM
 			return fmt.Errorf("updater: gc-root %s: %w", base, err)
 		}
 	}
+
+	// Record the release's exec entrypoint for the runtime wrapper. The
+	// manifest declares it private-store-relative; resolve it to the absolute
+	// materialized path and write it so the ExecStart wrapper can exec the
+	// release binary inside the mount-ns overlay.
+	if manifest.LayeringEntrypoint != "" {
+		entry := filepath.Join(storeRoot, filepath.Clean("/"+manifest.LayeringEntrypoint))
+		if _, err := os.Stat(entry); err != nil {
+			return fmt.Errorf("updater: layering entrypoint %s not materialized: %w", entry, err)
+		}
+		if err := writeNarFile(filepath.Join(u.root, "layering-entrypoint"), []byte(entry+"\n"), 0o444); err != nil {
+			return fmt.Errorf("updater: record layering entrypoint: %w", err)
+		}
+	}
 	return nil
 }
 

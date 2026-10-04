@@ -144,6 +144,7 @@ func TestApplyMaterializesLayeredClosureAndGcRoots(t *testing.T) {
 	request.Manifest.Files = append(request.Manifest.Files, ManifestFile{Path: "closure.nar", SHA256: closureSum, Mode: 0o444})
 	request.Manifest.ClosureDigest = closureSum
 	request.Manifest.BaseImageManifestDigest = bootedDigest
+	request.Manifest.LayeringEntrypoint = "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt"
 	if err := refinalizeRequest(&request); err != nil {
 		t.Fatal(err)
 	}
@@ -162,5 +163,13 @@ func TestApplyMaterializesLayeredClosureAndGcRoots(t *testing.T) {
 	gcLink := filepath.Join(root, "gc-roots", result.ReleaseDigest, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
 	if target, err := os.Readlink(gcLink); err != nil || target != materialized {
 		t.Fatalf("gc-root link = %q err=%v, want %q", target, err, materialized)
+	}
+	// The runtime wrapper reads the recorded entrypoint path.
+	entryBytes, err := os.ReadFile(filepath.Join(root, "layering-entrypoint"))
+	if err != nil {
+		t.Fatalf("layering entrypoint not recorded: %v", err)
+	}
+	if strings.TrimSpace(string(entryBytes)) != materialized {
+		t.Fatalf("layering-entrypoint = %q, want %q", entryBytes, materialized)
 	}
 }

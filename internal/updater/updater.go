@@ -59,9 +59,14 @@ type ReleaseManifest struct {
 	// ClosureDigest is the sha256 of the app-layer narchive (nix-store
 	// --export) carrying the base-absent store paths. Set when the release
 	// is a layered app-layer release rather than a plain file release.
-	ClosureDigest string         `json:"closure_digest,omitempty"`
-	Files         []ManifestFile `json:"files"`
-	ContentDigest string         `json:"content_digest"`
+	ClosureDigest string `json:"closure_digest,omitempty"`
+	// LayeringEntrypoint is the private-store-relative path to the release's
+	// exec binary (e.g. "<hash>-autoputer/bin/autoputer"). The guest runtime
+	// execs $UPDATER_ROOT/store/<layering_entrypoint> inside the mount-ns
+	// overlay instead of the base binary.
+	LayeringEntrypoint string         `json:"layering_entrypoint,omitempty"`
+	Files              []ManifestFile `json:"files"`
+	ContentDigest      string         `json:"content_digest"`
 }
 
 type ApplyRequest struct {
