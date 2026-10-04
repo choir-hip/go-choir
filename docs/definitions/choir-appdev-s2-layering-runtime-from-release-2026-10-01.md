@@ -196,21 +196,22 @@ heresy_delta:
 now:
   status: working
   slice: >-
-    Live. Effect plane proven 2026-10-04: wedge fix f61de45b deployed,
-    Go-effect op selfdev-b72a48565061c35c0a22246cb6fc06c3 FROZEN with
-    bundle 9d2be524fa6657b6 on staging (docs/problems/s0-selfdev-executing-wedge-2026-10-04.md).
-    Builder-substrate decision narrows to host-service vs
-    privileged-builder-capsule (scoped-guest-service weakened — gateway
-    maild is the only candidate in-guest host endpoint and it does not
-    run Nix). Capsule-namespace recon: the capsule mounts an overlay
-    (lower = sourceLower:e.lowerDir, writable upper) over the guest base;
-    nix-2.34.7 bin/nix-store + nix-daemon ship in the base EROFS
-    (read-only). A writable /nix/store bind over the merged root is
-    mechanically possible within the capsule's NS_MNT — the
-    privileged-builder-capsule branch is mechanically viable and needs
-    only a store-writability + daemon-socket proof, not a new image.
-  source_ref: main@3f68300e
-  deploy_identity: 'staging https://choir.news deployed_commit=f61de45b; Go-effect proof op selfdev-b72a48565061c35c0a22246cb6fc06c3 on disposable computer-70a23d69b699966937a59d12631556eb'
+    Live. Effect plane proven + host-service builder landed 2026-10-04.
+    Wedge fix f61de45b deployed, Go-effect op
+    selfdev-b72a48565061c35c0a22246cb6fc06c3 FROZEN with bundle
+    9d2be524fa6657b6 on staging. Builder substrate = host-service, code
+    landed in internal/builder + cmd/choir-builder (commit 4b5255d1,
+    deployed): Build resolves the deployed base (choir-guest-image-v1
+    manifest digest + storedisk digest + bound store paths), diffs the
+    installable's nix path-info -r closure against the base, exports only
+    the base-absent delta via nix-store --export, writes a canonical
+    receipt. Host-proven: .#frontend at f61de45b -> 1-path nar that
+    nix-store --import resolves
+    (docs/problems/s2-host-builder-landed-2026-10-04.md). Next: updater
+    manifest extension (closure + base-identity fields) + GC-rooted
+    data-disk store-path materialization + runtime exec from it.
+  source_ref: main@4b5255d1
+  deploy_identity: 'staging https://choir.news deployed_commit=4b5255d1; builder + Go-effect proof live'
   candidate:
     id: none
     state: none
@@ -278,14 +279,14 @@ now:
     frontend/state/event-head atomic join, or leaks a writable global store
     violates the updater trust boundary rather than providing a valid speedup.
   next_action: >-
-    Builder-substrate decision made 2026-10-04 (host-service; see
-    docs/problems/s2-builder-substrate-2026-10-04.md): the
-    privileged-builder-capsule branch needs new privileged-capsule
-    machinery (drop NEWNET, writable-store override, relax NS_USER),
-    not a config flip, and duplicates what the host already provides.
-    Next: land the host-service builder — produce the app-layer closure
-    + base-image identity the S2 contract requires, then the layering
-    slice (per-computer Nix closure, GC-rooted, no writable guest store).
+    Host-service builder landed 2026-10-04 (internal/builder +
+    cmd/choir-builder, commit 4b5255d1 deployed). Next: extend the
+    updater release contract so a manifest carries the app-layer closure
+    blob + the base-image identity it resolves against
+    (base_image_manifest_digest + store_disk digest + exported nar
+    store-path set), then materialization: replay the nar to GC-rooted
+    data-disk store paths + exec the runtime from them — the actual
+    layering acceptance.
 
 receipts: []
 ---
