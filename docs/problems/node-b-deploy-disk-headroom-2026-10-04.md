@@ -1,5 +1,21 @@
 # Node B deploy disk headroom — deploys blocked below 90 GiB
 
+## Recurrence 3 — 2026-10-04T07:06Z, deploy run 37184188348 (e87f3294)
+
+Fourth hit. 88 GiB free after the bounded reclaim; preflight refused. Cleared
+by deleting `data.img.corrupt` (21G) + `data.img.quarantine-1-*` (15G) inside
+the *live* fleet candidate `candidate-fleet-e15cb89f…` (firecracker running;
+the 31G live `data.img` untouched — the quarantine copies were stale forensic
+remnants of a prior repair, same stale-artifact class the owner authorized).
+Also removed `/tmp/vm-mnt-e15cb` + `/tmp/guest-data-ro` stale forensic mounts
+and a 148M `*.pre-*` backup on `candidate-fleet-49ee3bd…`. 90G free after
+sync; deploy rerun in flight.
+
+**Pattern for the preflight script:** the live fleet candidates accumulate
+`.corrupt`/`.quarantine-*` forensic disk copies that the bounded reclaim never
+sees because the VM itself is protected. A `find vm-state -name 'data.img.*'
+!-name 'data.img' -mtime +7` arm is the next durable lever.
+
 ## Recurrence 2 — 2026-10-04T04:43Z, deploy run 37177170737 (a3f0d48e)
 
 Third hit of the same gate within ~10 days. Headroom eroded back below 90
