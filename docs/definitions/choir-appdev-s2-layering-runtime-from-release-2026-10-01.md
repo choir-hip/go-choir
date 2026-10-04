@@ -196,18 +196,21 @@ heresy_delta:
 now:
   status: working
   slice: >-
-    Live. S0 complete 2026-10-04 (s0b-boundary-close): builder-substrate
-    decision narrows to host-service vs privileged-builder-capsule
-    (scoped-guest-service weakened — gateway maild is the only candidate
-    in-guest host endpoint and it does not run Nix). Named edges from S0:
-    (1) selfdev executing->frozen wedge must be repaired before any Go
-    effect is observable; (2) capsule-namespace probe is the precondition
-    for the privileged-builder-capsule branch; (3) snapshot/UFFD is
-    host-level (S3), not a guest observation. First slice: repair the
-    wedge so a Go effect can be observed on a disposable computer —
-    every later builder claim depends on the effect plane working.
-  source_ref: main@11e1a12f
-  deploy_identity: 'staging https://choir.news deployed_commit=e87f3294; disposable computer-a99366facf24b872703de326d3b33832 carries the wedged op'
+    Live. Effect plane proven 2026-10-04: wedge fix f61de45b deployed,
+    Go-effect op selfdev-b72a48565061c35c0a22246cb6fc06c3 FROZEN with
+    bundle 9d2be524fa6657b6 on staging (docs/problems/s0-selfdev-executing-wedge-2026-10-04.md).
+    Builder-substrate decision narrows to host-service vs
+    privileged-builder-capsule (scoped-guest-service weakened — gateway
+    maild is the only candidate in-guest host endpoint and it does not
+    run Nix). Capsule-namespace recon: the capsule mounts an overlay
+    (lower = sourceLower:e.lowerDir, writable upper) over the guest base;
+    nix-2.34.7 bin/nix-store + nix-daemon ship in the base EROFS
+    (read-only). A writable /nix/store bind over the merged root is
+    mechanically possible within the capsule's NS_MNT — the
+    privileged-builder-capsule branch is mechanically viable and needs
+    only a store-writability + daemon-socket proof, not a new image.
+  source_ref: main@3f68300e
+  deploy_identity: 'staging https://choir.news deployed_commit=f61de45b; Go-effect proof op selfdev-b72a48565061c35c0a22246cb6fc06c3 on disposable computer-70a23d69b699966937a59d12631556eb'
   candidate:
     id: none
     state: none
@@ -275,15 +278,13 @@ now:
     frontend/state/event-head atomic join, or leaks a writable global store
     violates the updater trust boundary rather than providing a valid speedup.
   next_action: >-
-    Repair the selfdev executing->frozen wedge
-    (docs/problems/s0-selfdev-executing-wedge-2026-10-04.md): the op
-    selfdev-0280c6cf2eac90dffb5c77912c0766a9 on disposable
-    computer-a99366facf24b872703de326d3b33832 wedged at executing with
-    verifier_refs empty after 10 proposal-loop inference rounds. Root-cause
-    the freeze/verify path (tools_capsule.go:367 FreezeGrantedWorktree →
-    op transition), land the fix, re-run the Go effect on a fresh
-    disposable until it commits a bundle and applies. Then the
-    capsule-namespace probe for the privileged-builder-capsule branch.
+    Wedge repaired and Go-effect proven on staging (op
+    selfdev-b72a48565061c35c0a22246cb6fc06c3 FROZEN, bundle 9d2be524,
+    fix f61de45b deployed). Next: the capsule-namespace probe — prove a
+    capsule can carry a writable /nix/store bind + nix-daemon socket
+    inside its NS_MNT (mechanically viable per the overlay mount), which
+    selects the privileged-builder-capsule substrate; else fall back to
+    host-service. Then land the selected builder substrate.
 
 receipts: []
 ---
