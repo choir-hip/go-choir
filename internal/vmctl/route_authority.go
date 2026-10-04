@@ -393,14 +393,14 @@ func (h *Handler) HandleResolveComputerVersionRoute(w http.ResponseWriter, r *ht
 	}
 	if !isInternalCaller(r) {
 		// S1a: tap-sourced callers are admitted only for their own slot —
-		// the slot ID embeds owner:computer; the caller's tap IP must bind
-		// to that computer's ownership record.
-		_, slotComputerID, parseErr := routeledger.ParseRouteSlotID(r.URL.Query().Get("route_slot_id"))
+		// the slot ID embeds owner:desktop; the caller's tap IP must bind
+		// to that ownership's computer_url.
+		slotOwnerID, slotDesktopID, parseErr := routeledger.ParseRouteSlotID(r.URL.Query().Get("route_slot_id"))
 		if parseErr != nil {
 			writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid route slot id"})
 			return
 		}
-		if bindErr := h.bindRequestToGuestComputer(r, slotComputerID); bindErr != nil {
+		if bindErr := h.bindRequestToRouteSlot(r, slotOwnerID, slotDesktopID); bindErr != nil {
 			writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "caller not bound to route slot computer: " + bindErr.Error()})
 			return
 		}

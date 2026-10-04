@@ -1532,6 +1532,31 @@ func (h *Handler) bindRequestToGuestComputer(r *http.Request, wantComputerID str
 	return nil
 }
 
+// bindRequestToRouteSlot checks that the caller's tap source IP belongs to the
+// ownership named by a route slot's owner:desktop pair. The ComputerVersion
+// route slot ID is computer:<owner>:<desktop> — its third segment is the
+// desktop, not a stable computer ID, so the slot resolves via
+// GetOwnershipForDesktop and the tap IP must match that ownership's
+// computer_url. Returns nil when the caller is bound.
+func (h *Handler) bindRequestToRouteSlot(r *http.Request, ownerID, desktopID string) error {
+	srcHost := guestRemoteAddrHost(r)
+	if srcHost == "" {
+		return fmt.Errorf("guest-scoped call requires a tap-sourced request (remote_addr=%s)", r.RemoteAddr)
+	}
+	own := h.registry.GetOwnershipForDesktop(ownerID, desktopID)
+	if own == nil {
+		return fmt.Errorf("no ownership for route slot %s:%s", ownerID, desktopID)
+	}
+	u, err := url.Parse(strings.TrimSpace(own.ComputerURL))
+	if err != nil {
+		return fmt.Errorf("route slot %s:%s has no usable computer_url", ownerID, desktopID)
+	}
+	if !strings.EqualFold(u.Hostname(), srcHost) {
+		return fmt.Errorf("caller %s is not bound to route slot %s:%s (bound guest IP %s)", srcHost, ownerID, desktopID, u.Hostname())
+	}
+	return nil
+}
+
 // callerBoundToAnyOwnership reports whether the request came over a guest
 // tap AND its source IP matches some live ownership's computer_url host.
 // Used for guest-scoped endpoints whose payload names no computer (the
