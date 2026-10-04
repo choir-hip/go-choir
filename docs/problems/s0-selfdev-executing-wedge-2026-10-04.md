@@ -125,6 +125,39 @@ by the deadline bug, op still `executing`).
 The state machine and the assignment machinery are correct; the
 substrate deadline bug and the error surface were not.
 
+
+## Resolution (2026-10-04, deployed fix `f61de45b`)
+
+The wedge is gone and the Go-effect plane is proven end-to-end on staging.
+
+- **Substrate fix deployed:** `armCellTerminalDeadline` arms from the
+  activation ctx (commit `f61de45b`, CI + staging verified);
+  `last_intent_error` surfaces every refusal.
+- **Probe 6** (`computer-59addaef`, op `selfdev-a4baaa4262e266cab3d8064950e71f6c`):
+  `freeze: distinct build, test, and dependency/toolchain execution receipts
+  are required` — wedge gone, contract gap exposed.
+- **Probe 7** (`computer-9dcde912`, op `selfdev-861f7fd312e2f588f8943816852539a7`):
+  `freeze rejected: unknown paths` — root-path write rejected.
+- **Probe 8** (`computer-d03eb970`, op `selfdev-c82335d383ae310d4d2a24eb31a99eab`):
+  `freeze: no frozen runtime artifacts` — release needs
+  `/var/lib/artifact/release/` layout.
+- **Probe 9** (`computer-70a23d69`, op `selfdev-b72a48565061c35c0a22246cb6fc06c3`):
+  **FROZEN, `bundle_digest=9d2be524fa6657b6`, `capsule_id` bound** — the
+  Go effect executed, staged a valid release, and froze on the deployed
+  fixed SHA.
+
+### Full contract for a successful freeze (confirmed against deployed state)
+
+1. Change lands under a classifying ledger prefix (`/workspace` = LedgerSource).
+2. Runtime artifacts staged under `/var/lib/artifact/release/`:
+   executable `bin/autoputer` + `frontend/` content.
+3. All writes complete BEFORE the receipt-carrying calls; no writes between them.
+4. Three DISTINCT `Exec`/`go_eval` `receipt_refs` to `Freeze` — the latest
+   receipt's `WorktreeDigest` must equal the frozen tree.
+
+Remaining edge (next station): `frozen -> verified` needs an independent
+`EngineeringAssignmentVerification` run + owner `awaiting_approval`; the
+wedge that blocked the effect plane is closed.
 ## Verification
 
 Re-run the Go effect through an engineering-assignment launch (management
