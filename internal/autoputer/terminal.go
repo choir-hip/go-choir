@@ -107,11 +107,13 @@ func NewManagementConsoleHandler(rootDir string) *TerminalHandler {
 }
 
 func resolveManagementConsoleCommand() []string {
+	// CHOIR_ZOT_PATH is the only trusted binary lookup. A bare PATH search for
+	// "zot" can resolve to a foreign binary (e.g. the container registry) and
+	// spawn it under autoputer privileges as the management console — the S1
+	// zot PATH-shadowing defect. Without the explicit path, the autoputer's
+	// own binary runs its built-in zot-session subcommand instead.
 	if override := strings.TrimSpace(os.Getenv("CHOIR_ZOT_PATH")); override != "" {
 		return []string{override}
-	}
-	if path, err := exec.LookPath("zot"); err == nil && strings.TrimSpace(path) != "" {
-		return []string{path}
 	}
 	exe, _ := os.Executable()
 	return []string{exe, "zot-session"}
