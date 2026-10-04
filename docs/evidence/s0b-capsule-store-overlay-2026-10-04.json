@@ -1,0 +1,23 @@
+{
+  "probe": "S0b capsule store overlay",
+  "computer": "computer-ac1808b4f04fc749c0781083ee747403",
+  "user": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+  "vm": "vm-b59963240d2cd8da769b92cacb213802",
+  "observed_at": "2026-10-04T07:10:41Z",
+  "inputs": {
+    "required_transition": "mount the proposed /nix/store-prefixed overlay inside a capsule namespace and observe it through dispose/activate",
+    "available_observation": "sealed guest HTTP surface; host VM-state dir; capsule-health-map probe (docs/evidence/s0b-capsule-health-map-2026-10-04.json) recorded no capsule endpoint"
+  },
+  "raw_observations": {
+    "build": "52ee562f769fc90197e0aa68de9d7022dcd2ab81",
+    "guest_surface": "no capsule-create, capsule-exec, or namespace-mount API reachable on :8085; /api/capsules returns SPA fallback",
+    "host_surface": "no overlay or mount control in /var/lib/go-choir/vm-state/vm-b59963240d2cd8da769b92cacb213802",
+    "capsule_health_receipt": "docs/evidence/s0b-capsule-health-map-2026-10-04.json verdict=gap"
+  },
+  "verdict": "unreached_transition",
+  "findings": [
+    "The sealed guest boundary supplies no surface on which to create a capsule namespace or mount a store-prefixed overlay, so the dispose->activate->reboot transition could not be attempted, not merely observed to fail.",
+    "This is a boundary-surface gap, not a falsification: whether a constructed privileged builder capsule could mount the overlay is a design question for S2, not a measured no."
+  ],
+  "cleanup": "No mutation attempted; disposable VM remains active."
+}

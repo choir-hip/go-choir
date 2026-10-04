@@ -1,0 +1,53 @@
+{
+  "probe": "S0b builder-substrate decision",
+  "computer": "computer-ac1808b4f04fc749c0781083ee747403",
+  "user": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+  "vm": "vm-b59963240d2cd8da769b92cacb213802",
+  "decided_at": "2026-10-04T07:20:00Z",
+  "inputs": {
+    "required_output": "select host service, privileged builder capsule, or scoped guest service as S2's builder substrate, or falsify all three with evidence",
+    "supporting_receipts": [
+      "docs/evidence/s0b-capsule-health-map-2026-10-04.json",
+      "docs/evidence/s0b-capsule-store-overlay-2026-10-04.json",
+      "docs/evidence/s0b-erofs-nix-db-2026-10-04.json",
+      "docs/evidence/s0b-nixpkgs-build-2026-10-04.json",
+      "docs/evidence/s0b-absent-runtime-dep-2026-10-04.json",
+      "docs/evidence/s0b-snapshot-resume-2026-10-04.json",
+      "docs/evidence/s0b-m9a-bundle-lifecycle-2026-10-04.json"
+    ]
+  },
+  "evidence": {
+    "sealed_guest": "no shell, vsock, serial, capsule, exec, build, mount, or snapshot endpoint reachable on :8085 or host vmctl; every guest-internal observation path is closed",
+    "erofs_store": "guest /nix/store is EROFS read-only with 898 entries; no writable scratch or overlay path exposed",
+    "no_build_surface": "no dependency build, package install, or capsule-create surface exists",
+    "no_snapshot_surface": "vmctl exposes resolve/resume/recover/refresh/runtime-package and no snapshot/UFFD/reflink handler",
+    "m9a_positive": "platform-signed update applied and restored with witness match — the only end-to-end lifecycle the sealed boundary actually admitted"
+  },
+  "substrate_assessment": {
+    "host_service": {
+      "verdict": "open",
+      "evidence": "host-side surfaces (vmctl, corpusd, node-b state dir) are reachable and already carry the M9a/restore/health evidence; nothing measured rules out a host-side builder substrate"
+    },
+    "privileged_builder_capsule": {
+      "verdict": "open_but_unprobed",
+      "evidence": "no capsule-create/namespace/exec endpoint exists today, so the privileged-capsule substrate is unfalsified but also unexercised; S2 entry for this branch must add a capsule-namespace probe precondition"
+    },
+    "scoped_guest_service": {
+      "verdict": "weakened_not_falsified",
+      "evidence": "the guest is sealed by design, /nix/store is EROFS, and no install or build surface exists; a scoped guest service would have to be constructed, not assumed present. The gaps weaken it as the default, but do not prove it impossible."
+    }
+  },
+  "decision": {
+    "selected": "none_selected_deferred_to_S2",
+    "falsified": [],
+    "rationale": "None of the three substrates is falsified: the gaps measure the current deployed surface, not the design space. The decision correctly moves to S2 carrying three binding requirements — (1) whichever substrate is chosen must expose the missing observation/build surfaces S0b could not reach; (2) if S2 picks privileged_builder_capsule, the capsule-namespace probe set is an S2-entry precondition; (3) the M9a route-projection defect (docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md) is early-S2 work, since any builder substrate needs route projection to publish artifacts.",
+    "named_edges": [
+      {"edge": "self-dev Go effect execution", "owner": "S2 entry", "note": "keydriver fixed in 57613ddc; re-attempt on next disposable"},
+      {"edge": "capsule namespace probe set", "owner": "S2 entry if builder-capsule branch"},
+      {"edge": "host-level Firecracker snapshot/UFFD/reflink surface", "owner": "S3", "note": "vmctl has no endpoint; S3 receives snapshot facts per the station handoff"},
+      {"edge": "capsule-store-overlay, EROFS Nix DB, nixpkgs-build, dependency lifecycle", "owner": "S4", "note": "mount/Nix-DB/sandbox facts per the station handoff"}
+    ]
+  },
+  "verdict": "receipt_of_deferral",
+  "cleanup": "Documentation receipt; no mutation."
+}

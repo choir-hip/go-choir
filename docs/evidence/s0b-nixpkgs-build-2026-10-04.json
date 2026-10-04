@@ -1,0 +1,26 @@
+{
+  "probe": "S0b sandboxed one-package nixpkgs build",
+  "computer": "computer-ac1808b4f04fc749c0781083ee747403",
+  "user": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+  "vm": "vm-b59963240d2cd8da769b92cacb213802",
+  "observed_at": "2026-10-04T07:10:41Z",
+  "inputs": {
+    "required_experiment": "one sandboxed nix build of a package absent from the base closure, inside a capsule namespace",
+    "available_observation": "sealed guest HTTP; EROFS /nix/store; capsule-health probe recorded no capsule endpoint; absent-runtime-dep probe recorded no build surface"
+  },
+  "raw_observations": {
+    "build": "52ee562f769fc90197e0aa68de9d7022dcd2ab81",
+    "build_surface": "no nix build, package install, capsule exec, or sandbox API exposed on :8085 or /internal/*",
+    "nix_store": "EROFS read-only; no scratch/store-writable mount reachable",
+    "prior_gap_receipts": [
+      "docs/evidence/s0b-absent-runtime-dep-2026-10-04.json",
+      "docs/evidence/s0b-capsule-health-map-2026-10-04.json"
+    ]
+  },
+  "verdict": "unreached_experiment",
+  "findings": [
+    "No sandboxed nix-build surface exists on the sealed guest; the one-package build experiment could not be attempted.",
+    "This is evidence that the *current* guest offers no builder surface — a fact that weighs against scoped-guest-service as S2's substrate — not a falsification that a built capsule/host service could not provide one."
+  ],
+  "cleanup": "No build attempted; no artifacts created."
+}

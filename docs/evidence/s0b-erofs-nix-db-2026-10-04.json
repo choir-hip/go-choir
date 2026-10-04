@@ -1,0 +1,24 @@
+{
+  "probe": "S0b EROFS Nix DB",
+  "computer": "computer-ac1808b4f04fc749c0781083ee747403",
+  "user": "69fcbf14-7fa7-442b-9e69-9c2666274b9e",
+  "vm": "vm-b59963240d2cd8da769b92cacb213802",
+  "observed_at": "2026-10-04T07:10:41Z",
+  "inputs": {
+    "required_observation": "observe the guest's EROFS Nix DB (store path -> derivation/closure index) inside a capsule or guest shell",
+    "available_observation": "sealed guest HTTP; host VM-state dir (data.img is an opaque block image, not mounted)"
+  },
+  "raw_observations": {
+    "build": "52ee562f769fc90197e0aa68de9d7022dcd2ab81",
+    "nix_store_mount": {"device": "/dev/vda", "fstype": "erofs", "read_only": true},
+    "nix_store_entries": 898,
+    "guest_access": "no shell, vsock, serial, or /nix/db read path exposed; /run/choir and /nix/store are unreachable across the sealed boundary",
+    "host_access": "data.img is a live ext4 block device for the running guest; no readonly mount or dump endpoint exists for Nix DB inspection"
+  },
+  "verdict": "unreached_observation",
+  "findings": [
+    "The Nix DB exists (898 store entries on the EROFS rootfs) but no observation path exposes it: no guest exec, no readonly store dump, no mountable snapshot.",
+    "This is a boundary gap only; the DB's shape (sqlite vs plain files, generation indexing, closure joins) is a design input S2 will need to obtain by a privileged-capsule or host-service route, not by guest inspection."
+  ],
+  "cleanup": "Read-only boundary scan; no mount or mutation attempted."
+}

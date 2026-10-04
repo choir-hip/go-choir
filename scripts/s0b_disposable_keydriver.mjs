@@ -77,7 +77,7 @@ try {
     const res = await fetch('/auth/api-keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label, scopes: ['read:base', 'write:base', 'read:runtime', 'write:runtime', 'read:texture', 'write:texture', 'computer:lifecycle', 'computer:self_development:propose', 'computer:self_development:mode', 'manage:keys'], computer_id: computer }),
+      body: JSON.stringify({ label, scopes: ['read:base', 'write:base', 'read:runtime', 'write:runtime', 'read:texture', 'write:texture', 'computer:lifecycle', 'computer:self_development:read', 'computer:self_development:propose', 'computer:self_development:mode', 'manage:keys'], computer_id: computer }),
     });
     const body = await res.json().catch(() => null);
     return { status: res.status, body };
