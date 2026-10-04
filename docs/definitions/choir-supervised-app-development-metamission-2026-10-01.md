@@ -1246,3 +1246,39 @@ are now owned:
   by the guest result that overlay works in the guest service context;
 - the silent apply-restart wedge → S2-e.
 
+### Handoff 2026-10-05 — S2 contract slices
+
+State for the next session: S2 mechanism is proven on staging; the work is
+the release *contract*, not the mount machinery. The layering scare was
+resolved into two non-bugs and one real defect:
+
+- `unshare`/`mount -t overlay`/`exec` all succeed in the guest's systemd
+  private mount namespace (`layering-diag.log`: `unshare_ok` → `mount_ok`
+  → `exec_path_resolves`). The mechanism is sound.
+- The `vm-3dc68688` crash-loop was the probe's own hand-staged binary —
+  an August autoputer (`43310064`) copied into `/tmp/closure.nar` on
+  Node B — running against an October persistent store. Builder output was
+  never exercised. Per the v4 evidence-quality rule, hand-staged artifacts
+  answer mechanism questions only; station acceptance requires
+  builder-produced releases.
+- The real defect: **`layering-entrypoint` is a global file** at
+  `$CHOIR_UPDATER_ROOT/layering-entrypoint`
+  (`internal/updater/closure.go:418,457-462`), outside the release dir and
+  outside the `current/` swap. `restorePrior` reverts `current` but not the
+  entrypoint, so a recovery restart re-execs the failed release. This is the
+  single-state-authority violation S2-e closes.
+
+Deployed state (`main@90d93a82`, staging `choir.news`):
+- `e605cdde` — `autoputerRuntimeExec` falls back to direct-exec when the
+  overlay path fails, and points `CHOIR_BASELINE_RELEASE_ROOT`/skills at the
+  applied layerdir. Keep or revert once `current/layering-entrypoint`
+  becomes the single pointer; it is a compatibility shim, not the contract.
+- `3c1cbaf6` — the `layering-diag.log` stage recorder that produced the
+  `unshare_ok`/`mount_ok`/`exec_path_resolves` evidence. Leave in place;
+  SO's durable-stderr work generalizes it.
+
+S2 slice order (v4): S2-e rollback atomicity → S2-d state-compat gate →
+S2-c provenance → S2-f builder join → S2-g CI wiring. Parallel: SO ops
+substrate (storage lifecycle, guest stderr, declared VM shapes, CI gating)
+gates S3; the S1 remainder continues.
+
