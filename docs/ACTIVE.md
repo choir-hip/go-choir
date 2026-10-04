@@ -50,13 +50,16 @@ divergent; all required revisions applied in v3). Thirteen stations;
   builder-substrate decision narrowed to host-service vs
   privileged-builder-capsule).
 
-**S2** layering-runtime-from-release is **live** — first named slice is
-the selfdev ops-launch repair (an ops POST creates no engineering
-assignment so `OperationStore` never binds and `choir.Freeze` refuses
-in-cell with the refusal invisible outside; Go-effect probes must launch
-through a management engineering cast, and cell refusals must surface on
-the op record), then the capsule-namespace probe for the
-privileged-builder-capsule branch. Station files:
+**S2** layering-runtime-from-release is **live** — mechanism proven on
+staging (offer → CAS-ref → private store → overlay exec → route promote;
+base-mismatch refused). Re-scoped by the metamission v4 director review
+(2026-10-05) to the contract slices: **S2-e** rollback atomicity (the
+global `layering-entrypoint` survives `restorePrior`), **S2-d** state-compat
+gate, **S2-c** provenance (builder-derived `code_commit`, buildinfo
+check), **S2-f** self-dev → builder join, **S2-g** CI wiring. Parallel:
+the S1 remainder, plus the new **SO** ops-substrate station (storage
+lifecycle after five disk-headroom hits, durable guest stderr, declared
+VM shapes, CI deploy gating), which gates S3. Station files:
 `definitions/choir-appdev-s*-2026-10-01.md`. Design evidence:
 [`reports/agent-messaging-system-state-2026-10-01.md`](reports/agent-messaging-system-state-2026-10-01.md),
 [`desk-system-harness-architecture-2026-10-01.md`](desk-system-harness-architecture-2026-10-01.md).

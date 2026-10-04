@@ -246,8 +246,9 @@ now:
     scope_if_supported: >-
       Tracking single-host staging computers running the shared NixOS base and
       a per-computer app-layer runtime/frontend closure.
-    status: proposed
+    status: testing
     evidence_refs:
+      - docs/problems/s2-runtime-exec-still-baseline-2026-10-04.md
       - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:512-518
       - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-543
       - internal/updater/updater.go:125-285
@@ -266,30 +267,50 @@ now:
       (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:434-437)
   belief:
     believed_state: >-
-      The existing updater already has manifest-verified release staging,
-      pointer swap, runtime restart, health evidence, and prior-release
-      recovery; the image runtime is still its execution baseline.
+      Mechanism proven on staging: signed layered offer, CAS-ref
+      transport, nar replay into the private store, overlay exec in the
+      guest (layering-diag unshare_ok/mount_ok/exec_path_resolves), route
+      promotion, base-mismatch refusal. The vm-3dc68688 crash-loop was a
+      hand-staged stale binary (August 43310064 copied into /tmp/closure.nar
+      on Node B, synthetic code_commit), not builder output. Contract
+      defects (source-traced 2026-10-05, director review):
+      (1) layering-entrypoint is global at the updater root, so
+      restorePrior does not revert exec (internal/updater/closure.go:418,
+      457-462; wrapper nix/autoputer-vm.nix:153);
+      (2) no pre-mutation state-compat refusal beyond the base digest;
+      (3) builder code_commit is caller-supplied and nothing binds the
+      binary's buildinfo to the manifest;
+      (4) self-dev still emits file releases, not builder input.
     main_uncertainty: >-
-      Which S0b-validated evaluator can build the required closure without a
-      writable guest-global store or daemon, and whether its dependency graph
-      can resolve strictly against the booted base.
+      Whether builder-produced runtime closures stay small as deltas
+      against the base, and whether CI can drive builder -> mint -> push
+      inside the deploy window.
     next_observation: >-
-      S0's recorded base/store layout and S0b evaluator selection, then S2's
-      landed builder and a staging no-reboot app-layer apply with refusal and
-      retained-predecessor evidence.
+      A builder-produced release from a real commit, applied to a
+      disposable computer alongside one deliberately incompatible release
+      (refused pre-mutation) and one health-failing release (restored,
+      exec included).
   blocker_or_risk: >-
-    A closure that appears to start but bypasses the booted base, leaves the
-    computer surface on immutable-baseline fallback, omits the
-    frontend/state/event-head atomic join, or leaks a writable global store
-    violates the updater trust boundary rather than providing a valid speedup.
+    Hand-staged artifacts may answer mechanism questions only; station
+    acceptance requires builder-produced releases (metamission evidence
+    quality rule, v4). Each layered release adds a ~146MB nar to
+    platform-artifacts with no GC; coordinate with SO before CI wiring
+    multiplies it.
   next_action: >-
-    Full layering mechanism landed + exec image deployed (df23219c, staging).
-    Next is the deployed layering acceptance (docs/problems/s2-runtime-exec-still-baseline):
-    on a disposable staging computer, mint a layered platform-update
-    (closure.nar carrying an app-layer binary + base_image_manifest_digest),
-    transport it in, apply, and observe the guest process exec the release
-    binary (store paths resolve through the overlay) — then a
-    deliberately-broken release rolls back to the prior/base binary.
+    Re-scoped by the metamission v4 director review ("Orientation
+    2026-10-05"). Slices, in order:
+    S2-e rollback atomicity (entrypoint inside the release dir, restorePrior
+    reverts exec, boot-loop guard with receipt);
+    S2-d state-compat gate (manifest declares minimum store schema + base
+    commit; Apply refuses before mutation);
+    S2-c provenance (builder derives code_commit; manifest carries the
+    builder receipt digest; updater checks the embedded buildinfo commit);
+    S2-f self-dev -> builder join (source patch, not file release, for
+    runtime changes);
+    S2-g CI wiring for tracking computers with time-to-healthy, no reboot
+    for app-layer-only changes.
+    Then station acceptance per the conjecture test above, using
+    builder-produced releases only.
 
 receipts: []
 ---

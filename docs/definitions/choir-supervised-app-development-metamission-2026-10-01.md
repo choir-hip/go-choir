@@ -17,6 +17,12 @@ definition_version: 4
 # staging; a durable stderr/observability hole blocked root-causing it.
 # Four substrate issues recorded for the next revision; a full metamission
 # revision is deferred until S2 is stable. See "Addendum 2026-10-04".
+# v4 2026-10-05 (director review): S0/S0m/S1a closed; S2 re-scoped around
+# the real residuals (provenance, state-compat gate, rollback atomicity of the
+# exec pointer, builder->release join, CI wiring). New parallel station SO
+# (ops substrate: storage lifecycle, guest observability, declared VM shapes,
+# CI deploy gating) gates S3. S3 opens with the snapshot measurement S0b could
+# not take. Addendum folded into "Orientation 2026-10-05".
 
 readiness: executable
 
@@ -48,20 +54,35 @@ metamission:
       status: complete
       depends_on: [S0m-record-native-messaging]
     - id: S1-security-floor
+      # S1a complete; the remainder (non-root runtime, gateway token off the
+      # cmdline and out of child env, Yaegi kernel floor, zot PATH-shadowing,
+      # S0a diag surfaces) runs in parallel with S2 and must close before S4.
       path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
       readiness: reviewed
-      status: pending
+      status: working
       depends_on: [S0-reality-and-boot-timeline, S1a-host-boundary-hotfix]
     - id: S2-layering-runtime-from-release
       path: docs/definitions/choir-appdev-s2-layering-runtime-from-release-2026-10-01.md
       readiness: reviewed
       status: working
       depends_on: [S0-reality-and-boot-timeline]
+    - id: SO-ops-substrate
+      # New in v4. Five disk-headroom hits in four days (Root Cause
+      # Clustering threshold), guest stderr unreachable, an undeclared
+      # 16 GiB VM shape, and CI deploy gating that strands runtime code are
+      # one substrate: the platform has no storage lifecycle and no durable
+      # guest observability. Runs in parallel with S2; S3 cannot start
+      # without it (memory snapshots add GiBs per hibernated computer).
+      # Station file to be authored from "Orientation 2026-10-05".
+      path: unauthored (scope in this file, "Orientation 2026-10-05" -> SO)
+      readiness: intent
+      status: pending
+      depends_on: []
     - id: S3-fast-resume
       path: docs/definitions/choir-appdev-s3-fast-resume-2026-10-01.md
       readiness: reviewed
       status: pending
-      depends_on: [S1-security-floor, S2-layering-runtime-from-release]
+      depends_on: [S1-security-floor, S2-layering-runtime-from-release, SO-ops-substrate]
     - id: S4-capsule-open-world
       path: docs/definitions/choir-appdev-s4-capsule-open-world-2026-10-01.md
       readiness: reviewed
@@ -419,20 +440,17 @@ boundaries:
 now:
   status: working
   slice: >-
-    S0 COMPLETE 2026-10-04 (s0b-boundary-close receipt). S2 effect plane
-    PROVEN 2026-10-04: wedge fix f61de45b deployed, Go-effect op
-    selfdev-b72a48565061c35c0a22246cb6fc06c3 FROZEN with bundle
-    9d2be524fa6657b6 on staging
-    (docs/problems/s0-selfdev-executing-wedge-2026-10-04.md).
-    Builder-substrate decided: host-service
-    (docs/problems/s2-builder-substrate-2026-10-04.md —
-    privileged-builder-capsule needs new machinery: drop NEWNET,
-    writable-store override, relax NS_USER). S1a host-boundary hotfix
-    closed (deployed refusal matrix PASSED). Next: land the
-    host-service builder producing the app-layer closure + base-image
-    identity; then the S2 layering slice.
-  source_ref: main@7da99b14
-  deploy_identity: 'staging https://choir.news deployed_commit=f61de45b (S2a wedge fix + Go-effect proof live)'
+    v4 director review 2026-10-05. Closed: S0 (S0a+S0b), S0m, S1a. Live: S2
+    (re-scoped below), S1 remainder in parallel, SO ops substrate in
+    parallel. S2's mechanism is proven on staging: offer mint/sign, CAS-ref
+    transport, nar replay into the private store, overlay exec in the guest
+    (layering-diag unshare_ok/mount_ok/exec_path_resolves), route promotion,
+    and base-mismatch fail-closed. What S2 lacks is the contract around the
+    mechanism: (S2-c) provenance, (S2-d) state-compat gate, (S2-e) rollback
+    atomicity of the exec pointer, (S2-f) self-dev/builder -> layered-release
+    join, and (S2-g) CI wiring with time-to-healthy.
+  source_ref: main@4c76730b13cda645665c6c95b5e89a7e2e805e78
+  deploy_identity: 'staging https://choir.news; last observed deployed runtime e605cdde/3c1cbaf6 per S2 layering-diag receipts (verify /health before the next probe)'
   candidate:
     id: none
     state: none
@@ -445,151 +463,171 @@ now:
     claim: >-
       The deliverable needs no new governance machinery. M7/M11 self-dev,
       M9a transport, capsule effect bundles, Restore-Zero semantic
-      snapshots and (since S0m) record-native desk couplings carry it.
-      What is missing is effect reach, openness, speed, and a host
-      boundary that actually holds:
-      (a) the guest executes a per-computer app-layer closure, not the
-      image baseline;
+      snapshots and record-native desk couplings carry it. What is missing
+      is effect reach, openness, speed, a host boundary that holds, and an
+      operable substrate:
+      (a) the guest executes a per-computer app-layer closure — mechanism
+      PROVEN 2026-10-04; contract (provenance, compat, atomic rollback)
+      open;
       (b) capsules get recorded egress and a private Nix store;
       (c) a preview bridge;
       (d) the change record is base rev + patch stack + pinned inputs;
       (e) machine snapshots for resume, semantic snapshots for
       distribution;
-      (f) guest traffic carries no host-internal authority (new
-      2026-10-04).
-      Layering (a) is also the largest latency lever, because most
-      updates stop rebooting VMs.
+      (f) guest traffic carries no host-internal authority — S1a
+      deployed-verified;
+      (g) the host has a storage lifecycle and durable guest observability
+      (new v4; SO).
     test: >-
-      S0b confirms (a) on a disposable computer (a self-dev Go change
-      applies but the endpoint does not change), selects or falsifies the
-      S2 builder substrate, and measures snapshot create/resume on an
-      owner-sized fixture. S1a's deployed refusals confirm (f). Each later
-      station is falsified if it needs a new authority path rather than
-      a new effect path.
+      S2: a real code change built by the host builder from a commit applies
+      without reboot and with recorded time-to-healthy; an incompatible
+      release refuses before mutation; a release that passes pre-checks but
+      fails health restores the predecessor INCLUDING its exec entrypoint.
+      SO: a release + snapshot workload runs for a week of deploys without a
+      manual disk reclaim, and every guest exec failure leaves a host-visible
+      record. Each later station is falsified if it needs a new authority
+      path rather than a new effect path.
     edge: missing_oracle
     delta_o: >-
-      Landed in S0a: a per-boot timeline receipt (host marks + guest
-      systemd + runtime phases + first healthy). Still needed: S0b's
-      runtime-effect probe, snapshot/UFFD measurement, and S1a's
-      guest-origin refusal receipts.
+      Durable guest stderr/journal on the host (SO) — today a guest-side
+      failure after cold boot is invisible without bespoke diag files.
     scope_if_supported: >-
-      Single-host Choir Community Cloud staging (32 GiB Node B), Go
-      runtime + Svelte frontend + app backends, Firecracker v1.15.1.
+      Single-host Choir Community Cloud staging (32 GiB Node B), Go runtime
+      + Svelte frontend + app backends, Firecracker v1.15.1.
     status: testing
     evidence_refs:
-      - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
-      - docs/reports/nixos-agent-platform-redhat-deepseek-audit-2026-10-01.md
-      - docs/problems/guest-release-propagation-manual-2026-10-01.md
-      - docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md
-      - docs/reports/s0a-boot-timeline-landing-2026-10-01.md
-      - docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json
-      - docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
-      - docs/evidence/s0a-tap-reachability-2026-10-01.json
-      - docs/evidence/s0a-gateway-token-visibility-2026-10-01.json
-      - docs/evidence/s0m-ask-acceptance-2026-10-04.json
-      - docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md
-      - docs/problems/s0m-guest-runtime-deploy-gap-2026-10-02.md
+      - docs/reports/s0b-disposable-probe-station-close-2026-10-04.md
+      - docs/reports/s1a-host-boundary-station-close-2026-10-04.md
+      - docs/reports/s0m-record-native-station-close-2026-10-04.md
+      - docs/reports/s2-layering-runtime-checkpoint-2026-10-04.md
+      - docs/evidence/s1a-refusal-matrix-2026-10-04.json
+      - docs/evidence/s0b-go-effect-2026-10-04.json
+      - docs/evidence/s0b-snapshot-resume-2026-10-04.json
+      - docs/problems/s2-runtime-exec-still-baseline-2026-10-04.md
+      - docs/problems/s2-builder-substrate-2026-10-04.md
+      - docs/problems/s2-host-builder-landed-2026-10-04.md
+      - docs/problems/node-b-deploy-disk-headroom-2026-10-04.md
+      - docs/problems/guest-stderr-unreachable-after-cold-boot-2026-10-04.md
+      - docs/problems/ci-docs-only-head-strands-runtime-deploy-2026-10-04.md
+      - docs/problems/guest-vm-embedded-dolt-memory-starved-2026-10-01.md
   decision:
     what: >-
-      Two-layer guest (shared non-forkable NixOS base; per-computer
-      app-layer Nix closure built against it). Source-only publication.
-      Machine snapshots for resume, semantic snapshots for fork and
-      distribution. Forks are sibling computers. 2026-10-04: S1a
-      host-boundary hotfix runs before S0b (operational ordering under
-      continuous authority; security precedes further probing on a
-      deployment with open registration).
+      Two-layer guest; source-only publication; machine snapshots for
+      resume, semantic for fork/distribution; forks are sibling computers;
+      builder substrate = host service (S0b). v4 operational decisions
+      (director, under continuous authority, reversible): S2 is re-scoped
+      to S2-c..g; SO is added as a parallel station gating S3; S3 opens
+      with its own snapshot measurement; acceptance releases must come out
+      of the builder (no hand-staged binaries).
     kind: architecture
     status: settled
-    evidence_ref: owner statements in session 2026-10-01; owner 2026-10-04 "update the metamission ... don't exclude the security relevant info"
+    evidence_ref: owner statements 2026-10-01 and 2026-10-04; director review 2026-10-05 (this card)
     owner_ratification_ref: >-
-      owner 2026-10-01: "I like your suggestion for layering, and using
-      guest NixOS closures appropriately"; "permission granted" (forks);
-      "I ratify #1"; source only. 2026-10-04: prerelease; considerable
-      hardening work follows this metamission.
+      owner 2026-10-01 (layering, Nix closures, forks, source only);
+      2026-10-04 (prerelease, full security detail); 2026-10-05
+      ("reorient and revise the metamission").
   belief:
     believed_state: >-
-      CONTROL PLANE: self-dev governance works (M11). Desk couplings are
-      record-native (S0m): every addressed act is a commitment record whose
-      Addressee is the delivery instruction; ask->report->resolve is
-      deployed-verified (trajectory 684ddcb1).
-      EFFECT PLANE: still stops at the frontend. The guest runtime execs
-      from the image's Nix store. Deploys skip constructed-computer-version
-      guests, so their runtime lags main until a manual refresh
-      (s0m-guest-runtime-deploy-gap). The Texture desk model was changed by
-      a manual live data.img edit (docs/evidence/s0m-texture-model-swap-2026-10-02.md):
-      untracked state drift that S2 must turn into a release.
-      BOOT (S0a, measured): fresh cold boot 8.6 s to first healthy. That is
-      host data-image creation ~1.1 s, guest kernel+initrd+systemd ~5.9 s
-      (initrd 2.8 s, userspace 3.0 s; network-online is immediate because
-      wait-online is masked), and runtime ~1.1 s. The owner-sized refresh
-      is 26.6 s: the same ~6 s OS, store open 3.2 s, reconstruct 15.6 s with
-      applied_rows=0, vocab fence 0.5 s. Reconstruct-with-nothing-to-apply
-      is the largest cold-path target; initrd is next. The 662.7 s
-      vocab-rescan boot is repaired.
-      SHAPES: the fresh computer booted with 16384 MiB while the owner
-      computer runs 4096 MiB; node-b.nix declares 4096 default / 8192
-      interactive. The source of 16384 is unexplained and matters for S3
-      snapshot size and the 32 GiB budget.
-      SECURITY (prerelease, recorded in full by owner direction):
-      - guest->other guest, guest->host internal ports, and guest->internet
-        are all open (confirmed).
-      - Guest->host traffic arrives as loopback. vmctl, corpusd, maild, the
-        gateway and guest /internal/runtime/* accept caller-controlled
-        X-Internal-Caller / X-Authenticated-User / Host headers
-        (source-traced).
-      - Hence any account holder can, from source, control any computer's
-        lifecycle, read other tenants' mail and guest routes, and inject a
-        frontend into tracking computers via a genuinely platform-signed
-        offer. The owner computer is canary and refuses offers.
-      - The gateway token rides the guest kernel cmdline.
-      - The guest runtime is unconfined root.
-      - Yaegi workers have no kernel floor.
-      - vmctl's lock substrate has a blocks-all class (10 siblings, S0a
-        panel).
-      OPS: a docs push cancels an in-flight CI deploy (ci.yml concurrency
-      group ci-${{ github.ref }}, cancel-in-progress: true; confirmed
-      2026-10-02, fix reached staging only by manual force deploy).
-      Node B deploy headroom is 103G vs a ~90G floor, reached by deleting
-      the 09-18 rollback ref. Guest Dolt journal leak and host dead-image
-      accumulation remain open (capacity mission). The Management
-      live-occurrence storm's live-locks are repaired, but its convergence
-      invariant (O(1) resolve + durable dispatch gate) is unbuilt.
+      CLOSED: S0 (boot attribution; S0b probe suite, builder decision,
+      self-dev ops wedge found + fixed f61de45b with a Go-effect bundle
+      frozen), S0m (record-native couplings, boundary closed with panel and
+      report), S1a (network isolation + transport-bound internal authority;
+      refusal matrix 5/5 refused, 5/5 legitimate flows green).
+      CORRECTION: the v3.1 claim that guest->host traffic arrives as
+      loopback was wrong; the real guest source IP is preserved (bffad45,
+      s1a guest-to-host-addr-preservation evidence). The authority defect
+      was the caller-controlled headers, which S1a removed.
+      S2 MECHANISM: works in the guest. The crash-loop on vm-3dc68688 was a
+      stale-binary release (August build 43310064 vs an October store) that
+      the probe hand-staged as /tmp/closure.nar on Node B ("a copied
+      autoputer" with a marker byte, synthetic code_commit). Builder output
+      was never used for acceptance.
+      S2 CONTRACT DEFECTS (source-traced 2026-10-05):
+      (1) Provenance unbound: builder Request.CodeCommit is caller-supplied;
+      mint accepts arbitrary files + code_commit; nothing checks that the
+      binary's embedded buildinfo matches the manifest.
+      (2) No state-compat gate: Apply checks the base digest only; schema,
+      reducer and store compatibility are probed after restart (health),
+      not refused before mutation.
+      (3) Rollback is not atomic: the exec pointer
+      $CHOIR_UPDATER_ROOT/layering-entrypoint is a global file outside the
+      release dir (internal/updater/closure.go:418,457-462). restorePrior
+      swaps current/ but leaves the entrypoint pointing at the failed
+      release, so a recovery restart re-execs the bad binary. This is the
+      likely cause of the silent crash-loop, and a single-state-authority
+      violation.
+      (4) The self-dev materializer still emits file releases from capsule
+      var/lib/artifact/release; nothing joins a capsule change to the host
+      builder.
+      OPS: five Node B disk-headroom hits since 10-01 (dead vm-state dirs,
+      quarantine remnants, nix store; corpus-dolt 97G + platform-artifacts
+      77G structural, and every layered release adds a ~146MB nar with no
+      GC). Guest stderr is unreachable after cold boot. CI never-cancel
+      landed (520a998), but a docs-only head after a failed runtime deploy
+      still strands runtime undeployed. VM_INTERACTIVE_MEM_MIB=16384 is set
+      in the mutable vmctl-priority.env, outside its declared purpose and
+      outside the repo: untracked drift that sizes every interactive guest
+      at half the host.
+      S3 INPUT GAP: S0b took no snapshot measurement (no vmctl snapshot
+      surface; sealed guest). S3 must measure first.
+      OPEN RESIDUALS CARRIED: registration-computer-missing-genesis; M9a
+      route owner-binding (probably resolved by 69983b0e per S2 route
+      promotion; record not closed); zot PATH-shadowing; Management storm
+      convergence invariant; guest Dolt journal leak.
     main_uncertainty: >-
-      (1) Whether the S1a fix can refuse guest-origin authority without
-      breaking the legitimate guest->host flows (gateway inference, maild
-      drafts, corpusd event CAS, wire publish, source service), which today
-      ride the same header/loopback path. (2) Whether an owner-sized
-      machine snapshot creates and resumes within budget with UFFD lazy
-      loading on Firecracker v1.15.1. (3) Which builder substrate
-      (host-side service, privileged builder capsule, or scoped guest
-      service) S2 uses.
+      (1) Whether a builder-produced runtime closure stays small enough to
+      ship per release once it carries real deps (the probe nar was 146MB),
+      i.e. whether the delta-vs-base export keeps app-layer releases
+      cheap. (2) Snapshot create/resume cost for a 16 GiB vs 8 GiB guest on
+      this host and disk. (3) Whether CI can drive builder -> mint -> push
+      for tracking computers within the deploy window.
     next_observation: >-
-      Two disposable accounts on staging: log RemoteAddr on one host
-      service for a guest-originated request (confirms the loopback leg),
-      then the S1a refusal matrix pre/post fix. Then the S0b probe suite.
+      S2-e and S2-d land first (small, high-leverage), then one
+      builder-produced release from a real commit applied to a disposable
+      computer with a deliberate incompatible release and a deliberate
+      health-failing release.
   blocker_or_risk: >-
-    SECURITY: the cross-tenant authority chain is live on a deployment with
-    open registration until S1a lands. Treat S1a as the next code change.
-    No S0b probe or later station may assume tenant isolation before it.
-    PROCESS: the S0m boundary protocol is incomplete. CI cancels deploys on
-    any docs push, which collides with Problem-Documentation-First on every
-    red fix. S4 (open-world capsule) and S9 (forks) must not land before
-    S1. A machine snapshot restored against a moved disk corrupts the
-    filesystem, and a double resume duplicates RNG and key state. S3's
-    invariants are the safety case, not optional polish.
+    Disk headroom will block deploys again within days unless SO's storage
+    lifecycle starts now; S2 makes it worse (unreclaimed release nars).
+    Acceptance probes that stage binaries by hand can pass mechanism checks
+    while proving nothing about the release contract. Treat builder-produced
+    releases as the only admissible S2 evidence. S4 still requires the
+    full S1 floor. S3 must not start before SO's storage lifecycle and the
+    VM shape decision.
   next_action: >-
-    1. S2: wedge repaired + Go-effect proven (f61de45b); builder
-       substrate = host-service. Land the host-service builder that
-       produces the app-layer Nix closure + base-image identity, then
-       the layering slice (per-computer GC-rooted closure, no writable
-       guest store). The S0 wedge and capsule-namespace probe are closed.
-    2. S1 remainder (runtime identity, token scrubbing, capsule/yaegi
-       floor) runs in parallel or before S2's layering per the S1 station
-       file.
-    3. The 'zot' PATH-shadowing heresy and the M9a route-projection
-       owner-binding defect are carried named residuals on the S1/S0
-       records.
+    S2 (in order):
+    S2-e rollback atomicity — move the layering entrypoint into the release
+    dir so the current/ swap covers exec; restorePrior reverts it; add a
+    boot-loop guard (N failed starts after apply -> recovery path with a
+    receipt).
+    S2-d state-compat gate — the release manifest declares
+    event_schema/reducer and the minimum store schema it accepts; the
+    updater refuses before mutation.
+    S2-c provenance — the builder derives code_commit from the flake ref it
+    builds; the manifest carries the builder receipt digest; the updater
+    verifies the binary's embedded buildinfo commit equals the manifest.
+    S2-f join — self-dev freeze yields a source patch the host builder
+    builds (source-only), replacing file releases for runtime changes.
+    S2-g CI — builder -> mint -> push for tracking computers on deploy,
+    with no VM reboot for app-layer-only changes and time-to-healthy
+    recorded.
+    In parallel: author the SO station file (scope in "Orientation
+    2026-10-05"); S1 remainder.
 receipts:
+  - id: s0-to-s2-transition-2026-10-04
+    kind: station_transition
+    status: closed
+    landed: S0-reality-and-boot-timeline (S0a + S0b)
+    next: S2-layering-runtime-from-release
+    terminal_receipt: docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md#s0b-boundary-close-2026-10-04
+    panel: .agentic-consensus/s0b-boundary-panel-20261004 (8 accept_with_edge / 3 send_back; send-backs closed)
+    report: docs/reports/s0b-disposable-probe-station-close-2026-10-04.md
+    note: >-
+      Recorded on the spine by the 2026-10-05 director review (the
+      transition was executed but only receipted on the station file).
+      Named edges into S2: wedge fix (landed f61de45b), capsule-namespace
+      probe (closed: builder = host service), host snapshot measurement
+      (not taken; moved to S3's first slice).
   - id: s0a-slice-landed-2026-10-02
     kind: slice_transition
     station: S0-reality-and-boot-timeline
@@ -874,6 +912,22 @@ idea of what a change is.
 
 ## Security posture (prerelease, 2026-10-04)
 
+**Update 2026-10-05:**
+- S1a landed and was deployed-verified: network isolation plus
+  transport-bound internal authority; refusal matrix 5/5 refused, 5/5
+  legitimate flows green (`docs/evidence/s1a-refusal-matrix-2026-10-04.json`).
+- **Correction:** guest→host traffic keeps its real guest source IP. It
+  does not arrive as loopback (`bffad45`). The exposure was the
+  caller-controlled headers.
+- Still open (S1 remainder; required before S4):
+  - non-root runtime;
+  - gateway token off the kernel cmdline and out of child environments;
+  - Yaegi kernel floor;
+  - zot PATH-shadowing;
+  - credentialing or removal of the S0a diag surfaces.
+
+The text below is the 2026-10-04 snapshot as written.
+
 Owner direction: record security findings in full. Choir is prerelease,
 and considerable hardening follows this metamission. This section lists
 what is known now. It is the input to that hardening pass.
@@ -989,61 +1043,134 @@ self-promoting a successor.
 5. Snapshot encryption at rest on the host (needed before any export;
    for on-host hibernate, root-only permissions match data.img today).
 
-## Addendum 2026-10-04 — S2 layering exec stabilization in flight
+## Orientation 2026-10-05 (director review, v4)
 
-This is an addendum, not a revision: the mission ordering, station contracts,
-and `now` card are unchanged. A full revision is scheduled once S2 is stable.
-Recorded here so the next session and the revision both start from the same
-evidence.
+This folds in the 2026-10-04 addendum. Pattern of work: the owner runs
+`/goal` on this file in a local agent. A remote director session reviews
+the commits between runs and revises this file. Station files govern
+inside a station; this section and the `now` card govern ordering.
 
-**S2 status.** The layered-apply chain lands end-to-end on staging — offer
-mint/sign, push, nar replay into the guest's private store,
-`layering-entrypoint` record, `current` swap, guest restart, route promotion.
-The remaining defect is the exec step: the guest's `unshare -m` +
-`mount -t overlay` + `exec` over the EROFS base fails in the guest's systemd
-private mount namespace (works identically on the host; fails deterministically
-in the guest). Two mitigation commits shipped (`e605cdde` direct-exec
-fallback + env roots; `3c1cbaf6` durable `layering-diag.log` stage
-recording). Whether the overlay or direct-exec path wins is being settled by
-re-probe on the deployed `e605cdde` image.
+### Where we are
 
-**Substrate issues this mission surfaced — all feeding future stations:**
+- **Closed:** S0 (S0a boot attribution + S0b probe suite), S0m, S1a.
+- **Live:** S2, with the S1 remainder and SO in parallel.
+- **S2 mechanism is proven on staging:**
+  - signed layered offer;
+  - CAS-ref transport for large payloads;
+  - nar replay into a GC-rooted private store;
+  - overlay exec over the read-only base store;
+  - route promotion;
+  - base-mismatch refusal.
 
-1. **Guest stderr is unreachable after cold boot** — disposable/interactive
-   VMs carry no serial sink and `journal_events` covers only the cold-boot
-   window, so a guest-side exec failure is host-invisible. Root-causing the
-   layering fallback required a dedicated diag file. Every later station
-   (S0b probes, S3 resume, S4 capsule exec, S6 rollback) inherits this hole.
-   `docs/problems/guest-stderr-unreachable-after-cold-boot-2026-10-04.md`.
+  The mid-S2 scare (the guest "falls back to base" or crash-loops) resolved
+  into one probe artifact plus two real contract gaps.
 
-2. **Node B deploy disk headroom — recurrence 4.** The bounded reclaim
-   misses dead `vm-state` dirs (no live `go-choir-vm@` unit); freed 19 GiB
-   manually. `corpus-dolt` + `platform-artifacts` are the structural
-   consumers and grow each deploy; the 90 GiB floor keeps eroding.
-   `docs/problems/node-b-deploy-disk-headroom-2026-10-04.md` (Recurrence 4).
+### S2 re-scope (remaining slices, in order)
 
-3. **S4's overlay-over-`/nix/store` falsifier is now live evidence.** The
-   service hit exactly the guest-side failure S4 names for the capsule
-   userns — the overlay mechanism is sound but the guest execution context
-   diverges. The S0b builder-mechanism decision and S4's private-store
-   choice now have a deployed data point: overlay needs a verified guest
-   fallback before S4 commits to it.
+1. **S2-e Rollback atomicity.**
+   - Defect: `layering-entrypoint` is a global file at the updater root
+     (`internal/updater/closure.go:418,457-462`), outside the release dir.
+     `restorePrior` swaps `current` but not the entrypoint, so recovery
+     re-execs the failed binary.
+   - Fix: put the entrypoint inside the release (for example
+     `current/layering-entrypoint`) and have the wrapper in
+     `nix/autoputer-vm.nix` read it through `current`. One pointer swap
+     then moves frontend and exec together. That is the single-state-
+     authority answer.
+   - Add a boot-loop guard: after an apply, N failed starts route to the
+     recovery path and leave a receipt.
+2. **S2-d State-compat gate.**
+   - The manifest already carries `EventSchemaVersion`/`ReducerVersion`.
+   - Add the minimum persistent-store schema the release accepts, and the
+     base commit it was built against. Refuse in `Apply` before mutation.
+   - The health probe stays as the post-restart backstop, not the gate.
+3. **S2-c Provenance.**
+   - The builder derives `code_commit` from the flake ref it evaluates,
+     instead of accepting it from the caller (`internal/builder/request.go`).
+   - The manifest carries the builder receipt digest.
+   - The updater verifies that the release binary's embedded `buildinfo`
+     commit equals the manifest.
+   - Acceptance releases must be builder output. No hand-staged nars.
+4. **S2-f Self-dev → builder join.**
+   - Self-dev freeze currently yields a file release from the capsule's
+     `var/lib/artifact/release`.
+   - For runtime changes it must yield a source patch (base revision +
+     diff) that the host builder builds. That is source-only, and it is
+     the shape S6 and S8 consume.
+   - Frontend-only file releases may remain as the narrow path.
+5. **S2-g CI wiring.**
+   - On deploy: builder → mint → push for tracking computers; app-layer-only
+     changes do not reboot VMs; record time-to-healthy.
+   - This closes `s0m-guest-runtime-deploy-gap` and
+     `guest-release-propagation-manual`. Canary and constructed computers
+     follow their declared policy.
 
-4. **Apply-restart can wedge the runtime silently.** A guest that was
-   healthy at cold boot failed to re-listen on 8085 after the apply restart;
-   the guest IP still pings. The self-restart kills the in-flight handler
-   and a failed new exec crash-loops with no receipt — the S6/S11 failure
-   mode that must be observable.
+### SO — ops substrate (new parallel station; gates S3)
 
-**For the next revision (when S2 stabilizes):** fold the guest observability
-substrate and Node B disk structure into the station contract as named
-prerequisites, not incidentals.
+Root Cause Clustering applies: five disk-headroom incidents since 10-01,
+guest stderr unreachable, untracked VM shape drift, and CI gating that
+strands runtime code. One substrate: no storage lifecycle and no durable
+guest observability.
 
-**S2 root cause (resolved the exec question):** `layering-diag.log` proved
-`unshare_ok`/`mount_ok`/`exec_path_resolves` — the layering mechanism works
-in the guest. The guest crash-loop is a **state-compatibility failure**: the
-applied release binary is build `43310064` (August) against an October
-persistent store. S2's "activation binds executable + frontend + state
-compatibility + effective event head" is not enforced — the apply execs a
-stale-binary release instead of failing closed. The real S2 residual is the
-state-compat/health gate, not the mount machinery.
+- **Storage lifecycle:**
+  - reclaim dead `vm-state` dirs (no live unit), `.corrupt`/`.pre-*` and
+    quarantine remnants;
+  - a retention/refcount GC for `platform-artifacts` (layered nars, offers,
+    publications) keyed by live route slots and retained predecessors;
+  - corpus-dolt growth handed to the capacity mission with a number;
+  - a headroom budget that includes future snapshot files.
+- **Guest observability:** a durable host-side sink for guest console and
+  journal (Firecracker serial to a per-VM rotated log, or journal
+  forwarding) so exec, boot and apply failures are host-visible without
+  bespoke diag files. `layering-diag.log` becomes a special case.
+- **Declared VM shapes:**
+  - Move `VM_INTERACTIVE_MEM_MIB=16384` out of `vmctl-priority.env` into
+    tracked config, or revert it.
+  - Budget shapes against 32 GiB explicitly: at 16 GiB, one interactive
+    guest is half the host.
+  - S3 sizes snapshots against this decision.
+- **CI deploy gating:** compute deploy need against the deployed identity,
+  not the push delta, so a docs-only head never strands runtime code
+  (`ci-docs-only-head-strands-runtime-deploy`).
+
+### S3 adjustment
+
+S0b could not measure snapshots: there is no vmctl snapshot surface and the
+guest is sealed. S3's first slice is therefore the measurement:
+- a disposable-only vmctl snapshot create/load path;
+- wall time for create and for resume-to-healthy, at 8 and 16 GiB;
+- UFFD versus file-backed loading;
+- snapshot file size after btrfs compression.
+
+The S3 invariants stand. S3 waits on SO's storage lifecycle and the shape
+decision.
+
+### Evidence quality rule (new)
+
+Mechanism probes (does exec work in the overlay?) and contract probes (does
+a real release from a real commit apply, refuse when incompatible, and roll
+back atomically?) are different evidence classes. Hand-staged artifacts
+may answer mechanism questions only. Station acceptance requires contract
+probes.
+
+### Carried residuals
+
+- `s0b-registration-computer-missing-genesis`.
+- `s0-m9a-route-projection-owner-binding`: likely resolved by `69983b0e`;
+  close the record with the S2 route-promotion receipt.
+- zot PATH-shadowing (S1 remainder).
+- Management storm convergence invariant.
+- Guest Dolt journal leak (capacity mission).
+- `s2-layered-offer-transport-cap`: CAS-ref landed; close or re-scope the
+  record.
+
+### Superseded addendum (2026-10-04) — summary
+
+The overlay-exec question is settled: it works. Its four substrate issues
+are now owned:
+- guest stderr → SO;
+- disk recurrence → SO;
+- the S4 overlay falsifier → S4 keeps the private-store choice, informed
+  by the guest result that overlay works in the guest service context;
+- the silent apply-restart wedge → S2-e.
+
