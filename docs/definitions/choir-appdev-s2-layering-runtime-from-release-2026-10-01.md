@@ -295,19 +295,6 @@ now:
       - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-543
       - internal/updater/updater.go:125-285
   decision:
-    what: >-
-      Adopt the owner-ratified two-layer guest: shared non-forkable NixOS base
-      plus per-computer app-layer closure. S0b selects the concrete builder
-      substrate from its probes; S2 includes landing that selection before
-      closure-consuming acceptance, rather than guessing or deferring it.
-    kind: architecture
-    status: settled
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437
-    owner_ratification_ref: >-
-      owner 2026-10-01: "I like your suggestion for layering, and using guest
-      NixOS closures appropriately"; "I ratify #1"
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:434-437)
-  belief:
     believed_state: >-
       Mechanism proven on staging: signed layered offer, CAS-ref
       transport, nar replay into the private store, overlay exec in the
@@ -332,6 +319,24 @@ now:
       disposable computer alongside one deliberately incompatible release
       (refused pre-mutation) and one health-failing release (restored,
       exec included).
+
+  transition_contract:
+    id: s2-layered-transition-v1
+    status: frozen
+    frozen_at: '2026-10-05'
+    # The unit of correctness is a COMPATIBLE TRANSITION (B, U, R), not a
+    # release commit: base closure B, base-resident updater U, target runtime
+    # R. Same-commit (B,R identical) transitions are valid no-ops outside the
+    # layered path; the layered path requires R base-absent from B.
+    # Harness release dirs are keyed <base-digest-prefix>-<commit> so a nar
+    # built against one base is never reused after a deploy moves the base.
+    # Broader demands require an explicit contract amendment, not another
+    # retrospective re-leg.
+    tuple: [base_closure_B, base_updater_U, target_runtime_R]
+    invariants:
+      - R entrypoint base-absent from B, else `not materialized` refusal
+      - U is B's resident daemon; serving runtime may be newer (retained release)
+      - reason string asserted in-harness per neg case; pins unchanged
   blocker_or_risk: >-
     Hand-staged artifacts may answer mechanism questions only; station
     acceptance requires builder-produced releases (metamission evidence
