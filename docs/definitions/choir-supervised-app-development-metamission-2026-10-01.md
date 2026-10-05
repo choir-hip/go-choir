@@ -1281,3 +1281,15 @@ S2-c provenance → S2-f builder join → S2-g CI wiring. Parallel: SO ops
 substrate (storage lifecycle, guest stderr, declared VM shapes, CI gating)
 gates S3; the S1 remainder continues.
 
+S2 contract slices **all landed 2026-10-05** (`9f5aa8a0` `c8fb7834`
+`8f06b3d9` `e1c3924b` `e527c169`, + `a3da83c4` verifier bind). The S2-g
+app-layer push is live in `ci.yml` (`deploy_app_layer=true` when autoputer
+is the only runtime dep) — three sequential bind gates surfaced on the
+first runs and were fixed/proven end-to-end on
+`computer-6450a253b8b6ebc0866471973694f5be` (release `36743b1f6ddb`,
+`build.commit 2f0e2cac`, atomic `current/` swap, entrypoint → release
+binary). Remaining S2-g residual gates are in
+`docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md`. The S2 station
+is now at acceptance-test stage (conjecture test vs builder-produced
+releases).
+
