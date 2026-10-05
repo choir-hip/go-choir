@@ -213,3 +213,24 @@ correct: the release path is byte-identical to the base path, so the
 delta excludes it. This is the third independent confirmation that a
 layered release must differ from its base — and that the harness must
 rebuild per base, never reuse a cached nar across deploys.
+
+## Closure 2026-10-05 ~19:05: built-frontend join green
+
+Applied patch-built release `57605ac` (S2-f join: title patch on
+`2811c779`, `code_commit` derived-patch) with the inline frontend file
+**omitted** from the offer: serving healthy, same fc 189418, same boot
+c643bbca. Headless fetch: `dataset.choirBuildCommit`,
+`window.__CHOIR_BUILD__`, and `meta s2-frontend-marker` all name the
+**patched** commit — bytes that exist only in the built bundle (Vite
+`__CHOIR_BUILD_COMMIT__` define at build time), unreachable to any
+harness injection. The staged `frontend/` can only be the daemon-staged
+built tree. Record `apply-idxmarker-built-frontend` in
+`s2-acceptance-20261005T190133Z.jsonl`.
+
+Criterion 1's "new backend and frontend" now holds by digest: the served
+executable is the release binary (buildinfo commit moves with
+`current/` swaps) and the served frontend bytes are the release-built
+bundle (marker names the patched commit). The heresy
+(computer_surface.go:69-87 baseline fallback) is repaired for the
+staged-frontend path: a frontend-less release can no longer be mistaken
+for a joined one, because the proof shape requires the built marker.
