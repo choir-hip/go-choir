@@ -126,10 +126,12 @@ boundaries:
 now:
   status: working
   slice: >-
-    Move 1 landed 2026-10-05 (8701668d): prompt rewrite + sealed
-    {desk_go_eval} registry in one commit. Parity checklist below —
+    Moves 1+2+3 landed 2026-10-05: prompt rewrite + sealed {desk_go_eval}
+    registry (8701668d); processor/reconciler end-to-end deletion
+    (3c963edf, -6,569 lines / 56 files — profiles, policies, prompts,
+    overlays, wire dispatch, sourcecycled handoff, api admit path;
+    frozen-history recognition preserved). Parity checklist below —
     every deleted typed tool maps to an existing choir.* egress verb.
-    Processor/reconciler end-to-end deletion in flight (delegated cut).
     Deletion-citers grep complete: processor/reconciler citers are live
     surfaces (profiles, policies, prompts, overlays, dispatch, spawn
     list, handoff path) vs frozen-history recognition (vocabmigrate
