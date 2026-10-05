@@ -50,11 +50,14 @@ divergent; all required revisions applied in v3). Thirteen stations;
   builder-substrate decision narrowed to host-service vs
   privileged-builder-capsule).
 
-**S2** layering-runtime-from-release is **live** — mechanism proven on
-staging (offer → CAS-ref → private store → overlay exec → route promote;
-base-mismatch refused). Re-scoped by the metamission v4 director review
-(2026-10-05) to the contract slices: **S2-e** rollback atomicity (the
-global `layering-entrypoint` survives `restorePrior`), **S2-d** state-compat
+**S2** layering-runtime-from-release is at **checkpoint_incomplete**
+(2026-10-05 acceptance run, deploy 63865ede): builder apply, six
+pre-mutation refusal+discharge legs, and panic-restore all green on the
+tape; consensus panel 7 send_back / 1 approve with named gaps (clean
+rollback with unchanged boot id; CI-driven M9a push with
+request-to-healthy; base-absent-dependency leg after builder disposal +
+reboot; store-schema-window refusal; frontend-by-digest proof).
+Contract slices landed: **S2-e** rollback atomicity, **S2-d** state-compat
 gate, **S2-c** provenance (builder-derived `code_commit`, buildinfo
 check), **S2-f** self-dev → builder join, **S2-g** CI wiring. Parallel:
 the S1 remainder, plus the new **SO** ops-substrate station (storage
