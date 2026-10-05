@@ -208,21 +208,19 @@ heresy_delta:
 now:
   status: checkpoint_incomplete
   slice: >-
-    Gap-closure run 2026-10-05 ~11:30-13:30 on choir.news (deploy fae12950):
-    criterion 6 CLOSED by a quiet-window clean rollback (rb-push 13:23:23,
-    tape seq 112-114 accepted/started/applied, same fc pid 3123628 + boot
-    id 7f725ae1, serving 2811c779 healthy); schema-window refusal CLOSED
-    as a leg and fixed as a defect (daemon journals pre-mutation refusals
-    as terminal Outcome=refused; agent discharges on refused); CI push
-    CLOSED by mechanism (run 37305290512 green, phase ran, t2h recorded).
-    Second consensus panel 6/6 send_back: two gaps remain, both specified
-    ~10-minute legs — (a) frontend-by-digest proof via a marker inside the
-    built SPA (the 2d0c16c0 marker attempt failed at the Nix cleanSourceWith
-    filter: marker in repo-root index.html never enters frontend/dist;
-    retry with the marker in built bytes), (b) reboot-then-push of a
-    base-absent entrypoint. Station NOT closed.
-  source_ref: main@14d2ac7d
-  deploy_identity: 'staging https://choir.news deployed_commit=fae12950; guest base fae12950 coherent'
+    Gap-closure legs A+B ran green but the third panel (1 approve / 5 send
+    back) reads both as adjacent properties, not the named ones: (A) the
+    counted marker is the harness-injected inline SPA, identical on every
+    offer — assert the built-frontend marker or tree digest instead; (B)
+    the post-reboot refusal stops at the base-digest fence
+    (updater.go:276-283) before closure replay, so it cannot establish the
+    absent-dependency condition — the leg needs a correct-digest offer
+    whose entrypoint path is absent from the booted base, reaching
+    `layering entrypoint %s not materialized` after a reboot. Station NOT
+    closed. Synthesis: /tmp/panel-synth.md is ephemeral; rerun synthesis
+    from /tmp/s2-panel3/manifest.tsv on demand.
+  source_ref: main@01a7bd7d
+  deploy_identity: 'staging https://choir.news deployed_commit=35046993; guest base coherent'
   candidate:
     id: none
     state: none
