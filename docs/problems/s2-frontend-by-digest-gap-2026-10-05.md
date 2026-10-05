@@ -185,3 +185,21 @@ Next (both required for the leg to mean anything): (a) refresh the guest
 onto a base carrying the fix; (b) apply with the inline frontend file
 **omitted** from the offer, so the only frontend bytes that can serve are
 the staged built tree — then the built-marker (or 503) is dispositive.
+
+## Update 2026-10-05 ~17:52: same-commit releases are base-present by construction
+
+Applied `8e29fe06` (no-inline-frontend offer) against base `8e29fe06`:
+refused `layering entrypoint ... not materialized` — and the refusal
+reason now crosses the boundary end to end (daemon → client → agent →
+push response), closing the observability hole from this morning. The
+refusal itself is correct behavior exposing a harness error, not a
+product defect: the release's autoputer store path is byte-identical to
+the base's (same commit built both), so the builder's delta excludes it
+and the entrypoint can never materialize. A layered release must differ
+from its base; same-commit applies are refused by design. The pending
+transition discharged cleanly on the refusal (Outcome=refused path).
+
+Retry: rebuild the same source against an older base (or apply an older
+release against this base) so the entrypoint is base-absent, with the
+inline frontend file omitted — then the staged `frontend/` can only be
+the built tree and the marker fetch is dispositive.
