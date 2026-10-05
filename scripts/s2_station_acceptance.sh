@@ -115,7 +115,7 @@ neg)
     content-mutation) over='{"closure_digest":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}' ;;
     provenance)       over='{"code_commit":"1111111111111111111111111111111111111111"}' ;;
     base-commit)      over='{"base_commit":"2222222222222222222222222222222222222222"}' ;;
-    realization)      over='{"realization_id":"vm-00000000000000000000000000000000-epoch-1"}' ;;
+    schema-window)    over='{"store_schema_version":1,"min_store_schema_version":999}' ;;
     *) echo "unknown neg case $2"; exit 2 ;;
   esac
   pre=$(note "neg-$2-pre" "$(jlog --arg g "$(route_gen)" --arg h "$(canonical_head)" --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" '{route_gen:$g,head:$h,served:$s,boot:$b,fc:$f}')" | jq -c .data)

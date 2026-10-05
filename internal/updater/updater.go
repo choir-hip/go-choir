@@ -197,21 +197,50 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	if err != nil {
 		return ApplyResult{}, err
 	}
+	if found && journal.Result.Outcome != "" {
+		if journal.Result.Outcome == "failed" {
+			return journal.Result, errors.New(journal.Failure)
+		}
+		if journal.Result.Outcome == "refused" {
+			return journal.Result, errors.New(journal.Failure)
+		}
+		return journal.Result, nil
+	}
+	// Pre-mutation refusals (shape, commitment, idempotency fence;
+	// base/state-compat/source-trust/stage/materialize gates) journal a
+	// terminal "refused" outcome BEFORE any mutation, so the caller can
+	// tell them apart from mutated-then-unrestored failures and the
+	// agent-side has a stable outcome to clear the pending transition.
+	// Resumed replays of a refused operation return this record.
+	refuse := func(reason string) (ApplyResult, error) {
+		result := ApplyResult{ReleaseDigest: request.Manifest.ContentDigest, Outcome: "refused"}
+		if jerr := writeJournal(journalPath, operationJournal{
+			RequestCommitment:   request.RequestCommitment,
+			Phase:               "refused",
+			TargetReleaseDigest: request.Manifest.ContentDigest,
+			StartedAt:           u.now().UTC().Truncate(time.Microsecond),
+			Result:              result,
+			Failure:             reason,
+		}); jerr != nil {
+			return ApplyResult{}, jerr
+		}
+		return result, errors.New(reason)
+	}
 	// The request commitment deliberately excludes RealizationID: a deploy
 	// refresh rotates the realization epoch, and a replayed apply for an
 	// already-journaled operation must still return the recorded outcome
 	// instead of wedge-refusing (journal replay is the resume path; the
 	// guest reboots between apply and checkpoint in that window). Fresh
 	// applies keep the strict realization fence below.
-	if _, err := validateApplyRequest(request); err != nil {
-		return ApplyResult{}, err
+	if _, verr := validateApplyRequest(request); verr != nil {
+		return refuse(verr.Error())
 	}
-	commitment, err := computeApplyRequestCommitment(request)
-	if err != nil {
-		return ApplyResult{}, err
+	commitment, cerr := computeApplyRequestCommitment(request)
+	if cerr != nil {
+		return refuse(cerr.Error())
 	}
 	if commitment != request.RequestCommitment {
-		return ApplyResult{}, fmt.Errorf("updater: request commitment mismatch")
+		return refuse("updater: request commitment mismatch")
 	}
 	if found {
 		if journal.RequestCommitment != request.RequestCommitment {
@@ -223,14 +252,17 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			if journal.Result.Outcome != "" {
 				log.Printf("updater: journal %s carries pre-epoch commitment; returning recorded outcome", request.IdempotencyKey)
 			} else {
-				return ApplyResult{}, ErrIdempotencyConflict
+				return refuse(ErrIdempotencyConflict.Error())
 			}
 		}
 	} else if request.ComputerID != u.computerID || request.RealizationID != u.realizationID {
-		return ApplyResult{}, fmt.Errorf("updater: incomplete or mismatched apply request")
+		return refuse("updater: incomplete or mismatched apply request")
 	}
 	if found && journal.Result.Outcome != "" {
 		if journal.Result.Outcome == "failed" {
+			return journal.Result, errors.New(journal.Failure)
+		}
+		if journal.Result.Outcome == "refused" {
 			return journal.Result, errors.New(journal.Failure)
 		}
 		return journal.Result, nil
@@ -244,10 +276,10 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	if request.Manifest.BaseImageManifestDigest != "" && u.guestImageManifestPath != "" {
 		booted, digestErr := DigestFile(u.guestImageManifestPath)
 		if digestErr != nil {
-			return ApplyResult{}, fmt.Errorf("updater: resolve booted base image digest: %w", digestErr)
+			return refuse(fmt.Errorf("updater: resolve booted base image digest: %w", digestErr).Error())
 		}
 		if booted != request.Manifest.BaseImageManifestDigest {
-			return ApplyResult{}, fmt.Errorf("updater: release base %s does not match booted base %s", request.Manifest.BaseImageManifestDigest, booted)
+			return refuse(fmt.Sprintf("updater: release base %s does not match booted base %s", request.Manifest.BaseImageManifestDigest, booted))
 		}
 	}
 	// S2-d state-compat gate: a layered release declares the store schema
@@ -256,26 +288,26 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	// persisted epoch or booted base commit falls outside the declaration —
 	// the vm-3dc68688 stale-binary failure class, caught pre-restart instead
 	// of by a post-mortem health probe.
-	if err := u.checkStateCompatibility(request.Manifest); err != nil {
-		return ApplyResult{}, err
+	if cerr := u.checkStateCompatibility(request.Manifest); cerr != nil {
+		return refuse(cerr.Error())
 	}
 
 	releaseDigest := request.Manifest.ContentDigest
-	sourceDir, err := u.trustedSourceDir(request.SourceDir, releaseDigest)
-	if err != nil {
-		return ApplyResult{}, err
+	sourceDir, serr := u.trustedSourceDir(request.SourceDir, releaseDigest)
+	if serr != nil {
+		return refuse(serr.Error())
 	}
 	request.SourceDir = sourceDir
 	releaseDir := filepath.Join(u.root, "releases", releaseDigest)
-	if err := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); err != nil {
-		return ApplyResult{}, err
+	if serr := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); serr != nil {
+		return refuse(serr.Error())
 	}
 	// Layered release: replay the app-layer narchive into the private store
 	// and GC-root it before the pointer swap. A failure here leaves `current`
 	// untouched and never publishes a restart — the running release keeps
 	// serving (fail-closed on the data path).
-	if err := u.materializeReleaseClosure(releaseDir, request.Manifest); err != nil {
-		return ApplyResult{}, err
+	if serr := u.materializeReleaseClosure(releaseDir, request.Manifest); serr != nil {
+		return refuse(serr.Error())
 	}
 	if !found {
 		priorDigest, priorTarget, priorErr := u.currentRelease()

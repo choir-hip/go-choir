@@ -26,7 +26,20 @@ Live receipt: `s2-acceptance-20261005T024234Z.jsonl` on Node B —
 `f3fa6f1b→7eadac15` (accepted + started committed, no failed), and every
 later push answered `base event head is stale`.
 
-## Root cause
+## Follow-up 2026-10-05 ~11:40: outcome split between pre- and post-journal gates
+
+The agent-side discharge fix above handled daemon refusals that return an
+empty outcome. A later schema-window leg proved a second shape: the daemon
+returned a non-empty outcome (set, no recovery receipt) for a refusal the
+agent-side then treated as mutated-then-unrestored and kept the wedge. Fix in
+flight: the daemon journals every pre-mutation refusal as a terminal
+`refused` outcome (base/shape/commitment/idempotency fence, base join,
+state-compat, source trust, stage, closure replay), gated BEFORE any
+mutation; the agent-side discharges on `refused` exactly like the empty
+case. Regression: daemon unit test asserts `Outcome == "refused"` plus
+replay-identical refusal on the same idempotency key.
+
+## Root cause (original)
 
 `ApplyPlatformUpdate` (`internal/agentcore/platform_update.go`) commits the
 accepted event **before** calling the updater — correct canonical binding —

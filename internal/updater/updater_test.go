@@ -140,7 +140,18 @@ func TestUpdaterRefusesApplyWhenReleaseBaseDoesNotMatchBooted(t *testing.T) {
 	if !strings.Contains(err.Error(), "does not match booted base") {
 		t.Fatalf("unexpected refusal error: %v", err)
 	}
-
+	if result.Outcome != "refused" {
+		t.Fatalf("pre-mutation refusal outcome = %q, want refused", result.Outcome)
+	}
+	// The refusal is terminal and replayable: the same operation id returns
+	// the recorded refusal instead of re-running the gates.
+	replay, rerr := engine.Apply(context.Background(), request)
+	if rerr == nil {
+		t.Fatalf("refused replay succeeded: %+v", replay)
+	}
+	if replay.Outcome != "refused" || rerr.Error() != err.Error() {
+		t.Fatalf("refused replay diverged: outcome=%q err=%v, want same refusal", replay.Outcome, rerr)
+	}
 	// A release declaring the matching booted base applies.
 	matching := updaterRequestFixture(t, root, "computer-test", "realization-test", "operation-base-ok", "idem-base-ok", "layered release")
 	matching.Manifest.BaseImageManifestDigest = bootedDigest

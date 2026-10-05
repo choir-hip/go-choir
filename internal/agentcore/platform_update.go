@@ -270,17 +270,17 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 		if result.RecoveryReceipt != nil && result.RecoveryReceipt.Verify(resolver) == nil {
 			return report, rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, result, applyErr, true)
 		}
-		if result.Outcome == "" {
+		if result.Outcome == "" || result.Outcome == "refused" {
 			// Refused before any mutation (base/compat/provenance/
-			// realization fence): no release took effect, so the prior
-			// effective state is trivially preserved. The accepted event
-			// already committed — discharge the pending transition or every
-			// later offer wedges on ErrPlatformUpdateStaleHead. A mutated
-			// then unrestored failure keeps the wedge: refusing new
-			// updates while the effective state is unknown is fail-closed.
+			// realization fence,Updater-journaled refusal): no release took
+			// effect, so the prior effective state is trivially preserved.
+			// The accepted event already committed — discharge the pending
+			// transition or every later offer wedges on
+			// ErrPlatformUpdateStaleHead. A mutated then unrestored failure
+			// keeps the wedge: refusing new updates while the effective
+			// state is unknown is fail-closed.
 			return report, rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, result, applyErr, false)
 		}
-		return report, fmt.Errorf("platform update: apply failed: %w", applyErr)
 	}
 	if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
 		return report, fmt.Errorf("platform update: invalid applied receipts")
