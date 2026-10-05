@@ -1,11 +1,11 @@
 # S2: post-swap guest restart loop can kill Firecracker and cold-boot the disposable
 
-**Date observed**: 2026-10-05 (S2 station acceptance, rollback leg).
+**Date observed**: 2026-10-05 (S2 station acceptance, rollback legs).
 **Computer**: `computer-6450a253b8b6ebc0866471973694f5be` (staging disposable).
 **Mutation class**: orange (runtime behavior) with a red edge (protected VM lifecycle surface).
-**Status**: documented; no fix attempted in this run. The rollback contract path needs one clean leg before S2 close.
+**Status**: cause split 2026-10-05 ~13:20 — two distinct kill mechanisms, one
+fixed by environment, one still open. See Addendum.
 
-## Symptom
 
 The rollback leg (`rb-push` 10:37:55, re-apply of retained release `2811c779`
 under a fresh update id) cut the caller — the expected swap+restart signal.
@@ -52,3 +52,32 @@ One clean `rollback` leg against the coherent `63865ede` deploy after the
 `served SPA is underivable` checkpoint path is understood: build the
 predecessor release with the serving frontend joined, apply under a fresh
 update id, and compare fc pid + boot id + served commit before/after.
+
+## Addendum 2026-10-05 ~13:20: two distinct kill mechanisms
+
+The 10:37 rollback kill and the 12:59-13:07 rollback kill have **different
+causes**, established by the vmctl journal:
+
+1. **10:37 — guest restart loop (~9 min of `served SPA is underivable`),
+   then `signal: killed`, hibernate, marked failed.** Guest-side loop is
+   the plausible killer (host killed an unhealthy VM). Still open —
+   whether the updater's recovery-restart races the boot guard or the new
+   runtime crashes before the health probe reports is unknown; the console
+   sink dies ~16s post-boot so the deciding lines are missing.
+2. **12:59–13:07 — host pressure-reclaim hibernated the VM mid-restart**
+   (`decision=reclaim`, epoch 12895/12896), then vmctl itself went down
+   during the fae12950 deploy and the resume came up under a new FC
+   process. Not a guest defect at all — an environment kill during the
+   leg. The 13:07 re-run then applied **cleanly**: tape seq 109–111
+   accepted/started/applied, serving 6fcb05e5 healthy within ~90s, no
+   restart loop. The only reason criterion 6 is still open is the changed
+   boot id across the environment kill, plus a harness bug found in the
+   same leg (`wait_served` compared full-SHA served output against a
+   short-SHA want, polled 450s, and the outer timeout killed the leg
+   before it wrote its note — fixed, prefix-match).
+
+**Consequence for the gap list:** the rollback path itself is now proven
+twice (release outcome correct, restore healthy, no guest loop on the
+re-run). What remains is one *quiet-environment* re-run that records fc
+pid + boot id + served commit before and after with no host kill in the
+window — not a code fix.
