@@ -47,12 +47,15 @@ wait_served(){ local want="$1" n=0; while [ $n -lt 90 ]; do c=$(served_commit); 
 wait_healthy(){ local n=0; while [ $n -lt 90 ]; do s=$(guest_health | jq -r '.status' 2>/dev/null); [ "$s" = "ready" ] || [ "$s" = "ok" ] && return 0; sleep 5; n=$((n+1)); done; return 1; }
 
 build_release(){
-  # $1 commit. Builds via a detached worktree at the commit so --source-dir
-  # derivation matches (and so the release can differ from the booted base —
-  # a same-commit release's entrypoint is base-present and always refused).
+  # $1 release dir. For a commit SHA, builds via a detached worktree at the
+  # commit so --source-dir derivation matches (and so the release can differ
+  # from the booted base — a same-commit release's entrypoint is base-present
+  # and always refused). Synthetic dirs (e.g. idxmarker for patch-built
+  # releases) must already exist; they are never built here.
   local commit="$1"
   local out="$REL_ROOT/$commit/out"
   if [ ! -f "$out/app-layer-closure.nar" ]; then
+    git -C "$SRC" cat-file -e "$commit^{commit}" 2>/dev/null || return 0
     local wt="/tmp/s2-build-$commit"
     git -C "$SRC" worktree remove --force "$wt" 2>/dev/null || true
     git -C "$SRC" fetch -q origin "$commit" 2>/dev/null || true
@@ -69,6 +72,8 @@ mk_offer(){
   # S2_WITH_INLINE_SPA=1 restores the legacy harness-injected frontend file;
   # default omits it so the only servable frontend bytes are the staged
   # built tree (the frontend-join proof shape).
+  local receipt="$1" uid="$2" over="${3:-"{}"}"
+  local cc ep schema bc rd nar nar_sha head
   cc=$(jq -r .code_commit "$receipt")
   ep="$(jq -r .runtime_path "$receipt" | sed 's|^/nix/store/||')/bin/autoputer"
   schema=$(jq -r '.store_schema_version // 1' "$receipt")
@@ -137,9 +142,10 @@ neg)
   [ "$discharged" = "true" ] || { echo "neg-$2: pending transition not discharged"; exit 5; }
   ;;
 apply)
-  # Generic apply leg: apply a release built from an arbitrary commit whose
-  # entrypoint differs from the booted base. $2 = commit.
-  [ -n "${2:-}" ] || { echo "apply requires a commit"; exit 2; }
+  # Generic apply leg: apply a release from an arbitrary release dir whose
+  # entrypoint differs from the booted base. $2 = release dir under REL_ROOT
+  # (a commit SHA, or a synthetic dir like idxmarker for patch-built releases).
+  [ -n "${2:-}" ] || { echo "apply requires a release dir"; exit 2; }
   build_release "$2" || { note "apply-$2" '{"error":"build failed"}'; exit 4; }
   receipt="$REL_ROOT/$2/out/builder-receipt.json"
   nar_sha=$(sha256sum "$REL_ROOT/$2/out/app-layer-closure.nar"|awk '{print $1}')
@@ -187,11 +193,12 @@ PY
   note panic "$(jlog --arg s "$(served_commit)" --arg want "$pre_commit" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg pc "$PCOMMIT" --arg con "$console" '{served:$s,restored:$want,boot:$b,fc:$f,panic_commit:$pc,console_tail:$con}')"
   ;;
 rollback)
-  # $2 = commit of the release to re-apply as the predecessor (must be a
-  # release built against the booted base, distinct from the serving one).
+  # $2 = release dir under REL_ROOT to re-apply as the predecessor (a commit
+  # SHA, or a synthetic dir like idxmarker for patch-built releases). It must
+  # be built against the booted base and distinct from the serving one.
   # A fresh update_id mints a new operation — same release digest, real
   # apply path (journal replay would be vacuous).
-  [ -n "${2:-}" ] || { echo "rollback requires the predecessor release commit"; exit 2; }
+  [ -n "${2:-}" ] || { echo "rollback requires the predecessor release dir"; exit 2; }
   receipt="$REL_ROOT/$2/out/builder-receipt.json"
   pre=$(jlog --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg g "$(route_gen)" '{served:$s,boot:$b,fc:$f,route_gen:$g}')
   req=$(mk_offer "$receipt" "s2acc-rb-${NOW}" '{}')
