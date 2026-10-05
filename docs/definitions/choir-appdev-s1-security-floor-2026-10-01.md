@@ -234,9 +234,39 @@ now:
   blocker_or_risk: >-
     S4 and S9 must not execute against the current assumed guest boundary; an
     over-broad fix could sever the gateway or other approved guest services.
-  next_action: S1a closed on the refusal-matrix receipt; run the S1a→S0b boundary protocol (panel + reporter + transition receipt) as S0b's disposable-computer probe suite begins.
+  next_action: S1a closed on the refusal-matrix receipt; the S1a→S0b transition is recorded in receipts below. The rest of S1 (runtime identity, token scrubbing, capsule/yaegi floor) continues as the S0b disposable-computer probe suite lands its findings.
 
 receipts:
+  - id: s1a-to-s0b-transition-2026-10-05
+    kind: station_transition
+    status: closed
+    landed: S1a-host-boundary-hotfix
+    next: S0b (resumes its disposable-computer probe suite)
+    closed_at: '2026-10-05T00:40:00Z'
+    boundary_evidence: >-
+      S1a closed on the deployed refusal matrix
+      (docs/evidence/s1a-refusal-matrix-2026-10-04.json, deploy b15f012a):
+      5/5 refusals (tap->tap FORWARD drop, vmctl internal 403, maild
+      forged-owner 403, corpusd mint 405, proxy publish 405) + 5/5
+      legitimate flows green (gateway dial, bound-owner CV resolve,
+      bound-owner maild read, egress dial, product page). Token moved off
+      the kernel cmdline to the root-only credential disk
+      (RUNTIME_GATEWAY_TOKEN_FILE, 619d6458); zot PATH-shadowing removed
+      (a80d2146); diag oracle restricted to the host peer (98cf3875).
+    panel: >-
+      Reused the S0b boundary panel
+      (.agentic-consensus/s0b-boundary-panel-20261004) rather than a fresh
+      panel: the transition is a closed-receipt hand-off, not a new
+      candidate gate — S0b resumes an in-flight probe suite, it does not
+      land a new candidate.
+    residual: >-
+      S1 remainder stays open: confined non-root runtime identity, child
+      token scrubbing, and the restricted Yaegi/capsule worker floor
+      (docs/problems/s1-non-root-runtime-child-uid-boundary-2026-10-04.md).
+      The owner computer's stale-active mark (candidate-fleet-e15cb89f,
+      last_active bumped by a deploy refresh on a dead VM) is filed under
+      docs/problems/s0-storage-lifecycle-gaps-2026-10-05.md, not a reaper
+      target.
   - id: s1a-refusal-matrix-2026-10-04
     kind: deployed_acceptance
     status: closed
