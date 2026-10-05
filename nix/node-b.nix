@@ -551,9 +551,13 @@ in
     };
   };
 
+  # go-choir-sourcecycled.service is deliberately NOT in the boot set: it was
+  # pure fetch-debt burning corpus-dolt (WW corpus burn, docs(s0)
+  # ee013c9a, 2026-10-05). Interim-stopped ~01:15Z; a switch restarted it via
+  # wantedBy. Durable default-off: the unit stays defined for an explicit
+  # operator `systemctl start`, but nothing pulls it in.
   systemd.services.go-choir-sourcecycled = {
-    description = "go-choir Source Service Ingestion Daemon";
-    wantedBy = [ "multi-user.target" ];
+    description = "go-choir Source Service Ingestion Daemon (opt-in; not in boot set)";
     after = [ "network-online.target" "go-choir-proxy.service" "go-choir-vmctl.service" ];
     wants = [ "network-online.target" "go-choir-proxy.service" "go-choir-vmctl.service" ];
     path = with pkgs; [ bash coreutils ];

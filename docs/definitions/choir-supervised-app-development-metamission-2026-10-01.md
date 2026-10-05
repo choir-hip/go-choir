@@ -642,24 +642,24 @@ now:
     full S1 floor. S3 must not start before SO's storage lifecycle and the
     VM shape decision.
   next_action: >-
-    1. S2 gap closure (panel send-back 2026-10-05): clean rollback leg with
-    unchanged boot id; CI-driven signed M9a push with recorded
-    request-to-healthy; base-absent-dependency refusal after builder disposal
-    + guest reboot; store-schema-window refusal; frontend-by-digest proof.
-    Then re-run the panel and the S2 boundary protocol (report, transition
-    receipt).
-    2. SO: og GC wrong-store fix (artifact_gc.go:202 must read Store B via
-       store.corpus(), with a split-pool test); sourcecycled durable
-       default-off in nix/node-b.nix; one corpus-dolt CPU sample +
-       processlist; CI deploy gating against the deployed identity.
-    3. S1: non-root runtime (last item; gates S4).
-    4. SR (station file authored, drafted): research registry ->
+    1. SO remainder: sourcecycled durable default-off in nix/node-b.nix; one
+       corpus-dolt CPU sample + processlist; CI deploy gating against the
+       deployed identity. DONE: og GC wrong-store fix (2fa30b17: live set ->
+       corpus(), fail-closed on load error, split-pool regression test;
+       incident doc s0-gc-og-wrong-store-deletion-2026-10-05 — the wrong-store
+       sweep mass-deleted ~45.8k live corpus bodies before the fix).
+    2. S1: non-root runtime (last item; gates S4).
+    3. SR (station file authored, drafted): research registry ->
        {desk_go_eval}; delete processor/reconciler end to end; rewrite
        research.yaml for the record-native in-cell world; check M1 against
        S0m.
-    5. SA (station file authored, drafted) after SR: fan-out load probe +
+    4. SA (station file authored, drafted) after SR: fan-out load probe +
        memory receipt first, then the slices in order.
-    6. Author SM and SC station files from "v5 plan" when SR lands.
+    5. Author SM and SC station files from "v5 plan" when SR lands.
+    DONE: S2 station CLOSED 2026-10-05 — terminal receipt
+    s2-station-terminal-2026-10-05 (panel round 2: 6 approve / 1 send-back,
+    sole send-back discharged); close report
+    docs/reports/s2-layering-station-close-2026-10-05.md.
 
 receipts:
   - id: s0-to-s2-transition-2026-10-04
