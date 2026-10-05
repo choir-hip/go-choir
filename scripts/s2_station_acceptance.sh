@@ -134,7 +134,7 @@ neg)
     base-digest)      over='{"base_image_manifest_digest":"0000000000000000000000000000000000000000000000000000000000000000"}' ;;
     stale-head)       over='{"base_event_head":"3333333333333333333333333333333333333333333333333333333333333333"}' ;;
     content-mutation) over='{"closure_digest":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}' ;;
-    provenance)       over='{"code_commit":"1111111111111111111111111111111111111111"}' ;;
+    provenance)       over='{"code_commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' ;;
     absent-entrypoint) over='{"layering_entrypoint":"ffffffffffffffffffffffffffffffffffff-autoputer-0.1.0/bin/autoputer"}' ;;
     base-commit)      over='{"base_commit":"2222222222222222222222222222222222222222"}' ;;
     schema-window)    over='{"store_schema_version":1,"min_store_schema_version":999}' ;;
