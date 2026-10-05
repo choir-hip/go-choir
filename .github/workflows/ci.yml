@@ -1270,7 +1270,9 @@ jobs:
               done
             elif [ "${DEPLOY_HOST}" = "true" ]; then
               echo "==> Synchronizing host service pointers from activated NixOS closure"
-              scripts/node-b-sync-service-pointers auth gateway maild corpusd proxy sourcecycled vmctl
+              # sourcecycled intentionally absent: durable default-off (fetch-debt
+              # against corpus-dolt; unit stays defined but deploy does not manage it).
+              scripts/node-b-sync-service-pointers auth gateway maild corpusd proxy vmctl
             else
               echo "    Skipping host service pointer install"
             fi
@@ -1283,7 +1285,6 @@ jobs:
                 go-choir-auth \
                 go-choir-maild \
                 go-choir-corpusd \
-                go-choir-sourcecycled \
                 go-choir-gateway \
                 go-choir-proxy
               if systemctl is-active --quiet caddy; then
@@ -1625,7 +1626,9 @@ jobs:
             note_phase "app-layer release push"
 
             echo "==> Smoke test: health endpoints"
-            for port in 8081 8082 8083 8084 8086 8087 8787; do
+            # 8787 (sourcecycled) intentionally absent — the unit is durable
+            # default-off; probing it would fail every deploy.
+            for port in 8081 8082 8083 8084 8086 8087; do
               curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health
               echo "    Port $port: OK"
             done
@@ -1637,7 +1640,8 @@ jobs:
                 gateway) echo 8084 ;;
                 corpusd) echo 8086 ;;
                 maild) echo 8087 ;;
-                sourcecycled) echo 8787 ;;
+                # sourcecycled (8787) intentionally has no identity probe —
+                # durable default-off; deploy does not manage it.
                 *) return 1 ;;
               esac
             }
@@ -1645,7 +1649,7 @@ jobs:
             if [ "${service_pointer_deploy}" = "true" ]; then
               IFS=',' read -ra identity_services <<< "${HOST_SERVICES}"
             elif [ "${DEPLOY_HOST}" = "true" ]; then
-              identity_services=(auth proxy vmctl gateway corpusd maild sourcecycled)
+              identity_services=(auth proxy vmctl gateway corpusd maild)
             fi
             for service in "${identity_services[@]}"; do
               [ -z "$service" ] && continue
@@ -1771,7 +1775,7 @@ jobs:
             # evidence unless it exactly matches the active copied tree.
             source scripts/node-b-sync-service-pointers
             host_services='{}'
-            for service in auth proxy vmctl gateway corpusd maild sourcecycled; do
+            for service in auth proxy vmctl gateway corpusd maild; do
               active_path="/var/lib/go-choir/services/${service}"
               active_commit=$(artifact_manifest_commit "$active_path/share/go-choir/build.json" "$service")
               active_digest=$(nix hash path --type sha256 "$active_path")
