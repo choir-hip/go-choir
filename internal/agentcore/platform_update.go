@@ -36,6 +36,14 @@ import (
 // canonical head the guest has moved past. Callers map it to 409.
 var ErrPlatformUpdateStaleHead = errors.New("platform update: base event head is stale")
 
+// ErrPlatformUpdateRealizationBound marks an offer whose pinned realization
+// can never be satisfied again. Realizations are epoch-monotonic, so an offer
+// accepted under a retired epoch is permanently inapplicable — unlike
+// ErrPlatformUpdateStaleHead, which is a transient head divergence that may
+// still resolve. A stranded accepted event in this state must resolve as
+// failed, not stay wedged.
+var ErrPlatformUpdateRealizationBound = errors.New("platform update: offer binds a different realization")
+
 // PlatformUpdateReport is the apply endpoint's observable result.
 type PlatformUpdateReport struct {
 	UpdateID                  string `json:"update_id"`
@@ -73,7 +81,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 		return report, fmt.Errorf("platform update: offer binds a different computer")
 	}
 	if offer.Realization != rt.selfdevRealizationID {
-		return report, fmt.Errorf("platform update: offer binds a different realization")
+		return report, ErrPlatformUpdateRealizationBound
 	}
 	if err := selfdevprotocol.PlatformUpdateOfferFromRequest(offer, time.Now().UTC()); err != nil {
 		return report, err
@@ -819,8 +827,35 @@ func (rt *Runtime) resumePendingPlatformUpdate(ctx context.Context) {
 		return // failed committed — the update already lost; do not retry
 	}
 	log.Printf("runtime: platform update resume: re-driving update %s after guest restart", offer.UpdateID)
-	if _, applyErr := rt.ApplyPlatformUpdate(ctx, offer); applyErr != nil {
+	_, applyErr := rt.ApplyPlatformUpdate(ctx, offer)
+	if applyErr == nil {
+		return
+	}
+	// An offer pinned to a retired realization can never be applied again —
+	// realizations are epoch-monotonic, and the accepted event's target
+	// commitment binds this offer digest so it cannot be re-minted. Retrying
+	// it every boot wedges the transition permanently: PendingTransitionRef
+	// stays set and every later offer is refused at the resume gate. The
+	// update has in fact lost, so resolve it as failed. Any other error is
+	// transient (the next boot retries it).
+	if !errors.Is(applyErr, ErrPlatformUpdateRealizationBound) {
 		log.Printf("runtime: platform update resume: %v", applyErr)
+		return
+	}
+	log.Printf("runtime: platform update resume: update %s binds a retired realization; discharging stranded transition", offer.UpdateID)
+	offerDigest, digestErr := selfdevprotocol.Digest(offer)
+	if digestErr != nil {
+		log.Printf("runtime: platform update resume: offer digest: %v", digestErr)
+		return
+	}
+	// Nothing was mutated, so the prior effective state trivially holds and
+	// the failed event carries RestoredPriorEffective to clear the transition.
+	if err := rt.recordPlatformUpdateFailed(ctx,
+		selfdevprotocol.PlatformUpdateOffer{ComputerID: rt.selfdevComputerID, UpdateID: offer.UpdateID},
+		offerDigest, head.PendingTransitionRef,
+		updater.ApplyResult{Outcome: "refused"},
+		ErrPlatformUpdateRealizationBound, false); err != nil {
+		log.Printf("runtime: platform update resume: discharge failed: %v", err)
 	}
 }
 

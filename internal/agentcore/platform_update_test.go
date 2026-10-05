@@ -570,3 +570,91 @@ func TestPlatformUpdateRefusalDischargesPendingTransition(t *testing.T) {
 		t.Fatal("post-refusal apply did not land")
 	}
 }
+
+// TestPlatformUpdateBootSweepDischargesRetiredRealization proves a stranded
+// accepted event whose offer binds an already-retired realization is resolved
+// as failed instead of being re-driven forever. Realizations are
+// epoch-monotonic and the accepted event binds the offer digest, so such an
+// offer can never be applied again; leaving the transition open wedges every
+// later offer at the resume gate.
+func TestPlatformUpdateBootSweepDischargesRetiredRealization(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-platform-update-retired-realization")
+	ctx := context.Background()
+
+	offer := fx.mintPlatformUpdateOffer(t, "update-retired", "<html>retired</html>", fx.currentHead(t))
+	// The guest rebooted into a new epoch: the runtime's realization moved on,
+	// and this offer's pinned realization can never be satisfied again.
+	fx.rt.selfdevRealizationID = "realization-derivable-epoch-2"
+	if offer.Realization == fx.rt.selfdevRealizationID {
+		t.Fatal("fixture offer already binds the runtime realization")
+	}
+	offerDigest := mustOfferDigest(t, offer)
+
+	targetCommitment, err := selfdevprotocol.Digest(struct {
+		ComputerID    string `json:"computer_id"`
+		UpdateID      string `json:"update_id"`
+		OfferDigest   string `json:"offer_digest"`
+		ContentDigest string `json:"content_digest"`
+	}{offer.ComputerID, offer.UpdateID, offerDigest, offer.Manifest.ContentDigest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := fx.store.Head(ctx, fx.computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v", err)
+	}
+	acceptedEventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	acceptedEvent := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: acceptedEventID, ComputerID: offer.ComputerID,
+		EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "platform-update-accepted-" + offer.UpdateID,
+		ActorProfile:   agentprofile.Management, AuthorityRef: "platform-control:update",
+		PrivacyClass:      "owner",
+		ProposedEffectRef: offer.Manifest.ContentDigest, DecisionRef: offerDigest,
+		VerifierRefs:                     offer.VerifierRefs,
+		RequireExpectedHead:              true,
+		PreviousHead:                     head.CanonicalEventHead,
+		ExpectedDesiredEventHead:         head.DesiredEventHead,
+		ExpectedEffectiveEventHead:       head.EffectiveEventHead,
+		ExpectedDesiredStateCommitment:   head.DesiredStateCommitment,
+		ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
+		ReducerVersion:                   computerevent.ReducerVersionV1,
+	}
+	offerBytes, err := json.Marshal(offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := fx.rt.eventAppender.AppendNewPayload(ctx, acceptedEvent, computerevent.TransitionInput{TargetStateCommitment: targetCommitment}, offerBytes, "application/vnd.choir.platform-update-offer+json", "owner"); err != nil {
+		t.Fatalf("seed accepted+offer event: %v", err)
+	}
+	head, err = fx.store.Head(ctx, fx.computerID)
+	if err != nil || head == nil || head.PendingTransitionRef == "" {
+		t.Fatalf("pending transition did not open: %v %#v", err, head)
+	}
+
+	fx.rt.resumePendingPlatformUpdate(ctx)
+
+	head, err = fx.store.Head(ctx, fx.computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head after sweep: %v", err)
+	}
+	if head.PendingTransitionRef != "" {
+		t.Fatalf("retired-realization strand left pending transition %s — permanent wedge", head.PendingTransitionRef)
+	}
+	if fx.countEventKinds()[computerevent.EventMaterializationFailed] != 1 {
+		t.Fatal("stranded transition not discharged with materialization_failed")
+	}
+	// The wedge is what mattered: a later, properly-bound offer must apply.
+	fx.rt.selfdevRealizationID = "realization-derivable"
+	fresh := fx.mintPlatformUpdateOffer(t, "update-after-retired", "<html>after</html>", fx.currentHead(t))
+	report, err := fx.rt.ApplyPlatformUpdate(ctx, fresh)
+	if err != nil {
+		t.Fatalf("offer after retired-realization discharge wedged: %v", err)
+	}
+	if report.ReleaseDigest == "" {
+		t.Fatal("post-discharge apply did not land")
+	}
+}
