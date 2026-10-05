@@ -183,6 +183,68 @@ func TestApplyMaterializesLayeredClosureAndGcRoots(t *testing.T) {
 	}
 }
 
+// A release whose materialized autoputer output root carries frontend/
+// must stage it into the release dir, so the serving surface join
+// (executable+frontend in one transaction) holds for releases whose offer
+// carries no separate frontend file.
+func TestApplyStagesReleaseFrontendFromOutputRoot(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	baseManifestPath, bootedDigest := layeredTestBase(t)
+	engine, err := NewWithBase(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{},
+		testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}},
+		baseManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-frontend", bootedDigest, blob, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	result, err := engine.Apply(context.Background(), request)
+	if err != nil {
+		t.Fatalf("layered apply refused: %v", err)
+	}
+	if result.Outcome != "applied" {
+		t.Fatalf("layered apply outcome = %q", result.Outcome)
+	}
+	current, err := os.Readlink(filepath.Join(root, "current"))
+	if err != nil {
+		t.Fatalf("read current: %v", err)
+	}
+	// The nar fixture carries no frontend tree, so no frontend dir stages.
+	if _, err := os.Lstat(filepath.Join(current, "frontend")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("frontend staged without a release frontend tree")
+	}
+	// Plant a built frontend tree beside the materialized entrypoint and
+	// re-stage under a fresh operation: the frontend must land in the dir.
+	entryDir := filepath.Dir(filepath.Join(root, "store", "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt"))
+	feDir := filepath.Join(filepath.Dir(entryDir), "frontend")
+	if err := os.MkdirAll(feDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(feDir, "index.html"), []byte("<title>staged</title>"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	retry := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-frontend-2", bootedDigest, blob, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	if _, err := engine.Apply(context.Background(), retry); err != nil {
+		t.Fatalf("frontend retry refused: %v", err)
+	}
+	current2, err := os.Readlink(filepath.Join(root, "current"))
+	if err != nil {
+		t.Fatalf("read current: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(current2, "frontend", "index.html"))
+	if err != nil || string(got) != "<title>staged</title>" {
+		t.Fatalf("staged frontend = %q err=%v, want staged bytes", got, err)
+	}
+}
+
 // layeredRequestFixture builds a layered apply request carrying the given
 // narchive blob and private-store-relative exec path. blobName makes each
 // release's closure.nar digest distinct so two layered releases stage as

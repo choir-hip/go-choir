@@ -74,9 +74,8 @@ mk_offer(){
   bc=$(awk -F= '$1=="build_commit"{print $2}' "$MANIFEST")
   rd=$(sha256sum "$receipt" | awk '{print $1}')
   nar=$(jq -r .exported_path "$receipt")
+  if [ ! -f "${nar:-}" ]; then nar="$(dirname "$receipt")/app-layer-closure.nar"; fi
   nar_sha=$(sha256sum "$nar" | awk '{print $1}')
-  # Blob upload commits a file_root_committed event — read the head AFTER it
-  # or the offer binds a head that is already stale by mint time.
   curl -fsS "${IC[@]}" -T "$nar" "http://127.0.0.1:8086/internal/computers/platform-updates/blob/${nar_sha}" >/dev/null
   head=$(canonical_head)
   jq -n \

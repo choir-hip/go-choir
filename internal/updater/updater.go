@@ -557,6 +557,16 @@ func (u *Updater) stageRelease(sourceDir, releaseDir string, manifest ReleaseMan
 		if err := os.WriteFile(filepath.Join(temporary, "layering-entrypoint"), []byte(entrypoint+"\n"), 0o444); err != nil {
 			return fmt.Errorf("updater: stage layering entrypoint: %w", err)
 		}
+		// The release's own built frontend ships inside its autoputer output
+		// root; link it into the staged dir so the serving surface join
+		// (executable+frontend in one transaction) holds for releases whose
+		// offer carries no separate frontend file.
+		releaseFrontend := filepath.Join(filepath.Dir(entrypoint), "..", "frontend")
+		if st, serr := os.Stat(releaseFrontend); serr == nil && st.IsDir() {
+			if cerr := copyDirTree(releaseFrontend, filepath.Join(temporary, "frontend")); cerr != nil {
+				return fmt.Errorf("updater: stage release frontend: %w", cerr)
+			}
+		}
 	}
 	manifestBytes, err := computerevent.CanonicalJSON(manifest)
 	if err != nil {
@@ -1090,6 +1100,40 @@ func writeJournal(path string, journal operationJournal) error {
 		return err
 	}
 	return syncDir(filepath.Dir(path))
+}
+
+// copyDirTree replicates a directory tree of regular files, preserving
+// modes masked to 0o555. Symlinks are never followed or recreated: a
+// store tree that needs a symlink is refused rather than materialized
+// into something the verifier did not hash.
+func copyDirTree(source, target string) error {
+	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return os.MkdirAll(target, 0o700)
+		}
+		dest := filepath.Join(target, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(dest, 0o700)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("updater: non-regular file in tree %q", path)
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+			return err
+		}
+		return copyRegularFile(path, dest, info.Mode().Perm()&0o555)
+	})
 }
 
 func copyRegularFile(source, target string, mode fs.FileMode) error {
