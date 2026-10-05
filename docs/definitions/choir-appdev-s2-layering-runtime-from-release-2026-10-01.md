@@ -297,22 +297,66 @@ now:
     platform-artifacts with no GC; coordinate with SO before CI wiring
     multiplies it.
   next_action: >-
-    Re-scoped by the metamission v4 director review ("Orientation
-    2026-10-05"). Slices, in order:
-    S2-e rollback atomicity (entrypoint inside the release dir, restorePrior
-    reverts exec, boot-loop guard with receipt);
-    S2-d state-compat gate (manifest declares minimum store schema + base
-    commit; Apply refuses before mutation);
-    S2-c provenance (builder derives code_commit; manifest carries the
-    builder receipt digest; updater checks the embedded buildinfo commit);
-    S2-f self-dev -> builder join (source patch, not file release, for
-    runtime changes);
-    S2-g CI wiring for tracking computers with time-to-healthy, no reboot
-    for app-layer-only changes.
-    Then station acceptance per the conjecture test above, using
-    builder-produced releases only.
+    Slices landed 2026-10-05: S2-e rollback atomicity (9f5aa8a0), S2-d
+    state-compat gate (c8fb7834), S2-c provenance (8f06b3d9), S2-f
+    builder join (e1c3924b), S2-g CI wiring (e527c169) — mechanism live
+    in deploy, bind gaps fixed (a3da83c4) and proven end-to-end on
+    computer-6450a253. Next: close the S2-g residual gates (canonical-head
+    bootstrap authorization, realization staleness on hibernate) and run
+    station acceptance per the conjecture test with builder-produced
+    releases only.
+    believed_state_update_2026_10_05: >-
+      App-layer land proven: release 36743b1f applied on
+      computer-6450a253b8b6ebc0866471973694f5be via signed offer +
+      verifier_refs; build.commit 2f0e2cac served healthy;
+      layering-entrypoint -> release bin/autoputer; current/ swapped
+      atomically; code_commit 2f0e2cac + base_commit eb9c5b19 +
+      builder_receipt_digest bound (S2-c). See
+      docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md.
 
-receipts: []
+receipts:
+  - id: s2-e-rollback-atomicity-2026-10-05
+    kind: station_slice
+    status: landed
+    commits: [9f5aa8a0]
+    summary: >-
+      layering-entrypoint moved inside the release dir; current/ swap now
+      moves served frontend and exec atomically and restorePrior reverts
+      exec with the same pointer. Boot-loop guard added with host-readable
+      tripped receipt.
+  - id: s2-d-state-compat-gate-2026-10-05
+    kind: station_slice
+    status: landed
+    commits: [c8fb7834]
+    summary: >-
+      Manifest declares store_schema_version + base_commit; Apply refuses
+      before mutation on mismatch.
+  - id: s2-c-provenance-2026-10-05
+    kind: station_slice
+    status: landed
+    commits: [8f06b3d9]
+    summary: >-
+      Builder derives code_commit; manifest carries builder_receipt_digest;
+      updater checks the entrypoint's embedded buildinfo commit.
+  - id: s2-f-builder-join-2026-10-05
+    kind: station_slice
+    status: landed
+    commits: [e1c3924b]
+    summary: >-
+      Self-dev freeze emits source.patch for runtime changes; builder
+      consumes patches, not file releases.
+  - id: s2-g-ci-app-layer-2026-10-05
+    kind: station_slice
+    status: landed
+    commits: [e527c169, a3da83c4]
+    summary: >-
+      CI app-layer release push for tracking computers — no VM reboot for
+      autoputer-only changes. Three sequential bind gates surfaced and
+      fixed/proven: canonical head bootstrap, verifier_refs requirement,
+      realization staleness on hibernate. End-to-end land proven on
+      computer-6450a253b8b6ebc0866471973694f5be (release 36743b1f6ddb,
+      build.commit 2f0e2cac).
+
 ---
 
 # S2 — Layering Runtime From Release
