@@ -1,7 +1,9 @@
 # S0: artifact-GC `og` live set read Store A — active sweep mass-deleted live corpus bodies
 
-**Status:** fix landed (`og` live set → `corpus()`); fail-closed on any live-set
-load error. Loss quantification running on node-b.
+**Status:** fix landed (`og` live set → `corpus()`); fail-closed on any
+live-set load error. Deployed to corpusd at `2fa30b17` (the deploy run
+marked failed at the sourcecycled health probe, but service pointers
+swapped first — verified live commit). Exact loss quantified below.
 
 ## What happened — 2026-10-05 ~20:45Z
 
@@ -29,16 +31,16 @@ resolved unreachable.
 Second amplifier: a live-set query error appended a warning and swept
 anyway — an unloaded live set is not an empty live set.
 
-## Loss estimate
+## Loss (measured 2026-10-05 23:00Z)
 
-- `corpus.og_objects`: 8,752,974 rows; **2,184,983 carry `body_ref`**.
-- `sha256/og/` held ~616k distinct digests (deduped CAS) — almost every
-  on-disk file was live under the corpus refs.
-- Deleted: 45,829 files, all past the 1h grace (older bodies).
-- `platform.og_objects` (the pool the code read): 6,090,210 rows, **620
-  externalized** — the residual mirror from the pre-split era.
-- Precise missing set: `SELECT body_ref` anti-join vs the post-sweep
-  filesystem listing — running detached on node-b; receipt lands here.
+- Distinct live digests on disk post-sweep: 570,559.
+- `corpus.og_objects` distinct `body_ref` basenames: 616,341.
+- **Live refs missing from disk: 161,185** — of which the 2026-10-05
+  sweep deleted at most 45,829; ~115k were already missing before it
+  (earlier loss or bodies never externalized — the CAS write is
+  best-effort inside PutObject with no fsync/fs-verify receipt).
+- No on-node recovery substrate for `platform-artifacts`; dolt backups
+  cover the tables, not the CAS.
 
 ## Restoration posture
 
