@@ -245,6 +245,79 @@ func TestApplyStagesReleaseFrontendFromOutputRoot(t *testing.T) {
 	}
 }
 
+// An offer-carried frontend/index.html must not collide with the staged
+// built tree: the built tree replaces the inline file.
+func TestApplyInlineFrontendYieldsToBuiltTree(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	baseManifestPath, bootedDigest := layeredTestBase(t)
+	engine, err := NewWithBase(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{},
+		testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}},
+		baseManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt"
+	// Plant the built frontend tree before staging, and carry a colliding
+	// inline frontend/index.html in the manifest files.
+	entryDir := filepath.Dir(filepath.Join(root, "store", entry))
+	feDir := filepath.Join(filepath.Dir(entryDir), "frontend")
+	if err := os.MkdirAll(feDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(feDir, "index.html"), []byte("<title>built</title>"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "op-collide", "idem-collide", "layered payload")
+	closurePath := filepath.Join(request.SourceDir, "closure.nar")
+	if err := os.WriteFile(closurePath, blob, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	closureSum, err := fileSHA256(closurePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inlinePath := filepath.Join(request.SourceDir, "frontend", "index.html")
+	if err := os.MkdirAll(filepath.Dir(inlinePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(inlinePath, []byte("<title>inline</title>"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	inlineSum, err := fileSHA256(inlinePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Manifest.Files = append(request.Manifest.Files,
+		ManifestFile{Path: "closure.nar", SHA256: closureSum, Mode: 0o444},
+		ManifestFile{Path: "frontend/index.html", SHA256: inlineSum, Mode: 0o444})
+	request.Manifest.ClosureDigest = closureSum
+	request.Manifest.BaseImageManifestDigest = bootedDigest
+	request.Manifest.LayeringEntrypoint = entry
+	if err := refinalizeRequest(&request); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Apply(context.Background(), request); err != nil {
+		t.Fatalf("colliding apply refused: %v", err)
+	}
+	current, err := os.Readlink(filepath.Join(root, "current"))
+	if err != nil {
+		t.Fatalf("read current: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(current, "frontend", "index.html"))
+	if err != nil || string(got) != "<title>built</title>" {
+		t.Fatalf("staged frontend = %q err=%v, want built tree bytes", got, err)
+	}
+}
+
 // layeredRequestFixture builds a layered apply request carrying the given
 // narchive blob and private-store-relative exec path. blobName makes each
 // release's closure.nar digest distinct so two layered releases stage as

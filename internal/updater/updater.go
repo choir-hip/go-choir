@@ -563,7 +563,12 @@ func (u *Updater) stageRelease(sourceDir, releaseDir string, manifest ReleaseMan
 		// offer carries no separate frontend file.
 		releaseFrontend := filepath.Join(filepath.Dir(entrypoint), "..", "frontend")
 		if st, serr := os.Stat(releaseFrontend); serr == nil && st.IsDir() {
-			if cerr := copyDirTree(releaseFrontend, filepath.Join(temporary, "frontend")); cerr != nil {
+			stagedFrontend := filepath.Join(temporary, "frontend")
+			// The offer may also carry its own frontend/index.html file,
+			// already copied above; the built tree is the authority, so it
+			// replaces the inline file rather than colliding with it.
+			_ = os.RemoveAll(stagedFrontend)
+			if cerr := copyDirTree(releaseFrontend, stagedFrontend); cerr != nil {
 				return fmt.Errorf("updater: stage release frontend: %w", cerr)
 			}
 		}
