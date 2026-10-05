@@ -1390,7 +1390,19 @@ jobs:
                   IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_computer_url <<< "$record"
                   (
                     echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
-                    payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
+                    # A refreshed layered computer keeps serving its retained
+                    # app-layer release — that is the point of layering — so
+                    # its /health reports the release commit, never the host
+                    # autoputer pointer commit. Read the pre-refresh served
+                    # commit and expect THAT after the refresh, not the
+                    # pointer. Only a computer with no retained release is
+                    # expected to serve the pointer commit.
+                    refresh_expected_commit=$(curl -fsS --max-time 10 "${refresh_computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+                    if [ -z "$refresh_expected_commit" ]; then
+                      refresh_expected_commit="$autoputer_runtime_commit"
+                    fi
+                    echo "    ${refresh_vm_id}: expecting served commit ${refresh_expected_commit} after refresh"
+                    payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id,desktop_id:$desktop_id}')
                     refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
                     refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' --retry 2 --retry-delay 2 --retry-all-errors \
                       -H "X-Internal-Caller: true" \
@@ -1409,7 +1421,7 @@ jobs:
                       refresh_computer_url="$refreshed_computer_url"
                     fi
                     echo "    Refreshed ${refresh_vm_id}"
-                    wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$autoputer_runtime_commit"
+                    wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit"
                   ) &
                   refresh_pids+=("$!")
                   if [ "${#refresh_pids[@]}" -ge "$max_parallel_refresh" ]; then
