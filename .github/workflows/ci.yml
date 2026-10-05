@@ -1533,7 +1533,8 @@ jobs:
                     --arg base_commit "$base_commit" \
                     --arg receipt_digest "$receipt_sha" \
                     --arg nar_sha "$nar_sha" \
-                    '{computer_id:$computer_id, update_id:$update_id, realization_id:$realization_id, base_event_head:$base_event_head, expires_at:$expires_at, marker:$marker, code_commit:$code_commit, base_image_manifest_digest:$base_manifest_digest, closure_digest:$closure_digest, layering_entrypoint:$entrypoint, store_schema_version:$schema_version, base_commit:$base_commit, builder_receipt_digest:$receipt_digest, files:[{path:"closure.nar", mode:420, ref:("artifact+sha256://" + $nar_sha + "/sha256/platform-update/" + $nar_sha)}], verifier_refs:[], divergence_status:"tracking", platform_follow_policy:"auto"}')
+                    --arg verifier_ref "$(printf 'verify-%s' "$t_update" | sha256sum | awk '{print $1}')" \
+                    '{computer_id:$computer_id, update_id:$update_id, realization_id:$realization_id, base_event_head:$base_event_head, expires_at:$expires_at, marker:$marker, code_commit:$code_commit, base_image_manifest_digest:$base_manifest_digest, closure_digest:$closure_digest, layering_entrypoint:$entrypoint, store_schema_version:$schema_version, base_commit:$base_commit, builder_receipt_digest:$receipt_digest, files:[{path:"closure.nar", mode:420, ref:("artifact+sha256://" + $nar_sha + "/sha256/platform-update/" + $nar_sha)}], verifier_refs:[$verifier_ref], divergence_status:"tracking", platform_follow_policy:"auto"}')
                   offer=$(curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" \
                     --data-binary "$mint_payload" \
                     "http://127.0.0.1:8086/internal/computers/platform-updates/offer" || true)
