@@ -289,11 +289,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}
 	}
 	if profile == agentprofile.Research {
-		if deskCarrierLive(agentprofile.Research) {
-			b.WriteString(runtimeprompts.RLMResearchOverlay())
-		} else {
-			b.WriteString(runtimeprompts.ResearchRuntimeOverlay())
-		}
+		// SR: the research desk is always on the cell carrier — the legacy
+		// tool-loop overlay branch is dead and removed with the typed surface.
+		b.WriteString(runtimeprompts.RLMResearchOverlay())
 	}
 	requesterAgentID := ""
 	textureDeliveryAgentID := ""
@@ -392,19 +390,12 @@ func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchto
 		}
 	}
 	if deskRole == agentprofile.Research {
-		// R3r: the desk keeps its typed research surface beside desk_go_eval
-		// (R3c precedent: typed authority tools stay). Generic host tools —
-		// read_file/glob/grep, verify_model_capability, spawn_agent,
-		// cancel_agent — drop; evidence/memory domain tools stay typed.
-		if err := researchtools.Register(registry, researchDeps); err != nil {
-			return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
-		}
-		if err := RegisterEvidenceTools(registry, rt); err != nil {
-			return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
-		}
-		if err := RegisterRunMemoryTools(registry, rt); err != nil {
-			return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
-		}
+		// SR (2026-10-05, owner-ratified): the research desk is a full RLM —
+		// exactly one tool, desk_go_eval. The typed research surface
+		// (researchtools.Register: 9 network/content tools) and the typed
+		// evidence/run-memory registrations are deleted, not dual-listed:
+		// every capability is a choir.* egress verb inside the cell. The
+		// shared egress ledger still meters the verbs through the worker.
 	}
 	return registry, nil
 }

@@ -57,16 +57,17 @@ func TestResearchCellRegistryIsSealed(t *testing.T) {
 	if _, ok := reg.Lookup("desk_go_eval"); !ok {
 		t.Fatal("sealed research registry must expose desk_go_eval")
 	}
-	// R3r keeps the typed research/evidence/memory surface beside
-	// desk_go_eval — the host-mediated, budget-charged domain tools.
-	for _, kept := range []string{
+	// SR (2026-10-05): the research desk is a full RLM — exactly one tool,
+	// desk_go_eval. Every former typed tool is gone; its capability is a
+	// choir.* egress verb inside the cell.
+	for _, gone := range []string{
 		"web_search", "fetch_url", "source_search", "import_url_content",
 		"import_document_content", "search_wire_corpus", "read_content_item",
 		"list_content_item_selectors", "read_content_item_selector",
 		"save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry",
 	} {
-		if _, ok := reg.Lookup(kept); !ok {
-			t.Fatalf("research cell registry must keep typed tool %q", kept)
+		if _, ok := reg.Lookup(gone); ok {
+			t.Fatalf("sealed research registry must not expose %q — it is a cell verb, not a tool", gone)
 		}
 	}
 	// Generic host tools a tool-loop research desk had must be gone.
