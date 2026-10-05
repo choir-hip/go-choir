@@ -7,8 +7,9 @@
 // -2026-10-05.md).
 //
 // It replicates recordPlatformUpdateFailed over the corpusd event-CAS HTTP
-// surface: mint a capability under the platform signing key, read the head,
-// pin the result payload, pin the canonical event, CompareAndSwap.
+// surface: read the head, mint a capability under the platform signing key at
+// the head's revocation epoch, pin the result payload, pin the canonical
+// event, CompareAndSwap.
 //
 // Run on Node B from a repo worktree as root:
 //
@@ -32,44 +33,69 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/platform"
 )
 
 var (
 	corpusdURL   = flag.String("corpusd", "http://127.0.0.1:8086", "corpusd base URL")
 	computerID   = flag.String("computer", "", "computer id (required)")
+	owner        = flag.String("owner", "", "owner user id asserted for event:read (X-Authenticated-User)")
 	signingKey   = flag.String("key", "/var/lib/go-choir/platform-artifacts/signing-key", "platform signing key path")
 	note         = flag.String("note", "manual discharge: pre-mutation refusal left pending transition wedged (s2-refused-apply-wedges-pending-transition-2026-10-05)", "cause recorded in the result payload")
 	internalHead = flag.String("caller", "true", "X-Internal-Caller header value")
 )
 
+// capability mirrors platform.ComputerCapability — inlined so this tool
+// cross-compiles without the Dolt/ICU dependency internal/platform pulls.
+var capabilityDomain = []byte("choir-computer-capability-v1\x00")
+
+type capability struct {
+	Version         int      `json:"version"`
+	ComputerID      string   `json:"computer_id"`
+	Scopes          []string `json:"scopes"`
+	ExpiresAt       string   `json:"expires_at"`
+	RevocationEpoch uint64   `json:"revocation_epoch"`
+	Nonce           string   `json:"nonce"`
+}
+
+func mintCapability(c capability, priv ed25519.PrivateKey) (string, error) {
+	payload, err := computerevent.CanonicalJSON(c)
+	if err != nil {
+		return "", err
+	}
+	preimage := append(append([]byte{}, capabilityDomain...), payload...)
+	sig := ed25519.Sign(priv, preimage)
+	return base64.RawURLEncoding.EncodeToString(payload) + "." + base64.RawURLEncoding.EncodeToString(sig), nil
+}
+
 func main() {
 	flag.Parse()
-	if *computerID == "" {
-		fmt.Fprintln(os.Stderr, "-computer required")
+	if *computerID == "" || *owner == "" {
+		fmt.Fprintln(os.Stderr, "-computer and -owner required")
 		os.Exit(2)
 	}
-	key, err := platform.LoadOrCreateSigningKey(*signingKey)
-	if err != nil {
+	keyBytes, err := os.ReadFile(*signingKey)
+	if err != nil || len(keyBytes) != ed25519.PrivateKeySize {
 		fatal("signing key: %v", err)
 	}
-	token, err := platform.MintComputerCapability(platform.ComputerCapability{
-		Version: 1, ComputerID: *computerID,
-		Scopes:   []string{"event:read", "event:pin", "event:append"},
-		ExpiresAt: time.Now().UTC().Add(10 * time.Minute).Truncate(time.Microsecond).Format(time.RFC3339Nano),
-		Nonce:    fmt.Sprintf("manual-discharge-%d", time.Now().UnixNano()),
-	}, ed25519.PrivateKey(key.Private))
-	if err != nil {
-		fatal("capability: %v", err)
-	}
-	_ = token // capability verified via signature only; send as Bearer
+	priv := ed25519.PrivateKey(keyBytes)
 
-	// 1. Head must carry a pending transition bound to a platform-update
-	//    accept event — otherwise there is nothing to discharge.
+	// 1. Read the head: must carry a pending transition bound to an
+	//    effect_accepted event. The capability is minted at the head's
+	//    revocation epoch — a wrong epoch verifies as revoked.
 	var head computerevent.Head
-	get("/internal/computers/events/head?computer_id="+*computerID, token, &head)
+	get("/internal/computers/events/head?computer_id="+*computerID, "", &head)
 	if head.PendingTransitionRef == "" {
 		fatal("head has no pending transition — nothing to discharge")
+	}
+	token, err := mintCapability(capability{
+		Version: 1, ComputerID: *computerID,
+		Scopes:          []string{"event:read", "event:pin", "event:append"},
+		ExpiresAt:       time.Now().UTC().Add(10 * time.Minute).Truncate(time.Microsecond).Format(time.RFC3339Nano),
+		RevocationEpoch: head.CredentialRevocationEpoch,
+		Nonce:           fmt.Sprintf("manual-discharge-%d", time.Now().UnixNano()),
+	}, priv)
+	if err != nil {
+		fatal("capability: %v", err)
 	}
 
 	// 2. Recover the accepted event (the pending ref) to bind DecisionRef and
@@ -95,10 +121,6 @@ func main() {
 	}
 	// The offer pins as the accepted event's payload; read update_id from it.
 	var offer map[string]any
-	var payload struct {
-		Artifact string `json:"artifact"`
-	}
-	_ = payload
 	var payloadBytes []byte
 	getBytes("/internal/computers/events/payload?computer_id="+*computerID+"&artifact_digest="+offerDigest, token, &payloadBytes)
 	if err := json.Unmarshal(payloadBytes, &offer); err != nil {
@@ -124,19 +146,19 @@ func main() {
 	})
 	event := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: *computerID,
-		Sequence:      head.Sequence + 1, PreviousHead: head.CanonicalEventHead,
+		Sequence: head.Sequence + 1, PreviousHead: head.CanonicalEventHead,
 		EventKind:      computerevent.EventMaterializationFailed,
 		OccurredAt:     time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: "platform-update-failed-" + updateID,
 		ActorProfile:   "management", AuthorityRef: "guest-core:choir-updater",
-		PrivacyClass:                    "owner",
-		ProposedEffectRef:               offerDigest,
-		DecisionRef:                     head.PendingTransitionRef,
-		ReducerVersion:                  computerevent.ReducerVersionV1,
-		ExpectedDesiredEventHead:        head.DesiredEventHead,
-		ExpectedEffectiveEventHead:      head.EffectiveEventHead,
-		ExpectedPendingTransitionRef:    head.PendingTransitionRef,
-		ExpectedDesiredStateCommitment:  head.DesiredStateCommitment,
+		PrivacyClass:                     "owner",
+		ProposedEffectRef:                offerDigest,
+		DecisionRef:                      head.PendingTransitionRef,
+		ReducerVersion:                   computerevent.ReducerVersionV1,
+		ExpectedDesiredEventHead:         head.DesiredEventHead,
+		ExpectedEffectiveEventHead:       head.EffectiveEventHead,
+		ExpectedPendingTransitionRef:     head.PendingTransitionRef,
+		ExpectedDesiredStateCommitment:   head.DesiredStateCommitment,
 		ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 	}
 	input := computerevent.TransitionInput{RestoredPriorEffective: true}
@@ -204,13 +226,13 @@ func main() {
 	var after computerevent.Head
 	get("/internal/computers/events/head?computer_id="+*computerID, token, &after)
 	out, _ := json.MarshalIndent(map[string]any{
-		"discharged_update":      updateID,
-		"failed_event_digest":    digest,
-		"pending_before":         head.PendingTransitionRef,
-		"pending_after":          after.PendingTransitionRef,
-		"canonical_head_before":  head.CanonicalEventHead,
-		"canonical_head_after":   after.CanonicalEventHead,
-		"desired_head_after":     after.DesiredEventHead,
+		"discharged_update":     updateID,
+		"failed_event_digest":   digest,
+		"pending_before":        head.PendingTransitionRef,
+		"pending_after":         after.PendingTransitionRef,
+		"canonical_head_before": head.CanonicalEventHead,
+		"canonical_head_after":  after.CanonicalEventHead,
+		"desired_head_after":    after.DesiredEventHead,
 	}, "", "  ")
 	fmt.Println(string(out))
 	if after.PendingTransitionRef != "" {
@@ -218,11 +240,19 @@ func main() {
 	}
 }
 
-func fatal(format string, args ...any) { fmt.Fprintf(os.Stderr, "discharge: "+format+"\n", args...); os.Exit(1) }
+func fatal(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "discharge: "+format+"\n", args...)
+	os.Exit(1)
+}
 
 func do(req *http.Request, token string) *http.Response {
-	req.Header.Set("Authorization", "Bearer "+token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	req.Header.Set("X-Internal-Caller", *internalHead)
+	if *owner != "" {
+		req.Header.Set("X-Authenticated-User", *owner)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fatal("http %s: %v", req.URL, err)
@@ -251,17 +281,11 @@ func getBytes(path, token string, out *[]byte) {
 	if resp.StatusCode != http.StatusOK {
 		fatal("GET %s: %d %s", path, resp.StatusCode, b)
 	}
-	// The payload endpoint returns {artifact_base64} or raw; try json first.
 	var wrapped struct {
 		PayloadBase64 string `json:"payload_base64"`
-		Payload       string `json:"payload"`
 	}
-	if json.Unmarshal(b, &wrapped) == nil && (wrapped.PayloadBase64 != "" || wrapped.Payload != "") {
-		raw := wrapped.PayloadBase64
-		if raw == "" {
-			raw = wrapped.Payload
-		}
-		dec, err := base64.StdEncoding.DecodeString(raw)
+	if json.Unmarshal(b, &wrapped) == nil && wrapped.PayloadBase64 != "" {
+		dec, err := base64.RawStdEncoding.DecodeString(wrapped.PayloadBase64)
 		if err == nil {
 			*out = dec
 			return
@@ -271,7 +295,7 @@ func getBytes(path, token string, out *[]byte) {
 }
 
 type pinResult struct {
-	ArtifactDigest string               `json:"artifact_digest"`
+	ArtifactDigest string                `json:"artifact_digest"`
 	Receipt        computerevent.Receipt `json:"receipt"`
 }
 

@@ -18,7 +18,10 @@ MANIFEST=/var/lib/go-choir/guest/guest-image-manifest
 STOREDISK=/var/lib/go-choir/guest/storedisk.erofs
 SRC=/opt/go-choir
 S2_COMMIT="${S2_COMMIT:-$(git -C "$SRC" rev-parse HEAD)}"
-PRED_COMMIT="2f0e2cac9947ab2ed009008a7acbaf31d68a9095"
+# PRED_COMMIT must name a release built against the SAME base manifest the
+# guest is booted on — set it explicitly per run (it is the release the
+# rollback leg applies), not a constant.
+PRED_COMMIT="${PRED_COMMIT:-}"
 REL_ROOT=/var/lib/go-choir/builder/releases
 IC=(-H 'X-Internal-Caller: true')
 NOW=$(date -u +%Y%m%dT%H%M%SZ)
@@ -42,7 +45,8 @@ wait_served(){ local want="$1" n=0; while [ $n -lt 90 ]; do c=$(served_commit); 
 wait_healthy(){ local n=0; while [ $n -lt 90 ]; do s=$(guest_health | jq -r '.status' 2>/dev/null); [ "$s" = "ready" ] || [ "$s" = "ok" ] && return 0; sleep 5; n=$((n+1)); done; return 1; }
 
 build_release(){
-  local commit="$1" out="$REL_ROOT/$commit/out"
+  local commit="$1"
+  local out="$REL_ROOT/$commit/out"
   if [ ! -f "$out/app-layer-closure.nar" ]; then
     git -C "$SRC" fetch -q origin "$commit" 2>/dev/null || true
     "$BUILDER" --installable '.#autoputer' --source-dir "$SRC" \
@@ -92,6 +96,7 @@ pre)
     '{fc_pid:$fc,boot_id:$boot,canonical_head:$head,route_generation:$gen,served_commit:$served,epoch:$epoch}')"
   ;;
 neg)
+  [ -n "$PRED_COMMIT" ] || { echo "PRED_COMMIT required (release built against the booted base)"; exit 2; }
   receipt="$REL_ROOT/$PRED_COMMIT/out/builder-receipt.json"
   case "$2" in
     base-digest)      over='{"base_image_manifest_digest":"0000000000000000000000000000000000000000000000000000000000000000"}' ;;
@@ -109,9 +114,15 @@ neg)
   if [ -z "$sig" ]; then note "neg-$2" "$(printf '%s' "$offer" | jq -c '{mint_refused:.}')"; exit 3; fi
   resp=$(printf '%s' "$(jq -nc --argjson o "$offer" '{offer:$o}')" | push)
   sleep 10
-  post=$(jlog --arg g "$(route_gen)" --arg h "$(canonical_head)" --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" '{route_gen:$g,head:$h,served:$s,boot:$b,fc:$f}')
+  post=$(jlog --arg g "$(route_gen)" --arg h "$(canonical_head)" --arg p "$(pending_ref)" --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" '{route_gen:$g,head:$h,pending:$p,served:$s,boot:$b,fc:$f}')
   tail_kinds=$(tape_kinds | tail -5 | tr '\n' ' ')
-  note "neg-$2" "$(jlog --argjson pre "$pre" --argjson post "$post" --arg resp "${resp:0:600}" --arg tape "$tail_kinds" '{pre:$pre,post:$post,push_response:$resp,tape_tail:$tape}')"
+  # Post-fix contract: a pre-mutation refusal must discharge the pending
+  # transition — pending empty and materialization_failed on the tail.
+  pend=$(printf '%s' "$post" | jq -r .pending)
+  discharged=false
+  if [ -z "$pend" ] || [ "$pend" = "null" ]; then discharged=true; fi
+  note "neg-$2" "$(jlog --argjson pre "$pre" --argjson post "$post" --arg resp "${resp:0:600}" --arg tape "$tail_kinds" --argjson disc "$discharged" '{pre:$pre,post:$post,push_response:$resp,tape_tail:$tape,discharged:$disc}')"
+  [ "$discharged" = "true" ] || { echo "neg-$2: pending transition not discharged"; exit 5; }
   ;;
 r2)
   build_release "$S2_COMMIT" || { note r2 '{"error":"build failed"}'; exit 4; }
@@ -156,6 +167,7 @@ PY
   note panic "$(jlog --arg s "$(served_commit)" --arg want "$pre_commit" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg pc "$PCOMMIT" --arg con "$console" '{served:$s,restored:$want,boot:$b,fc:$f,panic_commit:$pc,console_tail:$con}')"
   ;;
 rollback)
+  [ -n "$PRED_COMMIT" ] || { echo "PRED_COMMIT required (release built against the booted base)"; exit 2; }
   receipt="$REL_ROOT/$PRED_COMMIT/out/builder-receipt.json"
   req=$(mk_offer "$receipt" "s2acc-rb-${NOW}" '{}')
   offer=$(printf '%s' "$req" | mint)

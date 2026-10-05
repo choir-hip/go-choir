@@ -260,7 +260,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	resolver := updaterReceiptKeyResolver{ref: ref, key: publicKey}
 	if applyErr != nil {
 		if result.RecoveryReceipt != nil && result.RecoveryReceipt.Verify(resolver) == nil {
-			return report, rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, result, applyErr)
+			return report, rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, result, applyErr, true)
 		}
 		if result.Outcome == "" {
 			// Refused before any mutation (base/compat/provenance/
@@ -270,7 +270,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 			// later offer wedges on ErrPlatformUpdateStaleHead. A mutated
 			// then unrestored failure keeps the wedge: refusing new
 			// updates while the effective state is unknown is fail-closed.
-			return report, rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, result, applyErr)
+			return report, rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, result, applyErr, false)
 		}
 		return report, fmt.Errorf("platform update: apply failed: %w", applyErr)
 	}
@@ -683,7 +683,7 @@ func (rt *Runtime) fetchRefPayload(ctx context.Context, computerID string, file 
 // recordPlatformUpdateFailed commits a materialization_failed event when the
 // updater restored the prior release — the pending transition resolves back
 // to the effective state, keeping the tape auditable.
-func (rt *Runtime) recordPlatformUpdateFailed(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, offerDigest, acceptedDigest string, result updater.ApplyResult, cause error) error {
+func (rt *Runtime) recordPlatformUpdateFailed(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, offerDigest, acceptedDigest string, result updater.ApplyResult, cause error, restored bool) error {
 	failedKey := platformUpdateIdempotencyKey("failed", offer.UpdateID)
 	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, offer.ComputerID, failedKey); lookupErr != nil {
 		return lookupErr
@@ -711,7 +711,10 @@ func (rt *Runtime) recordPlatformUpdateFailed(ctx context.Context, offer selfdev
 	if _, _, err := rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{RestoredPriorEffective: true}, resultPayload, "application/vnd.choir.platform-update-result+json", "owner"); err != nil {
 		return fmt.Errorf("platform update: failed event refused: %w", err)
 	}
-	return fmt.Errorf("platform update: apply failed and prior release was restored: %w", cause)
+	if restored {
+		return fmt.Errorf("platform update: apply failed and prior release was restored: %w", cause)
+	}
+	return fmt.Errorf("platform update: apply refused before mutation: %w", cause)
 }
 
 // HandleInternalPlatformUpdate serves POST /internal/runtime/platform-update —
