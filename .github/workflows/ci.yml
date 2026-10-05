@@ -1507,8 +1507,7 @@ jobs:
                 app_layer_failed=0
                 declare -A pushed_users=()
                 for record in "${app_layer_targets[@]}"; do
-                  IFS=$'\t' read -r t_user t_computer t_vm t_epoch <<< "$record"
-                  t_realization="${t_vm}-epoch-${t_epoch}"
+                  IFS=$'\t' read -r t_user t_computer t_vm t_epoch_seed <<< "$record"
                   # Guest canonical head over corpusd (the apply's base binding).
                   t_head=$(curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${t_user}" \
                     "http://127.0.0.1:8086/internal/computers/events/head?computer_id=${t_computer}" 2>/dev/null | jq -r '.canonical_event_head // empty' || true)
@@ -1517,41 +1516,68 @@ jobs:
                     app_layer_failed=$((app_layer_failed + 1))
                     continue
                   fi
-                  t_update="app-layer-${DEPLOY_COMMIT:0:12}-$(date +%s)-${t_vm:0:12}"
-                  mint_payload=$(jq -n \
-                    --arg computer_id "$t_computer" \
-                    --arg update_id "$t_update" \
-                    --arg realization_id "$t_realization" \
-                    --arg base_event_head "$t_head" \
-                    --arg expires_at "$(date -u -d '+30 minutes' +%Y-%m-%dT%H:%M:%SZ)" \
-                    --arg marker "app-layer-${DEPLOY_COMMIT:0:12}" \
-                    --arg code_commit "$code_commit" \
-                    --arg base_manifest_digest "$base_manifest_sha" \
-                    --arg closure_digest "$nar_sha" \
-                    --arg entrypoint "$entrypoint" \
-                    --argjson schema_version "$schema_version" \
-                    --arg base_commit "$base_commit" \
-                    --arg receipt_digest "$receipt_sha" \
-                    --arg nar_sha "$nar_sha" \
-                    --arg verifier_ref "$(printf 'verify-%s' "$t_update" | sha256sum | awk '{print $1}')" \
-                    '{computer_id:$computer_id, update_id:$update_id, realization_id:$realization_id, base_event_head:$base_event_head, expires_at:$expires_at, marker:$marker, code_commit:$code_commit, base_image_manifest_digest:$base_manifest_digest, closure_digest:$closure_digest, layering_entrypoint:$entrypoint, store_schema_version:$schema_version, base_commit:$base_commit, builder_receipt_digest:$receipt_digest, files:[{path:"closure.nar", mode:420, ref:("artifact+sha256://" + $nar_sha + "/sha256/platform-update/" + $nar_sha)}], verifier_refs:[$verifier_ref], divergence_status:"tracking", platform_follow_policy:"auto"}')
-                  offer=$(curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" \
-                    --data-binary "$mint_payload" \
-                    "http://127.0.0.1:8086/internal/computers/platform-updates/offer" || true)
-                  if ! echo "$offer" | jq -e '.authorization.signature' >/dev/null 2>&1; then
-                    echo "    ${t_vm}: offer mint refused: ${offer:0:400}" >&2
+                  # The realization fence is strict: a hibernate+resume between
+                  # the ownership list and the push makes a minted offer stale.
+                  # Re-resolve the epoch per attempt and retry the mint+push
+                  # once on a refusal (bounded: one retry, then skip).
+                  t_attempt=0
+                  t_pushed=false
+                  while [ "$t_attempt" -lt 2 ] && [ "$t_pushed" != "true" ]; do
+                    t_attempt=$((t_attempt + 1))
+                    t_epoch=$(printf '%s' "$(curl -fsS -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list 2>/dev/null)" \
+                      | jq -r --arg vm "$t_vm" '.ownerships[] | select(.vm_id == $vm) | .epoch' 2>/dev/null || true)
+                    t_epoch=${t_epoch:-$t_epoch_seed}
+                    if [ -z "$t_epoch" ]; then
+                      echo "    ${t_vm}: epoch unavailable at mint time; skipping"
+                      break
+                    fi
+                    t_realization="${t_vm}-epoch-${t_epoch}"
+                    t_update="app-layer-${DEPLOY_COMMIT:0:12}-$(date +%s)-${t_vm:0:12}"
+                    mint_payload=$(jq -n \
+                      --arg computer_id "$t_computer" \
+                      --arg update_id "$t_update" \
+                      --arg realization_id "$t_realization" \
+                      --arg base_event_head "$t_head" \
+                      --arg expires_at "$(date -u -d '+4 minutes' +%Y-%m-%dT%H:%M:%SZ)" \
+                      --arg marker "app-layer-${DEPLOY_COMMIT:0:12}" \
+                      --arg code_commit "$code_commit" \
+                      --arg base_manifest_digest "$base_manifest_sha" \
+                      --arg closure_digest "$nar_sha" \
+                      --arg entrypoint "$entrypoint" \
+                      --argjson schema_version "$schema_version" \
+                      --arg base_commit "$base_commit" \
+                      --arg receipt_digest "$receipt_sha" \
+                      --arg nar_sha "$nar_sha" \
+                      --arg verifier_ref "$(printf 'verify-%s' "$t_update" | sha256sum | awk '{print $1}')" \
+                      '{computer_id:$computer_id, update_id:$update_id, realization_id:$realization_id, base_event_head:$base_event_head, expires_at:$expires_at, marker:$marker, code_commit:$code_commit, base_image_manifest_digest:$base_manifest_digest, closure_digest:$closure_digest, layering_entrypoint:$entrypoint, store_schema_version:$schema_version, base_commit:$base_commit, builder_receipt_digest:$receipt_digest, files:[{path:"closure.nar", mode:420, ref:("artifact+sha256://" + $nar_sha + "/sha256/platform-update/" + $nar_sha)}], verifier_refs:[$verifier_ref], divergence_status:"tracking", platform_follow_policy:"auto"}')
+                    offer=$(curl -sS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" \
+                      --data-binary "$mint_payload" \
+                      "http://127.0.0.1:8086/internal/computers/platform-updates/offer" || true)
+                    if ! echo "$offer" | jq -e '.authorization.signature' >/dev/null 2>&1; then
+                      echo "    ${t_vm}: offer mint refused (attempt ${t_attempt}): ${offer:0:400}" >&2
+                      break
+                    fi
+                    # Push through the autoputer proxy; the guest restarts
+                    # mid-apply, so the dead response is expected - the route
+                    # slot is the oracle. A refusal body (the guest-side
+                    # realization/base/compat fence) is retried once with a
+                    # fresh epoch, then skipped.
+                    t_push=$(curl -sS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" \
+                      --data-binary "$(jq -n --argjson offer "$offer" '{offer:$offer}')" \
+                      "http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${t_user}/internal/runtime/platform-update?desktop=primary" 2>/dev/null || true)
+                    echo "    ${t_vm}: push response (attempt ${t_attempt}): ${t_push:0:200}"
+                    if echo "$t_push" | grep -qiE '"error"|refused|rejected'; then
+                      echo "    ${t_vm}: push refused; retrying with fresh realization" >&2
+                      continue
+                    fi
+                    t_pushed=true
+                  done
+                  if [ "$t_pushed" = "true" ]; then
+                    pushed_users[$t_computer]=$t_user
+                    app_layer_pushed=$((app_layer_pushed + 1))
+                  else
                     app_layer_failed=$((app_layer_failed + 1))
-                    continue
                   fi
-                  # Push through the autoputer proxy; the guest restarts
-                  # mid-apply, so the dead response is expected - the route
-                  # slot is the oracle.
-                  t_push=$(curl -sS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" \
-                    --data-binary "$(jq -n --argjson offer "$offer" '{offer:$offer}')" \
-                    "http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${t_user}/internal/runtime/platform-update?desktop=primary" 2>/dev/null || true)
-                  echo "    ${t_vm}: push response: ${t_push:0:200}"
-                  pushed_users[$t_computer]=$t_user
-                  app_layer_pushed=$((app_layer_pushed + 1))
                 done
                 # Time-to-healthy: poll every pushed computer's guest health
                 # through the autoputer proxy; the apply's own restart makes

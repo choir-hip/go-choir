@@ -70,13 +70,23 @@ manually on `computer-6450a253b8b6ebc0866471973694f5be`:
   committed chain is skipped silently. Whether the deploy should bootstrap-chain
   idle targets (or whether head-less computers are out of scope for app-layer)
   is an open S2-g/S0 contract question — bootstrap-chain is owner-authorized,
-  so auto-minting it from CI needs an authority decision.
+  so auto-minting it from CI needs an authority decision. 2026-10-05
+  acceptance run: vm-7bbcf744's head was bootstrapped by the manual proof, so
+  the gate does not currently skip it.
 - `offer binds a different realization` is a correctness gate (good), but the
   CI reads `epoch` from the ownership list once; a hibernate+resume mid-push
-  makes the mint stale. Re-reading realization at push time (or treating a
-  realization change as retryable) is unaddressed.
-- `candidate-fleet-*` ownerships fail `computer event capability refused` — the
-  deploy can't mint an offer for them without a per-computer capability.
+  makes the mint stale. FIXED 2026-10-05 (ci.yml, same commit family): the
+  epoch is re-resolved per mint attempt and a push refusal retries the
+  mint+push once with a fresh realization, then skips.
+- NEW GATE (found 2026-10-05 by the acceptance probe): `expires_at` must be
+  ≤5 minutes out (`selfdevprotocol/platform_update.go:134`), but the CI mint
+  sent `+30 minutes` — every CI-minted offer would have been refused with
+  `short canonical expiry is required`. Never observed because a3da83c4's
+  deploy was ci.yml-only and skipped. Fixed in ci.yml (expiry now +4m).
+- `candidate-fleet-*` ownerships fail `computer event capability refused` —
+  the deploy can't mint an offer for them without a per-computer capability.
+  Still open; fleet owners need event:read credentialing or an explicit
+  exclusion for non-owned fleet computers.
 
 ## Mutation class
 

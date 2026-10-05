@@ -516,3 +516,57 @@ func mustRouteSlotID(t *testing.T) string {
 	}
 	return slotID
 }
+
+// TestPlatformUpdateRefusalDischargesPendingTransition proves a pre-mutation
+// refusal (staged and fenced, never activated) still commits
+// materialization_failed so the pending transition resolves — the wedge seen
+// on staging 2026-10-05 where one refused apply left every later offer
+// permanently stale.
+func TestPlatformUpdateRefusalDischargesPendingTransition(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-platform-update-refuse-discharge")
+	ctx := context.Background()
+
+	offer := fx.mintPlatformUpdateOffer(t, "update-refuse", "<html>refuse</html>", fx.currentHead(t))
+	// A release whose declared closure digest cannot resolve at apply time is
+	// fenced by the updater before any mutation — a pre-mutation refusal
+	// inside a still-validly-signed offer (re-signed like the mint).
+	offer.Manifest.ClosureDigest = strings.Repeat("f", 64)
+	offerDigest, err := offer.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := selfdevprotocol.NewAuthorityReceipt(
+		selfdevprotocol.ReceiptKindPlatformUpdate, fx.computerID,
+		offerDigest, offerDigest, "corpusd",
+		computerevent.SigningKey{
+			SignerRef:  computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "authority-test"},
+			PrivateKey: fx.platformKey,
+		}, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer.Authorization = receipt
+	if _, err := fx.rt.ApplyPlatformUpdate(ctx, offer); err == nil {
+		t.Fatal("tampered release accepted, want refusal")
+	}
+	head, err := fx.store.Head(ctx, fx.computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v", err)
+	}
+	if head.PendingTransitionRef != "" {
+		t.Fatalf("pre-mutation refusal left pending transition %s — wedge", head.PendingTransitionRef)
+	}
+	if fx.countEventKinds()[computerevent.EventMaterializationFailed] != 1 {
+		t.Fatal("materialization_failed not committed for refused apply")
+	}
+
+	// The next offer binds the post-refusal head and applies cleanly.
+	offer2 := fx.mintPlatformUpdateOffer(t, "update-after-refuse", "<html>after</html>", fx.currentHead(t))
+	report, err := fx.rt.ApplyPlatformUpdate(ctx, offer2)
+	if err != nil {
+		t.Fatalf("post-refusal offer wedged: %v", err)
+	}
+	if report.ReleaseDigest == "" {
+		t.Fatal("post-refusal apply did not land")
+	}
+}
