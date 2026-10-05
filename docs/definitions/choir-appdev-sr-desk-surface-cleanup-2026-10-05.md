@@ -126,9 +126,31 @@ boundaries:
 now:
   status: working
   slice: >-
-    Not started. First move: a deletion-citers grep for processor/reconciler
-    (types, tables, roles, overlays, CI, scripts, docs) and for each typed
-    research tool, producing the parity checklist before any deletion.
+    Move 1 landed 2026-10-05 (8701668d): prompt rewrite + sealed
+    {desk_go_eval} registry in one commit. Parity checklist below —
+    every deleted typed tool maps to an existing choir.* egress verb.
+    Processor/reconciler end-to-end deletion in flight (delegated cut).
+    Deletion-citers grep complete: processor/reconciler citers are live
+    surfaces (profiles, policies, prompts, overlays, dispatch, spawn
+    list, handoff path) vs frozen-history recognition (vocabmigrate
+    sets, computerevent/decode.go, lifecycle admission strings,
+    wirepublish/eligibility kind checks, wire/processorkey, sourceapi
+    request types) — the latter preserved.
+    Parity checklist (typed tool -> choir.* verb):
+    web_search -> WebSearch; source_search -> SourceSearch;
+    fetch_url -> FetchURL; import_url_content -> ImportURL;
+    import_document_content -> ImportDocument;
+    search_wire_corpus -> SearchWireCorpus;
+    read_content_item -> ReadContentItem;
+    list_content_item_selectors -> ListContentItemSelectors;
+    read_content_item_selector -> ReadContentItemSelector;
+    save_evidence -> SaveEvidence; read_evidence -> ReadEvidence;
+    list_evidence -> ListEvidence; get_run_memory_entry -> RunMemoryEntry.
+    No tool exists without a verb; egress ledger shared (same budget).
+    M1-vs-S0m disposition: M1 (rlm-cutover phase 2, the deferred
+    deletion) is SR by absorption — this station is its continuation;
+    S0m's channel-mail retirement is honored (prompt teaches Report,
+    not mail; update_coagent gone).
   source_ref: main@9e0fe4d
   deploy_identity: unknown
   candidate:
@@ -168,9 +190,10 @@ now:
     cannot follow; land the prompt rewrite and the registry change in the
     same deploy.
   next_action: >-
-    Deletion-citers grep -> parity checklist -> check M1 against S0m ->
-    prompt rewrite + registry deletion in one commit -> processor/reconciler
-    deletion -> deployed acceptance.
+    Processor/reconciler deletion landing -> deployed acceptance (schema
+    fetch {desk_go_eval}; composed-prompt grep; cell multi-search loop;
+    egress-budget refusal). Done: citers grep, parity checklist,
+    M1-vs-S0m disposition, prompt rewrite + registry seal (8701668d).
 
 receipts: []
 ---
