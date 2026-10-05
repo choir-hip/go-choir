@@ -26,17 +26,24 @@ Also, the orphan classifier only accepted `vm-*` dir names; `candidate-fleet-*`
 and `candidate-control-*` dirs (the probe-era fleet) were never classified as
 orphans even if their ownership was removed.
 
-## Finding 2 — the "dead" fleet computer is the owner computer (must preserve)
+## Finding 2 — the "dead" fleet computer is the live owner computer (must preserve)
 
-`candidate-fleet-e15cb89f25d963c220319b7b` shows `state=active` in ownership but
-its console logs are 5 weeks stale and its `computer_url` is dead. It is **not**
-a zombie to reap: its `computer_id` is `computer-03335285…`, the owner guest
-computer from S2's `start.deploy_identity`, and its `data.img` (31G) is the
-owner computer's persistent store. The `state=active` is a stale mark — the
-deploy's app-layer offer-mint attempt bumped `last_active_at` without real VM
-activity. `reconcileLookupReadiness` only degrades on *lookup*; an ops mint
-attempt does not degrade it. This is a stale-active reconciliation gap, not a
-reaper gap — and it must NOT be reclaimed (must_preserve).
+`candidate-fleet-e15cb89f25d963c220319b7b` shows `state=active`,
+`last_active=2026-10-04T12:53`, but its console logs were 5 weeks stale and
+its `computer_url` initially looked dead. It is **not** a zombie to reap: its
+`computer_id` is `computer-03335285…`, the owner guest computer from S2's
+`start.deploy_identity`, and its `data.img` (31G) is the owner computer's
+persistent store. Verified live 2026-10-05: `GET /health` on
+`10.200.206.2:8085` returns 200 and its Firecracker process is running.
+
+The stale *appearance* had two substrate causes: the deploy's active-VM
+refresh leg boots the canary and `transitionVM` marks it `active` (so
+`last_active` refreshes on a computer that was idle, not dead), and there
+was no per-VM serial capture to show it was alive — the `console-b14-*.log`
+tail was 5 weeks old because no serial sink existed (S0-2 fix). The
+stale-active *reconciliation* residual (an ops mint/refresh bumps
+`last_active` without a health gate) is a separate gap, not a reaper target
+— and this computer must_preserve regardless.
 
 ## Finding 3 — platform-artifacts GC does not exist (the real fire)
 
