@@ -273,28 +273,50 @@ now:
     fix + the 4 GiB ceiling on the owner computer once it fits;
     (4) CI deploy gating against deployed identity.
   slice_1_progress_2026_10_05: >-
-    Storage lifecycle mostly built. Dead-dir reaper: orphan-auth bug fixed
-    (orphans had empty user/desktop so authorizeLifecycleRoute always
-    refused) + candidate-* dir match added (8a322e57). Platform-artifacts
-    GC: new internal/platform/artifact_gc.go — reachability sweep over
+    Storage lifecycle landed + deployed. Dead-dir reaper: orphan-auth bug
+    fixed (orphans had empty user/desktop so authorizeLifecycleRoute always
+    refused) + candidate-* dir match added (8a322e57, deployed). Platform-
+    artifacts GC: internal/platform/artifact_gc.go — reachability sweep over
     file-cas-chunks/roots, projection-base, platform-update, og with
     DB-derived live sets + dry-run + grace + bounded deletes; periodic
-    corpusd GCRunner (dry-run) + on-demand /internal/platform/artifact-gc
-    endpoint for the deployed-proof report. NOT yet deployed. The event
-    tape namespaces are a chain-retention slice, not refcount. The
-    candidate-fleet-e15cb89f "zombie" is the owner computer (must_preserve)
-    — a stale-active reconciliation gap, documented.
+    corpusd GCRunner + on-demand /internal/platform/artifact-gc endpoint
+    (f20f3a51, DEPLOYED 2026-10-05 — corpusd commit f20f3a51). Deployed
+    dry-run proof in flight against the live store; the report lands in
+    docs/evidence/. The event-tape namespaces are a chain-retention slice.
+    candidate-fleet-e15cb89f is the LIVE owner computer (health 200,
+    firecracker running) — not a zombie; the stale appearance was absent
+    serial capture (fixed in slice 2) + a stale-active reconciliation gap
+    where the deploy refresh boots the canary and marks it active.
+  slice_2_progress_2026_10_05: >-
+    Guest observability landed (e8137d03). Root cause: buildFirecrackerConfig
+    emits no logger/log_fifo/serial_out_path; guest console=ttyS0 output went
+    to FC's stdout, wired to vmctl's shared os.Stdout (all VMs mixed into
+    vmctl's journald, unindexed). FC 1.15.1 accepts serial_out_path only via
+    its API socket; --no-api skips it. Fix: cmd.Stdout is now a bounded
+    rotating writer at <StateDir>/<vmID>/console.log (1 MiB active + 4
+    generations, 5 MiB cap) in the shared launchFirecracker path — covers
+    cold boot, resume, recover, refresh. Unit-tested. Deployed proof pending
+    the next VM launch on the new vmctl. Residual: ReattachVM (vmctl restart)
+    orphans the serial fd until next launch seam.
 
 receipts:
   - id: s0-1-storage-lifecycle-2026-10-05
     kind: station_slice
-    status: in_flight
-    commits: ['8a322e57', pending]
+    status: deployed_pending_proof
+    commits: ['8a322e57', 'f20f3a51']
     summary: >-
       Dead-dir reaper correctness (orphan-auth + candidate-* match) and a
       platform-artifacts reachability GC (dry-run default, on-demand
-      endpoint). Deployed proof pending the next host deploy.
-
+      endpoint) — deployed, corpusd at f20f3a51. Deployed dry-run proof in
+      flight against the live store.
+  - id: s0-2-guest-observability-2026-10-05
+    kind: station_slice
+    status: landed
+    commits: ['e8137d03']
+    summary: >-
+      Per-VM rotated guest serial/console sink at <StateDir>/<vmID>/console.log
+      (1 MiB active + 4 generations) via child stdout capture in the shared
+      launchFirecracker path. Deployed proof pending next VM launch.
 ---
 
 # SO — Ops Substrate
