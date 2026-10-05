@@ -28,3 +28,14 @@ The mint-side reads corpusd's head; the apply-side reads the guest's head. Any C
 
 ## Rollback
 None needed (read-only diagnosis; the wedge-discharges are already on the tape).
+
+
+## Addendum: the 34041932 deploy half-landed (found 08:1x)
+
+CI run `37267655124` (`34041932`) **failed**: `nixos switch` returned status 4 on both attempts. The deploy still wrote the guest artifacts before the switch — `storedisk.erofs` and `guest-image-manifest` (`build_commit=34041932`, digest `3db37dfa…`) — while `/var/lib/go-choir/deploy-receipt.json` still reads `target_commit=6fcb05e5`.
+
+Consequence: for ~2.5 h staging was **split** — the guest booted a `34041932` base image while the last *switched* host/guest runtime pair was `6fcb05e5`. Every layered-apply attempt in that window reasoned about a pairing that never existed as a coherent deploy. The base-join gate stayed internally consistent (the offer's `base_image_manifest_digest` is the sha256 of the host manifest file, which the guest also read), so the split did **not** present as a base-join refusal; it presented only as an unexplained daemon refusal. That is why source-tracing every gate could not converge.
+
+**Hazard class:** a deploy that writes artifacts and then fails its switch leaves the environment split, with no receipt that says so. The Landing Loop's "verify staging commit identity" step reads the receipt, which here named the *older* commit while the guest image was the *newer* one.
+
+**Detection gap:** `deploy-receipt.json` should record the guest image `build_commit` and manifest digest independently of the switch outcome, and mark the switch result, so a later reader sees "artifacts=34041932, switched=false" instead of a stale success receipt. An acceptance run against a split environment is uninterpretable — it must be detected before probing, not inferred from refusals afterward.
