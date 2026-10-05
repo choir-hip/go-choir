@@ -66,3 +66,28 @@ Svelte title in `frontend/src/App.svelte`, if it renders into `dist`), or
 assert on the release's `$out/frontend` tree hash versus the base's at
 build time and serve that digest as the frontend identity. Either keeps the
 proof inside builder-produced, base-absent bytes.
+
+## Update 2026-10-05 ~13:00: base-absent-dependency leg is partially redundant
+
+Reading the S0b substrate decision
+(docs/problems/s2-builder-substrate-2026-10-04.md) against the leg text:
+the selected builder is the **host service**, whose "build environment" is
+the host nix store + network. "Disposal of the build environment" for a
+host-service builder means the release must resolve with no builder
+present at apply time — which is already the standing condition of every
+leg in this run: the guest updater replays `closure.nar` from the staged
+blob against the booted base's store paths, and the builder is never
+consulted during apply. Every base-digest/base-commit refusal in the
+10:27-10:29 legs already exercised "the builder cannot substitute a
+base-absent dependency," because the release carried only its own digest
+bindings and the guest refused them against the booted base.
+
+What the leg text additionally demands, and what is genuinely unproven, is
+narrower: **after a guest reboot** (projection rebuilt from replay, no
+in-memory state), present a release whose closure names a store path absent
+from the booted base and observe refusal before mutation. That is a
+~10-minute leg once the disposable is back: mint with a `closure_digest`
+whose nar is staged but whose entrypoint path is not in the base store
+list, reboot the guest, push, and read the refusal. It needs no new code —
+the `content-mutation` neg shape with a reboot inserted before the push.
+Left for the next session with a healthy disposable.
