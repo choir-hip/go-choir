@@ -539,6 +539,14 @@ in
         "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
         "CORPUSD_VMCTL_URL=http://127.0.0.1:8083"
+        # Platform-artifacts reachability GC: dry-run reporting by default so
+        # the live set can be observed before the storage lifecycle deletes.
+        # Active collection stays an explicit operation via the internal
+        # /internal/platform/artifact-gc endpoint (S0-1 storage lifecycle).
+        "PLATFORM_ARTIFACT_GC_MODE=dry-run"
+        "PLATFORM_ARTIFACT_GC_GRACE=30m"
+        "PLATFORM_ARTIFACT_GC_INTERVAL=1h"
+        "PLATFORM_ARTIFACT_GC_MAX_DELETES=10000"
       ];
     };
   };

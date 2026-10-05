@@ -21,6 +21,10 @@ type Config struct {
 	KeyEscrowKeyPath      string
 	KeyEscrowOperatorsRaw string
 	VmctlURL              string
+	ArtifactGCMode        string
+	ArtifactGCGrace       string
+	ArtifactGCInterval    string
+	ArtifactGCMaxDeletes  string
 }
 
 func LoadConfig() (*Config, error) {
@@ -33,6 +37,10 @@ func LoadConfig() (*Config, error) {
 		KeyEscrowKeyPath:      envOr("CHOIR_KEY_ESCROW_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "key-escrow-key")),
 		KeyEscrowOperatorsRaw: os.Getenv("CHOIR_KEY_ESCROW_OPERATORS"),
 		VmctlURL:              os.Getenv("CORPUSD_VMCTL_URL"),
+		ArtifactGCMode:        os.Getenv("PLATFORM_ARTIFACT_GC_MODE"),
+		ArtifactGCGrace:       os.Getenv("PLATFORM_ARTIFACT_GC_GRACE"),
+		ArtifactGCInterval:    os.Getenv("PLATFORM_ARTIFACT_GC_INTERVAL"),
+		ArtifactGCMaxDeletes:  os.Getenv("PLATFORM_ARTIFACT_GC_MAX_DELETES"),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

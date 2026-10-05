@@ -1,14 +1,15 @@
 package main
 
 import (
-	"log"
-	"time"
-
+	"context"
 	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
+	"log"
+	"strconv"
+	"time"
 )
 
 func main() {
@@ -38,6 +39,17 @@ func main() {
 	}()
 
 	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
+	// Periodic platform-artifacts reachability GC (dry-run unless explicitly
+	// activated). The on-demand endpoint /internal/platform/artifact-gc admits
+	// the same sweep on demand for the deployed-proof report.
+	gcGrace, _ := time.ParseDuration(cfg.ArtifactGCGrace)
+	gcInterval, _ := time.ParseDuration(cfg.ArtifactGCInterval)
+	gcMax, _ := strconv.Atoi(cfg.ArtifactGCMaxDeletes)
+	platform.NewGCRunner(svc, platform.ArtifactGCConfig{
+		Mode:       cfg.ArtifactGCMode,
+		Grace:      gcGrace,
+		MaxDeletes: gcMax,
+	}, gcInterval).Start(context.Background())
 	handler := platform.NewHandler(svc)
 	if cfg.VmctlURL != "" {
 		if err := handler.ConfigureGuestBinding(vmctl.NewClient(cfg.VmctlURL)); err != nil {

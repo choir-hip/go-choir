@@ -379,6 +379,32 @@ func (h *Handler) HandleInternalGetTextureRevision(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, rev)
 }
 
+// HandleArtifactGC runs one platform-artifacts reachability sweep on demand.
+// POST {"mode":"dry-run"|"active"} — internal only. Dry-run returns the
+// report without deleting; active applies the same reachability + grace and
+// deletes. Used to admit the storage lifecycle (observe the report, then
+// collect) without a second deploy.
+func (h *Handler) HandleArtifactGC(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if !trustedInternalCaller(r) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	var req ArtifactGCConfig
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+	report, err := h.service.RunArtifactGC(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/computers/credentials/exchange", h.HandleComputerCredentialExchange)
@@ -421,6 +447,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/texture/revisions/", h.HandleInternalGetTextureRevision)
 	s.HandleFunc("/internal/platform/texture/documents/", h.HandleInternalListTextureRevisions)
 	s.HandleFunc("/internal/platform/texture/documents", h.HandleInternalGetTextureDocument)
+	s.HandleFunc("/internal/platform/artifact-gc", h.HandleArtifactGC)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

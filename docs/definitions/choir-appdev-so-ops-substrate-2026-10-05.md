@@ -272,8 +272,29 @@ now:
     through vmctl; (3) declared shapes + memory receipt + the GC ordering
     fix + the 4 GiB ceiling on the owner computer once it fits;
     (4) CI deploy gating against deployed identity.
+  slice_1_progress_2026_10_05: >-
+    Storage lifecycle mostly built. Dead-dir reaper: orphan-auth bug fixed
+    (orphans had empty user/desktop so authorizeLifecycleRoute always
+    refused) + candidate-* dir match added (8a322e57). Platform-artifacts
+    GC: new internal/platform/artifact_gc.go — reachability sweep over
+    file-cas-chunks/roots, projection-base, platform-update, og with
+    DB-derived live sets + dry-run + grace + bounded deletes; periodic
+    corpusd GCRunner (dry-run) + on-demand /internal/platform/artifact-gc
+    endpoint for the deployed-proof report. NOT yet deployed. The event
+    tape namespaces are a chain-retention slice, not refcount. The
+    candidate-fleet-e15cb89f "zombie" is the owner computer (must_preserve)
+    — a stale-active reconciliation gap, documented.
 
-receipts: []
+receipts:
+  - id: s0-1-storage-lifecycle-2026-10-05
+    kind: station_slice
+    status: in_flight
+    commits: ['8a322e57', pending]
+    summary: >-
+      Dead-dir reaper correctness (orphan-auth + candidate-* match) and a
+      platform-artifacts reachability GC (dry-run default, on-demand
+      endpoint). Deployed proof pending the next host deploy.
+
 ---
 
 # SO — Ops Substrate
