@@ -106,14 +106,17 @@ note(){ jq -nc --arg leg "$1" --argjson d "${2:-null}" '{leg:$leg,at:(now|todate
 # release_dir resolves a release name to its base-keyed out dir, so every leg
 # reads the nar built against the CURRENT base manifest — never a stale nar
 # from a previous deploy. Synthetic dirs pass through for legs that manage
-# their own out dir (panic).
+# their own out dir (panic). A missing manifest is fatal: falling back to a
+# shared prefix would mix bases silently.
 release_dir(){
   local name="$1" basekey
   case "$name" in
     */*) printf '%s' "$REL_ROOT/$name"; return 0;;
   esac
+  [ -f "${MANIFEST:-}" ] || { echo "MANIFEST missing: $MANIFEST" >&2; return 1; }
   basekey="$(sha256sum "$MANIFEST" 2>/dev/null | awk '{print substr($1,1,12)}')"
-  printf '%s' "$REL_ROOT/${basekey:-nobase}-$name"
+  [ -n "$basekey" ] || { echo "MANIFEST digest failed: $MANIFEST" >&2; return 1; }
+  printf '%s' "$REL_ROOT/$basekey-$name"
 }
 
 case "${1:-all}" in
@@ -141,18 +144,37 @@ neg)
   req=$(mk_offer "$receipt" "s2neg-$2-${NOW}" "$over")
   offer=$(printf '%s' "$req" | mint)
   sig=$(printf '%s' "$offer" | jq -r '.authorization.signature // empty')
-  if [ -z "$sig" ]; then note "neg-$2" "$(printf '%s' "$offer" | jq -c '{mint_refused:.}')"; exit 3; fi
   resp=$(printf '%s' "$(jq -nc --argjson o "$offer" '{offer:$o}')" | push)
   sleep 10
   post=$(jlog --arg g "$(route_gen)" --arg h "$(canonical_head)" --arg p "$(pending_ref)" --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" '{route_gen:$g,head:$h,pending:$p,served:$s,boot:$b,fc:$f}')
   tail_kinds=$(tape_kinds | tail -5 | tr '\n' ' ')
   # Post-fix contract: a pre-mutation refusal must discharge the pending
   # transition — pending empty and materialization_failed on the tail.
+  # The refusal reason must name the expected gate (no eyeballing): each
+  # case declares its gate string, and the leg fails unless the push
+  # response contains it. Boot/fc/route pins must be unchanged.
+  case "$2" in
+    base-digest)      want_reason="does not match booted base";;
+    stale-head)       want_reason="base event head is stale";;
+    content-mutation) want_reason="closure.nar digest";;
+    provenance)       want_reason="code_commit";;
+    absent-entrypoint) want_reason="not materialized";;
+    base-commit)      want_reason="does not match booted base commit";;
+    schema-window)    want_reason="store schema";;
+  esac
   pend=$(printf '%s' "$post" | jq -r .pending)
   discharged=false
   if [ -z "$pend" ] || [ "$pend" = "null" ]; then discharged=true; fi
-  note "neg-$2" "$(jlog --argjson pre "$pre" --argjson post "$post" --arg resp "${resp:0:600}" --arg tape "$tail_kinds" --argjson disc "$discharged" '{pre:$pre,post:$post,push_response:$resp,tape_tail:$tape,discharged:$disc}')"
+  reason_ok=false
+  if printf '%s' "$resp" | grep -qF "$want_reason"; then reason_ok=true; fi
+  pins_ok=false
+  if [ "$(printf '%s' "$post" | jq -r .boot)" = "$(printf '%s' "$pre" | jq -r .boot)" ] && \
+     [ "$(printf '%s' "$post" | jq -r .fc)" = "$(printf '%s' "$pre" | jq -r .fc)" ] && \
+     [ "$(printf '%s' "$post" | jq -r .served)" = "$(printf '%s' "$pre" | jq -r .served)" ]; then pins_ok=true; fi
+  note "neg-$2" "$(jlog --argjson pre "$pre" --argjson post "$post" --arg resp "${resp:0:1200}" --arg tape "$tail_kinds" --argjson disc "$discharged" --argjson rok "$reason_ok" --argjson pok "$pins_ok" --arg want "$want_reason" '{pre:$pre,post:$post,push_response:$resp,tape_tail:$tape,discharged:$disc,reason_ok:$rok,pins_ok:$pok,want_reason:$want}')"
   [ "$discharged" = "true" ] || { echo "neg-$2: pending transition not discharged"; exit 5; }
+  [ "$reason_ok" = "true" ] || { echo "neg-$2: refusal reason missing (want: $want_reason)"; exit 6; }
+  [ "$pins_ok" = "true" ] || { echo "neg-$2: boot/fc/served pins moved"; exit 7; }
   ;;
 apply)
   # Generic apply leg: apply a release from an arbitrary release dir whose
