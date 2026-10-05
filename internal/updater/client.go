@@ -342,8 +342,16 @@ func (c *Client) Apply(ctx context.Context, request ApplyRequest) (ApplyResult, 
 		var failed struct {
 			Result ApplyResult `json:"result"`
 			Error  string      `json:"error"`
+			Reason string      `json:"reason"`
 		}
 		if err := json.Unmarshal(raw, &failed); err == nil {
+			// Carry the daemon's computed gate message: it names which refusal
+			// gate fired (commitment, realization fence, base join, state
+			// compat, source trust, manifest verify, closure replay), and the
+			// guest's journal is not host-readable for disposables.
+			if reason := strings.TrimSpace(failed.Reason); reason != "" {
+				return failed.Result, fmt.Errorf("%w: %s: %s", ErrApplyRefused, failed.Error, reason)
+			}
 			return failed.Result, fmt.Errorf("%w: %s", ErrApplyRefused, failed.Error)
 		}
 		return ApplyResult{}, fmt.Errorf("%w: status %d", ErrApplyRefused, response.StatusCode)
