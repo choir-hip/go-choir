@@ -27,6 +27,7 @@ func main() {
 	commit := flag.String("commit", "", "repo commit the installable was built from")
 	sourceDir := flag.String("source-dir", "", "git checkout the installable is evaluated against; code_commit is derived from it (S2-c)")
 	sourcePatch := flag.String("source-patch", "", "unified-diff patch applied to a worktree at the base commit before build (S2-f)")
+	sourcePatchBase := flag.String("source-patch-base", "", "commit the source patch was authored against (required with -source-patch)")
 	resultLink := flag.String("result-link", "", "nix build result symlink path (default <out>/builder-result)")
 	flag.Parse()
 
@@ -37,14 +38,15 @@ func main() {
 	}
 
 	res, err := builder.Build(context.Background(), builder.Request{
-		Installable:       *installable,
-		ResultLink:        *resultLink,
-		SourceDir:         *sourceDir,
-		SourcePatch:       *sourcePatch,
-		BaseManifestPath:  *baseManifest,
-		BaseStoreDiskPath: *baseDisk,
-		OutDir:            *out,
-		CodeCommit:        *commit,
+		Installable:           *installable,
+		ResultLink:            *resultLink,
+		SourceDir:             *sourceDir,
+		SourcePatch:           *sourcePatch,
+		SourcePatchBaseCommit: *sourcePatchBase,
+		BaseManifestPath:      *baseManifest,
+		BaseStoreDiskPath:     *baseDisk,
+		OutDir:                *out,
+		CodeCommit:            *commit,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "choir-builder: %v\n", err)
