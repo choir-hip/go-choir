@@ -86,8 +86,9 @@ mk_offer(){
     --arg cd "$nar_sha" --arg ep "$ep" --argjson sv "$schema" --arg bc "$bc" \
     --arg rd "$rd" --arg ref "artifact+sha256://${nar_sha}/sha256/platform-update/${nar_sha}" \
     --arg vr "$(printf 'verify-%s' "$uid" | sha256sum | awk '{print $1}')" \
+    --arg spa "$(printf '%s' '<!doctype html><title>s2-layered</title><div id=app></div>' | base64 -w0)" \
     --argjson over "$over" \
-    '({computer_id:$cid,update_id:$uid,realization_id:$rid,base_event_head:$beh,expires_at:$exp,marker:$mk,code_commit:$cc,base_image_manifest_digest:$bmd,closure_digest:$cd,layering_entrypoint:$ep,store_schema_version:$sv,base_commit:$bc,builder_receipt_digest:$rd,files:[{path:"closure.nar",mode:420,ref:$ref}],verifier_refs:[$vr],divergence_status:"tracking",platform_follow_policy:"auto"} + $over)'
+    '({computer_id:$cid,update_id:$uid,realization_id:$rid,base_event_head:$beh,expires_at:$exp,marker:$mk,code_commit:$cc,base_image_manifest_digest:$bmd,closure_digest:$cd,layering_entrypoint:$ep,store_schema_version:$sv,base_commit:$bc,builder_receipt_digest:$rd,files:[{path:"closure.nar",mode:292,ref:$ref},{path:"frontend/index.html",mode:420,bytes:$spa}],verifier_refs:[$vr],divergence_status:"tracking",platform_follow_policy:"auto"} + $over)'
 }
 
 mint(){ curl -sS -X POST -H 'Content-Type: application/json' "${IC[@]}" --data-binary @- \
