@@ -121,3 +121,27 @@ a computer with no `current/` release. One-line shape: resolve expected
 per-computer before polling. Until then every deploy that refreshes a
 layered computer fails closed at this gate — which is how the marker
 deploy died despite switching cleanly.
+## Addendum 2026-10-05 ~16:30: restart loop burns 2 cores indefinitely, guest HTTP dead
+
+After the s2bfe patched-release apply (tape seq 139-141
+accepted/started/failed), the guest entered the same loop shape with a new
+signature: Firecracker at ~200% of one core sustained (1992 ticks/10s),
+guest TCP handshake succeeds but no HTTP byte is ever written (curl and raw
+socket both stall; autoputer-proxy times out in turn), console frozen since
+the 15:34 boot. The runtime never reaches its HTTP listener — the loop is
+*before* serve, not in request handling. Ping/ARP healthy, so the tap and
+guest net stack are up; only userspace above the network layer is wedged.
+
+Working hypothesis: the updater's recovery-restart path re-execs the new
+runtime on every boot-guard trip, and each exec replays the same failing
+materialization or health probe without advancing the journal — a livelock
+between `restorePrior`/`Restart` and the boot sweep, invisible because the
+serial sink dies ~16s post-boot and the daemon never logs its refusal
+reason to a host-readable surface. The 503-serving case (10:37) and this
+case (16:15) differ only in where the loop parks: behind a serving
+fallback vs before the listener starts.
+
+Next probe (needs a live disposable, not this one): cap the
+restart loop with a boot-guard trip counter that surfaces a host-readable
+receipt *before* the host kills the VM, and log the updater's per-attempt
+reason to `layering-diag.log` (the one host-readable guest file).
