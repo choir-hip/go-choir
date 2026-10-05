@@ -132,3 +132,23 @@ release contract), or the surface must serve something defined in its
 absence. The panel's "frontend-by-digest" leg then becomes: apply a
 frontend-carrying release (any 6fcb05e5 dir already staged proves the
 bytes exist; a fresh apply + `/` fetch shows them serving).
+
+## Update 2026-10-05 ~16:38: shape proven, discriminator specified
+
+Cold-booted the disposable (fresh resolve after the wedged FC was
+killed) and fetched `/` headlessly through an SSH tunnel: HTTP 200 with
+the staged minimal SPA bytes (`<title>s2-layered</title>`, `div#app`),
+JS-evaluated build markers all null. Record `frontend-shape-proof` in
+`s2-acceptance-20261005T163642Z.jsonl`.
+
+This establishes the serving *shape* — `current/frontend/index.html`
+from the staged release dir serves, not the base SPA and not a 503 —
+and simultaneously confirms the panel's objection: the served bytes are
+the harness-injected inline file, so this is staged-file serving, not
+builder-output-by-digest serving. The discriminator is now executable,
+not theoretical: the SAME fetch must return built-bundle bytes
+(`dataset.choirBuildCommit`, `window.__CHOIR_BUILD__`, or the
+`s2-frontend-marker` meta). The way to get them staged is a
+frontend-carrying apply of a release whose staged `frontend/index.html`
+is the built bundle — i.e. the `apply` leg with the release built from a
+commit whose `frontend/dist` differs from base, not the inline `$spa`.
