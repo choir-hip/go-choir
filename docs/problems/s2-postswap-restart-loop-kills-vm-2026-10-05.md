@@ -81,3 +81,20 @@ twice (release outcome correct, restore healthy, no guest loop on the
 re-run). What remains is one *quiet-environment* re-run that records fc
 pid + boot id + served commit before and after with no host kill in the
 window — not a code fix.
+
+## Closure 2026-10-05 ~13:24: clean rollback leg green — criterion 6 satisfied
+
+Re-ran the rollback leg in a quiet window (no deploy, no pressure-reclaim,
+vmctl healthy): `rb-push` 13:23:23 re-applying retained release `2811c779`
+under a fresh update id, then serving `2811c779` healthy with **same fc pid
+3123628 and same boot id 7f725ae1**. Tape seq 112–114
+accepted/started/applied (`s2acc-rb-20261005T132300Z`), no restart loop, no
+host kill. Record: `rollback-clean` row in
+`s2-acceptance-20261005T132300Z.jsonl` (the leg's own note raced the
+restart, so pins were reconstructed from health + boot timeline + tape).
+
+The 10:37 guest-loop kill (cause 1 above) remains an open hazard for
+post-swap health-failing releases in general, but it did not recur here —
+the rollback release was healthy, so no loop started. The remaining
+question is bounded: what kills the VM when the *new* runtime fails health
+repeatedly, not whether healthy rollbacks preserve the boot.
