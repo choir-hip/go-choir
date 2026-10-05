@@ -4,7 +4,7 @@
 # real commit; every apply path is the real mint + signed offer + guest apply.
 # Legs:
 #   pre     snapshot disposable state (fc pid, boot_id, head, route, served commit)
-#   neg:<case> base-digest | stale-head | content-mutation | provenance | base-commit | realization — signed offers that must refuse pre-mutation
+#   neg:<case> base-digest | stale-head | content-mutation | provenance | absent-entrypoint | base-commit | schema-window — signed offers that must refuse pre-mutation
 #   r2      build release at S2_COMMIT (default /opt/go-choir HEAD) and apply — no-reboot swap
 #   panic   build release at a throwaway panic commit (created on Node B) and apply — must fail health, restore predecessor incl. exec
 #   rollback re-apply predecessor release (2f0e2cac) — rollback through release authority
@@ -120,6 +120,7 @@ neg)
     stale-head)       over='{"base_event_head":"3333333333333333333333333333333333333333333333333333333333333333"}' ;;
     content-mutation) over='{"closure_digest":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}' ;;
     provenance)       over='{"code_commit":"1111111111111111111111111111111111111111"}' ;;
+    absent-entrypoint) over='{"layering_entrypoint":"ffffffffffffffffffffffffffffffffffff-autoputer-0.1.0/bin/autoputer"}' ;;
     base-commit)      over='{"base_commit":"2222222222222222222222222222222222222222"}' ;;
     schema-window)    over='{"store_schema_version":1,"min_store_schema_version":999}' ;;
     *) echo "unknown neg case $2"; exit 2 ;;
