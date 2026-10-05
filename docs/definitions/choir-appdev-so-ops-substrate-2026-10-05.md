@@ -299,6 +299,19 @@ now:
     the next VM launch on the new vmctl. Residual: ReattachVM (vmctl restart)
     orphans the serial fd until next launch seam.
 
+  ww_corpus_finding_2026_10_05: >-
+    The 15-day, >1-core, 10.2 GB-RSS, 99 GB corpus-dolt burn is the World
+    Wire store (8.5M og_objects, 3.3M fetches), NOT a platform leak —
+    corpus-dolt also carries the platform event-head CAS tables, so WW load
+    fate-shares with platform authority. Processor/reconciler pipeline is
+    dead (2,582 dispatch_failed, 83x 502/30min); sourcecycled was pure
+    fetch-debt. Interim stop: `systemctl stop go-choir-sourcecycled`
+    (reversible; a host deploy restarts it — durable disable deferred to
+    director). GC hazard: artifact GC's `og` namespace flagged 421k/421k
+    files "unreachable" — do NOT run og in active mode until a director
+    decision classifies WW corpus (keep/archive/delete). Docs for
+    director: docs/problems/world-wire-corpus-resource-burn-2026-10-05.md +
+    docs/world-wire-rearchitecture-2026-10-05.md.
 receipts:
   - id: s0-1-storage-lifecycle-2026-10-05
     kind: station_slice
