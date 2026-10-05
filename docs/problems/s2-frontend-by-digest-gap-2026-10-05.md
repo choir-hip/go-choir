@@ -99,3 +99,36 @@ whose nar is staged but whose entrypoint path is not in the base store
 list, reboot the guest, push, and read the refusal. It needs no new code —
 the `content-mutation` neg shape with a reboot inserted before the push.
 Left for the next session with a healthy disposable.
+
+## Update 2026-10-05 ~14:30: the join fails at stage, not at serve
+
+Cold-reading the hibernated data disk settles the mechanism completely:
+
+- `current/` names release `c8ef4c6c…` (`2811c779`, marker
+  `s2acc-rb-20261005T132300Z`) — the pointer itself is healthy; the
+  host-side "dangling symlink" rendering was an unreplayed-journal
+  artifact, not disk corruption.
+- That release dir contains `closure.nar`, `layering-entrypoint`, and
+  `release-manifest.json` — **no `frontend/` dir**. The 2811c779 release
+  was built by the older harness shape (closure.nar only, no SPA file).
+- Exactly three staged release dirs carry `frontend/index.html`: the
+  genesis baseline (full base SPA) and two 6fcb05e5 dirs carrying the
+  probe's minimal `<title>s2-layered</title>` SPA — i.e. precisely the
+  legs that used the frontend-carrying offer shape.
+
+So the chain is: offer files → staged into the release dir → served from
+`current/frontend`. The 2811c779 rollback serves the *release binary*
+(proven three ways) with **no release frontend staged**, hence
+`ComputerSurface` falls back to the baseline root, which is also absent
+in the layered context — therefore `served SPA is underivable`. The
+surface 503 is correct behavior for a frontend-less release; the defect
+is that nothing requires a frontend at stage time.
+
+This reframes the gap from "prove the frontend serves" to a concrete
+contract hole: **a layered release without `frontend/index.html` applies
+cleanly and then serves a 503 on `/`**. Either `stageRelease`/`verify`
+must require the frontend file (making frontend presence part of the
+release contract), or the surface must serve something defined in its
+absence. The panel's "frontend-by-digest" leg then becomes: apply a
+frontend-carrying release (any 6fcb05e5 dir already staged proves the
+bytes exist; a fresh apply + `/` fetch shows them serving).
