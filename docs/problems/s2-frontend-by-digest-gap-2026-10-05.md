@@ -165,3 +165,23 @@ not the offer carries a separate frontend file. Regression test
 `TestApplyStagesReleaseFrontendFromOutputRoot` fails before, passes
 after. The built-SPA marker assertion and the reboot-then-push leg can
 now run against this behavior once it deploys.
+
+## Update 2026-10-05 ~17:30: inline-$spa masks the daemon fix
+
+Applied release `03cfc944` (serving healthy, same fc/boot) and fetched `/`
+raw: the served bytes are the **harness-injected inline SPA**, not the
+built bundle. The staged release dir carries `frontend/index.html` only
+from the offer's inline `$spa` file. Two findings:
+
+1. The daemon-side staging fix (`4c4c9124`) could not act in this run:
+   the serving updater daemon is the **base image's** (pre-fix build),
+   and the fix reaches the daemon only via a base refresh. Staging behavior
+   is daemon-version-gated, not just offer-gated.
+2. The inline-`$spa` offer shape **masks** the daemon fix: as long as the
+   offer carries its own frontend file, the served bytes can never
+   discriminate staged-built-tree serving from inline-file serving.
+
+Next (both required for the leg to mean anything): (a) refresh the guest
+onto a base carrying the fix; (b) apply with the inline frontend file
+**omitted** from the offer, so the only frontend bytes that can serve are
+the staged built tree — then the built-marker (or 503) is dispositive.
