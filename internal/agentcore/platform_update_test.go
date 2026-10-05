@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -568,6 +569,63 @@ func TestPlatformUpdateRefusalDischargesPendingTransition(t *testing.T) {
 	}
 	if report.ReleaseDigest == "" {
 		t.Fatal("post-refusal apply did not land")
+	}
+}
+
+// TestPlatformUpdateDischargeAppendRetriesTransient proves the
+// materialization_failed append retries through transient store failures
+// (replay/settle window) instead of leaving the pending transition bound —
+// the second staging wedge where a refused apply's discharge append failed
+// once and nothing retried until the next restart.
+func TestPlatformUpdateDischargeAppendRetriesTransient(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-platform-update-discharge-retry")
+	ctx := context.Background()
+
+	offer := fx.mintPlatformUpdateOffer(t, "update-refuse-retry", "<html>refuse-retry</html>", fx.currentHead(t))
+	offer.Manifest.ClosureDigest = strings.Repeat("f", 64)
+	offerDigest, err := offer.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := selfdevprotocol.NewAuthorityReceipt(
+		selfdevprotocol.ReceiptKindPlatformUpdate, fx.computerID,
+		offerDigest, offerDigest, "corpusd",
+		computerevent.SigningKey{
+			SignerRef:  computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "authority-test"},
+			PrivateKey: fx.platformKey,
+		}, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer.Authorization = receipt
+
+	// Fail the failed-event append transiently, then let it through.
+	real := appendEventPayload
+	defer func() { appendEventPayload = real }()
+	var calls int
+	appendEventPayload = func(rt *Runtime, ctx context.Context, event computerevent.Event, input computerevent.TransitionInput, payload []byte, mediaType, privacyClass string) (computerevent.Receipt, string, error) {
+		calls++
+		if calls <= 3 {
+			return computerevent.Receipt{}, "", fmt.Errorf("store mid-replay: append unavailable")
+		}
+		return real(rt, ctx, event, input, payload, mediaType, privacyClass)
+	}
+
+	if _, err := fx.rt.ApplyPlatformUpdate(ctx, offer); err == nil {
+		t.Fatal("tampered release accepted, want refusal")
+	}
+	if calls < 4 {
+		t.Fatalf("discharge append not retried through transient failures: %d calls", calls)
+	}
+	head, err := fx.store.Head(ctx, fx.computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v", err)
+	}
+	if head.PendingTransitionRef != "" {
+		t.Fatalf("discharge append retry left pending transition %s — wedge", head.PendingTransitionRef)
+	}
+	if fx.countEventKinds()[computerevent.EventMaterializationFailed] != 1 {
+		t.Fatal("materialization_failed not committed after transient append failures")
 	}
 }
 

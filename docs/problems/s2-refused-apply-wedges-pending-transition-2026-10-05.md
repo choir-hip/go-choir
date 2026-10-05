@@ -93,3 +93,20 @@ boot the VM so the embedded projection replays to platform head
   answered `base event head is stale` — the wedge itself, not the intended
   fence. Only `neg-base-digest` produced a genuine pre-mutation refusal.
   Re-run all six after repair.
+
+## Second occurrence (2026-10-05 ~19:47Z) — fix deployed, wedge still happened
+
+The `neg absent-entrypoint` leg on computer-6450a253 refused
+`updater refused apply: updater refused request` and the pending
+transition wedged at `86b98028e712` — *with* `fae12950` present in the
+deployed daemon (verified `fae12950` ⊂ deployed `1e2e2895`). So the
+in-band discharge path (`platform_update.go:273-282` →
+`recordPlatformUpdateFailed` → `materialization_failed` append) exists
+but can itself fail: the only un-journaled failure left is the
+`AppendNewPayload` for the failed event racing guest replay/CAS state.
+Manual `s2_discharge_pending_transition.go` cleared it again (head
+`c0b84209` → `0661e341`, `discharged_update: s2neg-absent-entrypoint
+-20261005T194732Z`). Per the "watch for a second occurrence" instruction:
+it recurred — the discharge condition needs widening so a failed
+`materialization_failed` append retries rather than leaving the pending
+bound permanently.

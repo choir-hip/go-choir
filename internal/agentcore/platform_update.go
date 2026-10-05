@@ -688,6 +688,12 @@ func (rt *Runtime) fetchRefPayload(ctx context.Context, computerID string, file 
 	return nil
 }
 
+// appendEventPayload is the failed-event append seam — a package var so tests
+// can inject transient failures without faking the whole appender.
+var appendEventPayload = func(rt *Runtime, ctx context.Context, event computerevent.Event, input computerevent.TransitionInput, payload []byte, mediaType, privacyClass string) (computerevent.Receipt, string, error) {
+	return rt.eventAppender.AppendNewPayload(ctx, event, input, payload, mediaType, privacyClass)
+}
+
 // recordPlatformUpdateFailed commits a materialization_failed event when the
 // updater restored the prior release — the pending transition resolves back
 // to the effective state, keeping the tape auditable.
@@ -716,8 +722,25 @@ func (rt *Runtime) recordPlatformUpdateFailed(ctx context.Context, offer selfdev
 		ProposedEffectRef: offerDigest, DecisionRef: acceptedDigest,
 		ReducerVersion: computerevent.ReducerVersionV1,
 	}
-	if _, _, err := rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{RestoredPriorEffective: true}, resultPayload, "application/vnd.choir.platform-update-result+json", "owner"); err != nil {
-		return fmt.Errorf("platform update: failed event refused: %w", err)
+	// The failed event is the only discharge for the accepted transition:
+	// a single-attempt append leaves the pending transition permanently
+	// bound when the store is mid-replay (observed staging wedge
+	// 2026-10-05; docs/problems/s2-refused-apply-wedges-pending-transition
+	// -2026-10-05.md). Bounded retry covers replay/settle windows; the
+	// idempotency key makes a re-committed append a no-op.
+	var appendErr error
+	for attempt := range 8 {
+		if _, _, appendErr = appendEventPayload(rt, ctx, event, computerevent.TransitionInput{RestoredPriorEffective: true}, resultPayload, "application/vnd.choir.platform-update-result+json", "owner"); appendErr == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			appendErr = ctx.Err()
+		case <-time.After(time.Duration(250*(attempt+1)) * time.Millisecond):
+		}
+	}
+	if appendErr != nil {
+		return fmt.Errorf("platform update: failed event refused: %w", appendErr)
 	}
 	if restored {
 		return fmt.Errorf("platform update: apply failed and prior release was restored: %w", cause)

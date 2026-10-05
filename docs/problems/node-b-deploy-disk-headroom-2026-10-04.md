@@ -122,3 +122,38 @@ code defect.
 Until one of (1)-(4) frees ≥ ~6 GiB, deploy is blocked. `d20483e8`/`a4fcdb8d`
 are parked as `pushed_commit + ci` receipts without `deploy`/`environment_
 identity`; they land when headroom is restored and `Deploy to Staging` re-runs.
+
+## Resolution (2026-10-05) — option 3 executed via designed GC
+
+The `platform-artifacts` reachability GC (`/internal/platform/artifact-gc`,
+corpusd, S0b substrate — store-aware, DB-derived live set, grace + delete
+budget) ran on Node B. Dry-run then active, `max_deletes=500000`, default
+30min grace. Receipt:
+
+| namespace | scanned | live | deleted | bytes |
+|---|---|---|---|---|
+| file-cas-chunks | 633,971 | 179,814 | 454,157 | 33.2 GB |
+| og | 45,866 | 24 | 45,829 | 89 MB |
+| platform-update | 18 | 8 | 10 | 2.1 GB |
+| projection-base | 6 | 2 | 4 | 1.6 MB |
+| file-cas-roots | 4,998 | 4,998 | 0 | 0 |
+
+**35.4 GB reclaimed**; Node B root went 91G→133G free (79%→72%), past the
+90 GiB preflight floor with margin. Options 1 (20G dump deletion),
+2 (hibernated candidate-fleet vm-state destruction, red/black), and
+4 (floor change) were NOT needed and NOT taken — vm-state inspection showed
+all on-disk dirs carry live `ownerships.json` records including the S2 test
+computer (vm-7bbcf744/computer-6450a253), so manual deletion was refused.
+
+Residual: `file-cas-chunks` still holds 179,814 live chunks (~44G→~11G);
+growth resumes on each deploy. The recurring mitigation is this GC (on-demand
+or the GCRunner interval), not manual `rm`. 13 `og` entries were in-grace
+(protected by the 30min cutoff). A recurring sweep interval or wiring
+GCRunner at a non-debug cadence remains an S0 decision.
+
+Second failure mode observed same day: a GitHub Actions run sat `queued`
+with zero jobs started for ~57min (runner never assigned; repo is all
+`ubuntu-latest`, no self-hosted). `gh run cancel` + `gh run rerun` restored
+a fresh queue that scheduled normally — corrupted-queue-record class, not
+an environment problem. Record so the next 40min+ queued run is retried,
+not waited out.
