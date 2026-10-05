@@ -53,6 +53,7 @@ One clean `rollback` leg against the coherent `63865ede` deploy after the
 predecessor release with the serving frontend joined, apply under a fresh
 update id, and compare fc pid + boot id + served commit before/after.
 
+
 ## Addendum 2026-10-05 ~13:20: two distinct kill mechanisms
 
 The 10:37 rollback kill and the 12:59-13:07 rollback kill have **different
@@ -98,3 +99,25 @@ post-swap health-failing releases in general, but it did not recur here —
 the rollback release was healthy, so no loop started. The remaining
 question is bounded: what kills the VM when the *new* runtime fails health
 repeatedly, not whether healthy rollbacks preserve the boot.
+## Addendum 2026-10-05 ~14:20: deploy refresh asserts a false identity
+
+The `cfb86723` deploy rerun failed at `active computer refresh or identity
+verification failed`: after refreshing live VMs onto the new boot contract,
+`wait_for_autoputer_commit` polls `${computer_url}/health` for
+`.build.commit == $autoputer_runtime_commit`, where the expected value
+comes from the **host service pointer**
+(`/var/lib/go-choir/services/autoputer/share/go-choir/build.json`,
+commit `cfb86723`). But a refreshed layered computer keeps serving its
+retained app-layer release — the whole point of layering — so its
+`/health` reports the *release* commit, never the host pointer commit.
+The check can only pass for computers with no layered release, i.e.
+exactly the computers layering exists to avoid rebooting.
+
+Fix direction: after a boot-contract refresh, the expected identity must
+be the computer's **retained release commit** (read from its updater
+`current/` manifest or its pre-refresh `/health`), not the host
+autoputer pointer. The pointer commit is the right expectation only for
+a computer with no `current/` release. One-line shape: resolve expected
+per-computer before polling. Until then every deploy that refreshes a
+layered computer fails closed at this gate — which is how the marker
+deploy died despite switching cleanly.
