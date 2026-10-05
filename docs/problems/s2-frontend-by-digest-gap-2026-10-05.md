@@ -152,3 +152,16 @@ not theoretical: the SAME fetch must return built-bundle bytes
 frontend-carrying apply of a release whose staged `frontend/index.html`
 is the built bundle — i.e. the `apply` leg with the release built from a
 commit whose `frontend/dist` differs from base, not the inline `$spa`.
+
+## Update 2026-10-05 ~17:00: fixed at stage time (4c4c9124)
+
+Root cause, not a probe gap: `stageRelease` copied only manifest files,
+so a release without an inline `frontend/index.html` file staged a dir
+with no `frontend/` — and `ComputerSurface` then correctly 503'd. The
+fix copies the materialized autoputer output root's `frontend/` tree
+into the staged dir (regular files only, never symlinks), so
+`current/frontend` joins the swapped exec for every release, whether or
+not the offer carries a separate frontend file. Regression test
+`TestApplyStagesReleaseFrontendFromOutputRoot` fails before, passes
+after. The built-SPA marker assertion and the reboot-then-push leg can
+now run against this behavior once it deploys.
