@@ -29,25 +29,33 @@ three independent ways:
    `deployed_commit` stayed at the base. The served commit is the release's
    embedded buildinfo, not the base's.
 
-## What is still missing (the actual gap)
+## What is actually happening (corrected 2026-10-05 ~14:00)
 
-None of the above names the *served frontend bytes*. `ComputerSurface`
-falls back to the baseline SPA when `current/frontend/index.html` is
-absent, and the CI offer shape (which this run used) carries no frontend
-file — so the serving surface after every leg of this run may be the base
-SPA behind a new backend. The heresy at S2 `heresy_delta.discovered`
-(computer_surface.go:69-87) is exactly this, still `repaired: pending`.
+The staged 6fcb05e5 releases DO carry `frontend/index.html` — the offer
+shape used in this run includes the probe's minimal SPA file
+(`<title>s2-layered</title>`), and three staged release dirs on the
+disposable contain it. So the "CI shape carries no frontend" premise in
+the section above is wrong for the legs that mattered, and the marker
+experiment failed for a different reason: the builder's `cleanSourceWith`
+filter, not the offer.
+
+The serving surface still answers `served SPA is underivable`, which now
+points at the *guest-side* join, not the offer: either `current/` does not
+point at one of the frontend-carrying release dirs at serve time, or the
+in-guest `current/frontend` read fails. The `current` symlink itself is
+unreadable from the host right now (dangling rendering after journal
+replay), so even the pointer target is unconfirmed. That is the precise
+next probe: resolve `current/` in-guest, confirm it names a release dir
+containing `frontend/index.html`, and fetch `/` through the guest (not the
+vmctl proxy, which never reaches the surface route).
 
 ## Smallest probe that closes it
 
-One apply of a release whose `frontend/index.html` carries a unique marker
-(a builder-produced release with a one-line frontend change, or the probe's
-minimal SPA file), then fetch `/` through the autoputer proxy and match the
-marker bytes. If the marker serves, executable+frontend join in one
-transaction (criterion 1's "new backend and frontend"); if the base SPA
-serves, the claim fails and the heresy stands. No new authority or code
-path is needed — the existing `apply` + `push` legs with a frontend-carrying
-release do it.
+In-guest: readlink `current/`, list `current/frontend/`, and curl `/`
+from inside the guest network namespace. If the marker serves, the
+executable+frontend join holds in one transaction (criterion 1's "new
+backend and frontend"); if the base SPA serves, the claim fails and the
+heresy stands. No new authority or code path is needed.
 
 ## Update 2026-10-05 ~12:55: marker-release attempt failed at the source filter
 
