@@ -203,3 +203,13 @@ Retry: rebuild the same source against an older base (or apply an older
 release against this base) so the entrypoint is base-absent, with the
 inline frontend file omitted — then the staged `frontend/` can only be
 the built tree and the marker fetch is dispositive.
+
+## Update 2026-10-05 ~18:40: same-commit refusal re-confirmed with full reason chain
+
+Applied `d32a7b23` (no-inline offer) against base `d32a7b23`: refused
+`layering entrypoint ... not materialized`, and the reason now crosses
+the whole chain (daemon → client → agent → push response). The refusal is
+correct: the release path is byte-identical to the base path, so the
+delta excludes it. This is the third independent confirmation that a
+layered release must differ from its base — and that the harness must
+rebuild per base, never reuse a cached nar across deploys.
