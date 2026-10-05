@@ -75,6 +75,12 @@ const (
 // artifacts, exported packages, and ordinary user growth without wedging boot.
 const dataImageSizeMB = 32768
 
+const (
+	consoleLogName        = "console.log"
+	consoleLogMaxBytes    = 1 << 20
+	consoleLogGenerations = 4
+)
+
 // VMConfig holds the configuration for launching a single Firecracker VM.
 type VMConfig struct {
 	// VMID is the unique identifier for this VM instance.
@@ -1681,6 +1687,128 @@ func kernelParamValue(value string) string {
 	return b.String()
 }
 
+// rotatingConsoleWriter retains Firecracker's guest serial stdout in a fixed
+// set of files. Firecracker v1.15.1 accepts serial_out_path only through its
+// API; its --no-api JSON config deliberately skips that field. With
+// console=ttyS0, its stdout is therefore the supported serial capture point.
+type rotatingConsoleWriter struct {
+	mu          sync.Mutex
+	path        string
+	maxBytes    int64
+	generations int
+	file        *os.File
+	size        int64
+}
+
+func newRotatingConsoleWriter(path string, maxBytes int64, generations int) (*rotatingConsoleWriter, error) {
+	if maxBytes <= 0 {
+		return nil, fmt.Errorf("console log size limit must be positive")
+	}
+	if generations < 0 {
+		return nil, fmt.Errorf("console log generations must not be negative")
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open console log %s: %w", path, err)
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("stat console log %s: %w", path, err)
+	}
+
+	writer := &rotatingConsoleWriter{
+		path:        path,
+		maxBytes:    maxBytes,
+		generations: generations,
+		file:        file,
+		size:        info.Size(),
+	}
+	if writer.size >= writer.maxBytes {
+		if err := writer.rotate(); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+	}
+	return writer, nil
+}
+
+func (w *rotatingConsoleWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	written := 0
+	for len(p) > 0 {
+		if w.size >= w.maxBytes {
+			if err := w.rotate(); err != nil {
+				return written, err
+			}
+		}
+
+		available := int(w.maxBytes - w.size)
+		if available > len(p) {
+			available = len(p)
+		}
+		n, err := w.file.Write(p[:available])
+		written += n
+		w.size += int64(n)
+		p = p[n:]
+		if err != nil {
+			return written, err
+		}
+		if n != available {
+			return written, io.ErrShortWrite
+		}
+	}
+	return written, nil
+}
+
+func (w *rotatingConsoleWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file == nil {
+		return nil
+	}
+	err := w.file.Close()
+	w.file = nil
+	return err
+}
+
+func (w *rotatingConsoleWriter) rotate() error {
+	if err := w.file.Close(); err != nil {
+		return fmt.Errorf("close console log %s for rotation: %w", w.path, err)
+	}
+
+	for generation := w.generations; generation >= 1; generation-- {
+		source := w.path
+		if generation > 1 {
+			source = fmt.Sprintf("%s.%d", w.path, generation-1)
+		}
+		destination := fmt.Sprintf("%s.%d", w.path, generation)
+		if generation == w.generations {
+			if err := os.Remove(destination); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove expired console log %s: %w", destination, err)
+			}
+		}
+		if err := os.Rename(source, destination); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("rotate console log %s: %w", w.path, err)
+		}
+	}
+
+	file, err := os.OpenFile(w.path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("open rotated console log %s: %w", w.path, err)
+	}
+	w.file = file
+	w.size = 0
+	return nil
+}
+
+func consoleLogPath(stateDir, vmID string) string {
+	return filepath.Join(stateDir, vmID, consoleLogName)
+}
+
 // launchFirecracker starts a Firecracker process for the given VM.
 // hostPort is the host port assigned for this VM, used for setting up
 // networking. guestPort is the port the guest autoputer listens on.
@@ -1722,6 +1850,19 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 		log.Printf("vmmanager: warning: host networking setup failed for %s: %v", tapName, err)
 	}
 
+	// Firecracker v1.15.1 does not deserialize serial_out_path from its
+	// --no-api config file. The kernel's ttyS0 output is instead written to
+	// Firecracker stdout, which we retain per VM rather than mixing it into
+	// vmctl's shared journal.
+	console, err := newRotatingConsoleWriter(
+		consoleLogPath(m.cfg.StateDir, vmID),
+		consoleLogMaxBytes,
+		consoleLogGenerations,
+	)
+	if err != nil {
+		return fmt.Errorf("open console sink for VM %s: %w", vmID, err)
+	}
+
 	// Build the Firecracker command.
 	// --no-api disables the Firecracker API socket (we use config file).
 	// --enable-pci matches the upstream microvm runner so the guest sees the
@@ -1734,32 +1875,41 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 		"--id", vmID,
 		"--config-file", configPath,
 	)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = console
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
+		_ = console.Close()
 		return fmt.Errorf("start firecracker: %w", err)
 	}
 
 	// Store the process info.
+	var expected *VMInstance
 	if inst, ok := m.vms[vmID]; ok {
+		expected = inst
 		inst.PID = cmd.Process.Pid
 		inst.cmd = cmd
 		inst.done = make(chan struct{})
 		if err := m.savePID(vmID, inst.PID); err != nil {
 			log.Printf("vmmanager: warning: could not save pid for VM %s: %v", vmID, err)
 		}
+	}
 
-		// Monitor the process in the background.
-		go func(expected *VMInstance) {
-			err := cmd.Wait()
+	// Monitor the process in the background and close the host-side sink once
+	// os/exec has stopped forwarding its stdout.
+	go func() {
+		err := cmd.Wait()
+		_ = console.Close()
+		if expected != nil {
 			close(expected.done)
-			if err != nil {
-				log.Printf("vmmanager: firecracker process for VM %s exited with error: %v", vmID, err)
+		}
+		if err != nil {
+			log.Printf("vmmanager: firecracker process for VM %s exited with error: %v", vmID, err)
+			if expected != nil {
 				m.markInstanceFailed(vmID, expected)
 			}
-		}(inst)
-	}
+		}
+	}()
 
 	return nil
 }

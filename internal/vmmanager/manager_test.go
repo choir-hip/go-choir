@@ -197,6 +197,35 @@ func TestManagerBuildFirecrackerConfig_NoSecrets(t *testing.T) {
 	}
 }
 
+func TestBuildFirecrackerConfigEmitsSerialConsole(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+	cfg.KernelImagePath = "/opt/go-choir/guest/vmlinux"
+	cfg.StoreDiskPath = "/opt/go-choir/guest/store.erofs"
+
+	mgr := NewManager(cfg)
+	vmCfg := VMConfig{
+		VMID:              "vm-console-test",
+		KernelImagePath:   cfg.KernelImagePath,
+		StoreDiskPath:     cfg.StoreDiskPath,
+		KernelParams:      "root=fstab",
+		GuestPort:         8085,
+		MachineCPUCount:   2,
+		MachineMemSizeMib: 512,
+		Epoch:             1,
+	}
+
+	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9001)
+	bootSource := fcConfig["boot-source"].(map[string]interface{})
+	bootArgs := bootSource["boot_args"].(string)
+	if !strings.Contains(bootArgs, "console=ttyS0,115200") {
+		t.Fatalf("Firecracker config does not emit the serial console boot argument: %q", bootArgs)
+	}
+	if got, want := consoleLogPath(cfg.StateDir, vmCfg.VMID), filepath.Join(cfg.StateDir, vmCfg.VMID, consoleLogName); got != want {
+		t.Fatalf("console sink path = %q, want %q", got, want)
+	}
+}
+
 func TestManagerEpochPersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := DefaultManagerConfig()
@@ -1869,6 +1898,50 @@ func TestWaitForGuestReadyReplayProgressExtendsAndStallFails(t *testing.T) {
 	m3 := &Manager{cfg: ManagerConfig{BootReadyTimeout: 300 * time.Millisecond, ReplayStallTimeout: time.Second}}
 	if err := m3.waitForGuestReady(deadline.URL, nil); err == nil || !strings.Contains(err.Error(), "did not become healthy") {
 		t.Fatalf("non-replaying unhealthy guest must respect the deadline: %v", err)
+	}
+}
+
+func TestRotatingConsoleWriterBoundsFiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), consoleLogName)
+	writer, err := newRotatingConsoleWriter(path, 8, 2)
+	if err != nil {
+		t.Fatalf("create console writer: %v", err)
+	}
+	if n, err := writer.Write([]byte("abcdefghijklmnopqrstuvwxyz")); err != nil || n != 26 {
+		t.Fatalf("write console data = (%d, %v), want (26, nil)", n, err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close console writer: %v", err)
+	}
+
+	want := map[string]string{
+		path:        "yz",
+		path + ".1": "qrstuvwx",
+		path + ".2": "ijklmnop",
+	}
+	var total int64
+	for file, contents := range want {
+		info, err := os.Stat(file)
+		if err != nil {
+			t.Fatalf("stat %s: %v", file, err)
+		}
+		if info.Size() > 8 {
+			t.Fatalf("%s is %d bytes, exceeds 8-byte rotation limit", file, info.Size())
+		}
+		total += info.Size()
+		got, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		if string(got) != contents {
+			t.Fatalf("%s contents = %q, want %q", file, got, contents)
+		}
+	}
+	if total > 24 {
+		t.Fatalf("console generations retain %d bytes, exceed 24-byte bound", total)
+	}
+	if _, err := os.Stat(path + ".3"); !os.IsNotExist(err) {
+		t.Fatalf("unexpected generation beyond configured bound: %v", err)
 	}
 }
 
