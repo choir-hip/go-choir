@@ -22,32 +22,14 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 		t.Fatalf("install tools: %v", err)
 	}
 
-	ordinary := []string{
-		"cancel_agent", "fetch_url", "get_run_memory_entry", "glob", "grep",
-		"import_document_content", "import_url_content", "list_content_item_selectors",
-		"list_evidence", "read_content_item", "read_content_item_selector", "read_evidence",
-		"read_file", "save_evidence", "search_wire_corpus", "source_search",
-		"verify_model_capability", "web_search",
-	}
 	expected := map[string][]string{
 		agentprofile.Conductor:   {"cancel_agent"},
 		agentprofile.Management:  {"desk_go_eval", "cancel_co_super_assignment", "report_to_texture"},
 		agentprofile.Engineering: {},
-		// R3r: research is on the cell carrier — desk_go_eval plus the typed
-		// research/evidence/memory surface; generic host tools removed.
-		agentprofile.Research: {
-			"desk_go_eval",
-			"fetch_url", "import_document_content", "import_url_content",
-			"list_content_item_selectors", "read_content_item",
-			"read_content_item_selector", "search_wire_corpus", "source_search",
-			"web_search",
-			"get_run_memory_entry", "list_evidence", "read_evidence", "save_evidence",
-		},
+		// Research is cell-only; it has no typed tool registry surface.
+		agentprofile.Research: {"desk_go_eval"},
 		agentprofile.Texture: {"desk_go_eval"},
-		agentprofile.Processor: append(append(slices.Clone(ordinary), "update_coagent"),
-			"record_wire_processor_decision"),
-		agentprofile.Reconciler: append(slices.Clone(ordinary), "update_coagent"),
-		agentprofile.Email:      {},
+		agentprofile.Email: {},
 	}
 	for profile, want := range expected {
 		profile, want := profile, want
@@ -93,8 +75,8 @@ func TestDelegatedEngineeringCannotReachHostEffectToolsOrCallbacks(t *testing.T)
 		"create_checkpoint", "project_checkpoint", "route_candidate", "change_route",
 		"start_vm", "stop_vm", "restart_vm", "read_host_file", "write_host_file",
 		// Owner decisions and product-authority writes.
-		"record_texture_decision", "record_wire_processor_decision", "patch_texture",
-		"rewrite_texture", "request_email_draft", "product_api_request",
+		"record_texture_decision", "patch_texture", "rewrite_texture",
+		"request_email_draft", "product_api_request",
 		// Capsule lifecycle and capsule-local execution are absent from the static
 		// host registry; exact assignments receive a per-run overlay only.
 		"spawn_capsule", "destroy_capsule", "list_capsules", "inspect_capsule",

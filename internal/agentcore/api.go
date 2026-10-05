@@ -51,9 +51,9 @@ type internalChannelCastResponse struct {
 	Cursor uint64 `json:"cursor"`
 }
 
-// internalRunSubmitRequest is the private service payload for typed ingestion
-// processor and reconciler handoffs. It is never a delegated-agent transport
-// and must not become browser-public.
+// internalRunSubmitRequest is the retired private service payload shape for
+// historical ingestion processor and reconciler handoffs. New submissions are
+// rejected, but its metadata remains recognized for historical records.
 type internalRunSubmitRequest struct {
 	OwnerID  string         `json:"owner_id"`
 	Prompt   string         `json:"prompt"`
@@ -62,7 +62,7 @@ type internalRunSubmitRequest struct {
 
 const internalRunSubmissionFingerprintMetadataKey = "internal_run_submission_fingerprint"
 
-// These are the typed sourcecycled processor and reconciler fields used to
+// These are the historical sourcecycled processor and reconciler fields used to
 // compare a pre-idempotency run that does not yet carry the durable full-request
 // fingerprint. New submissions persist a fingerprint of the complete normalized
 // request metadata, so future metadata additions automatically participate in
@@ -243,7 +243,6 @@ type runtimeHealthResponse struct {
 	RunningRuns           int                      `json:"running_runs"`
 	DeskPendingMutations  int                      `json:"desk_pending_mutations,omitempty"`
 	SelfdevActiveOps      int                      `json:"selfdev_active_operations,omitempty"`
-	RunningProcessorRuns  int                      `json:"running_processor_runs"`
 	ResearchCount         int                      `json:"researcher_count"`
 	ActiveProvider        string                   `json:"active_provider"`
 	PersistentDisk        *persistentdisk.Status   `json:"persistent_disk,omitempty"`
@@ -371,7 +370,7 @@ func (h *APIHandler) runStatusWithTrajectory(ctx context.Context, rec *types.Run
 		OpenWorkItemCount: len(obligations.OpenWorkItems),
 	}
 	profile := agentProfileForRun(rec)
-	if profile == agentprofile.Processor && ownerID != "" {
+	if profile == frozenProcessorProfile && ownerID != "" {
 		item, found, err := h.rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
 		if err == nil && found {
 			resp.ProcessorResolution = &runProcessorResolutionStatusResponse{
@@ -568,25 +567,13 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]any)
 	}
-	profile, err := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))
+	_, err := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))
 	if err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "agent_profile is required and must be a live vocabulary profile"})
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "agent_profile is required and must be a recognized profile"})
 		return
 	}
-	switch profile {
-	case agentprofile.Processor, agentprofile.Reconciler:
-	default:
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal runs may only start processor or reconciler profiles"})
-		return
-	}
-	req.Metadata[runMetadataAgentProfile] = profile
-	if metadataStringValue(req.Metadata, runMetadataAgentRole) == "" {
-		req.Metadata[runMetadataAgentRole] = profile
-	}
-	if metadataStringValue(req.Metadata, "request_source") == "" {
-		req.Metadata["request_source"] = "internal_ingestion_handoff"
-	}
-
+	// Processor and reconciler remain recognizable above only to validate
+	// frozen historical request metadata. They cannot admit new runs.
 	rawRequestID, hasRequestID := req.Metadata["ingestion_handoff_request_id"]
 	rawRequestKind, hasRequestKind := req.Metadata["ingestion_handoff_request_kind"]
 	requestID, requestIDIsString := rawRequestID.(string)
@@ -598,88 +585,7 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "ingestion_handoff_request_id and ingestion_handoff_request_kind must be provided together as non-empty strings"})
 		return
 	}
-	typedIngestionSubmission := hasRequestID
-	if typedIngestionSubmission && profile != agentprofile.Processor && profile != agentprofile.Reconciler {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "ingestion handoff identity is only valid for processor or reconciler profiles"})
-		return
-	}
-	if profile == agentprofile.Processor || typedIngestionSubmission {
-		// One critical section owns typed identity lookup and persistence across
-		// ingestion profiles. It also serializes processor overload admission.
-		// Concurrent lost-receipt retries therefore cannot both observe absence.
-		h.rt.internalIngestionSubmissionMu.Lock()
-		defer h.rt.internalIngestionSubmissionMu.Unlock()
-	}
-
-	if typedIngestionSubmission {
-		req.Metadata["ingestion_handoff_request_id"] = requestID
-		req.Metadata["ingestion_handoff_request_kind"] = requestKind
-		fingerprint, err := internalRunSubmissionFingerprint(ownerID, req.Prompt, req.Metadata)
-		if err != nil {
-			log.Printf("runtime api: fingerprint internal ingestion submission: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to fingerprint internal ingestion submission"})
-			return
-		}
-		req.Metadata[internalRunSubmissionFingerprintMetadataKey] = fingerprint
-
-		existing, err := h.rt.Store().ListRunsByIngestionHandoff(r.Context(), ownerID, profile, requestID, requestKind, 2)
-		if err != nil {
-			log.Printf("runtime api: resolve ingestion handoff: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to resolve ingestion handoff"})
-			return
-		}
-		if len(existing) > 1 {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "ingestion handoff identity resolves to multiple runs"})
-			return
-		}
-		if len(existing) == 1 {
-			existingFingerprint := strings.TrimSpace(metadataStringValue(existing[0].Metadata, internalRunSubmissionFingerprintMetadataKey))
-			if existingFingerprint == "" {
-				// Runs created before the durable fingerprint was introduced can
-				// still be retried safely by comparing the complete typed
-				// sourcecycled ingestion contract for their profile.
-				existingFingerprint, err = legacyInternalIngestionSubmissionFingerprint(existing[0].OwnerID, existing[0].Prompt, existing[0].Metadata)
-				if err == nil {
-					fingerprint, err = legacyInternalIngestionSubmissionFingerprint(ownerID, req.Prompt, req.Metadata)
-				}
-				if err != nil {
-					log.Printf("runtime api: compare legacy ingestion handoff: %v", err)
-					writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to compare ingestion handoff"})
-					return
-				}
-			}
-			if existingFingerprint != fingerprint {
-				writeAPIJSON(w, http.StatusConflict, apiError{Error: "ingestion handoff identity already exists with a different payload"})
-				return
-			}
-			// Resolve idempotency before overload: the admitted run is the
-			// durable receipt even while it occupies the last processor slot.
-			writeAPIJSON(w, http.StatusAccepted, runStatusFromRecord(&existing[0]))
-			return
-		}
-	}
-
-	if profile == agentprofile.Processor {
-		// Reject genuinely new processor submissions when too many runs are
-		// active. Duplicate typed identities were returned above.
-		maxProc := 1
-		if v := os.Getenv("RUNTIME_MAX_PROCESSOR_RUNS"); v != "" {
-			if parsed, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && parsed > 0 {
-				maxProc = parsed
-			}
-		}
-		if h.rt.RunningCountByProfile(r.Context(), agentprofile.Processor) >= maxProc {
-			writeAPIJSON(w, http.StatusTooManyRequests, apiError{Error: "too many active processor runs; try again later"})
-			return
-		}
-	}
-	rec, err := h.rt.StartRunWithMetadata(r.Context(), req.Prompt, ownerID, req.Metadata)
-	if err != nil {
-		log.Printf("runtime api: submit internal run: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit internal run"})
-		return
-	}
-	writeAPIJSON(w, http.StatusAccepted, runStatusFromRecord(rec))
+	writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal ingestion profiles are retired"})
 }
 
 // HandleInternalRunStatus handles GET /internal/runtime/runs/{id}.
@@ -1040,7 +946,6 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
-	runningProcessorRuns := h.rt.RunningCountByProfile(r.Context(), agentprofile.Processor)
 	deskPending := h.rt.pendingDeskMutations(r.Context())
 	selfdevActive := h.rt.activeSelfdevOperations(r.Context())
 	resp := runtimeHealthResponse{
@@ -1049,7 +954,6 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		ComputerID:           h.rt.cfg.ComputerID,
 		RuntimeHealth:        health,
 		RunningRuns:          h.rt.RunningCount(),
-		RunningProcessorRuns: runningProcessorRuns,
 		DeskPendingMutations: deskPending,
 		SelfdevActiveOps:     selfdevActive,
 		ResearchCount:        h.rt.cfg.ResearchCount,

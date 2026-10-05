@@ -458,8 +458,6 @@ func Run() {
 			agentprofile.Engineering,
 			agentprofile.Research,
 			agentprofile.Texture,
-			agentprofile.Processor,
-			agentprofile.Reconciler,
 		} {
 			// Full-RLM desks (management R3c, texture R3d) are sealed to
 			// desk_go_eval: no spawn_agent tool. They open children through

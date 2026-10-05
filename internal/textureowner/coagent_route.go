@@ -43,8 +43,10 @@ func (h *Handler) ensureCoagentTextureRevisionRoute(ctx context.Context, parentR
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires a parent run")
 	}
 	callerProfile := req.CallerProfile
-	if callerProfile != agentprofile.Processor && callerProfile != agentprofile.Reconciler {
-		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires processor or reconciler caller")
+	// Frozen processor/reconciler records can still replay their original
+	// Texture handoff, but no live profile can enter this path.
+	if callerProfile != "processor" && callerProfile != "reconciler" {
+		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires frozen processor or reconciler caller")
 	}
 	ownerID := strings.TrimSpace(parentRec.OwnerID)
 	if ownerID == "" {
@@ -52,7 +54,7 @@ func (h *Handler) ensureCoagentTextureRevisionRoute(ctx context.Context, parentR
 	}
 
 	now := time.Now().UTC()
-	if callerProfile == agentprofile.Processor {
+	if callerProfile == "processor" {
 		resolvedSourceItemIDs, err := resolveWireProcessorSourceItemIDs(parentRec, req.SourceItemIDs, true)
 		if err != nil {
 			return coagentTextureRouteDecision{}, err
@@ -66,7 +68,7 @@ func (h *Handler) ensureCoagentTextureRevisionRoute(ctx context.Context, parentR
 	}
 
 	prompt := buildCoagentTextureRevisionPrompt(parentRec, req, doc, created, sourceEntities)
-	if callerProfile == agentprofile.Reconciler {
+	if callerProfile == "reconciler" {
 		if existing, found, err := h.existingReconcilerTextureHandoff(ctx, parentRec, doc.DocID); err != nil {
 			return coagentTextureRouteDecision{}, err
 		} else if found {

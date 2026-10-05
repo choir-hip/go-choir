@@ -43,9 +43,10 @@ var forwardV1ToV2 = map[string]string{
 	"co-super-coding": "engineering", "engineering": "engineering",
 }
 
-// Desk tokens that survive the rename unchanged. The multimodal verifier has
-// one canonical spelling (the modelpolicy roles.<name> key); the hyphenated
-// form folds to it through the forward map below.
+// Desk tokens that survive the rename unchanged. Processor and reconciler are
+// retained as frozen historical values for replay, not live profiles. The
+// multimodal verifier has one canonical spelling (the modelpolicy roles.<name>
+// key); the hyphenated form folds to it through the forward map below.
 var staysLive = map[string]bool{
 	"texture": true, "conductor": true, "processor": true,
 	"reconciler": true, "email": true, "verifier": true,

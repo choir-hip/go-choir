@@ -247,12 +247,6 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			b.WriteString("\n\nLifecycle Texture control authority:\nTexture is a full-RLM desk: you author the document and open children inside one staged choir.ApplyTexture turn. Open each new Research atomically in that turn's controls array — one controls entry with open_researcher=true, an objective, and the first typed downward packet. Open the persistent Management similarly with open_persistent_super=true and a valid execution_request packet. Continue an existing bound child only by target_work_item_id. Agent/work/control/update/target identities and direction are runtime-derived; never author them in packet fields.")
 		}
 	}
-	if profile == agentprofile.Processor {
-		b.WriteString(runtimeprompts.ProcessorRuntimeOverlay())
-	}
-	if profile == agentprofile.Reconciler {
-		b.WriteString(runtimeprompts.ReconcilerRuntimeOverlay())
-	}
 	if profile == agentprofile.Management {
 		if deskCarrierLive(agentprofile.Management) {
 			b.WriteString(runtimeprompts.RLMManagementOverlay())
@@ -496,32 +490,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		}
 	}
 
-	processorPolicy, err := agentprofile.PolicyFor(agentprofile.Processor)
-	if err != nil {
-		return err
-	}
-	processorRegistry, err := rt.buildRegistryForRole(processorPolicy, cwd, searchClient, sourceClient, httpClient)
-	if err != nil {
-		return err
-	}
-	// update_coagent remains on wire roles until their migration phase.
-	if err := RegisterCoagentUpdateTools(processorRegistry, rt); err != nil {
-		return err
-	}
-	if err := RegisterWireProcessorTools(processorRegistry, rt); err != nil {
-		return err
-	}
-	reconcilerPolicy, err := agentprofile.PolicyFor(agentprofile.Reconciler)
-	if err != nil {
-		return err
-	}
-	reconcilerRegistry, err := rt.buildRegistryForRole(reconcilerPolicy, cwd, searchClient, sourceClient, httpClient)
-	if err != nil {
-		return err
-	}
-	if err := RegisterCoagentUpdateTools(reconcilerRegistry, rt); err != nil {
-		return err
-	}
 	conductorPolicy, err := agentprofile.PolicyFor(agentprofile.Conductor)
 	if err != nil {
 		return err
@@ -554,8 +522,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	rt.toolProfiles[agentprofile.Conductor] = conductorRegistry
 	rt.toolProfiles[agentprofile.Management] = managementRegistry
 	rt.toolProfiles[agentprofile.Engineering] = engineeringRegistry
-	rt.toolProfiles[agentprofile.Processor] = processorRegistry
-	rt.toolProfiles[agentprofile.Reconciler] = reconcilerRegistry
 	rt.toolProfiles[agentprofile.Texture] = textureRegistry
 	rt.toolProfiles[agentprofile.Email] = emailRegistry
 	// Install the sealed desk-cell registry for every promoted desk profile.

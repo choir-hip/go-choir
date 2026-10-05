@@ -79,14 +79,12 @@ type Runtime struct {
 	// bootInProgress is set only while Runtime.Start is executing. Health
 	// probes that run while HTTP is already up must not JSON_EXTRACT/list
 	// og_objects until boot sweeps finish; they contend with Management rewarm
-	// and OOM the 4 GiB guest. Default false so tests and post-boot health
-	// still count durable running processors.
+	// and OOM the 4 GiB guest. Default false so tests and frozen historical
+	// processor records still count durable running runs.
 	bootInProgress atomic.Bool
-	// internalIngestionSubmissionMu serializes the durable idempotency lookup
-	// and creation of typed ingestion runs submitted through the internal runtime
-	// API. It also owns the processor overload check. Without one critical
-	// section, concurrent retries can both miss the persisted handoff identity
-	// and activate duplicate runs.
+	// internalIngestionSubmissionMu serializes the historical ingestion
+	// idempotency lookup. The submission endpoint rejects retired processor and
+	// reconciler profiles before it can create runs.
 	internalIngestionSubmissionMu sync.Mutex
 	// lifecycleWorkReconcileMu makes the active-run check and replacement
 	// creation one process-local critical section across terminal hooks and
@@ -424,11 +422,11 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
 			return currentTextureAgentID(docID)
 		}
-	case agentprofile.Processor:
+	case frozenProcessorProfile:
 		if key := metadataStringValue(metadata, runMetadataProcessorKey); key != "" {
 			return "processor:" + safeRefPart(key)
 		}
-	case agentprofile.Reconciler:
+	case frozenReconcilerProfile:
 		if scope := metadataStringValue(metadata, runMetadataReconcilerScope); scope != "" {
 			return "reconciler:" + safeRefPart(scope)
 		}
@@ -459,7 +457,7 @@ func defaultChannelID(profile string, metadata map[string]any, parent *types.Run
 			return docID
 		}
 	}
-	if profile == agentprofile.Management || profile == agentprofile.Processor || profile == agentprofile.Reconciler {
+	if profile == agentprofile.Management || profile == frozenProcessorProfile || profile == frozenReconcilerProfile {
 		return agentID
 	}
 	return ""
@@ -509,6 +507,9 @@ func resolveRunIdentity(ownerID, computerID string, metadata map[string]any, par
 		return types.AgentRecord{}, nil, fmt.Errorf("resolve run identity: %w", err)
 	}
 	profile = resolvedProfile
+	if profile == frozenProcessorProfile || profile == frozenReconcilerProfile {
+		return types.AgentRecord{}, nil, fmt.Errorf("resolve run identity: retired profile %q cannot start a new run", profile)
+	}
 	if strings.EqualFold(strings.TrimSpace(rawProfile), agentprofile.Texture) {
 		profile = agentprofile.Texture
 	}
@@ -803,7 +804,7 @@ func shouldLogWireLifecycle(rec *types.RunRecord) bool {
 		return false
 	}
 	profile := agentProfileForRun(rec)
-	if profile == agentprofile.Processor || profile == agentprofile.Texture || profile == agentprofile.Research || profile == agentprofile.Engineering {
+	if profile == frozenProcessorProfile || profile == agentprofile.Texture || profile == agentprofile.Research || profile == agentprofile.Engineering {
 		if metadataStringValue(rec.Metadata, runMetadataProcessorKey) != "" || strings.TrimSpace(rec.OwnerID) == vmctl.UniversalWirePlatformOwnerID {
 			return true
 		}
@@ -906,15 +907,6 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 		rt.stampAndMintTrajectory(ctx, rec)
 		if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt), rt.traceStore); err != nil {
 			return nil, err
-		}
-	}
-	submittedProfile := agentProfileForRun(rec)
-	if submittedProfile == agentprofile.Processor {
-		if _, err := rt.beginWireProcessorDecisionWorkItem(ctx, rec); err != nil {
-			log.Printf("runtime: wire processor decision work item run=%s: %v", rec.RunID, err)
-		}
-		if err := rt.beginWireProcessorSourceDecisionWorkItems(ctx, rec); err != nil {
-			log.Printf("runtime: wire processor source decision work items run=%s: %v", rec.RunID, err)
 		}
 	}
 	if shouldLogWireLifecycle(rec) {
@@ -2210,10 +2202,10 @@ func (rt *Runtime) RunningCount() int {
 }
 
 // RunningCountByProfile returns the number of running runs with the given
-// agent profile that still occupy admission capacity. Note: for processors
-// this issues one FindWorkItemByFingerprint per running run (an N+1 against
-// the work-item table; acceptable at current run volumes), and any lookup
-// error silently defaults to "occupies admission" — the conservative side.
+// agent profile that still occupy admission capacity. For frozen processor
+// history this issues one FindWorkItemByFingerprint per running run (an N+1
+// against the work-item table; acceptable at current run volumes), and any
+// lookup error silently defaults to "occupies admission" — the conservative side.
 func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) int {
 	if rt.bootInProgress.Load() {
 		return rt.RunningCount()
@@ -2241,7 +2233,7 @@ func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) in
 		if runProfile != profile {
 			continue
 		}
-		if profile == agentprofile.Processor && !rt.processorRunOccupiesAdmission(ctx, runs[i]) {
+		if profile == frozenProcessorProfile && !rt.processorRunOccupiesAdmission(ctx, runs[i]) {
 			continue
 		}
 		count++
@@ -2789,7 +2781,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 		return nil, nil
 	}
 	switch profile {
-	case agentprofile.Research, agentprofile.Processor, agentprofile.Reconciler:
+	case agentprofile.Research, frozenProcessorProfile, frozenReconcilerProfile:
 		// Texture reconstruction belongs to textureowner.ReconcileAgentWake,
 		// which derives revision authority from the canonical document head.
 		// A generic assigned-work run cannot safely synthesize that authority.

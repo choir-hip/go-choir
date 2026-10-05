@@ -23,18 +23,6 @@ func TestPolicyFor(t *testing.T) {
 			Profile: Texture, AllowMemoryTools: true, AllowCoAgentTools: false,
 			AllowedSpawnTargets: []string{Research}, AllowedMessageTargets: []string{Research, Management},
 		},
-		Processor: {
-			Profile: Processor, AllowReadOnlyFiles: true, AllowResearchTools: true,
-			AllowEvidenceTools: true, AllowMemoryTools: true,
-			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Texture}, AllowedMessageTargets: []string{Texture},
-		},
-		Reconciler: {
-			Profile: Reconciler, AllowReadOnlyFiles: true, AllowResearchTools: true,
-			AllowEvidenceTools: true, AllowMemoryTools: true,
-			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Texture}, AllowedMessageTargets: []string{Texture},
-		},
 		Email:       {Profile: Email},
 		Engineering: {Profile: Engineering, AllowedMessageTargets: []string{Management}},
 		Management: {
@@ -61,25 +49,31 @@ func TestPolicyFor(t *testing.T) {
 	if got, err := PolicyFor("   "); err == nil || !reflect.DeepEqual(got, Policy{}) {
 		t.Errorf("PolicyFor(empty) = %#v, %v, want (Policy{}, error)", got, err)
 	}
+	for _, profile := range []string{"processor", "reconciler"} {
+		if _, err := PolicyFor(profile); err == nil {
+			t.Errorf("PolicyFor(%q) unexpectedly accepted a retired profile", profile)
+		}
+	}
+	for _, operation := range []func(string, string) (bool, error){CanSpawn, CanMessage} {
+		if _, err := operation(Conductor, "processor"); err == nil {
+			t.Error("retired target unexpectedly accepted")
+		}
+	}
 }
 func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 	t.Parallel()
 
-	profiles := []string{Conductor, Management, Engineering, Research, Texture, Processor, Reconciler, Email}
+	profiles := []string{Conductor, Management, Engineering, Research, Texture, Email}
 	spawn := map[string]map[string]bool{
 		Conductor:  {Texture: true},
 		Management: {Research: true},
 		Texture:    {Research: true},
-		Processor:  {Texture: true},
-		Reconciler: {Texture: true},
 	}
 	message := map[string]map[string]bool{
 		Management:  {Texture: true, Research: true},
 		Engineering: {Management: true},
 		Research:    {Texture: true},
 		Texture:     {Research: true, Management: true},
-		Processor:   {Texture: true},
-		Reconciler:  {Texture: true},
 	}
 	for _, caller := range profiles {
 		caller := caller

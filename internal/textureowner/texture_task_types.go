@@ -28,6 +28,8 @@ const (
 	runMetadataReconcilerScope            = "reconciler_scope"
 )
 
+// textureInputOriginForCaller preserves the two retired origins when reading
+// historical handoffs; no live profile may produce them.
 func textureInputOriginForCaller(profile string) string {
 	switch strings.TrimSpace(profile) {
 	case "processor":

@@ -94,7 +94,6 @@ func (rt *Runtime) MaybeAutonomousPublishWireArticle(ctx context.Context, doc ty
 		return
 	}
 	publicationSucceeded = true
-	rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID, rec)
 }
 
 func (rt *Runtime) recordWirePublicationTrajectoryRef(ctx context.Context, rec *types.RunRecord, key, value string) error {
@@ -161,12 +160,14 @@ func (rt *Runtime) beginWireProcessorDecisionWorkItem(ctx context.Context, rec *
 		metadataStringValue(rec.Metadata, "source_network_request_id"),
 		rec.RunID,
 	)
+	// Frozen-history reconciliation preserves the original processor
+	// authority value for records created before the pipeline retirement.
 	item, err := rt.store.CreateWorkItem(ctx, types.WorkItemRecord{
 		OwnerID:              ownerID,
 		TrajectoryID:         trajectoryID,
 		Objective:            "resolve processor request into explicit publication decisions",
 		Reason:               "processor request started without durable per-item decision ledger yet",
-		AuthorityProfile:     agentprofile.Processor,
+		AuthorityProfile:     frozenProcessorProfile,
 		ObjectiveFingerprint: workitem.ProcessorDecisionFingerprint(trajectoryID),
 		CreatedByRunID:       rec.RunID,
 		Details: map[string]any{
@@ -208,7 +209,7 @@ func (rt *Runtime) beginWireProcessorSourceDecisionWorkItems(ctx context.Context
 			TrajectoryID:         trajectoryID,
 			Objective:            "resolve source item into explicit publication decision",
 			Reason:               "processor request started with source item awaiting typed publication verdict",
-			AuthorityProfile:     agentprofile.Processor,
+			AuthorityProfile:     frozenProcessorProfile,
 			ObjectiveFingerprint: workitem.SourceItemDecisionFingerprint(trajectoryID, sourceItemID),
 			CreatedByRunID:       rec.RunID,
 			Details: map[string]any{

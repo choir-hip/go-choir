@@ -18,7 +18,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
 func TestSpawnMintsTrajectoryAndChildJoinsIt(t *testing.T) {
@@ -88,131 +87,7 @@ func TestSpawnMintsTrajectoryAndChildJoinsIt(t *testing.T) {
 	}
 }
 
-func TestProcessorSpawnMintsPublicationTrajectory(t *testing.T) {
-	ctx := context.Background()
-	rt, s := testRuntime(t)
 
-	run, err := rt.StartRunWithMetadata(ctx, "ingest source handoff", "user-alice", map[string]any{
-		runMetadataAgentProfile:        agentprofile.Processor,
-		runMetadataAgentRole:           agentprofile.Processor,
-		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
-		"ingestion_handoff_request_id": "processor-request-1",
-		"source_network_request_id":    "processor-request-1",
-		"source_item_ids":              []string{"srcitem-1", "srcitem-2"},
-		"source_count":                 2,
-		"continuity_ref":               "sourcecycled://processor/global/latest",
-	})
-	if err != nil {
-		t.Fatalf("start processor run: %v", err)
-	}
-	trajectory, err := s.GetTrajectory(ctx, "user-alice", run.TrajectoryID)
-	if err != nil {
-		t.Fatalf("trajectory record not minted: %v", err)
-	}
-	if trajectory.Kind != types.TrajectoryKindPublication {
-		t.Fatalf("processor trajectory kind = %s, want publication", trajectory.Kind)
-	}
-	if trajectory.SubjectRefs["processor_key"] != "processor:global_firehose:global:gdelt" {
-		t.Fatalf("subject refs missing processor key: %+v", trajectory.SubjectRefs)
-	}
-	if len(trajectory.SettlementRule.RequiredSubjectRefs) != 2 {
-		t.Fatalf("publication settlement rule missing required refs: %+v", trajectory.SettlementRule)
-	}
-	workItems, err := s.ListWorkItemsByTrajectory(ctx, "user-alice", run.TrajectoryID, true)
-	if err != nil {
-		t.Fatalf("list processor work items: %v", err)
-	}
-	if len(workItems) != 3 {
-		t.Fatalf("processor open work items = %+v, want request item + two source-item items", workItems)
-	}
-	sawRequest := false
-	sawSourceItems := map[string]bool{}
-	for _, item := range workItems {
-		switch item.ObjectiveFingerprint {
-		case workitem.ProcessorDecisionFingerprint(run.TrajectoryID):
-			sawRequest = true
-			if item.Details["kind"] != "wire_processor_request_resolution" || item.Details["request_id"] != "processor-request-1" {
-				t.Fatalf("processor request decision details = %+v", item.Details)
-			}
-		case workitem.SourceItemDecisionFingerprint(run.TrajectoryID, "srcitem-1"),
-			workitem.SourceItemDecisionFingerprint(run.TrajectoryID, "srcitem-2"):
-			sourceItemID, _ := item.Details["source_item_id"].(string)
-			sawSourceItems[sourceItemID] = true
-			if item.Details["kind"] != "wire_source_item_resolution" || item.Details["request_id"] != "processor-request-1" {
-				t.Fatalf("processor source-item decision details = %+v", item.Details)
-			}
-		default:
-			t.Fatalf("unexpected processor work item = %+v", item)
-		}
-	}
-	if !sawRequest || !sawSourceItems["srcitem-1"] || !sawSourceItems["srcitem-2"] {
-		t.Fatalf("processor work items missing expected request/source items: %+v", workItems)
-	}
-}
-
-func TestTrajectoryObligationsAnswersWaitingOn(t *testing.T) {
-	ctx := context.Background()
-	rt, s := testRuntime(t)
-
-	run, err := rt.StartRunWithMetadata(ctx, "publish the cycle", "user-alice", map[string]any{
-		runMetadataAgentProfile: agentprofile.Processor,
-		runMetadataAgentRole:    agentprofile.Processor,
-	})
-	if err != nil {
-		t.Fatalf("start run: %v", err)
-	}
-	autoItems, err := s.ListWorkItemsByTrajectory(ctx, "user-alice", run.TrajectoryID, true)
-	if err != nil {
-		t.Fatalf("list auto-opened work items: %v", err)
-	}
-	for _, item := range autoItems {
-		if _, err := s.UpdateWorkItemStatus(ctx, "user-alice", item.WorkItemID, types.WorkItemCompleted); err != nil {
-			t.Fatalf("complete auto-opened work item %s: %v", item.WorkItemID, err)
-		}
-	}
-
-	item, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
-		OwnerID:              "user-alice",
-		TrajectoryID:         run.TrajectoryID,
-		Objective:            "select and verify the candidate story",
-		ObjectiveFingerprint: "fp-obligation",
-		CreatedByRunID:       run.RunID,
-	})
-	if err != nil {
-		t.Fatalf("create work item: %v", err)
-	}
-
-	obligations, err := rt.TrajectoryObligations(ctx, "user-alice", run.TrajectoryID)
-	if err != nil {
-		t.Fatalf("trajectory obligations: %v", err)
-	}
-	if obligations.SettlementReady {
-		t.Fatalf("trajectory with open work item reports settlement ready: %+v", obligations)
-	}
-	if len(obligations.OpenWorkItems) != 1 || obligations.OpenWorkItems[0].WorkItemID != item.WorkItemID {
-		t.Fatalf("open work items = %+v, want the created item", obligations.OpenWorkItems)
-	}
-	// Publication kind also waits on both required subject refs.
-	if len(obligations.WaitingOn) != 3 {
-		t.Fatalf("waiting_on = %+v, want open-item + missing publish_ref + missing edition_ref", obligations.WaitingOn)
-	}
-
-	if _, err := s.UpdateWorkItemStatus(ctx, "user-alice", item.WorkItemID, types.WorkItemCompleted); err != nil {
-		t.Fatalf("complete work item: %v", err)
-	}
-	obligations, err = rt.TrajectoryObligations(ctx, "user-alice", run.TrajectoryID)
-	if err != nil {
-		t.Fatalf("trajectory obligations after completion: %v", err)
-	}
-	if len(obligations.OpenWorkItems) != 0 {
-		t.Fatalf("open work items after completion = %+v", obligations.OpenWorkItems)
-	}
-	// Still not ready: publish_ref and edition_ref are missing — the rule
-	// is evaluated as data, not satisfied by run state.
-	if obligations.SettlementReady {
-		t.Fatalf("publication trajectory settled without publish_ref: %+v", obligations)
-	}
-}
 
 func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 	ctx := context.Background()

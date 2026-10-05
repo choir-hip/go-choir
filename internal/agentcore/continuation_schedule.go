@@ -22,7 +22,6 @@ const (
 	engineeringProgressDeadlineUpdateKind      = "engineering_progress_overdue_deadline"
 	freshMintManagementDeadlineUpdateKind      = "fresh_mint_management_resume_deadline"
 	reactivatedManagementDeadlineUpdateKind    = "reactivated_management_resume_deadline"
-	wireReconcilerPublishDeadlineUpdateKind    = "wire_reconciler_publish_deadline"
 	selfdevMaterializationRetryKind            = "selfdev_materialization_retry"
 )
 

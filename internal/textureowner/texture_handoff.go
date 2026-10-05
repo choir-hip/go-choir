@@ -86,9 +86,11 @@ func HandoffKindForCaller(profile string) HandoffKind {
 	switch callerKind {
 	case agentprofile.Conductor:
 		return HandoffKindUserPrompt
-	case agentprofile.Processor:
+	case "processor":
+		// Frozen historical handoff only; processor is not a live profile.
 		return HandoffKindSourceOpen
-	case agentprofile.Reconciler:
+	case "reconciler":
+		// Frozen historical handoff only; reconciler is not a live profile.
 		return HandoffKindCorpusWake
 	default:
 		return ""

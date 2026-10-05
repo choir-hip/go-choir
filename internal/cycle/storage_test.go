@@ -382,60 +382,6 @@ func TestStorageSupersedesQueuedProcessorContinuityAndDependentReconcilers(t *te
 	}
 }
 
-func TestBuildIngestionHandoffRoutesSourceItemsToProcessorsOnly(t *testing.T) {
-	now := time.Date(2026, 6, 7, 10, 30, 0, 0, time.UTC)
-	items := []sources.Item{
-		{
-			ID:         "srcitem_gdelt_supply",
-			SourceID:   "gdelt:15min",
-			SourceType: sources.SourceTypeGDELT,
-			Title:      "Port disruption mention",
-			Verticals:  []string{"supply_chain"},
-			Region:     "global",
-		},
-		{
-			ID:         "srcitem_rss_supply",
-			SourceID:   "rss:logistics",
-			SourceType: sources.SourceTypeRSS,
-			Title:      "Carrier advisory",
-			Verticals:  []string{"supply_chain"},
-			Region:     "global",
-		},
-		{
-			ID:         "srcitem_telegram_conflict",
-			SourceID:   "telegram:conflict",
-			SourceType: sources.SourceTypeTelegram,
-			Title:      "Field report",
-			Verticals:  []string{"conflict"},
-			Region:     "mena",
-		},
-	}
-
-	handoff := BuildIngestionHandoff("cycle_ingestion_handoff", items, BuildIngestionEventsFromItems("cycle_ingestion_handoff", items, now), now)
-	if len(handoff.ProcessorRequests) != 3 {
-		t.Fatalf("processor requests = %d, want one per source-class route: %+v", len(handoff.ProcessorRequests), handoff.ProcessorRequests)
-	}
-	if len(handoff.ReconcilerRequests) != 0 {
-		t.Fatalf("reconciler requests = %d, want 0 (publish-debounced, not per-cycle)", len(handoff.ReconcilerRequests))
-	}
-	for _, req := range handoff.ProcessorRequests {
-		if req.Status != "queued" || req.CycleID != "cycle_ingestion_handoff" || req.ContinuityRef == "" {
-			t.Fatalf("processor request missing durable handoff fields: %+v", req)
-		}
-		if len(req.SourceItemIDs) == 0 || req.Prompt == "" {
-			t.Fatalf("processor request missing source handles or prompt: %+v", req)
-		}
-	}
-	foundGDELT := false
-	for _, req := range handoff.ProcessorRequests {
-		if req.ProcessorKey == "processor:global_firehose:global:gdelt" {
-			foundGDELT = true
-		}
-	}
-	if !foundGDELT {
-		t.Fatalf("GDELT route missing global firehose processor: %+v", handoff.ProcessorRequests)
-	}
-}
 
 func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 	ctx := context.Background()
@@ -459,9 +405,18 @@ func TestStoragePersistsIngestionHandoffsAndLatestCycleSummary(t *testing.T) {
 	if err := store.SaveIngestionEvents(ctx, events); err != nil {
 		t.Fatalf("save ingestion events: %v", err)
 	}
-	handoff := BuildIngestionHandoff(cycleID, []sources.Item{item}, events, now)
-	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
-		t.Fatalf("save processor requests: %v", err)
+	if err := store.SaveProcessorRequests(ctx, []ProcessorRequest{{
+		RequestID:         "processor_ai_policy",
+		CycleID:           cycleID,
+		ProcessorKey:      "processor:ai:us:rss",
+		Status:            "queued",
+		RuntimeStatus:     "queued",
+		SourceItemIDs:     []string{item.ID},
+		SourceCount:       1,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}}); err != nil {
+		t.Fatalf("save frozen processor request: %v", err)
 	}
 	fetch := sources.NewFetchRecord(sources.Source{ID: "rss:ai_policy", Type: sources.SourceTypeRSS, URL: "https://example.test/feed"}, "https://example.test/feed", now)
 	fetch.Status = "ok"

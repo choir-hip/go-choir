@@ -7,9 +7,9 @@ const (
 	TargetKind   = "source_service_item"
 )
 
-// Resolution states recorded by the runtime on the wire-processor request
-// work item and projected through the internal run-status API; sourcecycled's
-// reconcile loop branches on them, so writers and readers must share these.
+// Resolution states retained to decode frozen wire-processor request records
+// and their historical run-status projections. New processor dispatch is
+// retired.
 const (
 	ResolutionStateAwaitingSourceItemDecisions      = "awaiting_source_item_decisions"
 	ResolutionStateDecidedWithStoryRoute            = "all_source_items_decided_with_story_route"
@@ -25,6 +25,8 @@ type HealthResponse struct {
 	CheckedAt  time.Time `json:"checked_at"`
 }
 
+// IngestionHandoffResponse retains frozen queue-table projections for
+// historical reads; it does not advertise a live dispatch surface.
 type IngestionHandoffResponse struct {
 	Provider           string                   `json:"provider"`
 	Cycle              CycleSummary             `json:"cycle"`
@@ -78,6 +80,7 @@ type CycleEventSummary struct {
 	CreatedAt string         `json:"created_at,omitempty"`
 }
 
+// ProcessorRequest is frozen queue-table residue retained for historical reads.
 type ProcessorRequest struct {
 	RequestID     string   `json:"request_id"`
 	CycleID       string   `json:"cycle_id"`
@@ -96,6 +99,7 @@ type ProcessorRequest struct {
 	UpdatedAt     string   `json:"updated_at,omitempty"`
 }
 
+// ReconcilerRequest is frozen queue-table residue retained for historical reads.
 type ReconcilerRequest struct {
 	RequestID           string   `json:"request_id"`
 	CycleID             string   `json:"cycle_id"`

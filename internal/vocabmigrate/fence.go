@@ -29,8 +29,8 @@ import (
 // stays-live identity plus underscore folding), so the fence and the
 // migrator can never disagree: one function is the single authority.
 
-// v2LiveSet is the frozen V2 live vocabulary (mapping §2): three desks plus
-// stays-live profiles. Aliases are NOT members: under active v2 they refuse.
+// v2LiveSet is the frozen V2 vocabulary used while replaying historical
+// records. Processor and reconciler are retained only for that replay path.
 var v2LiveSet = map[string]bool{
 	"management": true, "engineering": true, "research": true,
 	"texture": true, "conductor": true, "processor": true,

@@ -318,10 +318,10 @@ var FrozenSQLIdentifiers = []string{
 // Stratum C: the ONE explicit V1→V2 normalization point (plan §4).
 // ---------------------------------------------------------------------------
 
-// normalizeV2Live is the live V2 canonical acceptor set mirrored as data so
+// normalizeV2Live is the active V2 canonical acceptor set mirrored as data so
 // this package never imports agentprofile (which must stay able to change).
-// Values are the live V2 desk names; verifier roles normalize through their
-// modelpolicy spellings.
+// Processor and reconciler entries are frozen-history recognition only; they
+// remain to replay V2 records, not to admit live profiles.
 var normalizeV2Live = map[string]string{
 	"management":          "management",
 	"engineering":         "engineering",

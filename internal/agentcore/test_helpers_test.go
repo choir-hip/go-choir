@@ -67,25 +67,6 @@ func spawnBoundTestLifecycleProducer(t *testing.T, rt *Runtime, s *store.Store, 
 	if err := s.CreateRun(ctx, parent); err != nil {
 		t.Fatalf("create requesting lifecycle Texture: %v", err)
 	}
-	if profile == agentprofile.Processor {
-		agentID := profile + ":" + suffix
-		child := &types.RunRecord{
-			RunID: "processor-producer:" + suffix, AgentID: agentID, ChannelID: docID, TrajectoryID: trajectoryID,
-			RequestedByRunID: parent.RunID, AgentProfile: profile, AgentRole: profile, OwnerID: ownerID,
-			ComputerID: rt.TextureComputerID(), State: types.RunRunning, CreatedAt: now, UpdatedAt: now,
-			Metadata: map[string]any{
-				runMetadataAgentID: agentID, runMetadataAgentProfile: profile, runMetadataAgentRole: profile,
-				runMetadataChannelID: docID, runMetadataTrajectoryID: trajectoryID,
-				"requested_by": parent.RunID, "requested_by_run_id": parent.RunID,
-				"requested_by_agent_id": parent.AgentID, "requested_by_profile": agentprofile.Texture,
-			},
-		}
-		if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: child.ComputerID, Profile: profile, Role: profile, ChannelID: docID, CreatedAt: now, UpdatedAt: now}); err != nil {
-			t.Fatalf("seed processor lifecycle producer: %v", err)
-		}
-		bindTestLifecycleProducerWork(t, s, parent, child, profile)
-		return child, trajectoryID
-	}
 	child, err := rt.StartCoagentRun(ctx, parent.RunID, "produce bound lifecycle update", ownerID, map[string]any{
 		runMetadataAgentID: profile + ":" + suffix, runMetadataAgentProfile: profile,
 		runMetadataAgentRole: profile, runMetadataChannelID: docID,
@@ -141,21 +122,6 @@ func toolContextForTestCall(run *types.RunRecord, callID string) context.Context
 	return toolregistry.WithExecutionContext(context.Background(), execution)
 }
 
-func lifecycleUpdateFromToolOutput(t *testing.T, s *store.Store, run *types.RunRecord, raw string) types.CoagentSourcePacket {
-	t.Helper()
-	updateID := d9UpdateID(t, raw)
-	snapshot, err := s.GetLifecycleSnapshot(context.Background(), run.OwnerID, run.ComputerID, trajectoryIDForRun(run))
-	if err != nil {
-		t.Fatalf("get lifecycle snapshot: %v", err)
-	}
-	for _, update := range snapshot.Updates {
-		if update.UpdateID == updateID {
-			return update
-		}
-	}
-	t.Fatalf("lifecycle update %s not found in snapshot", updateID)
-	return types.CoagentSourcePacket{}
-}
 
 func startBoundLegacyEngineeringResultRun(t *testing.T, s *store.Store, target types.AgentRecord, suffix string) *types.RunRecord {
 	t.Helper()

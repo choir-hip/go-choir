@@ -166,7 +166,7 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		if to == "" {
 			return fmt.Errorf("reduce: %s %s missing destination desk", in.Kind, in.LocalID)
 		}
-		if _, err := agentprofile.Canonical(to); err != nil {
+		if _, err := agentprofile.Canonical(to); err != nil || !agentprofile.IsLive(to) {
 			return fmt.Errorf("reduce: %s %s targets unknown desk %q", in.Kind, in.LocalID, in.ToDesk)
 		}
 		return nil
@@ -1213,14 +1213,12 @@ func (r *rlmCallReduction) isAssignedDesk() bool {
 	return r != nil && r.rec != nil && metadataStringValue(r.rec.Metadata, "assignment_id") != ""
 }
 
-// isLifecycleProducer reports whether this reduction serves a lifecycle
-// producer run — a work-item-bound activation (research/processor/
-// reconciler) carrying work_item_ids or lifecycle_control_bindings but no
-// assignment_id. These runs' addressed acts are lifecycle updates with the
-// full producer authority contract; routing them to castStagedIntent dead-
-// letters the packet on a channel row nothing wakes on (the hollow-revision
-// defect documented in docs/problems/texture-research-hollow-revisions-
-// 2026-10-01.md).
+// isLifecycleProducer recognizes a frozen historical lifecycle producer run —
+// a work-item-bound activation (research/processor/reconciler) carrying
+// work_item_ids or lifecycle_control_bindings but no assignment_id. These
+// runs' addressed acts are lifecycle updates with the full producer authority
+// contract; routing them to castStagedIntent dead-letters the packet on a
+// channel row nothing wakes on (the hollow-revision case).
 func (r *rlmCallReduction) isLifecycleProducer() bool {
 	if r == nil || r.rec == nil {
 		return false

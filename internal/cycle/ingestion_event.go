@@ -14,8 +14,9 @@ const (
 	IngestionOriginPromptBar   = "prompt_bar"
 )
 
-// IngestionEvent is the only lawful activation record for wire processor dispatch.
-// Story creation must trace to a persisted source artifact and fetch provenance.
+// IngestionEvent preserves provenance for source artifacts and frozen
+// processor-history reads. Story creation must trace to a persisted source
+// artifact and fetch provenance.
 type IngestionEvent struct {
 	EventID     string
 	CycleID     string
@@ -89,8 +90,8 @@ func ValidateIngestionEventOrigin(origin string) error {
 	}
 }
 
-// ProcessorRequestEligibleForDispatch requires processor handoffs to carry
-// ingestion-event activation refs produced by a source fetch cycle.
+// ProcessorRequestEligibleForDispatch validates frozen processor queue records
+// when historical data is read or replayed. No new handoffs are produced.
 func ProcessorRequestEligibleForDispatch(req ProcessorRequest) bool {
 	return len(req.IngestionEventIDs) > 0
 }

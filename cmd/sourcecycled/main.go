@@ -1,16 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -29,72 +25,8 @@ import (
 )
 
 const (
-	defaultIngestionProcessorDispatchLimit  = 1
-	defaultIngestionRuntimeDispatchRetries  = 8
-	defaultIngestionRuntimeRetryDelay       = 2 * time.Second
-	defaultIngestionQueueDrainInterval      = 1 * time.Minute
-	defaultIngestionProcessorInFlightWindow = 15 * time.Minute
-	defaultObjectGraphBackfillLimit         = 50
+	defaultObjectGraphBackfillLimit = 50
 )
-
-type runtimeRunSubmitRequest struct {
-	OwnerID  string         `json:"owner_id"`
-	Prompt   string         `json:"prompt"`
-	Metadata map[string]any `json:"metadata,omitempty"`
-}
-
-type runtimeRunStatusResponse struct {
-	RunID               string                                    `json:"loop_id"`
-	AgentID             string                                    `json:"agent_id"`
-	ChannelID           string                                    `json:"channel_id,omitempty"`
-	AgentProfile        string                                    `json:"agent_profile,omitempty"`
-	AgentRole           string                                    `json:"agent_role,omitempty"`
-	State               string                                    `json:"state,omitempty"`
-	ActiveChildRuns     int                                       `json:"active_child_runs,omitempty"`
-	Trajectory          *runtimeTrajectoryStatusResponse          `json:"trajectory,omitempty"`
-	ProcessorResolution *runtimeProcessorResolutionStatusResponse `json:"processor_resolution,omitempty"`
-}
-
-type runtimeTrajectoryStatusResponse struct {
-	TrajectoryID      string   `json:"trajectory_id"`
-	Status            string   `json:"status,omitempty"`
-	SettlementReady   bool     `json:"settlement_ready"`
-	WaitingOn         []string `json:"waiting_on,omitempty"`
-	OpenWorkItemCount int      `json:"open_work_item_count"`
-}
-
-type runtimeProcessorResolutionStatusResponse struct {
-	WorkItemID              string `json:"work_item_id"`
-	Status                  string `json:"status,omitempty"`
-	ResolutionState         string `json:"resolution_state,omitempty"`
-	SourceItemCount         int    `json:"source_item_count,omitempty"`
-	ResolvedSourceItemCount int    `json:"resolved_source_item_count,omitempty"`
-	LastDecision            string `json:"last_decision,omitempty"`
-	StoryDocID              string `json:"story_doc_id,omitempty"`
-	CoveredByDocID          string `json:"covered_by_doc_id,omitempty"`
-}
-
-type ingestionRuntimeDispatcher struct {
-	baseURL              string
-	socketPath           string // UDS socket path; if set, uses unix transport and proxy path for autoputer
-	ownerID              string
-	maxProcessorRequests int
-	inFlightWindow       time.Duration
-	client               *http.Client
-	retryAttempts        int
-	retryDelay           time.Duration
-}
-
-type ingestionDispatchResult struct {
-	ProcessorSubmitted  int
-	ProcessorFailed     int
-	ProcessorSkipped    int
-	ReconcilerSubmitted int
-	ReconcilerFailed    int
-	ReconcilerSkipped   int
-	RunIDs              []string
-	Errors              []string
-}
 
 type webCaptureProjectionSummary struct {
 	Mode              string
@@ -105,13 +37,6 @@ type webCaptureProjectionSummary struct {
 	SkippedItemCount  int
 }
 
-type sourceServiceDispatchStateResponse struct {
-	CheckedAt           time.Time                `json:"checked_at"`
-	QueuedCount         int                      `json:"queued_count"`
-	RecentInFlightCount int                      `json:"recent_in_flight_count"`
-	InFlightWindow      string                   `json:"in_flight_window"`
-	Reconcilable        []cycle.ProcessorRequest `json:"reconcilable"`
-}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -159,18 +84,6 @@ func main() {
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	// Clean up stale submitted processor requests on startup.
-	// Runs submitted before restart are orphaned when the platform VM recycles.
-	inFlightWindow := time.Duration(parsePositiveInt(
-		firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_INFLIGHT_WINDOW_SECONDS", "SOURCECYCLED_INFLIGHT_WINDOW_SECONDS"),
-		int(defaultIngestionProcessorInFlightWindow/time.Second),
-	)) * time.Second
-	cutoff := time.Now().UTC().Add(-inFlightWindow)
-	if cleaned, err := store.ResetStaleSubmittedProcessorRequests(ctx, cutoff); err != nil {
-		log.Printf("Warning: failed to clean stale submitted processor requests: %v", err)
-	} else if cleaned > 0 {
-		log.Printf("Cleaned %d stale submitted processor requests (cutoff %s)", cleaned, cutoff.Format(time.RFC3339))
-	}
 	go func() {
 		<-sigChan
 		log.Println("Received shutdown signal, terminating...")
@@ -179,20 +92,18 @@ func main() {
 
 	server := startSourceServiceAPI(ctx, store)
 
-	// 3. Main Ingestion Loop (per-source-type tickers plus queue drain)
+	// 3. Main ingestion loop (per-source-type tickers).
 	//
 	// GDELT stays on a 15-minute cadence. RSS and Telegram get faster
 	// configurable intervals so high-frequency sources are not gated by the
 	// slowest one. Each ticker runs its own cycle filtered to that source
-	// type; the drain ticker is shared and unchanged.
+	// type.
 	rssTicker := time.NewTicker(sourceCycledRSSIntervalFromEnv())
 	defer rssTicker.Stop()
 	telegramTicker := time.NewTicker(sourceCycledTelegramIntervalFromEnv())
 	defer telegramTicker.Stop()
 	gdeltTicker := time.NewTicker(sourceCycledGDELTIntervalFromEnv())
 	defer gdeltTicker.Stop()
-	drainTicker := time.NewTicker(ingestionQueueDrainIntervalFromEnv())
-	defer drainTicker.Stop()
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
@@ -219,9 +130,6 @@ func main() {
 		case <-gdeltTicker.C:
 			log.Println("Initiating scheduled GDELT cycle...")
 			runCycle(ctx, &registry, store, sources.SourceTypeGDELT)
-		case <-drainTicker.C:
-			log.Println("Initiating queued ingestion handoff dispatch drain...")
-			dispatchQueuedIngestionHandoffs(ctx, store)
 		}
 	}
 }
@@ -365,53 +273,6 @@ func backfillSourceItemsToObjectGraphIfEmpty(ctx context.Context, store cycle.St
 	return nil
 }
 
-func ingestionRuntimeDispatcherFromEnv() *ingestionRuntimeDispatcher {
-	socketPath := strings.TrimSpace(firstEnv("SOURCECYCLED_VMCTL_PROXY_SOCK", "VMCTL_AUTOPUTER_PROXY_SOCK"))
-	ownerID := strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
-	if ownerID == "" {
-		ownerID = "universal-wire-platform"
-	}
-	limit := parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS", "SOURCECYCLED_AGENT_DISPATCH_MAX_PROCESSORS"), defaultIngestionProcessorDispatchLimit)
-	retries := parsePositiveInt(firstEnv("SOURCE_SERVICE_RUNTIME_DISPATCH_RETRIES", "SOURCECYCLED_RUNTIME_DISPATCH_RETRIES"), defaultIngestionRuntimeDispatchRetries)
-	d := &ingestionRuntimeDispatcher{
-		ownerID:              ownerID,
-		socketPath:           socketPath,
-		maxProcessorRequests: limit,
-		retryAttempts:        retries,
-		inFlightWindow:       time.Duration(parsePositiveInt(firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_INFLIGHT_WINDOW_SECONDS", "SOURCECYCLED_INFLIGHT_WINDOW_SECONDS"), int(defaultIngestionProcessorInFlightWindow/time.Second))) * time.Second,
-		retryDelay:           defaultIngestionRuntimeRetryDelay,
-	}
-	if socketPath != "" {
-		d.client = &http.Client{
-			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, "unix", socketPath)
-				},
-			},
-			Timeout: 5 * time.Minute,
-		}
-		d.baseURL = "http://unix" // host part is ignored by UDS dialer
-	} else {
-		baseURL := strings.TrimRight(strings.TrimSpace(firstEnv("SOURCE_SERVICE_RUNTIME_BASE_URL", "SOURCECYCLED_RUNTIME_BASE_URL")), "/")
-		if baseURL == "" {
-			return nil
-		}
-		d.baseURL = baseURL
-		d.client = &http.Client{Timeout: 20 * time.Second}
-	}
-	return d
-}
-
-func ingestionQueueDrainIntervalFromEnv() time.Duration {
-	raw := firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS", "SOURCECYCLED_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS")
-	seconds := parsePositiveInt(raw, int(defaultIngestionQueueDrainInterval/time.Second))
-	if seconds < 10 {
-		seconds = 10
-	}
-	return time.Duration(seconds) * time.Second
-}
-
 const (
 	defaultSourceCycledRSSInterval      = 5 * time.Minute
 	defaultSourceCycledTelegramInterval = 5 * time.Minute
@@ -495,7 +356,6 @@ func sourceServiceAPIHandler(store cycle.Store) http.Handler {
 	mux.HandleFunc("/internal/source-service/health", handleSourceServiceHealth(store))
 	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
 	mux.HandleFunc("/internal/source-service/ingestion-handoff/latest", handleSourceServiceIngestionHandoffLatest(store))
-	mux.HandleFunc("/internal/source-service/dispatch-state", handleSourceServiceDispatchState(store))
 	mux.HandleFunc("/internal/source-service/items/", handleSourceServiceItem(store))
 	// Top-level liveness and readiness endpoints. Liveness is a cheap
 	// process-alive check; readiness reports the source-service ledger as
@@ -544,40 +404,6 @@ func sourceServiceTrustedInternalTransport(r *http.Request) bool {
 	return host == "127.0.0.1" || host == "::1" || strings.HasPrefix(host, "192.0.2.")
 }
 
-func handleSourceServiceDispatchState(store cycle.Store) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		window := time.Duration(parsePositiveInt(
-			firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_INFLIGHT_WINDOW_SECONDS", "SOURCECYCLED_INFLIGHT_WINDOW_SECONDS"),
-			int(defaultIngestionProcessorInFlightWindow/time.Second),
-		)) * time.Second
-		queuedCount, err := store.CountQueuedProcessorRequests(r.Context())
-		if err != nil {
-			http.Error(w, "count queued processor requests: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		recentInFlightCount, err := store.CountRecentlySubmittedProcessorRequests(r.Context(), time.Now().UTC().Add(-window))
-		if err != nil {
-			http.Error(w, "count recent in-flight processor requests: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		reconcilable, err := store.ListReconcilableProcessorRequests(r.Context(), 128)
-		if err != nil {
-			http.Error(w, "list reconcilable processor requests: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeSourceServiceJSON(w, http.StatusOK, sourceServiceDispatchStateResponse{
-			CheckedAt:           time.Now().UTC(),
-			QueuedCount:         queuedCount,
-			RecentInFlightCount: recentInFlightCount,
-			InFlightWindow:      window.String(),
-			Reconcilable:        reconcilable,
-		})
-	}
-}
 
 func handleSourceServiceHealth(store cycle.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -644,8 +470,8 @@ func handleSourceServiceIngestionHandoffLatest(store cycle.Store) http.HandlerFu
 			ProcessorRequests:  sourceAPIProcessorRequests(summary.ProcessorRequests),
 			ReconcilerRequests: sourceAPIReconcilerRequests(summary.ReconcilerRequests),
 			Metadata: sourceapi.IngestionHandoffMetadata{
-				Topology:      "source-items -> processor-handoffs -> corpus-reconciler-handoff",
-				AuthorityRule: "source and version provenance stay in source items and Texture; handoffs are queues, not publication authority",
+				Topology:      "frozen historical processor/reconciler queue records",
+				AuthorityRule: "source and version provenance stay in source items and Texture; queue records are read-only historical residue",
 			},
 		})
 	}
@@ -842,438 +668,6 @@ func writeSourceServiceJSON(w http.ResponseWriter, status int, value any) {
 	}
 }
 
-func isTerminalRuntimeState(state string) bool {
-	switch strings.ToLower(strings.TrimSpace(state)) {
-	case "completed", "failed", "cancelled", "blocked":
-		return true
-	default:
-		return false
-	}
-}
-
-// processorRunProjection classifies what the runtime's trajectory and
-// processor-resolution state imply for the request verdict. The cases are
-// mutually exclusive: they require distinct trajectory statuses, or distinct
-// resolution states under the same status.
-type processorRunProjection int
-
-const (
-	projectionNone processorRunProjection = iota
-	projectionPublishedCorpusCoverage
-	projectionExplicitNoStoryTerminal
-	projectionDeferredWithoutStory
-	projectionPublicationSettled
-)
-
-func classifyProcessorRunProjection(run runtimeRunStatusResponse) processorRunProjection {
-	trajectoryStatus := ""
-	if run.Trajectory != nil {
-		trajectoryStatus = strings.ToLower(strings.TrimSpace(run.Trajectory.Status))
-	}
-	resolutionCompleted := false
-	resolutionState := ""
-	coveredByDocID := ""
-	if run.ProcessorResolution != nil {
-		resolutionCompleted = strings.EqualFold(strings.TrimSpace(run.ProcessorResolution.Status), "completed")
-		resolutionState = strings.ToLower(strings.TrimSpace(run.ProcessorResolution.ResolutionState))
-		coveredByDocID = strings.TrimSpace(run.ProcessorResolution.CoveredByDocID)
-	}
-	switch {
-	case trajectoryStatus == "cancelled" && resolutionCompleted &&
-		resolutionState == sourceapi.ResolutionStateSuppressedAgainstPublishedCorpus && coveredByDocID != "":
-		return projectionPublishedCorpusCoverage
-	case trajectoryStatus == "cancelled" && resolutionCompleted &&
-		resolutionState == sourceapi.ResolutionStateDecidedWithoutStoryRoute:
-		return projectionExplicitNoStoryTerminal
-	case trajectoryStatus == "live" && resolutionState == sourceapi.ResolutionStateDeferredWithoutStoryRoute:
-		return projectionDeferredWithoutStory
-	case trajectoryStatus == "settled":
-		return projectionPublicationSettled
-	default:
-		return projectionNone
-	}
-}
-
-// processorStoryRouteCompleted reports whether the processor request resolved
-// every source item with a story route; that releases runtime admission
-// capacity even while the run tree is still working the story.
-func processorStoryRouteCompleted(run runtimeRunStatusResponse) bool {
-	return run.ProcessorResolution != nil &&
-		strings.EqualFold(strings.TrimSpace(run.ProcessorResolution.Status), "completed") &&
-		strings.EqualFold(strings.TrimSpace(run.ProcessorResolution.ResolutionState), sourceapi.ResolutionStateDecidedWithStoryRoute)
-}
-
-// processorRunReconcileDecision projects a runtime run status onto at most
-// one verdict write and one runtime-status write. The deferred projection
-// intentionally records a verdict only once the run itself is terminal.
-func processorRunReconcileDecision(run runtimeRunStatusResponse) (verdict, runtimeStatus string) {
-	projection := classifyProcessorRunProjection(run)
-	switch projection {
-	case projectionPublishedCorpusCoverage, projectionExplicitNoStoryTerminal, projectionPublicationSettled:
-		verdict = "completed"
-		runtimeStatus = "completed"
-	}
-	if processorStoryRouteCompleted(run) {
-		runtimeStatus = "completed"
-	}
-	if isTerminalRuntimeState(run.State) {
-		runtimeStatus = strings.ToLower(strings.TrimSpace(run.State))
-		switch {
-		case projection == projectionDeferredWithoutStory:
-			verdict = "deferred"
-		case verdict == "" && (strings.EqualFold(run.State, "failed") || strings.EqualFold(run.State, "cancelled") || strings.EqualFold(run.State, "blocked")):
-			verdict = "dispatch_failed"
-		}
-	}
-	return verdict, runtimeStatus
-}
-
-func (d *ingestionRuntimeDispatcher) getRunStatus(ctx context.Context, runID string) (runtimeRunStatusResponse, error) {
-	var zero runtimeRunStatusResponse
-	runsEndpoint := strings.TrimRight(strings.TrimSpace(d.runtimeRunsEndpoint()), "/")
-	if runsEndpoint == "" {
-		return zero, fmt.Errorf("runtime base URL is not configured")
-	}
-	endpoint, err := url.Parse(runsEndpoint + "/" + url.PathEscape(strings.TrimSpace(runID)))
-	if err != nil {
-		return zero, fmt.Errorf("parse runtime status URL: %w", err)
-	}
-	q := endpoint.Query()
-	q.Set("owner_id", d.ownerID)
-	endpoint.RawQuery = q.Encode()
-	client := d.client
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
-	if err != nil {
-		return zero, fmt.Errorf("build runtime status request: %w", err)
-	}
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := client.Do(req)
-	if err != nil {
-		return zero, err
-	}
-	body, readErr := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if readErr != nil {
-		return zero, fmt.Errorf("read runtime status response: %w", readErr)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return zero, fmt.Errorf("runtime status returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var out runtimeRunStatusResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return zero, fmt.Errorf("decode runtime status response: %w", err)
-	}
-	return out, nil
-}
-
-func (d *ingestionRuntimeDispatcher) reconcileSubmittedProcessorRequests(ctx context.Context, store cycle.Store) error {
-	if d == nil || store == nil {
-		return nil
-	}
-	submitted, err := store.ListReconcilableProcessorRequests(ctx, 128)
-	if err != nil {
-		return err
-	}
-	for _, req := range submitted {
-		runID := strings.TrimSpace(req.RuntimeRunID)
-		if runID == "" {
-			continue
-		}
-		run, err := d.getRunStatus(ctx, runID)
-		if err != nil {
-			msg := strings.ToLower(err.Error())
-			if (strings.Contains(msg, "returned 404") || strings.Contains(msg, "not found")) && strings.EqualFold(strings.TrimSpace(req.RuntimeStatus), "submitted") {
-				if resetErr := store.ResetProcessorRequestSubmission(ctx, req.RequestID); resetErr != nil {
-					log.Printf("sourcecycled: reset missing runtime run %s for %s: %v", runID, req.RequestID, resetErr)
-				}
-			}
-			continue
-		}
-		verdict, runtimeStatus := processorRunReconcileDecision(run)
-		if runtimeStatus != "" {
-			if err := store.UpdateProcessorRequestRuntimeStatus(ctx, req.RequestID, runtimeStatus, runID); err != nil {
-				log.Printf("sourcecycled: reconcile submitted request runtime %s -> %s: %v", req.RequestID, runtimeStatus, err)
-			}
-		}
-		if verdict != "" {
-			if err := store.UpdateProcessorRequestVerdictStatus(ctx, req.RequestID, verdict); err != nil {
-				log.Printf("sourcecycled: reconcile submitted request %s -> %s: %v", req.RequestID, verdict, err)
-			}
-		}
-	}
-	return nil
-}
-
-func (d *ingestionRuntimeDispatcher) dispatch(ctx context.Context, store cycle.Store, handoff cycle.IngestionHandoff) ingestionDispatchResult {
-	var result ingestionDispatchResult
-	if d == nil || strings.TrimSpace(d.baseURL) == "" {
-		result.ProcessorSkipped = len(handoff.ProcessorRequests)
-		return result
-	}
-	if store != nil {
-		if err := d.reconcileSubmittedProcessorRequests(ctx, store); err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("reconcile submitted processors: %v", err))
-		}
-	}
-	processorLimit := d.maxProcessorRequests
-	if processorLimit <= 0 {
-		processorLimit = defaultIngestionProcessorDispatchLimit
-	}
-	processorRequests := handoff.ProcessorRequests
-	if store != nil {
-		queuedCount, err := store.CountQueuedProcessorRequests(ctx)
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("count queued processors: %v", err))
-			result.ProcessorSkipped += len(handoff.ProcessorRequests)
-			return result
-		}
-		queued, err := store.ListQueuedProcessorRequests(ctx, processorLimit)
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("list queued processors: %v", err))
-			result.ProcessorSkipped += len(handoff.ProcessorRequests)
-			return result
-		}
-		processorRequests = queued
-		result.ProcessorSkipped += maxInt(0, queuedCount-len(queued))
-	}
-	// Backpressure: count recently submitted (in-flight) processors and limit new submissions
-	inFlight := 0
-	if store != nil {
-		var err error
-		inFlight, err = store.CountRecentlySubmittedProcessorRequests(ctx, time.Now().UTC().Add(-d.inFlightWindow))
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("count in-flight processors: %v", err))
-			// Fall through — conservative: treat as overload and skip remaining
-			result.ProcessorSkipped += len(processorRequests)
-			return result
-		}
-	}
-	submitCap := processorLimit - inFlight
-	log.Printf("Dispatch backpressure: in-flight=%d submitCap=%d (%d - %d)", inFlight, submitCap, processorLimit, inFlight)
-	if submitCap <= 0 {
-		result.ProcessorSkipped += len(processorRequests)
-		return result
-	}
-	for _, req := range processorRequests {
-		if !cycle.ProcessorRequestEligibleForDispatch(req) {
-			result.ProcessorSkipped++
-			continue
-		}
-		if store != nil {
-			ok, err := store.ValidateProcessorRequestIngestionEvents(ctx, req)
-			if err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: validate ingestion events: %v", req.RequestID, err))
-				result.ProcessorSkipped++
-				continue
-			}
-			if !ok {
-				result.ProcessorSkipped++
-				continue
-			}
-		}
-		run, err := d.submitProcessor(ctx, req)
-		if err != nil {
-			if isTransientRuntimeSubmitError(err) {
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: transient runtime unavailable: %v", req.RequestID, err))
-				break
-			}
-			result.ProcessorFailed++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", req.RequestID, err))
-			if store != nil {
-				_ = store.UpdateProcessorRequestRuntimeRun(ctx, req.RequestID, "dispatch_failed", "")
-			}
-			continue
-		}
-		result.ProcessorSubmitted++
-		result.RunIDs = append(result.RunIDs, run.RunID)
-		if store != nil {
-			_ = store.UpdateProcessorRequestRuntimeRun(ctx, req.RequestID, "submitted", run.RunID)
-		}
-		// Enforce per-drain submission cap: stop if we have submitted enough
-		if result.ProcessorSubmitted >= submitCap {
-			break
-		}
-	}
-	// Story-corpus reconciler dispatches from wire publish debounce (runtime), not ingestion.
-	return result
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func (d *ingestionRuntimeDispatcher) submitProcessor(ctx context.Context, req cycle.ProcessorRequest) (runtimeRunStatusResponse, error) {
-	prompt := req.Prompt + "\n\nIngestion processor request: " + req.RequestID +
-		"\nCycle: " + req.CycleID +
-		"\nProcessor key: " + req.ProcessorKey +
-		"\nContinuity ref: " + req.ContinuityRef +
-		"\nSource item handles: " + strings.Join(req.SourceItemIDs, ", ") +
-		"\nDo not paste source bodies into the checkpoint. Use source_search/fetch_url by handle or URL when needed, preserve source handles, and spawn Texture agents when a story should be opened or revised."
-	channelID := "processor-v2:" + strings.ReplaceAll(req.ProcessorKey, ":", "-")
-	agentID := "processor-v2:" + strings.ReplaceAll(req.ProcessorKey, ":", "-")
-	return d.submit(ctx, runtimeRunSubmitRequest{
-		OwnerID: d.ownerID,
-		Prompt:  prompt,
-		Metadata: map[string]any{
-			"channel_id":                     channelID,
-			"agent_id":                       agentID,
-			"agent_profile":                  "processor",
-			"agent_role":                     "processor",
-			"request_source":                 "sourcecycled",
-			"activation_origin":              "ingestion_event",
-			"ingestion_event_ids":            req.IngestionEventIDs,
-			"source_network_cycle_id":        req.CycleID,
-			"source_network_request_id":      req.RequestID,
-			"source_network_request_kind":    "processor",
-			"ingestion_handoff_request_kind": "processor",
-			"ingestion_handoff_request_id":   req.RequestID,
-			"ingestion_handoff_cycle_id":     req.CycleID,
-			"processor_key":                  req.ProcessorKey,
-			"source_item_ids":                req.SourceItemIDs,
-			"source_count":                   req.SourceCount,
-			"source_types":                   req.SourceTypes,
-			"verticals":                      req.Verticals,
-			"regions":                        req.Regions,
-			"continuity_ref":                 req.ContinuityRef,
-		},
-	})
-}
-
-func (d *ingestionRuntimeDispatcher) submitReconciler(ctx context.Context, req cycle.ReconcilerRequest) (runtimeRunStatusResponse, error) {
-	prompt := req.Prompt + "\n\nIngestion reconciler request: " + req.RequestID +
-		"\nCycle: " + req.CycleID +
-		"\nScope: " + req.Scope +
-		"\nProcessor request handles: " + strings.Join(req.ProcessorRequestIDs, ", ") +
-		"\nSource item handles: " + strings.Join(req.SourceItemIDs, ", ") +
-		"\nReview the story corpus and source/processor state. Note consensus, contradictions, drift, research needs, and candidate Texture updates without mutating platform stories."
-	return d.submit(ctx, runtimeRunSubmitRequest{
-		OwnerID: d.ownerID,
-		Prompt:  prompt,
-		Metadata: map[string]any{
-			"agent_profile":                  "reconciler",
-			"agent_role":                     "reconciler",
-			"request_source":                 "sourcecycled",
-			"ingestion_handoff_request_kind": "reconciler",
-			"ingestion_handoff_request_id":   req.RequestID,
-			"ingestion_handoff_cycle_id":     req.CycleID,
-			"reconciler_scope":               req.Scope,
-			"source_item_ids":                req.SourceItemIDs,
-			"processor_request_ids":          req.ProcessorRequestIDs,
-		},
-	})
-}
-
-func (d *ingestionRuntimeDispatcher) submit(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
-	if d == nil || d.client == nil {
-		return runtimeRunStatusResponse{}, fmt.Errorf("runtime dispatcher is not configured")
-	}
-	attempts := d.retryAttempts
-	if attempts <= 0 {
-		attempts = defaultIngestionRuntimeDispatchRetries
-	}
-	delay := d.retryDelay
-	if delay <= 0 {
-		delay = defaultIngestionRuntimeRetryDelay
-	}
-	var lastErr error
-	for attempt := 1; attempt <= attempts; attempt++ {
-		out, err := d.submitOnce(ctx, payload)
-		if err == nil {
-			return out, nil
-		}
-		lastErr = err
-		if !isTransientRuntimeSubmitError(err) || attempt == attempts {
-			break
-		}
-		log.Printf("Ingestion runtime dispatch attempt %d/%d failed transiently: %v", attempt, attempts, err)
-		select {
-		case <-ctx.Done():
-			return runtimeRunStatusResponse{}, ctx.Err()
-		case <-time.After(delay):
-		}
-	}
-	return runtimeRunStatusResponse{}, lastErr
-}
-
-func (d *ingestionRuntimeDispatcher) runtimeRunsEndpoint() string {
-	if d.socketPath != "" {
-		return d.baseURL + "/internal/vmctl/autoputer-proxy/" + d.ownerID + "/internal/runtime/runs"
-	}
-	return d.baseURL + "/internal/runtime/runs"
-}
-
-func (d *ingestionRuntimeDispatcher) submitOnce(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return runtimeRunStatusResponse{}, fmt.Errorf("marshal runtime run request: %w", err)
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, d.runtimeRunsEndpoint(), bytes.NewReader(body))
-	if err != nil {
-		return runtimeRunStatusResponse{}, fmt.Errorf("create runtime run request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-Internal-Caller", "true")
-	resp, err := d.client.Do(httpReq)
-	if err != nil {
-		return runtimeRunStatusResponse{}, fmt.Errorf("submit runtime run: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		var apiErr struct {
-			Error string `json:"error"`
-		}
-		_ = json.NewDecoder(resp.Body).Decode(&apiErr)
-		if strings.TrimSpace(apiErr.Error) == "" {
-			apiErr.Error = resp.Status
-		}
-		return runtimeRunStatusResponse{}, runtimeSubmitError{StatusCode: resp.StatusCode, Status: resp.Status, Message: apiErr.Error}
-	}
-	var out runtimeRunStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return runtimeRunStatusResponse{}, fmt.Errorf("decode runtime run response: %w", err)
-	}
-	if strings.TrimSpace(out.RunID) == "" {
-		return runtimeRunStatusResponse{}, fmt.Errorf("runtime accepted run without loop_id")
-	}
-	return out, nil
-}
-
-type runtimeSubmitError struct {
-	StatusCode int
-	Status     string
-	Message    string
-}
-
-func (e runtimeSubmitError) Error() string {
-	return fmt.Sprintf("runtime returned %s: %s", e.Status, e.Message)
-}
-
-func isTransientRuntimeSubmitError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var statusErr runtimeSubmitError
-	if errors.As(err, &statusErr) {
-		return statusErr.StatusCode == http.StatusTooManyRequests || statusErr.StatusCode >= 500
-	}
-	return true
-}
-
-func ingestionDispatchResultHasActivity(result ingestionDispatchResult) bool {
-	return result.ProcessorSubmitted > 0 ||
-		result.ReconcilerSubmitted > 0 ||
-		result.ProcessorFailed > 0 ||
-		result.ReconcilerFailed > 0 ||
-		result.ProcessorSkipped > 0 ||
-		result.ReconcilerSkipped > 0 ||
-		len(result.Errors) > 0
-}
 
 func parsePositiveInt(raw string, fallback int) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
@@ -1330,19 +724,6 @@ func runCycle(ctx context.Context, registry *sources.Registry, store cycle.Store
 			_ = store.FinishCycle(ctx, cycleID, "error", 0, len(pollResult.Fetches), err)
 			return
 		}
-		dispatchResult := ingestionRuntimeDispatcherFromEnv().dispatch(ctx, store, cycle.IngestionHandoff{})
-		if ingestionDispatchResultHasActivity(dispatchResult) {
-			_ = store.RecordCycleEvent(ctx, cycleID, "", "ingestion_handoff_queue_drain", "queued ingestion handoffs drained during empty source cycle", map[string]any{
-				"processor_submitted":  dispatchResult.ProcessorSubmitted,
-				"processor_failed":     dispatchResult.ProcessorFailed,
-				"processor_skipped":    dispatchResult.ProcessorSkipped,
-				"reconciler_submitted": dispatchResult.ReconcilerSubmitted,
-				"reconciler_failed":    dispatchResult.ReconcilerFailed,
-				"reconciler_skipped":   dispatchResult.ReconcilerSkipped,
-				"runtime_run_ids":      dispatchResult.RunIDs,
-				"errors":               dispatchResult.Errors,
-			})
-		}
 		_ = store.FinishCycle(ctx, cycleID, "completed", 0, len(pollResult.Fetches), nil)
 		return
 	}
@@ -1370,82 +751,10 @@ func runCycle(ctx context.Context, registry *sources.Registry, store cycle.Store
 		"item_count":            len(items),
 	})
 
-	handoff := cycle.BuildIngestionHandoff(cycleID, items, ingestionEvents, now)
-	if err := store.SaveProcessorRequests(ctx, handoff.ProcessorRequests); err != nil {
-		log.Printf("Failed to save processor requests: %v", err)
-		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
-		return
-	}
-	if err := store.SaveReconcilerRequests(ctx, handoff.ReconcilerRequests); err != nil {
-		log.Printf("Failed to save reconciler requests: %v", err)
-		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
-		return
-	}
-	supersededProcessors, err := store.SupersedeQueuedProcessorRequests(ctx, handoff.ProcessorRequests)
-	if err != nil {
-		log.Printf("Failed to supersede stale processor requests: %v", err)
-		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
-		return
-	}
-	supersededReconcilers, err := store.SupersedeQueuedReconcilersWithSupersededProcessors(ctx)
-	if err != nil {
-		log.Printf("Failed to supersede stale reconciler requests: %v", err)
-		_ = store.FinishCycle(ctx, cycleID, "error", len(items), len(pollResult.Fetches), err)
-		return
-	}
-	_ = store.RecordCycleEvent(ctx, cycleID, "", "ingestion_handoffs_queued", "source items routed to processor and reconciler handoffs", map[string]any{
-		"processor_request_count":      len(handoff.ProcessorRequests),
-		"reconciler_request_count":     len(handoff.ReconcilerRequests),
-		"source_item_count":            len(items),
-		"superseded_processor_count":   supersededProcessors,
-		"superseded_reconciler_count":  supersededReconcilers,
-		"processor_continuity_refresh": supersededProcessors > 0,
-	})
-	dispatchResult := ingestionRuntimeDispatcherFromEnv().dispatch(ctx, store, handoff)
-	if ingestionDispatchResultHasActivity(dispatchResult) {
-		_ = store.RecordCycleEvent(ctx, cycleID, "", "ingestion_handoff_runs_dispatched", "ingestion handoffs submitted to processor/reconciler agent profiles", map[string]any{
-			"processor_submitted":  dispatchResult.ProcessorSubmitted,
-			"processor_failed":     dispatchResult.ProcessorFailed,
-			"processor_skipped":    dispatchResult.ProcessorSkipped,
-			"reconciler_submitted": dispatchResult.ReconcilerSubmitted,
-			"reconciler_failed":    dispatchResult.ReconcilerFailed,
-			"reconciler_skipped":   dispatchResult.ReconcilerSkipped,
-			"runtime_run_ids":      dispatchResult.RunIDs,
-			"errors":               dispatchResult.Errors,
-		})
-	}
 
 	cycleDuration := time.Since(cycleStartTime)
 	_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_completed", "source cycle completed", map[string]any{"duration_ms": cycleDuration.Milliseconds(), "item_count": len(items), "fetch_count": len(pollResult.Fetches)})
 	_ = store.FinishCycle(ctx, cycleID, "completed", len(items), len(pollResult.Fetches), nil)
 	log.Printf("Cycle completed in %v", cycleDuration)
-	log.Printf("Queued %d processor request(s) and %d reconciler request(s)", len(handoff.ProcessorRequests), len(handoff.ReconcilerRequests))
 }
 
-func dispatchQueuedIngestionHandoffs(ctx context.Context, store cycle.Store) {
-	if store == nil {
-		return
-	}
-	dispatcher := ingestionRuntimeDispatcherFromEnv()
-	if dispatcher == nil {
-		log.Println("Queued ingestion handoff dispatch drain skipped: runtime dispatcher is not configured")
-		return
-	}
-	result := dispatcher.dispatch(ctx, store, cycle.IngestionHandoff{})
-	if !ingestionDispatchResultHasActivity(result) {
-		log.Println("Queued ingestion handoff dispatch drain found no dispatchable work")
-		return
-	}
-	log.Printf("Queued ingestion handoff dispatch drain: processor_submitted=%d processor_failed=%d processor_skipped=%d reconciler_submitted=%d reconciler_failed=%d reconciler_skipped=%d errors=%d",
-		result.ProcessorSubmitted,
-		result.ProcessorFailed,
-		result.ProcessorSkipped,
-		result.ReconcilerSubmitted,
-		result.ReconcilerFailed,
-		result.ReconcilerSkipped,
-		len(result.Errors),
-	)
-	for _, errText := range result.Errors {
-		log.Printf("Queued ingestion handoff dispatch drain error: %s", errText)
-	}
-}

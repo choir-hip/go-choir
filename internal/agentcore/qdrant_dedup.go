@@ -12,9 +12,8 @@ import (
 )
 
 // qdrantDedupResult records the outcome of a semantic dedup pass over a batch
-// of ingested items. Kept items proceed to objectgraph projection and
-// processor dispatch; dropped items are logged with their nearest-neighbor
-// score for threshold calibration.
+// of ingested items. Kept items proceed to objectgraph projection; dropped
+// items are logged with their nearest-neighbor score for threshold calibration.
 type qdrantDedupResult struct {
 	Kept       []sources.Item
 	Dropped    []sources.Item
@@ -24,11 +23,11 @@ type qdrantDedupResult struct {
 }
 
 // dedupSourceItemsSemantically runs a Qdrant semantic dedup pass over items
-// before they are projected into the object graph and dispatched to the
-// processor. For each item it embeds the item text, searches the production
-// Qdrant collection for a near-duplicate, and drops items whose top match
-// score meets or exceeds the configured threshold. Items that pass are
-// upserted into Qdrant so future captures can be compared against them.
+// before they are projected into the object graph. For each item it embeds the
+// item text, searches the production Qdrant collection for a near-duplicate,
+// and drops items whose top match score meets or exceeds the configured
+// threshold. Items that pass are upserted into Qdrant so future captures can
+// be compared against them.
 //
 // The pass is best-effort and non-blocking: if the Qdrant pipeline is
 // unavailable, the production collection cannot be ensured, embedding fails,

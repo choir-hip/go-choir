@@ -41,13 +41,6 @@ func ConductorRunOverlay(opts ConductorRunOptions) string {
 	return mustRenderOverlay("conductor_run", opts)
 }
 
-func ProcessorRuntimeOverlay() string {
-	return mustRenderOverlay("processor_runtime", nil)
-}
-
-func ReconcilerRuntimeOverlay() string {
-	return mustRenderOverlay("reconciler_runtime", nil)
-}
 
 func ManagementRuntimeOverlay() string {
 	return mustRenderOverlay("management_runtime", nil)

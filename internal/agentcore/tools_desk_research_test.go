@@ -1,14 +1,8 @@
 package agentcore
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
-	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -67,51 +61,3 @@ func TestR3rEgressLedgerInstalledOnRuntime(t *testing.T) {
 	}
 }
 
-func TestR3rResearchEgressChargedOnNetworkTools(t *testing.T) {
-	rt, _ := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
-		t.Fatalf("install tools: %v", err)
-	}
-	reg := rt.ToolRegistryForProfile("research")
-	if reg == nil {
-		t.Fatal("research registry missing")
-	}
-	ledger := rt.researchEgress
-	ledger.MaxCalls = 1 // tighten for the test: one network call allowed
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("research evidence body"))
-	}))
-	defer server.Close()
-
-	runCtx := toolregistry.WithExecutionContext(t.Context(), toolregistry.ExecutionContext{
-		RunID:     "run-r3r-egress",
-		Profile:   "research",
-		RunRecord: &types.RunRecord{RunID: "run-r3r-egress"},
-	})
-
-	fetch, ok := reg.Lookup("fetch_url")
-	if !ok {
-		t.Fatal("fetch_url must be on the research cell registry")
-	}
-	args, _ := json.Marshal(map[string]any{"url": server.URL})
-	out, err := fetch.Func(runCtx, args)
-	if err != nil {
-		t.Fatalf("first fetch_url under budget: %v", err)
-	}
-	if !strings.Contains(out, "research evidence body") {
-		t.Fatalf("fetch_url output missing body: %s", out)
-	}
-	calls, fetched := ledger.Usage(toolregistry.ExecutionContextFrom(runCtx))
-	if calls != 1 || fetched <= 0 {
-		t.Fatalf("egress usage = %d calls / %d bytes, want 1 + >0", calls, fetched)
-	}
-
-	// Second network call refuses at cap — the budget binds the activation,
-	// not the single tool.
-	_, err = fetch.Func(runCtx, args)
-	if err == nil || !strings.Contains(err.Error(), "egress budget exhausted") {
-		t.Fatalf("fetch_url beyond cap must refuse with budget error, got %v", err)
-	}
-}

@@ -139,6 +139,8 @@ func revisionCarriesWireLineage(meta map[string]any) bool {
 	if kind == "" {
 		kind = metadataString(meta, "ingestion_handoff_request_kind")
 	}
+	// Frozen historical handoff kinds keep their original wire lineage during
+	// replay; no live processor/reconciler dispatch exists.
 	if kind == "processor" || kind == "reconciler" {
 		return true
 	}

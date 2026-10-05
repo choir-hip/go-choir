@@ -45,7 +45,7 @@ var frozenV1Canonical = map[string]string{
 	"researcher": "researcher", "researchers": "researcher",
 	"research": "researcher", "research-agent": "researcher",
 	"web-research": "researcher", "web-researcher": "researcher",
-	// Stays-live profiles.
+	// Live desk names plus frozen processor/reconciler history.
 	"texture": "texture", "texture-agent": "texture", "document-agent": "texture",
 	"conductor":    "conductor",
 	"processor":    "processor",

@@ -1260,6 +1260,8 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	if strings.TrimSpace(agent.Profile) != strings.TrimSpace(agent.Role) {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: agent profile and role must match: %w", ErrLifecycleInvalidTransition)
 	}
+	// "processor" and "reconciler" are frozen-history recognition for replay,
+	// not live agent profiles.
 	switch strings.TrimSpace(agent.Profile) {
 	case "texture", agentprofile.Engineering, agentprofile.Research, "processor", "reconciler":
 	default:
@@ -2530,6 +2532,8 @@ func (s *Store) requireLifecycleAssignedAgent(ctx context.Context, ownerID, comp
 	if err != nil {
 		return types.AgentRecord{}, err
 	}
+	// "processor" and "reconciler" are frozen-history recognition for replay,
+	// not live agent profiles.
 	switch strings.TrimSpace(agent.Profile) {
 	case "texture", agentprofile.Engineering, agentprofile.Research, "processor", "reconciler":
 	default:
@@ -2591,6 +2595,8 @@ func (s *Store) OpenLifecycleWork(ctx context.Context, req types.OpenLifecycleWo
 	assignedAgent, agentErr := s.requireLifecycleAssignedAgent(ctx, ownerID, computerID, work.AssignedAgentID)
 	var resultAgent *types.AgentRecord
 	if errors.Is(agentErr, ErrNotFound) {
+		// "processor" and "reconciler" are frozen-history recognition for replay,
+		// not live agent profiles.
 		switch strings.TrimSpace(work.AuthorityProfile) {
 		case agentprofile.Engineering, agentprofile.Research, "processor", "reconciler":
 		default:

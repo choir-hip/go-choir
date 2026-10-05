@@ -13,8 +13,6 @@ const (
 	Engineering = "engineering"
 	Research    = "research"
 	Texture     = "texture"
-	Processor   = "processor"
-	Reconciler  = "reconciler"
 	Email       = "email"
 )
 
@@ -71,30 +69,8 @@ func PolicyFor(profile string) (Policy, error) {
 			AllowedSpawnTargets:   []string{Research},
 			AllowedMessageTargets: []string{Research, Management},
 		}, nil
-	case Processor:
-		return Policy{
-			Profile:                   Processor,
-			AllowReadOnlyFiles:        true,
-			AllowResearchTools:        true,
-			AllowEvidenceTools:        true,
-			AllowMemoryTools:          true,
-			AllowModelDiagnosticTools: true,
-			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       []string{Texture},
-			AllowedMessageTargets:     []string{Texture},
-		}, nil
-	case Reconciler:
-		return Policy{
-			Profile:                   Reconciler,
-			AllowReadOnlyFiles:        true,
-			AllowResearchTools:        true,
-			AllowEvidenceTools:        true,
-			AllowMemoryTools:          true,
-			AllowModelDiagnosticTools: true,
-			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       []string{Texture},
-			AllowedMessageTargets:     []string{Texture},
-		}, nil
+	case "processor", "reconciler":
+		return Policy{}, UnknownProfileError{Input: profile}
 	case Email:
 		return Policy{Profile: Email}, nil
 	case Engineering:
@@ -138,16 +114,16 @@ func (e UnknownProfileError) Error() string {
 	return fmt.Sprintf("agentprofile: unknown profile %q", e.Input)
 }
 
-// Canonical resolves exactly the V2 live vocabulary (mapping §2 identity
-// map, zero alias branches, fail-closed default). V1 aliases refuse here;
-// history decodes through the frozen V1 decoder (computerevent package),
-// never through this function. The verifier roles have no agentprofile
-// constants (modelpolicy owns them) and resolve as themselves.
+// Canonical resolves the V2 live vocabulary and recognizes frozen processor
+// and reconciler records so historical runs can be replayed. V1 aliases
+// refuse here; history decodes through the frozen V1 decoder (computerevent
+// package). The verifier roles have no agentprofile constants (modelpolicy
+// owns them) and resolve as themselves.
 func Canonical(profile string) (string, error) {
 	normalized := strings.ToLower(strings.TrimSpace(profile))
 	switch normalized {
-	case Management, Engineering, Research, Texture, Conductor, Processor, Reconciler, Email,
-		"verifier":
+	case Management, Engineering, Research, Texture, Conductor, Email,
+		"processor", "reconciler", "verifier":
 		return normalized, nil
 	case "verifier-multimodal", "verifier_multimodal":
 		// One canonical spelling (the modelpolicy roles.<name> key): the
@@ -155,6 +131,21 @@ func Canonical(profile string) (string, error) {
 		return "verifier_multimodal", nil
 	default:
 		return "", UnknownProfileError{Input: profile}
+	}
+}
+// IsLive reports whether a profile may be used for new runtime work.
+// Processor and reconciler remain Canonical solely so stored historical
+// records can be decoded and replayed.
+func IsLive(profile string) bool {
+	canonical, err := Canonical(profile)
+	if err != nil {
+		return false
+	}
+	switch canonical {
+	case Management, Engineering, Research, Texture, Conductor, Email, "verifier", "verifier_multimodal":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -172,8 +163,8 @@ func CanSpawn(callerProfile, targetProfile string) (bool, error) {
 		return false, err
 	}
 	target, err := Canonical(targetProfile)
-	if err != nil {
-		return false, err
+	if err != nil || !IsLive(target) {
+		return false, UnknownProfileError{Input: targetProfile}
 	}
 	for _, allowed := range policy.AllowedSpawnTargets {
 		canonicalAllowed, err := Canonical(allowed)
@@ -195,8 +186,8 @@ func CanMessage(callerProfile, targetProfile string) (bool, error) {
 		return false, err
 	}
 	target, err := Canonical(targetProfile)
-	if err != nil {
-		return false, err
+	if err != nil || !IsLive(target) {
+		return false, UnknownProfileError{Input: targetProfile}
 	}
 	for _, allowed := range policy.AllowedMessageTargets {
 		canonicalAllowed, err := Canonical(allowed)

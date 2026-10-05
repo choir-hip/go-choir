@@ -184,7 +184,7 @@ func TestR2TypedResolveGrandfathersLegacyStringCommitment(t *testing.T) {
 
 // Probe 4 — registry census: the four desks carry zero tool-loop tools; every
 // agent-to-agent act is a staged choir verb. update_coagent is absent from
-// management/engineering/research/texture and present only on the wire roles.
+// every installed live desk registry.
 func TestR2DeskRegistryCensus(t *testing.T) {
 	rt, _ := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
@@ -193,13 +193,6 @@ func TestR2DeskRegistryCensus(t *testing.T) {
 	for _, profile := range []string{agentprofile.Management, agentprofile.Engineering, agentprofile.Research, agentprofile.Texture} {
 		if _, ok := rt.ToolRegistryForProfile(profile).Lookup("update_coagent"); ok {
 			t.Fatalf("%s registry still exposes update_coagent (tool-loop carrier)", profile)
-		}
-	}
-	// The wire roles keep the packet tool until their own carrier phase; it is
-	// a desk exclusion, not a deletion.
-	for _, profile := range []string{agentprofile.Processor, agentprofile.Reconciler} {
-		if _, ok := rt.ToolRegistryForProfile(profile).Lookup("update_coagent"); !ok {
-			t.Fatalf("%s registry missing update_coagent (wire-role tool until its phase)", profile)
 		}
 	}
 }

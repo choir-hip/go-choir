@@ -6,6 +6,11 @@ const (
 	textureRevisionRoleInput     = "input"
 	textureRevisionRoleCanonical = "canonical"
 
+	// Frozen historical profile values remain recognizable while no new
+	// processor or reconciler runs can be admitted.
+	frozenProcessorProfile  = "processor"
+	frozenReconcilerProfile = "reconciler"
+
 	textureInputOriginUserPrompt        = "user_prompt"
 	textureInputOriginProcessorHandoff  = "processor_handoff"
 	textureInputOriginReconcilerHandoff = "reconciler_handoff"
@@ -18,9 +23,9 @@ const (
 func textureInputOriginForCaller(profile string) string {
 	canonicalProfile, _ := agentprofile.Canonical(profile)
 	switch canonicalProfile {
-	case agentprofile.Processor:
+	case frozenProcessorProfile:
 		return textureInputOriginProcessorHandoff
-	case agentprofile.Reconciler:
+	case frozenReconcilerProfile:
 		return textureInputOriginReconcilerHandoff
 	default:
 		return ""

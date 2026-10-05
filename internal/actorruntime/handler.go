@@ -103,7 +103,9 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 	case "reactivated_management_resume_deadline":
 		return h.handleReactivatedManagementResumeDeadline(ctx, u, memory)
 	case "wire_reconciler_publish_deadline":
-		return h.handleWireReconcilerPublishDeadline(ctx, u, memory)
+		// Frozen historical continuation: consume as a no-op after the
+		// reconciler dispatch surface was retired.
+		return memory, nil
 	case "selfdev_materialization_retry":
 		return h.handleSelfDevelopmentMaterializationRetry(ctx, u, memory)
 	case "lifecycle_work_assigned":
@@ -211,16 +213,6 @@ func (h *actorHandler) handleReactivatedManagementResumeDeadline(ctx context.Con
 	return memory, nil
 }
 
-func (h *actorHandler) handleWireReconcilerPublishDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
-	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
-	if err != nil {
-		return nil, fmt.Errorf("actorruntime: resolve wire reconciler publish deadline scope: %w", err)
-	}
-	if err := h.rt.HandleWireReconcilerPublishDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
-		return nil, fmt.Errorf("actorruntime: wire reconciler publish deadline: %w", err)
-	}
-	return memory, nil
-}
 
 func (h *actorHandler) handleLifecycleWorkAssigned(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
 	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)

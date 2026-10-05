@@ -165,8 +165,7 @@ func NormalizeRole(role string) string {
 	normalized := strings.TrimSpace(strings.ToLower(role))
 	switch normalized {
 	case agentprofile.Management, agentprofile.Engineering, agentprofile.Research,
-		agentprofile.Conductor, agentprofile.Texture, agentprofile.Processor,
-		agentprofile.Reconciler, agentprofile.Email, VerifierRole:
+		agentprofile.Conductor, agentprofile.Texture, agentprofile.Email, VerifierRole:
 		return normalized
 	case MultimodalVerifierRole, "verifier-multimodal":
 		// One canonical spelling: the hyphenated form normalizes to the
@@ -317,15 +316,6 @@ provider = "chatgpt"
 model = "gpt-5.6-luna"
 reasoning = "low"
 
-[roles.processor]
-provider = "chatgpt"
-model = "gpt-5.6-luna"
-reasoning = "low"
-
-[roles.reconciler]
-provider = "chatgpt"
-model = "gpt-5.6-luna"
-reasoning = "low"
 
 [roles.verifier]
 provider = "chatgpt"
@@ -343,7 +333,6 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 	defaults := provideriface.LLMSelection{Provider: defaultChatGPTProvider, Model: defaultChatGPTMiniModel, ReasoningEffort: "low", Source: "platform_fallback"}
 	chatGPTMini := defaults
 	chatGPTForeground := provideriface.LLMSelection{Provider: defaultChatGPTProvider, Model: defaultChatGPTForegroundModel, ReasoningEffort: "high", Source: "platform_fallback"}
-	chatGPTWire := provideriface.LLMSelection{Provider: defaultChatGPTProvider, Model: defaultChatGPTForegroundModel, ReasoningEffort: "low", Source: "platform_fallback"}
 	// Texture authors canonical document revisions through a yaegi cell API —
 	// map-shaped ApplyTexture bodies with a typed packet schema the model must
 	// reproduce exactly. 2026-09-28 staging evidence: at effort=low the desk
@@ -361,8 +350,6 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 			agentprofile.Engineering: {Provider: "opencode-go", Model: "deepseek-v4.1-flash", Source: "platform_fallback"},
 			agentprofile.Research:    chatGPTMini,
 			agentprofile.Texture:     textureDesk,
-			agentprofile.Processor:   chatGPTWire,
-			agentprofile.Reconciler:  chatGPTWire,
 			VerifierRole:             chatGPTMini,
 			MultimodalVerifierRole:   chatGPTMini,
 		},

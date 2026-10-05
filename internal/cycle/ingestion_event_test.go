@@ -25,25 +25,6 @@ func TestSaveIngestionEventsRejectsPromptBarOrigin(t *testing.T) {
 	}
 }
 
-func TestBuildIngestionHandoffRequiresIngestionEvents(t *testing.T) {
-	now := time.Date(2026, 6, 10, 8, 0, 0, 0, time.UTC)
-	items := []sources.Item{{
-		ID:         "srcitem_rss_1",
-		SourceID:   "rss:bbc_world",
-		SourceType: sources.SourceTypeRSS,
-		Title:      "Story",
-		Region:     "global",
-	}}
-	handoff := BuildIngestionHandoff("cycle_1", items, nil, now)
-	if len(handoff.ProcessorRequests) != 0 {
-		t.Fatalf("expected no processor requests without ingestion events, got %+v", handoff.ProcessorRequests)
-	}
-	events := BuildIngestionEventsFromItems("cycle_1", items, now)
-	handoff = BuildIngestionHandoff("cycle_1", items, events, now)
-	if len(handoff.ProcessorRequests) != 1 || len(handoff.ProcessorRequests[0].IngestionEventIDs) != 1 {
-		t.Fatalf("expected processor request with ingestion event ids, got %+v", handoff.ProcessorRequests)
-	}
-}
 
 func TestValidateProcessorRequestIngestionEvents(t *testing.T) {
 	ctx := context.Background()
@@ -72,49 +53,3 @@ func TestValidateProcessorRequestIngestionEvents(t *testing.T) {
 	}
 }
 
-func TestRSSGDELTCurriculumEmitsIngestionEventsAndProcessorHandoff(t *testing.T) {
-	ctx := context.Background()
-	store := openTestStorage(t)
-	defer store.Close()
-
-	now := time.Date(2026, 6, 10, 9, 0, 0, 0, time.UTC)
-	cycleID := "cycle_curriculum"
-	items := []sources.Item{
-		{
-			ID:         "srcitem_rss_hn",
-			SourceID:   "rss:hn_best",
-			SourceType: sources.SourceTypeRSS,
-			FetchID:    "fetch_rss_1",
-			Title:      "HN story",
-			Region:     "global",
-		},
-		{
-			ID:         "srcitem_gdelt_1",
-			SourceID:   "gdelt:15min",
-			SourceType: sources.SourceTypeGDELT,
-			FetchID:    "fetch_gdelt_1",
-			Title:      "GDELT mention",
-			Region:     "global",
-		},
-	}
-	events := BuildIngestionEventsFromItems(cycleID, items, now)
-	if len(events) != 2 {
-		t.Fatalf("ingestion events = %d, want 2", len(events))
-	}
-	if err := store.SaveIngestionEvents(ctx, events); err != nil {
-		t.Fatalf("save ingestion events: %v", err)
-	}
-	handoff := BuildIngestionHandoff(cycleID, items, events, now)
-	if len(handoff.ProcessorRequests) != 2 {
-		t.Fatalf("processor requests = %d, want rss + gdelt routes", len(handoff.ProcessorRequests))
-	}
-	for _, req := range handoff.ProcessorRequests {
-		if len(req.IngestionEventIDs) == 0 {
-			t.Fatalf("processor request missing ingestion refs: %+v", req)
-		}
-		ok, err := store.ValidateProcessorRequestIngestionEvents(ctx, req)
-		if err != nil || !ok {
-			t.Fatalf("validate processor request %+v: ok=%v err=%v", req, ok, err)
-		}
-	}
-}
