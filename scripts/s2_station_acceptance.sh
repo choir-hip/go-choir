@@ -105,13 +105,14 @@ note(){ jq -nc --arg leg "$1" --argjson d "${2:-null}" '{leg:$leg,at:(now|todate
 
 # release_dir resolves a release name to its base-keyed out dir, so every leg
 # reads the nar built against the CURRENT base manifest — never a stale nar
-# from a previous deploy. Synthetic dirs pass through for legs that manage
-# their own out dir (panic). A missing manifest is fatal: falling back to a
+# from a previous deploy. Commit SHAs get base-keyed; synthetic dirs
+# (idxmarker, s2bfe — patch-built releases managed outside the harness)
+# pass through unkeyed. A missing manifest is fatal: falling back to a
 # shared prefix would mix bases silently.
 release_dir(){
   local name="$1" basekey
   case "$name" in
-    */*) printf '%s' "$REL_ROOT/$name"; return 0;;
+    idxmarker|s2bfe|*/*) printf '%s' "$REL_ROOT/$name"; return 0;;
   esac
   [ -f "${MANIFEST:-}" ] || { echo "MANIFEST missing: $MANIFEST" >&2; return 1; }
   basekey="$(sha256sum "$MANIFEST" 2>/dev/null | awk '{print substr($1,1,12)}')"
