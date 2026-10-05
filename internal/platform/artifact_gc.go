@@ -400,24 +400,23 @@ func (s *Service) sweepFileCASChunks(ctx context.Context, cfg ArtifactGCConfig, 
 		if c == nil || !c.IsDir() || !safeFileCASComponent(c.Name()) {
 			continue
 		}
-		removed, bytes, err := s.gcFileChunksForComputer(ctx, c.Name(), cfg, cutoff, maxDelete)
-		if err != nil {
+		before := rep.Deleted
+		if err := s.gcFileChunksForComputer(ctx, c.Name(), cfg, cutoff, maxDelete, &rep); err != nil {
 			return rep, err
 		}
-		rep.Deleted += removed
-		rep.BytesDeleted += bytes
-		maxDelete -= removed
+		maxDelete -= rep.Deleted - before
 	}
 	return rep, nil
 }
 
 // gcFileChunksForComputer deletes stale chunks for one computer under the
 // shared delete budget. Mirrors GCFileChunks' reachability but honors
-// dry-run + a global budget.
-func (s *Service) gcFileChunksForComputer(ctx context.Context, computerID string, cfg ArtifactGCConfig, cutoff time.Time, maxDelete int) (removed int, bytesRemoved int64, err error) {
+// dry-run + a global budget. Counts fold into rep; the caller tracks the
+// shared delete budget via rep.Deleted.
+func (s *Service) gcFileChunksForComputer(ctx context.Context, computerID string, cfg ArtifactGCConfig, cutoff time.Time, maxDelete int, rep *ArtifactGCNamespaceReport) error {
 	roots, rerr := s.fileCASRootsForGC(ctx, computerID, cutoff)
 	if rerr != nil {
-		return 0, 0, fmt.Errorf("file cas: roots for %s: %w", computerID, rerr)
+		return fmt.Errorf("file cas: roots for %s: %w", computerID, rerr)
 	}
 	reachable := make(map[string]struct{})
 	for _, root := range roots {
@@ -437,7 +436,7 @@ func (s *Service) gcFileChunksForComputer(ctx context.Context, computerID string
 	}
 	prefix, err := s.artifactPath(filepath.Join("sha256", "file-cas-chunks", computerID))
 	if err != nil {
-		return 0, 0, err
+		return err
 	}
 	walkErr := filepath.WalkDir(prefix, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil || maxDelete <= 0 {
@@ -446,11 +445,18 @@ func (s *Service) gcFileChunksForComputer(ctx context.Context, computerID string
 		if entry.IsDir() || !entry.Type().IsRegular() || !validFileCASDigest(entry.Name()) {
 			return nil
 		}
+		rep.Scanned++
 		if _, keep := reachable[entry.Name()]; keep {
+			rep.Live++
 			return nil
 		}
+		rep.Unreachable++
 		info, err := entry.Info()
-		if err != nil || !info.ModTime().Before(cutoff) {
+		if err != nil {
+			return nil
+		}
+		if !info.ModTime().Before(cutoff) {
+			rep.InGrace++
 			return nil
 		}
 		if cfg.Mode == ArtifactGCModeActive {
@@ -458,15 +464,15 @@ func (s *Service) gcFileChunksForComputer(ctx context.Context, computerID string
 				return err
 			}
 		}
-		removed++
-		bytesRemoved += info.Size()
+		rep.Deleted++
+		rep.BytesDeleted += info.Size()
 		maxDelete--
 		return nil
 	})
 	if os.IsNotExist(walkErr) {
-		return removed, bytesRemoved, nil
+		return nil
 	}
-	return removed, bytesRemoved, walkErr
+	return walkErr
 }
 
 // GCRunner periodically runs the artifact GC when enabled.
