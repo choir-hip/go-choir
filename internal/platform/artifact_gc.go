@@ -102,11 +102,15 @@ func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 	var bytesDeleted int64
 	remaining := func() int { return cfg.MaxDeletes - deleted }
 
-	// Compute each namespace's live set once per sweep; a set that errors is
-	// conservatively treated as "keep everything" (empty live + warning).
+	// Compute each namespace's live set once per sweep. A live set that fails
+	// to load aborts the whole sweep — sweeping with a missing set deletes
+	// live artifacts (s0-gc-og-wrong-store-deletion, 2026-10-05).
 	live, warnings := s.artifactGCLiveSets(ctx)
 	report.Warnings = append(report.Warnings, warnings...)
-
+	if live == nil {
+		report.DurationMs = time.Since(started).Milliseconds()
+		return report, fmt.Errorf("artifact gc: live set unavailable: %s", strings.Join(warnings, "; "))
+	}
 	for _, ns := range artifactGCNamespaces {
 		if remaining() <= 0 {
 			break
@@ -158,7 +162,9 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 	// retains all committed roots). file-cas-chunks liveness is resolved per
 	// computer inside sweepFileCASChunks because it depends on manifest parses.
 	if roots, err := s.store.db.QueryContext(ctx, `SELECT manifest_ref FROM computer_file_roots`); err != nil {
-		warnings = append(warnings, "file-cas-roots live set: "+err.Error())
+		// A live-set we could not load is not an empty live set — sweeping
+		// with it would delete live artifacts. Fail closed.
+		return nil, append(warnings, "file-cas-roots live set: "+err.Error())
 	} else {
 		for roots.Next() {
 			var ref string
@@ -172,7 +178,7 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 	// projection-base: the advertised watermark base_ref (blob) is live; its
 	// .descriptor.json sidecar is protected by pairing inside the sweep.
 	if wm, err := s.store.db.QueryContext(ctx, `SELECT base_ref FROM computer_replay_watermarks`); err != nil {
-		warnings = append(warnings, "projection-base live set: "+err.Error())
+		return nil, append(warnings, "projection-base live set: "+err.Error())
 	} else {
 		for wm.Next() {
 			var ref string
@@ -199,17 +205,20 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 	}
 
 	// og: exact body_ref reachability (basename of sha256/og/<digest>.bin).
-	if og, err := s.store.db.QueryContext(ctx, `SELECT body_ref FROM og_objects WHERE body_ref <> ''`); err != nil {
-		warnings = append(warnings, "og live set: "+err.Error())
-	} else {
-		for og.Next() {
-			var ref string
-			if err := og.Scan(&ref); err == nil {
-				live["og"][filepath.Base(ref)] = struct{}{}
-			}
-		}
-		og.Close()
+	// body_ref rows live in Store B (corpus) — reading Store A here made every
+	// externalized corpus body unreachable and the sweep mass-deleted live
+	// bodies on 2026-10-05 (s0-gc-og-wrong-store-deletion).
+	og, err := s.store.corpus().QueryContext(ctx, `SELECT body_ref FROM og_objects WHERE body_ref <> ''`)
+	if err != nil {
+		return nil, append(warnings, "og live set: "+err.Error())
 	}
+	for og.Next() {
+		var ref string
+		if err := og.Scan(&ref); err == nil {
+			live["og"][filepath.Base(ref)] = struct{}{}
+		}
+	}
+	og.Close()
 	return live, warnings
 }
 
