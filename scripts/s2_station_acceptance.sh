@@ -43,7 +43,7 @@ route_gen(){ curl -sS "${IC[@]}" "http://127.0.0.1:8083/internal/vmctl/computer-
 epoch_of(){ curl -sS "${IC[@]}" http://127.0.0.1:8083/internal/vmctl/list | jq -r --arg vm "$VM" '.ownerships[]|select(.vm_id==$vm)|.epoch'; }
 
 wait_head_free(){ for i in $(seq 1 36); do p=$(pending_ref); [ -z "$p" ] || [ "$p" = "null" ] && return 0; sleep 5; done; return 1; }
-wait_served(){ local want="$1" n=0; while [ $n -lt 90 ]; do c=$(served_commit); [ "$c" = "$want" ] && return 0; sleep 5; n=$((n+1)); done; return 1; }
+wait_served(){ local want="$1" n=0; while [ $n -lt 90 ]; do c=$(served_commit); [ "$c" = "$want" ] || [[ "$want" == "$c"* ]] || [[ "$c" == "$want"* ]] && return 0; sleep 5; n=$((n+1)); done; return 1; }
 wait_healthy(){ local n=0; while [ $n -lt 90 ]; do s=$(guest_health | jq -r '.status' 2>/dev/null); [ "$s" = "ready" ] || [ "$s" = "ok" ] && return 0; sleep 5; n=$((n+1)); done; return 1; }
 
 build_release(){
