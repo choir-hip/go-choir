@@ -208,29 +208,21 @@ heresy_delta:
 now:
   status: checkpoint_incomplete
   slice: >-
-    Acceptance run 2026-10-05 on choir.news (deploy 63865ede): builder release
-    6fcb05e5 applied on computer-6450a253b8b6ebc0866471973694f5be with
-    materialization_applied (tape seq 72), serving healthy, same
-    Firecracker pid 2686228 + guest boot id d541d292; six incompatible
-    offers (base-digest/base-commit/stale-head/content-mutation/provenance/
-    realization) each refused pre-mutation with materialization_failed and
-    the predecessor still serving; health-failing panic release applied,
-    failed its probe, predecessor 6fcb05e5 restored incl. exec. Panel
-    verdict: 7 send_back, 1 approve — NOT closed. Named gaps: clean
-    rollback with unchanged boot id (rollback leg swap was correct but the
-    post-swap guest restart loop killed Firecracker and cold-booted:
-    docs/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md); CI-driven
-    signed M9a push with recorded request-to-healthy (deploy_app_layer=false
-    on the two green deploys, skipped on the failed 63865ede deploy);
-    base-absent-dependency refusal after builder disposal + guest reboot;
-    store-schema-window refusal distinct from the base-commit join;
-    frontend-by-digest serving proof. Fixes landed in-run: pre-mutation
-    refusal discharge (6fcb05e5 + regression test), stranded retired-
-    realization discharge (0b9d5186 + regression test), updater/client
-    refusal-reason propagation (297eedf1, 63865ede), harness leg fixes
-    (7d78b182, dac021cd).
-  source_ref: main@dac021cd
-  deploy_identity: 'staging https://choir.news deployed_commit=63865ede; guest base 63865ede coherent; deploy-receipt matches'
+    Gap-closure run 2026-10-05 ~11:30-13:30 on choir.news (deploy fae12950):
+    criterion 6 CLOSED by a quiet-window clean rollback (rb-push 13:23:23,
+    tape seq 112-114 accepted/started/applied, same fc pid 3123628 + boot
+    id 7f725ae1, serving 2811c779 healthy); schema-window refusal CLOSED
+    as a leg and fixed as a defect (daemon journals pre-mutation refusals
+    as terminal Outcome=refused; agent discharges on refused); CI push
+    CLOSED by mechanism (run 37305290512 green, phase ran, t2h recorded).
+    Second consensus panel 6/6 send_back: two gaps remain, both specified
+    ~10-minute legs — (a) frontend-by-digest proof via a marker inside the
+    built SPA (the 2d0c16c0 marker attempt failed at the Nix cleanSourceWith
+    filter: marker in repo-root index.html never enters frontend/dist;
+    retry with the marker in built bytes), (b) reboot-then-push of a
+    base-absent entrypoint. Station NOT closed.
+  source_ref: main@14d2ac7d
+  deploy_identity: 'staging https://choir.news deployed_commit=fae12950; guest base fae12950 coherent'
   candidate:
     id: none
     state: none
