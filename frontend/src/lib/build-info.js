@@ -11,4 +11,8 @@ export function exposeBuildInfo() {
   window.__CHOIR_BUILD__ = BUILD_INFO;
   document.documentElement.dataset.choirBuildCommit = BUILD_INFO.commit;
   document.documentElement.dataset.choirBuildVersion = BUILD_INFO.version;
+  const s2m = document.createElement('meta');
+  s2m.name = 's2-frontend-marker';
+  s2m.content = 'built-spa:' + BUILD_INFO.commit;
+  document.head.appendChild(s2m);
 }
