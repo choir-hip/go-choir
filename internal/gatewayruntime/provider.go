@@ -1,4 +1,4 @@
-// Package gatewayruntime adapts a autoputer runtime to the host gateway without
+// Package gatewayruntime adapts an autoputer runtime to the host gateway without
 // importing host-side provider adapters. VM guests should only know the gateway
 // wire contract; provider credentials and upstream adapter code stay host-side.
 package gatewayruntime
