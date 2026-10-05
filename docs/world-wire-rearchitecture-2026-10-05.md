@@ -98,7 +98,7 @@ User computers "autopaper-N" (per tenant)
 
 White-label mechanics
   - primary autopaper = the first user computer of this shape
-  - white label = org-template export of that computer (S8: scrubbed template
+  - white label = org-template export of that computer (S10: scrubbed template
     + private-source adapter config + policy), installed per tenant
   - this is ALREADY the metamission's mechanism, not new invention
 ```
@@ -111,16 +111,23 @@ means by "the purpose of all this infra."
 
 WW deferrals and which station owns them:
 
-| WW need | Metamission station that produces it | Status |
+| WW need | Metamission station that produces it | Status (2026-10-05) |
 |---|---|---|
-| A computer that runs real workloads durably | S2 layering + S0 ops substrate | S2 contract slices in flight; S0 landing |
-| Snapshot/hibernate for heavy ingest bursts | S3 | gated by S0 |
-| Capsule workload isolation for fetch adapters | self-development gate / capsule admission | pending |
-| Desk-driven editorial pipeline | RLM substrate (carrier/ontology cutover — the blocked 1d work) | blocked |
-| Publication/update-on-new-info | precommitment records (`resolves`) + Texture desks | Phase 2 |
-| Org-template white-label | S8 | in stack |
-| Tenant private data | S1 security floor (data classes, authority) | partial |
-| Forked sibling autopapers (editions) | S7 forks/fleets | in stack |
+| A computer that runs real workloads durably | S2 layering + SO ops substrate | S2 contract slices landed, at acceptance; SO slices 1-2 landed |
+| Always-on feel / wake for scheduled ingest | S3 residency tiers (hot / warm-idle / cold + trigger wake) | gated by SO |
+| Capsule workload isolation + recorded egress for fetch adapters | S4 capsule open world (requires the full S1 floor) | pending |
+| Live supervision of the editorial pipeline | S5 live preview + supervision (Texture transclusion) | pending |
+| Desk-driven editorial pipeline | RLM desks (record-native since S0m) | partially live |
+| Publication / update-on-new-info | precommitment records (`resolves`) + Texture desks | Phase 2 |
+| Code/app distribution between autopapers | S8 source publication | pending |
+| Forked sibling autopapers (editions, experiments) | S9 forks and fleets | pending |
+| Org-template white-label | S10 org templates | pending |
+| Fleet-wide fixes across divergent autopapers | S11 mainline + security push | pending |
+| Tenant private data boundaries | S1 security floor (S1a landed) + S9 data classes | partial |
+| **Shared public claims graph read by tenant computers** | **none — no station produces cross-computer DATA subscription** (S8 is code publication) | **gap** |
+
+(Station numbers corrected 2026-10-05: forks are S9, org templates S10;
+SO is the ops-substrate station, not S0.)
 
 Conclusion for the director: **WW rearchitecture = the application-level
 validation of the entire metamission.** Nearly every station lands a
@@ -150,3 +157,30 @@ decided up front.
   store; Node B disk headroom stays pressured (S0 fire context).
 - Platform event-head CAS continues to fate-share with a WW store.
 - Every month of delay grows the migration/archive decision's cost.
+
+
+## Director notes (2026-10-05)
+
+- **The framing is accepted.** WW/autopaper is recorded in the metamission
+  as the consuming application, not a station. Each station's finish
+  should be checked against "could an autopaper computer run on this?".
+- **One missing primitive: cross-computer data subscription.** The target
+  sketch needs tenant autopaper computers to read a shared public claims
+  graph owned by a platform computer. The metamission publishes *code*
+  (S8) but has no data-publication/subscription primitive: authority,
+  privacy class, revocation, and how a subscriber merges a foreign claim
+  into its own og. That is the first WW-specific design to settle, and it
+  is the natural successor station after S8.
+- **Storage lesson to carry forward.** The 99 GB came from undeclared
+  retention. Raw fetches and items should be ephemeral or bounded working
+  data, with claims and provenance as the durable class. The
+  rearchitecture must declare a retention class per object kind before
+  ingestion restarts.
+- **The factorization question stays parked.** The evidence to decide it
+  (does reconcile need item access, or only claims?) can be gathered from
+  the frozen corpus read-only, without restarting ingestion.
+- **Containment now (in SO, per the problem doc's director review):**
+  - durable sourcecycled disable;
+  - the og GC wrong-store fix;
+  - WW data frozen and retained;
+  - one CPU observation.

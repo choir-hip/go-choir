@@ -138,12 +138,22 @@ The Dolt substrate is split into two stores that must never be conflated (see
 D-STORES and D-WIRE in
 [archive/og-dolt-heresy-completion-2026-07-08.md](archive/og-dolt-heresy-completion-2026-07-08.md)):
 
-- **World-wire store:** platform `ObjectGraphStore` at
-  `internal/platform/objectgraph_store.go`, served by `corpusd` in sql-server
-  mode. Narrow `computer_event_heads`, append/idempotency, mode, and lifecycle
-  control tables live beside—but are semantically separate from—world-wire
-  objects and route-slot tables. corpusd mechanically performs authenticated
-  event-head and platform-control CAS; it does not select semantic events.
+- **Platform control store (Store A):** the `platform` database on the
+  platform-dolt sql-server (`:13306`). It holds the narrow
+  `computer_event_heads`, append/idempotency, mode, lifecycle, route-slot and
+  replay-watermark control tables. corpusd mechanically performs
+  authenticated event-head and platform-control CAS here; it does not select
+  semantic events.
+- **World-wire store (Store B):** the `corpus` database on a separate
+  corpus-dolt sql-server process (`:13307`, `nix/node-b.nix`). It holds the
+  platform `ObjectGraphStore` tables (`og_*`, via `Store.corpus()` in
+  `internal/platform/objectgraph_store.go`) and the source/ingestion tables.
+  corpusd fronts both pools, but the two stores share no sql-server, so a
+  corpus GC-OOM or bulk scan cannot take the canonical log down. Code that
+  reads og or corpus tables must use the corpus pool; reading them from
+  Store A sees only pre-split leftovers.
+  (Corrected 2026-10-05; the earlier "live beside" wording predated the
+  Store A/B split.)
 - **VM-local embedded store:** one embedded Dolt workspace per user VM at
   `internal/objectgraph/dolt_store.go`. It indexes the externally pinned event
   chain and materializes the accepted effective state; it is never the sole

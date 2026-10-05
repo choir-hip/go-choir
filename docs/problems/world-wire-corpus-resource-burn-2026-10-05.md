@@ -85,3 +85,81 @@ there, almost all file-cas-chunks.
 - GC live-set code: internal/platform/artifact_gc.go:150-213
 - Rearchitecture analysis: docs/world-wire-rearchitecture-2026-10-05.md
 - WW stack: docs/world-wire-mission-stack-2026-09-22.md (Phase 5)
+
+## Director review (2026-10-05) — corrections, one confirmed bug, decisions
+
+Source-checked against `main@ee013c96`. Nothing here was re-observed on Node B.
+
+### Correction 1 — the event-head CAS does NOT share corpus-dolt's process
+
+There is a deployed Store A / Store B split:
+- `nix/node-b.nix:484-488`: corpus-dolt is "separate process from the
+  canonical event/control store (Store A, port 13306) so a corpus GC-OOM or
+  bulk scan cannot take the canonical log down".
+- corpusd's primary DSN is `127.0.0.1:13306/platform` (`node-b.nix:539`).
+- `computer_event_heads` is created on that platform pool
+  (`internal/platform/computer_events.go:18`).
+- The WW tables ride `Store.corpusDB` when `corpus-dsn.env` is present
+  (`internal/platform/store.go:441-470`).
+- The observed `corpus` database listing contains only WW tables, which is
+  consistent with this.
+
+The remaining coupling is at the **corpusd process** level: one Go service
+fronts both pools, so a corpus-side stall can still slow corpusd handlers.
+There is no sql-server or CAS fate-sharing. The misleading sentence is the
+pre-split wording in `docs/computer-ontology.md` "Dolt Store Taxonomy",
+corrected in the same commit as this review. Severity is downgraded from
+"platform authority entangled" to "corpusd process shared".
+
+### Correction 2 — the host does have dolt and jq
+
+`environment.systemPackages` includes `dolt` and `jq` (`nix/node-b.nix`,
+around line 1063). If they were missing from an agent shell, that is a PATH
+or session issue (`/run/current-system/sw/bin`), not missing packages. Only
+sysstat, iotop and e2fsprogs-on-PATH remain to add.
+
+### Confirmed bug — artifact GC reads og liveness from the wrong store
+
+- og bodies are written and read through `o.store.corpus()` — Store B
+  (`internal/platform/objectgraph_store.go:101,132`).
+- The GC's og liveness query uses `s.store.db` — Store A
+  (`internal/platform/artifact_gc.go:202`).
+- Store A's `og_objects` holds only pre-split leftovers, hence about 203
+  refs against 421k files.
+
+So the "421,167 deletable" figure is a wrong-database artifact, not a data
+classification question. **Active og GC would delete live WW bodies.** Fix:
+query `s.store.corpus()` for og liveness (and audit every other liveness
+query for its owning store), add a test with a split two-pool store, and
+keep `og` in dry-run until the fixed dry-run shows a plausible live set.
+Owner: SO storage lifecycle (orange; the sweep deletes data).
+
+### CPU burn — one discriminating observation
+
+`sourcecycled` (the only fetch, processor and reconciler dispatcher) has
+been stopped since about 01:15Z.
+- Sample corpus-dolt CPU now, then run `dolt sql -q "show processlist"`
+  against :13307 for a few minutes.
+- **Burn gone:** it was ingestion writes and commits on 8.5M-row tables
+  (corpus `doltbatch` commits). The stop already fixes it for now.
+- **Burn persists:** it is the read side (choir.news publication and source
+  API queries via corpusd) or Dolt background work on the bloated store.
+  Then sample queries before changing anything.
+
+### Decisions (director, reversible, under continuous authority)
+
+1. **sourcecycled stays off, durably.** Gate the unit behind an option that
+   defaults to disabled in `nix/node-b.nix`, so a deploy cannot restart it.
+   The processor path is dead and every fetch is debt. Re-enable only as
+   part of the WW rearchitecture. Owner may override.
+2. **WW corpus data class = frozen and retained.** No deletion and no
+   migration. Treat it as first-attempt residue to be read by the
+   rearchitecture. og GC stays dry-run until the bug above is fixed, and
+   even then WW bodies are excluded until the rearchitecture classifies
+   them.
+3. **No corpus-dolt GC or compaction yet.** A 99 GB store needs comparable
+   scratch space Node B does not have. Revisit after SO's headroom work.
+4. **The rearchitecture is not started now.** It becomes the consuming
+   application of this metamission (see the metamission "World Wire as the
+   consuming application" section). Containment items 1-3 and the GC fix
+   ride SO.

@@ -439,15 +439,20 @@ boundaries:
 now:
   status: working
   slice: >-
-    v4 director review 2026-10-05. Closed: S0 (S0a+S0b), S0m, S1a. Live: S2
-    (re-scoped below), S1 remainder in parallel, SO ops substrate in
-    parallel. S2's mechanism is proven on staging: offer mint/sign, CAS-ref
-    transport, nar replay into the private store, overlay exec in the guest
-    (layering-diag unshare_ok/mount_ok/exec_path_resolves), route promotion,
-    and base-mismatch fail-closed. What S2 lacks is the contract around the
-    mechanism: (S2-c) provenance, (S2-d) state-compat gate, (S2-e) rollback
-    atomicity of the exec pointer, (S2-f) self-dev/builder -> layered-release
-    join, and (S2-g) CI wiring with time-to-healthy.
+    v4.1 director review 2026-10-05 (after ee013c96). S2: all contract
+    slices landed (9f5aa8a0 S2-e, c8fb7834 S2-d, 8f06b3d9 S2-c, e1c3924b
+    S2-f, e527c169 + a3da83c4 S2-g); the app-layer push is live in CI and
+    proven on computer-6450a253 (release 36743b1f6ddb, build.commit
+    2f0e2cac). S2 is at station acceptance against builder-produced
+    releases. S1 remainder mostly landed: token off the cmdline (619d645e),
+    child-env scrub (6b54522c), zot shadowing (a80d2145), diag restricted
+    (98cf387b), Yaegi worker landlock/capdrop/seccomp behind
+    --session-harden (a578bbc0, eb9c5b1e); non-root runtime remains (problem
+    doc 94342f9d). SO: slice 1 (dead-dir reaper, platform-artifacts
+    reachability GC in dry-run) and slice 2 (per-VM serial sink e8137d03)
+    landed. NEW: World Wire corpus burn triaged. Containment rides SO; the
+    WW rearchitecture is recorded as this metamission's consuming
+    application (section below).
   source_ref: main@4c76730b13cda645665c6c95b5e89a7e2e805e78
   deploy_identity: 'staging https://choir.news; last observed deployed runtime e605cdde/3c1cbaf6 per S2 layering-diag receipts (verify /health before the next probe)'
   candidate:
@@ -600,26 +605,24 @@ now:
     full S1 floor. S3 must not start before SO's storage lifecycle and the
     VM shape decision.
   next_action: >-
-    S2 (in order):
-    S2-e rollback atomicity — move the layering entrypoint into the release
-    dir so the current/ swap covers exec; restorePrior reverts it; add a
-    boot-loop guard (N failed starts after apply -> recovery path with a
-    receipt).
-    S2-d state-compat gate — the release manifest declares
-    event_schema/reducer and the minimum store schema it accepts; the
-    updater refuses before mutation.
-    S2-c provenance — the builder derives code_commit from the flake ref it
-    builds; the manifest carries the builder receipt digest; the updater
-    verifies the binary's embedded buildinfo commit equals the manifest.
-    S2-f join — self-dev freeze yields a source patch the host builder
-    builds (source-only), replacing file releases for runtime changes.
-    S2-g CI — builder -> mint -> push for tracking computers on deploy,
-    with no VM reboot for app-layer-only changes and time-to-healthy
-    recorded.
-    In parallel: author the SO station file (scope in "Orientation
-    2026-10-05"), starting with the guest memory receipt + host offline GC
-    of the owner store (measure before/after), then the GC-ordering fix;
-    S1 remainder.
+    1. S2 station acceptance: run the conjecture test with builder-produced
+       releases (compatible apply without reboot + time-to-healthy;
+       incompatible refused pre-mutation; health-failing restored with exec
+       reverted). Close the S2-g bind-gap record. Then the station boundary
+       protocol (panel, report, transition receipt).
+    2. SO containment (World Wire, docs/problems/world-wire-corpus-resource-burn-2026-10-05.md
+       "Director review"):
+       (a) fix the og GC wrong-store liveness bug (artifact_gc.go:202 reads
+       Store A; og lives in Store B) with a split-pool test; og stays
+       dry-run, WW bodies excluded;
+       (b) make the sourcecycled disable durable via a default-off option
+       in nix/node-b.nix;
+       (c) take one corpus-dolt CPU sample + processlist with sourcecycled
+       stopped.
+    3. SO continues: memory receipt + host offline GC of the owner store
+       (before/after), the GC-ordering fix, then declared shapes.
+    4. S1: non-root runtime (the last S1 item; required before S4).
+
 receipts:
   - id: s0-to-s2-transition-2026-10-04
     kind: station_transition
@@ -987,6 +990,44 @@ lost):**
 - signer and credential lifecycle review;
 - supply-chain review of the S4 pinned-input capture;
 - an external review before public launch.
+
+## World Wire as the consuming application (2026-10-05)
+
+Owner framing: World Wire / autopaper is "the true application of Choir,
+the purpose of all this infra". This is not one autopaper but a platform
+for others' autopapers, with white-label copies built from the primary.
+The rearchitecture analysis is `docs/world-wire-rearchitecture-2026-10-05.md`
+(read it with its director notes); the evidence is
+`docs/problems/world-wire-corpus-resource-burn-2026-10-05.md`.
+
+How this metamission treats it:
+- **Not a station, a validation lens.** At each station boundary, the panel
+  also asks whether an autopaper computer could run on what landed. The
+  target sketch is a platform "wire-observer" computer plus per-tenant
+  autopaper computers plus S10 white-label, and it consumes S2-S11 almost
+  one-for-one.
+- **Gap named:** cross-computer *data* subscription. Tenant autopapers
+  reading a shared public claims graph owned by a platform computer has no
+  producing station; S8 publishes code. This is a candidate successor
+  station after S8 (intent only; not added to the station list until the
+  owner promotes it).
+- **Deferred:**
+  - processor/reconciler factorization (evidence can come from the frozen
+    corpus, read-only);
+  - shared-graph placement;
+  - corpus migration or archive;
+  - the editorial multisupervision location.
+- **Containment now, in SO:**
+  - sourcecycled durably disabled;
+  - og GC wrong-store fix;
+  - WW corpus frozen and retained (no deletion, migration or
+    compaction);
+  - one CPU observation.
+- **Corrections recorded:**
+  - The event-head CAS does not share corpus-dolt's process: Store A on
+    :13306 and Store B on :13307 are split. `docs/computer-ontology.md` was
+    corrected.
+  - The host already has `dolt` and `jq`.
 
 ## Orchestration contract (station boundaries)
 
