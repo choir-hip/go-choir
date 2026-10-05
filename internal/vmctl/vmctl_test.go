@@ -859,6 +859,56 @@ func TestOwnershipRegistry_RetentionPlanPrefersLargeSafeCandidates(t *testing.T)
 		t.Fatalf("projected bytes = %d, want meaningful large candidate", plan.Inventory.ProjectedDeleteBytes)
 	}
 }
+func TestOwnershipRegistry_PruneRetentionDeletesOrphansWithoutRouteJoin(t *testing.T) {
+	// Orphan state dirs have no ownership record, so there is no D-ROUTE
+	// join for the route guard to authorize. Requiring one made orphans
+	// unprunable (empty user/desktop always failed the guard). The orphan's
+	// safety is the directory-name match + OrphanMinAge — the guard applies
+	// only to owned candidates.
+	stateDir := t.TempDir()
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetRetentionPruneConfig(RetentionPruneConfig{
+		Mode:         RetentionPruneModeActive,
+		StateDir:     stateDir,
+		OrphanMinAge: time.Hour,
+		MaxDeletes:   10,
+		MaxBytes:     1024 * 1024 * 1024,
+	})
+	old := time.Now().Add(-3 * time.Hour)
+	// Two managed-dir names: generated vm-* and named candidate-*.
+	vmOrphan := filepath.Join(stateDir, "vm-dead-orphan")
+	candidateOrphan := filepath.Join(stateDir, "candidate-fleet-deadbeef")
+	nonManaged := filepath.Join(stateDir, "ownerships-scratch")
+	for _, dir := range []string{vmOrphan, candidateOrphan, nonManaged} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "data"), []byte("x"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", dir, err)
+		}
+		if err := os.Chtimes(dir, old, old); err != nil {
+			t.Fatalf("chtimes %s: %v", dir, err)
+		}
+	}
+	mgr := &mockVMManager{}
+	reg.SetVMManager(mgr)
+
+	// Guard that always refuses — must NOT block orphan deletion.
+	denyRoute := func(context.Context, string, string) error { return errors.New("route missing") }
+	result := reg.PruneRetention(context.Background(), denyRoute)
+	if result.Deleted != 2 {
+		t.Fatalf("deleted = %d, want 2 orphans (vm-* and candidate-*): %+v", result.Deleted, result)
+	}
+	for _, want := range []string{"vm-dead-orphan", "candidate-fleet-deadbeef"} {
+		if !containsString(mgr.destroys, want) {
+			t.Fatalf("destroyed = %v, want orphan %s", mgr.destroys, want)
+		}
+	}
+	if containsString(mgr.destroys, "ownerships-scratch") {
+		t.Fatalf("non-vmctl dir ownerships-scratch must not be destroyed: %v", mgr.destroys)
+	}
+}
+
 
 func retentionPlanHasVM(plan RetentionPrunePlan, vmID string) bool {
 	for _, candidate := range plan.Candidates {

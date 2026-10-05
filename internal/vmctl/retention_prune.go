@@ -334,9 +334,11 @@ func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]boo
 		if entry == nil || !entry.IsDir() {
 			continue
 		}
-		stateDirCount++
 		vmID := entry.Name()
-		if !strings.HasPrefix(vmID, "vm-") || ownedVMs[vmID] {
+		// vmctl-managed state dirs are named vm-* (generated) or candidate-*
+		// (named candidate/fleet computers). Anything else under vm-state is
+		// host bookkeeping (ownerships.json, backups), not a guest disk.
+		if (!strings.HasPrefix(vmID, "vm-") && !strings.HasPrefix(vmID, "candidate-")) || ownedVMs[vmID] {
 			continue
 		}
 		orphanCount++
@@ -481,7 +483,12 @@ func (r *OwnershipRegistry) PruneRetention(ctx context.Context, guard ComputerVe
 	}
 	result.Status = "ok"
 	for _, candidate := range before.Candidates {
-		if !authorizeLifecycleRoute(ctx, guard, candidate.UserID, candidate.DesktopID) {
+		// Orphan state dirs have no ownership record, so there is no D-ROUTE
+		// join to authorize against — requiring one would make orphans
+		// unprunable forever (empty user/desktop always fails the guard).
+		// Their safety is the directory-name match + OrphanMinAge.
+		owned := candidate.UserID != "" || candidate.DesktopID != ""
+		if owned && !authorizeLifecycleRoute(ctx, guard, candidate.UserID, candidate.DesktopID) {
 			continue
 		}
 		if r.destroyRetentionCandidate(candidate) {
