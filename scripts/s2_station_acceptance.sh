@@ -14,7 +14,9 @@ OWNER="${OWNER:-a85b8fee-c7f5-4d04-b1f1-0e0ce8e4c335}"
 COMPUTER="computer-6450a253b8b6ebc0866471973694f5be"
 VM="vm-7bbcf74444aa90afff8acf4a378b72a6"
 BUILDER=/var/lib/go-choir/services/choir-builder/bin/choir-builder
-MANIFEST=/var/lib/go-choir/guest/guest-image-manifest
+# MANIFEST must pin the BOOTED base image manifest, not the live deployed
+# file — a deploy mid-run flips the file and mints mismatched base_commit.
+MANIFEST="${MANIFEST:-/var/lib/go-choir/guest/guest-image-manifest}"
 STOREDISK=/var/lib/go-choir/guest/storedisk.erofs
 SRC=/opt/go-choir
 S2_COMMIT="${S2_COMMIT:-$(git -C "$SRC" rev-parse HEAD)}"
@@ -45,12 +47,19 @@ wait_served(){ local want="$1" n=0; while [ $n -lt 90 ]; do c=$(served_commit); 
 wait_healthy(){ local n=0; while [ $n -lt 90 ]; do s=$(guest_health | jq -r '.status' 2>/dev/null); [ "$s" = "ready" ] || [ "$s" = "ok" ] && return 0; sleep 5; n=$((n+1)); done; return 1; }
 
 build_release(){
+  # $1 commit. Builds via a detached worktree at the commit so --source-dir
+  # derivation matches (and so the release can differ from the booted base —
+  # a same-commit release's entrypoint is base-present and always refused).
   local commit="$1"
   local out="$REL_ROOT/$commit/out"
   if [ ! -f "$out/app-layer-closure.nar" ]; then
+    local wt="/tmp/s2-build-$commit"
+    git -C "$SRC" worktree remove --force "$wt" 2>/dev/null || true
     git -C "$SRC" fetch -q origin "$commit" 2>/dev/null || true
-    "$BUILDER" --installable '.#autoputer' --source-dir "$SRC" \
-      --base-manifest "$MANIFEST" --base-storedisk "$STOREDISK" --out "$out" || return 1
+    git -C "$SRC" worktree add "$wt" "$commit" >/dev/null 2>&1 || git -C "$wt" checkout -q "$commit"
+    (cd "$wt" && "$BUILDER" --installable '.#autoputer' --source-dir "$wt" \
+      --base-manifest "$MANIFEST" --base-storedisk "$STOREDISK" --out "$out") || { git -C "$SRC" worktree remove --force "$wt" 2>/dev/null; return 1; }
+    git -C "$SRC" worktree remove --force "$wt" 2>/dev/null || true
   fi
   [ -f "$out/app-layer-closure.nar" ] && [ -f "$out/builder-receipt.json" ]
 }
@@ -66,8 +75,10 @@ mk_offer(){
   rd=$(sha256sum "$receipt" | awk '{print $1}')
   nar=$(jq -r .exported_path "$receipt")
   nar_sha=$(sha256sum "$nar" | awk '{print $1}')
-  head=$(canonical_head)
+  # Blob upload commits a file_root_committed event — read the head AFTER it
+  # or the offer binds a head that is already stale by mint time.
   curl -fsS "${IC[@]}" -T "$nar" "http://127.0.0.1:8086/internal/computers/platform-updates/blob/${nar_sha}" >/dev/null
+  head=$(canonical_head)
   jq -n \
     --arg cid "$COMPUTER" --arg uid "$uid" --arg rid "${VM}-epoch-$(epoch_of)" \
     --arg beh "$head" --arg exp "$(date -u -d '+4 minutes' +%Y-%m-%dT%H:%M:%SZ)" \
@@ -75,8 +86,9 @@ mk_offer(){
     --arg cd "$nar_sha" --arg ep "$ep" --argjson sv "$schema" --arg bc "$bc" \
     --arg rd "$rd" --arg ref "artifact+sha256://${nar_sha}/sha256/platform-update/${nar_sha}" \
     --arg vr "$(printf 'verify-%s' "$uid" | sha256sum | awk '{print $1}')" \
+    --arg spa "$(printf '%s' '<!doctype html><title>s2-layered</title><div id=app></div>' | base64 -w0)" \
     --argjson over "$over" \
-    '({computer_id:$cid,update_id:$uid,realization_id:$rid,base_event_head:$beh,expires_at:$exp,marker:$mk,code_commit:$cc,base_image_manifest_digest:$bmd,closure_digest:$cd,layering_entrypoint:$ep,store_schema_version:$sv,base_commit:$bc,builder_receipt_digest:$rd,files:[{path:"closure.nar",mode:420,ref:$ref}],verifier_refs:[$vr],divergence_status:"tracking",platform_follow_policy:"auto"} + $over)'
+    '({computer_id:$cid,update_id:$uid,realization_id:$rid,base_event_head:$beh,expires_at:$exp,marker:$mk,code_commit:$cc,base_image_manifest_digest:$bmd,closure_digest:$cd,layering_entrypoint:$ep,store_schema_version:$sv,base_commit:$bc,builder_receipt_digest:$rd,files:[{path:"closure.nar",mode:292,ref:$ref},{path:"frontend/index.html",mode:420,bytes:$spa}],verifier_refs:[$vr],divergence_status:"tracking",platform_follow_policy:"auto"} + $over)'
 }
 
 mint(){ curl -sS -X POST -H 'Content-Type: application/json' "${IC[@]}" --data-binary @- \
@@ -124,17 +136,25 @@ neg)
   note "neg-$2" "$(jlog --argjson pre "$pre" --argjson post "$post" --arg resp "${resp:0:600}" --arg tape "$tail_kinds" --argjson disc "$discharged" '{pre:$pre,post:$post,push_response:$resp,tape_tail:$tape,discharged:$disc}')"
   [ "$discharged" = "true" ] || { echo "neg-$2: pending transition not discharged"; exit 5; }
   ;;
-r2)
-  build_release "$S2_COMMIT" || { note r2 '{"error":"build failed"}'; exit 4; }
-  receipt="$REL_ROOT/$S2_COMMIT/out/builder-receipt.json"
-  nar_sha=$(sha256sum "$REL_ROOT/$S2_COMMIT/out/app-layer-closure.nar"|awk '{print $1}')
-  note r2-build "$(jq -c '{code_commit:.code_commit,runtime_path:.runtime_path,closure_paths:(.closure_paths|length),nar_sha:"'"$nar_sha"'"}' "$receipt")"
-  req=$(mk_offer "$receipt" "s2acc-r2-${NOW}" '{}')
+apply)
+  # Generic apply leg: apply a release built from an arbitrary commit whose
+  # entrypoint differs from the booted base. $2 = commit.
+  [ -n "${2:-}" ] || { echo "apply requires a commit"; exit 2; }
+  build_release "$2" || { note "apply-$2" '{"error":"build failed"}'; exit 4; }
+  receipt="$REL_ROOT/$2/out/builder-receipt.json"
+  nar_sha=$(sha256sum "$REL_ROOT/$2/out/app-layer-closure.nar"|awk '{print $1}')
+  note "apply-$2-build" "$(jq -c '{code_commit:.code_commit,runtime_path:.runtime_path,closure_paths:(.closure_paths|length),nar_sha:"'"$nar_sha"'"}' "$receipt")"
+  pre=$(jlog --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg g "$(route_gen)" '{served:$s,boot:$b,fc:$f,route_gen:$g}')
+  req=$(mk_offer "$receipt" "s2acc-apply-${NOW}" '{}')
   offer=$(printf '%s' "$req" | mint)
   resp=$(printf '%s' "$(jq -nc --argjson o "$offer" '{offer:$o}')" | push)
-  note r2-push "$(jlog --arg r "${resp:0:600}" '{response:$r}')"
-  wait_served "$S2_COMMIT" || true
-  note r2 "$(jlog --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg g "$(route_gen)" '{served:$s,boot:$b,fc:$f,route_gen:$g}')"
+  note "apply-$2-push" "$(jlog --arg r "${resp:0:600}" '{response:$r}')"
+  wait_served "$2" || true
+  note "apply-$2" "$(jlog --argjson pre "$pre" --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg g "$(route_gen)" --arg p "$(pending_ref)" '{pre:$pre,served:$s,boot:$b,fc:$f,route_gen:$g,pending:$p}')"
+  ;;
+r2)  # legacy alias → apply $S2_COMMIT
+  S2_COMMIT="${S2_COMMIT:-$(git -C "$SRC" rev-parse HEAD)}"
+  exec "$0" apply "$S2_COMMIT"
   ;;
 panic)
   WT=/tmp/s2panic-wt
@@ -167,14 +187,19 @@ PY
   note panic "$(jlog --arg s "$(served_commit)" --arg want "$pre_commit" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg pc "$PCOMMIT" --arg con "$console" '{served:$s,restored:$want,boot:$b,fc:$f,panic_commit:$pc,console_tail:$con}')"
   ;;
 rollback)
-  [ -n "$PRED_COMMIT" ] || { echo "PRED_COMMIT required (release built against the booted base)"; exit 2; }
-  receipt="$REL_ROOT/$PRED_COMMIT/out/builder-receipt.json"
+  # $2 = commit of the release to re-apply as the predecessor (must be a
+  # release built against the booted base, distinct from the serving one).
+  # A fresh update_id mints a new operation — same release digest, real
+  # apply path (journal replay would be vacuous).
+  [ -n "${2:-}" ] || { echo "rollback requires the predecessor release commit"; exit 2; }
+  receipt="$REL_ROOT/$2/out/builder-receipt.json"
+  pre=$(jlog --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg g "$(route_gen)" '{served:$s,boot:$b,fc:$f,route_gen:$g}')
   req=$(mk_offer "$receipt" "s2acc-rb-${NOW}" '{}')
   offer=$(printf '%s' "$req" | mint)
   resp=$(printf '%s' "$(jq -nc --argjson o "$offer" '{offer:$o}')" | push)
   note rb-push "$(jlog --arg r "${resp:0:600}" '{response:$r}')"
-  wait_served "$PRED_COMMIT" || true
-  note rollback "$(jlog --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg g "$(route_gen)" '{served:$s,boot:$b,fc:$f,route_gen:$g}')"
+  wait_served "$2" || true
+  note rollback "$(jlog --argjson pre "$pre" --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg g "$(route_gen)" '{pre:$pre,served:$s,boot:$b,fc:$f,route_gen:$g}')"
   ;;
 inspect)
   note inspect-timeline "$(curl -sS -m 8 "${IC[@]}" "http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${OWNER}/internal/boot/timeline?desktop=primary" | jq -c '{layout:{boot_id:.layout.boot_id,mounts:.layout.mounts,nix_store_entries:.layout.nix_store_entries,persistent:.layout.persistent_bytes_total}}')"

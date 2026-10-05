@@ -178,7 +178,13 @@ func main() {
 			if errors.Is(err, updater.ErrIdempotencyConflict) {
 				status = http.StatusConflict
 			}
-			writeJSON(w, status, map[string]string{"error": "updater refused request"})
+			// Keep the stable "refused" discriminator the push classifiers
+			// match on, and return the computed gate message as `reason`:
+			// without it every pre-mutation refusal (commitment, realization
+			// fence, base join, state compat, source trust, manifest verify,
+			// closure replay) is indistinguishable from outside the guest,
+			// whose journal is not host-readable for disposables.
+			writeJSON(w, status, map[string]string{"error": "updater refused request", "reason": err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, result)
