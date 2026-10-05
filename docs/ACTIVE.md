@@ -50,22 +50,21 @@ divergent; all required revisions applied in v3). Thirteen stations;
   builder-substrate decision narrowed to host-service vs
   privileged-builder-capsule).
 
-**S2** layering-runtime-from-release is at **checkpoint_incomplete**
-(2026-10-05 acceptance run, deploy 63865ede): builder apply, six
-pre-mutation refusal+discharge legs, and panic-restore all green on the
-tape; consensus panel 7 send_back / 1 approve with named gaps (clean
-rollback with unchanged boot id; CI-driven M9a push with
-request-to-healthy; base-absent-dependency leg after builder disposal +
-reboot; store-schema-window refusal; frontend-by-digest proof).
-Contract slices landed: **S2-e** rollback atomicity, **S2-d** state-compat
-gate, **S2-c** provenance (builder-derived `code_commit`, buildinfo
-check), **S2-f** self-dev → builder join, **S2-g** CI wiring. Parallel:
-the S1 remainder, plus the new **SO** ops-substrate station (storage
-lifecycle after five disk-headroom hits, durable guest stderr, declared
-VM shapes, CI deploy gating), which gates S3. Station files:
-`definitions/choir-appdev-s*-2026-10-01.md`. Design evidence:
-[`reports/agent-messaging-system-state-2026-10-01.md`](reports/agent-messaging-system-state-2026-10-01.md),
-[`desk-system-harness-architecture-2026-10-01.md`](desk-system-harness-architecture-2026-10-01.md).
+- **S2** layering-runtime-from-release **CLOSED** (2026-10-05, terminal
+  receipt `s2-station-terminal-2026-10-05`): all six acceptance criteria
+  discharged at deployed-proof class on disposable `computer-6450a253`
+  plus the owner computer — builder-produced no-reboot apply with
+  built-bytes frontend join, CI-driven M9a push (run 37378327268,
+  2/2 healthy, t2h=131s), six refusal fences, post-disposal+reboot
+  base-absent refusal, GC-rooted private-store boundary, clean rollback.
+  Consensus round 2: 6 approve / 1 send-back (sole send-back receipt
+  completion only, discharged by fc/boot continuity pins). Contract
+  slices landed: S2-e rollback atomicity, S2-d state-compat gate, S2-c
+  provenance, S2-f builder join, S2-g CI wiring. Open residuals (problem
+  docs, not blockers): post-swap guest restart loop, canonical-head
+  bootstrap authority, platform-artifacts GC cadence (S0 — first sweep
+  reclaimed 35.4GB on Node B). Next spine station per v5: S3 fast resume
+  after SR/SA density work; parallel: S1 remainder + SO ops substrate.
 Ordered ahead of the World Wire metamission per owner direction
 2026-10-01 ("a good prerequisite to it").
 

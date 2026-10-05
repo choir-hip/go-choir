@@ -1038,10 +1038,11 @@ nodes:
       133637 divergent; promote-with-revisions, all applied in v3).
       Thirteen stations: S0 + S0m (record-native messaging, owner-inserted
       ahead of S0b) + S1-S11 authored under
-      docs/definitions/choir-appdev-s*-2026-10-01.md. S0m complete 2026-10-04
-      (boundary protocol incomplete); next: S0m boundary close, S1a
-      host-boundary hotfix (pulled ahead of S0b), CI deploy-cancel fix, S0b.
-      Ordered ahead of World Wire per owner direction.
+      docs/definitions/choir-appdev-s*-2026-10-01.md. Closed: S0, S0m, S1a,
+      S2 (2026-10-05, terminal receipt s2-station-terminal-2026-10-05;
+      close panel 6 approve / 1 send-back — sole send-back receipt
+      completion only and discharged). Ordered ahead of World Wire per
+      owner direction.
     sources:
       - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
       - docs/problems/guest-release-propagation-manual-2026-10-01.md

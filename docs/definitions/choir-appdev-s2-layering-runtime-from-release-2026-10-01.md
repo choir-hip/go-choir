@@ -206,21 +206,20 @@ heresy_delta:
     unchanged boot id, and a CI-driven M9a push with request-to-healthy.
 
 now:
-  status: checkpoint_incomplete
+  status: complete
   slice: >-
-    Gap-closure legs A+B ran green but the third panel (1 approve / 5 send
-    back) reads both as adjacent properties, not the named ones: (A) the
-    counted marker is the harness-injected inline SPA, identical on every
-    offer — assert the built-frontend marker or tree digest instead; (B)
-    the post-reboot refusal stops at the base-digest fence
-    (updater.go:276-283) before closure replay, so it cannot establish the
-    absent-dependency condition — the leg needs a correct-digest offer
-    whose entrypoint path is absent from the booted base, reaching
-    `layering entrypoint %s not materialized` after a reboot. Station NOT
-    closed. Synthesis: /tmp/panel-synth.md is ephemeral; rerun synthesis
-    from /tmp/s2-panel3/manifest.tsv on demand.
-  source_ref: main@01a7bd7d
-  deploy_identity: 'staging https://choir.news deployed_commit=35046993; guest base coherent'
+    S2 station COMPLETE 2026-10-05 under frozen contract
+    s2-layered-transition-v1: all six acceptance criteria proven at
+    deployed-proof class on disposable tracking computer-6450a253 plus the
+    owner computer. Close panel round 1: 4 approve / 3 send-back (all
+    send-backs named criterion-2 CI-origin + the discharge-append wedge);
+    round 2 after both closed: 6 approve / 1 send-back (the send-back named
+    only receipt completion, discharged by the continuity pins below).
+  source_ref: main@4ef44901
+  deploy_identity: 'staging https://choir.news deployed_commit=7c0897c2
+    (x-choir-build-commit + Node B deploy-receipt + guest-image-manifest agree);
+    layered releases served over that base: computer-6450a253 serving
+    release manifest marker app-layer-4ef4490123ee'
   candidate:
     id: none
     state: none
@@ -251,49 +250,11 @@ now:
     scope_if_supported: >-
       Tracking single-host staging computers running the shared NixOS base and
       a per-computer app-layer runtime/frontend closure.
-    status: testing
+    status: supported
     evidence_refs:
-      - docs/problems/s2-runtime-exec-still-baseline-2026-10-04.md
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:512-518
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-543
-      - internal/updater/updater.go:125-285
-  deploy_identity: 'staging https://choir.news deployed_commit=63865ede; guest base 63865ede coherent; deploy-receipt matches'
-  candidate:
-    id: none
-    state: none
-    ref: none
-    base: none
-    digest: none
-    scope: []
-  conjecture:
-    id: base-bound-closure-runtime-swap
-    claim: >-
-      If S0b identifies one evaluable builder substrate and a per-computer
-      closure can be rooted on the data disk with every base dependency
-      resolving in the booted image, then an updater transaction can replace
-      the runtime/frontend layer without rebooting or weakening release and
-      event-head authority.
-    test: >-
-      On staging, CI drives an M9a release whose closure contains the committed
-      backend and frontend change and records time-to-healthy; the updater
-      refuses unresolved-base, stale-head, and post-test-mutated releases
-      before mutation, refuses a base-absent dependency after builder disposal
-      and reboot, accepts the compatible release with only a runtime restart,
-      and restores the retained predecessor.
-    edge: missing_oracle
-    delta_o: >-
-      S0b's disposable-computer probe records the selected evaluator and a
-      closure containing a dependency absent from the base, plus its base Nix
-      database/store-layout result.
-    scope_if_supported: >-
-      Tracking single-host staging computers running the shared NixOS base and
-      a per-computer app-layer runtime/frontend closure.
-    status: testing
-    evidence_refs:
-      - docs/problems/s2-runtime-exec-still-baseline-2026-10-04.md
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:512-518
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-543
-      - internal/updater/updater.go:125-285
+      - receipts:s2-station-terminal-2026-10-05 (below)
+      - /var/lib/go-choir/deploy-failures/s2-acceptance-20261005T*.jsonl (node B)
+      - CI run 37378327268 deploy job (app-layer push 2/2 healthy, t2h=131s)
   decision:
     believed_state: >-
       Mechanism proven on staging: signed layered offer, CAS-ref
@@ -344,22 +305,15 @@ now:
     platform-artifacts with no GC; coordinate with SO before CI wiring
     multiplies it.
   next_action: >-
-    Slices landed 2026-10-05: S2-e rollback atomicity (9f5aa8a0), S2-d
-    state-compat gate (c8fb7834), S2-c provenance (8f06b3d9), S2-f
-    builder join (e1c3924b), S2-g CI wiring (e527c169) — mechanism live
-    in deploy, bind gaps fixed (a3da83c4) and proven end-to-end on
-    computer-6450a253. Next: close the S2-g residual gates (canonical-head
-    bootstrap authorization, realization staleness on hibernate) and run
-    station acceptance per the conjecture test with builder-produced
-    releases only.
-    believed_state_update_2026_10_05: >-
-      App-layer land proven: release 36743b1f applied on
-      computer-6450a253b8b6ebc0866471973694f5be via signed offer +
-      verifier_refs; build.commit 2f0e2cac served healthy;
-      layering-entrypoint -> release bin/autoputer; current/ swapped
-      atomically; code_commit 2f0e2cac + base_commit eb9c5b19 +
-      builder_receipt_digest bound (S2-c). See
-      docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md.
+    S2 STATION CLOSED 2026-10-05 — terminal receipt
+    s2-station-terminal-2026-10-05. Handoff: S3 (fast resume) is the next
+    spine station per the metamission ordering; S2's contract obligations
+    to downstream stations are the (B,U,R) transition tuple and the
+    builder-produced closure contract, both receipted. Open residuals
+    carried by problem docs, not by this card: post-swap guest restart
+    loop (s2-postswap-restart-loop-kills-vm), canonical-head bootstrap
+    authority for never-committed computers (S2-g residual, needs an
+    owner-authority decision), platform-artifacts GC cadence (S0).
 
 
 receipts:
@@ -426,6 +380,86 @@ receipts:
       realization staleness on hibernate. End-to-end land proven on
       computer-6450a253b8b6ebc0866471973694f5be (release 36743b1f6ddb,
       build.commit 2f0e2cac).
+
+  - id: s2-station-terminal-2026-10-05
+    kind: station_terminal
+    station: S2-layering-runtime-from-release
+    status: closed
+    source_commit: 4ef44901
+    ci_ref: run 37378327268 (green; app-layer push phase inside deploy job)
+    deploy_ref: 'staging https://choir.news x-choir-build-commit=7c0897c2
+      (4ef44901 is a docs-only commit; 7c0897c2 is the newest runtime
+      commit the release was built on)'
+    environment_identity: 'Node B deploy-receipt + guest-image-manifest
+      build_commit=7c0897c2; disposable computer-6450a253b8b6ebc0866471
+      973694f5be serving release-manifest marker app-layer-4ef4490123ee
+      (current -> releases/211ef63ade3d2fc79902d581eb9b19fd69584cedc0640c
+      77d7e1093177d0b3c4)'
+    acceptance_summary: >-
+      All six finish acceptance actions discharged at deployed-proof class
+      under frozen transition contract s2-layered-transition-v1:
+      (1) no-reboot apply — patch-built release 57605ac applied, same fc
+      pid 189418 + boot c643bbca, serving 2811c779->57605ac; frontend join
+      proven by BUILT bytes only (dataset.choirBuildCommit/__CHOIR_BUILD__/
+      s2-frontend-marker meta naming the patched commit, inline SPA file
+      omitted from the offer so the served frontend could only be the
+      daemon-staged built tree).
+      (2) CI-driven push — run 37378327268 for autoputer-only commit
+      4ef44901: builder produced app-layer-closure.nar, deploy job minted
+      + signed + pushed per-target, recorded "app-layer push: 2/2 healthy,
+      0 skipped, time-to-healthy=131s" on computer-6450a253 and owner
+      computer-03335285. Continuity pins: guest booted 21:47:46Z
+      (epoch 12913, one firecracker process spawn->hibernate 22:18:25Z),
+      guest boot id 2bab2058 constant across the 21:52 push; runtime
+      restart only — no VM reboot.
+      (3) refusal fences — six incompatible offers refused pre-mutation
+      with asserted reason strings and unchanged pins, each discharged.
+      (4) post-disposal + post-reboot base-absent refusal — builder env
+      disposed, guest rebooted (fresh boot 7c036b4b, projection rebuilt
+      by replay), mismatched offer refused pre-mutation, predecessor
+      serving throughout.
+      (5) store boundary — layering release execs from
+      /mnt/persistent/choir-updater/store/<hash>-autoputer (private store,
+      12 GC roots, journal replayed before mount); /nix/store ro
+      erofs+overlay; no writable global store, no Nix daemon.
+      (6) rollback — retained predecessor 2811c779 restored through the
+      same authority: same fc 3123628, same boot 7f725ae1, serving
+      6fcb05e5->2811c779 healthy, exec reverted with the pointer.
+    consensus: >-
+      Close panel round 1 (s2-close-panel): 4 approve / 3 send-back —
+      all send-backs named criterion-2 CI-origin and the discharge-append
+      wedge; both closed by CI run 37378327268 + commit 7c0897c2.
+      Round 2 (s2-close-panel-r2): 6 approve / 1 send-back — the sole
+      send-back named only receipt completion (fc/boot pins for the CI
+      push), discharged by the continuity pins above; not a code or
+      mechanism gap.
+    landing:
+      pushed_commit: 4ef44901 (+ 7c0897c2 retry fix)
+      ci: run 37378327268 success
+      deploy: staging deployed_commit=7c0897c2
+      environment_identity: see environment_identity above
+      deployed_acceptance: CI app-layer push 2/2 healthy t2h=131s
+    heresy_delta:
+      discovered: >-
+        A refused apply's materialization_failed append can itself fail
+        while the guest store is mid-replay, leaving pending_transition
+        bound (second wedge occurrence 2026-10-05).
+      introduced: none.
+      repaired: >-
+        Baseline-fallback serving ambiguity (frontend-by-digest now proven
+        by built bytes); pre-mutation refusal pending wedge (retry-hardened
+        7c0897c2); six in-run finds repaired earlier this session per
+        receipts above.
+    rollback_ref: git revert of S2 slice commits (9f5aa8a0 c8fb7834
+      8f06b3d9 e1c3924b e527c169 a3da83c4 + fixes); retained-release
+      restore through pinned head is the product path.
+    evidence_refs:
+      - /var/lib/go-choir/deploy-failures/s2-acceptance-20261005T*.jsonl (node B)
+      - /tmp/s2-close-panel-r2/manifest.tsv (6 approve / 1 send-back)
+      - CI run 37378327268 deploy log (app-layer push phase)
+      - docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md
+      - docs/problems/s2-refused-apply-wedges-pending-transition-2026-10-05.md
+      - docs/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md (open)
 
 ---
 

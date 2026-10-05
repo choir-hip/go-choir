@@ -479,18 +479,17 @@ now:
   status: working
   slice: >-
     v5 (2026-10-05, owner-approved outline). Governing principle: density
-    before distribution. Closed: S0, S0m, S1a. S2 at checkpoint_incomplete
-    after a full acceptance run 2026-10-05 (deploy 63865ede): builder apply,
-    six pre-mutation refusal+discharge legs, and panic-restore all green;
-    consensus panel 7 send_back / 1 approve with named gaps (clean rollback
-    with unchanged boot id; CI-driven M9a push with request-to-healthy;
-    base-absent-dependency leg after builder disposal + reboot; schema-window
-    refusal; frontend-by-digest proof). In flight: S1 remainder (non-root
-    runtime), SO (storage lifecycle + og wrong-store GC fix, observability,
-    CI gating, World Wire containment). Next substrate: SR desk-surface
-    cleanup, then SA agent density in a 2-4 GiB guest, with SM model policy +
-    evals after SR, and SC desk capability surface after SA + SM. See "v5
-    plan".
+    before distribution. Closed: S0, S0m, S1a, **S2** (2026-10-05, terminal
+    receipt s2-station-terminal-2026-10-05; consensus round 2 6 approve /
+    1 send-back, sole send-back receipt-completion only and discharged).
+    S2 leaves the (B,U,R) transition contract, builder-produced closures,
+    CI-driven app-layer pushes, and the pending-transition discharge path
+    hardened for every downstream station. In flight: S1 remainder
+    (non-root runtime), SO (storage lifecycle + og wrong-store GC fix,
+    observability, CI gating, World Wire containment). Next substrate: SR
+    desk-surface cleanup, then SA agent density in a 2-4 GiB guest, with
+    SM model policy + evals after SR, and SC desk capability surface after
+    SA + SM. See "v5 plan".
   source_ref: main@dac021cd
   deploy_identity: 'staging https://choir.news deployed_commit=63865ede; guest base 63865ede coherent; deploy-receipt matches'
   candidate:
@@ -1562,7 +1561,31 @@ first runs and were fixed/proven end-to-end on
 `computer-6450a253b8b6ebc0866471973694f5be` (release `36743b1f6ddb`,
 `build.commit 2f0e2cac`, atomic `current/` swap, entrypoint → release
 binary). Remaining S2-g residual gates are in
-`docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md`. The S2 station
-is now at acceptance-test stage (conjecture test vs builder-produced
-releases).
+`docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md`.
+
+### Handoff 2026-10-05 — S2 STATION CLOSED
+
+S2 closed under frozen transition contract `s2-layered-transition-v1`
+(terminal receipt `s2-station-terminal-2026-10-05` in the station file).
+All six acceptance criteria discharged at deployed-proof class on
+disposable computer-6450a253 plus the owner computer; criterion 2's
+CI-origin proof landed by CI run 37378327268 (`app-layer push: 2/2
+healthy, time-to-healthy=131s`, commit `4ef44901`, served release marker
+`app-layer-4ef4490123ee` on the guest's `current/`). Consensus: round 1
+4 approve / 3 send-back (criterion-2 CI-origin + discharge-append wedge,
+both then closed); round 2 **6 approve / 1 send-back** (sole send-back
+named receipt completion only, discharged by continuity pins — single
+Firecracker process and one boot id across the push). Deployed identity:
+`x-choir-build-commit=7c0897c2` (4ef44901 is docs-only).
+
+Carried residuals (open problem docs, not station blockers):
+`s2-postswap-restart-loop-kills-vm` (health-failing release can kill FC
+mid-restore; S2-e repair remains partially open),
+canonical-head bootstrap authority for never-committed computers
+(owner-authority decision), `s2-m9a-route-projection-owner-binding`
+(close the record with the route-promotion receipt),
+platform-artifacts GC cadence (S0 — first sweep reclaimed 35.4GB).
+
+Next station: **S3 fast resume** per the v5 ordering; S2 hands S3/S6 the
+(B,U,R) transition tuple and the builder-produced closure contract.
 

@@ -92,3 +92,20 @@ manually on `computer-6450a253b8b6ebc0866471973694f5be`:
 
 Orange (CI/deploy behavior). The bind gates are contract enforcement, not bugs —
 the fix is supplying the evidence the contract demands, not weakening the gate.
+## Criterion-2 close (2026-10-05 ~21:53Z) — CI-driven land delivered
+
+CI run 37378327268 (`4ef44901`, autoputer-only diff → `deploy_app_layer=true`)
+minted, signed, and pushed the layered release through the deploy job's own
+path: `app-layer push: 2/2 healthy, 0 skipped, time-to-healthy=131s`. Targets:
+`vm-7bbcf744`/`computer-6450a253` (S2 test disposable, active) and
+`candidate-fleet-e15cb89f`/`computer-03335285` (owner computer). Guest
+`current/` now points at `releases/211ef63a…` whose manifest marker is
+`app-layer-4ef4490123ee` — CI-originated end to end, not a manual mint.
+The `candidate-fleet` capability gate did NOT refuse this run — the earlier
+`computer event capability refused` observation no longer reproduces; the
+gate note below stands corrected, not reopened.
+
+Residual bind-gate candidates that remain open: canonical-head bootstrap for
+never-committed computers (owner-authority decision), and the wedge-retry
+hardening landing in 7c0897c2 (deployed same window).
+
