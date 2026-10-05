@@ -191,31 +191,83 @@ heresy_delta:
     does not prove the committed release served its frontend
     (internal/autoputer/computer_surface.go:69-87).
   introduced: none — this station must not add a writable guest-global store, daemon, or parallel release authority.
-  repaired: pending — require the executable/frontend/state/head serving join and its deployed negative proofs before completion.
+  repaired: >-
+    Still pending (panel send-back upheld): the discovered baseline-fallback
+    heresy plus three in-run finds — pre-mutation refusal wedging the pending
+    transition (fixed 6fcb05e5 + regression test), stranded accepted events
+    bound to a retired realization wedging the computer permanently (fixed
+    0b9d5186 + regression test, fails-before/passes-after), updater/client
+    discarding the computed refusal reason (fixed 297eedf1/63865ede) — and one
+    new open wedge: a post-swap guest restart loop can kill Firecracker and
+    cold-boot the disposable
+    (docs/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md).
+    Require before completion: the executable/frontend/state/head serving
+    join by digest, its deployed negative proofs, a clean rollback with
+    unchanged boot id, and a CI-driven M9a push with request-to-healthy.
 
 now:
-  status: working
+  status: checkpoint_incomplete
   slice: >-
-    Live. Deployed layering acceptance PROVEN 2026-10-04 on choir.news
-    (deployed_commit=672eb193): PUT the 146MB closure.nar to the corpusd
-    blob endpoint, minted a signed layered offer by ref (PlatformUpdateFile.
-    ref), applied to a disposable tracking computer — tape shows
-    materialization_applied -> checkpoint_published ->
-    route_projection_updated, route slot promoted to generation 1 with
-    closure.nar + frontend/index.html in the code closure. A base-mismatched
-    layered offer refused 'updater refused apply' (fail-closed, base kept
-    serving). Exec-in-overlay confirmed by live serving: the guest serves
-    the release's own frontend/index.html (title 's2-layered'), not the
-    base SPA — the release binary+artifacts are the serving surface.
-    Deployed fixes required: mint layering_entrypoint accept+forward
-    (1518abc1), route-resolve tap bind by owner:desktop not computer
-    (69983b0e), probe expiry within the 5-min mint window + minimal SPA so
-    the checkpoint can derive FrontendIdentity (77f2e691, 5bce87c3).
-    Residual: the disposable's serial console isn't journaled on the host,
-    so the journal-marker 'go-choir-autoputer: layering release' is an
-    observability gap, not evidence — closed by the live-serving check.
-  source_ref: main@672eb193
-  deploy_identity: 'staging https://choir.news deployed_commit=672eb193; layering exec + CAS-ref transport + mint/route-bind fixes live'
+    Acceptance run 2026-10-05 on choir.news (deploy 63865ede): builder release
+    6fcb05e5 applied on computer-6450a253b8b6ebc0866471973694f5be with
+    materialization_applied (tape seq 72), serving healthy, same
+    Firecracker pid 2686228 + guest boot id d541d292; six incompatible
+    offers (base-digest/base-commit/stale-head/content-mutation/provenance/
+    realization) each refused pre-mutation with materialization_failed and
+    the predecessor still serving; health-failing panic release applied,
+    failed its probe, predecessor 6fcb05e5 restored incl. exec. Panel
+    verdict: 7 send_back, 1 approve — NOT closed. Named gaps: clean
+    rollback with unchanged boot id (rollback leg swap was correct but the
+    post-swap guest restart loop killed Firecracker and cold-booted:
+    docs/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md); CI-driven
+    signed M9a push with recorded request-to-healthy (deploy_app_layer=false
+    on the two green deploys, skipped on the failed 63865ede deploy);
+    base-absent-dependency refusal after builder disposal + guest reboot;
+    store-schema-window refusal distinct from the base-commit join;
+    frontend-by-digest serving proof. Fixes landed in-run: pre-mutation
+    refusal discharge (6fcb05e5 + regression test), stranded retired-
+    realization discharge (0b9d5186 + regression test), updater/client
+    refusal-reason propagation (297eedf1, 63865ede), harness leg fixes
+    (7d78b182, dac021cd).
+  source_ref: main@dac021cd
+  deploy_identity: 'staging https://choir.news deployed_commit=63865ede; guest base 63865ede coherent; deploy-receipt matches'
+  candidate:
+    id: none
+    state: none
+    ref: none
+    base: none
+    digest: none
+    scope: []
+  conjecture:
+    id: base-bound-closure-runtime-swap
+    claim: >-
+      If S0b identifies one evaluable builder substrate and a per-computer
+      closure can be rooted on the data disk with every base dependency
+      resolving in the booted image, then an updater transaction can replace
+      the runtime/frontend layer without rebooting or weakening release and
+      event-head authority.
+    test: >-
+      On staging, CI drives an M9a release whose closure contains the committed
+      backend and frontend change and records time-to-healthy; the updater
+      refuses unresolved-base, stale-head, and post-test-mutated releases
+      before mutation, refuses a base-absent dependency after builder disposal
+      and reboot, accepts the compatible release with only a runtime restart,
+      and restores the retained predecessor.
+    edge: missing_oracle
+    delta_o: >-
+      S0b's disposable-computer probe records the selected evaluator and a
+      closure containing a dependency absent from the base, plus its base Nix
+      database/store-layout result.
+    scope_if_supported: >-
+      Tracking single-host staging computers running the shared NixOS base and
+      a per-computer app-layer runtime/frontend closure.
+    status: testing
+    evidence_refs:
+      - docs/problems/s2-runtime-exec-still-baseline-2026-10-04.md
+      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:512-518
+      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-543
+      - internal/updater/updater.go:125-285
+  deploy_identity: 'staging https://choir.news deployed_commit=63865ede; guest base 63865ede coherent; deploy-receipt matches'
   candidate:
     id: none
     state: none
@@ -314,7 +366,30 @@ now:
       builder_receipt_digest bound (S2-c). See
       docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md.
 
+
 receipts:
+  - id: s2-acceptance-run-2026-10-05
+    kind: station_evidence
+    status: checkpoint
+    commits: [6fcb05e5, 34041932, 297eedf1, 0b9d5186, 63865ede, 7d78b182, dac021cd]
+    deployed: 'staging https://choir.news deployed_commit=63865ede'
+    summary: >-
+      Builder release 6fcb05e5 applied (tape seq 72 materialization_applied,
+      serving 6fcb05e5 healthy, fc pid 2686228 + boot id d541d292 unchanged);
+      six incompatible offers refused pre-mutation with discharge; panic
+      release restored predecessor incl. exec. Consensus panel 7 send_back /
+      1 approve — station NOT closed; gaps receipted in now.slice.
+    evidence_refs:
+      - /var/lib/go-choir/deploy-failures/s2-acceptance-20261005T*.jsonl (node B)
+      - /tmp/s2-panel/manifest.tsv (panel run, 8 ok / 3 failed-or-timeout)
+  - id: s2-postswap-restart-loop-wedge-2026-10-05
+    kind: problem
+    status: open
+    summary: >-
+      Rollback leg swap was correct but the post-swap guest restart loop
+      killed Firecracker and cold-booted the disposable; criterion 6 needs
+      one clean rollback leg with unchanged boot id.
+    evidence_ref: docs/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md
   - id: s2-e-rollback-atomicity-2026-10-05
     kind: station_slice
     status: landed

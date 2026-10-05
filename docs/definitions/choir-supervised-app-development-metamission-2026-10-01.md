@@ -479,15 +479,20 @@ now:
   status: working
   slice: >-
     v5 (2026-10-05, owner-approved outline). Governing principle: density
-    before distribution. Closed: S0, S0m, S1a. In flight: S1 remainder
-    (non-root runtime), S2 station acceptance (all contract slices landed),
-    SO (storage lifecycle + og wrong-store GC fix, observability, CI gating,
-    World Wire containment). Next substrate: SR desk-surface cleanup (finish
-    the research RLM cutover; delete processor/reconciler), then SA agent
-    density in a 2-4 GiB guest, with SM model policy + evals after SR, and
-    SC desk capability surface after SA + SM. See "v5 plan".
-  source_ref: main@4c76730b13cda645665c6c95b5e89a7e2e805e78
-  deploy_identity: 'staging https://choir.news; last observed deployed runtime e605cdde/3c1cbaf6 per S2 layering-diag receipts (verify /health before the next probe)'
+    before distribution. Closed: S0, S0m, S1a. S2 at checkpoint_incomplete
+    after a full acceptance run 2026-10-05 (deploy 63865ede): builder apply,
+    six pre-mutation refusal+discharge legs, and panic-restore all green;
+    consensus panel 7 send_back / 1 approve with named gaps (clean rollback
+    with unchanged boot id; CI-driven M9a push with request-to-healthy;
+    base-absent-dependency leg after builder disposal + reboot; schema-window
+    refusal; frontend-by-digest proof). In flight: S1 remainder (non-root
+    runtime), SO (storage lifecycle + og wrong-store GC fix, observability,
+    CI gating, World Wire containment). Next substrate: SR desk-surface
+    cleanup, then SA agent density in a 2-4 GiB guest, with SM model policy +
+    evals after SR, and SC desk capability surface after SA + SM. See "v5
+    plan".
+  source_ref: main@dac021cd
+  deploy_identity: 'staging https://choir.news deployed_commit=63865ede; guest base 63865ede coherent; deploy-receipt matches'
   candidate:
     id: none
     state: none
@@ -638,8 +643,12 @@ now:
     full S1 floor. S3 must not start before SO's storage lifecycle and the
     VM shape decision.
   next_action: >-
-    1. S2 station acceptance with builder-produced releases, then the S2
-       boundary protocol (panel, report, transition receipt).
+    1. S2 gap closure (panel send-back 2026-10-05): clean rollback leg with
+    unchanged boot id; CI-driven signed M9a push with recorded
+    request-to-healthy; base-absent-dependency refusal after builder disposal
+    + guest reboot; store-schema-window refusal; frontend-by-digest proof.
+    Then re-run the panel and the S2 boundary protocol (report, transition
+    receipt).
     2. SO: og GC wrong-store fix (artifact_gc.go:202 must read Store B via
        store.corpus(), with a split-pool test); sourcecycled durable
        default-off in nix/node-b.nix; one corpus-dolt CPU sample +
