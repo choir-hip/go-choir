@@ -86,9 +86,8 @@ mk_offer(){
     --arg cd "$nar_sha" --arg ep "$ep" --argjson sv "$schema" --arg bc "$bc" \
     --arg rd "$rd" --arg ref "artifact+sha256://${nar_sha}/sha256/platform-update/${nar_sha}" \
     --arg vr "$(printf 'verify-%s' "$uid" | sha256sum | awk '{print $1}')" \
-    --arg spa "$(printf '%s' '<!doctype html><title>s2-layered</title><div id=app></div>' | base64 -w0)" \
     --argjson over "$over" \
-    '({computer_id:$cid,update_id:$uid,realization_id:$rid,base_event_head:$beh,expires_at:$exp,marker:$mk,code_commit:$cc,base_image_manifest_digest:$bmd,closure_digest:$cd,layering_entrypoint:$ep,store_schema_version:$sv,base_commit:$bc,builder_receipt_digest:$rd,files:[{path:"closure.nar",mode:292,ref:$ref},{path:"frontend/index.html",mode:420,bytes:$spa}],verifier_refs:[$vr],divergence_status:"tracking",platform_follow_policy:"auto"} + $over)'
+    '({computer_id:$cid,update_id:$uid,realization_id:$rid,base_event_head:$beh,expires_at:$exp,marker:$mk,code_commit:$cc,base_image_manifest_digest:$bmd,closure_digest:$cd,layering_entrypoint:$ep,store_schema_version:$sv,base_commit:$bc,builder_receipt_digest:$rd,files:[{path:"closure.nar",mode:420,ref:$ref}],verifier_refs:[$vr],divergence_status:"tracking",platform_follow_policy:"auto"} + $over)'
 }
 
 mint(){ curl -sS -X POST -H 'Content-Type: application/json' "${IC[@]}" --data-binary @- \
@@ -159,7 +158,7 @@ r2)  # legacy alias → apply $S2_COMMIT
 panic)
   WT=/tmp/s2panic-wt
   git -C "$SRC" worktree remove --force "$WT" 2>/dev/null || true
-  git -C "$SRC" worktree add "$WT" HEAD >/dev/null 2>&1
+  git -C "$SRC" worktree add --detach "$WT" HEAD >/dev/null 2>&1
   cd "$WT"
   python3 - <<'PY'
 src = open('cmd/autoputer/main.go').read()
@@ -167,7 +166,7 @@ src = src.replace('autoputer.Run()',
   'if os.Getenv("CHOIR_UPDATER_ROOT") != "" { os.Exit(3) }\n\tautoputer.Run()', 1)
 open('cmd/autoputer/main.go','w').write(src)
 PY
-  git -C "$WT" commit -qam "s2-acc panic release (throwaway)"
+  git -C "$WT" -c user.name=s2acc -c user.email=s2acc@localhost commit -qam "s2-acc panic release (throwaway)"
   PCOMMIT=$(git -C "$WT" rev-parse HEAD)
   out="$REL_ROOT/$PCOMMIT/out"; mkdir -p "$out"
   "$BUILDER" --installable '.#autoputer' --source-dir "$WT" \
