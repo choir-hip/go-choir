@@ -47,13 +47,12 @@ wait_served(){ local want="$1" n=0; while [ $n -lt 90 ]; do c=$(served_commit); 
 wait_healthy(){ local n=0; while [ $n -lt 90 ]; do s=$(guest_health | jq -r '.status' 2>/dev/null); [ "$s" = "ready" ] || [ "$s" = "ok" ] && return 0; sleep 5; n=$((n+1)); done; return 1; }
 
 build_release(){
-  # $1 release dir. For a commit SHA, builds via a detached worktree at the
-  # commit so --source-dir derivation matches (and so the release can differ
-  # from the booted base — a same-commit release's entrypoint is base-present
-  # and always refused). Synthetic dirs (e.g. idxmarker for patch-built
-  # releases) must already exist; they are never built here.
+  # $1 release name: commit SHA or synthetic dir. The out dir is base-keyed
+  # via release_dir, so a nar built against one base is never reused after
+  # a deploy moves the base. Synthetic dirs must already exist.
   local commit="$1"
-  local out="$REL_ROOT/$commit/out"
+  local out
+  out="$(release_dir "$commit")/out"
   if [ ! -f "$out/app-layer-closure.nar" ]; then
     git -C "$SRC" cat-file -e "$commit^{commit}" 2>/dev/null || return 0
     local wt="/tmp/s2-build-$commit"
@@ -104,6 +103,19 @@ push(){ curl -sS -m 120 -X POST -H 'Content-Type: application/json' "${IC[@]}" -
 RESULT=/var/lib/go-choir/deploy-failures/s2-acceptance-${NOW}.jsonl
 note(){ jq -nc --arg leg "$1" --argjson d "${2:-null}" '{leg:$leg,at:(now|todateiso8601),data:$d}' | tee -a "$RESULT"; }
 
+# release_dir resolves a release name to its base-keyed out dir, so every leg
+# reads the nar built against the CURRENT base manifest — never a stale nar
+# from a previous deploy. Synthetic dirs pass through for legs that manage
+# their own out dir (panic).
+release_dir(){
+  local name="$1" basekey
+  case "$name" in
+    */*) printf '%s' "$REL_ROOT/$name"; return 0;;
+  esac
+  basekey="$(sha256sum "$MANIFEST" 2>/dev/null | awk '{print substr($1,1,12)}')"
+  printf '%s' "$REL_ROOT/${basekey:-nobase}-$name"
+}
+
 case "${1:-all}" in
 pre)
   note pre "$(jlog \
@@ -114,7 +126,7 @@ pre)
   ;;
 neg)
   [ -n "$PRED_COMMIT" ] || { echo "PRED_COMMIT required (release built against the booted base)"; exit 2; }
-  receipt="$REL_ROOT/$PRED_COMMIT/out/builder-receipt.json"
+  receipt="$(release_dir "$PRED_COMMIT")/out/builder-receipt.json"
   case "$2" in
     base-digest)      over='{"base_image_manifest_digest":"0000000000000000000000000000000000000000000000000000000000000000"}' ;;
     stale-head)       over='{"base_event_head":"3333333333333333333333333333333333333333333333333333333333333333"}' ;;
@@ -148,8 +160,8 @@ apply)
   # (a commit SHA, or a synthetic dir like idxmarker for patch-built releases).
   [ -n "${2:-}" ] || { echo "apply requires a release dir"; exit 2; }
   build_release "$2" || { note "apply-$2" '{"error":"build failed"}'; exit 4; }
-  receipt="$REL_ROOT/$2/out/builder-receipt.json"
-  nar_sha=$(sha256sum "$REL_ROOT/$2/out/app-layer-closure.nar"|awk '{print $1}')
+  receipt="$(release_dir "$2")/out/builder-receipt.json"
+  nar_sha=$(sha256sum "$(release_dir "$2")/out/app-layer-closure.nar"|awk '{print $1}')
   note "apply-$2-build" "$(jq -c '{code_commit:.code_commit,runtime_path:.runtime_path,closure_paths:(.closure_paths|length),nar_sha:"'"$nar_sha"'"}' "$receipt")"
   pre=$(jlog --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg g "$(route_gen)" '{served:$s,boot:$b,fc:$f,route_gen:$g}')
   req=$(mk_offer "$receipt" "s2acc-apply-${NOW}" '{}')
@@ -200,7 +212,7 @@ rollback)
   # A fresh update_id mints a new operation — same release digest, real
   # apply path (journal replay would be vacuous).
   [ -n "${2:-}" ] || { echo "rollback requires the predecessor release dir"; exit 2; }
-  receipt="$REL_ROOT/$2/out/builder-receipt.json"
+  receipt="$(release_dir "$2")/out/builder-receipt.json"
   pre=$(jlog --arg s "$(served_commit)" --arg b "$(guest_boot_id)" --arg f "$(fc_pid)" --arg g "$(route_gen)" '{served:$s,boot:$b,fc:$f,route_gen:$g}')
   req=$(mk_offer "$receipt" "s2acc-rb-${NOW}" '{}')
   offer=$(printf '%s' "$req" | mint)
