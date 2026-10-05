@@ -77,7 +77,11 @@ homotopy:
     kind-registration makes later additions cheap and continuous.'
 
 now:
-  status: working
+  status: superseded
+  director_note_2026_10_05: >-
+    SUPERSEDED with the 10-01 World Wire metamission. The store-type decision
+    is re-posed by the rearchitecture (claim feed + per-computer og) and the
+    S8 claim-feed design slice.
   slice: 'W0 is green-class and may run parallel to the capacity mission; its
     first act is the store-type decision, which sits at the intersection of
     the KB, the OOM bounds, and Dolt transactional integrity.'

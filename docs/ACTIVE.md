@@ -85,7 +85,30 @@ mutex from writes. Evidence map:
 [`problems/texture-latency-layered-evidence-2026-10-01.md`](problems/texture-latency-layered-evidence-2026-10-01.md).
 Independent of the capacity mission's substrate work; runs parallel.
 
-## Successor Spine — World Wire Metamission (designed, intent)
+## v5 (2026-10-05) — density before distribution
+
+Owner-approved outline folded into the app-dev metamission (see its "v5 plan").
+New stations:
+- **SR** desk-surface cleanup: finish the research RLM cutover (registry →
+  `{desk_go_eval}`, prompt rewrite) and delete processor/reconciler. Absorbs
+  Jev M0a.
+- **SA** agent density: many concurrent desk activations in a 2–4 GiB guest.
+  Memory, the embedded-Dolt `engineMu` bottleneck, and the
+  operational/versioned store split. Gates S3.
+- **SM** model policy rewrite + evals. Absorbs Jev M2; Jev M3 is its first
+  consumer.
+- **SC** desk capability surface: per-desk packages, Graph/Ledger/Similar/Source
+  verbs, management scorer fan-out.
+
+World Wire phase 1 (the newspaper) can start after S5.
+
+## Successor Spine — World Wire Metamission (SUPERSEDED 2026-10-05; rewrite pending)
+
+The 10-01 file below predates the rearchitecture
+([`world-wire-rearchitecture-2026-10-05.md`](world-wire-rearchitecture-2026-10-05.md)):
+processor/reconciler and host ingestion are deleted. It is kept for its
+receipts (owner verticals ordering, June failure receipt).
+
 
 [`definitions/choir-world-wire-metamission-2026-10-01.md`](definitions/choir-world-wire-metamission-2026-10-01.md)
 (`status: intent`, `entrypoint: false`) — designed from the 2026-10-01

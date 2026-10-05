@@ -1074,7 +1074,7 @@ nodes:
     title: World Wire Metamission — compounding self-citing KB, verticals sequenced
     path: docs/definitions/choir-world-wire-metamission-2026-10-01.md
     ledger: ''
-    status: intent
+    status: superseded  # 2026-10-05 v5: rewrite pending from docs/world-wire-rearchitecture-2026-10-05.md
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -1293,3 +1293,32 @@ nodes:
     sources:
       - docs/definitions/choir-selfdev-gate-2026-09-27.md
       - docs/evidence/m11-episode-call-map-2026-09-27.md
+  - id: choir-appdev-sr-desk-surface-cleanup-2026-10-05
+    title: SR Desk-Surface Cleanup — finish research RLM cutover, delete processor/reconciler
+    path: docs/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md
+    ledger: ''
+    status: pending
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-supervised-app-development-metamission-2026-10-01
+    enables:
+      - choir-appdev-sa-agent-density-2026-10-05
+    note: >-
+      v5 2026-10-05. Absorbs Jev M0a (choir-signal-research-rlm-cutover-2026-09-29).
+  - id: choir-appdev-sa-agent-density-2026-10-05
+    title: SA Agent Density — many concurrent desk activations in a 2-4 GiB guest
+    path: docs/definitions/choir-appdev-sa-agent-density-2026-10-05.md
+    ledger: ''
+    status: pending
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-appdev-sr-desk-surface-cleanup-2026-10-05
+    enables:
+      - choir-appdev-s3-fast-resume-2026-10-01
+    note: >-
+      v5 2026-10-05. Memory budget + embedded-Dolt engine bottleneck + store
+      split. Owner principle: agents per guest before guests per host.

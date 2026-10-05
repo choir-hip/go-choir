@@ -117,7 +117,11 @@ boundaries:
     - 'per-desk run profile assembly'
 
 now:
-  status: blocked_incomplete
+  status: superseded
+  director_note_2026_10_05: >-
+    ABSORBED into the app-dev metamission station SM (model policy rewrite +
+    evals; see its 'v5 plan' -> SM). M0a's dependency is now SR there; the M1
+    dependency is checked against S0m in SR.
   slice: 'reconcile M0a/M1 receipts and inspect the existing model-policy
     manager, overlays, and cast selection path; then author choir
     model-policy module verbs: persistent per-desk policy storage and

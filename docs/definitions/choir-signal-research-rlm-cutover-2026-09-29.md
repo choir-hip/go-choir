@@ -120,7 +120,13 @@ boundaries:
     - 'rlm_research_runtime.yaml + promptstore/defaults/research.yaml'
 
 now:
-  status: working
+  status: superseded
+  director_note_2026_10_05: >-
+    ABSORBED into the app-dev metamission station SR
+    (docs/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md).
+    Phase 1 (13 in-cell choir.* verbs) landed; the deletion commit, deployed
+    verify and prompt rewrite never happened and are SR's scope. This file
+    stalled at 'phase 1 landed' when the spine moved on 2026-10-01.
   slice: 'phase-1 verbs landed + proven in a real cell (b83ea5db, a09fd215,
     007b64df): 13 research choir.* verbs on the typed surface — 9
     network/content via rt.researchDeps.HostEgress + 4 evidence/run-memory

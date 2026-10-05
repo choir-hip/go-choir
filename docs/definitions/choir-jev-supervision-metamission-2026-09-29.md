@@ -30,7 +30,7 @@ metamission:
     - id: m0a-research-rlm-cutover
       path: docs/definitions/choir-signal-research-rlm-cutover-2026-09-29.md
       readiness: drafted
-      status: working
+      status: superseded  # 2026-10-05: absorbed into app-dev SR (choir-appdev-sr-desk-surface-cleanup-2026-10-05.md)
       depends_on: [m-sub-signal-plane]
     - id: m1-typed-commitments
       path: docs/definitions/choir-signal-typed-commitments-2026-09-29.md
@@ -40,13 +40,13 @@ metamission:
     - id: m2-model-policy-rlm-module
       path: docs/definitions/choir-signal-model-policy-rlm-module-2026-09-29.md
       readiness: drafted
-      status: pending
+      status: superseded  # 2026-10-05: absorbed into app-dev SM (model policy rewrite + evals)
       depends_on: [m0a-research-rlm-cutover, m1-typed-commitments]
     - id: m3-research-hillclimb
       path: docs/definitions/choir-signal-research-hillclimb-2026-09-29.md
       readiness: drafted
       status: pending
-      depends_on: [m2-model-policy-rlm-module]
+      depends_on: [m2-model-policy-rlm-module]  # 2026-10-05: read as app-dev SM
     - id: m4-jev-transport
       path: docs/definitions/choir-signal-jev-transport-2026-09-29.md
       readiness: drafted
@@ -324,7 +324,7 @@ now:
     the bound run is still Active; passivated/terminal/unresolvable bound
     run re-mints the wake (actor_wake_strand_test.go proves both legs).
     Awaiting deploy; cfa90b87 unstrands on the next guest boot migration.
-    DEPLOY-OUTCOME UPDATE (08a76896): a7e31232's migration minted 3 pending
+    DEPLOY-OUTCOME UPDATE (08a76896): a7e31232''s migration minted 3 pending
     wakes at 21:14Z yet cfa90b87 stayed passivated — a divergent panel plus
     code audit proved the re-arm replayed the consumed tape row
     (actorDispatchUpdateID is content-derived; ON CONFLICT(update_id) DO
@@ -345,7 +345,6 @@ now:
     provider chatgpt circuit open (upstream unhealthy) — research cell
     calls fail on the provider until upstream recovers; not the seam.
   '
-  '
   next_action: 'STATUS 23:55Z — redrive chain DEPLOYED + seam proven live
     (salted #redrive-1 rows appended + handled). Environment recovered:
     provider circuit closed (chatgpt inference succeeding), deferral storm
@@ -358,7 +357,7 @@ now:
     M1 items 2+3 verified + committed (m1-actingpack-legacy-grandfather
     -2026-09-30.md). M-SUB: mid-cell emit + boundary notice passively
     confirmed live; 5 controlled-cell proofs blocked on stable window.
-    Gate: 362febb2 reactivation is now a diagnosed defect, not drain lag.'
+    Gate: 362febb2 reactivation is now a diagnosed defect, not drain lag.''
 
     and fixed: exhausted restart recasts live-locked the guest. "recast
     attempts exhausted" returned a transient error, so the actor

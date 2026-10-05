@@ -23,6 +23,15 @@ definition_version: 4
 # (ops substrate: storage lifecycle, guest observability, declared VM shapes,
 # CI deploy gating) gates S3. S3 opens with the snapshot measurement S0b could
 # not take. Addendum folded into "Orientation 2026-10-05".
+# v5 2026-10-05 (owner-approved outline): governing principle "density before
+# distribution" — scale agents horizontally inside a 2-4 GiB guest before
+# scaling guests per host, before hosts. New stations SR (desk-surface cleanup;
+# absorbs Jev M0a + processor/reconciler deletion), SA (agent density: memory +
+# Dolt engine bottleneck + store split; absorbs SO's memory slice), SM (model
+# policy rewrite + evals; absorbs Jev M2), SC (desk capability surface).
+# S3 now depends on SA, S5 on SC. World Wire: consuming lens; phase 1 can start
+# after S5; the 10-01 WW metamission is superseded pending a rewrite. See
+# "v5 plan".
 
 readiness: executable
 
@@ -77,11 +86,40 @@ metamission:
       readiness: reviewed
       status: working
       depends_on: []
+    - id: SR-desk-surface-cleanup
+      # v5. Completes Jev M0a (research RLM cutover: registry -> {desk_go_eval},
+      # prompt rewrite) and deletes processor/reconciler end to end. Small.
+      path: docs/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md
+      readiness: drafted
+      status: pending
+      depends_on: [S2-layering-runtime-from-release]
+    - id: SA-agent-density
+      # v5. "Scale agents horizontally in a 2-4 GiB VM before scaling VMs."
+      # Memory budget (moved from SO) + embedded-Dolt engine bottleneck +
+      # operational/versioned store split. Gates S3 and SC.
+      path: docs/definitions/choir-appdev-sa-agent-density-2026-10-05.md
+      readiness: drafted
+      status: pending
+      depends_on: [SR-desk-surface-cleanup, SO-ops-substrate]
+    - id: SM-model-policy-and-evals
+      # v5. Absorbs Jev M2 (choir-signal-model-policy-rlm-module-2026-09-29.md).
+      # Jev M3 (research hill-climb) is its first consumer.
+      path: unauthored (scope in "v5 plan" -> SM)
+      readiness: intent
+      status: pending
+      depends_on: [SR-desk-surface-cleanup]
+    - id: SC-desk-capability-surface
+      # v5. Per-desk package sets + Graph/Ledger/Similar/Source read verbs +
+      # management scorer fan-out via SM per-activation selection.
+      path: unauthored (scope in "v5 plan" -> SC)
+      readiness: intent
+      status: pending
+      depends_on: [SA-agent-density, SM-model-policy-and-evals]
     - id: S3-fast-resume
       path: docs/definitions/choir-appdev-s3-fast-resume-2026-10-01.md
       readiness: reviewed
       status: pending
-      depends_on: [S1-security-floor, S2-layering-runtime-from-release, SO-ops-substrate]
+      depends_on: [S1-security-floor, S2-layering-runtime-from-release, SO-ops-substrate, SA-agent-density]
     - id: S4-capsule-open-world
       path: docs/definitions/choir-appdev-s4-capsule-open-world-2026-10-01.md
       readiness: reviewed
@@ -91,7 +129,7 @@ metamission:
       path: docs/definitions/choir-appdev-s5-live-preview-supervision-2026-10-01.md
       readiness: reviewed
       status: pending
-      depends_on: [S4-capsule-open-world]
+      depends_on: [S4-capsule-open-world, SC-desk-capability-surface]
     - id: S6-commit-gate-full-release
       path: docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md
       readiness: reviewed
@@ -420,6 +458,7 @@ boundaries:
     - Forking a computer mid-run (pending tool-call replay from the tape, audit pattern 2.3).
     - Building a bespoke fleet dashboard; fleet view is Texture transclusion.
     - Marketplace, payments, or ranking of publications.
+    - Bulk World Wire scale-out across VMs (v5; belongs to the World Wire metamission after S9).
   dependencies_external:
     - >-
       Texture transclusion and rich formatting in the RLM tool-call
@@ -439,20 +478,14 @@ boundaries:
 now:
   status: working
   slice: >-
-    v4.1 director review 2026-10-05 (after ee013c96). S2: all contract
-    slices landed (9f5aa8a0 S2-e, c8fb7834 S2-d, 8f06b3d9 S2-c, e1c3924b
-    S2-f, e527c169 + a3da83c4 S2-g); the app-layer push is live in CI and
-    proven on computer-6450a253 (release 36743b1f6ddb, build.commit
-    2f0e2cac). S2 is at station acceptance against builder-produced
-    releases. S1 remainder mostly landed: token off the cmdline (619d645e),
-    child-env scrub (6b54522c), zot shadowing (a80d2145), diag restricted
-    (98cf387b), Yaegi worker landlock/capdrop/seccomp behind
-    --session-harden (a578bbc0, eb9c5b1e); non-root runtime remains (problem
-    doc 94342f9d). SO: slice 1 (dead-dir reaper, platform-artifacts
-    reachability GC in dry-run) and slice 2 (per-VM serial sink e8137d03)
-    landed. NEW: World Wire corpus burn triaged. Containment rides SO; the
-    WW rearchitecture is recorded as this metamission's consuming
-    application (section below).
+    v5 (2026-10-05, owner-approved outline). Governing principle: density
+    before distribution. Closed: S0, S0m, S1a. In flight: S1 remainder
+    (non-root runtime), S2 station acceptance (all contract slices landed),
+    SO (storage lifecycle + og wrong-store GC fix, observability, CI gating,
+    World Wire containment). Next substrate: SR desk-surface cleanup (finish
+    the research RLM cutover; delete processor/reconciler), then SA agent
+    density in a 2-4 GiB guest, with SM model policy + evals after SR, and
+    SC desk capability surface after SA + SM. See "v5 plan".
   source_ref: main@4c76730b13cda645665c6c95b5e89a7e2e805e78
   deploy_identity: 'staging https://choir.news; last observed deployed runtime e605cdde/3c1cbaf6 per S2 layering-diag receipts (verify /health before the next probe)'
   candidate:
@@ -518,11 +551,11 @@ now:
     what: >-
       Two-layer guest; source-only publication; machine snapshots for
       resume, semantic for fork/distribution; forks are sibling computers;
-      builder substrate = host service (S0b). v4 operational decisions
-      (director, under continuous authority, reversible): S2 is re-scoped
-      to S2-c..g; SO is added as a parallel station gating S3; S3 opens
-      with its own snapshot measurement; acceptance releases must come out
-      of the builder (no hand-staged binaries).
+      builder substrate = host service. v5 (owner-approved 2026-10-05):
+      density before distribution (agents per guest, then guests per host,
+      then hosts); SR/SA/SM/SC inserted; Jev M0a and M2 absorbed; World
+      Wire is the consuming lens and its 10-01 metamission is superseded
+      pending a rewrite on the rearchitecture analysis.
     kind: architecture
     status: settled
     evidence_ref: owner statements 2026-10-01 and 2026-10-04; director review 2026-10-05 (this card)
@@ -605,23 +638,20 @@ now:
     full S1 floor. S3 must not start before SO's storage lifecycle and the
     VM shape decision.
   next_action: >-
-    1. S2 station acceptance: run the conjecture test with builder-produced
-       releases (compatible apply without reboot + time-to-healthy;
-       incompatible refused pre-mutation; health-failing restored with exec
-       reverted). Close the S2-g bind-gap record. Then the station boundary
-       protocol (panel, report, transition receipt).
-    2. SO containment (World Wire, docs/problems/world-wire-corpus-resource-burn-2026-10-05.md
-       "Director review"):
-       (a) fix the og GC wrong-store liveness bug (artifact_gc.go:202 reads
-       Store A; og lives in Store B) with a split-pool test; og stays
-       dry-run, WW bodies excluded;
-       (b) make the sourcecycled disable durable via a default-off option
-       in nix/node-b.nix;
-       (c) take one corpus-dolt CPU sample + processlist with sourcecycled
-       stopped.
-    3. SO continues: memory receipt + host offline GC of the owner store
-       (before/after), the GC-ordering fix, then declared shapes.
-    4. S1: non-root runtime (the last S1 item; required before S4).
+    1. S2 station acceptance with builder-produced releases, then the S2
+       boundary protocol (panel, report, transition receipt).
+    2. SO: og GC wrong-store fix (artifact_gc.go:202 must read Store B via
+       store.corpus(), with a split-pool test); sourcecycled durable
+       default-off in nix/node-b.nix; one corpus-dolt CPU sample +
+       processlist; CI deploy gating against the deployed identity.
+    3. S1: non-root runtime (last item; gates S4).
+    4. SR (station file authored, drafted): research registry ->
+       {desk_go_eval}; delete processor/reconciler end to end; rewrite
+       research.yaml for the record-native in-cell world; check M1 against
+       S0m.
+    5. SA (station file authored, drafted) after SR: fan-out load probe +
+       memory receipt first, then the slices in order.
+    6. Author SM and SC station files from "v5 plan" when SR lands.
 
 receipts:
   - id: s0-to-s2-transition-2026-10-04
@@ -991,6 +1021,184 @@ lost):**
 - supply-chain review of the S4 pinned-input capture;
 - an external review before public launch.
 
+## v5 plan — density before distribution (2026-10-05)
+
+**Principle (owner):** "we must first scale agents horizontally in a 2-4 GiB
+VM before scaling VMs horizontally." Scale in order:
+1. concurrent desk activations inside one guest (SA);
+2. guests per host (S3 residency tiers);
+3. hosts (out of scope).
+
+Bulk World Wire across many computers comes after S9, in the World Wire
+metamission.
+
+### Critical path
+
+```
+S1 (non-root) ─┐
+S2 (accept) ───┼─> SR ─> SA ─> S3
+SO ────────────┘     └─> SM ─> SC ─> S5 ─> S6 ─> S7/S8 ─> S9 ─> S10/S11
+                                     └ S4 (after S1) ┘
+World Wire phase 1 (the newspaper) can start after S5.
+```
+
+### SR — desk-surface cleanup (small; absorbs Jev M0a)
+
+Finding (director review 2026-10-05): the research RLM cutover is half-done.
+- R3r (settled 09-26) put research on the in-cell carrier but kept 13 typed
+  tools (`internal/agentcore/tool_profiles.go:394-408`).
+- M0a phase 1 landed the 13 in-cell `choir.*` verbs. The deletion commit,
+  the deployed verify and the prompt rewrite never happened, and M0a's file
+  has been frozen since the 10-01 spine change.
+- The base prompt `internal/promptstore/defaults/research.yaml` still
+  teaches `update_coagent` and JSON-tool cadence. That tool is absent from
+  the research desk registry, and S0m retired raw messaging.
+- `rlm_research_runtime.yaml` advertises both surfaces.
+
+Scope:
+- Research registry becomes `{desk_go_eval}`. Delete the legacy
+  `ResearchRuntimeOverlay` branch if the carrier is always live.
+- Delete processor and reconciler end to end: roles in modelpolicy,
+  `processor_runtime.yaml`/`reconciler_runtime.yaml`, the
+  `processor_requests`/`reconciler_requests` dispatch path, and
+  sourcecycled's processing path. Run a deletion-citers grep first.
+- Rewrite `research.yaml` for the record-native in-cell world. The overlay
+  describes one surface.
+- Check whether S0m discharged Jev M1 ("typed commitments"). Close or
+  re-scope M1 accordingly.
+
+Acceptance: M0a's four deployed actions (multi-search loop in one cell with
+evidence reaching Texture mid-loop; capability-parity checklist; egress
+budget refusal returned into the cell; deployed tool schema is exactly
+`{desk_go_eval}`).
+
+### SA — agent density in a 2-4 GiB guest (red)
+
+Finding: `engineMu` (`internal/objectgraph/dolt_store.go:62-66`) serializes
+every query on the guest's embedded Dolt. The cause is a race, not design:
+two pools on one embedded engine "race on shared internal buffers
+(unescapeHTMLCodepoints mutating a JSON slice in place)". Occupancy was
+~97%, read-dominated, top holders unindexed scans (latency mission
+`cf0ef207`).
+
+One store holds versioned content and high-churn operational rows (runs,
+events, channel messages, inbox deliveries, work items, wake outbox, pending
+mutations). That plausibly explains three symptoms at once:
+- lock contention;
+- the ~22 GB journal against ~5 GB live;
+- the 2 -> 16 GiB memory ratchet.
+
+**Target** (fixed from slice 1's baseline): about N concurrent desk
+activations in a 4 GiB guest with p95 act-commit under 1 s and an idle
+footprint under 2 GiB. The owner computer comes down to a 4 GiB ceiling.
+
+Slices, in order:
+1. **Baseline.** A fan-out load probe (N research + M scorer activations)
+   plus a memory receipt: `EngineMutexOpStats` wait/hold per caller, guest
+   meminfo, Go runtime metrics, Dolt cache and journal sizes, and host
+   committed RSS per Firecracker process. Then a host offline GC of the owner
+   store, and measure again.
+2. **Memory.**
+   - GC ordering fix (`internal/store/dolt_maintenance.go:290` guard
+     precedes the `:309` journal trigger).
+   - Automatic host offline GC above the in-guest safety threshold.
+   - `GOMEMLIMIT`; bounded Dolt caches.
+3. **Engine lock.**
+   - Reproduce the race under `-race` with concurrent JSON queries on one
+     engine.
+   - Upgrade or patch Dolt / go-mysql-server, or avoid the path.
+   - Then make `engineMu` a read/write lock.
+   - No RW lock without a passing race test.
+4. **Read cost.**
+   - Scans become indexes or cursors; polling becomes notification.
+   - Hot reads (lifecycle snapshot, pending mutations, inbox, `Pack()`)
+     come from write-maintained projections.
+   - Includes the Management storm convergence invariant (O(1) occurrence
+     resolve + durable per-desk dispatch gate).
+5. **Store split.**
+   - High-churn operational tables move to SQLite WAL (precedent: the actor
+     recovery log, `internal/actorruntime`).
+   - Versioned content (Texture revisions, og effective state, event index)
+     stays in Dolt.
+   - Group-commit acts.
+   - The replay manifest and restore set are updated. State authority is
+     unchanged: the tape stays canonical.
+6. **Declared shapes and elasticity.**
+   - Remove the `vmctl-priority.env` 16 GiB override; shapes live in
+     tracked config.
+   - Per-VM cgroups (`MemoryHigh`/`MemoryMax`), balloon (verify v1.15.1
+     free-page reporting), host zswap, and a declared oversubscription ratio.
+
+### SM — model policy rewrite and evals (absorbs Jev M2)
+
+- **Policy as layered, versioned data:** platform -> computer -> desk
+  (desk-owned, cell-editable) -> per-cast -> eval assignment.
+  - Keys: desk plus purpose (for example research/imputation,
+    management/scoring, texture/drafting), task tags, budget class.
+  - Values: candidate sets with weights and constraints (tools/modalities,
+    context, cost ceiling, provider health), replacing hard-coded
+    fallbacks.
+- **Per-activation selection for every desk** (today only engineering
+  assignments pass `ModelPolicyOverlayID`).
+- **Every resolution stamped on the activation and its records:** policy
+  digest, matched rule, selection.
+- **Policy changes are precommitments,** resolved by evals or production
+  records. No more unrecorded edits like the 10-02 live data.img swap.
+- **Evals are N-arm runs** varying model, effort, prompt version (prompts
+  and styles are versioned Textures), context pack and tool surface.
+  1. Fixture evals first, with the rubric frozen before runs (Jev M3 rule).
+  2. Then shadow evals on sampled live traffic, with read-only arms (no
+     canonical acts, no external sends), after S1 is complete.
+  3. Replay evals only once tool-call results are on the tape.
+- Arms precommit; heterogeneous management scorer activations score.
+- Retire dead roles (`processor`, `reconciler`, and any other unused).
+
+### SC — desk capability surface
+
+- **Per-desk Go package sets** (`deskPackageSets` beside `deskModuleSets`).
+  - Pure computation only (`slices`, `maps`, `cmp`, `container/heap`,
+    `crypto/sha256`, `hash/fnv`, `net/url`, `encoding/xml`, `encoding/csv`,
+    …).
+  - Production must run workers with `--session-harden` before widening
+    any set.
+- **Read verbs:**
+  - `Graph.Get/Versions/Neighbors/Query` — `Neighbors` with backlinks is
+    autocitation;
+  - `Ledger.Query/TrackRecord/Due`;
+  - `Similar` (host-mediated vector search);
+  - `Source.Versions/Diff/Pin` (pinned span as a transclusion ref);
+  - `Export(query)` into an analysis capsule for engineering.
+- **Texture transcludes object-graph object versions** via `ApplyTexture`.
+- **Management scorer fan-out** uses SM's per-activation selection. A desk
+  is many heterogeneous activations: independence comes from model-family
+  diversity and context isolation, not from a separate scorer service.
+- **Read verbs are computer-scoped.** Cross-computer reads come later
+  through the claim feed, never as a back door into Store B.
+
+### Changes to existing stations
+
+- **S3:** depends on SA (small guests mean small snapshots). It opens with
+  the snapshot measurement S0b could not take.
+- **S5:** depends on SC (Texture reads), and still consumes the external
+  Texture transclusion work.
+- **S6:** narrower. S2-f already joined self-dev to the builder, so S6 is the
+  owner-gated full-release path from a supervised capsule.
+- **S8:** gains a design-only slice for the claim-feed protocol
+  (cross-computer data subscription: signed append-only claim log, base +
+  watermark + tail on the Restore-Zero pattern, subscription authority,
+  privacy class, revocation). It is built in the World Wire metamission.
+
+### Tracked open decisions
+
+1. M1 vs S0m — settled in SR.
+2. Claim-feed protocol shape — S8 design slice.
+3. corpus-dolt CPU burn diagnosis and its 18-20 GiB cap (host density).
+4. Capsule egress default: open-with-recording vs allowlist (S4).
+5. Snapshot encryption at rest (S3/S10).
+6. Trusted host build cache (deferred).
+7. Legal and licensing for scoring named public figures and republishing
+   excerpts (owner/legal, not engineering).
+
 ## World Wire as the consuming application (2026-10-05)
 
 Owner framing: World Wire / autopaper is "the true application of Choir,
@@ -1001,6 +1209,19 @@ The rearchitecture analysis is `docs/world-wire-rearchitecture-2026-10-05.md`
 `docs/problems/world-wire-corpus-resource-burn-2026-10-05.md`.
 
 How this metamission treats it:
+- **v5 status:** the World Wire metamission
+  (`choir-world-wire-metamission-2026-10-01.md`) and its W0 station are
+  superseded. They predate the rearchitecture (processor/reconciler, host
+  ingestion). A rewrite is pending, built on the rearchitecture analysis:
+  - speaker -> statement -> imputed commitment -> resolution;
+  - four-desk factorization (no processor/reconciler);
+  - the claim feed;
+  - a platform observer computer plus tenant autopaper computers.
+
+  The 10-01 owner decision on verticals ordering (general news, then AI,
+  then Taiwan/geopolitics/semis/internal democracy, then the region ladder)
+  carries forward. **Phase 1 (the newspaper)** can start after S1, S2, SO,
+  SR, SA, SC, S3 and S5 land; it does not need S6-S11.
 - **Not a station, a validation lens.** At each station boundary, the panel
   also asks whether an autopaper computer could run on what landed. The
   target sketch is a platform "wire-observer" computer plus per-tenant
@@ -1172,7 +1393,9 @@ guest observability.
   forwarding) so exec, boot and apply failures are host-visible without
   bespoke diag files. `layering-diag.log` becomes a special case.
 - **Guest memory budget (owner direction 2026-10-05: "shouldn't need 16gb
-  at all"; target 2-4 GiB, oversubscribed):**
+  at all"; target 2-4 GiB, oversubscribed).** *v5: moved to SA. It shares
+  a root cause with the Dolt engine bottleneck. The analysis below stands;
+  SA owns execution.*
   - **Diagnosis.** The owner guest went 2 → 4 → 8 → 16 GiB, each step
     justified by "the store outgrew the guest"
     (`internal/vmctl/ownership.go:1220-1224`,

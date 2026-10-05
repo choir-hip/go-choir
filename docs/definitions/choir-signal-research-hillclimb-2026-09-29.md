@@ -109,7 +109,10 @@ boundaries:
   protected_surfaces: []
 
 now:
-  status: blocked_incomplete
+  status: checkpoint_incomplete
+  director_note_2026_10_05: >-
+    Repointed 2026-10-05: depends on app-dev SM (which absorbed M2), not M2.
+    M3 is SM's first consumer; its frozen-rubric-before-matrix rule stands.
   slice: 'reconcile M2 receipts; freeze the QA fixture, the
     groundedness/attribution rubric, the baseline, and the comparison
     rule BEFORE running any tuning candidate; then run the eval matrix'
