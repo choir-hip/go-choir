@@ -481,13 +481,14 @@ func Run() {
 	apiHandler := apihandler.NewHandler(rt.Runtime.Store())
 	apihandler.RegisterRoutes(s, runtimeHandler, textureHandler, apiHandler, browserHandler, desktopHandler, contentService, mediaHandler, rtRuntimeCfg.EnableTestAPIs)
 	if toolsEnabled {
-		managementRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Management)
-		if err := apihandler.RegisterProductAPIRequestTool(s, managementRegistry); err != nil {
-			log.Fatalf("autoputer: register product API tool: %v", err)
-		}
+		// SMG: the management desk reaches the product API in-cell via
+		// choir.ProductAPI (broker ActionProductAPI); the typed
+		// product_api_request tool is deleted. The canonical route table is
+		// the same server `s`.
+		rt.Runtime.SetProductAPIHandler(s)
 		log.Printf("autoputer: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
 			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
-			managementRegistry.Size(),
+			rt.Runtime.ToolRegistryForProfile(agentprofile.Management).Size(),
 			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Research)),
 			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
 		)

@@ -128,7 +128,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "bash", "write_file", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "update_coagent", "save_evidence", "capsule_go_eval", "desk_go_eval":
+	case "bash", "write_file", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "update_coagent", "save_evidence", "capsule_go_eval", "desk_go_eval":
 		return true
 	default:
 		return false
@@ -258,7 +258,6 @@ func toolCallManagementEngineeringSpawnKey(call types.ToolCall) (string, bool) {
 	}
 	return profile + ":" + slot + ":" + strings.TrimSpace(in.ChannelID), true
 }
-
 
 func normalizedToolCallArgs(call types.ToolCall) string {
 	raw := strings.TrimSpace(string(call.Arguments))

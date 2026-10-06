@@ -2551,7 +2551,7 @@ tools:
     - id: internal/agentcore/tools_worker_update.go:Tool:update_coagent
       disposition: tools
     - id: internal/apihandler/product_api_tool.go:Tool:product_api_request
-      disposition: tools
+      disposition: deleted (SMG 2026-10-06) — capability moved to choir.ProductAPI verb (broker ActionProductAPI -> agentcore.productAPIRequest)
     - id: internal/coagentowner/spawn_tool.go:Tool:spawn_agent
       disposition: tools
     - id: internal/modelpolicy/tools_model_verify.go:Tool:verify_model_capability

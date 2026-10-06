@@ -258,6 +258,47 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	}
 }
 
+// TestChoirProductAPIIsManagementOnly pins the SMG contract: the deleted
+// product_api_request tool's capability now lives behind choir.ProductAPI,
+// exported only on the management desk — every other desk's module set
+// excludes it AND its session handle never authorizes product_api.
+func TestChoirProductAPIIsManagementOnly(t *testing.T) {
+	root := t.TempDir()
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := NewHandleIssuer(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := NewBroker(BrokerConfig{ComputerID: "computer-choir", CurrentEpoch: 1, AllowedRoot: root}, issuer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgmt, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, "management", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := mgmt.ChoirExports()["choir/choir"]["ProductAPI"]; !ok {
+		t.Fatal("management scope must export choir.ProductAPI")
+	}
+	for _, role := range []string{SessionRoleResearch, "engineering", "texture", "co-super"} {
+		scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, role, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := scope.ChoirExports()["choir/choir"]["ProductAPI"]; ok {
+			t.Fatalf("%s scope must not export choir.ProductAPI", role)
+		}
+		// Even if a cell bypassed the export map, the handle refuses the
+		// broker action — the authority check is the durable gate.
+		if _, err := scope.ProductAPI("GET", "/api/universal-wire/stories", nil); err == nil || !strings.Contains(err.Error(), "product_api") {
+			t.Fatalf("%s ProductAPI call should fail handle verify, got %v", role, err)
+		}
+	}
+}
+
 // TestPromptTaughtVerbsMatchExports cross-checks every `choir.<Name>`
 // identifier the deployed desk prompts teach against the kernel's actual
 // export map — the 2026-10-06 defect was prompts teaching

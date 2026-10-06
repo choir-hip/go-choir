@@ -86,6 +86,11 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 			ActionReadContentSelector, ActionSearchWireCorpus,
 			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry}
 	}
+	// SMG: the management desk's product API call rides the broker like the
+	// research egress verbs — the typed product_api_request tool is deleted.
+	if normalizeDeskRole(role) == "management" {
+		actions = append(actions, ActionProductAPI)
+	}
 	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, time.Hour)
 	if err != nil {
 		return nil, fmt.Errorf("choir: issue session handle: %w", err)
@@ -175,7 +180,8 @@ var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
 	// the filesystem (mutation is capsule-bound under engineering).
 	"management": {"Message", "Emit", "Cast", "Ask", "Note", "Reply",
-		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
+		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
+		"ProductAPI"},
 	// Engineering mutates inside its capsule and reports fate.
 	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
@@ -259,6 +265,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"ReadEvidence":         func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
 		"ListEvidence":         func() reflect.Value { return reflect.ValueOf(s.ListEvidence) },
 		"RunMemoryEntry":       func() reflect.Value { return reflect.ValueOf(s.RunMemoryEntry) },
+		"ProductAPI":           func() reflect.Value { return reflect.ValueOf(s.ProductAPI) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -483,6 +490,18 @@ func (s *ChoirScope) ListEvidence(agentID string, limit int) (json.RawMessage, e
 func (s *ChoirScope) RunMemoryEntry(entryID string) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := s.call(ActionGetRunMemoryEntry, GetRunMemoryEntryPayload{EntryID: entryID}, &out)
+	return out, err
+}
+
+// ProductAPI calls an allowlisted authenticated product API route as the run
+// owner — the management desk's in-cell replacement for the deleted
+// product_api_request tool (SMG). Method is GET/POST/PUT/DELETE; path is an
+// absolute /api/... route on the product-path allowlist; body is an optional
+// JSON object. The host validates and serves the route, returning a bounded
+// {status_code, content_type, body} JSON result.
+func (s *ChoirScope) ProductAPI(method, path string, body json.RawMessage) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := s.call(ActionProductAPI, ProductAPIPayload{Method: method, Path: path, Body: body}, &out)
 	return out, err
 }
 

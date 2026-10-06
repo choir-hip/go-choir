@@ -32,6 +32,7 @@ const (
 	ActionReadEvidence         BrokerAction = "read_evidence"
 	ActionListEvidence         BrokerAction = "list_evidence"
 	ActionGetRunMemoryEntry    BrokerAction = "get_run_memory_entry"
+	ActionProductAPI           BrokerAction = "product_api"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -159,6 +160,17 @@ type WebSearchPayload struct {
 	MaxResults int    `json:"max_results,omitempty"`
 }
 
+// ProductAPIPayload defines the parameters for ActionProductAPI — the
+// management desk's host-resolved product API call (former
+// product_api_request typed tool). The host validates method/route against
+// the product-path allowlist and serves the request with the run owner as
+// the authenticated user; the cell sees the bounded status/body result.
+type ProductAPIPayload struct {
+	Method string          `json:"method"`
+	Path   string          `json:"path"`
+	Body   json.RawMessage `json:"body,omitempty"`
+}
+
 // FetchURLPayload defines the parameters for ActionFetchURL — a host-
 // resolved fetch; the cell receives bounded content, never a socket.
 type FetchURLPayload struct {
@@ -242,7 +254,8 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit,
 		ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument, ActionImportURL,
 		ActionReadContentItem, ActionListContentSelectors, ActionReadContentSelector, ActionSearchWireCorpus,
-		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry:
+		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
+		ActionProductAPI:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

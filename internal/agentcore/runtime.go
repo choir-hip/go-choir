@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -99,10 +100,14 @@ type Runtime struct {
 	// in-flight durable open (each delivery's cleanup would otherwise write
 	// divergent fate intents on the same deterministic command identity).
 	engineeringAssignmentOpenMu sync.Mutex
-
-	wg           sync.WaitGroup
-	toolRegistry *toolregistry.ToolRegistry
-	toolProfiles map[string]*toolregistry.ToolRegistry
+	// productAPISrv is the canonical product API route table the management
+	// desk's choir.ProductAPI verb serves through (SMG). Bound at autoputer
+	// boot via SetProductAPIHandler; nil in tests that never call the verb.
+	productAPIMu  sync.RWMutex
+	productAPISrv http.Handler
+	wg            sync.WaitGroup
+	toolRegistry  *toolregistry.ToolRegistry
+	toolProfiles  map[string]*toolregistry.ToolRegistry
 	// deskWorkers owns the host session workers for non-capsule desks on the
 	// in-cell carrier (R3b). Lazy; nil until the first desk_go_eval call.
 	deskWorkers   *deskSessionWorkers
