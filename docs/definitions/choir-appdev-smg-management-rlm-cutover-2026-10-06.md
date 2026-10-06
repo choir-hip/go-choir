@@ -178,9 +178,11 @@ now:
     drain the storm (park/repair the replaying trajectories) or run the
     probe on a computer with genesis already committed.
   next_action: >-
-    Re-run scripts/smg_rlm_acceptance_probe.mjs after the owner-guest
-    storm drains or on a pre-genesis disposable; legs 1-3 of
-    finish.acceptance remain open. Schema leg is proven.
+    Storm observed to SURVIVE guest restart (reboot drained pending, then
+    the replayed backlog re-fed the storm: running_runs 0->4, pending 2->72
+    in ~15min; third probe starved). Retry path: park/drain the replayed
+    storm trajectories or a pre-genesis disposable, then re-run
+    scripts/smg_rlm_acceptance_probe.mjs for legs 1-3. Schema leg proven.
 
 receipts: []
 ---
