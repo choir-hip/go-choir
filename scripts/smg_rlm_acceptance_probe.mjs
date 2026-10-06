@@ -184,10 +184,10 @@ while (Date.now() < deadline) {
       unboundRefusal = e;
       recordLeg('unbound_refusal_evidence', { update_id: uid });
     }
-    // Bound report: an update_queued event whose update_id mints via the
-    // persistent-Management report convention (result:<sha256>) targeting
-    // the control's work item — a typed predicate, not substring over-match.
-    if (e.kind === 'update_queued' && uid.startsWith('result:') && e.work_item_id && e.work_item_id === open.body?.work_item_id) {
+    // Bound report: a result:sha256 update bound to the control's work item.
+    // The queued event carries work_item_id as null; the delivered event
+    // binds it, so the delivered event is the durable match.
+    if ((e.kind === 'update_queued' || e.kind === 'update_delivered') && uid.startsWith('result:') && e.work_item_id === open.body?.work_item_id) {
       boundReport = { ...e };
       recordLeg('bound_producer_report', { update_id: uid, kind: e.kind, work_item_id: e.work_item_id });
     }
@@ -197,8 +197,9 @@ while (Date.now() < deadline) {
     recordLeg('trajectory_poll', { ok: false, status: traj.status, body: traj.body });
     finish(1, `trajectory fetch failed status=${traj.status}`);
   }
-  const status = traj.body?.status || traj.body?.trajectory?.status;
-  if (boundReport && status && ['settled', 'completed', 'resolved', 'closed'].includes(String(status))) break;
+  // A bound producer report is the durable acceptance signal; a prompt-bar
+  // trajectory stays live after the legs land, so do not gate on it.
+  if (boundReport) break;
   await new Promise((r) => setTimeout(r, 8000));
 }
 

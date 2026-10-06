@@ -65,6 +65,20 @@ divergent; all required revisions applied in v3). Thirteen stations;
   bootstrap authority, platform-artifacts GC cadence (S0 — first sweep
   reclaimed 35.4GB on Node B). Next spine station per v5: S3 fast resume
   after SR/SA density work; parallel: S1 remainder + SO ops substrate.
+- **SMG** management RLM cutover **CLOSED** (2026-10-06, spine receipt
+  `smg-to-sa-transition-2026-10-06`): legs 1-3 passed on a fresh
+  disposable (computer-0ca7656f, build 475902d7,
+  `docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json`) via the
+  deterministic `POST /api/texture/management-open` acceptance surface;
+  deployed schema leg = management exactly `{desk_go_eval}`
+  (computer-03335285). Named edge: re-run legs on the owner computer
+  after SA slice 1 (incl. weak legs: cell-level unbound refusal +
+  work settlement). New substrate defects handed to SA slice 1:
+  delegated-report poisoned delivered-page listing + mint-no-start slot
+  deadlock (fixed 01199fb1) + AppendEvent unbounded scan (fixed
+  475902d7) + wake-outbox re-arm storm.
+- **SA** agent density **working** (slice 0 deployed 9f6f369c; slice 1
+  storm convergence open with the defect field above).
 Ordered ahead of the World Wire metamission per owner direction
 2026-10-01 ("a good prerequisite to it").
 

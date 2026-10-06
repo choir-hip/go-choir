@@ -129,13 +129,20 @@ boundaries:
 now:
   status: working
   slice: >-
-    v5.1 (director 2026-10-06): SR has landed. Not started. Order changed:
-    slice 0 registration genesis (fresh computers accept first prompt
-    without manual bootstrap-chain; every SA acceptance runs on
-    disposables), slice 1 Management storm convergence (moved up from
-    slice 4: it starves every activation on the owner computer, blocks SMG
-    behavioral legs, and would make any baseline a measurement of the
-    storm), then the baseline and the remaining slices.
+    v5.1 (director 2026-10-06): SR has landed. SMG CLOSED 2026-10-06
+    (spine receipt smg-to-sa-transition-2026-10-06): legs 1-3 passed on
+    disposable computer-0ca7656f at build 475902d7 via the deterministic
+    POST /api/texture/management-open acceptance surface
+    (docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json). Named
+    edge into this station: re-run legs on the owner computer after
+    slice 1 — including the two weak legs recorded below (cell-level
+    unbound refusal; work_disposition=completed settlement).
+    Order changed: slice 0 registration genesis (fresh computers accept
+    first prompt without manual bootstrap-chain; every SA acceptance runs
+    on disposables), slice 1 Management storm convergence (moved up from
+    slice 4: it starves every activation on the owner computer and would
+    make any baseline a measurement of the storm), then the baseline and
+    the remaining slices.
     SLICE 0 DEPLOYED 2026-10-06 (9f6f369c, CI 37465278828 green, Node B
     verified running 9f6f369c). Deployed acceptance: fresh registration
     (computer-07b582d5, no bootstrap-chain preamble) — genesis minted
@@ -154,25 +161,46 @@ now:
     (4/desk, 64/tick), poison-packet quarantine, and the empty-trajectory
     directive bind fix. Deployed acceptance still owed: owner-guest
     restart with migration minted ~=0 and storm absent, then SMG legs.
-    Separate defect found: fresh-disposable SMG probe failed on Texture
-    runs exhausting the 1.2M token budget (evidence
-    docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json) — not
-    the wake storm; candidate for its own problem record.
+    OPENING DEFECT FIELD (slice 1 starts here):
+    (a) sa-delegated-report-poisons-management-listing-2026-10-06.md
+    (red, protected surface): a delegated-cast producer report fails the
+    ListLifecycleControlsDeliveredToRunPage ProducerReport validation arm
+    (~:794, likely producerWork.TrajectoryID) — the listing throws on the
+    whole page rather than quarantining one packet, so the first
+    delegated report kills every subsequent management activation in a
+    ~30s bind→fail→re-mint burn loop (4 failures observed on
+    computer-0ca7656f, +34/+34/+28/+35s; loop stalls only when the
+    delivered report discharges the work item). d94ce9ef's quarantine
+    covers pending reconcile paths, NOT this delivered-page listing —
+    extend the invariant or validate delegated lineage explicitly.
+    Regression gate: one delegated-cast producer report → subsequent
+    persistent-Management activations survive.
+    (b) sa-management-mint-no-start-slot-deadlock-2026-10-06.md — fixed
+    01199fb1 (zero-bound stranded fresh-mint runs fail-release the slot);
+    deployed-verified on disposable 0ca7656f (run bound+drove legs).
+    (c) sa2-appendevent-unbounded-scan-2026-10-06.md — fixed 475902d7
+    (AppendEvent seeded counter replaces unbounded objectgraph scan);
+    deployed on owner computer (verified 475902d7 via
+    /api/runtime/observability).
+    (d) sa1-wake-outbox-rearm-storm-2026-10-06.md — the boot re-arm storm
+    record; d94ce9ef candidate addresses.
+    WEAK SMG LEGS CARRIED FORWARD: (1) unbound_refusal_evidence — probe
+    matcher is substring ('unbound'|'requires'|…) over event blobs and
+    the objective text itself contains those strings; no packet-body API
+    exists to tighten it; re-run on owner must assert refusal via the
+    management run's own report content. (2) work_disposition=completed
+    settlement — the delivered report is durable but no surviving
+    management run incorporated it on the disposable (burn loop); a
+    post-fix owner run must show the work item settle.
     SECOND DEFECT 2026-10-06 (mint-no-start): fresh disposable
     computer-03335285 minted persistent Management run 462d30ea at 17:24Z;
-    initial_dispatch never delivered (emission-buffer discard on
-    ErrEpochConflict or deferred-activation drop, per dispatcher.go:382-449);
-    run stranded pending holding the slot; every later wake deferred.
-    Watchdog fired at deadline but zero bound packets → no-op (escalate
-    packets bind nothing). Fix committed 01199fb1: zero-bound stranded
-    fresh-mint runs fail-release the slot via terminalizeRunCanonical.
-    Problem doc sa-management-mint-no-start-slot-deadlock-2026-10-06.md.
-    DEPLOY-FRESHNESS RESIDUAL: guest app layer pins the runtime closure
-    at mint; 01199fb1 not present on any deployed Node B runtime —
-    observable only after app-layer update ships (S2/S4 gate) or a
-    future disposable mints on a bumped flake pin.
-  source_ref: main@d94ce9ef
-  deploy_identity: 'choir.news deployed_commit=9f6f369c (d94ce9ef deploying)'
+    initial_dispatch never delivered; run stranded pending holding the
+    slot; every later wake deferred. Fix 01199fb1 deployed-verified on
+    disposable 0ca7656f (recorded at (b) above); the earlier
+    deploy-freshness residual is resolved — 475902d7 ships 01199fb1 and
+    the disposable confirmed the bound-run path.
+  source_ref: main@475902d7
+  deploy_identity: 'choir.news deployed_commit=475902d7 (verified on owner computer via /api/runtime/observability 2026-10-06)'
   candidate:
     id: none
     state: none
@@ -228,13 +256,17 @@ now:
     after slices 2-4 show what remains, and only with the restore check in
     hand.
   next_action: >-
-    Slice 0 (registration genesis; red, small) -> slice 1 (storm
-    convergence: problem-doc the boot re-arm mechanism and confirm it from
-    the guest trace; terminal fate for stale obligations as a recorded act;
-    wake-outbox migration one-shot or deleted; O(1) occurrence resolve;
+    Slice 1 (storm convergence; red) — opening defect field above: start
+    with (a) the delivered-page listing poison (delegated producer report;
+    quarantine-or-validate-delegated-lineage; whole-page throw must not
+    kill the consuming run), then the wake-outbox re-arm storm per
+    sa1-wake-outbox-rearm-storm + d94ce9ef candidate; terminal fate for
+    stale obligations as a recorded act; O(1) occurrence resolve;
     per-desk dispatch gate + paced drain; acceptance = owner guest restart
     converges pending to a bounded floor within a stated window and holds
-    24 h, and the SMG probe passes on the owner computer) -> slice 2
+    24 h, one delegated-cast producer report leaves subsequent
+    persistent-Management activations alive, and the SMG probe passes on
+    the owner computer (named edge incl. the two weak legs). -> slice 2
     (baseline + offline GC re-measure) -> 3 (memory) -> 4 (race test, then
     read/write lock) -> 5 (read cost) -> 6 (store split + group commit) ->
     7 (declared shapes + elasticity) -> acceptance.

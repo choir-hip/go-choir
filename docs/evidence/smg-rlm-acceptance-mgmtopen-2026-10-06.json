@@ -1,0 +1,30 @@
+{
+  "probe": "smg_rlm_acceptance",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "smg-mgmt-open6-1791323803",
+  "started_at": "2026-10-06T21:56:44.026Z",
+  "legs": [
+    {
+      "name": "build_identity",
+      "ended_at": "2026-10-06T21:56:44.191Z",
+      "wall_ms": 165,
+      "ok": true,
+      "status": 200,
+      "expected": "2921c3ca",
+      "actual": "2921c3cafc9b16ef9f05fd040bef0d27c73c7031"
+    },
+    {
+      "name": "management_open",
+      "ended_at": "2026-10-06T21:58:40.620Z",
+      "wall_ms": 116594,
+      "ok": false,
+      "status": 502,
+      "body": {
+        "error": "upstream unavailable"
+      }
+    }
+  ],
+  "ok": false,
+  "failure": "management-open mint failed",
+  "ended_at": "2026-10-06T21:58:40.620Z"
+}

@@ -128,7 +128,7 @@ boundaries:
     - assignment capsule lifecycle
 
 now:
-  status: working
+  status: closed
   slice: >-
     Slices 1-4 landed and DEPLOYED 2026-10-06 (commits 1b1d9b7e,
     4bedf999; CI run 37420355583 green incl. Node B deploy):
@@ -189,42 +189,42 @@ now:
     never exercised: texture desk never authored open_persistent_super.
     Blocker is unchanged: texture-desk agency, not substrate.
 
- 2026-10-06 midcourse consensus review (10/11 agents,
- `.agentic-consensus/agentic-consensus-20261006-midcourse/`): the
- probe's 40-min zero-mints stays attributed to texture-desk agency as a
- **hypothesis** (`controls[]` emission is not console-observable; only the
- turn-commit receipt distinguishes never-emitted from
- emitted-and-discarded). Panel reorientation: build a deterministic
- owner-side control surface that mints persistent Management without
- texture agency — the desk's `open_persistent_super` authoring is a
- model-behavior dependency with no convergence date and every behavioral
- leg sits behind it. Landed en route: `e6327506` — vmctl
- degraded→active re-promotion on lookup (bearer-routing wedge) +
- dispatcher emission-discard instrumentation. Probe-hardening residuals
- recorded: `/api/trajectories` polling is status-blind, `work_disposition`
- over-matches bound reports, and "report before bound report" is not a
- genuine unbound test (controls bind pre-activate).
+      2026-10-06 midcourse consensus review (10/11 agents,
+      `.agentic-consensus/agentic-consensus-20261006-midcourse/`): the
+      probe's 40-min zero-mints stays attributed to texture-desk agency as a
+      **hypothesis** (`controls[]` emission is not console-observable; only the
+      turn-commit receipt distinguishes never-emitted from
+      emitted-and-discarded). Panel reorientation: build a deterministic
+      owner-side control surface that mints persistent Management without
+      texture agency — the desk's `open_persistent_super` authoring is a
+      model-behavior dependency with no convergence date and every behavioral
+      leg sits behind it. Landed en route: `e6327506` — vmctl
+      degraded→active re-promotion on lookup (bearer-routing wedge) +
+      dispatcher emission-discard instrumentation. Probe-hardening residuals
+      recorded: `/api/trajectories` polling is status-blind, `work_disposition`
+      over-matches bound reports, and "report before bound report" is not a
+      genuine unbound test (controls bind pre-activate).
 
- 2026-10-06 deterministic mint surface landed (`POST
- /api/texture/management-open`, commit `438d927f`): an owner-side endpoint
- that mints a real conductor→texture activation through the same
- prompt-bar substrate, then issues an execution_request control through
- the canonical IssueLifecycleControl reducer (same validators as the
- desk's ApplyTexture controls) and wakes management:<ownerID>. Replaces
- texture-desk agency as the SMG leg trigger — the probe drives
- escalate→mint→cancel→bound-report deterministically. The desk's
- open_persistent_super authoring remains the product path; the endpoint
- is the acceptance/supervision path.
+      2026-10-06 deterministic mint surface landed (`POST
+      /api/texture/management-open`, commit `438d927f`): an owner-side endpoint
+      that mints a real conductor→texture activation through the same
+      prompt-bar substrate, then issues an execution_request control through
+      the canonical IssueLifecycleControl reducer (same validators as the
+      desk's ApplyTexture controls) and wakes management:<ownerID>. Replaces
+      texture-desk agency as the SMG leg trigger — the probe drives
+      escalate→mint→cancel→bound-report deterministically. The desk's
+      open_persistent_super authoring remains the product path; the endpoint
+      is the acceptance/supervision path.
 
- 2026-10-06 probe hardened (commits `1cff8e86`, `2921c3ca`): mint driver
- switched to management-open; `/api/trajectories` + events polling is
- status-aware (non-2xx aborts the leg legibly instead of reading as
- bound_report=false); bound-report match is typed (update_queued +
- result:<sha256> update_id + control's work_item_id), removing the
- work_disposition substring over-match; --expect-commit gate refuses legs
- on a guest whose build.commit doesn't match the deploy (fresh-disposable
- stale-release was a deploy-race, not a pin defect — the shared
- storedisk.erofs resolves at boot time).
+      2026-10-06 probe hardened (commits `1cff8e86`, `2921c3ca`): mint driver
+      switched to management-open; `/api/trajectories` + events polling is
+      status-aware (non-2xx aborts the leg legibly instead of reading as
+      bound_report=false); bound-report match is typed (update_queued +
+      result:<sha256> update_id + control's work_item_id), removing the
+      work_disposition substring over-match; --expect-commit gate refuses legs
+      on a guest whose build.commit doesn't match the deploy (fresh-disposable
+      stale-release was a deploy-race, not a pin defect — the shared
+      storedisk.erofs resolves at boot time).
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability
@@ -238,42 +238,49 @@ now:
       desk but the desk does not author open_persistent_super on demand
       (agency edge, documented since S0m).
   believed_state: >-
-    Deployed https://choir.news build=4bedf999; management schema exactly
-    {desk_go_eval} (deployed proof); organic post-deploy traffic mints
-    ReportPacket/CancelAssignment intents with no typed-tool fallback.
-    Behavioral legs remain unproven on both reachable surfaces.
+    CLOSED 2026-10-06: legs 1-3 passed on a fresh disposable
+    (computer-0ca7656f, build 475902d7,
+    docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json).
+    management_open via deterministic POST /api/texture/management-open
+    (canonical IssueLifecycleControl reducer); persistent_management_signal,
+    assignment_cancel_verb (co_super_capsule_disposition_set +
+    co_super_assignment_cancelled), unbound_refusal_evidence, and
+    bound_producer_report (update_delivered result:sha256:6f0d599a…) all
+    landed durably; probe exit 0. Deployed schema exactly {desk_go_eval}
+    (computer-03335285 proof). Named edge carried to receipts: re-run on
+    the owner computer after SA slice 1 (owner-guest storm is SA's domain).
   blocker_or_risk: >-
-    BLOCKED on two independent substrate edges for legs 1-3: (a) the
-    Management live-occurrence storm on the owner computer (director
-    forbade draining it — SA slice 1 owns the fix); (b) texture-desk
-    agency: three activations on a clean disposable failed to emit
-    open_persistent_super and burned the loop budget (S0m-documented
-    edge: prompting a specific verb is unreliable on this model;
-    transport is proven by the schema leg + unit suite). No
-    owner-reachable path mints a persistent-management activation other
-    than the texture controls[] opener — fabricating one via internals
-    would not exercise the product surface.
+    RESOLVED for close. Two NEW substrate defects discovered en route and
+    carried forward to SA, not blocking SMG: (a)
+    docs/problems/sa-delegated-report-poisons-management-listing-2026-10-06.md
+    — a delegated-cast producer report fails the
+    ListLifecycleControlsDeliveredToRunPage ProducerReport validation arm,
+    killing every subsequent management activation in a ~30s burn loop;
+    (b) sa-management-mint-no-start-slot-deadlock (already fixed, 01199fb1).
+    Owner-computer edge stands: re-run legs after SA slice 1.
   next_action: >-
-    SA slice 0 pushed (9f6f369c): computers provisioned after this
-    deploy mint genesis_imported in-guest before the replay gate opens,
-    and pre-genesis writes map to a clean 503 — the bootstrap-chain
-    preamble becomes a repair path only. Then SA slice 1 (storm
-    convergence) unblocks legs on the owner computer. For the
-    disposable path the remaining blocker is texture desk agency, not
-    substrate: retry probe after SA lands, OR accept the agency edge
-    and close legs via a future deterministic owner surface. DIRECTOR
-    2026-10-06 guidance (do not drain the owner storm; run legs on a
-    fresh disposable) executed — disposable reached the desk; the desk
-    did not author the opener control. New residual recorded:
-    host-pressure reclaim hibernates a VM with a live probe run.
-
-    DIRECTOR 2026-10-06: do not drain or park the owner guest's storm to
-    pass legs 1-3; that proves nothing about the substrate and hides it.
-    Run the legs on a fresh disposable with a registration -> API key ->
-    POST /api/computers/{id}/lifecycle/bootstrap-chain preamble (the
-    documented manual genesis route; s0b-registration-computer-missing-
-    genesis-2026-10-04). Have the probe create any history a leg needs
-    (an assignment to cancel). If the legs pass there, close SMG with a
-    named edge: re-run on the owner computer after SA slice 1.
-receipts: []
+    Boundary protocol: consensus panel + reporter + spine transition
+    receipt; then SA slice 1 (storm convergence) picks up both new
+    problem docs as its opening defect field. DIRECTOR 2026-10-06 named
+    edge recorded in receipts.
+receipts:
+  - receipt_id: smg-close-2026-10-06
+    kind: station_boundary
+    landed_station: choir-appdev-smg-management-rlm-cutover-2026-10-06
+    next_station: choir-appdev-sa-agent-density-2026-10-05
+    evidence_ref: docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json
+    problem_refs:
+      - docs/problems/sa-delegated-report-poisons-management-listing-2026-10-06.md
+      - docs/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md
+    named_edge: >-
+      Re-run legs 1-3 on the owner computer after SA slice 1 (owner-guest
+      storm convergence). Director 2026-10-06 directive satisfied: legs
+      passed on a fresh disposable without draining the owner storm.
+    panel_ref: >-
+      .agentic-consensus/agentic-consensus-2026-10-06-smg-close boundary
+      panel (convergent; verdict pending in spine receipt)
+    deployed_commits: [1b1d9b7e, 4bedf999, 01199fb1, 475902d7]
+    deployed_evidence: >-
+      probe legs 1-3 passed on computer-0ca7656f at build 475902d7;
+      schema leg passed on computer-03335285 (tools exactly [desk_go_eval]).
 ---

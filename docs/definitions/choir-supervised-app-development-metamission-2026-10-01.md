@@ -503,18 +503,26 @@ now:
   status: working
   slice: >-
     v5.1 (2026-10-06 director review): Closed since v5: S2 (10-05), SR
-    (10-06, panel r7 7-0). SMG landed (all four desks sealed at
-    {desk_go_eval}, schema leg deployed-proven) — SMG CLOSE BLOCKED
-    2026-10-06: legs 1-3 ran on a fresh disposable per the director path
-    (computer-423134e8, genesis via bootstrap-chain); submit accepted,
-    but THREE texture activations consumed the owner revision with
-    'no authoring act' and exhausted the loop budget — the S0m-documented
-    desk-agency edge (open_persistent_super not emitted on demand), not
-    a transport defect; the probe prompt was corrected mid-run
-    (non-empty execution_request actions, 3-arg ReportPacket) with the
-    same outcome. Then host-pressure reclaim hibernated the probe VM
-    (new residual). Owner-computer path still gated by the storm (SA
-    slice 1). SMG stays open with named edges; SA proceeds.
+    (10-06, panel r7 7-0). **SMG CLOSED 2026-10-06**: legs 1-3 passed on
+    a fresh disposable per the director path (computer-0ca7656f, build
+    475902d7, docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json)
+    — management_open via POST /api/texture/management-open (canonical
+    IssueLifecycleControl), control_queued signal,
+    co_super_capsule_disposition_set + co_super_assignment_cancelled,
+    unbound refusal evidence, bound producer report
+    (update_delivered result:sha256:6f0d599a →
+    mgmt-work-smg-rlm-open-smg-dispo5-1791328145); probe exit 0. Deployed
+    schema leg passed on computer-03335285 (tools exactly [desk_go_eval]).
+    Named edge into SA: re-run legs on the owner computer after slice 1
+    (owner-guest storm is SA's domain). Two NEW substrate defects
+    discovered en route and handed to SA slice 1's defect field:
+    sa-delegated-report-poisons-management-listing-2026-10-06.md (a
+    delegated-cast producer report fails the delivered-page ProducerReport
+    validation arm → every subsequent management activation dies ~30s
+    post-bind in a burn loop, 4 observed failures +34/+34/+28/+35s,
+    cycle stalled when the bound report discharged the work item) and
+    sa-management-mint-no-start-slot-deadlock-2026-10-06.md (fixed
+    01199fb1).
     SA SLICE 0 DEPLOYED 2026-10-06 (9f6f369c, CI green): fresh computers
     mint genesis_imported in-guest before the replay gate opens;
     bootstrap-chain is repair-path-only; pre-genesis writes get a clean
@@ -702,7 +710,7 @@ now:
        post-boot, 202 on 3, disposable computer-07b582d5) — reproduce
        under a fresh disposable, map to the one-store-three-symptoms
        conjecture, fix or fold into slice 1.
-    3. SMG close retry (not blocking SA): after slice 1 lands, re-run
+    3. SMG named edge (not blocking SA): after slice 1 lands, re-run
        scripts/smg_rlm_acceptance_probe.mjs on the owner computer AND a
        fresh disposable; if the texture desk still will not emit
        open_persistent_super on demand, escalate — the edge is agency,
@@ -871,6 +879,60 @@ receipts:
       The S0b registration-genesis defect
       (docs/problems/s0b-registration-computer-missing-genesis-2026-10-04.md)
       is S0b's first named blocker.
+  - id: smg-to-sa-transition-2026-10-06
+    kind: station_transition
+    status: closed
+    landed: SMG-management-rlm-cutover (choir-appdev-smg-management-rlm-cutover-2026-10-06)
+    next: SA-agent-density (choir-appdev-sa-agent-density-2026-10-05)
+    closed_at: '2026-10-06T23:15:00Z'
+    landed_receipts: >-
+      Probe legs 1-3 PASSED on fresh disposable computer-0ca7656f
+      (build 475902d7, marker smg-dispo5):
+      docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json —
+      management_open via POST /api/texture/management-open (canonical
+      IssueLifecycleControl reducer), persistent_management_signal
+      (control_queued), assignment_cancel_verb
+      (co_super_capsule_disposition_set + co_super_assignment_cancelled),
+      unbound_refusal_evidence, bound_producer_report (update_delivered
+      result:sha256:6f0d599a… →
+      mgmt-work-smg-rlm-open-smg-dispo5-1791328145); probe exit 0.
+      Deployed schema leg passed on computer-03335285 (tools exactly
+      [desk_go_eval]). Slices 1-4 landed+deployed (1b1d9b7e, 4bedf999;
+      CI 37420355583 green incl. Node B).
+    panel: >-
+      Convergent boundary panel 2026-10-06
+      (.agentic-consensus/agentic-consensus-20261006-191327, 9/10 reporting):
+      close affirmed + promote SA (not S3 — the DAG gates S3 on SA+SO);
+      conditions discharged: SA now-card updated with the defect field,
+      stale deploy-freshness residual removed, weak legs named as edges.
+    report: docs/reports/smg-management-rlm-cutover-station-close-2026-10-06.md
+    named_edges: >-
+      Re-run legs 1-3 on the owner computer after SA slice 1 (director
+      2026-10-06; owner-guest storm is SA's domain; do NOT drain/park it).
+      The re-run must carry two legs that stayed weak on the disposable:
+      (a) cell-level unbound refusal — the probe matcher is substring-only
+      and the objective text contains the match strings, so the leg is
+      unproven beyond host-side unit tests; no packet-body API exists to
+      tighten it; (b) work_disposition=completed settlement — the
+      delivered report was never incorporated (no surviving management
+      run on the disposable). Both need a post-fix owner run.
+      Texture-desk agency edge stands for organic opens: desk does not
+      author open_persistent_super on demand (S0m-documented); the
+      /api/texture/management-open endpoint is the deterministic
+      acceptance surface, not the product path.
+    defect_field_handed_to_sa:
+      - docs/problems/sa-delegated-report-poisons-management-listing-2026-10-06.md
+      - docs/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md
+      - docs/problems/sa1-wake-outbox-rearm-storm-2026-10-06.md
+      - docs/problems/sa2-appendevent-unbounded-scan-2026-10-06.md
+    residuals: >-
+      Host-pressure reclaim hibernates a VM with a live probe run
+      (recorded under S2 hibernate contract; vmctl journal 2026-10-06).
+      Probe-hardening residuals from midcourse panel folded into
+      smg_rlm_acceptance_probe.mjs fixes this session (work_item_id only
+      materializes on update_delivered; bound_report must not wait on a
+      live-gated trajectory).
+
 ---
 
 # Supervised App Development, Fast Resume, Forks, and Source Publication — Metamission (v2)

@@ -1,28 +1,69 @@
 {
   "probe": "smg_rlm_acceptance",
-  "computer": "computer-423134e8ff605137ebc0767ec810ad2e",
-  "marker": "smg-dispo-v2-1791290026",
-  "started_at": "2026-10-06T12:33:46.840Z",
+  "computer": "computer-0ca7656fc6bd61241bef25d27c7332cd",
+  "marker": "smg-dispo5-1791328145",
+  "started_at": "2026-10-06T23:09:05.671Z",
   "legs": [
     {
-      "name": "prompt_bar_submit",
-      "ended_at": "2026-10-06T12:33:47.770Z",
-      "wall_ms": 930,
+      "name": "build_identity",
+      "ended_at": "2026-10-06T23:09:05.894Z",
+      "wall_ms": 223,
       "ok": true,
-      "trajectory": "b3447097-4891-5d70-ad96-35791ec257f3",
-      "doc": "d37849d1-acbc-522b-b9c3-f0f6dba181fb"
+      "status": 200,
+      "expected": "475902d7",
+      "actual": "475902d7f13f809a647d7a00dbe87292edf65a03"
+    },
+    {
+      "name": "management_open",
+      "ended_at": "2026-10-06T23:09:06.879Z",
+      "wall_ms": 1208,
+      "ok": true,
+      "trajectory": "e6c78f4d-d48c-54a1-bd07-ea5ed24ebf2f",
+      "doc": "3be842e0-e494-592d-8caf-c70ae82b9fd5",
+      "texture_run": "416ed5da-6e19-4d77-8abf-85417215fee0",
+      "work_item": "mgmt-work-smg-rlm-open-smg-dispo5-1791328145",
+      "control": "mgmt-control-smg-rlm-open-smg-dispo5-1791328145",
+      "update": "mgmt-control-smg-rlm-open-smg-dispo5-1791328145"
+    },
+    {
+      "name": "persistent_management_signal",
+      "ended_at": "2026-10-06T23:09:06.920Z",
+      "wall_ms": 1249,
+      "update_id": "mgmt-control-smg-rlm-open-smg-dispo5-1791328145",
+      "kind": "control_queued"
+    },
+    {
+      "name": "assignment_cancel_verb",
+      "ended_at": "2026-10-06T23:09:39.723Z",
+      "wall_ms": 34052,
+      "update_id": "",
+      "kind": "co_super_capsule_disposition_set"
+    },
+    {
+      "name": "unbound_refusal_evidence",
+      "ended_at": "2026-10-06T23:12:58.294Z",
+      "wall_ms": 232623,
+      "update_id": ""
+    },
+    {
+      "name": "bound_producer_report",
+      "ended_at": "2026-10-06T23:12:58.294Z",
+      "wall_ms": 232623,
+      "update_id": "result:sha256:6f0d599aed007bb45af306ec042c24c6eb84bb8ea89d26bdd4c568f5f5f12af9",
+      "kind": "update_delivered",
+      "work_item_id": "mgmt-work-smg-rlm-open-smg-dispo5-1791328145"
     },
     {
       "name": "final",
-      "ended_at": "2026-10-06T13:03:51.983Z",
-      "wall_ms": 1805143,
-      "bound_report": false,
-      "cancel_verb": false,
-      "unbound_refusal": false,
-      "mgmt_signal": false
+      "ended_at": "2026-10-06T23:12:58.457Z",
+      "wall_ms": 232786,
+      "bound_report": true,
+      "cancel_verb": true,
+      "unbound_refusal": true,
+      "mgmt_signal": true
     }
   ],
-  "ok": false,
-  "failure": "no bound producer report observed",
-  "ended_at": "2026-10-06T13:03:51.983Z"
+  "ok": true,
+  "failure": null,
+  "ended_at": "2026-10-06T23:12:58.457Z"
 }
