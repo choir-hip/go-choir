@@ -666,7 +666,22 @@ func (rt *Runtime) redriveStrandedFreshMintManagement(ctx context.Context, owner
 		return false, fmt.Errorf("fresh-mint watchdog list bound controls: %w", err)
 	}
 	if len(packets) == 0 {
-		return false, nil
+		// A stranded pending run minted with no bound packet obligation (e.g.
+		// an escalate/directive packet that minted but bound nothing) has no
+		// controls to re-drive. Holding the persistent Management slot forever
+		// defers every later wake; the desk's obligation stays pending either
+		// way, so fail-release the slot — the next live occurrence mints a
+		// fresh run against the still-pending desk obligation.
+		rec.State = types.RunFailed
+		rec.Error = "management_fresh_mint_no_bound_packets"
+		finished := time.Now().UTC()
+		rec.FinishedAt = &finished
+		rec.UpdatedAt = finished
+		if err := rt.terminalizeRunCanonical(ctx, &rec, rec.Error); err != nil {
+			return false, fmt.Errorf("fresh-mint watchdog fail-release no-bound run %s: %w", rec.RunID, err)
+		}
+		log.Printf("runtime: fresh-mint Management run %s pending past deadline with no bound packets: fail-released slot", rec.RunID)
+		return true, nil
 	}
 	if err := rt.enqueuePersistentManagementRecoveryOccurrence(ctx, &rec, packets); err != nil {
 		return false, fmt.Errorf("fresh-mint watchdog re-drive: %w", err)
