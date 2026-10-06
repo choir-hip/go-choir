@@ -61,10 +61,15 @@
     },
     "egress_budget_refusal": {
       "ok": true,
-      "level": "desk-worker unit test (kept) + desk's own deployed report",
-      "test": "internal/agentcore/tools_desk_egress_refusal_test.go TestDeskEgressRefusalIntoCell — 1-call ledger, second choir.WebSearch in one cell returns 'activation egress budget exhausted (1/1 network calls this activation)' inside the cell body; ledger keys to RunID",
-      "deployed_evidence": "run 8a8d10d1 result: '...the second separate day-of-week gather/report are blocked by provider rate limits and exhausted activation egress' — the desk observed the refusal boundary on the live ledger",
-      "residual": "deployed knobs for MaxCalls/MaxFetchedBytes do not exist (fixed at 64 calls / 32 MiB); an organic over-budget event is indistinguishable from provider rate limiting without packet introspection, so the desk-worker test carries the mechanism and the desk's report corroborates"
+      "level": "deployed proof",
+      "trajectory": "70fde9e5-0bb9-5b53-a314-e903912d02a4",
+      "activation_run": "a3a48168-c4d7-4c58-a978-0b9790cb10c0 (research)",
+      "cell_call_id": "call_248bd776e (tool.result receipts rlm:report:6)",
+      "cell_source": "for i:=0;i<70;i++ { _, err := choir.WebSearch(\"x\",1); if err != nil { found = err.Error(); if strings.Contains(found,\"egress budget exhausted\") { break } } }; choir.Report(...fmt.Sprintf(...%q..., found)...)",
+      "verbatim_refusal": "choir: web_search: web_search: web_search: web_search: activation egress budget exhausted (64/64 network calls this activation)",
+      "verbatim_witness": "Texture revision bcbe05b7-7589-5b1a-9b99-7fd3cd6a4c39 (doc 3dfa0e1c) quotes the refusal verbatim — research cell -> report -> texture apply chain on deployed build 3c963edf",
+      "desk_worker_test": "internal/agentcore/tools_desk_egress_refusal_test.go TestDeskEgressRefusalIntoCell (passing, kept as regression)",
+      "corrected_claim": "SUPERSEDED: an earlier version cited run 8a8d10d1's report of 'exhausted activation egress' as deployed corroboration — event introspection shows no ledger string in that run's cell outputs (provider 429s only); the desk confabulated. This leg now rests on the verbatim refusal above."
     },
     "single_cell_ordered_loop": {
       "ok": true,
