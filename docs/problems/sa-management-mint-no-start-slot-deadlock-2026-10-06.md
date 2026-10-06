@@ -100,23 +100,27 @@ release branch to the prior `return false`; the run then strands again
   show `bound_report=true`, `cancel_verb=true`, `unbound_refusal=true`
   after the fix deploys.
 
-## Deploy-freshness residual (2026-10-06)
+## Deploy + verification status (2026-10-06)
 
-The fix is committed at `01199fb1` and unit-tested, but **the deployed
-staging runtime does not carry it**: guest app layers pin the runtime
-closure at mint time and do not advance on `main` pushes. Verified by
-scanning every `/nix/store/*-go-choir-run-autoputer-runtime` on Node B —
-none contains the fix's log string. A fresh disposable
-(`computer-ee6cb12dd67e613314a6ae070943137a`, minted post-deploy at 19:01Z)
-still boots `im5qd1rfi4sjmjbs7man6ayyp32d06y2-go-choir-run-autoputer-runtime`
-(pre-fix). Landing-loop "staging commit identity" does not cover guest
-runtime freshness; this is a known gap the SA/S2 layering stations own.
+`01199fb1` built into the guest image (`guest/build.json` commit match;
+`autoputer=/nix/store/qs4irlsyzy…` carries the fix string) and reached the
+owner computer via the sanctioned manual path
+`choir computer refresh --computer computer-03335285…` (vmctl epoch 1107,
+guest /health `build.commit=01199fb1`, `deployed_at=19:10:28Z`). Two
+substrate wedges surfaced on the way: a `degraded` ownership state is
+terminal for API-key routing (`api key computer realization unavailable`
+until explicit `choir computer start`, epoch 1108) — the bearer path never
+re-resolves by design, so health recovery does not self-heal routing.
 
-Consequence on `computer-03335285` (owner computer, where the probe ran
-after `462d30ea` passivated on restart): a second mint `52c3650d` minted
-at 18:37Z also stranded `pending` — same defect, old binary. Every
-subsequent live occurrence still defers on `slot occupied`. The fix's
-effect will be observable only when a computer receives a runtime
-containing `01199fb1` — via the app-layer update path (S2/S4 stations)
-or a future disposable whose VM closure is rebuilt after a flake pin
-bump.
+**Fix verification outcome**: SMG probe on the fixed runtime
+(`docs/evidence/smg-rlm-acceptance-fixedruntime-2026-10-06.json`) —
+`prompt_bar_submit` OK, but no persistent Management mint arrived in 40
+min: the texture desk never authored `open_persistent_super` (the S0m
+agency edge). The mint-no-start defect is therefore not exercised on the
+fixed runtime yet; verification requires a live escalate→mint (texture
+agency, deterministic owner control, or a rerun once agency improves).
+
+**Fresh disposable note**: `computer-ee6cb12d…` minted post-deploy at
+19:01Z still boots the pre-fix wrapper (`im5qd1rfi…`); new computer mints
+do not ride the rebuilt guest image until the mint path re-resolves the
+guest release — another propagation gap inside the same class.
