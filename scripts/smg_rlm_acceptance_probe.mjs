@@ -101,12 +101,19 @@ const objective =
 
 // Deploy-identity gate: if --expect-commit was passed, the guest must report
 // that build before we mint — otherwise a stale image would silently test the
-// prior release.
+// prior release. A freshly-refreshed guest replays boot passivation before
+// answering authenticated endpoints — wait up to 5min for the auth path.
 if (EXPECT_COMMIT) {
-  const obs = await api('/api/runtime/observability');
-  const actual = String(obs.body?.build?.commit || '');
-  recordLeg('build_identity', { ok: obs.status === 200, status: obs.status, expected: EXPECT_COMMIT, actual });
-  if (obs.status !== 200) finish(1, `build identity fetch failed status=${obs.status}`);
+  let obs = null;
+  const gateDeadline = Date.now() + 300 * 1000;
+  while (Date.now() < gateDeadline) {
+    obs = await api('/api/runtime/observability');
+    if (obs.status === 200) break;
+    await new Promise((r) => setTimeout(r, 15000));
+  }
+  const actual = String(obs?.body?.build?.commit || '');
+  recordLeg('build_identity', { ok: obs?.status === 200, status: obs?.status, expected: EXPECT_COMMIT, actual });
+  if (obs?.status !== 200) finish(1, `build identity fetch failed status=${obs?.status}`);
   if (!actual.startsWith(EXPECT_COMMIT)) {
     finish(1, `guest build ${actual} does not match expected ${EXPECT_COMMIT} — refusing to test stale release`);
   }
