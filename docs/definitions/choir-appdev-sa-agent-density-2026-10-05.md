@@ -147,8 +147,19 @@ now:
     activation commit and the post-boot outbox/replay burst, not the
     pre-genesis class (trajectory + work item commit, run left
     passivated, then settles). Feeds slice 1 storm/race work.
-  source_ref: main@74500c08
-  deploy_identity: 'choir.news deployed_commit=9f6f369c'
+    SLICE 1 CANDIDATE PUSHED 2026-10-06 (d94ce9ef): wake-outbox storm
+    convergence — marker-gated one-shot migration, recorded-act expiry
+    of undeliverable pending packets (ExpireStaleLifecyclePacket /
+    update_expired), index-scan occurrence resolve, paced drain
+    (4/desk, 64/tick), poison-packet quarantine, and the empty-trajectory
+    directive bind fix. Deployed acceptance still owed: owner-guest
+    restart with migration minted ~=0 and storm absent, then SMG legs.
+    Separate defect found: fresh-disposable SMG probe failed on Texture
+    runs exhausting the 1.2M token budget (evidence
+    docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json) — not
+    the wake storm; candidate for its own problem record.
+  source_ref: main@d94ce9ef
+  deploy_identity: 'choir.news deployed_commit=9f6f369c (d94ce9ef deploying)'
   candidate:
     id: none
     state: none
