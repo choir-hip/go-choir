@@ -1114,7 +1114,7 @@ func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 	}
 	if _, err := s.ogStore.GetObject(ctx, markerID); err == nil {
 		return 0, nil // already ran at this version
-	} else if !errors.Is(err, objectgraph.ErrNotFound) {
+	} else if !errors.Is(err, objectgraph.ErrNotFound) && !errors.Is(err, ErrNotFound) {
 		return 0, fmt.Errorf("migrate actor wake outbox: read marker: %w", err)
 	}
 	kinds := []objectgraph.ObjectKind{
