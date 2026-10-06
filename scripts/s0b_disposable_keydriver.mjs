@@ -60,19 +60,26 @@ try {
   console.error(`computer=${own.computer_id} vm=${own.vm_id} state=${own.state}`);
   if (own.state !== 'active') throw new Error(`computer did not reach active: ${own.state}`);
 
-  // Pre-genesis fix: bootstrap the canonical chain before any write.
-  const boot = await page.evaluate(async ({ computerID }) => {
-    const res = await fetch(`/api/computers/${encodeURIComponent(computerID)}/lifecycle/bootstrap-chain`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-    });
-    return { status: res.status, body: await res.json().catch(() => null) };
-  }, { computerID: own.computer_id });
-  if (boot.status !== 200 && boot.status !== 201) {
-    throw new Error(`bootstrap-chain refused: ${JSON.stringify(boot)}`);
+  // Post-SA-slice-0 (9f6f369c): computers mint genesis_imported in-guest at
+  // first boot, so bootstrap-chain is a repair path only. --skip-bootstrap
+  // asserts that property: the fresh computer is left untouched and the
+  // caller's first write must succeed without it (fails pre-slice-0).
+  if (process.argv.includes('--skip-bootstrap')) {
+    console.error('skipping bootstrap-chain (SA slice 0 acceptance)');
+  } else {
+    const boot = await page.evaluate(async ({ computerID }) => {
+      const res = await fetch(`/api/computers/${encodeURIComponent(computerID)}/lifecycle/bootstrap-chain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      return { status: res.status, body: await res.json().catch(() => null) };
+    }, { computerID: own.computer_id });
+    if (boot.status !== 200 && boot.status !== 201) {
+      throw new Error(`bootstrap-chain refused: ${JSON.stringify(boot)}`);
+    }
+    console.error(`bootstrap-chain -> ${boot.status}`);
   }
-  console.error(`bootstrap-chain -> ${boot.status}`);
 
   const key = await page.evaluate(async ({ label, computer }) => {
     const res = await fetch('/auth/api-keys', {

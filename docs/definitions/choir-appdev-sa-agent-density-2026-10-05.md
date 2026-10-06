@@ -136,17 +136,19 @@ now:
     slice 4: it starves every activation on the owner computer, blocks SMG
     behavioral legs, and would make any baseline a measurement of the
     storm), then the baseline and the remaining slices.
-    SLICE 0 IN FLIGHT (2026-10-06): problem doc root-caused
-    (s0b-registration-computer-missing-genesis, confirmed 10-06 section) —
-    RecoveryGenesis planned but never minted because the only mint lived
-    behind the owner-scoped bootstrap-chain route. Implementation: shared
-    mint helper extracted from BootstrapChain; MintProvisionedGenesis runs
-    in the guest after BindProjectionTape and before the replay phase when
-    the plan is RecoveryGenesis; prompt-bar + texture-eval map
-    agentcore.ErrPreGenesis to a clean 503. Deployed proof pending: fresh
-    registration accepts first prompt with no bootstrap-chain preamble.
-  source_ref: main@d750c3bc
-  deploy_identity: pending push
+    SLICE 0 DEPLOYED 2026-10-06 (9f6f369c, CI 37465278828 green, Node B
+    verified running 9f6f369c). Deployed acceptance: fresh registration
+    (computer-07b582d5, no bootstrap-chain preamble) — genesis minted
+    in-guest at boot (bootstrap-chain reports already_bootstrapped,
+    head seq 57). First write accepted (202 on third submit).
+    RESIDUAL EXPOSED: first ~2 prompt-bar submits during the first
+    minutes after boot fail 500 `replace durable activation: lifecycle
+    invalid transition` — a transient CAS race between the initial
+    activation commit and the post-boot outbox/replay burst, not the
+    pre-genesis class (trajectory + work item commit, run left
+    passivated, then settles). Feeds slice 1 storm/race work.
+  source_ref: main@74500c08
+  deploy_identity: 'choir.news deployed_commit=9f6f369c'
   candidate:
     id: none
     state: none
