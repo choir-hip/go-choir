@@ -188,6 +188,22 @@ now:
     fixed-boot segment — zombie-slot defect absent. Probe legs therefore
     never exercised: texture desk never authored open_persistent_super.
     Blocker is unchanged: texture-desk agency, not substrate.
+
+ 2026-10-06 midcourse consensus review (10/11 agents,
+ `.agentic-consensus/agentic-consensus-20261006-midcourse/`): the
+ probe's 40-min zero-mints stays attributed to texture-desk agency as a
+ **hypothesis** (`controls[]` emission is not console-observable; only the
+ turn-commit receipt distinguishes never-emitted from
+ emitted-and-discarded). Panel reorientation: build a deterministic
+ owner-side control surface that mints persistent Management without
+ texture agency — the desk's `open_persistent_super` authoring is a
+ model-behavior dependency with no convergence date and every behavioral
+ leg sits behind it. Landed en route: `e6327506` — vmctl
+ degraded→active re-promotion on lookup (bearer-routing wedge) +
+ dispatcher emission-discard instrumentation. Probe-hardening residuals
+ recorded: `/api/trajectories` polling is status-blind, `work_disposition`
+ over-matches bound reports, and "report before bound report" is not a
+ genuine unbound test (controls bind pre-activate).
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability
