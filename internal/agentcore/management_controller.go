@@ -1489,11 +1489,15 @@ func (rt *Runtime) listPendingPersistentManagementLifecycleControls(ctx context.
 			}
 			continue
 		}
-		if firstErr == nil {
-			firstErr = fmt.Errorf("validate pending control %s: %w", update.UpdateID, valErr)
-		}
+		// A control that is neither valid nor provably stale must not abort
+		// the pass: skipping it (rather than returning firstErr) keeps the
+		// rest of the desk's pending set reconcilable while the malformed
+		// packet stays pending for the next resolve attempt. Returning the
+		// error starved every later control behind the poisoned one and
+		// surfaced to wakes as a permanent "not pending" deferral.
+		log.Printf("runtime: persistent Management pending control %s failed validation, skipping this pass: %v", update.UpdateID, valErr)
 	}
-	return validated, firstErr
+	return validated, nil
 }
 
 func (rt *Runtime) listPendingPersistentManagementDirectives(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
@@ -1503,8 +1507,22 @@ func (rt *Runtime) listPendingPersistentManagementDirectives(ctx context.Context
 	}
 	directives := make([]types.CoagentSourcePacket, 0, len(updates))
 	for _, update := range updates {
+		if update.Direction != types.LifecyclePacketDirectionDirective {
+			continue
+		}
 		if persistentManagementAdmissibleDirective(update) {
 			directives = append(directives, update)
+			continue
+		}
+		// An inadmissible directive stays pending forever under the old code
+		// and resolves exact-but-not-pending on every wake — the same residue
+		// class as controls. Discharge what proves stale; keep the rest
+		// pending without blocking admissible directives behind them.
+		if reason := rt.store.StalePendingLifecyclePacketReason(ctx, update); reason != "" {
+			if discharged, expErr := rt.store.ExpireStalePendingLifecyclePacket(ctx, update, reason); expErr == nil && discharged {
+				log.Printf("runtime: discharged stale persistent-Management directive %s reason=%s", update.UpdateID, reason)
+				continue
+			}
 		}
 	}
 	if limit > 0 && len(directives) > limit {

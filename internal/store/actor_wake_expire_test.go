@@ -195,3 +195,45 @@ func TestExpireStaleLifecyclePacketReplayAndConflict(t *testing.T) {
 		t.Fatal("stale-version expire must conflict")
 	}
 }
+
+// Stale-reason classification for the missing-schema classes added with the
+// residue storm: a version-0 packet and a control packet with no trajectory
+// can never enter reconcile's pending view, so the resolve-time check must
+// mark them stale. Unknown direction stays unclassified (cannot expire what
+// cannot be classified).
+func TestStalePendingLifecyclePacketReasonMissingSchemaClasses(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	base := types.CoagentSourcePacket{
+		UpdateID: "upd-sc", ProducerUpdateID: "p-sc",
+		OwnerID: "owner-sc", ComputerID: "computer-sc",
+		AgentID: "texture:t", TargetAgentID: "management:m",
+		TrajectoryID: "traj-sc", Direction: types.LifecyclePacketDirectionControl,
+		LifecycleVersion: 1, Disposition: types.UpdatePending,
+	}
+	if reason := s.StalePendingLifecyclePacketReason(ctx, base); reason != "trajectory_not_live" {
+		t.Fatalf("control on missing trajectory: reason=%q", reason)
+	}
+	zero := base
+	zero.LifecycleVersion = 0
+	if reason := s.StalePendingLifecyclePacketReason(ctx, zero); reason != "missing_lifecycle_version" {
+		t.Fatalf("zero-version packet: reason=%q", reason)
+	}
+	noTraj := base
+	noTraj.TrajectoryID = ""
+	if reason := s.StalePendingLifecyclePacketReason(ctx, noTraj); reason != "missing_trajectory" {
+		t.Fatalf("control missing trajectory: reason=%q", reason)
+	}
+	noRecord := base
+	noRecord.Direction = types.LifecyclePacketDirectionDirective
+	noRecord.SourceRecordID = ""
+	noRecord.TrajectoryID = ""
+	if reason := s.StalePendingLifecyclePacketReason(ctx, noRecord); reason != "missing_source_record" {
+		t.Fatalf("directive missing source record: reason=%q", reason)
+	}
+	unk := base
+	unk.Direction = "future-direction"
+	if reason := s.StalePendingLifecyclePacketReason(ctx, unk); reason != "" {
+		t.Fatalf("unknown direction must stay unclassified: reason=%q", reason)
+	}
+}

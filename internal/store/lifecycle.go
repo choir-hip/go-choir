@@ -983,11 +983,20 @@ type actorWakeOutboxMigrationMarker struct {
 // affirmative closed authority (settled work, terminated trajectory, missing
 // record) — a missing-but-retryable read is NOT stale and returns "".
 func (s *Store) StalePendingLifecyclePacketReason(ctx context.Context, update types.CoagentSourcePacket) string {
+	// Rows that can never resolve into reconcile's pending view are stale by
+	// definition: the pending lister requires a positive lifecycle version,
+	// and an empty-direction row has no dispatch contract. Without these
+	// discharges a malformed packet wedged the whole desk — the occurrence
+	// finder still matched it, resolve exact-id'ed it, and reconcile
+	// reported "not pending" forever (sa1 residue storm).
+	if update.LifecycleVersion <= 0 {
+		return "missing_lifecycle_version"
+	}
 	switch update.Direction {
 	case types.LifecyclePacketDirectionControl, types.LifecyclePacketDirectionProducerReport:
 		trajectoryID := strings.TrimSpace(update.TrajectoryID)
 		if trajectoryID == "" {
-			return "" // malformed packet — not our authority to expire
+			return "missing_trajectory"
 		}
 		trajectory, err := s.GetLifecycleTrajectory(ctx, update.OwnerID, update.ComputerID, trajectoryID)
 		if err != nil || trajectory.Status != types.TrajectoryLive {
@@ -1013,7 +1022,7 @@ func (s *Store) StalePendingLifecyclePacketReason(ctx context.Context, update ty
 	case types.LifecyclePacketDirectionDirective:
 		recordID := strings.TrimSpace(update.SourceRecordID)
 		if recordID == "" {
-			return ""
+			return "missing_source_record"
 		}
 		if _, err := s.GetCommitmentRecord(ctx, update.OwnerID, update.ComputerID, recordID); err != nil {
 			if errors.Is(err, ErrNotFound) {
@@ -1023,7 +1032,7 @@ func (s *Store) StalePendingLifecyclePacketReason(ctx context.Context, update ty
 		}
 		return ""
 	default:
-		return ""
+		return "" // unrecognized direction — cannot classify, cannot expire
 	}
 }
 
