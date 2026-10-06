@@ -76,23 +76,25 @@ function finish(code, failure) {
 
 const prompt =
   `Operator-authorized SMG management-RLM acceptance probe (marker ${MARKER}). ` +
-  `Task: exercise the management desk's in-cell lifecycle surface. Open a ` +
-  `persistent Management activation atomically in your ApplyTexture turn via ` +
-  `controls[] with {"open_persistent_super": true, "objective": "SMG RLM ` +
-  `acceptance probe ${MARKER}", "packet": {"kind": "execution_request", ` +
-  `"summary": "Run the SMG cutover legs", "actions": []}}. The management ` +
-  `activation must do all of the following IN ORDER inside desk_go_eval ` +
-  `cells: (a) call choir.ReportPacket("texture", ` +
-  `{"schema_version":"coagent_source_packet.v1","kind":"execution_result",` +
-  `"summary":"unbound probe","claims":[],"sources":[],"actions":[],` +
-  `"questions":[],"notes":[],"work_disposition":"open"}) and record the ` +
+  `Task: exercise the management desk's in-cell lifecycle surface. In your ` +
+  `ApplyTexture turn, open a persistent Management activation via controls[] ` +
+  `with exactly this shape (actions must be non-empty): ` +
+  `choir.ApplyTexture({"controls":[{"open_persistent_super":true,` +
+  `"objective":"SMG RLM acceptance probe ${MARKER}","packet":{"kind":` +
+  `"execution_request","summary":"Run the SMG cutover legs","actions":[` +
+  `{"type":"probe","objective":"exercise report/cancel/report legs"}]}}],` +
+  `"work_disposition":"open"}). ` +
+  `The management activation must do all of the following IN ORDER inside ` +
+  `desk_go_eval cells (choir.ReportPacket takes THREE args: toDesk, packet, ` +
+  `resolverID): (a) BEFORE any bound report, call choir.ReportPacket("texture", ` +
+  `{"kind":"execution_result","summary":"unbound probe"}, "") and record the ` +
   `refusal text; (b) choir.Cast("engineering", "SMG no-op: create a file ` +
-  `smg-probe.txt containing the marker", {}) then immediately ` +
-  `choir.CancelAssignment(<assignment id from the cast result>, "probe") ` +
-  `and record the revoke result; (c) choir.ReportPacket back to the ` +
-  `delivered lifecycle control with summary "SMG legs complete: ` +
-  `unbound=<refusal text>; cancel=<revoke outcome>" and ` +
-  `work_disposition "completed". The document is disposable.`;
+  `smg-probe.txt containing the marker ${MARKER}", {}) then ` +
+  `choir.CancelAssignment(<assignment id from the cast result>, "probe") and ` +
+  `record the revoke result; (c) choir.ReportPacket back to texture with ` +
+  `{"kind":"execution_result","summary":"SMG legs complete: unbound=<refusal ` +
+  `text>; cancel=<revoke outcome>","work_disposition":"completed"}, "". ` +
+  `The document is disposable. Do not edit the document body.`;
 
 const submit = await api('/api/prompt-bar', 'POST', { text: prompt, command_id: `smg-rlm-${MARKER}` });
 let TRAJ = submit.body?.trajectory_id;

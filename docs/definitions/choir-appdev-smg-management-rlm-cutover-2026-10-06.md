@@ -152,10 +152,21 @@ now:
     (one texture_turn_committed, then stalled) by the known Management
     live-occurrence storm (owner guest cycles terminal/received pairs
     every ~10-15s; a research actor delivery-poisoned after 65
-    deferrals). A disposable computer cannot substitute — it hits the
-    canonical-head bootstrap residual (genesis absent -> submit 500).
-    Post-deploy guest log shows organic cell ReportPacket intents +
-    cancel_report obligations minted on the new path.
+    deferrals). Disposable attempt 2026-10-06 (computer-423134e8,
+    bootstrap-chain genesis OK, marker smg-dispo-*): THREE texture desk
+    activations consumed the owner revision with `desk cell completed
+    with no authoring act` then exhausted the 1.2M-token loop budget
+    (~22 desk_go_eval iterations, no ApplyTexture staged). Second
+    attempt used a corrected prompt (non-empty execution_request
+    actions, worked ApplyTexture call, correct 3-arg ReportPacket
+    arity) — same outcome in ~7 min. This is the documented desk-agency
+    edge (texture desk does not emit open_persistent_super on demand)
+    recorded under S0m; not a transport defect. Then host-pressure
+    reclaim HIBERNATED the probe VM mid-run (vmctl journal 12:44Z,
+    epoch=12916): gateway now 502s `failed to resolve user autoputer`
+    for the computer — reclaim killed a VM with a live owner-scoped
+    probe in flight. Recorded for SA slice 1+ and the S2 hibernate
+    contract.
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability
@@ -164,25 +175,39 @@ now:
     verdict: >-
       supported — all three typed tools deleted, validations moved
       host-side, deployed schema exactly {desk_go_eval}. Behavioral legs
-      blocked by substrate: the owner-guest occurrence storm (a known
-      heresy) starves fresh activations.
+      still unproven: owner-guest storm (substrate heresy, SA slice 1)
+      starves activations there; disposable path now reaches the texture
+      desk but the desk does not author open_persistent_super on demand
+      (agency edge, documented since S0m).
   believed_state: >-
     Deployed https://choir.news build=4bedf999; management schema exactly
     {desk_go_eval} (deployed proof); organic post-deploy traffic mints
     ReportPacket/CancelAssignment intents with no typed-tool fallback.
+    Behavioral legs remain unproven on both reachable surfaces.
   blocker_or_risk: >-
-    BLOCKED on the Management live-occurrence storm starving probe
-    activations on the only reachable computer (the API key owns
-    computer-03335285; the other active computer belongs to a different
-    owner). The storm's substrate fix is SA-station scope. Next attempt:
-    drain the storm (park/repair the replaying trajectories) or run the
-    probe on a computer with genesis already committed.
+    BLOCKED on two independent substrate edges for legs 1-3: (a) the
+    Management live-occurrence storm on the owner computer (director
+    forbade draining it — SA slice 1 owns the fix); (b) texture-desk
+    agency: three activations on a clean disposable failed to emit
+    open_persistent_super and burned the loop budget (S0m-documented
+    edge: prompting a specific verb is unreliable on this model;
+    transport is proven by the schema leg + unit suite). No
+    owner-reachable path mints a persistent-management activation other
+    than the texture controls[] opener — fabricating one via internals
+    would not exercise the product surface.
   next_action: >-
-    Storm observed to SURVIVE guest restart (reboot drained pending, then
-    the replayed backlog re-fed the storm: running_runs 0->4, pending 2->72
-    in ~15min; third probe starved). Retry path: park/drain the replayed
-    storm trajectories or a pre-genesis disposable, then re-run
-    scripts/smg_rlm_acceptance_probe.mjs for legs 1-3. Schema leg proven.
+    SA slice 0 pushed (9f6f369c): computers provisioned after this
+    deploy mint genesis_imported in-guest before the replay gate opens,
+    and pre-genesis writes map to a clean 503 — the bootstrap-chain
+    preamble becomes a repair path only. Then SA slice 1 (storm
+    convergence) unblocks legs on the owner computer. For the
+    disposable path the remaining blocker is texture desk agency, not
+    substrate: retry probe after SA lands, OR accept the agency edge
+    and close legs via a future deterministic owner surface. DIRECTOR
+    2026-10-06 guidance (do not drain the owner storm; run legs on a
+    fresh disposable) executed — disposable reached the desk; the desk
+    did not author the opener control. New residual recorded:
+    host-pressure reclaim hibernates a VM with a live probe run.
 
     DIRECTOR 2026-10-06: do not drain or park the owner guest's storm to
     pass legs 1-3; that proves nothing about the substrate and hides it.
