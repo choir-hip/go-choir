@@ -166,7 +166,20 @@ now:
     epoch=12916): gateway now 502s `failed to resolve user autoputer`
     for the computer — reclaim killed a VM with a live owner-scoped
     probe in flight. Recorded for SA slice 1+ and the S2 hibernate
+    reclaim killed a VM with a live owner-scoped
+    probe in flight. Recorded for SA slice 1+ and the S2 hibernate
     contract.
+
+    2026-10-06 second disposable (computer-03335285, marker
+    smg-rlm-clean): prompt_bar_submit OK; escalate leg minted persistent
+    Management run 462d30ea at 17:24Z that stayed `pending` forever —
+    `initial_dispatch` lost AND the fresh-mint watchdog's
+    redriveStrandedFreshMintManagement returned false on zero bound
+    packets (escalate binds none), slot deadlocked. Probe timed out 45min
+    (`docs/evidence/smg-rlm-acceptance-owner-clean-2026-10-06.json`). NEW
+    SUBSTRATE DEFECT — problem doc
+    `docs/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md`,
+    fix 01199fb1 fail-releases the slot at the watchdog deadline.
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability
