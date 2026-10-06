@@ -334,7 +334,7 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 			break
 		}
 		if !matched {
-			return nil, fmt.Errorf("exact live Management update %s is not pending", exact)
+			return nil, fmt.Errorf("%w: %s", ErrPersistentManagementExactNotPending, exact)
 		}
 	} else if !lifecycleControls && len(directives) > 0 {
 		updates = directives
@@ -3127,6 +3127,22 @@ func (rt *Runtime) ResolvePersistentManagementLiveOccurrence(ctx context.Context
 	}
 	rec, err := rt.reconcilePersistentManagementActorLocked(ctx, ownerID, agentID, exactID)
 	if err != nil {
+		// The occurrence scan matched this packet but reconcile's pending
+		// view rejected it — a stranded/consumed residue, not a transient
+		// failure. Record the fate where the packet is provably stale;
+		// either way the occurrence is the packet's bounded terminal
+		// signal and the wake must consume, never defer-loop.
+		if errors.Is(err, ErrPersistentManagementExactNotPending) && exact != nil {
+			if reason := rt.store.StalePendingLifecyclePacketReason(ctx, *exact); reason != "" {
+				if _, expErr := rt.store.ExpireStalePendingLifecyclePacket(ctx, *exact, reason); expErr != nil {
+					return nil, false, fmt.Errorf("expire not-pending exact packet %s: %w", exact.UpdateID, expErr)
+				}
+				log.Printf("runtime: persistent Management live occurrence discharged not-pending packet=%s reason=%s", exact.UpdateID, reason)
+			} else {
+				log.Printf("runtime: persistent Management live occurrence consumed not-pending packet=%s (no stale reason; discharge without expire)", exact.UpdateID)
+			}
+			return nil, true, nil
+		}
 		return nil, false, err
 	}
 	if rec == nil {
@@ -3139,6 +3155,12 @@ func (rt *Runtime) ResolvePersistentManagementLiveOccurrence(ctx context.Context
 // signal — reports carry no execution authority, so the control resolver must
 // not mint or bind from them (Definition 1 / storm receipt 3654d925).
 var ErrPersistentManagementReportOccurrence = errors.New("persistent Management producer report occurrence")
+
+// ErrPersistentManagementExactNotPending marks the reconcile outcome where the
+// occurrence scan matched a packet that reconcile's pending view rejects —
+// delivered-to-dead-loop, zero-version, or otherwise stranded residue. Resolve
+// maps it to a terminal discharge rather than a retryable deferral.
+var ErrPersistentManagementExactNotPending = errors.New("exact live Management update is not pending")
 
 // persistentManagementReportOccurrencePending reports whether the hashed live
 // occurrence names a pending producer report addressed to this persistent
