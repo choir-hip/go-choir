@@ -184,6 +184,12 @@ returned, convergent mode):
   indistinguishable from routing/auth failure); `work_disposition`
   substring over-matches as a bound report; "report before bound report" is
   not a genuine unbound test (controls bind pre-activate).
-- **Fresh-disposable stale release:** mints pin `im5qd1rfi` (pre-fix);
-  every fresh-disposable probe tests old code until the mint path
-  re-resolves the guest image. Named residual, SA/S2 layering line.
+- **Fresh-disposable stale release (corrected 2026-10-06):**
+  `storedisk.erofs` is a shared host-level guest store disk resolved at
+  boot — a mint boots whatever image is current *at boot time*.
+  `computer-ee6cb12d` booted `im5qd1rfi` because it minted at 19:01Z before
+  the `01199fb1` deploy's image build finished (image lands ~15-20min
+  post-commit). Not a pin defect — a deploy-race: mints before image
+  replacement completes get the old build. Gate: verify guest `/health`
+  `build.commit` matches the deploy before running legs on a fresh
+  disposable (folded into the SMG probe).

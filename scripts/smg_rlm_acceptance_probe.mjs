@@ -36,6 +36,12 @@ const MARKER = arg('marker', `smg-rlm-${Date.now()}`);
 const TIMEOUT_MIN = Number(arg('timeout-min', '30'));
 const OUT = arg('out', `docs/evidence/smg-rlm-acceptance-${new Date().toISOString().slice(0, 10)}.json`);
 
+
+// Optional deploy-identity gate: --expect-commit <sha> refuses to run legs
+// until the guest reports that build. A fresh disposable minted before the
+// image build finished otherwise tests the prior release (deploy-race —
+// docs/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md).
+const EXPECT_COMMIT = arg('expect-commit', '');
 if (!API_KEY) { console.error('CHOIR_API_KEY is required'); process.exit(2); }
 
 const headers = { Authorization: `Bearer ${API_KEY}`, 'X-Choir-Computer': COMPUTER };
@@ -92,6 +98,19 @@ const objective =
   `{"kind":"execution_result","summary":"SMG legs complete: unbound=<refusal ` +
   `text>; cancel=<revoke outcome>","work_disposition":"completed"}, "". ` +
   `Do not edit the document body.`;
+
+// Deploy-identity gate: if --expect-commit was passed, the guest must report
+// that build before we mint — otherwise a stale image would silently test the
+// prior release.
+if (EXPECT_COMMIT) {
+  const obs = await api('/api/runtime/observability');
+  const actual = String(obs.body?.build?.commit || '');
+  recordLeg('build_identity', { ok: obs.status === 200, status: obs.status, expected: EXPECT_COMMIT, actual });
+  if (obs.status !== 200) finish(1, `build identity fetch failed status=${obs.status}`);
+  if (!actual.startsWith(EXPECT_COMMIT)) {
+    finish(1, `guest build ${actual} does not match expected ${EXPECT_COMMIT} — refusing to test stale release`);
+  }
+}
 
 // Deterministic owner-side mint (panel item C): mints a real texture
 // activation + issues an execution_request control to management:<owner>,
