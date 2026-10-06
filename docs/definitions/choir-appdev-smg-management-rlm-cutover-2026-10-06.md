@@ -204,6 +204,17 @@ now:
  recorded: `/api/trajectories` polling is status-blind, `work_disposition`
  over-matches bound reports, and "report before bound report" is not a
  genuine unbound test (controls bind pre-activate).
+
+ 2026-10-06 deterministic mint surface landed (`POST
+ /api/texture/management-open`, commit pending): an owner-side endpoint
+ that mints a real conductor→texture activation through the same
+ prompt-bar substrate, then issues an execution_request control through
+ the canonical IssueLifecycleControl reducer (same validators as the
+ desk's ApplyTexture controls) and wakes management:<ownerID>. This
+ replaces texture-desk agency as the SMG leg trigger — the probe can now
+ drive escalate→mint→cancel→bound-report deterministically. The desk's
+ open_persistent_super authoring remains the product path; the endpoint
+ is the acceptance/supervision path.
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability

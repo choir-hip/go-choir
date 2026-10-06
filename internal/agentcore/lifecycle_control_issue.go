@@ -20,9 +20,20 @@ func lifecyclePacketIDForRecord(recordID string) string {
 	return LifecyclePacketIDForRecord(recordID)
 }
 
+
+// IssueLifecycleControl queues controls issued by a lifecycle Texture caller
+// run and wakes each newly-created target through the normal lifecycle queue
+// path. Exported so owner-reachable surfaces (e.g. the deterministic
+// management-open endpoint) can issue through the same canonical reducer the
+// desk's ApplyTexture path uses — same validators, same command digest, same
+// target binding.
+func (rt *Runtime) IssueLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string) ([]types.CoagentSourcePacket, error) {
+	return rt.issueLifecycleControl(ctx, rec, controls, reason)
+}
+
 // issueLifecycleControl queues controls from the exact active Texture run and
 // wakes each newly-created target through the normal lifecycle queue path.
-func (rt *Runtime) issueLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string) ([]types.CoagentSourcePacket, error) {
+ func (rt *Runtime) issueLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string) ([]types.CoagentSourcePacket, error) {
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil, fmt.Errorf("issue lifecycle control: runtime, store, and caller run are required")
 	}
