@@ -206,15 +206,25 @@ now:
  genuine unbound test (controls bind pre-activate).
 
  2026-10-06 deterministic mint surface landed (`POST
- /api/texture/management-open`, commit pending): an owner-side endpoint
+ /api/texture/management-open`, commit `438d927f`): an owner-side endpoint
  that mints a real conductor→texture activation through the same
  prompt-bar substrate, then issues an execution_request control through
  the canonical IssueLifecycleControl reducer (same validators as the
- desk's ApplyTexture controls) and wakes management:<ownerID>. This
- replaces texture-desk agency as the SMG leg trigger — the probe can now
- drive escalate→mint→cancel→bound-report deterministically. The desk's
+ desk's ApplyTexture controls) and wakes management:<ownerID>. Replaces
+ texture-desk agency as the SMG leg trigger — the probe drives
+ escalate→mint→cancel→bound-report deterministically. The desk's
  open_persistent_super authoring remains the product path; the endpoint
  is the acceptance/supervision path.
+
+ 2026-10-06 probe hardened (commits `1cff8e86`, `2921c3ca`): mint driver
+ switched to management-open; `/api/trajectories` + events polling is
+ status-aware (non-2xx aborts the leg legibly instead of reading as
+ bound_report=false); bound-report match is typed (update_queued +
+ result:<sha256> update_id + control's work_item_id), removing the
+ work_disposition substring over-match; --expect-commit gate refuses legs
+ on a guest whose build.commit doesn't match the deploy (fresh-disposable
+ stale-release was a deploy-race, not a pin defect — the shared
+ storedisk.erofs resolves at boot time).
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability
