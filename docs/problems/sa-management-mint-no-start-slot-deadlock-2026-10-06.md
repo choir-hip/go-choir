@@ -25,53 +25,79 @@ non-slot deferrals for that mailbox. The minted `initial_dispatch` was lost
 (or dropped before `dispatchReady`); the run holds the slot while remaining
 permanently `pending`.
 
-## Defect chain (two bugs, one stranded outcome)
+## Defect chain (updated 2026-10-06 panel review + trace forensics)
 
-**Bug 1 — lost `initial_dispatch` (root: epoch-conflict emission discard,
-hypothesis)**: `reconcilePersistentManagementActorLocked` mints the run and
-calls `rt.activate(rec)` → `dispatchActor` → `a.dispatchAtMode`. Because the
-mint happens *inside* a dispatcher activation (the handler for the incoming
-`sha256:` live occurrence), `EmissionsFromCtx` buffers the update — it
-becomes durable only at `d.log.Commit`. `Commit` on `ErrEpochConflict`
-returns with **no log line and no retry** (`internal/actor/dispatcher.go:445-449`),
-discarding the buffered `initial_dispatch` while the minted run — already
-durable via its own writes — stays `pending`. Nothing marks this run
-terminal, so it occupies the persistent Management slot forever.
-(Hypothesis: epoch conflicts are the only silent emission-discard path;
-deferred activations also drop `evEmitted` at dispatcher.go:382-409, but a
-deferred handler never reaches the "bound run" log line that was observed.)
+**Bug 1 — mechanism REVISED: the `initial_dispatch` wake exists; the
+discard hypothesis is refuted for this path.** The consensus panel
+(10/10 agents, `.agentic-consensus/agentic-consensus-20261006-midcourse/`)
+independently flagged: `rt.activate` dispatches with
+`context.Background()` (`runtime.go:311`), which carries no
+`EmissionsFromCtx` buffer — the `initial_dispatch` bypasses the emission
+buffer entirely and appends durably via `actorRT.Send` → `log.Append`
+(`adapter.go:401-409`, `actor.go:150-175`). An `ErrEpochConflict` at
+`Commit` therefore *cannot* have eaten it (and a conflict itself needs a
+second writer the single-dispatcher `d.running` serialization precludes —
+only a second process on the same `*-actor.db`). Console forensics on the
+owner VM confirm no `runtime: activate dispatch for run ...` error was
+logged at 17:24 — the `Send` succeeded; the wake row existed.
 
-**Bug 2 — watchdog no-op on zero bound packets**: `armFreshMintManagementResumeWatchdog`
-schedules `fresh_mint_management_resume_deadline` at mint+10min. When it
-fired (~17:34), `HandleFreshMintManagementResumeDeadline` →
-`redriveStrandedFreshMintManagement` → `listPendingLifecyclePacketsDeliveredToRun`
-returned **zero bound packets** — the escalate packet is not a lifecycle
-control, so nothing was bound at mint — and the function returned `false`
+The surviving mechanism (trace-consistent, not yet row-verified — guest
+SQLite is not host-reachable): the mint's `initial_dispatch` entered the
+management mailbox behind a `redrive-11` deferral storm — console.log.2
+shows `dispatcher: deferred` churning stale occurrence wakes every ~4s
+post-mint, plus `handler: unknown update kind "delivery_failed"` poison
+events — and either starved or deferred under `ErrDeferUnprocessed`
+(handler.go:398 maps any `ExecuteActivationSyncChecked` error to deferral;
+the live-occurrence handler's `slot occupied` deferral is by-design while
+462d30ea held the slot). A **durable re-drive authority already exists**:
+`actorWakeOutboxFromObject` derives an `initial_dispatch` wake for every
+pending fresh mint atomically at commit (`lifecycle.go:772-805`), re-driven
+by `sweepActorWakeOutbox` every 500ms — and it still did not deliver, which
+narrows the cause to (a) the outbox row marked `projected` into the wiped
+guest-local actor log (re-image wipes `*-actor.db` while Dolt persists the
+projection flag — mark ordering at `runtime.go:2575-2594` dispatches before
+marking, so the only loss window is a process death between append and
+mark), or (b) the sweep's dispatch erroring identically to the direct Send.
+
+The original epoch-conflict theory additionally predicted Bug 2's trigger
+window correctly; that part stands.
+
+**Bug 2 — watchdog no-op on zero bound packets** (unchanged):
+`armFreshMintManagementResumeWatchdog` schedules
+`fresh_mint_management_resume_deadline` at mint+10min. When it fired
+(~17:34), `redriveStrandedFreshMintManagement` found **zero bound packets**
+(the escalate packet is not a lifecycle control) and returned `false`
 without releasing the slot. The watchdog consumed its durable occurrence;
 the run remained `pending`. No further watchdog exists.
 
-Combined effect: a fresh-mint Management run whose `initial_dispatch` is
-lost and whose bound-packet set is empty becomes a permanent slot-holding
-zombie. The desk's obligation stays pending, all subsequent live
-occurrences defer on `slot occupied`, and the probe legs time out.
+Combined effect: a fresh-mint Management run whose `initial_dispatch` never
+delivers (mechanism above) and whose bound-packet set is empty becomes a
+slot-holding zombie. The desk's obligation stays pending, all subsequent
+live occurrences defer on `slot occupied`, and the probe legs time out.
 
-## Fix shape (for the landing commit)
+## Fix shape
 
-1. `redriveStrandedFreshMintManagement`: when `packets` is empty the run
-   has no recoverable bound obligation. Rather than a silent `return false`
-   (which keeps the slot held by a dead run), transition the run to a
-   terminal state (`failed`) via `terminalizeRunCanonical` with reason
-   `management_fresh_mint_no_bound_packets`, freeing the persistent slot.
-   The desk obligation remains pending; the next live occurrence mints a
-   fresh run against it — self-healing rather than permanent deadlock.
+1. `redriveStrandedFreshMintManagement`: when `packets` is empty, fail-release
+   the run via `terminalizeRunCanonical` (reason
+   `management_fresh_mint_no_bound_packets`), freeing the slot. **Shipped:
+   `01199fb1`.** The desk obligation stays pending; the next live
+   occurrence mints fresh.
 
-2. (Already covered by the existing boot-passivation path — a runtime
-   restart passivates `pending` runs and clears the slot; the fix above
-   makes the watchdog do the same without requiring a restart.)
+2. Emission-discard instrumentation (panel consensus, 9/10): log the drained
+   `emitted`/`incorporated` counts on the `ErrEpochConflict` and
+   `ErrDeferUnprocessed` paths in `dispatcher.go` — both are silent today,
+   which is why the discard was guessable rather than observable. Do **not**
+   implement emit-before-CAS (panel verdict 9/10 against): it breaks
+   fenced-commit atomicity ("a stale activation's emissions die with it",
+   dispatcher.go:55-57) and re-delivers non-deterministic emissions
+   (`actorDispatchUpdateID` mints a random uuid on empty content).
 
-The initial_dispatch loss itself is under separate observation; the
-fail-close on zero bound packets bounds the damage of any future
-dispatch loss without needing to detect it directly.
+3. Outbox/actor-log durability gap (deferred investigation): if mechanism
+   (a) above is confirmed — `projected` outbox flag in Dolt outlives the
+   wiped guest-local `*-actor.db` — the substrate fix is deriving
+   unprojected-on-boot re-dispatch from the wake row, or persisting the
+   actor log on the durable volume. Not fixed here.
+
 
 ## Probe evidence
 
@@ -124,3 +150,40 @@ agency, deterministic owner control, or a rerun once agency improves).
 19:01Z still boots the pre-fix wrapper (`im5qd1rfi…`); new computer mints
 do not ride the rebuilt guest image until the mint path re-resolves the
 guest release — another propagation gap inside the same class.
+
+**Fix-path exercise status (panel review 2026-10-06):** the post-fix probe
+observed **zero mints**, so neither `slot occupied` nor the zero-packet
+fail-release was exercised — the desk never authored
+`open_persistent_super`, and no outbox or slot-occupied event arose to test
+the repair. Console forensics: `slot_occupied` deferrals=0 on the fixed
+boot segment (vs 41 pre-fix); `reconcile_terminal_run_outcomes` completed.
+Deployed behavioral verification is still owed: the next probe must mint a
+fresh run then strand it to observe the fail-release.
+
+**Consensus panel outcome + reorientation**
+(`.agentic-consensus/agentic-consensus-20261006-midcourse/`, 10/11 agents
+returned, convergent mode):
+
+- **A (emission discard):** reject emit-before-CAS 9/10; refuted as *this*
+  incident's mechanism (see defect chain). Reduce to instrumentation.
+- **B (degraded-ownership terminal for bearer routing):** fix belongs in
+  vmctl `reconcileLookupReadiness` — a non-constructive `degraded→active`
+  re-check on the same realization (no wake/assign/restart). Red surface;
+  panel says schedule now — every bearer-token deployed proof currently
+  fails silently on it. Named residual.
+- **C (station order):** build a deterministic owner-side control surface
+  that mints persistent Management without texture-desk agency — the desk's
+  `open_persistent_super` authoring is a model-behavior dependency with no
+  convergence date and every SMG leg sits behind it.
+- **D (attribution):** "texture agency" for the post-fix zero mints stays a
+  **hypothesis** — `controls[]` emission isn't console-observable; only the
+  desk's turn-commit receipt distinguishes never-emitted from
+  emitted-and-discarded.
+- **Probe-hardening findings (unfixed):** `/api/trajectories` polling is
+  status-blind (missing events read as `bound_report=false`,
+  indistinguishable from routing/auth failure); `work_disposition`
+  substring over-matches as a bound report; "report before bound report" is
+  not a genuine unbound test (controls bind pre-activate).
+- **Fresh-disposable stale release:** mints pin `im5qd1rfi` (pre-fix);
+  every fresh-disposable probe tests old code until the mint path
+  re-resolves the guest image. Named residual, SA/S2 layering line.

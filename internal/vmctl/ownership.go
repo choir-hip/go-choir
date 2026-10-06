@@ -1771,7 +1771,18 @@ func (r *OwnershipRegistry) GetOwnershipByComputerID(computerID string) *VMOwner
 // the guest health evidence that made it routable. It never starts or replaces
 // a VM: lookup remains non-constructive, and lifecycle recovery stays explicit.
 func (r *OwnershipRegistry) reconcileLookupReadiness(own *VMOwnership) *VMOwnership {
-	if own == nil || !own.IsReady() {
+	if own == nil {
+		return own
+	}
+	if own.State == VMStateDegraded {
+		// Degraded is not terminal: the realization may have recovered after
+		// the health check that latched it. Re-probe on lookup and re-promote
+		// the same realization — no start, replace, or assignment. A held
+		// computer still promotes: holds gate auto-start, not routing, and a
+		// held active ownership already serves.
+		return r.reconcileDegradedOwnership(own)
+	}
+	if !own.IsReady() {
 		return own
 	}
 
@@ -1829,6 +1840,63 @@ func (r *OwnershipRegistry) reconcileLookupReadiness(own *VMOwnership) *VMOwners
 	} else {
 		log.Printf("vmctl: active VM %s lookup health check returned unhealthy; marked degraded", own.VMID)
 	}
+	return result
+}
+
+// reconcileDegradedOwnership re-probes a degraded realization on lookup and
+// re-promotes it to active when the guest health check passes. It is
+// non-constructive: it never starts, replaces, or assigns a VM, and it only
+// promotes the same VMID/epoch that latched degraded. Without this branch a
+// degraded latch is terminal — one transient health failure would refuse
+// routed ownership forever even though the guest recovered.
+func (r *OwnershipRegistry) reconcileDegradedOwnership(own *VMOwnership) *VMOwnership {
+	key := ownershipKey(own.UserID, own.DesktopID)
+	r.mu.RLock()
+	mgr := r.vmManager
+	_, refreshing := r.refreshing[key]
+	r.mu.RUnlock()
+	if mgr == nil {
+		return own
+	}
+	if refreshing {
+		snapshot := *own
+		snapshot.State = VMStateBooting
+		return &snapshot
+	}
+
+	healthy, healthErr := mgr.CheckHealth(own.VMID)
+	if healthErr != nil || !healthy {
+		if healthErr != nil {
+			log.Printf("vmctl: degraded VM %s lookup re-probe failed; staying degraded: %v", own.VMID, healthErr)
+		}
+		return own
+	}
+
+	r.mu.Lock()
+	current := r.ownerships[key]
+	if current == nil {
+		r.mu.Unlock()
+		return nil
+	}
+	if current.VMID != own.VMID || current.Epoch != own.Epoch || current.State != VMStateDegraded {
+		result := cloneOwnership(current)
+		r.mu.Unlock()
+		return result
+	}
+	if _, refreshing = r.refreshing[key]; refreshing {
+		result := cloneOwnership(current)
+		result.State = VMStateBooting
+		r.mu.Unlock()
+		return result
+	}
+	current.State = VMStateActive
+	current.LastActiveAt = time.Now()
+	current.StoppedBy = ""
+	r.saveLocked()
+	result := cloneOwnership(current)
+	r.mu.Unlock()
+
+	log.Printf("vmctl: degraded VM %s lookup health re-probe healthy; re-promoted to active", own.VMID)
 	return result
 }
 

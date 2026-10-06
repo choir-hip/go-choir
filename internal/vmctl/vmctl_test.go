@@ -1240,6 +1240,94 @@ func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
 	}
 }
 
+func TestHandler_LookupRepromotesRecoveredDegradedOwnership(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	persistencePath := filepath.Join(t.TempDir(), "ownership.json")
+	if err := reg.SetPersistencePath(persistencePath); err != nil {
+		t.Fatalf("SetPersistencePath: %v", err)
+	}
+	own := &VMOwnership{
+		VMID:        "vm-degraded-heals",
+		ComputerID:  "computer-degraded-heals",
+		UserID:      "user-degraded-heals",
+		DesktopID:   PrimaryDesktopID,
+		ComputerURL: "http://127.0.0.1:9001",
+		State:       VMStateActive,
+		Epoch:       9,
+	}
+	key := ownershipKey(own.UserID, own.DesktopID)
+	reg.ownerships[key] = own
+	reg.vmByID[own.VMID] = own
+	healthy := false
+	manager := &mockVMManager{
+		getVMs: map[string]*VMInstanceInfo{
+			own.VMID: {
+				HostURL: own.ComputerURL,
+				Epoch:   own.Epoch,
+				Healthy: false,
+				State:   "running",
+			},
+		},
+		checkHealthOK: &healthy,
+	}
+	reg.SetVMManager(manager)
+	handler := NewHandler(reg)
+
+	lookup := func() (int, ownershipResponse) {
+		request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/lookup?computer_id="+own.ComputerID, nil)
+		request.Header.Set("X-Internal-Caller", "true")
+		response := httptest.NewRecorder()
+		handler.HandleLookup(response, request)
+		var result ownershipResponse
+		if response.Code == http.StatusOK {
+			if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+				t.Fatalf("decode lookup response: %v", err)
+			}
+		}
+		return response.Code, result
+	}
+
+	// Unhealthy probe latches degraded (existing behavior).
+	code, result := lookup()
+	if code != http.StatusOK || result.State != string(VMStateDegraded) {
+		t.Fatalf("first lookup = %d/%q, want 200/degraded", code, result.State)
+	}
+
+	// Guest recovers; the next lookup must re-probe and re-promote the same
+	// realization without any constructive recovery (no restart, no new VMID,
+	// no epoch bump).
+	healthy = true
+	if vm := manager.getVMs[own.VMID]; vm != nil {
+		vm.Healthy = true
+	}
+	code, result = lookup()
+	if code != http.StatusOK {
+		t.Fatalf("second lookup status = %d, want 200", code)
+	}
+	if result.State != string(VMStateActive) {
+		t.Fatalf("second lookup state = %q, want %q — degraded latch must not be terminal", result.State, VMStateActive)
+	}
+	if result.VMID != own.VMID || result.Epoch != own.Epoch {
+		t.Fatalf("re-promoted identity = vmid %q epoch %d, want same realization %s epoch %d", result.VMID, result.Epoch, own.VMID, own.Epoch)
+	}
+	if len(manager.recovers) != 0 || len(manager.refreshes) != 0 {
+		t.Fatalf("re-promotion must be non-constructive; recovers=%d refreshes=%d", len(manager.recovers), len(manager.refreshes))
+	}
+	stored := reg.GetOwnershipForDesktop(own.UserID, own.DesktopID)
+	if stored == nil || stored.State != VMStateActive {
+		t.Fatalf("stored ownership = %+v, want durable active state", stored)
+	}
+
+	// Still-unhealthy probe must not promote: the latch holds while the guest
+	// remains unhealthy.
+	healthy = false
+	reg.ownerships[key].State = VMStateDegraded
+	code, result = lookup()
+	if code != http.StatusOK || result.State != string(VMStateDegraded) {
+		t.Fatalf("unhealthy re-probe = %d/%q, want 200/degraded", code, result.State)
+	}
+}
+
 func TestHandler_LookupKeepsActiveDuringUnhealthyRouteGrace(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	persistencePath := filepath.Join(t.TempDir(), "ownership.json")

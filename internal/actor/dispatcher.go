@@ -405,6 +405,18 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 				log.Printf("dispatcher: poison %s/%s after %d deferrals -> %s", agentID, u.UpdateID, n, d.opts.ErrorSink)
 				continue
 			}
+			if len(evEmitted) > 0 {
+				// The deferred event's emissions die with this activation —
+				// the event re-fires and the handler re-emits them (dedup on
+				// update_id). Log the discard so a stranded downstream
+				// obligation is attributable from the console instead of
+				// being indistinguishable from a silent loss.
+				ids := make([]string, 0, len(evEmitted))
+				for _, e := range evEmitted {
+					ids = append(ids, e.UpdateID)
+				}
+				log.Printf("dispatcher: deferred %s/%s discards %d emitted update(s) ids=%v", agentID, u.UpdateID, len(evEmitted), ids)
+			}
 			log.Printf("dispatcher: deferred %s/%s deferrals=%d cause=%v", agentID, u.UpdateID, n, herr)
 			break
 		}
@@ -445,7 +457,15 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 	if _, err := d.log.Commit(ctx, agentID, epoch, emitted, incorporated, memory); err != nil {
 		if err == ErrEpochConflict {
 			// Stale activation: discard; the dispatcher re-fires from the new
-			// head on the next projection read.
+			// head on the next projection read. The buffered emissions die
+			// with it — log the drop so a lost wake is attributable; this
+			// path is otherwise silent and indistinguishable from a missing
+			// send.
+			ids := make([]string, 0, len(emitted))
+			for _, e := range emitted {
+				ids = append(ids, e.UpdateID)
+			}
+			log.Printf("dispatcher: commit %s epoch conflict: discards %d emitted + %d incorporated update(s) emitted_ids=%v", agentID, len(emitted), len(incorporated), ids)
 			return
 		}
 		log.Printf("dispatcher: commit %s: %v", agentID, err)
