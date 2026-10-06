@@ -193,3 +193,14 @@ returned, convergent mode):
   replacement completes get the old build. Gate: verify guest `/health`
   `build.commit` matches the deploy before running legs on a fresh
   disposable (folded into the SMG probe).
+
+- **Owner-store OOM on mint (discovered 2026-10-06):** `POST
+  /api/texture/management-open` → `ensureConductorTextureRoute` →
+  `IssueLifecycleControl` → `UpdateRun` → `objectgraph dolt scan object`
+  on the owner computer's 31 GiB event store. The scan exceeded the 120s
+  request deadline and drove the runtime to OOM-kill at 3.7 GiB anon-rss
+  (console `21:56:11` timeout → `21:58` OOM). Repro: owner computer
+  `computer-03335285…`, build `2921c3ca`. Disposable probes don't hit
+  this (empty stores). Root-cause class: unbounded-objectgraph scan
+  inside a request-scoped persistence path — the fix is not the probe,
+  it's bounding the scan to the run's own event window.

@@ -124,7 +124,7 @@ if (EXPECT_COMMIT) {
 // replacing the desk's open_persistent_super authoring as the leg trigger.
 const open = await api('/api/texture/management-open', 'POST', {
   objective,
-  actions: [{ type: 'probe', objective: 'exercise report/cancel/report legs', safety: { mutation_class: 'green', network: 'forbidden', file_mutation: 'forbidden' } }],
+  actions: [{ type: 'inspect_file', objective: 'exercise report/cancel/report legs via desk_go_eval cells', safety: { mutation_class: 'green', network: 'forbidden', file_mutation: 'forbidden' } }],
   command_id: `smg-rlm-open-${MARKER}`,
 });
 if (open.status !== 200 && open.status !== 202) {
