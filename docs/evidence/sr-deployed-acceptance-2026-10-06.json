@@ -108,7 +108,17 @@
         "desk_go_eval": true
       },
       "tools_list_forbidden": {"update_coagent": false, "processor": false, "reconciler": false},
-      "proves": "deployed research schema = exactly {desk_go_eval}; composed effective prompt (8677 chars) contains none of the 13 deleted typed-tool names nor update_coagent/processor/reconciler and does name desk_go_eval — acceptance action 4 receipt bound to deployed build 4467a4fb"
+      "bidirectional_parity": {
+        "level": "deployed proof",
+        "deployed_commit": "12d3adc0",
+        "raw_response": "docs/evidence/sr-deployed-prompt-research-12d3adc0.json",
+        "taught_verbs_count": 31,
+        "taught_verbs_unmatched": 0,
+        "defect_found_by_panel": "R6 dissent (omp-space-bunny): prompts taught choir.ListContentItemSelectors / choir.ReadContentItemSelector while kernel exports ListContentSelectors / ReadContentSelector — taught cells would not compile",
+        "fix": "commit 12d3adc0: research.yaml + rlm_research_runtime.yaml corrected to kernel names; station checklist 147-148 corrected; TestPromptTaughtVerbsMatchExports added (every choir.<Name> in desk prompts must resolve to a kernel export; verifier-slot conditionals excluded)",
+        "post_fix_result": "all 31 choir.<Name> taught in deployed research prompt resolve to research-scope kernel exports; no forbidden names present"
+      },
+      "proves": "deployed research schema = exactly {desk_go_eval}; composed effective prompt contains none of the 13 deleted typed-tool names nor update_coagent/processor/reconciler, names desk_go_eval, and every taught choir.* verb resolves to a real kernel export — acceptance action 4 receipt bound to deployed build (4467a4fb schema leg; 12d3adc0 bidirectional parity leg)"
     }
   },
   "blocked_first_attempt": {
