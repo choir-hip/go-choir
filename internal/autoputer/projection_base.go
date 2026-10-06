@@ -28,14 +28,16 @@ import (
 //   - local ≥ W and tail in bound: resume from the retained head
 //
 // A non-empty store is never skipped; silent genesis fallback is deleted.
-func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerID, platformURL string, capability func(context.Context) (string, error), live *choirstore.Store) (bool, error) {
+// Returns the recovery plan and whether the store was materialized; the
+// caller mints the genesis event when the plan is RecoveryGenesis.
+func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerID, platformURL string, capability func(context.Context) (string, error), live *choirstore.Store) (projectionbase.RecoveryPlan, bool, error) {
 	storePath = filepath.Clean(storePath)
 	markerName := filepath.Base(storePath)
 	storeDir := filepath.Dir(storePath)
 	computerID = strings.TrimSpace(computerID)
 	platformURL = strings.TrimRight(strings.TrimSpace(platformURL), "/")
 	if storeDir == "" || storeDir == "." || markerName == "" || markerName == "." || markerName == "/" || computerID == "" || platformURL == "" || capability == nil {
-		return false, nil
+		return projectionbase.RecoveryPlan{}, false, nil
 	}
 	sweepStagingArtifacts(storeDir)
 
@@ -45,7 +47,7 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 		if live != nil {
 			head, err := live.Head(ctx, computerID)
 			if err != nil {
-				return false, fmt.Errorf("%w: retained store head: %v", projectionbase.ErrBaseRefused, err)
+				return projectionbase.RecoveryPlan{}, false, fmt.Errorf("%w: retained store head: %v", projectionbase.ErrBaseRefused, err)
 			}
 			if head != nil {
 				localSeq = head.Sequence
@@ -53,7 +55,7 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 		} else {
 			seq, err := projectionbase.PeekLocalSequence(ctx, storePath, computerID)
 			if err != nil {
-				return false, err
+				return projectionbase.RecoveryPlan{}, false, err
 			}
 			localSeq = seq
 		}
@@ -61,7 +63,7 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 
 	head, err := queryCanonicalHead(ctx, platformURL, computerID, capability)
 	if err != nil {
-		return false, err
+		return projectionbase.RecoveryPlan{}, false, err
 	}
 	chainExists := head != nil && head.Sequence > 0
 	var targetHead string
@@ -76,7 +78,7 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 	if chainExists {
 		seq, _, wmErr := source.Watermark(ctx, computerID)
 		if wmErr != nil && !errors.Is(wmErr, projectionbase.ErrBaseRefused) {
-			return false, wmErr
+			return projectionbase.RecoveryPlan{}, false, wmErr
 		}
 		if wmErr == nil {
 			watermarkSeq = seq
@@ -85,23 +87,23 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 
 	plan, err := projectionbase.PlanRecovery(empty, localSeq, chainExists, watermarkSeq, targetSeq)
 	if err != nil {
-		return false, fmt.Errorf("projection recovery plan refused for %s (empty=%t local=%d W=%d H=%d): %w", computerID, empty, localSeq, watermarkSeq, targetSeq, err)
+		return projectionbase.RecoveryPlan{}, false, fmt.Errorf("projection recovery plan refused for %s (empty=%t local=%d W=%d H=%d): %w", computerID, empty, localSeq, watermarkSeq, targetSeq, err)
 	}
 	switch plan.Action {
 	case projectionbase.RecoveryGenesis, projectionbase.RecoveryResume:
 		log.Printf("autoputer: projection recovery %s for %s (local=%d W=%d H=%d tail=%d)", plan.Action, computerID, localSeq, watermarkSeq, targetSeq, plan.TailEvents)
-		return false, nil
+		return plan, false, nil
 	case projectionbase.RecoveryInstall:
 		descriptor, err := projectionbase.InstallVerifiedBase(ctx, source, storeDir, markerName, computerID, targetHead, targetSeq)
 		if err != nil {
-			return false, fmt.Errorf("autoputer: required projection base refused: %w", err)
+			return projectionbase.RecoveryPlan{}, false, fmt.Errorf("autoputer: required projection base refused: %w", err)
 		}
 		log.Printf("autoputer: ProjectionBase installed at sequence %d (base %s) for target %d", descriptor.Sequence, descriptor.BlobSHA256, targetSeq)
-		return true, nil
+		return plan, true, nil
 	case projectionbase.RecoveryRebase:
 		if live != nil {
 			if err := live.Close(); err != nil {
-				return false, fmt.Errorf("autoputer: close retained store before rebase: %w", err)
+				return projectionbase.RecoveryPlan{}, false, fmt.Errorf("autoputer: close retained store before rebase: %w", err)
 			}
 		}
 		descriptor, err := projectionbase.RebaseRetainedStore(ctx, source, storePath, computerID, targetHead, targetSeq)
@@ -109,17 +111,17 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 			if live != nil {
 				_ = live.Reopen(storePath)
 			}
-			return false, fmt.Errorf("autoputer: required projection rebase refused: %w", err)
+			return projectionbase.RecoveryPlan{}, false, fmt.Errorf("autoputer: required projection rebase refused: %w", err)
 		}
 		if live != nil {
 			if err := live.Reopen(storePath); err != nil {
-				return false, fmt.Errorf("autoputer: reopen rebased store: %w", err)
+				return projectionbase.RecoveryPlan{}, false, fmt.Errorf("autoputer: reopen rebased store: %w", err)
 			}
 		}
 		log.Printf("autoputer: ProjectionBase rebased retained store from %d onto W=%d (base %s) for target %d", localSeq, descriptor.Sequence, descriptor.BlobSHA256, targetSeq)
-		return true, nil
+		return plan, true, nil
 	default:
-		return false, fmt.Errorf("%w: unknown recovery action %s", projectionbase.ErrBaseRefused, plan.Action)
+		return projectionbase.RecoveryPlan{}, false, fmt.Errorf("%w: unknown recovery action %s", projectionbase.ErrBaseRefused, plan.Action)
 	}
 }
 

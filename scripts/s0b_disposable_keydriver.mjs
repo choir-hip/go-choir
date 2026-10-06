@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // S0b disposable-computer keydriver: register a fresh staging account, wait
-// for its computer to reach active, POST lifecycle/bootstrap-chain (required
-// on pre-genesis computers — see
-// docs/problems/fresh-computer-genesis-missing-prompt-bar-500-2026-09-28.md),
+// for its computer to reach active, POST lifecycle/bootstrap-chain (idempotent
+// repair path — computers provisioned after SA slice 0 self-mint genesis at
+// first boot and this returns already_bootstrapped; see
+// docs/problems/s0b-registration-computer-missing-genesis-2026-10-04.md),
 // mint a scoped API key, print {api_key, user_id, computer_id, vm_id,
 // computer_url} JSON on stdout.
 //

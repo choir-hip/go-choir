@@ -41,9 +41,12 @@ func TestMaterializeBootstrapsNewComputerWithoutBase(t *testing.T) {
 	defer server.Close()
 	capability := func(ctx context.Context) (string, error) { return "test-cap", nil }
 
-	materialized, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(t.TempDir(), "runtime.db"), "computer-new", server.URL, capability, nil)
+	plan, materialized, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(t.TempDir(), "runtime.db"), "computer-new", server.URL, capability, nil)
 	if err != nil {
 		t.Fatalf("bootstrap refused: %v", err)
+	}
+	if plan.Action != projectionbase.RecoveryGenesis {
+		t.Fatalf("empty store + no chain must plan genesis, got %s", plan.Action)
 	}
 	if materialized {
 		t.Fatalf("bootstrap must not claim a base was installed")
@@ -58,7 +61,7 @@ func TestMaterializeRefusesMissingBaseForExistingChain(t *testing.T) {
 	capability := func(ctx context.Context) (string, error) { return "test-cap", nil }
 
 	storeDir := t.TempDir()
-	_, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(storeDir, "runtime.db"), "computer-old", server.URL, capability, nil)
+	_, _, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(storeDir, "runtime.db"), "computer-old", server.URL, capability, nil)
 	if !errors.Is(err, projectionbase.ErrBaseRefused) {
 		t.Fatalf("missing required base did not refuse: %v", err)
 	}
@@ -90,7 +93,7 @@ func TestMaterializeRefusesStaleWatermarkOnRetainedStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = materializeProjectionBaseIfNeeded(context.Background(), storePath, "computer-live", server.URL, capability, nil)
+	_, _, err = materializeProjectionBaseIfNeeded(context.Background(), storePath, "computer-live", server.URL, capability, nil)
 	if !errors.Is(err, projectionbase.ErrBaseRefused) {
 		t.Fatalf("stale W=13 against H=148333 must refuse, got %v", err)
 	}

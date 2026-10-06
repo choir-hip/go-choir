@@ -28,6 +28,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
+	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
@@ -278,12 +279,14 @@ func Run() {
 			cancel()
 			log.Fatalf("autoputer: resolve canonical event head before keyring: %v", err)
 		}
-		if materialized, baseErr := materializeProjectionBaseIfNeeded(bootstrapCtx, rtCfg.StorePath, computerID, platformURL, credentials.Capability, db); baseErr != nil {
+		recoveryPlan, materialized, baseErr := materializeProjectionBaseIfNeeded(bootstrapCtx, rtCfg.StorePath, computerID, platformURL, credentials.Capability, db)
+		if baseErr != nil {
 			cancel()
 			log.Fatalf("autoputer: required projection base refused; refusing genesis fallback: %v", baseErr)
 		} else if materialized {
 			log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
 		}
+		provisionedGenesis := recoveryPlan.Action == projectionbase.RecoveryGenesis
 		privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
 		privateCipher, err := computerevent.LoadGuestPrivateArtifactCipher(privacyKeyPath, computerID, canonicalHead == nil)
 		if err != nil {
@@ -316,6 +319,22 @@ func Run() {
 			err = db.BindProjectionTape(computerID, appender)
 		}
 		if err == nil {
+			// Provisioned genesis (SA slice 0): a computer whose recovery plan
+			// was RecoveryGenesis (empty store + no platform chain — provably
+			// fresh; a wiped store leaves a chain and installs or refuses)
+			// mints its own genesis_imported here, before the tape replay
+			// phase. The replay health gate then only opens serving with a
+			// canonical head >= 1, so vmctl never reports a computer active
+			// pre-genesis and prompt-bar never hits the invalid-genesis 500.
+			// Failure is logged, not fatal: the PF-3 admission gate and the
+			// owner-scoped bootstrap-chain repair route still cover it.
+			if provisionedGenesis {
+				if appended, mintErr := agentcore.MintProvisionedGenesis(bootstrapCtx, db, appender, computerID, os.Getenv("CHOIR_OWNER_ID")); mintErr != nil {
+					log.Printf("autoputer: provisioned genesis mint deferred (repairable via bootstrap-chain): %v", mintErr)
+				} else if appended {
+					log.Printf("autoputer: provisioned genesis minted for %s (empty store, no canonical chain)", computerID)
+				}
+			}
 			// Defer the tape replay to a dedicated phase that runs AFTER the HTTP
 			// surface is up, so the host wait-for-ready probe sees the replay
 			// progress instead of connection refusal (B5/B6/B7/B9).

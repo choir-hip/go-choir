@@ -133,6 +133,10 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "command identity conflicts with the stored request"})
 			return
 		}
+		if errors.Is(err, agentcore.ErrPreGenesis) {
+			writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer initializing"})
+			return
+		}
 		log.Printf("texture prompt bar: submit: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit prompt"})
 		return

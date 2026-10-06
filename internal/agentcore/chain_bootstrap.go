@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // ErrChainBootstrapUnavailable means the runtime cannot establish a canonical
@@ -66,66 +67,16 @@ func (rt *Runtime) BootstrapChain(ctx context.Context, ownerID, computerID strin
 		return report, nil
 	}
 
-	// Release identity is derived inside the guest, never accepted from the
-	// request. The build commit is the running binary's immutable identity and
-	// must agree with the separately observed deploy marker, matching the
-	// execution-identity endpoint's fail-closed rule.
-	build := buildinfo.Snapshot("autoputer")
-	if build.Commit == "" || build.Commit == "local" || build.DeployedCommit == "" || build.DeployedCommit != build.Commit {
-		return report, fmt.Errorf("%w: incomplete or conflicting build/deploy identity", ErrChainBootstrapUnavailable)
-	}
-	manifest, err := digestIdentityArtifact("guest-image-manifest", os.Getenv("CHOIR_GUEST_IMAGE_MANIFEST"))
+	head, codeRef, artifactRef, commitment, appended, err := mintGenesisImported(ctx, rt.store, rt.eventAppender, computerID, "external-owner-genesis:"+ownerID, "lifecycle-bootstrap-chain:"+computerID)
 	if err != nil {
-		return report, fmt.Errorf("%w: guest image manifest identity: %v", ErrChainBootstrapUnavailable, err)
-	}
-	codeRef := "git:" + build.Commit
-	artifactRef := "guest-image:" + manifest.SHA256
-	commitment, err := computerevent.StateCommitment(computerevent.EffectiveStateRefs{
-		ReducerVersion:     computerevent.ReducerVersionV1,
-		CodeRef:            codeRef,
-		ArtifactProgramRef: artifactRef,
-		EmbeddedDoltRefs:   nil,
-	})
-	if err != nil {
-		return report, fmt.Errorf("chain bootstrap: compute state commitment: %w", err)
-	}
-
-	eventID, err := computerevent.NewEventID()
-	if err != nil {
-		return report, fmt.Errorf("chain bootstrap: event id: %w", err)
-	}
-	event := computerevent.Event{
-		SchemaVersion:                computerevent.SchemaVersionV1,
-		EventID:                      eventID,
-		ComputerID:                   computerID,
-		EventKind:                    computerevent.EventGenesisImported,
-		OccurredAt:                   time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey:               "lifecycle-bootstrap-chain:" + computerID,
-		ActorProfile:                 agentprofile.Management,
-		AuthorityRef:                 "external-owner-genesis:" + ownerID,
-		PrivacyClass:                 "owner",
-		PayloadCommitment:            commitment,
-		ReducerVersion:               computerevent.ReducerVersionV1,
-		ResultingEffectiveCommitment: commitment,
-		RequestCommitment:            computerevent.ZeroHead,
-	}
-	if _, err := rt.eventAppender.AppendNew(ctx, event, computerevent.TransitionInput{TargetStateCommitment: commitment}, nil); err != nil {
-		// A concurrent owner request may have won the CAS. Re-read and return
-		// the converged head instead of surfacing a duplicate-genesis conflict.
-		if head, headErr := rt.store.Head(ctx, computerID); headErr == nil && head != nil {
-			report.ComputerID = computerID
-			report.AlreadyBootstrapped = true
-			report.Head = head
-			return report, nil
-		}
-		return report, fmt.Errorf("chain bootstrap: append genesis: %w", err)
-	}
-	head, err = rt.store.Head(ctx, computerID)
-	if err != nil || head == nil {
-		return report, fmt.Errorf("chain bootstrap: read head after append: %v", err)
+		return report, fmt.Errorf("%w", err)
 	}
 	report.ComputerID = computerID
 	report.Head = head
+	if !appended {
+		report.AlreadyBootstrapped = true
+		return report, nil
+	}
 	report.TargetStateCommitment = commitment
 	report.CodeRef = codeRef
 	report.ArtifactProgramRef = artifactRef
@@ -133,6 +84,105 @@ func (rt *Runtime) BootstrapChain(ctx context.Context, ownerID, computerID strin
 	report.PublishedCheckpoint = false
 	report.WroteSelfDevOperation = false
 	return report, nil
+}
+
+// MintProvisionedGenesis appends the same genesis_imported event as
+// BootstrapChain during first boot, for a computer whose recovery plan is
+// RecoveryGenesis (empty store + no platform canonical chain — provably
+// fresh: a wiped store leaves a platform chain and refuses or installs
+// instead). It runs inside the guest before the tape replay phase so the
+// replay health gate only opens serving with a canonical head >= 1, which
+// is what lets provisioning report active without the manual bootstrap-chain
+// repair (SA slice 0). Authority is the provisioning authority, not an
+// external owner request.
+//
+// Idempotent: a computer that already has a head is a no-op.
+func MintProvisionedGenesis(ctx context.Context, st *store.Store, appender *computerevent.ComputerEventAppender, computerID, ownerID string) (appended bool, err error) {
+	if st == nil || appender == nil {
+		return false, fmt.Errorf("%w: event projection authority is not configured", ErrChainBootstrapUnavailable)
+	}
+	computerID = strings.TrimSpace(computerID)
+	if computerID == "" {
+		return false, fmt.Errorf("%w: computer id is required", ErrChainBootstrapUnavailable)
+	}
+	head, err := st.Head(ctx, computerID)
+	if err != nil {
+		return false, fmt.Errorf("provisioned genesis: read event head: %w", err)
+	}
+	if head != nil {
+		return false, nil
+	}
+	authorityRef := "provisioned-genesis:" + strings.TrimSpace(ownerID)
+	if _, _, _, _, appended, err = mintGenesisImported(ctx, st, appender, computerID, authorityRef, "provisioned-genesis:"+computerID); err != nil {
+		return false, err
+	}
+	return appended, nil
+}
+
+// mintGenesisImported performs the single shared mint behind BootstrapChain
+// and MintProvisionedGenesis. Release identity is derived inside the guest,
+// never accepted from any caller: the build commit is the running binary's
+// immutable identity and must agree with the separately observed deploy
+// marker, matching the execution-identity endpoint's fail-closed rule. The
+// state commitment derives from the guest's build commit and guest image
+// manifest digest only; live Dolt contents are never folded into it.
+func mintGenesisImported(ctx context.Context, st *store.Store, appender *computerevent.ComputerEventAppender, computerID, authorityRef, idempotencyKey string) (head *computerevent.Head, codeRef, artifactRef, commitment string, appended bool, err error) {
+	// Release identity is derived inside the guest, never accepted from the
+	// request. The build commit is the running binary's immutable identity and
+	// must agree with the separately observed deploy marker, matching the
+	// execution-identity endpoint's fail-closed rule.
+	build := buildinfo.Snapshot("autoputer")
+	if build.Commit == "" || build.Commit == "local" || build.DeployedCommit == "" || build.DeployedCommit != build.Commit {
+		return nil, "", "", "", false, fmt.Errorf("%w: incomplete or conflicting build/deploy identity", ErrChainBootstrapUnavailable)
+	}
+	manifest, err := digestIdentityArtifact("guest-image-manifest", os.Getenv("CHOIR_GUEST_IMAGE_MANIFEST"))
+	if err != nil {
+		return nil, "", "", "", false, fmt.Errorf("%w: guest image manifest identity: %v", ErrChainBootstrapUnavailable, err)
+	}
+	codeRef = "git:" + build.Commit
+	artifactRef = "guest-image:" + manifest.SHA256
+	commitment, err = computerevent.StateCommitment(computerevent.EffectiveStateRefs{
+		ReducerVersion:     computerevent.ReducerVersionV1,
+		CodeRef:            codeRef,
+		ArtifactProgramRef: artifactRef,
+		EmbeddedDoltRefs:   nil,
+	})
+	if err != nil {
+		return nil, "", "", "", false, fmt.Errorf("chain bootstrap: compute state commitment: %w", err)
+	}
+
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		return nil, "", "", "", false, fmt.Errorf("chain bootstrap: event id: %w", err)
+	}
+	event := computerevent.Event{
+		SchemaVersion:                computerevent.SchemaVersionV1,
+		EventID:                      eventID,
+		ComputerID:                   computerID,
+		EventKind:                    computerevent.EventGenesisImported,
+		OccurredAt:                   time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey:               idempotencyKey,
+		ActorProfile:                 agentprofile.Management,
+		AuthorityRef:                 authorityRef,
+		PrivacyClass:                 "owner",
+		PayloadCommitment:            commitment,
+		ReducerVersion:               computerevent.ReducerVersionV1,
+		ResultingEffectiveCommitment: commitment,
+		RequestCommitment:            computerevent.ZeroHead,
+	}
+	if _, err := appender.AppendNew(ctx, event, computerevent.TransitionInput{TargetStateCommitment: commitment}, nil); err != nil {
+		// A concurrent mint may have won the CAS. Re-read and return the
+		// converged head instead of surfacing a duplicate-genesis conflict.
+		if existing, headErr := st.Head(ctx, computerID); headErr == nil && existing != nil {
+			return existing, "", "", "", false, nil
+		}
+		return nil, "", "", "", false, fmt.Errorf("chain bootstrap: append genesis: %w", err)
+	}
+	head, err = st.Head(ctx, computerID)
+	if err != nil || head == nil {
+		return nil, "", "", "", false, fmt.Errorf("chain bootstrap: read head after append: %v", err)
+	}
+	return head, codeRef, artifactRef, commitment, true, nil
 }
 
 func (h *APIHandler) bootstrapComputerChain(w http.ResponseWriter, r *http.Request, ownerID, computerID string) {

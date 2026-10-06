@@ -2,6 +2,7 @@ package textureowner
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -110,6 +111,10 @@ func (h *Handler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Request
 		Title:  title,
 	})
 	if err != nil {
+		if errors.Is(err, agentcore.ErrPreGenesis) {
+			writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer initializing"})
+			return
+		}
 		log.Printf("runtime api: start texture prompt eval: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to start texture prompt eval"})
 		return

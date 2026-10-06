@@ -177,3 +177,63 @@ func TestCreateRunAdmissionRefusesPreGenesis(t *testing.T) {
 		t.Fatalf("post-bootstrap head = %#v %v", head, err)
 	}
 }
+
+func TestMintProvisionedGenesisMintsOnce(t *testing.T) {
+	computerID := "computer-provisioned-genesis"
+	rt := chainBootstrapRuntime(t, computerID)
+	if err := rt.store.BindProjectionTape(computerID, rt.eventAppender); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	// First boot on an empty, unchained store mints genesis_imported seq=1.
+	appended, err := MintProvisionedGenesis(ctx, rt.store, rt.eventAppender, computerID, "owner-provisioned")
+	if err != nil || !appended {
+		t.Fatalf("provisioned mint = appended=%v err=%v", appended, err)
+	}
+	head, err := rt.store.Head(ctx, computerID)
+	if err != nil || head == nil || head.Sequence != 1 {
+		t.Fatalf("post-mint head = %#v err=%v", head, err)
+	}
+
+	// The mint is idempotent and shares the converged-head contract with
+	// BootstrapChain: a second call is a no-op, and a later owner-scoped
+	// bootstrap-chain call reports already_bootstrapped instead of a
+	// duplicate genesis.
+	appended, err = MintProvisionedGenesis(ctx, rt.store, rt.eventAppender, computerID, "owner-provisioned")
+	if err != nil || appended {
+		t.Fatalf("second provisioned mint = appended=%v err=%v", appended, err)
+	}
+	report, err := rt.BootstrapChain(ctx, "owner-bootstrap", computerID)
+	if err != nil || !report.AlreadyBootstrapped || report.AppendedEvent {
+		t.Fatalf("post-mint bootstrap-chain = %#v %v", report, err)
+	}
+}
+
+func TestCompletePromptBarDecisionRefusesPreGenesis(t *testing.T) {
+	computerID := "computer-pre-genesis-promptbar"
+	rt := chainBootstrapRuntime(t, computerID)
+	rt.bus = events.NewEventBus()
+	if err := rt.store.BindProjectionTape(computerID, rt.eventAppender); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	// The prompt-bar decision path persists the agent before StartRun
+	// admission; without its own gate a pre-genesis submit fails deep in
+	// the projection batch with invalid genesis (the observed staging 500).
+	// It must refuse with the typed sentinel instead.
+	rec, err := rt.CompletePromptBarDecision(ctx, "hello", "owner-pre-genesis", map[string]any{}, PromptBarDecisionSpec{Action: "open_app", App: "texture", Title: "hello"})
+	if !errors.Is(err, ErrPreGenesis) || rec != nil {
+		t.Fatalf("pre-genesis prompt-bar = rec=%v err=%v, want ErrPreGenesis", rec, err)
+	}
+
+	// After genesis the sentinel is resolved — the refusal was about the
+	// missing head, not the call shape.
+	if _, err := MintProvisionedGenesis(ctx, rt.store, rt.eventAppender, computerID, "owner-provisioned"); err != nil {
+		t.Fatalf("provisioned mint: %v", err)
+	}
+	if _, err := rt.CompletePromptBarDecision(ctx, "hello", "owner-pre-genesis", map[string]any{}, PromptBarDecisionSpec{Action: "open_app", App: "texture", Title: "hello"}); errors.Is(err, ErrPreGenesis) {
+		t.Fatalf("post-genesis prompt-bar still refused pre-genesis: %v", err)
+	}
+}

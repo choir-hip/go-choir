@@ -50,6 +50,11 @@ import (
 // different request. Public handlers map it to a durable 409 refusal.
 var ErrPromptCommandConflict = errors.New("prompt command conflict")
 
+// ErrPreGenesis marks a write on a computer with no canonical genesis. Public
+// handlers map it to a 503 "computer initializing" refusal; the computer is
+// repairable via the owner-scoped bootstrap-chain route.
+var ErrPreGenesis = errors.New("computer is pre-genesis")
+
 // Runtime is the core runtime engine that manages run lifecycle, event
 // emission, and health state. It persists all state through
 // the store so that run handles and events survive autoputer process restarts
@@ -855,7 +860,7 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	// repair the computer. Test/unbound stores keep their direct path.
 	if rt != nil && rt.store != nil && rt.store.ProjectionTapeBound() {
 		if head, headErr := rt.store.Head(ctx, rt.cfg.ComputerID); headErr == nil && head == nil {
-			return nil, fmt.Errorf("computer is pre-genesis: run admission refused (bootstrap-chain required; no canonical genesis on the tape)")
+			return nil, fmt.Errorf("%w: run admission refused (bootstrap-chain required; no canonical genesis on the tape)", ErrPreGenesis)
 		}
 	}
 	now := time.Now().UTC()
@@ -955,6 +960,15 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 	}
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
+	// Pre-genesis admission gate (same refusal as createRunWithMetadata): the
+	// prompt-bar decision path persists the agent BEFORE StartRun admission,
+	// so it needs its own gate or a pre-genesis submit surfaces a raw
+	// invalid-genesis 500 instead of a clean 503 (SA slice 0).
+	if rt != nil && rt.store != nil && rt.store.ProjectionTapeBound() {
+		if head, headErr := rt.store.Head(ctx, rt.cfg.ComputerID); headErr == nil && head == nil {
+			return nil, fmt.Errorf("%w: prompt-bar submit refused (bootstrap-chain required; no canonical genesis on the tape)", ErrPreGenesis)
+		}
+	}
 	if err := rt.store.UpsertAgent(ctx, agentRec); err != nil {
 		return nil, fmt.Errorf("persist agent: %w", err)
 	}

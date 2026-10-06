@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -360,4 +363,63 @@ func TestHandlePromptBarStableCommandReplaysOneLifecycle(t *testing.T) {
 	if snapshot.Document.Title == prompt || len(strings.Fields(snapshot.Document.Title)) > 9 {
 		t.Fatalf("document title was not bounded from owner input: %q", snapshot.Document.Title)
 	}
+}
+
+// TestHandlePromptBarPreGenesisServes503 pins the SA slice 0 contract: a
+// write on a tape-bound computer with no canonical genesis returns a clean
+// 503 "computer initializing", not the raw invalid-genesis 500 observed on
+// staging. The store is tape-bound with an empty chain, exactly the window a
+// mint-failed or pre-fix boot leaves.
+func TestHandlePromptBarPreGenesisServes503(t *testing.T) {
+	_, handler := testAPISetupWithOptions(t, func(s *store.Store, dir string) []agentcore.RuntimeOption {
+		appender, err := computerevent.NewComputerEventAppender(
+			"autoputer-test", preGenesisTestPinner{}, s, preGenesisTestCAS{projection: s}, preGenesisTestVerifier{})
+		if err != nil {
+			t.Fatalf("appender: %v", err)
+		}
+		if err := s.BindProjectionTape("autoputer-test", appender); err != nil {
+			t.Fatalf("bind tape: %v", err)
+		}
+		return []agentcore.RuntimeOption{agentcore.WithComputerEventAppender(appender)}
+	})
+
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"first write on a pre-genesis computer"}`, "user-alice")
+	w := httptest.NewRecorder()
+	handler.HandlePromptBar(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusServiceUnavailable, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["error"] != "computer initializing" {
+		t.Fatalf("error body = %v", body)
+	}
+}
+
+// Minimal inert appender deps for the pre-genesis fixture: the gate refuses
+// before any pin/CAS, so these are never exercised.
+type preGenesisTestPinner struct{}
+
+func (preGenesisTestPinner) PinEvent(context.Context, string, []byte, string) (computerevent.PinResult, error) {
+	return computerevent.PinResult{}, nil
+}
+
+type preGenesisTestCAS struct {
+	projection computerevent.ProjectionStore
+}
+
+func (c preGenesisTestCAS) Head(ctx context.Context, computerID string) (*computerevent.Head, error) {
+	return c.projection.Head(ctx, computerID)
+}
+
+func (preGenesisTestCAS) CompareAndSwap(context.Context, computerevent.CASRequest) (computerevent.Receipt, error) {
+	return computerevent.Receipt{}, nil
+}
+
+type preGenesisTestVerifier struct{}
+
+func (preGenesisTestVerifier) VerifyEventHeadReceipt(context.Context, computerevent.Receipt, computerevent.CASRequest) error {
+	return nil
 }
