@@ -2,8 +2,10 @@
 // SMG station deployed acceptance probe: the management desk is a full RLM —
 // exactly one tool (desk_go_eval), all capability in-cell via choir.* verbs.
 //
-// Drives one prompt-bar trajectory that asks Texture to open a persistent
-// Management activation whose objective exercises the cutover verbs:
+// Mint driver: deterministic owner-side POST /api/texture/management-open
+// (the desk's open_persistent_super authoring is a model-behavior dependency
+// — replaced here so legs are reproducible). The management activation is
+// instructed to exercise the cutover verbs:
 //   1. an UNBOUND choir.ReportPacket first (no delivered lifecycle control
 //      yet) — must be refused into the cell (no-binding refusal leg);
 //   2. a choir.Cast to engineering for a trivial objective, then
@@ -13,11 +15,13 @@
 //      work_disposition completed — the typed producer report surviving the
 //      cutover (bound-report leg).
 //
-// Watches trajectory + run events for: a persistent-management update
-// (producer report bound to a delivered control), an assignment open +
-// cancel/revoke record, and the refusal text surfaced in a report.
-// Exit 0 when the bound management report lands; other legs strengthen.
-
+// Watches run events for: a persistent-management run mint, an assignment
+// open + cancel/revoke record, a bound producer report (direction
+// producer_report + delivered_to_loop_id), and the refusal text surfaced
+// in a report. Exit 0 when the bound management report lands.
+// Polling is status-aware: a non-2xx response aborts the leg with the
+// HTTP status recorded, so a routing/auth failure never reads as "no
+// bound report" (panel finding D).
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 const HOST = process.env.CHOIR_HOST || 'https://choir.news';
@@ -74,74 +78,101 @@ function finish(code, failure) {
   process.exit(code);
 }
 
-const prompt =
-  `Operator-authorized SMG management-RLM acceptance probe (marker ${MARKER}). ` +
-  `Task: exercise the management desk's in-cell lifecycle surface. In your ` +
-  `ApplyTexture turn, open a persistent Management activation via controls[] ` +
-  `with exactly this shape (actions must be non-empty): ` +
-  `choir.ApplyTexture({"controls":[{"open_persistent_super":true,` +
-  `"objective":"SMG RLM acceptance probe ${MARKER}","packet":{"kind":` +
-  `"execution_request","summary":"Run the SMG cutover legs","actions":[` +
-  `{"type":"probe","objective":"exercise report/cancel/report legs"}]}}],` +
-  `"work_disposition":"open"}). ` +
-  `The management activation must do all of the following IN ORDER inside ` +
-  `desk_go_eval cells (choir.ReportPacket takes THREE args: toDesk, packet, ` +
-  `resolverID): (a) BEFORE any bound report, call choir.ReportPacket("texture", ` +
-  `{"kind":"execution_result","summary":"unbound probe"}, "") and record the ` +
-  `refusal text; (b) choir.Cast("engineering", "SMG no-op: create a file ` +
-  `smg-probe.txt containing the marker ${MARKER}", {}) then ` +
+// Objective drives the management activation's cell work. The mint itself is
+// deterministic (management-open POST below) — the prompt only describes the
+// three legs the activation must run inside desk_go_eval cells.
+const objective =
+  `SMG management-RLM acceptance probe (marker ${MARKER}). Inside desk_go_eval ` +
+  `cells, in order: (a) BEFORE any bound report, call choir.ReportPacket(` +
+  `"texture", {"kind":"execution_result","summary":"unbound probe"}, "") and ` +
+  `record the refusal text; (b) choir.Cast("engineering", "SMG no-op: create ` +
+  `a file smg-probe.txt containing the marker ${MARKER}", {}) then ` +
   `choir.CancelAssignment(<assignment id from the cast result>, "probe") and ` +
-  `record the revoke result; (c) choir.ReportPacket back to texture with ` +
+  `record the revoke outcome; (c) choir.ReportPacket back to texture with ` +
   `{"kind":"execution_result","summary":"SMG legs complete: unbound=<refusal ` +
   `text>; cancel=<revoke outcome>","work_disposition":"completed"}, "". ` +
-  `The document is disposable. Do not edit the document body.`;
+  `Do not edit the document body.`;
 
-const submit = await api('/api/prompt-bar', 'POST', { text: prompt, command_id: `smg-rlm-${MARKER}` });
-let TRAJ = submit.body?.trajectory_id;
-if (submit.status !== 200 && submit.status !== 202) {
-  recordLeg('prompt_bar_submit', { ok: false, status: submit.status, body: submit.body });
-  finish(1, 'prompt submit failed');
+// Deterministic owner-side mint (panel item C): mints a real texture
+// activation + issues an execution_request control to management:<owner>,
+// replacing the desk's open_persistent_super authoring as the leg trigger.
+const open = await api('/api/texture/management-open', 'POST', {
+  objective,
+  actions: [{ type: 'probe', objective: 'exercise report/cancel/report legs', safety: { mutation_class: 'green', network: 'forbidden', file_mutation: 'forbidden' } }],
+  command_id: `smg-rlm-open-${MARKER}`,
+});
+if (open.status !== 200 && open.status !== 202) {
+  recordLeg('management_open', { ok: false, status: open.status, body: open.body });
+  finish(1, 'management-open mint failed');
 }
-recordLeg('prompt_bar_submit', { ok: true, trajectory: TRAJ, doc: submit.body?.doc_id });
+const TRAJ = open.body?.trajectory_id;
+recordLeg('management_open', {
+  ok: true, trajectory: TRAJ, doc: open.body?.doc_id,
+  texture_run: open.body?.texture_run_id, work_item: open.body?.work_item_id,
+  control: open.body?.control_id, update: open.body?.update_id,
+});
+
+// Poll the management agent's own trajectory for run events. The minted
+// management run derives its trajectory from the bound control, so the same
+// trajectory id surfaces run opens / producer reports. Status-aware: a
+// non-2xx response aborts the leg with the HTTP status recorded, so a
+// routing/auth failure never reads as "no events" (panel finding D).
+async function trajEvents(trajID) {
+  const ev = await api(`/api/trajectories/${trajID}/events?limit=500`);
+  if (ev.status !== 200) {
+    return { ok: false, status: ev.status, body: ev.body, events: [] };
+  }
+  return { ok: true, status: 200, events: ev.body?.events || [] };
+}
 
 const deadline = t0 + TIMEOUT_MIN * 60 * 1000;
 let boundReport = null, cancelSeen = null, unboundRefusal = null, mgmtOpen = null;
 const seen = new Set();
 
 while (Date.now() < deadline) {
-  if (TRAJ) {
-    const ev = await api(`/api/trajectories/${TRAJ}/events?limit=500`);
-    for (const e of ev.body?.events || []) {
-      const key = `${e.kind}:${e.update_id || ''}:${e.event_id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const uid = String(e.update_id || '');
-      const blob = JSON.stringify(e);
-      // Persistent-management activation opened.
-      if (!mgmtOpen && (uid.includes('persistent') || blob.includes('open_persistent_super') || blob.includes('management'))) {
-        mgmtOpen = e;
-        recordLeg('persistent_management_signal', { update_id: uid, kind: e.kind });
-      }
-      // Cancellation leg: assignment opened then revoked.
-      if (!cancelSeen && (blob.includes('assignment_revoked') || blob.includes('cancel_assignment') || blob.includes('CancelAssignment') || blob.includes('revoked'))) {
-        cancelSeen = e;
-        recordLeg('assignment_cancel_verb', { update_id: uid, kind: e.kind });
-      }
-      // Unbound refusal surfaced (management reported the refused error).
-      if (!unboundRefusal && (blob.includes('unbound') || blob.includes('bound delivered control') || blob.includes('missing the ask') || blob.includes('requires'))) {
-        unboundRefusal = e;
-        recordLeg('unbound_refusal_evidence', { update_id: uid });
-      }
-      // Bound report: a producer report on the lifecycle control.
-      if (e.direction === 'producer_report' || uid.includes(':report:') || blob.includes('work_disposition')) {
-        boundReport = { ...e };
-        recordLeg('bound_producer_report', { update_id: uid, kind: e.kind, direction: e.direction });
-      }
-    }
-    const traj = await api(`/api/trajectories/${TRAJ}`);
-    const status = traj.body?.status || traj.body?.trajectory?.status;
-    if (boundReport && status && ['settled', 'completed', 'resolved', 'closed'].includes(String(status))) break;
+  const ev = await trajEvents(TRAJ);
+  if (!ev.ok) {
+    recordLeg('trajectory_events_poll', { ok: false, status: ev.status, body: ev.body });
+    finish(1, `trajectory events fetch failed status=${ev.status}`);
   }
+  for (const e of ev.events) {
+    const key = `${e.kind}:${e.update_id || ''}:${e.event_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const uid = String(e.update_id || '');
+    const blob = JSON.stringify(e);
+    // Persistent-management activation opened: a control_queued/delivered
+    // event for the management agent, or an update whose id carries the
+    // initial_dispatch convention (run:<id>:initial_dispatch).
+    if (!mgmtOpen && (e.kind === 'control_queued' || e.kind === 'control_delivered' || uid.includes(':initial_dispatch'))) {
+      mgmtOpen = e;
+      recordLeg('persistent_management_signal', { update_id: uid, kind: e.kind });
+    }
+    // Cancellation leg: assignment opened then revoked.
+    if (!cancelSeen && (blob.includes('assignment_revoked') || blob.includes('cancel_assignment') || blob.includes('CancelAssignment') || blob.includes('revoked'))) {
+      cancelSeen = e;
+      recordLeg('assignment_cancel_verb', { update_id: uid, kind: e.kind });
+    }
+    // Unbound refusal surfaced (management reported the refused error).
+    if (!unboundRefusal && (blob.includes('unbound') || blob.includes('bound delivered control') || blob.includes('missing the ask') || blob.includes('requires'))) {
+      unboundRefusal = e;
+      recordLeg('unbound_refusal_evidence', { update_id: uid });
+    }
+    // Bound report: an update_queued event whose update_id mints via the
+    // persistent-Management report convention (result:<sha256>) targeting
+    // the control's work item — a typed predicate, not substring over-match.
+    if (e.kind === 'update_queued' && uid.startsWith('result:') && e.work_item_id && e.work_item_id === open.body?.work_item_id) {
+      boundReport = { ...e };
+      recordLeg('bound_producer_report', { update_id: uid, kind: e.kind, work_item_id: e.work_item_id });
+    }
+  }
+  const traj = await api(`/api/trajectories/${TRAJ}`);
+  if (traj.status !== 200) {
+    recordLeg('trajectory_poll', { ok: false, status: traj.status, body: traj.body });
+    finish(1, `trajectory fetch failed status=${traj.status}`);
+  }
+  const status = traj.body?.status || traj.body?.trajectory?.status;
+  if (boundReport && status && ['settled', 'completed', 'resolved', 'closed'].includes(String(status))) break;
   await new Promise((r) => setTimeout(r, 8000));
 }
 
