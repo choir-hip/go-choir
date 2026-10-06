@@ -165,8 +165,7 @@ func (h *Handler) issueManagementOpenControl(ctx context.Context, ownerID string
 	targetAgentID := agentprofile.Management + ":" + ownerID
 	// Ensure the persistent-management agent record exists (the desk schema
 	// registers it on owner computers; a fresh disposable or first-open path
-	// has no prior registration). Idempotent: UpsertAgent over existing is a
-	// no-op update.
+	// has no prior registration). UpsertAgent is idempotent over existing.
 	if _, err := h.Core.EnsurePersistentManagementAgent(ctx, ownerID); err != nil {
 		return fmt.Errorf("ensure persistent management agent: %w", err)
 	}
