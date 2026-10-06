@@ -987,6 +987,12 @@ jobs:
               local computer_url="$1"
               local vm_id="$2"
               local expected_commit="$3"
+              # A pointer-following guest (no retained app-layer release, or its
+              # release advanced with this deploy) serves the deployed commit
+              # post-refresh — the deploy's own intent. A layered guest keeps
+              # serving its retained release commit. Both are valid
+              # post-refresh identities; anything else stays fail-closed.
+              local alt_commit="${4:-}"
               local commit=""
               # The persistent public-platform guest can spend more than one minute
               # reopening its store after a refresh. Keep the identity check fail-closed,
@@ -996,13 +1002,13 @@ jobs:
                 # three seconds. Give one health probe enough time to cross that
                 # contention window while keeping exact identity fail-closed.
                 commit=$(curl -fsS --max-time 5 "${computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
-                if [ "$commit" = "$expected_commit" ]; then
+                if [ "$commit" = "$expected_commit" ] || { [ -n "$alt_commit" ] && [ "$commit" = "$alt_commit" ]; }; then
                   echo "    Verified ${vm_id} serves autoputer commit ${commit}"
                   return 0
                 fi
                 sleep 1
               done
-              echo "Timed out waiting for ${vm_id} to serve autoputer runtime ${expected_commit}; observed ${commit:-missing}" >&2
+              echo "Timed out waiting for ${vm_id} to serve autoputer runtime ${expected_commit}${alt_commit:+ or ${alt_commit}}; observed ${commit:-missing}" >&2
               return 1
             }
             dump_deploy_service_diagnostics() {
@@ -1422,7 +1428,7 @@ jobs:
                       refresh_computer_url="$refreshed_computer_url"
                     fi
                     echo "    Refreshed ${refresh_vm_id}"
-                    wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit"
+                    wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit" "$autoputer_runtime_commit"
                   ) &
                   refresh_pids+=("$!")
                   if [ "${#refresh_pids[@]}" -ge "$max_parallel_refresh" ]; then
