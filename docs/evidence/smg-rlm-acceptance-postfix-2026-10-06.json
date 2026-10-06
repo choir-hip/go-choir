@@ -1,0 +1,28 @@
+{
+  "probe": "smg_rlm_acceptance",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "marker": "smg-rlm-fixed-1791310893",
+  "started_at": "2026-10-06T18:21:33.999Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": "2026-10-06T18:21:58.543Z",
+      "wall_ms": 24544,
+      "ok": true,
+      "trajectory": "51117a91-5060-5023-be51-3340848fcbd1",
+      "doc": "8d7cbe2a-26b0-5610-b2c0-c5251889d60f"
+    },
+    {
+      "name": "final",
+      "ended_at": "2026-10-06T18:56:35.029Z",
+      "wall_ms": 2101030,
+      "bound_report": false,
+      "cancel_verb": false,
+      "unbound_refusal": false,
+      "mgmt_signal": false
+    }
+  ],
+  "ok": false,
+  "failure": "no bound producer report observed",
+  "ended_at": "2026-10-06T18:56:35.032Z"
+}

@@ -99,3 +99,24 @@ release branch to the prior `return false`; the run then strands again
 - Artifact-verified success: probe legs 1–3 on a fresh disposable must
   show `bound_report=true`, `cancel_verb=true`, `unbound_refusal=true`
   after the fix deploys.
+
+## Deploy-freshness residual (2026-10-06)
+
+The fix is committed at `01199fb1` and unit-tested, but **the deployed
+staging runtime does not carry it**: guest app layers pin the runtime
+closure at mint time and do not advance on `main` pushes. Verified by
+scanning every `/nix/store/*-go-choir-run-autoputer-runtime` on Node B —
+none contains the fix's log string. A fresh disposable
+(`computer-ee6cb12dd67e613314a6ae070943137a`, minted post-deploy at 19:01Z)
+still boots `im5qd1rfi4sjmjbs7man6ayyp32d06y2-go-choir-run-autoputer-runtime`
+(pre-fix). Landing-loop "staging commit identity" does not cover guest
+runtime freshness; this is a known gap the SA/S2 layering stations own.
+
+Consequence on `computer-03335285` (owner computer, where the probe ran
+after `462d30ea` passivated on restart): a second mint `52c3650d` minted
+at 18:37Z also stranded `pending` — same defect, old binary. Every
+subsequent live occurrence still defers on `slot occupied`. The fix's
+effect will be observable only when a computer receives a runtime
+containing `01199fb1` — via the app-layer update path (S2/S4 stations)
+or a future disposable whose VM closure is rebuilt after a flake pin
+bump.
