@@ -1,21 +1,28 @@
 {
   "probe": "smg_rlm_acceptance",
-  "computer": "computer-477de82f227acfbd59bff2e4e2c0b34d",
-  "marker": "smg-rlm-1791268852599",
-  "started_at": "2026-10-06T06:40:52.599Z",
+  "computer": "computer-423134e8ff605137ebc0767ec810ad2e",
+  "marker": "smg-dispo-v2-1791290026",
+  "started_at": "2026-10-06T12:33:46.840Z",
   "legs": [
     {
       "name": "prompt_bar_submit",
-      "ended_at": "2026-10-06T06:40:53.067Z",
-      "wall_ms": 468,
-      "ok": false,
-      "status": 500,
-      "body": {
-        "error": "failed to submit prompt"
-      }
+      "ended_at": "2026-10-06T12:33:47.770Z",
+      "wall_ms": 930,
+      "ok": true,
+      "trajectory": "b3447097-4891-5d70-ad96-35791ec257f3",
+      "doc": "d37849d1-acbc-522b-b9c3-f0f6dba181fb"
+    },
+    {
+      "name": "final",
+      "ended_at": "2026-10-06T13:03:51.983Z",
+      "wall_ms": 1805143,
+      "bound_report": false,
+      "cancel_verb": false,
+      "unbound_refusal": false,
+      "mgmt_signal": false
     }
   ],
   "ok": false,
-  "failure": "prompt submit failed",
-  "ended_at": "2026-10-06T06:40:53.067Z"
+  "failure": "no bound producer report observed",
+  "ended_at": "2026-10-06T13:03:51.983Z"
 }
