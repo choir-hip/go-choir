@@ -587,6 +587,22 @@ func TestRuntimeInjectionAppendFailurePassivatesExactResearchRun(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// persistentMgmtReportForTest calls the SMG verb carrier directly — the
+// report_to_texture tool is deleted; cells reach this through
+// choir.ReportPacket. The raw JSON decodes into the packet the reducer
+// would have decoded.
+func persistentMgmtReportForTest(rt *Runtime, ctx context.Context, parent *types.RunRecord, raw json.RawMessage) (types.LifecycleResult, error) {
+	var pkt types.CoagentSourcePacketPayload
+	if err := json.Unmarshal(raw, &pkt); err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if pkt.SchemaVersion == "" {
+		pkt.SchemaVersion = types.CoagentSourcePacketSchemaV1
+	}
+	return rt.persistentManagementBoundReport(ctx, *parent, pkt, pkt.WorkDisposition)
+}
+
 func TestPersistentManagementReportToTextureCanonicalReplayWakeAndInjection(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
@@ -616,23 +632,29 @@ func TestPersistentManagementReportToTextureCanonicalReplayWakeAndInjection(t *t
 	dispatches = nil
 	raw := json.RawMessage(`{"kind":"execution_result","summary":"inspected assignment progress","claims":[],"sources":[],"actions":[],"questions":[],"notes":["evidence:progress"],"work_disposition":"open"}`)
 	ctx := toolContextForTestCall(parent, "provider-call-report-texture")
-	first, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", raw)
-	if err != nil || !strings.Contains(first, `"replay":false`) {
-		t.Fatalf("first report = %s err=%v", first, err)
+	first, err := persistentMgmtReportForTest(rt, ctx, parent, raw)
+	if err != nil || first.Replay {
+		t.Fatalf("first report = %+v err=%v", first, err)
 	}
 	if len(dispatches) != 1 || !strings.HasPrefix(dispatches[0], "coagent_result:sha256:") {
 		t.Fatalf("post-commit wakes = %+v", dispatches)
 	}
-	second, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", raw)
-	if err != nil || !strings.Contains(second, `"replay":true`) || len(dispatches) != 1 {
-		t.Fatalf("report replay = %s err=%v wakes=%+v", second, err, dispatches)
+	second, err := persistentMgmtReportForTest(rt, ctx, parent, raw)
+	if err != nil || !second.Replay || len(dispatches) != 1 {
+		t.Fatalf("report replay = %+v err=%v wakes=%+v", second, err, dispatches)
 	}
+	// SMG: unknown top-level fields are rejected at the cell boundary
+	// (DisallowUnknownFields in the reducer's packet decode); the forged
+	// nested authority key is rejected inside the carrier.
 	unknown := json.RawMessage(`{"kind":"execution_result","summary":"bad","claims":[],"sources":[],"actions":[],"questions":[],"notes":["x"],"work_disposition":"open","target_agent_id":"texture:forged"}`)
-	if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolContextForTestCall(parent, "provider-call-report-unknown"), "report_to_texture", unknown); err == nil || !strings.Contains(err.Error(), "unknown field") {
+	var unknownPkt types.CoagentSourcePacketPayload
+	dec := json.NewDecoder(strings.NewReader(string(unknown)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&unknownPkt); err == nil || !strings.Contains(err.Error(), "unknown field") {
 		t.Fatalf("unknown authority field = %v", err)
 	}
 	forged := json.RawMessage(`{"kind":"proposal","summary":"bad authority","claims":[],"sources":[],"actions":[{"type":"inspect_file","objective":"inspect","inputs":{"nested":{"workItemID":"forged"}}}],"questions":[],"notes":[],"work_disposition":"open"}`)
-	if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolContextForTestCall(parent, "provider-call-report-forged"), "report_to_texture", forged); err == nil || !strings.Contains(err.Error(), "cannot author lifecycle authority") {
+	if _, err := persistentMgmtReportForTest(rt, toolContextForTestCall(parent, "provider-call-report-forged"), parent, forged); err == nil || !strings.Contains(err.Error(), "cannot author lifecycle authority") {
 		t.Fatalf("nested authority input = %v", err)
 	}
 	updates, err := s.ListPendingLifecycleUpdates(context.Background(), ownerID, "autoputer-test", fixture.control.AgentID, 10)
@@ -716,12 +738,12 @@ func TestPersistentManagementReportRequiresCompleteAuthenticated101DeliveryAndDi
 	}
 	appendAuthenticatedInjectionForTest(t, s, *parent, partialMessages[0])
 	raw := json.RawMessage(`{"kind":"execution_result","summary":"complete 101 directions","claims":[],"sources":[],"actions":[],"questions":[],"notes":["complete"],"work_disposition":"open"}`)
-	partialResult, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolContextForTestCall(parent, "report-partial-101"), "report_to_texture", raw)
+	partialResult, err := persistentMgmtReportForTest(rt, toolContextForTestCall(parent, "report-partial-101"), parent, raw)
 	if err != nil {
 		t.Fatalf("partial durable delivery report: %v", err)
 	}
-	if !strings.Contains(partialResult, `"control_binding_id":"super-bulk-control-100"`) {
-		t.Fatalf("partial report did not select latest authenticated control: %s", partialResult)
+	if partialResult.Update == nil || partialResult.Update.ControlBindingID != "super-bulk-control-100" {
+		t.Fatalf("partial report did not select latest authenticated control: %+v", partialResult.Update)
 	}
 	afterPartial, err := rt.listAllLifecyclePacketsDeliveredToRun(context.Background(), parent)
 	if err != nil || len(afterPartial) != 101 {
@@ -741,12 +763,12 @@ func TestPersistentManagementReportRequiresCompleteAuthenticated101DeliveryAndDi
 		t.Fatalf("remaining occurrence 101=%s err=%v", remaining, err)
 	}
 	appendAuthenticatedInjectionForTest(t, s, *parent, remaining[0])
-	completeResult, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(toolContextForTestCall(parent, "report-complete-101"), "report_to_texture", raw)
+	completeResult, err := persistentMgmtReportForTest(rt, toolContextForTestCall(parent, "report-complete-101"), parent, raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(completeResult, `"control_binding_id":"super-bulk-control-101"`) {
-		t.Fatalf("complete report did not select occurrence 101 after prior dispositions: %s", completeResult)
+	if completeResult.Update == nil || completeResult.Update.ControlBindingID != "super-bulk-control-101" {
+		t.Fatalf("complete report did not select occurrence 101 after prior dispositions: %+v", completeResult.Update)
 	}
 	all, err := rt.listAllLifecyclePacketsDeliveredToRun(context.Background(), parent)
 	if err != nil || len(all) != 101 {
@@ -818,16 +840,12 @@ func TestPersistentManagementReportAfterCancellationIsHistoricalLateEvidenceOnly
 			dispatches = nil
 			raw := json.RawMessage(`{"kind":"execution_result","summary":"real delayed result after cancellation","claims":[],"sources":[],"actions":[],"questions":[],"notes":["historical evidence only"],"work_disposition":"completed"}`)
 			ctx := toolContextForTestCall(parent, "provider-call-late-"+string(oldRunState))
-			first, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", raw)
+			first, err := persistentMgmtReportForTest(rt, ctx, parent, raw)
 			if err != nil {
-				t.Fatalf("late report = %s err=%v", first, err)
+				t.Fatalf("late report = %+v err=%v", first, err)
 			}
-			var response struct {
-				Replay bool                       `json:"replay"`
-				Update *types.CoagentSourcePacket `json:"update"`
-			}
-			if err := json.Unmarshal([]byte(first), &response); err != nil || response.Replay || response.Update == nil || response.Update.Disposition != types.UpdateLate {
-				t.Fatalf("late response=%s decoded=%+v err=%v", first, response, err)
+			if first.Replay || first.Update == nil || first.Update.Disposition != types.UpdateLate {
+				t.Fatalf("late response=%+v err=%v", first, err)
 			}
 			if len(dispatches) != 0 {
 				t.Fatalf("late evidence woke an actor: %v", dispatches)
@@ -846,16 +864,16 @@ func TestPersistentManagementReportAfterCancellationIsHistoricalLateEvidenceOnly
 				}
 			}
 			stored, err := s.GetLifecycleUpdate(context.Background(), ownerID, "autoputer-test", fixture.trajectoryID,
-				fixture.control.AgentID, parent.AgentID, response.Update.ProducerUpdateID)
+				fixture.control.AgentID, parent.AgentID, first.Update.ProducerUpdateID)
 			if err != nil || stored.Disposition != types.UpdateLate || stored.DeliveredAt != nil || stored.DeliveredToRunID != "" {
 				t.Fatalf("stored late evidence=%+v err=%v", stored, err)
 			}
-			replay, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", raw)
-			if err != nil || !strings.Contains(replay, `"replay":true`) || len(dispatches) != 0 {
-				t.Fatalf("late replay=%s err=%v wakes=%v", replay, err, dispatches)
+			replay, err := persistentMgmtReportForTest(rt, ctx, parent, raw)
+			if err != nil || !replay.Replay || len(dispatches) != 0 {
+				t.Fatalf("late replay=%+v err=%v wakes=%v", replay, err, dispatches)
 			}
 			conflict := json.RawMessage(`{"kind":"execution_result","summary":"changed delayed result","claims":[],"sources":[],"actions":[],"questions":[],"notes":["historical evidence only"],"work_disposition":"completed"}`)
-			if _, err := rt.ToolRegistryForProfile(agentprofile.Management).Execute(ctx, "report_to_texture", conflict); err == nil || !strings.Contains(err.Error(), "conflict") {
+			if _, err := persistentMgmtReportForTest(rt, ctx, parent, conflict); err == nil || !strings.Contains(err.Error(), "conflict") {
 				t.Fatalf("changed late replay did not conflict: %v", err)
 			}
 		})
@@ -1027,7 +1045,6 @@ func TestAtomicResearchOpenColdWakeHydratesExactLifecycleWorkAndReplaysOneRun(t 
 		t.Fatalf("restart delivery=%+v err=%v", deliveredAfterBoot, err)
 	}
 }
-
 
 func TestLifecycleRunTerminalizeReleasesStrandedControlAndRewakesDesk(t *testing.T) {
 	rt, s := testRuntime(t)

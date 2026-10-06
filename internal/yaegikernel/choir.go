@@ -175,7 +175,7 @@ var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
 	// the filesystem (mutation is capsule-bound under engineering).
 	"management": {"Message", "Emit", "Cast", "Ask", "Note", "Reply",
-		"CancelAct", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
+		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Engineering mutates inside its capsule and reports fate.
 	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
@@ -237,6 +237,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Note":                 func() reflect.Value { return reflect.ValueOf(s.Note) },
 		"Reply":                func() reflect.Value { return reflect.ValueOf(s.Reply) },
 		"CancelAct":            func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
+		"CancelAssignment":     func() reflect.Value { return reflect.ValueOf(s.CancelAssignment) },
 		"Escalate":             func() reflect.Value { return reflect.ValueOf(s.Escalate) },
 		"Precommit":            func() reflect.Value { return reflect.ValueOf(s.Precommit) },
 		"Report":               func() reflect.Value { return reflect.ValueOf(s.Report) },
@@ -726,6 +727,19 @@ func (s *ChoirScope) CancelAct(targetRef string) (string, error) {
 		return "", err
 	}
 	return t.Cancel(targetRef)
+}
+
+// CancelAssignment revokes an engineering assignment capsule with executor
+// acknowledgement (SMG — the verb carrier for the deleted
+// cancel_co_super_assignment typed tool). Management desk only; the staged
+// intent reduces through rt.cancelAssignedEngineering under the exact
+// persistent-management gate.
+func (s *ChoirScope) CancelAssignment(assignmentID, reason string) (string, error) {
+	t, err := s.boundTray("cancel_assignment")
+	if err != nil {
+		return "", err
+	}
+	return t.CancelAssignment(assignmentID, reason)
 }
 
 // Escalate surfaces an issue to management or the owner.

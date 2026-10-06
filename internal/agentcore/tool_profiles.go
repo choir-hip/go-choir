@@ -248,11 +248,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}
 	}
 	if profile == agentprofile.Management {
-		if deskCarrierLive(agentprofile.Management) {
-			b.WriteString(runtimeprompts.RLMManagementOverlay())
-		} else {
-			b.WriteString(runtimeprompts.ManagementRuntimeOverlay())
-		}
+		b.WriteString(runtimeprompts.RLMManagementOverlay())
 	}
 	if profile == agentprofile.Engineering {
 		hasSelfDevelopmentOperation := false
@@ -361,27 +357,25 @@ func deskCarrierLive(profile string) bool {
 }
 
 // buildDeskCellRegistry is the host-cell sealed overlay for a non-capsule desk
-// (R3b): desk_go_eval is the cell doorway. For management (R3c) it
-// additionally carries the typed producer-report and cancellation control
-// tools — report_to_texture and cancel_co_super_assignment are the lifecycle
-// control surface, orthogonal to the cell-eval seal. For texture (R3d) the
-// registry stays sealed at desk_go_eval: authoring is the staged
-// choir.ApplyTexture cell intent committed through ApplyTextureTurn, not a
-// registered tool. Texture/research get desk_go_eval only.
+// (R3b): desk_go_eval is the sole tool on every desk registry. Management's
+// lifecycle control surface is in-cell too: bound producer reports ride
+// choir.ReportPacket -> persistentManagementBoundReport; assignment
+// cancellation rides choir.CancelAssignment. For texture (R3d) authoring is
+// the staged choir.ApplyTexture cell intent committed through
+// ApplyTextureTurn, not a registered tool.
 func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchtools.Dependencies) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	if err := registry.Register(newDeskGoEvalTool(rt, rt.deskSessionWorkers(), deskRole)); err != nil {
 		return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
 	}
 	if deskRole == agentprofile.Management {
-		if err := RegisterPersistentManagementReportTools(registry, rt); err != nil {
-			return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
-		}
-		if rt.capsuleExecutor != nil {
-			if err := RegisterAssignedEngineeringTools(registry, rt); err != nil {
-				return nil, fmt.Errorf("build desk cell registry for %s: %w", deskRole, err)
-			}
-		}
+		// SMG (2026-10-06, owner directive): management is a full RLM —
+		// exactly one tool, desk_go_eval. report_to_texture and
+		// cancel_co_super_assignment are deleted, not dual-listed: bound
+		// lifecycle reports ride choir.ReportPacket (packet work_disposition)
+		// through persistentManagementBoundReport; assignment cancellation
+		// rides choir.CancelAssignment. The validations moved host-side onto
+		// those verb paths.
 	}
 	if deskRole == agentprofile.Research {
 		// SR (2026-10-05, owner-ratified): the research desk is a full RLM —
@@ -459,9 +453,9 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	if err := RegisterPersistentManagementReportTools(managementRegistry, rt); err != nil {
-		return err
-	}
+	// SMG: no typed registration on the management registry — the desk-cell
+	// registry (desk_go_eval only) shadows it; the base registry stays the
+	// fallback for non-carrier paths.
 	// The D2 cap boundary charges every cell-carrier research request against
 	// the same activation-scoped egress ledger.
 	if rt.researchEgress == nil {

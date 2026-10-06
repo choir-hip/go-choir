@@ -200,7 +200,7 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		if in.TargetRef == "" {
 			return fmt.Errorf("reduce: reply %s missing the ask's target ref", in.LocalID)
 		}
-	case yaegikernel.IntentCancel:
+	case yaegikernel.IntentCancel, yaegikernel.IntentCancelAssignment:
 		if in.TargetRef == "" {
 			return fmt.Errorf("reduce: %s %s missing the act ref it closes", in.Kind, in.LocalID)
 		}
@@ -223,8 +223,8 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		if err := needTo(); err != nil {
 			return err
 		}
-		if in.Claim == "" {
-			return fmt.Errorf("reduce: report %s missing the claim", in.LocalID)
+		if in.Claim == "" && strings.TrimSpace(in.Packet) == "" {
+			return fmt.Errorf("reduce: report %s missing the claim or packet body", in.LocalID)
 		}
 	default:
 		return fmt.Errorf("reduce: unknown intent kind %q", in.Kind)
@@ -902,6 +902,27 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// replay idempotency: a re-reduced cell re-derives the same id and the
 	// not-exists condition re-mints nothing.
 	rec := commitmentRecordForIntent(r.scope, in)
+	// SMG: cancel_assignment is the verb carrier for the deleted
+	// cancel_co_super_assignment tool — the commitment record mints, then the
+	// durable revoke runs under the exact persistent-Management gate.
+	if in.Kind == yaegikernel.IntentCancelAssignment {
+		if r.rec == nil {
+			return 0, fmt.Errorf("reduce: cancel_assignment has no caller run record")
+		}
+		result, assignment, err := r.rt().cancelAssignedEngineeringForRun(ctx, *r.rec, in.TargetRef, in.Body)
+		if err != nil {
+			return 0, fmt.Errorf("reduce: cancel_assignment %s: %w", in.LocalID, err)
+		}
+		if r.ledger != nil {
+			rec.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveRetract, TargetRef: in.TargetRef}
+			rec.Kind = types.CommitmentKindDirective
+			if _, err := r.ledger.AppendCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, rec); err != nil {
+				return 0, err
+			}
+		}
+		_ = assignment
+		return uint64(result.Receipt.ReducerSeq), nil
+	}
 	// Record-native cutover (S0m RN3): every staged semantic act from a
 	// lifecycle-bound caller mints record (+ packet when addressed)
 	// atomically via CommitLifecycleAct — the record IS the delivery act;
@@ -1030,7 +1051,7 @@ func isSemanticActKind(kind string) bool {
 	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentNote,
 		yaegikernel.IntentReply, yaegikernel.IntentCancel, yaegikernel.IntentEscalate,
 		yaegikernel.IntentPrecommit, yaegikernel.IntentReport, yaegikernel.IntentResolve,
-		yaegikernel.IntentDisagreement:
+		yaegikernel.IntentDisagreement, yaegikernel.IntentCancelAssignment:
 		return true
 	}
 	return false
@@ -1915,6 +1936,39 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	execution.ToolCallID = intentIdempotencyKey(r.scope, in.LocalID, in.ToDesk, in.Body)
 	toolCallCtx := toolregistry.WithExecutionContext(ctx, execution)
+	// SMG: a persistent-Management run (trajectory-less super) reports through
+	// the deleted report_to_texture's exact validation — bound delivered
+	// control, authenticated delivery, single bound work item — via
+	// QueueLifecycleUpdate. The packet's work_disposition settles the work.
+	if r.rec != nil && r.rec.AgentID == persistentManagementAgentID(r.scope.OwnerID) && strings.TrimSpace(r.rec.TrajectoryID) == "" {
+		var pkt types.CoagentSourcePacketPayload
+		if raw := strings.TrimSpace(in.Packet); raw != "" {
+			dec := json.NewDecoder(strings.NewReader(raw))
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&pkt); err != nil {
+				return 0, fmt.Errorf("reduce: report %s body is not a coagent source packet: %w", in.LocalID, err)
+			}
+			if pkt.SchemaVersion == "" {
+				pkt.SchemaVersion = types.CoagentSourcePacketSchemaV1
+			}
+		} else {
+			claim := strings.TrimSpace(in.Claim)
+			pkt = types.CoagentSourcePacketPayload{
+				SchemaVersion: types.CoagentSourcePacketSchemaV1,
+				Kind:          "evidence_update",
+				Summary:       claim,
+				Claims:        []types.CoagentPacketClaim{{Text: claim}},
+			}
+		}
+		queued, err := rt.persistentManagementBoundReport(toolCallCtx, *r.rec, pkt, pkt.WorkDisposition)
+		if err != nil {
+			return 0, err
+		}
+		if queued.Receipt.ReducerSeq > 0 {
+			return uint64(queued.Receipt.ReducerSeq), nil
+		}
+		return 0, nil
+	}
 	// Cells address reports by desk name (choir.Report/ReportPacket toDesk),
 	// not agent id — resolve the name to the durable target the authority
 	// contract demands: the persistent Management desk, or the current

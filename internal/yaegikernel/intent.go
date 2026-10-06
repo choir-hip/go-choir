@@ -47,7 +47,11 @@ const (
 	// IntentCancel retracts a commitment; IntentEscalate surfaces an issue to
 	// management or the owner. Both are operational, unscored.
 	IntentCancel   = "cancel"
-	IntentEscalate = "escalate"
+	// IntentCancelAssignment revokes one engineering assignment capsule with
+	// executor acknowledgement (SMG): the verb carrier for the deleted
+	// cancel_co_super_assignment typed tool. Management desk only.
+	IntentCancelAssignment = "cancel_assignment"
+	IntentEscalate  = "escalate"
 	// IntentPrecommit freezes a machine-scoreable prediction on the
 	// commitment ledger.
 	IntentPrecommit = "precommit"
@@ -305,6 +309,16 @@ func (t *Tray) Cancel(targetRef string) (string, error) {
 		return "", fmt.Errorf("tray: cancel requires the commitment ref")
 	}
 	return t.stage(StagedIntent{Kind: IntentCancel, TargetRef: targetRef})
+}
+
+// CancelAssignment revokes an engineering assignment capsule with executor
+// acknowledgement (SMG — the verb carrier for the deleted
+// cancel_co_super_assignment tool). Management desk only.
+func (t *Tray) CancelAssignment(assignmentID, reason string) (string, error) {
+	if strings.TrimSpace(assignmentID) == "" {
+		return "", fmt.Errorf("tray: cancel_assignment requires the assignment id")
+	}
+	return t.stage(StagedIntent{Kind: IntentCancelAssignment, TargetRef: strings.TrimSpace(assignmentID), Body: reason})
 }
 
 // Escalate surfaces an issue to management or the owner.

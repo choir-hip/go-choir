@@ -128,38 +128,47 @@ boundaries:
     - assignment capsule lifecycle
 
 now:
-  status: candidate
+  status: working
   slice: >-
-    Station authored from owner directive 2026-10-06. Dependency decision:
-    separate station (not folded into SR) — SR is at its terminal gate;
-    two substrates (research egress surface vs management lifecycle
-    surface) should not share a receipt. Ordered immediately after SR
-    closes and before SM/SC authoring: SM evals and SC desk capability
-    assume the sealed-cell carrier on all desks.
+    Slices 1–4 landed locally 2026-10-06: report_to_texture and
+    cancel_co_super_assignment deleted from the management registry —
+    {desk_go_eval} only; report packets ride choir.ReportPacket ->
+    commitLifecycleReportActIntent -> persistentManagementBoundReport
+    (DisallowUnknownFields at the cell boundary, schema_version defaulted);
+    cancellation rides choir.CancelAssignment -> IntentCancelAssignment ->
+    cancelAssignedEngineeringForRun; reducer isSemanticActKind covers both
+    kinds; management prompts (rlm overlay + promptstore default) teach the
+    in-cell surface only; legacy management_runtime overlay deleted (dead
+    path behind deskCarrierLive); TestPromptTaughtVerbsMatchExports
+    extended to management + core.yaml and caught the overlay's stale
+    choir.Assign teaching — fixed to Cast-only.
   candidate: >-
-    Slices: (1) add management choir verbs covering bound lifecycle report
-    + assignment cancellation (host-side validation preserved);
-    (2) audit + rewrite management/engineering prompts RLM-only;
-    (3) delete report_to_texture + cancel_co_super_assignment and their
-    registrations; (4) extend TestPromptTaughtVerbsMatchExports to all
-    desks; (5) deployed acceptance per finish.acceptance.
+    Slices: (1) verb carriers landed; (2) prompts rewritten; (3) typed
+    tools deleted; (4) parity test extended. Remaining: (5) deployed
+    acceptance per finish.acceptance (bound-report leg, cancellation leg,
+    no-binding refusal leg, schema exactly {desk_go_eval}).
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability
       maps to an existing or cheaply-added choir.* verb, so the desk
       seals at {desk_go_eval} with no capability loss.
-    verdict: untested
+    verdict: >-
+      supported (local) — both tools delete with validations moved
+      host-side; unit coverage converted to carrier-level tests. Deployed
+      binding proof is the remaining leg.
   believed_state: >-
-    Observed baseline above is code-level truth at main@44a0e221; deployed
-    management schema unverified until a probe activation or the ungated
-    /api/prompts fetch (available at 4467a4fb+).
+    Local: agentcore + yaegikernel green, management registry exactly
+    {desk_go_eval}, prompts contain zero typed-tool names. Deployed
+    management schema unverified until the landing-loop probe activation
+    or /api/prompts fetch.
   blocker_or_risk: >-
-    report_to_texture's binding validation is safety-critical (lifecycle
-    authority); the verb migration must keep it byte-for-byte, and the
-    no-binding refusal acceptance leg is the load-bearing negative proof.
+    report_to_texture's binding validation moved to
+    persistentManagementBoundReport unchanged; the no-binding refusal leg
+    on staging is the load-bearing negative proof.
   next_action: >-
-    Land SR closure (panel r7 in flight), then open this station's first
-    slice: verb-level carriers for bound report + cancellation.
+    Commit + push the cutover, run the landing loop (CI -> Node B deploy
+    -> deployed identity), then the four deployed acceptance legs per
+    finish.acceptance.
 
 receipts: []
 ---

@@ -31,12 +31,12 @@ func TestManagementCellRegistryIsSealed(t *testing.T) {
 	if _, ok := reg.Lookup("desk_go_eval"); !ok {
 		t.Fatal("sealed management registry must expose desk_go_eval")
 	}
-	// R3c keeps the typed lifecycle control surface on the cell registry:
-	// report_to_texture (producer report) and cancel_co_super_assignment are
-	// the durable control path — orthogonal to the cell-eval seal.
-	for _, kept := range []string{"report_to_texture", "cancel_co_super_assignment"} {
-		if _, ok := reg.Lookup(kept); !ok {
-			t.Fatalf("management cell registry must keep lifecycle control %q", kept)
+	// SMG: the typed lifecycle control surface is deleted from the registry —
+	// report_to_texture -> choir.ReportPacket -> persistentManagementBoundReport;
+	// cancel_co_super_assignment -> choir.CancelAssignment. desk_go_eval only.
+	for _, gone := range []string{"report_to_texture", "cancel_co_super_assignment"} {
+		if _, ok := reg.Lookup(gone); ok {
+			t.Fatalf("management cell registry still exposes deleted tool %q", gone)
 		}
 	}
 	// The seal forbids the generic host tools a tool-loop desk would have:

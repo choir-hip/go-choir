@@ -24,12 +24,12 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 
 	expected := map[string][]string{
 		agentprofile.Conductor:   {"cancel_agent"},
-		agentprofile.Management:  {"desk_go_eval", "cancel_co_super_assignment", "report_to_texture"},
+		agentprofile.Management:  {"desk_go_eval"},
 		agentprofile.Engineering: {},
 		// Research is cell-only; it has no typed tool registry surface.
 		agentprofile.Research: {"desk_go_eval"},
-		agentprofile.Texture: {"desk_go_eval"},
-		agentprofile.Email: {},
+		agentprofile.Texture:  {"desk_go_eval"},
+		agentprofile.Email:    {},
 	}
 	for profile, want := range expected {
 		profile, want := profile, want
@@ -135,21 +135,19 @@ func registryToolNames(registry *toolregistry.ToolRegistry) []string {
 	return names
 }
 
-func TestAssignedEngineeringSchemaHasNoModelAuthoredRuntimeBindings(t *testing.T) {
-	registry := toolregistry.MustNewToolRegistry()
-	if err := RegisterAssignedEngineeringTools(registry, &Runtime{}); err != nil {
-		t.Fatal(err)
+func TestAssignedEngineeringCancellationIsAVerbNotATool(t *testing.T) {
+	// SMG: cancel_co_super_assignment's typed registration is deleted;
+	// cancellation reaches rt.cancelAssignedEngineering through the
+	// choir.CancelAssignment verb (management desk module set only).
+	rt := &Runtime{capsuleExecutor: new(capsule.Executor)}
+	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+		t.Fatalf("install tools: %v", err)
 	}
-	if _, ok := registry.Lookup("assign_co_super"); ok {
-		t.Fatal("assign_co_super remains registered; the document channel is the opener")
-	}
-	cancel, ok := registry.Lookup("cancel_co_super_assignment")
-	if !ok {
-		t.Fatal("cancel assignment missing")
-	}
-	cancelProperties, _ := cancel.Parameters["properties"].(map[string]any)
-	if _, present := cancelProperties["attempt"]; present {
-		t.Fatal("cancel schema retains model-authored attempt")
+	registry := rt.ToolRegistryForProfile(agentprofile.Management)
+	for _, name := range []string{"assign_co_super", "cancel_co_super_assignment", "report_to_texture", "spawn_capsule"} {
+		if _, ok := registry.Lookup(name); ok {
+			t.Fatalf("management desk exposes deleted typed tool %q", name)
+		}
 	}
 }
 
@@ -218,18 +216,17 @@ func TestAssignedEngineeringPromptNamesExactKindWithoutFutureToolLie(t *testing.
 	}
 }
 
-func TestPersistentManagementReportToolDoesNotDependOnCapsuleExecutor(t *testing.T) {
+func TestPersistentManagementReportIsAVerbNotATool(t *testing.T) {
+	// SMG: report_to_texture's typed registration is deleted; bound lifecycle
+	// reports ride choir.ReportPacket -> persistentManagementBoundReport.
 	rt := &Runtime{}
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	registry := rt.ToolRegistryForProfile(agentprofile.Management)
-	if _, ok := registry.Lookup("report_to_texture"); !ok {
-		t.Fatal("persistent Management lacks capsule-independent report_to_texture")
-	}
-	for _, name := range []string{"assign_co_super", "cancel_co_super_assignment", "spawn_capsule"} {
+	for _, name := range []string{"report_to_texture", "assign_co_super", "cancel_co_super_assignment", "spawn_capsule"} {
 		if _, ok := registry.Lookup(name); ok {
-			t.Fatalf("capsule-unavailable Management exposes %s", name)
+			t.Fatalf("capsule-unavailable Management exposes deleted tool %s", name)
 		}
 	}
 }

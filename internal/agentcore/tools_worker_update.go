@@ -1073,6 +1073,9 @@ func validateCoagentSourcePacketPayload(packet types.CoagentSourcePacketPayload)
 	if packet.Summary == "" {
 		return fmt.Errorf("update_coagent summary is required")
 	}
+	if d := packet.WorkDisposition; d != "" && d != types.WorkItemOpen && d != types.WorkItemCompleted {
+		return fmt.Errorf("update_coagent work_disposition %q must be open or completed", d)
+	}
 	if coagentPacketPayloadEmpty(packet) {
 		return fmt.Errorf("update_coagent requires at least one of claims, sources, actions, questions, or notes")
 	}

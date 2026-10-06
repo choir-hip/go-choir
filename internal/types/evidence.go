@@ -65,7 +65,11 @@ type CoagentSourcePacketPayload struct {
 	Sources       []CoagentPacketSource `json:"sources,omitempty"`
 	Actions       []CoagentPacketAction `json:"actions,omitempty"`
 	Questions     []string              `json:"questions,omitempty"`
-	Notes         []string              `json:"notes,omitempty"`
+	Notes           []string              `json:"notes,omitempty"`
+	// WorkDisposition settles the bound lifecycle work item (SMG 2026-10-06:
+	// moved from the deleted report_to_texture typed tool onto the packet so
+	// in-cell choir.ReportPacket can close work). open|completed|empty.
+	WorkDisposition WorkItemStatus `json:"work_disposition,omitempty"`
 }
 
 type CoagentPacketClaim struct {

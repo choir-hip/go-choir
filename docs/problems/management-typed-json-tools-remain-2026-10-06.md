@@ -58,3 +58,25 @@ makes it in-flight work regardless of station bookkeeping.
 - Deployed schema leg: GET /api/prompts/management shows
   `tools: [{desk_go_eval}]` on the live guest.
 - Bidirectional parity test covers management/engineering prompt↔exports.
+
+## Resolution (2026-10-06, local — deployed legs pending)
+
+- `buildDeskCellRegistry` registers exactly `desk_go_eval` for every desk,
+  management included; `RegisterPersistentManagementReportTools` /
+  `RegisterAssignedEngineeringTools` deleted.
+- Bound lifecycle reports ride `choir.ReportPacket` →
+  `commitLifecycleReportActIntent` → `persistentManagementBoundReport`
+  (validation preserved: bound delivered control, authenticated delivery,
+  work_disposition); `isSemanticActKind` extended to
+  `IntentCancelAssignment`; `choir.CancelAssignment` →
+  `cancelAssignedEngineeringForRun` (executor-acknowledged revocation).
+- Prompts: `rlm_management_runtime.yaml` rewritten cell-only,
+  `management.yaml` default patched, dead `management_runtime.yaml`
+  overlay + its branch in `systemPromptForRun` deleted; stale
+  `choir.Assign` teaching removed (management exports `Cast` only —
+  caught by the extended parity test).
+- `TestPromptTaughtVerbsMatchExports` now covers management +
+  `core.yaml` against every desk surface.
+- Remaining: the four deployed acceptance legs on the SMG station file
+  (bound report, cancellation, no-binding refusal, schema exactly
+  `{desk_go_eval}`).

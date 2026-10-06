@@ -1,11 +1,8 @@
 package agentcore
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -16,59 +13,55 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
-// RegisterAssignedEngineeringTools adds only the exact persistent-Management assignment
-// cancellation path. The assign_co_super opener is deleted: document-channel
-// casts open assignments directly. Generic lifecycle Management activation remains
-// refused in StartCoagentRun.
-func RegisterAssignedEngineeringTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
-	return registry.Register(newCancelAssignedEngineeringTool(rt))
-}
+// SMG (2026-10-06, owner directive): the typed JSON tools are deleted.
+// Persistent Management reports and assignment cancellation are in-cell
+// choir.* verbs committed through the record-native reducer; the binding
+// validations below moved host-side onto those verb paths. The registration
+// entry points are gone — buildDeskCellRegistry installs desk_go_eval only.
 
-func RegisterPersistentManagementReportTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
-	return registry.Register(newReportPersistentManagementToTextureTool(rt))
+// requirePersistentManagementExecution asserts the caller is the exact
+// non-lifecycle persistent Management run (SMG). Kept as the shared gate for
+// the verb carriers; the typed-tool registration is deleted.
+func requirePersistentManagementRunRecord(rec *types.RunRecord) error {
+	if rec == nil || rec.AgentID != persistentManagementAgentID(rec.OwnerID) || rec.AgentProfile != agentprofile.Management || rec.AgentRole != agentprofile.Management || rec.TrajectoryID != "" {
+		return fmt.Errorf("assigned Engineering verbs require the exact non-lifecycle persistent Management")
+	}
+	return nil
 }
 
 func requirePersistentManagementExecution(ctx context.Context) (*types.RunRecord, error) {
 	execution := toolregistry.ExecutionContextFrom(ctx)
 	rec := execution.RunRecord
-	if rec == nil || rec.AgentID != persistentManagementAgentID(rec.OwnerID) || rec.AgentProfile != agentprofile.Management || rec.AgentRole != agentprofile.Management || rec.TrajectoryID != "" {
-		return nil, fmt.Errorf("assigned Engineering tools require the exact non-lifecycle persistent Management")
+	if err := requirePersistentManagementRunRecord(rec); err != nil {
+		return nil, err
 	}
 	return rec, nil
 }
 
-func newCancelAssignedEngineeringTool(rt *Runtime) toolregistry.Tool {
-	type args struct {
-		AssignmentID string `json:"assignment_id"`
-		Reason       string `json:"reason"`
+// cancelAssignedEngineeringForRun is the verb carrier for
+// cancel_co_super_assignment (SMG): the reducer invokes it for
+// choir.CancelAssignment intents after the persistent-management gate.
+// Validation is byte-for-byte the deleted tool's: exact persistent
+// Management run, assignment id + reason, executor-acknowledged durable
+// revoke via rt.cancelAssignedEngineering.
+func (rt *Runtime) cancelAssignedEngineeringForRun(ctx context.Context, parent types.RunRecord, assignmentID, reason string) (types.EngineeringAssignmentCommandResult, types.EngineeringAssignment, error) {
+	if err := requirePersistentManagementRunRecord(&parent); err != nil {
+		return types.EngineeringAssignmentCommandResult{}, types.EngineeringAssignment{}, err
 	}
-	return toolregistry.Tool{
-		Name: "cancel_co_super_assignment", Description: "Durably revoke and executor-acknowledge one exact assignment capsule before cancellation.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"assignment_id": map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"},
-		}, []string{"assignment_id", "reason"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			parent, err := requirePersistentManagementExecution(ctx)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			result, err := rt.cancelAssignedEngineering(ctx, *parent, strings.TrimSpace(input.AssignmentID), 1, input.Reason)
-			if err != nil {
-				return "", err
-			}
-			if !result.Replay && result.Update != nil {
-				rt.wakeUpdatedCoagent(ctx, *result.Update)
-			}
-			assignment := result.Assignment
-			return toolregistry.ResultJSON(map[string]any{"assignment_id": assignment.AssignmentID, "attempt": assignment.Binding.Attempt,
-				"disposition": assignment.Disposition, "capsule_disposition": assignment.CapsuleDisposition, "receipt": result.Receipt, "replay": result.Replay})
-		},
+	result, err := rt.cancelAssignedEngineering(ctx, parent, strings.TrimSpace(assignmentID), 1, reason)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, types.EngineeringAssignment{}, err
 	}
+	assignment := result.Assignment
+	if !result.Replay && result.Update != nil {
+		rt.wakeUpdatedCoagent(ctx, *result.Update)
+	}
+	return result, assignment, nil
 }
+
+// cancel_co_super_assignment's typed-tool registration is deleted (SMG); the
+// cell verb choir.CancelAssignment reaches cancelAssignedEngineeringForRun
+// through the record-native reducer.
 
 func rejectReportAuthorityInputs(actions []types.CoagentPacketAction) error {
 	forbidden := map[string]bool{
@@ -117,177 +110,149 @@ func rejectReportAuthorityInputs(actions []types.CoagentPacketAction) error {
 	return nil
 }
 
-func newReportPersistentManagementToTextureTool(rt *Runtime) toolregistry.Tool {
-	type args struct {
-		Kind            string                      `json:"kind"`
-		Summary         string                      `json:"summary"`
-		Claims          []types.CoagentPacketClaim  `json:"claims"`
-		Sources         []types.CoagentPacketSource `json:"sources"`
-		Actions         []types.CoagentPacketAction `json:"actions"`
-		Questions       []string                    `json:"questions"`
-		Notes           []string                    `json:"notes"`
-		WorkDisposition types.WorkItemStatus        `json:"work_disposition"`
+// persistentManagementBoundReport is the verb carrier for the deleted
+// report_to_texture tool (SMG 2026-10-06). The record-native reducer calls it
+// for a persistent-Management run's choir.ReportPacket: the staged packet is
+// already decoded + validated; workDisposition comes from packet
+// work_disposition ("" = open). Validation is byte-for-byte the deleted
+// tool's: exact persistent-Management run, one delivered lifecycle control
+// trajectory, all delivered controls scoped to one trajectory/work/Texture
+// source, an authenticated (run-memory-seen) control binding, and exactly
+// one bound work item on the Texture source run.
+func (rt *Runtime) persistentManagementBoundReport(ctx context.Context, parent types.RunRecord, packet types.CoagentSourcePacketPayload, workDisposition types.WorkItemStatus) (types.LifecycleResult, error) {
+	if err := requirePersistentManagementRunRecord(&parent); err != nil {
+		return types.LifecycleResult{}, err
 	}
-	return toolregistry.Tool{
-		Name:        "report_to_texture",
-		Description: "Report typed progress, evidence, a blocker, or a terminal result from this exact persistent-Management control run back to its lifecycle Texture owner. Runtime derives all agent/run/trajectory/work identities.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"kind":             map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_result", "blocker", "question", "proposal", "decision_request"}},
-			"summary":          map[string]any{"type": "string"},
-			"claims":           map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-			"sources":          map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-			"actions":          map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-			"questions":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"notes":            map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"work_disposition": map[string]any{"type": "string", "enum": []string{"open", "completed"}},
-		}, []string{"kind", "summary", "claims", "sources", "actions", "questions", "notes", "work_disposition"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			parent, err := requirePersistentManagementExecution(ctx)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			decoder := json.NewDecoder(bytes.NewReader(raw))
-			decoder.DisallowUnknownFields()
-			if err := decoder.Decode(&input); err != nil {
-				return "", fmt.Errorf("report_to_texture typed payload: %w", err)
-			}
-			if err := decoder.Decode(&struct{}{}); err != io.EOF {
-				return "", fmt.Errorf("report_to_texture typed payload must contain one JSON object")
-			}
-			if err := rejectReportAuthorityInputs(input.Actions); err != nil {
-				return "", err
-			}
-			packet := normalizeCoagentSourcePacketPayload(types.CoagentSourcePacketPayload{
-				SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: input.Kind, Summary: input.Summary,
-				Claims: input.Claims, Sources: input.Sources, Actions: input.Actions, Questions: input.Questions, Notes: input.Notes,
-			})
-			if err := validateCoagentSourcePacketPayload(packet); err != nil {
-				return "", err
-			}
-			if input.WorkDisposition != types.WorkItemOpen && input.WorkDisposition != types.WorkItemCompleted {
-				return "", fmt.Errorf("report_to_texture work_disposition must be open or completed")
-			}
-			trajectoryID := lifecycleControlTrajectoryForRun(parent)
-			if trajectoryID == "" {
-				return "", fmt.Errorf("report_to_texture requires one exact delivered lifecycle control trajectory")
-			}
-			trajectory, err := rt.store.GetLifecycleTrajectory(ctx, parent.OwnerID, parent.ComputerID, trajectoryID)
-			if err != nil {
-				return "", err
-			}
-			var delivered []types.CoagentSourcePacket
-			if trajectory.Status == types.TrajectoryLive {
-				delivered, err = rt.listAllLifecyclePacketsDeliveredToRun(ctx, parent)
-			} else {
-				delivered, err = rt.store.ListHistoricalLifecycleControlsDeliveredToRun(ctx, parent.OwnerID, parent.ComputerID, trajectoryID, parent.AgentID, parent.RunID)
-			}
-
-			if err != nil {
-				return "", err
-			}
-			memoryEntries, err := rt.store.ListRunMemoryEntries(ctx, parent.OwnerID, parent.RunID)
-			if err != nil {
-				return "", fmt.Errorf("report_to_texture load durable run memory: %w", err)
-			}
-			memorySeen, _, _ := lifecycleInjectionIDsFromRunMemory(parent, memoryEntries)
-			authenticatedDelivered := make([]types.CoagentSourcePacket, 0, len(delivered))
-			consumedDeliveryIDs := make([]string, 0, len(delivered))
-			allControls := make([]types.CoagentSourcePacket, 0, len(delivered))
-			for _, deliveredPacket := range delivered {
-				if deliveredPacket.Direction == types.LifecyclePacketDirectionControl {
-					allControls = append(allControls, deliveredPacket)
-				}
-				if !memorySeen[strings.TrimSpace(deliveredPacket.UpdateID)] {
-					// Delivery can commit while a provider call is already in flight.
-					// It remains pending until the next authenticated runtime append.
-					continue
-				}
-				authenticatedDelivered = append(authenticatedDelivered, deliveredPacket)
-				consumedDeliveryIDs = append(consumedDeliveryIDs, deliveredPacket.UpdateID)
-			}
-			if len(allControls) == 0 {
-				return "", fmt.Errorf("report_to_texture requires an exact delivered control binding")
-			}
-			scope := allControls[0]
-			if scope.TargetWorkItemID == "" || scope.AgentID == "" || scope.SourceRunID == "" {
-				return "", fmt.Errorf("report_to_texture control binding is incomplete")
-			}
-			// Validate every downward control across every page before selecting
-			// report authority; an unauthenticated later arrival cannot conceal a
-			// cross-trajectory/work/Texture-source corruption.
-			for _, candidate := range allControls[1:] {
-				if candidate.TrajectoryID != scope.TrajectoryID || candidate.TargetWorkItemID != scope.TargetWorkItemID ||
-					candidate.AgentID != scope.AgentID || candidate.SourceRunID != scope.SourceRunID || candidate.ChannelID != scope.ChannelID {
-					return "", fmt.Errorf("report_to_texture delivered controls span more than one trajectory/work/Texture scope")
-				}
-			}
-			controls := make([]types.CoagentSourcePacket, 0, len(authenticatedDelivered))
-			for _, deliveredPacket := range authenticatedDelivered {
-				if deliveredPacket.Direction == types.LifecyclePacketDirectionControl {
-					controls = append(controls, deliveredPacket)
-				}
-			}
-			if len(controls) == 0 {
-				return "", fmt.Errorf("report_to_texture requires an authenticated delivered control binding")
-			}
-			control := controls[0]
-			for _, candidate := range controls[1:] {
-				// MessageSeq is the immutable occurrence order. ReducerSeq advances
-				// again when a partial report incorporates an older delivery.
-				if candidate.MessageSeq > control.MessageSeq || (candidate.MessageSeq == control.MessageSeq && candidate.UpdateID > control.UpdateID) {
-					control = candidate
-				}
-			}
-			targetRun, err := rt.store.GetLifecycleRun(ctx, parent.OwnerID, parent.ComputerID, control.SourceRunID)
-			if err != nil {
-				return "", err
-			}
-			targetWorkSet := lifecycleControlWorkIDsForRun(&targetRun)
-			if len(targetWorkSet) != 1 {
-				return "", fmt.Errorf("report_to_texture Texture source run must bind exactly one lifecycle work item")
-			}
-			targetWorkID := ""
-			for id := range targetWorkSet {
-				targetWorkID = id
-			}
-			execution := toolregistry.ExecutionContextFrom(ctx)
-			if strings.TrimSpace(execution.ToolCallID) == "" {
-				return "", fmt.Errorf("report_to_texture requires authenticated provider tool-call identity")
-			}
-			occurrence := objectgraph.SHA256([]byte(strings.Join([]string{vocabmigrate.IdentitySeedPersistentSuperReportV1, parent.OwnerID, parent.ComputerID, parent.RunID, execution.ToolCallID}, "\x00")))
-			producerUpdateID := "super-report:" + occurrence
-			content := strings.TrimSpace(packet.Summary)
-			payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
-			if err != nil {
-				return "", err
-			}
-			var consumedForReport []string
-			if trajectory.Status == types.TrajectoryLive {
-				consumedForReport = consumedDeliveryIDs
-			}
-			req := types.QueueLifecycleUpdateRequest{
-				OwnerID: parent.OwnerID, ComputerID: parent.ComputerID, CommandID: "queue-" + producerUpdateID,
-				TrajectoryID: trajectoryID, TargetAgentID: control.AgentID, ProducerAgentID: parent.AgentID,
-				ControlBindingID: control.UpdateID, TargetWorkItemID: targetWorkID,
-				ConsumedDeliveryUpdateIDs: consumedForReport,
-				ProducerUpdateID:          producerUpdateID, UpdateID: "result:" + occurrence,
-				ChannelID: control.ChannelID, Role: agentprofile.Management, SourceRunID: parent.RunID,
-				Packet: packet, Content: content, WorkDisposition: input.WorkDisposition,
-				WorkItemID: control.TargetWorkItemID, PayloadDigest: payloadDigest,
-			}
-			req.CommandDigest, err = store.ComputeQueuePersistentManagementReportDigest(req)
-			if err != nil {
-				return "", err
-			}
-			queued, err := rt.store.QueueLifecycleUpdate(ctx, req)
-			if err != nil {
-				return "", err
-			}
-			if !queued.Replay && queued.Update != nil && queued.Update.Disposition == types.UpdatePending {
-				rt.wakeUpdatedCoagent(ctx, *queued.Update)
-			}
-			return toolregistry.ResultJSON(map[string]any{"receipt": queued.Receipt, "update": queued.Update, "replay": queued.Replay})
-		},
+	if err := rejectReportAuthorityInputs(packet.Actions); err != nil {
+		return types.LifecycleResult{}, err
 	}
+	packet = normalizeCoagentSourcePacketPayload(packet)
+	if err := validateCoagentSourcePacketPayload(packet); err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if workDisposition == "" {
+		workDisposition = types.WorkItemOpen
+	}
+	if workDisposition != types.WorkItemOpen && workDisposition != types.WorkItemCompleted {
+		return types.LifecycleResult{}, fmt.Errorf("report work_disposition must be open or completed")
+	}
+	trajectoryID := lifecycleControlTrajectoryForRun(&parent)
+	if trajectoryID == "" {
+		return types.LifecycleResult{}, fmt.Errorf("report requires one exact delivered lifecycle control trajectory")
+	}
+	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, parent.OwnerID, parent.ComputerID, trajectoryID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	var delivered []types.CoagentSourcePacket
+	if trajectory.Status == types.TrajectoryLive {
+		delivered, err = rt.listAllLifecyclePacketsDeliveredToRun(ctx, &parent)
+	} else {
+		delivered, err = rt.store.ListHistoricalLifecycleControlsDeliveredToRun(ctx, parent.OwnerID, parent.ComputerID, trajectoryID, parent.AgentID, parent.RunID)
+	}
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	memoryEntries, err := rt.store.ListRunMemoryEntries(ctx, parent.OwnerID, parent.RunID)
+	if err != nil {
+		return types.LifecycleResult{}, fmt.Errorf("report load durable run memory: %w", err)
+	}
+	memorySeen, _, _ := lifecycleInjectionIDsFromRunMemory(&parent, memoryEntries)
+	authenticatedDelivered := make([]types.CoagentSourcePacket, 0, len(delivered))
+	consumedDeliveryIDs := make([]string, 0, len(delivered))
+	allControls := make([]types.CoagentSourcePacket, 0, len(delivered))
+	for _, deliveredPacket := range delivered {
+		if deliveredPacket.Direction == types.LifecyclePacketDirectionControl {
+			allControls = append(allControls, deliveredPacket)
+		}
+		if !memorySeen[strings.TrimSpace(deliveredPacket.UpdateID)] {
+			// Delivery can commit while a provider call is already in flight.
+			// It remains pending until the next authenticated runtime append.
+			continue
+		}
+		authenticatedDelivered = append(authenticatedDelivered, deliveredPacket)
+		consumedDeliveryIDs = append(consumedDeliveryIDs, deliveredPacket.UpdateID)
+	}
+	if len(allControls) == 0 {
+		return types.LifecycleResult{}, fmt.Errorf("report requires an exact delivered control binding")
+	}
+	scope := allControls[0]
+	if scope.TargetWorkItemID == "" || scope.AgentID == "" || scope.SourceRunID == "" {
+		return types.LifecycleResult{}, fmt.Errorf("report control binding is incomplete")
+	}
+	// Validate every downward control across every page before selecting
+	// report authority; an unauthenticated later arrival cannot conceal a
+	// cross-trajectory/work/Texture-source corruption.
+	for _, candidate := range allControls[1:] {
+		if candidate.TrajectoryID != scope.TrajectoryID || candidate.TargetWorkItemID != scope.TargetWorkItemID ||
+			candidate.AgentID != scope.AgentID || candidate.SourceRunID != scope.SourceRunID || candidate.ChannelID != scope.ChannelID {
+			return types.LifecycleResult{}, fmt.Errorf("report delivered controls span more than one trajectory/work/Texture scope")
+		}
+	}
+	controls := make([]types.CoagentSourcePacket, 0, len(authenticatedDelivered))
+	for _, deliveredPacket := range authenticatedDelivered {
+		if deliveredPacket.Direction == types.LifecyclePacketDirectionControl {
+			controls = append(controls, deliveredPacket)
+		}
+	}
+	if len(controls) == 0 {
+		return types.LifecycleResult{}, fmt.Errorf("report requires an authenticated delivered control binding")
+	}
+	control := controls[0]
+	for _, candidate := range controls[1:] {
+		// MessageSeq is the immutable occurrence order. ReducerSeq advances
+		// again when a partial report incorporates an older delivery.
+		if candidate.MessageSeq > control.MessageSeq || (candidate.MessageSeq == control.MessageSeq && candidate.UpdateID > control.UpdateID) {
+			control = candidate
+		}
+	}
+	targetRun, err := rt.store.GetLifecycleRun(ctx, parent.OwnerID, parent.ComputerID, control.SourceRunID)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	targetWorkSet := lifecycleControlWorkIDsForRun(&targetRun)
+	if len(targetWorkSet) != 1 {
+		return types.LifecycleResult{}, fmt.Errorf("report Texture source run must bind exactly one lifecycle work item")
+	}
+	targetWorkID := ""
+	for id := range targetWorkSet {
+		targetWorkID = id
+	}
+	execution := toolregistry.ExecutionContextFrom(ctx)
+	if strings.TrimSpace(execution.ToolCallID) == "" {
+		return types.LifecycleResult{}, fmt.Errorf("report requires authenticated provider tool-call identity")
+	}
+	occurrence := objectgraph.SHA256([]byte(strings.Join([]string{vocabmigrate.IdentitySeedPersistentSuperReportV1, parent.OwnerID, parent.ComputerID, parent.RunID, execution.ToolCallID}, "\x00")))
+	producerUpdateID := "super-report:" + occurrence
+	content := strings.TrimSpace(packet.Summary)
+	payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	var consumedForReport []string
+	if trajectory.Status == types.TrajectoryLive {
+		consumedForReport = consumedDeliveryIDs
+	}
+	req := types.QueueLifecycleUpdateRequest{
+		OwnerID: parent.OwnerID, ComputerID: parent.ComputerID, CommandID: "queue-" + producerUpdateID,
+		TrajectoryID: trajectoryID, TargetAgentID: control.AgentID, ProducerAgentID: parent.AgentID,
+		ControlBindingID: control.UpdateID, TargetWorkItemID: targetWorkID,
+		ConsumedDeliveryUpdateIDs: consumedForReport,
+		ProducerUpdateID:          producerUpdateID, UpdateID: "result:" + occurrence,
+		ChannelID: control.ChannelID, Role: agentprofile.Management, SourceRunID: parent.RunID,
+		Packet: packet, Content: content, WorkDisposition: workDisposition,
+		WorkItemID: control.TargetWorkItemID, PayloadDigest: payloadDigest,
+	}
+	req.CommandDigest, err = store.ComputeQueuePersistentManagementReportDigest(req)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	queued, err := rt.store.QueueLifecycleUpdate(ctx, req)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	if !queued.Replay && queued.Update != nil && queued.Update.Disposition == types.UpdatePending {
+		rt.wakeUpdatedCoagent(ctx, *queued.Update)
+	}
+	return queued, nil
 }

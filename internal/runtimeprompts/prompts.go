@@ -42,10 +42,6 @@ func ConductorRunOverlay(opts ConductorRunOptions) string {
 }
 
 
-func ManagementRuntimeOverlay() string {
-	return mustRenderOverlay("management_runtime", nil)
-}
-
 // RLMManagementOverlay is the sealed-Go variant served when the management
 // desk is live on the host cell carrier (R3c): desk_go_eval is the sole JSON
 // doorway, choir verbs stage acts, and report_to_texture is replaced by the

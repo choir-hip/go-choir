@@ -103,7 +103,11 @@ metamission:
       # sealed-cell carrier on all desks. Problem doc:
       # docs/problems/management-typed-json-tools-remain-2026-10-06.md
       path: docs/definitions/choir-appdev-smg-management-rlm-cutover-2026-10-06.md
-      readiness: drafted
+      # Local cutover landed 2026-10-06: management registry = {desk_go_eval};
+      # reports ride choir.ReportPacket, cancellation rides
+      # choir.CancelAssignment; prompts RLM-only; parity test extended.
+      # Deployed acceptance legs pending on the station file.
+      readiness: reviewed
       status: working
       depends_on: [SR-desk-surface-cleanup]
     - id: SA-agent-density

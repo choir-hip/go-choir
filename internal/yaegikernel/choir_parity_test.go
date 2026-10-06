@@ -284,8 +284,11 @@ func TestPromptTaughtVerbsMatchExports(t *testing.T) {
 	for _, path := range []string{
 		"../promptstore/defaults/research.yaml",
 		"../promptstore/defaults/engineering.yaml",
+		"../promptstore/defaults/management.yaml",
+		"../promptstore/defaults/core.yaml",
 		"../runtimeprompts/overlays/rlm_research_runtime.yaml",
 		"../runtimeprompts/overlays/rlm_engineering_runtime.yaml",
+		"../runtimeprompts/overlays/rlm_management_runtime.yaml",
 	} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -300,6 +303,10 @@ func TestPromptTaughtVerbsMatchExports(t *testing.T) {
 	roles := map[string]string{
 		"research":    SessionRoleResearch,
 		"engineering": "engineering",
+		"management":  "management",
+		// core.yaml is shared by every desk — check it against the most
+		// restrictive desk surfaces.
+		"core": SessionRoleResearch,
 	}
 	for deskRole, sessionRole := range roles {
 		scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, sessionRole, "")
@@ -313,7 +320,9 @@ func TestPromptTaughtVerbsMatchExports(t *testing.T) {
 		// separately instead of failing on the base scope.
 		slotConditional := map[string]bool{"Verify": true, "InspectBundle": true}
 		for path, text := range promptSources {
-			if !strings.Contains(path, deskRole) {
+			// core.yaml composes into every desk's prompt — check it against
+			// each desk's surface; desk-specific files match on role name.
+			if !strings.Contains(path, deskRole) && !strings.Contains(path, "core.yaml") {
 				continue
 			}
 			for _, m := range verbRe.FindAllStringSubmatch(text, -1) {
