@@ -86,6 +86,29 @@
       ],
       "observed_iterations": "desk tried 3 earlier single-cell programs that failed to compile (fmt undefined, arg-count, redeclare) then landed the four-step source — compile-error self-repair inside the activation is the RLM loop working",
       "proves": "ordered search->emit->search->emit inside one desk_go_eval cell on deployed 3c963edf; both in-cell Reports reach the durable update plane bound to the same call id"
+    },
+    "deployed_schema_and_composed_prompt": {
+      "ok": true,
+      "level": "deployed proof",
+      "endpoint": "GET https://choir.news -> guest http://10.200.4.2:8085/api/prompts/research",
+      "deployed_commit": "4467a4fb1a627a9a281709369616ab3351bee159 (deployed_at 2026-10-06T03:00:20Z)",
+      "route_change": "internal/apihandler/routes.go ungated GET /api/prompts[/role] (writes still test-gated); commit 4467a4fb",
+      "tool_names": ["desk_go_eval"],
+      "composed_prompt_chars": 8677,
+      "composed_prompt_forbidden_strings": {
+        "update_coagent": false,
+        "processor": false,
+        "reconciler": false,
+        "web_search": false,
+        "source_search": false,
+        "fetch_url": false,
+        "import_url": false,
+        "read_url": false,
+        "search_wire_corpus": false,
+        "desk_go_eval": true
+      },
+      "tools_list_forbidden": {"update_coagent": false, "processor": false, "reconciler": false},
+      "proves": "deployed research schema = exactly {desk_go_eval}; composed effective prompt (8677 chars) contains none of update_coagent / typed-tool names / processor / reconciler and does name desk_go_eval — acceptance action 4 receipt bound to deployed build"
     }
   },
   "blocked_first_attempt": {
