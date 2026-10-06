@@ -158,6 +158,19 @@ now:
     runs exhausting the 1.2M token budget (evidence
     docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json) — not
     the wake storm; candidate for its own problem record.
+    SECOND DEFECT 2026-10-06 (mint-no-start): fresh disposable
+    computer-03335285 minted persistent Management run 462d30ea at 17:24Z;
+    initial_dispatch never delivered (emission-buffer discard on
+    ErrEpochConflict or deferred-activation drop, per dispatcher.go:382-449);
+    run stranded pending holding the slot; every later wake deferred.
+    Watchdog fired at deadline but zero bound packets → no-op (escalate
+    packets bind nothing). Fix committed 01199fb1: zero-bound stranded
+    fresh-mint runs fail-release the slot via terminalizeRunCanonical.
+    Problem doc sa-management-mint-no-start-slot-deadlock-2026-10-06.md.
+    DEPLOY-FRESHNESS RESIDUAL: guest app layer pins the runtime closure
+    at mint; 01199fb1 not present on any deployed Node B runtime —
+    observable only after app-layer update ships (S2/S4 gate) or a
+    future disposable mints on a bumped flake pin.
   source_ref: main@d94ce9ef
   deploy_identity: 'choir.news deployed_commit=9f6f369c (d94ce9ef deploying)'
   candidate:
