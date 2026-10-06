@@ -153,8 +153,8 @@ now:
     deletion) is SR by absorption — this station is its continuation;
     S0m's channel-mail retirement is honored (prompt teaches Report,
     not mail; update_coagent gone).
-  source_ref: main@9e0fe4d
-  deploy_identity: unknown
+  source_ref: main@8e2d3d21
+  deploy_identity: 'https://choir.news deployed_commit=3c963edf (X-Choir-Build-Commit; guest lifecycle_activation_build_commit matches)'
   candidate:
     id: none
     state: none
@@ -192,10 +192,12 @@ now:
     cannot follow; land the prompt rewrite and the registry change in the
     same deploy.
   next_action: >-
-    Processor/reconciler deletion landing -> deployed acceptance (schema
-    fetch {desk_go_eval}; composed-prompt grep; cell multi-search loop;
-    egress-budget refusal). Done: citers grep, parity checklist,
-    M1-vs-S0m disposition, prompt rewrite + registry seal (8701668d).
+    Close panel round 2 on the two added legs — deployed two-emit loop
+    (trajectory 5c91129d, activations 8a8d10d1+4baef8aa, three cell
+    packets, work_settled) and egress refusal (kept desk-worker test
+    tools_desk_egress_refusal_test.go + the desk's own exhausted-egress
+    report on run 8a8d10d1; deployed-budget knob absence recorded as
+    residual). Evidence: docs/evidence/sr-deployed-acceptance-2026-10-06.json.
 
 receipts: []
 ---

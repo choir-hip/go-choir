@@ -1,0 +1,83 @@
+{
+  "probe": "sr deployed acceptance - research desk RLM cutover",
+  "date": "2026-10-06",
+  "environment": "staging https://choir.news",
+  "deployed_commit": "3c963edf1df0c03947a6d24d6c8e30d9fc89fff3",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6 (active, materialized on candidate-fleet-e15cb89f25d963c220319b7b)",
+  "trajectory_id": "c9deb194-465c-5556-8744-44e0d24ec640",
+  "research_run_id": "83964d11-85c8-4689-9e54-627881bbcfaf",
+  "research_agent_id": "research:50509a74-f3ae-4819-8821-7c9cd1556a89",
+  "legs": {
+    "prompt_bar_submit": {
+      "ok": true,
+      "trajectory": "c9deb194-465c-5556-8744-44e0d24ec640",
+      "doc": "0561d7fc-cdeb-58af-b976-89cb5b593d08",
+      "mechanism": "owner prompt-bar ask requiring research gather (reused s0m ask-acceptance probe, marker sr-rc2-1791247396)"
+    },
+    "research_activation": {
+      "ok": true,
+      "update_id": "c8879287-185e-49df-9d09-503dae63b401",
+      "control_queued_at": "seq 5",
+      "control_delivered_at": "seq 6",
+      "run_build": "3c963edf1df0c03947a6d24d6c8e30d9fc89fff3 (lifecycle_activation_build_commit)",
+      "model": "chatgpt/gpt-5.6-luna via model-policy.toml",
+      "proves": "post-SR research activation binds and runs under the new build"
+    },
+    "cell_carrier": {
+      "ok": true,
+      "cell_call_updates": 1,
+      "update_id": "cell:83964d11-85c8-4689-9e54-627881bbcfaf:call_8b41f86950f54295b334070b60af663b:report:tray-1:packet",
+      "shape": "cell:<run>:call_<hash>:report:tray-N — Report emitted from inside desk_go_eval reached the durable update plane",
+      "grounding": "run result cites an imported https:// source fetched inside the cell",
+      "registry": "deployed research registry is sealed {desk_go_eval} at runtime (buildDeskCellRegistry installs exactly one entry; no other tool call is expressible)",
+      "proves": "desk_go_eval cell carrier live on deployed code; egress verbs execute in-cell; Report mid-cell reaches Texture"
+    },
+    "report_apply_settle": {
+      "ok": true,
+      "events": [
+        "update_queued cell:...:report:tray-1 (seq 7)",
+        "update_delivered bound_to_activation run 1e857a6f (seq 8)",
+        "update_applied texture-turn 8e636050 (seq 10)",
+        "work_settled (seq 12)"
+      ],
+      "proves": "ask -> cell report -> texture apply -> settle end to end on deployed build"
+    },
+    "two_emit_loop": {
+      "ok": true,
+      "trajectory": "5c91129d-9ee6-5825-a09a-371a87b01b48",
+      "activations": [
+        "8a8d10d1 (research) — WebSearch gather + cell report xJwjrlPyuNMewTK, exhausted activation egress and stopped with work open",
+        "4baef8aa (research) — three cell packets; two cited gathers (UTC date + UTC day-of-week from distinct URLs); work_disposition=completed"
+      ],
+      "events": [
+        "update_queued cell:8a8d10d1:call_xJwjrlPyuNMewTK (first activation report)",
+        "update_delivered bound_to_activation texture run cbaf84ac",
+        "update_applied",
+        "re-drive: second work_opened + control_queued/delivered -> activation 4baef8aa",
+        "update_queued cell:4baef8aa:call_I5yf5DAHmfO40Rj + call_2gcwB6DjMRYPrWw + call_Cf0a6JtJqdsaFyB",
+        "update_delivered + update_applied + work_settled"
+      ],
+      "proves": "multi-gather loop across cell calls with mid-activation Texture delivery; second activation completes the two-fact report and settles"
+    },
+    "egress_budget_refusal": {
+      "ok": true,
+      "level": "desk-worker unit test (kept) + desk's own deployed report",
+      "test": "internal/agentcore/tools_desk_egress_refusal_test.go TestDeskEgressRefusalIntoCell — 1-call ledger, second choir.WebSearch in one cell returns 'activation egress budget exhausted (1/1 network calls this activation)' inside the cell body; ledger keys to RunID",
+      "deployed_evidence": "run 8a8d10d1 result: '...the second separate day-of-week gather/report are blocked by provider rate limits and exhausted activation egress' — the desk observed the refusal boundary on the live ledger",
+      "residual": "deployed knobs for MaxCalls/MaxFetchedBytes do not exist (fixed at 64 calls / 32 MiB); an organic over-budget event is indistinguishable from provider rate limiting without packet introspection, so the desk-worker test carries the mechanism and the desk's report corroborates"
+    }
+  },
+  "blocked_first_attempt": {
+    "trajectory": "f9eb012f-54ea-5e27-bb57-384017a0dffc",
+    "cause": "chatgpt OAuth refresh token rotation race — local codex CLI refreshed the shared token 2026-10-05T23:20Z, stranding node-b's copy; 3 activation attempts died at provider auth (delivery_attempts_exhausted)",
+    "repair": "copied fresh ~/.codex/auth.json to /var/lib/go-choir/codex-auth.json + gateway restart; round-trip verified via gateway chatgpt completions call",
+    "heresy": "shared refresh-token singleton across node-b gateway and local codex CLI is a documented fragility — token rotation on any writer kills the other"
+  },
+  "proves": [
+    "research desk runs a desk_go_eval cell on deployed 3c963edf",
+    "in-cell choir.* egress verbs produce grounded content",
+    "cell-emitted Report reaches Texture and settles the work item",
+    "frozen-history replay unaffected (research runs completed prior to the cutover still listed with full records)"
+  ],
+  "residual": "multi-search inside a single cell (search -> emit -> search -> emit with mid-loop evidence) is not separately introspectable via public APIs; the sealed registry makes non-cell tool calls inexpressible, and the in-cell loop shape is proven by the cell:...call_N packet + grounded result"
+}
