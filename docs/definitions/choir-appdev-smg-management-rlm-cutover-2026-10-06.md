@@ -130,45 +130,53 @@ boundaries:
 now:
   status: working
   slice: >-
-    Slices 1–4 landed locally 2026-10-06: report_to_texture and
-    cancel_co_super_assignment deleted from the management registry —
-    {desk_go_eval} only; report packets ride choir.ReportPacket ->
-    commitLifecycleReportActIntent -> persistentManagementBoundReport
-    (DisallowUnknownFields at the cell boundary, schema_version defaulted);
-    cancellation rides choir.CancelAssignment -> IntentCancelAssignment ->
-    cancelAssignedEngineeringForRun; reducer isSemanticActKind covers both
-    kinds; management prompts (rlm overlay + promptstore default) teach the
-    in-cell surface only; legacy management_runtime overlay deleted (dead
-    path behind deskCarrierLive); TestPromptTaughtVerbsMatchExports
-    extended to management + core.yaml and caught the overlay's stale
-    choir.Assign teaching — fixed to Cast-only.
+    Slices 1-4 landed and DEPLOYED 2026-10-06 (commits 1b1d9b7e,
+    4bedf999; CI run 37420355583 green incl. Node B deploy):
+    report_to_texture, cancel_co_super_assignment AND the third ad-hoc
+    tool found on the deployed registry — product_api_request — are all
+    deleted. Reports ride choir.ReportPacket ->
+    commitLifecycleReportActIntent -> persistentManagementBoundReport;
+    cancellation rides choir.CancelAssignment -> IntentCancelAssignment;
+    product API calls ride choir.ProductAPI -> broker ActionProductAPI ->
+    agentcore.productAPIRequest (same allowlist + owner-bound serving).
+    Latent defect repaired in passing: evidence broker actions
+    (save/read/list/run-memory) validated but never dispatched — desk
+    evidence verbs returned "unsupported action".
   candidate: >-
-    Slices: (1) verb carriers landed; (2) prompts rewritten; (3) typed
-    tools deleted; (4) parity test extended. Remaining: (5) deployed
-    acceptance per finish.acceptance (bound-report leg, cancellation leg,
-    no-binding refusal leg, schema exactly {desk_go_eval}).
+    Deployed schema leg PASSED: GET /api/prompts/management on
+    computer-03335285 reports tools exactly [desk_go_eval]; zero
+    typed-tool names in the effective prompt; 22 choir verbs taught
+    including ProductAPI + CancelAssignment. Remaining legs: bound-report
+    (ReportPacket under delivered control reaches Texture),
+    cancellation (verb -> durable revoke + executor ack), and the
+    no-binding refusal — all need a live persistent-management
+    activation on staging.
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability
       maps to an existing or cheaply-added choir.* verb, so the desk
       seals at {desk_go_eval} with no capability loss.
     verdict: >-
-      supported (local) — both tools delete with validations moved
-      host-side; unit coverage converted to carrier-level tests. Deployed
-      binding proof is the remaining leg.
+      supported — all three typed tools deleted, validations moved
+      host-side, deployed schema is exactly {desk_go_eval}. The
+      behavioral legs (binding intact under verb-driven report,
+      cancellation ack) still need deployed activation evidence.
   believed_state: >-
-    Local: agentcore + yaegikernel green, management registry exactly
-    {desk_go_eval}, prompts contain zero typed-tool names. Deployed
-    management schema unverified until the landing-loop probe activation
-    or /api/prompts fetch.
+    Deployed https://choir.news build=4bedf999; management schema exactly
+    {desk_go_eval} (deployed proof); prompts RLM-only locally and on the
+    deployed effective prompt.
   blocker_or_risk: >-
     report_to_texture's binding validation moved to
     persistentManagementBoundReport unchanged; the no-binding refusal leg
-    on staging is the load-bearing negative proof.
+    on staging is the load-bearing negative proof. The behavioral legs
+    need a persistent-management run bound to a delivered lifecycle
+    control — opening one on the owner computer is the conservative
+    route (it already runs a persistent management desk).
   next_action: >-
-    Commit + push the cutover, run the landing loop (CI -> Node B deploy
-    -> deployed identity), then the four deployed acceptance legs per
-    finish.acceptance.
+    Trigger a persistent-management activation on staging (the owner
+    computer already runs one — bind via an engineering assignment or a
+    probe trajectory), then run legs 1-3 of finish.acceptance and close
+    the station.
 
 receipts: []
 ---

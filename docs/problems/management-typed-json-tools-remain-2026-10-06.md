@@ -80,3 +80,15 @@ makes it in-flight work regardless of station bookkeeping.
 - Remaining: the four deployed acceptance legs on the SMG station file
   (bound report, cancellation, no-binding refusal, schema exactly
   `{desk_go_eval}`).
+
+## Deployed update (2026-10-06)
+
+Landed and deployed: `1b1d9b7e` (report/cancel cutover) + `4bedf999`
+(product_api_request — a third ad-hoc tool the deployed registry surfaced).
+GET /api/prompts/management on computer-03335285 reports
+`tools: ["desk_go_eval"]`; effective prompt has zero typed-tool names and
+teaches 22 choir verbs. Deployed behavioral legs (bound report,
+cancellation, no-binding refusal) remain — tracked on the SMG station
+now card. Deploy-gate bug found during the landing loop documented in
+`deploy-refresh-expected-commit-pointer-followers-2026-10-06.md` (fixed
+in `f15fb7ea`).
