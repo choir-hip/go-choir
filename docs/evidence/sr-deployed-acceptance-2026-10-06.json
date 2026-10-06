@@ -65,6 +65,22 @@
       "test": "internal/agentcore/tools_desk_egress_refusal_test.go TestDeskEgressRefusalIntoCell — 1-call ledger, second choir.WebSearch in one cell returns 'activation egress budget exhausted (1/1 network calls this activation)' inside the cell body; ledger keys to RunID",
       "deployed_evidence": "run 8a8d10d1 result: '...the second separate day-of-week gather/report are blocked by provider rate limits and exhausted activation egress' — the desk observed the refusal boundary on the live ledger",
       "residual": "deployed knobs for MaxCalls/MaxFetchedBytes do not exist (fixed at 64 calls / 32 MiB); an organic over-budget event is indistinguishable from provider rate limiting without packet introspection, so the desk-worker test carries the mechanism and the desk's report corroborates"
+    },
+    "single_cell_ordered_loop": {
+      "ok": true,
+      "trajectory": "c1162d9a-260c-5126-8c9d-51924e79a686",
+      "activation_run": "e80d11f0-c945-42bc-b63e-dda81d67ccf8 (research)",
+      "cell_call_id": "call_b3872d82f2444ae...",
+      "cell_source": "dateFinding := choir.WebSearch(...); choir.Report('texture', 'UTC date finding: 2026-10-06', [timeanddate url], ...); dayFinding := choir.WebSearch(...); choir.Report('texture', 'UTC day-of-week finding: Tuesday', [datetoday url], ...) — one source program",
+      "result_receipts": ["rlm:report:7", "rlm:report:8"],
+      "trajectory_packets": [
+        "update_queued cell:e80d11f0:call_b3872d82f... (report 1)",
+        "update_queued cell:e80d11f0:call_b3872d82f... (report 2)",
+        "update_delivered bound_to_activation (both packets, texture run eb0136e5)",
+        "update_applied x2"
+      ],
+      "observed_iterations": "desk tried 3 earlier single-cell programs that failed to compile (fmt undefined, arg-count, redeclare) then landed the four-step source — compile-error self-repair inside the activation is the RLM loop working",
+      "proves": "ordered search->emit->search->emit inside one desk_go_eval cell on deployed 3c963edf; both in-cell Reports reach the durable update plane bound to the same call id"
     }
   },
   "blocked_first_attempt": {
