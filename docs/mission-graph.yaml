@@ -1312,7 +1312,7 @@ nodes:
     title: SA Agent Density — many concurrent desk activations in a 2-4 GiB guest
     path: docs/definitions/choir-appdev-sa-agent-density-2026-10-05.md
     ledger: ''
-    status: pending
+    status: working
     kind: station
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -1323,3 +1323,23 @@ nodes:
     note: >-
       v5 2026-10-05. Memory budget + embedded-Dolt engine bottleneck + store
       split. Owner principle: agents per guest before guests per host.
+      v5.1 2026-10-06: slice 0 (registration genesis) deployed 9f6f369c —
+      fresh computers mint genesis_imported in-guest, deployed-verified.
+      Slice 1 storm convergence next.
+  - id: choir-appdev-smg-management-rlm-cutover-2026-10-06
+    title: SMG Management RLM Cutover — delete ad-hoc typed tools, in-cell verbs only
+    path: docs/definitions/choir-appdev-smg-management-rlm-cutover-2026-10-06.md
+    ledger: ''
+    status: working
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-supervised-app-development-metamission-2026-10-01
+    enables: []
+    note: >-
+      v5.1 2026-10-06. Owner directive: kill all ad-hoc JSON tool calls,
+      RLM-only prompts. Schema leg deployed-proven (management = exactly
+      {desk_go_eval}). Behavioral legs blocked: owner-guest occurrence
+      storm (SA slice 1) + texture-desk agency edge (three activations
+      on a clean disposable committed no-authoring-act).

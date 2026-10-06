@@ -504,10 +504,26 @@ now:
   slice: >-
     v5.1 (2026-10-06 director review): Closed since v5: S2 (10-05), SR
     (10-06, panel r7 7-0). SMG landed (all four desks sealed at
-    {desk_go_eval}, schema leg deployed-proven) with three behavioral legs
-    blocked by the Management storm. Critical path is now SA slice 0
-    (registration genesis) and slice 1 (storm convergence), then the SA
-    baseline. See "v5.1 revision".
+    {desk_go_eval}, schema leg deployed-proven) — SMG CLOSE BLOCKED
+    2026-10-06: legs 1-3 ran on a fresh disposable per the director path
+    (computer-423134e8, genesis via bootstrap-chain); submit accepted,
+    but THREE texture activations consumed the owner revision with
+    'no authoring act' and exhausted the loop budget — the S0m-documented
+    desk-agency edge (open_persistent_super not emitted on demand), not
+    a transport defect; the probe prompt was corrected mid-run
+    (non-empty execution_request actions, 3-arg ReportPacket) with the
+    same outcome. Then host-pressure reclaim hibernated the probe VM
+    (new residual). Owner-computer path still gated by the storm (SA
+    slice 1). SMG stays open with named edges; SA proceeds.
+    SA SLICE 0 DEPLOYED 2026-10-06 (9f6f369c, CI green): fresh computers
+    mint genesis_imported in-guest before the replay gate opens;
+    bootstrap-chain is repair-path-only; pre-genesis writes get a clean
+    503. Deployed proof: fresh registration accepted first prompt 202
+    (computer-07b582d5). Residual exposed behind it: first ~2 submits
+    post-boot race the outbox/replay burst → 500 'replace durable
+    activation: lifecycle invalid transition' (transient, CAS class) —
+    feeds slice 1. Critical path: SA slice 1 (storm convergence), then
+    the SA baseline. See "v5.1 revision".
     v5 (2026-10-05, owner-approved outline). Governing principle: density
     before distribution. Closed: S0, S0m, S1a, **S2** (2026-10-05, terminal
     receipt s2-station-terminal-2026-10-05; consensus round 2 6 approve /
@@ -520,8 +536,8 @@ now:
     desk-surface cleanup, then SA agent density in a 2-4 GiB guest, with
     SM model policy + evals after SR, and SC desk capability surface after
     SA + SM. See "v5 plan".
-  source_ref: main@dac021cd
-  deploy_identity: 'staging https://choir.news deployed_commit=63865ede; guest base 63865ede coherent; deploy-receipt matches'
+  source_ref: main@59749a9f
+  deploy_identity: 'staging https://choir.news deployed_commit=9f6f369c; Node B proxy verified running 9f6f369c'
   candidate:
     id: none
     state: none
@@ -672,18 +688,7 @@ now:
     full S1 floor. S3 must not start before SO's storage lifecycle and the
     VM shape decision.
   next_action: >-
-    1. SMG close: run legs 1-3 of scripts/smg_rlm_acceptance_probe.mjs on a
-       fresh disposable with a registration -> API key -> bootstrap-chain
-       preamble (s0b-registration-computer-missing-genesis documents the
-       manual route). Do NOT hand-drain or park the owner guest's storm to
-       pass the legs. If a leg needs history a fresh computer lacks (e.g.
-       an assignment to cancel), the probe creates it. Then SMG boundary.
-    2. SA slice 0: registration genesis — provisioning mints
-       genesis_imported (or refuses to report active) before the computer
-       is usable; prompt-bar returns a clean 503 pre-genesis, never a 500.
-       Regression gate: fresh registration accepts its first prompt with no
-       manual bootstrap-chain. Every SA acceptance runs on disposables.
-    3. SA slice 1: storm convergence (red). Problem-doc first: record the
+    1. SA slice 1: storm convergence (red). Problem-doc first: record the
        boot re-arm mechanism (v5.1 revision, finding 2) and confirm it from
        the guest trace (re-armed wake ids vs their source obligations'
        trajectory state). Then: terminal fate for stale obligations as a
@@ -692,6 +697,19 @@ now:
        with a paced drain. Acceptance: owner guest restart converges
        pending to a bounded floor within a stated window and stays there
        for 24 h, and the SMG probe passes on the owner computer.
+    2. SA slice 0 residual: first-activation CAS race (500 'replace
+       durable activation: lifecycle invalid transition' on submits 1-2
+       post-boot, 202 on 3, disposable computer-07b582d5) — reproduce
+       under a fresh disposable, map to the one-store-three-symptoms
+       conjecture, fix or fold into slice 1.
+    3. SMG close retry (not blocking SA): after slice 1 lands, re-run
+       scripts/smg_rlm_acceptance_probe.mjs on the owner computer AND a
+       fresh disposable; if the texture desk still will not emit
+       open_persistent_super on demand, escalate — the edge is agency,
+       not transport (three failures across two prompts on a clean
+       disposable 2026-10-06; evidence
+       smg-rlm-acceptance-disposable-2026-10-06.json). Director constraint
+       stands: do NOT drain/park the owner storm to pass the legs.
     4. SA slices 2-7 (baseline, memory, engine lock, read cost, store
        split, shapes) in order.
     5. SO remainder: CAS durability (fsync file+dir before the og row
@@ -705,7 +723,9 @@ now:
     DONE since v5: S2 CLOSED 2026-10-05 (s2-station-terminal-2026-10-05);
     SR CLOSED 2026-10-06; og wrong-store GC fix 2fa30b17; sourcecycled
     durably off d42c47b/0564246; CI deploy-gate verifier f15fb7ea; SMG
-    commits 1b1d9b7e, 4bedf999 deployed.
+    commits 1b1d9b7e, 4bedf999 deployed; SA slice 0 9f6f369c deployed
+    (in-guest genesis mint; pre-genesis -> 503; deployed-verified on
+    disposable computer-07b582d5).
 
 receipts:
   - id: s0-to-s2-transition-2026-10-04
