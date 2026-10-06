@@ -95,20 +95,20 @@
       "route_change": "internal/apihandler/routes.go ungated GET /api/prompts[/role] (writes still test-gated); commit 4467a4fb",
       "tool_names": ["desk_go_eval"],
       "composed_prompt_chars": 8677,
-      "composed_prompt_forbidden_strings": {
-        "update_coagent": false,
-        "processor": false,
-        "reconciler": false,
-        "web_search": false,
-        "source_search": false,
-        "fetch_url": false,
-        "import_url": false,
-        "read_url": false,
-        "search_wire_corpus": false,
+      "raw_response": "docs/evidence/sr-deployed-prompt-research-4467a4fb.json",
+      "composed_prompt_full_scan": {
+        "checked_against": "station parity checklist lines 141-150 — every deleted typed-tool name verbatim",
+        "web_search": false, "source_search": false, "fetch_url": false,
+        "import_url_content": false, "import_document_content": false,
+        "search_wire_corpus": false, "read_content_item": false,
+        "list_content_item_selectors": false, "read_content_item_selector": false,
+        "save_evidence": false, "read_evidence": false, "list_evidence": false,
+        "get_run_memory_entry": false,
+        "update_coagent": false, "processor": false, "reconciler": false,
         "desk_go_eval": true
       },
       "tools_list_forbidden": {"update_coagent": false, "processor": false, "reconciler": false},
-      "proves": "deployed research schema = exactly {desk_go_eval}; composed effective prompt (8677 chars) contains none of update_coagent / typed-tool names / processor / reconciler and does name desk_go_eval — acceptance action 4 receipt bound to deployed build"
+      "proves": "deployed research schema = exactly {desk_go_eval}; composed effective prompt (8677 chars) contains none of the 13 deleted typed-tool names nor update_coagent/processor/reconciler and does name desk_go_eval — acceptance action 4 receipt bound to deployed build 4467a4fb"
     }
   },
   "blocked_first_attempt": {
