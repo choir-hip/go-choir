@@ -180,6 +180,14 @@ now:
     SUBSTRATE DEFECT — problem doc
     `docs/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md`,
     fix 01199fb1 fail-releases the slot at the watchdog deadline.
+
+    2026-10-06 post-fix probe (owner computer refreshed to build
+    01199fb1, guest /health verified): 40min window, ZERO persistent
+    Management mints (`bound run` absent from console). Console streamer
+    (`SmgConsoleTail` job) confirms no `slot_occupied` deferrals in the
+    fixed-boot segment — zombie-slot defect absent. Probe legs therefore
+    never exercised: texture desk never authored open_persistent_super.
+    Blocker is unchanged: texture-desk agency, not substrate.
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability
