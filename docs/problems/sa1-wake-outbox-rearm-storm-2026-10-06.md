@@ -141,6 +141,34 @@ runs exhausting the 1.2M-token budget — separate root cause, recorded in
 `docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json`) is NOT this
 storm and needs its own problem record if it reproduces.
 
+## Deployed acceptance findings (2026-10-06, post-d94ce9ef/e3e96067)
+
+Deploy + guest restart confirmed the core fix: migration minted 1870
+pending wakes **once** (marker gate held across 3 later starts), expired
+257 stale packets, then went quiet — the storm's per-boot re-arm loop is
+dead. Two residuals surfaced on the deployed owner guest:
+
+- **Residue wedge:** wakes for packets the occurrence finder can match
+  but reconcile's pending view rejects (delivered-but-unconsumed rows,
+  missing lifecycle version, missing trajectory / source-record fields)
+  surfaced as `exact live Management update N is not pending` deferrals
+  — families of salted `#redrive-N` wakes each deferred 20-60+ times.
+  Fixed in `41822a4c`: `StalePendingLifecyclePacketReason` gained the
+  missing-schema classes; directive lister gained the same stale-expire
+  pass; a non-stale validation failure no longer aborts the whole
+  controls pass; and `reconcile`'s exact-not-pending error is now the
+  terminal sentinel `ErrPersistentManagementExactNotPending`, which
+  resolve maps to a bounded discharge (recorded expire when a reason
+  classifies, else consume-without-rearm).
+- **Guest restart churn:** 4 SIGTERM-driven restarts during a 20-min
+  window post-deploy — a guest-infra loop (updater restart-trigger or
+  `bindsTo` signer flap), separate substrate, not the wake path.
+
+The owner-guest SMG probe's final verdict is pending a re-run on
+`41822a4c` (first probe ran on the residue-wedged build and timed out
+with `no bound producer report observed` — evidence
+`docs/evidence/smg-rlm-acceptance-owner-postfix-2026-10-06.json`).
+
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;
