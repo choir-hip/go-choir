@@ -124,37 +124,13 @@ boundaries:
     - model policy roles (removal only)
 
 now:
-  status: working
+  status: closed
   slice: >-
-    Moves 1+2+3 landed 2026-10-05: prompt rewrite + sealed {desk_go_eval}
-    registry (8701668d); processor/reconciler end-to-end deletion
-    (3c963edf, -6,569 lines / 56 files — profiles, policies, prompts,
-    overlays, wire dispatch, sourcecycled handoff, api admit path;
-    frozen-history recognition preserved). Parity checklist below —
-    every deleted typed tool maps to an existing choir.* egress verb.
-    Deletion-citers grep complete: processor/reconciler citers are live
-    surfaces (profiles, policies, prompts, overlays, dispatch, spawn
-    list, handoff path) vs frozen-history recognition (vocabmigrate
-    sets, computerevent/decode.go, lifecycle admission strings,
-    wirepublish/eligibility kind checks, wire/processorkey, sourceapi
-    request types) — the latter preserved.
-    Parity checklist (typed tool -> choir.* verb):
-    web_search -> WebSearch; source_search -> SourceSearch;
-    fetch_url -> FetchURL; import_url_content -> ImportURL;
-    import_document_content -> ImportDocument;
-    search_wire_corpus -> SearchWireCorpus;
-    read_content_item -> ReadContentItem;
-    list_content_item_selectors -> ListContentSelectors;
-    read_content_item_selector -> ReadContentSelector;
-    save_evidence -> SaveEvidence; read_evidence -> ReadEvidence;
-    list_evidence -> ListEvidence; get_run_memory_entry -> RunMemoryEntry.
-    No tool exists without a verb; egress ledger shared (same budget).
-    M1-vs-S0m disposition: M1 (rlm-cutover phase 2, the deferred
-    deletion) is SR by absorption — this station is its continuation;
-    S0m's channel-mail retirement is honored (prompt teaches Report,
-    not mail; update_coagent gone).
-  source_ref: main@8e2d3d21
-  deploy_identity: 'https://choir.news deployed_commit=3c963edf (X-Choir-Build-Commit; guest lifecycle_activation_build_commit matches)'
+    Station closed 2026-10-06 after 7 panel rounds (r7: 7-0 APPROVE, 4
+    timeouts, no dissent; the r6 dissent's defect — prompts teaching
+    ListContentItemSelectors/ReadContentItemSelector vs kernel's
+    ListContentSelectors/ReadContentSelector — was found, fixed at
+    12d3adc0, deployed, and re-verified).
   candidate:
     id: none
     state: none
@@ -170,13 +146,13 @@ now:
       no capability and removes a source of contradictory instructions.
     test: The four acceptance actions above.
     edge: missing_oracle
-    delta_o: A deployed cell trace showing the verbs used end to end.
+    delta_o: Deployed cell traces + schema/prompt receipts — all present.
     scope_if_supported: The research desk on the in-cell carrier.
-    status: proposed
+    status: supported
     evidence_refs:
-      - internal/agentcore/tool_profiles.go:379-410
-      - internal/promptstore/defaults/research.yaml
-      - internal/runtimeprompts/overlays/rlm_research_runtime.yaml
+      - docs/evidence/sr-deployed-acceptance-2026-10-06.json
+      - docs/evidence/sr-deployed-prompt-research-4467a4fb.json
+      - docs/evidence/sr-deployed-prompt-research-12d3adc0.json
   decision:
     what: Delete the typed research surface and processor/reconciler; rewrite the prompts.
     kind: architecture
@@ -184,22 +160,51 @@ now:
     evidence_ref: owner 2026-10-05
     owner_ratification_ref: owner 2026-10-05 in the director session
   belief:
-    believed_state: The cutover is half-done and the prompts contradict the registry.
-    main_uncertainty: Whether any capability exists only as a typed tool (for example a selector or import path with no verb equivalent).
-    next_observation: The parity checklist.
-  blocker_or_risk: >-
-    Deleting before the prompt rewrite strands the model on instructions it
-    cannot follow; land the prompt rewrite and the registry change in the
-    same deploy.
+    believed_state: >-
+      Research is sealed at {desk_go_eval} on deployed 12d3adc0; every
+      taught verb resolves; management typed tools remain by design — that
+      cutover is SMG (choir-appdev-smg-management-rlm-cutover-2026-10-06),
+      owner-directed 2026-10-06.
+    main_uncertainty: none for this station's scope.
+    next_observation: SMG deployed schema leg.
+  blocker_or_risk: none — station closed.
   next_action: >-
-    Close panel round 2 on the two added legs — deployed two-emit loop
-    (trajectory 5c91129d, activations 8a8d10d1+4baef8aa, three cell
-    packets, work_settled) and egress refusal (kept desk-worker test
-    tools_desk_egress_refusal_test.go + the desk's own exhausted-egress
-    report on run 8a8d10d1; deployed-budget knob absence recorded as
-    residual). Evidence: docs/evidence/sr-deployed-acceptance-2026-10-06.json.
-
-receipts: []
+    SMG station (management RLM cutover) opens next; SM/SC station files
+    remain queued behind it.
+receipts:
+  - id: sr-station-terminal-2026-10-06
+    kind: station_terminal
+    station: SR-desk-surface-cleanup
+    status: closed
+    terminal_receipt: docs/evidence/sr-deployed-acceptance-2026-10-06.json
+    identity: 'https://choir.news deployed_commit=12d3adc0 (guest 10.200.4.2 build.deployed_commit matches)'
+    landing:
+      source_commit: 44a0e221 (docs; runtime HEAD 12d3adc0)
+      ci_ref: run 37408595521 (success)
+      deploy_ref: Node B deploy 2026-10-06T03:55Z
+      environment_identity: 'https://choir.news build.deployed_commit=12d3adc0'
+      deployed_acceptance: >-
+        legs A (ordered single-cell loop, e80d11f0/call_b3872d82f,
+        rlm:report:7/8), B (verbatim egress refusal a3a48168 -> Texture
+        bcbe05b7), C (two_emit_loop 5c91129d), D (deployed schema
+        {desk_go_eval} + 16-name clean scan on 4467a4fb + bidirectional
+        parity 31/31 resolve on 12d3adc0) — all deployed-bound receipts.
+      consensus_ref: .agentic-consensus/sr-close-r7-2026-10-06/ (7-0 APPROVE)
+    heresy_delta: >-
+      discovered: prompts taught nonexistent kernel verb names
+      (ListContentItemSelectors/ReadContentItemSelector) — found by panel
+      dissent, repaired at 12d3adc0; desk confabulated an egress-refusal
+      claim (8a8d10d1) — corrected in evidence file.
+      repaired: research sealed at {desk_go_eval}; processor/reconciler
+      deleted end to end; prompt↔kernel parity test added (the defect
+      class cannot recur silently).
+      introduced: GET /api/prompts ungated for reads (owner-auth'd;
+      composed prompt + policy fields — no secrets).
+    rollback_ref: git revert of 8701668d..12d3adc0 + redeploy
+    residuals:
+      - 'management typed tools (report_to_texture, cancel_co_super_assignment) → SMG station'
+      - 'role_policy.allow_coagent_tools=true on management — dead flag, SMG scope'
+      - 'GET /api/prompts read surface is owner-visible; revisit if surface minimization matters'
 ---
 
 # SR — Desk-Surface Cleanup

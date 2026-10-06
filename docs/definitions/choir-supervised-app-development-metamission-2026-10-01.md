@@ -89,10 +89,23 @@ metamission:
     - id: SR-desk-surface-cleanup
       # v5. Completes Jev M0a (research RLM cutover: registry -> {desk_go_eval},
       # prompt rewrite) and deletes processor/reconciler end to end. Small.
+      # CLOSED 2026-10-06 (panel r7 7-0; deployed 12d3adc0).
       path: docs/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md
-      readiness: drafted
-      status: pending
+      readiness: reviewed
+      status: closed
       depends_on: [S2-layering-runtime-from-release]
+    - id: SMG-management-rlm-cutover
+      # v5 addendum 2026-10-06 (owner directive): SR closed the research desk;
+      # the persistent-management desk still carries typed JSON tools
+      # (report_to_texture, cancel_co_super_assignment) beside desk_go_eval.
+      # "Get rid of all adhoc JSON tool calls everywhere; RLM-only prompts."
+      # Ordered before SM/SC: SM evals and SC desk capability assume the
+      # sealed-cell carrier on all desks. Problem doc:
+      # docs/problems/management-typed-json-tools-remain-2026-10-06.md
+      path: docs/definitions/choir-appdev-smg-management-rlm-cutover-2026-10-06.md
+      readiness: drafted
+      status: working
+      depends_on: [SR-desk-surface-cleanup]
     - id: SA-agent-density
       # v5. "Scale agents horizontally in a 2-4 GiB VM before scaling VMs."
       # Memory budget (moved from SO) + embedded-Dolt engine bottleneck +
@@ -107,14 +120,13 @@ metamission:
       path: unauthored (scope in "v5 plan" -> SM)
       readiness: intent
       status: pending
-      depends_on: [SR-desk-surface-cleanup]
+      depends_on: [SMG-management-rlm-cutover]
     - id: SC-desk-capability-surface
       # v5. Per-desk package sets + Graph/Ledger/Similar/Source read verbs +
       # management scorer fan-out via SM per-activation selection.
       path: unauthored (scope in "v5 plan" -> SC)
-      readiness: intent
       status: pending
-      depends_on: [SA-agent-density, SM-model-policy-and-evals]
+      depends_on: [SA-agent-density, SM-model-policy-and-evals, SMG-management-rlm-cutover]
     - id: S3-fast-resume
       path: docs/definitions/choir-appdev-s3-fast-resume-2026-10-01.md
       readiness: reviewed
@@ -649,10 +661,13 @@ now:
        incident doc s0-gc-og-wrong-store-deletion-2026-10-05 — the wrong-store
        sweep mass-deleted ~45.8k live corpus bodies before the fix).
     2. S1: non-root runtime (last item; gates S4).
-    3. SR (station file authored, drafted): research registry ->
-       {desk_go_eval}; delete processor/reconciler end to end; rewrite
-       research.yaml for the record-native in-cell world; check M1 against
-       S0m.
+    3. SR CLOSED 2026-10-06 (panel r7 7-0 APPROVE; deployed 12d3adc0;
+       terminal receipt in the station file).
+    3a. SMG (new, owner directive 2026-10-06): management desk RLM cutover —
+       delete report_to_texture + cancel_co_super_assignment, move their
+       validations behind choir.* verbs, all desk prompts RLM-only.
+       Ordered before SM/SC: they assume the sealed-cell carrier on all
+       desks. Problem doc + station file authored.
     4. SA (station file authored, drafted) after SR: fan-out load probe +
        memory receipt first, then the slices in order.
     5. Author SM and SC station files from "v5 plan" when SR lands.
