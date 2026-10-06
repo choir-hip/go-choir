@@ -143,14 +143,19 @@ now:
     (save/read/list/run-memory) validated but never dispatched — desk
     evidence verbs returned "unsupported action".
   candidate: >-
-    Deployed schema leg PASSED: GET /api/prompts/management on
-    computer-03335285 reports tools exactly [desk_go_eval]; zero
-    typed-tool names in the effective prompt; 22 choir verbs taught
-    including ProductAPI + CancelAssignment. Remaining legs: bound-report
-    (ReportPacket under delivered control reaches Texture),
-    cancellation (verb -> durable revoke + executor ack), and the
-    no-binding refusal — all need a live persistent-management
-    activation on staging.
+    Deployed schema leg PASSED twice: GET /api/prompts/management on
+    computer-03335285 reports tools exactly [desk_go_eval] (zero
+    typed-tool names in the effective prompt), and a fresh disposable
+    guest's boot log prints super=1 — exactly one management tool at
+    runtime. Behavioral legs attempted: smg_rlm_acceptance_probe.mjs
+    submitted two trajectories on the owner computer — both starved
+    (one texture_turn_committed, then stalled) by the known Management
+    live-occurrence storm (owner guest cycles terminal/received pairs
+    every ~10-15s; a research actor delivery-poisoned after 65
+    deferrals). A disposable computer cannot substitute — it hits the
+    canonical-head bootstrap residual (genesis absent -> submit 500).
+    Post-deploy guest log shows organic cell ReportPacket intents +
+    cancel_report obligations minted on the new path.
   conjecture:
     statement: >-
       Management's lifecycle tools are thin wrappers; every capability
@@ -158,25 +163,24 @@ now:
       seals at {desk_go_eval} with no capability loss.
     verdict: >-
       supported — all three typed tools deleted, validations moved
-      host-side, deployed schema is exactly {desk_go_eval}. The
-      behavioral legs (binding intact under verb-driven report,
-      cancellation ack) still need deployed activation evidence.
+      host-side, deployed schema exactly {desk_go_eval}. Behavioral legs
+      blocked by substrate: the owner-guest occurrence storm (a known
+      heresy) starves fresh activations.
   believed_state: >-
     Deployed https://choir.news build=4bedf999; management schema exactly
-    {desk_go_eval} (deployed proof); prompts RLM-only locally and on the
-    deployed effective prompt.
+    {desk_go_eval} (deployed proof); organic post-deploy traffic mints
+    ReportPacket/CancelAssignment intents with no typed-tool fallback.
   blocker_or_risk: >-
-    report_to_texture's binding validation moved to
-    persistentManagementBoundReport unchanged; the no-binding refusal leg
-    on staging is the load-bearing negative proof. The behavioral legs
-    need a persistent-management run bound to a delivered lifecycle
-    control — opening one on the owner computer is the conservative
-    route (it already runs a persistent management desk).
+    BLOCKED on the Management live-occurrence storm starving probe
+    activations on the only reachable computer (the API key owns
+    computer-03335285; the other active computer belongs to a different
+    owner). The storm's substrate fix is SA-station scope. Next attempt:
+    drain the storm (park/repair the replaying trajectories) or run the
+    probe on a computer with genesis already committed.
   next_action: >-
-    Trigger a persistent-management activation on staging (the owner
-    computer already runs one — bind via an engineering assignment or a
-    probe trajectory), then run legs 1-3 of finish.acceptance and close
-    the station.
+    Re-run scripts/smg_rlm_acceptance_probe.mjs after the owner-guest
+    storm drains or on a pre-genesis disposable; legs 1-3 of
+    finish.acceptance remain open. Schema leg is proven.
 
 receipts: []
 ---

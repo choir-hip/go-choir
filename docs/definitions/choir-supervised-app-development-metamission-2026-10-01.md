@@ -103,10 +103,10 @@ metamission:
       # sealed-cell carrier on all desks. Problem doc:
       # docs/problems/management-typed-json-tools-remain-2026-10-06.md
       path: docs/definitions/choir-appdev-smg-management-rlm-cutover-2026-10-06.md
-      # Local cutover landed 2026-10-06: management registry = {desk_go_eval};
-      # reports ride choir.ReportPacket, cancellation rides
-      # choir.CancelAssignment; prompts RLM-only; parity test extended.
-      # Deployed acceptance legs pending on the station file.
+      # Cutover DEPLOYED 2026-10-06 (1b1d9b7e + 4bedf999): management
+      # registry = {desk_go_eval} incl. product_api_request -> choir.ProductAPI;
+      # deployed schema leg PASSED. Behavioral legs blocked by the
+      # management occurrence storm on the owner guest — see station now card.
       readiness: reviewed
       status: working
       depends_on: [SR-desk-surface-cleanup]
