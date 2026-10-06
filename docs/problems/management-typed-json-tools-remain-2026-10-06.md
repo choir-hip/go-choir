@@ -92,3 +92,17 @@ cancellation, no-binding refusal) remain — tracked on the SMG station
 now card. Deploy-gate bug found during the landing loop documented in
 `deploy-refresh-expected-commit-pointer-followers-2026-10-06.md` (fixed
 in `f15fb7ea`).
+
+## Probe status (2026-10-06 ~06:40Z)
+
+`scripts/smg_rlm_acceptance_probe.mjs` drives legs 1–3 through one
+prompt-bar trajectory on `computer-03335285`. Two trajectories submitted
+(`5403e789`, `6c4e27ac`) — both minted work items and committed one
+texture turn, but the guest is saturated by the Management
+live-occurrence storm (`persistent Management live occurrence
+terminal/received` cycling every ~5–15s on the owner computer; research
+actor delivery-poisoned after 65 deferrals on an invalid-transition
+replay). The probe is starved, not failed. If the storm does not admit
+the probe within the window, an alternative is a disposable
+computer — persistent management opens there too, but a fresh guest has
+no storm backlog.
