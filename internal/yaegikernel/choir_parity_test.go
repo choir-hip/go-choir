@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -253,5 +255,85 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	}
 	if _, err := scope.ReadFile("missing.txt"); err == nil {
 		t.Fatal("researcher ReadFile unexpectedly succeeded on missing file")
+	}
+}
+
+// TestPromptTaughtVerbsMatchExports cross-checks every `choir.<Name>`
+// identifier the deployed desk prompts teach against the kernel's actual
+// export map — the 2026-10-06 defect was prompts teaching
+// ListContentItemSelectors/ReadContentItemSelector while the kernel exports
+// ListContentSelectors/ReadContentSelector (cells written from the prompt
+// fail to compile). This is the bidirectional check: any taught name missing
+// from exports fails the test.
+func TestPromptTaughtVerbsMatchExports(t *testing.T) {
+	root := t.TempDir()
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := NewHandleIssuer(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := NewBroker(BrokerConfig{ComputerID: "computer-choir", CurrentEpoch: 1, AllowedRoot: root}, issuer)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	promptSources := map[string]string{}
+	for _, path := range []string{
+		"../promptstore/defaults/research.yaml",
+		"../promptstore/defaults/engineering.yaml",
+		"../runtimeprompts/overlays/rlm_research_runtime.yaml",
+		"../runtimeprompts/overlays/rlm_engineering_runtime.yaml",
+	} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Skipf("prompt source %s not present: %v", path, err)
+			continue
+		}
+		promptSources[path] = string(raw)
+	}
+	verbRe := regexp.MustCompile(`choir\.([A-Z][A-Za-z0-9_]*)`)
+
+	// Map prompt files to the desk role they compose for.
+	roles := map[string]string{
+		"research":    SessionRoleResearch,
+		"engineering": "engineering",
+	}
+	for deskRole, sessionRole := range roles {
+		scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, sessionRole, "")
+		if err != nil {
+			t.Fatalf("scope %s: %v", deskRole, err)
+		}
+		exports := scope.ChoirExports()["choir/choir"]
+		// Slot-conditional exports: the engineering prompt teaches these under
+		// an explicit "Verifier Slot Only" guard — they exist only when the
+		// activation carries slot=verifier. Verify the conditional export
+		// separately instead of failing on the base scope.
+		slotConditional := map[string]bool{"Verify": true, "InspectBundle": true}
+		for path, text := range promptSources {
+			if !strings.Contains(path, deskRole) {
+				continue
+			}
+			for _, m := range verbRe.FindAllStringSubmatch(text, -1) {
+				name := m[1]
+				if _, ok := exports[name]; !ok && !slotConditional[name] {
+					t.Errorf("%s teaches choir.%s but the %s scope does not export it", path, name, deskRole)
+				}
+			}
+		}
+		// The verifier slot actually delivers the conditional exports.
+		vscope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, sessionRole, "verifier")
+		if err == nil {
+			vexports := vscope.ChoirExports()["choir/choir"]
+			for name := range slotConditional {
+				if deskRole == "engineering" {
+					if _, ok := vexports[name]; !ok {
+						t.Errorf("verifier-slot scope missing conditional export %s", name)
+					}
+				}
+			}
+		}
 	}
 }

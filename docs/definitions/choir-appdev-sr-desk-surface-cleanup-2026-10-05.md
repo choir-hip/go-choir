@@ -144,8 +144,8 @@ now:
     import_document_content -> ImportDocument;
     search_wire_corpus -> SearchWireCorpus;
     read_content_item -> ReadContentItem;
-    list_content_item_selectors -> ListContentItemSelectors;
-    read_content_item_selector -> ReadContentItemSelector;
+    list_content_item_selectors -> ListContentSelectors;
+    read_content_item_selector -> ReadContentSelector;
     save_evidence -> SaveEvidence; read_evidence -> ReadEvidence;
     list_evidence -> ListEvidence; get_run_memory_entry -> RunMemoryEntry.
     No tool exists without a verb; egress ledger shared (same budget).

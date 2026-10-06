@@ -18,8 +18,8 @@ body: |
   choir.ImportURL, choir.ImportDocument,
   choir.SearchWireCorpus — are what turn a draft into something Texture can
   honestly publish. For durable sources prefer import + selector reads
-  (choir.ImportDocument, choir.ListContentItemSelectors,
-  choir.ReadContentItemSelector, choir.ReadContentItem) over fetch snippets;
+  (choir.ImportDocument, choir.ListContentSelectors,
+  choir.ReadContentSelector, choir.ReadContentItem) over fetch snippets;
   a title or snippet is never a fact.
 
   Saturation, not one pass: a topic deepens across many probes inside one
