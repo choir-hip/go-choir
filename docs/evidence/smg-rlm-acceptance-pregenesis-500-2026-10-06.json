@@ -1,0 +1,21 @@
+{
+  "probe": "smg_rlm_acceptance",
+  "computer": "computer-477de82f227acfbd59bff2e4e2c0b34d",
+  "marker": "smg-rlm-1791268852599",
+  "started_at": "2026-10-06T06:40:52.599Z",
+  "legs": [
+    {
+      "name": "prompt_bar_submit",
+      "ended_at": "2026-10-06T06:40:53.067Z",
+      "wall_ms": 468,
+      "ok": false,
+      "status": 500,
+      "body": {
+        "error": "failed to submit prompt"
+      }
+    }
+  ],
+  "ok": false,
+  "failure": "prompt submit failed",
+  "ended_at": "2026-10-06T06:40:53.067Z"
+}

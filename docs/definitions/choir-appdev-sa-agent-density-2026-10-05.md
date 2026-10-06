@@ -136,8 +136,17 @@ now:
     slice 4: it starves every activation on the owner computer, blocks SMG
     behavioral legs, and would make any baseline a measurement of the
     storm), then the baseline and the remaining slices.
-  source_ref: main@9e0fe4d
-  deploy_identity: unknown
+    SLICE 0 IN FLIGHT (2026-10-06): problem doc root-caused
+    (s0b-registration-computer-missing-genesis, confirmed 10-06 section) —
+    RecoveryGenesis planned but never minted because the only mint lived
+    behind the owner-scoped bootstrap-chain route. Implementation: shared
+    mint helper extracted from BootstrapChain; MintProvisionedGenesis runs
+    in the guest after BindProjectionTape and before the replay phase when
+    the plan is RecoveryGenesis; prompt-bar + texture-eval map
+    agentcore.ErrPreGenesis to a clean 503. Deployed proof pending: fresh
+    registration accepts first prompt with no bootstrap-chain preamble.
+  source_ref: main@d750c3bc
+  deploy_identity: pending push
   candidate:
     id: none
     state: none

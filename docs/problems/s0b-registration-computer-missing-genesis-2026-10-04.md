@@ -1,8 +1,17 @@
 # Registration-computer reaches active with no canonical genesis — first write 500s
 
-**Status:** confirmed on staging, reproducible. Fix owner: S0b (disposable-computer probe suite) or S1a hardening — decide at the S1a boundary.
+**Status:** confirmed on staging, reproducible; ROOT CAUSE CONFIRMED 2026-10-06 — fix owned by SA slice 0 (v5.1 ordering).
 
 **Found:** 2026-10-04, running the S0m boundary-close stranded-bound probe on a fresh disposable computer (`computer-ca3a2cf9b7d921460ba990cefca57c97`, user `2587b196`, registered via the real product path — passkey registration → ownership created → VM `active` in ~14s).
+
+**Confirmed root cause (2026-10-06):** `materializeProjectionBaseIfNeeded` (`internal/autoputer/projection_base.go:86-93`) plans `RecoveryGenesis` (empty store + no platform chain) and returns without minting — per its own comment, "explicit new-computer genesis" was left to the manual `bootstrap-chain` route, and nothing in the boot sequence calls it. `recovery_plan.go:88` names the same intent ("explicit new-computer bootstrap"). The mint code in `Runtime.BootstrapChain` (`chain_bootstrap.go`) exists only behind the owner-scoped HTTP route. Meanwhile vmctl reports `active` as soon as `BootVM`'s guest `/health` returns 200 and the replay gate opens serving — a fresh computer is `active`-usable with zero canonical events.
+
+**Fix shape adopted (SA slice 0, red):**
+
+1. **Provisioned genesis mint, in-guest, pre-replay.** After `BindProjectionTape` succeeds and before `runReplayPhase` starts, when the recovery plan was `RecoveryGenesis` (empty store + no platform chain — provably fresh: a wiped store leaves a platform chain and plans `RecoveryInstall`/refuse instead), the guest mints the same `genesis_imported` event `BootstrapChain` produces (extracted shared mint helper), with `AuthorityRef "provisioned-genesis:"+CHOIR_OWNER_ID` and its own idempotency key. `RecoveryGenesis` is the only plan that mints. Failure is logged, not fatal: the computer stays pre-genesis under the PF-3 admission gate, repairable by the owner-scoped `bootstrap-chain` route exactly as today — a boot that cannot mint must not crash-loop.
+2. **Ordering guarantee.** The mint precedes the replay phase; `replayHealthGate` holds `/health` at 503 `ReplayInProgress` until replay completes, and vmctl's `BootVM` waits on `/health` 200 before the ownership flips to `active`. So `active` ⇒ canonical head ≥ 1: no window where a computer reports active pre-genesis.
+3. **Clean 503 pre-genesis.** `HandlePromptBar` maps the pre-genesis admission error to a typed sentinel → `503 {"error":"computer initializing"}` instead of the raw 500 (covers both the residual repair window and any mint-failed boot).
+4. **Regression gate.** Fresh registration → first `POST /api/prompt-bar` succeeds (202) with no manual `bootstrap-chain`; the S0b keydriver preamble becomes unnecessary.
 
 **Mutation class of this record:** green. The fix is red (provisioning / event-chain authority).
 
