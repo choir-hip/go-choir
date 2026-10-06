@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1237,6 +1238,63 @@ func TestAppendEventAssignsOwnerWideStreamSeqAcrossRuns(t *testing.T) {
 	}
 	if got[1].EventID != "evt-stream-3" || got[1].TrajectoryID != "traj-1" || got[1].StreamSeq != 3 {
 		t.Fatalf("second catch-up event = %+v, want evt-stream-3 traj-1 stream_seq=3", got[1])
+	}
+}
+
+// TestAppendEventStreamSeqReseedsMonotonicAcrossReopen proves the in-memory
+// high-water mark re-seeds above the last durable StreamSeq after a store
+// restart — a stale seed would silently repeat StreamSeq values and break
+// owner catch-up (ListEventsByOwnerAfter uses > afterSeq). Regression for
+// the unbounded-scan removal: the counter must survive reopen, not restart.
+func TestAppendEventStreamSeqReseedsMonotonicAcrossReopen(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	ctx := context.Background()
+
+	s1, err := Open(path)
+	if err != nil {
+		t.Fatalf("open store 1: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for i := range 3 {
+		if err := s1.AppendEvent(ctx, &types.EventRecord{
+			EventID: fmt.Sprintf("evt-reseed-%d", i), RunID: "run-reseed",
+			OwnerID: "user-alice", Timestamp: now.Add(time.Duration(i) * time.Second),
+			Kind: types.EventRunProgress, Payload: json.RawMessage(`{"i":` + fmt.Sprint(i) + `}`),
+		}); err != nil {
+			t.Fatalf("append %d: %v", i, err)
+		}
+	}
+	if err := s1.Close(); err != nil {
+		t.Fatalf("close store 1: %v", err)
+	}
+
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	defer func() {
+		_ = s2.Close()
+		cleanupTestStorePath(path)
+	}()
+
+	rec := &types.EventRecord{
+		EventID: "evt-reseed-after", RunID: "run-reseed-2",
+		OwnerID: "user-alice", Timestamp: now.Add(10 * time.Second),
+		Kind: types.EventRunProgress, Payload: json.RawMessage(`{"after":true}`),
+	}
+	if err := s2.AppendEvent(ctx, rec); err != nil {
+		t.Fatalf("append after reopen: %v", err)
+	}
+	if rec.StreamSeq != 4 {
+		t.Fatalf("StreamSeq after reopen = %d, want 4 (seeded above prior max 3)", rec.StreamSeq)
+	}
+	got, err := s2.ListEventsByOwnerAfter(ctx, "user-alice", 3, 10)
+	if err != nil {
+		t.Fatalf("list after reopen: %v", err)
+	}
+	if len(got) != 1 || got[0].EventID != "evt-reseed-after" {
+		t.Fatalf("catch-up after reopen = %+v, want exactly evt-reseed-after", got)
 	}
 }
 

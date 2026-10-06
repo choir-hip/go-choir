@@ -145,6 +145,13 @@ type Store struct {
 	// of silently writing a non-event-backed mutation. Set by
 	// Runtime.SetKernelMode via Store.SetKernelMode.
 	kernelMode atomic.Bool
+	// maxStreamSeq is the in-memory high-water mark for EventRecord.StreamSeq.
+	// AppendEvent is serialized under eventMu and the Dolt store is
+	// single-process, so a lazy seed from the newest page + increment under
+	// the same mutex replaces the per-append full-objectgraph scan that OOM'd
+	// owner-scale computers (docs/problems/sa2-appendevent-unbounded-scan-*).
+	maxStreamSeq    int64
+	streamSeqSeeded bool
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
@@ -2227,25 +2234,30 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 	}
 	rec.Seq = maxSeq + 1
 
-	// Compute stream_seq from OG: take the max of all OG events, then +1.
-	allEvents, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:  ogKindEvent,
-		Limit: 100000,
-	})
-	if err != nil {
-		return fmt.Errorf("append event: list all events: %w", err)
-	}
-	maxStreamSeq := int64(0)
-	for _, obj := range allEvents {
-		var ev types.EventRecord
-		if err := ogDecode(obj, &ev); err != nil {
-			continue
+	// StreamSeq: in-memory high-water mark incremented under eventMu. The
+	// unbounded ListObjects(100000) scan it replaced walked the entire event
+	// kind per append — at owner scale (~5.8G vm, 31GiB store) that read
+	// exceeded the request deadline and drove the runtime to OOM. Seeding
+	// from the newest page (updated_at DESC, indexed) is O(1) because the
+	// most recent append always carries max(StreamSeq).
+	if !s.streamSeqSeeded {
+		newest, err := s.og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindEvent, Limit: 500})
+		if err != nil {
+			return fmt.Errorf("append event: seed stream_seq: %w", err)
 		}
-		if ev.StreamSeq > maxStreamSeq {
-			maxStreamSeq = ev.StreamSeq
+		for _, obj := range newest {
+			var ev types.EventRecord
+			if err := ogDecode(obj, &ev); err != nil {
+				continue
+			}
+			if ev.StreamSeq > s.maxStreamSeq {
+				s.maxStreamSeq = ev.StreamSeq
+			}
 		}
+		s.streamSeqSeeded = true
 	}
-	rec.StreamSeq = maxStreamSeq + 1
+	s.maxStreamSeq++
+	rec.StreamSeq = s.maxStreamSeq
 
 	if tapeBound {
 		s.eventMu.Unlock()
