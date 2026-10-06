@@ -106,3 +106,22 @@ replay). The probe is starved, not failed. If the storm does not admit
 the probe within the window, an alternative is a disposable
 computer — persistent management opens there too, but a fresh guest has
 no storm backlog.
+
+## Probe attempt 3 (2026-10-06 ~07:20Z) — storm survives guest restart
+
+Owner guest rebooted (new runtime PID, IP moved 10.200.14.2 ->
+10.200.20.2, dead-wake outbox migration minted 2124 pending wakes).
+Post-restart the guest drained cleanly for a window (`running_runs: 0`,
+pending=2), probe trajectory `afe7e407` submitted, then the live-
+occurrence storm regrew from the replayed backlog (`running_runs: 4`,
+pending=72 within ~15 min) and starved the trajectory again —
+`texture_turn_committed` never appeared. Evidence:
+docs/evidence/smg-rlm-acceptance-2026-10-06b.json.
+
+Sharpened hypothesis: the storm is not transient work — it is replayed
+persistent-management controls from August trajectories that keep
+re-queueing management occurrences. Restart does not drain it; the
+backlog re-feeds it. The substrate fix belongs to the SA station
+(occurrence-storm convergence invariants + dead-wake GC). The SMG
+behavioral legs need either a drain mechanism or a computer whose
+texture history predates the storm.
