@@ -163,9 +163,13 @@ func (h *Handler) issueManagementOpenControl(ctx context.Context, ownerID string
 		return fmt.Errorf("load texture caller run: %w", err)
 	}
 	targetAgentID := agentprofile.Management + ":" + ownerID
-	// Persistent-management agent record must already exist (the desk schema
-	// registers it). The validator fail-closes otherwise — a clean error beats
-	// minting an unbound control.
+	// Ensure the persistent-management agent record exists (the desk schema
+	// registers it on owner computers; a fresh disposable or first-open path
+	// has no prior registration). Idempotent: UpsertAgent over existing is a
+	// no-op update.
+	if _, err := h.Core.EnsurePersistentManagementAgent(ctx, ownerID); err != nil {
+		return fmt.Errorf("ensure persistent management agent: %w", err)
+	}
 	if _, err := h.Store.GetAgentByScope(ctx, ownerID, computerID, targetAgentID); err != nil {
 		return fmt.Errorf("persistent management agent not registered: %w", err)
 	}

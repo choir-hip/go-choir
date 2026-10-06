@@ -66,6 +66,32 @@ func TestHandleManagementOpenMintsRealControlAndWake(t *testing.T) {
 	}
 }
 
+// TestHandleManagementOpenRegistersAgentOnFirstUse proves the endpoint is
+// self-bootstrapping: a computer with no prior persistent-management agent
+// record (fresh disposable, first open) gets one minted rather than failing
+// the IssueLifecycleControl validator. Regression for the
+// "persistent management agent not registered" 500 observed on the first
+// SMG disposable probe.
+func TestHandleManagementOpenRegistersAgentOnFirstUse(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	ownerID, computerID := "user-alice", "autoputer-test"
+	mgmtAgentID := agentprofile.Management + ":" + ownerID
+
+	body := `{"objective":"first open registers management","actions":[{"type":"inspect_file","objective":"noop","safety":{"mutation_class":"green","network":"forbidden","file_mutation":"forbidden"}}]}`
+	w := runtimeHandlerRequest(t, handler.HandleManagementOpen, http.MethodPost, "/api/texture/management-open", body, ownerID)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+	agent, err := handler.Store.GetAgentByScope(ctx, ownerID, computerID, mgmtAgentID)
+	if err != nil {
+		t.Fatalf("management agent must be registered by the endpoint: %v", err)
+	}
+	if agent.Profile != agentprofile.Management || agent.Role != agentprofile.Management {
+		t.Fatalf("agent = %+v, want persistent-management shape", agent)
+	}
+}
+
 // TestHandleManagementOpenRejectsNoActions proves the persistent-management
 // control shape requirement is enforced: execution_request actions are
 // mandatory (same validator the desk path uses).
