@@ -199,6 +199,13 @@ now:
     disposable 0ca7656f (recorded at (b) above); the earlier
     deploy-freshness residual is resolved — 475902d7 ships 01199fb1 and
     the disposable confirmed the bound-run path.
+    DISPOSABLE-RELEASE RESIDUAL (S2 line, not slice 1's fix): a fresh
+    disposable resolves the shared storedisk.erofs at boot time, so a VM
+    minted before a deploy but booted after it can run a stale runtime
+    (observed 2026-10-06: disposable served build 4dff031c while main
+    carried 475902d7; probe --expect-commit gate refused and caught it).
+    Not a pin defect — a deploy-race on a shared store image; an S2
+    per-mint release pin or boot-time freshness assertion would close it.
   source_ref: main@475902d7
   deploy_identity: 'choir.news deployed_commit=475902d7 (verified on owner computer via /api/runtime/observability 2026-10-06)'
   candidate:
