@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
@@ -89,14 +90,16 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 func TestRegisterRoutesGatesTestAPIs(t *testing.T) {
 	t.Parallel()
 
+	// SR (2026-10-05): /api/prompts GET is a deployed introspection surface —
+	// it registers regardless of the test-API flag. Writes stay gated.
 	for _, path := range []string{
 		"/api/prompts",
-		"/api/prompts/role-1",
+		"/api/prompts/research",
 	} {
 		disabled := server.NewServer("apihandler-routes-test-disabled", "0")
 		registerRoutesForTest(t, disabled, false)
-		if registeredRouteResponds(disabled, path) {
-			t.Fatalf("test route %q registered while disabled", path)
+		if !registeredRouteRespondsGET(t, disabled, path) {
+			t.Fatalf("GET prompt route %q not registered while test APIs disabled", path)
 		}
 
 		enabled := server.NewServer("apihandler-routes-test-enabled", "0")
@@ -104,6 +107,16 @@ func TestRegisterRoutesGatesTestAPIs(t *testing.T) {
 		if !registeredRouteResponds(enabled, path) {
 			t.Fatalf("test route %q not registered while enabled", path)
 		}
+	}
+
+	// Writes to /api/prompts/{role} (PUT/DELETE) remain test-gated.
+	disabled := server.NewServer("apihandler-routes-test-write-disabled", "0")
+	registerRoutesForTest(t, disabled, false)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/prompts/research", strings.NewReader("{}"))
+	disabled.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("PUT /api/prompts/* while test APIs disabled = %d, want 404", rec.Code)
 	}
 }
 
@@ -136,6 +149,23 @@ func registeredRouteResponds(srv *server.Server, path string) (registered bool) 
 	}()
 
 	req := httptest.NewRequest(http.MethodPost, path, nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	return w.Code != http.StatusNotFound
+}
+
+// registeredRouteRespondsGET probes registration with a GET request — needed
+// for the read-only /api/prompts surface, whose POST would 404 even when the
+// GET handler is registered.
+func registeredRouteRespondsGET(t *testing.T, srv *server.Server, path string) (registered bool) {
+	t.Helper()
+	defer func() {
+		if recover() != nil {
+			registered = true
+		}
+	}()
+
+	req := httptest.NewRequest(http.MethodGet, path, nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	return w.Code != http.StatusNotFound

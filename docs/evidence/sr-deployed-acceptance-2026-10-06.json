@@ -46,7 +46,7 @@
       "ok": true,
       "trajectory": "5c91129d-9ee6-5825-a09a-371a87b01b48",
       "activations": [
-        "8a8d10d1 (research) — WebSearch gather + cell report xJwjrlPyuNMewTK, exhausted activation egress and stopped with work open",
+        "8a8d10d1 (research) — WebSearch gather + cell report xJwjrlPyuNMewTK; activation stopped on provider 429 rate-limit errors with work open. CORRECTED: its cells contain no egress-ledger refusal string — an earlier version of this file's 'exhausted activation egress' wording for this activation was a confabulated desk report (superseded; see egress_budget_refusal.corrected_claim)",
         "4baef8aa (research) — three cell packets; two cited gathers (UTC date + UTC day-of-week from distinct URLs); work_disposition=completed"
       ],
       "events": [

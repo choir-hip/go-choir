@@ -1,6 +1,8 @@
 package apihandler
 
 import (
+	"net/http"
+
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
 	"github.com/yusefmosiah/go-choir/internal/content"
@@ -53,12 +55,16 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/internal/texture/revisions/", texture.HandleInternalTextureRevision)
 	// R3d: /internal/texture/proposals removed - the desk-originated
 	// worker_updates channel is deleted; children report through the ledger.
-	if enableTestAPIs {
-		s.HandleFunc("/api/prompts", h.HandlePromptList)
-		s.HandleFunc("/api/prompts/", h.HandlePromptRole)
-		// R3d: /api/test/texture/worker-update removed with the
-		// worker_updates channel.
-	}
+	// Deployed desk-surface introspection (SR acceptance): GET-only read of
+	// the composed prompt + per-role tool registry. Writes stay test-gated.
+	s.HandleFunc("/api/prompts", h.HandlePromptList)
+	s.HandleFunc("/api/prompts/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || enableTestAPIs {
+			h.HandlePromptRole(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	})
 
 	// Texture document/revision/history/diff/blame APIs.
 	// All routes are dispatched from a single prefix handler that inspects
