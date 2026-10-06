@@ -58,13 +58,28 @@ disposable, or any owner's texture run) before fix selection. The probe's
 `docs/evidence/` JSON is the acceptance record of the failure, not the
 mechanism.
 
-## Why this is a separate record
+## Update 2026-10-06 (owner-guest recurrence — budget bound is time, not
+tokens)
 
-The owner guest's storm (`sa1-wake-outbox-rearm-storm`) could not have caused
-this: the disposable has ~zero history, the migration minted nothing
-there (console grep finds no `wake outbox` lines), and the failing surface
-is Texture's tool loop, not the wake drain. The SA slice-1 storm fix
-(d94ce9ef) does not touch this path.
+Reproduced on the owner guest post-storm-fix (`candidate-fleet-e15cb89f`,
+SMG probe `smg-rlm-residue`, trajectory `ad443814`): three texture runs
+(`be496a66` texture:0f181fa1, `265b9494` texture:f947cef4, `9de8e633`
+texture:760b5adb) each exhausted the **45-minute elapsed** budget —
+`tool loop budget exhausted: elapsed time reached max 45m0s` — not the
+token cap. Iteration cadence ~20-30 s/tool with 1 tool per iteration is
+consistent with transient-provider-error retries (15 s sleeps) stacking
+on slow gateway calls, or a model that keeps issuing one small tool call
+per turn without converging on `controls[]` emission. Either way the
+desk never emits `open_persistent_super`, so Management is never opened
+and the SMG legs cannot pass — the storm fix removed the wake backlog
+entirely yet the legs still fail on this wall.
+
+**The texture tool loop is the current SMG blocker on both substrates**
+(fresh disposable and storm-clean owner guest). It is orthogonal to the
+SA slice-1 storm work and needs a dedicated slice: either trace why
+`desk_go_eval`/`ApplyTexture` turns iterate 20-40× without emitting the
+control, or bound the desk to a smaller wall/token envelope sized for
+its actual supervision surface.
 
 ## Impact on the SMG station boundary
 
