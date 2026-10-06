@@ -962,29 +962,192 @@ func (s *Store) MarkActorWakeProjected(ctx context.Context, canonicalID string) 
 	return nil
 }
 
+// migrateActorWakeOutboxMarkerKey is the versioned one-shot gate for the
+// pre-outbox-fold backfill. Version bumps re-run the pass; within a version
+// the marker row makes re-entry a no-op so boot never re-scans history.
+const migrateActorWakeOutboxMarkerKey = "actor-wake-outbox:v2"
+
+// actorWakeOutboxMigrationMarker is the durable record that the backfill pass
+// ran to completion (or partially — rerun safety comes from idempotent CAS
+// writes and deterministic command IDs, so a crash mid-pass retries cleanly).
+type actorWakeOutboxMigrationMarker struct {
+	Version   string    `json:"version"`
+	AppliedAt time.Time `json:"applied_at"`
+	Minted    int       `json:"minted"`
+	Expired   int       `json:"expired"`
+}
+
+// StalePendingLifecyclePacketReason proves a pending, unbound packet can
+// never deliver. Returned reasons feed both the expire command's recorded
+// event and the caller's skip decision. A packet is stale only against an
+// affirmative closed authority (settled work, terminated trajectory, missing
+// record) — a missing-but-retryable read is NOT stale and returns "".
+func (s *Store) StalePendingLifecyclePacketReason(ctx context.Context, update types.CoagentSourcePacket) string {
+	switch update.Direction {
+	case types.LifecyclePacketDirectionControl, types.LifecyclePacketDirectionProducerReport:
+		trajectoryID := strings.TrimSpace(update.TrajectoryID)
+		if trajectoryID == "" {
+			return "" // malformed packet — not our authority to expire
+		}
+		trajectory, err := s.GetLifecycleTrajectory(ctx, update.OwnerID, update.ComputerID, trajectoryID)
+		if err != nil || trajectory.Status != types.TrajectoryLive {
+			if err != nil && !errors.Is(err, ErrNotFound) {
+				return "" // read failure: retryable, not stale
+			}
+			return "trajectory_not_live"
+		}
+		workID := strings.TrimSpace(update.TargetWorkItemID)
+		if update.Direction == types.LifecyclePacketDirectionProducerReport {
+			workID = strings.TrimSpace(firstNonEmptyStore(update.ProducerWorkItemID, update.WorkItemID))
+		}
+		if workID != "" {
+			work, workErr := s.GetLifecycleWorkItem(ctx, update.OwnerID, update.ComputerID, workID)
+			if workErr != nil && !errors.Is(workErr, ErrNotFound) {
+				return ""
+			}
+			if workErr != nil || work.Status != types.WorkItemOpen {
+				return "work_item_not_open"
+			}
+		}
+		return ""
+	case types.LifecyclePacketDirectionDirective:
+		recordID := strings.TrimSpace(update.SourceRecordID)
+		if recordID == "" {
+			return ""
+		}
+		if _, err := s.GetCommitmentRecord(ctx, update.OwnerID, update.ComputerID, recordID); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return "source_record_missing"
+			}
+			return ""
+		}
+		return ""
+	default:
+		return ""
+	}
+}
+
+// firstNonEmptyStore returns the first non-empty trimmed string.
+func firstNonEmptyStore(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+// expireStalePacketCommandID is deterministic per packet+version so a
+// mid-migration crash replays into the stored receipt instead of double
+// committing.
+func expireStalePacketCommandID(update types.CoagentSourcePacket) string {
+	return fmt.Sprintf("expire-stale-packet:%s:%d", strings.TrimSpace(update.UpdateID), update.LifecycleVersion)
+}
+
+// ExpireStalePendingLifecyclePacket discharges one stale unbound packet
+// through the recorded expire command and marks its deterministic wake row
+// projected in the same commit. Returns true when a command was issued.
+func (s *Store) ExpireStalePendingLifecyclePacket(ctx context.Context, update types.CoagentSourcePacket, reason string) (bool, error) {
+	wakeID := ""
+	if update.Direction == types.LifecyclePacketDirectionControl ||
+		update.Direction == types.LifecyclePacketDirectionProducerReport ||
+		update.Direction == types.LifecyclePacketDirectionDirective {
+		wakeKey := "wake:" + updateObjectCanonicalID(update)
+		if id, err := lifecycleCanonicalID(ogKindActorWakeOutbox, update.OwnerID, update.ComputerID, wakeKey); err == nil {
+			wakeID = id
+		}
+	}
+	req := types.ExpireStaleLifecyclePacketRequest{
+		OwnerID:                  update.OwnerID,
+		ComputerID:               update.ComputerID,
+		CommandID:                expireStalePacketCommandID(update),
+		UpdateID:                 update.UpdateID,
+		ProducerAgentID:          update.AgentID,
+		ProducerUpdateID:         update.ProducerUpdateID,
+		TrajectoryID:             update.TrajectoryID,
+		TargetAgentID:            update.TargetAgentID,
+		ExpectedLifecycleVersion: update.LifecycleVersion,
+		ExpectedRunID:            update.DeliveredToRunID,
+		StaleReason:              reason,
+		WakeCanonicalID:          wakeID,
+	}
+	digest, err := ComputeExpireStaleLifecyclePacketDigest(req)
+	if err != nil {
+		return false, err
+	}
+	req.CommandDigest = digest
+	if _, err := s.ExpireStaleLifecyclePacket(ctx, req); err != nil {
+		if errors.Is(err, ErrLifecycleCommandConflict) {
+			return false, nil // packet moved under us — next pass or the live path owns it
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// updateObjectCanonicalID reconstructs a worker_update row's canonical ID
+// from its immutable body fields — the envelope's OwnerID/ComputerID may be
+// empty on pre-scope rows, so the body is the authority.
+func updateObjectCanonicalID(update types.CoagentSourcePacket) string {
+	key := strings.TrimSpace(update.TrajectoryID) + "\x00" + strings.TrimSpace(update.TargetAgentID) + "\x00" + strings.TrimSpace(update.AgentID) + "\x00" + strings.TrimSpace(update.ProducerUpdateID)
+	id, err := lifecycleCanonicalID(ogKindWorkerUpdate, update.OwnerID, update.ComputerID, key)
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
 // MigrateActorWakeOutbox mints the durable actor-wake outbox objects for every
 // obligation-bearing canonical object that predates the outbox fold. It runs
-// inside the write fence at kernel cutover: each obligation (pending
-// worker_update, open work item, cancel intent, engineering assignment,
-// owner-authored revision) derives a deterministic wake keyed
-// "wake:<source-canonical-id>[:<source-id>]", so re-running is a no-op. The
-// projector then drains them onto the delivery tape. Returns the number of
-// outbox objects minted.
+// once per marker version inside the write fence at kernel cutover; before
+// minting, it discharges pending packets that can never deliver (settled
+// work, dead trajectory, missing record) through the recorded expire command
+// so stale obligations converge instead of re-arming every boot. Returns the
+// number of outbox objects minted.
 func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 	if s.ogStore == nil {
 		return 0, fmt.Errorf("migrate actor wake outbox: object graph not initialized")
+	}
+	markerID, err := lifecycleCanonicalID(ogKindMigrationMarker, "system", "", migrateActorWakeOutboxMarkerKey)
+	if err != nil {
+		return 0, fmt.Errorf("migrate actor wake outbox: marker id: %w", err)
+	}
+	if _, err := s.ogStore.GetObject(ctx, markerID); err == nil {
+		return 0, nil // already ran at this version
+	} else if !errors.Is(err, objectgraph.ErrNotFound) {
+		return 0, fmt.Errorf("migrate actor wake outbox: read marker: %w", err)
 	}
 	kinds := []objectgraph.ObjectKind{
 		ogKindWorkerUpdate, ogKindWorkItem, ogKindLifecycleCancelIntent,
 		ogKindEngineeringAssignment, ogKindTexRev, ogKindRun,
 	}
 	minted := 0
+	expired := 0
 	for _, kind := range kinds {
 		objects, err := s.ogListAllObjectsByKind(ctx, kind)
 		if err != nil {
 			return minted, fmt.Errorf("migrate actor wake outbox: list %s: %w", kind, err)
 		}
 		for _, obj := range objects {
+			// Stale pending packets discharge before a wake can be minted for
+			// them: an undeliverable obligation re-armed forever is the storm
+			// this pass retires (sa1-wake-outbox-rearm-storm-2026-10-06).
+			if kind == ogKindWorkerUpdate {
+				update, decErr := decodeLifecycleObject[types.CoagentSourcePacket](obj)
+				if decErr == nil && update.Disposition == types.UpdatePending &&
+					update.LifecycleVersion > 0 &&
+					strings.TrimSpace(update.DeliveredToRunID) == "" {
+					if reason := s.StalePendingLifecyclePacketReason(ctx, update); reason != "" {
+						discharged, expErr := s.ExpireStalePendingLifecyclePacket(ctx, update, reason)
+						if expErr != nil {
+							log.Printf("migrate actor wake outbox: expire stale packet %s: %v", update.UpdateID, expErr)
+						} else if discharged {
+							expired++
+							continue // discharged — no wake owed
+						}
+					}
+				}
+			}
 			outboxes, err := actorWakeOutboxFromObject(obj, s.actorWakeResolverObjects(ctx, obj, objects))
 			if err != nil {
 				// One malformed/unmappable object must not abort the migration
@@ -1030,6 +1193,19 @@ func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 				}
 			}
 		}
+	}
+	// Marker commits last: a crash before it reruns the (idempotent) pass;
+	// after it, boot never scans again at this version.
+	markerBody := actorWakeOutboxMigrationMarker{Version: migrateActorWakeOutboxMarkerKey, AppliedAt: time.Now().UTC(), Minted: minted, Expired: expired}
+	markerObj, err := lifecycleObject(ogKindMigrationMarker, "system", "", migrateActorWakeOutboxMarkerKey, markerBody, map[string]any{"migration": migrateActorWakeOutboxMarkerKey}, markerBody.AppliedAt, markerBody.AppliedAt)
+	if err != nil {
+		return minted, fmt.Errorf("migrate actor wake outbox: build marker: %w", err)
+	}
+	if err := s.ogStore.PutBatchConditional(ctx, []objectgraph.ObjectCondition{{CanonicalID: markerID, Exists: false}}, objectgraph.Batch{Objects: []objectgraph.Object{markerObj}}); err != nil && !errors.Is(err, objectgraph.ErrConflict) {
+		return minted, fmt.Errorf("migrate actor wake outbox: write marker: %w", err)
+	}
+	if expired > 0 {
+		log.Printf("migrate actor wake outbox: expired %d stale pending packets", expired)
 	}
 	return minted, nil
 }
@@ -2296,7 +2472,7 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	if trajectoryID := strings.TrimSpace(storedReceipt.TrajectoryID); trajectoryID != "" && commandID != "" {
 		if intentObj, intentErr := s.lifecycleGetObject(ctx, ogKindLifecycleCancelIntent, ownerID, computerID, trajectoryID); intentErr == nil {
 			intent, decodeErr := decodeLifecycleObject[types.LifecycleCancellationIntent](intentObj)
-			allowedFate := storedReceipt.Kind == types.LifecycleSetEngineeringCapsuleDisposition || storedReceipt.Kind == types.LifecycleCancelEngineeringAssignment || storedReceipt.Kind == types.LifecycleRecordEngineeringAssignment || storedReceipt.Kind == types.LifecycleTerminalizeRun || storedReceipt.Kind == types.LifecycleReactivateRun
+			allowedFate := storedReceipt.Kind == types.LifecycleSetEngineeringCapsuleDisposition || storedReceipt.Kind == types.LifecycleCancelEngineeringAssignment || storedReceipt.Kind == types.LifecycleRecordEngineeringAssignment || storedReceipt.Kind == types.LifecycleTerminalizeRun || storedReceipt.Kind == types.LifecycleReactivateRun || storedReceipt.Kind == types.LifecycleExpireStalePacket
 			lateEvidence := false
 			for _, event := range result.Events {
 				if event.Kind == types.LifecycleUpdateLate {
@@ -2349,7 +2525,6 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	}
 	return result, nil
 }
-
 
 // appendActorWakeOutboxes derives every durable actor wake the batch's objects
 // owe and appends the new (or re-armed) outbox rows plus their commit

@@ -65,6 +65,7 @@ var frozenLifecycleCommandKinds = map[types.LifecycleCommandKind]bool{
 	types.LifecycleReconcileUpdateDelivery:          true,
 	types.LifecycleTerminalizeRun:                   true,
 	types.LifecycleReactivateRun:                    true,
+	types.LifecycleExpireStalePacket:                true, // SA1 storm-convergence discharge 2026-10-06
 }
 
 // frozenLifecycleEventKinds is every lifecycle event kind string in the
@@ -99,6 +100,7 @@ var frozenLifecycleEventKinds = map[types.LifecycleEventKind]bool{
 	types.LifecycleEngineeringCapsuleDispositionSet: true, // V1 "co_super_capsule_disposition_set"
 	types.LifecycleRunTerminalized:                  true,
 	types.LifecycleRunReactivated:                   true,
+	types.LifecycleUpdateExpired:                    true, // SA1 storm-convergence discharge 2026-10-06
 	// Tombstone: retired by M1's owner-input cutover (2026-09-23). Pre-M1
 	// computers' frozen tapes still carry it; the decode boundary must accept
 	// it so boot reconcile on those computers does not fail closed.
@@ -139,6 +141,7 @@ var frozenOGObjectKinds = map[string]bool{
 	"choir.artifact_manifest":            true,
 	"choir.audio_recording":              true,
 	"choir.autoradio_run_sheet":          true,
+	"choir.migration_marker":             true,
 	"choir.browser_session":              true,
 	"choir.channel_message":              true,
 	"choir.coagent_mailbox":              true,

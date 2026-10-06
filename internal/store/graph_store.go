@@ -45,6 +45,7 @@ const (
 	ogKindDesktopSess           = objectgraph.ObjectKind("choir.desktop_session")
 	ogKindDesktopApp            = objectgraph.ObjectKind("choir.desktop_app_instance")
 	ogKindCommitmentRecord      = objectgraph.ObjectKind("choir.commitment_record")
+	ogKindMigrationMarker       = objectgraph.ObjectKind("choir.migration_marker")
 )
 
 // Edge kind constants.

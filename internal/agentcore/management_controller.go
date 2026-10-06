@@ -1463,8 +1463,37 @@ func (rt *Runtime) listPendingPersistentManagementLifecycleControls(ctx context.
 			controls = append(controls, update)
 		}
 	}
-	validated, valErr := rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, controls, true)
-	return validated, valErr
+	// A single poisoned pending control must not starve every valid control
+	// behind it: validation runs per-packet, packets that prove stale against
+	// canonical authority discharge through the expire command (recorded
+	// act), and the rest stay pending for this pass.
+	validated := make([]types.CoagentSourcePacket, 0, len(controls))
+	var firstErr error
+	for _, update := range controls {
+		single, valErr := rt.validateTargetBoundLifecycleControls(ctx, ownerID, computerID, agentID, []types.CoagentSourcePacket{update}, true)
+		if valErr == nil {
+			validated = append(validated, single...)
+			continue
+		}
+		if reason := rt.store.StalePendingLifecyclePacketReason(ctx, update); reason != "" {
+			discharged, expErr := rt.store.ExpireStalePendingLifecyclePacket(ctx, update, reason)
+			switch {
+			case expErr != nil:
+				if firstErr == nil {
+					firstErr = fmt.Errorf("expire poisoned control %s: %w", update.UpdateID, expErr)
+				}
+			case discharged:
+				log.Printf("runtime: discharged stale persistent-Management control %s reason=%s", update.UpdateID, reason)
+			default:
+				// Raced terminal transition; treat as converged this pass.
+			}
+			continue
+		}
+		if firstErr == nil {
+			firstErr = fmt.Errorf("validate pending control %s: %w", update.UpdateID, valErr)
+		}
+	}
+	return validated, firstErr
 }
 
 func (rt *Runtime) listPendingPersistentManagementDirectives(ctx context.Context, ownerID, computerID, agentID string, limit int) ([]types.CoagentSourcePacket, error) {
@@ -3014,34 +3043,53 @@ func (rt *Runtime) ResolvePersistentManagementLiveOccurrence(ctx context.Context
 	}
 	rt.managementReconcileMu.Lock()
 	defer rt.managementReconcileMu.Unlock()
-	pending, err := rt.listPendingPersistentManagementLifecycleControls(ctx, ownerID, computerID, agentID, 100)
+	// O(1) resolve: one metadata-field scan hashes the pending backlog's
+	// identity columns and point-fetches only rows whose occurrence content
+	// matches — never a hydrated validation pass per wake.
+	matched, err := rt.store.FindPendingLifecyclePacketsByOccurrence(ctx, ownerID, computerID, agentID, content)
 	if err != nil {
 		return nil, false, err
 	}
-	directives, err := rt.listPendingPersistentManagementDirectives(ctx, ownerID, computerID, agentID, 100)
-	if err != nil {
-		return nil, false, err
-	}
-	pending = append(pending, directives...)
-	var matched types.CoagentSourcePacket
-	found := false
-	for _, update := range pending {
-		if lifecycleControlActorOccurrenceContent(update) != content {
-			continue
-		}
+	// Envelope tighten: trajectory/from headers must agree with the packet's
+	// own scope before the packet is trusted as the wake's authority.
+	var exact *types.CoagentSourcePacket
+	for i := range matched {
+		update := matched[i]
 		if trajectoryID != "" && strings.TrimSpace(update.TrajectoryID) != trajectoryID {
 			continue
 		}
 		if fromAgentID != "" && strings.TrimSpace(update.AgentID) != fromAgentID {
 			continue
 		}
-		if found {
+		if update.Direction == types.LifecyclePacketDirectionProducerReport {
+			return nil, false, ErrPersistentManagementReportOccurrence
+		}
+		// A pending packet that can never deliver discharges at resolve time:
+		// the occurrence consumed is the packet's bounded terminal fate, and
+		// the stale wake row is marked projected in the same commit so the
+		// obligation cannot re-enter the drain (sa1 rearm storm).
+		if reason := rt.store.StalePendingLifecyclePacketReason(ctx, update); reason != "" {
+			discharged, expErr := rt.store.ExpireStalePendingLifecyclePacket(ctx, update, reason)
+			if expErr != nil {
+				return nil, false, fmt.Errorf("expire stale occurrence packet %s: %w", update.UpdateID, expErr)
+			}
+			if discharged {
+				log.Printf("runtime: persistent Management live occurrence discharged stale packet=%s reason=%s", update.UpdateID, reason)
+				return nil, true, nil
+			}
+			continue
+		}
+		if exact != nil {
 			return nil, false, fmt.Errorf("%w: ambiguous live Management occurrence", ErrInvalidPersistentManagementRecovery)
 		}
-		matched = update
-		found = true
+		copied := update
+		exact = &copied
 	}
-	if !found {
+	if exact == nil {
+		// Delivered-but-unconsumed reports are invisible to the pending scan
+		// (DeliveredToRunID is set), so the finder alone cannot classify a
+		// report wake aimed at a dead bound run. The report path still
+		// resolves here so the handler falls through to park-resume.
 		reportPending, reportErr := rt.persistentManagementReportOccurrencePending(ctx, ownerID, computerID, agentID, content, trajectoryID, fromAgentID)
 		if reportErr != nil {
 			return nil, false, reportErr
@@ -3051,7 +3099,15 @@ func (rt *Runtime) ResolvePersistentManagementLiveOccurrence(ctx context.Context
 		}
 		return nil, true, nil
 	}
-	rec, err := rt.reconcilePersistentManagementActorLocked(ctx, ownerID, agentID, matched.UpdateID)
+	// A bound-but-pending match names a dead carrier's claim, not a pending
+	// activation target: pass no exact id so reconcile releases the stranded
+	// binding and re-queues the packet (unbindStrandedLifecycleControls),
+	// rather than erroring on "exact update not pending".
+	exactID := exact.UpdateID
+	if strings.TrimSpace(exact.DeliveredToRunID) != "" {
+		exactID = ""
+	}
+	rec, err := rt.reconcilePersistentManagementActorLocked(ctx, ownerID, agentID, exactID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -3061,8 +3117,6 @@ func (rt *Runtime) ResolvePersistentManagementLiveOccurrence(ctx context.Context
 	return rec, false, nil
 }
 
-// ErrPersistentManagementReportOccurrence marks a live occurrence whose hashed
-// content matches a pending producer report rather than a control. The actor
 // handler resumes the parked Management run through the generic path on this
 // signal — reports carry no execution authority, so the control resolver must
 // not mint or bind from them (Definition 1 / storm receipt 3654d925).

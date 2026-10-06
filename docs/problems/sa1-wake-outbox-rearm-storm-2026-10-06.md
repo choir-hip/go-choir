@@ -101,6 +101,46 @@ under pressure reclaim; each restart re-ran the whole scan.
   binds, and reports without being starved).
 - No obligation is deleted: every discharge is a tape-visible act.
 
+## Landed fix (2026-10-06)
+
+Commit pending (same mission). The four named mechanisms landed together:
+
+1. **One-shot migration gate.** `MigrateActorWakeOutbox` is now gated on a
+   versioned `choir.migration_marker` object (`actor-wake-outbox:v2`): the
+   scan runs once per marker version, not per boot. Marker writes last so a
+   crash mid-pass reruns the idempotent pass cleanly.
+2. **Stale-obligation expiry as a recorded act.** New command
+   `ExpireStaleLifecyclePacket` (`internal/store/lifecycle_expire.go`) CAS-
+   discharges a pending packet to `UpdateCancelled` with an
+   `update_expired` lifecycle event, and marks the packet's deterministic
+   wake row projected in the same commit. The migration calls it for
+   unbound pending packets whose authority is closed — settled/cancelled
+   work item, non-live trajectory, missing directive record.
+3. **O(1) occurrence resolve.** `FindPendingLifecyclePacketsByOccurrence`
+   (`internal/store/lifecycle_control_delivery.go`) hashes identity fields
+   from a metadata scan and point-fetches only content-matched rows.
+   `ResolvePersistentManagementLiveOccurrence` uses it — no per-row body
+   fetches, no work-item hydration during match.
+4. **Paced drain.** `sweepActorWakeOutbox` caps dispatches at 4 per target
+   desk and 64 total per 500 ms tick.
+
+Two adjacent defects fixed in the same change:
+- `ReconcileUpdateDelivery` rejected empty `TrajectoryID`, making
+  computer-scoped directives (record-native) permanently unbindable — the
+  reconcile now tolerates a nil trajectory (events sequence on the packet's
+  own reducer position).
+- `listPendingPersistentManagementLifecycleControls` aborted the whole
+  reconcile on one poisoned pending row; validation is now per-packet, and
+  stale packets expire instead of starving the desk.
+
+Deferred within slice 1 (documented residuals): the `wakes`-per-boot figure
+after this deploy is expected ≈ 0 *because* the marker suppresses rescan;
+true convergence proof is the 24 h acceptance window on the owner guest.
+The disposable-computer SMG failure seen during this slice (Texture desk
+runs exhausting the 1.2M-token budget — separate root cause, recorded in
+`docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json`) is NOT this
+storm and needs its own problem record if it reproduces.
+
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;

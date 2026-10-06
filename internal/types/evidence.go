@@ -65,7 +65,7 @@ type CoagentSourcePacketPayload struct {
 	Sources       []CoagentPacketSource `json:"sources,omitempty"`
 	Actions       []CoagentPacketAction `json:"actions,omitempty"`
 	Questions     []string              `json:"questions,omitempty"`
-	Notes           []string              `json:"notes,omitempty"`
+	Notes         []string              `json:"notes,omitempty"`
 	// WorkDisposition settles the bound lifecycle work item (SMG 2026-10-06:
 	// moved from the deleted report_to_texture typed tool onto the packet so
 	// in-cell choir.ReportPacket can close work). open|completed|empty.
@@ -238,6 +238,27 @@ func LifecycleControlActorOccurrenceContent(update CoagentSourcePacket) string {
 		"choir:lifecycle-control-actor-occurrence:v2",
 		updateID,
 		strings.TrimSpace(update.ProducerUpdateID),
+	} {
+		identity = binary.AppendUvarint(identity, uint64(len(field)))
+		identity = append(identity, field...)
+	}
+	digest := sha256.Sum256(identity)
+	return "sha256:" + hex.EncodeToString(digest[:])
+}
+
+// LifecycleControlActorOccurrenceContentForIDs is the same identity hash at
+// the field level, for callers that have only the packet's identity fields
+// (e.g. an index-scan row) rather than a hydrated packet.
+func LifecycleControlActorOccurrenceContentForIDs(updateID, producerUpdateID string) string {
+	updateID = strings.TrimSpace(updateID)
+	if updateID == "" {
+		return ""
+	}
+	identity := make([]byte, 0, len(updateID)+len(producerUpdateID)+64)
+	for _, field := range []string{
+		"choir:lifecycle-control-actor-occurrence:v2",
+		updateID,
+		strings.TrimSpace(producerUpdateID),
 	} {
 		identity = binary.AppendUvarint(identity, uint64(len(field)))
 		identity = append(identity, field...)

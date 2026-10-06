@@ -2548,6 +2548,15 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 	if schedule == nil {
 		schedule = rt.scheduleActor
 	}
+	// Paced drain: one target desk gets at most a handful of dispatches per
+	// sweep. A boot storm that mints thousands of wakes for the same desk
+	// collapses to a bounded burst per tick — resolve folds the desk's whole
+	// pending set anyway, so extra dispatches to a hot desk carry no
+	// additional obligation (sa1 rearm storm).
+	perTarget := map[string]int{}
+	const sweepPerTargetLimit = 4
+	dispatched := 0
+	const sweepDispatchBudget = 64
 	for _, wake := range wakes {
 		var dispatchErr error
 		if !wake.NotBefore.IsZero() {
@@ -2557,6 +2566,12 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 			}
 			dispatchErr = schedule(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID, wake.NotBefore.UTC())
 		} else {
+			if wake.NotBefore.IsZero() && dispatched >= sweepDispatchBudget {
+				break // leave the rest unprojected for the next tick
+			}
+			if perTarget[wake.TargetAgentID] >= sweepPerTargetLimit {
+				continue
+			}
 			dispatchErr = dispatch(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
 		}
 		if dispatchErr != nil {
@@ -2574,6 +2589,8 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 			log.Printf("runtime: actor wake outbox dispatch %s: %v", wake.SourceUpdateID, dispatchErr)
 			continue
 		}
+		perTarget[wake.TargetAgentID]++
+		dispatched++
 		if err := rt.store.MarkActorWakeProjected(ctx, wake.CanonicalID); err != nil && !errors.Is(err, store.ErrConcurrentStateChange) {
 			log.Printf("runtime: actor wake outbox mark projected %s: %v", wake.SourceUpdateID, err)
 		}

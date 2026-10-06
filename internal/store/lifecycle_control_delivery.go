@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -157,6 +158,61 @@ func (s *Store) GetCoagentSourcePacket(ctx context.Context, canonicalID string) 
 		return types.CoagentSourcePacket{}, err
 	}
 	return decodeLifecycleObject[types.CoagentSourcePacket](obj)
+}
+
+// FindPendingLifecyclePacketsByOccurrence resolves an actor wake's hashed
+// content to the pending packets that mint it — a metadata-field scan of
+// headers only (no per-row body decode), then point-fetching just the matched
+// rows. This is the O(1)-fetch resolve path for live occurrences: the scan
+// itself is index-bounded by lifecycleWorkerUpdateScanCap and never hydrates
+// the backlog to compare hashes.
+func (s *Store) FindPendingLifecyclePacketsByOccurrence(ctx context.Context, ownerID, computerID, targetAgentID, occurrenceContent string) ([]types.CoagentSourcePacket, error) {
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("lifecycle worker updates: object graph not initialized")
+	}
+	targetAgentID = strings.TrimSpace(targetAgentID)
+	if targetAgentID == "" || strings.TrimSpace(occurrenceContent) == "" {
+		return nil, nil
+	}
+	rows, err := graph.ListJSONBodyFieldsByKindOwner(ctx, string(ogKindWorkerUpdate), ownerID, []string{
+		"$.target_agent_id", "$.disposition", "$.update_id", "$.producer_update_id",
+	}, lifecycleWorkerUpdateScanCap+1)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > lifecycleWorkerUpdateScanCap {
+		return nil, fmt.Errorf("lifecycle updates: scan cap %d exceeded for owner %s", lifecycleWorkerUpdateScanCap, ownerID)
+	}
+	matched := make([]types.CoagentSourcePacket, 0, 1)
+	for _, row := range rows {
+		if len(row.Fields) < 4 ||
+			strings.TrimSpace(row.Fields[0]) != targetAgentID ||
+			strings.TrimSpace(row.Fields[1]) != string(types.UpdatePending) {
+			continue
+		}
+		if computerID != "" && strings.TrimSpace(row.ComputerID) != computerID {
+			continue
+		}
+		if types.LifecycleControlActorOccurrenceContentForIDs(row.Fields[2], row.Fields[3]) != occurrenceContent {
+			continue
+		}
+		packet, getErr := s.GetCoagentSourcePacket(ctx, row.CanonicalID)
+		if getErr != nil {
+			if errors.Is(getErr, ErrNotFound) || errors.Is(getErr, objectgraph.ErrNotFound) {
+				continue
+			}
+			return nil, getErr
+		}
+		if packet.Disposition != types.UpdatePending || packet.TargetAgentID != targetAgentID {
+			continue // raced terminal transition between scan and fetch
+		}
+		matched = append(matched, packet)
+	}
+	return matched, nil
 }
 
 func (s *Store) indexPendingDeliveredWorkerUpdatesByRun(ctx context.Context, ownerID, computerID string) (map[string]int, map[string][]string, error) {

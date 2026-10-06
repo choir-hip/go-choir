@@ -37,6 +37,7 @@ const (
 	LifecycleReconcileUpdateDelivery          LifecycleCommandKind = "reconcile_update_delivery"
 	LifecycleTerminalizeRun                   LifecycleCommandKind = "terminalize_run"
 	LifecycleReactivateRun                    LifecycleCommandKind = "reactivate_run"
+	LifecycleExpireStalePacket                LifecycleCommandKind = "expire_stale_packet"
 )
 
 type LifecycleEventKind string
@@ -76,6 +77,12 @@ const (
 	LifecycleEngineeringCapsuleDispositionSet LifecycleEventKind = "co_super_capsule_disposition_set"
 	LifecycleRunTerminalized                  LifecycleEventKind = "run_terminalized"
 	LifecycleRunReactivated                   LifecycleEventKind = "run_reactivated"
+	// LifecycleUpdateExpired is the recorded terminal fate for a pending
+	// lifecycle packet whose obligation can never deliver — its target work
+	// item settled, its trajectory terminated, or its directive record
+	// vanished. The wake-outbox boot pass and the live-occurrence resolve
+	// emit it so a stale obligation stops re-arming instead of storming.
+	LifecycleUpdateExpired LifecycleEventKind = "update_expired"
 	// Retired kinds remain decodable: computers whose tapes were written
 	// before the kind was deleted still carry these events, and the decode
 	// boundary refuses anything absent from the frozen table. Tombstones are
@@ -363,6 +370,35 @@ type ReconcileUpdateDeliveryRequest struct {
 	// BreakerReason, when set, emits one texture_activation_failed event for
 	// the doc breaker trip observed by the reconciler (deduped by command id).
 	BreakerReason string `json:"breaker_reason,omitempty"`
+}
+
+// ExpireStaleLifecyclePacketRequest terminalizes one pending lifecycle packet
+// whose obligation can never deliver: the target work item is settled, the
+// trajectory terminated, or the backing record vanished. The caller proves
+// staleness; the command CAS-fences the packet's pending version so a packet
+// that legitimately re-pends mid-expire rejects the command instead of being
+// silently discharged. Trajectory may be empty — computer-scoped directives
+// carry no trajectory. If WakeCanonicalID names the packet's derived wake
+// row, the same commit marks it projected so the discharged obligation leaves
+// the outbox drain.
+type ExpireStaleLifecyclePacketRequest struct {
+	OwnerID                  string `json:"owner_id"`
+	ComputerID               string `json:"computer_id"`
+	CommandID                string `json:"command_id"`
+	CommandDigest            string `json:"command_digest"`
+	UpdateID                 string `json:"update_id"`
+	ProducerAgentID          string `json:"producer_agent_id"`
+	ProducerUpdateID         string `json:"producer_update_id"`
+	TrajectoryID             string `json:"trajectory_id"`
+	TargetAgentID            string `json:"target_agent_id"`
+	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
+	ExpectedRunID            string `json:"expected_run_id,omitempty"`
+	// StaleReason names the undeliverable evidence (work item settled,
+	// trajectory not live, source record missing).
+	StaleReason string `json:"stale_reason"`
+	// WakeCanonicalID is the deterministic wake:<packet> outbox row to mark
+	// projected in the same commit; empty leaves the drain untouched.
+	WakeCanonicalID string `json:"wake_canonical_id,omitempty"`
 }
 
 type FailLifecycleControlActivationRequest struct {

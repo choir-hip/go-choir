@@ -385,6 +385,50 @@ func TestPersistentManagementLiveOccurrenceBindsExactControlNotFIFO(t *testing.T
 	}
 }
 
+// SA1 storm convergence: a live occurrence that resolves to a pending
+// control whose work item already settled must discharge the packet as its
+// recorded terminal fate (update_expired) and consume the occurrence —
+// never defer-loop it back into the drain.
+func TestPersistentManagementLiveOccurrenceExpiresStaleControl(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	ownerID := "owner-super-live-stale"
+	managementAgent, err := rt.EnsurePersistentManagementAgent(context.Background(), ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "stale-a", managementAgent.AgentID, agentprofile.Management)
+
+	// Close the target work item under canonical command so the pending
+	// control is undeliverable.
+	settle := types.SettleLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: "autoputer-test",
+		CommandID: "settle-stale-target", TrajectoryID: fixture.trajectoryID,
+		WorkItemID: fixture.control.TargetWorkItemID, ActingAgentID: managementAgent.AgentID,
+		ResultRef: "evidence://closed-stale",
+	}
+	settle.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(settle)
+	if _, err := s.SettleLifecycleWork(context.Background(), settle); err != nil {
+		t.Fatalf("settle target work: %v", err)
+	}
+
+	content := LifecycleControlActorOccurrenceContent(fixture.control)
+	rec, terminal, err := rt.ResolvePersistentManagementLiveOccurrence(context.Background(), ownerID, "autoputer-test", managementAgent.AgentID, content, fixture.trajectoryID, fixture.control.AgentID)
+	if err != nil {
+		t.Fatalf("resolve stale occurrence: %v", err)
+	}
+	if !terminal || rec != nil {
+		t.Fatalf("stale occurrence must consume as terminal, rec=%+v terminal=%t", rec, terminal)
+	}
+	reloaded, err := s.GetLifecycleUpdate(context.Background(), ownerID, "autoputer-test", fixture.trajectoryID, managementAgent.AgentID, fixture.control.AgentID, fixture.control.ProducerUpdateID)
+	if err != nil {
+		t.Fatalf("reload packet: %v", err)
+	}
+	if reloaded.Disposition != types.UpdateCancelled || reloaded.DispositionReason != "stale_obligation_expired" {
+		t.Fatalf("stale packet not discharged: disposition=%s reason=%s", reloaded.Disposition, reloaded.DispositionReason)
+	}
+}
+
 func TestPersistentManagementRestartUsesDistinctRecoveryOccurrence(t *testing.T) {
 	rt, s := testRuntime(t)
 	ctx := context.Background()

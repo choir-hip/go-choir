@@ -36,8 +36,8 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 	}
 	req.OwnerID, req.ComputerID = ownerID, computerID
 	req.CommandID = strings.TrimSpace(req.CommandID)
-	if req.CommandID == "" || strings.TrimSpace(req.TrajectoryID) == "" || strings.TrimSpace(req.TargetAgentID) == "" {
-		return types.LifecycleResult{}, fmt.Errorf("reconcile update delivery: command, trajectory, and target agent are required")
+	if req.CommandID == "" || strings.TrimSpace(req.TargetAgentID) == "" {
+		return types.LifecycleResult{}, fmt.Errorf("reconcile update delivery: command and target agent are required")
 	}
 	computedDigest, digestErr := ComputeReconcileUpdateDeliveryDigest(req)
 	if err := requireLifecycleDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
@@ -54,10 +54,21 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 		return types.LifecycleResult{}, fmt.Errorf("reconcile update delivery: object graph not initialized")
 	}
 	trajectoryID := strings.TrimSpace(req.TrajectoryID)
-	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
-		return types.LifecycleResult{}, fmt.Errorf("reconcile update delivery trajectory %s: %w", trajectoryID, err)
+	var trajectoryObj objectgraph.Object
+	var trajectory types.TrajectoryRecord
+	var seq int64
+	trajectoryBound := trajectoryID != ""
+	if trajectoryBound {
+		trajectoryObj, trajectory, err = s.lifecycleTrajectoryObject(ctx, ownerID, computerID, trajectoryID)
+		if err != nil {
+			return types.LifecycleResult{}, fmt.Errorf("reconcile update delivery trajectory %s: %w", trajectoryID, err)
+		}
+		seq = trajectory.ReducerSeq
 	}
+	// Computer-scoped packets (record-native directives to persistent
+	// Management) carry no trajectory. They reconcile against a zero seq:
+	// ReducerSeq on their events is the packet's own stream position, and the
+	// receipt commits with no trajectory object.
 
 	firstNonEmptyStore := func(a, b string) string {
 		if strings.TrimSpace(a) != "" {
@@ -70,8 +81,9 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 	var objects []objectgraph.Object
 	var events []types.LifecycleEvent
 	var eventObjs []objectgraph.Object
-	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash})
-	seq := trajectory.ReducerSeq
+	if trajectoryBound {
+		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: trajectoryObj.CanonicalID, Exists: true, ExpectedContentHash: trajectoryObj.ContentHash})
+	}
 	eventSeq := 0
 	emit := func(kind types.LifecycleEventKind, update types.CoagentSourcePacket, reason string) error {
 		eventSeq++
@@ -120,7 +132,13 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 			update.LifecycleVersion != item.ExpectedLifecycleVersion {
 			return types.LifecycleResult{}, ErrLifecycleCommandConflict
 		}
-		seq++
+		if trajectoryBound {
+			seq++
+		} else {
+			// No trajectory stream to sequence on: the packet's own ReducerSeq
+			// stays the monotone reference for this packet's events.
+			seq = update.ReducerSeq + 1
+		}
 		exhausted := item.Exhaust || update.DeliveryAttempts+1 > req.MaxAttempts
 		if exhausted {
 			update.Disposition = types.UpdateDelivered
@@ -194,14 +212,16 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 		}
 	}
 
-	trajectory.ReducerSeq = seq
-	trajectory.LifecycleVersion++
-	trajectory.UpdatedAt = now
-	updatedTrajectoryObj, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, trajectory.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", trajectory.TrajectoryID, computerID, trajectory.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
-	if err != nil {
-		return types.LifecycleResult{}, err
+	if trajectoryBound {
+		trajectory.ReducerSeq = seq
+		trajectory.LifecycleVersion++
+		trajectory.UpdatedAt = now
+		updatedTrajectoryObj, trajErr := lifecycleObject(ogKindTrajectory, ownerID, computerID, trajectory.TrajectoryID, trajectory, lifecycleMetadata("trajectory_id", trajectory.TrajectoryID, computerID, trajectory.TrajectoryID, seq), trajectoryObj.CreatedAt, now)
+		if trajErr != nil {
+			return types.LifecycleResult{}, trajErr
+		}
+		objects = append(objects, updatedTrajectoryObj)
 	}
-	objects = append(objects, updatedTrajectoryObj)
 
 	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, trajectoryID, req.CommandID, req.CommandDigest, types.LifecycleReconcileUpdateDelivery, seq, eventObjs)
 	if err != nil {
@@ -210,6 +230,9 @@ func (s *Store) ReconcileUpdateDelivery(ctx context.Context, req types.Reconcile
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
 	objects = append(objects, receiptObj)
 
-	result := types.LifecycleResult{Receipt: receipt, Trajectory: trajectory, Events: events}
+	result := types.LifecycleResult{Receipt: receipt, Events: events}
+	if trajectoryBound {
+		result.Trajectory = trajectory
+	}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, result)
 }
