@@ -184,5 +184,13 @@ now:
     storm trajectories or a pre-genesis disposable, then re-run
     scripts/smg_rlm_acceptance_probe.mjs for legs 1-3. Schema leg proven.
 
+    DIRECTOR 2026-10-06: do not drain or park the owner guest's storm to
+    pass legs 1-3; that proves nothing about the substrate and hides it.
+    Run the legs on a fresh disposable with a registration -> API key ->
+    POST /api/computers/{id}/lifecycle/bootstrap-chain preamble (the
+    documented manual genesis route; s0b-registration-computer-missing-
+    genesis-2026-10-04). Have the probe create any history a leg needs
+    (an assignment to cancel). If the legs pass there, close SMG with a
+    named edge: re-run on the owner computer after SA slice 1.
 receipts: []
 ---

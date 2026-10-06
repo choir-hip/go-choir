@@ -32,6 +32,14 @@ definition_version: 4
 # S3 now depends on SA, S5 on SC. World Wire: consuming lens; phase 1 can start
 # after S5; the 10-01 WW metamission is superseded pending a rewrite. See
 # "v5 plan".
+# v5.1 2026-10-06 (director review): S2, SR closed; SMG landed with its
+# behavioral legs blocked. The Management storm (4th recurrence; survives
+# restart because the wake-outbox migration re-arms open August obligations
+# on every boot) moves from SA slice 4 to SA slice 1, ahead of the baseline.
+# Registration genesis fix becomes SA slice 0. SMG legs run on a disposable
+# with the bootstrap-chain preamble, never by hand-draining the owner guest.
+# CAS durability + 161k lost corpus bodies recorded under SO. See
+# "v5.1 revision".
 
 readiness: executable
 
@@ -494,6 +502,12 @@ boundaries:
 now:
   status: working
   slice: >-
+    v5.1 (2026-10-06 director review): Closed since v5: S2 (10-05), SR
+    (10-06, panel r7 7-0). SMG landed (all four desks sealed at
+    {desk_go_eval}, schema leg deployed-proven) with three behavioral legs
+    blocked by the Management storm. Critical path is now SA slice 0
+    (registration genesis) and slice 1 (storm convergence), then the SA
+    baseline. See "v5.1 revision".
     v5 (2026-10-05, owner-approved outline). Governing principle: density
     before distribution. Closed: S0, S0m, S1a, **S2** (2026-10-05, terminal
     receipt s2-station-terminal-2026-10-05; consensus round 2 6 approve /
@@ -658,27 +672,40 @@ now:
     full S1 floor. S3 must not start before SO's storage lifecycle and the
     VM shape decision.
   next_action: >-
-    1. SO remainder: sourcecycled durable default-off in nix/node-b.nix; one
-       corpus-dolt CPU sample + processlist; CI deploy gating against the
-       deployed identity. DONE: og GC wrong-store fix (2fa30b17: live set ->
-       corpus(), fail-closed on load error, split-pool regression test;
-       incident doc s0-gc-og-wrong-store-deletion-2026-10-05 — the wrong-store
-       sweep mass-deleted ~45.8k live corpus bodies before the fix).
-    2. S1: non-root runtime (last item; gates S4).
-    3. SR CLOSED 2026-10-06 (panel r7 7-0 APPROVE; deployed 12d3adc0;
-       terminal receipt in the station file).
-    3a. SMG (new, owner directive 2026-10-06): management desk RLM cutover —
-       delete report_to_texture + cancel_co_super_assignment, move their
-       validations behind choir.* verbs, all desk prompts RLM-only.
-       Ordered before SM/SC: they assume the sealed-cell carrier on all
-       desks. Problem doc + station file authored.
-    4. SA (station file authored, drafted) after SR: fan-out load probe +
-       memory receipt first, then the slices in order.
-    5. Author SM and SC station files from "v5 plan" when SR lands.
-    DONE: S2 station CLOSED 2026-10-05 — terminal receipt
-    s2-station-terminal-2026-10-05 (panel round 2: 6 approve / 1 send-back,
-    sole send-back discharged); close report
-    docs/reports/s2-layering-station-close-2026-10-05.md.
+    1. SMG close: run legs 1-3 of scripts/smg_rlm_acceptance_probe.mjs on a
+       fresh disposable with a registration -> API key -> bootstrap-chain
+       preamble (s0b-registration-computer-missing-genesis documents the
+       manual route). Do NOT hand-drain or park the owner guest's storm to
+       pass the legs. If a leg needs history a fresh computer lacks (e.g.
+       an assignment to cancel), the probe creates it. Then SMG boundary.
+    2. SA slice 0: registration genesis — provisioning mints
+       genesis_imported (or refuses to report active) before the computer
+       is usable; prompt-bar returns a clean 503 pre-genesis, never a 500.
+       Regression gate: fresh registration accepts its first prompt with no
+       manual bootstrap-chain. Every SA acceptance runs on disposables.
+    3. SA slice 1: storm convergence (red). Problem-doc first: record the
+       boot re-arm mechanism (v5.1 revision, finding 2) and confirm it from
+       the guest trace (re-armed wake ids vs their source obligations'
+       trajectory state). Then: terminal fate for stale obligations as a
+       recorded act on the tape; wake-outbox migration one-shot (versioned
+       marker) or deleted; O(1) occurrence resolve; per-desk dispatch gate
+       with a paced drain. Acceptance: owner guest restart converges
+       pending to a bounded floor within a stated window and stays there
+       for 24 h, and the SMG probe passes on the owner computer.
+    4. SA slices 2-7 (baseline, memory, engine lock, read cost, store
+       split, shapes) in order.
+    5. SO remainder: CAS durability (fsync file+dir before the og row
+       commits), recorded loss disposition for the 161,185 missing corpus
+       body_refs, check artifact-GC history for the ~115k pre-10-05 loss,
+       delete platform.og_objects residue, corpus-dolt CPU sample. Not on
+       the critical path (corpus frozen).
+    6. S1: non-root runtime (gates S4).
+    7. Author SM and SC station files (SR has landed; SM can start in
+       parallel with SA slice 2+ since it does not touch the store).
+    DONE since v5: S2 CLOSED 2026-10-05 (s2-station-terminal-2026-10-05);
+    SR CLOSED 2026-10-06; og wrong-store GC fix 2fa30b17; sourcecycled
+    durably off d42c47b/0564246; CI deploy-gate verifier f15fb7ea; SMG
+    commits 1b1d9b7e, 4bedf999 deployed.
 
 receipts:
   - id: s0-to-s2-transition-2026-10-04
@@ -1048,6 +1075,85 @@ lost):**
 - supply-chain review of the S4 pinned-input capture;
 - an external review before public launch.
 
+## v5.1 revision — convergence before density (2026-10-06)
+
+Director review after S2, SR and SMG. Verdict: continue the metamission;
+the station order changes inside SA only, plus one SO addition.
+
+**Progress since v5.** S2 closed 10-05. SR closed 10-06 (panel r7 7-0):
+research is a full RLM and processor/reconciler are gone. SO: the og
+wrong-store GC fix (`2fa30b17`, fail-closed on live-set errors),
+sourcecycled durably off (`d42c47b`, `0564246`), and the deploy-gate
+verifier for pointer-following guests (`f15fb7ea`). SMG, inserted on the
+owner's 10-06 directive, landed: management, research and texture all
+expose exactly `{desk_go_eval}`, and the `product_api_request`,
+`report_to_texture` and `cancel_co_super_assignment` tools are gone. A
+latent broker defect (evidence actions validated but never dispatched) was
+fixed in passing. SMG's schema leg is deployed-proven; its three
+behavioral legs are blocked.
+
+**Finding 1 — the storm is the critical path.** The Management
+live-occurrence storm is the fourth recurrence of one substrate defect
+(live-locks `886e5ce1`, `3b0a1ed2`/`b7f59cc9`, the 10-03 storm, the 10-06
+restart regrowth). It starves every fresh activation on the owner computer.
+That blocks SMG's legs, would make SA's baseline a measurement of the storm,
+and makes the owner computer unreliable for ordinary work. Root Cause
+Clustering applies. It moves from SA slice 4 to SA slice 1, ahead of the
+baseline.
+
+**Finding 2 — why it survives restart (source-traced; confirm in the
+trace).** `migrateActorWakeOutboxAsync` (`internal/agentcore/runtime.go:2588`)
+runs `MigrateActorWakeOutbox` (`internal/store/lifecycle.go:965`) on every
+kernel-mode boot, not once at cutover. It lists every object of six kinds,
+including all runs and Texture revisions. For each wake row that is already
+projected but whose source obligation still derives as open, it re-arms the
+wake. Nothing gives stale obligations (August trajectories) a terminal fate,
+so each restart re-feeds the herd. The 10-06 07:20Z boot logged "minted 2124
+pending wakes"; the wake keys are deterministic and prior boots already
+minted them, so that count is almost entirely re-arms. The migration is also
+an O(all objects) boot scan under `engineMu`, which is SA cost in its own
+right. The fix is the convergence invariant already written in
+`s0m-management-live-occurrence-storm-2026-10-03.md` plus two additions:
+- **Terminal fate as a recorded act.** Obligations whose trajectory is
+  closed, or that exceed a recovery budget, get a durable disposition on the
+  tape (`delivery_attempts_exhausted` / `expired`). Never a table delete:
+  the tape stays the single state authority.
+- **One-shot migration.** Gate it behind a versioned marker, or delete it if
+  the cutover is complete everywhere (deletion-citers grep first).
+
+**Finding 3 — the disposable path is not blocked.** The genesis residual has
+a documented manual route: `POST /api/computers/{id}/lifecycle/bootstrap-chain`
+with the owner's key mints genesis, and writes then succeed. SMG's legs can
+run now on a disposable with that preamble. Hand-draining or parking the
+owner guest's storm to pass the legs is not admissible. It is the S2
+hand-staged-nar trap: the probe passes, nothing is proven, and the substrate
+stays broken. The proper fix (provisioning mints genesis or refuses `active`;
+pre-genesis writes get a clean 503) is small and red. It becomes SA slice 0,
+because every SA acceptance runs on disposables.
+
+**Finding 4 — CAS durability (SO, off the critical path).** 161,185 live
+corpus `body_ref`s are missing from disk: at most 45,829 from the 10-05
+sweep, about 115k earlier. Externalized rows store `body = NULL`, so the CAS
+file was the only copy. `externalizeBody`
+(`internal/platform/objectgraph_store.go:42`) does tmp + rename with no file
+or directory fsync, and the Dolt row commits regardless. The leading
+hypothesis for the earlier ~115k is earlier artifact-GC runs with the same
+wrong-store live set, since that bug dates from the Store A/B split. Check
+the GC run history before blaming fsync. SO items:
+- fsync file and directory before the row commits;
+- a recorded loss disposition for the missing refs, so readers degrade
+  cleanly instead of erroring;
+- delete the `platform.og_objects` residue (6.09M rows, a future decoy).
+
+Guest stores keep og bodies inline (`DoltStore`), so this loss is
+corpus-only. The corpus is frozen, so nothing user-facing regresses now. It
+must be repaired before World Wire ingests again.
+
+**Revised SA order:** 0 registration genesis → 1 storm convergence → 2
+baseline + offline GC re-measure → 3 memory → 4 engine lock (race test
+first) → 5 read cost → 6 store split → 7 shapes and elasticity. SM can start
+in parallel once SA slice 1 lands, because SM does not touch the store.
+
 ## v5 plan — density before distribution (2026-10-05)
 
 **Principle (owner):** "we must first scale agents horizontally in a 2-4 GiB
@@ -1140,8 +1246,8 @@ Slices, in order:
    - Scans become indexes or cursors; polling becomes notification.
    - Hot reads (lifecycle snapshot, pending mutations, inbox, `Pack()`)
      come from write-maintained projections.
-   - Includes the Management storm convergence invariant (O(1) occurrence
-     resolve + durable per-desk dispatch gate).
+   - (v5.1: the Management storm convergence invariant moved to SA slice 1;
+     see "v5.1 revision".)
 5. **Store split.**
    - High-churn operational tables move to SQLite WAL (precedent: the actor
      recovery log, `internal/actorruntime`).

@@ -129,10 +129,13 @@ boundaries:
 now:
   status: working
   slice: >-
-    Not started; gated on SR (so load probes measure the cleaned-up research
-    surface). First move: slice 1 baseline — the fan-out load probe and
-    memory receipt, then a host offline GC of the owner store and
-    re-measure.
+    v5.1 (director 2026-10-06): SR has landed. Not started. Order changed:
+    slice 0 registration genesis (fresh computers accept first prompt
+    without manual bootstrap-chain; every SA acceptance runs on
+    disposables), slice 1 Management storm convergence (moved up from
+    slice 4: it starves every activation on the owner computer, blocks SMG
+    behavioral legs, and would make any baseline a measurement of the
+    storm), then the baseline and the remaining slices.
   source_ref: main@9e0fe4d
   deploy_identity: unknown
   candidate:
@@ -163,6 +166,8 @@ now:
       - docs/problems/guest-dolt-journal-and-host-image-leak-2026-10-03.md
       - docs/problems/guest-vm-embedded-dolt-memory-starved-2026-10-01.md
       - docs/problems/s0m-management-live-occurrence-storm-2026-10-03.md
+      - internal/store/lifecycle.go:965 (MigrateActorWakeOutbox re-arms on every boot)
+      - internal/agentcore/runtime.go:2588
   decision:
     what: Density before distribution; fix the store, not the ceiling.
     kind: architecture
@@ -180,15 +185,24 @@ now:
       working set.
     next_observation: Slice 1 baseline numbers.
   blocker_or_risk: >-
-    The store split is the largest red change in the metamission. Sequence it
+    Slice 1 is the fourth attempt at the storm family; prior fixes each
+    returned a terminal verdict for one trigger class. Land the invariant
+    (every pending obligation binds, discharges, or scores a bounded
+    terminal fate; nothing scans history to find it), not another
+    per-trigger fix. The store split is the largest red change in the metamission. Sequence it
     after slices 2-4 show what remains, and only with the restore check in
     hand.
   next_action: >-
-    After SR lands: slice 1 (baseline + offline GC re-measure) -> slice 2
-    (memory) -> slice 3 (race test, then read/write lock) -> slice 4 (read
-    cost + storm invariant) -> slice 5 (store split + group commit) -> slice 6
-    (declared shapes + elasticity) -> acceptance.
-
+    Slice 0 (registration genesis; red, small) -> slice 1 (storm
+    convergence: problem-doc the boot re-arm mechanism and confirm it from
+    the guest trace; terminal fate for stale obligations as a recorded act;
+    wake-outbox migration one-shot or deleted; O(1) occurrence resolve;
+    per-desk dispatch gate + paced drain; acceptance = owner guest restart
+    converges pending to a bounded floor within a stated window and holds
+    24 h, and the SMG probe passes on the owner computer) -> slice 2
+    (baseline + offline GC re-measure) -> 3 (memory) -> 4 (race test, then
+    read/write lock) -> 5 (read cost) -> 6 (store split + group commit) ->
+    7 (declared shapes + elasticity) -> acceptance.
 receipts: []
 ---
 
