@@ -27,12 +27,19 @@ permanently `pending`.
 
 ## Defect chain (two bugs, one stranded outcome)
 
-**Bug 1 — lost `initial_dispatch`**: `reconcilePersistentManagementActorLocked`
-mints the run and calls `rt.activate(rec)`; `activate` calls
-`dispatchActor(...)`, and any error is log-only (no durable surfacing).
-The dispatch either never reached the tape or was consumed without delivery
-under `dispatchReady` timing. Nothing marks this run terminal, so it
-occupies the persistent Management slot forever.
+**Bug 1 — lost `initial_dispatch` (root: epoch-conflict emission discard,
+hypothesis)**: `reconcilePersistentManagementActorLocked` mints the run and
+calls `rt.activate(rec)` → `dispatchActor` → `a.dispatchAtMode`. Because the
+mint happens *inside* a dispatcher activation (the handler for the incoming
+`sha256:` live occurrence), `EmissionsFromCtx` buffers the update — it
+becomes durable only at `d.log.Commit`. `Commit` on `ErrEpochConflict`
+returns with **no log line and no retry** (`internal/actor/dispatcher.go:445-449`),
+discarding the buffered `initial_dispatch` while the minted run — already
+durable via its own writes — stays `pending`. Nothing marks this run
+terminal, so it occupies the persistent Management slot forever.
+(Hypothesis: epoch conflicts are the only silent emission-discard path;
+deferred activations also drop `evEmitted` at dispatcher.go:382-409, but a
+deferred handler never reaches the "bound run" log line that was observed.)
 
 **Bug 2 — watchdog no-op on zero bound packets**: `armFreshMintManagementResumeWatchdog`
 schedules `fresh_mint_management_resume_deadline` at mint+10min. When it
