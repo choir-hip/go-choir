@@ -173,6 +173,19 @@ now:
     delivered report discharges the work item). d94ce9ef's quarantine
     covers pending reconcile paths, NOT this delivered-page listing —
     extend the invariant or validate delegated lineage explicitly.
+    FIXED ca8c8c18 (landed 2026-10-07): delivered-page ProducerReport
+    arm fetches producer run+work first, then accepts the consumer-side
+    binding OR the delegated work-item lineage join
+    (parent_control_id/parent_work_item_id/parent_loop_id).
+    TestDelegatedCastReportDoesNotPoisonConsumerDeliveredListing
+    fails-before/passes-after; full ./internal/store suite green.
+    DEPLOYED ACCEPTANCE RESIDUAL: ca8c8c18 pushed 2/2 "healthy" but the
+    owner canary's apply failed with updater health-probe 503 and
+    rolled back — the push gate is not commit-bound
+    (docs/problems/app-layer-push-health-gate-not-commit-bound-2026-10-07.md,
+    deterministic on retry). Behavioral proof on the owner computer is
+    blocked by that platform-update fence defect; vm-48bc0981 runs the
+    fix but has no API key for driving a delegated cast.
     Regression gate: one delegated-cast producer report → subsequent
     persistent-Management activations survive.
     (b) sa-management-mint-no-start-slot-deadlock-2026-10-06.md — fixed
@@ -206,8 +219,8 @@ now:
     carried 475902d7; probe --expect-commit gate refused and caught it).
     Not a pin defect — a deploy-race on a shared store image; an S2
     per-mint release pin or boot-time freshness assertion would close it.
-  source_ref: main@475902d7
-  deploy_identity: 'choir.news deployed_commit=475902d7 (verified on owner computer via /api/runtime/observability 2026-10-06)'
+  source_ref: main@1ba0c144
+  deploy_identity: 'choir.news deployed_commit=ca8c8c18 (deploy run 37551113838 green; owner canary rolled back on update-apply health 503 — see gate problem doc; vm-48bc0981 verified running ca8c8c18)'
   candidate:
     id: none
     state: none

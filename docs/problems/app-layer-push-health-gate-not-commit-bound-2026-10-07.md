@@ -53,6 +53,32 @@ prior-release autoputer answers 200 — the gate counts it healthy.
 **Mutation class of this record:** green. The fix is orange (CI gate)
 plus the underlying fence question is red (platform update apply).
 
+## Update 2026-10-07 — deterministic apply failure on the owner computer
+
+A manual re-push of the same staged release (fresh offer, minted against
+the live canonical head + epoch) reproduced the failure bit-for-bit:
+
+```
+platform update resume: re-driving update
+  app-layer-ca8c8c18-retry-1791333327-1 after guest restart
+platform update resume: platform update: apply failed and prior release
+  was restored: updater refused apply: materialization failed and prior
+  release was restored: updater: health probe failed: health status=503
+```
+
+The resume phase completes in ~1s — the updater's health probe refuses
+the new runtime essentially immediately, on a computer whose store
+replay is long (546k canonical events). `vm-48bc0981` (much smaller
+state) applied the same release cleanly. So the apply health fence is
+tighter than the boot-to-healthy time of a large-history computer, and
+the deploy gate then mislabels the rollback healthy. Two distinct
+defects, one green deploy receipt.
+
+**Status:** confirmed on staging, reproducible. The gate fix belongs in
+SA's deploy-proof slice; the apply-fence defect is a platform-update
+substrate problem that now blocks landing any app-layer release on the
+owner computer.
+
 ## Rollback
 
 None — record only.
