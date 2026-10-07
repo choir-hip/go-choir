@@ -193,7 +193,23 @@ check skipped):
   activates, delegated report binds, refusal text surfaces). Current run
   `dd52c39d` is the first non-wedged drain; watch for whether it completes
   or stalls at a deterministic residue packet.
-
+- **Residual surfaced 01:58 — transient gateway failures kill the drain
+  carrier.** Run `ed435162` (the run minted to continue the drain after
+  `dd52c39d` bound) hit `tool loop iteration 94: gateway call failed:
+  gateway client: decode response: unexpected end of JSON input` and
+  failed terminal at 01:58:17. The run had already consumed 94 tool
+  iterations of backlog. A new Management `6f2119ea` minted at 01:58:21
+  and the `received→bound` cycle resumed ~1/sec — the pending backlog
+  keeps re-binding fresh carriers. **The storm is now bounded but
+  non-converging:** each carrier dies to a transient transport error
+  before draining the 14-run delivered working set. Two candidate
+  causes: (i) gateway JSON decode has no retry-tolerant EOF handling —
+  a single truncated provider body fails the whole run; (ii) no
+  carrier-level retry budget — one transient kills the run rather than
+  resuming from the last committed tool result. This is the substrate
+  gap to close next: gateway call retry on decode/5xx, or drain
+  resumption from committed tool results so a carrier crash doesn't
+  reset the cursor.
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;
