@@ -66,18 +66,32 @@ platform update resume: platform update: apply failed and prior release
   release was restored: updater: health probe failed: health status=503
 ```
 
-The resume phase completes in ~1s — the updater's health probe refuses
-the new runtime essentially immediately, on a computer whose store
-replay is long (546k canonical events). `vm-48bc0981` (much smaller
-state) applied the same release cleanly. So the apply health fence is
-tighter than the boot-to-healthy time of a large-history computer, and
-the deploy gate then mislabels the rollback healthy. Two distinct
-defects, one green deploy receipt.
+Correction on timing (2026-10-07): the resume phase's own `dur=` is
+near-zero, but the probe then loops 30×~1s — the apply actually burned
+~35s of 503s (00:36:05 boot → 00:36:42 refusal) while the owner's
+546k-event replay still gated /health. The fence defect is real but the
+"~1s" read was the resume-phase duration, not the probe window.
+`vm-48bc0981` (much smaller state) applied the same release cleanly. So
+the apply health fence is shorter than the boot-to-healthy time of a
+large-history computer, and the deploy gate then mislabels the rollback
+healthy. Two distinct defects, one green deploy receipt.
 
-**Status:** confirmed on staging, reproducible. The gate fix belongs in
-SA's deploy-proof slice; the apply-fence defect is a platform-update
-substrate problem that now blocks landing any app-layer release on the
-owner computer.
+**Status (2026-10-07):**
+- Gate defect: **fixed `68397ae7`** — the healthy poll now counts
+  `build.commit == DEPLOY_COMMIT` via `/api/runtime/observability` and
+  fails the deploy when any pushed computer did not land the commit.
+  Live on the next app-layer deploy.
+- Apply-fence defect: **fixed `19d7913e`** — `HTTPHealthProber` treats a
+  503 `{"status":"replaying"}` body whose `committed_sequence`/`progress`
+  advances since the last poll as liveness (resets the stall budget);
+  stagnant replays still exhaust it; `MaxDuration=15m` is the absolute
+  bound. `choir-updater` ships in the guest base image, so the fix landed
+  via the `19d7913e` guest-image deploy + active-VM refresh; the owner
+  computer now runs `19d7913e`. Regression tests fail-before/pass-after
+  (`TestHTTPHealthProber{ToleratesAdvancingReplay,StallFails,
+  MaxDurationCaps}`). Deployed acceptance pending the next real app-layer
+  apply on the owner (the `19d7913e` commit itself is base-image-only, so
+  its layered-release delta was empty).
 
 ## Rollback
 
