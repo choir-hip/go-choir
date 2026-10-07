@@ -90,6 +90,7 @@ func (c *GatewayClient) Call(ctx context.Context, req provider.LLMRequest) (*pro
 	}
 
 	var body []byte
+	var gwResp ProviderResponse
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
@@ -134,16 +135,21 @@ func (c *GatewayClient) Call(ctx context.Context, req provider.LLMRequest) (*pro
 			}
 			return nil, fmt.Errorf("gateway client: status %s (sanitized)", resp.Status)
 		}
+		if err := json.Unmarshal(body, &gwResp); err != nil {
+			// A truncated response body (connection dropped after ReadAll
+			// returned partial bytes without error) surfaces as a JSON decode
+			// error — most commonly `unexpected end of JSON input`. That is a
+			// transient transport failure, not a semantic rejection: retry it
+			// like a read/5xx failure so one dropped mid-flight response does
+			// not kill the caller's run (sa1 storm drain carrier-kill).
+			lastErr = fmt.Errorf("gateway client: decode response: %w", err)
+			continue
+		}
 		lastErr = nil
 		break
 	}
 	if lastErr != nil {
 		return nil, lastErr
-	}
-
-	var gwResp ProviderResponse
-	if err := json.Unmarshal(body, &gwResp); err != nil {
-		return nil, fmt.Errorf("gateway client: decode response: %w", err)
 	}
 
 	// Convert gateway response to provider LLMResponse.

@@ -2348,3 +2348,58 @@ func TestHandleInference_StreamingModelRoutingToZAI(t *testing.T) {
 		t.Errorf("expected Z.AI streaming response, got: %s", respBody)
 	}
 }
+
+func TestGatewayClientCall_RetriesTruncatedJSONBody(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		if attempts == 1 {
+			// Simulate a connection that dropped after headers — ReadAll
+			// returned partial bytes without error, leaving a JSON decoder
+			// with an unexpected-EOF body.
+			_, _ = w.Write([]byte(`{"id":"r1","text":"part`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"r1","text":"ok","model":"m","stop_reason":"end_turn","usage":{}}`))
+	}))
+	defer server.Close()
+
+	client := NewGatewayClient(server.URL, "tok")
+	resp, err := client.Call(context.Background(), provider.LLMRequest{
+		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
+	})
+	if err != nil {
+		t.Fatalf("Call err = %v, want nil after retrying truncated body", err)
+	}
+	if attempts < 2 {
+		t.Fatalf("attempts = %d, want >=2 (truncated body retried)", attempts)
+	}
+	if resp.Text != "ok" {
+		t.Fatalf("resp.Text = %q, want ok", resp.Text)
+	}
+}
+
+func TestGatewayClientCall_PermanentJSONFailure(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"r1","text":"part`))
+	}))
+	defer server.Close()
+
+	client := NewGatewayClient(server.URL, "tok")
+	_, err := client.Call(context.Background(), provider.LLMRequest{
+		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
+	})
+	if err == nil {
+		t.Fatal("expected error when every attempt returns truncated JSON")
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts = %d, want 3 (bounded retries)", attempts)
+	}
+	if !strings.Contains(err.Error(), "decode response") {
+		t.Fatalf("err = %q, want decode response", err.Error())
+	}
+}
