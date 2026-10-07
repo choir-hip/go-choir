@@ -203,16 +203,18 @@ check skipped):
   keeps re-binding fresh carriers. **The storm is now bounded but
   non-converging:** each carrier dies to a transient transport error
   before draining the 14-run delivered working set.
-- **Fixed `5eb63161` (orange):** `GatewayClient.Call` moved its
-  `json.Unmarshal(body, &gwResp)` inside the 3-attempt retry loop so a
-  truncated response body retries like a read/5xx failure. The
-  transient-EOF decode error no longer kills the caller's run. Bounded
-  permanent decode still surfaces after 3 attempts. Regression tests:
-  `TestGatewayClientCall_RetriesTruncatedJSONBody` (retry-then-success)
-  + `TestGatewayClientCall_PermanentJSONFailure` (3-attempt bounded
-  fail). Deployed acceptance pending — `5eb63161` is on main, the owner
-  still runs `19d7913e`; a fresh deploy + active-VM refresh is required
-  to land it.
+- **Fixed `29817fda` (orange) — the real drain-killer path.** The guest's
+  LLM calls run through `internal/gatewayruntime.Provider.call`, not the
+  host-side `internal/gateway.Client` (that fix is `5eb63161`, kept as a
+  companion on the gateway-service side). `call()` now wraps
+  `do()+ReadAll+Unmarshal` in a 3-attempt retry: read errors, transient
+  statuses (429/5xx via `gatewayHTTPStatusError.Transient`), and JSON
+  decode failures all retry; a permanently truncated response still
+  fails after 3 attempts. Regression tests
+  `TestCallWithToolsRetriesTruncatedJSONBody` +
+  `TestCallWithToolsPermanentJSONFailureBounded`. Deployed acceptance
+  pending — owner still on `19d7913e`; a fresh deploy + active-VM
+  refresh is required to land it.
 - **Residual surfaced 02:13 — drain pace collapses under single-tool-call
   stalls.** Carrier `6f2119ea` ran iterations ~1/sec through i=51, then
   stalled ~10min between i=51 and i=53 before resuming at 02:23. The
