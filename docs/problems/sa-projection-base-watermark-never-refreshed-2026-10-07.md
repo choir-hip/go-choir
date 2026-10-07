@@ -126,6 +126,66 @@ row not retained in the plan.
 Re-run: `--scratch-dir /tmp/og-scratch` preserves the store on failure
 for inspection (resumed replays skip committed events).
 
+## Fourth defect — replayed V1 row collides with its own later V2 row (2026-10-07)
+
+The `7cf0a438` rebuild (fresh replay, 4h34m, all 572,151 events applied,
+scratch store preserved at `/tmp/og-scratch` on Node B, 82G) failed at
+the same step through the new divergent-external branch:
+
+```
+og migrate: canonical ID convergence conflict on
+obj:choir.agent:NWJk…:key-f3958e3f…: migrated obj:choir.agent:NWJk…:key-ad7fb958…
+(kind=choir.agent created=2026-08-16T20:07:13Z) collides with untouched live
+row with divergent content; cannot auto-resolve
+```
+
+Rows in the scratch store (`dolt sql` on `runtime.texture/texture`):
+
+| canonical_id | metadata.agent_id | created_at | updated_at |
+|---|---|---|---|
+| `…key-ad7fb958…` (V1, migrating) | `super:5bd6de97…` | 2026-08-16 20:07:13 | 2026-09-06 04:04:22 |
+| `…key-f3958e3f…` (V2, live) | `management:5bd6de97…` | 2026-08-16 20:07:13 | 2026-10-07 06:47:11 |
+
+**Cause:** one agent at two points in time. On the live computer the V1
+row was renamed at the vocabulary cutover, and later events updated the
+renamed V2 row. Replay is not cutover-aware: it deposits pre-cutover
+events as V1 rows and post-cutover events as V2 rows, then migrates once
+at the end. The stale V1 row renames onto its own successor. The planner
+treats any content difference as an unresolvable conflict.
+
+**Owner impact:** owner computer `computer-03335285…` (VM
+`candidate-fleet-e15cb89f…`) still cannot boot. vmctl's warmness policy
+retries every 30 min and marks the VM failed (21:37, 22:07, 22:37 UTC).
+Proxy `api.resolve` calls for the owner hang 1800s before erroring.
+
+**Fix shape:** live row wins when its `updated_at` is ≥ the migrating
+row's (the order the live computer actually applied: cutover rename,
+then later updates). The stale V1 row is dropped, and its original body
+and metadata are kept in the migration report so nothing is silently
+lost. A migrating row strictly newer than the live V2 row still fails
+loudly; that would be a V1 write after the cutover. The durable fix is a
+replay that applies the vocabulary migration at the cutover point in the
+chain; that is recorded as a residual, not done here.
+
+**Resume:** planning writes nothing (report persist and row writes
+happen only after `planOGMigration` succeeds), and `ReconstructThrough`
+returns immediately when the local head equals the target
+(`appender.go:767`), so a rerun with the same `--scratch-dir` skips the
+replay.
+
+## Residuals named by this incident
+
+- **Checkpoint cadence:** nothing republishes the projection base or
+  re-advertises the watermark. Publish every N events or on a timer, and
+  alert as the tail approaches `MaxRecoveryTailEvents`.
+- **vmctl fail-fast:** a computer whose recovery tail exceeds the cap
+  should report "rebuild required", not retry every 30 min while proxy
+  resolve hangs 1800s.
+- **Cutover-aware replay:** apply the vocabulary migration at the chain
+  point where the cutover happened, not once at the end.
+- **`mergeVocabReports` drops `OGDropped`** when a prior report exists
+  (from `7cf0a438`); in-guest reruns lose the dedup audit trail. Fixed
+  together with the fourth defect.
 
 ## Rollback
 
