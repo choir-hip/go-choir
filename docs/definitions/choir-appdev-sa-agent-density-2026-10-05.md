@@ -289,17 +289,21 @@ now:
     bounded 14-run delivered backlog, not a perpetual loop. Carrier-kill
     residual fixed `29817fda` (guest-side `gatewayruntime.Provider.call`
     retries decode-EOF/read/5xx 3x; host-side companion `5eb63161`).
-    Drain carriers `dd52c39d` → `ed435162` (killed at i=94 transient,
-    pre-fix) → `6f2119ea` (live i=53+, ~10min stall under engineMu at
-    i=51→53 — per-tool elapsed instrumentation owed). Queued
+    Drain carriers `dd52c39d` → `ed435162` (killed i=94 transient,
+    pre-fix) → `6f2119ea` (refresh-killed) → `ceff999b` (vmctl
+    reattach-kill — `update_coagent` carriers were invisible to rewarm)
+    → `5f311268` (live on `19d7913e`, minted via wake post-boot).
+    Drain-carrier rewarm fix `91e9c03b` (drop request_source gate;
+    pendingIDsByRun is the authoritative filter). Queued
     `management-open` control defers FIFO behind drain (correct).
     Remaining acceptance is measurement: drain settles at a bounded
     floor in a stated window, holds 24h, then SMG probe passes on the
-    owner (legs 1-3 incl. the two weak legs). Deploy gate: push
-    `29817fda` through CI + deploy + owner active-VM refresh. -> slice 2
-    (baseline + offline GC re-measure) -> 3 (memory) -> 4 (race test, then
-    read/write lock) -> 5 (read cost) -> 6 (store split + group commit) ->
-    7 (declared shapes + elasticity) -> acceptance.
+    owner (legs 1-3 incl. the two weak legs). Deploy gate: `29817fda` +
+    `91e9c03b` through CI + deploy + owner app-layer push (push currently
+    refused on head-churn fence while drain runs — land post-drain).
+    -> slice 2 (baseline + offline GC re-measure) -> 3 (memory) -> 4
+    (race test, then read/write lock) -> 5 (read cost) -> 6 (store split
+    + group commit) -> 7 (declared shapes + elasticity) -> acceptance.
 receipts: []
 ---
 
