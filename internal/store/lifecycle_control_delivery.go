@@ -778,7 +778,7 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 			}
 		case types.LifecyclePacketDirectionProducerReport:
 			if profile != agentprofile.Management || producerWorkID == "" || targetWorkID == "" || strings.TrimSpace(update.ControlBindingID) == "" ||
-				!lifecycleRunBindsWork(run, targetWorkID) || !persistentManagementControlBinding(run.Metadata, trajectoryID, targetWorkID, update.ControlBindingID) {
+				!lifecycleRunBindsWork(run, targetWorkID) {
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 			producerRun, runErr := s.GetLifecycleRun(ctx, ownerID, computerID, update.SourceRunID)
@@ -792,6 +792,25 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 			if producerRun.RunID != update.SourceRunID || producerRun.AgentID != update.AgentID || producerRun.TrajectoryID != trajectoryID ||
 				producerRun.AgentProfile != agentprofile.Engineering || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) ||
 				producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || producerWork.AuthorityProfile != agentprofile.Engineering {
+				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
+			}
+			// The control binding authenticates two different ID spaces: owner casts
+			// bind the report to the consuming run's lifecycle control update id,
+			// while delegated casts (R2) bind it to the cast's commitment record —
+			// which never appears in the consuming run's lifecycle_control_bindings.
+			// A delegated report instead authenticates through the producing work
+			// item's recorded parent join: the work's parent_control_id is the
+			// commitment record and parent_work_item_id/parent_loop_id point back
+			// to the consuming run's own obligation. Checking the consumer-side
+			// binding alone would reject every delegated report and poison the
+			// listing (sa-delegated-report-poisons-management-listing-2026-10-06).
+			bindingOK := persistentManagementControlBinding(run.Metadata, trajectoryID, targetWorkID, update.ControlBindingID)
+			if !bindingOK {
+				bindingOK = metadataExactString(producerWork.Details, "parent_control_id") == update.ControlBindingID &&
+					metadataExactString(producerWork.Details, "parent_work_item_id") == targetWorkID &&
+					metadataExactString(producerWork.Details, "parent_loop_id") == run.RunID
+			}
+			if !bindingOK {
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
 		case types.LifecyclePacketDirectionDirective:

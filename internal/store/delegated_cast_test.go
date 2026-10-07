@@ -103,3 +103,48 @@ func TestDelegatedCastRejectsMissingControl(t *testing.T) {
 		t.Fatal("delegated cast admitted with an absent commitment control")
 	}
 }
+
+// TestDelegatedCastReportDoesNotPoisonConsumerDeliveredListing is the
+// regression for sa-delegated-report-poisons-management-listing-2026-10-06:
+// a delegated cast's producer report carries the cast commitment record id as
+// its ControlBindingID — not a lifecycle control update id — so the
+// consuming Management run's persistentManagementControlBinding check can
+// never match. Before the fix the delivered-page listing returned
+// ErrLifecycleInvalidTransition on the whole page, killing the run ~30s into
+// every subsequent activation. The delegated lineage is authenticated via
+// the producing work item's recorded parent join instead.
+func TestDelegatedCastReportDoesNotPoisonConsumerDeliveredListing(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installEngineeringAssignmentAuthority(t, s, 1)
+	controlID, err := s.AppendCommitmentRecord(ctx, f.ownerID, f.computerID, types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cast-cell:cast:poison-test",
+		Provenance: types.CommitmentProvenance{AgentID: f.parentAgentID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := delegatedCastOpenRequest(f, 0, "delegated-assignment-poison", controlID)
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatalf("delegated open: %v", err)
+	}
+	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[0], "cap-delegated-assignment-poison")); err != nil {
+		t.Fatalf("delegated bind: %v", err)
+	}
+	report := assignmentReportRequest(open, 2, "report-poison", open.Binding.SubjectDigest, types.EngineeringResultPartial, types.EngineeringVerdictNone)
+	result, err := s.RecordEngineeringAssignmentReport(ctx, report)
+	if err != nil || result.Update == nil || result.Update.Direction != types.LifecyclePacketDirectionProducerReport ||
+		result.Update.DeliveredToRunID != f.parentRunID || result.Update.ControlBindingID != controlID {
+		t.Fatalf("delegated report = %+v err=%v", result, err)
+	}
+	// The consuming Management run's delivered-page listing must not throw on
+	// the delegated report — before the fix this returned
+	// ErrLifecycleInvalidTransition (the poisoned-listing defect).
+	packets, err := s.ListLifecycleControlsDeliveredToRun(ctx, f.ownerID, f.computerID, f.trajectoryID, f.parentAgentID, f.parentRunID, 10)
+	if err != nil {
+		t.Fatalf("delivered listing threw on delegated report: %v", err)
+	}
+	if len(packets) != 1 || packets[0].UpdateID != result.Update.UpdateID || packets[0].Direction != types.LifecyclePacketDirectionProducerReport {
+		t.Fatalf("delivered packets = %+v", packets)
+	}
+}

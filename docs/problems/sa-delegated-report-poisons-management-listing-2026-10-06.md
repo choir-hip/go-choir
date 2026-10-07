@@ -18,7 +18,31 @@ Every persistent-Management activation on the computer fails at `tool loop injec
 Any of the ProducerReport checks at :780-794 failing makes the whole page listing return `ErrLifecycleInvalidTransition`. `pendingCoagentUpdatesForRun` calls this listing inside the tool loop's inject-turns path; one poisoned packet therefore kills every subsequent activation, since the packet is durable (`update_delivered` is durable evidence; a packet that fails validation remains delivered and continues to poison the listing).
 
 **Mutation class of this record:** green. The fix is red (persistent-Management lifecycle binding path — a `protected_surfaces` member on the SMG station).
+## Confirmed mechanism (fix landed this session)
 
+Root cause confirmed by a failing-then-passing store regression test
+(`TestDelegatedCastReportDoesNotPoisonConsumerDeliveredListing`): the
+delivered-page ProducerReport arm calls
+`persistentManagementControlBinding(run.Metadata, trajectoryID,
+targetWorkID, update.ControlBindingID)` on the **consuming** run's
+`lifecycle_control_bindings`, whose `update_id` entries are lifecycle
+control update ids (`mgmt-control-…`). A delegated cast's report instead
+carries `ControlBindingID = assignment.Binding.ParentControlID` = the
+cast's **commitment record** id — a different ID space that can never
+match. The listing threw on the whole page, killing every activation.
+
+Fix in `internal/store/lifecycle_control_delivery.go`: the ProducerReport
+arm fetches the producer run + work item first (predicates unchanged),
+then accepts either the consumer-side control binding (owner casts) OR
+the delegated work-item lineage join — `producerWork.Details
+parent_control_id == update.ControlBindingID && parent_work_item_id ==
+targetWorkID && parent_loop_id == run.RunID`. The join mirrors
+`requireEngineeringDelegatedParentAuthority`'s own authority checks.
+
+Residual: the listing still throws whole-page on a genuinely corrupt or
+unauthenticated delivered packet (a packet that is durable-but-invalid
+stays poisonous). Quarantine-vs-throw is a separate slice-1 decision;
+this fix removes the authentic-but-misparsed class.
 ## What is proven vs hypothesized
 
 Proven:
