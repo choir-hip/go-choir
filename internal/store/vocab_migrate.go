@@ -75,6 +75,11 @@ type MigrationReport struct {
 	// Revert restores recorded leaves exactly, recomputes content_hash and
 	// canonical_id, and rewrites references through the recorded ID map.
 	OGObjects []OGProvEntry `json:"og_objects,omitempty"`
+	// OGDropped records canonical IDs of rows deleted by convergence dedup:
+	// distinct V1 objects that migrated to identical content and identity.
+	// Revert cannot restore them (no row remains); the entry preserves the
+	// audit trail that they existed and were folded into the survivor.
+	OGDropped []string `json:"og_dropped,omitempty"`
 	// OGEdges records every rewritten og_edges row.
 	OGEdges []OGEdgeProvEntry `json:"og_edges,omitempty"`
 }

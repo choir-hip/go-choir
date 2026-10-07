@@ -36,6 +36,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -51,6 +52,8 @@ type ogObjectRow struct {
 	versionID    string
 	body         []byte
 	metadata     []byte
+	createdAt    string
+	updatedAt    string
 	tombstone    bool
 	supersededBy string
 
@@ -60,6 +63,11 @@ type ogObjectRow struct {
 	newID    string
 	newHash  string
 	dirty    bool
+	// dropped marks a row that converges onto a surviving row's canonical
+	// ID: V1 identity spellings that collapse to the same V2 identity. The
+	// apply path deletes it instead of updating it (the update would set a
+	// canonical_id that already exists, failing on the primary key).
+	dropped bool
 }
 
 // ogEdgeRow is one og_edges row under migration.
@@ -317,22 +325,24 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 	// retained. Loading every row's body+metadata at once OOMs the guest on
 	// real computers (observed: autoputer OOM-killed at ~3.7GB on staging).
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, body, metadata, tombstone, superseded_by FROM og_objects`)
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects`)
 	if err != nil {
 		return nil, nil, fmt.Errorf("og migrate scan: %w", err)
 	}
 	objs = []*ogObjectRow{}
+	allIDs := map[string]bool{} // every og_objects canonical_id (incl. untouched rows)
 	for rows.Next() {
 		if progress != nil {
 			progress()
 		}
 		o := &ogObjectRow{fields: map[string]string{}}
 		var tomb int
-		if err := rows.Scan(&o.canonicalID, &o.kind, &o.ownerID, &o.computerID, &o.versionID, &o.body, &o.metadata, &tomb, &o.supersededBy); err != nil {
+		if err := rows.Scan(&o.canonicalID, &o.kind, &o.ownerID, &o.computerID, &o.versionID, &o.body, &o.metadata, &o.createdAt, &o.updatedAt, &tomb, &o.supersededBy); err != nil {
 			rows.Close()
 			return nil, nil, fmt.Errorf("og migrate scan: %w", err)
 		}
 		o.tombstone = tomb != 0
+		allIDs[o.canonicalID] = true
 		hasRefs := bytes.Contains(o.body, []byte("obj:")) || bytes.Contains(o.body, []byte("edge:")) ||
 			bytes.Contains(o.metadata, []byte("obj:")) || bytes.Contains(o.metadata, []byte("edge:"))
 		if err := json.Unmarshal(o.metadata, &o.metaJSON); err != nil {
@@ -558,9 +568,83 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 		}
 	}
 
+	// Convergence check: two V1 objects whose migrated identity keys collide
+	// (e.g. agent_id "co-super:x" and "cosuper:x" both → "engineering:x")
+	// produce the same newID. Rows identical after migration are deduplicated
+	// (the survivor keeps the canonical ID; the duplicate is deleted at
+	// apply). Rows that diverge — different body, metadata, tombstone, or
+	// superseded_by — are a structural conflict the migration cannot resolve;
+	// fail loudly with both IDs so the collision is inspectable.
+	byNewID := map[string][]*ogObjectRow{}
+	for _, o := range objs {
+		if o.newID != "" {
+			byNewID[o.newID] = append(byNewID[o.newID], o)
+		}
+	}
+	for newID, group := range byNewID {
+		if len(group) < 2 {
+			continue
+		}
+		sort.Slice(group, func(i, j int) bool {
+			if group[i].createdAt != group[j].createdAt {
+				return group[i].createdAt < group[j].createdAt
+			}
+			return group[i].canonicalID < group[j].canonicalID
+		})
+		survivor := group[0]
+		for _, dup := range group[1:] {
+			if !bytes.Equal(dup.body, survivor.body) ||
+				!bytes.Equal(dup.metadata, survivor.metadata) ||
+				dup.tombstone != survivor.tombstone ||
+				dup.supersededBy != survivor.supersededBy ||
+				dup.versionID != survivor.versionID {
+				return nil, nil, fmt.Errorf(
+					"og migrate: canonical ID convergence conflict on %s: "+
+						"%s (kind=%s owner=%s created=%s) and %s (kind=%s owner=%s created=%s) "+
+						"migrate to the same ID with divergent content; cannot auto-resolve",
+					newID,
+					survivor.canonicalID, survivor.kind, survivor.ownerID, survivor.createdAt,
+					dup.canonicalID, dup.kind, dup.ownerID, dup.createdAt)
+			}
+			dup.dropped = true
+			rep.OGDropped = append(rep.OGDropped, dup.canonicalID)
+		}
+	}
+
+	// External convergence: a migrated object's newID lands on a canonical_id
+	// that exists but was never retained in objs (an untouched row). Fetch
+	// the live row; identical content → drop the migrating duplicate,
+	// divergent → fail with both IDs.
+	for _, o := range objs {
+		if o.dropped || o.newID == o.canonicalID || !allIDs[o.newID] {
+			continue
+		}
+		var liveBody, liveMeta []byte
+		var liveTomb int
+		var liveVer, liveSup string
+		err := s.db.QueryRowContext(ctx,
+			`SELECT body, metadata, tombstone, version_id, superseded_by FROM og_objects WHERE canonical_id = ?`,
+			o.newID).Scan(&liveBody, &liveMeta, &liveTomb, &liveVer, &liveSup)
+		if err != nil {
+			return nil, nil, fmt.Errorf("og migrate: external convergence check %s → %s: %w", o.canonicalID, o.newID, err)
+		}
+		if bytes.Equal(o.body, liveBody) && bytes.Equal(o.metadata, liveMeta) &&
+			o.tombstone == (liveTomb != 0) && o.versionID == liveVer && o.supersededBy == liveSup {
+			o.dropped = true
+			rep.OGDropped = append(rep.OGDropped, o.canonicalID)
+			continue
+		}
+		return nil, nil, fmt.Errorf(
+			"og migrate: canonical ID convergence conflict on %s: "+
+				"migrated %s (kind=%s created=%s) collides with untouched live row "+
+				"with divergent content; cannot auto-resolve",
+			o.newID, o.canonicalID, o.kind, o.createdAt)
+	}
+
+
 	// Record provenance.
 	for _, o := range objs {
-		if !o.dirty {
+		if !o.dirty || o.dropped {
 			continue
 		}
 		rep.OGObjects = append(rep.OGObjects, OGProvEntry{
@@ -592,7 +676,17 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 		return fmt.Errorf("og migrate tx: %w", err)
 	}
 	for _, o := range objs {
-		if !o.dirty {
+		if !o.dirty && !o.dropped {
+			continue
+		}
+		if o.dropped {
+			// Convergence duplicate: the survivor holds the target canonical
+			// ID. Delete this row rather than updating it into a PK conflict.
+			if _, err := tx.ExecContext(ctx,
+				`DELETE FROM og_objects WHERE canonical_id = ?`, o.canonicalID); err != nil {
+				_ = tx.Rollback()
+				return fmt.Errorf("og migrate drop %s: %w", o.canonicalID, err)
+			}
 			continue
 		}
 		if _, err := tx.ExecContext(ctx,

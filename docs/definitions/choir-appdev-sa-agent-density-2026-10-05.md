@@ -169,6 +169,11 @@ now:
     base is published via choir-rebuild-base --source http (DiskEventSource
     additionally broken for effect_accepted events — TargetStateCommitment
     fabricated from ResultingEffectiveCommitment which is empty).
+    THIRD DEFECT SAME FILE: applyOGMigration canonical-ID convergence —
+    two V1 choir.agent objects (agent_id co-super:X vs cosuper:X) collapse
+    to the same engineering:X canonical ID; applyOGMigration UPDATEs hit
+    PK conflict. Fixed in 05d0f0ec: identical newID groups dedupe, divergent
+    fails loudly. Rebuild re-running (PID 838678, --scratch-dir /tmp/og-scratch).
     (a) sa-delegated-report-poisons-management-listing-2026-10-06.md
     (red, protected surface): a delegated-cast producer report fails the
     ListLifecycleControlsDeliveredToRunPage ProducerReport validation arm

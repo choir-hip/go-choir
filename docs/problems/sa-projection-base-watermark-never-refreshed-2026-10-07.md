@@ -99,6 +99,33 @@ reading `/internal/computers/events/replay` (corpusd has the receipts).**
 events — a durable fix requires either receipts in the artifact store or a
 seeded scratch store from the guest's data.img.
 
+## Tertiary defect — applyOGMigration canonical-ID convergence (2026-10-07)
+
+Rebuild failed at vocabulary migration after all 571,392 events replayed:
+
+```
+Error 1062: duplicate primary key given:
+[obj:choir.agent:NWJkNmRlOTctM2I1OC00MDhjLWJmODktYzQyYzgxYjA4M2Rl:
+ key-f3958e3fc25ccbaccb9c71381f9d324070c8b7d41bc5d572fd442901d71b7a41]
+```
+
+**Cause:** `ogRekey` derives key-suffixed canonical IDs from migrated
+identity fields. Two V1 `choir.agent` objects whose `agent_id` spellings
+differ in V1 ("co-super:X" and "cosuper:X") both migrate to
+"engineering:X", producing the same V2 `newID`. `applyOGMigration`
+`UPDATE`s both rows to that PK → conflict. The planner had no
+convergence detection.
+
+**Fix (this commit):** `planOGMigration` now groups objects by `newID`
+after the fixpoint; identical rows dedupe (earliest `created_at`
+survives, losers are `DELETE`d at apply, provenance in
+`MigrationReport.OGDropped`). Divergent groups fail with both IDs.
+A second check catches a migrated `newID` colliding with an untouched
+row not retained in the plan.
+
+Re-run: `--scratch-dir /tmp/og-scratch` preserves the store on failure
+for inspection (resumed replays skip committed events).
+
 
 ## Rollback
 

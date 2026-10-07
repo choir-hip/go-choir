@@ -590,3 +590,81 @@ func TestVocabDrillObjectGraph(t *testing.T) {
 		}
 	}
 }
+
+// TestVocabDrillOGConvergenceDedup reproduces the 2026-10-07 rebuild
+// failure: two V1 choir.agent objects whose agent_id spellings differ
+// ("co-super:impl" vs "cosuper:impl") both migrate to "engineering:impl",
+// producing the same canonical_id. Identical post-migration rows dedupe
+// (one row survives, one is deleted); divergent rows would fail loudly.
+func TestVocabDrillOGConvergenceDedup(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	body1 := []byte(`{"agent_id":"co-super:impl","profile":"co-super"}`)
+	meta1 := []byte(`{"agent_id":"co-super:impl","profile":"co-super"}`)
+	body2 := []byte(`{"agent_id":"cosuper:impl","profile":"cosuper"}`)
+	meta2 := []byte(`{"agent_id":"cosuper:impl","profile":"cosuper"}`)
+	m1, err := objectgraph.NormalizeMetadata(meta1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, err := objectgraph.NormalizeMetadata(meta2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id1, err := objectgraph.BuildCanonicalID("choir.agent", "owner",
+		objectgraph.StableSuffixFromKey("computer\x00co-super:impl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id2, err := objectgraph.BuildCanonicalID("choir.agent", "owner",
+		objectgraph.StableSuffixFromKey("computer\x00cosuper:impl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id1 == id2 {
+		t.Fatal("test requires distinct V1 canonical IDs")
+	}
+	for i, args := range [][]any{
+		{id1, "choir.agent", "owner", "computer", "v1", objectgraph.ContentHash("choir.agent", body1, m1), body1, string(m1)},
+		{id2, "choir.agent", "owner", "computer", "v1", objectgraph.ContentHash("choir.agent", body2, m2), body2, string(m2)},
+	} {
+		drillExec(t, s, `INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')`,
+			args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], now.Add(time.Duration(i)*time.Second), now)
+	}
+
+	rep, err := s.MigrateVocabularyToV2(ctx)
+	if err != nil {
+		t.Fatalf("og migrate with convergence: %v", err)
+	}
+
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind='choir.agent'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("og_objects after dedup: %d rows, want 1", count)
+	}
+	if len(rep.OGDropped) != 1 {
+		t.Fatalf("OGDropped: got %v, want 1 entry", rep.OGDropped)
+	}
+
+	var finalID string
+	if err := s.db.QueryRowContext(ctx, `SELECT canonical_id FROM og_objects WHERE object_kind='choir.agent'`).Scan(&finalID); err != nil {
+		t.Fatal(err)
+	}
+	wantID, err := objectgraph.BuildCanonicalID("choir.agent", "owner",
+		objectgraph.StableSuffixFromKey("computer\x00engineering:impl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finalID != wantID {
+		t.Fatalf("survivor canonical_id = %q, want %q", finalID, wantID)
+	}
+
+	// Survivor is the earlier-created row (co-super, first inserted).
+	if rep.OGDropped[0] != id2 {
+		t.Fatalf("dropped canonical_id = %q, want %q (cosuper)", rep.OGDropped[0], id2)
+	}
+}
