@@ -137,8 +137,34 @@ func (rt *Runtime) persistentManagementBoundReport(ctx context.Context, parent t
 		return types.LifecycleResult{}, fmt.Errorf("report work_disposition must be open or completed")
 	}
 	trajectoryID := lifecycleControlTrajectoryForRun(&parent)
+	// Drain carriers mint via ResolvePersistentManagementLiveOccurrence →
+	// reconcile with request_source=update_coagent and a backlog of
+	// mixed-trajectory packets; their run TrajectoryID is the mint-defaulted
+	// runID and assignment_trajectory_id is absent. Resolve the report's
+	// trajectory from the delivered control set instead — the carrier may
+	// report one trajectory's worth of controls at a time.
+	isDrainCarrier := metadataStringValue(parent.Metadata, "request_source") == "update_coagent"
+	if isDrainCarrier {
+		trajectoryID = ""
+	}
 	if trajectoryID == "" {
-		return types.LifecycleResult{}, fmt.Errorf("report requires one exact delivered lifecycle control trajectory")
+		if isDrainCarrier {
+			// Pick the trajectory of the most recent delivered control; the
+			// carrier iterates the backlog and reports each trajectory's set
+			// separately.
+			deliveredForTraj, trajErr := rt.listAllLifecyclePacketsDeliveredToRun(ctx, &parent)
+			if trajErr != nil {
+				return types.LifecycleResult{}, trajErr
+			}
+			for _, p := range deliveredForTraj {
+				if p.Direction == types.LifecyclePacketDirectionControl && strings.TrimSpace(p.TrajectoryID) != "" {
+					trajectoryID = p.TrajectoryID
+				}
+			}
+		}
+		if trajectoryID == "" {
+			return types.LifecycleResult{}, fmt.Errorf("report requires one exact delivered lifecycle control trajectory")
+		}
 	}
 	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, parent.OwnerID, parent.ComputerID, trajectoryID)
 	if err != nil {
@@ -152,6 +178,19 @@ func (rt *Runtime) persistentManagementBoundReport(ctx context.Context, parent t
 	}
 	if err != nil {
 		return types.LifecycleResult{}, err
+	}
+	// Drain carriers bind packets across trajectories; a report resolves one
+	// trajectory at a time. Restrict the consumable set to the resolved
+	// trajectory so the homogeneity check below sees a single-trajectory
+	// window.
+	if isDrainCarrier {
+		filtered := delivered[:0]
+		for _, p := range delivered {
+			if strings.TrimSpace(p.TrajectoryID) == trajectoryID {
+				filtered = append(filtered, p)
+			}
+		}
+		delivered = filtered
 	}
 	memoryEntries, err := rt.store.ListRunMemoryEntries(ctx, parent.OwnerID, parent.RunID)
 	if err != nil {

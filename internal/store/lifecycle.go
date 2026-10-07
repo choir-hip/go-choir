@@ -3595,11 +3595,22 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 		if lateEvidenceOnly {
 			producerRunStateAllowed = persistentManagementHistoricalReportRunStateAllowed(producerRun.State)
 		}
+		// Backlog-minted drain carriers (request_source=update_coagent) bind
+		// packets across trajectories — they carry no single
+		// assignment_trajectory_id and their run TrajectoryID is the run's own
+		// ID (mint-defaulted). The run-to-packet authority is already proven
+		// by control.DeliveredToRunID == req.SourceRunID below; the
+		// single-trajectory mint fields are a contract only lifecycle-control
+		// carriers can satisfy. Relax them for drain carriers.
+		drainCarrier := metadataExactString(producerRun.Metadata, "request_source") == "update_coagent"
+		runBound := producerRun.TrajectoryID == "" &&
+			metadataExactString(producerRun.Metadata, "assignment_trajectory_id") == req.TrajectoryID &&
+			persistentManagementControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID)
 		if producerRunObj.ComputerID != "" || producerRun.RunID != req.SourceRunID || producerRun.OwnerID != ownerID ||
-			producerRun.ComputerID != computerID || producerRun.TrajectoryID != "" || producerRun.AgentID != req.ProducerAgentID ||
+			producerRun.ComputerID != computerID || producerRun.AgentID != req.ProducerAgentID ||
 			producerRun.AgentProfile != agentprofile.Management || producerRun.AgentRole != agentprofile.Management || !producerRunStateAllowed ||
-			producerRun.ChannelID != req.ChannelID || metadataExactString(producerRun.Metadata, "assignment_trajectory_id") != req.TrajectoryID ||
-			!persistentManagementControlBinding(producerRun.Metadata, req.TrajectoryID, req.WorkItemID, req.ControlBindingID) {
+			producerRun.ChannelID != req.ChannelID ||
+			(!drainCarrier && !runBound) {
 			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 		}
 		controlKey := req.TrajectoryID + "\x00" + req.ProducerAgentID + "\x00" + req.TargetAgentID + "\x00" + req.ControlBindingID
