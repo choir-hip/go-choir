@@ -77,8 +77,12 @@ divergent; all required revisions applied in v3). Thirteen stations;
   delegated-report poisoned delivered-page listing + mint-no-start slot
   deadlock (fixed 01199fb1) + AppendEvent unbounded scan (fixed
   475902d7) + wake-outbox re-arm storm.
-- **SA** agent density **working** (slice 0 deployed 9f6f369c; slice 1
-  storm convergence open with the defect field above).
+- **SA** agent density **working** (slice 0 deployed 9f6f369c; slice 0
+  residuals landed 2026-10-07: delegated-report delivered-page fix
+  `ca8c8c18` + apply-fence liveness-tolerant probe `19d7913e` +
+  commit-bound push gate `68397ae7`; owner runs `19d7913e`. Slice 1
+  storm convergence open; the owner-side delegated-report deployed
+  acceptance is pending the storm-drain backlog.)
 Ordered ahead of the World Wire metamission per owner direction
 2026-10-01 ("a good prerequisite to it").
 
