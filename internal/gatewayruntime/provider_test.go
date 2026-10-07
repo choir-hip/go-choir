@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -153,6 +154,63 @@ func TestExecuteStreamsGatewayReasoningWithoutRendering(t *testing.T) {
 	}
 	if len(deltas) != 1 || deltas[0] != "visible" {
 		t.Fatalf("visible deltas = %#v", deltas)
+	}
+}
+
+func TestCallWithToolsRetriesTruncatedJSONBody(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		if attempts == 1 {
+			// Connection dropped after headers — ReadAll returned partial
+			// bytes without error, leaving decode with an unexpected EOF.
+			_, _ = w.Write([]byte(`{"id":"r1","text":"part`))
+			return
+		}
+		writeJSON(t, w, llmResponse{
+			ID: "r1", Text: "ok", Model: "m", StopReason: "end_turn",
+			Usage: tokenUsage{InputTokens: 1, OutputTokens: 1},
+		})
+	}))
+	defer server.Close()
+
+	provider := New(server.URL, "autoputer-token")
+	resp, err := provider.CallWithTools(context.Background(), provideriface.ToolLoopRequest{
+		Messages: []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hi"}]}`)},
+	})
+	if err != nil {
+		t.Fatalf("CallWithTools err = %v, want nil after retrying truncated body", err)
+	}
+	if attempts < 2 {
+		t.Fatalf("attempts = %d, want >=2", attempts)
+	}
+	if resp.Text != "ok" {
+		t.Fatalf("resp.Text = %q, want ok", resp.Text)
+	}
+}
+
+func TestCallWithToolsPermanentJSONFailureBounded(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"r1","text":"part`))
+	}))
+	defer server.Close()
+
+	provider := New(server.URL, "autoputer-token")
+	_, err := provider.CallWithTools(context.Background(), provideriface.ToolLoopRequest{
+		Messages: []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hi"}]}`)},
+	})
+	if err == nil {
+		t.Fatal("expected error when every attempt returns truncated JSON")
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts = %d, want 3 (bounded retries)", attempts)
+	}
+	if !strings.Contains(err.Error(), "decode response") {
+		t.Fatalf("err = %q, want decode response", err.Error())
 	}
 }
 

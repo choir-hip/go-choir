@@ -163,24 +163,48 @@ func (p *Provider) CallWithTools(ctx context.Context, req provideriface.ToolLoop
 
 func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, error) {
 	req.Stream = false
-	httpResp, err := p.do(ctx, req, "")
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
+			}
+		}
+		httpResp, err := p.do(ctx, req, "")
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, err := io.ReadAll(httpResp.Body)
+		_ = httpResp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("gateway client: read response: %w", err)
+			continue
+		}
+		if httpResp.StatusCode != http.StatusOK {
+			stErr := gatewayStatusError(httpResp.Status, body)
+			if transient, ok := stErr.(interface{ Transient() bool }); ok && transient.Transient() {
+				lastErr = stErr
+				continue
+			}
+			return nil, stErr
+		}
+		var out llmResponse
+		if err := json.Unmarshal(body, &out); err != nil {
+			// A connection that dropped after ReadAll returned partial bytes
+			// without error surfaces as a JSON decode error — most commonly
+			// `unexpected end of JSON input`. That is a transient transport
+			// failure, not a semantic rejection: retry it like a read/5xx
+			// failure so one dropped mid-flight response does not kill the
+			// caller's run (sa1 storm drain carrier-kill on owner guest).
+			lastErr = fmt.Errorf("gateway client: decode response: %w", err)
+			continue
+		}
+		return &out, nil
 	}
-	defer func() { _ = httpResp.Body.Close() }()
-
-	body, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("gateway client: read response: %w", err)
-	}
-	if httpResp.StatusCode != http.StatusOK {
-		return nil, gatewayStatusError(httpResp.Status, body)
-	}
-	var out llmResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return nil, fmt.Errorf("gateway client: decode response: %w", err)
-	}
-	return &out, nil
+	return nil, lastErr
 }
 
 func (p *Provider) stream(ctx context.Context, req llmRequest, onChunk func(streamChunk)) (*llmResponse, error) {
