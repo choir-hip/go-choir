@@ -83,7 +83,10 @@ divergent; all required revisions applied in v3). Thirteen stations;
   commit-bound push gate `68397ae7`; owner runs `19d7913e`. Slice 1
   storm convergence open; drain fixes landed `91e9c03b`/`29817fda`/
   `5eb63161`/`7a36713c`. Management-open wake race fixed `e9cd9fed`
-  (problem doc `smg-management-open-invalid-transition-2026-10-07.md`)).
+  (problem doc `smg-management-open-invalid-transition-2026-10-07.md`);
+  deployed-verified 2026-10-07 on fresh disposable `computer-e472d237`
+  (legs 1-3 + bound report green, evidence
+  `smg-rlm-acceptance-fix-verify-2026-10-07.json`).
 Ordered ahead of the World Wire metamission per owner direction
 2026-10-01 ("a good prerequisite to it").
 

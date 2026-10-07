@@ -1,0 +1,60 @@
+{
+  "probe": "smg_rlm_acceptance",
+  "computer": "computer-e472d2375add94b114df1a0c4ecaed87",
+  "marker": "smg-fix-verify-1791368256",
+  "started_at": "2026-10-07T10:17:59.662Z",
+  "legs": [
+    {
+      "name": "management_open",
+      "ended_at": "2026-10-07T10:18:00.683Z",
+      "wall_ms": 1021,
+      "ok": true,
+      "trajectory": "83baee0a-9edb-5f1b-99e2-0883c6b7e2b5",
+      "doc": "15035233-758f-53c8-8b3b-cfb9289bf7cb",
+      "texture_run": "c5c6cfc0-0cf7-45b7-9fdd-26531b9fe297",
+      "work_item": "mgmt-work-smg-rlm-open-smg-fix-verify-1791368256",
+      "control": "mgmt-control-smg-rlm-open-smg-fix-verify-1791368256",
+      "update": "mgmt-control-smg-rlm-open-smg-fix-verify-1791368256"
+    },
+    {
+      "name": "persistent_management_signal",
+      "ended_at": "2026-10-07T10:18:00.771Z",
+      "wall_ms": 1109,
+      "update_id": "mgmt-control-smg-rlm-open-smg-fix-verify-1791368256",
+      "kind": "control_queued"
+    },
+    {
+      "name": "assignment_cancel_verb",
+      "ended_at": "2026-10-07T10:18:33.886Z",
+      "wall_ms": 34224,
+      "update_id": "",
+      "kind": "co_super_capsule_disposition_set"
+    },
+    {
+      "name": "unbound_refusal_evidence",
+      "ended_at": "2026-10-07T10:20:12.689Z",
+      "wall_ms": 133027,
+      "update_id": ""
+    },
+    {
+      "name": "bound_producer_report",
+      "ended_at": "2026-10-07T10:30:16.996Z",
+      "wall_ms": 737334,
+      "update_id": "result:sha256:a59458046532220a769334953a6c73f2827e79c1bd5735188b538ca47f6ef8f1",
+      "kind": "update_delivered",
+      "work_item_id": "mgmt-work-smg-rlm-open-smg-fix-verify-1791368256"
+    },
+    {
+      "name": "final",
+      "ended_at": "2026-10-07T10:30:17.146Z",
+      "wall_ms": 737484,
+      "bound_report": true,
+      "cancel_verb": true,
+      "unbound_refusal": true,
+      "mgmt_signal": true
+    }
+  ],
+  "ok": true,
+  "failure": null,
+  "ended_at": "2026-10-07T10:30:17.147Z"
+}

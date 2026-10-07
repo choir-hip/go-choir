@@ -756,16 +756,17 @@ now:
        with a paced drain. Acceptance: owner guest restart converges
        pending to a bounded floor within a stated window and stays there
        for 24 h, and the SMG probe passes on the owner computer.
-    2. SA slice 0 residual — RESOLVED 2026-10-07 (e9cd9fed):
-       first-activation CAS race (500 'replace durable activation:
-       lifecycle invalid transition' on submits 1-2 post-boot) was the
-       lifecycle_work_assigned wake racing EnsureTextureHandoff — the
-       wake's reconcileAgentWakeLocked committed run-A before the
+    2. SA slice 0 residual — RESOLVED + DEPLOYED-VERIFIED 2026-10-07
+       (e9cd9fed): first-activation CAS race (500 'replace durable
+       activation: lifecycle invalid transition' on submits 1-2 post-boot)
+       was the lifecycle_work_assigned wake racing EnsureTextureHandoff —
+       the wake's reconcileAgentWakeLocked committed run-A before the
        handoff's own submit landed, so run-B hit the previous-active-run
        gate. Fix: submitTextureAgentRevisionRun recovers the already-
        committed run on ErrLifecycleInvalidTransition
-       (recoverRacedTextureActivation). CI run in flight; SMG probe on
-       fresh disposable owed as deployed proof.
+       (recoverRacedTextureActivation). Deployed-verified on fresh
+       disposable computer-e472d237 — management_open 202, all legs green
+       (smg-rlm-acceptance-fix-verify-2026-10-07.json).
     3. SMG named edge (not blocking SA): after slice 1 lands, re-run
        scripts/smg_rlm_acceptance_probe.mjs on the owner computer AND a
        fresh disposable; if the texture desk still will not emit
