@@ -169,6 +169,31 @@ The owner-guest SMG probe's final verdict is pending a re-run on
 with `no bound producer report observed` — evidence
 `docs/evidence/smg-rlm-acceptance-owner-postfix-2026-10-06.json`).
 
+## Deployed observation 2026-10-07 (on `19d7913e`, owner `computer-03335285`)
+
+Post-deploy-boot behavior (fresh boot 01:06 by vmctl after reattach health
+check skipped):
+
+- `delivered-pending-runs=15` at rewarm → `=14` after Management's first
+  turn, then flat through 01:20. Management run `dd52c39d` reactivated and
+  is in its own tool loop (iterations 60+ observed 01:42) consuming the
+  bound backlog serially — the drain is real, not silent.
+- `live occurrence received → bound → terminal` cycles ran ~1/sec through
+  01:20:27, then **stopped entirely** — the wake source exhausted its
+  stale-supply; no new wakes mint since. The storm is not a perpetual
+  motion loop on `19d7913e`; it is a bounded backlog draining.
+- A queued `management-open` lifecycle control sits deferred behind the
+  draining Management run (`pending lifecycle control ... queued at +7min`,
+  `resident lifecycle control bind deferred`). It activates once the drain
+  frees the resident slot — the deferred disposition is correct FIFO, not
+  a deadlock.
+- **Acceptance still owed:** (a) drain completes and `delivered-pending-runs`
+  settles at a bounded floor across a stated window; (b) the floor holds
+  24h; (c) the SMG probe passes on the owner (legs 1-3: management-open
+  activates, delegated report binds, refusal text surfaces). Current run
+  `dd52c39d` is the first non-wedged drain; watch for whether it completes
+  or stalls at a deterministic residue packet.
+
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;
