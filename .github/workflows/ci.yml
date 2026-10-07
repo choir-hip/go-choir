@@ -1598,19 +1598,23 @@ jobs:
                     app_layer_failed=$((app_layer_failed + 1))
                   fi
                 done
-                # Time-to-healthy: poll every pushed computer's guest health
+                # Time-to-healthy: poll every pushed computer's running build
                 # through the autoputer proxy; the apply's own restart makes
                 # the push response unreliable, so the healthy window is the
-                # oracle.
+                # oracle. The gate is commit-bound: a rolled-back computer's
+                # prior release also answers /health 200, so a computer is
+                # healthy only when its running build.commit == DEPLOY_COMMIT
+                # (app-layer-push-health-gate-not-commit-bound-2026-10-07).
                 push_deadline=$(( $(date +%s) + 420 ))
                 app_layer_healthy=0
                 while [ "$(date +%s)" -lt "$push_deadline" ]; do
                   app_layer_healthy=0
                   for t_computer in "${!pushed_users[@]}"; do
                     t_user="${pushed_users[$t_computer]}"
-                    h=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' -H "X-Internal-Caller: true" \
-                      "http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${t_user}/health?desktop=primary" 2>/dev/null || true)
-                    if [ "$h" = "200" ]; then
+                    obs=$(curl -sS --max-time 5 -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${t_user}" \
+                      "http://127.0.0.1:8083/internal/vmctl/autoputer-proxy/${t_user}/api/runtime/observability?desktop=primary" 2>/dev/null || true)
+                    running_commit=$(printf '%s' "$obs" | jq -r '.build.commit // empty' 2>/dev/null || true)
+                    if [ "$running_commit" = "$DEPLOY_COMMIT" ]; then
                       app_layer_healthy=$((app_layer_healthy + 1))
                     fi
                   done
@@ -1620,11 +1624,14 @@ jobs:
                   sleep 10
                 done
                 t2h=$(( $(date +%s) - app_layer_start ))
-                echo "    app-layer push: ${app_layer_healthy}/${#pushed_users[@]} healthy, ${app_layer_failed} skipped, time-to-healthy=${t2h}s"
+                echo "    app-layer push: ${app_layer_healthy}/${#pushed_users[@]} applied ${DEPLOY_COMMIT}, ${app_layer_failed} skipped, time-to-healthy=${t2h}s"
                 record_receipt_artifact app_layer_release "$code_commit" pushed
-                if [ "${#pushed_users[@]}" -gt 0 ] && [ "$app_layer_healthy" -eq 0 ]; then
-                  echo "App-layer push produced no healthy computer" >&2
-                  dump_deploy_service_diagnostics "app-layer push unhealthy"
+                # A pushed computer that did not land DEPLOY_COMMIT is a
+                # rollback — never silently green (a prior release still
+                # answers health probes).
+                if [ "${#pushed_users[@]}" -gt 0 ] && [ "$app_layer_healthy" -lt "${#pushed_users[@]}" ]; then
+                  echo "App-layer push left $(( ${#pushed_users[@]} - app_layer_healthy )) pushed computer(s) not running ${DEPLOY_COMMIT} (rolled back or failed)" >&2
+                  dump_deploy_service_diagnostics "app-layer push rolled back"
                   exit 1
                 fi
               fi
