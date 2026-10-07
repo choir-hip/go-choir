@@ -219,8 +219,14 @@ now:
     carried 475902d7; probe --expect-commit gate refused and caught it).
     Not a pin defect — a deploy-race on a shared store image; an S2
     per-mint release pin or boot-time freshness assertion would close it.
-  source_ref: main@1ba0c144
-  deploy_identity: 'choir.news deployed_commit=ca8c8c18 (deploy run 37551113838 green; owner canary rolled back on update-apply health 503 — see gate problem doc; vm-48bc0981 verified running ca8c8c18)'
+    APPLY-FENCE RESIDUAL RESOLVED (a)'s follow-on: the owner canary's
+    apply of ca8c8c18 rolled back on updater health-probe 503 during the
+    546k-event replay — fixed 19d7913e (liveness-tolerant HTTPHealthProber
+    + MaxDuration=15m) and landed on the owner via the guest-image deploy
+    + active-VM refresh. The commit-bound push gate is fixed 68397ae7.
+    Slice-1 blocker lifted: the owner can now receive app-layer releases.
+  source_ref: main@19d7913e
+  deploy_identity: 'choir.news deployed_commit=19d7913e (deploy run 37553820678; owner computer verified via internal proxy; vm-48bc0981 canary on ca8c8c18 from prior push)'
   candidate:
     id: none
     state: none

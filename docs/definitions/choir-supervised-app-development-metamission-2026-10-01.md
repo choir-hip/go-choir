@@ -535,18 +535,18 @@ now:
     reports no longer poison the consuming run's delivered-page listing
     — the binding check accepts the consumer-side control binding OR the
     delegated work-item lineage join. Test fails-before/passes-after;
-    store suite green. Deployed-verified on vm-48bc0981; the owner
-    canary's apply failed with updater health-probe 503 and rolled back
-    (deterministic on manual retry) — a platform-update apply-fence
-    defect that now blocks ANY release landing on the 546k-event owner
-    computer, plus a CI gate that reported the rollback as "2/2
-    healthy". Both recorded in
-    docs/problems/app-layer-push-health-gate-not-commit-bound-2026-10-07.md;
-    gate made commit-bound + fail-on-rollback in 68397ae7 (effective on
-    next deploy). The apply-fence defect is SA's critical blocker: SA
-    acceptance must run on the owner computer, which cannot receive a
-    release until it is fixed. Critical path: SA slice 1 (storm
-    convergence) gated on the apply-fence repair, then the SA baseline.
+    store suite green. Deployed-verified on vm-48bc0981.
+    APPLY-FENCE FOLLOW-ON FIXED 2026-10-07 (19d7913e): the owner canary's
+    apply of ca8c8c18 rolled back on updater health-probe 503 during the
+    546k-event replay — the 30-attempt fence was shorter than
+    boot-to-healthy on a large store. HTTPHealthProber now treats an
+    advancing replaying 503 (committed_sequence/progress) as liveness and
+    resets the stall budget; MaxDuration=15m is the absolute bound. The
+    commit-bound push gate (68397ae7) also landed: a rolled-back computer
+    no longer reports "healthy". Owner runs 19d7913e via guest-image
+    deploy + active-VM refresh; an app-layer acceptance apply is still
+    owed (19d7913e itself is base-image-only).
+    Critical path: SA slice 1 (storm convergence), then the SA baseline.
     See "v5.1 revision".
     v5 (2026-10-05, owner-approved outline). Governing principle: density
     before distribution. Closed: S0, S0m, S1a, **S2** (2026-10-05, terminal
@@ -560,8 +560,8 @@ now:
     desk-surface cleanup, then SA agent density in a 2-4 GiB guest, with
     SM model policy + evals after SR, and SC desk capability surface after
     SA + SM. See "v5 plan".
-  source_ref: main@68397ae7
-  deploy_identity: 'staging https://choir.news deployed_commit=ca8c8c18 (run 37551113838); owner canary rolled back to 6d55a585 on apply 503 — see gate problem doc; vm-48bc0981 verified ca8c8c18'
+  source_ref: main@52f76be4
+  deploy_identity: 'staging https://choir.news deployed_commit=19d7913e (run 37553820678; owner + vm-48bc0981 refreshed; owner verified via internal proxy)'
   candidate:
     id: none
     state: none
@@ -712,16 +712,17 @@ now:
     full S1 floor. S3 must not start before SO's storage lifecycle and the
     VM shape decision.
   next_action: >-
-    0. SA slice 0 residual — platform-update apply-fence blocks the
-       owner computer: ca8c8c18's apply failed with updater health-probe
-       503 ~1s into the post-restart probe on the 546k-event owner store
-       (deterministic on retry), while vm-48bc0981 applied the same
-       release cleanly. Until this is fixed the owner canary cannot
-       receive ANY release — SA acceptance (slice 1 on the owner
-       computer) is gated on it. Root the fence: probe window vs
-       boot-to-healthy on a large store; widen or re-check the gate.
-       Also confirmed en route: fresh disposables resolve the PREVIOUS
-       release (storedisk.erofs baked at guest-image build) — an S2
+    0. RESOLVED — SA slice 0's apply-fence blocker: ca8c8c18's apply
+       rolled back on updater health-probe 503 during the 546k-event
+       replay (~35s of 503s vs a 30-attempt fence). Fixed 19d7913e —
+       HTTPHealthProber treats an advancing replaying 503 as liveness
+       (resets stall budget, MaxDuration=15m absolute). Owner runs
+       19d7913e via guest-image deploy + refresh. Gate hardened 68397ae7
+       (commit-bound; rolled-back pushed computer fails the deploy).
+       Residual: a real app-layer apply on the owner under the tolerant
+       probe is still owed — land on the next deploy carrying an
+       app-layer delta. Fresh disposables still resolve the PREVIOUS
+       release (storedisk.erofs baked at guest-image build) — S2
        per-mint release pin is the durable fix.
     1. SA slice 1: storm convergence (red). Problem-doc first: record the
        boot re-arm mechanism (v5.1 revision, finding 2) and confirm it from
