@@ -225,8 +225,8 @@ now:
     + MaxDuration=15m) and landed on the owner via the guest-image deploy
     + active-VM refresh. The commit-bound push gate is fixed 68397ae7.
     Slice-1 blocker lifted: the owner can now receive app-layer releases.
-  source_ref: main@19d7913e
-  deploy_identity: 'choir.news deployed_commit=19d7913e (deploy run 37553820678; owner computer verified via internal proxy; vm-48bc0981 canary on ca8c8c18 from prior push)'
+  source_ref: main@5eb63161
+  deploy_identity: 'choir.news deployed_commit=19d7913e (deploy run 37553820678); pending push 5eb63161 (gateway client decode-EOF retry) through deploy + owner refresh'
   candidate:
     id: none
     state: none
@@ -285,14 +285,16 @@ now:
     terminal fate `41822a4c`, wake-mint marker `d94ce9ef`, occurrence
     resolve O(1) `e3e96067`, paced drain `d94ce9ef`. Deployed observation
     2026-10-07 on `19d7913e` (owner `computer-03335285`): wake mint
-    ceased at 01:20:27 — no new `live occurrence` mints after the stale
-    supply drained; Management run `dd52c39d` is in serial consume of the
-    14-run delivered backlog (tool iterations 60+); queued
-    `management-open` control defers FIFO behind the drain (correct).
-    Remaining acceptance is measurement, not mechanism: drain must settle
-    at a bounded floor in a stated window, hold 24h, then the SMG probe
-    re-run must pass on the owner (legs 1-3 incl. the two weak legs:
-    refusal-by-run-report, work_disposition=completed). -> slice 2
+    ceased 01:20:27 — the stale supply drained; the storm is now a
+    bounded 14-run delivered backlog, not a perpetual loop. Carrier-kill
+    residual fixed `5eb63161` (GatewayClient.Call retries JSON-decode
+    EOF; owner still on `19d7913e` pre-fix). Drain carriers `dd52c39d` →
+    `ed435162` (killed at i=94 transient, pre-fix) → `6f2119ea` (live
+    i=30+). Queued `management-open` control defers FIFO behind drain
+    (correct). Remaining acceptance is measurement: drain settles at a
+    bounded floor in a stated window, holds 24h, then SMG probe passes on
+    the owner (legs 1-3 incl. the two weak legs). Deploy gate: push
+    `5eb63161` through CI + deploy + active-VM refresh. -> slice 2
     (baseline + offline GC re-measure) -> 3 (memory) -> 4 (race test, then
     read/write lock) -> 5 (read cost) -> 6 (store split + group commit) ->
     7 (declared shapes + elasticity) -> acceptance.
