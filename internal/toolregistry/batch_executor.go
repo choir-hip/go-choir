@@ -6,13 +6,21 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+// slowToolLogThreshold is the elapsed bound above which a single tool call
+// logs its name + duration. Below it per-tool logging would flood the
+// console on every iteration; above it the call is the dominant cost and
+// the stall signature worth naming (sa1 drain pace-collapse residual).
+const slowToolLogThreshold = 30 * time.Second
 
 // ExecuteToolBatch executes a provider batch under the authoritative tool
 // execution policy and returns results in provider call order.
@@ -79,7 +87,15 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 		execution.ToolCallID = strings.TrimSpace(call.ID)
 		callCtx := WithExecutionContext(ctx, execution)
 		var err error
+		toolStart := time.Now()
 		output, err = registry.Execute(callCtx, call.Name, call.Arguments)
+		if elapsed := time.Since(toolStart); elapsed > slowToolLogThreshold {
+			// A single tool call that holds the serialized store lock for
+			// tens of seconds stalls a Management drain carrier's whole
+			// iteration. Log which call owns the stall so a slow-path
+			// residual names the offending tool, not just "the store".
+			log.Printf("tool loop: slow tool call tool=%s call_id=%s dur=%s err=%v", call.Name, call.ID, elapsed.Round(time.Millisecond), err)
+		}
 		if err != nil {
 			output = fmt.Sprintf("tool_error: %v", err)
 			isError = true
