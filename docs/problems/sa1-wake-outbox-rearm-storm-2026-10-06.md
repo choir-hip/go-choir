@@ -213,6 +213,16 @@ check skipped):
   fail). Deployed acceptance pending — `5eb63161` is on main, the owner
   still runs `19d7913e`; a fresh deploy + active-VM refresh is required
   to land it.
+- **Residual surfaced 02:13 — drain pace collapses under single-tool-call
+  stalls.** Carrier `6f2119ea` ran iterations ~1/sec through i=51, then
+  stalled ~10min between i=51 and i=53 before resuming at 02:23. The
+  run did not die; one tool call held the serialized store lock for the
+  duration. If this repeats, the drain is effectively unbounded: each
+  stall is a silent block with no watchdog signal. Instrument: a per-tool
+  elapsed log on the management drain path would surface which call owns
+  the stall (likely the delivered-listing / packet-scan query under the
+  serialized engineMu).
+
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;
