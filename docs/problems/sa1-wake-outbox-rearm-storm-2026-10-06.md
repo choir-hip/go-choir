@@ -225,6 +225,20 @@ check skipped):
   the stall (likely the delivered-listing / packet-scan query under the
   serialized engineMu).
 
+- **Residual surfaced 02:44 — drain blocks release pushes (head-churn
+  fence).** The `29817fda` app-layer push to the owner was refused on
+  `expected canonical event head changed` / `base event head is stale`
+  twice by the deploy gate (0/0 applied, 1 skipped — the gate counted
+  the owner skipped, not failed, so the deploy stayed green). Manual
+  re-drive minted a fresh offer and was refused on the same head fence:
+  the owner guest's canonical event head advances every ~5s while the
+  drain commits, so an offer bound to head-at-mint is already stale at
+  push. Structural consequence: **no release can land on the owner
+  until the drain's write rate falls below the mint→push window.**
+  The drain must settle first; a minted offer then binds cleanly. (The
+  `68397ae7` commit-bound gate still works — skipped != pushed — but
+  the gate does not count a push-refused computer as a deploy failure,
+  a residual edge worth a follow-up.)
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;
