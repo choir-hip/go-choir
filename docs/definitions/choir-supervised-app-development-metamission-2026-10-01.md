@@ -40,7 +40,12 @@ definition_version: 4
 # with the bootstrap-chain preamble, never by hand-draining the owner guest.
 # CAS durability + 161k lost corpus bodies recorded under SO. See
 # "v5.1 revision".
-
+# v5.2 2026-10-07 (addendum only, not a revision): SA slice 1 drain fixes
+# landed (91e9c03b rewarm, 29817fda+5eb63161 gateway decode retry, 7a36713c
+# drain-carrier validator relax). Management-open race fixed e9cd9fed —
+# lifecycle_work_assigned wake fires reconcileAgentWakeLocked before
+# EnsureTextureHandoff's own submit; loser now recovers the already-committed
+# run instead of 500ing. See "v5.2 addendum" in now.slice.
 readiness: executable
 
 review:
@@ -546,9 +551,27 @@ now:
     no longer reports "healthy". Owner runs 19d7913e via guest-image
     deploy + active-VM refresh; an app-layer acceptance apply is still
     owed (19d7913e itself is base-image-only).
+    SA SLICE 1 STORM CONVERGENCE (2026-10-07): wake mint ceased on
+    19d7913e owner boot (01:20:27); Management dd52c39d in serial drain
+    of 14-run delivered backlog; management-open control defers FIFO.
+    Fixes landed: drain-carrier rewarm (91e9c03b, drop request_source
+    gate), gatewayruntime Call JSON-decode retry (29817fda + host
+    5eb63161), drain-carrier report validator relaxation (7a36713c).
+    Drain-carrier kill residuals: transient gateway decode + host-side
+    health-check kill reset mid-drain — reattach fix pending.
+    SMG MANAGEMENT-OPEN RACE FIXED 2026-10-07 (e9cd9fed): the
+    lifecycle_work_assigned wake (minted by StartLifecycle in the same
+    batch) fires reconcileAgentWakeLocked → submitTextureAgentRevisionRun
+    → ReplaceLifecycleActivation BEFORE EnsureTextureHandoff's own submit
+    lands. The wake's run wins; the handoff's run-B hits
+    previous-active-run gate → ErrLifecycleInvalidTransition → 500.
+    Fix: submitTextureAgentRevisionRun calls recoverRacedTextureActivation
+    on ErrLifecycleInvalidTransition; if agent.ActiveRunID is set and
+    live, returns that run idempotently. Problem doc:
+    smg-management-open-invalid-transition-2026-10-07.md. Deployed proof
+    pending CI on e9cd9fed.
     Critical path: SA slice 1 (storm convergence), then the SA baseline.
     See "v5.1 revision".
-    v5 (2026-10-05, owner-approved outline). Governing principle: density
     before distribution. Closed: S0, S0m, S1a, **S2** (2026-10-05, terminal
     receipt s2-station-terminal-2026-10-05; consensus round 2 6 approve /
     1 send-back, sole send-back receipt-completion only and discharged).
@@ -560,8 +583,8 @@ now:
     desk-surface cleanup, then SA agent density in a 2-4 GiB guest, with
     SM model policy + evals after SR, and SC desk capability surface after
     SA + SM. See "v5 plan".
-  source_ref: main@52f76be4
-  deploy_identity: 'staging https://choir.news deployed_commit=19d7913e (run 37553820678; owner + vm-48bc0981 refreshed; owner verified via internal proxy)'
+  source_ref: main@e9cd9fed
+  deploy_identity: 'staging https://choir.news deployed_commit=7a36713c (CI run in flight for e9cd9fed; owner + vm-48bc0981 on 19d7913e base image)'
   candidate:
     id: none
     state: none
@@ -733,11 +756,16 @@ now:
        with a paced drain. Acceptance: owner guest restart converges
        pending to a bounded floor within a stated window and stays there
        for 24 h, and the SMG probe passes on the owner computer.
-    2. SA slice 0 residual: first-activation CAS race (500 'replace
-       durable activation: lifecycle invalid transition' on submits 1-2
-       post-boot, 202 on 3, disposable computer-07b582d5) — reproduce
-       under a fresh disposable, map to the one-store-three-symptoms
-       conjecture, fix or fold into slice 1.
+    2. SA slice 0 residual — RESOLVED 2026-10-07 (e9cd9fed):
+       first-activation CAS race (500 'replace durable activation:
+       lifecycle invalid transition' on submits 1-2 post-boot) was the
+       lifecycle_work_assigned wake racing EnsureTextureHandoff — the
+       wake's reconcileAgentWakeLocked committed run-A before the
+       handoff's own submit landed, so run-B hit the previous-active-run
+       gate. Fix: submitTextureAgentRevisionRun recovers the already-
+       committed run on ErrLifecycleInvalidTransition
+       (recoverRacedTextureActivation). CI run in flight; SMG probe on
+       fresh disposable owed as deployed proof.
     3. SMG named edge (not blocking SA): after slice 1 lands, re-run
        scripts/smg_rlm_acceptance_probe.mjs on the owner computer AND a
        fresh disposable; if the texture desk still will not emit
