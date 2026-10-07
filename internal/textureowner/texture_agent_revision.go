@@ -483,6 +483,16 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 	rec, err := rt.Core.StartRunWithMetadata(ctx, agentPrompt, ownerID, runMetadata)
 	if err != nil {
+		if errors.Is(err, store.ErrLifecycleInvalidTransition) {
+			// The initial_dispatch wake from StartLifecycle can fire reconcileAgentWakeLocked
+			// before EnsureTextureHandoff's own submit lands. When that happens the agent
+			// already carries ActiveRunID for this trajectory — treat the committed run as
+			// the activation instead of surfacing a lifecycle invalid-transition 500.
+			if recovered := rt.recoverRacedTextureActivation(ctx, ownerID, doc); recovered != nil {
+				log.Printf("texture api: recovered raced activation for doc %s run %s", doc.DocID, recovered.RunID)
+				return recovered, nil
+			}
+		}
 		return nil, err
 	}
 	// The adapter's checked dispatch wrapper records the synchronous SQLite
@@ -500,6 +510,28 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		events.CauseTaskLifecycle, startedPayload)
 
 	return rec, nil
+}
+
+// recoverRacedTextureActivation returns the already-committed active run when a
+// concurrent activation (the initial_dispatch wake racing EnsureTextureHandoff)
+// committed the same trajectory's activation first. The winner's run already
+// carries agent.ActiveRunID; loading and returning it makes the second caller
+// idempotent instead of surfacing lifecycle invalid transition.
+func (rt *Handler) recoverRacedTextureActivation(ctx context.Context, ownerID string, doc types.Document) *types.RunRecord {
+	if rt == nil || rt.Store == nil {
+		return nil
+	}
+	computerID := strings.TrimSpace(doc.ComputerID)
+	agentID := currentTextureAgentID(doc.DocID)
+	agent, err := rt.Store.GetAgentByScope(ctx, ownerID, computerID, agentID)
+	if err != nil || strings.TrimSpace(agent.ActiveRunID) == "" {
+		return nil
+	}
+	run, err := rt.Store.GetLifecycleRun(ctx, ownerID, computerID, agent.ActiveRunID)
+	if err != nil || !run.State.Active() {
+		return nil
+	}
+	return &run
 }
 
 func textureHardRequirementHints(parts ...string) []string {
