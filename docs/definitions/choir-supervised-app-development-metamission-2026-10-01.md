@@ -584,7 +584,7 @@ now:
     SM model policy + evals after SR, and SC desk capability surface after
     SA + SM. See "v5 plan".
   source_ref: main@e9cd9fed
-  deploy_identity: 'staging https://choir.news deployed_commit=7a36713c (CI run in flight for e9cd9fed; owner + vm-48bc0981 on 19d7913e base image)'
+  deploy_identity: 'staging https://choir.news deployed_commit=e9cd9fed (SMG probe verified on computer-e472d237; owner + vm-48bc0981 on 19d7913e base image)'
   candidate:
     id: none
     state: none
