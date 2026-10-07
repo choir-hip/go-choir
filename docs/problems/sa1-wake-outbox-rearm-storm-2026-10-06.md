@@ -274,6 +274,25 @@ check skipped):
   Each carrier restart replays the same pending set; wall-clock progress
   is lost even though `delivered` is monotonic. Not yet diagnosed to
   substrate; the rewarm fix is prerequisite and live on `91e9c03b`.
+- **Root cause confirmed 2026-10-07 — drain carriers cannot report.**
+  `delivered-pending-runs` flat at 14 across three carrier generations
+  because `QueueLifecycleUpdate`'s persistent-Management producer path
+  refuses every report: line 3599 requires `producerRun.TrajectoryID==""`
+  but `createRunWithMetadata` defaults `runMetadataTrajectoryID=runID`
+  for a backlog-minted carrier; line 3601 requires
+  `assignment_trajectory_id==req.TrajectoryID` but the carrier binds
+  mixed-trajectory backlog packets (no single trajectory). Every
+  `ReportPacket` the carrier submits returns `ErrLifecycleInvalidTransition`;
+  the bound packets' `disposition` never leaves `pending`. The carrier
+  iterates the full backlog per turn, hits budget, gets killed, rewarmed
+  (post-`91e9c03b`), and replays the same undrained set — wall-clock
+  progress is impossible by construction. The drain is not slow; it is
+  permanently unable to commit its work. Fix: the producer-run binding
+  check must accept drain carriers — `persistentManagementControlBinding`
+  (`lifecycle_control_bindings` metadata) + `control.DeliveredToRunID ==
+  req.SourceRunID` already authenticate the run-to-packet relationship;
+  the single-trajectory mint fields are a narrower contract than the
+  backlog carrier can satisfy.
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;
