@@ -585,6 +585,25 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 		if len(group) < 2 {
 			continue
 		}
+		// A member already at newID is the live row holding the target
+		// canonical ID; every other member collides with it.
+		var live *ogObjectRow
+		for _, o := range group {
+			if o.canonicalID == newID {
+				live = o
+			}
+		}
+		if live != nil {
+			for _, o := range group {
+				if o == live {
+					continue
+				}
+				if err := s.ogResolveLiveCollision(ctx, rep, o, live.body, live.metadata, live.tombstone, live.versionID, live.supersededBy); err != nil {
+					return nil, nil, err
+				}
+			}
+			continue
+		}
 		sort.Slice(group, func(i, j int) bool {
 			if group[i].createdAt != group[j].createdAt {
 				return group[i].createdAt < group[j].createdAt
@@ -612,9 +631,7 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 	}
 
 	// External convergence: a migrated object's newID lands on a canonical_id
-	// that exists but was never retained in objs (an untouched row). Fetch
-	// the live row; identical content → drop the migrating duplicate,
-	// divergent → fail with both IDs.
+	// that exists but was never retained in objs (an untouched row).
 	for _, o := range objs {
 		if o.dropped || o.newID == o.canonicalID || !allIDs[o.newID] {
 			continue
@@ -628,17 +645,9 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 		if err != nil {
 			return nil, nil, fmt.Errorf("og migrate: external convergence check %s → %s: %w", o.canonicalID, o.newID, err)
 		}
-		if bytes.Equal(o.body, liveBody) && bytes.Equal(o.metadata, liveMeta) &&
-			o.tombstone == (liveTomb != 0) && o.versionID == liveVer && o.supersededBy == liveSup {
-			o.dropped = true
-			rep.OGDropped = append(rep.OGDropped, o.canonicalID)
-			continue
+		if err := s.ogResolveLiveCollision(ctx, rep, o, liveBody, liveMeta, liveTomb != 0, liveVer, liveSup); err != nil {
+			return nil, nil, err
 		}
-		return nil, nil, fmt.Errorf(
-			"og migrate: canonical ID convergence conflict on %s: "+
-				"migrated %s (kind=%s created=%s) collides with untouched live row "+
-				"with divergent content; cannot auto-resolve",
-			o.newID, o.canonicalID, o.kind, o.createdAt)
 	}
 
 
@@ -666,6 +675,55 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 	}
 
 	return objs, edges, nil
+}
+
+// ogResolveLiveCollision settles a migrating row o whose newID is already
+// held by a live row (given by its current content). Identical content is
+// a plain duplicate: drop o. Divergent content is accepted only when the
+// live row was updated no earlier than o. That is the replay artifact of
+// a vocabulary cutover: replay deposits the pre-cutover V1 row next to the
+// post-cutover V2 row for the same object, while the live computer renamed
+// the V1 row at cutover and kept updating the V2 row. The live row wins;
+// o is dropped and its original pre-migration content is recorded in
+// rep.OGSuperseded. A migrating row strictly newer than the live row is a
+// V1 write after the cutover, which no replay should produce: refuse.
+//
+// Planning has not mutated any row, so o still sits at o.canonicalID with
+// its original content, and the timestamp comparison runs on the DATETIME
+// columns themselves.
+func (s *Store) ogResolveLiveCollision(ctx context.Context, rep *MigrationReport, o *ogObjectRow,
+	liveBody, liveMeta []byte, liveTomb bool, liveVer, liveSup string) error {
+	if bytes.Equal(o.body, liveBody) && bytes.Equal(o.metadata, liveMeta) &&
+		o.tombstone == liveTomb && o.versionID == liveVer && o.supersededBy == liveSup {
+		o.dropped = true
+		rep.OGDropped = append(rep.OGDropped, o.canonicalID)
+		return nil
+	}
+	var liveNotOlder bool
+	var origBody, origMeta []byte
+	var liveUpdated string
+	err := s.db.QueryRowContext(ctx, `SELECT live.updated_at >= old.updated_at, live.updated_at, old.body, old.metadata
+		FROM og_objects live, og_objects old WHERE live.canonical_id = ? AND old.canonical_id = ?`,
+		o.newID, o.canonicalID).Scan(&liveNotOlder, &liveUpdated, &origBody, &origMeta)
+	if err != nil {
+		return fmt.Errorf("og migrate: live collision check %s → %s: %w", o.canonicalID, o.newID, err)
+	}
+	if !liveNotOlder {
+		return fmt.Errorf(
+			"og migrate: canonical ID convergence conflict on %s: "+
+				"migrated %s (kind=%s created=%s updated=%s) is newer than the live row "+
+				"(updated=%s) with divergent content; cannot auto-resolve",
+			o.newID, o.canonicalID, o.kind, o.createdAt, o.updatedAt, liveUpdated)
+	}
+	o.dropped = true
+	rep.OGSuperseded = append(rep.OGSuperseded, OGSupersededEntry{
+		OldCanonicalID:      o.canonicalID,
+		SurvivorCanonicalID: o.newID,
+		UpdatedAt:           o.updatedAt,
+		Body:                origBody,
+		Metadata:            origMeta,
+	})
+	return nil
 }
 
 // applyOGMigration writes the planned object/edge state in one transaction.

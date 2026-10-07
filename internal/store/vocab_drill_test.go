@@ -668,3 +668,96 @@ func TestVocabDrillOGConvergenceDedup(t *testing.T) {
 		t.Fatalf("dropped canonical_id = %q, want %q (cosuper)", rep.OGDropped[0], id2)
 	}
 }
+
+// seedOGAgentPair inserts a V1 choir.agent row (agent_id "super:x") and a
+// live V2 row for the same agent (agent_id "management:x", the V1 row's
+// migration target), both created at the same instant, with the given
+// updated_at stamps. It returns the V1 and V2 canonical IDs.
+func seedOGAgentPair(t *testing.T, s *Store, v1Updated, v2Updated time.Time) (string, string) {
+	t.Helper()
+	created := v1Updated.Add(-24 * time.Hour)
+	insert := func(agentID, extra string, updated time.Time) string {
+		body := []byte(`{"agent_id":"` + agentID + `"` + extra + `}`)
+		meta, err := objectgraph.NormalizeMetadata([]byte(`{"agent_id":"` + agentID + `"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := objectgraph.BuildCanonicalID("choir.agent", "owner",
+			objectgraph.StableSuffixFromKey("computer\x00"+agentID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		drillExec(t, s, `INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')`,
+			id, "choir.agent", "owner", "computer", "", objectgraph.ContentHash("choir.agent", body, meta), body, string(meta), created, updated)
+		return id
+	}
+	v1 := insert("super:x", `,"state":"stale"`, v1Updated)
+	v2 := insert("management:x", `,"state":"current"`, v2Updated)
+	return v1, v2
+}
+
+// TestVocabDrillOGStaleV1CollidesWithLaterV2 reproduces the fourth
+// 2026-10-07 rebuild failure: replay deposits a pre-cutover V1 agent row
+// next to the post-cutover V2 row for the same agent. The V1 row migrates
+// onto the V2 row's canonical ID with divergent content. The live V2 row
+// is newer, so it survives unchanged; the stale V1 row is removed and its
+// original content kept in the report.
+func TestVocabDrillOGStaleV1CollidesWithLaterV2(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	base := time.Date(2026, 9, 6, 4, 4, 22, 0, time.UTC)
+	v1ID, v2ID := seedOGAgentPair(t, s, base, base.Add(31*24*time.Hour))
+
+	rep, err := s.MigrateVocabularyToV2(ctx)
+	if err != nil {
+		t.Fatalf("og migrate with stale V1 collision: %v", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx, `SELECT canonical_id, body FROM og_objects WHERE object_kind='choir.agent'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for rows.Next() {
+		var id, body string
+		if err := rows.Scan(&id, &body); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, id+" "+body)
+	}
+	rows.Close()
+	if len(got) != 1 || !strings.HasPrefix(got[0], v2ID+" ") || !strings.Contains(got[0], `"state":"current"`) {
+		t.Fatalf("og_objects after migrate = %v, want only live V2 row %s with current state", got, v2ID)
+	}
+	if len(rep.OGSuperseded) != 1 {
+		t.Fatalf("OGSuperseded = %+v, want one entry", rep.OGSuperseded)
+	}
+	sup := rep.OGSuperseded[0]
+	if sup.OldCanonicalID != v1ID || sup.SurvivorCanonicalID != v2ID {
+		t.Fatalf("OGSuperseded ids = %s -> %s, want %s -> %s", sup.OldCanonicalID, sup.SurvivorCanonicalID, v1ID, v2ID)
+	}
+	if !strings.Contains(string(sup.Body), `"agent_id":"super:x"`) || !strings.Contains(string(sup.Body), `"state":"stale"`) {
+		t.Fatalf("OGSuperseded body lost original V1 content: %s", sup.Body)
+	}
+}
+
+// TestVocabDrillOGNewerV1CollisionRefused: a migrating V1 row strictly
+// newer than the live V2 row it collides with means a V1 write after the
+// cutover. That is not a replay artifact; the migration must refuse it.
+func TestVocabDrillOGNewerV1CollisionRefused(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	base := time.Date(2026, 9, 6, 4, 4, 22, 0, time.UTC)
+	seedOGAgentPair(t, s, base.Add(time.Hour), base)
+
+	if _, err := s.MigrateVocabularyToV2(ctx); err == nil || !strings.Contains(err.Error(), "convergence conflict") {
+		t.Fatalf("migrate with newer V1 collision: err = %v, want convergence conflict", err)
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind='choir.agent'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("refused migration mutated rows: %d agent rows, want 2", count)
+	}
+}

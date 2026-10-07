@@ -80,8 +80,24 @@ type MigrationReport struct {
 	// Revert cannot restore them (no row remains); the entry preserves the
 	// audit trail that they existed and were folded into the survivor.
 	OGDropped []string `json:"og_dropped,omitempty"`
+	// OGSuperseded records stale rows deleted because their migration
+	// target was already held by a live row updated no earlier than them
+	// (replay's pre-cutover V1 copy of an object the live computer kept
+	// updating under its V2 identity). The original body and metadata are
+	// kept so the superseded content is never silently lost.
+	OGSuperseded []OGSupersededEntry `json:"og_superseded,omitempty"`
 	// OGEdges records every rewritten og_edges row.
 	OGEdges []OGEdgeProvEntry `json:"og_edges,omitempty"`
+}
+
+// OGSupersededEntry retains one superseded og_objects row's pre-migration
+// content and the live row that replaced it.
+type OGSupersededEntry struct {
+	OldCanonicalID      string `json:"old_canonical_id"`
+	SurvivorCanonicalID string `json:"survivor_canonical_id"`
+	UpdatedAt           string `json:"updated_at"`
+	Body                []byte `json:"body"`
+	Metadata            []byte `json:"metadata"`
 }
 
 // OGProvEntry retains one migrated og_objects row's inverse record.
@@ -858,6 +874,24 @@ func mergeVocabReports(dst, src *MigrationReport) {
 	for _, e := range src.OGEdges {
 		if !seenEdge[e.OldEdgeID] {
 			dst.OGEdges = append(dst.OGEdges, e)
+		}
+	}
+	seenDropped := map[string]bool{}
+	for _, id := range dst.OGDropped {
+		seenDropped[id] = true
+	}
+	for _, id := range src.OGDropped {
+		if !seenDropped[id] {
+			dst.OGDropped = append(dst.OGDropped, id)
+		}
+	}
+	seenSup := map[string]bool{}
+	for _, e := range dst.OGSuperseded {
+		seenSup[e.OldCanonicalID] = true
+	}
+	for _, e := range src.OGSuperseded {
+		if !seenSup[e.OldCanonicalID] {
+			dst.OGSuperseded = append(dst.OGSuperseded, e)
 		}
 	}
 }
