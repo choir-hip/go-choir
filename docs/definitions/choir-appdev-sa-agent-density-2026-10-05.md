@@ -296,20 +296,27 @@ now:
     `1a9ca12e` (04:03 rewarm-minted on `[696]` image post-03:47 NixOS
     switch) → `3aad068e` (05:05). `delivered-pending-runs` stuck at 14
     across `1a9ca12e`'s ~1hr run — carrier consumes but bound packets'
-    disposition never leaves `pending`. **NEW RESIDUAL: packet
-    incorporations not durable under carrier budget-kill** — reducer
-    write at `internal/store/lifecycle.go:3826` likely not reached or
-    not committed before the budget reaps the run; next carrier replays
-    the same pending set. Queued `management-open` control defers FIFO
-    behind drain (correct). Remaining acceptance is measurement: drain
-    settles at a bounded floor in a stated window, holds 24h, then SMG
-    probe passes on the owner (legs 1-3 incl. the two weak legs).
-    Deploy gate: `29817fda` + `91e9c03b` through CI + deploy + owner
-    app-layer push (push currently refused on head-churn fence while
-    drain runs — land post-drain). -> slice 2 (baseline + offline GC
-    re-measure) -> 3 (memory) -> 4 (race test, then read/write lock)
-    -> 5 (read cost) -> 6 (store split + group commit) -> 7 (declared
-    shapes + elasticity) -> acceptance.
+    disposition never leaves `pending`. **Residual resolved
+    2026-10-07**: drain carriers cannot report — the
+    `QueueLifecycleUpdate` producer-run check demanded a
+    single-trajectory binding (`assignment_trajectory_id` +
+    `lifecycle_control_bindings`) that backlog-minted
+    `update_coagent` carriers never carry, and the runtime
+    `persistentManagementBoundReport` required `trajectory_id` from the
+    run record (mint-defaulted to runID). Fixed `7a36713c`: the store
+    validator relaxes for `update_coagent` carriers
+    (`control.DeliveredToRunID == req.SourceRunID` is authority); the
+    runtime resolves the report trajectory from the delivered set and
+    scopes consumption to it. Queued `management-open` control defers
+    FIFO behind drain (correct). Remaining acceptance is measurement:
+    drain settles at a bounded floor in a stated window, holds 24h,
+    then SMG probe passes on the owner (legs 1-3 incl. the two weak
+    legs). Deploy gate: `29817fda` + `91e9c03b` + `7a36713c` through
+    CI + deploy + owner app-layer push (push currently refused on
+    head-churn fence while drain runs — land post-drain). -> slice 2
+    (baseline + offline GC re-measure) -> 3 (memory) -> 4 (race test,
+    then read/write lock) -> 5 (read cost) -> 6 (store split + group
+    commit) -> 7 (declared shapes + elasticity) -> acceptance.
 receipts: []
 ---
 
