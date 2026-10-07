@@ -239,6 +239,19 @@ check skipped):
   `68397ae7` commit-bound gate still works — skipped != pushed — but
   the gate does not count a push-refused computer as a deploy failure,
   a residual edge worth a follow-up.)
+- **Residual surfaced 03:14 — host-side kills reset the drain mid-flight.**
+  vmctl restarted at 03:14 and its reattach health check failed on the
+  owner guest mid-drain (busy under the serialized store → health answer
+  times out) → vmctl killed the Firecracker process and cold-booted. This
+  is the second host-initiated drain reset in ~45min (manual
+  `vmctl/refresh` at 02:28, reattach-kill at 03:14). Consequence: the
+  drain is monotonic in tape terms but loses wall-clock progress on every
+  host reset — the carrier restart cost is borne each time. The storm is
+  mechanically converged; the drain's *settlement* is gated on host
+  stability, not the storm machinery. `reattach skipped` on health-check
+  → kill is aggressive for a guest under a known drain workload; a
+  busy-but-alive guest should be left running (vmctl health grace /
+  owner-busy signal).
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;
