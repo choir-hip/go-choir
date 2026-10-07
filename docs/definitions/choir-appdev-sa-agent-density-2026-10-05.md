@@ -162,18 +162,26 @@ now:
     directive bind fix. Deployed acceptance still owed: owner-guest
     restart with migration minted ~=0 and storm absent, then SMG legs.
     OPENING DEFECT FIELD (slice 1 starts here):
-    (NEW 2026-10-07 — owner VM boot loop, blocks drain carrier):
+    (RESOLVED 2026-10-07 — owner VM boot loop unblocked):
     docs/problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md
-    — projection base watermark never re-advertised; recovery tail
-    423720 > MaxRecoveryTailEvents 10000; VM cannot boot until a fresh
-    base is published via choir-rebuild-base --source http (DiskEventSource
-    additionally broken for effect_accepted events — TargetStateCommitment
-    fabricated from ResultingEffectiveCommitment which is empty).
-    THIRD DEFECT SAME FILE: applyOGMigration canonical-ID convergence —
-    two V1 choir.agent objects (agent_id co-super:X vs cosuper:X) collapse
-    to the same engineering:X canonical ID; applyOGMigration UPDATEs hit
-    PK conflict. Fixed in 05d0f0ec: identical newID groups dedupe, divergent
-    fails loudly. Rebuild re-running (PID 838678, --scratch-dir /tmp/og-scratch).
+    — projection base watermark was stale at seq 148431 (recovery tail
+    423720 > MaxRecoveryTailEvents 10000). Replay of all 572,151 events
+    completed via choir-rebuild-base --source http (DiskEventSource
+    secondary defect recorded). Vocabulary migration hit two convergence
+    defects: (1) identical-content group dedup (fixed 05d0f0ec), and
+    (2) replayed stale V1 agent row colliding with newer live V2 row for
+    the same agent (fixed ca41be90: live row wins when updated_at >= old,
+    1,445 stale V1 rows preserved in MigrationReport.OGSuperseded). Dolt GC
+    compacted scratch store from 93GB journal to 8.1GB darc archive.
+    ProjectionBase published: blob 0cbffdd0 (8.69GB), seq 572151, head
+    5fdd38cc, vocabulary v2. Watermark advertised and verified on Node B.
+    Owner VM (candidate-fleet-e15cb89f) resumed via vmctl resolve:
+    recovery tail count=0, all boot phases complete, runtime started,
+    state: active, autoputer health: ready.
+    Incident residuals recorded in problem doc:
+    - checkpoint cadence / watermark auto-refresh before tail hits cap;
+    - vmctl fail-fast with "rebuild required" instead of 30-min retry loop;
+    - cutover-aware replay (migrate at cutover point in event chain).
     (a) sa-delegated-report-poisons-management-listing-2026-10-06.md
     (red, protected surface): a delegated-cast producer report fails the
     ListLifecycleControlsDeliveredToRunPage ProducerReport validation arm
