@@ -281,18 +281,18 @@ now:
     per-trigger fix. The store split is the largest red change in the metamission. Sequence it
     after slices 2-4 show what remains, and only with the restore check in
     hand.
-  next_action: >-
-    Slice 1 (storm convergence; red) — opening defect field above: start
-    with (a) the delivered-page listing poison (delegated producer report;
-    quarantine-or-validate-delegated-lineage; whole-page throw must not
-    kill the consuming run), then the wake-outbox re-arm storm per
-    sa1-wake-outbox-rearm-storm + d94ce9ef candidate; terminal fate for
-    stale obligations as a recorded act; O(1) occurrence resolve;
-    per-desk dispatch gate + paced drain; acceptance = owner guest restart
-    converges pending to a bounded floor within a stated window and holds
-    24 h, one delegated-cast producer report leaves subsequent
-    persistent-Management activations alive, and the SMG probe passes on
-    the owner computer (named edge incl. the two weak legs). -> slice 2
+    Slice 1 (storm convergence; red) — mechanism landed: stale-packet
+    terminal fate `41822a4c`, wake-mint marker `d94ce9ef`, occurrence
+    resolve O(1) `e3e96067`, paced drain `d94ce9ef`. Deployed observation
+    2026-10-07 on `19d7913e` (owner `computer-03335285`): wake mint
+    ceased at 01:20:27 — no new `live occurrence` mints after the stale
+    supply drained; Management run `dd52c39d` is in serial consume of the
+    14-run delivered backlog (tool iterations 60+); queued
+    `management-open` control defers FIFO behind the drain (correct).
+    Remaining acceptance is measurement, not mechanism: drain must settle
+    at a bounded floor in a stated window, hold 24h, then the SMG probe
+    re-run must pass on the owner (legs 1-3 incl. the two weak legs:
+    refusal-by-run-report, work_disposition=completed). -> slice 2
     (baseline + offline GC re-measure) -> 3 (memory) -> 4 (race test, then
     read/write lock) -> 5 (read cost) -> 6 (store split + group commit) ->
     7 (declared shapes + elasticity) -> acceptance.
