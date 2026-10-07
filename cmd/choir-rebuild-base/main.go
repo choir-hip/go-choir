@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 )
 
@@ -26,9 +28,11 @@ func main() {
 	keyHex := fs.String("key-hex", "", "Hex-encoded 32-byte privacy key")
 	advertise := fs.Bool("advertise", false, "POST the published blob as this computer's advertised watermark")
 	platformURL := fs.String("platform-url", os.Getenv("CHOIR_PLATFORM_URL"), "Platform URL for --advertise (or CHOIR_PLATFORM_URL)")
+	memoryLimitMB := fs.Int64("memory-limit-mb", 2048, "Memory limit in MB for replay process")
+	sourceKind := fs.String("source", "disk", "Event source: disk (artifact store) or http (platform replay endpoint)")
+	ownerID := fs.String("owner", os.Getenv("CHOIR_OWNER_ID"), "Owner user ID for --source http internal-caller auth (or CHOIR_OWNER_ID)")
 	capability := fs.String("capability", os.Getenv("CHOIR_PLATFORM_CAPABILITY"), "Bearer capability for --advertise (or CHOIR_PLATFORM_CAPABILITY)")
 	batchSize := fs.Int("batch-size", projectionbase.DefaultBatchSize, "Number of events per database transaction")
-	memoryLimitMB := fs.Int64("memory-limit-mb", 2048, "Memory limit in MB for replay process")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "choir-rebuild-base: %v\n", err)
@@ -98,10 +102,29 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	diskSource := projectionbase.NewDiskEventSource(cfg.ArtifactsRoot, cfg.ComputerID, cfg.TargetHead)
+	var replaySource projectionbase.CASReplaySource
+	switch strings.TrimSpace(*sourceKind) {
+	case "http":
+		httpClient, err := computerevent.NewHTTPClient(
+			*platformURL,
+			&http.Client{Transport: &internalCallerTransport{ownerID: strings.TrimSpace(*ownerID)}},
+			func(context.Context) (string, error) { return "internal", nil },
+			true,
+		)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "choir-rebuild-base: http source: %v\n", err)
+			os.Exit(2)
+		}
+		replaySource = &httpReplaySource{HTTPClient: httpClient}
+	case "disk":
+		replaySource = projectionbase.NewDiskEventSource(cfg.ArtifactsRoot, cfg.ComputerID, cfg.TargetHead)
+	default:
+		fmt.Fprintf(os.Stderr, "choir-rebuild-base: unknown --source %q (expected disk or http)\n", *sourceKind)
+		os.Exit(2)
+	}
 
-	fmt.Printf("Starting offline projection base rebuild for %s through head %s...\n", cfg.ComputerID, cfg.TargetHead)
-	result, err := rebuilder.Run(ctx, diskSource)
+	fmt.Printf("Starting projection base rebuild for %s through head %s (source=%s)...\n", cfg.ComputerID, cfg.TargetHead, *sourceKind)
+	result, err := rebuilder.Run(ctx, replaySource)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "choir-rebuild-base: rebuild failed: %v\n", err)
 		os.Exit(1)
@@ -125,3 +148,36 @@ func main() {
 		fmt.Printf("Advertised watermark sequence %d (%s)\n", result.Descriptor.Sequence, result.Descriptor.BlobSHA256)
 	}
 }
+
+// internalCallerTransport injects X-Internal-Caller and X-Authenticated-User
+// headers so the platform event:read endpoints accept this tool as a host-side
+// internal caller (authorizeComputerEvent allows event:read without a per-
+// computer capability when both headers are present and the transport is
+// loopback).
+type internalCallerTransport struct {
+	ownerID string
+}
+
+func (t *internalCallerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("X-Internal-Caller", "true")
+	if t.ownerID != "" {
+		req.Header.Set("X-Authenticated-User", t.ownerID)
+	}
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+// httpReplaySource wraps computerevent.HTTPClient to satisfy
+// projectionbase.CASReplaySource by adding a trivial VerifyEventHeadReceipt
+// (mirroring DiskEventSource: kind-check only for offline rebuild).
+type httpReplaySource struct {
+	*computerevent.HTTPClient
+}
+
+func (s *httpReplaySource) VerifyEventHeadReceipt(_ context.Context, receipt computerevent.Receipt, _ computerevent.CASRequest) error {
+	if receipt.ReceiptKind != "EventHeadReceipt" {
+		return fmt.Errorf("http replay source: receipt kind mismatch: %s", receipt.ReceiptKind)
+	}
+	return nil
+}
+
+var _ projectionbase.CASReplaySource = (*httpReplaySource)(nil)

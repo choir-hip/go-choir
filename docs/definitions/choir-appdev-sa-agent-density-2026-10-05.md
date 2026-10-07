@@ -162,6 +162,13 @@ now:
     directive bind fix. Deployed acceptance still owed: owner-guest
     restart with migration minted ~=0 and storm absent, then SMG legs.
     OPENING DEFECT FIELD (slice 1 starts here):
+    (NEW 2026-10-07 — owner VM boot loop, blocks drain carrier):
+    docs/problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md
+    — projection base watermark never re-advertised; recovery tail
+    423720 > MaxRecoveryTailEvents 10000; VM cannot boot until a fresh
+    base is published via choir-rebuild-base --source http (DiskEventSource
+    additionally broken for effect_accepted events — TargetStateCommitment
+    fabricated from ResultingEffectiveCommitment which is empty).
     (a) sa-delegated-report-poisons-management-listing-2026-10-06.md
     (red, protected surface): a delegated-cast producer report fails the
     ListLifecycleControlsDeliveredToRunPage ProducerReport validation arm
