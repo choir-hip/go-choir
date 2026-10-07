@@ -291,19 +291,25 @@ now:
     retries decode-EOF/read/5xx 3x; host-side companion `5eb63161`).
     Drain carriers `dd52c39d` → `ed435162` (killed i=94 transient,
     pre-fix) → `6f2119ea` (refresh-killed) → `ceff999b` (vmctl
-    reattach-kill — `update_coagent` carriers were invisible to rewarm)
-    → `5f311268` (live on `19d7913e`, minted via wake post-boot).
-    Drain-carrier rewarm fix `91e9c03b` (drop request_source gate;
-    pendingIDsByRun is the authoritative filter). Queued
-    `management-open` control defers FIFO behind drain (correct).
-    Remaining acceptance is measurement: drain settles at a bounded
-    floor in a stated window, holds 24h, then SMG probe passes on the
-    owner (legs 1-3 incl. the two weak legs). Deploy gate: `29817fda` +
-    `91e9c03b` through CI + deploy + owner app-layer push (push currently
-    refused on head-churn fence while drain runs — land post-drain).
-    -> slice 2 (baseline + offline GC re-measure) -> 3 (memory) -> 4
-    (race test, then read/write lock) -> 5 (read cost) -> 6 (store split
-    + group commit) -> 7 (declared shapes + elasticity) -> acceptance.
+    reattach-kill — `update_coagent` carriers were invisible to rewarm;
+    fixed `91e9c03b`) → `5f311268` (wake-minted post-03:15 boot) →
+    `1a9ca12e` (04:03 rewarm-minted on `[696]` image post-03:47 NixOS
+    switch) → `3aad068e` (05:05). `delivered-pending-runs` stuck at 14
+    across `1a9ca12e`'s ~1hr run — carrier consumes but bound packets'
+    disposition never leaves `pending`. **NEW RESIDUAL: packet
+    incorporations not durable under carrier budget-kill** — reducer
+    write at `internal/store/lifecycle.go:3826` likely not reached or
+    not committed before the budget reaps the run; next carrier replays
+    the same pending set. Queued `management-open` control defers FIFO
+    behind drain (correct). Remaining acceptance is measurement: drain
+    settles at a bounded floor in a stated window, holds 24h, then SMG
+    probe passes on the owner (legs 1-3 incl. the two weak legs).
+    Deploy gate: `29817fda` + `91e9c03b` through CI + deploy + owner
+    app-layer push (push currently refused on head-churn fence while
+    drain runs — land post-drain). -> slice 2 (baseline + offline GC
+    re-measure) -> 3 (memory) -> 4 (race test, then read/write lock)
+    -> 5 (read cost) -> 6 (store split + group commit) -> 7 (declared
+    shapes + elasticity) -> acceptance.
 receipts: []
 ---
 
