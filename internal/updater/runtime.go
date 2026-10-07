@@ -116,6 +116,9 @@ type HTTPHealthProber struct {
 	Client   *http.Client
 	Attempts int
 	Interval time.Duration
+	// MaxDuration caps total probe wall time regardless of replay liveness;
+	// zero keeps the stall budget as the only bound.
+	MaxDuration time.Duration
 }
 
 func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manifest ReleaseManifest) ([]string, error) {
@@ -135,13 +138,21 @@ func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manif
 		interval = time.Second
 	}
 	var lastErr error
-	for attempt := 0; attempt < attempts; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(interval):
-			}
+	// Liveness tolerance: the guest's replayHealthGate serves
+	// 503 {"status":"replaying", committed_sequence, progress} while the
+	// event-tape replay runs. On a large-history computer that replay can
+	// outlast a fixed attempt budget entirely (owner computer = 546k
+	// events; every app-layer apply rolled back at the 30-attempt fence —
+	// app-layer-push-health-gate-not-commit-bound-2026-10-07). A 503 body
+	// whose committed_sequence or progress ADVANCES since the last poll is
+	// liveness, not failure: it resets the remaining stall budget instead
+	// of consuming an attempt. MaxDuration is the absolute bound.
+	var lastCommitted, lastProgress uint64
+	stallsLeft := attempts
+	deadline := time.Now().Add(p.MaxDuration)
+	for stallsLeft > 0 {
+		if p.MaxDuration > 0 && !time.Now().Before(deadline) {
+			return nil, fmt.Errorf("updater: health probe exceeded max duration %v: %w", p.MaxDuration, lastErr)
 		}
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, p.URL, nil)
 		if err != nil {
@@ -150,30 +161,58 @@ func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manif
 		response, err := client.Do(request)
 		if err != nil {
 			lastErr = err
-			continue
+			stallsLeft--
+		} else {
+			var health struct {
+				Status                string `json:"status"`
+				SelfDevelopmentMarker string `json:"self_development_marker"`
+				EventSchemaVersion    uint64 `json:"event_schema_version"`
+				ReducerVersion        uint64 `json:"reducer_version"`
+				ReleaseDigest         string `json:"release_digest"`
+				Sequence              uint64 `json:"sequence"`
+				CommittedSequence     uint64 `json:"committed_sequence"`
+				Progress              uint64 `json:"progress"`
+			}
+			decodeErr := json.NewDecoder(response.Body).Decode(&health)
+			_ = response.Body.Close()
+			switch {
+			case response.StatusCode == http.StatusServiceUnavailable && decodeErr == nil && health.Status == "replaying":
+				if health.CommittedSequence > lastCommitted || health.Progress > lastProgress {
+					lastCommitted, lastProgress = health.CommittedSequence, health.Progress
+					stallsLeft = attempts // advancing replay = liveness; reset the stall budget
+				} else {
+					stallsLeft-- // stagnant replay consumes the stall budget
+				}
+				lastErr = fmt.Errorf("health status=%d replaying committed_sequence=%d progress=%d", response.StatusCode, health.CommittedSequence, health.Progress)
+			case response.StatusCode != http.StatusOK || decodeErr != nil:
+				lastErr = fmt.Errorf("health status=%d decode=%v", response.StatusCode, decodeErr)
+				stallsLeft--
+			case health.Status == "" || health.Status == "failed" || health.SelfDevelopmentMarker != manifest.Marker || health.EventSchemaVersion != manifest.EventSchemaVersion || health.ReducerVersion != manifest.ReducerVersion || health.ReleaseDigest != releaseDigest:
+				lastErr = fmt.Errorf("health identity mismatch")
+				stallsLeft--
+			default:
+				// Canonicalize the SAME identity shape as before the
+				// liveness fields were added — the replay-only keys must
+				// not change the recorded observation digest.
+				identity := struct {
+					Status                string `json:"status"`
+					SelfDevelopmentMarker string `json:"self_development_marker"`
+					EventSchemaVersion    uint64 `json:"event_schema_version"`
+					ReducerVersion        uint64 `json:"reducer_version"`
+					ReleaseDigest         string `json:"release_digest"`
+				}{health.Status, health.SelfDevelopmentMarker, health.EventSchemaVersion, health.ReducerVersion, health.ReleaseDigest}
+				canonical, err := computerevent.CanonicalJSON(identity)
+				if err != nil {
+					return nil, err
+				}
+				return []string{computerevent.DigestBytes(canonical)}, nil
+			}
 		}
-		var health struct {
-			Status                string `json:"status"`
-			SelfDevelopmentMarker string `json:"self_development_marker"`
-			EventSchemaVersion    uint64 `json:"event_schema_version"`
-			ReducerVersion        uint64 `json:"reducer_version"`
-			ReleaseDigest         string `json:"release_digest"`
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(interval):
 		}
-		decodeErr := json.NewDecoder(response.Body).Decode(&health)
-		_ = response.Body.Close()
-		if response.StatusCode != http.StatusOK || decodeErr != nil {
-			lastErr = fmt.Errorf("health status=%d decode=%v", response.StatusCode, decodeErr)
-			continue
-		}
-		if health.Status == "" || health.Status == "failed" || health.SelfDevelopmentMarker != manifest.Marker || health.EventSchemaVersion != manifest.EventSchemaVersion || health.ReducerVersion != manifest.ReducerVersion || health.ReleaseDigest != releaseDigest {
-			lastErr = fmt.Errorf("health identity mismatch")
-			continue
-		}
-		canonical, err := computerevent.CanonicalJSON(health)
-		if err != nil {
-			return nil, err
-		}
-		return []string{computerevent.DigestBytes(canonical)}, nil
 	}
 	return nil, fmt.Errorf("updater: health probe failed: %w", lastErr)
 }
