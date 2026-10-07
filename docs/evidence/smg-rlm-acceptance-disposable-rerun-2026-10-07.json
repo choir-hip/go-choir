@@ -1,0 +1,21 @@
+{
+  "probe": "smg_rlm_acceptance",
+  "computer": "computer-423134e8ff605137ecb0767ec810ad2e",
+  "marker": "smg-dispo-rerun-1791376504",
+  "started_at": "2026-10-07T12:35:04.552Z",
+  "legs": [
+    {
+      "name": "management_open",
+      "ended_at": "2026-10-07T12:35:04.741Z",
+      "wall_ms": 189,
+      "ok": false,
+      "status": 401,
+      "body": {
+        "error": "authentication required"
+      }
+    }
+  ],
+  "ok": false,
+  "failure": "management-open mint failed",
+  "ended_at": "2026-10-07T12:35:04.742Z"
+}

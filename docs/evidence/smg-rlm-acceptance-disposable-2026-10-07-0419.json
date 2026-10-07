@@ -1,0 +1,21 @@
+{
+  "probe": "smg_rlm_acceptance",
+  "computer": "computer-6fa241fa8b90a0f9f884c89977d1343d",
+  "marker": "smg-dispo2-1791361153",
+  "started_at": "2026-10-07T08:19:13.166Z",
+  "legs": [
+    {
+      "name": "management_open",
+      "ended_at": "2026-10-07T08:19:13.990Z",
+      "wall_ms": 824,
+      "ok": false,
+      "status": 500,
+      "body": {
+        "error": "failed to open management"
+      }
+    }
+  ],
+  "ok": false,
+  "failure": "management-open mint failed",
+  "ended_at": "2026-10-07T08:19:13.990Z"
+}

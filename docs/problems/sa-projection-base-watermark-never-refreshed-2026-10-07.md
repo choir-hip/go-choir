@@ -67,9 +67,14 @@ choir-rebuild-base \
   --owner 5bd6de97-3b58-408c-bf89-c42c81b083de \
   --platform-url http://127.0.0.1:8086 \
   --artifacts-root /var/lib/go-choir/platform-artifacts \
-  --key-hex <guest-privacy-key> \
-  --advertise \
-  --capability <bearer-or-internal>
+  --key-hex <guest-privacy-key>
+```
+
+`--advertise` POST requires a real computer capability (event:append scope);
+the internal-caller header path only covers `event:read`. Mint one via:
+1. `POST /internal/computers/credentials/issue` (X-Internal-Caller) → envelope
+2. `POST /internal/computers/credentials/exchange` → Bearer capability token
+3. `POST /internal/computers/files/watermark` with `Authorization: Bearer`
 ```
 
 Guest privacy key extracted from `data.img` at
