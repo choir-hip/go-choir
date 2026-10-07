@@ -482,6 +482,48 @@ func TestPersistentManagementRestartUsesDistinctRecoveryOccurrence(t *testing.T)
 	}
 }
 
+func TestPersistentManagementRestartRewarmsUpdateCoagentDrainCarrier(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	ownerID := "owner-super-recovery-update-coagent"
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := seedTextureLifecycleControl(t, s, ownerID, "super-recovery-update-coagent", managementAgent.AgentID, agentprofile.Management)
+	var dispatches []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, _, kind, _, _, _ string) error {
+		dispatches = append(dispatches, kind)
+		return nil
+	})
+	first, err := rt.reconcilePersistentManagementActor(ctx, ownerID, managementAgent.AgentID)
+	if err != nil || first == nil {
+		t.Fatalf("initial Management reconciliation=%+v err=%v", first, err)
+	}
+	// Mint the drain-carrier shape: a bound Management whose own packets were
+	// delivered to it but never consumed — the sa1 storm backlog state.
+	dispatches = nil
+	first.State = types.RunPassivated
+	first.Metadata = cloneMetadata(first.Metadata)
+	first.Metadata["passivated_reason"] = "runtime_restarted"
+	// The drain carrier's mint path is ResolvePersistentManagementLiveOccurrence
+	// → reconcile, which marks request_source=update_coagent, not
+	// lifecycle_texture_control. The source gate alone would strand it.
+	first.Metadata["request_source"] = "update_coagent"
+	first.UpdatedAt = time.Now().UTC()
+	if err := s.UpdateRun(ctx, *first); err != nil {
+		t.Fatal(err)
+	}
+	recovered, ok, err := rt.reactivateRestartedPersistentManagementControlRun(ctx, ownerID, managementAgent.AgentID)
+	if err != nil || !ok || recovered == nil || recovered.RunID != first.RunID {
+		t.Fatalf("recovered update_coagent Management=%+v ok=%t err=%v — drain carrier must rewarm, not strand", recovered, ok, err)
+	}
+	if len(dispatches) == 0 || dispatches[0] != "coagent_result" {
+		t.Fatalf("recovery dispatches=%+v, want a coagent_result recovery occurrence", dispatches)
+	}
+	_ = fixture
+}
+
 func TestPersistentManagementReconcilesOtherTrajectoryAfterTerminalRun(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })

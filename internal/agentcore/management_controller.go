@@ -441,10 +441,16 @@ func (rt *Runtime) reactivateRestartedPersistentManagementControlRun(ctx context
 		run := &runs[i]
 		passivatedReason := metadataStringValue(run.Metadata, "passivated_reason")
 		if run.OwnerID != ownerID || run.AgentID != agentID || !isPersistentManagementAgentRun(run) ||
-			metadataStringValue(run.Metadata, "request_source") != "lifecycle_texture_control" ||
 			(passivatedReason != "runtime_restarted" && passivatedReason != runtimeInjectionAppendFailurePassivationReason) {
 			continue
 		}
+		// A passivated run whose own bound packets are still undelivered owes
+		// rewarm regardless of how it was minted. The drain carrier is minted
+		// update_coagent (ResolvePersistentManagementLiveOccurrence path), not
+		// lifecycle_texture_control — the source gate alone strands the whole
+		// backlog on every restart (sa1 drain carrier-kill). pendingIDsByRun
+		// below is the authoritative filter: a run with zero pending packets
+		// is skipped before the validation pass.
 		if strings.TrimSpace(run.TrajectoryID) != "" {
 			// Management delivery requires empty TrajectoryID. Listing packets for a
 			// tombstone used to ReadObjectSnapshot the whole computer.
