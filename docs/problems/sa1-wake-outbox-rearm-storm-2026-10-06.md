@@ -202,14 +202,17 @@ check skipped):
   and the `received→bound` cycle resumed ~1/sec — the pending backlog
   keeps re-binding fresh carriers. **The storm is now bounded but
   non-converging:** each carrier dies to a transient transport error
-  before draining the 14-run delivered working set. Two candidate
-  causes: (i) gateway JSON decode has no retry-tolerant EOF handling —
-  a single truncated provider body fails the whole run; (ii) no
-  carrier-level retry budget — one transient kills the run rather than
-  resuming from the last committed tool result. This is the substrate
-  gap to close next: gateway call retry on decode/5xx, or drain
-  resumption from committed tool results so a carrier crash doesn't
-  reset the cursor.
+  before draining the 14-run delivered working set.
+- **Fixed `5eb63161` (orange):** `GatewayClient.Call` moved its
+  `json.Unmarshal(body, &gwResp)` inside the 3-attempt retry loop so a
+  truncated response body retries like a read/5xx failure. The
+  transient-EOF decode error no longer kills the caller's run. Bounded
+  permanent decode still surfaces after 3 attempts. Regression tests:
+  `TestGatewayClientCall_RetriesTruncatedJSONBody` (retry-then-success)
+  + `TestGatewayClientCall_PermanentJSONFailure` (3-attempt bounded
+  fail). Deployed acceptance pending — `5eb63161` is on main, the owner
+  still runs `19d7913e`; a fresh deploy + active-VM refresh is required
+  to land it.
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;
