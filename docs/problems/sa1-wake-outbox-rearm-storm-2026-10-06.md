@@ -252,6 +252,28 @@ check skipped):
   → kill is aggressive for a guest under a known drain workload; a
   busy-but-alive guest should be left running (vmctl health grace /
   owner-busy signal).
+- **Residual surfaced 04:01 — drain-carrier `update_coagent` runs were
+  invisible to boot rewarm.** `ceff999b` (the post-03:14 carrier) was
+  minted `request_source=update_coagent` through
+  `ResolvePersistentManagementLiveOccurrence` → `reconcile`, but
+  `reactivateRestartedPersistentManagementControlRun` gated on
+  `request_source == "lifecycle_texture_control"`. Every restart stranded
+  the carrier's bound packets — the drain machinery could not see its
+  own backlog. **Fixed `91e9c03b`**: dropped the source gate;
+  `pendingIDsByRun` is the authoritative eligibility filter. Regression
+  `TestPersistentManagementRestartRewarmsUpdateCoagentDrainCarrier`.
+- **Residual surfaced 04:01+ — packet incorporations are not durable
+  under carrier budget-kill.** `delivered-pending-runs=14` stayed flat
+  across `1a9ca12e` (04:03→05:04, ~1hr) and `3aad068e` (05:05+) — the
+  carrier iterates but the bound packets' `disposition` never leaves
+  `pending`. Hypothesis: the reducer write that marks
+  `UpdateIncorporated` on `Management report` (`internal/store/lifecycle.go:3826`)
+  isn't reached before the budget kill reaps the run — or the storm
+  packets aren't being reported at all (the drain carrier processes the
+  *control* obligation but the *report* path is a separate cell call).
+  Each carrier restart replays the same pending set; wall-clock progress
+  is lost even though `delivered` is monotonic. Not yet diagnosed to
+  substrate; the rewarm fix is prerequisite and live on `91e9c03b`.
 ## Evidence
 
 - Console log receipts above (8 boots, ~2.1k re-arms each;
