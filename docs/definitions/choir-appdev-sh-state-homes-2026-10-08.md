@@ -200,3 +200,59 @@ Slices, in order:
 The desktop app's hosted↔local move is the end of the realism axis. It needs
 two more decisions recorded in the inventory but excluded here: a key
 protector for an unattested local machine, and offline appends.
+
+## Slice 3 design — escrow-to-realization key delivery (proposal, for panel)
+
+Owner-ratified intent: a new realization of an existing computer receives
+the computer's privacy key from custodian escrow, automatically, bound,
+consume-once, transparency-logged before unwrap. No new party gains
+plaintext access.
+
+**Binding.** A realization is minted when vmctl asks corpusd to issue a
+credential envelope `(ComputerID, RealizationID, epoch, nonce,
+request_commitment)`; the guest exchanges it once for its capability
+(`credential_envelope_issued` / `_consumed` lifecycle receipts). The guest
+capability itself carries no realization identity. Delivery is therefore
+bound to the envelope's `request_commitment`, which names exactly one
+realization issuance.
+
+**Flow.**
+
+1. Guest boot, chain exists, key file absent: generate an ephemeral X25519
+   keypair (in memory only).
+2. `POST /internal/computers/keys/realization-delivery` with
+   `{computer_id, request_commitment, recipient_public_key}`, authorized by
+   the guest capability for that computer (current revocation epoch).
+3. corpusd: require exactly one `credential_envelope_issued` record for
+   `(computer_id, request_commitment)`; insert a consume-once delivery row
+   keyed by `(computer_id, request_commitment)` (a replay with the same
+   recipient key returns the same sealed result; a different recipient key
+   is refused); append a key-escrow transparency entry
+   `{type: realization_delivery, computer_id, request_commitment, key_digest}`
+   **before** unwrap; open the custodian wrap; seal the DEK to the
+   recipient key; return the sealed wrap. Plaintext exists only inside
+   corpusd's process and the guest.
+4. Guest opens with the ephemeral private key, checks the digest against
+   the escrow digest, writes the canonical key file (mode 0400, `O_EXCL`),
+   and continues boot. Any failure is the typed `privacy_key_unavailable`
+   refusal.
+5. vmctl admission: a fresh realization of an existing chain is admitted
+   when a custodian escrow record exists (read from corpusd's escrow
+   status, internal caller); otherwise the slice-1 refusal stands, and a
+   durable `privacy_key_unavailable` condition reopens when escrow appears.
+
+**Deletion.** Once proved on a lose-the-disk disposable,
+`internal/vmctl/trusted_guest_copier.go` (debugfs copy from quarantined
+images) and its cold-recover phase are deleted.
+
+**Alternatives considered.** (a) Deliver inside the credential exchange
+response — tighter binding but changes the exchange/consumption protocol
+(red auth surface). (b) vmctl writes the key on the credential disk —
+puts plaintext in a host service that does not otherwise need it and on a
+disk image. (c) Operator-only reveal — rejected by owner (O21).
+
+**Open questions for review.** Whether `request_commitment` binding is
+sufficient against a guest replaying another realization's commitment
+(it would need that realization's capability for the same computer —
+same trust domain); whether delivery should also be recorded on the
+canonical tape; desktop (unattested local) realizations are excluded.
