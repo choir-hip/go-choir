@@ -38,6 +38,17 @@ Disposable `computer-f177676f…` (user `6c13cf31…`), driver log
    full 30-minute health timeout — the blind wait the recovery policy
    removed for over-cap tails.
 
+4. **Retry of a refused fresh start loses its freshness (found 2026-10-08
+   while writing the slice-1 tests).** A fresh realization refused before
+   boot keeps its ownership record (state `failed`). The next resolve
+   starts it through the *retained* path, which calls admission with
+   `emptyStore=false`; once the durable recovery condition clears (e.g. the
+   repair job publishes a base), no fresh-realization check runs and the VM
+   boots with an empty data image. This is exactly the staging sequence
+   above: refused → repair succeeded → "admission reopened" → keyless boot.
+   The unit test `TestRecoveryAdmissionFreshInstallRefusesOvercapBeforeBoot`
+   asserted this boot as correct.
+
 ## Decision (owner, 2026-10-08) — formerly open
 
 Whether a fresh realization of an existing computer may receive its privacy
